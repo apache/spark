@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.ProductEncoder
 import org.apache.spark.sql.connect.common.UdfUtils
 import org.apache.spark.sql.expressions.ScalarUserDefinedFunction
 import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, TimeoutMode}
+import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, TimeoutMode, TTLMode}
 
 /**
  * A [[Dataset]] has been logically grouped by a user specified grouping key. Users should not
@@ -829,12 +829,15 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
    *   Instance of statefulProcessor whose functions will be invoked by the operator.
    * @param timeoutMode
    *   The timeout mode of the stateful processor.
+   * @param ttlMode
+   *   The ttlMode to evict user state on ttl expiration.
    * @param outputMode
    *   The output mode of the stateful processor.
    */
   def transformWithState[U: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
       timeoutMode: TimeoutMode,
+      ttlMode: TTLMode,
       outputMode: OutputMode): Dataset[U] = {
     throw new UnsupportedOperationException
   }
@@ -853,6 +856,8 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
    *   Instance of statefulProcessor whose functions will be invoked by the operator.
    * @param timeoutMode
    *   The timeout mode of the stateful processor.
+   * @param ttlMode
+   *   The ttlMode to evict user state on ttl expiration.
    * @param outputMode
    *   The output mode of the stateful processor.
    * @param outputEncoder
@@ -861,6 +866,7 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
   def transformWithState[U: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
       timeoutMode: TimeoutMode,
+      ttlMode: TTLMode,
       outputMode: OutputMode,
       outputEncoder: Encoder[U]): Dataset[U] = {
     throw new UnsupportedOperationException
@@ -879,6 +885,8 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
    *   Instance of statefulProcessor whose functions will be invoked by the operator.
    * @param timeoutMode
    *   The timeout mode of the stateful processor.
+   * @param ttlMode
+   *   The ttlMode to evict user state on ttl expiration.
    * @param outputMode
    *   The output mode of the stateful processor.
    * @param initialState
@@ -890,6 +898,7 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
   def transformWithState[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
       timeoutMode: TimeoutMode,
+      ttlMode: TTLMode,
       outputMode: OutputMode,
       initialState: KeyValueGroupedDataset[K, S]): Dataset[U] = {
     throw new UnsupportedOperationException
@@ -908,6 +917,8 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
    *   Instance of statefulProcessor whose functions will be invoked by the operator.
    * @param timeoutMode
    *   The timeout mode of the stateful processor.
+   * @param ttlMode
+   *   The ttlMode to evict user state on ttl expiration
    * @param outputMode
    *   The output mode of the stateful processor.
    * @param initialState
@@ -923,6 +934,7 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
   private[sql] def transformWithState[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
       timeoutMode: TimeoutMode,
+      ttlMode: TTLMode,
       outputMode: OutputMode,
       initialState: KeyValueGroupedDataset[K, S],
       outputEncoder: Encoder[U],

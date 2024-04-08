@@ -2552,7 +2552,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "sqlExpr" -> "\"concat(map(1, 2), map(3, 4))\"",
         "paramIndex" -> "first",
-        "requiredType" -> "(\"STRING_ANY_COLLATION\" or \"BINARY\" or \"ARRAY\")",
+        "requiredType" -> "(\"STRING\" or \"BINARY\" or \"ARRAY\")",
         "inputSql" -> "\"map(1, 2)\"",
         "inputType" -> "\"MAP<INT, INT>\""
       ),
