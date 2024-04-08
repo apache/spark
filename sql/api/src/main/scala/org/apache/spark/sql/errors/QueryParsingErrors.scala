@@ -38,7 +38,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
 
   def executeImmediateStackOverflow(sqlText: String): Throwable = {
     throw new ParseException(
-      errorClass = "EXECUTE_IMMEDIATE_FAILED_TO_PARSE_STACK_OVERFLOW",
+      errorClass = "FAILED_TO_PARSE_STACK_OVERFLOW",
       messageParameters = Map.empty,
       start = Origin(Some(0)),
       stop = Origin(Some(sqlText.length)),
