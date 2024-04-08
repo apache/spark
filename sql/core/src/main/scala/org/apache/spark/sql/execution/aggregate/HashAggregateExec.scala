@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.aggregate
 
+import java.util.Locale
 import java.util.concurrent.TimeUnit._
 
 import scala.collection.mutable
@@ -33,16 +34,18 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.catalyst.util.{truncatedString, CollationFactory}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
-import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.MutableColumnarRow
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{CalendarIntervalType, DecimalType, StringType}
+import org.apache.spark.sql.types.{CalendarIntervalType, DecimalType, StringType, StructType}
 import org.apache.spark.unsafe.KVIterator
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
+
 
 /**
  * Hash-based aggregate operator that can also fallback to sorting when data exceeds memory size.
@@ -59,7 +62,7 @@ case class HashAggregateExec(
     child: SparkPlan)
   extends AggregateCodegenSupport {
 
-  require(Aggregate.supportsHashAggregate(aggregateBufferAttributes, groupingExpressions))
+  require(Aggregate.supportsHashAggregate(aggregateBufferAttributes))
 
   override lazy val allAttributes: AttributeSeq =
     child.output ++ aggregateBufferAttributes ++ aggregateAttributes ++
@@ -87,6 +90,31 @@ case class HashAggregateExec(
     }
   }
 
+  private def collationAwareStringRows(row: InternalRow, schema: StructType): InternalRow = {
+    val newRow = new Array[Any](schema.length)
+    for (i <- schema.fields.indices) {
+      val field = schema.fields(i)
+      field.dataType match {
+        case st: StringType =>
+          val str: UTF8String = row.getUTF8String(i)
+          val collationId: Int = st.collationId
+          if (collationId == CollationFactory.UTF8_BINARY_COLLATION_ID) {
+            newRow(i) = str
+          } else if (collationId == CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID) {
+            newRow(i) = UTF8String.fromString(str.toString.toLowerCase(Locale.ROOT))
+          } else {
+            val collator = CollationFactory.fetchCollation(collationId).collator
+            val collationKey = collator.getCollationKey(str.toString).toByteArray
+            newRow(i) = UTF8String.fromString(collationKey.map("%02x" format _).mkString)
+          }
+        case _ =>
+          newRow(i) = row.get(i, field.dataType)
+      }
+    }
+    val project = UnsafeProjection.create(schema)
+    project(InternalRow.fromSeq(newRow.toIndexedSeq))
+  }
+
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
     val peakMemory = longMetric("peakMemory")
@@ -96,9 +124,9 @@ case class HashAggregateExec(
     val numTasksFallBacked = longMetric("numTasksFallBacked")
 
     child.execute().mapPartitionsWithIndex { (partIndex, iter) =>
-
+//      val collationAwareIterator = iter.map(row => collationAwareStringRows(row, child.schema))
       val beforeAgg = System.nanoTime()
-      val hasInput = iter.hasNext
+      val hasInput = iter.hasNext // collationAwareIterator.hasNext
       val res = if (!hasInput && groupingExpressions.nonEmpty) {
         // This is a grouped aggregate and the input iterator is empty,
         // so return an empty iterator.
@@ -115,7 +143,7 @@ case class HashAggregateExec(
             (expressions, inputSchema) =>
               MutableProjection.create(expressions, inputSchema),
             inputAttributes,
-            iter,
+            iter, // collationAwareIterator
             testFallbackStartsAt,
             numOutputRows,
             peakMemory,

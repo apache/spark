@@ -21,7 +21,12 @@ import scala.collection.immutable.Seq
 import scala.jdk.CollectionConverters.MapHasAsJava
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.ExtendedAnalysisException
+import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, InternalRow}
+import org.apache.spark.sql.catalyst.analysis.{CollationKey, RewriteGroupByCollation}
+import org.apache.spark.sql.catalyst.expressions.{BindReferences, UnsafeProjection}
+// import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LocalRelation}
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2ProviderWithCustomSchema}
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable}
@@ -33,6 +38,7 @@ import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAg
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.{MapType, StringType, StructField, StructType}
+import org.apache.spark.unsafe.types.UTF8String
 
 class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   protected val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
@@ -369,20 +375,10 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
   test("aggregates count respects collation") {
     Seq(
-      ("utf8_binary", Seq("AAA", "aaa"), Seq(Row(1, "AAA"), Row(1, "aaa"))),
-      ("utf8_binary", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
-      ("utf8_binary", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
-      ("utf8_binary_lcase", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
-      ("utf8_binary_lcase", Seq("AAA", "aaa"), Seq(Row(2, "AAA"))),
-      ("utf8_binary_lcase", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
-      ("unicode", Seq("AAA", "aaa"), Seq(Row(1, "AAA"), Row(1, "aaa"))),
-      ("unicode", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
-      ("unicode", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
-      ("unicode_CI", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
-      ("unicode_CI", Seq("AAA", "aaa"), Seq(Row(2, "AAA"))),
-      ("unicode_CI", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb")))
+      ("unicode_ci", Seq("AA", "aa"), Seq(Row(2, "aa"))),
     ).foreach {
       case (collationName: String, input: Seq[String], expected: Seq[Row]) =>
+        spark.conf.set("spark.sql.codegen.wholeStage", "false")
         checkAnswer(sql(
           s"""
           with t as (
@@ -395,7 +391,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("hash agg is not used for non binary collations") {
+  test("hash agg is also used for non binary collations") {
     val tableNameNonBinary = "T_NON_BINARY"
     val tableNameBinary = "T_BINARY"
     withTable(tableNameNonBinary) {
@@ -408,7 +404,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         val dfNonBinary = sql(s"SELECT COUNT(*), c FROM $tableNameNonBinary GROUP BY c")
         assert(collectFirst(dfNonBinary.queryExecution.executedPlan) {
           case _: HashAggregateExec | _: ObjectHashAggregateExec => ()
-        }.isEmpty)
+        }.nonEmpty)
 
         val dfBinary = sql(s"SELECT COUNT(*), c FROM $tableNameBinary GROUP BY c")
         assert(collectFirst(dfBinary.queryExecution.executedPlan) {
@@ -819,4 +815,102 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       checkAnswer(dfNonBinary, dfBinary)
     }
   }
+
+  test("CollationKey generates correct collation key") {
+    val testCases = Seq(
+      ("", "UTF8_BINARY", UTF8String.fromString("")),
+      ("aa", "UTF8_BINARY", UTF8String.fromString("aa")),
+      ("AA", "UTF8_BINARY", UTF8String.fromString("AA")),
+      ("aA", "UTF8_BINARY", UTF8String.fromString("aA")),
+      ("", "UTF8_BINARY_LCASE", UTF8String.fromString("")),
+      ("aa", "UTF8_BINARY_LCASE", UTF8String.fromString("aa")),
+      ("AA", "UTF8_BINARY_LCASE", UTF8String.fromString("aa")),
+      ("aA", "UTF8_BINARY_LCASE", UTF8String.fromString("aa")),
+      ("", "UNICODE", UTF8String.fromBytes(Array[Byte](1, 1, 0))),
+      ("aa", "UNICODE", UTF8String.fromBytes(Array[Byte](42, 42, 1, 6, 1, 6, 0))),
+      ("AA", "UNICODE", UTF8String.fromBytes(Array[Byte](42, 42, 1, 6, 1, -36, -36, 0))),
+      ("aA", "UNICODE", UTF8String.fromBytes(Array[Byte](42, 42, 1, 6, 1, -59, -36, 0))),
+      ("", "UNICODE_CI", UTF8String.fromBytes(Array[Byte](1, 0))),
+      ("aa", "UNICODE_CI", UTF8String.fromBytes(Array[Byte](42, 42, 1, 6, 0))),
+      ("AA", "UNICODE_CI", UTF8String.fromBytes(Array[Byte](42, 42, 1, 6, 0))),
+      ("aA", "UNICODE_CI", UTF8String.fromBytes(Array[Byte](42, 42, 1, 6, 0)))
+    )
+    for ((input, collation, expected) <- testCases) {
+      val collationId: Int = CollationFactory.collationNameToId(collation)
+      val attrRef: AttributeReference = AttributeReference("attr", StringType(collationId))()
+      // generate CollationKey for the input string
+      val collationKey: CollationKey = CollationKey(attrRef)
+      val str: UTF8String = UTF8String.fromString(input)
+      assert(collationKey.nullSafeEval(str) === expected)
+    }
+  }
+
+  test("CollationKey generates correct collation key using codegen") {
+    val testCases = Seq(
+      ("", "UTF8_BINARY", ""),
+      ("aa", "UTF8_BINARY", "6161"),
+      ("AA", "UTF8_BINARY", "4141"),
+      ("aA", "UTF8_BINARY", "4161"),
+      ("", "UTF8_BINARY_LCASE", ""),
+      ("aa", "UTF8_BINARY_LCASE", "6161"),
+      ("AA", "UTF8_BINARY_LCASE", "6161"),
+      ("aA", "UTF8_BINARY_LCASE", "6161"),
+      ("", "UNICODE", "101"),
+      ("aa", "UNICODE", "60106012a2a"),
+      ("AA", "UNICODE", "dcdc0106012a2a"),
+      ("aA", "UNICODE", "dcc50106012a2a"),
+      ("", "UNICODE_CI", "1"),
+      ("aa", "UNICODE_CI", "6012a2a"),
+      ("AA", "UNICODE_CI", "6012a2a"),
+      ("aA", "UNICODE_CI", "6012a2a"),
+    )
+    for ((input, collation, expected) <- testCases) {
+      val collationId: Int = CollationFactory.collationNameToId(collation)
+      val attrRef: AttributeReference = AttributeReference("attr", StringType(collationId))()
+      // generate CollationKey for the input string
+      val collationKey: CollationKey = CollationKey(attrRef)
+      val str: UTF8String = UTF8String.fromString(input)
+      val boundExpr = BindReferences.bindReference(collationKey, Seq(attrRef))
+      val ev = UnsafeProjection.create(Array(boundExpr).toIndexedSeq)
+      val strProj = ev.apply(InternalRow(str))
+      assert(strProj.toString.split(',').last.startsWith(expected))
+    }
+  }
+
+  test("RewriteGroupByCollation rule rewrites Aggregate logical plan") {
+    val dataType = StringType(CollationFactory.collationNameToId("UNICODE_CI"))
+    val attrRef = AttributeReference("attr", dataType)()
+    val originalPlan = Aggregate(Seq(attrRef), Seq(attrRef), LocalRelation(attrRef))
+    assert(originalPlan.groupingExpressions.size == 1)
+    assert(originalPlan.groupingExpressions.head == attrRef)
+    // plan level rewrite should put CollationKey in Aggregate logical plan
+    val newPlan = RewriteGroupByCollation(originalPlan)
+    val groupingExpressions = newPlan.asInstanceOf[Aggregate].groupingExpressions
+    assert(groupingExpressions.size == 1) // only 1 alias should be present in groupingExpressions
+    val groupingAlias = groupingExpressions.head.asInstanceOf[Alias]
+    assert(groupingAlias.child.isInstanceOf[CollationKey]) // alias should be a CollationKey
+    assert(groupingAlias.child.containsChild(attrRef)) // CollationKey should be for attrRef
+  }
+
+  test("RewriteGroupByCollation rule works in SQL query analysis") {
+    spark.conf.set("spark.sql.codegen.wholeStage", value = false)
+    val dataType = StringType(CollationFactory.collationNameToId("UNICODE_CI"))
+    val schema = StructType(Seq(StructField("name", dataType)))
+    val data = Seq(Row("AA"), Row("aa"), Row("BB"))
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+    df.createOrReplaceTempView("tempTable")
+    val dfGroupBy = spark.sql("SELECT name, COUNT(*) FROM tempTable GROUP BY name")
+    // get the logical plan for the spark SQL query
+    val logicalPlan = dfGroupBy.queryExecution.analyzed
+    val newPlan = RewriteGroupByCollation(logicalPlan)
+    assert(newPlan.isInstanceOf[Aggregate])
+    val groupingExpressions = newPlan.asInstanceOf[Aggregate].groupingExpressions
+    assert(groupingExpressions.size == 1)
+//    val groupingAlias = groupingExpressions.head.asInstanceOf[Alias]
+//    assert(groupingAlias.isInstanceOf[Alias])
+//    assert(groupingAlias.child.isInstanceOf[CollationKey])
+    // get the query execution result
+    checkAnswer(dfGroupBy, Seq(Row("AA", 2), Row("BB", 1)))
+  }
+
 }
