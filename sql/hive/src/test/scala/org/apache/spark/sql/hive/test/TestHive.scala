@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-import org.apache.spark.sql.execution.{CommandExecutionMode, QueryExecution, SQLExecution}
+import org.apache.spark.sql.execution.{CommandExecutionMode, DoNotCleanup, QueryExecution, ShuffleCleanupMode, SQLExecution}
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf, WithTestConf}
@@ -580,8 +580,10 @@ private[hive] class TestHiveSparkSession(
 private[hive] class TestHiveQueryExecution(
     sparkSession: TestHiveSparkSession,
     logicalPlan: LogicalPlan,
-    mode: CommandExecutionMode.Value = CommandExecutionMode.ALL)
-  extends QueryExecution(sparkSession, logicalPlan, mode = mode) with Logging {
+    mode: CommandExecutionMode.Value = CommandExecutionMode.ALL,
+    shuffleCleanupMode: ShuffleCleanupMode = DoNotCleanup)
+  extends QueryExecution(
+    sparkSession, logicalPlan, mode = mode, shuffleCleanupMode = shuffleCleanupMode) with Logging {
 
   def this(sparkSession: TestHiveSparkSession, sql: String) = {
     this(sparkSession, sparkSession.sessionState.sqlParser.parsePlan(sql))
@@ -658,9 +660,10 @@ private[sql] class TestHiveSessionStateBuilder(
   override def overrideConfs: Map[String, String] = TestHiveContext.overrideConfs
 
   override def createQueryExecution:
-    (LogicalPlan, CommandExecutionMode.Value) => QueryExecution =
-      (plan, mode) =>
-        new TestHiveQueryExecution(session.asInstanceOf[TestHiveSparkSession], plan, mode)
+  (LogicalPlan, CommandExecutionMode.Value, ShuffleCleanupMode) => QueryExecution =
+      (plan, mode, shuffleCleanupMode) =>
+        new TestHiveQueryExecution(
+          session.asInstanceOf[TestHiveSparkSession], plan, mode, shuffleCleanupMode)
 
   override protected def newBuilder: NewBuilder = new TestHiveSessionStateBuilder(_, _)
 }

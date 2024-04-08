@@ -302,6 +302,11 @@ case class AdaptiveSparkPlanExec(
             try {
               stage.materialize().onComplete { res =>
                 if (res.isSuccess) {
+                  // record shuffle IDs for successful stages for cleanup
+                  stage.plan.collect {
+                    case s: ShuffleExchangeLike =>
+                      context.shuffleIds.put(s.shuffleId, true)
+                  }
                   events.offer(StageSuccess(stage, res.get))
                 } else {
                   events.offer(StageFailure(stage, res.failed.get))
@@ -869,6 +874,8 @@ case class AdaptiveExecutionContext(session: SparkSession, qe: QueryExecution) {
    */
   val stageCache: TrieMap[SparkPlan, ExchangeQueryStageExec] =
     new TrieMap[SparkPlan, ExchangeQueryStageExec]()
+
+  val shuffleIds: TrieMap[Int, Boolean] = new TrieMap[Int, Boolean]()
 }
 
 /**

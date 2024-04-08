@@ -21,6 +21,8 @@ import java.io._
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
 import java.nio.file.Files
+import java.util.Collections
+import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -76,11 +78,17 @@ private[spark] class IndexShuffleBlockResolver(
   override def getStoredShuffles(): Seq[ShuffleBlockInfo] = {
     val allBlocks = blockManager.diskBlockManager.getAllBlocks()
     allBlocks.flatMap {
-      case ShuffleIndexBlockId(shuffleId, mapId, _) =>
+      case ShuffleIndexBlockId(shuffleId, mapId, _) if !shuffleIdsToSkip.contains(shuffleId) =>
         Some(ShuffleBlockInfo(shuffleId, mapId))
       case _ =>
         None
     }
+  }
+
+  private val shuffleIdsToSkip = Collections.newSetFromMap[Int](new ConcurrentHashMap)
+
+  override def addShuffleToSkip(shuffleId: ShuffleId): Unit = {
+    shuffleIdsToSkip.add(shuffleId)
   }
 
   private def getShuffleBytesStored(): Long = {
