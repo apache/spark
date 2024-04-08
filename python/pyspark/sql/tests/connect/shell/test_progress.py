@@ -19,6 +19,7 @@ from io import StringIO
 import unittest
 from typing import Iterable
 
+from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
 from pyspark.testing.connectutils import (
     should_test_connect,
     connect_requirement_message,
@@ -102,6 +103,27 @@ class ProgressBarTest(unittest.TestCase, PySparkErrorTestUtils):
         p.finish()
         self.assertTrue(buffer.getvalue().endswith("\r"), "Last line should be empty")
         self.assertTrue(done_called, "After finish, done should be True")
+
+
+class SparkConnectProgressHandlerE2E(SparkConnectSQLTestCase):
+    def test_custom_handler_works(self):
+        called = False
+
+        def handler(**kwargs):
+            nonlocal called
+            called = True
+            self.assertIsNotNone(kwargs.get("stages"))
+            self.assertIsNotNone(kwargs.get("operation_id"))
+            self.assertIsNotNone(kwargs.get("inflight_tasks"))
+            self.assertGreater(len(kwargs.get("stages")), 0)
+            self.assertGreater(len(kwargs.get("operation_id")), 0)
+
+        try:
+            self.connect.registerProgressHandler(handler)
+            self.connect.range(100).repartition(20).count()
+            self.assertTrue(called, "Handler must have been called")
+        finally:
+            self.connect.clearProgressHandlers()
 
 
 if __name__ == "__main__":

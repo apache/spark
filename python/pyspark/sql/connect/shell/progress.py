@@ -143,11 +143,16 @@ class Progress:
         exc_type: typing.Optional[typing.Type[BaseException]],
         exception: typing.Optional[BaseException],
         exc_tb: typing.Optional[TracebackType],
-    ) -> None:
+    ) -> typing.Any:
         self.finish()
         return False
 
-    def update_ticks(self, stages: Iterable[StageInfo], inflight_tasks: int) -> None:
+    def update_ticks(
+        self,
+        stages: Iterable[StageInfo],
+        inflight_tasks: int,
+        operation_id: typing.Optional[str] = None,
+    ) -> None:
         """This method is called from the execution to update the progress bar with a new total
         tick counter and the current position. This is necessary in case new stages get added with
         new tasks and so the total task number will be updated as well.
@@ -159,6 +164,9 @@ class Progress:
         inflight_tasks : int
           The number of tasks that are currently running.
         """
+        if self._operation_id is None or len(self._operation_id) == 0:
+            self._operation_id = operation_id
+
         total_tasks = sum(map(lambda x: x.num_tasks, stages))
         completed_tasks = sum(map(lambda x: x.num_completed_tasks, stages))
         if total_tasks > 0:

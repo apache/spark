@@ -897,7 +897,7 @@ class SparkConnectClient(object):
         logger.info(f"Executing plan {self._proto_to_string(plan)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
-        with Progress(handlers=self._progress_handlers) as progress:
+        with Progress(handlers=self._progress_handlers, operation_id=req.operation_id) as progress:
             for response in self._execute_and_fetch_as_iterator(req, observations, progress):
                 if isinstance(response, StructType):
                     yield response
@@ -1332,7 +1332,7 @@ class SparkConnectClient(object):
             if b.HasField("execution_progress"):
                 if progress:
                     p = from_proto(b.execution_progress)
-                    progress.update_ticks(*p)
+                    progress.update_ticks(*p, operation_id=b.operation_id)
             if b.HasField("arrow_batch"):
                 logger.debug(
                     f"Received arrow batch rows={b.arrow_batch.row_count} "
@@ -1412,7 +1412,7 @@ class SparkConnectClient(object):
         schema: Optional[StructType] = None
         properties: Dict[str, Any] = {}
 
-        with Progress(handlers=self._progress_handlers) as progress:
+        with Progress(handlers=self._progress_handlers, operation_id=req.operation_id) as progress:
             for response in self._execute_and_fetch_as_iterator(
                 req, observations, progress=progress
             ):
