@@ -60,6 +60,8 @@
               files="sql/api/src/main/java/org/apache/spark/sql/streaming/TimeoutMode.java"/>
     <suppress checks="MethodName"
               files="sql/api/src/main/java/org/apache/spark/sql/streaming/Trigger.java"/>
+    <suppress checks="MethodName"
+              files="sql/api/src/main/java/org/apache/spark/sql/streaming/TTLMode.java"/>
     <suppress checks="LineLength"
               files="src/main/java/org/apache/spark/sql/api/java/*"/>
     <suppress checks="IllegalImport"

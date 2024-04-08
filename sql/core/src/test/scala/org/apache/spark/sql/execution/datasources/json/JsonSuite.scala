@@ -3043,10 +3043,10 @@ abstract class JsonSuite
         val err = intercept[SparkException] {
           exp.write.option("timestampNTZFormat", pattern).json(path.getAbsolutePath)
         }
-        checkError(
+        checkErrorMatchPVals(
           exception = err,
           errorClass = "TASK_WRITE_FAILED",
-          parameters = Map("path" -> actualPath))
+          parameters = Map("path" -> s"$actualPath.*"))
 
         val msg = err.getCause.getMessage
         assert(

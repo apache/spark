@@ -44,7 +44,8 @@ private[sql] abstract class StatefulProcessor[K, I, O] extends Serializable {
    */
   def init(
       outputMode: OutputMode,
-      timeoutMode: TimeoutMode): Unit
+      timeoutMode: TimeoutMode,
+      ttlMode: TTLMode): Unit
 
   /**
    * Function that will allow users to interact with input data rows along with the grouping key

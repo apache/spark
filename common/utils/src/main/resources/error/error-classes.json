@@ -3579,6 +3579,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "STATEFUL_PROCESSOR_CANNOT_ASSIGN_TTL_IN_NO_TTL_MODE" : {
+    "message" : [
+      "Cannot use TTL for state=<stateName> in NoTTL() mode."
+    ],
+    "sqlState" : "42802"
+  },
   "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_HANDLE_STATE" : {
     "message" : [
       "Failed to perform stateful processor operation=<operationType> with invalid handle state=<handleState>."
@@ -3594,6 +3600,12 @@
   "STATEFUL_PROCESSOR_CANNOT_REINITIALIZE_STATE_ON_KEY" : {
     "message" : [
       "Cannot re-initialize state on the same grouping key during initial state handling for stateful processor. Invalid grouping key=<groupingKey>."
+    ],
+    "sqlState" : "42802"
+  },
+  "STATEFUL_PROCESSOR_TTL_DURATION_MUST_BE_POSITIVE" : {
+    "message" : [
+      "TTL duration must be greater than zero for State store operation=<operationType> on state=<stateName>."
     ],
     "sqlState" : "42802"
   },
@@ -4389,6 +4401,11 @@
       "STATE_STORE_REMOVING_COLUMN_FAMILIES" : {
         "message" : [
           "Removing column families with <stateStoreProvider> is not supported."
+        ]
+      },
+      "STATE_STORE_TTL" : {
+        "message" : [
+          "State TTL with <stateStoreProvider> is not supported. Please use RocksDBStateStoreProvider."
         ]
       },
       "TABLE_OPERATION" : {
