@@ -99,7 +99,7 @@ abstract class SingleKeyTTLStateImpl(
   def upsertTTLForStateKey(
       expirationMs: Long,
       groupingKey: Array[Byte]): Unit = {
-    logError(s"### upsertTTLForStateKey: expirationMs=$expirationMs")
+
     val encodedTtlKey = ttlKeyEncoder(InternalRow(expirationMs, groupingKey))
     store.put(encodedTtlKey, EMPTY_ROW, ttlColumnFamilyName)
   }
@@ -150,8 +150,7 @@ object StateTTL extends Logging {
   def isExpired(
       expirationMs: Long,
       batchTtlExpirationMs: Long): Boolean = {
-    logError(s"### isExpired: expirationMs=$expirationMs," +
-      s" batchTtlExpirationMs=$batchTtlExpirationMs")
+
     batchTtlExpirationMs >= expirationMs
   }
 }

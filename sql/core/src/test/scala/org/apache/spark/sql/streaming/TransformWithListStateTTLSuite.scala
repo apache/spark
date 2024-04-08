@@ -105,169 +105,196 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
-      val ttlConfig1 = TTLConfig(ttlDuration = Duration.ofMinutes(3))
-      val inputStream = MemoryStream[InputEvent]
-      val result1 = inputStream.toDS()
-        .groupByKey(x => x.key)
-        .transformWithState(
-          getProcessor(ttlConfig1),
-          TimeoutMode.NoTimeouts(),
-          TTLMode.ProcessingTimeTTL(),
-          OutputMode.Append())
+      withTempDir { checkpointLocation =>
+        val ttlConfig1 = TTLConfig(ttlDuration = Duration.ofMinutes(3))
+        val inputStream = MemoryStream[InputEvent]
+        val result1 = inputStream.toDS()
+          .groupByKey(x => x.key)
+          .transformWithState(
+            getProcessor(ttlConfig1),
+            TimeoutMode.NoTimeouts(),
+            TTLMode.ProcessingTimeTTL(),
+            OutputMode.Append())
 
-      val clock = new StreamManualClock
-      // add 3 elements with a duration of a minute
-      testStream(result1)(
-        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
-        AddData(inputStream, InputEvent("k1", "put", 1)),
-        AdvanceManualClock(1 * 1000),
-        AddData(inputStream, InputEvent("k1", "append", 2)),
-        AddData(inputStream, InputEvent("k1", "append", 3)),
-        // advance clock to trigger processing
-        AdvanceManualClock(1 * 1000),
-        CheckNewAnswer(),
-        // get all elements without enforcing ttl
-        AddData(inputStream, InputEvent("k1", "get_without_enforcing_ttl", -1, null)),
-        AdvanceManualClock(1 * 1000),
-        CheckNewAnswer(
-          OutputEvent("k1", 1, isTTLValue = false, -1),
-          OutputEvent("k1", 2, isTTLValue = false, -1),
-          OutputEvent("k1", 3, isTTLValue = false, -1)
-        ),
-        // get ttl values
-        AddData(inputStream, InputEvent("k1", "get_ttl_value_from_state", -1, null)),
-        AdvanceManualClock(1 * 1000),
-        CheckNewAnswer(
-          OutputEvent("k1", -1, isTTLValue = true, 181000),
-          OutputEvent("k1", -1, isTTLValue = true, 182000),
-          OutputEvent("k1", -1, isTTLValue = true, 182000)
-        ),
-        AddData(inputStream, InputEvent("k1", "get", -1, null)),
-        AdvanceManualClock(1 * 1000),
-        CheckNewAnswer(
-          OutputEvent("k1", 1, isTTLValue = false, -1),
-          OutputEvent("k1", 2, isTTLValue = false, -1),
-          OutputEvent("k1", 3, isTTLValue = false, -1)
-        ),
-        AdvanceManualClock(1 * 1000),
-        StopStream
-      )
+        val clock = new StreamManualClock
+        // add 3 elements with a duration of a minute
+        testStream(result1)(
+          StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock,
+            checkpointLocation = checkpointLocation.getAbsolutePath),
+          AddData(inputStream, InputEvent("k1", "put", 1)),
+          AdvanceManualClock(1 * 1000),
+          AddData(inputStream, InputEvent("k1", "append", 2)),
+          AddData(inputStream, InputEvent("k1", "append", 3)),
+          // advance clock to trigger processing
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(),
+          // get ttl values
+          AddData(inputStream, InputEvent("k1", "get_ttl_value_from_state", -1, null)),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(
+            OutputEvent("k1", -1, isTTLValue = true, 181000),
+            OutputEvent("k1", -1, isTTLValue = true, 182000),
+            OutputEvent("k1", -1, isTTLValue = true, 182000)
+          ),
+          AddData(inputStream, InputEvent("k1", "get", -1, null)),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(
+            OutputEvent("k1", 1, isTTLValue = false, -1),
+            OutputEvent("k1", 2, isTTLValue = false, -1),
+            OutputEvent("k1", 3, isTTLValue = false, -1)
+          ),
+          StopStream
+        )
 
-      val ttlConfig2 = TTLConfig(ttlDuration = Duration.ofSeconds(15))
-      val result2 = inputStream.toDS()
-        .groupByKey(x => x.key)
-        .transformWithState(
-          getProcessor(ttlConfig2),
-          TimeoutMode.NoTimeouts(),
-          TTLMode.ProcessingTimeTTL(),
-          OutputMode.Append())
-      // add 3 elements with a duration of 15 seconds
-      testStream(result2)(
-        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
-        AddData(inputStream, InputEvent("k1", "append", 4)),
-        AddData(inputStream, InputEvent("k1", "append", 5)),
-        AddData(inputStream, InputEvent("k1", "append", 6)),
-        // advance clock to trigger processing
-        AdvanceManualClock(1 * 1000),
-        CheckNewAnswer(),
-        // get all elements without enforcing ttl
-        AddData(inputStream, InputEvent("k1", "get_without_enforcing_ttl", -1, null)),
-        AdvanceManualClock(1 * 1000),
-        CheckNewAnswer(
-          OutputEvent("k1", 1, isTTLValue = false, -1),
-          OutputEvent("k1", 2, isTTLValue = false, -1),
-          OutputEvent("k1", 3, isTTLValue = false, -1),
-          OutputEvent("k1", 4, isTTLValue = false, -1),
-          OutputEvent("k1", 5, isTTLValue = false, -1),
-          OutputEvent("k1", 6, isTTLValue = false, -1)
-        ),
-        // get ttl values
-        AddData(inputStream, InputEvent("k1", "get_ttl_value_from_state", -1, null)),
-        AdvanceManualClock(1 * 1000),
-        CheckNewAnswer(
-          OutputEvent("k1", -1, isTTLValue = true, 181000),
-          OutputEvent("k1", -1, isTTLValue = true, 182000),
-          OutputEvent("k1", -1, isTTLValue = true, 182000),
-          OutputEvent("k1", -1, isTTLValue = true, 21000),
-          OutputEvent("k1", -1, isTTLValue = true, 21000),
-          OutputEvent("k1", -1, isTTLValue = true, 21000)
-        ),
-        StopStream
-      )
-      // add 3 more elements with a duration of a minute
-      testStream(result1)(
-        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
-        AddData(inputStream, InputEvent("k1", "append", 7)),
-        AddData(inputStream, InputEvent("k1", "append", 8)),
-        AddData(inputStream, InputEvent("k1", "append", 9)),
-        // advance clock to trigger processing
-        AdvanceManualClock(1 * 1000),
-        CheckNewAnswer(),
-        // advance clock to expire the middle three elements
-        AdvanceManualClock(45 * 1000),
-        // Get all elements in the list
-        AddData(inputStream, InputEvent("k1", "get", -1, null)),
-        AdvanceManualClock(1 * 1000),
-        // validate that the expired elements are not returned
-        CheckNewAnswer(
-          OutputEvent("k1", 1, isTTLValue = false, -1),
-          OutputEvent("k1", 2, isTTLValue = false, -1),
-          OutputEvent("k1", 3, isTTLValue = false, -1),
-          OutputEvent("k1", 7, isTTLValue = false, -1),
-          OutputEvent("k1", 8, isTTLValue = false, -1),
-          OutputEvent("k1", 9, isTTLValue = false, -1)
-        ),
-        StopStream
-      )
+        val ttlConfig2 = TTLConfig(ttlDuration = Duration.ofSeconds(15))
+        val result2 = inputStream.toDS()
+          .groupByKey(x => x.key)
+          .transformWithState(
+            getProcessor(ttlConfig2),
+            TimeoutMode.NoTimeouts(),
+            TTLMode.ProcessingTimeTTL(),
+            OutputMode.Append())
+        // add 3 elements with a duration of 15 seconds
+        testStream(result2)(
+          StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock,
+            checkpointLocation = checkpointLocation.getAbsolutePath),
+          AddData(inputStream, InputEvent("k1", "append", 4)),
+          AddData(inputStream, InputEvent("k1", "append", 5)),
+          AddData(inputStream, InputEvent("k1", "append", 6)),
+          // advance clock to trigger processing
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(),
+          // get all elements without enforcing ttl
+          AddData(inputStream, InputEvent("k1", "get_without_enforcing_ttl", -1, null)),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(
+            OutputEvent("k1", 1, isTTLValue = false, -1),
+            OutputEvent("k1", 2, isTTLValue = false, -1),
+            OutputEvent("k1", 3, isTTLValue = false, -1),
+            OutputEvent("k1", 4, isTTLValue = false, -1),
+            OutputEvent("k1", 5, isTTLValue = false, -1),
+            OutputEvent("k1", 6, isTTLValue = false, -1)
+          ),
+          StopStream
+        )
+        // add 3 more elements with a duration of a minute
+        testStream(result1)(
+          StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock,
+            checkpointLocation = checkpointLocation.getAbsolutePath),
+          AddData(inputStream, InputEvent("k1", "append", 7)),
+          AddData(inputStream, InputEvent("k1", "append", 8)),
+          AddData(inputStream, InputEvent("k1", "append", 9)),
+          // advance clock to trigger processing
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(),
+          // advance clock to expire the middle three elements
+          AdvanceManualClock(45 * 1000),
+          // Get all elements in the list
+          AddData(inputStream, InputEvent("k1", "get", -1, null)),
+          AdvanceManualClock(1 * 1000),
+          // validate that the expired elements are not returned
+          CheckNewAnswer(
+            OutputEvent("k1", 1, isTTLValue = false, -1),
+            OutputEvent("k1", 2, isTTLValue = false, -1),
+            OutputEvent("k1", 3, isTTLValue = false, -1),
+            OutputEvent("k1", 7, isTTLValue = false, -1),
+            OutputEvent("k1", 8, isTTLValue = false, -1),
+            OutputEvent("k1", 9, isTTLValue = false, -1)
+          ),
+          StopStream
+        )
+      }
     }
   }
 
-  /*
-  test("verify iterator works with expired values in beginning of list - processing time ttl") {
+
+  test("verify iterator works with expired values in beginning of list") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
-      val inputStream = MemoryStream[InputEvent]
-      val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
-      val result = inputStream.toDS()
-        .groupByKey(x => x.key)
-        .transformWithState(
-          getProcessor(ttlConfig),
-          TimeoutMode.NoTimeouts(),
-          TTLMode.ProcessingTimeTTL(),
-          OutputMode.Append())
+      withTempDir { checkpointLocation =>
+        val inputStream = MemoryStream[InputEvent]
+        val ttlConfig1 = TTLConfig(ttlDuration = Duration.ofMinutes(1))
+        val result1 = inputStream.toDS()
+          .groupByKey(x => x.key)
+          .transformWithState(
+            getProcessor(ttlConfig1),
+            TimeoutMode.NoTimeouts(),
+            TTLMode.ProcessingTimeTTL(),
+            OutputMode.Append())
 
-      val clock = new StreamManualClock
-      testStream(result)(
-        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
-        // Add three elements with duration of a minute
-        AddData(inputStream, InputEvent("k1", "put", 1)),
-        AdvanceManualClock(1 * 1000),
-        AddData(inputStream, InputEvent("k1", "append", 2)),
-        AddData(inputStream, InputEvent("k1", "append", 3)),
-        // advance clock to trigger processing
-        AdvanceManualClock(1 * 1000),
-        CheckNewAnswer(),
-        // Add three elements with a duration of 2 minutes
-        AddData(inputStream, InputEvent("k1", "append", 4)),
-        AddData(inputStream, InputEvent("k1", "append", 5)),
-        AddData(inputStream, InputEvent("k1", "append", 6)),
-        // advance clock to trigger processing
-        AdvanceManualClock(1 * 1000),
-        CheckNewAnswer(),
-        // Advance clock to expire the middle three elements
-        AdvanceManualClock(60 * 1000),
-        // Get all elements in the list
-        AddData(inputStream, InputEvent("k1", "get", -1, null)),
-        AdvanceManualClock(1 * 1000),
-        // Validate that the expired elements are not returned
-        CheckNewAnswer(
-          OutputEvent("k1", 4, isTTLValue = false, -1),
-          OutputEvent("k1", 5, isTTLValue = false, -1),
-          OutputEvent("k1", 6, isTTLValue = false, -1)
+        val ttlConfig2 = TTLConfig(ttlDuration = Duration.ofMinutes(2))
+        val result2 = inputStream.toDS()
+          .groupByKey(x => x.key)
+          .transformWithState(
+            getProcessor(ttlConfig2),
+            TimeoutMode.NoTimeouts(),
+            TTLMode.ProcessingTimeTTL(),
+            OutputMode.Append())
+
+        val clock = new StreamManualClock
+        // add 3 elements with a duration of a minute
+        testStream(result1)(
+          StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock,
+            checkpointLocation = checkpointLocation.getAbsolutePath),
+          AddData(inputStream, InputEvent("k1", "put", 1)),
+          AdvanceManualClock(1 * 1000),
+          AddData(inputStream, InputEvent("k1", "append", 2)),
+          AddData(inputStream, InputEvent("k1", "append", 3)),
+          // advance clock to trigger processing
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(),
+          // get ttl values
+          AddData(inputStream, InputEvent("k1", "get_ttl_value_from_state", -1, null)),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(
+            OutputEvent("k1", -1, isTTLValue = true, 61000),
+            OutputEvent("k1", -1, isTTLValue = true, 62000),
+            OutputEvent("k1", -1, isTTLValue = true, 62000)
+          ),
+          AddData(inputStream, InputEvent("k1", "get", -1, null)),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(
+            OutputEvent("k1", 1, isTTLValue = false, -1),
+            OutputEvent("k1", 2, isTTLValue = false, -1),
+            OutputEvent("k1", 3, isTTLValue = false, -1)
+          ),
+          StopStream
         )
-      )
+
+        // add 3 elements with a duration of two minutes
+        testStream(result2)(
+          StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock,
+            checkpointLocation = checkpointLocation.getAbsolutePath),
+          AddData(inputStream, InputEvent("k1", "append", 4)),
+          AddData(inputStream, InputEvent("k1", "append", 5)),
+          AddData(inputStream, InputEvent("k1", "append", 6)),
+          // advance clock to trigger processing
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(),
+          // get ttl values
+          AddData(inputStream, InputEvent("k1", "get_ttl_value_from_state", -1, null)),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(
+            OutputEvent("k1", -1, isTTLValue = true, 61000),
+            OutputEvent("k1", -1, isTTLValue = true, 62000),
+            OutputEvent("k1", -1, isTTLValue = true, 62000),
+            OutputEvent("k1", -1, isTTLValue = true, 125000),
+            OutputEvent("k1", -1, isTTLValue = true, 125000),
+            OutputEvent("k1", -1, isTTLValue = true, 125000)
+          ),
+          // expire beginning values
+          AdvanceManualClock(60 * 1000),
+          AddData(inputStream, InputEvent("k1", "get", -1, null)),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(
+            OutputEvent("k1", 4, isTTLValue = false, -1),
+            OutputEvent("k1", 5, isTTLValue = false, -1),
+            OutputEvent("k1", 6, isTTLValue = false, -1)
+          ),
+          StopStream
+        )
+      }
     }
   }
-   */
 }

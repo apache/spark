@@ -70,7 +70,6 @@ class ListStateImplWithTTL[S](
    */
   override def get(): Iterator[S] = {
     val encodedKey = stateTypesEncoder.encodeGroupingKey()
-    logError(s"### size: ${store.valuesIterator(encodedKey, stateName).size}")
 
     val unsafeRowValuesIterator = store.valuesIterator(encodedKey, stateName)
 
@@ -78,7 +77,6 @@ class ListStateImplWithTTL[S](
 
     new Iterator[S] {
       override def hasNext: Boolean = {
-        logError(s"### calling hasNext")
         if (currentRow == null) {
           setNextValidRow()
         }
@@ -87,7 +85,6 @@ class ListStateImplWithTTL[S](
       }
 
       override def next(): S = {
-        logError(s"### calling next()")
         if (currentRow == null) {
           setNextValidRow()
         }
@@ -102,19 +99,14 @@ class ListStateImplWithTTL[S](
       // sets currentRow to a valid state, where we are
       // pointing to a non-expired row
       private def setNextValidRow(): Unit = {
-        logError(s"### setNextValidRow")
         assert(currentRow == null)
         if (unsafeRowValuesIterator.hasNext) {
-          logError(s"### set currentRow")
           currentRow = unsafeRowValuesIterator.next()
-          logError(s"### currentRowVal: ${stateTypesEncoder.decodeValue(currentRow)}")
         } else {
           currentRow = null
           return
         }
         while (unsafeRowValuesIterator.hasNext && isExpired(currentRow)) {
-          logError(s"### isExpired, ${isExpired(currentRow)}")
-          logError(s"### currentRowVal: ${stateTypesEncoder.decodeValue(currentRow)}")
           currentRow = unsafeRowValuesIterator.next()
         }
 
@@ -197,7 +189,6 @@ class ListStateImplWithTTL[S](
    * @param groupingKey grouping key for which cleanup should be performed.
    */
   override def clearIfExpired(groupingKey: Array[Byte]): Unit = {
-    logError(s"### clearIfExpired")
     val encodedGroupingKey = stateTypesEncoder.encodeSerializedGroupingKey(groupingKey)
     val unsafeRowValuesIterator = store.valuesIterator(encodedGroupingKey, stateName)
     // We clear the list, and use the iterator to put back all of the non-expired values
@@ -211,14 +202,11 @@ class ListStateImplWithTTL[S](
         } else {
           store.merge(encodedGroupingKey, encodedValue, stateName)
         }
-      } else {
-        logError(s"### expired value found")
       }
     }
   }
 
   private def isExpired(valueRow: UnsafeRow): Boolean = {
-    logError(s"### isExpired, ${batchTimestampMs}")
     val expirationMs = stateTypesEncoder.decodeTtlExpirationMs(valueRow)
     expirationMs.exists(StateTTL.isExpired(_, batchTimestampMs))
   }
