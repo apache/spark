@@ -2349,7 +2349,7 @@ case class Ascii(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def dataType: DataType = IntegerType
-  override def inputTypes: Seq[DataType] = Seq(StringType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
 
   protected override def nullSafeEval(string: Any): Any = {
     // only pick the first character to reduce the `toString` cost
@@ -2477,7 +2477,7 @@ case class UnBase64(child: Expression, failOnError: Boolean = false)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def dataType: DataType = BinaryType
-  override def inputTypes: Seq[DataType] = Seq(StringType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
 
   def this(expr: Expression) = this(expr, false)
 
@@ -2670,7 +2670,7 @@ case class StringDecode(bin: Expression, charset: Expression, legacyCharsets: Bo
   override def left: Expression = bin
   override def right: Expression = charset
   override def dataType: DataType = StringType
-  override def inputTypes: Seq[DataType] = Seq(BinaryType, StringType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, StringTypeAnyCollation)
 
   private val supportedCharsets = Set(
     "US-ASCII", "ISO-8859-1", "UTF-8", "UTF-16BE", "UTF-16LE", "UTF-16")
@@ -2747,7 +2747,8 @@ case class Encode(str: Expression, charset: Expression, legacyCharsets: Boolean)
   override def left: Expression = str
   override def right: Expression = charset
   override def dataType: DataType = BinaryType
-  override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeAnyCollation, StringTypeAnyCollation)
 
   private val supportedCharsets = Set(
     "US-ASCII", "ISO-8859-1", "UTF-8", "UTF-16BE", "UTF-16LE", "UTF-16")
@@ -2844,7 +2845,7 @@ case class ToBinary(
 
   override def children: Seq[Expression] = expr +: format.toSeq
 
-  override def inputTypes: Seq[AbstractDataType] = children.map(_ => StringType)
+  override def inputTypes: Seq[AbstractDataType] = children.map(_ => StringTypeAnyCollation)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     def isValidFormat: Boolean = {
@@ -2852,7 +2853,7 @@ case class ToBinary(
     }
     format match {
       case Some(f) =>
-        if (f.foldable && (f.dataType == StringType || f.dataType == NullType)) {
+        if (f.foldable && (f.dataType.isInstanceOf[StringType] || f.dataType == NullType)) {
           if (isValidFormat || nullOnInvalidFormat) {
             super.checkInputDataTypes()
           } else {
@@ -2860,9 +2861,9 @@ case class ToBinary(
               errorSubClass = "INVALID_ARG_VALUE",
               messageParameters = Map(
                 "inputName" -> "fmt",
-                "requireType" -> s"case-insensitive ${toSQLType(StringType)}",
+                "requireType" -> s"case-insensitive ${toSQLType(StringTypeAnyCollation)}",
                 "validValues" -> "'hex', 'utf-8', 'utf8', or 'base64'",
-                "inputValue" -> toSQLValue(fmt, StringType)
+                "inputValue" -> toSQLValue(fmt, f.dataType)
               )
             )
           }
@@ -2871,7 +2872,7 @@ case class ToBinary(
             errorSubClass = "NON_FOLDABLE_INPUT",
             messageParameters = Map(
               "inputName" -> toSQLId("fmt"),
-              "inputType" -> toSQLType(StringType),
+              "inputType" -> toSQLType(StringTypeAnyCollation),
               "inputExpr" -> toSQLExpr(f)
             )
           )
@@ -2880,7 +2881,7 @@ case class ToBinary(
             errorSubClass = "INVALID_ARG_VALUE",
             messageParameters = Map(
               "inputName" -> "fmt",
-              "requireType" -> s"case-insensitive ${toSQLType(StringType)}",
+              "requireType" -> s"case-insensitive ${toSQLType(StringTypeAnyCollation)}",
               "validValues" -> "'hex', 'utf-8', 'utf8', or 'base64'",
               "inputValue" -> toSQLValue(f.eval(), f.dataType)
             )
@@ -2926,10 +2927,13 @@ case class FormatNumber(x: Expression, d: Expression)
 
   override def left: Expression = x
   override def right: Expression = d
-  override def dataType: DataType = StringType
+  override def dataType: DataType = right.dataType match {
+    case s: StringType => s
+    case _ => StringType
+  }
   override def nullable: Boolean = true
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(NumericType, TypeCollection(IntegerType, StringType))
+    Seq(NumericType, TypeCollection(IntegerType, StringTypeAnyCollation))
 
   private val defaultFormat = "#,###,###,###,###,###,##0"
 
@@ -2984,7 +2988,7 @@ case class FormatNumber(x: Expression, d: Expression)
 
             numberFormat.applyLocalizedPattern(pattern.toString)
         }
-      case StringType =>
+      case _: StringType =>
         val dValue = dObject.asInstanceOf[UTF8String].toString
         lastDStringValue match {
           case Some(last) if last == dValue =>
@@ -3058,7 +3062,7 @@ case class FormatNumber(x: Expression, d: Expression)
               ${ev.isNull} = true;
             }
            """
-        case StringType =>
+        case _: StringType =>
           val lastDValue = ctx.addMutableState("String", "lastDValue", v => s"""$v = null;""")
           val dValue = ctx.freshName("dValue")
           s"""
@@ -3107,8 +3111,9 @@ case class Sentences(
 
   override def nullable: Boolean = true
   override def dataType: DataType =
-    ArrayType(ArrayType(StringType, containsNull = false), containsNull = false)
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, StringType)
+    ArrayType(ArrayType(str.dataType, containsNull = false), containsNull = false)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeAnyCollation, StringTypeAnyCollation, StringTypeAnyCollation)
   override def first: Expression = str
   override def second: Expression = language
   override def third: Expression = country
