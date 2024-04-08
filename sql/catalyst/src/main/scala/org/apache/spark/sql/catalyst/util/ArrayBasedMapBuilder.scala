@@ -34,14 +34,22 @@ import org.apache.spark.unsafe.array.ByteArrayMethods
 class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Serializable {
   assert(!keyType.existsRecursively(_.isInstanceOf[MapType]), "key of map cannot be/contain map")
 
-  private lazy val keyToIndex = keyType match {
-    // Binary type data is `byte[]`, which can't use `==` to check equality.
-    case _: AtomicType | _: CalendarIntervalType | _: NullType
-      if !keyType.isInstanceOf[BinaryType] => new java.util.HashMap[Any, Int]()
-    case _ =>
-      // for complex types, use interpreted ordering to be able to compare unsafe data with safe
-      // data, e.g. UnsafeRow vs GenericInternalRow.
-      new java.util.TreeMap[Any, Int](TypeUtils.getInterpretedOrdering(keyType))
+  private lazy val keyToIndex = {
+    def hashMap = new java.util.HashMap[Any, Int]()
+    def treeMap = new java.util.TreeMap[Any, Int](TypeUtils.getInterpretedOrdering(keyType))
+
+    keyType match {
+      // StringType binary equality support implies hashing support
+      case s: StringType if s.supportsBinaryEquality => hashMap
+      case _: StringType => treeMap
+      // Binary type data is `byte[]`, which can't use `==` to check equality.
+      case _: BinaryType => treeMap
+      case _: AtomicType | _: CalendarIntervalType | _: NullType => hashMap
+      case _ =>
+        // for complex types, use interpreted ordering to be able to compare unsafe data with safe
+        // data, e.g. UnsafeRow vs GenericInternalRow.
+        treeMap
+    }
   }
 
   // TODO: specialize it
@@ -53,11 +61,13 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
 
   private val mapKeyDedupPolicy = SQLConf.get.getConf(SQLConf.MAP_KEY_DEDUP_POLICY)
 
-  private lazy val keyNormalizer: Any => Any = keyType match {
-    case FloatType => NormalizeFloatingNumbers.FLOAT_NORMALIZER
-    case DoubleType => NormalizeFloatingNumbers.DOUBLE_NORMALIZER
-    case _ => identity
-  }
+  private lazy val keyNormalizer: Any => Any =
+    (SQLConf.get.getConf(SQLConf.DISABLE_MAP_KEY_NORMALIZATION), keyType) match {
+      case (false, FloatType) => NormalizeFloatingNumbers.FLOAT_NORMALIZER
+      case (false, DoubleType) => NormalizeFloatingNumbers.DOUBLE_NORMALIZER
+      case _ => identity
+    }
+
 
   def put(key: Any, value: Any): Unit = {
     if (key == null) {

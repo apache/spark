@@ -31,7 +31,8 @@ import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.worker.WorkerWatcher
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{CONFIG, CONFIG2, REASON}
 import org.apache.spark.internal.config._
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.util.NettyUtils
@@ -282,7 +283,7 @@ private[spark] class CoarseGrainedExecutorBackend(
                              throwable: Throwable = null,
                              notifyDriver: Boolean = true) = {
     if (stopping.compareAndSet(false, true)) {
-      val message = "Executor self-exiting due to : " + reason
+      val message = log"Executor self-exiting due to : ${MDC(REASON, reason)}"
       if (throwable != null) {
         logError(message, throwable)
       } else {
@@ -320,9 +321,9 @@ private[spark] class CoarseGrainedExecutorBackend(
       if (migrationEnabled) {
         env.blockManager.decommissionBlockManager()
       } else if (env.conf.get(STORAGE_DECOMMISSION_ENABLED)) {
-        logError(s"Storage decommissioning attempted but neither " +
-          s"${STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED.key} or " +
-          s"${STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED.key} is enabled ")
+        logError(log"Storage decommissioning attempted but neither " +
+          log"${MDC(CONFIG, STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED.key)} or " +
+          log"${MDC(CONFIG2, STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED.key)} is enabled ")
       }
       if (executor != null) {
         executor.decommission()

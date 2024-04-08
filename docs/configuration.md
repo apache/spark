@@ -292,7 +292,7 @@ of the most common options to set are:
     shared with other non-JVM processes. When PySpark is run in YARN or Kubernetes, this memory
     is added to executor resource requests.
     <br/>
-    <em>Note:</em> This feature is dependent on Python's `resource` module; therefore, the behaviors and
+    <em>Note:</em> This feature is dependent on Python's <code>resource</code> module; therefore, the behaviors and
     limitations are inherited. For instance, Windows does not support resource limiting and actual
     resource is not limited on MacOS.
   </td>
@@ -561,7 +561,7 @@ of the most common options to set are:
   <td>
     The maximum number of executor failures before failing the application.
     This configuration only takes effect on YARN, or Kubernetes when 
-    `spark.kubernetes.allocation.pods.allocator` is set to 'direct'.
+    <code>spark.kubernetes.allocation.pods.allocator</code> is set to 'direct'.
   </td>
   <td>3.5.0</td>
 </tr>
@@ -572,7 +572,7 @@ of the most common options to set are:
     Interval after which executor failures will be considered independent and
     not accumulate towards the attempt count.
     This configuration only takes effect on YARN, or Kubernetes when 
-    `spark.kubernetes.allocation.pods.allocator` is set to 'direct'.
+    <code>spark.kubernetes.allocation.pods.allocator</code> is set to 'direct'.
   </td>
   <td>3.5.0</td>
 </tr>
@@ -1099,7 +1099,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Timeout for the established connections between shuffle servers and clients to be marked
     as idled and closed if there are still outstanding fetch requests but no traffic no the channel
-    for at least `connectionTimeout`.
+    for at least <code>connectionTimeout</code>.
   </td>
   <td>1.2.0</td>
 </tr>
@@ -1283,7 +1283,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Timeout for the established connections for fetching files in Spark RPC environments to be marked
     as idled and closed if there are still outstanding files being downloaded but no traffic no the channel
-    for at least `connectionTimeout`.
+    for at least <code>connectionTimeout</code>.
   </td>
   <td>1.6.0</td>
 </tr>
@@ -1604,7 +1604,7 @@ Apart from these, the following properties are also available, and may be useful
     identically on all the workers, drivers and masters. In is only effective when
     <code>spark.ui.reverseProxy</code> is turned on. This setting is not needed when the Spark
     master web UI is directly reachable.<br/>
-    Note that the value of the setting can't contain the keyword `proxy` or `history` after split by "/". Spark UI relies on both keywords for getting REST API endpoints from URIs.
+    Note that the value of the setting can't contain the keyword <code>proxy</code> or <code>history</code> after split by "/". Spark UI relies on both keywords for getting REST API endpoints from URIs.
   </td>
   <td>2.1.0</td>
 </tr>
@@ -1826,7 +1826,7 @@ Apart from these, the following properties are also available, and may be useful
     Block size used in LZ4 compression, in the case when LZ4 compression codec
     is used. Lowering this block size will also lower shuffle memory usage when LZ4 is used.
     Default unit is bytes, unless otherwise specified. This configuration only applies to
-    `spark.io.compression.codec`.
+    <code>spark.io.compression.codec</code>.
   </td>
   <td>1.4.0</td>
 </tr>
@@ -1837,7 +1837,7 @@ Apart from these, the following properties are also available, and may be useful
     Block size in Snappy compression, in the case when Snappy compression codec is used.
     Lowering this block size will also lower shuffle memory usage when Snappy is used.
     Default unit is bytes, unless otherwise specified. This configuration only applies
-    to `spark.io.compression.codec`.
+    to <code>spark.io.compression.codec</code>.
   </td>
   <td>1.4.0</td>
 </tr>
@@ -1847,7 +1847,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Compression level for Zstd compression codec. Increasing the compression level will result in better
     compression at the expense of more CPU and memory. This configuration only applies to
-    `spark.io.compression.codec`.
+    <code>spark.io.compression.codec</code>.
   </td>
   <td>2.3.0</td>
 </tr>
@@ -1858,7 +1858,7 @@ Apart from these, the following properties are also available, and may be useful
     Buffer size in bytes used in Zstd compression, in the case when Zstd compression codec
     is used. Lowering this size will lower the shuffle memory usage when Zstd is used, but it
     might increase the compression cost because of excessive JNI call overhead. This
-    configuration only applies to `spark.io.compression.codec`.
+    configuration only applies to <code>spark.io.compression.codec</code>.
   </td>
   <td>2.3.0</td>
 </tr>
@@ -2586,7 +2586,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Timeout for the established connections between RPC peers to be marked as idled and closed
     if there are outstanding RPC requests but no traffic on the channel for at least
-    `connectionTimeout`.
+    <code>connectionTimeout</code>.
   </td>
   <td>1.2.0</td>
 </tr>
@@ -2699,7 +2699,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>10000</td>
   <td>
     The default capacity for event queues. Spark will try to initialize an event queue
-    using capacity specified by `spark.scheduler.listenerbus.eventqueue.queueName.capacity`
+    using capacity specified by <code>spark.scheduler.listenerbus.eventqueue.queueName.capacity</code>
     first. If it's not configured, Spark will use the default capacity specified by this
     config. Note that capacity must be greater than 0. Consider increasing value (e.g. 20000)
     if listener events are dropped. Increasing this value may result in the driver using more memory.
@@ -2907,7 +2907,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.speculation.multiplier</code></td>
-  <td>1.5</td>
+  <td>3</td>
   <td>
     How many times slower a task is than the median to be considered for speculation.
   </td>
@@ -2915,7 +2915,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.speculation.quantile</code></td>
-  <td>0.75</td>
+  <td>0.9</td>
   <td>
     Fraction of tasks which must be complete before speculation is enabled for a particular stage.
   </td>
@@ -3180,7 +3180,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Initial number of executors to run if dynamic allocation is enabled.
     <br /><br />
-    If `--num-executors` (or `spark.executor.instances`) is set and larger than this value, it will
+    If <code>--num-executors</code> (or <code>spark.executor.instances</code>) is set and larger than this value, it will
     be used as the initial number of executors.
   </td>
   <td>1.3.0</td>

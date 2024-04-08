@@ -1223,6 +1223,11 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.select(try_to_number(col("a"), lit("$99.99"))), Seq(Row(78.12)))
   }
 
+  test("SPARK-47646: try_to_number should return NULL for malformed input") {
+    val df = spark.createDataset(spark.sparkContext.parallelize(Seq("11")))
+    checkAnswer(df.select(try_to_number($"value", lit("$99.99"))), Seq(Row(null)))
+  }
+
   test("SPARK-44905: stateful lastRegex causes NullPointerException on eval for regexp_replace") {
     val df = sql("select regexp_replace('', '[a\\\\d]{0, 2}', 'x')")
     intercept[SparkRuntimeException](df.queryExecution.optimizedPlan)

@@ -201,7 +201,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   override def visitComplexColType(ctx: ComplexColTypeContext): StructField = withOrigin(ctx) {
     import ctx._
     val structField = StructField(
-      name = identifier.getText,
+      name = errorCapturingIdentifier.getText,
       dataType = typedVisit(dataType()),
       nullable = NULL == null)
     Option(commentSpec).map(visitCommentSpec).map(structField.withComment).getOrElse(structField)

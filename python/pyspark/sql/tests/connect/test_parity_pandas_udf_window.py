@@ -25,7 +25,7 @@ class PandasUDFWindowParityTests(WindowPandasUDFTestsMixin, ReusedConnectTestCas
     #  AnalysisException
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_invalid_args(self):
-        self.check_invalid_args()
+        super().test_invalid_args()
 
 
 if __name__ == "__main__":
