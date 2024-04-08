@@ -159,6 +159,11 @@ The legacy method is an AES-based encryption mechanism relying on a shared secre
 RPC authentication to also be enabled. This method uses a bespoke protocol and it is recommended
 to use SSL instead.
 
+One may prefer to use the SSL based encryption in scenarios where compliance mandates the usage
+of specific protocols; or to leverage the security of a more standard encryption library. However,
+the AES based encryption is simpler to configure and may be preferred if the only requirement
+is that data be encrypted in transit.
+
 If both options are enabled in the configuration, the SSL based RPC encryption takes precedence
 and the AES based encryption will not be used (and a warning message will be emitted).
 
