@@ -113,9 +113,9 @@ class CollationStringExpressionsSuite
 
   test("left/right/substr on collated proper string returns proper value") {
     Seq("utf8_binary_lcase", "utf8_binary", "unicode", "unicode_ci").foreach { collationName =>
-      checkAnswerAndType(sql(s"select left(collate('Spark', $collationName), 2))"), Row("Sp"),
+      checkAnswerAndType(sql(s"select left(collate('Spark', '$collationName'), 2))"), Row("Sp"),
         StringType(CollationFactory.collationNameToId(collationName)))
-      checkAnswer(sql(s"select right(collate('Spark', $collationName), 2))"), Row("rk"))
+      checkAnswer(sql(s"select right(collate('Spark', '$collationName'), 2))"), Row("rk"))
       checkAnswer(sql(s"select right('Def' collate $collationName, 1)"), Row("f"))
       checkAnswer(sql(s"select substr('abc' collate $collationName, 2)"), Row("bc"))
       checkAnswer(sql(s"select substr('example' collate $collationName, 0, 2)"), Row("ex"))
