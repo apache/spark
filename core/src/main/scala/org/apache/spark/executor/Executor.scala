@@ -41,7 +41,7 @@ import org.slf4j.MDC
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.{Logging, MDC => LogMDC}
-import org.apache.spark.internal.LogKey.{ERROR, MAX_ATTEMPTS, TASK_ID, TASK_NAME, TIMEOUT}
+import org.apache.spark.internal.LogKey.{CLASS_NAME, ERROR, MAX_ATTEMPTS, TASK_ID, TASK_NAME, TIMEOUT}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.plugin.PluginContainer
 import org.apache.spark.memory.{SparkOutOfMemoryError, TaskMemoryManager}
@@ -661,9 +661,10 @@ private[spark] class Executor(
           // uh-oh.  it appears the user code has caught the fetch-failure without throwing any
           // other exceptions.  Its *possible* this is what the user meant to do (though highly
           // unlikely).  So we will log an error and keep going.
-          logError(s"$taskName completed successfully though internally it encountered " +
-            s"unrecoverable fetch failures!  Most likely this means user code is incorrectly " +
-            s"swallowing Spark's internal ${classOf[FetchFailedException]}", fetchFailure)
+          logError(log"${LogMDC(TASK_NAME, taskName)} completed successfully though internally " +
+            log"it encountered unrecoverable fetch failures! Most likely this means user code " +
+            log"is incorrectly swallowing Spark's internal " +
+            log"${LogMDC(CLASS_NAME, classOf[FetchFailedException])}", fetchFailure)
         }
         val taskFinishNs = System.nanoTime()
         val taskFinishCpu = if (threadMXBean.isCurrentThreadCpuTimeSupported) {
@@ -802,7 +803,7 @@ private[spark] class Executor(
           // Attempt to exit cleanly by informing the driver of our failure.
           // If anything goes wrong (or this was a fatal exception), we will delegate to
           // the default uncaught exception handler, which will terminate the Executor.
-          logError(s"Exception in $taskName", t)
+          logError(log"Exception in ${LogMDC(TASK_NAME, taskName)}", t)
 
           // SPARK-20904: Do not report failure to driver if if happened during shut down. Because
           // libraries may set up shutdown hooks that race with running tasks during shutdown,

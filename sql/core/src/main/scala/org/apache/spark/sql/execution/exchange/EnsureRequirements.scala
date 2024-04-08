@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
+import org.apache.spark.sql.connector.catalog.functions.Reducer
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
@@ -505,11 +506,28 @@ case class EnsureRequirements(
           }
         }
 
-        // Now we need to push-down the common partition key to the scan in each child
-        newLeft = populatePartitionValues(left, mergedPartValues, leftSpec.joinKeyPositions,
-          applyPartialClustering, replicateLeftSide)
-        newRight = populatePartitionValues(right, mergedPartValues, rightSpec.joinKeyPositions,
-          applyPartialClustering, replicateRightSide)
+        // in case of compatible but not identical partition expressions, we apply 'reduce'
+        // transforms to group one side's partitions as well as the common partition values
+        val leftReducers = leftSpec.reducers(rightSpec)
+        val rightReducers = rightSpec.reducers(leftSpec)
+
+        if (leftReducers.isDefined || rightReducers.isDefined) {
+          mergedPartValues = reduceCommonPartValues(mergedPartValues,
+            leftSpec.partitioning.expressions,
+            leftReducers)
+          mergedPartValues = reduceCommonPartValues(mergedPartValues,
+            rightSpec.partitioning.expressions,
+            rightReducers)
+          val rowOrdering = RowOrdering
+            .createNaturalAscendingOrdering(partitionExprs.map(_.dataType))
+          mergedPartValues = mergedPartValues.sorted(rowOrdering.on((t: (InternalRow, _)) => t._1))
+        }
+
+        // Now we need to push-down the common partition information to the scan in each child
+        newLeft = populateCommonPartitionInfo(left, mergedPartValues, leftSpec.joinKeyPositions,
+          leftReducers, applyPartialClustering, replicateLeftSide)
+        newRight = populateCommonPartitionInfo(right, mergedPartValues, rightSpec.joinKeyPositions,
+          rightReducers, applyPartialClustering, replicateRightSide)
       }
     }
 
@@ -527,11 +545,12 @@ case class EnsureRequirements(
         joinType == LeftAnti || joinType == LeftOuter
   }
 
-  // Populate the common partition values down to the scan nodes
-  private def populatePartitionValues(
+  // Populate the common partition information down to the scan nodes
+  private def populateCommonPartitionInfo(
       plan: SparkPlan,
       values: Seq[(InternalRow, Int)],
       joinKeyPositions: Option[Seq[Int]],
+      reducers: Option[Seq[Option[Reducer[_, _]]]],
       applyPartialClustering: Boolean,
       replicatePartitions: Boolean): SparkPlan = plan match {
     case scan: BatchScanExec =>
@@ -539,13 +558,26 @@ case class EnsureRequirements(
         spjParams = scan.spjParams.copy(
           commonPartitionValues = Some(values),
           joinKeyPositions = joinKeyPositions,
+          reducers = reducers,
           applyPartialClustering = applyPartialClustering,
           replicatePartitions = replicatePartitions
         )
       )
     case node =>
-      node.mapChildren(child => populatePartitionValues(
-        child, values, joinKeyPositions, applyPartialClustering, replicatePartitions))
+      node.mapChildren(child => populateCommonPartitionInfo(
+        child, values, joinKeyPositions, reducers, applyPartialClustering, replicatePartitions))
+  }
+
+  private def reduceCommonPartValues(
+      commonPartValues: Seq[(InternalRow, Int)],
+      expressions: Seq[Expression],
+      reducers: Option[Seq[Option[Reducer[_, _]]]]) = {
+    reducers match {
+      case Some(reducers) => commonPartValues.groupBy { case (row, _) =>
+        KeyGroupedShuffleSpec.reducePartitionValue(row, expressions, reducers)
+      }.map{ case(wrapper, splits) => (wrapper.row, splits.map(_._2).sum) }.toSeq
+      case _ => commonPartValues
+    }
   }
 
   /**
