@@ -25,7 +25,8 @@ import org.apache.hive.service.cli.operation.GetSchemasOperation
 import org.apache.hive.service.cli.operation.MetadataOperation.DEFAULT_HIVE_CATALOG
 import org.apache.hive.service.cli.session.HiveSession
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey._
 import org.apache.spark.sql.SQLContext
 
 /**
@@ -47,9 +48,10 @@ private[hive] class SparkGetSchemasOperation(
 
   override def runInternal(): Unit = {
     // Do not change cmdStr. It's used for Hive auditing and authorization.
-    val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName"
-    val logMsg = s"Listing databases '$cmdStr'"
-    logInfo(s"$logMsg with $statementId")
+    val cmdStr = log"catalog : ${MDC(CATALOG_NAME, catalogName)}, " +
+      log"schemaPattern : ${MDC(SCHEMA_NAME, schemaName)}"
+    val logMsg = log"Listing databases '$cmdStr'"
+    logInfo(log"$logMsg with ${MDC(STATEMENT_ID, statementId)}")
     setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
     val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader

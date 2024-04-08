@@ -30,9 +30,11 @@ object LogKey extends Enumeration {
   val BROADCAST_ID = Value
   val BUCKET = Value
   val BYTECODE_SIZE = Value
+  val CATALOG_NAME = Value
   val CATEGORICAL_FEATURES = Value
   val CLASS_LOADER = Value
   val CLASS_NAME = Value
+  val COLUMN_NAME = Value
   val COMMAND = Value
   val COMMAND_OUTPUT = Value
   val COMPONENT = Value
@@ -80,6 +82,7 @@ object LogKey extends Enumeration {
   val RANGE = Value
   val RDD_ID = Value
   val REASON = Value
+  val REDACTED_STATE = Value
   val REDUCE_ID = Value
   val REMOTE_ADDRESS = Value
   val RETRY_COUNT = Value
@@ -88,6 +91,7 @@ object LogKey extends Enumeration {
   val RULE_BATCH_NAME = Value
   val RULE_NAME = Value
   val RULE_NUMBER_OF_RUNS = Value
+  val SCHEMA_NAME = Value
   val SESSION_ID = Value
   val SHARD_ID = Value
   val SHUFFLE_BLOCK_INFO = Value
@@ -95,9 +99,12 @@ object LogKey extends Enumeration {
   val SHUFFLE_MERGE_ID = Value
   val SIZE = Value
   val SLEEP_TIME = Value
+  val SPARK_VERSION = Value
   val STAGE_ID = Value
+  val STATEMENT_ID = Value
   val SUBMISSION_ID = Value
   val SUBSAMPLING_RATE = Value
+  val TABLE_NAME = Value
   val TASK_ATTEMPT_ID = Value
   val TASK_ID = Value
   val TASK_NAME = Value

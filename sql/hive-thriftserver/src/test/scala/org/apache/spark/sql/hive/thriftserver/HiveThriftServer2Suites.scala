@@ -46,7 +46,8 @@ import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ProcessTestUtils.ProcessOutputCapturer
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.SPARK_VERSION
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.HiveTestJars
 import org.apache.spark.sql.internal.SQLConf
@@ -92,7 +93,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftServer2Test {
 
       assertResult(true, "Spark version shouldn't be \"Unknown\"") {
         val version = client.getInfo(sessionHandle, GetInfoType.CLI_DBMS_VER).getStringValue
-        logInfo(s"Spark version: $version")
+        logInfo(log"Spark version: ${MDC(SPARK_VERSION, version)}")
         version != "Unknown"
       }
     }

@@ -27,7 +27,8 @@ import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.GetColumnsOperation
 import org.apache.hive.service.cli.session.HiveSession
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey._
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
@@ -58,9 +59,11 @@ private[hive] class SparkGetColumnsOperation(
 
   override def runInternal(): Unit = {
     // Do not change cmdStr. It's used for Hive auditing and authorization.
-    val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName, tablePattern : $tableName"
-    val logMsg = s"Listing columns '$cmdStr, columnName : $columnName'"
-    logInfo(s"$logMsg with $statementId")
+    val cmdStr = log"catalog : ${MDC(CATALOG_NAME, catalogName)}, " +
+      log"schemaPattern : ${MDC(SCHEMA_NAME, schemaName)}, " +
+      log"tablePattern : ${MDC(TABLE_NAME, tableName)}"
+    val logMsg = log"Listing columns '$cmdStr, columnName : ${MDC(COLUMN_NAME, columnName)}'"
+    logInfo(log"$logMsg with ${MDC(STATEMENT_ID, statementId)}")
 
     setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
