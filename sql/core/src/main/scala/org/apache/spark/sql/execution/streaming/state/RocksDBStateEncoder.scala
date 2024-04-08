@@ -323,8 +323,14 @@ class RangeKeyScanStateEncoder(
         field.dataType match {
           case BooleanType =>
           case ByteType =>
-            bbuf.put(positiveValMarker)
-            bbuf.put(value.asInstanceOf[Byte])
+            val byteVal = value.asInstanceOf[Byte]
+            val signCol = if (byteVal < 0) {
+              negativeValMarker
+            } else {
+              positiveValMarker
+            }
+            bbuf.put(signCol)
+            bbuf.put(byteVal)
             writer.write(idx, bbuf.array())
 
           case ShortType =>

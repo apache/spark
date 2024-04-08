@@ -994,6 +994,58 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("Support operations on complex types containing collated strings") {
+    checkAnswer(sql("select reverse('abc' collate utf8_binary_lcase)"), Seq(Row("cba")))
+    checkAnswer(sql(
+      """
+        |select reverse(array('a' collate utf8_binary_lcase,
+        |'b' collate utf8_binary_lcase))
+        |""".stripMargin), Seq(Row(Seq("b", "a"))))
+    checkAnswer(sql(
+      """
+        |select array_join(array('a' collate utf8_binary_lcase,
+        |'b' collate utf8_binary_lcase), ', ' collate utf8_binary_lcase)
+        |""".stripMargin), Seq(Row("a, b")))
+    checkAnswer(sql(
+      """
+        |select array_join(array('a' collate utf8_binary_lcase,
+        |'b' collate utf8_binary_lcase, null), ', ' collate utf8_binary_lcase,
+        |'c' collate utf8_binary_lcase)
+        |""".stripMargin), Seq(Row("a, b, c")))
+    checkAnswer(sql(
+      """
+        |select concat('a' collate utf8_binary_lcase, 'b' collate utf8_binary_lcase)
+        |""".stripMargin), Seq(Row("ab")))
+    checkAnswer(sql(
+      """
+        |select concat(array('a' collate utf8_binary_lcase, 'b' collate utf8_binary_lcase))
+        |""".stripMargin), Seq(Row(Seq("a", "b"))))
+    checkAnswer(sql(
+      """
+        |select map('a' collate utf8_binary_lcase, 1, 'b' collate utf8_binary_lcase, 2)
+        |['A' collate utf8_binary_lcase]
+        |""".stripMargin), Seq(Row(1)))
+    val ctx = "map('aaa' collate utf8_binary_lcase, 1, 'AAA' collate utf8_binary_lcase, 2)['AaA']"
+    val query = s"select $ctx"
+    checkError(
+      exception = intercept[AnalysisException](sql(query)),
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"map(collate(aaa), 1, collate(AAA), 2)[AaA]\"",
+        "paramIndex" -> "second",
+        "inputSql" -> "\"AaA\"",
+        "inputType" -> toSQLType(StringType),
+        "requiredType" -> toSQLType(StringType(
+          CollationFactory.collationNameToId("UTF8_BINARY_LCASE")))
+      ),
+      context = ExpectedContext(
+        fragment = ctx,
+        start = query.length - ctx.length,
+        stop = query.length - 1
+      )
+    )
+  }
+
   test("window aggregates should respect collation") {
     val t1 = "T_NON_BINARY"
     val t2 = "T_BINARY"
