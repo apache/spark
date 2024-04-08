@@ -50,6 +50,7 @@ object LogKey extends Enumeration {
   val EXIT_CODE = Value
   val FAILURES = Value
   val GROUP_ID = Value
+  val HISTORY_DIR = Value
   val HOST = Value
   val JOB_ID = Value
   val JOIN_CONDITION = Value
@@ -69,6 +70,7 @@ object LogKey extends Enumeration {
   val NUM_ITERATIONS = Value
   val OBJECT_ID = Value
   val OLD_BLOCK_MANAGER_ID = Value
+  val OPERATION_ID = Value
   val OPTIMIZER_CLASS_NAME = Value
   val OP_TYPE = Value
   val PARTITION_ID = Value
@@ -96,6 +98,7 @@ object LogKey extends Enumeration {
   val SIZE = Value
   val SLEEP_TIME = Value
   val STAGE_ID = Value
+  val STATEMENT_ID = Value
   val SUBMISSION_ID = Value
   val SUBSAMPLING_RATE = Value
   val TASK_ATTEMPT_ID = Value

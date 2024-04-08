@@ -30,7 +30,8 @@ import org.apache.hive.service.cli.operation.ExecuteStatementOperation
 import org.apache.hive.service.cli.session.HiveSession
 import org.apache.hive.service.rpc.thrift.{TCLIServiceConstants, TColumnDesc, TPrimitiveTypeEntry, TRowSet, TTableSchema, TTypeDesc, TTypeEntry, TTypeId, TTypeQualifiers, TTypeQualifierValue}
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.STATEMENT_ID
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.execution.HiveResult.getTimeFormatters
@@ -252,7 +253,9 @@ private[hive] class SparkExecuteStatementOperation(
         val currentState = getStatus().getState()
         if (currentState.isTerminal) {
           // This may happen if the execution was cancelled, and then closed from another thread.
-          logWarning(s"Ignore exception in terminal state with $statementId: $e")
+          logWarning(
+            log"Ignore exception in terminal state with ${MDC(STATEMENT_ID, statementId)}", e
+          )
         } else {
           logError(s"Error executing query with $statementId, currentState $currentState, ", e)
           setState(OperationState.ERROR)
