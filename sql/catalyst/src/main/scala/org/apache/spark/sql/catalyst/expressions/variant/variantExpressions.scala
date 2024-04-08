@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions.variant
 
-import scala.collection.mutable
 import scala.util.parsing.combinator.RegexParsers
 
 import org.apache.spark.SparkRuntimeException
@@ -28,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
+import org.apache.spark.sql.catalyst.json.JsonInferSchema
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, VARIANT_GET}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -486,53 +486,6 @@ object SchemaOfVariant {
    * Returns the tightest common type for two given data types. Input struct fields are assumed to
    * be sorted alphabetically.
    */
-  def mergeSchema(t1: DataType, t2: DataType): DataType = (t1, t2) match {
-    case (t1, t2) if t1 == t2 => t1
-    case (t1, NullType) => t1
-    case (NullType, t2) => t2
-    case (DoubleType, _: NumericType) | (_: NumericType, DoubleType) => DoubleType
-    case (t1: IntegralType, t2: DecimalType) => mergeSchema(DecimalType.forType(t1), t2)
-    case (t1: DecimalType, t2: IntegralType) => mergeSchema(t1, DecimalType.forType(t2))
-    case (t1: DecimalType, t2: DecimalType) =>
-      val scale = math.max(t1.scale, t2.scale)
-      val range = math.max(t1.precision - t1.scale, t2.precision - t2.scale)
-      if (range + scale > DecimalType.MAX_PRECISION) {
-        DoubleType
-      } else {
-        DecimalType(range + scale, scale)
-      }
-    case (StructType(fields1), StructType(fields2)) =>
-      val newFields = new mutable.ArrayBuffer[StructField]()
-      var idx1 = 0
-      var idx2 = 0
-      while (idx1 < fields1.length && idx2 < fields2.length) {
-        val name1 = fields1(idx1).name
-        val name2 = fields2(idx2).name
-        val cmp = name1.compareTo(name2)
-        if (cmp == 0) {
-          val dataType = mergeSchema(fields1(idx1).dataType, fields2(idx2).dataType)
-          newFields += StructField(name1, dataType)
-          idx1 += 1
-          idx2 += 1
-        } else if (cmp < 0) {
-          newFields += fields1(idx1)
-          idx1 += 1
-        } else {
-          newFields += fields2(idx2)
-          idx2 += 1
-        }
-      }
-      while (idx1 < fields1.length) {
-        newFields += fields1(idx1)
-        idx1 += 1
-      }
-      while (idx2 < fields2.length) {
-        newFields += fields2(idx2)
-        idx2 += 1
-      }
-      StructType(newFields.toArray)
-    case (ArrayType(elementType1, _), ArrayType(elementType2, _)) =>
-      ArrayType(mergeSchema(elementType1, elementType2))
-    case (_, _) => VariantType
-  }
+  def mergeSchema(t1: DataType, t2: DataType): DataType =
+    JsonInferSchema.compatibleType(t1, t2, VariantType)
 }
