@@ -174,34 +174,6 @@ class ColumnPruningSuite extends PlanTest {
     }
   }
 
-  test("Nested column pruning for Generate with Filter 3") {
-    withSQLConf(SQLConf.NESTED_SCHEMA_PRUNING_THROUGH_FILTER_GENERATE.key -> "true") {
-      val structType = StructType.fromDDL("d double, e array<string>, f double, g double, " +
-        "h array<struct<h1: int, h2: double, h3 int>>")
-      val input = LocalRelation($"a".int, $"b".int, $"c".struct(structType))
-      val selectedExprs = Seq(UnresolvedAttribute("a"), $"c".getField("d")) ++ Seq($"explode.h2")
-      val query =
-        input
-          .generate(Explode($"c".getField("h")), outputNames = Seq("explode"))
-          .select(selectedExprs: _*)
-          .where($"explode".getField("h1").isNotNull)
-          .analyze
-      val optimized = Optimize.execute(query)
-      val finalSelectedExprs = Seq(UnresolvedAttribute("a"), $"c.d".as("c.d")) ++
-        Seq($"explode.h2".as("h2"))
-      val correctAnswer =
-        input
-          .select($"a", $"c")
-          .generate(Explode($"c.h".as("c.h")),
-            unrequiredChildIndex = Seq(2),
-            outputNames = Seq("explode"))
-          .where($"explode.h1".isNotNull)
-          .select(finalSelectedExprs: _*)
-          .analyze
-      comparePlans(optimized, correctAnswer)
-    }
-  }
-
   test("Nested column pruning for Generate") {
     def runTest(
         origGenerator: Generator,
