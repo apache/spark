@@ -1641,7 +1641,7 @@ object CodeGenerator extends Logging {
         val timeMs: Double = duration.toDouble / NANOS_PER_MILLIS
         CodegenMetrics.METRIC_SOURCE_CODE_SIZE.update(code.body.length)
         CodegenMetrics.METRIC_COMPILATION_TIME.update(timeMs.toLong)
-        logInfo(log"Code generated in ${MDC(TIME_UNITS, timeMs)} ms")
+        logInfo(log"Code generated in ${MDC(TOTAL_TIME, timeMs)} ms")
         _compileTime.add(duration)
         result
     }
