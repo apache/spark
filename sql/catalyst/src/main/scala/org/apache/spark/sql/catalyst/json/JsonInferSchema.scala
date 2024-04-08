@@ -360,10 +360,10 @@ object JsonInferSchema {
 
   /**
    * Returns the most general data type for two given data types.
-   * When the two types are incompatible, return `incompatibleType` as a fallback result.
+   * When the two types are incompatible, return `defaultDataType` as a fallback result.
    */
   def compatibleType(
-      t1: DataType, t2: DataType, incompatibleType: DataType = StringType): DataType = {
+      t1: DataType, t2: DataType, defaultDataType: DataType = StringType): DataType = {
     TypeCoercion.findTightestCommonType(t1, t2).getOrElse {
       // t1 or t2 is a StructType, ArrayType, or an unexpected type.
       (t1, t2) match {
@@ -402,7 +402,7 @@ object JsonInferSchema {
             val comp = f1Name.compareTo(f2Name)
             if (comp == 0) {
               val dataType = compatibleType(
-                fields1(f1Idx).dataType, fields2(f2Idx).dataType, incompatibleType)
+                fields1(f1Idx).dataType, fields2(f2Idx).dataType, defaultDataType)
               newFields.add(StructField(f1Name, dataType, nullable = true))
               f1Idx += 1
               f2Idx += 1
@@ -426,21 +426,21 @@ object JsonInferSchema {
 
         case (ArrayType(elementType1, containsNull1), ArrayType(elementType2, containsNull2)) =>
           ArrayType(
-            compatibleType(elementType1, elementType2, incompatibleType),
+            compatibleType(elementType1, elementType2, defaultDataType),
             containsNull1 || containsNull2)
 
         // The case that given `DecimalType` is capable of given `IntegralType` is handled in
         // `findTightestCommonType`. Both cases below will be executed only when the given
         // `DecimalType` is not capable of the given `IntegralType`.
         case (t1: IntegralType, t2: DecimalType) =>
-          compatibleType(DecimalType.forType(t1), t2, incompatibleType)
+          compatibleType(DecimalType.forType(t1), t2, defaultDataType)
         case (t1: DecimalType, t2: IntegralType) =>
-          compatibleType(t1, DecimalType.forType(t2), incompatibleType)
+          compatibleType(t1, DecimalType.forType(t2), defaultDataType)
 
         case (TimestampNTZType, TimestampType) | (TimestampType, TimestampNTZType) =>
           TimestampType
 
-        case (_, _) => incompatibleType
+        case (_, _) => defaultDataType
       }
     }
   }
