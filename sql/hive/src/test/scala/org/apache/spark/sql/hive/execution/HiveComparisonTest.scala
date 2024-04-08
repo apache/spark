@@ -27,6 +27,8 @@ import scala.util.control.NonFatal
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.internal.LogKey.TEST_CASE_NAME
+import org.apache.spark.internal.MDC
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -274,7 +276,8 @@ abstract class HiveComparisonTest extends SparkFunSuite with BeforeAndAfterAll {
           .filterNot(_ contains "hive.exec.post.hooks")
 
       if (allQueries != queryList) {
-        logWarning(s"Simplifications made on unsupported operations for test $testCaseName")
+        logWarning(log"Simplifications made on unsupported operations for test " +
+          log"${MDC(TEST_CASE_NAME, testCaseName)}")
       }
 
       lazy val consoleTestCase = {
@@ -384,7 +387,8 @@ abstract class HiveComparisonTest extends SparkFunSuite with BeforeAndAfterAll {
               val resultComparison = sideBySide(hivePrintOut, catalystPrintOut).mkString("\n")
 
               if (recomputeCache) {
-                logWarning(s"Clearing cache files for failed test $testCaseName")
+                logWarning(log"Clearing cache files for failed test " +
+                  log"${MDC(TEST_CASE_NAME, testCaseName)}")
                 hiveCacheFiles.foreach(_.delete())
               }
 
