@@ -142,7 +142,8 @@ private[thriftserver] class HiveThriftServer2Listener(
         updateStoreWithTriggerEnabled(sessionData)
         sessionList.remove(e.sessionId)
       case None => logWarning(
-        log"onSessionClosed called with unknown session id: ${MDC(SESSION_ID, e.sessionId)}", e)
+        log"onSessionClosed called with unknown session id: ${MDC(SESSION_ID, e.sessionId)}"
+      )
     }
 
   private def onOperationStart(e: SparkListenerThriftServerOperationStart): Unit = {
