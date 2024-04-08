@@ -26,7 +26,8 @@ import scala.util.Try
 import org.apache.hadoop.fs.FileSystem
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.PATH
 import org.apache.spark.internal.config.SPARK_SHUTDOWN_TIMEOUT_MS
 
 
@@ -68,7 +69,8 @@ private[spark] object ShutdownHookManager extends Logging {
         logInfo("Deleting directory " + dirPath)
         Utils.deleteRecursively(new File(dirPath))
       } catch {
-        case e: Exception => logError(s"Exception while deleting Spark temp dir: $dirPath", e)
+        case e: Exception =>
+          logError(log"Exception while deleting Spark temp dir: ${MDC(PATH, dirPath)}", e)
       }
     }
   }

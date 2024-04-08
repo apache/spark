@@ -39,7 +39,8 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.spark._
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.rest._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.CLASS_NAME
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher.SparkLauncher
@@ -743,8 +744,11 @@ private[spark] class SparkSubmit extends Logging {
       }
     }
 
-    // In case of shells, spark.ui.showConsoleProgress can be true by default or by user.
-    if (isShell(args.primaryResource) && !sparkConf.contains(UI_SHOW_CONSOLE_PROGRESS)) {
+    // In case of shells, spark.ui.showConsoleProgress can be true by default or by user. Except,
+    // when Spark Connect is in local mode, because Spark Connect support its own progress
+    // reporting.
+    if (isShell(args.primaryResource) && !sparkConf.contains(UI_SHOW_CONSOLE_PROGRESS) &&
+        !sparkConf.contains("spark.local.connect")) {
       sparkConf.set(UI_SHOW_CONSOLE_PROGRESS, true)
     }
 
@@ -966,7 +970,7 @@ private[spark] class SparkSubmit extends Logging {
       mainClass = Utils.classForName(childMainClass)
     } catch {
       case e: ClassNotFoundException =>
-        logError(s"Failed to load class $childMainClass.")
+        logError(log"Failed to load class ${MDC(CLASS_NAME, childMainClass)}.")
         if (childMainClass.contains("thriftserver")) {
           logInfo(s"Failed to load main class $childMainClass.")
           logInfo("You need to build Spark with -Phive and -Phive-thriftserver.")
@@ -977,7 +981,7 @@ private[spark] class SparkSubmit extends Logging {
         }
         throw new SparkUserAppException(CLASS_NOT_FOUND_EXIT_STATUS)
       case e: NoClassDefFoundError =>
-        logError(s"Failed to load $childMainClass: ${e.getMessage()}")
+        logError(log"Failed to load ${MDC(CLASS_NAME, childMainClass)}", e)
         if (e.getMessage.contains("org/apache/hadoop/hive")) {
           logInfo(s"Failed to load hive class.")
           logInfo("You need to build Spark with -Phive and -Phive-thriftserver.")
@@ -1013,7 +1017,7 @@ private[spark] class SparkSubmit extends Logging {
         try {
           SparkContext.getActive.foreach(_.stop())
         } catch {
-          case e: Throwable => logError(s"Failed to close SparkContext: $e")
+          case e: Throwable => logError("Failed to close SparkContext", e)
         }
       }
     }

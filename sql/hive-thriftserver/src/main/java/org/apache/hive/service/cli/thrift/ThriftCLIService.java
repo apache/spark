@@ -697,6 +697,16 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
   }
 
   @Override
+  public TUploadDataResp UploadData(TUploadDataReq req) throws TException {
+    throw new UnsupportedOperationException("Method UploadData has not been implemented.");
+  }
+
+  @Override
+  public TDownloadDataResp DownloadData(TDownloadDataReq req) throws TException {
+    throw new UnsupportedOperationException("Method DownloadData has not been implemented.");
+  }
+
+  @Override
   public abstract void run();
 
   /**

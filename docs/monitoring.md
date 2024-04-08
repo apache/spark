@@ -705,6 +705,16 @@ A list of the available metrics, with a short description:
     The value is expressed in milliseconds.</td>
   </tr>
   <tr>
+    <td>ConcurrentGCCount</td>
+    <td>This metric returns the total number of collections that have occurred.
+        It only applies when the Java Garbage collector is G1 Concurrent GC.</td>
+  </tr>
+  <tr>
+    <td>ConcurrentGCTime</td>
+    <td>This metric returns the approximate accumulated collection elapsed time in milliseconds.
+        It only applies when the Java Garbage collector is G1 Concurrent GC.</td>
+  </tr> 
+  <tr>
     <td>resultSerializationTime</td>
     <td>Elapsed time spent serializing the task result. The value is expressed in milliseconds.</td>
   </tr>

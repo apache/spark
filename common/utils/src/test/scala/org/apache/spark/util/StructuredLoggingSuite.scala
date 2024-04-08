@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.util
 
 import java.io.File
@@ -57,14 +58,20 @@ trait LoggingSuiteBase
 
   def msgWithMDCAndException: LogEntry = log"Error in executor ${MDC(EXECUTOR_ID, "1")}."
 
-  def expectedPatternForBasicMsg(level: Level): String
-
   def msgWithConcat: LogEntry = log"Min Size: ${MDC(MIN_SIZE, "2")}, " +
     log"Max Size: ${MDC(MAX_SIZE, "4")}. " +
     log"Please double check."
 
+  // test for basic message (without any mdc)
+  def expectedPatternForBasicMsg(level: Level): String
+
+  // test for basic message and exception
+  def expectedPatternForBasicMsgWithException(level: Level): String
+
+  // test for message (with mdc)
   def expectedPatternForMsgWithMDC(level: Level): String
 
+  // test for message and exception
   def expectedPatternForMsgWithMDCAndException(level: Level): String
 
   def verifyMsgWithConcat(level: Level, logOutput: String): Unit
@@ -76,6 +83,17 @@ trait LoggingSuiteBase
       (Level.INFO, () => logInfo(basicMsg))).foreach { case (level, logFunc) =>
       val logOutput = captureLogOutput(logFunc)
       assert(expectedPatternForBasicMsg(level).r.matches(logOutput))
+    }
+  }
+
+  test("Basic logging with Exception") {
+    val exception = new RuntimeException("OOM")
+    Seq(
+      (Level.ERROR, () => logError(basicMsg, exception)),
+      (Level.WARN, () => logWarning(basicMsg, exception)),
+      (Level.INFO, () => logInfo(basicMsg, exception))).foreach { case (level, logFunc) =>
+      val logOutput = captureLogOutput(logFunc)
+      assert(expectedPatternForBasicMsgWithException(level).r.matches(logOutput))
     }
   }
 
@@ -98,7 +116,7 @@ trait LoggingSuiteBase
       (Level.INFO, () => logInfo(msgWithMDCAndException, exception))).foreach {
         case (level, logFunc) =>
           val logOutput = captureLogOutput(logFunc)
-          assert(expectedPatternForMsgWithMDCAndException(level).r.findFirstIn(logOutput).isDefined)
+          assert(expectedPatternForMsgWithMDCAndException(level).r.matches(logOutput))
       }
   }
 
@@ -133,6 +151,22 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
           "ts": "<timestamp>",
           "level": "$level",
           "msg": "This is a log message",
+          "logger": "$className"
+        }""")
+  }
+
+  override def expectedPatternForBasicMsgWithException(level: Level): String = {
+    compactAndToRegexPattern(
+      s"""
+        {
+          "ts": "<timestamp>",
+          "level": "$level",
+          "msg": "This is a log message",
+          "exception": {
+            "class": "java.lang.RuntimeException",
+            "msg": "OOM",
+            "stacktrace": "<stacktrace>"
+          },
           "logger": "$className"
         }""")
   }

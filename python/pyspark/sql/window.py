@@ -17,8 +17,6 @@
 import sys
 from typing import cast, Iterable, List, Tuple, TYPE_CHECKING, Union
 
-from py4j.java_gateway import JavaObject, JVMView
-
 from pyspark.sql.column import _to_seq, _to_java_column
 from pyspark.sql.utils import (
     try_remote_window,
@@ -27,12 +25,13 @@ from pyspark.sql.utils import (
 )
 
 if TYPE_CHECKING:
+    from py4j.java_gateway import JavaObject
     from pyspark.sql._typing import ColumnOrName, ColumnOrName_
 
 __all__ = ["Window", "WindowSpec"]
 
 
-def _to_java_cols(cols: Tuple[Union["ColumnOrName", List["ColumnOrName_"]], ...]) -> JavaObject:
+def _to_java_cols(cols: Tuple[Union["ColumnOrName", List["ColumnOrName_"]], ...]) -> "JavaObject":
     if len(cols) == 1 and isinstance(cols[0], list):
         cols = cols[0]  # type: ignore[assignment]
     sc = get_active_spark_context()
@@ -125,6 +124,8 @@ class Window:
         |  3|       b|         3|
         +---+--------+----------+
         """
+        from py4j.java_gateway import JVMView
+
         sc = get_active_spark_context()
         jspec = cast(JVMView, sc._jvm).org.apache.spark.sql.expressions.Window.partitionBy(
             _to_java_cols(cols)
@@ -182,6 +183,8 @@ class Window:
         |  3|       b|         1|
         +---+--------+----------+
         """
+        from py4j.java_gateway import JVMView
+
         sc = get_active_spark_context()
         jspec = cast(JVMView, sc._jvm).org.apache.spark.sql.expressions.Window.orderBy(
             _to_java_cols(cols)
@@ -263,6 +266,8 @@ class Window:
         +---+--------+---+
 
         """
+        from py4j.java_gateway import JVMView
+
         if start <= Window._PRECEDING_THRESHOLD:
             start = Window.unboundedPreceding
         if end >= Window._FOLLOWING_THRESHOLD:
@@ -351,6 +356,8 @@ class Window:
         +---+--------+---+
 
         """
+        from py4j.java_gateway import JVMView
+
         if start <= Window._PRECEDING_THRESHOLD:
             start = Window.unboundedPreceding
         if end >= Window._FOLLOWING_THRESHOLD:
@@ -375,7 +382,7 @@ class WindowSpec:
         Supports Spark Connect.
     """
 
-    def __init__(self, jspec: JavaObject) -> None:
+    def __init__(self, jspec: "JavaObject") -> None:
         self._jspec = jspec
 
     @try_remote_windowspec

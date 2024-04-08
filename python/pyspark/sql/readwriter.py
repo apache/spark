@@ -17,9 +17,7 @@
 import sys
 from typing import cast, overload, Dict, Iterable, List, Optional, Tuple, TYPE_CHECKING, Union
 
-from py4j.java_gateway import JavaClass, JavaObject
-
-from pyspark import RDD
+from pyspark.util import is_remote_only
 from pyspark.sql.column import _to_seq, _to_java_column, Column
 from pyspark.sql.types import StructType
 from pyspark.sql import utils
@@ -27,6 +25,8 @@ from pyspark.sql.utils import to_str
 from pyspark.errors import PySparkTypeError, PySparkValueError
 
 if TYPE_CHECKING:
+    from py4j.java_gateway import JavaObject
+    from pyspark.core.rdd import RDD
     from pyspark.sql._typing import OptionalPrimitiveType, ColumnOrName
     from pyspark.sql.session import SparkSession
     from pyspark.sql.dataframe import DataFrame
@@ -70,7 +70,7 @@ class DataFrameReader(OptionUtils):
         self._jreader = spark._jsparkSession.read()
         self._spark = spark
 
-    def _df(self, jdf: JavaObject) -> "DataFrame":
+    def _df(self, jdf: "JavaObject") -> "DataFrame":
         from pyspark.sql.dataframe import DataFrame
 
         return DataFrame(jdf, self._spark)
@@ -320,7 +320,7 @@ class DataFrameReader(OptionUtils):
 
     def json(
         self,
-        path: Union[str, List[str], RDD[str]],
+        path: Union[str, List[str], "RDD[str]"],
         schema: Optional[Union[StructType, str]] = None,
         primitivesAsString: Optional[Union[bool, str]] = None,
         prefersDecimal: Optional[Union[bool, str]] = None,
@@ -465,7 +465,11 @@ class DataFrameReader(OptionUtils):
         if type(path) == list:
             assert self._spark._sc._jvm is not None
             return self._df(self._jreader.json(self._spark._sc._jvm.PythonUtils.toSeq(path)))
-        elif isinstance(path, RDD):
+
+        if not is_remote_only():
+            from pyspark.core.rdd import RDD  # noqa: F401
+
+        if not is_remote_only() and isinstance(path, RDD):
 
             def func(iterator: Iterable) -> Iterable:
                 for x in iterator:
@@ -829,7 +833,11 @@ class DataFrameReader(OptionUtils):
         if type(path) == list:
             assert self._spark._sc._jvm is not None
             return self._df(self._jreader.csv(self._spark._sc._jvm.PythonUtils.toSeq(path)))
-        elif isinstance(path, RDD):
+
+        if not is_remote_only():
+            from pyspark.core.rdd import RDD  # noqa: F401
+
+        if not is_remote_only() and isinstance(path, RDD):
 
             def func(iterator):
                 for x in iterator:
@@ -861,7 +869,7 @@ class DataFrameReader(OptionUtils):
 
     def xml(
         self,
-        path: Union[str, List[str], RDD[str]],
+        path: Union[str, List[str], "RDD[str]"],
         rowTag: Optional[str] = None,
         schema: Optional[Union[StructType, str]] = None,
         excludeAttribute: Optional[Union[bool, str]] = None,
@@ -952,7 +960,11 @@ class DataFrameReader(OptionUtils):
         if type(path) == list:
             assert self._spark._sc._jvm is not None
             return self._df(self._jreader.xml(self._spark._sc._jvm.PythonUtils.toSeq(path)))
-        elif isinstance(path, RDD):
+
+        if not is_remote_only():
+            from pyspark.core.rdd import RDD  # noqa: F401
+
+        if not is_remote_only() and isinstance(path, RDD):
 
             def func(iterator: Iterable) -> Iterable:
                 for x in iterator:
@@ -1132,6 +1144,8 @@ class DataFrameReader(OptionUtils):
         -------
         :class:`DataFrame`
         """
+        from py4j.java_gateway import JavaClass
+
         if properties is None:
             properties = dict()
         assert self._spark._sc._gateway is not None
@@ -1177,7 +1191,7 @@ class DataFrameWriter(OptionUtils):
         self._spark = df.sparkSession
         self._jwrite = df._jdf.write()
 
-    def _sq(self, jsq: JavaObject) -> "StreamingQuery":
+    def _sq(self, jsq: "JavaObject") -> "StreamingQuery":
         from pyspark.sql.streaming import StreamingQuery
 
         return StreamingQuery(jsq)
@@ -2269,6 +2283,8 @@ class DataFrameWriter(OptionUtils):
         Don't create too many partitions in parallel on a large cluster;
         otherwise Spark might crash your external database systems.
         """
+        from py4j.java_gateway import JavaClass
+
         if properties is None:
             properties = dict()
 
@@ -2439,7 +2455,7 @@ def _test() -> None:
     import doctest
     import os
     import py4j
-    from pyspark.context import SparkContext
+    from pyspark.core.context import SparkContext
     from pyspark.sql import SparkSession
     import pyspark.sql.readwriter
 
