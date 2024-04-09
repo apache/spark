@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import os
 import unittest
 
 from pyspark.sql import SparkSession
