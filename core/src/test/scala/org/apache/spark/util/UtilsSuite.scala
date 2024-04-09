@@ -28,6 +28,7 @@ import java.util.concurrent.TimeUnit
 import java.util.zip.GZIPOutputStream
 
 import scala.collection.mutable.ListBuffer
+import scala.concurrent.duration._
 import scala.util.Random
 
 import com.google.common.io.Files
@@ -93,6 +94,35 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
 
     intercept[NumberFormatException] {
       Utils.timeStringAsMs("This 123s breaks")
+    }
+  }
+
+  test("timeConversion with the safe fallback") {
+    assert(Utils.timeStringAsSecondsWithSafeFallback("3s") === 3.seconds)
+    assert(Utils.timeStringAsSecondsWithSafeFallback("4") === 4.seconds)
+    assert(Utils.timeStringAsSecondsWithSafeFallback(" 5 xyz ") === 5.seconds)
+
+    intercept[NullPointerException] {
+      Utils.timeStringAsSecondsWithSafeFallback(null)
+    }
+    intercept[NumberFormatException] {
+      Utils.timeStringAsSecondsWithSafeFallback(" ")
+    }
+    intercept[NumberFormatException] {
+      Utils.timeStringAsSecondsWithSafeFallback("This 123s breaks")
+    }
+
+    assert(Utils.timeStringAsMsWithSafeFallback("60ms") === 60.milliseconds)
+    assert(Utils.timeStringAsMsWithSafeFallback("70") === 70.milliseconds)
+    assert(Utils.timeStringAsMsWithSafeFallback(" 80 whatever ") === 80.milliseconds)
+    intercept[NullPointerException] {
+      Utils.timeStringAsMsWithSafeFallback(null)
+    }
+    intercept[NumberFormatException] {
+      Utils.timeStringAsMsWithSafeFallback(" ")
+    }
+    intercept[NumberFormatException] {
+      Utils.timeStringAsMsWithSafeFallback("This 123ms breaks")
     }
   }
 

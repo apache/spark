@@ -36,6 +36,7 @@ import java.util.zip.{GZIPInputStream, ZipInputStream}
 import scala.annotation.tailrec
 import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.duration._
 import scala.io.Source
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
@@ -1079,6 +1080,30 @@ private[spark] object Utils
    */
   def timeStringAsSeconds(str: String): Long = {
     JavaUtils.timeStringAsSec(str)
+  }
+
+  /**
+   * In case that timeStringAsMs in the Try block gives us a runtime exception, we'll go with
+   * a safe fallback by deriving a duration based on the leading numeric chars of the given input.
+   */
+  def timeStringAsMsWithSafeFallback(str: String): FiniteDuration = {
+    Try {
+      JavaUtils.timeStringAsMs(str).milliseconds
+    }.getOrElse(
+      JavaUtils.numericsFrom(str).milliseconds
+    )
+  }
+
+  /**
+   * In case that timeStringAsSec in the Try block gives us a runtime exception, we'll go with
+   * a safe fallback by deriving a duration based on the leading numeric chars of the given input.
+   */
+  def timeStringAsSecondsWithSafeFallback(str: String): FiniteDuration = {
+    Try {
+      JavaUtils.timeStringAsSec(str).seconds
+    }.getOrElse(
+      JavaUtils.numericsFrom(str).seconds
+    )
   }
 
   /**

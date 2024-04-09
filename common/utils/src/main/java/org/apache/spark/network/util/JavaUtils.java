@@ -37,7 +37,10 @@ import org.slf4j.LoggerFactory;
  * own Utils, just accessible within this package.
  */
 public class JavaUtils {
-  private static final Logger logger = LoggerFactory.getLogger(JavaUtils.class);
+  private static final Logger LOG = LoggerFactory.getLogger(JavaUtils.class);
+  private static final Pattern TIME_PATTERN = Pattern.compile("(-?[0-9]+)([a-z]+)?");
+  private static final Pattern BYTE_PATTERN = Pattern.compile("([0-9]+)([a-z]+)?");
+  private static final Pattern FRACTION_PATTERN = Pattern.compile("([0-9]+\\.[0-9]+)([a-z]+)?");
 
   /**
    * Define a default value for driver memory here since this value is referenced across the code
@@ -52,7 +55,7 @@ public class JavaUtils {
         closeable.close();
       }
     } catch (IOException e) {
-      logger.error("IOException should not have been thrown.", e);
+      LOG.error("IOException should not have been thrown.", e);
     }
   }
 
@@ -111,7 +114,7 @@ public class JavaUtils {
         deleteRecursivelyUsingUnixNative(file);
         return;
       } catch (IOException e) {
-        logger.warn("Attempt to delete using native Unix OS command failed for path = {}. " +
+        LOG.warn("Attempt to delete using native Unix OS command failed for path = {}. " +
                         "Falling back to Java IO way", file.getAbsolutePath(), e);
       }
     }
@@ -229,6 +232,24 @@ public class JavaUtils {
   }
 
   /**
+   * Convert a given string to long based on the leading numeric chars.
+   * This is meant for a critical path (e.g., RpcUtils$.askRpcTimeout) requiring a safe fallback.
+   */
+  public static long numericsFrom(String str) {
+    StringBuilder builder = new StringBuilder();
+
+    for (char c : str.trim().toCharArray()) {
+      if (Character.isDigit(c)) {
+        builder.append(c);
+      } else {
+        break;
+      }
+    }
+
+    return Long.parseLong(builder.toString());
+  }
+
+  /**
    * Convert a passed time string (e.g. 50s, 100ms, or 250us) to a time count in the given unit.
    * The unit is also considered the default if the given string does not specify a unit.
    */
@@ -236,7 +257,7 @@ public class JavaUtils {
     String lower = str.toLowerCase(Locale.ROOT).trim();
 
     try {
-      Matcher m = Pattern.compile("(-?[0-9]+)([a-z]+)?").matcher(lower);
+      Matcher m = TIME_PATTERN.matcher(lower);
       if (!m.matches()) {
         throw new NumberFormatException("Failed to parse time string: " + str);
       }
@@ -284,8 +305,8 @@ public class JavaUtils {
     String lower = str.toLowerCase(Locale.ROOT).trim();
 
     try {
-      Matcher m = Pattern.compile("([0-9]+)([a-z]+)?").matcher(lower);
-      Matcher fractionMatcher = Pattern.compile("([0-9]+\\.[0-9]+)([a-z]+)?").matcher(lower);
+      Matcher m = BYTE_PATTERN.matcher(lower);
+      Matcher fractionMatcher = FRACTION_PATTERN.matcher(lower);
 
       if (m.matches()) {
         long val = Long.parseLong(m.group(1));
@@ -396,7 +417,7 @@ public class JavaUtils {
         dir = new File(root, namePrefix + "-" + UUID.randomUUID());
         Files.createDirectories(dir.toPath());
       } catch (IOException | SecurityException e) {
-        logger.error("Failed to create directory " + dir, e);
+        LOG.error("Failed to create directory " + dir, e);
         dir = null;
       }
     }

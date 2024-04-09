@@ -128,7 +128,7 @@ private[spark] object RpcTimeout {
       conf.getOption(propKey).foreach { prop => foundProp = Some((propKey, prop)) }
     }
     val finalProp = foundProp.getOrElse((timeoutPropList.head, defaultValue))
-    val timeout = { Utils.timeStringAsSeconds(finalProp._2).seconds }
+    val timeout = Utils.timeStringAsSecondsWithSafeFallback(finalProp._2)
     new RpcTimeout(timeout, finalProp._1)
   }
 }
