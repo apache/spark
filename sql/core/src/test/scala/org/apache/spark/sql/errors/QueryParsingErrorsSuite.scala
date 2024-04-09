@@ -37,8 +37,15 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
     val e = intercept[ParseException] {
       spark.sql(query)
     }
-
-    assert(e.errorClass.get == "FAILED_TO_PARSE_STACK_OVERFLOW")
+    checkError(
+      exception = parseException(query),
+      errorClass = "FAILED_TO_PARSE_STACK_OVERFLOW",
+      parameters = Map(),
+      context = ExpectedContext(
+        query,
+        start = 0,
+        stop = query.length - 1)
+    )
   }
 
   test("EXEC_IMMEDIATE_DUPLICATE_ARGUMENT_ALIASES: duplicate aliases provided in using statement") {

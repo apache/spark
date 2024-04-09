@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
+import org.antlr.v4.runtime.ParserRuleContext
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser.ParserUtils.withOrigin
@@ -30,37 +31,50 @@ abstract class AbstractSqlParser extends AbstractParser with ParserInterface {
   override def astBuilder: AstBuilder
 
   /** Creates Expression for a given SQL string. */
-  override def parseExpression(sqlText: String): Expression = parse(sqlText) { parser =>
-    val ctx = parser.singleExpression()
-    withOrigin(ctx, Some(sqlText)) {
-      astBuilder.visitSingleExpression(ctx)
+  override def parseExpression(sqlText: String): Expression =
+    parse(sqlText) { parser =>
+      val ctx = parser.singleExpression()
+      withOrigin[Expression](ctx, Some(sqlText)) {
+        withErrorHandling(ctx) {
+          astBuilder.visitSingleExpression(ctx)
+        }
+      }
     }
-  }
 
   /** Creates TableIdentifier for a given SQL string. */
-  override def parseTableIdentifier(sqlText: String): TableIdentifier = parse(sqlText) { parser =>
-    astBuilder.visitSingleTableIdentifier(parser.singleTableIdentifier())
-  }
+  override def parseTableIdentifier(sqlText: String): TableIdentifier =
+    parse(sqlText) { parser =>
+      withErrorHandling(parser.singleTableIdentifier()) {
+        astBuilder.visitSingleTableIdentifier(parser.singleTableIdentifier())
+      }
+    }
 
   /** Creates FunctionIdentifier for a given SQL string. */
   override def parseFunctionIdentifier(sqlText: String): FunctionIdentifier = {
     parse(sqlText) { parser =>
-      astBuilder.visitSingleFunctionIdentifier(parser.singleFunctionIdentifier())
+      withErrorHandling(parser.singleFunctionIdentifier()) {
+        astBuilder.visitSingleFunctionIdentifier(parser.singleFunctionIdentifier())
+      }
     }
   }
 
   /** Creates a multi-part identifier for a given SQL string */
   override def parseMultipartIdentifier(sqlText: String): Seq[String] = {
     parse(sqlText) { parser =>
-      astBuilder.visitSingleMultipartIdentifier(parser.singleMultipartIdentifier())
+      withErrorHandling(parser.singleMultipartIdentifier()) {
+        astBuilder.visitSingleMultipartIdentifier(parser.singleMultipartIdentifier())
+      }
     }
   }
 
   /** Creates LogicalPlan for a given SQL string of query. */
-  override def parseQuery(sqlText: String): LogicalPlan = parse(sqlText) { parser =>
+  override def parseQuery(sqlText: String): LogicalPlan =
+    parse(sqlText) { parser =>
     val ctx = parser.query()
     withOrigin(ctx, Some(sqlText)) {
-      astBuilder.visitQuery(ctx)
+      withErrorHandling(ctx) {
+        astBuilder.visitQuery(ctx)
+      }
     }
   }
 
@@ -68,12 +82,23 @@ abstract class AbstractSqlParser extends AbstractParser with ParserInterface {
   override def parsePlan(sqlText: String): LogicalPlan = parse(sqlText) { parser =>
     val ctx = parser.singleStatement()
     withOrigin(ctx, Some(sqlText)) {
-      astBuilder.visitSingleStatement(ctx) match {
-        case plan: LogicalPlan => plan
-        case _ =>
-          val position = Origin(None, None)
-          throw QueryParsingErrors.sqlStatementUnsupportedError(sqlText, position)
+      withErrorHandling(ctx) {
+        astBuilder.visitSingleStatement(ctx) match {
+          case plan: LogicalPlan => plan
+          case _ =>
+            val position = Origin(None, None)
+            throw QueryParsingErrors.sqlStatementUnsupportedError(sqlText, position)
+        }
       }
+    }
+  }
+
+  def withErrorHandling[T](ctx: ParserRuleContext)(toResult: => T): T = {
+    try {
+      toResult
+    } catch {
+      case so: StackOverflowError =>
+        throw QueryParsingErrors.parserStackOverflow(ctx)
     }
   }
 }

@@ -36,13 +36,10 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0001", ctx)
   }
 
-  def parserStackOverflow(sqlText: String): Throwable = {
+  def parserStackOverflow(parserRuleContext: ParserRuleContext): Throwable = {
     throw new ParseException(
       errorClass = "FAILED_TO_PARSE_STACK_OVERFLOW",
-      messageParameters = Map.empty,
-      start = Origin(Some(0)),
-      stop = Origin(Some(sqlText.length)),
-      command = Some(sqlText))
+      ctx = parserRuleContext)
   }
 
   def insertOverwriteDirectoryUnsupportedError(): Throwable = {
