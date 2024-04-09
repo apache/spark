@@ -28,6 +28,10 @@ object StateTTLSchema {
   val TTL_KEY_ROW_SCHEMA: StructType = new StructType()
     .add("expirationMs", LongType)
     .add("groupingKey", BinaryType)
+  val TTL_COMPOSITE_KEY_ROW_SCHEMA: StructType = new StructType()
+    .add("expirationMs", LongType)
+    .add("groupingKey", BinaryType)
+    .add("userKey", BinaryType)
   val TTL_VALUE_ROW_SCHEMA: StructType =
     StructType(Array(StructField("__dummy__", NullType)))
 }
@@ -40,6 +44,18 @@ object StateTTLSchema {
  */
 case class SingleKeyTTLRow(
     groupingKey: Array[Byte],
+    expirationMs: Long)
+
+/**
+ * Encapsulates the ttl row information stored in [[CompositeKeyTTLStateImpl]].
+ *
+ * @param groupingKey grouping key for which ttl is set
+ * @param userKey user key for which ttl is set
+ * @param expirationMs expiration time for the grouping key
+ */
+case class CompositeKeyTTLRow(
+    groupingKey: Array[Byte],
+    userKey: Array[Byte],
     expirationMs: Long)
 
 /**
@@ -58,21 +74,6 @@ trait TTLState {
    * after arbitrary state operations are completed by the user.
    */
   def clearExpiredState(): Unit
-
-  /**
-   * Clears the user state associated with this grouping key
-   * if it has expired. This function is called by Spark to perform
-   * cleanup at the end of transformWithState processing.
-   *
-   * Spark uses a secondary index to determine if the user state for
-   * this grouping key has expired. However, its possible that the user
-   * has updated the TTL and secondary index is out of date. Implementations
-   * must validate that the user State has actually expired before cleanup based
-   * on their own State data.
-   *
-   * @param groupingKey grouping key for which cleanup should be performed.
-   */
-  def clearIfExpired(groupingKey: Array[Byte]): Unit
 }
 
 /**
@@ -134,6 +135,101 @@ abstract class SingleKeyTTLStateImpl(
       }
     }
   }
+  /**
+   * Clears the user state associated with this grouping key
+   * if it has expired. This function is called by Spark to perform
+   * cleanup at the end of transformWithState processing.
+   *
+   * Spark uses a secondary index to determine if the user state for
+   * this grouping key has expired. However, its possible that the user
+   * has updated the TTL and secondary index is out of date. Implementations
+   * must validate that the user State has actually expired before cleanup based
+   * on their own State data.
+   *
+   * @param groupingKey grouping key for which cleanup should be performed.
+   */
+  def clearIfExpired(groupingKey: Array[Byte]): Unit
+}
+
+/**
+ * Manages the ttl information for user state keyed with a single key (grouping key).
+ */
+abstract class CompositeKeyTTLStateImpl(
+    stateName: String,
+    store: StateStore,
+    ttlExpirationMs: Long)
+  extends TTLState with Logging {
+
+  import org.apache.spark.sql.execution.streaming.StateTTLSchema._
+
+  private val ttlColumnFamilyName = s"_ttl_$stateName"
+  private val ttlKeyEncoder = UnsafeProjection.create(TTL_COMPOSITE_KEY_ROW_SCHEMA)
+
+  // empty row used for values
+  private val EMPTY_ROW =
+    UnsafeProjection.create(Array[DataType](NullType)).apply(InternalRow.apply(null))
+
+  store.createColFamilyIfAbsent(ttlColumnFamilyName, TTL_COMPOSITE_KEY_ROW_SCHEMA,
+    TTL_VALUE_ROW_SCHEMA, RangeKeyScanStateEncoderSpec(TTL_COMPOSITE_KEY_ROW_SCHEMA,
+      Seq(0)), isInternal = true)
+
+  def upsertTTLForStateKey(
+      expirationMs: Long,
+      groupingKey: Array[Byte],
+      userKey: Array[Byte]): Unit = {
+    val encodedTtlKey = ttlKeyEncoder(InternalRow(expirationMs, groupingKey, userKey))
+    store.put(encodedTtlKey, EMPTY_ROW, ttlColumnFamilyName)
+  }
+
+  /**
+   * Clears any state which has ttl older than [[ttlExpirationMs]].
+   */
+  override def clearExpiredState(): Unit = {
+    val iterator = store.iterator(ttlColumnFamilyName)
+
+    iterator.takeWhile { kv =>
+      val expirationMs = kv.key.getLong(0)
+      StateTTL.isExpired(expirationMs, ttlExpirationMs)
+    }.foreach { kv =>
+      val groupingKey = kv.key.getBinary(1)
+      val userKey = kv.key.getBinary(2)
+      clearIfExpired(groupingKey, userKey)
+      store.remove(kv.key, ttlColumnFamilyName)
+    }
+  }
+
+  private[sql] def ttlIndexIterator(): Iterator[CompositeKeyTTLRow] = {
+    val ttlIterator = store.iterator(ttlColumnFamilyName)
+
+    new Iterator[CompositeKeyTTLRow] {
+      override def hasNext: Boolean = ttlIterator.hasNext
+
+      override def next(): CompositeKeyTTLRow = {
+        val kv = ttlIterator.next()
+        CompositeKeyTTLRow(
+          expirationMs = kv.key.getLong(0),
+          groupingKey = kv.key.getBinary(1),
+          userKey = kv.key.getBinary(2)
+        )
+      }
+    }
+  }
+
+  /**
+   * Clears the user state associated with this grouping key
+   * if it has expired. This function is called by Spark to perform
+   * cleanup at the end of transformWithState processing.
+   *
+   * Spark uses a secondary index to determine if the user state for
+   * this grouping key has expired. However, its possible that the user
+   * has updated the TTL and secondary index is out of date. Implementations
+   * must validate that the user State has actually expired before cleanup based
+   * on their own State data.
+   *
+   * @param groupingKey grouping key for which cleanup should be performed.
+   * @param userKey user key for which cleanup should be performed.
+   */
+  def clearIfExpired(groupingKey: Array[Byte], userKey: Array[Byte]): Unit
 }
 
 /**
