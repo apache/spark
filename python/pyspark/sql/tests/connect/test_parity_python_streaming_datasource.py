@@ -14,11 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.tests.test_python_streaming_datasource import BasePythonStreamingDataSourceTestsMixin
+from pyspark.sql.tests.test_python_streaming_datasource import (
+    BasePythonStreamingDataSourceTestsMixin,
+)
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class PythonStreamingDataSourceParityTests(BasePythonStreamingDataSourceTestsMixin, ReusedConnectTestCase):
+class PythonStreamingDataSourceParityTests(
+    BasePythonStreamingDataSourceTestsMixin, ReusedConnectTestCase
+):
     pass
 
 
