@@ -72,6 +72,7 @@ jobs:
           python packaging/connect/setup.py sdist
           cd dist
           pip install pyspark-connect-*.tar.gz
+          pip install scikit-learn torch torchvision torcheval
       - name: Run tests
         env:
           SPARK_CONNECT_TESTING_REMOTE: sc://localhost
@@ -82,7 +83,7 @@ jobs:
           # Remove Py4J and PySpark zipped library to make sure there is no JVM connection
           rm python/lib/*
           rm -r python/pyspark
-          ./python/run-tests --parallelism=1 --python-executables=python3 --modules pyspark-connect
+          ./python/run-tests --parallelism=1 --python-executables=python3 --modules pyspark-connect,pyspark-ml-connect
       - name: Upload test results to report
         if: always()
         uses: actions/upload-artifact@v4
