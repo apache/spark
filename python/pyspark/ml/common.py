@@ -77,9 +77,10 @@ def _to_java_object_rdd(rdd: "RDD") -> "JavaObject":
     return rdd.ctx._jvm.org.apache.spark.ml.python.MLSerDe.pythonToJava(rdd._jrdd, True)
 
 
-def _py2java(sc: SparkContext, obj: Any) -> "JavaObject":
+def _py2java(sc: "SparkContext", obj: Any) -> "JavaObject":
     """Convert Python object into Java"""
     from py4j.java_gateway import JavaObject
+    from pyspark.core import RDD, SparkContext
 
     if isinstance(obj, RDD):
         obj = _to_java_object_rdd(obj)
@@ -100,7 +101,7 @@ def _py2java(sc: SparkContext, obj: Any) -> "JavaObject":
     return obj
 
 
-def _java2py(sc: SparkContext, r: "JavaObjectOrPickleDump", encoding: str = "bytes") -> Any:
+def _java2py(sc: "SparkContext", r: "JavaObjectOrPickleDump", encoding: str = "bytes") -> Any:
     from py4j.protocol import Py4JJavaError
     from py4j.java_gateway import JavaObject
     from py4j.java_collections import JavaArray, JavaList
