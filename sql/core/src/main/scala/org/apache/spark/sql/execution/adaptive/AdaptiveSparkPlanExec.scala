@@ -28,6 +28,8 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
 import org.apache.spark.broadcast
+import org.apache.spark.internal.{LogEntry, MDC}
+import org.apache.spark.internal.LogKey._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
@@ -74,13 +76,13 @@ case class AdaptiveSparkPlanExec(
 
   @transient private val lock = new Object()
 
-  @transient private val logOnLevel: ( => String) => Unit = conf.adaptiveExecutionLogLevel match {
-    case "TRACE" => logTrace(_)
-    case "DEBUG" => logDebug(_)
+  @transient private val logOnLevel: ( => LogEntry) => Unit = conf.adaptiveExecutionLogLevel match {
+    case "TRACE" => log: LogEntry => logTrace(log.message)
+    case "DEBUG" => log: LogEntry => logDebug(log.message)
     case "INFO" => logInfo(_)
     case "WARN" => logWarning(_)
     case "ERROR" => logError(_)
-    case _ => logDebug(_)
+    case _ => log: LogEntry => logDebug(log.message)
   }
 
   @transient private val planChangeLogger = new PlanChangeLogger[SparkPlan]()
@@ -795,7 +797,8 @@ case class AdaptiveSparkPlanExec(
           s.cancel()
         } catch {
           case NonFatal(t) =>
-            logError(s"Exception in cancelling query stage: ${s.treeString}", t)
+            logError(log"Exception in cancelling query stage: " +
+              log"${MDC(QUERY_PLAN, s.treeString)}", t)
         }
       case _ =>
     }

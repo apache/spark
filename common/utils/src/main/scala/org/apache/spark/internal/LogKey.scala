@@ -25,10 +25,11 @@ object LogKey extends Enumeration {
   val APP_DESC = Value
   val APP_ID = Value
   val APP_STATE = Value
+  val BATCH_WRITE = Value
   val BLOCK_ID = Value
   val BLOCK_MANAGER_ID = Value
   val BROADCAST_ID = Value
-  val BUCKET = Value
+  val BUCKET = Valu)e
   val BYTECODE_SIZE = Value
   val CATEGORICAL_FEATURES = Value
   val CLASS_LOADER = Value
@@ -40,6 +41,7 @@ object LogKey extends Enumeration {
   val CONFIG2 = Value
   val CONTAINER_ID = Value
   val COUNT = Value
+  val DATA_SOURCE_PROVIDER = Value
   val DRIVER_ID = Value
   val END_POINT = Value
   val ERROR = Value
@@ -51,6 +53,7 @@ object LogKey extends Enumeration {
   val FAILURES = Value
   val GROUP_ID = Value
   val HOST = Value
+  val IDENTIFIER = Value
   val JOB_ID = Value
   val JOIN_CONDITION = Value
   val LEARNING_RATE = Value
@@ -95,7 +98,9 @@ object LogKey extends Enumeration {
   val SHUFFLE_MERGE_ID = Value
   val SIZE = Value
   val SLEEP_TIME = Value
+  val STAGE_ATTEMPT = Value
   val STAGE_ID = Value
+  val STDERR = Value
   val SUBMISSION_ID = Value
   val SUBSAMPLING_RATE = Value
   val TASK_ATTEMPT_ID = Value
@@ -114,6 +119,7 @@ object LogKey extends Enumeration {
   val USER_NAME = Value
   val WATERMARK_CONSTRAINT = Value
   val WORKER_URL = Value
+  val WRITE_JOB_UUID = Value
   val XSD_PATH = Value
 
   type LogKey = Value
