@@ -50,7 +50,7 @@ object RewriteGroupByCollation extends Rule[LogicalPlan] {
 
       val newAggregateExpressions = a.aggregateExpressions.map {
         case attr: AttributeReference if aliasMap.contains(attr) =>
-          Alias(First(attr, ignoreNulls = false), attr.name)()
+          Alias(First(attr, ignoreNulls = false).toAggregateExpression(), attr.name)()
         case other => other
       }
 
