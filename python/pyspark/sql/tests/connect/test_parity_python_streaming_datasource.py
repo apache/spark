@@ -19,7 +19,7 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class PythonStreamingDataSourceParityTests(BasePythonStreamingDataSourceTestsMixin, ReusedConnectTestCase):
-    ...
+    pass
 
 
 if __name__ == "__main__":
