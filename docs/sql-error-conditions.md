@@ -2205,7 +2205,7 @@ Cannot re-initialize state on the same grouping key during initial state handlin
 
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Cannot use TTL for state=`<stateName>` in timeMode `<timeMode>`, use TimeMode.ProcessingTime() instead.
+Cannot use TTL for state=`<stateName>` in timeMode=`<timeMode>`, use TimeMode.ProcessingTime() instead.
 
 ### STATEFUL_PROCESSOR_TTL_DURATION_MUST_BE_POSITIVE
 

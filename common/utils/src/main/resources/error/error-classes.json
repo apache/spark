@@ -3599,7 +3599,7 @@
   },
   "STATEFUL_PROCESSOR_INCORRECT_TIME_MODE_TO_ASSIGN_TTL" : {
     "message" : [
-      "Cannot use TTL for state=<stateName> in timeMode <timeMode>, use TimeMode.ProcessingTime() instead."
+      "Cannot use TTL for state=<stateName> in timeMode=<timeMode>, use TimeMode.ProcessingTime() instead."
     ],
     "sqlState" : "42802"
   },
