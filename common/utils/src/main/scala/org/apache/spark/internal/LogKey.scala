@@ -42,6 +42,7 @@ object LogKey extends Enumeration {
   val COUNT = Value
   val DB_NAME = Value
   val DRIVER_ID = Value
+  val DROPPED_PARTITIONS = Value
   val END_POINT = Value
   val ERROR = Value
   val EVENT_LOOP = Value
@@ -74,6 +75,7 @@ object LogKey extends Enumeration {
   val OPTIMIZER_CLASS_NAME = Value
   val OP_TYPE = Value
   val PARTITION_ID = Value
+  val PARTITION_SPECS = Value
   val PATH = Value
   val PATHS = Value
   val POD_ID = Value
@@ -83,6 +85,7 @@ object LogKey extends Enumeration {
   val RDD_ID = Value
   val REASON = Value
   val REDUCE_ID = Value
+  val REMAINING_PARTITIONS = Value
   val REMOTE_ADDRESS = Value
   val RETRY_COUNT = Value
   val RETRY_INTERVAL = Value

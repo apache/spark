@@ -689,14 +689,14 @@ private[hive] class HiveClientImpl(
           val remainingParts = matchingParts.toBuffer --= droppedParts
           // scalastyle:off line.size.limit
           logError(
-            s"""
+            log"""
                |======================
                |Attempt to drop the partition specs in table '${MDC(TABLE_NAME, table)}' database '${MDC(DB_NAME, db)}':
-               |${specs.mkString("\n")}
+               |${MDC(PARTITION_SPECS, specs.mkString("\n"))}
                |In this attempt, the following partitions have been dropped successfully:
-               |${droppedParts.mkString("\n")}
+               |${MDC(DROPPED_PARTITIONS, droppedParts.mkString("\n"))}
                |The remaining partitions have not been dropped:
-               |${remainingParts.mkString("\n")}
+               |${MDC(REMAINING_PARTITIONS, remainingParts.mkString("\n"))}
                |======================
              """.stripMargin)
           // scalastyle:on line.size.limit
