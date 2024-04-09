@@ -30,7 +30,6 @@ from typing import (
 )
 
 import numpy as np
-from py4j.java_gateway import JavaObject
 
 from pyspark.ml.linalg import DenseVector, Vector, Matrix
 from pyspark.ml.util import Identifiable
@@ -516,6 +515,8 @@ class Params(Identifiable, metaclass=ABCMeta):
         """
         Sets default params.
         """
+        from py4j.java_gateway import JavaObject
+
         for param, value in kwargs.items():
             p = getattr(self, param)
             if value is not None and not isinstance(value, JavaObject):
