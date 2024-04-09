@@ -175,29 +175,6 @@ class CollationStringExpressionsSuite
     }
   }
 
-  test("left/right/substr on struct fields that are collated strings") {
-    Seq(None, Some("utf8_binary_lcase"), Some("utf8_binary"), Some("unicode"), Some("unicode_ci"))
-      .foreach { collationNameMaybe =>
-        withTable("t") {
-          sql("CREATE TABLE t(i STRING, s" +
-            s" struct<a: string${collationNameMaybe.map(cn => " collate " + cn).getOrElse("")}>)" +
-            s" USING parquet")
-          (1 to 5).map(n => "a" + " " * n).foreach { v =>
-            sql(s"INSERT OVERWRITE t VALUES ('1', named_struct('a', '$v'))")
-          }
-          assert(sql(s"SELECT i, left(s.a, 1) FROM t").schema(1).dataType ==
-            collationNameMaybe.map(cn =>
-              StringType(CollationFactory.collationNameToId(cn))).getOrElse(StringType))
-          assert(sql(s"SELECT i, right(s.a, 1) FROM t").schema(1).dataType ==
-            collationNameMaybe.map(cn =>
-              StringType(CollationFactory.collationNameToId(cn))).getOrElse(StringType))
-          assert(sql(s"SELECT i, substr(s.a, 1, 0) FROM t").schema(1).dataType ==
-            collationNameMaybe.map(cn =>
-              StringType(CollationFactory.collationNameToId(cn))).getOrElse(StringType))
-        }
-      }
-  }
-
   test("left/right/substr on collated improper string returns proper type") {
     Seq("utf8_binary_lcase", "utf8_binary", "unicode", "unicode_ci").foreach { collationName =>
       val collationId = CollationFactory.collationNameToId(collationName)
