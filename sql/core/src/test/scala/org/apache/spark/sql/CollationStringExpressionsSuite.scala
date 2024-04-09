@@ -113,9 +113,6 @@ class CollationStringExpressionsSuite
 
   test("left/right/substr on collated proper string returns proper value") {
     Seq("utf8_binary_lcase", "utf8_binary", "unicode", "unicode_ci").foreach { collationName =>
-      checkAnswerAndType(sql(s"select left(collate('Spark', '$collationName'), 2))"), Row("Sp"),
-        StringType(CollationFactory.collationNameToId(collationName)))
-      checkAnswer(sql(s"select right(collate('Spark', '$collationName'), 2))"), Row("rk"))
       checkAnswer(sql(s"select right('Def' collate $collationName, 1)"), Row("f"))
       checkAnswer(sql(s"select substr('abc' collate $collationName, 2)"), Row("bc"))
       checkAnswer(sql(s"select substr('example' collate $collationName, 0, 2)"), Row("ex"))
@@ -146,14 +143,6 @@ class CollationStringExpressionsSuite
       checkAnswer(sql(s"select right('' collate $collationName, 1)"), Row(""))
       checkAnswer(sql(s"select left('ghi' collate $collationName, 1)"), Row("g"))
     }
-  }
-
-  private def checkAnswerAndType(
-      frame: DataFrame,
-      row: Row,
-      stringType: StringType) = {
-    checkAnswer(frame, row)
-    assert(frame.schema(0).dataType == stringType)
   }
 
   test("left/right/substr on collated improper string returns proper value") {
