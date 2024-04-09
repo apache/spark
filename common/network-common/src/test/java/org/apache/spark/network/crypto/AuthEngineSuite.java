@@ -51,8 +51,9 @@ public class AuthEngineSuite {
       "e25e9d5c5a380b8e6d1a184692fac065ed84f8592c18e9629f9c636809dca2ffc041f20346eb53db78738" +
       "08ecad08b46b5ee3ff";
   private static final String derivedKey = "2d6e7a9048c8265c33a8f3747bfcc84c";
-  // This key would have been derived from an older version of the protocol that did not run a final HKDF pass
-  private static final String unsafeDerivedKey = "31963f15a320d5c90333f7ecf5cf3a31c7eaf151de07fef8494663a9f47cfd31";
+  // This key would have been derived for version 1.0 protocol that did not run a final HKDF round.
+  private static final String unsafeDerivedKey =
+      "31963f15a320d5c90333f7ecf5cf3a31c7eaf151de07fef8494663a9f47cfd31";
 
   private static final String inputIv = "fc6a5dc8b90a9dad8f54f08b51a59ed2";
   private static final String outputIv = "a72709baf00785cad6329ce09f631f71";

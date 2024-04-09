@@ -65,7 +65,8 @@ class AuthEngine implements Closeable {
     this.preSharedSecret = preSharedSecret.getBytes(UTF_8);
     this.conf = conf;
     this.cryptoConf = conf.cryptoConf();
-    // This is for backward compatibility with older versions of this protocol which did not perform a final HKDF
+    // This is for backward compatibility with version 1.0 of this protocol,
+    // which did not perform a final HKDF round.
     this.unsafeSkipFinalHkdf = conf.authEngineVersion() == UNSAFE_SKIP_HKDF_VERSION;
   }
 
