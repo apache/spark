@@ -44,7 +44,6 @@ if TYPE_CHECKING:
     from pyspark.sql.window import WindowSpec
 
 __all__ = ["Column"]
-SUPPORTED_WITH_PYSPARK_LOGGING_INFO_FUNCTIONS = ["divide", "plus", "minus", "multiply"]
 
 
 def _create_column_from_literal(literal: Union["LiteralType", "DecimalLiteral"]) -> "Column":
