@@ -30,7 +30,7 @@ object LogKey extends Enumeration {
   val BLOCK_ID = Value
   val BLOCK_MANAGER_ID = Value
   val BROADCAST_ID = Value
-  val BUCKET = Valu)e
+  val BUCKET = Value
   val BYTECODE_SIZE = Value
   val CATEGORICAL_FEATURES = Value
   val CLASS_LOADER = Value
