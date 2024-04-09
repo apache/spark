@@ -58,9 +58,10 @@ private[hive] class SparkGetTablesOperation(
     val cmdStr = log"catalog : ${MDC(CATALOG_NAME, catalogName)}, " +
       log"schemaPattern : ${MDC(SCHEMA_NAME, schemaName)}"
     val tableTypesStr = if (tableTypes == null) "null" else tableTypes.asScala.mkString(",")
-    val logMsg = log"Listing tables '$cmdStr, tableTypes : $tableTypesStr, " +
+    val logMsg = log"Listing tables '${MDC(COMMAND, cmdStr)}, " +
+      log"tableTypes : ${MDC(TABLE_TYPES, tableTypesStr)}, " +
       log"tableName : ${MDC(TABLE_NAME, tableName)}'"
-    logInfo(log"$logMsg with ${MDC(STATEMENT_ID, statementId)}")
+    logInfo(log"${MDC(LOG_MESSAGE, logMsg)} with ${MDC(STATEMENT_ID, statementId)}")
     setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
     val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
@@ -74,13 +75,13 @@ private[hive] class SparkGetTablesOperation(
     if (isAuthV2Enabled) {
       val privObjs =
         HivePrivilegeObjectUtils.getHivePrivDbObjects(matchingDbs.asJava)
-      authorizeMetaGets(HiveOperationType.GET_TABLES, privObjs, cmdStr)
+      authorizeMetaGets(HiveOperationType.GET_TABLES, privObjs, cmdStr.message)
     }
 
     HiveThriftServer2.eventManager.onStatementStart(
       statementId,
       parentSession.getSessionHandle.getSessionId.toString,
-      logMsg,
+      logMsg.message,
       statementId,
       parentSession.getUsername)
 

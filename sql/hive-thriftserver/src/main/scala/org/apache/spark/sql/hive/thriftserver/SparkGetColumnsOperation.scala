@@ -62,8 +62,9 @@ private[hive] class SparkGetColumnsOperation(
     val cmdStr = log"catalog : ${MDC(CATALOG_NAME, catalogName)}, " +
       log"schemaPattern : ${MDC(SCHEMA_NAME, schemaName)}, " +
       log"tablePattern : ${MDC(TABLE_NAME, tableName)}"
-    val logMsg = log"Listing columns '$cmdStr, columnName : ${MDC(COLUMN_NAME, columnName)}'"
-    logInfo(log"$logMsg with ${MDC(STATEMENT_ID, statementId)}")
+    val logMsg = log"Listing columns '${MDC(COMMAND, cmdStr)}, " +
+      log"columnName : ${MDC(COLUMN_NAME, columnName)}'"
+    logInfo(log"${MDC(LOG_MESSAGE, logMsg)} with ${MDC(STATEMENT_ID, statementId)}")
 
     setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
@@ -73,7 +74,7 @@ private[hive] class SparkGetColumnsOperation(
     HiveThriftServer2.eventManager.onStatementStart(
       statementId,
       parentSession.getSessionHandle.getSessionId.toString,
-      logMsg,
+      logMsg.message,
       statementId,
       parentSession.getUsername)
 
@@ -91,7 +92,7 @@ private[hive] class SparkGetColumnsOperation(
 
     if (isAuthV2Enabled) {
       val privObjs = getPrivObjs(db2Tabs).asJava
-      authorizeMetaGets(HiveOperationType.GET_COLUMNS, privObjs, cmdStr)
+      authorizeMetaGets(HiveOperationType.GET_COLUMNS, privObjs, cmdStr.message)
     }
 
     try {

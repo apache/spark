@@ -50,21 +50,21 @@ private[hive] class SparkGetSchemasOperation(
     // Do not change cmdStr. It's used for Hive auditing and authorization.
     val cmdStr = log"catalog : ${MDC(CATALOG_NAME, catalogName)}, " +
       log"schemaPattern : ${MDC(SCHEMA_NAME, schemaName)}"
-    val logMsg = log"Listing databases '$cmdStr'"
-    logInfo(log"$logMsg with ${MDC(STATEMENT_ID, statementId)}")
+    val logMsg = log"Listing databases '${MDC(COMMAND, cmdStr)}'"
+    logInfo(log"${MDC(LOG_MESSAGE, logMsg)} with ${MDC(STATEMENT_ID, statementId)}")
     setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
     val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
     Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
 
     if (isAuthV2Enabled) {
-      authorizeMetaGets(HiveOperationType.GET_TABLES, null, cmdStr)
+      authorizeMetaGets(HiveOperationType.GET_TABLES, null, cmdStr.message)
     }
 
     HiveThriftServer2.eventManager.onStatementStart(
       statementId,
       parentSession.getSessionHandle.getSessionId.toString,
-      logMsg,
+      logMsg.message,
       statementId,
       parentSession.getUsername)
 

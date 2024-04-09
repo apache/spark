@@ -61,6 +61,7 @@ object LogKey extends Enumeration {
   val LINE = Value
   val LINE_NUM = Value
   val LISTENER = Value
+  val LOG_MESSAGE = Value
   val LOG_TYPE = Value
   val MASTER_URL = Value
   val MAX_ATTEMPTS = Value
@@ -106,6 +107,7 @@ object LogKey extends Enumeration {
   val SUBMISSION_ID = Value
   val SUBSAMPLING_RATE = Value
   val TABLE_NAME = Value
+  val TABLE_TYPES = Value
   val TASK_ATTEMPT_ID = Value
   val TASK_ID = Value
   val TASK_NAME = Value
