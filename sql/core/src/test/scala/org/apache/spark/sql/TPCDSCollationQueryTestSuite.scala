@@ -38,9 +38,10 @@ import org.apache.spark.util.Utils
  * randomized-case data.
  *
  * When running arbitrary SQL query, we convert the query to lowercase for execution
- * against first DB; second DB receives original query. Results should compare equal
- * ignoring case. We use this method to validate collations are working with arbitrary standard
- * SQL constructs.
+ * against first DB, we do this to ensure results are equivalent to case-insensitive collations
+ * when queries contain uppercase string literals; second DB receives original query.
+ * Results should compare equal ignoring case. We use this method to validate collations are
+ * working with arbitrary standard SQL constructs.
  *
  * Additionally, we perform trims on string data to properly convert it from CharType
  * to StringType and do sanity checks to verify that results are non-empty as expected.
@@ -115,32 +116,21 @@ class TPCDSCollationQueryTestSuite extends QueryTest with TPCDSBase with SQLQuer
     override def queryTransform: String => String = _.toLowerCase(Locale.ROOT)
   }
 
-  val collateNormalize = "COLLATE_NORMALIZE"
   val randomizeCase = "RANDOMIZE_CASE"
 
   // List of batches of runs which should yield the same result when run on a query
   val checks: Seq[Seq[CollationCheck]] = Seq(
     Seq(
-      CaseSensitiveCollationCheck("tpcds_utf8", "UTF8_BINARY", collateNormalize),
+      CaseSensitiveCollationCheck("tpcds_utf8", "UTF8_BINARY", "lower"),
       CaseInsensitiveCollationCheck("tpcds_utf8_random", "UTF8_BINARY_LCASE", randomizeCase)
     ),
     Seq(
-      CaseSensitiveCollationCheck("tpcds_unicode", "UNICODE", collateNormalize),
+      CaseSensitiveCollationCheck("tpcds_unicode", "UNICODE", "lower"),
       CaseInsensitiveCollationCheck("tpcds_unicode_random", "UNICODE_CI", randomizeCase)
     )
   )
 
   override def createTables(): Unit = {
-    // trim collated strings with udf
-    // this is a workaround until we have proper trim support for collations
-    spark.udf.register(
-      collateNormalize,
-      functions.udf((s: String) => {
-        s match {
-          case null => null
-          case _ => s.trim.toLowerCase(Locale.ROOT)
-        }
-      }))
     spark.udf.register(
       randomizeCase,
       functions.udf((s: String) => {
@@ -148,7 +138,7 @@ class TPCDSCollationQueryTestSuite extends QueryTest with TPCDSBase with SQLQuer
           case null => null
           case _ =>
             val random = new scala.util.Random()
-            s.trim.map(c => if (random.nextBoolean()) c.toUpper else c.toLower)
+            s.map(c => if (random.nextBoolean()) c.toUpper else c.toLower)
         }
       }).asNondeterministic())
     checks.flatten.foreach(check => {
@@ -174,7 +164,8 @@ class TPCDSCollationQueryTestSuite extends QueryTest with TPCDSBase with SQLQuer
 
           val transformedColumns = columns.map { case (name, colType) =>
             if (isTextColumn(colType)) {
-              s"${check.columnTransform}($name) AS $name"
+              // trim to support conversions from CharType
+              s"${check.columnTransform}(trim(both from $name)) AS $name"
             } else {
               name
             }
