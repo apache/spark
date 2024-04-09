@@ -39,7 +39,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
     }
     checkError(
       exception = parseException(query),
-      errorClass = "FAILED_TO_PARSE_STACK_OVERFLOW",
+      errorClass = "FAILED_TO_PARSE_TOO_COMPLEX",
       parameters = Map(),
       context = ExpectedContext(
         query,

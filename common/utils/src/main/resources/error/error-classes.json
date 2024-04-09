@@ -1083,12 +1083,6 @@
     ],
     "sqlState" : "42702"
   },
-  "FAILED_TO_PARSE_STACK_OVERFLOW" : {
-    "message" : [
-      "Stack overflow was hit while parsing the SQL query. "
-    ],
-    "sqlState" : "42907"
-  },
   "EXEC_IMMEDIATE_DUPLICATE_ARGUMENT_ALIASES" : {
     "message" : [
       "The USING clause of this EXECUTE IMMEDIATE command contained multiple arguments with same alias (<aliases>), which is invalid; please update the command to specify unique aliases and then try it again."
@@ -1305,6 +1299,13 @@
       "Failed to convert the row value <value> of the class <class> to the target SQL type <sqlType> in the JSON format."
     ],
     "sqlState" : "2203G"
+  },
+  "FAILED_TO_PARSE_TOO_COMPLEX" : {
+    "message" : [
+      "The statement, including potential SQL functions and referenced views,  was too complex to parse.",
+      "To mitigate this error divide the statement into multiple, less complex chunks."
+    ],
+    "sqlState" : "54001"
   },
   "FIELDS_ALREADY_EXISTS" : {
     "message" : [

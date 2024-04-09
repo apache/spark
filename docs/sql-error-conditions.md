@@ -756,11 +756,12 @@ Failed to rename temp file `<srcPath>` to `<dstPath>` as FileSystem.rename retur
 
 Failed to convert the row value `<value>` of the class `<class>` to the target SQL type `<sqlType>` in the JSON format.
 
-### FAILED_TO_PARSE_STACK_OVERFLOW
+### FAILED_TO_PARSE_TOO_COMPLEX
 
-[SQLSTATE: 42907](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+[SQLSTATE: 54001](sql-error-conditions-sqlstates.html#class-54-program-limit-exceeded)
 
-Stack overflow was hit while parsing the SQL query. 
+The statement, including potential SQL functions and referenced views,  was too complex to parse.
+To mitigate this error divide the statement into multiple, less complex chunks.
 
 ### FIELDS_ALREADY_EXISTS
 

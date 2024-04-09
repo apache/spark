@@ -38,7 +38,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
 
   def parserStackOverflow(parserRuleContext: ParserRuleContext): Throwable = {
     throw new ParseException(
-      errorClass = "FAILED_TO_PARSE_STACK_OVERFLOW",
+      errorClass = "FAILED_TO_PARSE_TOO_COMPLEX",
       ctx = parserRuleContext)
   }
 
