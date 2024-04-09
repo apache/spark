@@ -78,6 +78,18 @@ if "SPARK_TESTING" in os.environ:
         "pyspark.sql.tests.pandas",
         "pyspark.sql.tests.streaming",
         "pyspark.pandas.tests.connect",
+        "pyspark.pandas.tests.connect.computation",
+        "pyspark.pandas.tests.connect.data_type_ops",
+        "pyspark.pandas.tests.connect.diff_frames_ops",
+        "pyspark.pandas.tests.connect.frame",
+        "pyspark.pandas.tests.connect.groupby",
+        "pyspark.pandas.tests.connect.indexes",
+        "pyspark.pandas.tests.connect.io",
+        "pyspark.pandas.tests.connect.plot",
+        "pyspark.pandas.tests.connect.resample",
+        "pyspark.pandas.tests.connect.reshape",
+        "pyspark.pandas.tests.connect.series",
+        "pyspark.pandas.tests.connect.window",
         "pyspark.ml.tests.connect",
     ]
 
