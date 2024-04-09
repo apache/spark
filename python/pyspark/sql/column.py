@@ -199,11 +199,8 @@ def _bin_op(
         self: "Column",
         other: Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"],
     ) -> "Column":
-
         logging_info = {}
         if name in binary_operator_map:
-            from pyspark.sql.functions import lit
-            other = lit(None) if other is None else other
             stack = inspect.stack()
             frame_info = stack[-1]
             logging_info = {

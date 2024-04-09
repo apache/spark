@@ -177,25 +177,6 @@ class Column(val expr: Expression) extends Logging {
    * This method is used when the operation involves another Column.
    *
    * @param name               The name of the operation to be performed.
-   * @param other              The other Column involved in the operation.
-   * @param pysparkLoggingInfo A map containing logging information such as the fragment and
-   *                           call site from PySpark.
-   * @return A Column resulting from the operation.
-   */
-  private def fn(
-      name: String, other: Column, pysparkLoggingInfo: java.util.Map[String, String]): Column = {
-    withOrigin(Some(pysparkLoggingInfo)) {
-      Column.fn(name, this, other)
-    }
-  }
-
-  /**
-   * A version of the `fn` method for binary operations that involve a value other than a Column
-   * and require PySpark logging information.
-   * This method is used to apply an operation with any value, converting it to a Column
-   * if necessary.
-   *
-   * @param name               The name of the operation to be performed.
    * @param other              The value to be used in the operation, which will be converted to a
    *                           Column if not already one.
    * @param pysparkLoggingInfo A map containing logging information such as the fragment and
