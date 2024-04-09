@@ -645,6 +645,8 @@ object StateStore extends Logging {
               messageParameters = Map("schema" -> schema.json)
             )
           }
+
+        case _ => // no-op
       }
     }
   }
