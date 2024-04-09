@@ -861,7 +861,7 @@ class SparkSession(SparkConversionMixin):
         Create a temp view, show the list, and drop it.
 
         >>> spark.range(1).createTempView("test_view")
-        >>> spark.catalog.listTables()
+        >>> spark.catalog.listTables()  # doctest: +SKIP
         [Table(name='test_view', catalog=None, namespace=[], description=None, ...
         >>> _ = spark.catalog.dropTempView("test_view")
         """

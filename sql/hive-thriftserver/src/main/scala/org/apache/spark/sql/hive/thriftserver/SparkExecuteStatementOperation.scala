@@ -31,9 +31,10 @@ import org.apache.hive.service.cli.session.HiveSession
 import org.apache.hive.service.rpc.thrift.{TCLIServiceConstants, TColumnDesc, TPrimitiveTypeEntry, TRowSet, TTableSchema, TTypeDesc, TTypeEntry, TTypeId, TTypeQualifiers, TTypeQualifierValue}
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.STATEMENT_ID
+import org.apache.spark.internal.LogKey.{HIVE_OPERATION_STATE, STATEMENT_ID, TIMEOUT, USER_NAME}
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_SECOND
 import org.apache.spark.sql.execution.HiveResult.getTimeFormatters
 import org.apache.spark.sql.internal.{SQLConf, VariableSubstitution}
 import org.apache.spark.sql.types._
@@ -143,7 +144,9 @@ private[hive] class SparkExecuteStatementOperation(
           } catch {
             case NonFatal(e) =>
               setOperationException(new HiveSQLException(e))
-              logError(s"Error cancelling the query after timeout: $timeout seconds")
+              val timeout_ms = timeout * MILLIS_PER_SECOND
+              logError(
+                log"Error cancelling the query after timeout: ${MDC(TIMEOUT, timeout_ms)} ms")
           } finally {
             timeoutExecutor.shutdown()
           }
@@ -179,8 +182,8 @@ private[hive] class SparkExecuteStatementOperation(
           } catch {
             case e: Exception =>
               setOperationException(new HiveSQLException(e))
-              logError("Error running hive query as user : " +
-                sparkServiceUGI.getShortUserName(), e)
+              logError(log"Error running hive query as user : " +
+                log"${MDC(USER_NAME, sparkServiceUGI.getShortUserName())}", e)
           }
         }
       }
@@ -197,7 +200,7 @@ private[hive] class SparkExecuteStatementOperation(
             statementId, rejected.getMessage, SparkUtils.exceptionString(rejected))
           throw HiveThriftServerErrors.taskExecutionRejectedError(rejected)
         case NonFatal(e) =>
-          logError(s"Error executing query in background", e)
+          logError("Error executing query in background", e)
           setState(OperationState.ERROR)
           HiveThriftServer2.eventManager.onStatementError(
             statementId, e.getMessage, SparkUtils.exceptionString(e))
@@ -257,7 +260,8 @@ private[hive] class SparkExecuteStatementOperation(
             log"Ignore exception in terminal state with ${MDC(STATEMENT_ID, statementId)}", e
           )
         } else {
-          logError(s"Error executing query with $statementId, currentState $currentState, ", e)
+          logError(log"Error executing query with ${MDC(STATEMENT_ID, statementId)}, " +
+            log"currentState ${MDC(HIVE_OPERATION_STATE, currentState)}, ", e)
           setState(OperationState.ERROR)
           HiveThriftServer2.eventManager.onStatementError(
             statementId, e.getMessage, SparkUtils.exceptionString(e))

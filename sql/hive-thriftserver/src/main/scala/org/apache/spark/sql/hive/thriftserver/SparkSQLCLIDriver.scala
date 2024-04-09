@@ -215,7 +215,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       }
     } catch {
       case e: FileNotFoundException =>
-        logError(s"Could not open input file for reading. (${e.getMessage})")
+        logError(log"Could not open input file for reading. (${MDC(ERROR, e.getMessage)})")
         exit(ERROR_PATH_NOT_FOUND)
     }
 

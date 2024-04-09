@@ -51,6 +51,8 @@ object LogKey extends Enumeration {
   val FAILURES = Value
   val GROUP_ID = Value
   val HISTORY_DIR = Value
+  val HIVE_OPERATION_STATE = Value
+  val HIVE_OPERATION_TYPE = Value
   val HOST = Value
   val JOB_ID = Value
   val JOIN_CONDITION = Value

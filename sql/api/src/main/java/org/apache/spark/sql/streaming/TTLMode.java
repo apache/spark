@@ -15,40 +15,28 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.streaming
+package org.apache.spark.sql.streaming;
 
-import java.io.Serializable
+import org.apache.spark.annotation.Evolving;
+import org.apache.spark.annotation.Experimental;
+import org.apache.spark.sql.catalyst.plans.logical.*;
 
-import org.apache.spark.annotation.{Evolving, Experimental}
-
+/**
+ * Represents the type of ttl modes possible for the Dataset operations
+ * {@code transformWithState}.
+ */
 @Experimental
 @Evolving
-/**
- * Interface used for arbitrary stateful operations with the v2 API to capture
- * single value state.
- */
-private[sql] trait ValueState[S] extends Serializable {
-
-  /** Whether state exists or not. */
-  def exists(): Boolean
+public class TTLMode {
 
   /**
-   * Get the state value if it exists
-   * @throws java.util.NoSuchElementException if the state does not exist
+   * Specifies that there is no TTL for the user state. User state would not
+   * be cleaned up by Spark automatically.
    */
-  @throws[NoSuchElementException]
-  def get(): S
-
-  /** Get the state if it exists as an option and None otherwise */
-  def getOption(): Option[S]
+  public static final TTLMode NoTTL() { return NoTTL$.MODULE$; }
 
   /**
-   * Update the value of the state.
-   *
-   * @param newState    the new value
+   * Specifies that all ttl durations for user state are in processing time.
    */
-  def update(newState: S): Unit
-
-  /** Remove this state. */
-  def clear(): Unit
+  public static final TTLMode ProcessingTimeTTL() { return ProcessingTimeTTL$.MODULE$; }
 }
