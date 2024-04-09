@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import javax.annotation.Nullable
-
 import scala.annotation.tailrec
 import scala.collection.mutable
 
@@ -31,6 +30,7 @@ import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.types.AbstractStringType
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.UpCastRule.numericPrecedence
 
@@ -997,7 +997,7 @@ object TypeCoercion extends TypeCoercionBase {
       case (_: StringType, BinaryType) => BinaryType
       // Cast any atomic type to string.
       case (any: AtomicType, _: StringType) if !any.isInstanceOf[StringType] => StringType
-      case (any: AtomicType, st: StringTypeCollated)
+      case (any: AtomicType, st: AbstractStringType)
         if !any.isInstanceOf[StringType] => st.defaultConcreteType
 
       // When we reach here, input type is not acceptable for any types in this type collection,
@@ -1017,7 +1017,7 @@ object TypeCoercion extends TypeCoercionBase {
       case (ArrayType(fromType, fn), ArrayType(toType: DataType, true)) =>
         implicitCast(fromType, toType).map(ArrayType(_, true)).orNull
 
-      case (ArrayType(fromType, fn), AbstractArrayType(toType: StringTypeCollated)) =>
+      case (ArrayType(fromType, fn), AbstractArrayType(toType)) =>
         implicitCast(fromType, toType).map(ArrayType(_, true)).orNull
 
       case (ArrayType(fromType, true), ArrayType(toType: DataType, false)) => null
