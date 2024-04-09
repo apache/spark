@@ -2183,29 +2183,29 @@ The SQL config `<sqlConf>` cannot be found. Please verify that the config exists
 
 Star (*) is not allowed in a select list when GROUP BY an ordinal position is used.
 
-### STATEFUL_PROCESSOR_CANNOT_ASSIGN_TTL_IN_NO_TTL_MODE
-
-[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
-
-Cannot use TTL for state=`<stateName>` in NoTTL() mode.
-
 ### STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_HANDLE_STATE
 
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Failed to perform stateful processor operation=`<operationType>` with invalid handle state=`<handleState>`.
 
-### STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_TIMEOUT_MODE
+### STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_TIME_MODE
 
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Failed to perform stateful processor operation=`<operationType>` with invalid timeoutMode=`<timeoutMode>`
+Failed to perform stateful processor operation=`<operationType>` with invalid timeMode=`<timeMode>`
 
 ### STATEFUL_PROCESSOR_CANNOT_REINITIALIZE_STATE_ON_KEY
 
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Cannot re-initialize state on the same grouping key during initial state handling for stateful processor. Invalid grouping key=`<groupingKey>`.
+
+### STATEFUL_PROCESSOR_INCORRECT_TIME_MODE_TO_ASSIGN_TTL
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot use TTL for state=`<stateName>` in timeMode `<timeMode>`, use TimeMode.ProcessingTime() instead.
 
 ### STATEFUL_PROCESSOR_TTL_DURATION_MUST_BE_POSITIVE
 

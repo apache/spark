@@ -14,29 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql.catalyst.plans.logical
 
-package org.apache.spark.sql.streaming;
+import org.apache.spark.sql.streaming.TimeMode
 
-import org.apache.spark.annotation.Evolving;
-import org.apache.spark.annotation.Experimental;
-import org.apache.spark.sql.catalyst.plans.logical.*;
+/** TimeMode types used in transformWithState operator */
+case object NoTime extends TimeMode
 
-/**
- * Represents the type of ttl modes possible for the Dataset operations
- * {@code transformWithState}.
- */
-@Experimental
-@Evolving
-public class TTLMode {
+case object ProcessingTime extends TimeMode
 
-  /**
-   * Specifies that there is no TTL for the user state. User state would not
-   * be cleaned up by Spark automatically.
-   */
-  public static final TTLMode NoTTL() { return NoTTL$.MODULE$; }
-
-  /**
-   * Specifies that all ttl durations for user state are in processing time.
-   */
-  public static final TTLMode ProcessingTimeTTL() { return ProcessingTimeTTL$.MODULE$; }
-}
+case object EventTime extends TimeMode

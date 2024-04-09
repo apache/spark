@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.streaming.state._
-import org.apache.spark.sql.streaming.TimeoutMode
+import org.apache.spark.sql.streaming.TimeMode
 import org.apache.spark.sql.types._
 import org.apache.spark.util.NextIterator
 
@@ -31,6 +31,7 @@ import org.apache.spark.util.NextIterator
  * Singleton utils class used primarily while interacting with TimerState
  */
 object TimerStateUtils {
+  // TODO(sahnib): remove this if not needed
   case class TimestampWithKey(
       key: Any,
       expiryTimestampMs: Long) extends Serializable
@@ -45,12 +46,12 @@ object TimerStateUtils {
  * Class that provides the implementation for storing timers
  * used within the `transformWithState` operator.
  * @param store - state store to be used for storing timer data
- * @param timeoutMode - mode of timeout (event time or processing time)
+ * @param timeMode - mode of timeout (event time or processing time)
  * @param keyExprEnc - encoder for key expression
  */
 class TimerStateImpl(
     store: StateStore,
-    timeoutMode: TimeoutMode,
+    timeMode: TimeMode,
     keyExprEnc: ExpressionEncoder[Any]) extends Logging {
 
   private val EMPTY_ROW =
@@ -78,7 +79,7 @@ class TimerStateImpl(
 
   private val secIndexKeyEncoder = UnsafeProjection.create(keySchemaForSecIndex)
 
-  private val timerCFName = if (timeoutMode == TimeoutMode.ProcessingTime) {
+  private val timerCFName = if (timeMode == TimeMode.ProcessingTime) {
     TimerStateUtils.PROC_TIMERS_STATE_NAME
   } else {
     TimerStateUtils.EVENT_TIMERS_STATE_NAME
