@@ -3664,6 +3664,12 @@
     ],
     "sqlState" : "42802"
   },
+  "STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY" : {
+    "message" : [
+      "Binary inequality column is not supported with state store. Provided schema: <schema>."
+    ],
+    "sqlState" : "XXKST"
+  },
   "STATIC_PARTITION_COLUMN_IN_INSERT_COLUMN_LIST" : {
     "message" : [
       "Static partition column <staticName> is also specified in the column list."
