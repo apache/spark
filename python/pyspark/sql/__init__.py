@@ -67,6 +67,7 @@ __all__ = [
     "Row",
     "DataFrameNaFunctions",
     "DataFrameStatFunctions",
+    "VariantVal",
     "Window",
     "WindowSpec",
     "DataFrameReader",
