@@ -274,6 +274,21 @@ class DatasetCacheSuite extends QueryTest
     }
   }
 
+  test("SPARK-47609. InMemoryRelation used when plans are partially matched ") {
+    val df = spark.range(0, 50).selectExpr("id as a ", "id % 2 AS b", "id % 3 AS c")
+    val df1 = df.withColumn("d", $"a" + 1)
+    df1.cache()
+    df1.collect()
+    // df2 should be able to use IMR
+    val df2 = df.select($"a", $"c")
+    assert(df2.queryExecution.executedPlan.exists(_.isInstanceOf[InMemoryTableScanExec]))
+    val rows = df2.collect()
+    df1.unpersist(true)
+    val uncachedDf2 = df.select($"a", $"c")
+    assert(!uncachedDf2.queryExecution.executedPlan.exists(_.isInstanceOf[InMemoryTableScanExec]))
+    checkAnswer(uncachedDf2, rows)
+  }
+
   test("SPARK-44653: non-trivial DataFrame unions should not break caching") {
     val df1 = Seq(1 -> 1).toDF("i", "j")
     val df2 = Seq(2 -> 2).toDF("i", "j")
