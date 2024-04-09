@@ -318,6 +318,8 @@ object AggUtils {
       stateFormatVersion: Int,
       child: SparkPlan): Seq[SparkPlan] = {
 
+    println("wei==planStreamingAggregation child output metadata: " + child.output.map(_.metadata))
+
     val groupingAttributes = groupingExpressions.map(_.toAttribute)
 
     val partialAggregate: SparkPlan = {
@@ -353,6 +355,7 @@ object AggUtils {
     val partialMerged2: SparkPlan = {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = PartialMerge))
       val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
+      println("wei=== aggregationAttributs: " + aggregateAttributes)
       createStreamingAggregate(
         requiredChildDistributionExpressions =
             Some(groupingAttributes),
@@ -364,6 +367,8 @@ object AggUtils {
             aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
         child = restored)
     }
+
+    println("wei partialMerged2 output metadata: " + partialMerged2.output.map(_.metadata))
     // Note: stateId and returnAllStates are filled in later with preparation rules
     // in IncrementalExecution.
     val saved =

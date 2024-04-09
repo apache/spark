@@ -438,10 +438,14 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case _ if !plan.isStreaming => Nil
 
       case EventTimeWatermark(columnName, delay, child) =>
+        // scalastyle: off
+        println("wei=== eventtime watermark child metadata: " + child.output.map(_.metadata))
         EventTimeWatermarkExec(columnName, delay, planLater(child)) :: Nil
 
       case PhysicalAggregation(
         namedGroupingExpressions, aggregateExpressions, rewrittenResultExpressions, child) =>
+
+        println("wei== PhysicalAggregation child metadata: " + child.output.map(_.metadata))
 
         if (aggregateExpressions.exists(_.aggregateFunction.isInstanceOf[PythonUDAF])) {
           throw new AnalysisException(
@@ -449,6 +453,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             messageParameters = Map.empty)
         }
 
+        // scalastyle: on
         val sessionWindowOption = namedGroupingExpressions.find { p =>
           p.metadata.contains(SessionWindow.marker)
         }

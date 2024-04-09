@@ -59,6 +59,8 @@ class IncrementalExecution(
     val isFirstBatch: Boolean)
   extends QueryExecution(sparkSession, logicalPlan) with Logging {
 
+  println("wei === logical plan metadata: " + logicalPlan.output.map(_.metadata))
+
   // Modified planner with stateful operations.
   override val planner: SparkPlanner = new SparkPlanner(
       sparkSession,

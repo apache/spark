@@ -205,29 +205,39 @@ object UnsupportedOperationChecker extends Logging {
         // scalastyle:off
         println("wei=== aggregate is: " + aggregate)
 
-        val subqueryAlias = plan.collect {
+        val subqueryAliasL = plan.collect {
           case s: SubqueryAlias => s
-        }.head
+        }
 
-        println("wei=== subqueryAlias is: " + subqueryAlias)
-        println("wei=== subqueryAlias output is: " + subqueryAlias.output)
-        println("wei=== subqueryAlias output metadata is: " + subqueryAlias.output.map(_.metadata))
+        if (!subqueryAliasL.isEmpty) {
+          val subqueryAlias = subqueryAliasL.head
 
-        println("wei=== subqueryAlias child output is: " + subqueryAlias.child.output)
-        println("wei=== subqueryAlias child output metadata is: " + subqueryAlias.child.output.map(_.metadata))
+          println("wei=== subqueryAlias is: " + subqueryAlias)
+          println("wei=== subqueryAlias output is: " + subqueryAlias.output)
+          println("wei=== subqueryAlias output metadata is: " + subqueryAlias.output.map(_.metadata))
 
-        val filter = plan.collect {
+          println("wei=== subqueryAlias child output is: " + subqueryAlias.child.output)
+          println("wei=== subqueryAlias child output metadata is: " + subqueryAlias.child.output.map(_.metadata))
+
+        }
+        val filterL = plan.collect {
           case f: Filter => f
-        }.head
+        }
 
-        println("wei=== filter is: " + filter)
-        println("wei=== filter output is: " + filter.output)
-        println("wei=== filter output metadata is: " + filter.output.map(_.metadata))
+        if (!filterL.isEmpty) {
+          val filter = filterL.head
+
+          println("wei=== filter is: " + filter)
+          println("wei=== filter output is: " + filter.output)
+          println("wei=== filter output metadata is: " + filter.output.map(_.metadata))
+
+        }
 
         // Find any attributes that are associated with an eventTime watermark.
         val watermarkAttributes = aggregate.groupingExpressions.collect {
           case a: Attribute if a.metadata.contains(EventTimeWatermark.delayKey) => a
         }
+        println("wei == watermarkAttributes: " + watermarkAttributes)
         // scala style: on
 
         // We can append rows to the sink once the group is under the watermark. Without this

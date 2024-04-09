@@ -91,6 +91,8 @@ class QueryExecution(
     plan
   }
 
+  println("wei===analyzed output metadata: " + analyzed.output.map(_.metadata))
+
   lazy val commandExecuted: LogicalPlan = mode match {
     case CommandExecutionMode.NON_ROOT => analyzed.mapChildren(eagerlyExecuteCommands)
     case CommandExecutionMode.ALL => eagerlyExecuteCommands(analyzed)

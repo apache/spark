@@ -120,7 +120,12 @@ object TimeWindowing extends Rule[LogicalPlan] {
         val newMetadata = newMetadataBuilder.build()
 
         def getWindow(i: Int, dataType: DataType): Expression = {
-          val timestamp = PreciseTimestampConversion(window.timeColumn, dataType, LongType)
+          val timecolumn = window.timeColumn match {
+            case c: Cast => Alias(c, c.child.prettyName)(
+              explicitMetadata = Some(newMetadata))
+            case _ => window.timeColumn
+          }
+          val timestamp = PreciseTimestampConversion(timecolumn, dataType, LongType)
           val remainder = (timestamp - window.startTime) % window.slideDuration
           val lastStart = timestamp - CaseWhen(Seq((LessThan(remainder, 0),
             remainder + window.slideDuration)), Some(remainder))
@@ -156,7 +161,6 @@ object TimeWindowing extends Rule[LogicalPlan] {
               println("wei=== window.timeColumn is Cast")
               IsNotNull(
                 Alias(c,c.child.prettyName)(
-                  exprId = child.output(0).exprId,
                   explicitMetadata = Some(newMetadata))
               )
             case _ => IsNotNull(window.timeColumn)
