@@ -23,8 +23,9 @@ if should_test_connect:
     from pyspark.sql.connect.udtf import UserDefinedTableFunction
 
     sql.udtf.UserDefinedTableFunction = UserDefinedTableFunction
+    from pyspark.sql.connect.functions import lit, udtf
 
-from pyspark.sql.connect.functions import lit, udtf
+from pyspark.util import is_remote_only
 from pyspark.sql.tests.test_udtf import BaseUDTFTestsMixin, UDTFArrowTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.errors.exceptions.connect import SparkConnectGrpcException
@@ -66,6 +67,14 @@ class UDTFParityTests(BaseUDTFTestsMixin, ReusedConnectTestCase):
     @unittest.skip("Spark Connect does not support accumulator but the test depends on it.")
     def test_udtf_with_analyze_using_accumulator(self):
         super().test_udtf_with_analyze_using_accumulator()
+
+    @unittest.skipIf(is_remote_only(), "pyspark-connect does not have SparkFiles")
+    def test_udtf_with_analyze_using_archive(self):
+        super().test_udtf_with_analyze_using_archive()
+
+    @unittest.skipIf(is_remote_only(), "pyspark-connect does not have SparkFiles")
+    def test_udtf_with_analyze_using_file(self):
+        super().test_udtf_with_analyze_using_file()
 
     def _add_pyfile(self, path):
         self.spark.addArtifacts(path, pyfile=True)

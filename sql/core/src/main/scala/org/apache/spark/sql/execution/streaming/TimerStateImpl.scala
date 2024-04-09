@@ -91,7 +91,7 @@ class TimerStateImpl(
 
   private val tsToKeyCFName = timerCFName + TimerStateUtils.TIMESTAMP_TO_KEY_CF
   store.createColFamilyIfAbsent(tsToKeyCFName, keySchemaForSecIndex,
-    schemaForValueRow, RangeKeyScanStateEncoderSpec(keySchemaForSecIndex, 1),
+    schemaForValueRow, RangeKeyScanStateEncoderSpec(keySchemaForSecIndex, Seq(0)),
     useMultipleValuesPerKey = false, isInternal = true)
 
   private def getGroupingKey(cfName: String): Any = {

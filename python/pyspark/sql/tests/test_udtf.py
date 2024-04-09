@@ -21,8 +21,6 @@ import unittest
 from dataclasses import dataclass
 from typing import Iterator, Optional
 
-from py4j.protocol import Py4JJavaError
-
 from pyspark.errors import (
     PySparkAttributeError,
     PythonException,
@@ -30,7 +28,6 @@ from pyspark.errors import (
     AnalysisException,
     PySparkPicklingError,
 )
-from pyspark.core.files import SparkFiles
 from pyspark.util import PythonEvalType
 from pyspark.sql.functions import (
     array,
@@ -858,6 +855,8 @@ class BaseUDTFTestsMixin:
                 self._check_result_or_exception(TestUDTF, ret_type, expected)
 
     def test_struct_output_type_casting_row(self):
+        from py4j.protocol import Py4JJavaError
+
         self.check_struct_output_type_casting_row(Py4JJavaError)
 
     def check_struct_output_type_casting_row(self, error_type):
@@ -1800,6 +1799,8 @@ class BaseUDTFTestsMixin:
         self.sc.addArchive(path)
 
     def test_udtf_with_analyze_using_archive(self):
+        from pyspark.core.files import SparkFiles
+
         with tempfile.TemporaryDirectory(prefix="test_udtf_with_analyze_using_archive") as d:
             archive_path = os.path.join(d, "my_archive")
             os.mkdir(archive_path)
@@ -1847,6 +1848,8 @@ class BaseUDTFTestsMixin:
         self.sc.addFile(path)
 
     def test_udtf_with_analyze_using_file(self):
+        from pyspark.core.files import SparkFiles
+
         with tempfile.TemporaryDirectory(prefix="test_udtf_with_analyze_using_file") as d:
             file_path = os.path.join(d, "my_file.txt")
             with open(file_path, "w") as f:
