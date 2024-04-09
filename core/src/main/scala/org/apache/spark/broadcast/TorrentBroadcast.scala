@@ -27,7 +27,8 @@ import scala.reflect.ClassTag
 import scala.util.Random
 
 import org.apache.spark._
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKey.BROADCAST_ID
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage._
@@ -176,7 +177,9 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long, serializedO
       blocks.length
     } catch {
       case t: Throwable =>
-        logError(s"Store broadcast $broadcastId fail, remove all pieces of the broadcast")
+        // scalastyle:off line.size.limit
+        logError(log"Store broadcast ${MDC(BROADCAST_ID, broadcastId)} fail, remove all pieces of the broadcast")
+        // scalastyle:on
         blockManager.removeBroadcast(id, tellMaster = true)
         throw t
     }

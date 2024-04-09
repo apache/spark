@@ -27,7 +27,7 @@ import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{LogEntry, Logging}
 import org.apache.spark.ml.{MLEvents, PipelineStage}
 import org.apache.spark.ml.param.{Param, Params}
 import org.apache.spark.rdd.RDD
@@ -85,6 +85,17 @@ private[spark] class Instrumentation private () extends Logging with MLEvents {
   }
 
   /**
+   * Logs a LogEntry which message with a prefix that uniquely identifies the training session.
+   */
+  override def logWarning(entry: LogEntry): Unit = {
+    if (log.isWarnEnabled) {
+      withLogContext(entry.context) {
+        log.warn(prefix + entry.message)
+      }
+    }
+  }
+
+  /**
    * Logs a error message with a prefix that uniquely identifies the training session.
    */
   override def logError(msg: => String): Unit = {
@@ -92,10 +103,32 @@ private[spark] class Instrumentation private () extends Logging with MLEvents {
   }
 
   /**
+   * Logs a LogEntry which message with a prefix that uniquely identifies the training session.
+   */
+  override def logError(entry: LogEntry): Unit = {
+    if (log.isErrorEnabled) {
+      withLogContext(entry.context) {
+        log.error(prefix + entry.message)
+      }
+    }
+  }
+
+  /**
    * Logs an info message with a prefix that uniquely identifies the training session.
    */
   override def logInfo(msg: => String): Unit = {
     super.logInfo(prefix + msg)
+  }
+
+  /**
+   * Logs a LogEntry which message with a prefix that uniquely identifies the training session.
+   */
+  override def logInfo(entry: LogEntry): Unit = {
+    if (log.isInfoEnabled) {
+      withLogContext(entry.context) {
+        log.info(prefix + entry.message)
+      }
+    }
   }
 
   /**

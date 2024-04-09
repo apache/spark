@@ -46,6 +46,8 @@ license: |
 - Since Spark 4.0, MySQL JDBC datasource will read FLOAT as FloatType, while in Spark 3.5 and previous, it was read as DoubleType. To restore the previous behavior, you can cast the column to the old type.
 - Since Spark 4.0, MySQL JDBC datasource will read BIT(n > 1) as BinaryType, while in Spark 3.5 and previous, read as LongType. To restore the previous behavior, set `spark.sql.legacy.mysql.bitArrayMapping.enabled` to `true`.
 - Since Spark 4.0, MySQL JDBC datasource will write ShortType as SMALLINT, while in Spark 3.5 and previous, write as INTEGER. To restore the previous behavior, you can replace the column with IntegerType whenever before writing.
+- Since Spark 4.0, The default value for `spark.sql.legacy.ctePrecedencePolicy` has been changed from `EXCEPTION` to `CORRECTED`. Instead of raising an error, inner CTE definitions take precedence over outer definitions.
+- Since Spark 4.0, The default value for `spark.sql.legacy.timeParserPolicy` has been changed from `EXCEPTION` to `CORRECTED`. Instead of raising an `INCONSISTENT_BEHAVIOR_CROSS_VERSION` error, `CANNOT_PARSE_TIMESTAMP` will be raised if ANSI mode is enable. `NULL` will be returned if ANSI mode is disabled. See [Datetime Patterns for Formatting and Parsing](sql-ref-datetime-pattern.html).
 
 ## Upgrading from Spark SQL 3.5.1 to 3.5.2
 

@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.variant
 
 import scala.util.parsing.combinator.RegexParsers
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.analysis.ExpressionBuilder
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -26,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
+import org.apache.spark.sql.catalyst.json.JsonInferSchema
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, VARIANT_GET}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -239,6 +241,19 @@ case object VariantGet {
   }
 
   /**
+   * A simple wrapper of the `cast` function that takes `Variant` rather than `VariantVal`. The
+   * `Cast` expression uses it and makes the implementation simpler.
+   */
+  def cast(
+      input: VariantVal,
+      dataType: DataType,
+      failOnError: Boolean,
+      zoneId: Option[String]): Any = {
+    val v = new Variant(input.getValue, input.getMetadata)
+    VariantGet.cast(v, dataType, failOnError, zoneId)
+  }
+
+  /**
    * Cast a variant `v` into a target data type `dataType`. If the variant represents a variant
    * null, the result is always a SQL NULL. The cast may fail due to an illegal type combination
    * (e.g., cast a variant int to binary), or an invalid input valid (e.g, cast a variant string
@@ -403,3 +418,87 @@ object VariantGetExpressionBuilder extends VariantGetExpressionBuilderBase(true)
 )
 // scalastyle:on line.size.limit
 object TryVariantGetExpressionBuilder extends VariantGetExpressionBuilderBase(false)
+
+@ExpressionDescription(
+  usage = "_FUNC_(v) - Returns schema in the SQL format of a variant.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(parse_json('null'));
+       VOID
+      > SELECT _FUNC_(parse_json('[{"b":true,"a":0}]'));
+       ARRAY<STRUCT<a: BIGINT, b: BOOLEAN>>
+  """,
+  since = "4.0.0",
+  group = "variant_funcs"
+)
+case class SchemaOfVariant(child: Expression)
+  extends UnaryExpression
+    with RuntimeReplaceable
+    with ExpectsInputTypes {
+  override lazy val replacement: Expression = StaticInvoke(
+    SchemaOfVariant.getClass,
+    StringType,
+    "schemaOfVariant",
+    Seq(child),
+    inputTypes,
+    returnNullable = false)
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(VariantType)
+
+  override def dataType: DataType = StringType
+
+  override def prettyName: String = "schema_of_variant"
+
+  override protected def withNewChildInternal(newChild: Expression): SchemaOfVariant =
+    copy(child = newChild)
+}
+
+object SchemaOfVariant {
+  /** The actual implementation of the `SchemaOfVariant` expression. */
+  def schemaOfVariant(input: VariantVal): UTF8String = {
+    val v = new Variant(input.getValue, input.getMetadata)
+    UTF8String.fromString(schemaOf(v).sql)
+  }
+
+  /**
+   * Return the schema of a variant. Struct fields are guaranteed to be sorted alphabetically.
+   */
+  def schemaOf(v: Variant): DataType = v.getType match {
+    case Type.OBJECT =>
+      val size = v.objectSize()
+      val fields = new Array[StructField](size)
+      for (i <- 0 until size) {
+        val field = v.getFieldAtIndex(i)
+        fields(i) = StructField(field.key, schemaOf(field.value))
+      }
+      // According to the variant spec, object fields must be sorted alphabetically. So we don't
+      // have to sort, but just need to validate they are sorted.
+      for (i <- 1 until size) {
+        if (fields(i - 1).name >= fields(i).name) {
+          throw new SparkRuntimeException("MALFORMED_VARIANT", Map.empty)
+        }
+      }
+      StructType(fields)
+    case Type.ARRAY =>
+      var elementType: DataType = NullType
+      for (i <- 0 until v.arraySize()) {
+        elementType = mergeSchema(elementType, schemaOf(v.getElementAtIndex(i)))
+      }
+      ArrayType(elementType)
+    case Type.NULL => NullType
+    case Type.BOOLEAN => BooleanType
+    case Type.LONG => LongType
+    case Type.STRING => StringType
+    case Type.DOUBLE => DoubleType
+    case Type.DECIMAL =>
+      val d = v.getDecimal
+      DecimalType(d.precision(), d.scale())
+  }
+
+  /**
+   * Returns the tightest common type for two given data types. Input struct fields are assumed to
+   * be sorted alphabetically.
+   */
+  def mergeSchema(t1: DataType, t2: DataType): DataType =
+    JsonInferSchema.compatibleType(t1, t2, VariantType)
+}

@@ -39,9 +39,6 @@ from typing import (
     ValuesView,
 )
 
-from py4j.java_gateway import JVMView
-
-from pyspark import SparkContext
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql.column import Column, _to_java_column, _to_seq, _create_column_from_literal
 from pyspark.sql.dataframe import DataFrame
@@ -65,6 +62,7 @@ from pyspark.sql.utils import (
 )
 
 if TYPE_CHECKING:
+    from pyspark import SparkContext
     from pyspark.sql._typing import (
         ColumnOrName,
         ColumnOrName_,
@@ -82,7 +80,7 @@ if _has_numpy:
 # since it requires making every single overridden definition.
 
 
-def _get_jvm_function(name: str, sc: SparkContext) -> Callable:
+def _get_jvm_function(name: str, sc: "SparkContext") -> Callable:
     """
     Retrieves JVM function identified by name from
     Java gateway associated with sc.
@@ -96,6 +94,8 @@ def _invoke_function(name: str, *args: Any) -> Column:
     Invokes JVM function identified by name with args
     and wraps the result with :class:`~pyspark.sql.Column`.
     """
+    from pyspark import SparkContext
+
     assert SparkContext._active_spark_context is not None
     jf = _get_jvm_function(name, SparkContext._active_spark_context)
     return Column(jf(*args))
@@ -972,12 +972,13 @@ def mode(col: "ColumnOrName", deterministic: bool = False) -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([
     ...     ("Java", 2012, 20000), ("dotNET", 2012, 5000),
     ...     ("Java", 2012, 20000), ("dotNET", 2012, 5000),
     ...     ("dotNET", 2013, 48000), ("Java", 2013, 30000)],
     ...     schema=("course", "year", "earnings"))
-    >>> df.groupby("course").agg(mode("year")).show()
+    >>> df.groupby("course").agg(sf.mode("year")).sort("course").show()
     +------+----------+
     |course|mode(year)|
     +------+----------+
@@ -989,13 +990,20 @@ def mode(col: "ColumnOrName", deterministic: bool = False) -> Column:
     deterministic is false or is not defined, or the lowest value is returned if deterministic is
     true.
 
-    >>> df2 = spark.createDataFrame([(-10,), (0,), (10,)], ["col"])
-    >>> df2.select(mode("col", False), mode("col", True)).show()
-    +---------+---------------------------------------+
-    |mode(col)|mode() WITHIN GROUP (ORDER BY col DESC)|
-    +---------+---------------------------------------+
-    |        0|                                    -10|
-    +---------+---------------------------------------+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(-10,), (0,), (10,)], ["col"])
+    >>> df.select(sf.mode("col", False)).show() # doctest: +SKIP
+    +---------+
+    |mode(col)|
+    +---------+
+    |        0|
+    +---------+
+    >>> df.select(sf.mode("col", True)).show()
+    +---------------------------------------+
+    |mode() WITHIN GROUP (ORDER BY col DESC)|
+    +---------------------------------------+
+    |                                    -10|
+    +---------------------------------------+
     """
     return _invoke_function("mode", _to_java_column(col), deterministic)
 
@@ -1230,7 +1238,7 @@ def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     ...     ("Java", 2012, 20000), ("dotNET", 2012, 5000),
     ...     ("dotNET", 2013, 48000), ("Java", 2013, 30000)],
     ...     schema=("course", "year", "earnings"))
-    >>> df.groupby("course").agg(sf.max_by("year", "earnings")).show()
+    >>> df.groupby("course").agg(sf.max_by("year", "earnings")).sort("course").show()
     +------+----------------------+
     |course|max_by(year, earnings)|
     +------+----------------------+
@@ -1245,7 +1253,9 @@ def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     ...     ("Marketing", "Anna", 4), ("IT", "Bob", 2),
     ...     ("IT", "Charlie", 3), ("Marketing", "David", 1)],
     ...     schema=("department", "name", "years_in_dept"))
-    >>> df.groupby("department").agg(sf.max_by("name", "years_in_dept")).show()
+    >>> df.groupby("department").agg(
+    ...     sf.max_by("name", "years_in_dept")
+    ... ).sort("department").show()
     +----------+---------------------------+
     |department|max_by(name, years_in_dept)|
     +----------+---------------------------+
@@ -1260,7 +1270,9 @@ def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     ...     ("Consult", "Eva", 6), ("Finance", "Frank", 5),
     ...     ("Finance", "George", 5), ("Consult", "Henry", 7)],
     ...     schema=("department", "name", "years_in_dept"))
-    >>> df.groupby("department").agg(sf.max_by("name", "years_in_dept")).show()
+    >>> df.groupby("department").agg(
+    ...     sf.max_by("name", "years_in_dept")
+    ... ).sort("department").show()
     +----------+---------------------------+
     |department|max_by(name, years_in_dept)|
     +----------+---------------------------+
@@ -1307,7 +1319,7 @@ def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     ...     ("Java", 2012, 20000), ("dotNET", 2012, 5000),
     ...     ("dotNET", 2013, 48000), ("Java", 2013, 30000)],
     ...     schema=("course", "year", "earnings"))
-    >>> df.groupby("course").agg(sf.min_by("year", "earnings")).show()
+    >>> df.groupby("course").agg(sf.min_by("year", "earnings")).sort("course").show()
     +------+----------------------+
     |course|min_by(year, earnings)|
     +------+----------------------+
@@ -1322,7 +1334,9 @@ def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     ...     ("Marketing", "Anna", 4), ("IT", "Bob", 2),
     ...     ("IT", "Charlie", 3), ("Marketing", "David", 1)],
     ...     schema=("department", "name", "years_in_dept"))
-    >>> df.groupby("department").agg(sf.min_by("name", "years_in_dept")).show()
+    >>> df.groupby("department").agg(
+    ...     sf.min_by("name", "years_in_dept")
+    ... ).sort("department").show()
     +----------+---------------------------+
     |department|min_by(name, years_in_dept)|
     +----------+---------------------------+
@@ -1337,7 +1351,9 @@ def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     ...     ("Consult", "Eva", 6), ("Finance", "Frank", 5),
     ...     ("Finance", "George", 5), ("Consult", "Henry", 7)],
     ...     schema=("department", "name", "years_in_dept"))
-    >>> df.groupby("department").agg(sf.min_by("name", "years_in_dept")).show()
+    >>> df.groupby("department").agg(
+    ...     sf.min_by("name", "years_in_dept")
+    ... ).sort("department").show()
     +----------+---------------------------+
     |department|min_by(name, years_in_dept)|
     +----------+---------------------------+
@@ -5142,6 +5158,7 @@ def broadcast(df: DataFrame) -> DataFrame:
     |    2|  2|
     +-----+---+
     """
+    from py4j.java_gateway import JVMView
 
     sc = _get_active_spark_context()
     return DataFrame(cast(JVMView, sc._jvm).functions.broadcast(df._jdf), df.sparkSession)
@@ -17460,6 +17477,8 @@ def _unresolved_named_lambda_variable(*name_parts: Any) -> Column:
     ----------
     name_parts : str
     """
+    from py4j.java_gateway import JVMView
+
     sc = _get_active_spark_context()
     name_parts_seq = _to_seq(sc, name_parts)
     expressions = cast(JVMView, sc._jvm).org.apache.spark.sql.catalyst.expressions
@@ -17508,6 +17527,8 @@ def _create_lambda(f: Callable) -> Callable:
             - (Column, Column) -> Column: ...
             - (Column, Column, Column) -> Column: ...
     """
+    from py4j.java_gateway import JVMView
+
     parameters = _get_lambda_parameters(f)
 
     sc = _get_active_spark_context()
@@ -17551,6 +17572,8 @@ def _invoke_higher_order_function(
 
     :return: a Column
     """
+    from py4j.java_gateway import JVMView
+
     sc = _get_active_spark_context()
     expressions = cast(JVMView, sc._jvm).org.apache.spark.sql.catalyst.expressions
     expr = getattr(expressions, name)

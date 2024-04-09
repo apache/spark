@@ -15,13 +15,8 @@
 # limitations under the License.
 #
 from contextlib import contextmanager
-from typing import Any, Callable, Dict, Iterator, Optional, cast, List
+from typing import Any, Callable, Dict, Iterator, Optional, cast, List, TYPE_CHECKING
 
-import py4j
-from py4j.protocol import Py4JJavaError
-from py4j.java_gateway import is_instance_of, JavaObject
-
-from pyspark import SparkContext
 from pyspark.errors.exceptions.base import (
     AnalysisException as BaseAnalysisException,
     IllegalArgumentException as BaseIllegalArgumentException,
@@ -43,15 +38,22 @@ from pyspark.errors.exceptions.base import (
     QueryContextType,
 )
 
+if TYPE_CHECKING:
+    from py4j.protocol import Py4JJavaError
+    from py4j.java_gateway import JavaObject
+
 
 class CapturedException(PySparkException):
     def __init__(
         self,
         desc: Optional[str] = None,
         stackTrace: Optional[str] = None,
-        cause: Optional[Py4JJavaError] = None,
-        origin: Optional[Py4JJavaError] = None,
+        cause: Optional["Py4JJavaError"] = None,
+        origin: Optional["Py4JJavaError"] = None,
     ):
+        from pyspark import SparkContext
+        from py4j.protocol import Py4JJavaError
+
         # desc & stackTrace vs origin are mutually exclusive.
         # cause is optional.
         assert (origin is not None and desc is None and stackTrace is None) or (
@@ -73,6 +75,8 @@ class CapturedException(PySparkException):
         self._origin = origin
 
     def __str__(self) -> str:
+        from pyspark import SparkContext
+
         assert SparkContext._jvm is not None
 
         jvm = SparkContext._jvm
@@ -91,6 +95,9 @@ class CapturedException(PySparkException):
         return str(desc)
 
     def getErrorClass(self) -> Optional[str]:
+        from pyspark import SparkContext
+        from py4j.java_gateway import is_instance_of
+
         assert SparkContext._gateway is not None
 
         gw = SparkContext._gateway
@@ -102,6 +109,9 @@ class CapturedException(PySparkException):
             return None
 
     def getMessageParameters(self) -> Optional[Dict[str, str]]:
+        from pyspark import SparkContext
+        from py4j.java_gateway import is_instance_of
+
         assert SparkContext._gateway is not None
 
         gw = SparkContext._gateway
@@ -113,6 +123,9 @@ class CapturedException(PySparkException):
             return None
 
     def getSqlState(self) -> Optional[str]:
+        from pyspark import SparkContext
+        from py4j.java_gateway import is_instance_of
+
         assert SparkContext._gateway is not None
         gw = SparkContext._gateway
         if self._origin is not None and is_instance_of(
@@ -123,6 +136,9 @@ class CapturedException(PySparkException):
             return None
 
     def getMessage(self) -> str:
+        from pyspark import SparkContext
+        from py4j.java_gateway import is_instance_of
+
         assert SparkContext._gateway is not None
         gw = SparkContext._gateway
 
@@ -141,6 +157,9 @@ class CapturedException(PySparkException):
             return ""
 
     def getQueryContext(self) -> List[BaseQueryContext]:
+        from pyspark import SparkContext
+        from py4j.java_gateway import is_instance_of
+
         assert SparkContext._gateway is not None
 
         gw = SparkContext._gateway
@@ -152,7 +171,10 @@ class CapturedException(PySparkException):
             return []
 
 
-def convert_exception(e: Py4JJavaError) -> CapturedException:
+def convert_exception(e: "Py4JJavaError") -> CapturedException:
+    from pyspark import SparkContext
+    from py4j.java_gateway import is_instance_of
+
     assert e is not None
     assert SparkContext._jvm is not None
     assert SparkContext._gateway is not None
@@ -189,7 +211,7 @@ def convert_exception(e: Py4JJavaError) -> CapturedException:
     elif is_instance_of(gw, e, "org.apache.spark.SparkNoSuchElementException"):
         return SparkNoSuchElementException(origin=e)
 
-    c: Py4JJavaError = e.getCause()
+    c: "Py4JJavaError" = e.getCause()
     stacktrace: str = jvm.org.apache.spark.util.Utils.exceptionString(e)
     if c is not None and (
         is_instance_of(gw, c, "org.apache.spark.api.python.PythonException")
@@ -211,6 +233,8 @@ def convert_exception(e: Py4JJavaError) -> CapturedException:
 
 def capture_sql_exception(f: Callable[..., Any]) -> Callable[..., Any]:
     def deco(*a: Any, **kw: Any) -> Any:
+        from py4j.protocol import Py4JJavaError
+
         try:
             return f(*a, **kw)
         except Py4JJavaError as e:
@@ -227,13 +251,17 @@ def capture_sql_exception(f: Callable[..., Any]) -> Callable[..., Any]:
 
 @contextmanager
 def unwrap_spark_exception() -> Iterator[Any]:
+    from pyspark import SparkContext
+    from py4j.protocol import Py4JJavaError
+    from py4j.java_gateway import is_instance_of
+
     assert SparkContext._gateway is not None
 
     gw = SparkContext._gateway
     try:
         yield
     except Py4JJavaError as e:
-        je: Py4JJavaError = e.java_exception
+        je: "Py4JJavaError" = e.java_exception
         if je is not None and is_instance_of(gw, je, "org.apache.spark.SparkException"):
             converted = convert_exception(je.getCause())
             if not isinstance(converted, UnknownException):
@@ -252,6 +280,8 @@ def install_exception_handler() -> None:
 
     It's idempotent, could be called multiple times.
     """
+    import py4j
+
     original = py4j.protocol.get_return_value
     # The original `get_return_value` is not patched, it's idempotent.
     patched = capture_sql_exception(original)
@@ -350,7 +380,7 @@ class UnknownException(CapturedException, BaseUnknownException):
 
 
 class QueryContext(BaseQueryContext):
-    def __init__(self, q: JavaObject):
+    def __init__(self, q: "JavaObject"):
         self._q = q
 
     def contextType(self) -> QueryContextType:

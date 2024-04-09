@@ -20,7 +20,7 @@ import warnings
 from inspect import getfullargspec, signature
 from typing import get_type_hints
 
-from pyspark.rdd import PythonEvalType
+from pyspark.util import PythonEvalType
 from pyspark.sql.pandas.typehints import infer_eval_type
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 from pyspark.sql.types import DataType

@@ -3191,12 +3191,34 @@ class PlanGenerationTestSuite
   }
 
   /* Extensions */
-  test("relation extension") {
+  test("relation extension deprecated") {
     val input = proto.ExamplePluginRelation
       .newBuilder()
       .setInput(simple.plan.getRoot)
       .build()
     session.newDataFrame(com.google.protobuf.Any.pack(input))
+  }
+
+  test("expression extension deprecated") {
+    val extension = proto.ExamplePluginExpression
+      .newBuilder()
+      .setChild(
+        proto.Expression
+          .newBuilder()
+          .setUnresolvedAttribute(proto.Expression.UnresolvedAttribute
+            .newBuilder()
+            .setUnparsedIdentifier("id")))
+      .setCustomField("abc")
+      .build()
+    simple.select(Column(com.google.protobuf.Any.pack(extension)))
+  }
+
+  test("relation extension") {
+    val input = proto.ExamplePluginRelation
+      .newBuilder()
+      .setInput(simple.plan.getRoot)
+      .build()
+    session.newDataFrame(com.google.protobuf.Any.pack(input).toByteArray)
   }
 
   test("expression extension") {
@@ -3210,7 +3232,7 @@ class PlanGenerationTestSuite
             .setUnparsedIdentifier("id")))
       .setCustomField("abc")
       .build()
-    simple.select(Column(com.google.protobuf.Any.pack(extension)))
+    simple.select(Column.forExtension(com.google.protobuf.Any.pack(extension).toByteArray))
   }
 
   test("crosstab") {

@@ -64,7 +64,7 @@ from pyspark.errors import (
     PySparkNotImplementedError,
     PySparkRuntimeError,
 )
-from pyspark.rdd import PythonEvalType
+from pyspark.util import PythonEvalType
 from pyspark.storagelevel import StorageLevel
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.connect.conversion import ArrowTableToRowsConversion
@@ -2279,7 +2279,7 @@ def _test() -> None:
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.dataframe tests")
-        .remote("local[4]")
+        .remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[4]"))
         .getOrCreate()
     )
 

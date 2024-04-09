@@ -122,8 +122,16 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
                 # Remove again to verify this won't throw any error
                 self.spark.streams.removeListener(test_listener)
 
-        verify(TestListenerV1(), "_v1")
-        verify(TestListenerV2(), "_v2")
+        with self.table(
+            "listener_start_events_v1",
+            "listener_progress_events_v1",
+            "listener_terminated_events_v1",
+            "listener_start_events_v2",
+            "listener_progress_events_v2",
+            "listener_terminated_events_v2",
+        ):
+            verify(TestListenerV1(), "_v1")
+            verify(TestListenerV2(), "_v2")
 
     def test_accessing_spark_session(self):
         spark = self.spark

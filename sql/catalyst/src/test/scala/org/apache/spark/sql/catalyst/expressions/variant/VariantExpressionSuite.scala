@@ -236,15 +236,14 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     check(expectedResult4, smallObject, smallMetadata)
   }
 
-  private def variantGet(input: String, path: String, dataType: DataType): VariantGet = {
-    val inputVariant = VariantExpressionEvalUtils.parseJson(UTF8String.fromString(input))
-    VariantGet(Literal(inputVariant), Literal(path), dataType, failOnError = true)
-  }
+  private def parseJson(input: String): VariantVal =
+    VariantExpressionEvalUtils.parseJson(UTF8String.fromString(input))
 
-  private def tryVariantGet(input: String, path: String, dataType: DataType): VariantGet = {
-    val inputVariant = VariantExpressionEvalUtils.parseJson(UTF8String.fromString(input))
-    VariantGet(Literal(inputVariant), Literal(path), dataType, failOnError = false)
-  }
+  private def variantGet(input: String, path: String, dataType: DataType): VariantGet =
+    VariantGet(Literal(parseJson(input)), Literal(path), dataType, failOnError = true)
+
+  private def tryVariantGet(input: String, path: String, dataType: DataType): VariantGet =
+    VariantGet(Literal(parseJson(input)), Literal(path), dataType, failOnError = false)
 
   private def testVariantGet(input: String, path: String, dataType: DataType, output: Any): Unit = {
     checkEvaluation(variantGet(input, path, dataType), output)
@@ -641,5 +640,49 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkInvalidPath("$1")
     checkInvalidPath("$[-1]")
     checkInvalidPath("""$['"]""")
+  }
+
+  test("cast from variant") {
+    // We do not test too many type combinations, as the cast implementation is mostly the same as
+    // variant_get.
+
+    def checkCast(input: Any, dataType: DataType, output: Any): Unit = {
+      for (mode <- Seq(EvalMode.LEGACY, EvalMode.ANSI, EvalMode.TRY)) {
+        checkEvaluation(Cast(Literal(input), dataType, evalMode = mode), output)
+      }
+    }
+
+    def checkInvalidCast(input: Any, dataType: DataType, tryOutput: Any): Unit = {
+      // Casting from variant is not affected by the ANSI flag.
+      for (mode <- Seq(EvalMode.LEGACY, EvalMode.ANSI)) {
+        checkExceptionInExpression[SparkRuntimeException](
+          Cast(Literal(input), dataType, evalMode = mode),
+          "INVALID_VARIANT_CAST"
+        )
+      }
+      checkEvaluation(Cast(Literal(input), dataType, evalMode = EvalMode.TRY), tryOutput)
+    }
+
+    checkCast(parseJson("1"), StringType, "1")
+    // Other to-string casts never produce NULL when the input is not NULL, but variant-to-string
+    // cast can produce NULL when the input is a variant null (not NULL).
+    checkCast(parseJson("null"), StringType, null)
+    checkCast(parseJson("\"1\""), IntegerType, 1)
+
+    checkInvalidCast(parseJson("2147483648"), IntegerType, null)
+    checkInvalidCast(parseJson("[2147483648, 1]"), ArrayType(IntegerType), Array(null, 1))
+
+    checkCast(Array(null, parseJson("true")), ArrayType(BooleanType), Array(null, true))
+    checkCast(
+      Array(null, parseJson("false"), parseJson("null")),
+      ArrayType(StringType),
+      Array(null, "false", null)
+    )
+    checkCast(Array(parseJson("[1]")), ArrayType(ArrayType(IntegerType)), Array(Array(1)))
+    checkInvalidCast(
+      Array(parseJson("\"hello\""), null, parseJson("\"1\"")),
+      ArrayType(IntegerType),
+      Array(null, null, 1)
+    )
   }
 }

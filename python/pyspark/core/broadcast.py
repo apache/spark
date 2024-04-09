@@ -37,9 +37,8 @@ from typing import (
     Union,
 )
 
-from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import ChunkedStream, pickle_protocol
-from pyspark.util import print_exec
+from pyspark.util import print_exec, local_connect_and_auth
 from pyspark.errors import PySparkRuntimeError
 
 if TYPE_CHECKING:
@@ -56,7 +55,7 @@ _broadcastRegistry: Dict[int, "Broadcast[Any]"] = {}
 
 
 def _from_id(bid: int) -> "Broadcast[Any]":
-    from pyspark.broadcast import _broadcastRegistry
+    from pyspark.core.broadcast import _broadcastRegistry
 
     if bid not in _broadcastRegistry:
         raise PySparkRuntimeError(
@@ -367,13 +366,13 @@ class BroadcastPickleRegistry(threading.local):
 def _test() -> None:
     import doctest
     from pyspark.sql import SparkSession
-    import pyspark.broadcast
+    import pyspark.core.broadcast
 
-    globs = pyspark.broadcast.__dict__.copy()
+    globs = pyspark.core.broadcast.__dict__.copy()
     spark = SparkSession.builder.master("local[4]").appName("broadcast tests").getOrCreate()
     globs["spark"] = spark
 
-    (failure_count, test_count) = doctest.testmod(pyspark.broadcast, globs=globs)
+    (failure_count, test_count) = doctest.testmod(pyspark.core.broadcast, globs=globs)
     spark.stop()
     if failure_count:
         sys.exit(-1)
