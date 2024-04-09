@@ -241,6 +241,19 @@ case object VariantGet {
   }
 
   /**
+   * A simple wrapper of the `cast` function that takes `Variant` rather than `VariantVal`. The
+   * `Cast` expression uses it and makes the implementation simpler.
+   */
+  def cast(
+      input: VariantVal,
+      dataType: DataType,
+      failOnError: Boolean,
+      zoneId: Option[String]): Any = {
+    val v = new Variant(input.getValue, input.getMetadata)
+    VariantGet.cast(v, dataType, failOnError, zoneId)
+  }
+
+  /**
    * Cast a variant `v` into a target data type `dataType`. If the variant represents a variant
    * null, the result is always a SQL NULL. The cast may fail due to an illegal type combination
    * (e.g., cast a variant int to binary), or an invalid input valid (e.g, cast a variant string
