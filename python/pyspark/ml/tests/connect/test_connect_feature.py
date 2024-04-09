@@ -27,7 +27,9 @@ if should_test_connect:
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
 class FeatureTestsOnConnect(FeatureTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
-        self.spark = SparkSession.builder.remote("local[2]").getOrCreate()
+        self.spark = SparkSession.builder.remote(
+            os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[2]")
+        ).getOrCreate()
 
     def tearDown(self) -> None:
         self.spark.stop()
