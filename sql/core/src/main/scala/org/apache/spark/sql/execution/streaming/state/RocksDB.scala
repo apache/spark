@@ -766,6 +766,7 @@ class RocksDB(
       nativeStats.getTickerCount(typ)
     }
 
+    // Used for metrics reporting around internal/external column families
     val numInternalColFamilies = colFamilyNameToHandleMap
       .keys.filter(checkInternalColumnFamilies(_)).size
     val numExternalColFamilies = colFamilyNameToHandleMap.keys.size - numInternalColFamilies
