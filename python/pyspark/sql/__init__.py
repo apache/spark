@@ -39,7 +39,7 @@ Important classes of Spark SQL and DataFrames:
     - :class:`pyspark.sql.Window`
       For working with window functions.
 """
-from pyspark.sql.types import Row
+from pyspark.sql.types import Row, VariantVal
 from pyspark.sql.context import SQLContext, HiveContext, UDFRegistration, UDTFRegistration
 from pyspark.sql.session import SparkSession
 from pyspark.sql.column import Column
