@@ -67,7 +67,7 @@ object JDBCRDD extends Logging {
       Using.resource(conn.prepareStatement(query)) { statement =>
         statement.setQueryTimeout(options.queryTimeout)
         Using.resource(statement.executeQuery()) { rs =>
-          JdbcUtils.getSchema(rs, dialect, alwaysNullable = true,
+          JdbcUtils.getSchema(conn, rs, dialect, alwaysNullable = true,
             isTimestampNTZ = options.preferTimestampNTZ)
         }
       }

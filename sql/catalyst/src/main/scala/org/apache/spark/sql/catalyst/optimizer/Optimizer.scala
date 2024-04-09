@@ -445,8 +445,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
     val excludedRules = excludedRulesConf.filter { ruleName =>
       val nonExcludable = nonExcludableRules.contains(ruleName)
       if (nonExcludable) {
-        logWarning(s"Optimization rule '${ruleName}' was not excluded from the optimizer " +
-          s"because this rule is a non-excludable rule.")
+        logWarning(log"Optimization rule '${MDC(RULE_NAME, ruleName)}' " +
+          log"was not excluded from the optimizer because this rule is a non-excludable rule.")
       }
       !nonExcludable
     }

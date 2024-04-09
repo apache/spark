@@ -131,7 +131,7 @@ class CompareSeriesMixin:
         )
 
         with ps.option_context("compute.eager_check", False):
-            self.assert_eq(expected, psser1.compare(psser2))
+            self.assert_eq(expected, psser1.compare(psser2).sort_index())
 
 
 class CompareSeriesTests(
