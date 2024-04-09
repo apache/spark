@@ -99,7 +99,6 @@ object LogKey extends Enumeration {
   val SHUFFLE_MERGE_ID = Value
   val SIZE = Value
   val SLEEP_TIME = Value
-  val SPARK_VERSION = Value
   val STAGE_ID = Value
   val STATEMENT_ID = Value
   val SUBMISSION_ID = Value
