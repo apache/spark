@@ -29,6 +29,7 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
+import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.Locale;
@@ -95,27 +96,6 @@ public final class Variant {
   // Get a decimal value from the variant.
   public BigDecimal getDecimal() {
     return VariantUtil.getDecimal(value, pos);
-  }
-
-  // Get a raw date value (number of days from the Unix epoch) from the variant.
-  public int getRawDate() {
-    return VariantUtil.getRawDate(value, pos);
-  }
-
-  // Get a date value from the variant.
-  public LocalDate getDate() {
-    return VariantUtil.getDate(value, pos);
-  }
-
-  // Get a raw timestamp/timestamp_ntz value (number of microseconds from the Unix epoch) from the
-  // variant
-  public long getRawTimestamp() {
-    return VariantUtil.getRawTimestamp(value, pos);
-  }
-
-  // Get a timestamp/timestamp_ntz value from the variant.
-  public Instant getTimestamp() {
-    return VariantUtil.getTimestamp(value, pos);
   }
 
   // Get a float value from the variant.
@@ -266,6 +246,10 @@ public final class Variant {
       .appendOffset("+HH:MM", "+00:00")
       .toFormatter(Locale.US);
 
+  private static Instant microsToInstant(long timestamp) {
+    return Instant.EPOCH.plus(timestamp, ChronoUnit.MICROS);
+  }
+
   static void toJsonImpl(byte[] value, byte[] metadata, int pos, StringBuilder sb, ZoneId zoneId) {
     switch (VariantUtil.getType(value, pos)) {
       case OBJECT:
@@ -316,15 +300,15 @@ public final class Variant {
         sb.append(VariantUtil.getDecimal(value, pos).toPlainString());
         break;
       case DATE:
-        appendQuoted(sb, VariantUtil.getDate(value, pos).toString());
+        appendQuoted(sb, LocalDate.ofEpochDay((int) VariantUtil.getLong(value, pos)).toString());
         break;
       case TIMESTAMP:
         appendQuoted(sb, TIMESTAMP_FORMATTER.format(
-            VariantUtil.getTimestamp(value, pos).atZone(zoneId)));
+            microsToInstant(VariantUtil.getLong(value, pos)).atZone(zoneId)));
         break;
       case TIMESTAMP_NTZ:
         appendQuoted(sb, TIMESTAMP_NTZ_FORMATTER.format(
-            VariantUtil.getTimestamp(value, pos).atZone(ZoneOffset.UTC)));
+            microsToInstant(VariantUtil.getLong(value, pos)).atZone(ZoneOffset.UTC)));
         break;
       case FLOAT:
         sb.append(VariantUtil.getFloat(value, pos));

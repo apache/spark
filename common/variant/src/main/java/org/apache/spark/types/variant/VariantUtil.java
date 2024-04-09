@@ -23,9 +23,6 @@ import scala.collection.immutable.Map$;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 
 /**
@@ -357,23 +354,31 @@ public class VariantUtil {
   }
 
   // Get a long value from variant value `value[pos...]`.
+  // It is only legal to call it if `getType` returns one of `Type.LONG/DATE/TIMESTAMP/
+  // TIMESTAMP_NTZ`. If the type is `DATE`, the return value is guaranteed to fit into an int and
+  // represents the number of days from the Unix epoch. If the type is `TIMESTAMP/TIMESTAMP_NTZ`,
+  // the return value represents the number of microseconds from the Unix epoch.
   // Throw `MALFORMED_VARIANT` if the variant is malformed.
   public static long getLong(byte[] value, int pos) {
     checkIndex(pos, value.length);
     int basicType = value[pos] & BASIC_TYPE_MASK;
     int typeInfo = (value[pos] >> BASIC_TYPE_BITS) & TYPE_INFO_MASK;
-    if (basicType != PRIMITIVE) throw unexpectedType(Type.LONG);
+    String exceptionMessage = "Expect type to be LONG/DATE/TIMESTAMP/TIMESTAMP_NTZ";
+    if (basicType != PRIMITIVE) throw new IllegalStateException(exceptionMessage);
     switch (typeInfo) {
       case INT1:
         return readLong(value, pos + 1, 1);
       case INT2:
         return readLong(value, pos + 1, 2);
       case INT4:
+      case DATE:
         return readLong(value, pos + 1, 4);
       case INT8:
+      case TIMESTAMP:
+      case TIMESTAMP_NTZ:
         return readLong(value, pos + 1, 8);
       default:
-        throw unexpectedType(Type.LONG);
+        throw new IllegalStateException(exceptionMessage);
     }
   }
 
@@ -417,42 +422,6 @@ public class VariantUtil {
         throw unexpectedType(Type.DECIMAL);
     }
     return result.stripTrailingZeros();
-  }
-
-  // Get a raw date value (number of days from the Unix epoch) from variant value `value[pos...]`.
-  // Throw `MALFORMED_VARIANT` if the variant is malformed.
-  public static int getRawDate(byte[] value, int pos) {
-    checkIndex(pos, value.length);
-    int basicType = value[pos] & BASIC_TYPE_MASK;
-    int typeInfo = (value[pos] >> BASIC_TYPE_BITS) & TYPE_INFO_MASK;
-    if (basicType != PRIMITIVE || typeInfo != DATE) throw unexpectedType(Type.DATE);
-    return (int) readLong(value, pos + 1, 4);
-  }
-
-  // Get a date value from variant value `value[pos...]`.
-  // Throw `MALFORMED_VARIANT` if the variant is malformed.
-  public static LocalDate getDate(byte[] value, int pos) {
-    return LocalDate.ofEpochDay(getRawDate(value, pos));
-  }
-
-  // Get a raw timestamp/timestamp_ntz value (number of microseconds from the Unix epoch) from
-  // variant value `value[pos...]`. The variant library doesn't distinguish the content of these two
-  // types. Instead, the user interprets them differently.
-  // Throw `MALFORMED_VARIANT` if the variant is malformed.
-  public static long getRawTimestamp(byte[] value, int pos) {
-    checkIndex(pos, value.length);
-    int basicType = value[pos] & BASIC_TYPE_MASK;
-    int typeInfo = (value[pos] >> BASIC_TYPE_BITS) & TYPE_INFO_MASK;
-    if (basicType != PRIMITIVE || (typeInfo != TIMESTAMP && typeInfo != TIMESTAMP_NTZ)) {
-      throw new IllegalStateException("Expect type to be TIMESTAMP/TIMESTAMP_NTZ");
-    }
-    return readLong(value, pos + 1, 8);
-  }
-
-  // Get a timestamp/timestamp_ntz value from variant value `value[pos...]`.
-  // Throw `MALFORMED_VARIANT` if the variant is malformed.
-  public static Instant getTimestamp(byte[] value, int pos) {
-    return Instant.EPOCH.plus(getRawTimestamp(value, pos), ChronoUnit.MICROS);
   }
 
   // Get a float value from variant value `value[pos...]`.

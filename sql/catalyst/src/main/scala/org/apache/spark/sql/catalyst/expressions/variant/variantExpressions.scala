@@ -299,9 +299,9 @@ case object VariantGet {
           case Type.DECIMAL =>
             val d = Decimal(v.getDecimal)
             Literal(Decimal(v.getDecimal), DecimalType(d.precision, d.scale))
-          case Type.DATE => Literal(v.getRawDate, DateType)
-          case Type.TIMESTAMP => Literal(v.getRawTimestamp, TimestampType)
-          case Type.TIMESTAMP_NTZ => Literal(v.getRawTimestamp, TimestampNTZType)
+          case Type.DATE => Literal(v.getLong.toInt, DateType)
+          case Type.TIMESTAMP => Literal(v.getLong, TimestampType)
+          case Type.TIMESTAMP_NTZ => Literal(v.getLong, TimestampNTZType)
           case Type.FLOAT => Literal(v.getFloat, FloatType)
           case Type.BINARY => Literal(v.getBinary, BinaryType)
           // We have handled other cases and should never reach here. This case is only intended
