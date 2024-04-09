@@ -683,6 +683,10 @@ abstract class TypeCoercionBase {
       }
     }
 
+    private def createAlias(e: Expression, metadata: Metadata): Alias = {
+      Alias(e, e.prettyName)(explicitMetadata = Some(metadata))
+    }
+
     override val transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
@@ -692,8 +696,21 @@ abstract class TypeCoercionBase {
         findTightestCommonType(left.dataType, right.dataType).map { commonType =>
           if (b.inputType.acceptsType(commonType)) {
             // If the expression accepts the tightest common type, cast to that.
-            val newLeft = if (left.dataType == commonType) left else Cast(left, commonType)
-            val newRight = if (right.dataType == commonType) right else Cast(right, commonType)
+            val leftMetadata = left match {
+              case AttributeReference(_, _, _, metadata) => metadata
+              case _ => Metadata.empty
+            }
+            val rightMetadata = right match {
+              case AttributeReference(_, _, _, metadata) => metadata
+              case _ => Metadata.empty
+            }
+            // scalastyle:off
+            println("wei === leftMetadata: " + leftMetadata + ", rightMetadata: " + rightMetadata)
+            println("wei === left: " + left + ", right: " + right)
+            println("wei === left data type: " + left.dataType + ", right data type: " + right.dataType + " commonType: " + commonType)
+            val newLeft = if (left.dataType == commonType) left else createAlias(Cast(left, commonType), leftMetadata)
+            val newRight = if (right.dataType == commonType) right else createAlias(Cast(right, commonType), rightMetadata)
+            // scalastyle:on
             b.withNewChildren(Seq(newLeft, newRight))
           } else {
             // Otherwise, don't do anything with the expression.

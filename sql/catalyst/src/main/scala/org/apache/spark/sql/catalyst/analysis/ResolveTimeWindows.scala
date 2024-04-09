@@ -120,12 +120,12 @@ object TimeWindowing extends Rule[LogicalPlan] {
         val newMetadata = newMetadataBuilder.build()
 
         def getWindow(i: Int, dataType: DataType): Expression = {
-          val timecolumn = window.timeColumn match {
-            case c: Cast => Alias(c, c.child.prettyName)(
-              explicitMetadata = Some(newMetadata))
-            case _ => window.timeColumn
-          }
-          val timestamp = PreciseTimestampConversion(timecolumn, dataType, LongType)
+//          val timecolumn = window.timeColumn match {
+//            case c: Cast => Alias(c, c.child.prettyName)(
+//              explicitMetadata = Some(newMetadata))
+//            case _ => window.timeColumn
+//          }
+          val timestamp = PreciseTimestampConversion(window.timeColumn, dataType, LongType)
           val remainder = (timestamp - window.startTime) % window.slideDuration
           val lastStart = timestamp - CaseWhen(Seq((LessThan(remainder, 0),
             remainder + window.slideDuration)), Some(remainder))
@@ -136,9 +136,9 @@ object TimeWindowing extends Rule[LogicalPlan] {
           // as nullable.
           CreateNamedStruct(
             Literal(WINDOW_START) ::
-              PreciseTimestampConversion(windowStart, LongType, dataType).castNullable() ::
+              Alias(PreciseTimestampConversion(windowStart, LongType, dataType).castNullable(), "window-start")(explicitMetadata = Some(newMetadata)) ::
               Literal(WINDOW_END) ::
-              PreciseTimestampConversion(windowEnd, LongType, dataType).castNullable() ::
+              Alias(PreciseTimestampConversion(windowEnd, LongType, dataType).castNullable(), "window-start")(explicitMetadata = Some(newMetadata)) ::
               Nil)
         }
 
@@ -156,16 +156,16 @@ object TimeWindowing extends Rule[LogicalPlan] {
           }
 
           // For backwards compatibility we add a filter to filter out nulls
-          val filterExpr = window.timeColumn match {
-            case c: Cast =>
-              println("wei=== window.timeColumn is Cast")
-              IsNotNull(
-                Alias(c,c.child.prettyName)(
-                  explicitMetadata = Some(newMetadata))
-              )
-            case _ => IsNotNull(window.timeColumn)
-          }
-//            IsNotNull(window.timeColumn)
+//          val filterExpr = window.timeColumn match {
+//            case c: Cast =>
+//              println("wei=== window.timeColumn is Cast")
+//              IsNotNull(
+//                Alias(c,c.child.prettyName)(
+//                  explicitMetadata = Some(newMetadata))
+//              )
+//            case _ => IsNotNull(window.timeColumn)
+//          }
+          val filterExpr = IsNotNull(window.timeColumn)
           println("wei=== windowStruct metadata: " + windowStruct.metadata)
           println("wei=== windowStruct attr metadat: " + windowStruct.toAttribute.metadata)
           println("wei=== child output metadata: " + child.output.map(_.metadata))
