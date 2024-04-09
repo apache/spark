@@ -16,9 +16,9 @@
     under the License.
 
 
-===
+==========
 VariantVal
-===
+==========
 .. currentmodule:: pyspark.sql
 
 .. autosummary::
