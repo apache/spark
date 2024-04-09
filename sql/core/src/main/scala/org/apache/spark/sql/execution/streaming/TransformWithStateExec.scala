@@ -299,22 +299,19 @@ case class TransformWithStateExec(
 
   // operator specific metrics
   override def customStatefulOperatorMetrics: Seq[StatefulOperatorCustomMetric] = {
-    val timerMetrics = if (timeoutMode != NoTimeouts) {
-      Seq(
-        StatefulOperatorCustomSumMetric("numRegisteredTimers", "Number of registered timers"),
-        StatefulOperatorCustomSumMetric("numDeletedTimers", "Number of deleted timers"),
-        StatefulOperatorCustomSumMetric("numExpiredTimers", "Number of expired timers")
-      )
-    } else Seq.empty
-
     Seq(
+      // metrics around state variables
       StatefulOperatorCustomSumMetric("numValueStateVars", "Number of value state variables"),
       StatefulOperatorCustomSumMetric("numValueStateWithTTLVars",
         "Number of value state variables with TTL"),
       StatefulOperatorCustomSumMetric("numListStateVars", "Number of list state variables"),
       StatefulOperatorCustomSumMetric("numMapStateVars", "Number of map state variables"),
-      StatefulOperatorCustomSumMetric("numDeleteStateVars", "Number of deleted state variables")
-    ) ++ timerMetrics
+      StatefulOperatorCustomSumMetric("numDeleteStateVars", "Number of deleted state variables"),
+      // metrics around timers
+      StatefulOperatorCustomSumMetric("numRegisteredTimers", "Number of registered timers"),
+      StatefulOperatorCustomSumMetric("numDeletedTimers", "Number of deleted timers"),
+      StatefulOperatorCustomSumMetric("numExpiredTimers", "Number of expired timers")
+    )
   }
 
   override protected def doExecute(): RDD[InternalRow] = {

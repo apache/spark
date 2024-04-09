@@ -356,6 +356,11 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       testStream(result, OutputMode.Update())(
         AddData(inputData, "a"),
         CheckNewAnswer(("a", "1")),
+        Execute(q => {
+          assert(q.lastProgress.stateOperators(0).customMetrics.get("numValueStateVars") > 0)
+          assert(q.lastProgress.stateOperators(0).customMetrics.get("numRegisteredTimers") == 0)
+        }
+        ),
         AddData(inputData, "a", "b"),
         CheckNewAnswer(("a", "2"), ("b", "1")),
         StopStream,
