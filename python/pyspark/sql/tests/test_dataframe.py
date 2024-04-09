@@ -833,7 +833,7 @@ class DataFrameTestsMixin:
         with self.sql_conf({"spark.sql.ansi.enabled": True}):
             df = self.spark.range(10)
 
-            # DataFrameQueryContext with pysparkCallSite - divide
+            # DataFrameQueryContext with pysparkLoggingInfo - divide
             with self.assertRaises(ArithmeticException) as pe:
                 df.withColumn("div_zero", df.id / 0).collect()
             self.check_error(
@@ -844,7 +844,7 @@ class DataFrameTestsMixin:
                 pyspark_fragment="divide",
             )
 
-            # DataFrameQueryContext with pysparkCallSite - plus
+            # DataFrameQueryContext with pysparkLoggingInfo - plus
             with self.assertRaises(NumberFormatException) as pe:
                 df.withColumn("plus_invalid_type", df.id + "string").collect()
             self.check_error(
@@ -860,7 +860,7 @@ class DataFrameTestsMixin:
                 pyspark_fragment="plus",
             )
 
-            # DataFrameQueryContext with pysparkCallSite - minus
+            # DataFrameQueryContext with pysparkLoggingInfo - minus
             with self.assertRaises(NumberFormatException) as pe:
                 df.withColumn("minus_invalid_type", df.id - "string").collect()
             self.check_error(
@@ -876,7 +876,7 @@ class DataFrameTestsMixin:
                 pyspark_fragment="minus",
             )
 
-            # DataFrameQueryContext with pysparkCallSite - multiply
+            # DataFrameQueryContext with pysparkLoggingInfo - multiply
             with self.assertRaises(NumberFormatException) as pe:
                 df.withColumn("multiply_invalid_type", df.id * "string").collect()
             self.check_error(
@@ -892,7 +892,197 @@ class DataFrameTestsMixin:
                 pyspark_fragment="multiply",
             )
 
-            # DataFrameQueryContext with pysparkCallSite - chained (`divide` is problematic)
+            # DataFrameQueryContext with pysparkLoggingInfo - mod
+            with self.assertRaises(NumberFormatException) as pe:
+                df.withColumn("mod_invalid_type", df.id % "string").collect()
+            self.check_error(
+                exception=pe.exception,
+                error_class="CAST_INVALID_INPUT",
+                message_parameters={
+                    "expression": "'string'",
+                    "sourceType": '"STRING"',
+                    "targetType": '"BIGINT"',
+                    "ansiConfig": '"spark.sql.ansi.enabled"',
+                },
+                query_context_type=QueryContextType.DataFrame,
+                pyspark_fragment="mod",
+            )
+
+            # DataFrameQueryContext with pysparkLoggingInfo - equalTo
+            with self.assertRaises(NumberFormatException) as pe:
+                df.withColumn("equalTo_invalid_type", df.id == "string").collect()
+            self.check_error(
+                exception=pe.exception,
+                error_class="CAST_INVALID_INPUT",
+                message_parameters={
+                    "expression": "'string'",
+                    "sourceType": '"STRING"',
+                    "targetType": '"BIGINT"',
+                    "ansiConfig": '"spark.sql.ansi.enabled"',
+                },
+                query_context_type=QueryContextType.DataFrame,
+                pyspark_fragment="equalTo",
+            )
+
+            # DataFrameQueryContext with pysparkLoggingInfo - lt
+            with self.assertRaises(NumberFormatException) as pe:
+                df.withColumn("lt_invalid_type", df.id < "string").collect()
+            self.check_error(
+                exception=pe.exception,
+                error_class="CAST_INVALID_INPUT",
+                message_parameters={
+                    "expression": "'string'",
+                    "sourceType": '"STRING"',
+                    "targetType": '"BIGINT"',
+                    "ansiConfig": '"spark.sql.ansi.enabled"',
+                },
+                query_context_type=QueryContextType.DataFrame,
+                pyspark_fragment="lt",
+            )
+
+            # DataFrameQueryContext with pysparkLoggingInfo - leq
+            with self.assertRaises(NumberFormatException) as pe:
+                df.withColumn("leq_invalid_type", df.id <= "string").collect()
+            self.check_error(
+                exception=pe.exception,
+                error_class="CAST_INVALID_INPUT",
+                message_parameters={
+                    "expression": "'string'",
+                    "sourceType": '"STRING"',
+                    "targetType": '"BIGINT"',
+                    "ansiConfig": '"spark.sql.ansi.enabled"',
+                },
+                query_context_type=QueryContextType.DataFrame,
+                pyspark_fragment="leq",
+            )
+
+            # DataFrameQueryContext with pysparkLoggingInfo - geq
+            with self.assertRaises(NumberFormatException) as pe:
+                df.withColumn("geq_invalid_type", df.id >= "string").collect()
+            self.check_error(
+                exception=pe.exception,
+                error_class="CAST_INVALID_INPUT",
+                message_parameters={
+                    "expression": "'string'",
+                    "sourceType": '"STRING"',
+                    "targetType": '"BIGINT"',
+                    "ansiConfig": '"spark.sql.ansi.enabled"',
+                },
+                query_context_type=QueryContextType.DataFrame,
+                pyspark_fragment="geq",
+            )
+
+            # DataFrameQueryContext with pysparkLoggingInfo - gt
+            with self.assertRaises(NumberFormatException) as pe:
+                df.withColumn("gt_invalid_type", df.id > "string").collect()
+            self.check_error(
+                exception=pe.exception,
+                error_class="CAST_INVALID_INPUT",
+                message_parameters={
+                    "expression": "'string'",
+                    "sourceType": '"STRING"',
+                    "targetType": '"BIGINT"',
+                    "ansiConfig": '"spark.sql.ansi.enabled"',
+                },
+                query_context_type=QueryContextType.DataFrame,
+                pyspark_fragment="gt",
+            )
+
+            # DataFrameQueryContext with pysparkLoggingInfo - eqNullSafe
+            with self.assertRaises(NumberFormatException) as pe:
+                df.withColumn("eqNullSafe_invalid_type", df.id.eqNullSafe("string")).collect()
+            self.check_error(
+                exception=pe.exception,
+                error_class="CAST_INVALID_INPUT",
+                message_parameters={
+                    "expression": "'string'",
+                    "sourceType": '"STRING"',
+                    "targetType": '"BIGINT"',
+                    "ansiConfig": '"spark.sql.ansi.enabled"',
+                },
+                query_context_type=QueryContextType.DataFrame,
+                pyspark_fragment="eqNullSafe",
+            )
+
+            # DataFrameQueryContext with pysparkLoggingInfo - and
+            with self.assertRaises(AnalysisException) as pe:
+                df.withColumn("and_invalid_type", df.id & "string").collect()
+            self.check_error(
+                exception=pe.exception,
+                error_class="DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+                message_parameters={
+                    "inputType": '"BOOLEAN"',
+                    "actualDataType": '"BIGINT"',
+                    "sqlExpr": '"(id AND string)"',
+                },
+                query_context_type=QueryContextType.DataFrame,
+                pyspark_fragment="and",
+            )
+
+            # DataFrameQueryContext with pysparkLoggingInfo - or
+            with self.assertRaises(AnalysisException) as pe:
+                df.withColumn("or_invalid_type", df.id | "string").collect()
+            self.check_error(
+                exception=pe.exception,
+                error_class="DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+                message_parameters={
+                    "inputType": '"BOOLEAN"',
+                    "actualDataType": '"BIGINT"',
+                    "sqlExpr": '"(id OR string)"',
+                },
+                query_context_type=QueryContextType.DataFrame,
+                pyspark_fragment="or",
+            )
+
+            # DataFrameQueryContext with pysparkLoggingInfo - bitwiseOR
+            with self.assertRaises(NumberFormatException) as pe:
+                df.withColumn("bitwiseOR_invalid_type", df.id.bitwiseOR("string")).collect()
+            self.check_error(
+                exception=pe.exception,
+                error_class="CAST_INVALID_INPUT",
+                message_parameters={
+                    "expression": "'string'",
+                    "sourceType": '"STRING"',
+                    "targetType": '"BIGINT"',
+                    "ansiConfig": '"spark.sql.ansi.enabled"',
+                },
+                query_context_type=QueryContextType.DataFrame,
+                pyspark_fragment="bitwiseOR",
+            )
+
+            # DataFrameQueryContext with pysparkLoggingInfo - bitwiseAND
+            with self.assertRaises(NumberFormatException) as pe:
+                df.withColumn("bitwiseAND_invalid_type", df.id.bitwiseAND("string")).collect()
+            self.check_error(
+                exception=pe.exception,
+                error_class="CAST_INVALID_INPUT",
+                message_parameters={
+                    "expression": "'string'",
+                    "sourceType": '"STRING"',
+                    "targetType": '"BIGINT"',
+                    "ansiConfig": '"spark.sql.ansi.enabled"',
+                },
+                query_context_type=QueryContextType.DataFrame,
+                pyspark_fragment="bitwiseAND",
+            )
+
+            # DataFrameQueryContext with pysparkLoggingInfo - bitwiseXOR
+            with self.assertRaises(NumberFormatException) as pe:
+                df.withColumn("bitwiseXOR_invalid_type", df.id.bitwiseXOR("string")).collect()
+            self.check_error(
+                exception=pe.exception,
+                error_class="CAST_INVALID_INPUT",
+                message_parameters={
+                    "expression": "'string'",
+                    "sourceType": '"STRING"',
+                    "targetType": '"BIGINT"',
+                    "ansiConfig": '"spark.sql.ansi.enabled"',
+                },
+                query_context_type=QueryContextType.DataFrame,
+                pyspark_fragment="bitwiseXOR",
+            )
+
+            # DataFrameQueryContext with pysparkLoggingInfo - chained (`divide` is problematic)
             with self.assertRaises(ArithmeticException) as pe:
                 df.withColumn("multiply_ten", df.id * 10).withColumn(
                     "divide_zero", df.id / 0
@@ -905,7 +1095,7 @@ class DataFrameTestsMixin:
                 pyspark_fragment="divide",
             )
 
-            # DataFrameQueryContext with pysparkCallSite - chained (`plus` is problematic)
+            # DataFrameQueryContext with pysparkLoggingInfo - chained (`plus` is problematic)
             with self.assertRaises(NumberFormatException) as pe:
                 df.withColumn("multiply_ten", df.id * 10).withColumn(
                     "divide_ten", df.id / 10
@@ -925,7 +1115,7 @@ class DataFrameTestsMixin:
                 pyspark_fragment="plus",
             )
 
-            # DataFrameQueryContext with pysparkCallSite - chained (`minus` is problematic)
+            # DataFrameQueryContext with pysparkLoggingInfo - chained (`minus` is problematic)
             with self.assertRaises(NumberFormatException) as pe:
                 df.withColumn("multiply_ten", df.id * 10).withColumn(
                     "divide_ten", df.id / 10
@@ -945,7 +1135,7 @@ class DataFrameTestsMixin:
                 pyspark_fragment="minus",
             )
 
-            # DataFrameQueryContext with pysparkCallSite - chained (`multiply` is problematic)
+            # DataFrameQueryContext with pysparkLoggingInfo - chained (`multiply` is problematic)
             with self.assertRaises(NumberFormatException) as pe:
                 df.withColumn("multiply_string", df.id * "string").withColumn(
                     "divide_ten", df.id / 10
@@ -1089,7 +1279,7 @@ class DataFrameTestsMixin:
                 pyspark_fragment="multiply",
             )
 
-            # DataFrameQueryContext without pysparkCallSite
+            # DataFrameQueryContext without pysparkLoggingInfo
             with self.assertRaises(AnalysisException) as pe:
                 df.select("non-existing-column")
             self.check_error(

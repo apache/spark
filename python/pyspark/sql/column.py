@@ -169,6 +169,25 @@ def _bin_op(
     ["Column", Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"]], "Column"
 ]:
     """Create a method for given binary operator"""
+    binary_operator_map = {
+        "plus": "+",
+        "minus": "-",
+        "divide": "/",
+        "multiply": "*",
+        "mod": "%",
+        "equalTo": "=",
+        "lt": "<",
+        "leq": "<=",
+        "geq": ">=",
+        "gt": ">",
+        "eqNullSafe": "<=>",
+        "bitwiseOR": "|",
+        "bitwiseAND": "&",
+        "bitwiseXOR": "^",
+        # Just following JVM rule even if the names of source and target are the same.
+        "and": "and",
+        "or": "or",
+    }
 
     def _(
         self: "Column",
@@ -178,7 +197,7 @@ def _bin_op(
 
         logging_info = {}
         spark = SparkSession.getActiveSession()
-        if name in SUPPORTED_WITH_PYSPARK_LOGGING_INFO_FUNCTIONS and spark is not None:
+        if name in binary_operator_map and spark is not None:
             assert spark._jvm is not None
 
             stack = inspect.stack()
@@ -190,7 +209,7 @@ def _bin_op(
 
         jc = other._jc if isinstance(other, Column) else other
         if logging_info:
-            njc = getattr(self._jc, f"{name}WithPySparkLoggingInfo")(jc, logging_info)
+            njc = getattr(self._jc, "fn")(binary_operator_map[name], jc, logging_info)
         else:
             njc = getattr(self._jc, name)(jc)
         return Column(njc)
