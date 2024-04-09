@@ -17,6 +17,7 @@
 
 from typing import Any, Callable, TYPE_CHECKING
 
+from pyspark.util import is_remote_only
 from pyspark.serializers import CPickleSerializer, AutoBatchedSerializer
 from pyspark.sql import DataFrame, SparkSession
 
@@ -28,6 +29,10 @@ if TYPE_CHECKING:
     import pyspark.core.context
     from pyspark.core import RDD, SparkContext
     from pyspark.ml._typing import C, JavaObjectOrPickleDump
+
+
+if not is_remote_only():
+    import py4j
 
     # Hack for support float('inf') in Py4j
     _old_smart_decode = py4j.protocol.smart_decode
@@ -46,7 +51,10 @@ def _new_smart_decode(obj: Any) -> str:
     return _old_smart_decode(obj)
 
 
-py4j.protocol.smart_decode = _new_smart_decode
+if not is_remote_only():
+    import py4j
+
+    py4j.protocol.smart_decode = _new_smart_decode
 
 
 _picklable_classes = [
