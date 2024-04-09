@@ -27,7 +27,8 @@ import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{CONFIG, DB_BACKEND}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Network._
 import org.apache.spark.network.shuffle.ShuffleTestAccessor
@@ -170,8 +171,8 @@ private object YarnExternalShuffleDriver extends Logging with Matchers {
       if (registeredExecFile != null && execStateCopy != null) {
         val dbBackendName = conf.get(SHUFFLE_SERVICE_DB_BACKEND.key)
         val dbBackend = DBBackend.byName(dbBackendName)
-        logWarning(s"Use ${dbBackend.name()} as the implementation of " +
-          s"${SHUFFLE_SERVICE_DB_BACKEND.key}")
+        logWarning(log"Use ${MDC(DB_BACKEND, dbBackend.name())} as the implementation of " +
+          log"${MDC(CONFIG, SHUFFLE_SERVICE_DB_BACKEND.key)}")
         FileUtils.copyDirectory(registeredExecFile, execStateCopy)
         assert(!ShuffleTestAccessor
           .reloadRegisteredExecutors(dbBackend, execStateCopy).isEmpty)

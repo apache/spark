@@ -43,6 +43,9 @@ object LogKey extends Enumeration {
   val COMPONENT = Value
   val CONFIG = Value
   val CONFIG2 = Value
+  val CONFIG3 = Value
+  val CONFIG4 = Value
+  val CONFIG5 = Value
   val CONTAINER_ID = Value
   val COUNT = Value
   val CSV_HEADER_COLUMN_NAME = Value
@@ -51,13 +54,16 @@ object LogKey extends Enumeration {
   val CSV_SCHEMA_FIELD_NAME = Value
   val CSV_SCHEMA_FIELD_NAMES = Value
   val CSV_SOURCE = Value
+  val DB_BACKEND = Value
   val DRIVER_ID = Value
   val END_POINT = Value
   val ERROR = Value
   val EVENT_LOOP = Value
   val EVENT_QUEUE = Value
   val EXECUTOR_ID = Value
+  val EXECUTOR_IDS = Value
   val EXECUTOR_STATE = Value
+  val EXECUTOR_ENV_REGEX = Value
   val EXIT_CODE = Value
   val EXPRESSION_TERMS = Value
   val FAILURES = Value
@@ -67,6 +73,7 @@ object LogKey extends Enumeration {
   val HIVE_OPERATION_STATE = Value
   val HIVE_OPERATION_TYPE = Value
   val HOST = Value
+  val INTERVAL = Value
   val JOB_ID = Value
   val JOIN_CONDITION = Value
   val JOIN_CONDITION_SUB_EXPRESSION = Value
@@ -83,6 +90,7 @@ object LogKey extends Enumeration {
   val MERGE_DIR_NAME = Value
   val METHOD_NAME = Value
   val MIN_SIZE = Value
+  val MINIKUBE_URL = Value
   val NUM_COLUMNS = Value
   val NUM_ITERATIONS = Value
   val OBJECT_ID = Value
@@ -95,6 +103,9 @@ object LogKey extends Enumeration {
   val PATH = Value
   val PATHS = Value
   val POD_ID = Value
+  val POD_PHASE = Value
+  val POD_NAME = Value
+  val POD_NAMESPACE = Value
   val PORT = Value
   val QUERY_HINT = Value
   val QUERY_PLAN = Value
@@ -103,9 +114,10 @@ object LogKey extends Enumeration {
   val RANGE = Value
   val RDD_ID = Value
   val REASON = Value
+  val RESOURCE_COUNT = Value
+  val RESOURCE_NAME = Value
   val REDUCE_ID = Value
   val RELATION_NAME = Value
-  val REMOTE_ADDRESS = Value
   val RETRY_COUNT = Value
   val RETRY_INTERVAL = Value
   val RPC_ADDRESS = Value
