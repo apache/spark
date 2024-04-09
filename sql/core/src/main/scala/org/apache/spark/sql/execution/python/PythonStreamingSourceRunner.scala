@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.python
 
 import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream}
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
@@ -43,7 +44,6 @@ object PythonStreamingSourceRunner {
   val LATEST_OFFSET_FUNC_ID = 885
   val PARTITIONS_FUNC_ID = 886
   val COMMIT_FUNC_ID = 887
-  val SEND_BATCH_FUNC_ID = 888
 }
 
 /**
@@ -70,6 +70,9 @@ class PythonStreamingSourceRunner(
 
   private var dataOut: DataOutputStream = null
   private var dataIn: DataInputStream = null
+
+
+  var cache: mutable.Map[String, Iterator[InternalRow]] = mutable.Map.empty
 
   import PythonStreamingSourceRunner._
 
@@ -153,7 +156,8 @@ class PythonStreamingSourceRunner(
   /**
    * Invokes partitions(start, end) function of the stream reader and receive the return value.
    */
-  def partitions(start: String, end: String): Array[Array[Byte]] = {
+  def partitions(start: String, end: String): (Array[Array[Byte]], Option[Iterator[InternalRow]]) =
+  {
     dataOut.writeInt(PARTITIONS_FUNC_ID)
     PythonWorkerUtils.writeUTF(start, dataOut)
     PythonWorkerUtils.writeUTF(end, dataOut)
@@ -170,7 +174,24 @@ class PythonStreamingSourceRunner(
       val pickledPartition: Array[Byte] = PythonWorkerUtils.readBytes(dataIn)
       pickledPartitions.append(pickledPartition)
     }
-    pickledPartitions.toArray
+    val shouldReadCache = dataIn.readInt()
+    val iter: Option[Iterator[InternalRow]] = if (shouldReadCache == 1) {
+      if (cache.contains(end)) {
+        Some(cache.get(end).get)
+      } else {
+        try {
+          val it = readBatches()
+          Some(it)
+        } catch {
+          case e: Throwable =>
+            e.printStackTrace()
+            None
+        }
+      }
+    } else {
+      None
+    }
+    (pickledPartitions.toArray, iter)
   }
 
   /**
@@ -210,30 +231,23 @@ class PythonStreamingSourceRunner(
     s"stream reader for $pythonExec", 0, Long.MaxValue)
 
   def readBatches(): Iterator[InternalRow] = {
-    dataOut.writeInt(SEND_BATCH_FUNC_ID)
-    dataOut.flush()
-    assert(dataIn.readInt() == 6)
+    assert(dataIn.readInt() == SpecialLengths.START_ARROW_STREAM)
     val reader = new ArrowStreamReader(dataIn, allocator)
     val root = reader.getVectorSchemaRoot()
-    val schema = ArrowUtils.fromArrowSchema(root.getSchema())
+    // When input is empty schema can't be read.
+    // val schema = ArrowUtils.fromArrowSchema(root.getSchema())
     val vectors = root.getFieldVectors().asScala.map { vector =>
       new ArrowColumnVector(vector)
     }.toArray[ColumnVector]
-    assert(schema == outputSchema)
+
+    // assert(schema == outputSchema)
     val rows = ArrayBuffer[InternalRow]()
     while (reader.loadNextBatch()) {
       val batch = new ColumnarBatch(vectors)
       batch.setNumRows(root.getRowCount)
-      batch.rowIterator().asScala.foreach { p =>
-        // println(s"lsdf: ${p.getInt(0)}")
-      }
       rows.appendAll(batch.rowIterator().asScala.map(_.copy()))
     }
-    rows.zipWithIndex.foreach { p =>
-      println(s"lsdf: ${p._1.getInt(0)}")
-    }
     reader.close(false)
-    assert(dataIn.readInt() == 222)
     rows.iterator
   }
 }

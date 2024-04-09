@@ -16,12 +16,15 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.python
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory}
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset}
+import org.apache.spark.sql.execution.datasources.v2.python.PythonMicroBatchStream.nextStreamId
 import org.apache.spark.sql.execution.python.PythonStreamingSourceRunner
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.storage.{BlockId, StorageLevel}
 
 case class PythonStreamingSourceOffset(json: String) extends Offset
 
@@ -35,6 +38,10 @@ class PythonMicroBatchStream(
     ds.source.createPythonFunction(
       ds.getOrCreateDataSourceInPython(shortName, options, Some(outputSchema)).dataSource)
 
+  private val streamId = nextStreamId
+  private var nextBlockId = 0
+  private var cachedInputPartition: Option[(String, String, PythonStreamingInputPartition)] = None
+
   private val runner: PythonStreamingSourceRunner =
     new PythonStreamingSourceRunner(createDataSourceFunc, outputSchema)
   runner.init()
@@ -44,10 +51,39 @@ class PythonMicroBatchStream(
   override def latestOffset(): Offset = PythonStreamingSourceOffset(runner.latestOffset())
 
   override def planInputPartitions(start: Offset, end: Offset): Array[InputPartition] = {
-    runner.readBatches().toArray
-    runner.partitions(start.asInstanceOf[PythonStreamingSourceOffset].json,
-      end.asInstanceOf[PythonStreamingSourceOffset].json)
-      .zipWithIndex.map(p => PythonInputPartition(p._2, p._1))
+    val start_offset_json = start.asInstanceOf[PythonStreamingSourceOffset].json
+    val end_offset_json = end.asInstanceOf[PythonStreamingSourceOffset].json
+
+    if (cachedInputPartition.exists(p => p._1 == start_offset_json && p._2 == end_offset_json)) {
+      return Array(cachedInputPartition.get._3)
+    }
+
+    val (partitions, rows) = runner.partitions(start_offset_json, end_offset_json)
+    if (rows.isDefined) {
+      // Only SimpleStreamReader without partitioning prefetch data.
+      assert(partitions.length == 1)
+      nextBlockId = nextBlockId + 1
+      val blockId = BlockId(s"input-$streamId-$nextBlockId")
+      SparkEnv.get.blockManager.putIterator(
+        blockId, rows.get, StorageLevel.MEMORY_AND_DISK_SER, true)
+      val partition = PythonStreamingInputPartition(0, partitions.head, Some(blockId))
+
+      cachedInputPartition.foreach { p =>
+        SparkEnv.get.blockManager.removeBlock(p._3.blockId.get)
+      }
+      cachedInputPartition = Some((start_offset_json, end_offset_json, partition))
+      Array(partition)
+    } else {
+      partitions.zipWithIndex
+        .map(p => PythonStreamingInputPartition(p._2, p._1, None))
+    }
+  }
+
+  private def evictCache(): Unit = {
+    cachedInputPartition.foreach { p =>
+      SparkEnv.get.blockManager.removeBlock(p._3.blockId.get)
+    }
+    cachedInputPartition = None
   }
 
   private lazy val readInfo: PythonDataSourceReadInfo = {
@@ -58,7 +94,7 @@ class PythonMicroBatchStream(
   }
 
   override def createReaderFactory(): PartitionReaderFactory = {
-    new PythonPartitionReaderFactory(
+    new PythonStreamingPartitionReaderFactory(
       ds.source, readInfo.func, outputSchema, None)
   }
 
@@ -67,9 +103,18 @@ class PythonMicroBatchStream(
   }
 
   override def stop(): Unit = {
+    evictCache()
     runner.stop()
   }
 
   override def deserializeOffset(json: String): Offset = PythonStreamingSourceOffset(json)
+}
+
+object PythonMicroBatchStream {
+  var currentId = 0
+  def nextStreamId: Int = synchronized {
+    currentId = currentId + 1
+    currentId
+  }
 }
 

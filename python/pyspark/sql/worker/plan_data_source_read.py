@@ -24,7 +24,6 @@ from typing import IO, List, Iterator, Iterable
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.errors import PySparkAssertionError, PySparkNotImplementedError, PySparkRuntimeError
-from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import (
     read_bool,
     read_int,
@@ -33,14 +32,14 @@ from pyspark.serializers import (
 )
 from pyspark.sql import Row
 from pyspark.sql.connect.conversion import ArrowTableToRowsConversion, LocalDataToArrowConversion
-from pyspark.sql.datasource import DataSource, InputPartition, SimpleStreamReaderWrapper
+from pyspark.sql.datasource import DataSource, InputPartition
 from pyspark.sql.pandas.types import to_arrow_schema
 from pyspark.sql.types import (
     _parse_datatype_json_string,
     BinaryType,
     StructType,
 )
-from pyspark.util import handle_worker_exception
+from pyspark.util import handle_worker_exception, local_connect_and_auth
 from pyspark.worker_util import (
     check_python_version,
     read_command,
@@ -70,7 +69,6 @@ def records_to_arrow_batches(output_iter, max_arrow_batch_size, return_type, dat
     for batch in batched(output_iter, max_arrow_batch_size):
         pylist: List[List] = [[] for _ in range(num_cols)]
         for result in batch:
-            print(result)
             # Validate the output row schema.
             if hasattr(result, "__len__") and len(result) != num_cols:
                 raise PySparkRuntimeError(
@@ -195,10 +193,7 @@ def main(infile: IO, outfile: IO) -> None:
 
         # Instantiate data source reader.
         if is_streaming:
-            try:
-                reader = data_source.streamReader(schema=schema)
-            except PySparkNotImplementedError:
-                reader = SimpleStreamReaderWrapper(data_source.simpleStreamReader(schema=schema))
+            reader = data_source._streamReader(schema=schema)
         else:
             reader = data_source.reader(schema=schema)
 
@@ -223,7 +218,7 @@ def main(infile: IO, outfile: IO) -> None:
                 partition_bytes = converter(columns[0][0])
 
             assert (
-                    partition_bytes is not None
+                partition_bytes is not None
             ), "The input iterator for Python data source read function is empty."
 
             # Deserialize the partition value.

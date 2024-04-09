@@ -36,11 +36,11 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
 
   val waitTimeout = 15.seconds
 
-  protected def simpleDataStreamReaderScript: String =
+  protected def testDataStreamReaderScript: String =
     """
       |from pyspark.sql.datasource import DataSourceStreamReader, InputPartition
       |
-      |class SimpleDataStreamReader(DataSourceStreamReader):
+      |class TestDataStreamReader(DataSourceStreamReader):
       |    current = 0
       |    def initialOffset(self):
       |        return {"offset": {"partition-1": 0}}
@@ -55,6 +55,27 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
       |        1 + 2
       |    def read(self, partition):
       |        yield (partition.value,)
+      |""".stripMargin
+
+  protected def simpleDataStreamReaderScript: String =
+    """
+      |from pyspark.sql.datasource import SimpleDataSourceStreamReader, InputPartition
+      |
+      |class SimpleDataStreamReader(SimpleDataSourceStreamReader):
+      |    current = 0
+      |    def initialOffset(self):
+      |        return {"partition-1": 0}
+      |    def read1(self, start: dict):
+      |        start_idx = start["partition-1"]
+      |        if start_idx > self.current:
+      |            self.current = start_idx
+      |        self.current += 2
+      |        it = iter([(i, ) for i in range(start_idx, self.current)])
+      |        return (it, {"partition-1": self.current})
+      |    def read2(self, start: dict, end: dict):
+      |        start_idx = start["partition-1"]
+      |        end_idx = end["partition-1"]
+      |        return iter([(i, ) for i in range(start_idx, end_idx)])
       |""".stripMargin
 
   protected def errorDataStreamReaderScript: String =
@@ -117,11 +138,11 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
     val dataSourceScript =
       s"""
          |from pyspark.sql.datasource import DataSource
-         |$simpleDataStreamReaderScript
+         |$testDataStreamReaderScript
          |
          |class $dataSourceName(DataSource):
          |    def streamReader(self, schema):
-         |        return SimpleDataStreamReader()
+         |        return TestDataStreamReader()
          |""".stripMargin
     val inputSchema = StructType.fromDDL("input BINARY")
 
@@ -144,7 +165,7 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
     stream.stop()
   }
 
-  test("Read from simple data stream source") {
+  test("Simple streaming data source read") {
     assume(shouldTestPandasUDFs)
     val dataSourceScript =
       s"""
@@ -154,8 +175,61 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
          |class $dataSourceName(DataSource):
          |    def schema(self) -> str:
          |        return "id INT"
-         |    def streamReader(self, schema):
+         |    def simpleStreamReader(self, schema):
          |        return SimpleDataStreamReader()
+         |""".stripMargin
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    assert(spark.sessionState.dataSourceManager.dataSourceExists(dataSourceName))
+    withTempDir { dir =>
+      val path = dir.getAbsolutePath
+      val checkpointDir = new File(path, "checkpoint")
+      val df = spark.readStream.format(dataSourceName).load()
+
+      val stopSignal1 = new CountDownLatch(1)
+
+      val q1 = df
+        .writeStream
+        .option("checkpointLocation", checkpointDir.getAbsolutePath)
+        .foreachBatch((df: DataFrame, batchId: Long) => {
+          df.cache()
+          checkAnswer(df, Seq(Row(batchId * 2), Row(batchId * 2 + 1)))
+          if (batchId == 10) stopSignal1.countDown()
+        })
+        .start()
+      stopSignal1.await()
+      assert(q1.recentProgress.forall(_.numInputRows == 2))
+      q1.stop()
+      q1.awaitTermination()
+
+      val stopSignal2 = new CountDownLatch(1)
+      val q2 = df
+        .writeStream
+        .option("checkpointLocation", checkpointDir.getAbsolutePath)
+        .foreachBatch((df: DataFrame, batchId: Long) => {
+          df.cache()
+          checkAnswer(df, Seq(Row(batchId * 2), Row(batchId * 2 + 1)))
+          if (batchId == 20) stopSignal2.countDown()
+        }).start()
+      stopSignal2.await()
+      assert(q2.recentProgress.forall(_.numInputRows == 2))
+      q2.stop()
+      q2.awaitTermination()
+    }
+  }
+
+  test("Read from test data stream source") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource
+         |$testDataStreamReaderScript
+         |
+         |class $dataSourceName(DataSource):
+         |    def schema(self) -> str:
+         |        return "id INT"
+         |    def streamReader(self, schema):
+         |        return TestDataStreamReader()
          |""".stripMargin
 
     val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
@@ -188,7 +262,7 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
          |        self.start = start
          |        self.end = end
          |
-         |class SimpleDataStreamReader(DataSourceStreamReader):
+         |class TestDataStreamReader(DataSourceStreamReader):
          |    current = 0
          |    def initialOffset(self):
          |        return {"offset": 0}
@@ -210,7 +284,7 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
          |        return "id INT"
          |
          |    def streamReader(self, schema):
-         |        return SimpleDataStreamReader()
+         |        return TestDataStreamReader()
          |""".stripMargin
     val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
     spark.dataSource.registerPython(dataSourceName, dataSource)

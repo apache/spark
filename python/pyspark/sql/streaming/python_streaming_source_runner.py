@@ -15,13 +15,14 @@
 # limitations under the License.
 #
 
+import copy
 import os
 import sys
 import json
 from typing import IO, Iterable, Iterator, Tuple
 
 from pyspark.accumulators import _accumulatorRegistry
-from pyspark.errors import IllegalArgumentException, PySparkAssertionError, PySparkNotImplementedError, PySparkRuntimeError
+from pyspark.errors import IllegalArgumentException, PySparkAssertionError, PySparkRuntimeError
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import (
     read_int,
@@ -29,7 +30,7 @@ from pyspark.serializers import (
     write_with_length,
     SpecialLengths,
 )
-from pyspark.sql.datasource import DataSource, DataSourceStreamReader, SimpleDataSourceStreamReader, SimpleStreamReaderWrapper, InputPartition
+from pyspark.sql.datasource import DataSource, DataSourceStreamReader, SimpleDataSourceStreamReader, _SimpleStreamReaderWrapper, InputPartition
 from pyspark.sql.pandas.serializers import ArrowStreamSerializer
 from pyspark.sql.types import (
     _parse_datatype_json_string,
@@ -51,7 +52,6 @@ INITIAL_OFFSET_FUNC_ID = 884
 LATEST_OFFSET_FUNC_ID = 885
 PARTITIONS_FUNC_ID = 886
 COMMIT_FUNC_ID = 887
-SEND_BATCH_FUNC_ID = 888
 
 
 def initial_offset_func(reader: DataSourceStreamReader, outfile: IO) -> None:
@@ -64,7 +64,7 @@ def latest_offset_func(reader: DataSourceStreamReader, outfile: IO) -> None:
     write_with_length(json.dumps(offset).encode("utf-8"), outfile)
 
 
-def partitions_func(reader: DataSourceStreamReader, infile: IO, outfile: IO) -> None:
+def partitions_func(reader: DataSourceStreamReader, data_source: DataSource, schema, infile: IO, outfile: IO) -> None:
     start_offset = json.loads(utf8_deserializer.loads(infile))
     end_offset = json.loads(utf8_deserializer.loads(infile))
     partitions = reader.partitions(start_offset, end_offset)
@@ -72,6 +72,15 @@ def partitions_func(reader: DataSourceStreamReader, infile: IO, outfile: IO) -> 
     write_int(len(partitions), outfile)
     for partition in partitions:
         pickleSer._write_with_length(partition, outfile)
+    if isinstance(reader, _SimpleStreamReaderWrapper):
+        it = reader.getCache(start_offset, end_offset)
+        if it is None:
+            write_int(0, outfile)
+        else:
+            write_int(1, outfile)
+            send_batch_func(it, outfile, schema, data_source)
+    else:
+        write_int(0, outfile)
 
 
 def commit_func(reader: DataSourceStreamReader, infile: IO, outfile: IO) -> None:
@@ -81,15 +90,10 @@ def commit_func(reader: DataSourceStreamReader, infile: IO, outfile: IO) -> None
 
 
 def send_batch_func(rows: Iterator[Tuple], outfile: IO, schema, data_source) -> None:
-    write_int(6, outfile)
+    write_int(SpecialLengths.START_ARROW_STREAM, outfile)
     batches = records_to_arrow_batches(rows, 1000, schema, data_source)
     serializer = ArrowStreamSerializer()
-    try:
-        serializer.dump_stream(batches, outfile)
-    except BaseException as e:
-        print(e)
-    write_int(222, outfile)
-
+    serializer.dump_stream(batches, outfile)
 
 
 def main(infile: IO, outfile: IO) -> None:
@@ -128,10 +132,7 @@ def main(infile: IO, outfile: IO) -> None:
 
         # Instantiate data source reader.
         try:
-            try:
-                reader = data_source.streamReader(schema=schema)
-            except PySparkNotImplementedError:
-                reader = SimpleStreamReaderWrapper(data_source.simpleStreamReader(schema=schema))
+            reader = data_source._streamReader(schema=schema)
             # Initialization succeed.
             write_int(0, outfile)
             outfile.flush()
@@ -144,12 +145,9 @@ def main(infile: IO, outfile: IO) -> None:
                 elif func_id == LATEST_OFFSET_FUNC_ID:
                     latest_offset_func(reader, outfile)
                 elif func_id == PARTITIONS_FUNC_ID:
-                    partitions_func(reader, infile, outfile)
+                    partitions_func(reader, data_source, schema, infile, outfile)
                 elif func_id == COMMIT_FUNC_ID:
                     commit_func(reader, infile, outfile)
-                elif func_id == SEND_BATCH_FUNC_ID:
-                    rows = [(0,), (15,), (30,)]
-                    send_batch_func(iter(rows), outfile, schema, data_source)
                 else:
                     raise IllegalArgumentException(
                         error_class="UNSUPPORTED_OPERATION",

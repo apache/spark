@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 import json
+import copy
 from abc import ABC, abstractmethod
 from collections import UserDict
 from itertools import chain
@@ -161,6 +162,12 @@ class DataSource(ABC):
             error_class="NOT_IMPLEMENTED",
             message_parameters={"feature": "writer"},
         )
+
+    def _streamReader(self, schema: StructType) -> "DataSourceStreamReader":
+        try:
+            return self.streamReader(schema=schema)
+        except PySparkNotImplementedError:
+            return _SimpleStreamReaderWrapper(self.simpleStreamReader(schema=schema))
 
     def simpleStreamReader(self, schema: StructType) -> "SimpleDataSourceStreamReader":
         raise PySparkNotImplementedError(
@@ -484,46 +491,84 @@ class SimpleInputPartition(InputPartition):
 
 
 class SimpleDataSourceStreamReader(ABC):
-    def read(self, start: dict) -> (Iterator[Tuple], dict):
+    def initialOffset(self) -> dict:
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "initialOffset"},
+        )
+
+    def read1(self, start: dict) -> (Iterator[Tuple], dict):
         ...
+
+    def read2(self, start: dict, end: dict) -> Iterator[Tuple]:
+        return read(start)[1]
 
     def commit(self, end: dict) -> None:
         ...
 
 
-class SimpleStreamReaderWrapper(DataSourceStreamReader):
+class _SimpleStreamReaderWrapper(DataSourceStreamReader):
     def __init__(self, simple_reader):
-        self.current_offset = None
         self.simple_reader = simple_reader
+        self.initial_offset = None
+        self.current_offset = None
         self.cache = []
 
+
     def initialOffset(self):
-        return None
+        if self.initial_offset is None:
+            self.initial_offset = self.simple_reader.initialOffset()
+        return self.initial_offset
 
     def latestOffset(self):
-        (iter, end) = self.simple_reader.read(self.current_offset)
+        # when query start for the first time, use initial offset as the start offset.
+        if self.current_offset is None:
+            self.current_offset = self.initialOffset()
+        (iter, end) = self.simple_reader.read1(self.current_offset)
         self.cache.append((self.current_offset, end, iter))
         self.current_offset = end
         return end
 
     def commit(self, end: dict):
+        end_idx = -1
         if self.current_offset is None:
             self.current_offset = end
+        for i in range(len(self.cache)):
+            # print(json.dumps(self.cache[i][0]) + " ggg " + json.dumps(self.cache[i][1]))
+            if json.dumps(self.cache[i][1]) == json.dumps(end):
+                end_idx = i
+                break
+        if end_idx > 0:
+            self.cache = self.cache[end_idx:]
         self.simple_reader.commit(end)
 
     def partitions(self, start: dict, end: dict):
-        assert (self.cache[-1][1] == end)
-        start_idx = 0
+        # when query restart from checkpoint, use the last committed offset as the start offset.
+        # This depends on the current behavior that streaming engine call getBatch on the last
+        # microbatch when query restart.
+        if self.current_offset is None:
+            self.current_offset = end
+        if len(self.cache) > 0:
+            assert (self.cache[-1][1] == end)
+        return [SimpleInputPartition(start, end)]
+
+    def getCache(self, start: dict, end: dict):
+        start_idx = -1
+        end_idx = -1
         for i in range(len(self.cache)):
             # print(json.dumps(self.cache[i][0]) + " ggg " + json.dumps(self.cache[i][1]))
             if json.dumps(self.cache[i][0]) == json.dumps(start):
                 start_idx = i
-        iters = [entry[2] for entry in self.cache[start_idx:]]
-        iter = chain(iters)
-        return [SimpleInputPartition(start, end, iter)]
+            if json.dumps(self.cache[i][1]) == json.dumps(end):
+                end_idx = i
+        if start_idx == -1 or end_idx == -1:
+            return None
+        entries = [copy.copy(entry[2]) for entry in self.cache[start_idx: end_idx + 1]]
+        it = chain(*entries)
+        return it
 
     def read(self, input_partition: InputPartition):
-        return self.simple_reader.read(input_partition.start)[0]
+        return self.simple_reader.read2(input_partition.start, input_partition.end)
 
 
 class DataSourceWriter(ABC):
@@ -692,8 +737,8 @@ class DataSourceRegistration:
         self.sparkSession = sparkSession
 
     def register(
-            self,
-            dataSource: Type["DataSource"],
+        self,
+        dataSource: Type["DataSource"],
     ) -> None:
         """Register a Python user-defined data source.
 
