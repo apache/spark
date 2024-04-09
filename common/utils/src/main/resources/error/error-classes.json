@@ -3652,6 +3652,12 @@
     ],
     "sqlState" : "XXKST"
   },
+  "STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY" : {
+    "message" : [
+      "Binary inequality column is not supported with state store. Provided schema: <schema>."
+    ],
+    "sqlState" : "XXKST"
+  },
   "STATE_STORE_UNSUPPORTED_OPERATION_ON_MISSING_COLUMN_FAMILY" : {
     "message" : [
       "State store operation=<operationType> not supported on missing column family=<colFamilyName>."
@@ -3663,12 +3669,6 @@
       "Variable size ordering column with name=<fieldName> at index=<index> is not supported for range scan encoder."
     ],
     "sqlState" : "42802"
-  },
-  "STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY" : {
-    "message" : [
-      "Binary inequality column is not supported with state store. Provided schema: <schema>."
-    ],
-    "sqlState" : "XXKST"
   },
   "STATIC_PARTITION_COLUMN_IN_INSERT_COLUMN_LIST" : {
     "message" : [

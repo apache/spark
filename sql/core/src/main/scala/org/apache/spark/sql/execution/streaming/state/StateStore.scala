@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
-import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
@@ -636,18 +636,11 @@ object StateStore extends Logging {
   }
 
   private def disallowBinaryInequalityColumn(schema: StructType): Unit = {
-    schema.foreach { field =>
-      field.dataType match {
-        case s: StringType =>
-          if (!s.supportsBinaryEquality) {
-            throw new SparkUnsupportedOperationException(
-              errorClass = "STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY",
-              messageParameters = Map("schema" -> schema.json)
-            )
-          }
-
-        case _ => // no-op
-      }
+    if (!UnsafeRowUtils.isBinaryStable(schema)) {
+      throw new SparkUnsupportedOperationException(
+        errorClass = "STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY",
+        messageParameters = Map("schema" -> schema.json)
+      )
     }
   }
 
