@@ -61,13 +61,9 @@ class PythonStreamingPartitionReaderFactory(
           metrics,
           jobArtifactUUID)
 
-
         evaluatorFactory.createEvaluator().eval(
           part.index, Iterator.single(InternalRow(part.pickedPartition)))
-      } else {
-        println("cache hit")
-        cachedBlock.get
-      }
+      } else cachedBlock.get
 
       override def next(): Boolean = outputIter.hasNext
 

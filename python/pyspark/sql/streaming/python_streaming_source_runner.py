@@ -53,6 +53,9 @@ LATEST_OFFSET_FUNC_ID = 885
 PARTITIONS_FUNC_ID = 886
 COMMIT_FUNC_ID = 887
 
+PREFETCHED_RECORDS_NOT_FOUND = 0
+NON_EMPTY_PYARROW_RECORD_BATCHES = 1
+EMPTY_PYARROW_RECORD_BATCHES = 2
 
 def initial_offset_func(reader: DataSourceStreamReader, outfile: IO) -> None:
     offset = reader.initialOffset()
@@ -75,9 +78,8 @@ def partitions_func(reader: DataSourceStreamReader, data_source: DataSource, sch
     if isinstance(reader, _SimpleStreamReaderWrapper):
         it = reader.getCache(start_offset, end_offset)
         if it is None:
-            write_int(0, outfile)
+            write_int(PREFETCHED_RECORDS_NOT_FOUND, outfile)
         else:
-            write_int(1, outfile)
             send_batch_func(it, outfile, schema, data_source)
     else:
         write_int(0, outfile)
@@ -90,10 +92,14 @@ def commit_func(reader: DataSourceStreamReader, infile: IO, outfile: IO) -> None
 
 
 def send_batch_func(rows: Iterator[Tuple], outfile: IO, schema, data_source) -> None:
-    write_int(SpecialLengths.START_ARROW_STREAM, outfile)
-    batches = records_to_arrow_batches(rows, 1000, schema, data_source)
-    serializer = ArrowStreamSerializer()
-    serializer.dump_stream(batches, outfile)
+    batches = list(records_to_arrow_batches(rows, 1000, schema, data_source))
+    if len(batches) != 0:
+        write_int(NON_EMPTY_PYARROW_RECORD_BATCHES, outfile)
+        write_int(SpecialLengths.START_ARROW_STREAM, outfile)
+        serializer = ArrowStreamSerializer()
+        serializer.dump_stream(batches, outfile)
+    else:
+        write_int(EMPTY_PYARROW_RECORD_BATCHES, outfile)
 
 
 def main(infile: IO, outfile: IO) -> None:

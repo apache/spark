@@ -65,12 +65,36 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
       |    current = 0
       |    def initialOffset(self):
       |        return {"partition-1": 0}
-      |    def read1(self, start: dict):
+      |    def read(self, start: dict):
       |        start_idx = start["partition-1"]
       |        if start_idx > self.current:
       |            self.current = start_idx
       |        self.current += 2
       |        it = iter([(i, ) for i in range(start_idx, self.current)])
+      |        return (it, {"partition-1": self.current})
+      |    def read2(self, start: dict, end: dict):
+      |        start_idx = start["partition-1"]
+      |        end_idx = end["partition-1"]
+      |        return iter([(i, ) for i in range(start_idx, end_idx)])
+      |""".stripMargin
+
+  protected def simpleDataStreamReaderWithEmptyBatchScript: String =
+    """
+      |from pyspark.sql.datasource import SimpleDataSourceStreamReader, InputPartition
+      |
+      |class SimpleDataStreamReader(SimpleDataSourceStreamReader):
+      |    current = 0
+      |    def initialOffset(self):
+      |        return {"partition-1": 0}
+      |    def read(self, start: dict):
+      |        start_idx = start["partition-1"]
+      |        if start_idx > self.current:
+      |            self.current = start_idx
+      |        self.current += 2
+      |        if start_idx % 4 == 0:
+      |            it = iter([(i, ) for i in range(start_idx, self.current)])
+      |        else:
+      |            it = iter([])
       |        return (it, {"partition-1": self.current})
       |    def read2(self, start: dict, end: dict):
       |        start_idx = start["partition-1"]
@@ -215,6 +239,48 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
       assert(q2.recentProgress.forall(_.numInputRows == 2))
       q2.stop()
       q2.awaitTermination()
+    }
+  }
+
+  test("Simple streaming data source read with empty batch") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource
+         |$simpleDataStreamReaderWithEmptyBatchScript
+         |
+         |class $dataSourceName(DataSource):
+         |    def schema(self) -> str:
+         |        return "id INT"
+         |    def simpleStreamReader(self, schema):
+         |        return SimpleDataStreamReader()
+         |""".stripMargin
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    assert(spark.sessionState.dataSourceManager.dataSourceExists(dataSourceName))
+    withTempDir { dir =>
+      val path = dir.getAbsolutePath
+      val checkpointDir = new File(path, "checkpoint")
+      val df = spark.readStream.format(dataSourceName).load()
+
+      val stopSignal = new CountDownLatch(1)
+
+      val q = df
+        .writeStream
+        .option("checkpointLocation", checkpointDir.getAbsolutePath)
+        .foreachBatch((df: DataFrame, batchId: Long) => {
+          df.cache()
+          if (batchId % 2 == 0) {
+            checkAnswer(df, Seq(Row(batchId * 2), Row(batchId * 2 + 1)))
+          } else {
+            assert(df.isEmpty)
+          }
+          if (batchId == 10) stopSignal.countDown()
+        })
+        .start()
+      stopSignal.await()
+      q.stop()
+      q.awaitTermination()
     }
   }
 

@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.python
 
 import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream}
 
-import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
@@ -44,6 +43,11 @@ object PythonStreamingSourceRunner {
   val LATEST_OFFSET_FUNC_ID = 885
   val PARTITIONS_FUNC_ID = 886
   val COMMIT_FUNC_ID = 887
+  // Status code for JVM to decide how to receive prefetched record batches
+  // for simple stream reader.
+  val PREFETCHED_RECORDS_NOT_FOUND = 0
+  val NON_EMPTY_PYARROW_RECORD_BATCHES = 1
+  val EMPTY_PYARROW_RECORD_BATCHES = 2
 }
 
 /**
@@ -70,9 +74,6 @@ class PythonStreamingSourceRunner(
 
   private var dataOut: DataOutputStream = null
   private var dataIn: DataInputStream = null
-
-
-  var cache: mutable.Map[String, Iterator[InternalRow]] = mutable.Map.empty
 
   import PythonStreamingSourceRunner._
 
@@ -174,23 +175,19 @@ class PythonStreamingSourceRunner(
       val pickledPartition: Array[Byte] = PythonWorkerUtils.readBytes(dataIn)
       pickledPartitions.append(pickledPartition)
     }
-    val shouldReadCache = dataIn.readInt()
-    val iter: Option[Iterator[InternalRow]] = if (shouldReadCache == 1) {
-      if (cache.contains(end)) {
-        Some(cache.get(end).get)
+    val prefetchedRecordsStatus = dataIn.readInt()
+    val iter: Option[Iterator[InternalRow]] =
+      if (prefetchedRecordsStatus == NON_EMPTY_PYARROW_RECORD_BATCHES) {
+        Some(readArrowRecordBatches())
+      } else if (prefetchedRecordsStatus == PREFETCHED_RECORDS_NOT_FOUND) {
+        None
       } else {
-        try {
-          val it = readBatches()
-          Some(it)
-        } catch {
-          case e: Throwable =>
-            e.printStackTrace()
-            None
-        }
+        // We differentiate empty and non empty prefetched batch because arrow reader
+        // throws exception when there is nothing written in the arrow stream and readings
+        // arrow stream must be skipped when record batch is empty.
+        assert(prefetchedRecordsStatus == EMPTY_PYARROW_RECORD_BATCHES)
+        Some(Iterator.empty)
       }
-    } else {
-      None
-    }
     (pickledPartitions.toArray, iter)
   }
 
@@ -230,17 +227,17 @@ class PythonStreamingSourceRunner(
   private val allocator = ArrowUtils.rootAllocator.newChildAllocator(
     s"stream reader for $pythonExec", 0, Long.MaxValue)
 
-  def readBatches(): Iterator[InternalRow] = {
+  def readArrowRecordBatches(): Iterator[InternalRow] = {
     assert(dataIn.readInt() == SpecialLengths.START_ARROW_STREAM)
     val reader = new ArrowStreamReader(dataIn, allocator)
     val root = reader.getVectorSchemaRoot()
     // When input is empty schema can't be read.
-    // val schema = ArrowUtils.fromArrowSchema(root.getSchema())
+    val schema = ArrowUtils.fromArrowSchema(root.getSchema())
     val vectors = root.getFieldVectors().asScala.map { vector =>
       new ArrowColumnVector(vector)
     }.toArray[ColumnVector]
 
-    // assert(schema == outputSchema)
+    assert(schema == outputSchema)
     val rows = ArrayBuffer[InternalRow]()
     while (reader.loadNextBatch()) {
       val batch = new ColumnarBatch(vectors)

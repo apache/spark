@@ -492,18 +492,86 @@ class SimpleInputPartition(InputPartition):
 
 class SimpleDataSourceStreamReader(ABC):
     def initialOffset(self) -> dict:
+        """
+        Return the initial offset of the streaming data source.
+        A new streaming query starts reading data from the initial offset.
+        If Spark is restarting an existing query, it will restart from the check-pointed offset
+        rather than the initial one.
+
+        Returns
+        -------
+        dict
+            A dict or recursive dict whose key and value are primitive types, which includes
+            Integer, String and Boolean.
+
+        Examples
+        --------
+        >>> def initialOffset(self):
+        ...     return {"parititon-1": {"index": 3, "closed": True}, "partition-2": {"index": 5}}
+        """
         raise PySparkNotImplementedError(
             error_class="NOT_IMPLEMENTED",
             message_parameters={"feature": "initialOffset"},
         )
 
-    def read1(self, start: dict) -> (Iterator[Tuple], dict):
-        ...
+    def read(self, start: dict) -> (Iterator[Tuple], dict):
+        """
+        Read all available data from specified start offset and return the offset that next read attempt
+        starts from.
+
+        Parameters
+        ----------
+        start : dict
+            The start offset to start reading from.
+
+        Returns
+        -------
+        A tuple of an iterator of :class:`Tuple` and a dict\\s
+            The iterator contains all the available records after start offset.
+            The dict is the end of this read attempt and the start of next read attempt.
+
+        dict
+            The end offset of this read attempt. The next read will start from this end offset.
+        """
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "read"},
+        )
 
     def read2(self, start: dict, end: dict) -> Iterator[Tuple]:
-        return read(start)[1]
+        """
+        Read all available data from specific start offset and end offset.
+        This is invoked during failure recovery to re-read a batch deterministically
+        in order to achieve exactly once.
+
+        Parameters
+        ----------
+        start : dict
+            The start offset to start reading from.
+
+        end : dict
+            The offset where the reading stop.
+
+        Returns
+        -------
+        iterator of :class:`Tuple`\\s
+            All the records between start offset and end offset.
+        """
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "read2"},
+        )
 
     def commit(self, end: dict) -> None:
+        """
+        Informs the source that Spark has completed processing all data for offsets less than or
+        equal to `end` and will only request offsets greater than `end` in the future.
+
+        Parameters
+        ----------
+        end : dict
+            The latest offset that the streaming query has processed for this source.
+        """
         ...
 
 
@@ -514,7 +582,6 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
         self.current_offset = None
         self.cache = []
 
-
     def initialOffset(self):
         if self.initial_offset is None:
             self.initial_offset = self.simple_reader.initialOffset()
@@ -524,7 +591,7 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
         # when query start for the first time, use initial offset as the start offset.
         if self.current_offset is None:
             self.current_offset = self.initialOffset()
-        (iter, end) = self.simple_reader.read1(self.current_offset)
+        (iter, end) = self.simple_reader.read(self.current_offset)
         self.cache.append((self.current_offset, end, iter))
         self.current_offset = end
         return end
