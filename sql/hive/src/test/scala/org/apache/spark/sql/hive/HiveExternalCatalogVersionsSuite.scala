@@ -202,9 +202,8 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
           logInfo("Skip tests because old Spark versions don't support Java 21.")
         }
       } else {
-        logError(
-          log"Python version < ${MDC(PYTHON_VERSION, TestUtils.minimumPythonSupportedVersion)}, " +
-          log"the running environment is unavailable.")
+        logError(s"Python version <  ${TestUtils.minimumPythonSupportedVersion}, " +
+          "the running environment is unavailable.")
       }
     }
 

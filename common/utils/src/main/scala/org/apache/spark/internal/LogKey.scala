@@ -40,6 +40,7 @@ object LogKey extends Enumeration {
   val CONFIG2 = Value
   val CONTAINER_ID = Value
   val COUNT = Value
+  val DB_NAME = Value
   val DRIVER_ID = Value
   val END_POINT = Value
   val ERROR = Value
@@ -99,6 +100,7 @@ object LogKey extends Enumeration {
   val STAGE_ID = Value
   val SUBMISSION_ID = Value
   val SUBSAMPLING_RATE = Value
+  val TABLE_NAME = Value
   val TASK_ATTEMPT_ID = Value
   val TASK_ID = Value
   val TASK_NAME = Value
