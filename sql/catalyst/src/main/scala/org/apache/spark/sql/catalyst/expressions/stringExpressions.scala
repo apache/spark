@@ -2227,8 +2227,8 @@ case class Levenshtein(
   }
 
   override def inputTypes: Seq[AbstractDataType] = threshold match {
-    case Some(_) => Seq(StringType, StringType, IntegerType)
-    case _ => Seq(StringType, StringType)
+    case Some(_) => Seq(StringTypeAnyCollation, StringTypeAnyCollation, IntegerType)
+    case _ => Seq(StringTypeAnyCollation, StringTypeAnyCollation)
   }
 
   override def children: Seq[Expression] = threshold match {
@@ -2251,6 +2251,8 @@ case class Levenshtein(
 
   override def foldable: Boolean = children.forall(_.foldable)
 
+  final lazy val collationId = left.dataType.asInstanceOf[StringType].collationId
+
   override def eval(input: InternalRow): Any = {
     val leftEval = left.eval(input)
     if (leftEval == null) return null
@@ -2259,10 +2261,12 @@ case class Levenshtein(
     val thresholdEval = threshold.map(_.eval(input))
     thresholdEval match {
       case Some(v) =>
-        leftEval.asInstanceOf[UTF8String].levenshteinDistance(rightEval.asInstanceOf[UTF8String],
-          v.asInstanceOf[Int])
+        leftEval.asInstanceOf[UTF8String].collationAwareLevenshteinDistance(
+          rightEval.asInstanceOf[UTF8String], v.asInstanceOf[Int], collationId)
       case _ =>
-        leftEval.asInstanceOf[UTF8String].levenshteinDistance(rightEval.asInstanceOf[UTF8String])
+        val x = leftEval.asInstanceOf[UTF8String].collationAwareLevenshteinDistance(
+          rightEval.asInstanceOf[UTF8String], collationId)
+        x
     }
   }
 
@@ -2280,8 +2284,8 @@ case class Levenshtein(
     val leftGen = children.head.genCode(ctx)
     val rightGen = children(1).genCode(ctx)
     val thresholdGen = thresholdExpr.genCode(ctx)
-    val resultCode = s"${ev.value} = ${leftGen.value}.levenshteinDistance(" +
-      s"${rightGen.value}, ${thresholdGen.value});"
+    val resultCode = s"${ev.value} = ${leftGen.value}.collationAwareLevenshteinDistance(" +
+      s"${rightGen.value}, ${thresholdGen.value}, $collationId);"
     if (nullable) {
       val nullSafeEval =
         leftGen.code.toString + ctx.nullSafeExec(children.head.nullable, leftGen.isNull) {
@@ -2311,7 +2315,8 @@ case class Levenshtein(
   private def genCodeWithoutThreshold(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val leftGen = children.head.genCode(ctx)
     val rightGen = children(1).genCode(ctx)
-    val resultCode = s"${ev.value} = ${leftGen.value}.levenshteinDistance(${rightGen.value});"
+    val resultCode = s"${ev.value} = ${leftGen.value}.collationAwareLevenshteinDistance(" +
+      s"${rightGen.value}, $collationId);"
     if (nullable) {
       val nullSafeEval =
         leftGen.code.toString + ctx.nullSafeExec(children.head.nullable, leftGen.isNull) {

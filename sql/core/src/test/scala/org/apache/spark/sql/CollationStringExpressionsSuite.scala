@@ -18,6 +18,8 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkConf
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.{Collation, ConcatWs, ExpressionEvalHelper, Levenshtein, Literal, StringRepeat}
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -798,6 +800,73 @@ class CollationStringExpressionsSuite
       sql("SELECT locate(collate('aBc', 'UTF8_BINARY'),collate('abcabc', 'UTF8_BINARY_LCASE'),4)")
     }
     assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+  }
+
+  test("Levenshtein expressions with collation") {
+    def prepareLevenshtein(
+        left: String,
+        right: String,
+        collation: String): Levenshtein = {
+      val collationId = CollationFactory.collationNameToId(collation)
+      val leftLit = Literal.create(left, StringType(collationId))
+      val rightLit = Literal.create(right, StringType(collationId))
+      Levenshtein(leftLit, rightLit)
+    }
+
+    Seq(
+      // scalastyle:off nonascii
+      CollationTestCase("", "", "UTF8_BINARY", 0),
+      CollationTestCase("", "something", "UTF8_BINARY", 9),
+      CollationTestCase("a", "a", "UTF8_BINARY", 0),
+      CollationTestCase("a", "A", "UTF8_BINARY", 1),
+      CollationTestCase("a", "a", "UTF8_BINARY_LCASE", 0),
+      CollationTestCase("a", "A", "UTF8_BINARY_LCASE", 0),
+      CollationTestCase("bd", "ABc", "UTF8_BINARY_LCASE", 2),
+      CollationTestCase("Xü", "Ü", "UTF8_BINARY_LCASE", 1),
+      CollationTestCase("Xũ", "Üx", "UTF8_BINARY_LCASE", 2),
+      CollationTestCase("", "something", "UTF8_BINARY_LCASE", 9),
+      CollationTestCase("sOmeThINg", "SOMETHING", "UTF8_BINARY_LCASE", 0),
+      CollationTestCase("sOmeThINg", "SOMETHING", "UNICODE", 5),
+      CollationTestCase("sOmeThINg", "SOMETHING", "UNICODE_CI", 0)
+      // scalastyle:on nonascii
+    ).foreach(c => checkEvaluation(prepareLevenshtein(c.s1, c.s2, c.collation), c.expectedResult))
+  }
+
+  test("Levenshtein expression with collation and threshold") {
+    case class CollationThresholdTestCase(
+        s1: String,
+        s2: String,
+        collation: String,
+        threshold: Int,
+        expectedResult: Int)
+
+    def prepareLevenshtein(
+        left: String,
+        right: String,
+        collation: String,
+        threshold: Int): Levenshtein = {
+      val collationId = CollationFactory.collationNameToId(collation)
+      val leftLit = Literal.create(left, StringType(collationId))
+      val rightLit = Literal.create(right, StringType(collationId))
+      Levenshtein(leftLit, rightLit, Some(Literal.create(threshold)))
+    }
+
+    Seq(
+      // scalastyle:off nonascii
+      CollationThresholdTestCase("", "", "UTF8_BINARY", 0, 0),
+      CollationThresholdTestCase("", "something", "UTF8_BINARY", 0, -1),
+      CollationThresholdTestCase("aaa", "AAA", "UTF8_BINARY_LCASE", 0, 0),
+      CollationThresholdTestCase("a", "b", "UTF8_BINARY_LCASE", 1, 1),
+      CollationThresholdTestCase("Xü", "Ü", "UTF8_BINARY_LCASE", 1, 1),
+      CollationThresholdTestCase("Xũ", "Üx", "UTF8_BINARY_LCASE", 1, -1),
+      CollationThresholdTestCase("sOmeThINg", "SOMETHING", "UNICODE", 0, -1),
+      CollationThresholdTestCase("sOmeThINg", "SOMETHING", "UNICODE", 10, 5),
+      CollationThresholdTestCase("sOmeThINg", "SOMETHING", "UNICODE_CI", 0, 0),
+      CollationThresholdTestCase("sOmeThINg", "SOMETHING", "UNICODE_CI", 10, 0)
+      // scalastyle:on nonascii
+    ).foreach(c =>
+      checkEvaluation(prepareLevenshtein(c.s1, c.s2, c.collation, c.threshold), c.expectedResult)
+    )
   }
 
   // TODO: Add more tests for other string expressions

@@ -1624,12 +1624,58 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return CollationFactory.fetchCollation(collationId).equalsFunction.apply(this, other);
   }
 
+  private interface SubstringEquals {
+    boolean equals(UTF8String left, UTF8String right, int posLeft, int posRight,
+      int lenLeft, int lenRight);
+  }
+
+  private static class ByteSubstringEquals implements SubstringEquals {
+    @Override
+    public boolean equals(UTF8String left, UTF8String right, int posLeft, int posRight,
+      int lenLeft, int lenRight) {
+      if (lenLeft != lenRight || left.getByte(posLeft) != right.getByte(posRight)) {
+        return false;
+      }
+      return (ByteArrayMethods.arrayEquals(left.base, left.offset + posLeft, right.base,
+        right.offset + posRight, lenLeft));
+    }
+  }
+
+  private static final ByteSubstringEquals byteSubstringEquals = new ByteSubstringEquals();
+
+  public static class CollationSubstringEquals implements SubstringEquals {
+    int collationId;
+
+    public CollationSubstringEquals(int collationId) {
+      this.collationId = collationId;
+    }
+
+    @Override
+    public boolean equals(UTF8String left, UTF8String right, int posLeft, int posRight,
+      int lenLeft, int lenRight) {
+      UTF8String cmpL = UTF8String.fromAddress(left.base, left.offset + posLeft, lenLeft);
+      UTF8String cmpR = UTF8String.fromAddress(right.base, right.offset + posRight, lenRight);
+      return CollationFactory.fetchCollation(collationId).equalsFunction.apply(cmpL, cmpR);
+    }
+  }
+
   /**
    * Levenshtein distance is a metric for measuring the distance of two strings. The distance is
    * defined by the minimum number of single-character edits (i.e. insertions, deletions or
    * substitutions) that are required to change one of the strings into the other.
    */
   public int levenshteinDistance(UTF8String other) {
+    return levenshteinDistance(other, byteSubstringEquals);
+  }
+
+  public int collationAwareLevenshteinDistance(UTF8String other, int collationId) {
+    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
+      return levenshteinDistance(other, byteSubstringEquals);
+    }
+    return levenshteinDistance(other, CollationFactory.getSubstringEquals(collationId));
+  }
+
+  private int levenshteinDistance(UTF8String other, SubstringEquals comparator) {
     // Implementation adopted from
     // org.apache.commons.text.similarity.LevenshteinDistance.unlimitedCompare
 
@@ -1660,7 +1706,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     int[] d = new int[n + 1];
     int[] swap;
 
-    int i, i_bytes, j, j_bytes, num_bytes_j, cost;
+    int i, i_bytes, num_bytes_i, j, j_bytes, num_bytes_j, cost;
 
     for (i = 0; i <= n; i++) {
       p[i] = i;
@@ -1670,14 +1716,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       num_bytes_j = numBytesForFirstByte(t.getByte(j_bytes));
       d[0] = j + 1;
 
-      for (i = 0, i_bytes = 0; i < n; i_bytes += numBytesForFirstByte(s.getByte(i_bytes)), i++) {
-        if (s.getByte(i_bytes) != t.getByte(j_bytes) ||
-              num_bytes_j != numBytesForFirstByte(s.getByte(i_bytes))) {
-          cost = 1;
-        } else {
-          cost = (ByteArrayMethods.arrayEquals(t.base, t.offset + j_bytes, s.base,
-              s.offset + i_bytes, num_bytes_j)) ? 0 : 1;
-        }
+      for (i = 0, i_bytes = 0; i < n; i_bytes += num_bytes_i, i++) {
+        num_bytes_i = numBytesForFirstByte(s.getByte(i_bytes));
+        cost = comparator.equals(s, t, i_bytes, j_bytes, num_bytes_i, num_bytes_j) ? 0 : 1;
         d[i + 1] = Math.min(Math.min(d[i] + 1, p[i + 1] + 1), p[i] + cost);
       }
 
@@ -1690,6 +1731,18 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public int levenshteinDistance(UTF8String other, int threshold) {
+    return levenshteinDistance(other, threshold, byteSubstringEquals);
+  }
+
+  public int collationAwareLevenshteinDistance(UTF8String other, int threshold, int collationId) {
+    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
+      return levenshteinDistance(other, threshold, byteSubstringEquals);
+    }
+    return levenshteinDistance(other, threshold, CollationFactory.getSubstringEquals(collationId));
+  }
+
+  private int levenshteinDistance(UTF8String other, int threshold,
+    SubstringEquals substringEquals) {
     // Implementation adopted from
     // org.apache.commons.text.similarity.LevenshteinDistance.limitedCompare
 
@@ -1751,14 +1804,13 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
         } else if (i == min - 1) {
           num_bytes_i = 0;
         } else {
-          if (ByteArrayMethods.arrayEquals(t.base, t.offset + j_bytes,
-                  s.base, s.offset + i_bytes, num_bytes_j)) {
+          num_bytes_i = numBytesForFirstByte(s.getByte(i_bytes));
+          if (substringEquals.equals(s, t, i_bytes, j_bytes, num_bytes_i, num_bytes_j)) {
             d[i] = p[i - 1];
           } else {
             d[i] = 1 + Math.min(Math.min(d[i - 1], p[i]), p[i - 1]);
           }
           lowerBound = Math.min(lowerBound, d[i]);
-          num_bytes_i = numBytesForFirstByte(s.getByte(i_bytes));
         }
       }
 

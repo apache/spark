@@ -30,6 +30,7 @@ import com.ibm.icu.text.Collator;
 
 import org.apache.spark.SparkException;
 import org.apache.spark.unsafe.types.UTF8String;
+import org.apache.spark.unsafe.types.UTF8String.CollationSubstringEquals;
 
 /**
  * Static entry point for collation aware string functions.
@@ -141,6 +142,8 @@ public final class CollationFactory {
 
   private static final Collation[] collationTable = new Collation[4];
   private static final HashMap<String, Integer> collationNameToIdMap = new HashMap<>();
+  private static final CollationSubstringEquals[] substringEquals =
+    new CollationSubstringEquals[collationTable.length];
 
   public static final int UTF8_BINARY_COLLATION_ID = 0;
   public static final int UTF8_BINARY_LCASE_COLLATION_ID = 1;
@@ -185,6 +188,7 @@ public final class CollationFactory {
 
     for (int i = 0; i < collationTable.length; i++) {
       collationNameToIdMap.put(collationTable[i].collationName, i);
+      substringEquals[i] = new CollationSubstringEquals(i);
     }
   }
 
@@ -284,4 +288,7 @@ public final class CollationFactory {
     }
   }
 
+  public static CollationSubstringEquals getSubstringEquals(int collationId) {
+    return substringEquals[collationId];
+  }
 }
