@@ -18,6 +18,8 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.SparkIllegalArgumentException
+import org.apache.spark.internal.LogKey.{SQL_TEXT, UNSUPPORTED_EXPRESSION}
+import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.expressions.{And, ArrayExists, ArrayFilter, CaseWhen, EqualNullSafe, Expression, If, In, InSet, LambdaFunction, Literal, MapFilter, Not, Or}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.logical.{DeleteAction, DeleteFromTable, Filter, InsertAction, InsertStarAction, Join, LogicalPlan, MergeAction, MergeIntoTable, ReplaceData, UpdateAction, UpdateStarAction, UpdateTable, WriteDelta}
@@ -138,8 +140,9 @@ object ReplaceNullWithFalseInPredicate extends Rule[LogicalPlan] {
             "dataType" -> e.dataType.catalogString,
             "expr" -> e.sql))
       } else {
-        val message = "Expected a Boolean type expression in replaceNullWithFalse, " +
-          s"but got the type `${e.dataType.catalogString}` in `${e.sql}`."
+        val message = log"Expected a Boolean type expression in replaceNullWithFalse, " +
+          log"but got the type `${MDC(UNSUPPORTED_EXPRESSION, e.dataType.catalogString)}` " +
+          log"in `${MDC(SQL_TEXT, e.sql)}`."
         logWarning(message)
         e
       }

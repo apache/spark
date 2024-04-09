@@ -26,7 +26,7 @@ from io import StringIO
 from typing import cast, Iterator
 from unittest import mock
 
-from pyspark import SparkConf, SparkContext
+from pyspark import SparkConf
 from pyspark.profiler import has_memory_profiler
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, pandas_udf, udf
@@ -61,6 +61,8 @@ def _do_computation(spark, *, action=lambda df: df.collect(), use_arrow=False):
 @unittest.skipIf(not have_pandas, pandas_requirement_message)
 class MemoryProfilerTests(PySparkTestCase):
     def setUp(self):
+        from pyspark import SparkContext
+
         self._old_sys_path = list(sys.path)
         class_name = self.__class__.__name__
         conf = SparkConf().set("spark.python.profile.memory", "true")

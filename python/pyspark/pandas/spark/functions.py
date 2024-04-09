@@ -17,7 +17,6 @@
 """
 Additional Spark functions used in pandas-on-Spark.
 """
-from pyspark import SparkContext
 from pyspark.sql.column import Column
 from pyspark.sql.utils import is_remote
 
@@ -33,6 +32,8 @@ def product(col: Column, dropna: bool) -> Column:
         )
 
     else:
+        from pyspark import SparkContext
+
         sc = SparkContext._active_spark_context
         return Column(sc._jvm.PythonSQLUtils.pandasProduct(col._jc, dropna))
 
@@ -48,6 +49,8 @@ def stddev(col: Column, ddof: int) -> Column:
         )
 
     else:
+        from pyspark import SparkContext
+
         sc = SparkContext._active_spark_context
         return Column(sc._jvm.PythonSQLUtils.pandasStddev(col._jc, ddof))
 
@@ -63,6 +66,8 @@ def var(col: Column, ddof: int) -> Column:
         )
 
     else:
+        from pyspark import SparkContext
+
         sc = SparkContext._active_spark_context
         return Column(sc._jvm.PythonSQLUtils.pandasVariance(col._jc, ddof))
 
@@ -77,6 +82,8 @@ def skew(col: Column) -> Column:
         )
 
     else:
+        from pyspark import SparkContext
+
         sc = SparkContext._active_spark_context
         return Column(sc._jvm.PythonSQLUtils.pandasSkewness(col._jc))
 
@@ -91,6 +98,8 @@ def kurt(col: Column) -> Column:
         )
 
     else:
+        from pyspark import SparkContext
+
         sc = SparkContext._active_spark_context
         return Column(sc._jvm.PythonSQLUtils.pandasKurtosis(col._jc))
 
@@ -106,6 +115,8 @@ def mode(col: Column, dropna: bool) -> Column:
         )
 
     else:
+        from pyspark import SparkContext
+
         sc = SparkContext._active_spark_context
         return Column(sc._jvm.PythonSQLUtils.pandasMode(col._jc, dropna))
 
@@ -122,6 +133,8 @@ def covar(col1: Column, col2: Column, ddof: int) -> Column:
         )
 
     else:
+        from pyspark import SparkContext
+
         sc = SparkContext._active_spark_context
         return Column(sc._jvm.PythonSQLUtils.pandasCovar(col1._jc, col2._jc, ddof))
 
@@ -138,6 +151,8 @@ def ewm(col: Column, alpha: float, ignore_na: bool) -> Column:
         )
 
     else:
+        from pyspark import SparkContext
+
         sc = SparkContext._active_spark_context
         return Column(sc._jvm.PythonSQLUtils.ewm(col._jc, alpha, ignore_na))
 
@@ -152,6 +167,8 @@ def null_index(col: Column) -> Column:
         )
 
     else:
+        from pyspark import SparkContext
+
         sc = SparkContext._active_spark_context
         return Column(sc._jvm.PythonSQLUtils.nullIndex(col._jc))
 
@@ -168,5 +185,7 @@ def timestampdiff(unit: str, start: Column, end: Column) -> Column:
         )
 
     else:
+        from pyspark import SparkContext
+
         sc = SparkContext._active_spark_context
         return Column(sc._jvm.PythonSQLUtils.timestampDiff(unit, start._jc, end._jc))

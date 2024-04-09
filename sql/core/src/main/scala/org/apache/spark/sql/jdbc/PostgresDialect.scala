@@ -22,6 +22,8 @@ import java.time.{LocalDateTime, ZoneOffset}
 import java.util
 import java.util.Locale
 
+import scala.util.Using
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NonEmptyNamespaceException, NoSuchIndexException}
@@ -74,7 +76,16 @@ private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
       case _ if "text".equalsIgnoreCase(typeName) => Some(StringType) // sqlType is Types.VARCHAR
       case Types.ARRAY =>
         // postgres array type names start with underscore
-        toCatalystType(typeName.drop(1), size, md).map(ArrayType(_))
+        val elementType = toCatalystType(typeName.drop(1), size, md)
+        elementType.map { et =>
+          val metadata = md.build()
+          val dim = if (metadata.contains("arrayDimension")) {
+            metadata.getLong("arrayDimension").toInt
+          } else {
+            1
+          }
+          (0 until dim).foldLeft(et)((acc, _) => ArrayType(acc))
+        }
       case _ => None
     }
   }
@@ -329,6 +340,29 @@ private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
       case -9223372036832400000L =>
         new Date(LocalDateTime.of(1, 1, 1, 0, 0, 0).toInstant(ZoneOffset.UTC).toEpochMilli)
       case _ => d
+    }
+  }
+
+  override def getArrayDimension(
+      conn: Connection,
+      tableName: String,
+      columnName: String): Option[Int] = {
+    val query =
+      s"""
+         |SELECT pg_attribute.attndims
+         |FROM pg_attribute
+         |  JOIN pg_class ON pg_attribute.attrelid = pg_class.oid
+         |  JOIN pg_namespace ON pg_class.relnamespace = pg_namespace.oid
+         |WHERE pg_class.relname = '$tableName' and pg_attribute.attname = '$columnName'
+         |""".stripMargin
+    try {
+      Using.resource(conn.createStatement()) { stmt =>
+        Using.resource(stmt.executeQuery(query)) { rs =>
+          if (rs.next()) Some(rs.getInt(1)) else None
+        }
+      }
+    } catch {
+      case _: SQLException => None
     }
   }
 }
