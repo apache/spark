@@ -78,7 +78,6 @@ object LogKey extends Enumeration {
   val PATHS = Value
   val POD_ID = Value
   val PORT = Value
-  val PYTHON_VERSION = Value
   val QUERY_PLAN = Value
   val RANGE = Value
   val RDD_ID = Value
