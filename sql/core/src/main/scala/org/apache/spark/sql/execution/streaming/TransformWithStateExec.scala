@@ -309,6 +309,8 @@ case class TransformWithStateExec(
 
     Seq(
       StatefulOperatorCustomSumMetric("numValueStateVars", "Number of value state variables"),
+      StatefulOperatorCustomSumMetric("numValueStateWithTTLVars",
+        "Number of value state variables with TTL"),
       StatefulOperatorCustomSumMetric("numListStateVars", "Number of list state variables"),
       StatefulOperatorCustomSumMetric("numMapStateVars", "Number of map state variables"),
       StatefulOperatorCustomSumMetric("numDeleteStateVars", "Number of deleted state variables")
