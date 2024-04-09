@@ -98,6 +98,8 @@ object LogKey extends Enumeration {
   val STAGE_ID = Value
   val SUBMISSION_ID = Value
   val SUBSAMPLING_RATE = Value
+  val INFERENCE_MODE = Value
+  val TABLE_NAME = Value
   val TASK_ATTEMPT_ID = Value
   val TASK_ID = Value
   val TASK_NAME = Value
