@@ -35,7 +35,7 @@ import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
-import org.apache.spark.sql.catalyst.analysis.Resolver
+import org.apache.spark.sql.catalyst.analysis.{DecimalPrecision, Resolver}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -196,9 +196,13 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case java.sql.Types.CHAR => CharType(precision)
     case java.sql.Types.CLOB => StringType
     case java.sql.Types.DATE => DateType
-    case java.sql.Types.DECIMAL if precision != 0 || scale != 0 =>
-      DecimalType.bounded(precision, scale)
-    case java.sql.Types.DECIMAL => DecimalType.SYSTEM_DEFAULT
+    case java.sql.Types.DECIMAL | java.sql.Types.NUMERIC if precision != 0 || scale != 0 =>
+      if (scale < 0) {
+        DecimalPrecision.bounded(precision - scale, 0)
+      } else {
+        DecimalPrecision.bounded(precision, scale)
+      }
+    case java.sql.Types.DECIMAL | java.sql.Types.NUMERIC => DecimalType.SYSTEM_DEFAULT
     case java.sql.Types.DOUBLE => DoubleType
     case java.sql.Types.FLOAT => FloatType
     case java.sql.Types.INTEGER => if (signed) IntegerType else LongType
@@ -207,9 +211,6 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case java.sql.Types.LONGVARCHAR => StringType
     case java.sql.Types.NCHAR => StringType
     case java.sql.Types.NCLOB => StringType
-    case java.sql.Types.NUMERIC if precision != 0 || scale != 0 =>
-      DecimalType.bounded(precision, scale)
-    case java.sql.Types.NUMERIC => DecimalType.SYSTEM_DEFAULT
     case java.sql.Types.NVARCHAR => StringType
     case java.sql.Types.REAL => DoubleType
     case java.sql.Types.REF => StringType
