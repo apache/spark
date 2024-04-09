@@ -78,6 +78,7 @@ object LogKey extends Enumeration {
   val PATHS = Value
   val POD_ID = Value
   val PORT = Value
+  val PYTHON_VERSION = Value
   val QUERY_PLAN = Value
   val RANGE = Value
   val RDD_ID = Value
@@ -115,7 +116,6 @@ object LogKey extends Enumeration {
   val URI = Value
   val USER_ID = Value
   val USER_NAME = Value
-  val PYTHON_VERSION = Value
   val WATERMARK_CONSTRAINT = Value
   val WORKER_URL = Value
   val XSD_PATH = Value
