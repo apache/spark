@@ -19,12 +19,15 @@ import os
 import shutil
 import unittest
 
+torch_requirement_message = None
 have_torch = True
 try:
     import torch  # noqa: F401
 except ImportError:
     have_torch = False
+    torch_requirement_message = "torch is required"
 
+from pyspark.util import is_remote_only
 from pyspark.sql import SparkSession
 from pyspark.ml.torch.tests.test_distributor import (
     TorchDistributorBaselineUnitTestsMixin,
@@ -37,7 +40,9 @@ from pyspark.ml.torch.tests.test_distributor import (
 )
 
 
-@unittest.skipIf(not have_torch, "torch is required")
+@unittest.skipIf(
+    not have_torch or is_remote_only(), torch_requirement_message or "Requires JVM access"
+)
 class TorchDistributorBaselineUnitTestsOnConnect(
     TorchDistributorBaselineUnitTestsMixin, unittest.TestCase
 ):
