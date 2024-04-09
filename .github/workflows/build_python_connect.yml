@@ -20,8 +20,9 @@
 name: Build / Spark Connect Python-only (master, Python 3.11)
 
 on:
-  schedule:
-    - cron: '0 19 * * *'
+  push:
+    branches:
+    - '**'
 
 jobs:
   # Build: build Spark and run the tests for specified modules using SBT
@@ -81,7 +82,7 @@ jobs:
           # Remove Py4J and PySpark zipped library to make sure there is no JVM connection
           rm python/lib/*
           rm -r python/pyspark
-          ./python/run-tests --parallelism=1 --python-executables=python3 --modules pyspark-connect
+          ./python/run-tests --parallelism=1 --python-executables=python3 --modules pyspark-connect,pyspark-ml-connect,pyspark-pandas-connect-part0,pyspark-pandas-connect-part1,pyspark-pandas-connect-part2,pandas-connect-part3
       - name: Upload test results to report
         if: always()
         uses: actions/upload-artifact@v4
