@@ -691,7 +691,7 @@ private[hive] class HiveClientImpl(
           logError(
             log"""
                |======================
-               |Attempt to drop the partition specs in table '${MDC(TABLE_NAME, table)}' database '${MDC(DB_NAME, db)}':
+               |Attempt to drop the partition specs in table '${MDC(TABLE_NAME, table)}' database '${MDC(DATABASE_NAME, db)}':
                |${MDC(PARTITION_SPECS, specs.mkString("\n"))}
                |In this attempt, the following partitions have been dropped successfully:
                |${MDC(DROPPED_PARTITIONS, droppedParts.mkString("\n"))}
