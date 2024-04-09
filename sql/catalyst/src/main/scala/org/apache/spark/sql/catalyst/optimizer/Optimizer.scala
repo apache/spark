@@ -131,8 +131,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         SimplifyExtractValueOps,
         OptimizeCsvJsonExprs,
         CombineConcats,
-        PushdownPredicatesAndPruneColumnsForCTEDef,
-        RewriteGroupByCollation) ++
+        PushdownPredicatesAndPruneColumnsForCTEDef) ++
         extendedOperatorOptimizationRules
 
     val operatorOptimizationBatch: Seq[Batch] = {
@@ -295,6 +294,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       EliminateView,
       ReplaceExpressions,
       RewriteNonCorrelatedExists,
+      RewriteGroupByCollation,
       PullOutGroupingExpressions,
       ComputeCurrentTime,
       ReplaceCurrentLike(catalogManager),

@@ -22,7 +22,7 @@ import java.util.Locale
 // import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, ExpectsInputTypes, Expression, StringTypeAnyCollation, UnaryExpression}
-import org.apache.spark.sql.catalyst.expressions.aggregate.AnyValue
+import org.apache.spark.sql.catalyst.expressions.aggregate.First
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 // import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
@@ -50,7 +50,7 @@ object RewriteGroupByCollation extends Rule[LogicalPlan] {
 
       val newAggregateExpressions = a.aggregateExpressions.map {
         case attr: AttributeReference if aliasMap.contains(attr) =>
-          Alias(AnyValue(attr, ignoreNulls = false), attr.name)()
+          Alias(First(attr, ignoreNulls = false), attr.name)()
         case other => other
       }
 

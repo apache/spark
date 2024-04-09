@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable
 
+import org.apache.spark.sql.catalyst.analysis.CollationKey
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
@@ -51,7 +52,7 @@ object PullOutGroupingExpressions extends Rule[LogicalPlan] {
       case a: Aggregate if a.resolved =>
         val complexGroupingExpressionMap = mutable.LinkedHashMap.empty[Expression, NamedExpression]
         val newGroupingExpressions = a.groupingExpressions.toIndexedSeq.map {
-          case e if !e.foldable && e.children.nonEmpty =>
+          case e if !e.foldable && e.children.nonEmpty && !e.isInstanceOf[CollationKey] =>
             complexGroupingExpressionMap
               .getOrElseUpdate(e.canonicalized, Alias(e, "_groupingexpression")())
               .toAttribute

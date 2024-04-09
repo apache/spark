@@ -903,7 +903,9 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     // get the logical plan for the spark SQL query
     val logicalPlan = dfGroupBy.queryExecution.analyzed
     val newPlan = RewriteGroupByCollation(logicalPlan)
+    val newNewPlan = RewriteGroupByCollation(newPlan)
     assert(newPlan.isInstanceOf[Aggregate])
+    assert(newNewPlan.isInstanceOf[Aggregate])
     val groupingExpressions = newPlan.asInstanceOf[Aggregate].groupingExpressions
     assert(groupingExpressions.size == 1)
 //    val groupingAlias = groupingExpressions.head.asInstanceOf[Alias]
