@@ -54,7 +54,7 @@
         "usedBy": ["SQL/Foundation", "PostgreSQL", "Redshift", "Oracle", "SQL Server"]
     },
     "01008": {
-        "description": "implicit_zero_bit_padding",
+        "description": "implicit zero bit padding",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift", "Oracle"]
@@ -702,7 +702,7 @@
         "usedBy": ["DB2"]
     },
     "01P01": {
-        "description": "deprecated_feature",
+        "description": "deprecated feature",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
@@ -750,7 +750,7 @@
         "usedBy": ["SQL Server"]
     },
     "02000": {
-        "description": "(no subclass)",
+        "description": "no data",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation", "PostgreSQL", "DB2", "Redshift", "Oracle"]
@@ -774,13 +774,13 @@
         "usedBy": ["DB2"]
     },
     "03000": {
-        "description": "sql_statement_not_yet_complete",
+        "description": "sql statement not yet complete",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "07000": {
-        "description": "(no subclass)",
+        "description": "dynamic SQL error",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation", "Oracle"]
@@ -894,7 +894,7 @@
         "usedBy": ["SQL Server"]
     },
     "08000": {
-        "description": "(no subclass)",
+        "description": "connection exception",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation", "PostgreSQL", "Redshift", "Oracle"]
@@ -935,8 +935,14 @@
         "standard": "Y",
         "usedBy": ["SQL/Foundation", "PostgreSQL", "Redshift", "Oracle", "SQL Server"]
     },
+    "08KD1": {
+        "description": "server busy",
+        "origin": "Databricks",
+        "standard": "N",
+        "usedBy": ["Databricks"]
+    },
     "08P01": {
-        "description": "protocol_violation",
+        "description": "protocol violation",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
@@ -948,13 +954,13 @@
         "usedBy": ["SQL Server"]
     },
     "09000": {
-        "description": "(no subclass)",
+        "description": "triggered action exception",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation", "PostgreSQL", "DB2", "Redshift"]
     },
     "0A000": {
-        "description": "(no subclass)",
+        "description": "feature not supported",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation", "PostgreSQL", "Redshift", "Redshift", "Oracle"]
@@ -966,31 +972,55 @@
         "usedBy": ["SQL/Foundation", "DB2", "Oracle"]
     },
     "0AKD0": {
-        "description": "Renaming a <type> across schemas is not allowed.",
-        "origin": "Spark",
-        "standard": "Y",
-        "usedBy": ["Spark"]
+        "description": "Cross catalog or schema operation not supported",
+        "origin": "Databricks",
+        "standard": "N",
+        "usedBy": ["Databricks"]
+    },
+    "0AKD1": {
+        "description": "Security feature not supported",
+        "origin": "Databricks",
+        "standard": "N",
+        "usedBy": ["Databricks"]
+    },
+    "0AKDC": {
+        "description": "Not supported in Delta",
+        "origin": "Databricks",
+        "standard": "N",
+        "usedBy": ["Databricks"]
+    },
+    "0AKDD": {
+        "description": "Feature requires Delta",
+        "origin": "Databricks",
+        "standard": "N",
+        "usedBy": ["Databricks"]
+    },
+    "0AKDE": {
+        "description": "Feature non enabled for this Delta table",
+        "origin": "Databricks",
+        "standard": "N",
+        "usedBy": ["Databricks"]
     },
     "0B000": {
-        "description": "invalid_transaction_initiation",
+        "description": "invalid transaction initiation",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "0D000": {
-        "description": "(no subclass)",
+        "description": "invalid target type specification",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation"]
     },
     "0E000": {
-        "description": "(no subclass)",
+        "description": "invalid schema name list specification",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation"]
     },
     "0F000": {
-        "description": "(no subclass)",
+        "description": "locator exception",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation", "PostgreSQL", "Redshift"]
@@ -1002,31 +1032,31 @@
         "usedBy": ["SQL/Foundation", "PostgreSQL", "DB2", "Redshift"]
     },
     "0K000": {
-        "description": "(no subclass)",
+        "description": "resignal when handler not active",
         "origin": "SQL/PSM",
         "standard": "Y",
         "usedBy": ["SQL/PSM", "DB2"]
     },
     "0L000": {
-        "description": "(no subclass)",
+        "description": "invalid grantor",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation", "PostgreSQL", "Redshift"]
     },
     "0LP01": {
-        "description": "invalid_grant_operation",
+        "description": "invalid grant operation",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "0M000": {
-        "description": "(no subclass)",
+        "description": "invalid SQL-invoked procedure reference",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation"]
     },
     "0N000": {
-        "description": "(no subclass)",
+        "description": "SQL/XML mapping error",
         "origin": "SQL/XML",
         "standard": "Y",
         "usedBy": ["SQL/XML"]
@@ -1044,37 +1074,37 @@
         "usedBy": ["SQL/XML", "DB2"]
     },
     "0P000": {
-        "description": "(no subclass)",
+        "description": "invalid role specification",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation", "PostgreSQL", "Redshift"]
     },
     "0S000": {
-        "description": "(no subclass)",
+        "description": "invalid transform group name specification",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation"]
     },
     "0T000": {
-        "description": "(no subclass)",
+        "description": "target table disagrees with cursor specification",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation"]
     },
     "0U000": {
-        "description": "(no subclass)",
+        "description": "attempt to assign to non-updatable column",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation"]
     },
     "0V000": {
-        "description": "(no subclass)",
+        "description": "attempt to assign to ordering column",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation"]
     },
     "0W000": {
-        "description": "(no subclass)",
+        "description": "prohibited statement encountered during trigger execution",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation"]
@@ -1086,13 +1116,13 @@
         "usedBy": ["SQL/Foundation"]
     },
     "0X000": {
-        "description": "(no subclass)",
+        "description": "invalid foreign server specification",
         "origin": "SQL/MED",
         "standard": "Y",
         "usedBy": ["SQL/MED"]
     },
     "0Y000": {
-        "description": "(no subclass)",
+        "description": "pass-through specific condition",
         "origin": "SQL/MED",
         "standard": "Y",
         "usedBy": ["SQL/MED"]
@@ -1110,7 +1140,7 @@
         "usedBy": ["SQL/MED"]
     },
     "0Z000": {
-        "description": "(no subclass)",
+        "description": "pass-through specific condition",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation", "PostgreSQL", "Redshift"]
@@ -1128,7 +1158,7 @@
         "usedBy": ["SQL/PSM", "PostgreSQL", "Redshift"]
     },
     "10000": {
-        "description": "(no subclass)",
+        "description": "XQuery error",
         "origin": "SQL/XML",
         "standard": "Y",
         "usedBy": ["SQL/XML"]
@@ -1218,19 +1248,19 @@
         "usedBy": ["DB2"]
     },
     "11000": {
-        "description": "(no subclass)",
+        "description": "prohibited column reference encountered during trigger execution",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation"]
     },
     "20000": {
-        "description": "(no subclass)",
+        "description": "case not found for case statement",
         "origin": "SQL/PSM",
         "standard": "Y",
         "usedBy": ["SQL/PSM", "PostgreSQL", "DB2", "Redshift"]
     },
     "21000": {
-        "description": "(no subclass)",
+        "description": "cardinality violation",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation", "PostgreSQL", "DB2", "Redshift", "Oracle"]
@@ -1243,6 +1273,12 @@
     },
     "21502": {
         "description": "A multiple-row UPDATE of a primary key is invalid.",
+        "origin": "DB2",
+        "standard": "N",
+        "usedBy": ["DB2"]
+    },
+    "21506": {
+        "description": "The same row of a table cannot be the target for more than one of an update, delete or insert operation.",
         "origin": "DB2",
         "standard": "N",
         "usedBy": ["DB2"]
@@ -1260,7 +1296,7 @@
         "usedBy": ["SQL Server"]
     },
     "22000": {
-        "description": "(no subclass)",
+        "description": "data exception",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation", "PostgreSQL", "Redshift", "Oracle"]
@@ -1842,7 +1878,7 @@
         "usedBy": ["SQL/Foundation", "PostgreSQL"]
     },
     "2203G": {
-        "description": "sql_json_item_cannot_be_cast_to_target_type",
+        "description": "sql json item cannot be cast to target type",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL"]
@@ -2148,43 +2184,43 @@
         "usedBy": ["Databricks"]
     },
     "22P01": {
-        "description": "floating_point_exception",
+        "description": "floating point exception",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "22P02": {
-        "description": "invalid_text_representation",
+        "description": "invalid text representation",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "22P03": {
-        "description": "invalid_binary_representation",
+        "description": "invalid binary representation",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "22P04": {
-        "description": "bad_copy_file_format",
+        "description": "bad copy file format",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "22P05": {
-        "description": "untranslatable_character",
+        "description": "untranslatable character",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "22P06": {
-        "description": "nonstandard_use_of_escape_character",
+        "description": "nonstandard use of escape character",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "23000": {
-        "description": "(no subclass)",
+        "description": "integrity constraint violation",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation", "PostgreSQL", "Redshift", "Oracle", "SQL Server"]
@@ -2268,7 +2304,7 @@
         "usedBy": ["DB2"]
     },
     "23514": {
-        "description": "check_violation",
+        "description": "check violation",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
@@ -2310,13 +2346,13 @@
         "usedBy": ["Spark"]
     },
     "23P01": {
-        "description": "exclusion_violation",
+        "description": "exclusion violation",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL"]
     },
     "24000": {
-        "description": "(no subclass)",
+        "description": "invalid cursor state",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation", "PostgreSQL", "Redshift", "Oracle", "SQL Server"]
@@ -2412,7 +2448,7 @@
         "usedBy": ["DB2"]
     },
     "25000": {
-        "description": "(no subclass)",
+        "description": "invalid transaction state",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation", "PostgreSQL", "DB2", "Redshift", "Oracle", "SQL Server"]
@@ -2466,19 +2502,19 @@
         "usedBy": ["SQL/Foundation", "PostgreSQL", "Redshift"]
     },
     "25P01": {
-        "description": "no_active_sql_transaction",
+        "description": "no activ sql transaction",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "25P02": {
-        "description": "in_failed_sql_transaction",
+        "description": "in failed sql transaction",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "25P03": {
-        "description": "idle_in_transaction_session_timeout",
+        "description": "idle in transaction session timeout",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL"]
@@ -2502,7 +2538,7 @@
         "usedBy": ["SQL Server"]
     },
     "26000": {
-        "description": "(no subclass)",
+        "description": "invalid SQL statement name",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation", "PostgreSQL", "Redshift", "Oracle"]
@@ -2514,7 +2550,7 @@
         "usedBy": ["DB2"]
     },
     "27000": {
-        "description": "(no subclass)",
+        "description": "triggered data change violation",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation", "PostgreSQL", "Oracle"]
@@ -2526,13 +2562,13 @@
         "usedBy": ["SQL/Foundation"]
     },
     "28000": {
-        "description": "(no subclass)",
+        "description": "invalid authorization specification",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation", "PostgreSQL", "Redshift", "Oracle", "SQL Server"]
     },
     "28P01": {
-        "description": "invalid_password",
+        "description": "invalid password",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL"]
@@ -2544,19 +2580,19 @@
         "usedBy": ["Oracle"]
     },
     "2B000": {
-        "description": "(no subclass)",
+        "description": "dependent privilege descriptors still exist",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation", "PostgreSQL", "Redshift", "Oracle"]
     },
     "2BP01": {
-        "description": "dependent_objects_still_exist",
+        "description": "dependent objects still exist",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "2C000": {
-        "description": "(no subclass)",
+        "description": "invalid character set name",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation", "Oracle"]
@@ -2568,7 +2604,7 @@
         "usedBy": ["SQL/Foundation"]
     },
     "2D000": {
-        "description": "(no subclass)",
+        "description": "invalid transaction termination",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation", "PostgreSQL", "Redshift", "Oracle"]
@@ -2591,14 +2627,20 @@
         "standard": "N",
         "usedBy": ["DB2"]
     },
+    "2DKD0": {
+        "description": "Post commit hook failed.",
+        "origin": "Databricks",
+        "standard": "N",
+        "usedBy": ["Databricks"]
+    },
     "2E000": {
-        "description": "(no subclass)",
+        "description": "invalid connection name",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation", "Oracle"]
     },
     "2F000": {
-        "description": "(no subclass)",
+        "description": "SQL routine exception",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation", "PostgreSQL", "Redshift"]
@@ -2628,37 +2670,37 @@
         "usedBy": ["SQL/Foundation", "PostgreSQL", "Redshift"]
     },
     "2H000": {
-        "description": "(no subclass)",
+        "description": "invalid collation name",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation"]
     },
     "30000": {
-        "description": "(no subclass)",
+        "description": "invalid SQL statement identifier",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation"]
     },
     "33000": {
-        "description": "(no subclass)",
+        "description": "invalid SQL descriptor nameno subclass)",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation", "Oracle"]
     },
     "34000": {
-        "description": "(no subclass)",
+        "description": "invalid cursor name",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation", "PostgreSQL", "DB2", "Redshift", "Oracle", "SQL Server"]
     },
     "35000": {
-        "description": "(no subclass)",
+        "description": "invalid condition number",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation", "DB2", "Oracle"]
     },
     "36000": {
-        "description": "(no subclass)",
+        "description": "cursor sensitivity exception",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation"]
@@ -2682,7 +2724,7 @@
         "usedBy": ["Oracle"]
     },
     "38000": {
-        "description": "(no subclass)",
+        "description": "external routine exception",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation", "PostgreSQL", "DB2", "Redshift"]
@@ -2796,13 +2838,13 @@
         "usedBy": ["DB2"]
     },
     "39000": {
-        "description": "(no subclass)",
+        "description": "external routine invocation exception",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation", "PostgreSQL", "Redshift"]
     },
     "39001": {
-        "description": "invalid_sqlstate_returned",
+        "description": "invalid sqlstate returned",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
@@ -2820,25 +2862,25 @@
         "usedBy": ["DB2"]
     },
     "39P01": {
-        "description": "trigger_protocol_violated",
+        "description": "trigger protocol violated",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "39P02": {
-        "description": "srf_protocol_violated",
+        "description": "srf protocol violated",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "39P03": {
-        "description": "event_trigger_protocol_violated",
+        "description": "event trigger protocol violated",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL"]
     },
     "3B000": {
-        "description": "(no subclass)",
+        "description": "savepoint exception",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation", "PostgreSQL"]
@@ -2874,25 +2916,25 @@
         "usedBy": ["DB2"]
     },
     "3C000": {
-        "description": "(no subclass)",
+        "description": "ambiguous cursor name",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation", "DB2", "Oracle", "SQL Server"]
     },
     "3D000": {
-        "description": "(no subclass)",
+        "description": "invalid catalog name",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation", "PostgreSQL", "Redshift", "Oracle", "SQL Server"]
     },
     "3F000": {
-        "description": "(no subclass)",
+        "description": "invalid schema name",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation", "PostgreSQL", "Redshift", "Oracle", "SQL Server"]
     },
     "40000": {
-        "description": "(no subclass)",
+        "description": "transaction rollback",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation", "PostgreSQL", "Oracle"]
@@ -2922,13 +2964,13 @@
         "usedBy": ["SQL/Foundation"]
     },
     "40P01": {
-        "description": "deadlock_detected",
+        "description": "deadlock detected",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL"]
     },
     "42000": {
-        "description": "(no subclass)",
+        "description": "syntax error or access rule violation",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation", "PostgreSQL", "Redshift", "Oracle", "SQL Server"]
@@ -4667,134 +4709,140 @@
         "standard": "N",
         "usedBy": ["Databricks"]
     },
+    "42KDG": {
+        "description": "The target schema is not compatible with the ingested data.",
+        "origin": "Databricks",
+        "standard": "N",
+        "usedBy": ["Databricks"]
+    },
     "42P01": {
-        "description": "undefined_table",
+        "description": "undefined table",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "42P02": {
-        "description": "undefined_parameter",
+        "description": "undefined parameter",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "42P03": {
-        "description": "duplicate_cursor",
+        "description": "duplicate cursor",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "42P04": {
-        "description": "duplicate_database",
+        "description": "duplicate database",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "42P05": {
-        "description": "duplicate_prepared_statement",
+        "description": "duplicate prepared statement",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "42P06": {
-        "description": "duplicate_schema",
+        "description": "duplicate schema",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "42P07": {
-        "description": "duplicate_table",
+        "description": "duplicate table",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "42P08": {
-        "description": "ambiguous_parameter",
+        "description": "ambiguous parameter",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "42P09": {
-        "description": "ambiguous_alias",
+        "description": "ambiguous alias",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "42P10": {
-        "description": "invalid_column_reference",
+        "description": "invalid column reference",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "42P11": {
-        "description": "invalid_cursor_definition",
+        "description": "invalid cursor definition",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "42P12": {
-        "description": "invalid_database_definition",
+        "description": "invalid database definition",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "42P13": {
-        "description": "invalid_function_definition",
+        "description": "invalid function definition",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "42P14": {
-        "description": "invalid_prepared_statement_definition",
+        "description": "invalid prepared statement definition",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "42P15": {
-        "description": "invalid_schema_definition",
+        "description": "invalid schema definition",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "42P16": {
-        "description": "invalid_table_definition",
+        "description": "invalid table definition",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "42P17": {
-        "description": "invalid_object_definition",
+        "description": "invalid object definition",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "42P18": {
-        "description": "indeterminate_datatype",
+        "description": "indeterminate datatype",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "42P19": {
-        "description": "invalid_recursion",
+        "description": "invalid recursion",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL"]
     },
     "42P20": {
-        "description": "windowing_error",
+        "description": "windowing error",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL"]
     },
     "42P21": {
-        "description": "collation_mismatch",
+        "description": "collation mismatch",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL"]
     },
     "42P22": {
-        "description": "indeterminate_collation",
+        "description": "indeterminate collation",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL"]
@@ -4836,19 +4884,19 @@
         "usedBy": ["SQL Server"]
     },
     "44000": {
-        "description": "(no subclass)",
+        "description": "with check option violation",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation", "PostgreSQL", "DB2", "Redshift", "Oracle", "SQL Server"]
     },
     "45000": {
-        "description": "(no subclass)",
+        "description": "unhandled user-defined exception",
         "origin": "SQL/PSM",
         "standard": "Y",
         "usedBy": ["SQL/PSM"]
     },
     "46000": {
-        "description": "(no subclass)",
+        "description": "Java DDL 1",
         "origin": "SQL/JRT",
         "standard": "Y",
         "usedBy": ["SQL/JRT", "SQL/JRT", "SQL/OLB"]
@@ -4973,6 +5021,13 @@
         "standard": "N",
         "usedBy": ["DB2"]
     },
+    "51000": {
+        "description": "Invalid Application State",
+        "origin": "DB2",
+        "standard": "N",
+        "usedBy": ["DB2"]
+    },
+
     "51002": {
         "description": "The package corresponding to an SQL statement execution request was not found.",
         "origin": "DB2",
@@ -5076,7 +5131,7 @@
         "usedBy": ["DB2"]
     },
     "53000": {
-        "description": "insufficient_resources",
+        "description": "insufficient resources",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
@@ -5280,31 +5335,31 @@
         "usedBy": ["DB2"]
     },
     "53100": {
-        "description": "disk_full",
+        "description": "disk full",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "53200": {
-        "description": "out_of_memory",
+        "description": "out of memory",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "53300": {
-        "description": "too_many_connections",
+        "description": "too many connections",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "53400": {
-        "description": "configuration_limit_exceeded",
+        "description": "configuration limit exceeded",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL"]
     },
     "54000": {
-        "description": "program_limit_exceeded",
+        "description": "program limit exceeded",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
@@ -5364,7 +5419,7 @@
         "usedBy": ["DB2"]
     },
     "54023": {
-        "description": "too_many_arguments",
+        "description": "too many arguments",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
@@ -5459,8 +5514,14 @@
         "standard": "N",
         "usedBy": ["Databricks"]
     },
+    "54KD1": {
+        "description": "Maximum object count in session exceeded.",
+        "origin": "Databricks",
+        "standard": "N",
+        "usedBy": ["Databricks"]
+    },
     "55000": {
-        "description": "object_not_in_prerequisite_state",
+        "description": "object not in prerequisite state",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
@@ -5598,25 +5659,25 @@
         "usedBy": ["DB2"]
     },
     "55P02": {
-        "description": "cant_change_runtime_param",
+        "description": "cant change runtime param",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "55P03": {
-        "description": "lock_not_available",
+        "description": "lock not available",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "55P04": {
-        "description": "unsafe_new_enum_value_usage",
+        "description": "unsafe new enum value usage",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL"]
     },
     "56000": {
-        "description": "(no subclass)",
+        "description": "Miscellaneous SQL or Product Error",
         "origin": "DB2",
         "standard": "N",
         "usedBy": ["DB2"]
@@ -5815,6 +5876,12 @@
     },
     "56096": {
         "description": "Bind options are incompatible.",
+        "origin": "DB2",
+        "standard": "N",
+        "usedBy": ["DB2"]
+    },
+    "56098": {
+        "description": "An error occurred during implicit rebind, recompile, or revalidation.",
         "origin": "DB2",
         "standard": "N",
         "usedBy": ["DB2"]
@@ -6018,7 +6085,7 @@
         "usedBy": ["Spark"]
     },
     "57000": {
-        "description": "operator_intervention",
+        "description": "operator intervention",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
@@ -6162,31 +6229,31 @@
         "usedBy": ["DB2"]
     },
     "57P01": {
-        "description": "admin_shutdown",
+        "description": "admin shutdown",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "57P02": {
-        "description": "crash_shutdown",
+        "description": "crash shutdown",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "57P03": {
-        "description": "cannot_connect_now",
+        "description": "cannot connect now",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "57P04": {
-        "description": "database_dropped",
+        "description": "database dropped",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL"]
     },
     "57P05": {
-        "description": "idle_session_timeout",
+        "description": "idle session timeout",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL"]
@@ -6378,11 +6445,18 @@
         "usedBy": ["Oracle"]
     },
     "72000": {
-        "description": "snapshot_too_old",
+        "description": "snapshot too old",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Oracle"]
     },
+    "82000": {
+        "description": "out of memory",
+        "origin": "Oracle",
+        "standard": "N",
+        "usedBy": ["Oracle"]
+    },
+
     "82100": {
         "description": "out of memory (could not allocate)",
         "origin": "Oracle",
@@ -6528,19 +6602,19 @@
         "usedBy": ["Oracle"]
     },
     "F0000": {
-        "description": "config_file_error",
+        "description": "configuration file error",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "F0001": {
-        "description": "lock_file_exists",
+        "description": "lock file exists",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "HV000": {
-        "description": "(no subclass)",
+        "description": "FDW-specific condition",
         "origin": "SQL/MED",
         "standard": "Y",
         "usedBy": ["SQL/MED", "PostgreSQL"]
@@ -6702,7 +6776,7 @@
         "usedBy": ["SQL/MED", "PostgreSQL"]
     },
     "HW000": {
-        "description": "(no subclass)",
+        "description": "datalink exception",
         "origin": "SQL/MED",
         "standard": "Y",
         "usedBy": ["SQL/MED"]
@@ -6750,7 +6824,7 @@
         "usedBy": ["SQL/MED"]
     },
     "HY000": {
-        "description": "(no subclass)",
+        "description": "CLI-specific condition",
         "origin": "SQL/CLI",
         "standard": "Y",
         "usedBy": ["SQL/CLI", "SQL Server"]
@@ -7008,7 +7082,7 @@
         "usedBy": ["SQL Server"]
     },
     "HZ000": {
-        "description": "(no subclass)",
+        "description": "RDA-specific condition",
         "origin": "RDA/SQL",
         "standard": "Y",
         "usedBy": ["RDA/SQL", "Oracle"]
@@ -7319,50 +7393,56 @@
         "standard": "N",
         "usedBy": ["Databricks"]
     },
+    "KD00E": {
+        "description": "table feature validation failure",
+        "origin": "Databricks",
+        "standard": "N",
+        "usedBy": ["Databricks"]
+    },
     "P0000": {
-        "description": "plpgsql_error",
+        "description": "procedural logic error",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "P0001": {
-        "description": "raise_exception",
+        "description": "raise exception",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "P0002": {
-        "description": "no_data_found",
+        "description": "no data found",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "P0003": {
-        "description": "too_many_rows",
+        "description": "too many rows",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "P0004": {
-        "description": "assert_failure",
+        "description": "assert failure",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL"]
     },
     "XX000": {
-        "description": "internal_error",
+        "description": "internal error",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "XX001": {
-        "description": "data_corrupted",
+        "description": "data corrupted",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
     "XX002": {
-        "description": "index_corrupted",
+        "description": "index corrupted",
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
