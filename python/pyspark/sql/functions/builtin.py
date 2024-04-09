@@ -972,12 +972,13 @@ def mode(col: "ColumnOrName", deterministic: bool = False) -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([
     ...     ("Java", 2012, 20000), ("dotNET", 2012, 5000),
     ...     ("Java", 2012, 20000), ("dotNET", 2012, 5000),
     ...     ("dotNET", 2013, 48000), ("Java", 2013, 30000)],
     ...     schema=("course", "year", "earnings"))
-    >>> df.groupby("course").agg(mode("year")).show()
+    >>> df.groupby("course").agg(sf.mode("year")).sort("course").show()
     +------+----------+
     |course|mode(year)|
     +------+----------+
@@ -989,13 +990,20 @@ def mode(col: "ColumnOrName", deterministic: bool = False) -> Column:
     deterministic is false or is not defined, or the lowest value is returned if deterministic is
     true.
 
-    >>> df2 = spark.createDataFrame([(-10,), (0,), (10,)], ["col"])
-    >>> df2.select(mode("col", False), mode("col", True)).show()
-    +---------+---------------------------------------+
-    |mode(col)|mode() WITHIN GROUP (ORDER BY col DESC)|
-    +---------+---------------------------------------+
-    |        0|                                    -10|
-    +---------+---------------------------------------+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(-10,), (0,), (10,)], ["col"])
+    >>> df.select(sf.mode("col", False)).show() # doctest: +SKIP
+    +---------+
+    |mode(col)|
+    +---------+
+    |        0|
+    +---------+
+    >>> df.select(sf.mode("col", True)).show()
+    +---------------------------------------+
+    |mode() WITHIN GROUP (ORDER BY col DESC)|
+    +---------------------------------------+
+    |                                    -10|
+    +---------------------------------------+
     """
     return _invoke_function("mode", _to_java_column(col), deterministic)
 
