@@ -1062,4 +1062,10 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       checkAnswer(dfNonBinary, dfBinary)
     }
   }
+
+  test("SPARK-47765: test SET COLLATION statement") {
+    checkAnswer(sql("SELECT collation('a')"), Seq(Row("UTF8_BINARY")))
+    sql("SET COLLATION UNICODE")
+    checkAnswer(sql("SELECT collation('a')"), Seq(Row("UNICODE")))
+  }
 }
