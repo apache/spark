@@ -22,8 +22,10 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.annotation.Since
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.OPTIMIZER_CLASS_NAME
 import org.apache.spark.ml.linalg.{MatrixUDT => MLMatrixUDT, VectorUDT => MLVectorUDT}
+import org.apache.spark.ml.util.Instrumentation
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.linalg.BLAS.dot
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -592,5 +594,11 @@ object MLUtils extends Logging {
     } else {
       math.log1p(math.exp(x))
     }
+  }
+
+  def optimizerFailed(instr: Instrumentation, optimizerClass: Class[_]): Unit = {
+    val msg = log"${MDC(OPTIMIZER_CLASS_NAME, optimizerClass.getName)} failed."
+    instr.logError(msg)
+    throw new SparkException(msg.message)
   }
 }

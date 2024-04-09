@@ -37,7 +37,6 @@ from pyspark.testing.sqlutils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.testing.utils import QuietTest
 
 if have_pandas:
     import pandas as pd
@@ -139,7 +138,7 @@ class CogroupedApplyInPandasTestsMixin:
         self._test_merge(self.data1, self.data2, by=[])
 
     def test_different_group_key_cardinality(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_different_group_key_cardinality()
 
     def check_different_group_key_cardinality(self):
@@ -158,7 +157,7 @@ class CogroupedApplyInPandasTestsMixin:
             )
 
     def test_apply_in_pandas_not_returning_pandas_dataframe(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_apply_in_pandas_not_returning_pandas_dataframe()
 
     def check_apply_in_pandas_not_returning_pandas_dataframe(self):
@@ -191,7 +190,7 @@ class CogroupedApplyInPandasTestsMixin:
         self._test_merge(fn=merge_pandas)
 
     def test_apply_in_pandas_returning_wrong_column_names(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_apply_in_pandas_returning_wrong_column_names()
 
     def check_apply_in_pandas_returning_wrong_column_names(self):
@@ -210,7 +209,7 @@ class CogroupedApplyInPandasTestsMixin:
         )
 
     def test_apply_in_pandas_returning_no_column_names_and_wrong_amount(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_apply_in_pandas_returning_no_column_names_and_wrong_amount()
 
     def check_apply_in_pandas_returning_no_column_names_and_wrong_amount(self):
@@ -241,7 +240,7 @@ class CogroupedApplyInPandasTestsMixin:
         self._test_merge_empty(fn=merge_pandas)
 
     def test_apply_in_pandas_returning_incompatible_type(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_apply_in_pandas_returning_incompatible_type()
 
     def check_apply_in_pandas_returning_incompatible_type(self):
@@ -332,7 +331,7 @@ class CogroupedApplyInPandasTestsMixin:
         assert_frame_equal(expected, result)
 
     def test_wrong_return_type(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_wrong_return_type()
 
     def check_wrong_return_type(self):
@@ -347,7 +346,7 @@ class CogroupedApplyInPandasTestsMixin:
         )
 
     def test_wrong_args(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_wrong_args()
 
     def check_wrong_args(self):

@@ -189,7 +189,11 @@ autodoc_typehints = "none"
 html_theme = 'pydata_sphinx_theme'
 
 html_context = {
-    "switcher_json_url": "_static/versions.json",
+    # When releasing a new Spark version, please update the file
+    # "site/static/versions.json" under the code repository "spark-website"
+    # (item should be added in order), and also set the local environment
+    # variable "RELEASE_VERSION".
+    "switcher_json_url": "https://spark.apache.org/static/versions.json",
     "switcher_template_url": "https://spark.apache.org/docs/{version}/api/python/index.html",
 }
 

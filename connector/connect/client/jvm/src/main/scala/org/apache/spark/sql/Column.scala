@@ -1091,6 +1091,41 @@ class Column private[sql] (@DeveloperApi val expr: proto.Expression) extends Log
   def cast(to: String): Column = cast(DataTypeParser.parseDataType(to))
 
   /**
+   * Casts the column to a different data type and the result is null on failure.
+   * {{{
+   *   // Casts colA to IntegerType.
+   *   import org.apache.spark.sql.types.IntegerType
+   *   df.select(df("colA").try_cast(IntegerType))
+   *
+   *   // equivalent to
+   *   df.select(df("colA").try_cast("int"))
+   * }}}
+   *
+   * @group expr_ops
+   * @since 4.0.0
+   */
+  def try_cast(to: DataType): Column = Column { builder =>
+    builder.getCastBuilder
+      .setExpr(expr)
+      .setType(DataTypeProtoConverter.toConnectProtoType(to))
+      .setEvalMode(proto.Expression.Cast.EvalMode.EVAL_MODE_TRY)
+  }
+
+  /**
+   * Casts the column to a different data type and the result is null on failure.
+   * {{{
+   *   // Casts colA to integer.
+   *   df.select(df("colA").try_cast("int"))
+   * }}}
+   *
+   * @group expr_ops
+   * @since 4.0.0
+   */
+  def try_cast(to: String): Column = {
+    try_cast(DataTypeParser.parseDataType(to))
+  }
+
+  /**
    * Returns a sort expression based on the descending order of the column.
    * {{{
    *   // Scala
@@ -1316,8 +1351,14 @@ private[sql] object Column {
   }
 
   @DeveloperApi
+  @deprecated("Use forExtension(Array[Byte]) instead", "4.0.0")
   def apply(extension: com.google.protobuf.Any): Column = {
     apply(_.setExtension(extension))
+  }
+
+  @DeveloperApi
+  def forExtension(extension: Array[Byte]): Column = {
+    apply(_.setExtension(com.google.protobuf.Any.parseFrom(extension)))
   }
 
   private[sql] def fn(name: String, inputs: Column*): Column = {

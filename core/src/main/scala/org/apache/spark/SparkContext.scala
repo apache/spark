@@ -46,7 +46,8 @@ import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.{Executor, ExecutorMetrics, ExecutorMetricsSource}
 import org.apache.spark.input.{FixedLengthBinaryInputFormat, PortableDataStream, StreamInputFormat, WholeTextFileInputFormat}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests._
 import org.apache.spark.internal.config.UI._
@@ -417,6 +418,9 @@ class SparkContext(config: SparkConf) extends Logging {
     if (!_conf.contains("spark.app.name")) {
       throw new SparkException("An application name must be set in your configuration")
     }
+    // HADOOP-19097 Set fs.s3a.connection.establish.timeout to 30s
+    // We can remove this after Apache Hadoop 3.4.1 releases
+    conf.setIfMissing("spark.hadoop.fs.s3a.connection.establish.timeout", "30s")
     // This should be set as early as possible.
     SparkContext.fillMissingMagicCommitterConfsIfNeeded(_conf)
 
@@ -745,7 +749,9 @@ class SparkContext(config: SparkConf) extends Logging {
       }
     } catch {
       case e: Exception =>
-        logError(s"Exception getting thread dump from executor $executorId", e)
+        logError(
+          log"Exception getting thread dump from executor ${MDC(LogKey.EXECUTOR_ID, executorId)}",
+          e)
         None
     }
   }
@@ -775,7 +781,9 @@ class SparkContext(config: SparkConf) extends Logging {
       }
     } catch {
       case e: Exception =>
-        logError(s"Exception getting heap histogram from executor $executorId", e)
+        logError(
+          log"Exception getting heap histogram from " +
+            log"executor ${MDC(LogKey.EXECUTOR_ID, executorId)}", e)
         None
     }
   }
@@ -2137,7 +2145,7 @@ class SparkContext(config: SparkConf) extends Logging {
         Seq(env.rpcEnv.fileServer.addJar(file))
       } catch {
         case NonFatal(e) =>
-          logError(s"Failed to add $path to Spark environment", e)
+          logError(log"Failed to add ${MDC(LogKey.PATH, path)} to Spark environment", e)
           Nil
       }
     }
@@ -2158,7 +2166,7 @@ class SparkContext(config: SparkConf) extends Logging {
           Seq(path)
         } catch {
           case NonFatal(e) =>
-            logError(s"Failed to add $path to Spark environment", e)
+            logError(log"Failed to add ${MDC(LogKey.PATH, path)} to Spark environment", e)
             Nil
         }
       } else {
@@ -3288,7 +3296,7 @@ object SparkContext extends Logging {
   }
 
   /**
-   * SPARK-36796: This is a helper function to supplement `--add-opens` options to
+   * SPARK-36796: This is a helper function to supplement some JVM runtime options to
    * `spark.driver.extraJavaOptions` and `spark.executor.extraJavaOptions`.
    */
   private def supplementJavaModuleOptions(conf: SparkConf): Unit = {

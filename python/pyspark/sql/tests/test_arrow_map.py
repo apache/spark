@@ -26,7 +26,6 @@ from pyspark.testing.sqlutils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.testing.utils import QuietTest
 
 if have_pyarrow:
     import pyarrow as pa
@@ -91,7 +90,7 @@ class MapInArrowTestsMixin(object):
         self.assertEqual(set((r.a for r in actual)), set(range(100)))
 
     def test_other_than_recordbatch_iter(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_other_than_recordbatch_iter()
 
     def check_other_than_recordbatch_iter(self):

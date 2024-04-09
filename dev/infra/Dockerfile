@@ -96,6 +96,7 @@ ARG CONNECT_PIP_PKGS="grpcio==1.62.0 grpcio-status==1.62.0 protobuf==4.25.1 goog
 # Install Python 3.10 packages
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10
 RUN python3.10 -m pip install --ignore-installed blinker>=1.6.2 # mlflow needs this
+RUN python3.10 -m pip install --ignore-installed 'six==1.16.0'  # Avoid `python3-six` installation
 RUN python3.10 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS && \
     python3.10 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
     python3.10 -m pip install deepspeed torcheval && \

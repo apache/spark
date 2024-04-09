@@ -320,7 +320,7 @@ object LongLiteral {
  */
 object StringLiteral {
   def unapply(a: Any): Option[String] = a match {
-    case Literal(s: UTF8String, StringType) => Some(s.toString)
+    case Literal(s: UTF8String, _: StringType) => Some(s.toString)
     case _ => None
   }
 }
@@ -487,6 +487,10 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
     case (v: UTF8String, StringType) =>
       // Escapes all backslashes and single quotes.
       "'" + v.toString.replace("\\", "\\\\").replace("'", "\\'") + "'"
+    case (v: UTF8String, st: StringType) =>
+      // Escapes all backslashes and single quotes.
+      "'" + v.toString.replace("\\", "\\\\").replace("'", "\\'") +
+        "'" + st.typeName.substring(6)
     case (v: Byte, ByteType) => s"${v}Y"
     case (v: Short, ShortType) => s"${v}S"
     case (v: Long, LongType) => s"${v}L"

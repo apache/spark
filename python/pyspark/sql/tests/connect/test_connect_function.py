@@ -18,6 +18,7 @@ import os
 import unittest
 from inspect import getmembers, isfunction
 
+from pyspark.util import is_remote_only
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql import SparkSession as PySparkSession
 from pyspark.sql.types import StringType, StructType, StructField, ArrayType, IntegerType
@@ -37,6 +38,7 @@ if should_test_connect:
     from pyspark.sql.connect.dataframe import DataFrame as CDF
 
 
+@unittest.skipIf(is_remote_only(), "Requires JVM access")
 class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, SQLTestUtils):
     """These test cases exercise the interface to the proto plan
     generation but do not call Spark."""

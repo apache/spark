@@ -135,7 +135,9 @@ class JDBCTableCatalog extends TableCatalog
       val schema = JDBCRDD.resolveTable(optionsWithTableName)
       JDBCTable(ident, schema, optionsWithTableName)
     } catch {
-      case _: SQLException => throw QueryCompilationErrors.noSuchTableError(ident)
+      case e: SQLException =>
+        logWarning("Failed to load table", e)
+        throw QueryCompilationErrors.noSuchTableError(ident)
     }
   }
 
