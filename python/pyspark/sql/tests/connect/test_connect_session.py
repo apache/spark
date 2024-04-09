@@ -15,11 +15,12 @@
 # limitations under the License.
 #
 
+import os
 import unittest
 import uuid
 from collections import defaultdict
 
-
+from pyspark.util import is_remote_only
 from pyspark.errors import (
     PySparkException,
     PySparkValueError,
@@ -46,6 +47,7 @@ if should_test_connect:
     from pyspark.sql.connect.client.core import Retrying, SparkConnectClient
 
 
+@unittest.skipIf(is_remote_only(), "Session creation different from local mode")
 class SparkConnectSessionTests(ReusedConnectTestCase):
     def setUp(self) -> None:
         self.spark = (
@@ -130,6 +132,7 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
             {
                 "spark.sql.connect.enrichError.enabled": True,
                 "spark.sql.pyspark.jvmStacktrace.enabled": False,
+                "spark.sql.legacy.timeParserPolicy": "EXCEPTION",
             }
         ):
             with self.sql_conf({"spark.sql.connect.serverStacktrace.enabled": False}):
@@ -247,7 +250,7 @@ class SparkConnectSessionWithOptionsTest(unittest.TestCase):
             .config("integer", 1)
             .config("boolean", False)
             .appName(self.__class__.__name__)
-            .remote("local[4]")
+            .remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[4]"))
             .getOrCreate()
         )
 

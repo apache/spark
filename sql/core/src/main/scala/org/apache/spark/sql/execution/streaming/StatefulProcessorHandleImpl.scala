@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.execution.streaming
 
+import java.util
 import java.util.UUID
 
 import org.apache.spark.TaskContext
@@ -25,7 +26,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.state._
-import org.apache.spark.sql.streaming.{ListState, MapState, QueryInfo, StatefulProcessorHandle, TimeoutMode, ValueState}
+import org.apache.spark.sql.streaming.{ListState, MapState, QueryInfo, StatefulProcessorHandle, TimeoutMode, TTLConfig, TTLMode, ValueState}
 import org.apache.spark.util.Utils
 
 /**
@@ -73,20 +74,30 @@ class QueryInfoImpl(
  * @param runId - unique id for the current run
  * @param keyEncoder - encoder for the key
  * @param isStreaming - defines whether the query is streaming or batch
+ * @param batchTimestampMs - timestamp for the current batch if available
+ * @param metrics - metrics to be updated as part of stateful processing
  */
 class StatefulProcessorHandleImpl(
     store: StateStore,
     runId: UUID,
     keyEncoder: ExpressionEncoder[Any],
+    ttlMode: TTLMode,
     timeoutMode: TimeoutMode,
     isStreaming: Boolean = true,
+    batchTimestampMs: Option[Long] = None,
     metrics: Map[String, SQLMetric] = Map.empty)
   extends StatefulProcessorHandle with Logging {
   import StatefulProcessorHandleState._
 
-  private val BATCH_QUERY_ID = "00000000-0000-0000-0000-000000000000"
-  private def buildQueryInfo(): QueryInfo = {
+  /**
+   * Stores all the active ttl states, and is used to cleanup expired values
+   * in [[doTtlCleanup()]] function.
+   */
+  private[sql] val ttlStates: util.List[TTLState] = new util.ArrayList[TTLState]()
 
+  private val BATCH_QUERY_ID = "00000000-0000-0000-0000-000000000000"
+
+  private def buildQueryInfo(): QueryInfo = {
     val taskCtxOpt = Option(TaskContext.get())
     val (queryId, batchId) = if (!isStreaming) {
       (BATCH_QUERY_ID, 0L)
@@ -105,12 +116,6 @@ class StatefulProcessorHandleImpl(
 
   private var currState: StatefulProcessorHandleState = CREATED
 
-  private def verify(condition: => Boolean, msg: String): Unit = {
-    if (!condition) {
-      throw new IllegalStateException(msg)
-    }
-  }
-
   private def updateMetric(metricName: String): Unit = {
     metrics.get(metricName).foreach(_.add(1))
   }
@@ -121,11 +126,27 @@ class StatefulProcessorHandleImpl(
 
   def getHandleState: StatefulProcessorHandleState = currState
 
-  override def getValueState[T](stateName: String, valEncoder: Encoder[T]): ValueState[T] = {
+  override def getValueState[T](
+      stateName: String,
+      valEncoder: Encoder[T]): ValueState[T] = {
     verifyStateVarOperations("get_value_state")
     updateMetric("numValueStateVars")
     val resultState = new ValueStateImpl[T](store, stateName, keyEncoder, valEncoder)
     resultState
+  }
+
+  override def getValueState[T](
+      stateName: String,
+      valEncoder: Encoder[T],
+      ttlConfig: TTLConfig): ValueState[T] = {
+    verifyStateVarOperations("get_value_state")
+    validateTTLConfig(ttlConfig, stateName)
+
+    assert(batchTimestampMs.isDefined)
+    val valueStateWithTTL = new ValueStateImplWithTTL[T](store, stateName,
+      keyEncoder, valEncoder, ttlConfig, batchTimestampMs.get)
+    ttlStates.add(valueStateWithTTL)
+    valueStateWithTTL
   }
 
   override def getQueryInfo(): QueryInfo = currQueryInfo
@@ -195,6 +216,16 @@ class StatefulProcessorHandleImpl(
   }
 
   /**
+   * Performs the user state cleanup based on assigned TTl values. Any state
+   * which is expired will be cleaned up from StateStore.
+   */
+  def doTtlCleanup(): Unit = {
+    ttlStates.forEach { s =>
+      s.clearExpiredState()
+    }
+  }
+
+  /**
    * Function to delete and purge state variable if defined previously
    *
    * @param stateName - name of the state variable
@@ -221,5 +252,14 @@ class StatefulProcessorHandleImpl(
     updateMetric("numMapStateVars")
     val resultState = new MapStateImpl[K, V](store, stateName, keyEncoder, userKeyEnc, valEncoder)
     resultState
+  }
+
+  private def validateTTLConfig(ttlConfig: TTLConfig, stateName: String): Unit = {
+    val ttlDuration = ttlConfig.ttlDuration
+    if (ttlMode != TTLMode.ProcessingTimeTTL()) {
+      throw StateStoreErrors.cannotProvideTTLConfigForNoTTLMode(stateName)
+    } else if (ttlDuration == null || ttlDuration.isNegative || ttlDuration.isZero) {
+      throw StateStoreErrors.ttlMustBePositive("update", stateName)
+    }
   }
 }

@@ -1558,6 +1558,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS =
+    buildConf("spark.sql.sources.v2.bucketing.allowCompatibleTransforms.enabled")
+      .doc("Whether to allow storage-partition join in the case where the partition transforms " +
+        "are compatible but not identical.  This config requires both " +
+        s"${V2_BUCKETING_ENABLED.key} and ${V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key} to be " +
+        s"enabled and ${V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key} " +
+        "to be disabled."
+      )
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val BUCKETING_MAX_BUCKETS = buildConf("spark.sql.sources.bucketing.maxBuckets")
     .doc("The maximum number of buckets allowed.")
     .version("2.4.0")
@@ -4027,13 +4039,13 @@ object SQLConf {
     .doc("When LEGACY, java.text.SimpleDateFormat is used for formatting and parsing " +
       "dates/timestamps in a locale-sensitive manner, which is the approach before Spark 3.0. " +
       "When set to CORRECTED, classes from java.time.* packages are used for the same purpose. " +
-      "The default value is EXCEPTION, RuntimeException is thrown when we will get different " +
-      "results.")
+      "When set to EXCEPTION, RuntimeException is thrown when we will get different " +
+      "results. The default is CORRECTED.")
     .version("3.0.0")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
-    .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
+    .createWithDefault(LegacyBehaviorPolicy.CORRECTED.toString)
 
   val LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC =
     buildConf("spark.sql.legacy.followThreeValuedLogicInArrayExists")
@@ -5322,6 +5334,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def v2BucketingAllowJoinKeysSubsetOfPartitionKeys: Boolean =
     getConf(SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS)
+
+  def v2BucketingAllowCompatibleTransforms: Boolean =
+    getConf(SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS)
 
   def dataFrameSelfJoinAutoResolveAmbiguity: Boolean =
     getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY)

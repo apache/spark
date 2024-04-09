@@ -26,7 +26,8 @@ import scala.xml.{Node, XML}
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkContext
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.PATH
 import org.apache.spark.internal.config.{SCHEDULER_ALLOCATION_FILE, SCHEDULER_MODE}
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.util.Utils
@@ -99,10 +100,13 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, sc: SparkContext
       fileData.foreach { case (is, fileName) => buildFairSchedulerPool(is, fileName) }
     } catch {
       case NonFatal(t) =>
-        val defaultMessage = "Error while building the fair scheduler pools"
-        val message = fileData.map { case (is, fileName) => s"$defaultMessage from $fileName" }
-          .getOrElse(defaultMessage)
-        logError(message, t)
+        if (fileData.isDefined) {
+          val fileName = fileData.get._2
+          logError(log"Error while building the fair scheduler pools from ${MDC(PATH, fileName)}",
+            t)
+        } else {
+          logError("Error while building the fair scheduler pools", t)
+        }
         throw t
     } finally {
       fileData.foreach { case (is, fileName) => is.close() }

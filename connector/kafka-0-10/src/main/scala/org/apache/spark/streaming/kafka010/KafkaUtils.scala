@@ -24,7 +24,8 @@ import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.SparkContext
 import org.apache.spark.api.java.{ JavaRDD, JavaSparkContext }
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.GROUP_ID
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.api.java.{ JavaInputDStream, JavaStreamingContext }
@@ -192,7 +193,8 @@ object KafkaUtils extends Logging {
     // driver and executor should be in different consumer groups
     val originalGroupId = kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG)
     if (null == originalGroupId) {
-      logError(s"${ConsumerConfig.GROUP_ID_CONFIG} is null, you should probably set it")
+      logError(log"${MDC(GROUP_ID, ConsumerConfig.GROUP_ID_CONFIG)} is null, " +
+        log"you should probably set it")
     }
     val groupId = "spark-executor-" + originalGroupId
     logWarning(s"overriding executor ${ConsumerConfig.GROUP_ID_CONFIG} to ${groupId}")
