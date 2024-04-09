@@ -1351,7 +1351,8 @@ case class Reverse(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   // Input types are utilized by type coercion in ImplicitTypeCasts.
-  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(StringType, ArrayType))
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(StringTypeAnyCollation, ArrayType))
 
   override def dataType: DataType = child.dataType
 
@@ -1365,7 +1366,7 @@ case class Reverse(child: Expression)
         val arrayData = input.asInstanceOf[ArrayData]
         new GenericArrayData(arrayData.toObjectArray(elementType).reverse)
       }
-    case StringType => _.asInstanceOf[UTF8String].reverse()
+    case _: StringType => _.asInstanceOf[UTF8String].reverse()
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {

@@ -53,20 +53,19 @@ from typing import cast, Any, Callable, TypeVar, Union
 from pyspark.util import is_remote_only
 
 if not is_remote_only():
-    from pyspark.core.conf import SparkConf
     from pyspark.core.rdd import RDD, RDDBarrier
     from pyspark.core.files import SparkFiles
     from pyspark.core.status import StatusTracker, SparkJobInfo, SparkStageInfo
     from pyspark.core.broadcast import Broadcast
-    from pyspark.core import conf, rdd, files, status, broadcast
+    from pyspark.core import rdd, files, status, broadcast
 
     # for backward compatibility references.
-    sys.modules["pyspark.conf"] = conf
     sys.modules["pyspark.rdd"] = rdd
     sys.modules["pyspark.files"] = files
     sys.modules["pyspark.status"] = status
     sys.modules["pyspark.broadcast"] = broadcast
 
+from pyspark.conf import SparkConf
 from pyspark.util import InheritableThread, inheritable_thread_target
 from pyspark.storagelevel import StorageLevel
 from pyspark.accumulators import Accumulator, AccumulatorParam

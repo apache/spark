@@ -188,7 +188,8 @@ private[spark] class MetricsSystem private (
         val source = Utils.classForName[Source](classPath).getConstructor().newInstance()
         registerSource(source)
       } catch {
-        case e: Exception => logError("Source class " + classPath + " cannot be instantiated", e)
+        case e: Exception =>
+          logError(log"Source class ${MDC(CLASS_NAME, classPath)} cannot be instantiated", e)
       }
     }
   }
