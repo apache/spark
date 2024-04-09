@@ -38,17 +38,11 @@ object MimaExcludes {
     // [SPARK-44863][UI] Add a button to download thread dump as a txt in Spark UI
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ThreadStackTrace.*"),
     ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.status.api.v1.ThreadStackTrace$"),
-    // [SPARK-44705][PYTHON] Make PythonRunner single-threaded
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.api.python.BasePythonRunner#ReaderIterator.this"),
-    // [SPARK-44198][CORE] Support propagation of the log level to the executors
-    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages$SparkAppConfig$"),
     //[SPARK-46399][Core] Add exit status to the Application End event for the use of Spark Listener
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.SparkListenerApplicationEnd.*"),
     ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.scheduler.SparkListenerApplicationEnd$"),
     // [SPARK-45427][CORE] Add RPC SSL settings to SSLOptions and SparkTransportConf
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.network.netty.SparkTransportConf.fromSparkConf"),
-    // [SPARK-45136][CONNECT] Enhance ClosureCleaner with Ammonite support
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.MethodIdentifier$"),
     // [SPARK-45022][SQL] Provide context for dataset API errors
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.QueryContext.contextType"),
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.QueryContext.code"),
