@@ -306,7 +306,7 @@ case class TransformWithStateExec(
         "Number of value state variables with TTL"),
       StatefulOperatorCustomSumMetric("numListStateVars", "Number of list state variables"),
       StatefulOperatorCustomSumMetric("numMapStateVars", "Number of map state variables"),
-      StatefulOperatorCustomSumMetric("numDeleteStateVars", "Number of deleted state variables"),
+      StatefulOperatorCustomSumMetric("numDeletedStateVars", "Number of deleted state variables"),
       // metrics around timers
       StatefulOperatorCustomSumMetric("numRegisteredTimers", "Number of registered timers"),
       StatefulOperatorCustomSumMetric("numDeletedTimers", "Number of deleted timers"),

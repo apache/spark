@@ -202,6 +202,10 @@ class TransformWithValueStateTTLSuite
             triggerClock = clock,
             checkpointLocation = dir.getAbsolutePath),
           AddData(inputStream, InputEvent("k1", "put", 1)),
+          Execute(q =>
+            assert(q.lastProgress
+              .stateOperators(0).customMetrics.get("numValueStateWithTTLVars") > 0)
+          ),
           // advance clock to trigger processing
           AdvanceManualClock(1 * 1000),
           CheckNewAnswer(),
