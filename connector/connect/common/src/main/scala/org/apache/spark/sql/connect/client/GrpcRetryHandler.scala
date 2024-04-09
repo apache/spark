@@ -22,7 +22,7 @@ import scala.util.control.NonFatal
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.LogKey.{POLICY, RETRY_COUNT, WAIT_TIME}
+import org.apache.spark.internal.LogKey.{ERROR, POLICY, RETRY_COUNT, WAIT_TIME}
 import org.apache.spark.internal.MDC
 
 private[sql] class GrpcRetryHandler(
@@ -189,9 +189,8 @@ private[sql] object GrpcRetryHandler extends Logging {
       if (lastException.isInstanceOf[RetryException]) {
         // retry exception is considered immediately retriable without any policies.
         logWarning(
-          log"Retrying (currentRetryNum=${MDC(RETRY_COUNT, currentRetryNum)}), " +
-            log"Non-Fatal error during RPC execution:",
-          lastException)
+          log"Non-Fatal error during RPC execution: ${MDC(ERROR, lastException)}, " +
+            log"retrying (currentRetryNum=${MDC(RETRY_COUNT, currentRetryNum)})")
         return
       }
 
@@ -200,20 +199,18 @@ private[sql] object GrpcRetryHandler extends Logging {
 
         if (time.isDefined) {
           logWarning(
-            log"Retrying (wait=${MDC(WAIT_TIME, time.get.toMillis)}, " +
+            log"Non-Fatal error during RPC execution: ${MDC(ERROR, lastException)}, " +
+              log"retrying (wait=${MDC(WAIT_TIME, time.get.toMillis)} ms, " +
               log"currentRetryNum=${MDC(RETRY_COUNT, currentRetryNum)}, " +
-              log"policy=${MDC(POLICY, policy.getName)}), Non-Fatal error during RPC execution: ",
-            lastException)
-
+              log"policy=${MDC(POLICY, policy.getName)}).")
           sleep(time.get.toMillis)
           return
         }
       }
 
       logWarning(
-        log"Exceeded retries (currentRetryNum=${MDC(RETRY_COUNT, currentRetryNum)}), " +
-          log"Non-Fatal error during RPC execution: ",
-        lastException)
+        log"Non-Fatal error during RPC execution: ${MDC(ERROR, lastException)}, " +
+          log"exceeded retries (currentRetryNum=${MDC(RETRY_COUNT, currentRetryNum)})")
 
       val error = new RetriesExceeded()
       exceptionList.foreach(error.addSuppressed)

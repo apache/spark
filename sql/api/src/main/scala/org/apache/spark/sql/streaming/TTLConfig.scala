@@ -17,38 +17,14 @@
 
 package org.apache.spark.sql.streaming
 
-import java.io.Serializable
+import java.time.Duration
 
-import org.apache.spark.annotation.{Evolving, Experimental}
-
-@Experimental
-@Evolving
 /**
- * Interface used for arbitrary stateful operations with the v2 API to capture
- * single value state.
+ * TTL Configuration for state variable. State values will not be returned past ttlDuration,
+ * and will be eventually removed from the state store. Any state update resets the ttl to
+ * current processing time plus ttlDuration.
+ *
+ * @param ttlDuration time to live duration for state
+ *                    stored in the state variable.
  */
-private[sql] trait ValueState[S] extends Serializable {
-
-  /** Whether state exists or not. */
-  def exists(): Boolean
-
-  /**
-   * Get the state value if it exists
-   * @throws java.util.NoSuchElementException if the state does not exist
-   */
-  @throws[NoSuchElementException]
-  def get(): S
-
-  /** Get the state if it exists as an option and None otherwise */
-  def getOption(): Option[S]
-
-  /**
-   * Update the value of the state.
-   *
-   * @param newState    the new value
-   */
-  def update(newState: S): Unit
-
-  /** Remove this state. */
-  def clear(): Unit
-}
+case class TTLConfig(ttlDuration: Duration)

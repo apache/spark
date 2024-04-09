@@ -53,6 +53,8 @@ object LogKey extends Enumeration {
   val EXIT_CODE = Value
   val FAILURES = Value
   val GROUP_ID = Value
+  val HIVE_OPERATION_STATE = Value
+  val HIVE_OPERATION_TYPE = Value
   val HOST = Value
   val INDEX = Value
   val JOB_ID = Value
@@ -111,6 +113,7 @@ object LogKey extends Enumeration {
   val SIZE = Value
   val SLEEP_TIME = Value
   val STAGE_ID = Value
+  val STATEMENT_ID = Value
   val STATUS = Value
   val STREAM_NAME = Value
   val SUBMISSION_ID = Value
