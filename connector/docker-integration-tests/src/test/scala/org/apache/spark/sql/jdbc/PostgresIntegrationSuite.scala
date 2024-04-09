@@ -23,7 +23,6 @@ import java.text.SimpleDateFormat
 import java.time.LocalDateTime
 import java.util.Properties
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.types._
@@ -514,19 +513,17 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
 
     sql("select array(array(1, 2), array(3, 4)) as col0").write
       .jdbc(jdbcUrl, "double_dim_array", new Properties)
+
+    checkAnswer(
+      spark.read.jdbc(jdbcUrl, "double_dim_array", new Properties),
+      Row(Seq(Seq(1, 2), Seq(3, 4))))
+
     sql("select array(array(array(1, 2), array(3, 4)), array(array(5, 6), array(7, 8))) as col0")
       .write.jdbc(jdbcUrl, "triple_dim_array", new Properties)
-    // Reading multi-dimensional array is not supported yet.
-    checkError(
-      exception = intercept[SparkException] {
-        spark.read.jdbc(jdbcUrl, "double_dim_array", new Properties).collect()
-      },
-      errorClass = null)
-    checkError(
-      exception = intercept[SparkException] {
-        spark.read.jdbc(jdbcUrl, "triple_dim_array", new Properties).collect()
-      },
-      errorClass = null)
+
+    checkAnswer(
+      spark.read.jdbc(jdbcUrl, "triple_dim_array", new Properties),
+      Row(Seq(Seq(Seq(1, 2), Seq(3, 4)), Seq(Seq(5, 6), Seq(7, 8)))))
   }
 
   test("SPARK-47701: Reading complex type") {

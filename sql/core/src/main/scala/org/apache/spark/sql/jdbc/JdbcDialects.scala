@@ -798,6 +798,22 @@ abstract class JdbcDialect extends Serializable with Logging {
   protected final def getTimestampType(md: Metadata): DataType = {
     JdbcUtils.getTimestampType(md.getBoolean("isTimestampNTZ"))
   }
+
+  /**
+   * Return the array dimension of the column. The array dimension will be carried in the
+   * metadata of the column and used by `getCatalystType` to determine the dimension of the
+   * ArrayType.
+   *
+   * @param conn The connection currently connection being used.
+   * @param tableName The name of the table which the column belongs to.
+   * @param columnName The name of the column.
+   * @return An Option[Int] which contains the number of array dimension.
+   *         If Some(n), the column is an array with n dimensions.
+   *         If the method is un-implemented, or some error encountered, return None.
+   *         Then, `getCatalystType` will try use 1 dimension as default for arrays.
+   */
+  @Since("4.0.0")
+  def getArrayDimension(conn: Connection, tableName: String, columnName: String): Option[Int] = None
 }
 
 /**
