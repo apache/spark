@@ -28,7 +28,7 @@ import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.{SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
@@ -166,16 +166,29 @@ abstract class JdbcDialect extends Serializable with Logging {
   @Since("4.0.0")
   def convertJavaDateToDate(d: Date): Date = d
 
+  /**
+   * Converts an year-month interval string to an int value `months`.
+   *
+   * @param yearmonthStr the year-month interval string
+   * @return the number of total months in the interval
+   * @throws SparkIllegalArgumentException if the input string is invalid
+   */
   @Since("4.0.0")
   def getYearMonthIntervalAsMonths(yearmonthStr: String): Int = {
     fromYearMonthString(yearmonthStr).months
   }
 
+  /**
+   * Converts a day-time interval string to a long value `micros`.
+   *
+   * @param daytimeStr the day-time interval string
+   * @return the number of total microseconds in the interval
+   * @throws SparkIllegalArgumentException if the input string is invalid
+   */
   @Since("4.0.0")
   def getDayTimeIntervalAsMicros(daytimeStr: String): Long = {
     getDuration(fromDayTimeString(daytimeStr), TimeUnit.MICROSECONDS)
   }
-
 
   /**
    * Convert java.sql.Timestamp to a LocalDateTime representing the same wall-clock time as the
