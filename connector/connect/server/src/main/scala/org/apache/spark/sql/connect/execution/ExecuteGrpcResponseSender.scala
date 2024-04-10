@@ -24,7 +24,9 @@ import io.grpc.stub.{ServerCallStreamObserver, StreamObserver}
 
 import org.apache.spark.{SparkEnv, SparkSQLException}
 import org.apache.spark.connect.proto.ExecutePlanResponse
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{INDEX, OP_ID, TOTAL_TIME, WAIT_RESULT_TIME, WAIT_SEND_TIME}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.connect.common.ProtoUtils
 import org.apache.spark.sql.connect.config.Connect.{CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_DURATION, CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_SIZE, CONNECT_PROGRESS_REPORT_INTERVAL}
 import org.apache.spark.sql.connect.service.{ExecuteHolder, SparkConnectService}
@@ -268,10 +270,15 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
       // Process the outcome of the inner loop.
       if (interrupted) {
         // This sender got interrupted. Kill this RPC.
+        val totalTime = (System.nanoTime - startTime) / NANOS_PER_MILLIS.toDouble
+        val waitResultTime = consumeSleep / NANOS_PER_MILLIS.toDouble
+        val waitSendTime = sendSleep / NANOS_PER_MILLIS.toDouble
         logWarning(
-          s"Got detached from opId=${executeHolder.operationId} at index ${nextIndex - 1}." +
-            s"totalTime=${System.nanoTime - startTime}ns " +
-            s"waitingForResults=${consumeSleep}ns waitingForSend=${sendSleep}ns")
+          log"Got detached from opId=${MDC(OP_ID, executeHolder.operationId)} " +
+            log"at index ${MDC(INDEX, nextIndex - 1)}." +
+            log"totalTime=${MDC(TOTAL_TIME, totalTime)} ms " +
+            log"waitingForResults=${MDC(WAIT_RESULT_TIME, waitResultTime)} ms " +
+            log"waitingForSend=${MDC(WAIT_SEND_TIME, waitSendTime)} ms")
         throw new SparkSQLException(errorClass = "INVALID_CURSOR.DISCONNECTED", Map.empty)
       } else if (gotResponse) {
         enqueueProgressMessage()
