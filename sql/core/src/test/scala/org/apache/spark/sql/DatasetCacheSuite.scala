@@ -20,11 +20,13 @@ package org.apache.spark.sql
 import org.scalatest.concurrent.TimeLimits
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.tags.SlowSQLTest
 
@@ -274,19 +276,44 @@ class DatasetCacheSuite extends QueryTest
     }
   }
 
-  test("SPARK-47609. InMemoryRelation used when plans are partially matched ") {
-    val df = spark.range(0, 50).selectExpr("id as a ", "id % 2 AS b", "id % 3 AS c")
-    val df1 = df.withColumn("d", $"a" + 1)
-    df1.cache()
-    df1.collect()
-    // df2 should be able to use IMR
-    val df2 = df.select($"a", $"c")
-    assert(df2.queryExecution.executedPlan.exists(_.isInstanceOf[InMemoryTableScanExec]))
-    val rows = df2.collect()
-    df1.unpersist(true)
-    val uncachedDf2 = df.select($"a", $"c")
-    assert(!uncachedDf2.queryExecution.executedPlan.exists(_.isInstanceOf[InMemoryTableScanExec]))
-    checkAnswer(uncachedDf2, rows)
+  test("SPARK-47609. Partial match IMR with more columns than base") {
+    val baseDfCreator = () => spark.range(0, 50).selectExpr("id as a ", "id % 2 AS b",
+      "id % 3 AS c")
+    val df1 = checkIMRUseAndInvalidation(baseDfCreator, df => df.withColumn("d", $"a" + 1))
+  }
+
+  test("SPARK-47609. Partial match IMR with less columns than base") {
+    val baseDfCreator = () => spark.range(0, 50).selectExpr("id as a ", "id % 2 AS b",
+      "id % 3 AS c")
+    val df1 = checkIMRUseAndInvalidation(baseDfCreator, df => df.select(($"a" + $"c").as("t")))
+  }
+
+  test("SPARK-47609. Partial match IMR with columns remapped to different value") {
+    val baseDfCreator = () => spark.range(0, 50).selectExpr("id as a ", "id % 2 AS b",
+      "id % 3 AS c")
+    val df1 = checkIMRUseAndInvalidation(baseDfCreator, df => df.select(($"a" + $"c").as("a")))
+  }
+
+  test("SPARK-47609. Partial match IMR with extra columns as literal") {
+    val baseDfCreator = () => spark.range(0, 50).selectExpr("id as a ", "id % 2 AS b",
+      "id % 3 AS c")
+    val df1 = checkIMRUseAndInvalidation(baseDfCreator,
+      df => df.select(expr("100").cast(IntegerType).as("t"), $"c", $"a"))
+  }
+
+  test("SPARK-47609. Partial match IMR with multiple columns remap") {
+    val baseDfCreator = () => spark.range(0, 50).selectExpr("id as a ", "id % 2 AS b",
+      "id % 3 AS c")
+    val df1 = checkIMRUseAndInvalidation(baseDfCreator,
+      df => df.select( ($"c" * $"b").as("c"), ($"a" - $"c").as("a"), $"a".as("b")))
+  }
+
+  test("SPARK-47609. Partial match IMR with multiple columns remap and one remap as constant") {
+    val baseDfCreator = () => spark.range(0, 50).selectExpr("id as a ", "id % 2 AS b",
+      "id % 3 AS c")
+    val df1 = checkIMRUseAndInvalidation(baseDfCreator,
+      df => df.select(($"c" * $"b").as("c"), ($"a" - $"c").as("a"),
+        expr("100").cast(IntegerType).as("b"), $"b".as("d")))
   }
 
   test("SPARK-44653: non-trivial DataFrame unions should not break caching") {
@@ -325,5 +352,41 @@ class DatasetCacheSuite extends QueryTest
         assert(!finalDf.queryExecution.executedPlan.exists(_.isInstanceOf[InMemoryTableScanExec]))
       }
     }
+  }
+
+  protected def checkIMRUseAndInvalidation(
+      baseDfCreator: () => DataFrame,
+      testExec: DataFrame => DataFrame): Unit = {
+
+    def recurse(sparkPlan: SparkPlan): Int = {
+      val imrs = sparkPlan.collect {
+        case i: InMemoryTableScanExec => i
+      }
+      imrs.size + imrs.map(ime => recurse(ime.relation.cacheBuilder.cachedPlan)).sum
+    }
+
+    def verifyCacheDependency(df: DataFrame, numOfCachesExpected: Int): Unit = {
+      val cachedPlans = df.queryExecution.withCachedData.collect {
+        case i: InMemoryRelation => i.cacheBuilder.cachedPlan
+      }
+      val totalIMRs = cachedPlans.size + cachedPlans.map(ime => recurse(ime)).sum
+      assert(totalIMRs == numOfCachesExpected)
+    }
+
+    // now check if the results of optimized dataframe and completely unoptimized dataframe are
+    // same
+    val baseDf = baseDfCreator()
+    val testDf = testExec(baseDfCreator())
+    val testDfRows = testDf.collect()
+    baseDf.cache()
+    verifyCacheDependency(baseDfCreator(), 1)
+    verifyCacheDependency(testExec(baseDfCreator()), 1)
+    baseDfCreator().unpersist(true)
+    verifyCacheDependency(baseDfCreator(), 0)
+    verifyCacheDependency(testExec(baseDfCreator()), 0)
+    baseDfCreator().cache()
+    val newTestDf = testExec(baseDfCreator())
+    checkAnswer(newTestDf, testDfRows)
+    baseDfCreator().unpersist(true)
   }
 }
