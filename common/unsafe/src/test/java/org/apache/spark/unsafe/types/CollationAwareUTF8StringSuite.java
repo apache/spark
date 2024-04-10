@@ -18,23 +18,68 @@ package org.apache.spark.unsafe.types;
 
 import org.apache.spark.SparkException;
 import org.apache.spark.sql.catalyst.util.CollationFactory;
+import org.apache.spark.sql.catalyst.util.CollationSupport;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 
-public class UTF8StringWithCollationSuite {
+public class CollationAwareUTF8StringSuite {
+
+  private void assertContains(String pattern, String target, String collationName, boolean value)
+          throws SparkException {
+    UTF8String l = UTF8String.fromString(pattern);
+    UTF8String r = UTF8String.fromString(target);
+    int collationId = CollationFactory.collationNameToId(collationName);
+    assertEquals(CollationSupport.StartsWith.startsWithCollationAware(l, r, collationId), value);
+  }
 
   private void assertStartsWith(String pattern, String prefix, String collationName, boolean value)
       throws SparkException {
-    assertEquals(UTF8String.fromString(pattern).startsWith(UTF8String.fromString(prefix),
-        CollationFactory.collationNameToId(collationName)), value);
+    UTF8String l = UTF8String.fromString(pattern);
+    UTF8String r = UTF8String.fromString(prefix);
+    int collationId = CollationFactory.collationNameToId(collationName);
+    assertEquals(CollationSupport.StartsWith.startsWithCollationAware(l, r, collationId), value);
   }
 
   private void assertEndsWith(String pattern, String suffix, String collationName, boolean value)
       throws SparkException {
-    assertEquals(UTF8String.fromString(pattern).endsWith(UTF8String.fromString(suffix),
-        CollationFactory.collationNameToId(collationName)), value);
+    UTF8String l = UTF8String.fromString(pattern);
+    UTF8String r = UTF8String.fromString(suffix);
+    int collationId = CollationFactory.collationNameToId(collationName);
+    assertEquals(CollationSupport.EndsWith.endsWithCollationAware(l, r, collationId), value);
+  }
+
+  @Test
+  public void containsTest() throws SparkException {
+    assertContains("", "", "UTF8_BINARY", true);
+    assertContains("c", "", "UTF8_BINARY", true);
+    assertContains("", "c", "UTF8_BINARY", false);
+    assertContains("abcde", "a", "UTF8_BINARY", true);
+    assertContains("abcde", "A", "UTF8_BINARY", false);
+    assertContains("abcde", "bcd", "UTF8_BINARY", false);
+    assertContains("abcde", "BCD", "UTF8_BINARY", false);
+    assertContains("", "", "UNICODE", true);
+    assertContains("c", "", "UNICODE", true);
+    assertContains("", "c", "UNICODE", false);
+    assertContains("abcde", "a", "UNICODE", true);
+    assertContains("abcde", "A", "UNICODE", false);
+    assertContains("abcde", "bcd", "UNICODE", false);
+    assertContains("abcde", "BCD", "UNICODE", false);
+    assertContains("", "", "UTF8_BINARY_LCASE", true);
+    assertContains("c", "", "UTF8_BINARY_LCASE", true);
+    assertContains("", "c", "UTF8_BINARY_LCASE", false);
+    assertContains("abcde", "a", "UTF8_BINARY_LCASE", true);
+    assertContains("abcde", "A", "UTF8_BINARY_LCASE", true);
+    assertContains("abcde", "abc", "UTF8_BINARY_LCASE", true);
+    assertContains("abcde", "BCD", "UTF8_BINARY_LCASE", false);
+    assertContains("", "", "UNICODE_CI", true);
+    assertContains("c", "", "UNICODE_CI", true);
+    assertContains("", "c", "UNICODE_CI", false);
+    assertContains("abcde", "a", "UNICODE_CI", true);
+    assertContains("abcde", "A", "UNICODE_CI", true);
+    assertContains("abcde", "abc", "UNICODE_CI", true);
+    assertContains("abcde", "BCD", "UNICODE_CI", false);
   }
 
   @Test

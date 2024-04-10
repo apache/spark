@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UPPER_OR_LOWER}
-import org.apache.spark.sql.catalyst.util.{ArrayData, CollationStringExpressions, GenericArrayData, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CollationSupport, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -590,11 +590,11 @@ object ContainsExpressionBuilder extends StringBinaryPredicateExpressionBuilderB
 
 case class Contains(left: Expression, right: Expression) extends StringPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = {
-    CollationStringExpressions.Contains.containsCollationAware(l, r, collationId)
+    CollationSupport.Contains.containsCollationAware(l, r, collationId)
   }
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) =>
-      CollationStringExpressions.Contains.containsGenCode(c1, c2, collationId))
+      CollationSupport.Contains.containsGenCode(c1, c2, collationId))
   }
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): Contains = copy(left = newLeft, right = newRight)
@@ -630,12 +630,12 @@ object StartsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilde
 
 case class StartsWith(left: Expression, right: Expression) extends StringPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = {
-    CollationStringExpressions.StartsWith.startsWithCollationAware(l, r, collationId)
+    CollationSupport.StartsWith.startsWithCollationAware(l, r, collationId)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) =>
-      CollationStringExpressions.StartsWith.startsWithGenCode(c1, c2, collationId))
+      CollationSupport.StartsWith.startsWithGenCode(c1, c2, collationId))
   }
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): StartsWith = copy(left = newLeft, right = newRight)
@@ -671,12 +671,12 @@ object EndsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilderB
 
 case class EndsWith(left: Expression, right: Expression) extends StringPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = {
-    CollationStringExpressions.EndsWith.endsWithCollationAware(l, r, collationId)
+    CollationSupport.EndsWith.endsWithCollationAware(l, r, collationId)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) =>
-      CollationStringExpressions.EndsWith.endsWithGenCode(c1, c2, collationId))
+      CollationSupport.EndsWith.endsWithGenCode(c1, c2, collationId))
   }
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): EndsWith = copy(left = newLeft, right = newRight)

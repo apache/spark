@@ -23,7 +23,7 @@ import org.apache.spark.unsafe.types.UTF8String;
 /**
  * Static entry point for collation aware string expressions.
  */
-public final class CollationStringExpressions {
+public final class CollationSupport {
 
   /**
    * Collation aware string expressions.
@@ -40,11 +40,11 @@ public final class CollationStringExpressions {
     }
     public static String containsGenCode(String l, String r, int collationId) {
       if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
-        return String.format("CollationStringExpressions.Contains.containsBinary(%s, %s)", l, r);
+        return String.format("CollationSupport.Contains.containsBinary(%s, %s)", l, r);
       } else if (CollationFactory.fetchCollation(collationId).supportsLowercaseEquality) {
-        return String.format("CollationStringExpressions.Contains.containsLowercase(%s, %s)", l, r);
+        return String.format("CollationSupport.Contains.containsLowercase(%s, %s)", l, r);
       } else {
-        return String.format("CollationStringExpressions.Contains.containsICU(%s, %s, %d)", l, r, collationId);
+        return String.format("CollationSupport.Contains.containsICU(%s, %s, %d)", l, r, collationId);
       }
     }
     public static boolean containsBinary(UTF8String l, UTF8String r) {
@@ -73,11 +73,11 @@ public final class CollationStringExpressions {
     }
     public static String startsWithGenCode(String l, String r, int collationId) {
       if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
-        return String.format("CollationStringExpressions.StartsWith.startsWithBinary(%s, %s)", l, r);
+        return String.format("CollationSupport.StartsWith.startsWithBinary(%s, %s)", l, r);
       } else if (CollationFactory.fetchCollation(collationId).supportsLowercaseEquality) {
-        return String.format("CollationStringExpressions.StartsWith.startsWithLowercase(%s, %s)", l, r);
+        return String.format("CollationSupport.StartsWith.startsWithLowercase(%s, %s)", l, r);
       } else {
-        return String.format("CollationStringExpressions.StartsWith.startsWithICU(%s, %s, %d)", l, r, collationId);
+        return String.format("CollationSupport.StartsWith.startsWithICU(%s, %s, %d)", l, r, collationId);
       }
     }
     public static boolean startsWithBinary(final UTF8String l, final UTF8String r) {
@@ -103,11 +103,11 @@ public final class CollationStringExpressions {
     }
     public static String endsWithGenCode(String l, String r, int collationId) {
       if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
-        return String.format("CollationStringExpressions.EndsWith.endsWithBinary(%s, %s)", l, r);
+        return String.format("CollationSupport.EndsWith.endsWithBinary(%s, %s)", l, r);
       } else if (CollationFactory.fetchCollation(collationId).supportsLowercaseEquality) {
-        return String.format("CollationStringExpressions.EndsWith.endsWithLowercase(%s, %s)", l, r);
+        return String.format("CollationSupport.EndsWith.endsWithLowercase(%s, %s)", l, r);
       } else {
-        return String.format("CollationStringExpressions.EndsWith.endsWithICU(%s, %s, %d)", l, r, collationId);
+        return String.format("CollationSupport.EndsWith.endsWithICU(%s, %s, %d)", l, r, collationId);
       }
     }
     public static boolean endsWithBinary(final UTF8String l, final UTF8String r) {
