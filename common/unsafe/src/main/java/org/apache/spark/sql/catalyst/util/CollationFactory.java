@@ -180,13 +180,19 @@ public final class CollationFactory {
    */
 
   public static StringSearch getStringSearch(
-      final UTF8String left,
-      final UTF8String right,
+      final UTF8String targetUTF8String,
+      final UTF8String patternUTF8String,
       final int collationId) {
-    String pattern = right.toString();
-    CharacterIterator target = new StringCharacterIterator(left.toString());
+    String pattern = patternUTF8String.toString();
+    CharacterIterator target = new StringCharacterIterator(targetUTF8String.toString());
     Collator collator = CollationFactory.fetchCollation(collationId).collator;
     return new StringSearch(pattern, target, (RuleBasedCollator) collator);
+  }
+
+  public static StringSearch getStringSearch(
+          final UTF8String targetUTF8String,
+          final UTF8String patternUTF8String) {
+    return new StringSearch(patternUTF8String.toString(), targetUTF8String.toString());
   }
 
   /**

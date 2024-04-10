@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UPPER_OR_LOWER}
-import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, CollationStringExpressions, GenericArrayData, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CollationStringExpressions, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -590,25 +590,11 @@ object ContainsExpressionBuilder extends StringBinaryPredicateExpressionBuilderB
 
 case class Contains(left: Expression, right: Expression) extends StringPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = {
-    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
-      CollationStringExpressions.Contains.containsBinary(l, r)
-    } else if (CollationFactory.fetchCollation(collationId).supportsLowercaseEquality) {
-      CollationStringExpressions.Contains.containsLowercase(l, r)
-    } else {
-      CollationStringExpressions.Contains.containsICU(l, r, collationId)
-    }
+    CollationStringExpressions.Contains.containsCollationAware(l, r, collationId)
   }
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
-      defineCodeGen(ctx, ev, (c1, c2) =>
-        s"CollationStringExpressions.Contains.containsBinary($c1, $c2)")
-    } else if (CollationFactory.fetchCollation(collationId).supportsLowercaseEquality) {
-      defineCodeGen(ctx, ev, (c1, c2) =>
-        s"CollationStringExpressions.Contains.containsLowercase($c1, $c2)")
-    } else {
-      defineCodeGen(ctx, ev, (c1, c2) =>
-        s"CollationStringExpressions.Contains.containsICU($c1, $c2, $collationId)")
-    }
+    defineCodeGen(ctx, ev, (c1, c2) =>
+      CollationStringExpressions.Contains.containsGenCode(c1, c2, collationId))
   }
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): Contains = copy(left = newLeft, right = newRight)
@@ -644,26 +630,12 @@ object StartsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilde
 
 case class StartsWith(left: Expression, right: Expression) extends StringPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = {
-    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
-      CollationStringExpressions.StartsWith.startsWithBinary(l, r)
-    } else if (CollationFactory.fetchCollation(collationId).supportsLowercaseEquality) {
-      CollationStringExpressions.StartsWith.startsWithLowercase(l, r)
-    } else {
-      CollationStringExpressions.StartsWith.startsWithICU(l, r, collationId)
-    }
+    CollationStringExpressions.StartsWith.startsWithCollationAware(l, r, collationId)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
-      defineCodeGen(ctx, ev, (c1, c2) =>
-        s"CollationStringExpressions.StartsWith.startsWithBinary($c1, $c2)")
-    } else if (CollationFactory.fetchCollation(collationId).supportsLowercaseEquality) {
-      defineCodeGen(ctx, ev, (c1, c2) =>
-        s"CollationStringExpressions.StartsWith.startsWithLowercase($c1, $c2)")
-    } else {
-      defineCodeGen(ctx, ev, (c1, c2) =>
-        s"CollationStringExpressions.StartsWith.startsWithICU($c1, $c2, $collationId)")
-    }
+    defineCodeGen(ctx, ev, (c1, c2) =>
+      CollationStringExpressions.StartsWith.startsWithGenCode(c1, c2, collationId))
   }
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): StartsWith = copy(left = newLeft, right = newRight)
@@ -699,26 +671,12 @@ object EndsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilderB
 
 case class EndsWith(left: Expression, right: Expression) extends StringPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = {
-    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
-      CollationStringExpressions.EndsWith.endsWithBinary(l, r)
-    } else if (CollationFactory.fetchCollation(collationId).supportsLowercaseEquality) {
-      CollationStringExpressions.EndsWith.endsWithLowercase(l, r)
-    } else {
-      CollationStringExpressions.EndsWith.endsWithICU(l, r, collationId)
-    }
+    CollationStringExpressions.EndsWith.endsWithCollationAware(l, r, collationId)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
-      defineCodeGen(ctx, ev, (c1, c2) =>
-        s"CollationStringExpressions.EndsWith.endsWithBinary($c1, $c2)")
-    } else if (CollationFactory.fetchCollation(collationId).supportsLowercaseEquality) {
-      defineCodeGen(ctx, ev, (c1, c2) =>
-        s"CollationStringExpressions.EndsWith.endsWithLowercase($c1, $c2)")
-    } else {
-      defineCodeGen(ctx, ev, (c1, c2) =>
-        s"CollationStringExpressions.EndsWith.endsWithICU($c1, $c2, $collationId)")
-    }
+    defineCodeGen(ctx, ev, (c1, c2) =>
+      CollationStringExpressions.EndsWith.endsWithGenCode(c1, c2, collationId))
   }
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): EndsWith = copy(left = newLeft, right = newRight)

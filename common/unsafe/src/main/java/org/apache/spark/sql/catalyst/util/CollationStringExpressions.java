@@ -25,7 +25,28 @@ import org.apache.spark.unsafe.types.UTF8String;
  */
 public final class CollationStringExpressions {
 
+  /**
+   * Collation aware string expressions.
+   */
   public static class Contains {
+    public static boolean containsCollationAware(UTF8String l, UTF8String r, int collationId) {
+      if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
+        return containsBinary(l, r);
+      } else if (CollationFactory.fetchCollation(collationId).supportsLowercaseEquality) {
+        return containsLowercase(l, r);
+      } else {
+        return containsICU(l, r, collationId);
+      }
+    }
+    public static String containsGenCode(String l, String r, int collationId) {
+      if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
+        return String.format("CollationStringExpressions.Contains.containsBinary(%s, %s)", l, r);
+      } else if (CollationFactory.fetchCollation(collationId).supportsLowercaseEquality) {
+        return String.format("CollationStringExpressions.Contains.containsLowercase(%s, %s)", l, r);
+      } else {
+        return String.format("CollationStringExpressions.Contains.containsICU(%s, %s, %d)", l, r, collationId);
+      }
+    }
     public static boolean containsBinary(UTF8String l, UTF8String r) {
       return l.contains(r);
     }
@@ -41,6 +62,24 @@ public final class CollationStringExpressions {
   }
 
   public static class StartsWith {
+    public static boolean startsWithCollationAware(UTF8String l, UTF8String r, int collationId) {
+      if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
+        return startsWithBinary(l, r);
+      } else if (CollationFactory.fetchCollation(collationId).supportsLowercaseEquality) {
+        return startsWithLowercase(l, r);
+      } else {
+        return startsWithICU(l, r, collationId);
+      }
+    }
+    public static String startsWithGenCode(String l, String r, int collationId) {
+      if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
+        return String.format("CollationStringExpressions.StartsWith.startsWithBinary(%s, %s)", l, r);
+      } else if (CollationFactory.fetchCollation(collationId).supportsLowercaseEquality) {
+        return String.format("CollationStringExpressions.StartsWith.startsWithLowercase(%s, %s)", l, r);
+      } else {
+        return String.format("CollationStringExpressions.StartsWith.startsWithICU(%s, %s, %d)", l, r, collationId);
+      }
+    }
     public static boolean startsWithBinary(final UTF8String l, final UTF8String r) {
       return l.startsWith(r);
     }
@@ -53,6 +92,24 @@ public final class CollationStringExpressions {
   }
 
   public static class EndsWith {
+    public static boolean endsWithCollationAware(UTF8String l, UTF8String r, int collationId) {
+      if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
+        return endsWithBinary(l, r);
+      } else if (CollationFactory.fetchCollation(collationId).supportsLowercaseEquality) {
+        return endsWithLowercase(l, r);
+      } else {
+        return endsWithICU(l, r, collationId);
+      }
+    }
+    public static String endsWithGenCode(String l, String r, int collationId) {
+      if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
+        return String.format("CollationStringExpressions.EndsWith.endsWithBinary(%s, %s)", l, r);
+      } else if (CollationFactory.fetchCollation(collationId).supportsLowercaseEquality) {
+        return String.format("CollationStringExpressions.EndsWith.endsWithLowercase(%s, %s)", l, r);
+      } else {
+        return String.format("CollationStringExpressions.EndsWith.endsWithICU(%s, %s, %d)", l, r, collationId);
+      }
+    }
     public static boolean endsWithBinary(final UTF8String l, final UTF8String r) {
       return l.endsWith(r);
     }
@@ -64,6 +121,9 @@ public final class CollationStringExpressions {
     }
   }
 
+  /**
+   * Utility class for collation support for UTF8String.
+   */
   private static class CollationAwareUTF8String {
     private static boolean matchAt(final UTF8String first, final UTF8String second, final int pos, final int collationId) {
       if (second.numChars() + pos > first.numChars() || pos < 0) {
