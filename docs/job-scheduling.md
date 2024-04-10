@@ -54,6 +54,10 @@ Resource allocation can be configured as follows, based on the cluster type:
   (`spark.executor.memory` configuration property) and `--executor-cores` (`spark.executor.cores` configuration
   property) control the resources per executor. For more information, see the
   [YARN Spark Properties](running-on-yarn.html#spark-properties).
+* **K8S:** The same as the situation with Yarn, please refer to the description of Yarn above. Furthermore,
+  Spark on K8S offers higher priority versions of spark.kubernetes.executor.limit.core and
+  spark.kubernetes.executor.request.core than spark.executor.core. For more information, see the
+  [K8S Spark Properties](running-on-kubernetes.html#spark-properties).
 
 Note that none of the modes currently provide memory sharing across applications. If you would like to share
 data this way, we recommend running a single server application that can serve multiple requests by querying
@@ -91,6 +95,8 @@ without deleting shuffle files written by them (more detail described
 In standalone mode, simply start your workers with `spark.shuffle.service.enabled` set to `true`.
 
 In YARN mode, follow the instructions [here](running-on-yarn.html#configuring-the-external-shuffle-service).
+
+In K8S mode, follow the future work [here](running-on-kubernetes.html#future-work).
 
 All other relevant configurations are optional and under the `spark.dynamicAllocation.*` and
 `spark.shuffle.service.*` namespaces. For more detail, see the
