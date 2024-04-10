@@ -242,6 +242,8 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
     }
   }
 
+  // Verify prefetch and cache pattern of SimpleDataSourceStreamReader handle empty
+  // data batch correctly.
   test("SimpleDataSourceStreamReader read empty batch") {
     assume(shouldTestPandasUDFs)
     val dataSourceScript =
@@ -306,6 +308,7 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
       val outputDir = new File(path, "output")
       val df = spark.readStream.format(dataSourceName).load()
       var lastBatch = 0
+      // Restart streaming query multiple times to verify exactly once guarantee.
       for (_ <- 1 to 5) {
         val q = df
           .writeStream
