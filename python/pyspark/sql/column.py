@@ -209,11 +209,10 @@ def _bin_op(
                 spark.conf.get("spark.sql.stackTracesInDataFrameContext")  # type: ignore[arg-type]
             )
             selected_frames = stack[:depth]
-            logging_info_list = [f"{frame.filename}:{frame.lineno}" for frame in selected_frames]
-            logging_info_str = "\n".join(logging_info_list)
-            logging_info = (name, logging_info_str)
+            call_sites = [f"{frame.filename}:{frame.lineno}" for frame in selected_frames]
+            call_site_str = "\n".join(call_sites)
 
-            njc = getattr(self._jc, "fn")(binary_operator_map[name], jc, logging_info)
+            njc = getattr(self._jc, "fn")(binary_operator_map[name], jc, name, call_site_str)
         else:
             njc = getattr(self._jc, name)(jc)
         return Column(njc)

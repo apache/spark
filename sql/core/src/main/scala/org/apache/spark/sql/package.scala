@@ -137,30 +137,30 @@ package object sql {
    * without the overhead of capturing and processing Java stack traces that are less relevant
    * to PySpark developers.
    *
-   * The `pysparkLoggingInfo` parameter allows for passing PySpark call site information, which
+   * The `pysparkErrorContext` parameter allows for passing PySpark call site information, which
    * is then included in the Origin context. This facilitates more precise and useful logging for
    * troubleshooting PySpark applications.
    *
    * This method should be used in places where PySpark API calls are made, and PySpark logging
    * information is available and beneficial for debugging purposes.
    *
-   * @param pysparkLoggingInfo Optional PySpark logging information including the call site,
-   *                           represented as a (String, String).
-   *                           This may contain keys like "fragment" and "callSite" to provide
-   *                           detailed context about the PySpark call site.
-   * @param f                  The function that can utilize the modified Origin context with
-   *                           PySpark logging information.
+   * @param pysparkErrorContext Optional PySpark logging information including the call site,
+   *                            represented as a (String, String).
+   *                            This may contain keys like "fragment" and "callSite" to provide
+   *                            detailed context about the PySpark call site.
+   * @param f                   The function that can utilize the modified Origin context with
+   *                            PySpark logging information.
    * @return The result of executing `f` within the context of the provided PySpark logging
    *         information.
    */
   private[sql] def withOrigin[T](
-      pysparkLoggingInfo: Option[(String, String)] = None)(f: => T): T = {
+      pysparkErrorContext: Option[(String, String)] = None)(f: => T): T = {
     if (CurrentOrigin.get.stackTrace.isDefined) {
       f
     } else {
       val origin = Origin(
         stackTrace = Some(captureStackTrace()),
-        pysparkLoggingInfo = pysparkLoggingInfo
+        pysparkErrorContext = pysparkErrorContext
       )
       CurrentOrigin.withOrigin(origin)(f)
     }

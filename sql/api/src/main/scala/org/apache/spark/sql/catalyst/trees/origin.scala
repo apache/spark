@@ -33,10 +33,10 @@ case class Origin(
     objectType: Option[String] = None,
     objectName: Option[String] = None,
     stackTrace: Option[Array[StackTraceElement]] = None,
-    pysparkLoggingInfo: Option[(String, String)] = None) {
+    pysparkErrorContext: Option[(String, String)] = None) {
 
   lazy val context: QueryContext = if (stackTrace.isDefined) {
-    DataFrameQueryContext(stackTrace.get.toImmutableArraySeq, pysparkLoggingInfo)
+    DataFrameQueryContext(stackTrace.get.toImmutableArraySeq, pysparkErrorContext)
   } else {
     SQLQueryContext(
       line, startPosition, startIndex, stopIndex, sqlText, objectType, objectName)

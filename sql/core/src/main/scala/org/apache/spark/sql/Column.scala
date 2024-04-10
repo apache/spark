@@ -176,16 +176,19 @@ class Column(val expr: Expression) extends Logging {
    * that require logging information.
    * This method is used when the operation involves another Column.
    *
-   * @param name               The name of the operation to be performed.
-   * @param other              The value to be used in the operation, which will be converted to a
-   *                           Column if not already one.
-   * @param pysparkLoggingInfo A map containing logging information such as the fragment and
-   *                           call site from PySpark.
+   * @param name                The name of the operation to be performed.
+   * @param other               The value to be used in the operation, which will be converted to a
+   *                            Column if not already one.
+   * @param pysparkFragment     A string representing the 'fragment' of the PySpark error context,
+   *                            typically indicates the name of PySpark function.
+   * @param pysparkCallSite     A string representing the 'callSite' of the PySpark error context,
+   *                            providing the exact location within the PySpark code where the
+   *                            operation originated.
    * @return A Column resulting from the operation.
    */
   private def fn(
-      name: String, other: Any, pysparkLoggingInfo: java.util.ArrayList[String]): Column = {
-    val tupleInfo = (pysparkLoggingInfo.get(0), pysparkLoggingInfo.get(1))
+      name: String, other: Any, pysparkFragment: String, pysparkCallSite: String): Column = {
+    val tupleInfo = (pysparkFragment, pysparkCallSite)
     withOrigin(Some(tupleInfo)) {
       Column.fn(name, this, lit(other))
     }
