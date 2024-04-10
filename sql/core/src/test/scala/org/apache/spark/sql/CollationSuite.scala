@@ -1067,5 +1067,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     checkAnswer(sql("SELECT collation('a')"), Seq(Row("UTF8_BINARY")))
     sql("SET COLLATION UNICODE")
     checkAnswer(sql("SELECT collation('a')"), Seq(Row("UNICODE")))
+    sql("SET COLLATION UTF8_BINARY")
   }
 }
