@@ -196,9 +196,12 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case java.sql.Types.CHAR => CharType(precision)
     case java.sql.Types.CLOB => StringType
     case java.sql.Types.DATE => DateType
-    case java.sql.Types.DECIMAL if precision != 0 || scale != 0 =>
+    case java.sql.Types.DECIMAL | java.sql.Types.NUMERIC if precision == 0 && scale == 0 =>
+      DecimalType.SYSTEM_DEFAULT
+    case java.sql.Types.DECIMAL | java.sql.Types.NUMERIC if scale < 0 =>
+      DecimalType.bounded(precision - scale, 0)
+    case java.sql.Types.DECIMAL | java.sql.Types.NUMERIC =>
       DecimalType.bounded(precision, scale)
-    case java.sql.Types.DECIMAL => DecimalType.SYSTEM_DEFAULT
     case java.sql.Types.DOUBLE => DoubleType
     case java.sql.Types.FLOAT => FloatType
     case java.sql.Types.INTEGER => if (signed) IntegerType else LongType
@@ -207,9 +210,6 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case java.sql.Types.LONGVARCHAR => StringType
     case java.sql.Types.NCHAR => StringType
     case java.sql.Types.NCLOB => StringType
-    case java.sql.Types.NUMERIC if precision != 0 || scale != 0 =>
-      DecimalType.bounded(precision, scale)
-    case java.sql.Types.NUMERIC => DecimalType.SYSTEM_DEFAULT
     case java.sql.Types.NVARCHAR => StringType
     case java.sql.Types.REAL => DoubleType
     case java.sql.Types.REF => StringType
@@ -531,6 +531,16 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case BinaryType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         row.update(pos, rs.getBytes(pos + 1))
+
+    case _: YearMonthIntervalType =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
+        row.update(pos,
+          nullSafeConvert(rs.getString(pos + 1), dialect.getYearMonthIntervalAsMonths))
+
+    case _: DayTimeIntervalType =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
+        row.update(pos,
+          nullSafeConvert(rs.getString(pos + 1), dialect.getDayTimeIntervalAsMicros))
 
     case _: ArrayType if metadata.contains("pg_bit_array_type") =>
       // SPARK-47628: Handle PostgreSQL bit(n>1) array type ahead. As in the pgjdbc driver,
