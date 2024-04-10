@@ -159,7 +159,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
     conn.commit()
   }
 
-  test("SPARK-16625 : Importing Oracle numeric types") {
+  test("SPARK-16625: Importing Oracle numeric types") {
     Seq("true", "false").foreach { flag =>
       withSQLConf((SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key, flag)) {
         val df = sqlContext.read.jdbc(jdbcUrl, "numerics", new Properties)

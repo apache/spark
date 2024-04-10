@@ -65,14 +65,10 @@ object DecimalPrecision extends TypeCoercionRule {
   def widerDecimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType = {
     val scale = max(s1, s2)
     val range = max(p1 - s1, p2 - s2)
-    bounded(range + scale, scale)
-  }
-
-  def bounded(precision: Int, scale: Int): DecimalType = {
     if (conf.getConf(SQLConf.LEGACY_RETAIN_FRACTION_DIGITS_FIRST)) {
-      DecimalType.bounded(precision, scale)
+      DecimalType.bounded(range + scale, scale)
     } else {
-      DecimalType.boundedPreferIntegralDigits(precision, scale)
+      DecimalType.boundedPreferIntegralDigits(range + scale, scale)
     }
   }
 
