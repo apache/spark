@@ -164,6 +164,12 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     this.numBytes = numBytes;
   }
 
+  private static void moveAddress(UTF8String s, Object base, long offset, int numBytes) {
+    s.base = base;
+    s.offset = offset;
+    s.numBytes = numBytes;
+  }
+
   // for serialization
   public UTF8String() {
     this(null, 0, 0);
@@ -1656,12 +1662,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     @Override
     public boolean equals(UTF8String left, UTF8String right, int posLeft, int posRight,
       int lenLeft, int lenRight) {
-      this.left.base = left.base;
-      this.left.offset = left.offset + posLeft;
-      this.left.numBytes = lenLeft;
-      this.right.base = right.base;
-      this.right.offset = right.offset + posRight;
-      this.right.numBytes = lenRight;
+      moveAddress(this.left, left.base, left.offset + posLeft, lenLeft);
+      moveAddress(this.right, right.base, right.offset + posRight, lenRight);
       return CollationFactory.fetchCollation(collationId).equalsFunction
         .apply(this.left, this.right);
     }

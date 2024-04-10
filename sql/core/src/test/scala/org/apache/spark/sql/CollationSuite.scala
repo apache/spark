@@ -564,6 +564,22 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
       checkAnswer(sql("SELECT array_join(array('a', 'b' collate UNICODE), 'c' collate UNICODE_CI)"),
         Seq(Row("acb")))
+
+      // levenshtein distance on collated inputs
+      checkAnswer(sql("select levenshtein('a', 'A' collate utf8_binary_lcase)"), Seq(Row(0)))
+      checkAnswer(sql("select levenshtein('a', 'A', '10' collate utf8_binary_lcase)"), Seq(Row(1)))
+      checkAnswer(
+        sql("select levenshtein('a', 'A' collate utf8_binary_lcase, '10' collate unicode)"),
+        Seq(Row(0)))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("select levenshtein('a' collate utf8_binary_lcase, 'b' collate unicode)")
+        },
+        errorClass = "COLLATION_MISMATCH.EXPLICIT",
+        parameters = Map(
+          "explicitTypes" -> "`string collate UTF8_BINARY_LCASE`.`string collate UNICODE`"
+        )
+      )
     }
   }
 

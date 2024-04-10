@@ -71,10 +71,12 @@ object CollationTypeCasts extends TypeCoercionRule {
       val Seq(newStr, newPad) = collateToSingleType(Seq(str, pad))
       stringPadExpr.withNewChildren(Seq(newStr, len, newPad))
 
+    case lev: Levenshtein =>
+      lev.withNewChildren(collateToSingleType(Seq(lev.left, lev.right)) ++ lev.threshold)
+
     case otherExpr @ (
       _: In | _: InSubquery | _: CreateArray | _: ArrayJoin | _: Concat | _: Greatest | _: Least |
-      _: Coalesce | _: BinaryExpression | _: ConcatWs | _: Mask | _: StringReplace |
-      _: StringTranslate | _: Levenshtein) =>
+      _: Coalesce | _: BinaryExpression | _: ConcatWs) =>
       val newChildren = collateToSingleType(otherExpr.children)
       otherExpr.withNewChildren(newChildren)
   }

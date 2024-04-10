@@ -814,7 +814,6 @@ class CollationStringExpressionsSuite
     }
 
     Seq(
-      // scalastyle:off nonascii
       CollationTestCase("", "", "UTF8_BINARY", 0),
       CollationTestCase("", "something", "UTF8_BINARY", 9),
       CollationTestCase("a", "a", "UTF8_BINARY", 0),
@@ -828,7 +827,6 @@ class CollationStringExpressionsSuite
       CollationTestCase("sOmeThINg", "SOMETHING", "UTF8_BINARY_LCASE", 0),
       CollationTestCase("sOmeThINg", "SOMETHING", "UNICODE", 5),
       CollationTestCase("sOmeThINg", "SOMETHING", "UNICODE_CI", 0)
-      // scalastyle:on nonascii
     ).foreach(c => checkEvaluation(prepareLevenshtein(c.s1, c.s2, c.collation), c.expectedResult))
   }
 
@@ -852,7 +850,6 @@ class CollationStringExpressionsSuite
     }
 
     Seq(
-      // scalastyle:off nonascii
       CollationThresholdTestCase("", "", "UTF8_BINARY", 0, 0),
       CollationThresholdTestCase("", "something", "UTF8_BINARY", 0, -1),
       CollationThresholdTestCase("aaa", "AAA", "UTF8_BINARY_LCASE", 0, 0),
@@ -863,7 +860,6 @@ class CollationStringExpressionsSuite
       CollationThresholdTestCase("sOmeThINg", "SOMETHING", "UNICODE", 10, 5),
       CollationThresholdTestCase("sOmeThINg", "SOMETHING", "UNICODE_CI", 0, 0),
       CollationThresholdTestCase("sOmeThINg", "SOMETHING", "UNICODE_CI", 10, 0)
-      // scalastyle:on nonascii
     ).foreach(c =>
       checkEvaluation(prepareLevenshtein(c.s1, c.s2, c.collation, c.threshold), c.expectedResult)
     )
