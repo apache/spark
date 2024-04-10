@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.variant
 import scala.util.parsing.combinator.RegexParsers
 
 import org.apache.spark.SparkRuntimeException
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.ExpressionBuilder
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -418,6 +419,88 @@ object VariantGetExpressionBuilder extends VariantGetExpressionBuilderBase(true)
 )
 // scalastyle:on line.size.limit
 object TryVariantGetExpressionBuilder extends VariantGetExpressionBuilderBase(false)
+
+// scalastyle:off line.size.limit line.contains.tab
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - It separates a variant object/array into multiple rows containing its fields/elements. Its result schema is `struct<pos int, key string, value variant>`. `pos` is the position of the field/element in its parent object/array, and `value` is the field/element value. `key` is the field name when exploding a variant object, or is NULL when exploding a variant array. It ignores any input that is not a variant array/object, including SQL NULL, variant null, and any other variant values.",
+  examples = """
+    Examples:
+      > SELECT * from _FUNC_(parse_json('["hello", "world"]'));
+       0	NULL	"hello"
+       1	NULL	"world"
+      > SELECT * from _FUNC_(parse_json('{"a": true, "b": 3.14}'));
+       0	a	true
+       1	b	3.14
+  """,
+  since = "4.0.0",
+  group = "variant_funcs")
+// scalastyle:on line.size.limit line.contains.tab
+case class VariantExplode(child: Expression) extends UnaryExpression with Generator
+  with ExpectsInputTypes {
+  override def inputTypes: Seq[AbstractDataType] = Seq(VariantType)
+
+  override def prettyName: String = "variant_explode"
+
+  override protected def withNewChildInternal(newChild: Expression): VariantExplode =
+    copy(child = newChild)
+
+  override def eval(input: InternalRow): IterableOnce[InternalRow] = {
+    val inputVariant = child.eval(input).asInstanceOf[VariantVal]
+    VariantExplode.variantExplode(inputVariant, inputVariant == null)
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val childCode = child.genCode(ctx)
+    val cls = classOf[VariantExplode].getName
+    val code = code"""
+      ${childCode.code}
+      scala.collection.Seq<InternalRow> ${ev.value} = $cls.variantExplode(
+          ${childCode.value}, ${childCode.isNull});
+    """
+    ev.copy(code = code, isNull = FalseLiteral)
+  }
+
+  override def elementSchema: StructType = {
+    new StructType()
+      .add("pos", IntegerType, nullable = false)
+      .add("key", StringType, nullable = true)
+      .add("value", VariantType, nullable = false)
+  }
+}
+
+object VariantExplode {
+  /**
+   * The actual implementation of the `VariantExplode` expression. We check `isNull` separately
+   * rather than `input == null` because the documentation of `ExprCode` says that the value is not
+   * valid if `isNull` is set to `true`.
+   */
+  def variantExplode(input: VariantVal, isNull: Boolean): scala.collection.Seq[InternalRow] = {
+    if (isNull) {
+      return Nil
+    }
+    val v = new Variant(input.getValue, input.getMetadata)
+    v.getType match {
+      case Type.OBJECT =>
+        val size = v.objectSize()
+        val result = new Array[InternalRow](size)
+        for (i <- 0 until size) {
+          val field = v.getFieldAtIndex(i)
+          result(i) = InternalRow(i, UTF8String.fromString(field.key),
+            new VariantVal(field.value.getValue, field.value.getMetadata))
+        }
+        result
+      case Type.ARRAY =>
+        val size = v.arraySize()
+        val result = new Array[InternalRow](size)
+        for (i <- 0 until size) {
+          val elem = v.getElementAtIndex(i)
+          result(i) = InternalRow(i, null, new VariantVal(elem.getValue, elem.getMetadata))
+        }
+        result
+      case _ => Nil
+    }
+  }
+}
 
 @ExpressionDescription(
   usage = "_FUNC_(v) - Returns schema in the SQL format of a variant.",
