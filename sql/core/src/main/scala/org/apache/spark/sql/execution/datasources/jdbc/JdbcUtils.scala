@@ -18,11 +18,13 @@
 package org.apache.spark.sql.execution.datasources.jdbc
 
 import java.math.{BigDecimal => JBigDecimal}
+import java.nio.charset.StandardCharsets
 import java.sql.{Connection, Date, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException, Timestamp}
 import java.time.{Instant, LocalDate}
 import java.util
 import java.util.concurrent.TimeUnit
 
+import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.util.Try
@@ -33,7 +35,7 @@ import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
-import org.apache.spark.sql.catalyst.analysis.Resolver
+import org.apache.spark.sql.catalyst.analysis.{DecimalPrecision, Resolver}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -167,6 +169,10 @@ object JdbcUtils extends Logging with SQLConfHelper {
       throw QueryExecutionErrors.cannotGetJdbcTypeError(dt))
   }
 
+  def getTimestampType(isTimestampNTZ: Boolean): DataType = {
+    if (isTimestampNTZ) TimestampNTZType else TimestampType
+  }
+
   /**
    * Maps a JDBC type to a Catalyst type.  This function is called only when
    * the JdbcDialect class corresponding to your database driver returns null.
@@ -190,9 +196,12 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case java.sql.Types.CHAR => CharType(precision)
     case java.sql.Types.CLOB => StringType
     case java.sql.Types.DATE => DateType
-    case java.sql.Types.DECIMAL if precision != 0 || scale != 0 =>
-      DecimalType.bounded(precision, scale)
-    case java.sql.Types.DECIMAL => DecimalType.SYSTEM_DEFAULT
+    case java.sql.Types.DECIMAL | java.sql.Types.NUMERIC if precision == 0 && scale == 0 =>
+      DecimalType.SYSTEM_DEFAULT
+    case java.sql.Types.DECIMAL | java.sql.Types.NUMERIC if scale < 0 =>
+      DecimalType.bounded(precision - scale, 0)
+    case java.sql.Types.DECIMAL | java.sql.Types.NUMERIC =>
+      DecimalPrecision.bounded(precision, scale)
     case java.sql.Types.DOUBLE => DoubleType
     case java.sql.Types.FLOAT => FloatType
     case java.sql.Types.INTEGER => if (signed) IntegerType else LongType
@@ -201,9 +210,6 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case java.sql.Types.LONGVARCHAR => StringType
     case java.sql.Types.NCHAR => StringType
     case java.sql.Types.NCLOB => StringType
-    case java.sql.Types.NUMERIC if precision != 0 || scale != 0 =>
-      DecimalType.bounded(precision, scale)
-    case java.sql.Types.NUMERIC => DecimalType.SYSTEM_DEFAULT
     case java.sql.Types.NVARCHAR => StringType
     case java.sql.Types.REAL => DoubleType
     case java.sql.Types.REF => StringType
@@ -211,16 +217,16 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case java.sql.Types.SMALLINT => IntegerType
     case java.sql.Types.SQLXML => StringType
     case java.sql.Types.STRUCT => StringType
-    case java.sql.Types.TIME => TimestampType
-    case java.sql.Types.TIMESTAMP if isTimestampNTZ => TimestampNTZType
-    case java.sql.Types.TIMESTAMP => TimestampType
+    case java.sql.Types.TIME => getTimestampType(isTimestampNTZ)
+    case java.sql.Types.TIMESTAMP => getTimestampType(isTimestampNTZ)
     case java.sql.Types.TINYINT => IntegerType
     case java.sql.Types.VARBINARY => BinaryType
     case java.sql.Types.VARCHAR if conf.charVarcharAsString => StringType
     case java.sql.Types.VARCHAR => VarcharType(precision)
+    case java.sql.Types.NULL => NullType
     case _ =>
       // For unmatched types:
-      // including java.sql.Types.ARRAY,DATALINK,DISTINCT,JAVA_OBJECT,NULL,OTHER,REF_CURSOR,
+      // including java.sql.Types.ARRAY,DATALINK,DISTINCT,JAVA_OBJECT,OTHER,REF_CURSOR,
       // TIME_WITH_TIMEZONE,TIMESTAMP_WITH_TIMEZONE, and among others.
       val jdbcType = classOf[JDBCType].getEnumConstants()
         .find(_.getVendorTypeNumber == sqlType)
@@ -240,7 +246,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
         conn.prepareStatement(options.prepareQuery + dialect.getSchemaQuery(options.tableOrQuery))
       try {
         statement.setQueryTimeout(options.queryTimeout)
-        Some(getSchema(statement.executeQuery(), dialect,
+        Some(getSchema(conn, statement.executeQuery(), dialect,
           isTimestampNTZ = options.preferTimestampNTZ))
       } catch {
         case _: SQLException => None
@@ -261,6 +267,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
    * @throws SQLException if the schema contains an unsupported type.
    */
   def getSchema(
+      conn: Connection,
       resultSet: ResultSet,
       dialect: JdbcDialect,
       alwaysNullable: Boolean = false,
@@ -270,6 +277,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     val fields = new Array[StructField](ncols)
     var i = 0
     while (i < ncols) {
+      val metadata = new MetadataBuilder()
       val columnName = rsmd.getColumnLabel(i + 1)
       val dataType = rsmd.getColumnType(i + 1)
       val typeName = rsmd.getColumnTypeName(i + 1)
@@ -290,8 +298,6 @@ object JdbcUtils extends Logging with SQLConfHelper {
       } else {
         rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
       }
-      val metadata = new MetadataBuilder()
-      metadata.putLong("scale", fieldScale)
 
       dataType match {
         case java.sql.Types.TIME =>
@@ -301,9 +307,16 @@ object JdbcUtils extends Logging with SQLConfHelper {
           metadata.putBoolean("logical_time_type", true)
         case java.sql.Types.ROWID =>
           metadata.putBoolean("rowid", true)
+        case java.sql.Types.ARRAY =>
+          val tableName = rsmd.getTableName(i + 1)
+          dialect.getArrayDimension(conn, tableName, columnName).foreach { dimension =>
+            metadata.putLong("arrayDimension", dimension)
+          }
         case _ =>
       }
+      metadata.putBoolean("isSigned", isSigned)
       metadata.putBoolean("isTimestampNTZ", isTimestampNTZ)
+      metadata.putLong("scale", fieldScale)
       val columnType =
         dialect.getCatalystType(dataType, typeName, fieldSize, metadata).getOrElse(
           getCatalystType(dataType, typeName, fieldSize, fieldScale, isSigned, isTimestampNTZ))
@@ -399,7 +412,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
         // DateTimeUtils.fromJavaDate does not handle null value, so we need to check it.
         val dateVal = rs.getDate(pos + 1)
         if (dateVal != null) {
-          row.setInt(pos, fromJavaDate(dateVal))
+          row.setInt(pos, fromJavaDate(dialect.convertJavaDateToDate(dateVal)))
         } else {
           row.update(pos, null)
         }
@@ -432,14 +445,16 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
     case LongType if metadata.contains("binarylong") =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
-        val bytes = rs.getBytes(pos + 1)
-        var ans = 0L
-        var j = 0
-        while (j < bytes.length) {
-          ans = 256 * ans + (255 & bytes(j))
-          j = j + 1
-        }
-        row.setLong(pos, ans)
+        val l = nullSafeConvert[Array[Byte]](rs.getBytes(pos + 1), bytes => {
+          var ans = 0L
+          var j = 0
+          while (j < bytes.length) {
+            ans = 256 * ans + (255 & bytes(j))
+            j = j + 1
+          }
+          ans
+        })
+        row.update(pos, l)
 
     case LongType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
@@ -503,12 +518,47 @@ object JdbcUtils extends Logging with SQLConfHelper {
           row.update(pos, null)
         }
 
+    case BinaryType if metadata.contains("binarylong") =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
+        val bytes = rs.getBytes(pos + 1)
+        if (bytes != null) {
+          val binary = bytes.flatMap(Integer.toBinaryString(_).getBytes(StandardCharsets.US_ASCII))
+          row.update(pos, binary)
+        } else {
+          row.update(pos, null)
+        }
+
     case BinaryType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         row.update(pos, rs.getBytes(pos + 1))
 
+    case _: YearMonthIntervalType =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
+        row.update(pos,
+          nullSafeConvert(rs.getString(pos + 1), dialect.getYearMonthIntervalAsMonths))
+
+    case _: DayTimeIntervalType =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
+        row.update(pos,
+          nullSafeConvert(rs.getString(pos + 1), dialect.getDayTimeIntervalAsMicros))
+
+    case _: ArrayType if metadata.contains("pg_bit_array_type") =>
+      // SPARK-47628: Handle PostgreSQL bit(n>1) array type ahead. As in the pgjdbc driver,
+      // bit(n>1)[] is not distinguishable from bit(1)[], and they are all recognized as boolen[].
+      // This is wrong for bit(n>1)[], so we need to handle it first as byte array.
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
+        val fieldString = rs.getString(pos + 1)
+        if (fieldString != null) {
+          val strArray = fieldString.substring(1, fieldString.length - 1).split(",")
+          // Charset is picked from the pgjdbc driver for consistency.
+          val bytesArray = strArray.map(_.getBytes(StandardCharsets.US_ASCII))
+          row.update(pos, new GenericArrayData(bytesArray))
+        } else {
+          row.update(pos, null)
+        }
+
     case ArrayType(et, _) =>
-      val elementConversion = et match {
+      def elementConversion(et: DataType): AnyRef => Any = et match {
         case TimestampType => arrayConverter[Timestamp] {
           (t: Timestamp) => fromJavaTimestamp(dialect.convertJavaTimestampToTimestamp(t))
         }
@@ -521,7 +571,9 @@ object JdbcUtils extends Logging with SQLConfHelper {
         case StringType =>
           arrayConverter[Object]((obj: Object) => UTF8String.fromString(obj.toString))
 
-        case DateType => arrayConverter[Date](fromJavaDate)
+        case DateType => arrayConverter[Date] {
+          (d: Date) => fromJavaDate(dialect.convertJavaDateToDate(d))
+        }
 
         case dt: DecimalType =>
             arrayConverter[java.math.BigDecimal](d => Decimal(d, dt.precision, dt.scale))
@@ -529,8 +581,10 @@ object JdbcUtils extends Logging with SQLConfHelper {
         case LongType if metadata.contains("binarylong") =>
           throw QueryExecutionErrors.unsupportedArrayElementTypeBasedOnBinaryError(dt)
 
-        case ArrayType(_, _) =>
-          throw QueryExecutionErrors.nestedArraysUnsupportedError()
+        case ArrayType(et0, _) =>
+          arrayConverter[Array[Any]] {
+            arr => new GenericArrayData(elementConversion(et0)(arr))
+          }
 
         case _ => (array: Object) => array.asInstanceOf[Array[Any]]
       }
@@ -538,8 +592,11 @@ object JdbcUtils extends Logging with SQLConfHelper {
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         val array = nullSafeConvert[java.sql.Array](
           input = rs.getArray(pos + 1),
-          array => new GenericArrayData(elementConversion(array.getArray)))
+          array => new GenericArrayData(elementConversion(et)(array.getArray)))
         row.update(pos, array)
+
+    case NullType =>
+      (_: ResultSet, row: InternalRow, pos: Int) => row.update(pos, null)
 
     case _ => throw QueryExecutionErrors.unsupportedJdbcTypeError(dt.catalogString)
   }
@@ -630,20 +687,32 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
     case ArrayType(et, _) =>
       // remove type length parameters from end of type name
-      val typeName = getJdbcType(et, dialect).databaseTypeDefinition.split("\\(")(0)
       (stmt: PreparedStatement, row: Row, pos: Int) =>
         et match {
           case TimestampNTZType =>
             val array = row.getSeq[java.time.LocalDateTime](pos)
             val arrayType = conn.createArrayOf(
-              typeName,
+              getJdbcType(et, dialect).databaseTypeDefinition.split("\\(")(0),
               array.map(dialect.convertTimestampNTZToJavaTimestamp).toArray)
             stmt.setArray(pos + 1, arrayType)
           case _ =>
-            val array = row.getSeq[AnyRef](pos)
+            @tailrec
+            def getElementTypeName(dt: DataType): String = dt match {
+              case ArrayType(et0, _) => getElementTypeName(et0)
+              case a: AtomicType => getJdbcType(a, dialect).databaseTypeDefinition.split("\\(")(0)
+              case _ => throw QueryExecutionErrors.nestedArraysUnsupportedError()
+            }
+
+            def toArray(seq: scala.collection.Seq[Any], dt: DataType): Array[Any] = dt match {
+              case ArrayType(et0, _) =>
+                seq.map(i => toArray(i.asInstanceOf[scala.collection.Seq[Any]], et0)).toArray
+              case _ => seq.toArray
+            }
+
+            val seq = row.getSeq[AnyRef](pos)
             val arrayType = conn.createArrayOf(
-              typeName,
-              array.toArray)
+              getElementTypeName(et),
+              toArray(seq, et).asInstanceOf[Array[AnyRef]])
             stmt.setArray(pos + 1, arrayType)
         }
 

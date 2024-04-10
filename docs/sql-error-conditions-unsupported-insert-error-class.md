@@ -30,6 +30,10 @@ Can't insert into the target.
 
 This error class has the following derived error classes:
 
+## MULTI_PATH
+
+Can only write data to relations with a single path but given paths are `<paths>`.
+
 ## NOT_ALLOWED
 
 The target relation `<relationId>` does not allow insertion.

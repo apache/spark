@@ -22,6 +22,8 @@ import scala.util.control.NonFatal
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKey.{ERROR, POLICY, RETRY_COUNT, WAIT_TIME}
+import org.apache.spark.internal.MDC
 
 private[sql] class GrpcRetryHandler(
     private val policies: Seq[RetryPolicy],
@@ -187,8 +189,8 @@ private[sql] object GrpcRetryHandler extends Logging {
       if (lastException.isInstanceOf[RetryException]) {
         // retry exception is considered immediately retriable without any policies.
         logWarning(
-          s"Non-Fatal error during RPC execution: $lastException, retrying " +
-            s"(currentRetryNum=$currentRetryNum)")
+          log"Non-Fatal error during RPC execution: ${MDC(ERROR, lastException)}, " +
+            log"retrying (currentRetryNum=${MDC(RETRY_COUNT, currentRetryNum)})")
         return
       }
 
@@ -197,18 +199,18 @@ private[sql] object GrpcRetryHandler extends Logging {
 
         if (time.isDefined) {
           logWarning(
-            s"Non-Fatal error during RPC execution: $lastException, retrying " +
-              s"(wait=${time.get.toMillis}, currentRetryNum=$currentRetryNum, " +
-              s"policy: ${policy.getName})")
-
+            log"Non-Fatal error during RPC execution: ${MDC(ERROR, lastException)}, " +
+              log"retrying (wait=${MDC(WAIT_TIME, time.get.toMillis)} ms, " +
+              log"currentRetryNum=${MDC(RETRY_COUNT, currentRetryNum)}, " +
+              log"policy=${MDC(POLICY, policy.getName)}).")
           sleep(time.get.toMillis)
           return
         }
       }
 
       logWarning(
-        s"Non-Fatal error during RPC execution: $lastException, exceeded retries " +
-          s"(currentRetryNum=$currentRetryNum)")
+        log"Non-Fatal error during RPC execution: ${MDC(ERROR, lastException)}, " +
+          log"exceeded retries (currentRetryNum=${MDC(RETRY_COUNT, currentRetryNum)})")
 
       val error = new RetriesExceeded()
       exceptionList.foreach(error.addSuppressed)

@@ -343,10 +343,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public boolean contains(final UTF8String substring, int collationId) {
-    if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
+    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
       return this.contains(substring);
     }
-    if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
+    if (collationId == CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID) {
       return this.toLowerCase().contains(substring.toLowerCase());
     }
     return collatedContains(substring, collationId);
@@ -379,10 +379,14 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   private boolean matchAt(final UTF8String s, int pos, int collationId) {
-    if (s.numBytes + pos > numBytes || pos < 0) {
+    if (s.numChars() + pos > this.numChars() || pos < 0) {
       return false;
     }
-    return this.substring(pos, pos + s.numBytes).semanticCompare(s, collationId) == 0;
+    if (s.numBytes == 0 || this.numBytes == 0) {
+      return s.numBytes == 0;
+    }
+    return CollationFactory.getStringSearch(this.substring(pos, pos + s.numChars()),
+      s, collationId).last() == 0;
   }
 
   public boolean startsWith(final UTF8String prefix) {
@@ -390,10 +394,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public boolean startsWith(final UTF8String prefix, int collationId) {
-    if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
+    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
       return this.startsWith(prefix);
     }
-    if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
+    if (collationId == CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID) {
       return this.toLowerCase().startsWith(prefix.toLowerCase());
     }
     return matchAt(prefix, 0, collationId);
@@ -404,10 +408,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public boolean endsWith(final UTF8String suffix, int collationId) {
-    if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
+    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
       return this.endsWith(suffix);
     }
-    if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
+    if (collationId == CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID) {
       return this.toLowerCase().endsWith(suffix.toLowerCase());
     }
     return matchAt(suffix, numBytes - suffix.numBytes, collationId);

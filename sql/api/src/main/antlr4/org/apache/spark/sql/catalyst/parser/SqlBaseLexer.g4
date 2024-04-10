@@ -79,6 +79,7 @@ COMMA: ',';
 DOT: '.';
 LEFT_BRACKET: '[';
 RIGHT_BRACKET: ']';
+BANG: '!';
 
 // NOTE: If you add a new token in the list below, you should update the list of keywords
 // and reserved tag in `docs/sql-ref-ansi-compliance.md#sql-keywords`, and
@@ -273,7 +274,7 @@ NANOSECOND: 'NANOSECOND';
 NANOSECONDS: 'NANOSECONDS';
 NATURAL: 'NATURAL';
 NO: 'NO';
-NOT: 'NOT' | '!';
+NOT: 'NOT';
 NULL: 'NULL';
 NULLS: 'NULLS';
 NUMERIC: 'NUMERIC';
@@ -510,8 +511,13 @@ BIGDECIMAL_LITERAL
     | DECIMAL_DIGITS EXPONENT? 'BD' {isValidDecimal()}?
     ;
 
+// Generalize the identifier to give a sensible INVALID_IDENTIFIER error message:
+// * Unicode letters rather than a-z and A-Z only
+// * URI paths for table references using paths
+// We then narrow down to ANSI rules in exitUnquotedIdentifier() in the parser.
 IDENTIFIER
-    : (LETTER | DIGIT | '_')+
+    : (UNICODE_LETTER | DIGIT | '_')+
+    | UNICODE_LETTER+ '://' (UNICODE_LETTER | DIGIT | '_' | '/' | '-' | '.' | '?' | '=' | '&' | '#' | '%')+
     ;
 
 BACKQUOTED_IDENTIFIER
@@ -535,6 +541,10 @@ fragment LETTER
     : [A-Z]
     ;
 
+fragment UNICODE_LETTER
+    : [\p{L}]
+    ;
+
 SIMPLE_COMMENT
     : '--' ('\\\n' | ~[\r\n])* '\r'? '\n'? -> channel(HIDDEN)
     ;
@@ -544,7 +554,7 @@ BRACKETED_COMMENT
     ;
 
 WS
-    : [ \r\n\t]+ -> channel(HIDDEN)
+    : [ \t\n\f\r\u000B\u00A0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200A\u2028\u202F\u205F\u3000]+ -> channel(HIDDEN)
     ;
 
 // Catch-all for anything we can't recognize.

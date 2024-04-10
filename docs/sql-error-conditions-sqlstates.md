@@ -739,6 +739,3 @@ Spark SQL uses the following `SQLSTATE` classes:
 </tr>
 
 </table>
-
-
-.. include:: /shared/replacements.md

@@ -32,25 +32,44 @@ object StateStoreErrors {
     )
   }
 
+  def missingTimeoutValues(timeoutMode: String): SparkException = {
+    SparkException.internalError(
+      msg = s"Failed to find timeout values for timeoutMode=$timeoutMode",
+      category = "TWS"
+    )
+  }
+
+  def missingTTLValues(ttlMode: String): SparkException = {
+    SparkException.internalError(
+      msg = s"Failed to find timeout values for ttlMode=$ttlMode",
+      category = "TWS"
+    )
+  }
+
+  def unsupportedOperationOnMissingColumnFamily(operationName: String, colFamilyName: String):
+    StateStoreUnsupportedOperationOnMissingColumnFamily = {
+    new StateStoreUnsupportedOperationOnMissingColumnFamily(operationName, colFamilyName)
+  }
+
   def multipleColumnFamiliesNotSupported(stateStoreProvider: String):
     StateStoreMultipleColumnFamiliesNotSupportedException = {
-      new StateStoreMultipleColumnFamiliesNotSupportedException(stateStoreProvider)
-    }
+    new StateStoreMultipleColumnFamiliesNotSupportedException(stateStoreProvider)
+  }
 
   def removingColumnFamiliesNotSupported(stateStoreProvider: String):
     StateStoreRemovingColumnFamiliesNotSupportedException = {
-        new StateStoreRemovingColumnFamiliesNotSupportedException(stateStoreProvider)
-    }
+    new StateStoreRemovingColumnFamiliesNotSupportedException(stateStoreProvider)
+  }
 
-  def cannotRemoveDefaultColumnFamily(colFamilyName: String):
-    StateStoreCannotRemoveDefaultColumnFamily = {
-        new StateStoreCannotRemoveDefaultColumnFamily(colFamilyName)
-    }
+  def cannotUseColumnFamilyWithInvalidName(operationName: String, colFamilyName: String):
+    StateStoreCannotUseColumnFamilyWithInvalidName = {
+      new StateStoreCannotUseColumnFamilyWithInvalidName(operationName, colFamilyName)
+  }
 
   def unsupportedOperationException(operationName: String, entity: String):
     StateStoreUnsupportedOperationException = {
-      new StateStoreUnsupportedOperationException(operationName, entity)
-    }
+    new StateStoreUnsupportedOperationException(operationName, entity)
+  }
 
   def requireNonNullStateValue(value: Any, stateName: String): Unit = {
     SparkException.require(value != null,
@@ -63,28 +82,142 @@ object StateStoreErrors {
       errorClass = "ILLEGAL_STATE_STORE_VALUE.EMPTY_LIST_VALUE",
       messageParameters = Map("stateName" -> stateName))
   }
+
+  def incorrectNumOrderingColsForPrefixScan(numPrefixCols: String):
+    StateStoreIncorrectNumOrderingColsForPrefixScan = {
+    new StateStoreIncorrectNumOrderingColsForPrefixScan(numPrefixCols)
+  }
+
+  def incorrectNumOrderingColsForRangeScan(numOrderingCols: String):
+    StateStoreIncorrectNumOrderingColsForRangeScan = {
+    new StateStoreIncorrectNumOrderingColsForRangeScan(numOrderingCols)
+  }
+
+  def nullTypeOrderingColsNotSupported(fieldName: String, index: String):
+    StateStoreNullTypeOrderingColsNotSupported = {
+    new StateStoreNullTypeOrderingColsNotSupported(fieldName, index)
+  }
+
+  def variableSizeOrderingColsNotSupported(fieldName: String, index: String):
+    StateStoreVariableSizeOrderingColsNotSupported = {
+    new StateStoreVariableSizeOrderingColsNotSupported(fieldName, index)
+  }
+
+  def cannotCreateColumnFamilyWithReservedChars(colFamilyName: String):
+    StateStoreCannotCreateColumnFamilyWithReservedChars = {
+    new StateStoreCannotCreateColumnFamilyWithReservedChars(colFamilyName)
+  }
+
+  def cannotPerformOperationWithInvalidTimeoutMode(
+      operationType: String,
+      timeoutMode: String): StatefulProcessorCannotPerformOperationWithInvalidTimeoutMode = {
+    new StatefulProcessorCannotPerformOperationWithInvalidTimeoutMode(operationType, timeoutMode)
+  }
+
+  def cannotPerformOperationWithInvalidHandleState(
+      operationType: String,
+      handleState: String): StatefulProcessorCannotPerformOperationWithInvalidHandleState = {
+    new StatefulProcessorCannotPerformOperationWithInvalidHandleState(operationType, handleState)
+  }
+
+  def cannotReInitializeStateOnKey(groupingKey: String):
+    StatefulProcessorCannotReInitializeState = {
+    new StatefulProcessorCannotReInitializeState(groupingKey)
+  }
+
+  def cannotProvideTTLConfigForNoTTLMode(stateName: String):
+    StatefulProcessorCannotAssignTTLInNoTTLMode = {
+    new StatefulProcessorCannotAssignTTLInNoTTLMode(stateName)
+  }
+
+  def ttlMustBePositive(operationType: String,
+      stateName: String): StatefulProcessorTTLMustBePositive = {
+    new StatefulProcessorTTLMustBePositive(operationType, stateName)
+  }
 }
 
 class StateStoreMultipleColumnFamiliesNotSupportedException(stateStoreProvider: String)
   extends SparkUnsupportedOperationException(
     errorClass = "UNSUPPORTED_FEATURE.STATE_STORE_MULTIPLE_COLUMN_FAMILIES",
-    messageParameters = Map("stateStoreProvider" -> stateStoreProvider)
-  )
+    messageParameters = Map("stateStoreProvider" -> stateStoreProvider))
+
 class StateStoreRemovingColumnFamiliesNotSupportedException(stateStoreProvider: String)
   extends SparkUnsupportedOperationException(
     errorClass = "UNSUPPORTED_FEATURE.STATE_STORE_REMOVING_COLUMN_FAMILIES",
-    messageParameters = Map("stateStoreProvider" -> stateStoreProvider)
-  )
+    messageParameters = Map("stateStoreProvider" -> stateStoreProvider))
 
-class StateStoreCannotRemoveDefaultColumnFamily(colFamilyName: String)
+class StateStoreCannotUseColumnFamilyWithInvalidName(operationName: String, colFamilyName: String)
   extends SparkUnsupportedOperationException(
-    errorClass = "STATE_STORE_CANNOT_REMOVE_DEFAULT_COLUMN_FAMILY",
+    errorClass = "STATE_STORE_CANNOT_USE_COLUMN_FAMILY_WITH_INVALID_NAME",
+    messageParameters = Map("operationName" -> operationName, "colFamilyName" -> colFamilyName))
+
+class StateStoreCannotCreateColumnFamilyWithReservedChars(colFamilyName: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS",
     messageParameters = Map("colFamilyName" -> colFamilyName)
   )
-
 
 class StateStoreUnsupportedOperationException(operationType: String, entity: String)
   extends SparkUnsupportedOperationException(
     errorClass = "STATE_STORE_UNSUPPORTED_OPERATION",
     messageParameters = Map("operationType" -> operationType, "entity" -> entity)
   )
+
+class StatefulProcessorCannotPerformOperationWithInvalidTimeoutMode(
+    operationType: String,
+    timeoutMode: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_TIMEOUT_MODE",
+    messageParameters = Map("operationType" -> operationType, "timeoutMode" -> timeoutMode)
+  )
+
+class StatefulProcessorCannotPerformOperationWithInvalidHandleState(
+    operationType: String,
+    handleState: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_HANDLE_STATE",
+    messageParameters = Map("operationType" -> operationType, "handleState" -> handleState)
+  )
+
+class StatefulProcessorCannotReInitializeState(groupingKey: String)
+  extends SparkUnsupportedOperationException(
+  errorClass = "STATEFUL_PROCESSOR_CANNOT_REINITIALIZE_STATE_ON_KEY",
+  messageParameters = Map("groupingKey" -> groupingKey))
+
+class StateStoreUnsupportedOperationOnMissingColumnFamily(
+    operationType: String,
+    colFamilyName: String) extends SparkUnsupportedOperationException(
+  errorClass = "STATE_STORE_UNSUPPORTED_OPERATION_ON_MISSING_COLUMN_FAMILY",
+  messageParameters = Map("operationType" -> operationType, "colFamilyName" -> colFamilyName))
+
+class StateStoreIncorrectNumOrderingColsForPrefixScan(numPrefixCols: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_INCORRECT_NUM_PREFIX_COLS_FOR_PREFIX_SCAN",
+    messageParameters = Map("numPrefixCols" -> numPrefixCols))
+
+class StateStoreIncorrectNumOrderingColsForRangeScan(numOrderingCols: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_INCORRECT_NUM_ORDERING_COLS_FOR_RANGE_SCAN",
+    messageParameters = Map("numOrderingCols" -> numOrderingCols))
+
+class StateStoreVariableSizeOrderingColsNotSupported(fieldName: String, index: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_VARIABLE_SIZE_ORDERING_COLS_NOT_SUPPORTED",
+    messageParameters = Map("fieldName" -> fieldName, "index" -> index))
+
+class StateStoreNullTypeOrderingColsNotSupported(fieldName: String, index: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_NULL_TYPE_ORDERING_COLS_NOT_SUPPORTED",
+    messageParameters = Map("fieldName" -> fieldName, "index" -> index))
+
+class StatefulProcessorCannotAssignTTLInNoTTLMode(stateName: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATEFUL_PROCESSOR_CANNOT_ASSIGN_TTL_IN_NO_TTL_MODE",
+    messageParameters = Map("stateName" -> stateName))
+
+class StatefulProcessorTTLMustBePositive(
+    operationType: String,
+    stateName: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATEFUL_PROCESSOR_TTL_DURATION_MUST_BE_POSITIVE",
+    messageParameters = Map("operationType" -> operationType, "stateName" -> stateName))

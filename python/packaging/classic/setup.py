@@ -24,6 +24,25 @@ import ctypes
 from setuptools import setup
 from setuptools.command.install import install
 from shutil import copyfile, copytree, rmtree
+from pathlib import Path
+
+if (
+    # When we package, the parent diectory 'classic' dir
+    # (as we pip install -e python/packaging/classic)
+    os.getcwd() == str(Path(__file__).parent.absolute())
+    and str(Path(__file__).parent.name) == "classic"
+):
+    # For:
+    # - pip install -e python/packaging/classic
+    #     It moves the current working directory to 'classic'
+    # - cd python/packaging/classic; python setup.py sdist
+    #
+    # For:
+    # - python packaging/classic/setup.py sdist, it does not
+    #     execute this branch.
+    #
+    # Move to spark/python
+    os.chdir(Path(__file__).parent.parent.parent.absolute())
 
 try:
     exec(open("pyspark/version.py").read())
@@ -58,7 +77,7 @@ run sdist.
       ./build/mvn -DskipTests clean package
     Building the source dist is done in the Python directory:
       cd python
-      python setup.py sdist
+      python packaging/classic/setup.py sdist
       pip install dist/*.tar.gz"""
 
 # Figure out where the jars are we need to package with PySpark.
@@ -129,11 +148,12 @@ if in_spark:
 # If you are changing the versions here, please also change ./python/pyspark/sql/pandas/utils.py
 # For Arrow, you should also check ./pom.xml and ensure there are no breaking changes in the
 # binary format protocol with the Java version, see ARROW_HOME/format/* for specifications.
-# Also don't forget to update python/docs/source/getting_started/install.rst.
+# Also don't forget to update python/docs/source/getting_started/install.rst, and
+# python/packaging/connect/setup.py
 _minimum_pandas_version = "1.4.4"
 _minimum_numpy_version = "1.21"
-_minimum_pyarrow_version = "4.0.0"
-_minimum_grpc_version = "1.59.3"
+_minimum_pyarrow_version = "10.0.0"
+_minimum_grpc_version = "1.62.0"
 _minimum_googleapis_common_protos_version = "1.56.4"
 
 
@@ -184,8 +204,11 @@ try:
     copyfile("pyspark/shell.py", "pyspark/python/pyspark/shell.py")
 
     if in_spark:
-        # Construct the symlink farm - this is necessary since we can't refer to the path above the
-        # package root and we need to copy the jars and scripts which are up above the python root.
+        copyfile("packaging/classic/setup.py", "setup.py")
+        copyfile("packaging/classic/setup.cfg", "setup.cfg")
+        # Construct the symlink farm - this is nein_sparkcessary since we can't refer to
+        # the path above the package root and we need to copy the jars and scripts which
+        # are up above the python root.
         if _supports_symlinks():
             os.symlink(JARS_PATH, JARS_TARGET)
             os.symlink(SCRIPTS_PATH, SCRIPTS_TARGET)
@@ -234,6 +257,7 @@ try:
         url="https://github.com/apache/spark/tree/master/python",
         packages=[
             "pyspark",
+            "pyspark.core",
             "pyspark.cloudpickle",
             "pyspark.mllib",
             "pyspark.mllib.linalg",
@@ -251,6 +275,8 @@ try:
             "pyspark.sql.connect.client",
             "pyspark.sql.connect.functions",
             "pyspark.sql.connect.proto",
+            "pyspark.sql.connect.protobuf",
+            "pyspark.sql.connect.shell",
             "pyspark.sql.connect.streaming",
             "pyspark.sql.connect.streaming.worker",
             "pyspark.sql.functions",
@@ -352,6 +378,8 @@ finally:
     # We only cleanup the symlink farm if we were in Spark, otherwise we are installing rather than
     # packaging.
     if in_spark:
+        os.remove("setup.py")
+        os.remove("setup.cfg")
         # Depending on cleaning up the symlink farm or copied version
         if _supports_symlinks():
             os.remove(os.path.join(TEMP_PATH, "jars"))

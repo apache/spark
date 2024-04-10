@@ -102,7 +102,7 @@ abstract class DataType extends AbstractDataType {
    */
   private[spark] def existsRecursively(f: (DataType) => Boolean): Boolean = f(this)
 
-  override private[sql] def defaultConcreteType: DataType = this
+  final override private[sql] def defaultConcreteType: DataType = this
 
   override private[sql] def acceptsType(other: DataType): Boolean = sameType(other)
 }
@@ -117,7 +117,7 @@ object DataType {
   private val FIXED_DECIMAL = """decimal\(\s*(\d+)\s*,\s*(\-?\d+)\s*\)""".r
   private val CHAR_TYPE = """char\(\s*(\d+)\s*\)""".r
   private val VARCHAR_TYPE = """varchar\(\s*(\d+)\s*\)""".r
-  private val COLLATED_STRING_TYPE = """string\s+COLLATE\s+([\w_]+|`[\w_]`)""".r
+  private val COLLATED_STRING_TYPE = """string\s+collate\s+([\w_]+|`[\w_]`)""".r
 
   def fromDDL(ddl: String): DataType = {
     parseTypeWithFallback(
@@ -195,8 +195,8 @@ object DataType {
       case other => otherTypes.getOrElse(
         other,
         throw new SparkIllegalArgumentException(
-          errorClass = "_LEGACY_ERROR_TEMP_3251",
-          messageParameters = Map("other" -> name)))
+          errorClass = "INVALID_JSON_DATA_TYPE",
+          messageParameters = Map("invalidType" -> name)))
     }
   }
 
@@ -247,8 +247,8 @@ object DataType {
         new PythonUserDefinedType(parseDataType(v), pyClass, serialized)
 
     case other => throw new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_3251",
-      messageParameters = Map("other" -> compact(render(other))))
+      errorClass = "INVALID_JSON_DATA_TYPE",
+      messageParameters = Map("invalidType" -> compact(render(other))))
   }
 
   private def parseStructField(json: JValue): StructField = json match {

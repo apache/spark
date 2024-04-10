@@ -17,12 +17,18 @@
 
 package org.apache.spark.sql.streaming
 
-import org.apache.spark.{SparkException, SparkRuntimeException}
+import java.io.File
+import java.util.UUID
+
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.Encoders
+import org.apache.spark.sql.{Dataset, Encoders}
+import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider, StateStoreMultipleColumnFamiliesNotSupportedException}
+import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider, StatefulProcessorCannotPerformOperationWithInvalidHandleState, StateStoreMultipleColumnFamiliesNotSupportedException}
+import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.streaming.util.StreamManualClock
 
 object TransformWithStateSuiteUtils {
   val NUM_SHUFFLE_PARTITIONS = 5
@@ -30,16 +36,20 @@ object TransformWithStateSuiteUtils {
 
 class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (String, String)]
   with Logging {
-  @transient private var _countState: ValueState[Long] = _
+  @transient protected var _countState: ValueState[Long] = _
 
-  override def init(outputMode: OutputMode): Unit = {
+  override def init(
+      outputMode: OutputMode,
+      timeoutMode: TimeoutMode,
+      ttlMode: TTLMode): Unit = {
     _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong)
   }
 
   override def handleInputRows(
       key: String,
       inputRows: Iterator[String],
-      timerValues: TimerValues): Iterator[(String, String)] = {
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
     val count = _countState.getOption().getOrElse(0L) + 1
     if (count == 3) {
       _countState.clear()
@@ -49,8 +59,179 @@ class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (S
       Iterator((key, count.toString))
     }
   }
+}
 
-  override def close(): Unit = {}
+// Class to verify stateful processor usage with adding processing time timers
+class RunningCountStatefulProcessorWithProcTimeTimer extends RunningCountStatefulProcessor {
+  private def handleProcessingTimeBasedTimers(
+      key: String,
+      expiryTimestampMs: Long): Iterator[(String, String)] = {
+    _countState.clear()
+    Iterator((key, "-1"))
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[String],
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
+
+    if (expiredTimerInfo.isValid()) {
+      handleProcessingTimeBasedTimers(key, expiredTimerInfo.getExpiryTimeInMs())
+    } else {
+      val currCount = _countState.getOption().getOrElse(0L)
+      if (currCount == 0 && (key == "a" || key == "c")) {
+        getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs()
+          + 5000)
+      }
+
+      val count = currCount + 1
+      if (count == 3) {
+        _countState.clear()
+        Iterator.empty
+      } else {
+        _countState.update(count)
+        Iterator((key, count.toString))
+      }
+    }
+  }
+}
+
+// Class to verify stateful processor usage with updating processing time timers
+class RunningCountStatefulProcessorWithProcTimeTimerUpdates
+  extends RunningCountStatefulProcessor {
+  @transient private var _timerState: ValueState[Long] = _
+
+  override def init(
+      outputMode: OutputMode,
+      timeoutMode: TimeoutMode,
+      ttlMode: TTLMode) : Unit = {
+    super.init(outputMode, timeoutMode, ttlMode)
+    _timerState = getHandle.getValueState[Long]("timerState", Encoders.scalaLong)
+  }
+
+  private def handleProcessingTimeBasedTimers(
+      key: String,
+      expiryTimestampMs: Long): Iterator[(String, String)] = {
+    _timerState.clear()
+    Iterator((key, "-1"))
+  }
+
+  protected def processUnexpiredRows(
+      key: String,
+      currCount: Long,
+      count: Long,
+      timerValues: TimerValues): Unit = {
+    _countState.update(count)
+    if (key == "a") {
+      var nextTimerTs: Long = 0L
+      if (currCount == 0) {
+        nextTimerTs = timerValues.getCurrentProcessingTimeInMs() + 5000
+        getHandle.registerTimer(nextTimerTs)
+        _timerState.update(nextTimerTs)
+      } else if (currCount == 1) {
+        getHandle.deleteTimer(_timerState.get())
+        nextTimerTs = timerValues.getCurrentProcessingTimeInMs() + 7500
+        getHandle.registerTimer(nextTimerTs)
+        _timerState.update(nextTimerTs)
+      }
+    }
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[String],
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
+    if (expiredTimerInfo.isValid()) {
+      handleProcessingTimeBasedTimers(key, expiredTimerInfo.getExpiryTimeInMs())
+    } else {
+      val currCount = _countState.getOption().getOrElse(0L)
+      val count = currCount + inputRows.size
+      processUnexpiredRows(key, currCount, count, timerValues)
+      Iterator((key, count.toString))
+    }
+  }
+}
+
+class RunningCountStatefulProcessorWithMultipleTimers
+  extends RunningCountStatefulProcessor {
+  private def handleProcessingTimeBasedTimers(
+      key: String,
+      expiryTimestampMs: Long): Iterator[(String, String)] = {
+    val currCount = _countState.getOption().getOrElse(0L)
+    if (getHandle.listTimers().size == 1) {
+      _countState.clear()
+    }
+    Iterator((key, currCount.toString))
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[String],
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
+    if (expiredTimerInfo.isValid()) {
+      handleProcessingTimeBasedTimers(key, expiredTimerInfo.getExpiryTimeInMs())
+    } else {
+      val currCount = _countState.getOption().getOrElse(0L)
+      val count = currCount + inputRows.size
+      _countState.update(count)
+      if (getHandle.listTimers().isEmpty) {
+        getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs() + 5000)
+        getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs() + 10000)
+        getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs() + 15000)
+        assert(getHandle.listTimers().size == 3)
+      }
+      Iterator.empty
+    }
+  }
+}
+
+class MaxEventTimeStatefulProcessor
+  extends StatefulProcessor[String, (String, Long), (String, Int)]
+  with Logging {
+  @transient var _maxEventTimeState: ValueState[Long] = _
+  @transient var _timerState: ValueState[Long] = _
+
+  override def init(
+      outputMode: OutputMode,
+      timeoutMode: TimeoutMode,
+      ttlMode: TTLMode): Unit = {
+    _maxEventTimeState = getHandle.getValueState[Long]("maxEventTimeState",
+      Encoders.scalaLong)
+    _timerState = getHandle.getValueState[Long]("timerState", Encoders.scalaLong)
+  }
+
+  protected def processUnexpiredRows(maxEventTimeSec: Long): Unit = {
+    val timeoutDelaySec = 5
+    val timeoutTimestampMs = (maxEventTimeSec + timeoutDelaySec) * 1000
+    _maxEventTimeState.update(maxEventTimeSec)
+
+    val registeredTimerMs: Long = _timerState.getOption().getOrElse(0L)
+    if (registeredTimerMs < timeoutTimestampMs) {
+      getHandle.deleteTimer(registeredTimerMs)
+      getHandle.registerTimer(timeoutTimestampMs)
+      _timerState.update(timeoutTimestampMs)
+    }
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[(String, Long)],
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, Int)] = {
+    if (expiredTimerInfo.isValid()) {
+      _maxEventTimeState.clear()
+      Iterator((key, -1))
+    } else {
+      val valuesSeq = inputRows.toSeq
+      val maxEventTimeSec = math.max(valuesSeq.map(_._2).max,
+        _maxEventTimeState.getOption().getOrElse(0L))
+      processUnexpiredRows(maxEventTimeSec)
+      Iterator((key, maxEventTimeSec.toInt))
+    }
+  }
 }
 
 class RunningCountMostRecentStatefulProcessor
@@ -59,14 +240,19 @@ class RunningCountMostRecentStatefulProcessor
   @transient private var _countState: ValueState[Long] = _
   @transient private var _mostRecent: ValueState[String] = _
 
-  override def init(outputMode: OutputMode): Unit = {
+  override def init(
+      outputMode: OutputMode,
+      timeoutMode: TimeoutMode,
+      ttlMode: TTLMode): Unit = {
     _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong)
     _mostRecent = getHandle.getValueState[String]("mostRecent", Encoders.STRING)
   }
+
   override def handleInputRows(
       key: String,
       inputRows: Iterator[(String, String)],
-      timerValues: TimerValues): Iterator[(String, String, String)] = {
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String, String)] = {
     val count = _countState.getOption().getOrElse(0L) + 1
     val mostRecent = _mostRecent.getOption().getOrElse("")
 
@@ -78,8 +264,6 @@ class RunningCountMostRecentStatefulProcessor
     }
     output.iterator
   }
-
-  override def close(): Unit = {}
 }
 
 class MostRecentStatefulProcessorWithDeletion
@@ -87,7 +271,10 @@ class MostRecentStatefulProcessorWithDeletion
   with Logging {
   @transient private var _mostRecent: ValueState[String] = _
 
-  override def init(outputMode: OutputMode): Unit = {
+  override def init(
+      outputMode: OutputMode,
+      timeoutMode: TimeoutMode,
+      ttlMode: TTLMode): Unit = {
     getHandle.deleteIfExists("countState")
     _mostRecent = getHandle.getValueState[String]("mostRecent", Encoders.STRING)
   }
@@ -95,7 +282,8 @@ class MostRecentStatefulProcessorWithDeletion
   override def handleInputRows(
       key: String,
       inputRows: Iterator[(String, String)],
-      timerValues: TimerValues): Iterator[(String, String)] = {
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
     val mostRecent = _mostRecent.getOption().getOrElse("")
 
     var output = List[(String, String)]()
@@ -105,17 +293,17 @@ class MostRecentStatefulProcessorWithDeletion
     }
     output.iterator
   }
-
-  override def close(): Unit = {}
 }
 
+// Class to verify incorrect usage of stateful processor
 class RunningCountStatefulProcessorWithError extends RunningCountStatefulProcessor {
   @transient private var _tempState: ValueState[Long] = _
 
   override def handleInputRows(
       key: String,
       inputRows: Iterator[String],
-      timerValues: TimerValues): Iterator[(String, String)] = {
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
     // Trying to create value state here should fail
     _tempState = getHandle.getValueState[Long]("tempState", Encoders.scalaLong)
     Iterator.empty
@@ -140,12 +328,13 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         .groupByKey(x => x)
         .transformWithState(new RunningCountStatefulProcessorWithError(),
           TimeoutMode.NoTimeouts(),
+          TTLMode.NoTTL(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
         AddData(inputData, "a"),
-        ExpectFailure[SparkException] { t =>
-          assert(t.getCause.getMessage.contains("Cannot create state variable"))
+        ExpectFailure[StatefulProcessorCannotPerformOperationWithInvalidHandleState] { t =>
+          assert(t.getMessage.contains("invalid handle state"))
         }
       )
     }
@@ -161,6 +350,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         .groupByKey(x => x)
         .transformWithState(new RunningCountStatefulProcessor(),
           TimeoutMode.NoTimeouts(),
+          TTLMode.NoTTL(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
@@ -178,6 +368,158 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         CheckNewAnswer(("a", "1"), ("c", "1"))
       )
     }
+  }
+
+  test("transformWithState - streaming with rocksdb and processing time timer " +
+   "should succeed") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
+      val clock = new StreamManualClock
+
+      val inputData = MemoryStream[String]
+      val result = inputData.toDS()
+        .groupByKey(x => x)
+        .transformWithState(new RunningCountStatefulProcessorWithProcTimeTimer(),
+          TimeoutMode.ProcessingTime(),
+          TTLMode.NoTTL(),
+          OutputMode.Update())
+
+      testStream(result, OutputMode.Update())(
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+        AddData(inputData, "a"),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(("a", "1")),
+
+        AddData(inputData, "b"),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(("b", "1")),
+
+        AddData(inputData, "b"),
+        AdvanceManualClock(10 * 1000),
+        CheckNewAnswer(("a", "-1"), ("b", "2")),
+
+        StopStream,
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+        AddData(inputData, "b"),
+        AddData(inputData, "c"),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(("c", "1")), // should remove 'b' as count reaches 3
+
+        AddData(inputData, "d"),
+        AdvanceManualClock(10 * 1000),
+        CheckNewAnswer(("c", "-1"), ("d", "1")),
+        StopStream
+      )
+    }
+  }
+
+  test("transformWithState - streaming with rocksdb and processing time timer " +
+   "and updating timers should succeed") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
+      val clock = new StreamManualClock
+
+      val inputData = MemoryStream[String]
+      val result = inputData.toDS()
+        .groupByKey(x => x)
+        .transformWithState(
+          new RunningCountStatefulProcessorWithProcTimeTimerUpdates(),
+          TimeoutMode.ProcessingTime(),
+          TTLMode.NoTTL(),
+          OutputMode.Update())
+
+      testStream(result, OutputMode.Update())(
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+        AddData(inputData, "a"),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(("a", "1")), // at batch 0, ts = 1, timer = "a" -> [6] (= 1 + 5)
+
+        AddData(inputData, "a"),
+        AdvanceManualClock(2 * 1000),
+        CheckNewAnswer(("a", "2")), // at batch 1, ts = 3, timer = "a" -> [9.5] (2 + 7.5)
+        StopStream,
+
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+        AddData(inputData, "d"),
+        AdvanceManualClock(10 * 1000),
+        CheckNewAnswer(("a", "-1"), ("d", "1")), // at batch 2, ts = 13, timer for "a" is expired.
+        // If the timer of "a" was not replaced (pure addition), it would have triggered the timer
+        // two times here and produced ("a", "-1") two times.
+        StopStream
+      )
+    }
+  }
+
+  test("transformWithState - streaming with rocksdb and processing time timer " +
+   "and multiple timers should succeed") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
+      val clock = new StreamManualClock
+
+      val inputData = MemoryStream[String]
+      val result = inputData.toDS()
+        .groupByKey(x => x)
+        .transformWithState(
+          new RunningCountStatefulProcessorWithMultipleTimers(),
+          TimeoutMode.ProcessingTime(),
+          TTLMode.NoTTL(),
+          OutputMode.Update())
+
+      testStream(result, OutputMode.Update())(
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+        AddData(inputData, "a"),
+        AdvanceManualClock(1 * 1000), // at batch 0, add 3 timers for given key = "a"
+
+        AddData(inputData, "a"),
+        AdvanceManualClock(6 * 1000),
+        CheckNewAnswer(("a", "2")), // at ts = 7, first timer expires and produces ("a", "2")
+        AddData(inputData, "a"),
+        AdvanceManualClock(5 * 1000),
+        CheckNewAnswer(("a", "3")), // at ts = 12, second timer expires and produces ("a", "3")
+        StopStream,
+
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+        AddData(inputData, "a"),
+        AdvanceManualClock(5 * 1000),
+        CheckNewAnswer(("a", "4")), // at ts = 17, third timer expires and produces ("a", "4")
+        StopStream
+      )
+    }
+  }
+
+  test("transformWithState - streaming with rocksdb and event time based timer") {
+    val inputData = MemoryStream[(String, Int)]
+    val result =
+      inputData.toDS()
+        .select($"_1".as("key"), timestamp_seconds($"_2").as("eventTime"))
+        .withWatermark("eventTime", "10 seconds")
+        .as[(String, Long)]
+        .groupByKey(_._1)
+        .transformWithState(
+          new MaxEventTimeStatefulProcessor(),
+          TimeoutMode.EventTime(),
+          TTLMode.NoTTL(),
+          OutputMode.Update())
+
+    testStream(result, OutputMode.Update())(
+      StartStream(),
+
+      AddData(inputData, ("a", 11), ("a", 13), ("a", 15)),
+      // Max event time = 15. Timeout timestamp for "a" = 15 + 5 = 20. Watermark = 15 - 10 = 5.
+      CheckNewAnswer(("a", 15)), // Output = max event time of a
+
+      AddData(inputData, ("a", 4)), // Add data older than watermark for "a"
+      CheckNewAnswer(), // No output as data should get filtered by watermark
+
+      AddData(inputData, ("a", 10)), // Add data newer than watermark for "a"
+      CheckNewAnswer(("a", 15)), // Max event time is still the same
+      // Timeout timestamp for "a" is still 20 as max event time for "a" is still 15.
+      // Watermark is still 5 as max event time for all data is still 15.
+
+      AddData(inputData, ("b", 31)), // Add data newer than watermark for "b", not "a"
+      // Watermark = 31 - 10 = 21, so "a" should be timed out as timeout timestamp for "a" is 20.
+      CheckNewAnswer(("a", -1), ("b", 31)) // State for "a" should timeout and emit -1
+    )
   }
 
   test("Use statefulProcessor without transformWithState - handle should be absent") {
@@ -198,6 +540,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       .groupByKey(x => x)
       .transformWithState(new RunningCountStatefulProcessor(),
         TimeoutMode.NoTimeouts(),
+        TTLMode.NoTTL(),
         OutputMode.Append())
 
     val df = result.toDF()
@@ -216,12 +559,14 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           .groupByKey(x => x._1)
           .transformWithState(new RunningCountMostRecentStatefulProcessor(),
             TimeoutMode.NoTimeouts(),
+            TTLMode.NoTTL(),
             OutputMode.Update())
 
         val stream2 = inputData.toDS()
           .groupByKey(x => x._1)
           .transformWithState(new MostRecentStatefulProcessorWithDeletion(),
             TimeoutMode.NoTimeouts(),
+            TTLMode.NoTTL(),
             OutputMode.Update())
 
         testStream(stream1, OutputMode.Update())(
@@ -254,6 +599,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         .groupByKey(x => x)
         .transformWithState(new RunningCountStatefulProcessor(),
           TimeoutMode.NoTimeouts(),
+          TTLMode.NoTTL(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
@@ -287,6 +633,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         .groupByKey(x => x)
         .transformWithState(new RunningCountStatefulProcessor(),
           TimeoutMode.NoTimeouts(),
+          TTLMode.NoTTL(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
@@ -320,6 +667,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         .groupByKey(x => x)
         .transformWithState(new RunningCountStatefulProcessor(),
           TimeoutMode.NoTimeouts(),
+          TTLMode.NoTTL(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
@@ -336,6 +684,102 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       )
     }
   }
+
+  /** Create a text file with a single data item */
+  private def createFile(data: String, srcDir: File): File =
+    stringToFile(new File(srcDir, s"${UUID.randomUUID()}.txt"), data)
+
+  private def createFileStream(srcDir: File): Dataset[(String, String)] = {
+    spark
+      .readStream
+      .option("maxFilesPerTrigger", "1")
+      .text(srcDir.getCanonicalPath)
+      .select("value").as[String]
+      .groupByKey(x => x)
+      .transformWithState(new RunningCountStatefulProcessor(),
+        TimeoutMode.NoTimeouts(),
+        TTLMode.NoTTL(),
+        OutputMode.Update())
+  }
+
+  test("transformWithState - availableNow trigger mode, rate limit is respected") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
+      withTempDir { srcDir =>
+
+        Seq("a", "b", "c").foreach(createFile(_, srcDir))
+
+        // Set up a query to read text files one at a time
+        val df = createFileStream(srcDir)
+
+        testStream(df)(
+          StartStream(trigger = Trigger.AvailableNow()),
+          ProcessAllAvailable(),
+          CheckNewAnswer(("a", "1"), ("b", "1"), ("c", "1")),
+          StopStream,
+          Execute { _ =>
+            createFile("a", srcDir)
+          },
+          StartStream(trigger = Trigger.AvailableNow()),
+          ProcessAllAvailable(),
+          CheckNewAnswer(("a", "2"))
+        )
+
+        var index = 0
+        val foreachBatchDf = df.writeStream
+          .foreachBatch((_: Dataset[(String, String)], _: Long) => {
+            index += 1
+          })
+          .trigger(Trigger.AvailableNow())
+          .start()
+
+        try {
+          foreachBatchDf.awaitTermination()
+          assert(index == 4)
+        } finally {
+          foreachBatchDf.stop()
+        }
+      }
+    }
+  }
+
+  test("transformWithState - availableNow trigger mode, multiple restarts") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
+      withTempDir { srcDir =>
+        Seq("a", "b", "c").foreach(createFile(_, srcDir))
+        val df = createFileStream(srcDir)
+
+        var index = 0
+
+        def startTriggerAvailableNowQueryAndCheck(expectedIdx: Int): Unit = {
+          val q = df.writeStream
+            .foreachBatch((_: Dataset[(String, String)], _: Long) => {
+              index += 1
+            })
+            .trigger(Trigger.AvailableNow)
+            .start()
+          try {
+            assert(q.awaitTermination(streamingTimeout.toMillis))
+            assert(index == expectedIdx)
+          } finally {
+            q.stop()
+          }
+        }
+        // start query for the first time
+        startTriggerAvailableNowQueryAndCheck(3)
+
+        // add two files and restart
+        createFile("a", srcDir)
+        createFile("b", srcDir)
+        startTriggerAvailableNowQueryAndCheck(8)
+
+        // try restart again
+        createFile("d", srcDir)
+        startTriggerAvailableNowQueryAndCheck(14)
+      }
+    }
+  }
 }
 
 class TransformWithStateValidationSuite extends StateStoreMetricsTest {
@@ -347,12 +791,33 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
       .groupByKey(x => x)
       .transformWithState(new RunningCountStatefulProcessor(),
         TimeoutMode.NoTimeouts(),
+        TTLMode.NoTTL(),
         OutputMode.Update())
 
     testStream(result, OutputMode.Update())(
       AddData(inputData, "a"),
       ExpectFailure[StateStoreMultipleColumnFamiliesNotSupportedException] { t =>
         assert(t.getMessage.contains("not supported"))
+      }
+    )
+  }
+
+  test("transformWithStateWithInitialState - streaming with hdfsStateStoreProvider should fail") {
+    val inputData = MemoryStream[InitInputRow]
+    val initDf = Seq(("init_1", 40.0), ("init_2", 100.0)).toDS()
+      .groupByKey(x => x._1)
+      .mapValues(x => x)
+    val result = inputData.toDS()
+      .groupByKey(x => x.key)
+      .transformWithState(new AccumulateStatefulProcessorWithInitState(),
+        TimeoutMode.NoTimeouts(), TTLMode.NoTTL(), OutputMode.Append(), initDf
+      )
+    testStream(result, OutputMode.Update())(
+      AddData(inputData, InitInputRow("a", "add", -1.0)),
+      ExpectFailure[StateStoreMultipleColumnFamiliesNotSupportedException] {
+        (t: Throwable) => {
+          assert(t.getMessage.contains("not supported"))
+        }
       }
     )
   }

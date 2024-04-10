@@ -150,6 +150,8 @@ class SparkThrowableSuite extends SparkFunSuite {
     }
     messageSeq.foreach { message =>
       message.foreach { msg =>
+        // Error messages in the JSON file should not contain newline characters:
+        // newlines are delineated as different elements in the array.
         assert(!msg.contains("\n"))
         assert(msg.trim == msg)
       }

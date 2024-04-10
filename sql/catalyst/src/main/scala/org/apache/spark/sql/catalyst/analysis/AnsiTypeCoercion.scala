@@ -77,6 +77,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
     UnpivotCoercion ::
     WidenSetOperationTypes ::
     new AnsiCombinedTypeCoercionRule(
+      CollationTypeCasts ::
       InConversion ::
       PromoteStrings ::
       DecimalPrecision ::
@@ -92,7 +93,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       ImplicitTypeCasts ::
       DateTimeOperations ::
       WindowFrameCoercion ::
-      GetDateFieldOperations:: Nil) :: Nil
+      GetDateFieldOperations :: Nil) :: Nil
 
   val findTightestCommonType: (DataType, DataType) => Option[DataType] = {
     case (t1, t2) if t1 == t2 => Some(t1)
@@ -138,15 +139,16 @@ object AnsiTypeCoercion extends TypeCoercionBase {
   @scala.annotation.tailrec
   private def findWiderTypeForString(dt1: DataType, dt2: DataType): Option[DataType] = {
     (dt1, dt2) match {
-      case (StringType, _: IntegralType) => Some(LongType)
-      case (StringType, _: FractionalType) => Some(DoubleType)
-      case (StringType, NullType) => Some(StringType)
+      case (_: StringType, _: IntegralType) => Some(LongType)
+      case (_: StringType, _: FractionalType) => Some(DoubleType)
+      case (st: StringType, NullType) => Some(st)
       // If a binary operation contains interval type and string, we can't decide which
       // interval type the string should be promoted as. There are many possible interval
       // types, such as year interval, month interval, day interval, hour interval, etc.
-      case (StringType, _: AnsiIntervalType) => None
-      case (StringType, a: AtomicType) => Some(a)
-      case (other, StringType) if other != StringType => findWiderTypeForString(StringType, other)
+      case (_: StringType, _: AnsiIntervalType) => None
+      case (_: StringType, a: AtomicType) => Some(a)
+      case (other, st: StringType) if !other.isInstanceOf[StringType] =>
+        findWiderTypeForString(st, other)
       case _ => None
     }
   }
@@ -180,37 +182,26 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       // cast the input to decimal.
       case (n: NumericType, DecimalType) => Some(DecimalType.forType(n))
 
-      // Cast null type (usually from null literals) into target types
-      // By default, the result type is `target.defaultConcreteType`. When the target type is
-      // `TypeCollection`, there is another branch to find the "closet convertible data type" below.
-      case (NullType, target) if !target.isInstanceOf[TypeCollection] =>
-        Some(target.defaultConcreteType)
+      // If a function expects a StringType, no StringType instance should be implicitly cast to
+      // StringType with a collation that's not accepted (aka. lockdown unsupported collations).
+      case (_: StringType, _: StringType) => None
+      case (_: StringType, _: StringTypeCollated) => None
 
-      // This type coercion system will allow implicit converting String type as other
-      // primitive types, in case of breaking too many existing Spark SQL queries.
-      case (StringType, a: AtomicType) =>
-        Some(a)
+      // If a function expects integral type, fractional input is not allowed.
+      case (_: FractionalType, IntegralType) => None
 
-      // If the target type is any Numeric type, convert the String type as Double type.
-      case (StringType, NumericType) =>
-        Some(DoubleType)
+      // Ideally the implicit cast rule should be the same as `Cast.canANSIStoreAssign` so that it's
+      // consistent with table insertion. To avoid breaking too many existing Spark SQL queries,
+      // we make the system to allow implicitly converting String type as other primitive types.
+      case (_: StringType, a @ (_: AtomicType | NumericType | DecimalType | AnyTimestampType)) =>
+        Some(a.defaultConcreteType)
 
-      // If the target type is any Decimal type, convert the String type as the default
-      // Decimal type.
-      case (StringType, DecimalType) =>
-        Some(DecimalType.SYSTEM_DEFAULT)
-
-      // If the target type is any timestamp type, convert the String type as the default
-      // Timestamp type.
-      case (StringType, AnyTimestampType) =>
-        Some(AnyTimestampType.defaultConcreteType)
-
-      case (DateType, AnyTimestampType) =>
-        Some(AnyTimestampType.defaultConcreteType)
-
-      case (_, target: DataType) =>
-        if (Cast.canANSIStoreAssign(inType, target)) {
-          Some(target)
+      // When the target type is `TypeCollection`, there is another branch to find the
+      // "closet convertible data type" below.
+      case (_, target) if !target.isInstanceOf[TypeCollection] =>
+        val concreteType = target.defaultConcreteType
+        if (Cast.canANSIStoreAssign(inType, concreteType)) {
+          Some(concreteType)
         } else {
           None
         }
