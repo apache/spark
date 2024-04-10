@@ -34,9 +34,9 @@ def check_dependencies(mod_name: str) -> None:
     else:
         require_minimum_pandas_version()
         require_minimum_pyarrow_version()
-        #require_minimum_grpc_version()
-        #require_minimum_grpcio_status_version()
-        #require_minimum_googleapis_common_protos_version()
+        require_minimum_grpc_version()
+        require_minimum_grpcio_status_version()
+        require_minimum_googleapis_common_protos_version()
 
 
 def require_minimum_grpc_version() -> None:

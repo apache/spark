@@ -41,6 +41,8 @@ class PythonStreamingPartitionReaderFactory(
 
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     val part = partition.asInstanceOf[PythonStreamingInputPartition]
+
+    // Maybe read from cached block prefetched by SimpleStreamReader
     lazy val cachedBlock = if (part.blockId.isDefined) {
       SparkEnv.get.blockManager.get[InternalRow](part.blockId.get)
         .map(_.data.asInstanceOf[Iterator[InternalRow]])
@@ -53,6 +55,7 @@ class PythonStreamingPartitionReaderFactory(
       private[this] val metrics: Map[String, SQLMetric] = PythonCustomMetric.pythonMetrics
 
       private val outputIter = if (cachedBlock.isEmpty) {
+        // Evaluate the python read UDF if the partition is not cached as block.
         val evaluatorFactory = source.createMapInBatchEvaluatorFactory(
           pickledReadFunc,
           "read_from_data_source",

@@ -163,18 +163,6 @@ class DataSource(ABC):
             message_parameters={"feature": "writer"},
         )
 
-    def _streamReader(self, schema: StructType) -> "DataSourceStreamReader":
-        try:
-            return self.streamReader(schema=schema)
-        except PySparkNotImplementedError:
-            return _SimpleStreamReaderWrapper(self.simpleStreamReader(schema=schema))
-
-    def simpleStreamReader(self, schema: StructType) -> "SimpleDataSourceStreamReader":
-        raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "simpleStreamReader"},
-        )
-
     def streamWriter(self, schema: StructType, overwrite: bool) -> "DataSourceStreamWriter":
         """
         Returns a :class:`DataSourceStreamWriter` instance for writing data into a streaming sink.
@@ -198,11 +186,40 @@ class DataSource(ABC):
             message_parameters={"feature": "streamWriter"},
         )
 
+    def _streamReader(self, schema: StructType) -> "DataSourceStreamReader":
+        try:
+            return self.streamReader(schema=schema)
+        except PySparkNotImplementedError:
+            return _SimpleStreamReaderWrapper(self.simpleStreamReader(schema=schema))
+
+    def simpleStreamReader(self, schema: StructType) -> "SimpleDataSourceStreamReader":
+        """
+        Returns a :class:`SimpleDataSourceStreamReader` instance for reading data.
+
+        One of simpleStreamReader() and streamReader() must be implemented for readable streaming
+        data source.
+
+        Parameters
+        ----------
+        schema : :class:`StructType`
+            The schema of the data to be read.
+
+        Returns
+        -------
+        reader : :class:`SimpleDataSourceStreamReader`
+            A reader instance for this data source.
+        """
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "simpleStreamReader"},
+        )
+
     def streamReader(self, schema: StructType) -> "DataSourceStreamReader":
         """
         Returns a :class:`DataSourceStreamReader` instance for reading streaming data.
 
-        The implementation is required for readable streaming data sources.
+        One of simpleStreamReader() and streamReader() must be implemented for readable streaming
+        data source.
 
         Parameters
         ----------
@@ -576,18 +593,18 @@ class SimpleDataSourceStreamReader(ABC):
 
 
 class _SimpleStreamReaderWrapper(DataSourceStreamReader):
-    def __init__(self, simple_reader):
+    def __init__(self, simple_reader: SimpleDataSourceStreamReader):
         self.simple_reader = simple_reader
         self.initial_offset = None
         self.current_offset = None
         self.cache = []
 
-    def initialOffset(self):
+    def initialOffset(self) -> dict:
         if self.initial_offset is None:
             self.initial_offset = self.simple_reader.initialOffset()
         return self.initial_offset
 
-    def latestOffset(self):
+    def latestOffset(self) -> dict:
         # when query start for the first time, use initial offset as the start offset.
         if self.current_offset is None:
             self.current_offset = self.initialOffset()
@@ -596,7 +613,7 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
         self.current_offset = end
         return end
 
-    def commit(self, end: dict):
+    def commit(self, end: dict) -> None:
         end_idx = -1
         if self.current_offset is None:
             self.current_offset = end
@@ -609,7 +626,7 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
             self.cache = self.cache[end_idx:]
         self.simple_reader.commit(end)
 
-    def partitions(self, start: dict, end: dict):
+    def partitions(self, start: dict, end: dict) -> Sequence["InputPartition"]:
         # when query restart from checkpoint, use the last committed offset as the start offset.
         # This depends on the current behavior that streaming engine call getBatch on the last
         # microbatch when query restart.
@@ -619,7 +636,7 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
             assert (self.cache[-1][1] == end)
         return [SimpleInputPartition(start, end)]
 
-    def getCache(self, start: dict, end: dict):
+    def getCache(self, start: dict, end: dict) -> Iterator[Tuple]:
         start_idx = -1
         end_idx = -1
         for i in range(len(self.cache)):
