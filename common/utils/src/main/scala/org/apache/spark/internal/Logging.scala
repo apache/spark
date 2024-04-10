@@ -105,9 +105,10 @@ trait Logging {
       val context = new java.util.HashMap[String, String]()
 
       args.foreach { mdc =>
-        sb.append(mdc.value.toString)
+        val value = if (mdc.value != null) mdc.value.toString else null.asInstanceOf[String]
+        sb.append(value)
         if (Logging.isStructuredLoggingEnabled) {
-          context.put(mdc.key.toString.toLowerCase(Locale.ROOT), mdc.value.toString)
+          context.put(mdc.key.toString.toLowerCase(Locale.ROOT), value)
         }
 
         if (processedParts.hasNext) {
