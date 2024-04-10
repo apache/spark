@@ -246,7 +246,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
         conn.prepareStatement(options.prepareQuery + dialect.getSchemaQuery(options.tableOrQuery))
       try {
         statement.setQueryTimeout(options.queryTimeout)
-        Some(getSchema(statement.executeQuery(), dialect,
+        Some(getSchema(conn, statement.executeQuery(), dialect,
           isTimestampNTZ = options.preferTimestampNTZ))
       } catch {
         case _: SQLException => None
@@ -267,6 +267,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
    * @throws SQLException if the schema contains an unsupported type.
    */
   def getSchema(
+      conn: Connection,
       resultSet: ResultSet,
       dialect: JdbcDialect,
       alwaysNullable: Boolean = false,
@@ -306,6 +307,11 @@ object JdbcUtils extends Logging with SQLConfHelper {
           metadata.putBoolean("logical_time_type", true)
         case java.sql.Types.ROWID =>
           metadata.putBoolean("rowid", true)
+        case java.sql.Types.ARRAY =>
+          val tableName = rsmd.getTableName(i + 1)
+          dialect.getArrayDimension(conn, tableName, columnName).foreach { dimension =>
+            metadata.putLong("arrayDimension", dimension)
+          }
         case _ =>
       }
       metadata.putBoolean("isSigned", isSigned)
@@ -542,7 +548,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
         }
 
     case ArrayType(et, _) =>
-      val elementConversion = et match {
+      def elementConversion(et: DataType): AnyRef => Any = et match {
         case TimestampType => arrayConverter[Timestamp] {
           (t: Timestamp) => fromJavaTimestamp(dialect.convertJavaTimestampToTimestamp(t))
         }
@@ -565,8 +571,10 @@ object JdbcUtils extends Logging with SQLConfHelper {
         case LongType if metadata.contains("binarylong") =>
           throw QueryExecutionErrors.unsupportedArrayElementTypeBasedOnBinaryError(dt)
 
-        case ArrayType(_, _) =>
-          throw QueryExecutionErrors.nestedArraysUnsupportedError()
+        case ArrayType(et0, _) =>
+          arrayConverter[Array[Any]] {
+            arr => new GenericArrayData(elementConversion(et0)(arr))
+          }
 
         case _ => (array: Object) => array.asInstanceOf[Array[Any]]
       }
@@ -574,7 +582,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         val array = nullSafeConvert[java.sql.Array](
           input = rs.getArray(pos + 1),
-          array => new GenericArrayData(elementConversion(array.getArray)))
+          array => new GenericArrayData(elementConversion(et)(array.getArray)))
         row.update(pos, array)
 
     case NullType =>

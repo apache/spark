@@ -141,7 +141,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
    * send to the client about the current query progress. The message is not directly send to the
    * client, but rather enqueued to in the response observer.
    */
-  private def enqueueProgressMessage(): Unit = {
+  private def enqueueProgressMessage(force: Boolean = false): Unit = {
     if (executeHolder.sessionHolder.session.conf.get(CONNECT_PROGRESS_REPORT_INTERVAL) > 0) {
       SparkConnectService.executionListener.foreach { listener =>
         // It is possible, that the tracker is no longer available and in this
@@ -149,7 +149,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
         // having to synchronize on the listener.
         listener.tryGetTracker(executeHolder.jobTag).foreach { tracker =>
           // Only send progress message if there is something new to report.
-          tracker.yieldWhenDirty { (stages, inflightTasks) =>
+          tracker.yieldWhenDirty(force) { (stages, inflightTasks) =>
             val response = ExecutePlanResponse
               .newBuilder()
               .setExecutionProgress(
@@ -160,7 +160,8 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
               .build()
             // There is a special case when the response observer has alreaady determined
             // that the final message is send (and the stream will be closed) but we might want
-            // to send the progress message. In this case we ignore the result of the `onNext` call.
+            // to send the progress message. In this case we ignore the result of the `onNext`
+            // call.
             executeHolder.responseObserver.tryOnNext(response)
           }
         }
@@ -250,7 +251,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
             }
             logTrace(s"Wait for response to become available with timeout=$timeout ms.")
             executionObserver.responseLock.wait(timeout)
-            enqueueProgressMessage()
+            enqueueProgressMessage(force = true)
             logTrace(s"Reacquired executionObserver lock after waiting.")
             sleepEnd = System.nanoTime()
           }
