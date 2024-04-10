@@ -374,13 +374,11 @@ class SqlCommand(google.protobuf.message.Message):
         input: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
     ) -> None: ...
     def HasField(
-        self, field_name: typing_extensions.Literal["_input", b"_input", "input", b"input"]
+        self, field_name: typing_extensions.Literal["input", b"input"]
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "_input",
-            b"_input",
             "args",
             b"args",
             "input",
@@ -395,9 +393,6 @@ class SqlCommand(google.protobuf.message.Message):
             b"sql",
         ],
     ) -> None: ...
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_input", b"_input"]
-    ) -> typing_extensions.Literal["input"] | None: ...
 
 global___SqlCommand = SqlCommand
 

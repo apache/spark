@@ -1185,8 +1185,8 @@ class SQL(LogicalPlan):
             # with_relations [id 10]
             #     root: sql  [id 9]
             #     reference:
-            #          alias#1: [id 8]
-            #          alias#2: [id 5]
+            #          view#1: [id 8]
+            #          view#2: [id 5]
             sql_plan = plan
             plan = proto.Relation()
             plan.common.plan_id = self._plan_id_with_rel

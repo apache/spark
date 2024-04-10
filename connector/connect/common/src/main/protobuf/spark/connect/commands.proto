@@ -78,7 +78,7 @@ message SqlCommand {
   repeated Expression pos_arguments = 5 [deprecated=true];
 
   // (Optional) The relation that this SQL command will be built on.
-  optional Relation input = 6;
+  Relation input = 6;
 }
 
 // A command that can create DataFrame global temp view or local temp view.
