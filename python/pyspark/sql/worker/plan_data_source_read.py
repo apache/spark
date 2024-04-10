@@ -23,7 +23,7 @@ from itertools import islice
 from typing import IO, List, Iterator, Iterable
 
 from pyspark.accumulators import _accumulatorRegistry
-from pyspark.errors import PySparkAssertionError, PySparkNotImplementedError, PySparkRuntimeError
+from pyspark.errors import PySparkAssertionError, PySparkRuntimeError
 from pyspark.serializers import (
     read_bool,
     read_int,

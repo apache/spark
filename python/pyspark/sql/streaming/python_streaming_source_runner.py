@@ -15,22 +15,21 @@
 # limitations under the License.
 #
 
-import copy
 import os
 import sys
 import json
-from typing import IO, Iterable, Iterator, Tuple
+from typing import IO, Iterator, Tuple
 
 from pyspark.accumulators import _accumulatorRegistry
-from pyspark.errors import IllegalArgumentException, PySparkAssertionError, PySparkRuntimeError
 from pyspark.java_gateway import local_connect_and_auth
+from pyspark.errors import IllegalArgumentException, PySparkAssertionError, PySparkRuntimeError
 from pyspark.serializers import (
     read_int,
     write_int,
     write_with_length,
     SpecialLengths,
 )
-from pyspark.sql.datasource import DataSource, DataSourceStreamReader, SimpleDataSourceStreamReader, _SimpleStreamReaderWrapper, InputPartition
+from pyspark.sql.datasource import DataSource, DataSourceStreamReader, _SimpleStreamReaderWrapper, InputPartition
 from pyspark.sql.pandas.serializers import ArrowStreamSerializer
 from pyspark.sql.types import (
     _parse_datatype_json_string,
