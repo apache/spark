@@ -50,13 +50,13 @@ public final class CollationSupport {
         return String.format(expr + "ICU(%s, %s, %d)", l, r, collationId);
       }
     }
-    private static boolean containsBinary(final UTF8String l, final UTF8String r) {
+    public static boolean containsBinary(final UTF8String l, final UTF8String r) {
       return l.contains(r);
     }
-    private static boolean containsLowercase(final UTF8String l, final UTF8String r) {
+    public static boolean containsLowercase(final UTF8String l, final UTF8String r) {
       return l.toLowerCase().contains(r.toLowerCase());
     }
-    private static boolean containsICU(final UTF8String l, final UTF8String r,
+    public static boolean containsICU(final UTF8String l, final UTF8String r,
         final int collationId) {
       if (r.numBytes() == 0) return true;
       if (l.numBytes() == 0) return false;
@@ -88,13 +88,13 @@ public final class CollationSupport {
         return String.format(expr + "ICU(%s, %s, %d)", l, r, collationId);
       }
     }
-    private static boolean startsWithBinary(final UTF8String l, final UTF8String r) {
+    public static boolean startsWithBinary(final UTF8String l, final UTF8String r) {
       return l.startsWith(r);
     }
-    private static boolean startsWithLowercase(final UTF8String l, final UTF8String r) {
+    public static boolean startsWithLowercase(final UTF8String l, final UTF8String r) {
       return l.toLowerCase().startsWith(r.toLowerCase());
     }
-    private static boolean startsWithICU(final UTF8String l, final UTF8String r,
+    public static boolean startsWithICU(final UTF8String l, final UTF8String r,
         final int collationId) {
       return CollationAwareUTF8String.matchAt(l, r, 0, collationId);
     }
@@ -122,13 +122,13 @@ public final class CollationSupport {
         return String.format(expr + "ICU(%s, %s, %d)", l, r, collationId);
       }
     }
-    private static boolean endsWithBinary(final UTF8String l, final UTF8String r) {
+    public static boolean endsWithBinary(final UTF8String l, final UTF8String r) {
       return l.endsWith(r);
     }
-    private static boolean endsWithLowercase(final UTF8String l, final UTF8String r) {
+    public static boolean endsWithLowercase(final UTF8String l, final UTF8String r) {
       return l.toLowerCase().endsWith(r.toLowerCase());
     }
-    private static boolean endsWithICU(final UTF8String l, final UTF8String r,
+    public static boolean endsWithICU(final UTF8String l, final UTF8String r,
         final int collationId) {
       return CollationAwareUTF8String.matchAt(l, r, l.numBytes() - r.numBytes(), collationId);
     }
