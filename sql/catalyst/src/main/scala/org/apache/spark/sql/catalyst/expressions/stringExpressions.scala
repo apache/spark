@@ -2264,9 +2264,8 @@ case class Levenshtein(
         leftEval.asInstanceOf[UTF8String].collationAwareLevenshteinDistance(
           rightEval.asInstanceOf[UTF8String], v.asInstanceOf[Int], collationId)
       case _ =>
-        val x = leftEval.asInstanceOf[UTF8String].collationAwareLevenshteinDistance(
+        leftEval.asInstanceOf[UTF8String].collationAwareLevenshteinDistance(
           rightEval.asInstanceOf[UTF8String], collationId)
-        x
     }
   }
 
