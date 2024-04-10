@@ -184,8 +184,9 @@ class Column(val expr: Expression) extends Logging {
    * @return A Column resulting from the operation.
    */
   private def fn(
-      name: String, other: Any, pysparkLoggingInfo: java.util.Map[String, String]): Column = {
-    withOrigin(Some(pysparkLoggingInfo)) {
+      name: String, other: Any, pysparkLoggingInfo: java.util.ArrayList[String]): Column = {
+    val tupleInfo = (pysparkLoggingInfo.get(0), pysparkLoggingInfo.get(1))
+    withOrigin(Some(tupleInfo)) {
       Column.fn(name, this, lit(other))
     }
   }

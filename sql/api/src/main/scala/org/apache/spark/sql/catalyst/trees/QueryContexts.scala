@@ -136,7 +136,7 @@ case class SQLQueryContext(
 
 case class DataFrameQueryContext(
     stackTrace: Seq[StackTraceElement],
-    pysparkLoggingInfo: Option[java.util.Map[String, String]]) extends QueryContext {
+    pysparkLoggingInfo: Option[(String, String)]) extends QueryContext {
   override val contextType = QueryContextType.DataFrame
 
   override def objectType: String = throw SparkUnsupportedOperationException()
@@ -157,15 +157,8 @@ case class DataFrameQueryContext(
 
   override val callSite: String = stackTrace.tail.mkString("\n")
 
-  val pysparkFragment: String = pysparkLoggingInfo match {
-    case Some(loggingInfo) => loggingInfo.getOrDefault("fragment", "")
-    case None => ""
-  }
-
-  val pysparkCallSite: String = pysparkLoggingInfo match {
-    case Some(loggingInfo) => loggingInfo.getOrDefault("callSite", "")
-    case None => ""
-  }
+  val pysparkFragment: String = pysparkLoggingInfo.map(_._1).getOrElse("")
+  val pysparkCallSite: String = pysparkLoggingInfo.map(_._2).getOrElse("")
 
   val (displayedFragment, displayedCallsite) = if (pysparkLoggingInfo.nonEmpty) {
     (pysparkFragment, pysparkCallSite)

@@ -111,8 +111,33 @@ package object sql {
     }
   }
 
+  /**
+   * This overloaded helper function captures the call site information specifically for PySpark,
+   * using provided PySpark logging information instead of capturing the current Java stack trace.
+   *
+   * This method is designed to enhance the debuggability of PySpark by including PySpark-specific
+   * logging information (e.g., method names and call sites within PySpark scripts) in debug logs,
+   * without the overhead of capturing and processing Java stack traces that are less relevant
+   * to PySpark developers.
+   *
+   * The `pysparkLoggingInfo` parameter allows for passing PySpark call site information, which
+   * is then included in the Origin context. This facilitates more precise and useful logging for
+   * troubleshooting PySpark applications.
+   *
+   * This method should be used in places where PySpark API calls are made, and PySpark logging
+   * information is available and beneficial for debugging purposes.
+   *
+   * @param pysparkLoggingInfo Optional PySpark logging information including the call site,
+   *                           represented as a (String, String).
+   *                           This may contain keys like "fragment" and "callSite" to provide
+   *                           detailed context about the PySpark call site.
+   * @param f                  The function that can utilize the modified Origin context with
+   *                           PySpark logging information.
+   * @return The result of executing `f` within the context of the provided PySpark logging
+   *         information.
+   */
   private[sql] def withOrigin[T](
-      pysparkLoggingInfo: Option[java.util.Map[String, String]] = None)(f: => T): T = {
+      pysparkLoggingInfo: Option[(String, String)] = None)(f: => T): T = {
     if (CurrentOrigin.get.stackTrace.isDefined) {
       f
     } else {

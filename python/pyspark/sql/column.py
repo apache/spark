@@ -199,17 +199,20 @@ def _bin_op(
         self: "Column",
         other: Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"],
     ) -> "Column":
-        logging_info = {}
-        if name in binary_operator_map:
-            stack = inspect.stack()
-            frame_info = stack[-1]
-            logging_info = {
-                "fragment": name,
-                "callSite": f"{frame_info.filename}:{frame_info.lineno}",
-            }
-
         jc = other._jc if isinstance(other, Column) else other
-        if logging_info:
+        if name in binary_operator_map:
+            from pyspark.sql import SparkSession
+
+            spark = SparkSession._getActiveSessionOrCreate()
+            stack = list(reversed(inspect.stack()))
+            depth = int(
+                spark.conf.get("spark.sql.stackTracesInDataFrameContext")  # type: ignore[arg-type]
+            )
+            selected_frames = stack[:depth]
+            logging_info_list = [f"{frame.filename}:{frame.lineno}" for frame in selected_frames]
+            logging_info_str = "\n".join(logging_info_list)
+            logging_info = (name, logging_info_str)
+
             njc = getattr(self._jc, "fn")(binary_operator_map[name], jc, logging_info)
         else:
             njc = getattr(self._jc, name)(jc)
