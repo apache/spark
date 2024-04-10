@@ -79,6 +79,31 @@ package object sql {
   private[sql] val SPARK_LEGACY_INT96_METADATA_KEY = "org.apache.spark.legacyINT96"
 
   /**
+   * Captures the current Java stack trace up to a specified depth defined by the
+   * `spark.sql.stackTracesInDataFrameContext` configuration. This method helps in identifying
+   * the call sites in Spark code by filtering out the stack frames until it reaches the
+   * user code calling into Spark. This method is intended to be used for enhancing debuggability
+   * by providing detailed context about where in the Spark source code a particular operation
+   * was called from.
+   *
+   * This functionality is crucial for both debugging purposes and for providing more insightful
+   * logging and error messages. By capturing the stack trace up to a certain depth, it enables
+   * a more precise pinpointing of the execution flow, especially useful when troubleshooting
+   * complex interactions within Spark.
+   *
+   * @return An array of `StackTraceElement` representing the filtered stack trace.
+   */
+  private def captureStackTrace(): Array[StackTraceElement] = {
+    val st = Thread.currentThread().getStackTrace
+    var i = 0
+    // Find the beginning of Spark code traces
+    while (i < st.length && !sparkCode(st(i))) i += 1
+    // Stop at the end of the first Spark code traces
+    while (i < st.length && sparkCode(st(i))) i += 1
+    st.slice(from = i - 1, until = i + SQLConf.get.stackTracesInDataFrameContext)
+  }
+
+  /**
    * This helper function captures the Spark API and its call site in the user code from the current
    * stacktrace.
    *
@@ -98,15 +123,7 @@ package object sql {
     if (CurrentOrigin.get.stackTrace.isDefined) {
       f
     } else {
-      val st = Thread.currentThread().getStackTrace
-      var i = 0
-      // Find the beginning of Spark code traces
-      while (i < st.length && !sparkCode(st(i))) i += 1
-      // Stop at the end of the first Spark code traces
-      while (i < st.length && sparkCode(st(i))) i += 1
-      val origin = Origin(stackTrace = Some(st.slice(
-        from = i - 1,
-        until = i + SQLConf.get.stackTracesInDataFrameContext)))
+      val origin = Origin(stackTrace = Some(captureStackTrace()))
       CurrentOrigin.withOrigin(origin)(f)
     }
   }
@@ -141,15 +158,8 @@ package object sql {
     if (CurrentOrigin.get.stackTrace.isDefined) {
       f
     } else {
-      val st = Thread.currentThread().getStackTrace
-      var i = 0
-      // Find the beginning of Spark code traces
-      while (i < st.length && !sparkCode(st(i))) i += 1
-      // Stop at the end of the first Spark code traces
-      while (i < st.length && sparkCode(st(i))) i += 1
       val origin = Origin(
-        stackTrace = Some(
-          st.slice(from = i - 1, until = i + SQLConf.get.stackTracesInDataFrameContext)),
+        stackTrace = Some(captureStackTrace()),
         pysparkLoggingInfo = pysparkLoggingInfo
       )
       CurrentOrigin.withOrigin(origin)(f)

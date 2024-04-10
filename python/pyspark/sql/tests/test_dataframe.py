@@ -1319,9 +1319,6 @@ class DataFrameTestsMixin:
 
 
 class DataFrameTests(DataFrameTestsMixin, ReusedSQLTestCase):
-    def test_dataframe_error_context(self):
-        super().test_dataframe_error_context()
-
     pass
 
 
