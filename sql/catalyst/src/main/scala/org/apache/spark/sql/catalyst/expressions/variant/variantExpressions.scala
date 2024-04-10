@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions.variant
 
+import java.time.ZoneId
+
 import scala.util.parsing.combinator.RegexParsers
 
 import org.apache.spark.SparkRuntimeException
@@ -170,7 +172,8 @@ case class VariantGet(
       parsedPath,
       dataType,
       failOnError,
-      timeZoneId)
+      timeZoneId,
+      zoneId)
   }
 
   protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -178,14 +181,15 @@ case class VariantGet(
     val tmp = ctx.freshVariable("tmp", classOf[Object])
     val parsedPathArg = ctx.addReferenceObj("parsedPath", parsedPath)
     val dataTypeArg = ctx.addReferenceObj("dataType", dataType)
-    val zoneIdArg = ctx.addReferenceObj("zoneId", timeZoneId)
+    val zoneStrArg = ctx.addReferenceObj("zoneStr", timeZoneId)
+    val zoneIdArg = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
     val code = code"""
       ${childCode.code}
       boolean ${ev.isNull} = ${childCode.isNull};
       ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
       if (!${ev.isNull}) {
         Object $tmp = org.apache.spark.sql.catalyst.expressions.variant.VariantGet.variantGet(
-          ${childCode.value}, $parsedPathArg, $dataTypeArg, $failOnError, $zoneIdArg);
+          ${childCode.value}, $parsedPathArg, $dataTypeArg, $failOnError, $zoneStrArg, $zoneIdArg);
         if ($tmp == null) {
           ${ev.isNull} = true;
         } else {
@@ -228,7 +232,8 @@ case object VariantGet {
       parsedPath: Array[VariantPathParser.PathSegment],
       dataType: DataType,
       failOnError: Boolean,
-      zoneId: Option[String]): Any = {
+      zoneStr: Option[String],
+      zoneId: ZoneId): Any = {
     var v = new Variant(input.getValue, input.getMetadata)
     for (path <- parsedPath) {
       v = path match {
@@ -238,7 +243,7 @@ case object VariantGet {
       }
       if (v == null) return null
     }
-    VariantGet.cast(v, dataType, failOnError, zoneId)
+    VariantGet.cast(v, dataType, failOnError, zoneStr, zoneId)
   }
 
   /**
@@ -249,9 +254,10 @@ case object VariantGet {
       input: VariantVal,
       dataType: DataType,
       failOnError: Boolean,
-      zoneId: Option[String]): Any = {
+      zoneStr: Option[String],
+      zoneId: ZoneId): Any = {
     val v = new Variant(input.getValue, input.getMetadata)
-    VariantGet.cast(v, dataType, failOnError, zoneId)
+    VariantGet.cast(v, dataType, failOnError, zoneStr, zoneId)
   }
 
   /**
@@ -261,9 +267,19 @@ case object VariantGet {
    * "hello" to int). If the cast fails, throw an exception when `failOnError` is true, or return a
    * SQL NULL when it is false.
    */
-  def cast(v: Variant, dataType: DataType, failOnError: Boolean, zoneId: Option[String]): Any = {
-    def invalidCast(): Any =
-      if (failOnError) throw QueryExecutionErrors.invalidVariantCast(v.toJson, dataType) else null
+  def cast(
+      v: Variant,
+      dataType: DataType,
+      failOnError: Boolean,
+      zoneStr: Option[String],
+      zoneId: ZoneId): Any = {
+    def invalidCast(): Any = {
+      if (failOnError) {
+        throw QueryExecutionErrors.invalidVariantCast(v.toJson(zoneId), dataType)
+      } else {
+        null
+      }
+    }
 
     if (dataType == VariantType) return new VariantVal(v.getValue, v.getMetadata)
     val variantType = v.getType
@@ -273,15 +289,22 @@ case object VariantGet {
         val input = variantType match {
           case Type.OBJECT | Type.ARRAY =>
             return if (dataType.isInstanceOf[StringType]) {
-              UTF8String.fromString(v.toJson)
+              UTF8String.fromString(v.toJson(zoneId))
             } else {
               invalidCast()
             }
-          case Type.BOOLEAN => v.getBoolean
-          case Type.LONG => v.getLong
-          case Type.STRING => UTF8String.fromString(v.getString)
-          case Type.DOUBLE => v.getDouble
-          case Type.DECIMAL => Decimal(v.getDecimal)
+          case Type.BOOLEAN => Literal(v.getBoolean, BooleanType)
+          case Type.LONG => Literal(v.getLong, LongType)
+          case Type.STRING => Literal(UTF8String.fromString(v.getString), StringType)
+          case Type.DOUBLE => Literal(v.getDouble, DoubleType)
+          case Type.DECIMAL =>
+            val d = Decimal(v.getDecimal)
+            Literal(Decimal(v.getDecimal), DecimalType(d.precision, d.scale))
+          case Type.DATE => Literal(v.getLong.toInt, DateType)
+          case Type.TIMESTAMP => Literal(v.getLong, TimestampType)
+          case Type.TIMESTAMP_NTZ => Literal(v.getLong, TimestampNTZType)
+          case Type.FLOAT => Literal(v.getFloat, FloatType)
+          case Type.BINARY => Literal(v.getBinary, BinaryType)
           // We have handled other cases and should never reach here. This case is only intended
           // to by pass the compiler exhaustiveness check.
           case _ => throw QueryExecutionErrors.unreachableError()
@@ -289,15 +312,17 @@ case object VariantGet {
         // We mostly use the `Cast` expression to implement the cast. However, `Cast` silently
         // ignores the overflow in the long/decimal -> timestamp cast, and we want to enforce
         // strict overflow checks.
-        input match {
-          case l: Long if dataType == TimestampType =>
-            try Math.multiplyExact(l, MICROS_PER_SECOND)
+        input.dataType match {
+          case LongType if dataType == TimestampType =>
+            try Math.multiplyExact(input.value.asInstanceOf[Long], MICROS_PER_SECOND)
             catch {
               case _: ArithmeticException => invalidCast()
             }
-          case d: Decimal if dataType == TimestampType =>
+          case _: DecimalType if dataType == TimestampType =>
             try {
-              d.toJavaBigDecimal
+              input.value
+                .asInstanceOf[Decimal]
+                .toJavaBigDecimal
                 .multiply(new java.math.BigDecimal(MICROS_PER_SECOND))
                 .toBigInteger
                 .longValueExact()
@@ -305,9 +330,8 @@ case object VariantGet {
               case _: ArithmeticException => invalidCast()
             }
           case _ =>
-            val inputLiteral = Literal(input)
-            if (Cast.canAnsiCast(inputLiteral.dataType, dataType)) {
-              val result = Cast(inputLiteral, dataType, zoneId, EvalMode.TRY).eval()
+            if (Cast.canAnsiCast(input.dataType, dataType)) {
+              val result = Cast(input, dataType, zoneStr, EvalMode.TRY).eval()
               if (result == null) invalidCast() else result
             } else {
               invalidCast()
@@ -318,7 +342,7 @@ case object VariantGet {
           val size = v.arraySize()
           val array = new Array[Any](size)
           for (i <- 0 until size) {
-            array(i) = cast(v.getElementAtIndex(i), elementType, failOnError, zoneId)
+            array(i) = cast(v.getElementAtIndex(i), elementType, failOnError, zoneStr, zoneId)
           }
           new GenericArrayData(array)
         } else {
@@ -332,7 +356,7 @@ case object VariantGet {
           for (i <- 0 until size) {
             val field = v.getFieldAtIndex(i)
             keyArray(i) = UTF8String.fromString(field.key)
-            valueArray(i) = cast(field.value, valueType, failOnError, zoneId)
+            valueArray(i) = cast(field.value, valueType, failOnError, zoneStr, zoneId)
           }
           ArrayBasedMapData(keyArray, valueArray)
         } else {
@@ -345,7 +369,8 @@ case object VariantGet {
             val field = v.getFieldAtIndex(i)
             st.getFieldIndex(field.key) match {
               case Some(idx) =>
-                row.update(idx, cast(field.value, fields(idx).dataType, failOnError, zoneId))
+                row.update(idx,
+                  cast(field.value, fields(idx).dataType, failOnError, zoneStr, zoneId))
               case _ =>
             }
           }
@@ -576,6 +601,11 @@ object SchemaOfVariant {
     case Type.DECIMAL =>
       val d = v.getDecimal
       DecimalType(d.precision(), d.scale())
+    case Type.DATE => DateType
+    case Type.TIMESTAMP => TimestampType
+    case Type.TIMESTAMP_NTZ => TimestampNTZType
+    case Type.FLOAT => FloatType
+    case Type.BINARY => BinaryType
   }
 
   /**
