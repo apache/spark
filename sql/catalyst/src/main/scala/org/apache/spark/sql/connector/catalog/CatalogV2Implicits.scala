@@ -173,11 +173,14 @@ private[sql] object CatalogV2Implicits {
      * @return Table identifier if conversion can be done, None otherwise
      */
     def asTableIdentifier(catalogName: Option[String]): Option[TableIdentifier] = {
-      if (ident.namespace().length <= 1) {
-        Some(TableIdentifier(ident.name(), ident.namespace().headOption, catalogName))
-      }
-      else {
-        None
+      ident.namespace().toImmutableArraySeq match {
+        case Seq(singleNamespace) =>
+          Some(TableIdentifier(ident.name(), Some(singleNamespace), catalogName))
+        case Seq() =>
+          // If namespace is not given, catalog will not be used
+          Some(TableIdentifier(ident.name()))
+        case _ =>
+          None
       }
     }
 
