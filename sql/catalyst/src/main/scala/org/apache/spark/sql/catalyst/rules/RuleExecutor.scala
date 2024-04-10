@@ -257,16 +257,18 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
           // Only log if this is a rule that is supposed to run more than once.
           if (iteration != 2) {
             val endingMsg = if (batch.strategy.maxIterationsSetting == null) {
-              "."
+              log"."
             } else {
-              s", please set '${batch.strategy.maxIterationsSetting}' to a larger value."
+              log", please set '${MDC(NUM_ITERATIONS, batch.strategy.maxIterationsSetting)}' " +
+                log"to a larger value."
             }
-            val message = s"Max iterations (${iteration - 1}) reached for batch ${batch.name}" +
-              s"$endingMsg"
+            val log = log"Max iterations (${MDC(NUM_ITERATIONS, iteration - 1)}) " +
+              log"reached for batch ${MDC(RULE_BATCH_NAME, batch.name)}" +
+              endingMsg
             if (Utils.isTesting || batch.strategy.errorOnExceed) {
-              throw new RuntimeException(message)
+              throw new RuntimeException(log.message)
             } else {
-              logWarning(message)
+              logWarning(log)
             }
           }
           // Check idempotence for Once batches.
