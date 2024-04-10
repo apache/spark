@@ -40,6 +40,10 @@ class PythonMicroBatchStream(
 
   private val streamId = nextStreamId
   private var nextBlockId = 0
+
+  // planInputPartitions() maybe be called multiple times for the current microbatch.
+  // Cache the result of planInputPartitions() because it may involves sending data
+  // from python to JVM.
   private var cachedInputPartition: Option[(String, String, PythonStreamingInputPartition)] = None
 
   private val runner: PythonStreamingSourceRunner =
@@ -71,6 +75,7 @@ class PythonMicroBatchStream(
       cachedInputPartition.foreach { p =>
         SparkEnv.get.blockManager.removeBlock(p._3.blockId.get)
       }
+      evictCache()
       cachedInputPartition = Some((start_offset_json, end_offset_json, partition))
       Array(partition)
     } else {
@@ -79,6 +84,7 @@ class PythonMicroBatchStream(
     }
   }
 
+  // Evict the cached data block for the previous microbatch.
   private def evictCache(): Unit = {
     cachedInputPartition.foreach { p =>
       SparkEnv.get.blockManager.removeBlock(p._3.blockId.get)

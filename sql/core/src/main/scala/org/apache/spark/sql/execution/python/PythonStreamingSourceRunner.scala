@@ -233,15 +233,17 @@ class PythonStreamingSourceRunner(
     val root = reader.getVectorSchemaRoot()
     // When input is empty schema can't be read.
     val schema = ArrowUtils.fromArrowSchema(root.getSchema())
+    assert(schema == outputSchema)
+
     val vectors = root.getFieldVectors().asScala.map { vector =>
       new ArrowColumnVector(vector)
     }.toArray[ColumnVector]
-
-    assert(schema == outputSchema)
     val rows = ArrayBuffer[InternalRow]()
     while (reader.loadNextBatch()) {
       val batch = new ColumnarBatch(vectors)
       batch.setNumRows(root.getRowCount)
+      // Need to copy the row because the ColumnarBatch row iterator use
+      // the same underlying Internal row.
       rows.appendAll(batch.rowIterator().asScala.map(_.copy()))
     }
     reader.close(false)

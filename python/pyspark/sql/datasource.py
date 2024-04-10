@@ -508,6 +508,14 @@ class SimpleInputPartition(InputPartition):
 
 
 class SimpleDataSourceStreamReader(ABC):
+    """
+    A base class for simplified streaming data source readers. Compared to DataSourceStreamReader,
+    SimpleDataSourceStreamReader doesn't require planning data partitioning. Also, the read api of
+    SimpleDataSourceStreamReader allows reading data and planning the latest offset at the same time.
+
+    .. versionadded: 4.0.0
+    """
+
     def initialOffset(self) -> dict:
         """
         Return the initial offset of the streaming data source.
@@ -546,9 +554,6 @@ class SimpleDataSourceStreamReader(ABC):
         A tuple of an iterator of :class:`Tuple` and a dict\\s
             The iterator contains all the available records after start offset.
             The dict is the end of this read attempt and the start of next read attempt.
-
-        dict
-            The end offset of this read attempt. The next read will start from this end offset.
         """
         raise PySparkNotImplementedError(
             error_class="NOT_IMPLEMENTED",
@@ -593,6 +598,25 @@ class SimpleDataSourceStreamReader(ABC):
 
 
 class _SimpleStreamReaderWrapper(DataSourceStreamReader):
+    """
+    A private class that wrap SimpleDataSourceStreamReader in a prefetch and cache pattern,
+    so that SimpleDataSourceStreamReader can integrate with streaming engine like an ordinary
+    DataSourceStreamReader.
+
+    current_offset track the latest progress of the record prefetching, it is initialized to be
+    initialOffset() when query start for the first time or initialized to be the end offset of
+    the last committed batch when query restarts.
+
+    When streaming engine call latestOffset(), the wrapper calls read() that start from current_offset,
+    prefetch and cache the data, then update the current_offset to be the end offset of the new data.
+
+    When streaming engine call planInputPartitions(start, end), the wrapper get the prefetched data from
+    cache and send it to JVM along with the input partitions.
+
+    When query restart, batches in write ahead offset log that has not been committed will be replayed
+    by reading data between start and end offset through read2(start, end).
+    """
+
     def __init__(self, simple_reader: SimpleDataSourceStreamReader):
         self.simple_reader = simple_reader
         self.initial_offset = None
@@ -614,15 +638,16 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
         return end
 
     def commit(self, end: dict) -> None:
-        end_idx = -1
         if self.current_offset is None:
             self.current_offset = end
+
+        end_idx = -1
         for i in range(len(self.cache)):
-            # print(json.dumps(self.cache[i][0]) + " ggg " + json.dumps(self.cache[i][1]))
             if json.dumps(self.cache[i][1]) == json.dumps(end):
                 end_idx = i
                 break
         if end_idx > 0:
+            # Drop prefetched data for batch that has been committed.
             self.cache = self.cache[end_idx:]
         self.simple_reader.commit(end)
 
@@ -647,6 +672,8 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
                 end_idx = i
         if start_idx == -1 or end_idx == -1:
             return None
+        # Chain all the data iterator between start offset and end offset
+        # need to copy here to avoid exhausting the original data iterator.
         entries = [copy.copy(entry[2]) for entry in self.cache[start_idx: end_idx + 1]]
         it = chain(*entries)
         return it
