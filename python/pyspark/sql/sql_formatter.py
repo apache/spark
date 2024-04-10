@@ -22,6 +22,7 @@ import uuid
 
 if typing.TYPE_CHECKING:
     from pyspark.sql import SparkSession, DataFrame
+from pyspark.sql.utils import get_lit_sql_str
 from pyspark.errors import PySparkValueError
 
 
@@ -74,8 +75,6 @@ class SQLStringFormatter(string.Formatter):
             val.createOrReplaceTempView(df_name)
             return df_name
         elif isinstance(val, str):
-            from pyspark.sql.utils import get_lit_sql_str
-
             return get_lit_sql_str(val)
         else:
             return val

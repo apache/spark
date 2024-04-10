@@ -49,6 +49,7 @@ class SQLStringFormatter(string.Formatter):
         from pyspark.sql.connect.dataframe import DataFrame
         from pyspark.sql.connect.column import Column
         from pyspark.sql.connect.expressions import ColumnReference
+        from pyspark.sql.utils import get_lit_sql_str
 
         if isinstance(val, Column):
             expr = val._expr
@@ -67,8 +68,6 @@ class SQLStringFormatter(string.Formatter):
             self._temp_views.append((val, name))
             return name
         elif isinstance(val, str):
-            from pyspark.sql.utils import get_lit_sql_str
-
             return get_lit_sql_str(val)
         else:
             return val
