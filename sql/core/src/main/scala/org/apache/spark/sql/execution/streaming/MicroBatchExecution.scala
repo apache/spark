@@ -33,6 +33,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
+import org.apache.spark.sql.execution.datasources.v2.python.PythonMicroBatchStream
 import org.apache.spark.sql.execution.streaming.sources.{WriteToMicroBatchDataSource, WriteToMicroBatchDataSourceV1}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.Trigger
@@ -489,9 +490,15 @@ class MicroBatchExecution(
                 case (source: Source, end: Offset) =>
                   val start = execCtx.startOffsets.get(source).map(_.asInstanceOf[Offset])
                   source.getBatch(start, end)
-                case nonV1Tuple =>
-                  // The V2 API does not have the same edge case requiring getBatch to be called
-                  // here, so we do nothing here.
+                case (source: PythonMicroBatchStream, end: Offset) =>
+                  // PythonMicrobatchStream need to initialize the start offset of prefetching
+                  // by calling planInputPartitions of the last completed batch during restart.
+                  // We don't need to do that if there is incomplete batch in the offset log
+                  // because planInputPartitions during batch replay initializes the start offset.
+                  val start = execCtx.startOffsets.get(source).map(_.asInstanceOf[Offset])
+                  source.planInputPartitions(source.deserializeOffset(start.get.json()),
+                    source.deserializeOffset(end.json()))
+                case _ =>
               }
               execCtx.batchId = latestCommittedBatchId + 1
               execCtx.isCurrentBatchConstructed = false

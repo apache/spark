@@ -19,36 +19,43 @@
 package org.apache.spark.sql.execution.datasources.v2.python
 
 import org.apache.spark.SparkEnv
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.metric.CustomTaskMetric
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.storage.BlockId
+import org.apache.spark.storage.PythonStreamBlockId
 
 
 case class PythonStreamingInputPartition(
     index: Int,
     pickedPartition: Array[Byte],
-    blockId: Option[BlockId]) extends InputPartition
+    blockId: Option[PythonStreamBlockId]) extends InputPartition {
+  def dropCache(): Unit = {
+    blockId.foreach(SparkEnv.get.blockManager.master.removeBlock(_))
+  }
+}
 
 class PythonStreamingPartitionReaderFactory(
     source: UserDefinedPythonDataSource,
     pickledReadFunc: Array[Byte],
     outputSchema: StructType,
     jobArtifactUUID: Option[String])
-  extends PartitionReaderFactory {
+  extends PartitionReaderFactory with Logging {
 
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     val part = partition.asInstanceOf[PythonStreamingInputPartition]
 
     // Maybe read from cached block prefetched by SimpleStreamReader
     lazy val cachedBlock = if (part.blockId.isDefined) {
-      SparkEnv.get.blockManager.get[InternalRow](part.blockId.get)
+      val block = SparkEnv.get.blockManager.get[InternalRow](part.blockId.get)
         .map(_.data.asInstanceOf[Iterator[InternalRow]])
-    } else {
-      None
-    }
+      if (block.isEmpty) {
+        logWarning(s"Prefetched block ${part.blockId} for Python data source not found.")
+      }
+      block
+    } else None
 
     new PartitionReader[InternalRow] {
 

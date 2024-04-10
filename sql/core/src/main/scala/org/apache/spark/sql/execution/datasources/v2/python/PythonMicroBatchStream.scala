@@ -24,7 +24,7 @@ import org.apache.spark.sql.execution.datasources.v2.python.PythonMicroBatchStre
 import org.apache.spark.sql.execution.python.PythonStreamingSourceRunner
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.storage.{BlockId, StorageLevel}
+import org.apache.spark.storage.{PythonStreamBlockId, StorageLevel}
 
 case class PythonStreamingSourceOffset(json: String) extends Offset
 
@@ -39,7 +39,7 @@ class PythonMicroBatchStream(
       ds.getOrCreateDataSourceInPython(shortName, options, Some(outputSchema)).dataSource)
 
   private val streamId = nextStreamId
-  private var nextBlockId = 0
+  private var nextBlockId = 0L
 
   // planInputPartitions() maybe be called multiple times for the current microbatch.
   // Cache the result of planInputPartitions() because it may involves sending data
@@ -67,29 +67,17 @@ class PythonMicroBatchStream(
       // Only SimpleStreamReader without partitioning prefetch data.
       assert(partitions.length == 1)
       nextBlockId = nextBlockId + 1
-      val blockId = BlockId(s"input-$streamId-$nextBlockId")
+      val blockId = PythonStreamBlockId(streamId, nextBlockId)
       SparkEnv.get.blockManager.putIterator(
         blockId, rows.get, StorageLevel.MEMORY_AND_DISK_SER, true)
       val partition = PythonStreamingInputPartition(0, partitions.head, Some(blockId))
-
-      cachedInputPartition.foreach { p =>
-        SparkEnv.get.blockManager.removeBlock(p._3.blockId.get)
-      }
-      evictCache()
+      cachedInputPartition.foreach(_._3.dropCache())
       cachedInputPartition = Some((start_offset_json, end_offset_json, partition))
       Array(partition)
     } else {
       partitions.zipWithIndex
         .map(p => PythonStreamingInputPartition(p._2, p._1, None))
     }
-  }
-
-  // Evict the cached data block for the previous microbatch.
-  private def evictCache(): Unit = {
-    cachedInputPartition.foreach { p =>
-      SparkEnv.get.blockManager.removeBlock(p._3.blockId.get)
-    }
-    cachedInputPartition = None
   }
 
   private lazy val readInfo: PythonDataSourceReadInfo = {
@@ -109,7 +97,7 @@ class PythonMicroBatchStream(
   }
 
   override def stop(): Unit = {
-    evictCache()
+    cachedInputPartition.foreach(_._3.dropCache())
     runner.stop()
   }
 

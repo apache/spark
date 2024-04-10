@@ -305,19 +305,22 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
       val checkpointDir = new File(path, "checkpoint")
       val outputDir = new File(path, "output")
       val df = spark.readStream.format(dataSourceName).load()
+      var lastBatch = 0
+      for (_ <- 1 to 5) {
+        val q = df
+          .writeStream
+          .option("checkpointLocation", checkpointDir.getAbsolutePath)
+          .format("json")
+          .start(outputDir.getAbsolutePath)
 
-      val q = df
-        .writeStream
-        .option("checkpointLocation", checkpointDir.getAbsolutePath)
-        .format("json")
-        .start(outputDir.getAbsolutePath)
-
-      while (q.recentProgress.length < 3) {
-        Thread.sleep(200)
+        while (q.recentProgress.length < 5) {
+          Thread.sleep(200)
+        }
+        q.stop()
+        q.awaitTermination()
+        lastBatch = q.lastProgress.batchId.toInt
       }
-      q.stop()
-      q.awaitTermination()
-      val lastBatch = q.lastProgress.batchId.toInt
+      assert(lastBatch > 20)
       checkAnswer(spark.read.format("json").load(outputDir.getAbsolutePath),
         (0 to  2 * lastBatch + 1).map(Row(_)))
     }
@@ -338,9 +341,9 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
          |""".stripMargin
     val inputSchema = StructType.fromDDL("input BINARY")
 
-    val dataSource1 =
+    val dataSource =
       createUserDefinedPythonDataSource(errorDataSourceName, initialOffsetNotImplementedScript)
-    spark.dataSource.registerPython(errorDataSourceName, dataSource1)
+    spark.dataSource.registerPython(errorDataSourceName, dataSource)
     val pythonDs = new PythonDataSourceV2
     pythonDs.setShortName("ErrorDataSource")
 
@@ -394,9 +397,9 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
          |""".stripMargin
     val inputSchema = StructType.fromDDL("input BINARY")
 
-    val dataSource1 =
+    val dataSource =
       createUserDefinedPythonDataSource(errorDataSourceName, initialOffsetNotImplementedScript)
-    spark.dataSource.registerPython(errorDataSourceName, dataSource1)
+    spark.dataSource.registerPython(errorDataSourceName, dataSource)
     val pythonDs = new PythonDataSourceV2
     pythonDs.setShortName("ErrorDataSource")
 
