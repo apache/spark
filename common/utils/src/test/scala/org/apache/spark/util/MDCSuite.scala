@@ -41,6 +41,12 @@ class MDCSuite
     assert(log.context === Map("exit_code" -> "CustomObjectValue: spark, 10086").asJava)
   }
 
+  test("null as MDC value") {
+    val log = log"This is a log, exitcode ${MDC(EXIT_CODE, null)}"
+    assert(log.message === "This is a log, exitcode null")
+    assert(log.context === Map("exit_code" -> null).asJava)
+  }
+
   test("check MDC stripMargin") {
     val log =
       log"""
