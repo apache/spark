@@ -590,7 +590,7 @@ object ContainsExpressionBuilder extends StringBinaryPredicateExpressionBuilderB
 
 case class Contains(left: Expression, right: Expression) extends StringPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = {
-    CollationSupport.Contains.containsCollationAware(l, r, collationId)
+    CollationSupport.Contains.contains(l, r, collationId)
   }
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) =>
@@ -630,7 +630,7 @@ object StartsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilde
 
 case class StartsWith(left: Expression, right: Expression) extends StringPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = {
-    CollationSupport.StartsWith.startsWithCollationAware(l, r, collationId)
+    CollationSupport.StartsWith.startsWith(l, r, collationId)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -671,7 +671,7 @@ object EndsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilderB
 
 case class EndsWith(left: Expression, right: Expression) extends StringPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = {
-    CollationSupport.EndsWith.endsWithCollationAware(l, r, collationId)
+    CollationSupport.EndsWith.endsWith(l, r, collationId)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
