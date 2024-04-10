@@ -575,8 +575,13 @@ transformClause
       (RECORDREADER recordReader=stringLit)?
     ;
 
+parenthesizedStar
+    : LEFT_PAREN ASTERISK RIGHT_PAREN
+    ;
+
 selectClause
-    : SELECT (hints+=hint)* setQuantifier? namedExpressionSeq
+    : SELECT (hints+=hint)* setQuantifier parenthesizedStar
+    | SELECT (hints+=hint)* setQuantifier? namedExpressionSeq
     ;
 
 setClause

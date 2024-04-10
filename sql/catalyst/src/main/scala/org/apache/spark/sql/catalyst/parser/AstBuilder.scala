@@ -2599,6 +2599,15 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    * Create an expression for an expression between parentheses. This is need because the ANTLR
    * visitor cannot automatically convert the nested context into an expression.
    */
+  override def visitParenthesizedStar(
+     ctx: ParenthesizedStarContext): Seq[Expression] = withOrigin(ctx) {
+    Seq(UnresolvedStar(None))
+ }
+
+  /**
+   * Create an expression for an expression between parentheses. This is need because the ANTLR
+   * visitor cannot automatically convert the nested context into an expression.
+   */
   override def visitParenthesizedExpression(
      ctx: ParenthesizedExpressionContext): Expression = withOrigin(ctx) {
     val res = expression(ctx.expression())
