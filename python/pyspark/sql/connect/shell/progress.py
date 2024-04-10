@@ -21,6 +21,7 @@ from dataclasses import dataclass
 import time
 import sys
 import typing
+from types import TracebackType
 from typing import Iterable, Any
 
 from pyspark.sql.connect.proto import ExecutePlanResponse
@@ -51,6 +52,7 @@ class ProgressHandler(abc.ABC):
         self,
         stages: typing.Optional[Iterable[StageInfo]],
         inflight_tasks: int,
+        operation_id: typing.Optional[str],
         done: bool,
     ) -> None:
         pass
@@ -88,6 +90,7 @@ class Progress:
         output: typing.IO = sys.stdout,
         enabled: bool = False,
         handlers: Iterable[ProgressHandler] = [],
+        operation_id: typing.Optional[str] = None,
     ) -> None:
         """
         Constructs a new Progress bar. The progress bar is typically used in
@@ -107,8 +110,8 @@ class Progress:
         handlers : list of ProgressHandler
           A list of handlers that will be called when the progress bar is updated.
         """
-        self._ticks = 0
-        self._tick = 0
+        self._ticks: typing.Optional[int] = None
+        self._tick: typing.Optional[int] = None
         x, y = get_terminal_size()
         self._min_width = min_width
         self._char = char
@@ -121,16 +124,35 @@ class Progress:
         self._running = 0
         self._handlers = handlers
         self._stages: Iterable[StageInfo] = []
+        self._operation_id = operation_id
 
     def _notify(self, done: bool = False) -> None:
         for handler in self._handlers:
             handler(
                 stages=self._stages,
                 inflight_tasks=self._running,
+                operation_id=self._operation_id,
                 done=done,
             )
 
-    def update_ticks(self, stages: Iterable[StageInfo], inflight_tasks: int) -> None:
+    def __enter__(self) -> "Progress":
+        return self
+
+    def __exit__(
+        self,
+        exc_type: typing.Optional[typing.Type[BaseException]],
+        exception: typing.Optional[BaseException],
+        exc_tb: typing.Optional[TracebackType],
+    ) -> typing.Any:
+        self.finish()
+        return False
+
+    def update_ticks(
+        self,
+        stages: Iterable[StageInfo],
+        inflight_tasks: int,
+        operation_id: typing.Optional[str] = None,
+    ) -> None:
         """This method is called from the execution to update the progress bar with a new total
         tick counter and the current position. This is necessary in case new stages get added with
         new tasks and so the total task number will be updated as well.
@@ -142,13 +164,16 @@ class Progress:
         inflight_tasks : int
           The number of tasks that are currently running.
         """
+        if self._operation_id is None or len(self._operation_id) == 0:
+            self._operation_id = operation_id
+
         total_tasks = sum(map(lambda x: x.num_tasks, stages))
         completed_tasks = sum(map(lambda x: x.num_completed_tasks, stages))
-        if total_tasks > 0 and completed_tasks != self._tick:
+        if total_tasks > 0:
             self._ticks = total_tasks
             self._tick = completed_tasks
             self._bytes_read = sum(map(lambda x: x.num_bytes_read, stages))
-            if self._tick > 0:
+            if self._tick is not None and self._tick >= 0:
                 self.output()
             self._running = inflight_tasks
             self._stages = stages
@@ -163,7 +188,7 @@ class Progress:
 
     def output(self) -> None:
         """Writes the progress bar out."""
-        if self._enabled:
+        if self._enabled and self._tick is not None and self._ticks is not None:
             val = int((self._tick / float(self._ticks)) * self._width)
             bar = self._char * val + "-" * (self._width - val)
             percent_complete = (self._tick / self._ticks) * 100
