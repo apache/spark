@@ -29,7 +29,12 @@ from pyspark.serializers import (
     write_with_length,
     SpecialLengths,
 )
-from pyspark.sql.datasource import DataSource, DataSourceStreamReader, _SimpleStreamReaderWrapper, InputPartition
+from pyspark.sql.datasource import (
+    DataSource,
+    DataSourceStreamReader,
+    _SimpleStreamReaderWrapper,
+    InputPartition,
+)
 from pyspark.sql.pandas.serializers import ArrowStreamSerializer
 from pyspark.sql.types import (
     _parse_datatype_json_string,
@@ -67,7 +72,13 @@ def latest_offset_func(reader: DataSourceStreamReader, outfile: IO) -> None:
     write_with_length(json.dumps(offset).encode("utf-8"), outfile)
 
 
-def partitions_func(reader: DataSourceStreamReader, data_source: DataSource, schema: StructType, infile: IO, outfile: IO) -> None:
+def partitions_func(
+    reader: DataSourceStreamReader,
+    data_source: DataSource,
+    schema: StructType,
+    infile: IO,
+    outfile: IO,
+) -> None:
     start_offset = json.loads(utf8_deserializer.loads(infile))
     end_offset = json.loads(utf8_deserializer.loads(infile))
     partitions = reader.partitions(start_offset, end_offset)
@@ -82,7 +93,7 @@ def partitions_func(reader: DataSourceStreamReader, data_source: DataSource, sch
         else:
             send_batch_func(it, outfile, schema, data_source)
     else:
-        write_int(0, outfile)
+        write_int(PREFETCHED_RECORDS_NOT_FOUND, outfile)
 
 
 def commit_func(reader: DataSourceStreamReader, infile: IO, outfile: IO) -> None:
@@ -91,7 +102,9 @@ def commit_func(reader: DataSourceStreamReader, infile: IO, outfile: IO) -> None
     write_int(0, outfile)
 
 
-def send_batch_func(rows: Iterator[Tuple], outfile: IO, schema: StructType, data_source: DataSource) -> None:
+def send_batch_func(
+    rows: Iterator[Tuple], outfile: IO, schema: StructType, data_source: DataSource
+) -> None:
     batches = list(records_to_arrow_batches(rows, 1000, schema, data_source))
     if len(batches) != 0:
         write_int(NON_EMPTY_PYARROW_RECORD_BATCHES, outfile)

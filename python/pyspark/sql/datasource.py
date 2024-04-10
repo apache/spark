@@ -658,7 +658,7 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
         if self.current_offset is None:
             self.current_offset = end
         if len(self.cache) > 0:
-            assert (self.cache[-1][1] == end)
+            assert self.cache[-1][1] == end
         return [SimpleInputPartition(start, end)]
 
     def getCache(self, start: dict, end: dict) -> Iterator[Tuple]:
@@ -675,7 +675,7 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
             return None
         # Chain all the data iterator between start offset and end offset
         # need to copy here to avoid exhausting the original data iterator.
-        entries = [copy.copy(entry[2]) for entry in self.cache[start_idx: end_idx + 1]]
+        entries = [copy.copy(entry[2]) for entry in self.cache[start_idx : end_idx + 1]]
         it = chain(*entries)
         return it
 

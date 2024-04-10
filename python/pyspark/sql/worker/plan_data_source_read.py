@@ -52,15 +52,16 @@ from pyspark.worker_util import (
 )
 
 
-def records_to_arrow_batches(output_iter, max_arrow_batch_size, return_type, data_source) -> Iterable[pa.RecordBatch]:
+def records_to_arrow_batches(
+    output_iter, max_arrow_batch_size, return_type, data_source
+) -> Iterable[pa.RecordBatch]:
     def batched(iterator: Iterator, n: int) -> Iterator:
         return iter(functools.partial(lambda it: list(islice(it, n)), iterator), [])
 
     pa_schema = to_arrow_schema(return_type)
     column_names = return_type.fieldNames()
     column_converters = [
-        LocalDataToArrowConversion._create_converter(field.dataType)
-        for field in return_type.fields
+        LocalDataToArrowConversion._create_converter(field.dataType) for field in return_type.fields
     ]
     # Convert the results from the `reader.read` method to an iterator of arrow batches.
     num_cols = len(column_names)
@@ -197,7 +198,6 @@ def main(infile: IO, outfile: IO) -> None:
         else:
             reader = data_source.reader(schema=schema)
 
-
         # Create input converter.
         converter = ArrowTableToRowsConversion._create_converter(BinaryType())
 
@@ -242,7 +242,9 @@ def main(infile: IO, outfile: IO) -> None:
                     },
                 )
 
-            return records_to_arrow_batches(output_iter, max_arrow_batch_size, return_type, data_source)
+            return records_to_arrow_batches(
+                output_iter, max_arrow_batch_size, return_type, data_source
+            )
 
         command = (data_source_read_func, return_type)
         pickleSer._write_with_length(command, outfile)
