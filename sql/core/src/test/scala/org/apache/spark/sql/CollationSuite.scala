@@ -24,8 +24,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.{CollationKey, RewriteGroupByCollation}
 import org.apache.spark.sql.catalyst.expressions.{BindReferences, UnsafeProjection}
-// import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LocalRelation}
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2ProviderWithCustomSchema}
@@ -375,7 +374,18 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
   test("aggregates count respects collation") {
     Seq(
-      ("unicode_ci", Seq("AA", "aa"), Seq(Row(2, "aa"))),
+      ("utf8_binary", Seq("AAA", "aaa"), Seq(Row(1, "AAA"), Row(1, "aaa"))),
+      ("utf8_binary", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
+      ("utf8_binary", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
+      ("utf8_binary_lcase", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
+      ("utf8_binary_lcase", Seq("AAA", "aaa"), Seq(Row(2, "AAA"))),
+      ("utf8_binary_lcase", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
+      ("unicode", Seq("AAA", "aaa"), Seq(Row(1, "AAA"), Row(1, "aaa"))),
+      ("unicode", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
+      ("unicode", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
+      ("unicode_CI", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
+      ("unicode_CI", Seq("AAA", "aaa"), Seq(Row(2, "AAA"))),
+      ("unicode_CI", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb")))
     ).foreach {
       case (collationName: String, input: Seq[String], expected: Seq[Row]) =>
         spark.conf.set("spark.sql.codegen.wholeStage", "false")
@@ -388,29 +398,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         )
         SELECT COUNT(*), c FROM t GROUP BY c
         """), expected)
-    }
-  }
-
-  test("hash agg is also used for non binary collations") {
-    val tableNameNonBinary = "T_NON_BINARY"
-    val tableNameBinary = "T_BINARY"
-    withTable(tableNameNonBinary) {
-      withTable(tableNameBinary) {
-        sql(s"CREATE TABLE $tableNameNonBinary (c STRING COLLATE UTF8_BINARY_LCASE) USING PARQUET")
-        sql(s"INSERT INTO $tableNameNonBinary VALUES ('aaa')")
-        sql(s"CREATE TABLE $tableNameBinary (c STRING COLLATE UTF8_BINARY) USING PARQUET")
-        sql(s"INSERT INTO $tableNameBinary VALUES ('aaa')")
-
-        val dfNonBinary = sql(s"SELECT COUNT(*), c FROM $tableNameNonBinary GROUP BY c")
-        assert(collectFirst(dfNonBinary.queryExecution.executedPlan) {
-          case _: HashAggregateExec | _: ObjectHashAggregateExec => ()
-        }.nonEmpty)
-
-        val dfBinary = sql(s"SELECT COUNT(*), c FROM $tableNameBinary GROUP BY c")
-        assert(collectFirst(dfBinary.queryExecution.executedPlan) {
-          case _: HashAggregateExec | _: ObjectHashAggregateExec => ()
-        }.nonEmpty)
-      }
     }
   }
 
@@ -880,16 +867,16 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   test("RewriteGroupByCollation rule rewrites Aggregate logical plan") {
     val dataType = StringType(CollationFactory.collationNameToId("UNICODE_CI"))
     val attrRef = AttributeReference("attr", dataType)()
+    // original logical plan should only contain one attribute in groupingExpressions
     val originalPlan = Aggregate(Seq(attrRef), Seq(attrRef), LocalRelation(attrRef))
     assert(originalPlan.groupingExpressions.size == 1)
+    assert(originalPlan.groupingExpressions.head.isInstanceOf[AttributeReference])
     assert(originalPlan.groupingExpressions.head == attrRef)
-    // plan level rewrite should put CollationKey in Aggregate logical plan
-    val newPlan = RewriteGroupByCollation(originalPlan)
-    val groupingExpressions = newPlan.asInstanceOf[Aggregate].groupingExpressions
-    assert(groupingExpressions.size == 1) // only 1 alias should be present in groupingExpressions
-    val groupingAlias = groupingExpressions.head.asInstanceOf[Alias]
-    assert(groupingAlias.child.isInstanceOf[CollationKey]) // alias should be a CollationKey
-    assert(groupingAlias.child.containsChild(attrRef)) // CollationKey should be for attrRef
+    // plan level rewrite should replace attr with CollationKey in Aggregate logical plan
+    val newPlan = RewriteGroupByCollation(originalPlan).asInstanceOf[Aggregate]
+    assert(newPlan.groupingExpressions.size == 1)
+    assert(newPlan.groupingExpressions.head.isInstanceOf[CollationKey])
+    assert(newPlan.groupingExpressions.head.asInstanceOf[CollationKey].expr == attrRef)
   }
 
   test("RewriteGroupByCollation rule works in SQL query analysis") {
@@ -900,19 +887,22 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
     df.createOrReplaceTempView("tempTable")
     val dfGroupBy = spark.sql("SELECT name, COUNT(*) FROM tempTable GROUP BY name")
-    // get the logical plan for the spark SQL query
+    // test RewriteGroupByCollation idempotence
     val logicalPlan = dfGroupBy.queryExecution.analyzed
     val newPlan = RewriteGroupByCollation(logicalPlan)
     val newNewPlan = RewriteGroupByCollation(newPlan)
-    assert(newPlan.isInstanceOf[Aggregate])
-    assert(newNewPlan.isInstanceOf[Aggregate])
-    val groupingExpressions = newPlan.asInstanceOf[Aggregate].groupingExpressions
-    assert(groupingExpressions.size == 1)
-//    val groupingAlias = groupingExpressions.head.asInstanceOf[Alias]
-//    assert(groupingAlias.isInstanceOf[Alias])
-//    assert(groupingAlias.child.isInstanceOf[CollationKey])
+    assert(newPlan == newNewPlan)
     // get the query execution result
     checkAnswer(dfGroupBy, Seq(Row("AA", 2), Row("BB", 1)))
+  }
+
+  test("RewriteGroupByCollation doesn't disrupt aggregation on complex types") {
+    val table = "table_agg"
+    withTable(table) {
+      sql(s"create table $table (a array<string collate utf8_binary_lcase>) using parquet")
+      sql(s"insert into $table values (array('aaa')), (array('AAA'))")
+      checkAnswer(sql(s"select distinct a from $table"), Seq(Row(Seq("aaa"))))
+    }
   }
 
 }
