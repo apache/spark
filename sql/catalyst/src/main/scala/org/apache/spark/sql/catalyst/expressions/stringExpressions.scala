@@ -21,7 +21,9 @@ import java.io.UnsupportedEncodingException
 import java.text.{BreakIterator, DecimalFormat, DecimalFormatSymbols}
 import java.util.{Base64 => JBase64}
 import java.util.{HashMap, Locale, Map => JMap}
+
 import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, TypeCheckResult}
