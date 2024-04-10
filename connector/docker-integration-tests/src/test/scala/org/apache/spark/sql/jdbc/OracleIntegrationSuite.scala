@@ -355,7 +355,9 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
     val e = intercept[org.apache.spark.SparkArithmeticException] {
       spark.read.jdbc(jdbcUrl, "tableWithCustomSchema", new Properties()).collect()
     }
-    assert(e.getMessage.contains("Decimal precision 39 exceeds max precision 38"))
+    assert(e.getMessage.contains(
+      "The 12312321321321312312312312123.0000000000 rounded half up from" +
+        " 12312321321321312312312312123 cannot be represented as Decimal(38, 10)"))
 
     // custom schema can read data
     val props = new Properties()
