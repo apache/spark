@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.internal.types
 
-import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.types.{AbstractDataType, ArrayType, DataType}
 
 
