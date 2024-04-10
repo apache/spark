@@ -78,6 +78,8 @@ public final class CollationFactory {
      */
     public final boolean supportsBinaryOrdering;
 
+    public final boolean supportsLowercaseEquality;
+
     public Collation(
         String collationName,
         Collator collator,
@@ -102,6 +104,8 @@ public final class CollationFactory {
       } else {
         this.equalsFunction = (s1, s2) -> this.comparator.compare(s1, s2) == 0;
       }
+
+      supportsLowercaseEquality = collationName.equals("UTF8_BINARY_LCASE");
     }
 
     /**
