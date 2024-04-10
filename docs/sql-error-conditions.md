@@ -390,6 +390,14 @@ Cannot find a short name for the codec `<codecName>`.
 
 The value `<collationName>` does not represent a correct collation name. Suggested valid collation name: [`<proposal>`].
 
+### [COLLATION_MISMATCH](sql-error-conditions-collation-mismatch-error-class.html)
+
+[SQLSTATE: 42P21](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Could not determine which collation to use for string functions and operators.
+
+For more details see [COLLATION_MISMATCH](sql-error-conditions-collation-mismatch-error-class.html)
+
 ### [COLLECTION_SIZE_LIMIT_EXCEEDED](sql-error-conditions-collection-size-limit-exceeded-error-class.html)
 
 [SQLSTATE: 54000](sql-error-conditions-sqlstates.html#class-54-program-limit-exceeded)
@@ -944,6 +952,12 @@ For more details see [INCONSISTENT_BEHAVIOR_CROSS_VERSION](sql-error-conditions-
 [SQLSTATE: 22003](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
 Max offset with `<rowsPerSecond>` rowsPerSecond is `<maxSeconds>`, but 'rampUpTimeSeconds' is `<rampUpTimeSeconds>`.
+
+### INDETERMINATE_COLLATION
+
+[SQLSTATE: 42P22](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Function called requires knowledge of the collation it should apply, but indeterminate collation was found. Use COLLATE function to set the collation explicitly.
 
 ### INDEX_ALREADY_EXISTS
 
@@ -1506,6 +1520,19 @@ Invalid usage of `<elem>` in `<prettyName>`.
 [SQLSTATE: 42K09](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Variable type must be string type but got `<varType>`.
+
+### INVALID_VARIANT_CAST
+
+[SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+The variant value ``<value>`` cannot be cast into ``<dataType>``. Please use `try_variant_get` instead.
+
+### INVALID_VARIANT_GET_PATH
+
+[SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+The path ``<path>`` is not a valid variant extraction path in ``<functionName>``.
+A valid path should start with `$` and is followed by zero or more segments like `[123]`, `.name`, `['name']`, or `["name"]`.
 
 ### INVALID_VIEW_TEXT
 
@@ -2156,6 +2183,12 @@ The SQL config `<sqlConf>` cannot be found. Please verify that the config exists
 
 Star (*) is not allowed in a select list when GROUP BY an ordinal position is used.
 
+### STATEFUL_PROCESSOR_CANNOT_ASSIGN_TTL_IN_NO_TTL_MODE
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot use TTL for state=`<stateName>` in NoTTL() mode.
+
 ### STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_HANDLE_STATE
 
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -2173,6 +2206,12 @@ Failed to perform stateful processor operation=`<operationType>` with invalid ti
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Cannot re-initialize state on the same grouping key during initial state handling for stateful processor. Invalid grouping key=`<groupingKey>`.
+
+### STATEFUL_PROCESSOR_TTL_DURATION_MUST_BE_POSITIVE
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+TTL duration must be greater than zero for State store operation=`<operationType>` on state=`<stateName>`.
 
 ### STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS
 
@@ -2197,7 +2236,7 @@ Please only use the StatefulProcessor within the transformWithState operator.
 
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Incorrect number of ordering columns=`<numOrderingCols>` for range scan encoder. Ordering columns cannot be zero or greater than num of schema columns.
+Incorrect number of ordering ordinals=`<numOrderingCols>` for range scan encoder. The number of ordering ordinals cannot be zero or greater than number of schema columns.
 
 ### STATE_STORE_INCORRECT_NUM_PREFIX_COLS_FOR_PREFIX_SCAN
 
@@ -2216,6 +2255,12 @@ Null type ordering column with name=`<fieldName>` at index=`<index>` is not supp
 [SQLSTATE: XXKST](sql-error-conditions-sqlstates.html#class-XX-internal-error)
 
 `<operationType>` operation not supported with `<entity>`
+
+### STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY
+
+[SQLSTATE: XXKST](sql-error-conditions-sqlstates.html#class-XX-internal-error)
+
+Binary inequality column is not supported with state store. Provided schema: `<schema>`.
 
 ### STATE_STORE_UNSUPPORTED_OPERATION_ON_MISSING_COLUMN_FAMILY
 

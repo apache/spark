@@ -16,30 +16,37 @@
  */
 package org.apache.spark.util
 
+import org.apache.logging.log4j.Level
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.internal.Logging
 
 class PatternLoggingSuite extends LoggingSuiteBase with BeforeAndAfterAll {
 
-  override protected def logFilePath: String = "target/pattern.log"
+  override def className: String = classOf[PatternLoggingSuite].getSimpleName
+  override def logFilePath: String = "target/pattern.log"
 
   override def beforeAll(): Unit = Logging.disableStructuredLogging()
 
   override def afterAll(): Unit = Logging.enableStructuredLogging()
 
-  override def expectedPatternForBasicMsg(level: String): String =
-    s""".*$level PatternLoggingSuite: This is a log message\n"""
+  override def expectedPatternForBasicMsg(level: Level): String = {
+    s""".*$level $className: This is a log message\n"""
+  }
 
-  override def expectedPatternForMsgWithMDC(level: String): String =
-    s""".*$level PatternLoggingSuite: Lost executor 1.\n"""
+  override def expectedPatternForBasicMsgWithException(level: Level): String = {
+    s""".*$level $className: This is a log message\n[\\s\\S]*"""
+  }
 
-  override def expectedPatternForMsgWithMDCAndException(level: String): String =
-    s""".*$level PatternLoggingSuite: Error in executor 1.\njava.lang.RuntimeException: OOM\n.*"""
+  override def expectedPatternForMsgWithMDC(level: Level): String =
+    s""".*$level $className: Lost executor 1.\n"""
 
-  override def verifyMsgWithConcat(level: String, logOutput: String): Unit = {
+  override def expectedPatternForMsgWithMDCAndException(level: Level): String =
+    s""".*$level $className: Error in executor 1.\njava.lang.RuntimeException: OOM\n[\\s\\S]*"""
+
+  override def verifyMsgWithConcat(level: Level, logOutput: String): Unit = {
     val pattern =
-      s""".*$level PatternLoggingSuite: Min Size: 2, Max Size: 4. Please double check.\n"""
+      s""".*$level $className: Min Size: 2, Max Size: 4. Please double check.\n"""
     assert(pattern.r.matches(logOutput))
   }
 }

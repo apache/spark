@@ -103,6 +103,8 @@ private case class OracleDialect() extends JdbcDialect {
         Some(TimestampType)
       case BINARY_FLOAT => Some(FloatType) // Value for OracleTypes.BINARY_FLOAT
       case BINARY_DOUBLE => Some(DoubleType) // Value for OracleTypes.BINARY_DOUBLE
+      case INTERVAL_YM => Some(YearMonthIntervalType())
+      case INTERVAL_DS => Some(DayTimeIntervalType())
       case _ => None
     }
   }
@@ -231,4 +233,16 @@ private[jdbc] object OracleDialect {
   final val TIMESTAMP_TZ = -101
   // oracle.jdbc.OracleType.TIMESTAMP_WITH_LOCAL_TIME_ZONE
   final val TIMESTAMP_LTZ = -102
+  // INTERVAL YEAR [(year_precision)] TO MONTH
+  // Stores a period of time in years and months, where year_precision is the number of digits in
+  // the YEAR datetime field. Accepted values are 0 to 9. The default is 2.
+  // The size is fixed at 5 bytes.
+  final val INTERVAL_YM = -103
+  // INTERVAL DAY [(day_precision)] TO SECOND [(fractional_seconds_precision)]
+  // Stores a period of time in days, hours, minutes, and seconds, where
+  // - day_precision is the maximum number of digits in the DAY datetime field.
+  //   Accepted values are 0 to 9. The default is 2.
+  // - fractional_seconds_precision is the number of digits in the fractional part
+  //   of the SECOND field. Accepted values are 0 to 9. The default is 6.
+  final val INTERVAL_DS = -104
 }

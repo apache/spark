@@ -20,11 +20,11 @@ import tempfile
 import unittest
 import os
 
+from pyspark.util import is_remote_only
 from pyspark.errors.exceptions.connect import SparkConnectGrpcException
 from pyspark.sql import SparkSession
 from pyspark.testing.connectutils import ReusedConnectTestCase, should_test_connect
 from pyspark.testing.utils import SPARK_HOME
-from pyspark import SparkFiles
 from pyspark.sql.functions import udf
 
 if should_test_connect:
@@ -174,9 +174,12 @@ class ArtifactTestsMixin:
         )
 
 
+@unittest.skipIf(is_remote_only(), "Requires JVM access")
 class ArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
     @classmethod
     def root(cls):
+        from pyspark.core.files import SparkFiles
+
         # In local mode, the file location is the same as Driver
         # The executors are running in a thread.
         jvm = SparkSession._instantiatedSession._jvm
@@ -424,6 +427,7 @@ class ArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
                 )
 
 
+@unittest.skipIf(is_remote_only(), "Requires local cluster to run")
 class LocalClusterArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
     @classmethod
     def conf(cls):

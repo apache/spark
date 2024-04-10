@@ -20,7 +20,8 @@ package org.apache.spark.util.logging
 import java.io.{File, FileOutputStream, InputStream, IOException}
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKey.PATH
 import org.apache.spark.util.{IntParam, Utils}
 
 /**
@@ -90,7 +91,7 @@ private[spark] class FileAppender(
       }
     } catch {
       case e: Exception =>
-        logError(s"Error writing stream to file $file", e)
+        logError(log"Error writing stream to file ${MDC(PATH, file)}", e)
     }
   }
 

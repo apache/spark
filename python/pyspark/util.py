@@ -26,18 +26,48 @@ import sys
 import threading
 import traceback
 import typing
+import socket
 from types import TracebackType
 from typing import Any, Callable, IO, Iterator, List, Optional, TextIO, Tuple, Union
 
-from py4j.clientserver import ClientServer
-
 from pyspark.errors import PySparkRuntimeError
+from pyspark.serializers import (
+    write_int,
+    read_int,
+    write_with_length,
+    SpecialLengths,
+    UTF8Deserializer,
+)
 
 __all__: List[str] = []
 
-from py4j.java_gateway import JavaObject
-
 if typing.TYPE_CHECKING:
+    import io
+
+    from py4j.java_collections import JavaArray
+    from py4j.java_gateway import JavaObject
+
+    from pyspark._typing import NonUDFType
+    from pyspark.sql.pandas._typing import (
+        PandasScalarUDFType,
+        PandasGroupedMapUDFType,
+        PandasGroupedAggUDFType,
+        PandasWindowAggUDFType,
+        PandasScalarIterUDFType,
+        PandasMapIterUDFType,
+        PandasCogroupedMapUDFType,
+        ArrowMapIterUDFType,
+        PandasGroupedMapUDFWithStateType,
+        ArrowGroupedMapUDFType,
+        ArrowCogroupedMapUDFType,
+    )
+    from pyspark.sql._typing import (
+        SQLArrowBatchedUDFType,
+        SQLArrowTableUDFType,
+        SQLBatchedUDFType,
+        SQLTableUDFType,
+    )
+    from pyspark.serializers import Serializer
     from pyspark.sql import SparkSession
 
 
@@ -365,6 +395,7 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
 
     # Non Spark Connect
     from pyspark import SparkContext
+    from py4j.clientserver import ClientServer
 
     if isinstance(SparkContext._gateway, ClientServer):
         # Here's when the pinned-thread mode (PYSPARK_PIN_THREAD) is on.
@@ -394,8 +425,6 @@ def handle_worker_exception(e: BaseException, outfile: IO) -> None:
     and exception traceback info to outfile. JVM could then read from the outfile and perform
     exception handling there.
     """
-    from pyspark.serializers import write_int, write_with_length, SpecialLengths
-
     try:
         exc_info = None
         if os.environ.get("SPARK_SIMPLIFIED_TRACEBACK", False):
@@ -437,7 +466,7 @@ class InheritableThread(threading.Thread):
     This API is experimental.
     """
 
-    _props: JavaObject
+    _props: "JavaObject"
 
     def __init__(
         self, target: Callable, *args: Any, session: Optional["SparkSession"] = None, **kwargs: Any
@@ -461,6 +490,7 @@ class InheritableThread(threading.Thread):
         else:
             # Non Spark Connect
             from pyspark import SparkContext
+            from py4j.clientserver import ClientServer
 
             if isinstance(SparkContext._gateway, ClientServer):
                 # Here's when the pinned-thread mode (PYSPARK_PIN_THREAD) is on.
@@ -491,6 +521,7 @@ class InheritableThread(threading.Thread):
         else:
             # Non Spark Connect
             from pyspark import SparkContext
+            from py4j.clientserver import ClientServer
 
             if isinstance(SparkContext._gateway, ClientServer):
                 # Here's when the pinned-thread mode (PYSPARK_PIN_THREAD) is on.
@@ -503,11 +534,236 @@ class InheritableThread(threading.Thread):
         return super(InheritableThread, self).start()
 
 
+class PythonEvalType:
+    """
+    Evaluation type of python rdd.
+
+    These values are internal to PySpark.
+
+    These values should match values in org.apache.spark.api.python.PythonEvalType.
+    """
+
+    NON_UDF: "NonUDFType" = 0
+
+    SQL_BATCHED_UDF: "SQLBatchedUDFType" = 100
+    SQL_ARROW_BATCHED_UDF: "SQLArrowBatchedUDFType" = 101
+
+    SQL_SCALAR_PANDAS_UDF: "PandasScalarUDFType" = 200
+    SQL_GROUPED_MAP_PANDAS_UDF: "PandasGroupedMapUDFType" = 201
+    SQL_GROUPED_AGG_PANDAS_UDF: "PandasGroupedAggUDFType" = 202
+    SQL_WINDOW_AGG_PANDAS_UDF: "PandasWindowAggUDFType" = 203
+    SQL_SCALAR_PANDAS_ITER_UDF: "PandasScalarIterUDFType" = 204
+    SQL_MAP_PANDAS_ITER_UDF: "PandasMapIterUDFType" = 205
+    SQL_COGROUPED_MAP_PANDAS_UDF: "PandasCogroupedMapUDFType" = 206
+    SQL_MAP_ARROW_ITER_UDF: "ArrowMapIterUDFType" = 207
+    SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE: "PandasGroupedMapUDFWithStateType" = 208
+    SQL_GROUPED_MAP_ARROW_UDF: "ArrowGroupedMapUDFType" = 209
+    SQL_COGROUPED_MAP_ARROW_UDF: "ArrowCogroupedMapUDFType" = 210
+
+    SQL_TABLE_UDF: "SQLTableUDFType" = 300
+    SQL_ARROW_TABLE_UDF: "SQLArrowTableUDFType" = 301
+
+
+def _create_local_socket(sock_info: "JavaArray") -> "io.BufferedRWPair":
+    """
+    Create a local socket that can be used to load deserialized data from the JVM
+
+    Parameters
+    ----------
+    sock_info : tuple
+        Tuple containing port number and authentication secret for a local socket.
+
+    Returns
+    -------
+    sockfile file descriptor of the local socket
+    """
+    sockfile: "io.BufferedRWPair"
+    sock: "socket.socket"
+    port: int = sock_info[0]
+    auth_secret: str = sock_info[1]
+    sockfile, sock = local_connect_and_auth(port, auth_secret)
+    # The RDD materialization time is unpredictable, if we set a timeout for socket reading
+    # operation, it will very possibly fail. See SPARK-18281.
+    sock.settimeout(None)
+    return sockfile
+
+
+def _load_from_socket(sock_info: "JavaArray", serializer: "Serializer") -> Iterator[Any]:
+    """
+    Connect to a local socket described by sock_info and use the given serializer to yield data
+
+    Parameters
+    ----------
+    sock_info : tuple
+        Tuple containing port number and authentication secret for a local socket.
+    serializer : class:`Serializer`
+        The PySpark serializer to use
+
+    Returns
+    -------
+    result of meth:`Serializer.load_stream`,
+    usually a generator that yields deserialized data
+    """
+    sockfile = _create_local_socket(sock_info)
+    # The socket will be automatically closed when garbage-collected.
+    return serializer.load_stream(sockfile)
+
+
+def _local_iterator_from_socket(sock_info: "JavaArray", serializer: "Serializer") -> Iterator[Any]:
+    class PyLocalIterable:
+        """Create a synchronous local iterable over a socket"""
+
+        def __init__(self, _sock_info: "JavaArray", _serializer: "Serializer"):
+            port: int
+            auth_secret: str
+            jsocket_auth_server: "JavaObject"
+            port, auth_secret, self.jsocket_auth_server = _sock_info
+            self._sockfile = _create_local_socket((port, auth_secret))
+            self._serializer = _serializer
+            self._read_iter: Iterator[Any] = iter([])  # Initialize as empty iterator
+            self._read_status = 1
+
+        def __iter__(self) -> Iterator[Any]:
+            while self._read_status == 1:
+                # Request next partition data from Java
+                write_int(1, self._sockfile)
+                self._sockfile.flush()
+
+                # If response is 1 then there is a partition to read, if 0 then fully consumed
+                self._read_status = read_int(self._sockfile)
+                if self._read_status == 1:
+                    # Load the partition data as a stream and read each item
+                    self._read_iter = self._serializer.load_stream(self._sockfile)
+                    for item in self._read_iter:
+                        yield item
+
+                # An error occurred, join serving thread and raise any exceptions from the JVM
+                elif self._read_status == -1:
+                    self.jsocket_auth_server.getResult()
+
+        def __del__(self) -> None:
+            # If local iterator is not fully consumed,
+            if self._read_status == 1:
+                try:
+                    # Finish consuming partition data stream
+                    for _ in self._read_iter:
+                        pass
+                    # Tell Java to stop sending data and close connection
+                    write_int(0, self._sockfile)
+                    self._sockfile.flush()
+                except Exception:
+                    # Ignore any errors, socket is automatically closed when garbage-collected
+                    pass
+
+    return iter(PyLocalIterable(sock_info, serializer))
+
+
+def local_connect_and_auth(port: Optional[Union[str, int]], auth_secret: str) -> Tuple:
+    """
+    Connect to local host, authenticate with it, and return a (sockfile,sock) for that connection.
+    Handles IPV4 & IPV6, does some error handling.
+
+    Parameters
+    ----------
+    port : str or int, optional
+    auth_secret : str
+
+    Returns
+    -------
+    tuple
+        with (sockfile, sock)
+    """
+    sock = None
+    errors = []
+    # Support for both IPv4 and IPv6.
+    addr = "127.0.0.1"
+    if os.environ.get("SPARK_PREFER_IPV6", "false").lower() == "true":
+        addr = "::1"
+    for res in socket.getaddrinfo(addr, port, socket.AF_UNSPEC, socket.SOCK_STREAM):
+        af, socktype, proto, _, sa = res
+        try:
+            sock = socket.socket(af, socktype, proto)
+            sock.settimeout(int(os.environ.get("SPARK_AUTH_SOCKET_TIMEOUT", 15)))
+            sock.connect(sa)
+            sockfile = sock.makefile("rwb", int(os.environ.get("SPARK_BUFFER_SIZE", 65536)))
+            _do_server_auth(sockfile, auth_secret)
+            return (sockfile, sock)
+        except socket.error as e:
+            emsg = str(e)
+            errors.append("tried to connect to %s, but an error occurred: %s" % (sa, emsg))
+            if sock is not None:
+                sock.close()
+                sock = None
+    raise PySparkRuntimeError(
+        error_class="CANNOT_OPEN_SOCKET",
+        message_parameters={
+            "errors": str(errors),
+        },
+    )
+
+
+def _do_server_auth(conn: "io.IOBase", auth_secret: str) -> None:
+    """
+    Performs the authentication protocol defined by the SocketAuthHelper class on the given
+    file-like object 'conn'.
+    """
+    write_with_length(auth_secret.encode("utf-8"), conn)
+    conn.flush()
+    reply = UTF8Deserializer().loads(conn)
+    if reply != "ok":
+        conn.close()
+        raise PySparkRuntimeError(
+            error_class="UNEXPECTED_RESPONSE_FROM_SERVER",
+            message_parameters={},
+        )
+
+
+_is_remote_only = None
+
+
+def is_remote_only() -> bool:
+    """
+    Returns if the current running environment is only for Spark Connect.
+    If users install pyspark-connect alone, RDD API does not exist.
+
+    .. versionadded:: 4.0.0
+
+    Notes
+    -----
+    This will only return ``True`` if installed PySpark is only for Spark Connect.
+    Otherwise, it returns ``False``.
+
+    This API is unstable, and for developers.
+
+    Returns
+    -------
+    bool
+
+    Examples
+    --------
+    >>> from pyspark.sql import is_remote
+    >>> is_remote()
+    False
+    """
+    global _is_remote_only
+
+    if _is_remote_only is not None:
+        return _is_remote_only
+    try:
+        from pyspark import core  # noqa: F401
+
+        _is_remote_only = False
+        return _is_remote_only
+    except ImportError:
+        _is_remote_only = True
+        return _is_remote_only
+
+
 if __name__ == "__main__":
     if "pypy" not in platform.python_implementation().lower() and sys.version_info[:2] >= (3, 7):
         import doctest
         import pyspark.util
-        from pyspark.context import SparkContext
+        from pyspark.core.context import SparkContext
 
         globs = pyspark.util.__dict__.copy()
         globs["sc"] = SparkContext("local[4]", "PythonTest")

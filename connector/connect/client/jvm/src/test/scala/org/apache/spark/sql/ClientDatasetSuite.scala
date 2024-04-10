@@ -162,7 +162,7 @@ class ClientDatasetSuite extends ConnectFunSuite with BeforeAndAfterEach {
     }
   }
 
-  test("command extension") {
+  test("command extension deprecated") {
     val extension = proto.ExamplePluginCommand.newBuilder().setCustomField("abc").build()
     val command = proto.Command
       .newBuilder()
@@ -170,6 +170,18 @@ class ClientDatasetSuite extends ConnectFunSuite with BeforeAndAfterEach {
       .build()
     val expectedPlan = proto.Plan.newBuilder().setCommand(command).build()
     ss.execute(com.google.protobuf.Any.pack(extension))
+    val actualPlan = service.getAndClearLatestInputPlan()
+    assert(actualPlan.equals(expectedPlan))
+  }
+
+  test("command extension") {
+    val extension = proto.ExamplePluginCommand.newBuilder().setCustomField("abc").build()
+    val command = proto.Command
+      .newBuilder()
+      .setExtension(com.google.protobuf.Any.pack(extension))
+      .build()
+    val expectedPlan = proto.Plan.newBuilder().setCommand(command).build()
+    ss.execute(com.google.protobuf.Any.pack(extension).toByteArray)
     val actualPlan = service.getAndClearLatestInputPlan()
     assert(actualPlan.equals(expectedPlan))
   }

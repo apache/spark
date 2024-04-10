@@ -19,11 +19,12 @@ package org.apache.spark.sql.jdbc
 
 import java.math.BigDecimal
 import java.sql.{Connection, Date, Timestamp}
+import java.time.{Duration, Period}
 import java.util.{Properties, TimeZone}
 
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.sql.{Row, SaveMode}
+import org.apache.spark.sql.{DataFrame, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -120,10 +121,11 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
       """.stripMargin.replaceAll("\n", " "))
 
 
-    conn.prepareStatement("CREATE TABLE numerics (b DECIMAL(1), f DECIMAL(3, 2), i DECIMAL(10))")
+    conn.prepareStatement("CREATE TABLE numerics (b DECIMAL(1), f DECIMAL(3, 2), i DECIMAL(10)," +
+        "n NUMBER(7,-2))")
       .executeUpdate()
     conn.prepareStatement(
-      "INSERT INTO numerics VALUES (4, 1.23, 9999999999)").executeUpdate()
+      "INSERT INTO numerics VALUES (4, 1.23, 9999999999, 7456123.89)").executeUpdate()
     conn.commit()
 
     conn.prepareStatement("CREATE TABLE oracle_types (d BINARY_DOUBLE, f BINARY_FLOAT)")
@@ -158,19 +160,14 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
     conn.commit()
   }
 
-  test("SPARK-16625 : Importing Oracle numeric types") {
-    val df = sqlContext.read.jdbc(jdbcUrl, "numerics", new Properties)
-    val rows = df.collect()
-    assert(rows.length == 1)
-    val row = rows(0)
-    // The main point of the below assertions is not to make sure that these Oracle types are
-    // mapped to decimal types, but to make sure that the returned values are correct.
-    // A value > 1 from DECIMAL(1) is correct:
-    assert(row.getDecimal(0).compareTo(BigDecimal.valueOf(4)) == 0)
-    // A value with fractions from DECIMAL(3, 2) is correct:
-    assert(row.getDecimal(1).compareTo(BigDecimal.valueOf(1.23)) == 0)
-    // A value > Int.MaxValue from DECIMAL(10) is correct:
-    assert(row.getDecimal(2).compareTo(BigDecimal.valueOf(9999999999L)) == 0)
+  test("SPARK-16625: Importing Oracle numeric types") {
+    Seq("true", "false").foreach { flag =>
+      withSQLConf((SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key, flag)) {
+        val df = sqlContext.read.jdbc(jdbcUrl, "numerics", new Properties)
+        checkAnswer(df, Seq(Row(BigDecimal.valueOf(4), BigDecimal.valueOf(1.23),
+          BigDecimal.valueOf(9999999999L), BigDecimal.valueOf(7456100))))
+      }
+    }
   }
 
 
@@ -539,5 +536,31 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
     val df2 = reader.load()
     assert(df.count() === 2)
     assert(df2.collect().forall(_.getTimestamp(0) === row1))
+  }
+
+  test("SPARK-47761: Reading ANSI INTERVAL Types") {
+    val df: String => DataFrame = query => spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("query", query)
+      .load()
+    checkAnswer(df("SELECT INTERVAL '1-2' YEAR(1) TO MONTH as i0 FROM dual"),
+      Row(Period.of(1, 2, 0)))
+    checkAnswer(df("SELECT INTERVAL '1-2' YEAR(2) TO MONTH as i1 FROM dual"),
+      Row(Period.of(1, 2, 0)))
+    checkAnswer(df("SELECT INTERVAL '12345-2' YEAR(9) TO MONTH as i2 FROM dual"),
+      Row(Period.of(12345, 2, 0)))
+    checkAnswer(df("SELECT INTERVAL '1 12:23:56' DAY(1) TO SECOND(0) as i3 FROM dual"),
+      Row(Duration.ofDays(1).plusHours(12).plusMinutes(23).plusSeconds(56)))
+    checkAnswer(df("SELECT INTERVAL '1 12:23:56.12' DAY TO SECOND(2) as i4 FROM dual"),
+      Row(Duration.ofDays(1).plusHours(12).plusMinutes(23).plusSeconds(56).plusMillis(120)))
+    checkAnswer(df("SELECT INTERVAL '1 12:23:56.1234' DAY TO SECOND(4) as i5 FROM dual"),
+      Row(Duration.ofDays(1).plusHours(12).plusMinutes(23).plusSeconds(56).plusMillis(123)
+        .plusNanos(400000)))
+    checkAnswer(df("SELECT INTERVAL '1 12:23:56.123456' DAY TO SECOND(6) as i6 FROM dual"),
+      Row(Duration.ofDays(1).plusHours(12).plusMinutes(23).plusSeconds(56).plusMillis(123)
+        .plusNanos(456000)))
+    checkAnswer(df("SELECT INTERVAL '1 12:23:56.12345678' DAY TO SECOND(8) as i7 FROM dual"),
+      Row(Duration.ofDays(1).plusHours(12).plusMinutes(23).plusSeconds(56).plusMillis(123)
+        .plusNanos(456000)))
   }
 }

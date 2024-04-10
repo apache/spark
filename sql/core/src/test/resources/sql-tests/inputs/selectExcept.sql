@@ -77,5 +77,17 @@ SELECT T.* FROM v1, LATERAL (SELECT  COALESCE(v1.*)) AS T(x);
 -- We used to ignore () around * in the past, but now we don't
 SET spark.sql.legacy.ignoreParenthesesAroundStar = true;
 SELECT (*) FROM v1;
+
+SELECT DISTINCT * FROM v1;
+
+SELECT DISTINCT(*) FROM v1;
+
 SET spark.sql.legacy.ignoreParenthesesAroundStar = false;
+
+SELECT DISTINCT(*) FROM v1;
+
 DROP VIEW v1;
+
+-- Except for DISTINCT, where we still ignore ()
+SELECT DISTINCT(*)
+
