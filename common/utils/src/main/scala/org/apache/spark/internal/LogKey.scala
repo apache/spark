@@ -83,7 +83,6 @@ object LogKey extends Enumeration {
   val LINE = Value
   val LINE_NUM = Value
   val LISTENER = Value
-  val LOG_MESSAGE = Value
   val LOG_TYPE = Value
   val MASTER_URL = Value
   val MAX_ATTEMPTS = Value
@@ -123,7 +122,7 @@ object LogKey extends Enumeration {
   val RANGE = Value
   val RDD_ID = Value
   val REASON = Value
-  val REDACTED_STATE = Value
+  val REDACTED_STATEMENT = Value
   val REDUCE_ID = Value
   val RELATION_NAME = Value
   val REMAINING_PARTITIONS = Value
@@ -134,7 +133,6 @@ object LogKey extends Enumeration {
   val RULE_BATCH_NAME = Value
   val RULE_NAME = Value
   val RULE_NUMBER_OF_RUNS = Value
-  val SCHEMA_NAME = Value
   val SERVICE_NAME = Value
   val SESSION_ID = Value
   val SHARD_ID = Value

@@ -59,12 +59,14 @@ private[hive] class SparkGetColumnsOperation(
 
   override def runInternal(): Unit = {
     // Do not change cmdStr. It's used for Hive auditing and authorization.
-    val cmdStr = log"catalog : ${MDC(CATALOG_NAME, catalogName)}, " +
-      log"schemaPattern : ${MDC(SCHEMA_NAME, schemaName)}, " +
-      log"tablePattern : ${MDC(TABLE_NAME, tableName)}"
-    val logMsg = log"Listing columns '${MDC(COMMAND, cmdStr)}, " +
-      log"columnName : ${MDC(COLUMN_NAME, columnName)}'"
-    logInfo(log"${MDC(LOG_MESSAGE, logMsg)} with ${MDC(STATEMENT_ID, statementId)}")
+    val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName, tablePattern : $tableName"
+    val logMsg = s"Listing columns '$cmdStr, columnName : $columnName'"
+
+    logInfo(log"Listing columns 'catalog: ${MDC(CATALOG_NAME, catalogName)}, " +
+      log"schemaPattern : ${MDC(DATABASE_NAME, schemaName)}, " +
+      log"tablePattern : ${MDC(TABLE_NAME, tableName)}, " +
+      log"columnName : ${MDC(COLUMN_NAME, columnName)}' " +
+      log"with ${MDC(STATEMENT_ID, statementId)}")
 
     setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
@@ -74,7 +76,7 @@ private[hive] class SparkGetColumnsOperation(
     HiveThriftServer2.eventManager.onStatementStart(
       statementId,
       parentSession.getSessionHandle.getSessionId.toString,
-      logMsg.message,
+      logMsg,
       statementId,
       parentSession.getUsername)
 
@@ -92,7 +94,7 @@ private[hive] class SparkGetColumnsOperation(
 
     if (isAuthV2Enabled) {
       val privObjs = getPrivObjs(db2Tabs).asJava
-      authorizeMetaGets(HiveOperationType.GET_COLUMNS, privObjs, cmdStr.message)
+      authorizeMetaGets(HiveOperationType.GET_COLUMNS, privObjs, cmdStr)
     }
 
     try {

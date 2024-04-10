@@ -127,7 +127,7 @@ private[hive] class SparkExecuteStatementOperation(
   override def runInternal(): Unit = {
     setState(OperationState.PENDING)
     logInfo(
-      log"Submitting query '${MDC(REDACTED_STATE, redactedStatement)}' with " +
+      log"Submitting query '${MDC(REDACTED_STATEMENT, redactedStatement)}' with " +
         log"${MDC(STATEMENT_ID, statementId)}")
     HiveThriftServer2.eventManager.onStatementStart(
       statementId,
