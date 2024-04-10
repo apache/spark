@@ -148,7 +148,7 @@ public final class CollationFactory {
     collationTable[1] = new Collation(
       "UTF8_BINARY_LCASE",
       null,
-      UTF8String::compareLowercase,
+      UTF8String::compareLowerCase,
       "1.0",
       (s) -> (long)s.toLowerCase().hashCode(),
       false,

@@ -424,7 +424,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (numBytes == 0) {
       return EMPTY_UTF8;
     }
-    // skip allocation if we need to fallback in case of non-ASCII occurrences
+    // Optimization - do char level uppercase conversion in case of chars in ASCII range
     for (int i = 0; i < numBytes; i++) {
       if (getByte(i) < 0) {
         // non-ASCII
@@ -444,13 +444,14 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   /**
    * Optimized lowercase comparison for UTF8_BINARY_LCASE collation
+   * a.compareLowerCase(b) is equivalent to a.toLowerCase().binaryCompare(b.toLowerCase())
    */
-  public int compareLowercase(UTF8String other) {
+  public int compareLowerCase(UTF8String other) {
     int curr;
     for (curr = 0; curr < numBytes && curr < other.numBytes; curr++) {
       byte left, right;
       if ((left = getByte(curr)) < 0 || (right = other.getByte(curr)) < 0) {
-        return compareLowercaseSuffixSlow(other, curr);
+        return compareLowerCaseSuffixSlow(other, curr);
       }
       int lowerLeft = Character.toLowerCase(left);
       int lowerRight = Character.toLowerCase(right);
@@ -461,7 +462,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return numBytes - other.numBytes;
   }
 
-  private int compareLowercaseSuffixSlow(UTF8String other, int pref) {
+  private int compareLowerCaseSuffixSlow(UTF8String other, int pref) {
     UTF8String suffixLeft = UTF8String.fromAddress(base, offset + pref,
       numBytes - pref);
     UTF8String suffixRight = UTF8String.fromAddress(other.base, other.offset + pref,
@@ -476,7 +477,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (numBytes == 0) {
       return EMPTY_UTF8;
     }
-    // skip allocation if we need to fallback in case of non-ASCII occurrences
+    // Optimization - do char level lowercase conversion in case of chars in ASCII range
     for (int i = 0; i < numBytes; i++) {
       if (getByte(i) < 0) {
         // non-ASCII
@@ -501,7 +502,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (numBytes == 0) {
       return EMPTY_UTF8;
     }
-    // skip allocation if we need to fallback in case of non-ASCII occurrences
+    // Optimization - in case of ASCII chars we can skip copying the data to and from StringBuilder
     byte prev = ' ', curr;
     for (int i = 0; i < numBytes; i++) {
       curr = getByte(i);
