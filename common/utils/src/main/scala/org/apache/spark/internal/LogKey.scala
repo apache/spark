@@ -54,7 +54,9 @@ object LogKey extends Enumeration {
   val CSV_SCHEMA_FIELD_NAMES = Value
   val CSV_SOURCE = Value
   val DATA = Value
+  val DATABASE_NAME = Value
   val DRIVER_ID = Value
+  val DROPPED_PARTITIONS = Value
   val END_POINT = Value
   val ERROR = Value
   val EVENT_LOOP = Value
@@ -64,6 +66,7 @@ object LogKey extends Enumeration {
   val EXIT_CODE = Value
   val EXPRESSION_TERMS = Value
   val FAILURES = Value
+  val FIELD_NAME = Value
   val FUNCTION_NAME = Value
   val FUNCTION_PARAMETER = Value
   val GROUP_ID = Value
@@ -103,6 +106,7 @@ object LogKey extends Enumeration {
   val PARSE_MODE = Value
   val PARTITION_ID = Value
   val PARTITION_SPECIFICATION = Value
+  val PARTITION_SPECS = Value
   val PATH = Value
   val PATHS = Value
   val POD_ID = Value
@@ -119,6 +123,7 @@ object LogKey extends Enumeration {
   val REASON = Value
   val REDUCE_ID = Value
   val RELATION_NAME = Value
+  val REMAINING_PARTITIONS = Value
   val REMOTE_ADDRESS = Value
   val RETRY_COUNT = Value
   val RETRY_INTERVAL = Value
