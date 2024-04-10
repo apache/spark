@@ -1643,19 +1643,26 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   private static final ByteSubstringEquals byteSubstringEquals = new ByteSubstringEquals();
 
-  public static class CollationSubstringEquals implements SubstringEquals {
-    int collationId;
+  private static class CollationSubstringEquals implements SubstringEquals {
+    private final int collationId;
+    private final UTF8String left, right;
 
     public CollationSubstringEquals(int collationId) {
       this.collationId = collationId;
+      this.left = new UTF8String();
+      this.right = new UTF8String();
     }
 
     @Override
     public boolean equals(UTF8String left, UTF8String right, int posLeft, int posRight,
       int lenLeft, int lenRight) {
-      UTF8String cmpL = UTF8String.fromAddress(left.base, left.offset + posLeft, lenLeft);
-      UTF8String cmpR = UTF8String.fromAddress(right.base, right.offset + posRight, lenRight);
-      return CollationFactory.fetchCollation(collationId).equalsFunction.apply(cmpL, cmpR);
+      this.left.base = left.base;
+      this.left.offset = left.offset + posLeft;
+      this.left.numBytes = lenLeft;
+      this.right.base = right.base;
+      this.right.offset = right.offset + posRight;
+      this.right.numBytes = lenRight;
+      return CollationFactory.fetchCollation(collationId).equalsFunction.apply(this.left, this.right);
     }
   }
 
@@ -1672,7 +1679,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
       return levenshteinDistance(other, byteSubstringEquals);
     }
-    return levenshteinDistance(other, CollationFactory.getSubstringEquals(collationId));
+    return levenshteinDistance(other, new CollationSubstringEquals(collationId));
   }
 
   private int levenshteinDistance(UTF8String other, SubstringEquals comparator) {
@@ -1738,7 +1745,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
       return levenshteinDistance(other, threshold, byteSubstringEquals);
     }
-    return levenshteinDistance(other, threshold, CollationFactory.getSubstringEquals(collationId));
+    return levenshteinDistance(other, threshold, new CollationSubstringEquals(collationId));
   }
 
   private int levenshteinDistance(UTF8String other, int threshold,
