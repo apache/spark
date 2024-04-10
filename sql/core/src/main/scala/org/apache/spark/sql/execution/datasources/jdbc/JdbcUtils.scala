@@ -532,6 +532,16 @@ object JdbcUtils extends Logging with SQLConfHelper {
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         row.update(pos, rs.getBytes(pos + 1))
 
+    case _: YearMonthIntervalType =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
+        row.update(pos,
+          nullSafeConvert(rs.getString(pos + 1), dialect.getYearMonthIntervalAsMonths))
+
+    case _: DayTimeIntervalType =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
+        row.update(pos,
+          nullSafeConvert(rs.getString(pos + 1), dialect.getDayTimeIntervalAsMicros))
+
     case _: ArrayType if metadata.contains("pg_bit_array_type") =>
       // SPARK-47628: Handle PostgreSQL bit(n>1) array type ahead. As in the pgjdbc driver,
       // bit(n>1)[] is not distinguishable from bit(1)[], and they are all recognized as boolen[].
