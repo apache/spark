@@ -190,7 +190,7 @@
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
     <commons-codec.version>1.16.1</commons-codec.version>
     <commons-compress.version>1.23.0</commons-compress.version>
-    <commons-io.version>2.13.0</commons-io.version>
+    <commons-io.version>2.16.0</commons-io.version>
     <!-- org.apache.commons/commons-lang/-->
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
