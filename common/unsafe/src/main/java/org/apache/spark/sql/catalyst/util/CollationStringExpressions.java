@@ -36,12 +36,7 @@ public final class CollationStringExpressions {
       if (r.numBytes() == 0) return true;
       if (l.numBytes() == 0) return false;
       StringSearch stringSearch = CollationFactory.getStringSearch(l, r, collationId);
-      while (stringSearch.next() != StringSearch.DONE) {
-        if (stringSearch.getMatchLength() == stringSearch.getPattern().length()) {
-          return true;
-        }
-      }
-      return false;
+      return stringSearch.first() != StringSearch.DONE;
     }
   }
 
