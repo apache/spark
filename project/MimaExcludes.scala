@@ -84,7 +84,11 @@ object MimaExcludes {
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.jdbc.MySQLDialect#MySQLSQLBuilder.this"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.jdbc.MySQLDialect#MySQLSQLQueryBuilder.this"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.jdbc.OracleDialect#OracleSQLBuilder.this"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.jdbc.OracleDialect#OracleSQLQueryBuilder.this")
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.jdbc.OracleDialect#OracleSQLQueryBuilder.this"),
+    // SPARK-47706: Bump json4s from 3.7.0-M11 to 4.0.7
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.expressions.MutableAggregationBuffer.jsonValue"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.types.DataType#JSortedObject.unapplySeq"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.mllib.tree.model.TreeEnsembleModel#SaveLoadV1_0.readMetadata")
   )
 
   // Default exclude rules
