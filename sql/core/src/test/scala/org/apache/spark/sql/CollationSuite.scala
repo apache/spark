@@ -544,13 +544,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
       // concat of columns of different collations is allowed
       // as long as we don't use the result in an unsupported function
-      // TODO(SPARK-47210): Add indeterminate support
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(s"SELECT c1 || c2 FROM $tableName")
-        },
-        errorClass = "COLLATION_MISMATCH.IMPLICIT"
-      )
+      checkAnswer(sql(s"SELECT c1 || c2 FROM $tableName"), Seq(Row("aa"), Row("AA")))
 
 
       // concat + in
@@ -610,7 +604,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         exception = intercept[AnalysisException] {
           sql(s"SELECT c1 FROM $tableName WHERE c1 || c3 = 'aa'")
         },
-        errorClass = "COLLATION_MISMATCH.IMPLICIT"
+        errorClass = "INDETERMINATE_COLLATION"
       )
 
       // concat on different implicit collations should succeed,
@@ -619,7 +613,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         exception = intercept[AnalysisException] {
           sql(s"SELECT * FROM $tableName ORDER BY c1 || c3")
         },
-        errorClass = "COLLATION_MISMATCH.IMPLICIT"
+        errorClass = "INDETERMINATE_COLLATION"
       )
 
       // concat + in
@@ -636,7 +630,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         exception = intercept[AnalysisException] {
           sql(s"SELECT * FROM $tableName WHERE contains(c1||c3, 'a')")
         },
-        errorClass = "COLLATION_MISMATCH.IMPLICIT"
+        errorClass = "INDETERMINATE_COLLATION"
       )
 
       checkError(
@@ -672,7 +666,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
-  // TODO(SPARK-47210): Add indeterminate support
   test("indeterminate collation checks") {
     val tableName = "t1"
     val newTableName = "t2"
@@ -695,7 +688,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
           exception = intercept[AnalysisException] {
             sql(s"CREATE TABLE $newTableName AS SELECT c1 || c2 FROM $tableName")
           },
-          errorClass = "COLLATION_MISMATCH.IMPLICIT")
+          errorClass = "INDETERMINATE_COLLATION")
       }
     }
   }

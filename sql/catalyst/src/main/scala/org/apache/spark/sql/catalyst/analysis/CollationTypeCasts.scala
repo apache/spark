@@ -22,7 +22,8 @@ import javax.annotation.Nullable
 import scala.annotation.tailrec
 
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.{hasStringType, haveSameType}
-import org.apache.spark.sql.catalyst.expressions.{ArrayJoin, BinaryExpression, CaseWhen, Cast, Coalesce, Collate, Concat, ConcatWs, CreateArray, Expression, Greatest, If, In, InSubquery, Least}
+import org.apache.spark.sql.catalyst.expressions.{ArrayJoin, BinaryExpression, CaseWhen, Cast, Coalesce, Collate, Concat, ConcatWs, CreateArray, Expression, Greatest, If, In, InSubquery, Least, SortOrder}
+import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
@@ -37,7 +38,9 @@ object CollationTypeCasts extends TypeCoercionRule {
 
     case caseWhenExpr: CaseWhen if !haveSameType(caseWhenExpr.inputTypesForMerging) =>
       val outputStringType =
-        getOutputCollation(caseWhenExpr.branches.map(_._2) ++ caseWhenExpr.elseValue)
+        getOutputCollation(
+          caseWhenExpr.branches.map(_._2) ++ caseWhenExpr.elseValue,
+          failOnIndeterminate = true)
         val newBranches = caseWhenExpr.branches.map { case (condition, value) =>
           (condition, castStringType(value, outputStringType).getOrElse(value))
         }
@@ -45,9 +48,13 @@ object CollationTypeCasts extends TypeCoercionRule {
           caseWhenExpr.elseValue.map(e => castStringType(e, outputStringType).getOrElse(e))
         CaseWhen(newBranches, newElseValue)
 
+    case concatExpr: Concat =>
+      val newChildren = collateToSingleType(concatExpr.children, failOnIndeterminate = false)
+      concatExpr.withNewChildren(newChildren)
+
     case otherExpr @ (
-      _: In | _: InSubquery | _: CreateArray | _: ArrayJoin | _: Concat | _: Greatest | _: Least |
-      _: Coalesce | _: BinaryExpression | _: ConcatWs) =>
+      _: In | _: InSubquery | _: CreateArray | _: ArrayJoin | _: Greatest | _: Least |
+      _: Coalesce | _: BinaryExpression | _: ConcatWs | _: SortOrder) =>
       val newChildren = collateToSingleType(otherExpr.children)
       otherExpr.withNewChildren(newChildren)
   }
@@ -83,8 +90,10 @@ object CollationTypeCasts extends TypeCoercionRule {
   /**
    * Collates input expressions to a single collation.
    */
-  def collateToSingleType(exprs: Seq[Expression]): Seq[Expression] = {
-    val st = getOutputCollation(exprs)
+  def collateToSingleType(
+      exprs: Seq[Expression],
+      failOnIndeterminate: Boolean = true): Seq[Expression] = {
+    val st = getOutputCollation(exprs, failOnIndeterminate)
 
     exprs.map(e => castStringType(e, st).getOrElse(e))
   }
@@ -95,7 +104,7 @@ object CollationTypeCasts extends TypeCoercionRule {
    * any expressions, but will only be affected by collated StringTypes or
    * complex DataTypes with collated StringTypes (e.g. ArrayType)
    */
-  def getOutputCollation(expr: Seq[Expression]): StringType = {
+  def getOutputCollation(expr: Seq[Expression], failOnIndeterminate: Boolean): StringType = {
     val explicitTypes = expr.filter(_.isInstanceOf[Collate])
       .map(_.dataType.asInstanceOf[StringType].collationId)
       .distinct
@@ -118,7 +127,20 @@ object CollationTypeCasts extends TypeCoercionRule {
           .distinctBy(_.collationId)
 
         if (implicitTypes.length > 1) {
-          throw QueryCompilationErrors.implicitCollationMismatchError()
+          if (failOnIndeterminate) {
+            throw QueryCompilationErrors.implicitCollationMismatchError()
+          }
+          else {
+            StringType(CollationFactory.INDETERMINATE_COLLATION_ID)
+          }
+        }
+        else if (implicitTypes.exists(_.collationId == -1)) {
+          if (failOnIndeterminate) {
+            throw QueryCompilationErrors.indeterminateCollationError()
+          }
+          else {
+            StringType(CollationFactory.INDETERMINATE_COLLATION_ID)
+          }
         }
         else {
           implicitTypes.headOption.getOrElse(SQLConf.get.defaultStringType)

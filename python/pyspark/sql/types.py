@@ -252,7 +252,7 @@ class StringType(AtomicType):
         name of the collation, default is UTF8_BINARY.
     """
 
-    collationNames = ["UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI"]
+    collationNames = ["UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI", "INDETERMINATE"]
 
     def __init__(self, collation: Optional[str] = None):
         self.collationId = 0 if collation is None else self.collationNameToId(collation)

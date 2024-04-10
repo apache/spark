@@ -128,6 +128,7 @@ public final class CollationFactory {
   private static final HashMap<String, Integer> collationNameToIdMap = new HashMap<>();
 
   public static final int UTF8_BINARY_COLLATION_ID = 0;
+  public static final int INDETERMINATE_COLLATION_ID = -1;
   public static final int UTF8_BINARY_LCASE_COLLATION_ID = 1;
 
   static {
