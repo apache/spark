@@ -3271,8 +3271,20 @@
   },
   "NUMERIC_VALUE_OUT_OF_RANGE" : {
     "message" : [
-      "<value> cannot be represented as Decimal(<precision>, <scale>). If necessary set <config> to \"false\" to bypass this error, and return NULL instead."
+      ""
     ],
+    "subClass" : {
+      "WITH_SUGGESTION" : {
+        "message" : [
+          "<value> cannot be represented as Decimal(<precision>, <scale>). If necessary set <config> to \"false\" to bypass this error, and return NULL instead."
+        ]
+      },
+      "WITHOUT_SUGGESTION" : {
+        "message" : [
+          "The <roundedValue> rounded half up from <originalValue> cannot be represented as Decimal(<precision>, <scale>)."
+        ]
+      }
+    },
     "sqlState" : "22003"
   },
   "NUM_COLUMNS_MISMATCH" : {
