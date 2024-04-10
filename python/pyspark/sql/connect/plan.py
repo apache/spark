@@ -1161,6 +1161,9 @@ class SQL(LogicalPlan):
         if views is not None:
             assert isinstance(views, List)
             assert all(isinstance(v, SubqueryAlias) for v in views)
+            if len(views) > 0:
+                # reserved plan id for WithRelations
+                self._plan_id_with_rel = LogicalPlan._fresh_plan_id()
 
         self._query = query
         self._args = args
@@ -1178,10 +1181,16 @@ class SQL(LogicalPlan):
                 plan.sql.named_arguments[k].CopyFrom(arg.to_plan(session))
 
         if self._views is not None and len(self._views) > 0:
-            old_plan = plan
+            # build new plan like
+            # with_relations [id 10]
+            #     root: sql  [id 9]
+            #     reference:
+            #          alias#1: [id 8]
+            #          alias#2: [id 5]
+            sql_plan = plan
             plan = proto.Relation()
-            plan.common.plan_id = LogicalPlan._fresh_plan_id()
-            plan.with_relations.root.CopyFrom(old_plan)
+            plan.common.plan_id = self._plan_id_with_rel
+            plan.with_relations.root.CopyFrom(sql_plan)
             plan.with_relations.references.extend([v.plan(session) for v in self._views])
 
         return plan
