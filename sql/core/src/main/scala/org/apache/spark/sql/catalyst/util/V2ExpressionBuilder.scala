@@ -210,11 +210,10 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
         None
       }
     case iff: If =>
-      val childrenExpressions = iff.children.flatMap(generateExpression(_))
-      if (iff.children.length == childrenExpressions.length) {
-        Some(new V2Predicate("CASE_WHEN", childrenExpressions.toArray[V2Expression]))
+      if (isPredicate && iff.dataType.isInstanceOf[BooleanType]) {
+        generatePredicateWithName("CASE_WHEN", iff.children)
       } else {
-        None
+        generateExpressionWithName("CASE_WHEN", iff.children)
       }
     case substring: Substring =>
       val children = if (substring.len == Literal(Integer.MAX_VALUE)) {
@@ -390,6 +389,16 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
     val childrenExpressions = children.flatMap(generateExpression(_))
     if (childrenExpressions.length == children.length) {
       Some(new GeneralScalarExpression(v2ExpressionName, childrenExpressions.toArray[V2Expression]))
+    } else {
+      None
+    }
+  }
+
+  private def generatePredicateWithName(
+      v2PredicateName: String, children: Seq[Expression]): Option[V2Expression] = {
+    val childrenExpressions = children.flatMap(generateExpression(_))
+    if (childrenExpressions.length == children.length) {
+      Some(new V2Predicate(v2PredicateName, childrenExpressions.toArray[V2Expression]))
     } else {
       None
     }
