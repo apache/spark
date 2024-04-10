@@ -47,6 +47,15 @@ class MDCSuite
     assert(log.context === Map("exit_code" -> null).asJava)
   }
 
+  test("the class of value cannot be MDC") {
+    val log = log"This is a log, exitcode ${MDC(EXIT_CODE, "123456")}"
+    val e = intercept[IllegalArgumentException] {
+      MDC(RANGE, log)
+    }
+    assert(e.getMessage ===
+      "requirement failed: the class of value cannot be MessageWithContext")
+  }
+
   test("check MDC stripMargin") {
     val log =
       log"""
