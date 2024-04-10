@@ -967,7 +967,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     }
   }
 
-  test("SPARK-47463: Pushed down v2 filter that folded predicate into (if / case) branches") {
+  test("SPARK-47463: Pushed down v2 filter with (if / case when/ nullif) expression") {
     withTempView("t1") {
       spark.read.format(classOf[AdvancedDataSourceV2WithV2Filter].getName).load()
         .createTempView("t1")
@@ -990,6 +990,15 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
       )
       val result2 = df2.collect()
       assert(result2.length == 1)
+
+      val df3 = sql(
+        s"""
+           |select * from t1
+           |where nullif(i, 1) is null
+           |""".stripMargin
+      )
+      val result3 = df3.collect()
+      assert(result3.length == 1)
     }
   }
 }
