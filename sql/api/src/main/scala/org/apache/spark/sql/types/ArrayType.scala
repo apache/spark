@@ -44,23 +44,6 @@ object ArrayType extends AbstractDataType {
 }
 
 /**
- * Use AbstractArrayType(AbstractDataType) for defining expected types for expression parameters.
- */
-@Stable
-case class AbstractArrayType(elementType: AbstractDataType) extends AbstractDataType {
-
-  override private[sql] def defaultConcreteType: DataType =
-    ArrayType(elementType.defaultConcreteType, containsNull = true)
-
-  override private[sql] def acceptsType(other: DataType): Boolean = {
-    other.isInstanceOf[ArrayType] &&
-      elementType.acceptsType(other.asInstanceOf[ArrayType].elementType)
-  }
-
-  override private[spark] def simpleString: String = s"array<${elementType.simpleString}>"
-}
-
-/**
  * The data type for collections of multiple values.
  * Internally these are represented as columns that contain a ``scala.collection.Seq``.
  *

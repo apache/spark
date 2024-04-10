@@ -24,7 +24,6 @@ import org.apache.spark.sql.types.{AbstractDataType, ArrayType, DataType}
 /**
  * Use AbstractArrayType(AbstractDataType) for defining expected types for expression parameters.
  */
-@Stable
 case class AbstractArrayType(elementType: AbstractDataType) extends AbstractDataType {
 
   override private[sql] def defaultConcreteType: DataType =
