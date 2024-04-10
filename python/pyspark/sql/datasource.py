@@ -502,7 +502,7 @@ class DataSourceStreamReader(ABC):
 
 
 class SimpleInputPartition(InputPartition):
-    def __init__(self, start, end):
+    def __init__(self, start: dict, end: dict):
         self.start = start
         self.end = end
 

@@ -229,7 +229,7 @@ def main(infile: IO, outfile: IO) -> None:
                 f"but found '{type(partition).__name__}'."
             )
 
-            output_iter = reader.read(partition)  # type: ignore[arg-type]
+            output_iter = reader.read(partition)  # type: ignore[attr-defined]
 
             # Validate the output iterator.
             if not isinstance(output_iter, Iterator):
@@ -250,7 +250,7 @@ def main(infile: IO, outfile: IO) -> None:
         if not is_streaming:
             # The partitioning of python batch source read is determined before query execution.
             try:
-                partitions = reader.partitions()
+                partitions = reader.partitions()  # type: ignore[attr-defined]
                 if not isinstance(partitions, list):
                     raise PySparkRuntimeError(
                         error_class="DATA_SOURCE_TYPE_MISMATCH",
@@ -269,9 +269,9 @@ def main(infile: IO, outfile: IO) -> None:
                         },
                     )
                 if len(partitions) == 0:
-                    partitions = [None]  # type: ignore
+                    partitions = [None]
             except NotImplementedError:
-                partitions = [None]  # type: ignore
+                partitions = [None]
 
             # Return the serialized partition values.
             write_int(len(partitions), outfile)
