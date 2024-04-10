@@ -22,7 +22,7 @@ import scala.jdk.CollectionConverters._
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.EXIT_CODE
+import org.apache.spark.internal.LogKey.{EXIT_CODE, OFFSET, RANGE}
 
 class MDCSuite
     extends AnyFunSuite // scalastyle:ignore funsuite
@@ -39,6 +39,19 @@ class MDCSuite
     val log = log"This is a log, exitcode ${MDC(EXIT_CODE, cov)}"
     assert(log.message === "This is a log, exitcode CustomObjectValue: spark, 10086")
     assert(log.context === Map("exit_code" -> "CustomObjectValue: spark, 10086").asJava)
+  }
+
+  test("check MDC stripMargin") {
+    val log =
+      log"""
+           |The current available offset range is ${MDC(RANGE, "12 - 34")}.
+           | Offset ${MDC(OFFSET, "666")}. is out of range""".stripMargin
+    val expected =
+      s"""
+         |The current available offset range is 12 - 34.
+         | Offset 666. is out of range""".stripMargin
+    assert(log.message === expected)
+    assert(log.context === Map("range" -> "12 - 34", "offset" -> "666").asJava)
   }
 
   case class CustomObjectValue(key: String, value: Int) {
