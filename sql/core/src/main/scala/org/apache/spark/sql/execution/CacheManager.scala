@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
 import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan, ResolvedHint, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
+import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.CommandUtils
@@ -38,7 +39,14 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
 
 /** Holds a cached logical plan and its data */
-case class CachedData(plan: LogicalPlan, cachedRepresentation: InMemoryRelation)
+case class CachedData(plan: LogicalPlan, cachedRepresentation: InMemoryRelation) {
+  override def toString: String =
+    s"""
+       |CachedData(
+       |logicalPlan=$plan
+       |InMemoryRelation=$cachedRepresentation)
+       |""".stripMargin
+}
 
 /**
  * Provides support in a SQLContext for caching query results and automatically using these cached
@@ -62,6 +70,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   def clearCache(): Unit = this.synchronized {
     cachedData.foreach(_.cachedRepresentation.cacheBuilder.clearCache())
     cachedData = IndexedSeq[CachedData]()
+    CacheManager.logCacheOperation(s"Cleared all Dataframe cache entries")
   }
 
   /** Checks if the cache is empty. */
@@ -119,7 +128,9 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
         if (lookupCachedData(planToCache).nonEmpty) {
           logWarning("Data has already been cached.")
         } else {
-          cachedData = CachedData(planToCache, inMemoryRelation) +: cachedData
+          val cd = CachedData(planToCache, inMemoryRelation)
+          cachedData = cd +: cachedData
+          CacheManager.logCacheOperation(s"Added Dataframe cache entry:$cd")
         }
       }
     }
@@ -204,6 +215,8 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       cachedData = cachedData.filterNot(cd => plansToUncache.exists(_ eq cd))
     }
     plansToUncache.foreach { _.cachedRepresentation.cacheBuilder.clearCache(blocking) }
+    CacheManager.logCacheOperation(s"Removed ${plansToUncache.size} Dataframe cache " +
+      s"entries, with logical plans being \n[${plansToUncache.map(_.plan).mkString(",\n")}]")
 
     // Re-compile dependent cached queries after removing the cached query.
     if (!cascade) {
@@ -268,6 +281,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
           logWarning("While recaching, data was already added to cache.")
         } else {
           cachedData = recomputedPlan +: cachedData
+          CacheManager.logCacheOperation(s"Re-cached Dataframe cache entry:$recomputedPlan")
         }
       }
     }
@@ -280,7 +294,12 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
 
   /** Optionally returns cached data for the given [[LogicalPlan]]. */
   def lookupCachedData(plan: LogicalPlan): Option[CachedData] = {
-    cachedData.find(cd => plan.sameResult(cd.plan))
+    val result = cachedData.find(cd => plan.sameResult(cd.plan))
+    if (result.isDefined) {
+      CacheManager.logCacheOperation(s"Dataframe cache hit for input plan:\n$plan" +
+        s"matched with cache entry:${result.get}")
+    }
+    result
   }
 
   /** Replaces segments of the given logical plan with cached versions where possible. */
@@ -301,9 +320,19 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
         }.getOrElse(currentFragment)
     }
 
-    newPlan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
+    val result = newPlan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
       case s: SubqueryExpression => s.withNewPlan(useCachedData(s.plan))
     }
+
+    if (result.fastEquals(plan)) {
+      CacheManager.logCacheOperation(s"Dataframe cache miss for input plan:\n$plan")
+      CacheManager.logCacheOperation(s"Last 20 Dataframe cache entry logical plans:\n" +
+        s"[${cachedData.take(20).map(_.plan).mkString(",\n")}]")
+    } else {
+      CacheManager.logCacheOperation("Dataframe cache hit plan change summary:\n" +
+        s"${sideBySide(plan.treeString, result.treeString).mkString("\n")}")
+    }
+    result
   }
 
   /**
@@ -394,5 +423,18 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
         disableConfigs :+ SQLConf.ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS
     }
     SparkSession.getOrCloneSessionWithConfigsOff(session, disableConfigs)
+  }
+}
+
+object CacheManager extends Logging {
+  def logCacheOperation(f: => String): Unit = {
+    SQLConf.get.dataframeCacheLogLevel match {
+      case "TRACE" => logTrace(f)
+      case "DEBUG" => logDebug(f)
+      case "INFO" => logInfo(f)
+      case "WARN" => logWarning(f)
+      case "ERROR" => logError(f)
+      case _ => logTrace(f)
+    }
   }
 }
