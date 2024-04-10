@@ -1647,7 +1647,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     private final int collationId;
     private final UTF8String left, right;
 
-    public CollationSubstringEquals(int collationId) {
+    CollationSubstringEquals(int collationId) {
       this.collationId = collationId;
       this.left = new UTF8String();
       this.right = new UTF8String();
@@ -1662,7 +1662,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       this.right.base = right.base;
       this.right.offset = right.offset + posRight;
       this.right.numBytes = lenRight;
-      return CollationFactory.fetchCollation(collationId).equalsFunction.apply(this.left, this.right);
+      return CollationFactory.fetchCollation(collationId).equalsFunction
+        .apply(this.left, this.right);
     }
   }
 
