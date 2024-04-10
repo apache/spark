@@ -2927,10 +2927,7 @@ case class FormatNumber(x: Expression, d: Expression)
 
   override def left: Expression = x
   override def right: Expression = d
-  override def dataType: DataType = right.dataType match {
-    case s: StringType => s
-    case _ => StringType
-  }
+  override def dataType: DataType = StringType
   override def nullable: Boolean = true
   override def inputTypes: Seq[AbstractDataType] =
     Seq(NumericType, TypeCollection(IntegerType, StringTypeAnyCollation))
