@@ -849,7 +849,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       ("", "UNICODE_CI", "1"),
       ("aa", "UNICODE_CI", "6012a2a"),
       ("AA", "UNICODE_CI", "6012a2a"),
-      ("aA", "UNICODE_CI", "6012a2a"),
+      ("aA", "UNICODE_CI", "6012a2a")
     )
     for ((input, collation, expected) <- testCases) {
       val collationId: Int = CollationFactory.collationNameToId(collation)
