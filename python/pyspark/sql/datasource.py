@@ -665,7 +665,8 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
         start_idx = -1
         end_idx = -1
         for i in range(len(self.cache)):
-            # print(json.dumps(self.cache[i][0]) + " ggg " + json.dumps(self.cache[i][1]))
+            # There is no convenient way to compare 2 offsets.
+            # Serialize into json string before comparison.
             if json.dumps(self.cache[i][0]) == json.dumps(start):
                 start_idx = i
             if json.dumps(self.cache[i][1]) == json.dumps(end):
