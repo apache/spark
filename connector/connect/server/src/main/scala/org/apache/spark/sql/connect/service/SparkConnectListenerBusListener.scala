@@ -145,7 +145,7 @@ private[sql] class SparkConnectListenerBusListener(
   }
 
   override def onQueryTerminated(
-    event: StreamingQueryListener.QueryTerminatedEvent): Unit = {
+      event: StreamingQueryListener.QueryTerminatedEvent): Unit = {
     send(event.json, StreamingQueryEventType.QUERY_TERMINATED_EVENT)
   }
 
