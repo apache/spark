@@ -36,13 +36,6 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{CreateResourceProfileCommand, ExecutePlanResponse, SqlCommand, StreamingForeachFunction, StreamingQueryCommand, StreamingQueryCommandResult, StreamingQueryInstanceId, StreamingQueryManagerCommand, StreamingQueryManagerCommandResult, WriteStreamOperationStart, WriteStreamOperationStartResult}
 import org.apache.spark.connect.proto.ExecutePlanResponse.SqlCommandResult
 import org.apache.spark.connect.proto.Parse.ParseFormat
-import org.apache.spark.connect.proto.StreamingForeachFunction
-import org.apache.spark.connect.proto.StreamingQueryCommand
-import org.apache.spark.connect.proto.StreamingQueryCommandResult
-import org.apache.spark.connect.proto.StreamingQueryInstanceId
-import org.apache.spark.connect.proto.StreamingQueryListenerBusCommand
-import org.apache.spark.connect.proto.StreamingQueryManagerCommand
-import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult
 import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.StreamingQueryInstance
 import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
 import org.apache.spark.internal.Logging
