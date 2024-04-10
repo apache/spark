@@ -112,8 +112,7 @@ object NestedColumnAliasing {
 
     // Push projection through filter only if the pruning could be pushed through generate too
     case Project(projectList, Filter(condition, g: Generate)) if
-      SQLConf.get.nestedSchemaPruningEnabled &&
-        SQLConf.get.nestedSchemaPruningThroughFilterGenerate =>
+      SQLConf.get.nestedSchemaPruningEnabled && SQLConf.get.nestedSchemaPruningThroughFilterGenerate =>
       // As the pruning could not be pushed through Generate under following conditions
       // it may cause infinite loop during the [[PushDownPredicates]] rule.
       g.generator.children.head.dataType match {
