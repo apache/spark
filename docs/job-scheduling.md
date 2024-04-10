@@ -40,7 +40,7 @@ different options to manage allocation, depending on the cluster manager.
 The simplest option, available on all cluster managers, is _static partitioning_ of resources. With
 this approach, each application is given a maximum amount of resources it can use and holds onto them
 for its whole duration. This is the approach used in Spark's [standalone](spark-standalone.html)
-and [YARN](running-on-yarn.html) modes.
+and [YARN](running-on-yarn.html) modes, as well as the [K8s](running-on-kubernetes.html) mode.
 Resource allocation can be configured as follows, based on the cluster type:
 
 * **Standalone mode:** By default, applications submitted to the standalone mode cluster will run in
@@ -53,11 +53,11 @@ Resource allocation can be configured as follows, based on the cluster type:
   on the cluster (`spark.executor.instances` as configuration property), while `--executor-memory`
   (`spark.executor.memory` configuration property) and `--executor-cores` (`spark.executor.cores` configuration
   property) control the resources per executor. For more information, see the
-  [YARN Spark Properties](running-on-yarn.html#spark-properties).
-* **K8S:** The same as the situation with Yarn, please refer to the description of Yarn above. Furthermore,
-  Spark on K8S offers higher priority versions of spark.kubernetes.executor.limit.core and
+  [YARN Spark Properties](running-on-yarn.html).
+* **K8s:** The same as the situation with Yarn, please refer to the description of Yarn above. Furthermore,
+  Spark on K8s offers higher priority versions of spark.kubernetes.executor.limit.core and
   spark.kubernetes.executor.request.core than spark.executor.core. For more information, see the
-  [K8S Spark Properties](running-on-kubernetes.html#spark-properties).
+  [K8s Spark Properties](running-on-kubernetes.html#spark-properties).
 
 Note that none of the modes currently provide memory sharing across applications. If you would like to share
 data this way, we recommend running a single server application that can serve multiple requests by querying
@@ -96,7 +96,7 @@ In standalone mode, simply start your workers with `spark.shuffle.service.enable
 
 In YARN mode, follow the instructions [here](running-on-yarn.html#configuring-the-external-shuffle-service).
 
-In K8S mode, follow the future work [here](running-on-kubernetes.html#future-work).
+In K8s mode, K8s doesn't support external shuffle service yet.
 
 All other relevant configurations are optional and under the `spark.dynamicAllocation.*` and
 `spark.shuffle.service.*` namespaces. For more detail, see the
