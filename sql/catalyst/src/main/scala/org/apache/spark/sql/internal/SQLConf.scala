@@ -772,7 +772,7 @@ object SQLConf {
         " produced by a builtin function such as to_char or CAST")
       .version("4.0.0")
       .stringConf
-      .checkValue({s => CollationFactory.collationNameToId(s) >= 0}, "")
+      .checkValue(s => CollationFactory.collationNameToId(s) >= 0, "")
       .createWithDefault("UTF8_BINARY")
 
   val FETCH_SHUFFLE_BLOCKS_IN_BATCH =

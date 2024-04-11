@@ -521,7 +521,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
         "proposal" -> "UNICODE_CI"))
   }
 
-    test("SPARK-43028: config not found error") {
+  test("SPARK-43028: config not found error") {
     checkError(
       exception = intercept[SparkNoSuchElementException](spark.conf.get("some.conf")),
       errorClass = "SQL_CONF_NOT_FOUND",
