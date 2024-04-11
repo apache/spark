@@ -50,6 +50,22 @@ class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedCo
             if q:
                 q.stop()
 
+    def test_pickling_error(self):
+        class NoPickle:
+            def __reduce__(self):
+                raise ValueError("No pickle")
+
+        no_pickle = NoPickle()
+
+        def func(df, _):
+            print(no_pickle)
+            df.count()
+
+        with self.assertRaises(PySparkPicklingError) as e:
+            df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
+            q = df.writeStream.foreachBatch(func).start()
+            q.processAllAvailable()
+
     def test_accessing_spark_session(self):
         spark = self.spark
 
