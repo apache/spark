@@ -21,7 +21,7 @@ import scala.collection.immutable.Seq
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.{Collation, ConcatWs, ExpressionEvalHelper, Literal, StringRepeat}
+import org.apache.spark.sql.catalyst.expressions.{Collation, ConcatWs, ExpressionEvalHelper, InitCap, Literal, Lower, StringRepeat, Upper}
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -87,6 +87,45 @@ class CollationStringExpressionsSuite
     testRepeat("UTF8_BINARY_LCASE", 1, "abc", 2)
     testRepeat("UNICODE", 2, "abc", 2)
     testRepeat("UNICODE_CI", 3, "abc", 2)
+  }
+
+  test("UPPER check output type on collated string") {
+    def testUpper(expected: String, collationId: Int, input: String): Unit = {
+      val s = Literal.create(input, StringType(collationId))
+
+      checkEvaluation(Collation(Upper(s)).replacement, expected)
+    }
+
+    testUpper("UTF8_BINARY", 0, "abc")
+    testUpper("UTF8_BINARY_LCASE", 1, "abc")
+    testUpper("UNICODE", 2, "abc")
+    testUpper("UNICODE_CI", 3, "abc")
+  }
+
+  test("LOWER check output type on collated string") {
+    def testLower(expected: String, collationId: Int, input: String): Unit = {
+      val s = Literal.create(input, StringType(collationId))
+
+      checkEvaluation(Collation(Lower(s)).replacement, expected)
+    }
+
+    testLower("UTF8_BINARY", 0, "abc")
+    testLower("UTF8_BINARY_LCASE", 1, "abc")
+    testLower("UNICODE", 2, "abc")
+    testLower("UNICODE_CI", 3, "abc")
+  }
+
+  test("INITCAP check output type on collated string") {
+    def testInitCap(expected: String, collationId: Int, input: String): Unit = {
+      val s = Literal.create(input, StringType(collationId))
+
+      checkEvaluation(Collation(InitCap(s)).replacement, expected)
+    }
+
+    testInitCap("UTF8_BINARY", 0, "abc")
+    testInitCap("UTF8_BINARY_LCASE", 1, "abc")
+    testInitCap("UNICODE", 2, "abc")
+    testInitCap("UNICODE_CI", 3, "abc")
   }
 
   // TODO: Add more tests for other string expressions
