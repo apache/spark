@@ -118,7 +118,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val unsafeRowRDD = DataSourceStrategy.toCatalystRDD(v1Relation, output, rdd)
 
       val catalogName = v2Relation.catalog.map(_.name())
-      val tableIdentifier = v2Relation.identifier.flatMap(_.asTableIdentifier(catalogName))
+      val tableIdentifier = v2Relation.identifier.flatMap(_.asTableIdentifierOpt(catalogName))
 
       val dsScan = RowDataSourceScanExec(
         output,
