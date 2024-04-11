@@ -250,6 +250,9 @@ class TransformWithValueStateTTLSuite
             val progData = q.recentProgress.filter(prog => prog.stateOperators.size > 0)
             assert(progData.filter(prog =>
               prog.stateOperators(0).customMetrics.get("numValueStateWithTTLVars") > 0).size > 0)
+            assert(progData.filter(prog =>
+              prog.stateOperators(0).customMetrics
+                .get("numValuesRemovedDueToTTLExpiry") > 0).size > 0)
           })
         )
       }

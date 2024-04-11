@@ -116,7 +116,7 @@ class StatefulProcessorHandleImpl(
 
   private var currState: StatefulProcessorHandleState = CREATED
 
-  private def updateMetric(metricName: String): Unit = {
+  private def incrementMetric(metricName: String): Unit = {
     metrics.get(metricName).foreach(_.add(1))
   }
 
@@ -130,7 +130,7 @@ class StatefulProcessorHandleImpl(
       stateName: String,
       valEncoder: Encoder[T]): ValueState[T] = {
     verifyStateVarOperations("get_value_state")
-    updateMetric("numValueStateVars")
+    incrementMetric("numValueStateVars")
     val resultState = new ValueStateImpl[T](store, stateName, keyEncoder, valEncoder)
     resultState
   }
@@ -145,7 +145,7 @@ class StatefulProcessorHandleImpl(
     assert(batchTimestampMs.isDefined)
     val valueStateWithTTL = new ValueStateImplWithTTL[T](store, stateName,
       keyEncoder, valEncoder, ttlConfig, batchTimestampMs.get)
-    updateMetric("numValueStateWithTTLVars")
+    incrementMetric("numValueStateWithTTLVars")
     ttlStates.add(valueStateWithTTL)
     valueStateWithTTL
   }
@@ -179,7 +179,7 @@ class StatefulProcessorHandleImpl(
    */
   override def registerTimer(expiryTimestampMs: Long): Unit = {
     verifyTimerOperations("register_timer")
-    updateMetric("numRegisteredTimers")
+    incrementMetric("numRegisteredTimers")
     timerState.registerTimer(expiryTimestampMs)
   }
 
@@ -189,7 +189,7 @@ class StatefulProcessorHandleImpl(
    */
   override def deleteTimer(expiryTimestampMs: Long): Unit = {
     verifyTimerOperations("delete_timer")
-    updateMetric("numDeletedTimers")
+    incrementMetric("numDeletedTimers")
     timerState.deleteTimer(expiryTimestampMs)
   }
 
@@ -221,8 +221,9 @@ class StatefulProcessorHandleImpl(
    * which is expired will be cleaned up from StateStore.
    */
   def doTtlCleanup(): Unit = {
+    val numValuesRemovedDueToTTLExpiry = metrics.get("numValuesRemovedDueToTTLExpiry").get
     ttlStates.forEach { s =>
-      s.clearExpiredState()
+      numValuesRemovedDueToTTLExpiry += s.clearExpiredState()
     }
   }
 
@@ -234,13 +235,13 @@ class StatefulProcessorHandleImpl(
   override def deleteIfExists(stateName: String): Unit = {
     verifyStateVarOperations("delete_if_exists")
     if (store.removeColFamilyIfExists(stateName)) {
-      updateMetric("numDeletedStateVars")
+      incrementMetric("numDeletedStateVars")
     }
   }
 
   override def getListState[T](stateName: String, valEncoder: Encoder[T]): ListState[T] = {
     verifyStateVarOperations("get_list_state")
-    updateMetric("numListStateVars")
+    incrementMetric("numListStateVars")
     val resultState = new ListStateImpl[T](store, stateName, keyEncoder, valEncoder)
     resultState
   }
@@ -250,7 +251,7 @@ class StatefulProcessorHandleImpl(
       userKeyEnc: Encoder[K],
       valEncoder: Encoder[V]): MapState[K, V] = {
     verifyStateVarOperations("get_map_state")
-    updateMetric("numMapStateVars")
+    incrementMetric("numMapStateVars")
     val resultState = new MapStateImpl[K, V](store, stateName, keyEncoder, userKeyEnc, valEncoder)
     resultState
   }

@@ -302,15 +302,18 @@ case class TransformWithStateExec(
     Seq(
       // metrics around state variables
       StatefulOperatorCustomSumMetric("numValueStateVars", "Number of value state variables"),
-      StatefulOperatorCustomSumMetric("numValueStateWithTTLVars",
-        "Number of value state variables with TTL"),
       StatefulOperatorCustomSumMetric("numListStateVars", "Number of list state variables"),
       StatefulOperatorCustomSumMetric("numMapStateVars", "Number of map state variables"),
       StatefulOperatorCustomSumMetric("numDeletedStateVars", "Number of deleted state variables"),
       // metrics around timers
       StatefulOperatorCustomSumMetric("numRegisteredTimers", "Number of registered timers"),
       StatefulOperatorCustomSumMetric("numDeletedTimers", "Number of deleted timers"),
-      StatefulOperatorCustomSumMetric("numExpiredTimers", "Number of expired timers")
+      StatefulOperatorCustomSumMetric("numExpiredTimers", "Number of expired timers"),
+      // metrics around TTL
+      StatefulOperatorCustomSumMetric("numValueStateWithTTLVars",
+        "Number of value state variables with TTL"),
+      StatefulOperatorCustomSumMetric("numValuesRemovedDueToTTLExpiry",
+        "Number of values removed due to TTL expiry")
     )
   }
 
