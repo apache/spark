@@ -63,8 +63,6 @@ case class ParseJson(child: Expression)
     inputTypes,
     returnNullable = false)
 
-  override def nullable: Boolean = false
-
   override def inputTypes: Seq[AbstractDataType] = StringType :: Nil
 
   override def dataType: DataType = VariantType
