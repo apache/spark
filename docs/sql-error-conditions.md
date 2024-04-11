@@ -2825,7 +2825,7 @@ Cannot construct a Variant larger than 16 MiB. The maximum allowed size of a Var
 
 [SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
-Failed to build variant bigger because of a duplicate object key ``<key>``.
+Failed to build variant because of a duplicate object key ``<key>``.
 
 ### VARIANT_SIZE_LIMIT
 
