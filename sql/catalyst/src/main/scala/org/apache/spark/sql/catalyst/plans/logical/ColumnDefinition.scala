@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.util.{CollationFactory, GeneratedColumn}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.validateDefaultValueExpr
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumnsUtils.{CURRENT_DEFAULT_COLUMN_METADATA_KEY, EXISTS_DEFAULT_COLUMN_METADATA_KEY}
-import org.apache.spark.sql.connector.catalog.{ColumnDefaultValue, Column => V2Column}
+import org.apache.spark.sql.connector.catalog.{Column => V2Column, ColumnDefaultValue}
 import org.apache.spark.sql.connector.expressions.LiteralValue
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.connector.ColumnImpl
