@@ -321,6 +321,8 @@ class LogisticRegressionModel(
     def _get_transform_fn(self) -> Callable[["pd.Series"], Any]:
         import torch
 
+        import torch.nn as torch_nn
+
         model_state_dict = self.torch_model.state_dict()
         num_features = self.num_features
         num_classes = self.num_classes
@@ -363,6 +365,7 @@ class LogisticRegressionModel(
 
     def _save_core_model(self, path: str) -> None:
         import torch
+        import torch.nn as torch_nn
 
         lor_torch_model = torch_nn.Sequential(
             self.torch_model,
