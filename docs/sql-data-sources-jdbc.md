@@ -544,7 +544,7 @@ are also available to connect MySQL, may have different mapping rules.
     <tr>
       <td>DECIMAL(p,s) [UNSIGNED]</td>
       <td>DecimalType(min(38, p),(min(18,s)))</td>
-      <td>The column type is bounded to DecimalType(38, 18), thus if any value of this column have a actual presion greater 38 will fail with DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION </td>
+      <td>The column type is bounded to DecimalType(38, 18), if 'p>38', the fraction part will be truncated if exceeded. And if any value of this column have an actual precision greater 38 will fail with NUMERIC_VALUE_OUT_OF_RANGE.WITHOUT_SUGGESTION error</td>
     </tr>
     <tr>
       <td>DATE</td>
@@ -845,7 +845,7 @@ as the activated JDBC Driver. Note that, different JDBC drivers, or different ve
     <tr>
       <td>numeric, decimal</td>
       <td>DecimalType</td>
-      <td></td>
+      <td>Since PostgreSQL 15, 's' can be negative. If 's<0' it'll be adjusted to DecimalType(min(p-s, 38), 0); Otherwise, DecimalType(p, s), and if 'p>38', the fraction part will be truncated if exceeded. And if any value of this column have an actual precision greater 38 will fail with NUMERIC_VALUE_OUT_OF_RANGE.WITHOUT_SUGGESTION error</td>
     </tr>
     <tr>
       <td>character varying(n), varchar(n)</td>
