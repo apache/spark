@@ -804,21 +804,26 @@ case class Overlay(input: Expression, replace: Expression, pos: Expression, len:
 
   override def dataType: DataType = input.dataType
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(StringType, BinaryType),
-    TypeCollection(StringType, BinaryType), IntegerType, IntegerType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(
+    TypeCollection(StringTypeAnyCollation, BinaryType),
+    TypeCollection(StringTypeAnyCollation, BinaryType), IntegerType, IntegerType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val inputTypeCheck = super.checkInputDataTypes()
     if (inputTypeCheck.isSuccess) {
-      TypeUtils.checkForSameTypeInputExpr(
-        input.dataType :: replace.dataType :: Nil, prettyName)
+      if ((input.dataType.isInstanceOf[StringType] && replace.dataType.isInstanceOf[StringType]) ||
+        (input.dataType.isInstanceOf[BinaryType] && replace.dataType.isInstanceOf[BinaryType])) {
+        inputTypeCheck
+      } else {
+        TypeUtils.checkForSameTypeInputExpr(input.dataType :: replace.dataType :: Nil, prettyName)
+      }
     } else {
       inputTypeCheck
     }
   }
 
   private lazy val replaceFunc = input.dataType match {
-    case StringType =>
+    case _: StringType =>
       (inputEval: Any, replaceEval: Any, posEval: Int, lenEval: Int) => {
         Overlay.calculate(
           inputEval.asInstanceOf[UTF8String],
@@ -1698,10 +1703,10 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
 
   override def foldable: Boolean = children.forall(_.foldable)
   override def nullable: Boolean = children(0).nullable
-  override def dataType: DataType = StringType
+  override def dataType: DataType = children(0).dataType
 
   override def inputTypes: Seq[AbstractDataType] =
-    StringType :: List.fill(children.size - 1)(AnyDataType)
+    StringTypeAnyCollation :: List.fill(children.size - 1)(AnyDataType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.isEmpty) {
@@ -2064,16 +2069,17 @@ case class Left(str: Expression, len: Expression) extends RuntimeReplaceable
 case class Length(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
   override def dataType: DataType = IntegerType
-  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(StringType, BinaryType))
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(StringTypeAnyCollation, BinaryType))
 
   protected override def nullSafeEval(value: Any): Any = child.dataType match {
-    case StringType => value.asInstanceOf[UTF8String].numChars
+    case _: StringType => value.asInstanceOf[UTF8String].numChars
     case BinaryType => value.asInstanceOf[Array[Byte]].length
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     child.dataType match {
-      case StringType => defineCodeGen(ctx, ev, c => s"($c).numChars()")
+      case _: StringType => defineCodeGen(ctx, ev, c => s"($c).numChars()")
       case BinaryType => defineCodeGen(ctx, ev, c => s"($c).length")
     }
   }
@@ -2098,16 +2104,17 @@ case class Length(child: Expression)
 case class BitLength(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
   override def dataType: DataType = IntegerType
-  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(StringType, BinaryType))
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(StringTypeAnyCollation, BinaryType))
 
   protected override def nullSafeEval(value: Any): Any = child.dataType match {
-    case StringType => value.asInstanceOf[UTF8String].numBytes * 8
+    case _: StringType => value.asInstanceOf[UTF8String].numBytes * 8
     case BinaryType => value.asInstanceOf[Array[Byte]].length * 8
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     child.dataType match {
-      case StringType => defineCodeGen(ctx, ev, c => s"($c).numBytes() * 8")
+      case _: StringType => defineCodeGen(ctx, ev, c => s"($c).numBytes() * 8")
       case BinaryType => defineCodeGen(ctx, ev, c => s"($c).length * 8")
     }
   }
@@ -2136,16 +2143,17 @@ case class BitLength(child: Expression)
 case class OctetLength(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
   override def dataType: DataType = IntegerType
-  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(StringType, BinaryType))
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(StringTypeAnyCollation, BinaryType))
 
   protected override def nullSafeEval(value: Any): Any = child.dataType match {
-    case StringType => value.asInstanceOf[UTF8String].numBytes
+    case _: StringType => value.asInstanceOf[UTF8String].numBytes
     case BinaryType => value.asInstanceOf[Array[Byte]].length
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     child.dataType match {
-      case StringType => defineCodeGen(ctx, ev, c => s"($c).numBytes()")
+      case _: StringType => defineCodeGen(ctx, ev, c => s"($c).numBytes()")
       case BinaryType => defineCodeGen(ctx, ev, c => s"($c).length")
     }
   }
@@ -2322,7 +2330,7 @@ case class SoundEx(child: Expression)
 
   override def dataType: DataType = StringType
 
-  override def inputTypes: Seq[DataType] = Seq(StringType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
 
   override def nullSafeEval(input: Any): Any = input.asInstanceOf[UTF8String].soundex()
 
@@ -3290,7 +3298,7 @@ case class Luhncheck(input: Expression) extends RuntimeReplaceable with Implicit
     Seq(input),
     inputTypes)
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
 
   override def prettyName: String = "luhn_check"
 
