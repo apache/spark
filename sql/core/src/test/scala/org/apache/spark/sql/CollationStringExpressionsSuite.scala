@@ -38,14 +38,18 @@ class CollationStringExpressionsSuite
     )
     testCases.foreach(t => {
       val arrCollated = t.a.map(s => s"collate('$s', '${t.c}')").mkString(", ")
-      val query = s"SELECT concat_ws(collate('${t.s}', '${t.c}'), $arrCollated)"
+      var query = s"SELECT concat_ws(collate('${t.s}', '${t.c}'), $arrCollated)"
       // Result & data type
       checkAnswer(sql(query), Row(t.result))
       assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
       // Implicit casting
       val arr = t.a.map(s => s"'$s'").mkString(", ")
-      checkAnswer(sql(s"SELECT concat_ws(collate('${t.s}', '${t.c}'), $arr)"), Row(t.result))
-      checkAnswer(sql(s"SELECT concat_ws('${t.s}', $arrCollated)"), Row(t.result))
+      query = s"SELECT concat_ws(collate('${t.s}', '${t.c}'), $arr)"
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
+      query = s"SELECT concat_ws('${t.s}', $arrCollated)"
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
     })
     // Unsupported collations
     case class ConcatWsTestFail[R](s: String, a: Array[String], c: String)
@@ -163,10 +167,10 @@ class CollationStringExpressionsSuite
 
 }
 
-class CollationStringExpressionsANSISuite extends CollationRegexpExpressionsSuite {
+class CollationStringExpressionsANSISuite extends CollationStringExpressionsSuite {
   override protected def sparkConf: SparkConf =
     super.sparkConf.set(SQLConf.ANSI_ENABLED, true)
 
-  // TODO: Add more tests for other string expressions (with ANSI mode enabled)
+  // TODO: If needed, add more tests for other string expressions (with ANSI mode enabled)
 
 }
