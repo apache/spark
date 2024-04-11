@@ -1633,8 +1633,9 @@ class SparkSession(SparkConversionMixin):
         Notes
         -----
         In Classic Spark, a referenced temporary view is resolved immediately, while in Spark
-        Connect it is lazy evaluated. So if a view is dropped, modified or replaced after
-        `spark.sql`, the execution may fail or generate incorrect results.
+        Connect it is lazy evaluated.
+        So in Spark Connect if a view is dropped, modified or replaced after `spark.sql`, the
+        execution may fail or generate different results.
 
         Examples
         --------
@@ -1765,8 +1766,9 @@ class SparkSession(SparkConversionMixin):
         Notes
         -----
         In Classic Spark, a referenced temporary view is resolved immediately, while in Spark
-        Connect it is lazy evaluated. So if a view is dropped, modified or replaced after
-        `spark.table`, the execution may fail or generate incorrect results.
+        Connect it is lazy evaluated.
+        So in Spark Connect if a view is dropped, modified or replaced after `spark.table`, the
+        execution may fail or generate different results.
 
         Examples
         --------
