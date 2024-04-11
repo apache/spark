@@ -1817,7 +1817,6 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
 
     case filter @ Filter(condition, union: Union) =>
       // Union could change the rows, so non-deterministic predicate can't be pushed down
-      val output = union.output
       val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition(_.deterministic)
 
       if (pushDown.nonEmpty) {
@@ -1825,6 +1824,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         // The union is the child of the filter so it's children are grandchildren.
         // Moves filters down to the grandchild if there is an element in the grand child's
         // output which is semantically equal to the filter being evaluated.
+        val output = union.output
         val newGrandChildren = union.children.map { grandchild =>
           val newCond = pushDownCond transform {
             case a: Attribute if output.exists(_.exprId == a.exprId) =>
