@@ -27,10 +27,11 @@ import com.fasterxml.jackson.core.json.JsonReadFeature
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
+import org.apache.spark.sql.catalyst.expressions.variant.ParseJson
 import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{JSON_TO_STRUCT, TreePattern}
 import org.apache.spark.sql.catalyst.util._
@@ -1070,4 +1071,16 @@ case class JsonObjectKeys(child: Expression) extends UnaryExpression with Codege
 
   override protected def withNewChildInternal(newChild: Expression): JsonObjectKeys =
     copy(child = newChild)
+}
+
+object FromJsonExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    val numArgs = expressions.length
+    if (numArgs == 1) {
+      ParseJson(expressions.head)
+    } else {
+      JsonToStructs(expressions : _*)
+//      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(1, 2), numArgs)
+    }
+  }
 }

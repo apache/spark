@@ -815,7 +815,8 @@ object FunctionRegistry {
 
     // json
     expression[StructsToJson]("to_json"),
-    expression[JsonToStructs]("from_json"),
+    expressionBuilder("from_json", FromJsonExpressionBuilder, setAlias = true),
+//    expression[JsonToStructs]("from_json"),
     expression[SchemaOfJson]("schema_of_json"),
     expression[LengthOfJsonArray]("json_array_length"),
     expression[JsonObjectKeys]("json_object_keys"),
