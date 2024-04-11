@@ -509,9 +509,9 @@ class SimpleInputPartition(InputPartition):
 
 class SimpleDataSourceStreamReader(ABC):
     """
-    A base class for simplified streaming data source readers. Compared to DataSourceStreamReader,
+    A base class for simplified streaming data source readers. Compared to :class:`DataSourceStreamReader`,
     :class:`SimpleDataSourceStreamReader` doesn't require planning data partitioning. Also, the read api of
-    SimpleDataSourceStreamReader allows reading data and planning the latest offset at the same time.
+    :class:`SimpleDataSourceStreamReader` allows reading data and planning the latest offset at the same time.
 
     .. versionadded: 4.0.0
     """
@@ -551,7 +551,7 @@ class SimpleDataSourceStreamReader(ABC):
 
         Returns
         -------
-        A tuple of an iterator of :class:`Tuple` and a dict\\s
+        A :class:`Tuple` of an iterator of :class:`Tuple` and a dict\\s
             The iterator contains all the available records after start offset.
             The dict is the end of this read attempt and the start of next read attempt.
         """
@@ -599,9 +599,9 @@ class SimpleDataSourceStreamReader(ABC):
 
 class _SimpleStreamReaderWrapper(DataSourceStreamReader):
     """
-    A private class that wrap SimpleDataSourceStreamReader in a prefetch and cache pattern,
-    so that SimpleDataSourceStreamReader can integrate with streaming engine like an ordinary
-    DataSourceStreamReader.
+    A private class that wrap :class:`SimpleDataSourceStreamReader` in a prefetch and cache pattern,
+    so that :class:`SimpleDataSourceStreamReader` can integrate with streaming engine like an ordinary
+    :class:`DataSourceStreamReader`.
 
     current_offset track the latest progress of the record prefetching, it is initialized to be
     initialOffset() when query start for the first time or initialized to be the end offset of
