@@ -30,6 +30,7 @@ import platform
 import urllib.parse
 import uuid
 import sys
+import json
 from typing import (
     Iterable,
     Iterator,
@@ -263,13 +264,15 @@ class ChannelBuilder:
             raise SparkConnectException(
                 f"'user_agent' parameter should not exceed 2048 characters, found {len} characters."
             )
-        return " ".join(
-            [
-                user_agent,
-                f"spark/{__version__}",
-                f"os/{platform.uname().system.lower()}",
-                f"python/{platform.python_version()}",
-            ]
+
+        return json.dumps(
+            obj={
+                "agent": user_agent,
+                "spark": __version__,
+                "os": platform.uname().system.lower(),
+                "python": platform.python_version(),
+            },
+            separators=(",", ":"),
         )
 
 

@@ -27,6 +27,8 @@ import scala.util.Properties
 
 import com.google.protobuf.ByteString
 import io.grpc._
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkBuildInfo.{spark_version => SPARK_VERSION}
 import org.apache.spark.connect.proto
@@ -669,12 +671,14 @@ object SparkConnectClient {
       else if (os.contains("win")) "windows"
       else "unknown"
     }
-    List(
-      value,
-      s"spark/$SPARK_VERSION",
-      s"scala/$scalaVersion",
-      s"jvm/$jvmVersion",
-      s"os/$osName").mkString(" ")
+
+    compact(
+      render(
+        ("agent" -> value) ~
+          ("spark" -> SPARK_VERSION) ~
+          ("os" -> osName) ~
+          ("scala" -> scalaVersion) ~
+          ("jvm" -> jvmVersion)))
   }
 
   /**
