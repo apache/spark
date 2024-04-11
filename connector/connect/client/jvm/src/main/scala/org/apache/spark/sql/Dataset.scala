@@ -1089,12 +1089,10 @@ class Dataset[T] private[sql] (
    * @group typedrel
    * @since 3.4.0
    */
-  def as(alias: String): Dataset[T] = {
-    sparkSession.newDataset(agnosticEncoder) { builder =>
-      builder.getSubqueryAliasBuilder
-        .setInput(plan.getRoot)
-        .setAlias(alias)
-    }
+  def as(alias: String): Dataset[T] = sparkSession.newDataset(agnosticEncoder) { builder =>
+    builder.getSubqueryAliasBuilder
+      .setInput(plan.getRoot)
+      .setAlias(alias)
   }
 
   /**
@@ -1273,10 +1271,10 @@ class Dataset[T] private[sql] (
    * @group typedrel
    * @since 3.4.0
    */
-  def filter(condition: Column): Dataset[T] =
-    sparkSession.newDataset(agnosticEncoder) { builder =>
+  def filter(condition: Column): Dataset[T] = sparkSession.newDataset(agnosticEncoder) {
+    builder =>
       builder.getFilterBuilder.setInput(plan.getRoot).setCondition(condition.expr)
-    }
+  }
 
   /**
    * Filters rows using the given SQL expression.
@@ -1789,12 +1787,10 @@ class Dataset[T] private[sql] (
    * @group typedrel
    * @since 3.4.0
    */
-  def limit(n: Int): Dataset[T] = {
-    sparkSession.newDataset(agnosticEncoder) { builder =>
-      builder.getLimitBuilder
-        .setInput(plan.getRoot)
-        .setLimit(n)
-    }
+  def limit(n: Int): Dataset[T] = sparkSession.newDataset(agnosticEncoder) { builder =>
+    builder.getLimitBuilder
+      .setInput(plan.getRoot)
+      .setLimit(n)
   }
 
   /**
@@ -1803,12 +1799,10 @@ class Dataset[T] private[sql] (
    * @group typedrel
    * @since 3.4.0
    */
-  def offset(n: Int): Dataset[T] = {
-    sparkSession.newDataset(agnosticEncoder) { builder =>
-      builder.getOffsetBuilder
-        .setInput(plan.getRoot)
-        .setOffset(n)
-    }
+  def offset(n: Int): Dataset[T] = sparkSession.newDataset(agnosticEncoder) { builder =>
+    builder.getOffsetBuilder
+      .setInput(plan.getRoot)
+      .setOffset(n)
   }
 
   private def buildSetOp(right: Dataset[T], setOpType: proto.SetOperation.SetOpType)(
@@ -2482,8 +2476,8 @@ class Dataset[T] private[sql] (
 
   private def buildDropDuplicates(
       columns: Option[Seq[String]],
-      withinWaterMark: Boolean): Dataset[T] = {
-    sparkSession.newDataset(agnosticEncoder) { builder =>
+      withinWaterMark: Boolean): Dataset[T] = sparkSession.newDataset(agnosticEncoder) {
+    builder =>
       val dropBuilder = builder.getDeduplicateBuilder
         .setInput(plan.getRoot)
         .setWithinWatermark(withinWaterMark)
@@ -2492,7 +2486,6 @@ class Dataset[T] private[sql] (
       } else {
         dropBuilder.setAllColumnsAsKeys(true)
       }
-    }
   }
 
   /**
@@ -3018,13 +3011,12 @@ class Dataset[T] private[sql] (
 
   private def buildRepartitionByExpression(
       numPartitions: Option[Int],
-      partitionExprs: Seq[Column]): Dataset[T] = {
-    sparkSession.newDataset(agnosticEncoder) { builder =>
+      partitionExprs: Seq[Column]): Dataset[T] = sparkSession.newDataset(agnosticEncoder) {
+    builder =>
       val repartitionBuilder = builder.getRepartitionByExpressionBuilder
         .setInput(plan.getRoot)
         .addAllPartitionExprs(partitionExprs.map(_.expr).asJava)
       numPartitions.foreach(repartitionBuilder.setNumPartitions)
-    }
   }
 
   /**

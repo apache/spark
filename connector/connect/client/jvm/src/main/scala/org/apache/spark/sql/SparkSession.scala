@@ -489,8 +489,7 @@ class SparkSession private[sql] (
     newDataset(UnboundRowEncoder)(f)
   }
 
-  private[sql] def newDataset[T](
-      encoder: AgnosticEncoder[T])(
+  private[sql] def newDataset[T](encoder: AgnosticEncoder[T])(
       f: proto.Relation.Builder => Unit): Dataset[T] = {
     val builder = proto.Relation.newBuilder()
     f(builder)
@@ -569,7 +568,7 @@ class SparkSession private[sql] (
     builder.getCommonBuilder.setPlanId(planIdGenerator.getAndIncrement())
     val plan = proto.Plan.newBuilder().setRoot(builder).build()
     // .foreach forces that the iterator is consumed and closed
-    execute(plan).foreach(_ => ())
+    client.execute(plan).foreach(_ => ())
   }
 
   private[sql] def execute(command: proto.Command): Seq[ExecutePlanResponse] = {
