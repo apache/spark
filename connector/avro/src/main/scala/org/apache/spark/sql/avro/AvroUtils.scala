@@ -44,8 +44,6 @@ import org.apache.spark.util.Utils
 
 private[sql] object AvroUtils extends Logging {
 
-  AvroFileFormat.registerCustomAvroTypes()
-
   def inferSchema(
       spark: SparkSession,
       options: Map[String, String],
