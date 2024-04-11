@@ -56,7 +56,7 @@ Resource allocation can be configured as follows, based on the cluster type:
   [YARN Spark Properties](running-on-yarn.html#spark-properties).
 * **K8s:** The same as the situation with Yarn, please refer to the description of Yarn above. Furthermore,
   Spark on K8s offers higher priority versions of spark.kubernetes.executor.limit.core and
-  spark.kubernetes.executor.request.core than spark.executor.core. For more information, see the
+  spark.kubernetes.executor.request.cores than spark.executor.cores. For more information, see the
   [K8s Spark Properties](running-on-kubernetes.html#spark-properties).
 
 Note that none of the modes currently provide memory sharing across applications. If you would like to share
