@@ -52,7 +52,7 @@ class CollationStringExpressionsSuite
       assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
     })
     // Unsupported collations
-    case class ConcatWsTestFail[R](s: String, a: Array[String], c: String)
+    case class ConcatWsTestFail(s: String, a: Array[String], c: String)
     val failCases = Seq(
       ConcatWsTestFail(" ", Array("ABC", "%b%"), "UTF8_BINARY_LCASE"),
       ConcatWsTestFail(" ", Array("ABC", "%B%"), "UNICODE"),
@@ -66,7 +66,7 @@ class CollationStringExpressionsSuite
     })
     // Collation mismatch
     val collationMismatch = intercept[AnalysisException] {
-      sql(s"SELECT concat_ws(' ',collate('Spark', 'UTF8_BINARY_LCASE'),collate('SQL', 'UNICODE'))")
+      sql("SELECT concat_ws(' ',collate('Spark', 'UTF8_BINARY_LCASE'),collate('SQL', 'UNICODE'))")
     }
     assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
   }
@@ -91,7 +91,7 @@ class CollationStringExpressionsSuite
     })
     // Collation mismatch
     val collationMismatch = intercept[AnalysisException] {
-      sql(s"SELECT contains(collate('abcde','UTF8_BINARY_LCASE'),collate('C','UNICODE_CI'))")
+      sql("SELECT contains(collate('abcde','UTF8_BINARY_LCASE'),collate('C','UNICODE_CI'))")
     }
     assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
   }
@@ -116,7 +116,7 @@ class CollationStringExpressionsSuite
     })
     // Collation mismatch
     val collationMismatch = intercept[AnalysisException] {
-      sql(s"SELECT startswith(collate('abcde', 'UTF8_BINARY_LCASE'),collate('C', 'UNICODE_CI'))")
+      sql("SELECT startswith(collate('abcde', 'UTF8_BINARY_LCASE'),collate('C', 'UNICODE_CI'))")
     }
     assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
   }
@@ -141,7 +141,7 @@ class CollationStringExpressionsSuite
     })
     // Collation mismatch
     val collationMismatch = intercept[AnalysisException] {
-      sql(s"SELECT endswith(collate('abcde', 'UTF8_BINARY_LCASE'),collate('C', 'UNICODE_CI'))")
+      sql("SELECT endswith(collate('abcde', 'UTF8_BINARY_LCASE'),collate('C', 'UNICODE_CI'))")
     }
     assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
   }
