@@ -30,7 +30,8 @@ import org.apache.hadoop.hive.shims.ShimLoader
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkSubmit
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{FALLBACK_VERSION, HADOOP_VERSION}
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.hive.HiveUtils
@@ -66,10 +67,12 @@ private[hive] object IsolatedClientLoader extends Logging {
             // If the error message contains hadoop, it is probably because the hadoop
             // version cannot be resolved.
             val fallbackVersion = "3.4.0"
-            logWarning(s"Failed to resolve Hadoop artifacts for the version $hadoopVersion. We " +
-              s"will change the hadoop version from $hadoopVersion to $fallbackVersion and try " +
-              "again. It is recommended to set jars used by Hive metastore client through " +
-              "spark.sql.hive.metastore.jars in the production environment.")
+            logWarning(log"Failed to resolve Hadoop artifacts for the version " +
+              log"${MDC(HADOOP_VERSION, hadoopVersion)}. We will change the hadoop version from " +
+              log"${MDC(HADOOP_VERSION, hadoopVersion)} to " +
+              log"${MDC(FALLBACK_VERSION, fallbackVersion)} and try again. It is recommended to " +
+              log"set jars used by Hive metastore client through spark.sql.hive.metastore.jars " +
+              log"in the production environment.")
             (downloadVersion(
               resolvedVersion, fallbackVersion, ivyPath, remoteRepos), fallbackVersion)
         }
