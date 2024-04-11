@@ -26,7 +26,8 @@ if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
 
     import pyspark.core.context
-    from pyspark.core import RDD, SparkContext
+    from pyspark.core.rdd import RDD
+    from pyspark.core.context import SparkContext
     from pyspark.ml._typing import C, JavaObjectOrPickleDump
 
 
@@ -79,7 +80,8 @@ def _to_java_object_rdd(rdd: "RDD") -> "JavaObject":
 def _py2java(sc: "SparkContext", obj: Any) -> "JavaObject":
     """Convert Python object into Java"""
     from py4j.java_gateway import JavaObject
-    from pyspark.core import RDD, SparkContext
+    from pyspark.core.rdd import RDD
+    from pyspark.core.context import SparkContext
 
     if isinstance(obj, RDD):
         obj = _to_java_object_rdd(obj)
