@@ -243,6 +243,10 @@ The input of `<functionName>` can't be `<dataType>` type data.
 
 The `<exprName>` must be between `<valueRange>` (current value = `<currentValue>`).
 
+## VARIANT_TYPE
+
+Input to the function `<functionName>` cannot contain elements of the "VARIANT" type yet.
+
 ## WRONG_NUM_ARG_TYPES
 
 The expression requires `<expectedNum>` argument types but the actual number is `<actualNum>`.
