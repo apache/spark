@@ -24,8 +24,19 @@ from pyspark.testing.connectutils import should_test_connect, connect_requiremen
 if should_test_connect:
     from pyspark.ml.tests.connect.test_legacy_mode_pipeline import PipelineTestsMixin
 
+torch_requirement_message = None
+have_torch = True
+try:
+    import torch  # noqa: F401
+except ImportError:
+    have_torch = False
+    torch_requirement_message = "torch is required"
 
-@unittest.skipIf(not should_test_connect, connect_requirement_message)
+
+@unittest.skipIf(
+    not should_test_connect or not have_torch,
+    connect_requirement_message or torch_requirement_message,
+)
 class PipelineTestsOnConnect(PipelineTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
         self.spark = (

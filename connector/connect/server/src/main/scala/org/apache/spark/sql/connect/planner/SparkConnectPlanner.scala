@@ -3421,7 +3421,7 @@ class SparkConnectPlanner(
         .build())
   }
 
-  def handleCreateResourceProfileCommand(
+  private def handleCreateResourceProfileCommand(
       createResourceProfileCommand: CreateResourceProfileCommand,
       responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
     val rp = createResourceProfileCommand.getProfile
