@@ -497,9 +497,9 @@ class JacksonParser(
       try {
         values += fieldConverter.apply(parser)
       } catch {
-        case PartialResultException(row, cause) if enablePartialResults =>
-          badRecordException = badRecordException.orElse(Some(cause))
-          values += row
+        case err: PartialValueException if enablePartialResults =>
+          badRecordException = badRecordException.orElse(Some(err.cause))
+          values += err.partialResult
         case NonFatal(e) if enablePartialResults =>
           badRecordException = badRecordException.orElse(Some(e))
           parser.skipChildren()
@@ -534,9 +534,9 @@ class JacksonParser(
         if (isRoot && v == null) throw QueryExecutionErrors.rootConverterReturnNullError()
         values += v
       } catch {
-        case PartialResultException(row, cause) if enablePartialResults =>
-          badRecordException = badRecordException.orElse(Some(cause))
-          values += row
+        case err: PartialValueException if enablePartialResults =>
+          badRecordException = badRecordException.orElse(Some(err.cause))
+          values += err.partialResult
       }
     }
 
