@@ -63,6 +63,8 @@ case class ParseJson(child: Expression)
     inputTypes,
     returnNullable = false)
 
+  override def nullable: Boolean = false
+
   override def inputTypes: Seq[AbstractDataType] = StringType :: Nil
 
   override def dataType: DataType = VariantType
@@ -70,6 +72,45 @@ case class ParseJson(child: Expression)
   override def prettyName: String = "parse_json"
 
   override protected def withNewChildInternal(newChild: Expression): ParseJson =
+    copy(child = newChild)
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Check if a variant value is a variant NULL.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(parse_json('null'));
+       true
+      > SELECT _FUNC_(parse_json('"null"'));
+       false
+      > SELECT _FUNC_(parse_json('13'));
+       false
+      > SELECT _FUNC_(parse_json(null));
+       false
+      > SELECT _FUNC_(variant_get(parse_json('{"a":null, "b":"spark"}'), "$.c"));
+       false
+      > SELECT _FUNC_(variant_get(parse_json('{"a":null, "b":"spark"}'), "$.a"));
+       true
+  """,
+  since = "4.0.0",
+  group = "variant_funcs")
+case class IsVariantNull(child: Expression) extends UnaryExpression
+  with Predicate with ExpectsInputTypes with RuntimeReplaceable {
+
+  override lazy val replacement: Expression = StaticInvoke(
+    VariantExpressionEvalUtils.getClass,
+    VariantType,
+    "isVariantNull",
+    Seq(child),
+    inputTypes,
+    propagateNull = false,
+    returnNullable = false)
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(VariantType)
+
+  override def prettyName: String = "is_variant_null"
+
+  override protected def withNewChildInternal(newChild: Expression): IsVariantNull =
     copy(child = newChild)
 }
 

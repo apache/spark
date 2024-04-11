@@ -41,4 +41,15 @@ object VariantExpressionEvalUtils {
           input.toString, BadRecordException(() => input, cause = e))
     }
   }
+
+  def isVariantNull(input: VariantVal): Boolean = {
+    if (input == null) {
+      // This is a SQL NULL, not a Variant NULL
+      false
+    } else {
+      val valMeta = input.getValue
+      // Variant NULL is denoted by basic_type == 0 and val_header == 0
+      valMeta(0) == 0
+    }
+  }
 }
