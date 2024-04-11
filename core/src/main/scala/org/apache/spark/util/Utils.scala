@@ -68,7 +68,7 @@ import org.slf4j.Logger
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
 import org.apache.spark.internal.LogKey._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Streaming._
@@ -2972,10 +2972,10 @@ private[spark] object Utils
   }
 
   /** Returns a string message about delegation token generation failure */
-  def createFailedToGetTokenMessage(serviceName: String, e: scala.Throwable): String = {
-    val message = "Failed to get token from service %s due to %s. " +
-      "If %s is not used, set spark.security.credentials.%s.enabled to false."
-    message.format(serviceName, e, serviceName, serviceName)
+  def createFailedToGetTokenMessage(serviceName: String, e: scala.Throwable): MessageWithContext = {
+    log"Failed to get token from service ${MDC(SERVICE_NAME, serviceName)} " +
+      log"due to ${MDC(ERROR, e)}. If ${MDC(SERVICE_NAME, serviceName)} is not used, " +
+      log"set spark.security.credentials.${MDC(SERVICE_NAME, serviceName)}.enabled to false."
   }
 
   /**
