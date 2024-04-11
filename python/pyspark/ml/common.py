@@ -23,7 +23,6 @@ from pyspark.sql import DataFrame, SparkSession
 
 if TYPE_CHECKING:
     import py4j.protocol
-    from py4j.protocol import Py4JJavaError
     from py4j.java_gateway import JavaObject
 
     import pyspark.core.context
