@@ -32,12 +32,12 @@ import org.apache.spark.sql.catalyst.plans.logical.ProcessingTime$;
 public class TimeMode {
 
     /**
-     * Stateful processor that does not register timers, or use ttl eviction.
+     * Neither timers nor ttl is supported in this mode.
      */
     public static final TimeMode None() { return NoTime$.MODULE$; }
 
     /**
-     * Stateful processor that uses query processing time to register timers or
+     * Stateful processor that uses query processing time to register timers and
      * calculate ttl expiration.
      */
     public static final TimeMode ProcessingTime() { return ProcessingTime$.MODULE$; }

@@ -31,11 +31,6 @@ import org.apache.spark.util.NextIterator
  * Singleton utils class used primarily while interacting with TimerState
  */
 object TimerStateUtils {
-  // TODO(sahnib): remove this if not needed
-  case class TimestampWithKey(
-      key: Any,
-      expiryTimestampMs: Long) extends Serializable
-
   val PROC_TIMERS_STATE_NAME = "_procTimers"
   val EVENT_TIMERS_STATE_NAME = "_eventTimers"
   val KEY_TO_TIMESTAMP_CF = "_keyToTimestamp"
