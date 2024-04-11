@@ -31,7 +31,8 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.RETRY_COUNT
 import org.apache.spark.util.{CompletionIterator, ThreadUtils}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -106,7 +107,7 @@ private[streaming] class FileBasedWriteAheadLog(
       }
     }
     if (fileSegment == null) {
-      logError(s"Failed to write to write ahead log after $failures failures")
+      logError(log"Failed to write to write ahead log after ${MDC(RETRY_COUNT, failures)} failures")
       throw lastException
     }
     fileSegment

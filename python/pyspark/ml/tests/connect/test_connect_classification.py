@@ -21,6 +21,7 @@ import unittest
 from pyspark.sql import SparkSession
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 
+torch_requirement_message = "torch is required"
 have_torch = True
 try:
     import torch  # noqa: F401
@@ -32,7 +33,8 @@ if should_test_connect:
 
 
 @unittest.skipIf(
-    not should_test_connect or not have_torch, connect_requirement_message or "torch is required"
+    not should_test_connect or not have_torch,
+    connect_requirement_message or torch_requirement_message,
 )
 class ClassificationTestsOnConnect(ClassificationTestsMixin, unittest.TestCase):
     def setUp(self) -> None:

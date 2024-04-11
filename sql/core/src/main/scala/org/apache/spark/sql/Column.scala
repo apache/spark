@@ -171,6 +171,29 @@ class Column(val expr: Expression) extends Logging {
     Column.fn(name, this, lit(other))
   }
 
+  /**
+   * A version of the `fn` method specifically designed for binary operations in PySpark
+   * that require logging information.
+   * This method is used when the operation involves another Column.
+   *
+   * @param name                The name of the operation to be performed.
+   * @param other               The value to be used in the operation, which will be converted to a
+   *                            Column if not already one.
+   * @param pysparkFragment     A string representing the 'fragment' of the PySpark error context,
+   *                            typically indicates the name of PySpark function.
+   * @param pysparkCallSite     A string representing the 'callSite' of the PySpark error context,
+   *                            providing the exact location within the PySpark code where the
+   *                            operation originated.
+   * @return A Column resulting from the operation.
+   */
+  private def fn(
+      name: String, other: Any, pysparkFragment: String, pysparkCallSite: String): Column = {
+    val tupleInfo = (pysparkFragment, pysparkCallSite)
+    withOrigin(Some(tupleInfo)) {
+      Column.fn(name, this, lit(other))
+    }
+  }
+
   override def toString: String = toPrettySQL(expr)
 
   override def equals(that: Any): Boolean = that match {
