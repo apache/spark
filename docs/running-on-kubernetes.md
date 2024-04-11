@@ -1720,8 +1720,8 @@ See the [configuration page](configuration.html) for information on Spark config
     which can vary on cluster manager. Spark Kubernetes cluster manager supports the following path variables:
     <ul>
       <li><code>APP_ID</code>: The unique application id</li>
-      <li><code>KUBERNETES_NAMESPACE</code>: The namespace where the executor pods run</li>
-      <li><code>KUBERNETES_POD_NAME</code>: The name of the pod that contains the executor</li>
+      <li><code>KUBERNETES_NAMESPACE</code>: The namespace where the driver pods run</li>
+      <li><code>KUBERNETES_POD_NAME</code>: The name of the pod that contains the driver, which is <code>"[null]" in client mode</code></li>
       <li><code>FILE_NAME</code>: The name of the log, which is always <code>"log"</code></li>
     </ul>
     Please note that this configuration also replaces original log urls in event log,
