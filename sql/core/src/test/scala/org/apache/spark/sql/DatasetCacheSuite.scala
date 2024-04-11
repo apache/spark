@@ -279,41 +279,48 @@ class DatasetCacheSuite extends QueryTest
   test("SPARK-47609. Partial match IMR with more columns than base") {
     val baseDfCreator = () => spark.range(0, 50).selectExpr("id as a ", "id % 2 AS b",
       "id % 3 AS c")
-    val df1 = checkIMRUseAndInvalidation(baseDfCreator, df => df.withColumn("d", $"a" + 1))
+    val testDfCreator = () => spark.range(0, 50).select($"id".as("a"), ($"id" % 2).as("b"),
+      ($"id" + 1).as("d"), ($"id" % 3).as("c") )
+    checkIMRUseAndInvalidation(baseDfCreator, testDfCreator)
   }
 
   test("SPARK-47609. Partial match IMR with less columns than base") {
     val baseDfCreator = () => spark.range(0, 50).selectExpr("id as a ", "id % 2 AS b",
       "id % 3 AS c")
-    val df1 = checkIMRUseAndInvalidation(baseDfCreator, df => df.select(($"a" + $"c").as("t")))
+    val testDfCreator = () => spark.range(0, 50).select($"id".as("a"), ($"id" % 2).as("b"))
+    checkIMRUseAndInvalidation(baseDfCreator, testDfCreator)
   }
 
   test("SPARK-47609. Partial match IMR with columns remapped to different value") {
     val baseDfCreator = () => spark.range(0, 50).selectExpr("id as a ", "id % 2 AS b",
       "id % 3 AS c")
-    val df1 = checkIMRUseAndInvalidation(baseDfCreator, df => df.select(($"a" + $"c").as("a")))
+    val testDfCreator = () => spark.range(0, 50).select(($"id" + ($"id" % 3)).as("a"),
+     ($"id" % 2).as("b"), ($"id" % 3).as("c"))
+    checkIMRUseAndInvalidation(baseDfCreator, testDfCreator)
   }
 
   test("SPARK-47609. Partial match IMR with extra columns as literal") {
     val baseDfCreator = () => spark.range(0, 50).selectExpr("id as a ", "id % 2 AS b",
       "id % 3 AS c")
-    val df1 = checkIMRUseAndInvalidation(baseDfCreator,
-      df => df.select(expr("100").cast(IntegerType).as("t"), $"c", $"a"))
+    val testDfCreator = () => spark.range(0, 50).select(($"id" + ($"id" % 3)).as("a"),
+      ($"id" % 2).as("b"), expr("100").cast(IntegerType).as("t"))
+    checkIMRUseAndInvalidation(baseDfCreator, testDfCreator)
   }
 
   test("SPARK-47609. Partial match IMR with multiple columns remap") {
     val baseDfCreator = () => spark.range(0, 50).selectExpr("id as a ", "id % 2 AS b",
       "id % 3 AS c")
-    val df1 = checkIMRUseAndInvalidation(baseDfCreator,
-      df => df.select( ($"c" * $"b").as("c"), ($"a" - $"c").as("a"), $"a".as("b")))
+    val testDfCreator = () => spark.range(0, 50).select((($"id" % 3) * ($"id" % 2)).as("c"),
+      ($"id" - ($"id" % 3)).as("a"), $"id".as("b"))
+    checkIMRUseAndInvalidation(baseDfCreator, testDfCreator)
   }
 
   test("SPARK-47609. Partial match IMR with multiple columns remap and one remap as constant") {
     val baseDfCreator = () => spark.range(0, 50).selectExpr("id as a ", "id % 2 AS b",
       "id % 3 AS c")
-    val df1 = checkIMRUseAndInvalidation(baseDfCreator,
-      df => df.select(($"c" * $"b").as("c"), ($"a" - $"c").as("a"),
-        expr("100").cast(IntegerType).as("b"), $"b".as("d")))
+    val testDfCreator = () => spark.range(0, 50).select((($"id" % 3) * ($"id" % 2)).as("c"),
+      ($"id" - ($"id" % 3)).as("a"), expr("100").cast(IntegerType).as("b"), $"b".as("d"))
+    checkIMRUseAndInvalidation(baseDfCreator, testDfCreator)
   }
 
   test("SPARK-44653: non-trivial DataFrame unions should not break caching") {
@@ -356,7 +363,7 @@ class DatasetCacheSuite extends QueryTest
 
   protected def checkIMRUseAndInvalidation(
       baseDfCreator: () => DataFrame,
-      testExec: DataFrame => DataFrame): Unit = {
+      testExec: () => DataFrame): Unit = {
 
     def recurse(sparkPlan: SparkPlan): Int = {
       val imrs = sparkPlan.collect {
@@ -376,16 +383,16 @@ class DatasetCacheSuite extends QueryTest
     // now check if the results of optimized dataframe and completely unoptimized dataframe are
     // same
     val baseDf = baseDfCreator()
-    val testDf = testExec(baseDfCreator())
+    val testDf = testExec()
     val testDfRows = testDf.collect()
     baseDf.cache()
     verifyCacheDependency(baseDfCreator(), 1)
-    verifyCacheDependency(testExec(baseDfCreator()), 1)
+    verifyCacheDependency(testExec(), 1)
     baseDfCreator().unpersist(true)
     verifyCacheDependency(baseDfCreator(), 0)
-    verifyCacheDependency(testExec(baseDfCreator()), 0)
+    verifyCacheDependency(testExec(), 0)
     baseDfCreator().cache()
-    val newTestDf = testExec(baseDfCreator())
+    val newTestDf = testExec()
     checkAnswer(newTestDf, testDfRows)
     baseDfCreator().unpersist(true)
   }
