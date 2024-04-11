@@ -25,7 +25,7 @@ import com.fasterxml.jackson.core.JsonParseException
 import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{LINE, LINE_NUM}
+import org.apache.spark.internal.LogKey.{LINE, LINE_NUM, PATH}
 import org.apache.spark.scheduler.ReplayListenerBus._
 import org.apache.spark.util.JsonProtocol
 
@@ -125,7 +125,7 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
       case ioe: IOException =>
         throw ioe
       case e: Exception =>
-        logError(s"Exception parsing Spark event log: $sourceName", e)
+        logError(log"Exception parsing Spark event log: ${MDC(PATH, sourceName)}", e)
         logError(log"Malformed line #${MDC(LINE_NUM, lineNumber)}: ${MDC(LINE, currentLine)}\n")
         false
     }

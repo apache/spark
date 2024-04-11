@@ -21,7 +21,8 @@ import java.util.regex.{Pattern, PatternSyntaxException}
 
 import org.apache.commons.text.similarity.LevenshteinDistance
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -136,9 +137,11 @@ object StringUtils extends Logging {
     override def toString: String = {
       if (atLimit) {
         logWarning(
-          "Truncated the string representation of a plan since it was too long. The " +
-            s"plan had length ${length} and the maximum is ${maxLength}. This behavior " +
-            s"can be adjusted by setting '${SQLConf.MAX_PLAN_STRING_LENGTH.key}'.")
+          log"Truncated the string representation of a plan since it was too long. The " +
+            log"plan had length ${MDC(QUERY_PLAN_LENGTH_ACTUAL, length)} " +
+            log"and the maximum is ${MDC(QUERY_PLAN_LENGTH_MAX, maxLength)}. This behavior " +
+            log"can be adjusted by setting " +
+            log"'${MDC(CONFIG, SQLConf.MAX_PLAN_STRING_LENGTH.key)}'.")
         val truncateMsg = if (maxLength == 0) {
           s"Truncated plan of $length characters"
         } else {

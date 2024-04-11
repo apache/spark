@@ -284,12 +284,15 @@ object DataSourceUtils extends PredicateHelper {
    * Determines whether a filter should be pushed down to the data source or not.
    *
    * @param expression The filter expression to be evaluated.
+   * @param isCollationPushDownSupported Whether the data source supports collation push down.
    * @return A boolean indicating whether the filter should be pushed down or not.
    */
-  def shouldPushFilter(expression: Expression): Boolean = {
-    expression.deterministic && !expression.exists {
+  def shouldPushFilter(expression: Expression, isCollationPushDownSupported: Boolean): Boolean = {
+    if (!expression.deterministic) return false
+
+    isCollationPushDownSupported || !expression.exists {
       case childExpression @ (_: Attribute | _: GetStructField) =>
-        // don't push down filters for types with non-default collation
+        // don't push down filters for types with non-binary sortable collation
         // as it could lead to incorrect results
         SchemaUtils.hasNonBinarySortableCollatedString(childExpression.dataType)
 

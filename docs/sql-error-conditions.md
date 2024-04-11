@@ -1873,11 +1873,13 @@ Execute immediate requires a non-null variable as the query string, but the prov
 
 The value `<value>` cannot be interpreted as a numeric since it has more than 38 digits.
 
-### NUMERIC_VALUE_OUT_OF_RANGE
+### [NUMERIC_VALUE_OUT_OF_RANGE](sql-error-conditions-numeric-value-out-of-range-error-class.html)
 
 [SQLSTATE: 22003](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
-`<value>` cannot be represented as Decimal(`<precision>`, `<scale>`). If necessary set `<config>` to "false" to bypass this error, and return NULL instead.
+
+
+For more details see [NUMERIC_VALUE_OUT_OF_RANGE](sql-error-conditions-numeric-value-out-of-range-error-class.html)
 
 ### NUM_COLUMNS_MISMATCH
 
@@ -2183,6 +2185,12 @@ The SQL config `<sqlConf>` cannot be found. Please verify that the config exists
 
 Star (*) is not allowed in a select list when GROUP BY an ordinal position is used.
 
+### STATEFUL_PROCESSOR_CANNOT_ASSIGN_TTL_IN_NO_TTL_MODE
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot use TTL for state=`<stateName>` in NoTTL() mode.
+
 ### STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_HANDLE_STATE
 
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -2200,6 +2208,12 @@ Failed to perform stateful processor operation=`<operationType>` with invalid ti
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Cannot re-initialize state on the same grouping key during initial state handling for stateful processor. Invalid grouping key=`<groupingKey>`.
+
+### STATEFUL_PROCESSOR_TTL_DURATION_MUST_BE_POSITIVE
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+TTL duration must be greater than zero for State store operation=`<operationType>` on state=`<stateName>`.
 
 ### STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS
 
@@ -2224,7 +2238,7 @@ Please only use the StatefulProcessor within the transformWithState operator.
 
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Incorrect number of ordering columns=`<numOrderingCols>` for range scan encoder. Ordering columns cannot be zero or greater than num of schema columns.
+Incorrect number of ordering ordinals=`<numOrderingCols>` for range scan encoder. The number of ordering ordinals cannot be zero or greater than number of schema columns.
 
 ### STATE_STORE_INCORRECT_NUM_PREFIX_COLS_FOR_PREFIX_SCAN
 
@@ -2243,6 +2257,12 @@ Null type ordering column with name=`<fieldName>` at index=`<index>` is not supp
 [SQLSTATE: XXKST](sql-error-conditions-sqlstates.html#class-XX-internal-error)
 
 `<operationType>` operation not supported with `<entity>`
+
+### STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY
+
+[SQLSTATE: XXKST](sql-error-conditions-sqlstates.html#class-XX-internal-error)
+
+Binary inequality column is not supported with state store. Provided schema: `<schema>`.
 
 ### STATE_STORE_UNSUPPORTED_OPERATION_ON_MISSING_COLUMN_FAMILY
 

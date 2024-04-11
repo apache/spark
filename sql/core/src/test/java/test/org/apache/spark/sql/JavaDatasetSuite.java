@@ -207,6 +207,7 @@ public class JavaDatasetSuite implements Serializable {
     Dataset<String> transformWithStateMapped = grouped.transformWithState(
       new TestStatefulProcessorWithInitialState(),
       TimeoutMode.NoTimeouts(),
+      TTLMode.NoTTL(),
       OutputMode.Append(),
       kvInitStateMappedDS,
       Encoders.STRING(),
@@ -362,6 +363,7 @@ public class JavaDatasetSuite implements Serializable {
     Dataset<String> transformWithStateMapped = grouped.transformWithState(
       testStatefulProcessor,
       TimeoutMode.NoTimeouts(),
+      TTLMode.NoTTL(),
       OutputMode.Append(),
       Encoders.STRING());
 

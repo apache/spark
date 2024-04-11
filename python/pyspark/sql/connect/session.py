@@ -60,6 +60,7 @@ from pyspark.sql.connect.plan import (
     CachedLocalRelation,
     CachedRelation,
     CachedRemoteRelation,
+    SubqueryAlias,
 )
 from pyspark.sql.connect.functions import builtin as F
 from pyspark.sql.connect.profiler import ProfilerCollector
@@ -619,7 +620,12 @@ class SparkSession:
 
     createDataFrame.__doc__ = PySparkSession.createDataFrame.__doc__
 
-    def sql(self, sqlQuery: str, args: Optional[Union[Dict[str, Any], List]] = None) -> "DataFrame":
+    def sql(
+        self,
+        sqlQuery: str,
+        args: Optional[Union[Dict[str, Any], List]] = None,
+        **kwargs: Any,
+    ) -> "DataFrame":
         _args = []
         _named_args = {}
         if args is not None:
@@ -635,7 +641,17 @@ class SparkSession:
                     message_parameters={"arg_name": "args", "arg_type": type(args).__name__},
                 )
 
-        cmd = SQL(sqlQuery, _args, _named_args)
+        _views: List[SubqueryAlias] = []
+        if len(kwargs) > 0:
+            from pyspark.sql.connect.sql_formatter import SQLStringFormatter
+
+            formatter = SQLStringFormatter(self)
+            sqlQuery = formatter.format(sqlQuery, **kwargs)
+
+            for df, name in formatter._temp_views:
+                _views.append(SubqueryAlias(df._plan, name))
+
+        cmd = SQL(sqlQuery, _args, _named_args, _views)
         data, properties = self.client.execute_command(cmd.command(self._client))
         if "sql_command_result" in properties:
             return DataFrame(CachedRelation(properties["sql_command_result"]), self)
@@ -1023,6 +1039,7 @@ SparkSession.__doc__ = PySparkSession.__doc__
 
 
 def _test() -> None:
+    import os
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
@@ -1030,7 +1047,9 @@ def _test() -> None:
 
     globs = pyspark.sql.connect.session.__dict__.copy()
     globs["spark"] = (
-        PySparkSession.builder.appName("sql.connect.session tests").remote("local[4]").getOrCreate()
+        PySparkSession.builder.appName("sql.connect.session tests")
+        .remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[4]"))
+        .getOrCreate()
     )
 
     # Uses PySpark session to test builder.
@@ -1038,9 +1057,6 @@ def _test() -> None:
     # Spark Connect does not support to set master together.
     pyspark.sql.connect.session.SparkSession.__doc__ = None
     del pyspark.sql.connect.session.SparkSession.Builder.master.__doc__
-
-    # TODO(SPARK-41811): Implement SparkSession.sql's string formatter
-    del pyspark.sql.connect.session.SparkSession.sql.__doc__
 
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.connect.session,
