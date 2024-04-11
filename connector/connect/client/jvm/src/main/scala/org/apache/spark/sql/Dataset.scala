@@ -3461,8 +3461,7 @@ class Dataset[T] private[sql] (
     sparkSession.analyze(plan, proto.AnalyzePlanRequest.AnalyzeCase.SCHEMA)
   }
 
-  def collectResult(): SparkResult[T] =
-    sparkSession.execute(plan, agnosticEncoder, Some(sparkSession.observationRegistry.toMap))
+  def collectResult(): SparkResult[T] = sparkSession.execute(plan, agnosticEncoder)
 
   def collectObservations(): Map[String, Map[String, Any]] =
     collectResult().getObservedMetrics

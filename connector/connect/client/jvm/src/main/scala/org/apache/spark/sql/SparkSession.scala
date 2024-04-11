@@ -555,11 +555,9 @@ class SparkSession private[sql] (
 
   private[sql] def execute[T](
       plan: proto.Plan,
-      encoder: AgnosticEncoder[T],
-      observationsOpt: Option[Map[Long, Observation]] = None): SparkResult[T] = {
+      encoder: AgnosticEncoder[T]): SparkResult[T] = {
     val value = client.execute(plan)
-    val result = new SparkResult(value, allocator, encoder, timeZoneId, observationsOpt)
-    result
+    new SparkResult(value, allocator, encoder, timeZoneId, Some(this.observationRegistry.toMap))
   }
 
   private[sql] def execute(f: proto.Relation.Builder => Unit): Unit = {

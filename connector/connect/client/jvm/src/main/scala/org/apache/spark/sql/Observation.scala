@@ -47,6 +47,11 @@ class Observation(name: String) extends ObservationBase(name) {
       sparkSession.observationRegistry.remove(planId)
     }
   }
+
+  override private[spark] def setMetricsAndNotify(metrics: Option[Map[String, Any]]): Boolean = {
+    this.unregister()
+    super.setMetricsAndNotify(metrics)
+  }
 }
 
 /**
