@@ -49,7 +49,7 @@ abstract class HiveQueryFileTest extends HiveComparisonTest {
   val includeListProperty: String = "spark.hive.includelist"
   if (System.getProperty(deprecatedIncludeListProperty) != null) {
     logWarning(s"System property `$deprecatedIncludeListProperty` is deprecated; please update " +
-      s"to use new property: $includeListProperty")
+        s"to use new property: $includeListProperty")
   }
   // Allow the includeList to be overridden by a system property
   val realIncludeList: Seq[String] =
