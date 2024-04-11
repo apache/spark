@@ -140,15 +140,11 @@ class BasePythonStreamingDataSourceTestsMixin:
         self.spark.dataSource.register(self._get_test_data_source())
         df = self.spark.readStream.format("TestDataSource").load()
 
-        current_batch_id = -1
-
         def check_batch(df, batch_id):
-            nonlocal current_batch_id
-            current_batch_id = batch_id
             assertDataFrameEqual(df, [Row(batch_id * 2), Row(batch_id * 2 + 1)])
 
         q = df.writeStream.foreachBatch(check_batch).start()
-        while current_batch_id < 10:
+        while len(q.recentProgress) < 10:
             time.sleep(0.2)
         q.stop()
         q.awaitTermination
