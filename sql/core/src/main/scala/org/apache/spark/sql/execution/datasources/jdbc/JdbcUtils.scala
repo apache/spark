@@ -307,16 +307,13 @@ object JdbcUtils extends Logging with SQLConfHelper {
           metadata.putBoolean("logical_time_type", true)
         case java.sql.Types.ROWID =>
           metadata.putBoolean("rowid", true)
-        case java.sql.Types.ARRAY =>
-          val tableName = rsmd.getTableName(i + 1)
-          dialect.getArrayDimension(conn, tableName, columnName).foreach { dimension =>
-            metadata.putLong("arrayDimension", dimension)
-          }
         case _ =>
       }
       metadata.putBoolean("isSigned", isSigned)
       metadata.putBoolean("isTimestampNTZ", isTimestampNTZ)
       metadata.putLong("scale", fieldScale)
+      dialect.updateExtraColumnMeta(conn, rsmd, i + 1, metadata)
+
       val columnType =
         dialect.getCatalystType(dataType, typeName, fieldSize, metadata).getOrElse(
           getCatalystType(dataType, typeName, fieldSize, fieldScale, isSigned, isTimestampNTZ))
