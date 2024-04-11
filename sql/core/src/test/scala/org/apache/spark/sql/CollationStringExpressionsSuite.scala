@@ -474,6 +474,80 @@ class CollationStringExpressionsSuite
     }
   }
 
+  test("Support StringRPad string expressions with collation") {
+    // Supported collations
+    case class StringRPadTestCase[R](s: String, len: Int, pad: String, c: String, result: R)
+    val testCases = Seq(
+      StringRPadTestCase("", 5, " ", "UTF8_BINARY", "     "),
+      StringRPadTestCase("abc", 5, " ", "UNICODE", "abc  "),
+      StringRPadTestCase("Hello", 7, "Wörld", "UTF8_BINARY_LCASE", "HelloWö"),
+      StringRPadTestCase("1234567890", 5, "aaaAAa", "UNICODE_CI", "12345"),
+      StringRPadTestCase("aaAA", 2, " ", "UTF8_BINARY", "aa"),
+      StringRPadTestCase("ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ℀℃", 2, "1", "UTF8_BINARY_LCASE", "ÀÃ"),
+      StringRPadTestCase("ĂȦÄäåäá", 20, "ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ", "UNICODE", "ĂȦÄäåäáÀÃÂĀĂȦÄäåäáâã"),
+      StringRPadTestCase("aȦÄä", 8, "a1", "UNICODE_CI", "aȦÄäa1a1")
+    )
+    testCases.foreach(t => {
+      val query = s"SELECT rpad(collate('${t.s}', '${t.c}')," +
+        s" ${t.len}, collate('${t.pad}', '${t.c}'))"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
+      // Implicit casting
+      checkAnswer(
+        sql(s"SELECT rpad(collate('${t.s}', '${t.c}'), ${t.len}, '${t.pad}')"),
+        Row(t.result))
+      checkAnswer(
+        sql(s"SELECT rpad('${t.s}', ${t.len}, collate('${t.pad}', '${t.c}'))"),
+        Row(t.result))
+    })
+    // Collation mismatch
+    val collationMismatch = intercept[AnalysisException] {
+      sql("SELECT rpad(collate('abcde', 'UNICODE_CI'),1,collate('C', 'UTF8_BINARY_LCASE'))")
+    }
+    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+  }
+
+  test("Support StringLPad string expressions with collation") {
+    // Supported collations
+    case class StringLPadTestCase[R](s: String, len: Int, pad: String, c: String, result: R)
+    val testCases = Seq(
+      StringLPadTestCase("", 5, " ", "UTF8_BINARY", "     "),
+      StringLPadTestCase("abc", 5, " ", "UNICODE", "  abc"),
+      StringLPadTestCase("Hello", 7, "Wörld", "UTF8_BINARY_LCASE", "WöHello"),
+      StringLPadTestCase("1234567890", 5, "aaaAAa", "UNICODE_CI", "12345"),
+      StringLPadTestCase("aaAA", 2, " ", "UTF8_BINARY", "aa"),
+      StringLPadTestCase("ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ℀℃", 2, "1", "UTF8_BINARY_LCASE", "ÀÃ"),
+      StringLPadTestCase("ĂȦÄäåäá", 20, "ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ", "UNICODE", "ÀÃÂĀĂȦÄäåäáâãĂȦÄäåäá"),
+      StringLPadTestCase("aȦÄä", 8, "a1", "UNICODE_CI", "a1a1aȦÄä")
+    )
+    testCases.foreach(t => {
+      val query = s"SELECT lpad(collate('${t.s}', '${t.c}')," +
+        s" ${t.len}, collate('${t.pad}', '${t.c}'))"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
+      // Implicit casting
+      checkAnswer(
+        sql(s"SELECT lpad(collate('${t.s}', '${t.c}'), ${t.len}, '${t.pad}')"),
+        Row(t.result))
+      checkAnswer(
+        sql(s"SELECT lpad('${t.s}', ${t.len}, collate('${t.pad}', '${t.c}'))"),
+        Row(t.result))
+    })
+    // Collation mismatch
+    val collationMismatch = intercept[AnalysisException] {
+      sql("SELECT lpad(collate('abcde', 'UNICODE_CI'),1,collate('C', 'UTF8_BINARY_LCASE'))")
+    }
+    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+  }
+
+  test("Support StringLPad string expressions with explicit collation on second parameter") {
+    val query = "SELECT lpad('abc', collate('5', 'unicode_ci'), ' ')"
+    checkAnswer(sql(query), Row("  abc"))
+    assert(sql(query).schema.fields.head.dataType.sameType(StringType(0)))
+  }
+
   // TODO: Add more tests for other string expressions
 
 }
