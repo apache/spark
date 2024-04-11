@@ -509,9 +509,10 @@ class SimpleInputPartition(InputPartition):
 
 class SimpleDataSourceStreamReader(ABC):
     """
-    A base class for simplified streaming data source readers. Compared to :class:`DataSourceStreamReader`,
-    :class:`SimpleDataSourceStreamReader` doesn't require planning data partitioning. Also, the read api of
-    :class:`SimpleDataSourceStreamReader` allows reading data and planning the latest offset at the same time.
+    A base class for simplified streaming data source readers.
+    Compared to :class:`DataSourceStreamReader`, :class:`SimpleDataSourceStreamReader` doesn't
+    require planning data partition. Also, the read api of :class:`SimpleDataSourceStreamReader`
+    allows reading data and planning the latest offset at the same time.
 
     .. versionadded: 4.0.0
     """
@@ -541,7 +542,7 @@ class SimpleDataSourceStreamReader(ABC):
 
     def read(self, start: dict) -> (Iterator[Tuple], dict):
         """
-        Read all available data from specified start offset and return the offset that next read attempt
+        Read all available data from start offset and return the offset that next read attempt
         starts from.
 
         Parameters
@@ -599,22 +600,23 @@ class SimpleDataSourceStreamReader(ABC):
 
 class _SimpleStreamReaderWrapper(DataSourceStreamReader):
     """
-    A private class that wrap :class:`SimpleDataSourceStreamReader` in a prefetch and cache pattern,
-    so that :class:`SimpleDataSourceStreamReader` can integrate with streaming engine like an ordinary
-    :class:`DataSourceStreamReader`.
+    A private class that wrap :class:`SimpleDataSourceStreamReader` in prefetch and cache pattern,
+    so that :class:`SimpleDataSourceStreamReader` can integrate with streaming engine like an
+    ordinary :class:`DataSourceStreamReader`.
 
     current_offset track the latest progress of the record prefetching, it is initialized to be
     initialOffset() when query start for the first time or initialized to be the end offset of
     the last committed batch when query restarts.
 
-    When streaming engine call latestOffset(), the wrapper calls read() that start from current_offset,
-    prefetch and cache the data, then update the current_offset to be the end offset of the new data.
+    When streaming engine call latestOffset(), the wrapper calls read() that start from
+    current_offset, prefetch and cache the data, then update the current_offset to be
+    the end offset of the new data.
 
-    When streaming engine call planInputPartitions(start, end), the wrapper get the prefetched data from
-    cache and send it to JVM along with the input partitions.
+    When streaming engine call planInputPartitions(start, end), the wrapper get the prefetched data
+    from cache and send it to JVM along with the input partitions.
 
-    When query restart, batches in write ahead offset log that has not been committed will be replayed
-    by reading data between start and end offset through read2(start, end).
+    When query restart, batches in write ahead offset log that has not been committed will be
+    replayed by reading data between start and end offset through read2(start, end).
     """
 
     def __init__(self, simple_reader: SimpleDataSourceStreamReader):

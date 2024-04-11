@@ -29,12 +29,7 @@ from pyspark.serializers import (
     write_with_length,
     SpecialLengths,
 )
-from pyspark.sql.datasource import (
-    DataSource,
-    DataSourceStreamReader,
-    _SimpleStreamReaderWrapper,
-    InputPartition,
-)
+from pyspark.sql.datasource import DataSource, DataSourceStreamReader, _SimpleStreamReaderWrapper
 from pyspark.sql.pandas.serializers import ArrowStreamSerializer
 from pyspark.sql.types import (
     _parse_datatype_json_string,
