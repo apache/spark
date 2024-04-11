@@ -101,7 +101,6 @@ object LogKey extends Enumeration {
   val OFFSETS = Value
   val OLD_BLOCK_MANAGER_ID = Value
   val OLD_VALUE = Value
-  val OPERATION_ID = Value
   val OPTIMIZER_CLASS_NAME = Value
   val OP_ID = Value
   val OP_TYPE = Value
