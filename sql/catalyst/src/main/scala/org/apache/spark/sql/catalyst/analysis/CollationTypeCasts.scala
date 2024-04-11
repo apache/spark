@@ -48,13 +48,13 @@ object CollationTypeCasts extends TypeCoercionRule {
           caseWhenExpr.elseValue.map(e => castStringType(e, outputStringType).getOrElse(e))
         CaseWhen(newBranches, newElseValue)
 
-    case concatExpr: Concat =>
-      val newChildren = collateToSingleType(concatExpr.children, failOnIndeterminate = false)
-      concatExpr.withNewChildren(newChildren)
+    case concatExprs @ (_: Concat | _: ConcatWs) =>
+      val newChildren = collateToSingleType(concatExprs.children, failOnIndeterminate = false)
+      concatExprs.withNewChildren(newChildren)
 
     case otherExpr @ (
       _: In | _: InSubquery | _: CreateArray | _: ArrayJoin | _: Greatest | _: Least |
-      _: Coalesce | _: BinaryExpression | _: ConcatWs | _: SortOrder) =>
+      _: Coalesce | _: BinaryExpression | _: SortOrder) =>
       val newChildren = collateToSingleType(otherExpr.children)
       otherExpr.withNewChildren(newChildren)
   }

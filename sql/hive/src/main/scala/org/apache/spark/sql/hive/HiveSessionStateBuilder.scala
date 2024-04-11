@@ -114,6 +114,7 @@ class HiveSessionStateBuilder(
         TableCapabilityCheck +:
         CommandCheck +:
         CollationCheck +:
+        IndeterminateCheck +:
         customCheckRules
   }
 
