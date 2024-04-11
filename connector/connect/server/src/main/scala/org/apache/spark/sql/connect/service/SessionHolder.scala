@@ -19,7 +19,7 @@ package org.apache.spark.sql.connect.service
 
 import java.nio.file.Path
 import java.util.UUID
-import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, CountDownLatch, TimeUnit}
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable

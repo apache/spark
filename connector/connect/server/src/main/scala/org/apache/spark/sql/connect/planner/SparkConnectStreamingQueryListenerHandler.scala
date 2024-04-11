@@ -21,14 +21,11 @@ import scala.util.control.NonFatal
 
 import io.grpc.stub.StreamObserver
 
-import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.connect.proto.StreamingQueryListenerBusCommand
-import org.apache.spark.connect.proto.StreamingQueryListenerEvent
 import org.apache.spark.connect.proto.StreamingQueryListenerEventsResult
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connect.service.{ExecuteHolder, SessionHolder, SparkConnectListenerBusListener}
+import org.apache.spark.sql.connect.service.ExecuteHolder
 
 
 /**
@@ -108,6 +105,8 @@ class SparkConnectStreamingQueryListenerHandler(executeHolder: ExecuteHolder) ex
               s"but received remove listener call. Exiting.")
             return
         }
+      case StreamingQueryListenerBusCommand.CommandCase.COMMAND_NOT_SET =>
+        throw new IllegalArgumentException("Missing command in StreamingQueryListenerBusCommand")
     }
     // If this thread is the handling thread of the original ADD_LISTENER_BUS_LISTENER command,
     // this will be sent when the latch is counted down (either through
