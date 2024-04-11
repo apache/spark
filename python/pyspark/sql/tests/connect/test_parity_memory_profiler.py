@@ -18,10 +18,13 @@ import inspect
 import os
 import unittest
 
+from pyspark.util import is_remote_only
 from pyspark.tests.test_memory_profiler import MemoryProfiler2TestsMixin, _do_computation
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
+# TODO(SPARK-47830): Reeanble MemoryProfilerParityTests for pyspark-connect
+@unittest.skipIf(is_remote_only(), "Skipped for now")
 class MemoryProfilerParityTests(MemoryProfiler2TestsMixin, ReusedConnectTestCase):
     def setUp(self) -> None:
         super().setUp()
