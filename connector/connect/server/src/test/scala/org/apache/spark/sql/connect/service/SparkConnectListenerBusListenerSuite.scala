@@ -25,12 +25,12 @@ import scala.jdk.CollectionConverters._
 
 import io.grpc.stub.StreamObserver
 import org.mockito.ArgumentMatchers.any
-import org.mockito.MockitoSugar.{doAnswer, doThrow, when}
+import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.connect.proto.{Command, ExecutePlanResponse, StreamingQueryListenerBusCommand}
+import org.apache.spark.connect.proto.{Command, ExecutePlanResponse}
 import org.apache.spark.sql.connect.planner.SparkConnectStreamingQueryListenerHandler
 import org.apache.spark.sql.streaming.{StreamingQuery, StreamingQueryListener}
 import org.apache.spark.sql.streaming.Trigger.ProcessingTime
