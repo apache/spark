@@ -374,6 +374,8 @@ class LogisticRegressionModel(
         torch.save(lor_torch_model, path)
 
     def _load_core_model(self, path: str) -> None:
+        import torch
+
         lor_torch_model = torch.load(path)
         self.torch_model = lor_torch_model[0]
 
