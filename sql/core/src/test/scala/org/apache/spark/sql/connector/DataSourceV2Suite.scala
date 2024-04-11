@@ -967,38 +967,41 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     }
   }
 
-  test("SPARK-47463: Pushed down v2 filter with (if / case when/ nullif) expression") {
+  test("SPARK-47463: Pushed down v2 filter with (if / case when / nvl) expression") {
     withTempView("t1") {
-      spark.read.format(classOf[AdvancedDataSourceV2WithV2Filter].getName).load()
-        .createTempView("t1")
-      val df1 = sql(
-        s"""
-           |select * from
-           |(select if(i = 1, i, 0) as c from t1) t
-           |where t.c > 0
-           |""".stripMargin
-      )
-      val result1 = df1.collect()
-      assert(result1.length == 1)
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        spark.read.format(classOf[AdvancedDataSourceV2WithV2Filter].getName).load()
+          .createTempView("t1")
+        val df1 = sql(
+          s"""
+             |select * from
+             |(select if(i = 1, i, 0) as c from t1) t
+             |where t.c > 0
+             |""".stripMargin
+        )
+        val result1 = df1.collect()
+        assert(result1.length == 1)
 
-      val df2 = sql(
-        s"""
-           |select * from
-           |(select case when i = 1 then i else 0 end as c from t1) t
-           |where t.c > 0
-           |""".stripMargin
-      )
-      val result2 = df2.collect()
-      assert(result2.length == 1)
+        val df2 = sql(
+          s"""
+             |select * from
+             |(select case when i = 1 then i else 0 end as c from t1) t
+             |where t.c > 0
+             |""".stripMargin
+        )
+        val result2 = df2.collect()
+        assert(result2.length == 1)
 
-      val df3 = sql(
-        s"""
-           |select * from t1
-           |where nullif(i, 1) is null
-           |""".stripMargin
-      )
-      val result3 = df3.collect()
-      assert(result3.length == 1)
+        val df3 = sql(
+          s"""
+             |select * from
+             |(select nvl(cast(i as boolean), false) c from t1) t
+             |where t.c is true
+             |""".stripMargin
+        )
+        val result3 = df3.collect()
+        assert(result3.length > 0)
+      }
     }
   }
 }
