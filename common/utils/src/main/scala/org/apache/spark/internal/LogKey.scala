@@ -44,6 +44,7 @@ object LogKey extends Enumeration {
   val COMPONENT = Value
   val CONFIG = Value
   val CONFIG2 = Value
+  val CONFIG3 = Value
   val CONTAINER = Value
   val CONTAINER_ID = Value
   val COUNT = Value
@@ -58,6 +59,7 @@ object LogKey extends Enumeration {
   val DRIVER_ID = Value
   val DROPPED_PARTITIONS = Value
   val END_POINT = Value
+  val ENGINE = Value
   val ERROR = Value
   val EVENT_LOOP = Value
   val EVENT_QUEUE = Value
@@ -66,14 +68,19 @@ object LogKey extends Enumeration {
   val EXIT_CODE = Value
   val EXPRESSION_TERMS = Value
   val FAILURES = Value
+  val FALLBACK_VERSION = Value
   val FIELD_NAME = Value
+  val FILE_FORMAT = Value
+  val FILE_FORMAT2 = Value
   val FUNCTION_NAME = Value
   val FUNCTION_PARAMETER = Value
   val GROUP_ID = Value
+  val HADOOP_VERSION = Value
   val HIVE_OPERATION_STATE = Value
   val HIVE_OPERATION_TYPE = Value
   val HOST = Value
   val INDEX = Value
+  val INFERENCE_MODE = Value
   val JOB_ID = Value
   val JOIN_CONDITION = Value
   val JOIN_CONDITION_SUB_EXPRESSION = Value
@@ -132,6 +139,8 @@ object LogKey extends Enumeration {
   val RULE_BATCH_NAME = Value
   val RULE_NAME = Value
   val RULE_NUMBER_OF_RUNS = Value
+  val SCHEMA = Value
+  val SCHEMA2 = Value
   val SERVICE_NAME = Value
   val SESSION_ID = Value
   val SHARD_ID = Value
