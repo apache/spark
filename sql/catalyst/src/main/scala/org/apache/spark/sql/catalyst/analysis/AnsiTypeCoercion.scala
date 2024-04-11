@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.internal.types.AbstractStringType
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.UpCastRule.numericPrecedence
 
@@ -185,7 +186,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       // If a function expects a StringType, no StringType instance should be implicitly cast to
       // StringType with a collation that's not accepted (aka. lockdown unsupported collations).
       case (_: StringType, _: StringType) => None
-      case (_: StringType, _: StringTypeCollated) => None
+      case (_: StringType, _: AbstractStringType) => None
 
       // If a function expects integral type, fractional input is not allowed.
       case (_: FractionalType, IntegralType) => None

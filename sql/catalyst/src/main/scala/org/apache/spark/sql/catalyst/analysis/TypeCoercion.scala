@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.types.{AbstractArrayType, AbstractStringType}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.UpCastRule.numericPrecedence
 
@@ -1017,6 +1018,9 @@ object TypeCoercion extends TypeCoercionBase {
       // 3. If the nullabilities of both the from type and the to type are false, the cast is
       // allowed only when Cast.forceNullable(fromType, toType) is false.
       case (ArrayType(fromType, fn), ArrayType(toType: DataType, true)) =>
+        implicitCast(fromType, toType).map(ArrayType(_, true)).orNull
+
+      case (ArrayType(fromType, fn), AbstractArrayType(toType)) =>
         implicitCast(fromType, toType).map(ArrayType(_, true)).orNull
 
       case (ArrayType(fromType, true), ArrayType(toType: DataType, false)) => null

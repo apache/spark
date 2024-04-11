@@ -25,7 +25,7 @@ from typing import cast
 from collections import namedtuple
 import sys
 
-from pyspark import SparkContext, SparkConf
+from pyspark import SparkConf
 from pyspark.sql import Row, SparkSession
 from pyspark.sql.functions import rand, udf, assert_true, lit
 from pyspark.sql.types import (
@@ -1202,6 +1202,8 @@ class MaxResultArrowTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        from pyspark import SparkContext
+
         cls.spark = SparkSession(
             SparkContext(
                 "local[4]", cls.__name__, conf=SparkConf().set("spark.driver.maxResultSize", "10k")

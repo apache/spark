@@ -18,6 +18,7 @@
 import sys
 import json
 import warnings
+import inspect
 from typing import (
     cast,
     overload,
@@ -174,16 +175,50 @@ def _bin_op(
     ["Column", Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"]], "Column"
 ]:
     """Create a method for given binary operator"""
+    binary_operator_map = {
+        "plus": "+",
+        "minus": "-",
+        "divide": "/",
+        "multiply": "*",
+        "mod": "%",
+        "equalTo": "=",
+        "lt": "<",
+        "leq": "<=",
+        "geq": ">=",
+        "gt": ">",
+        "eqNullSafe": "<=>",
+        "bitwiseOR": "|",
+        "bitwiseAND": "&",
+        "bitwiseXOR": "^",
+        # Just following JVM rule even if the names of source and target are the same.
+        "and": "and",
+        "or": "or",
+    }
 
     def _(
         self: "Column",
         other: Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"],
     ) -> "Column":
         jc = other._jc if isinstance(other, Column) else other
-        njc = getattr(self._jc, name)(jc)
+        if name in binary_operator_map:
+            from pyspark.sql import SparkSession
+
+            spark = SparkSession._getActiveSessionOrCreate()
+            stack = list(reversed(inspect.stack()))
+            depth = int(
+                spark.conf.get("spark.sql.stackTracesInDataFrameContext")  # type: ignore[arg-type]
+            )
+            selected_frames = stack[:depth]
+            call_sites = [f"{frame.filename}:{frame.lineno}" for frame in selected_frames]
+            call_site_str = "\n".join(call_sites)
+
+            njc = getattr(self._jc, "fn")(binary_operator_map[name], jc, name, call_site_str)
+        else:
+            njc = getattr(self._jc, name)(jc)
         return Column(njc)
 
     _.__doc__ = doc
+    _.__name__ = name
     return _
 
 

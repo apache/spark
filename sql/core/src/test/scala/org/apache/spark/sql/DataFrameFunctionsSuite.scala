@@ -1713,7 +1713,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         "paramIndex" -> "second",
         "inputSql" -> "\"1\"",
         "inputType" -> "\"INT\"",
-        "requiredType" -> "\"STRING_ANY_COLLATION\""
+        "requiredType" -> "\"STRING\""
       ),
       queryContext = Array(ExpectedContext("", "", 0, 15, "array_join(x, 1)"))
     )
@@ -1727,7 +1727,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         "paramIndex" -> "third",
         "inputSql" -> "\"1\"",
         "inputType" -> "\"INT\"",
-        "requiredType" -> "\"STRING_ANY_COLLATION\""
+        "requiredType" -> "\"STRING\""
       ),
       queryContext = Array(ExpectedContext("", "", 0, 21, "array_join(x, ', ', 1)"))
     )
@@ -1987,7 +1987,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         "paramIndex" -> "first",
         "inputSql" -> "\"struct(1, a)\"",
         "inputType" -> "\"STRUCT<col1: INT NOT NULL, col2: STRING NOT NULL>\"",
-        "requiredType" -> "(\"STRING_ANY_COLLATION\" or \"ARRAY\")"
+        "requiredType" -> "(\"STRING\" or \"ARRAY\")"
       ),
       queryContext = Array(ExpectedContext("", "", 7, 29, "reverse(struct(1, 'a'))"))
     )
@@ -2002,7 +2002,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         "paramIndex" -> "first",
         "inputSql" -> "\"map(1, a)\"",
         "inputType" -> "\"MAP<INT, STRING>\"",
-        "requiredType" -> "(\"STRING_ANY_COLLATION\" or \"ARRAY\")"
+        "requiredType" -> "(\"STRING\" or \"ARRAY\")"
       ),
       queryContext = Array(ExpectedContext("", "", 7, 26, "reverse(map(1, 'a'))"))
     )
@@ -2552,7 +2552,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "sqlExpr" -> "\"concat(map(1, 2), map(3, 4))\"",
         "paramIndex" -> "first",
-        "requiredType" -> "(\"STRING_ANY_COLLATION\" or \"BINARY\" or \"ARRAY\")",
+        "requiredType" -> "(\"STRING\" or \"BINARY\" or \"ARRAY\")",
         "inputSql" -> "\"map(1, 2)\"",
         "inputType" -> "\"MAP<INT, INT>\""
       ),
