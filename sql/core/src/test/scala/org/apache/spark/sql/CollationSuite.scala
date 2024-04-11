@@ -22,7 +22,6 @@ import scala.jdk.CollectionConverters.MapHasAsJava
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2ProviderWithCustomSchema}
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable}
@@ -655,22 +654,22 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         errorClass = "COLLATION_MISMATCH.IMPLICIT"
       )
 
-      checkAnswer(spark.sql("SELECT collation(:var1 || :var2)",
-        Map(
-          "var1" -> Literal.create("a", StringType(1)),
-          "var2" -> Literal.create("b", StringType(2))
-      )
-      ),
+      sql(s"DECLARE stmtStr = 'SELECT collation(:var1 || :var2)';")
+
+      checkAnswer(
+        sql(
+          """EXECUTE IMMEDIATE stmtStr USING
+            | 'a' COLLATE UNICODE AS var1,
+            | 'b' COLLATE UNICODE_CI AS var2;""".stripMargin),
         Seq(Row("UTF8_BINARY"))
       )
 
       withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
-        checkAnswer(spark.sql("SELECT collation(:var1 || :var2)",
-          Map(
-            "var1" -> Literal.create("a", StringType(1)),
-            "var2" -> Literal.create("b", StringType(2))
-          )
-        ),
+        checkAnswer(
+          sql(
+            """EXECUTE IMMEDIATE stmtStr USING
+              | 'a' COLLATE UNICODE AS var1,
+              | 'b' COLLATE UNICODE_CI AS var2;""".stripMargin),
           Seq(Row("UNICODE"))
         )
       }

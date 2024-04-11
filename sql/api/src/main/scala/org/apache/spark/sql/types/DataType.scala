@@ -182,6 +182,8 @@ object DataType {
   /** Given the string representation of a type, return its DataType */
   private def nameToType(name: String): DataType = {
     name match {
+      case "string collate INDETERMINATE" =>
+        StringType(-1)
       case COLLATED_STRING_TYPE(collation) =>
         val collationId = CollationFactory.collationNameToId(collation)
         StringType(collationId)
