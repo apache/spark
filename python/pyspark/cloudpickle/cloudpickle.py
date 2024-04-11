@@ -1485,7 +1485,6 @@ def dumps(obj, protocol=None, buffer_callback=None, dispatch_handlers=None):
         # Register custom dispatch handlers. This allows per object customization of
         # the serialization.
         if dispatch_handlers is not None:
-            print(dispatch_handlers)
             for klass, handler in dispatch_handlers.items():
                 cp.dispatch_table[klass] = handler
 
