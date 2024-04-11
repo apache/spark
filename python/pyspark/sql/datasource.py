@@ -540,7 +540,7 @@ class SimpleDataSourceStreamReader(ABC):
             message_parameters={"feature": "initialOffset"},
         )
 
-    def read(self, start: dict) -> (Iterator[Tuple], dict):
+    def read(self, start: dict) -> Tuple[Iterator[Tuple], dict]:
         """
         Read all available data from start offset and return the offset that next read attempt
         starts from.
@@ -623,7 +623,7 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
         self.simple_reader = simple_reader
         self.initial_offset = None
         self.current_offset = None
-        self.cache = []
+        self.cache: List[Tuple[dict, dict, Iterator[Tuple]]] = []
 
     def initialOffset(self) -> dict:
         if self.initial_offset is None:
@@ -633,7 +633,7 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
     def latestOffset(self) -> dict:
         # when query start for the first time, use initial offset as the start offset.
         if self.current_offset is None:
-            self.current_offset = self.initialOffset()
+            self.current_offset = self.initialOffset()  # type: ignore[assignment]
         (iter, end) = self.simple_reader.read(self.current_offset)
         self.cache.append((self.current_offset, end, iter))
         self.current_offset = end
@@ -641,7 +641,7 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
 
     def commit(self, end: dict) -> None:
         if self.current_offset is None:
-            self.current_offset = end
+            self.current_offset = end  # type: ignore[assignment]
 
         end_idx = -1
         for i in range(len(self.cache)):
@@ -681,8 +681,10 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
         it = chain(*entries)
         return it
 
-    def read(self, input_partition: InputPartition):
-        return self.simple_reader.readBetweenOffsets(input_partition.start, input_partition.end)
+    def read(self, input_partition: InputPartition) -> Iterator[Tuple]:
+        return self.simple_reader.readBetweenOffsets(
+            input_partition.start, input_partition.end
+        )  # type: ignore[attr-defined]
 
 
 class DataSourceWriter(ABC):

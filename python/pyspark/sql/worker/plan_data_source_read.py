@@ -53,7 +53,10 @@ from pyspark.worker_util import (
 
 
 def records_to_arrow_batches(
-    output_iter, max_arrow_batch_size, return_type, data_source
+    output_iter: Iterator[Row],
+    max_arrow_batch_size: int,
+    return_type: StructType,
+    data_source: DataSource,
 ) -> Iterable[pa.RecordBatch]:
     def batched(iterator: Iterator, n: int) -> Iterator:
         return iter(functools.partial(lambda it: list(islice(it, n)), iterator), [])
@@ -193,10 +196,11 @@ def main(infile: IO, outfile: IO) -> None:
         is_streaming = read_bool(infile)
 
         # Instantiate data source reader.
-        if is_streaming:
-            reader = data_source._streamReader(schema=schema)
-        else:
-            reader = data_source.reader(schema=schema)
+        reader = (
+            data_source._streamReader(schema=schema)
+            if is_streaming
+            else data_source.reader(schema=schema)
+        )
 
         # Create input converter.
         converter = ArrowTableToRowsConversion._create_converter(BinaryType())
