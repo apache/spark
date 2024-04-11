@@ -999,7 +999,7 @@ object TypeCoercion extends TypeCoercionBase {
       // Cast any atomic type to string.
       case (any: AtomicType, _: StringType) if !any.isInstanceOf[StringType] =>
         SQLConf.get.defaultStringType
-      case (any: AtomicType, _: StringTypeCollated)
+      case (any: AtomicType, _: AbstractStringType)
         if !any.isInstanceOf[StringType] =>
         SQLConf.get.defaultStringType
 
