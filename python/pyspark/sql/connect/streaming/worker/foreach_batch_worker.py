@@ -38,7 +38,11 @@ pickle_ser = CPickleSerializer()
 utf8_deserializer = UTF8Deserializer()
 
 
+spark = None  # type: ignore[assignment]
+
+
 def main(infile: IO, outfile: IO) -> None:
+    global spark
     check_python_version(infile)
 
     connect_url = os.environ["SPARK_CONNECT_LOCAL_URL"]
@@ -51,6 +55,7 @@ def main(infile: IO, outfile: IO) -> None:
 
     spark_connect_session = SparkSession.builder.remote(connect_url).getOrCreate()
     spark_connect_session._client._session_id = session_id  # type: ignore[attr-defined]
+    spark = spark_connect_session
 
     # TODO(SPARK-44461): Enable Process Isolation
 
@@ -62,6 +67,7 @@ def main(infile: IO, outfile: IO) -> None:
     log_name = "Streaming ForeachBatch worker"
 
     def process(df_id, batch_id):  # type: ignore[no-untyped-def]
+        global spark
         print(f"{log_name} Started batch {batch_id} with DF id {df_id}")
         batch_df = spark_connect_session._create_remote_dataframe(df_id)
         func(batch_df, batch_id)

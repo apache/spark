@@ -100,7 +100,7 @@ class Serializer:
         """
         raise NotImplementedError
 
-    def dumps(self, obj):
+    def dumps(self, obj, dispatch_handlers=None):
         """
         Serialize an object into a byte array.
         When batching is used, this will be called with an array of objects.
@@ -172,7 +172,7 @@ class FramedSerializer(Serializer):
             raise EOFError
         return self.loads(obj)
 
-    def dumps(self, obj):
+    def dumps(self, obj, dispatch_handlers=None):
         """
         Serialize an object into a byte array.
         When batching is used, this will be called with an array of objects.
@@ -353,7 +353,7 @@ class NoOpSerializer(FramedSerializer):
     def loads(self, obj):
         return obj
 
-    def dumps(self, obj):
+    def dumps(self, obj, dispatch_handlers=None):
         return obj
 
 
@@ -445,7 +445,7 @@ class PickleSerializer(FramedSerializer):
     not be as fast as more specialized serializers.
     """
 
-    def dumps(self, obj):
+    def dumps(self, obj, dispatch_handlers=None):
         return pickle.dumps(obj, pickle_protocol)
 
     def loads(self, obj, encoding="bytes"):
@@ -453,11 +453,11 @@ class PickleSerializer(FramedSerializer):
 
 
 class CloudPickleSerializer(FramedSerializer):
-    def dumps(self, obj):
+    def dumps(self, obj, dispatch_handlers=None):
         from pyspark.util import print_exec
 
         try:
-            return cloudpickle.dumps(obj, pickle_protocol)
+            return cloudpickle.dumps(obj, pickle_protocol, dispatch_handlers=dispatch_handlers)
         except pickle.PickleError:
             raise
         except Exception as e:

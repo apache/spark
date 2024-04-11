@@ -1034,6 +1034,20 @@ class SparkSession:
 
     profile.__doc__ = PySparkSession.profile.__doc__
 
+    def __custom_reduce_handler__(self) -> Tuple:
+        """
+        This method is called when the object is pickled. It returns a tuple of the object's
+        constructor function, arguments to it and the local state of the object.
+        This function is supposed to only be used when the active spark session that is pickled
+        is the same active spark session that is unpickled.
+        """
+
+        def creator():
+            # Access the currently active session.
+            return SparkSession.builder.getOrCreate()
+
+        return (creator, ())
+
 
 SparkSession.__doc__ = PySparkSession.__doc__
 

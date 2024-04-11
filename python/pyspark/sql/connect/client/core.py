@@ -1379,7 +1379,7 @@ class SparkConnectClient(object):
                     with attempt:
                         for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
                             yield from handle_response(b)
-        except KeyboardInterrupt:
+        except KeyboardInterrupt as kb:
             logger.debug(f"Interrupt request received for operation={req.operation_id}")
             try:
                 self.interrupt_operation(req.operation_id)

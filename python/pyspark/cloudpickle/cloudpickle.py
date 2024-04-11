@@ -1461,7 +1461,7 @@ def dump(obj, file, protocol=None, buffer_callback=None):
     Pickler(file, protocol=protocol, buffer_callback=buffer_callback).dump(obj)
 
 
-def dumps(obj, protocol=None, buffer_callback=None):
+def dumps(obj, protocol=None, buffer_callback=None, dispatch_handlers=None):
     """Serialize obj as a string of bytes allocated in memory
 
     protocol defaults to cloudpickle.DEFAULT_PROTOCOL which is an alias to
@@ -1473,9 +1473,22 @@ def dumps(obj, protocol=None, buffer_callback=None):
     guaranteed to work because cloudpickle relies on some internal
     implementation details that can change from one Python version to the
     next).
+
+    Dispatch handlers can be ued to register custom serializers that are
+    called when from Pickle. Instead of registering them as global handlers
+    using local dispatch_handlers here allows to configure the serialization
+    in a use-case driven way.
     """
     with io.BytesIO() as file:
         cp = Pickler(file, protocol=protocol, buffer_callback=buffer_callback)
+
+        # Register custom dispatch handlers. This allows per object customization of
+        # the serialization.
+        if dispatch_handlers is not None:
+            print(dispatch_handlers)
+            for klass, handler in dispatch_handlers.items():
+                cp.dispatch_table[klass] = handler
+
         cp.dump(obj)
         return file.getvalue()
 
