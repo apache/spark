@@ -3630,7 +3630,7 @@
   },
   "STATE_STORE_INCORRECT_NUM_ORDERING_COLS_FOR_RANGE_SCAN" : {
     "message" : [
-      "Incorrect number of ordering columns=<numOrderingCols> for range scan encoder. Ordering columns cannot be zero or greater than num of schema columns."
+      "Incorrect number of ordering ordinals=<numOrderingCols> for range scan encoder. The number of ordering ordinals cannot be zero or greater than number of schema columns."
     ],
     "sqlState" : "42802"
   },
@@ -3649,6 +3649,12 @@
   "STATE_STORE_UNSUPPORTED_OPERATION" : {
     "message" : [
       "<operationType> operation not supported with <entity>"
+    ],
+    "sqlState" : "XXKST"
+  },
+  "STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY" : {
+    "message" : [
+      "Binary inequality column is not supported with state store. Provided schema: <schema>."
     ],
     "sqlState" : "XXKST"
   },

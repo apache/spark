@@ -21,6 +21,7 @@ import java.sql.{Connection, Date, Driver, Statement, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime}
 import java.util
 import java.util.ServiceLoader
+import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.ArrayBuilder
 import scala.util.control.NonFatal
@@ -34,6 +35,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{localDateTimeToMicros, toJavaTimestampNoRebase}
+import org.apache.spark.sql.catalyst.util.IntervalUtils.{fromDayTimeString, fromYearMonthString, getDuration}
 import org.apache.spark.sql.connector.catalog.{Identifier, TableChange}
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
@@ -163,6 +165,30 @@ abstract class JdbcDialect extends Serializable with Logging {
    */
   @Since("4.0.0")
   def convertJavaDateToDate(d: Date): Date = d
+
+  /**
+   * Converts an year-month interval string to an int value `months`.
+   *
+   * @param yearmonthStr the year-month interval string
+   * @return the number of total months in the interval
+   * @throws IllegalArgumentException if the input string is invalid
+   */
+  @Since("4.0.0")
+  def getYearMonthIntervalAsMonths(yearmonthStr: String): Int = {
+    fromYearMonthString(yearmonthStr).months
+  }
+
+  /**
+   * Converts a day-time interval string to a long value `micros`.
+   *
+   * @param daytimeStr the day-time interval string
+   * @return the number of total microseconds in the interval
+   * @throws IllegalArgumentException if the input string is invalid
+   */
+  @Since("4.0.0")
+  def getDayTimeIntervalAsMicros(daytimeStr: String): Long = {
+    getDuration(fromDayTimeString(daytimeStr), TimeUnit.MICROSECONDS)
+  }
 
   /**
    * Convert java.sql.Timestamp to a LocalDateTime representing the same wall-clock time as the
@@ -798,6 +824,22 @@ abstract class JdbcDialect extends Serializable with Logging {
   protected final def getTimestampType(md: Metadata): DataType = {
     JdbcUtils.getTimestampType(md.getBoolean("isTimestampNTZ"))
   }
+
+  /**
+   * Return the array dimension of the column. The array dimension will be carried in the
+   * metadata of the column and used by `getCatalystType` to determine the dimension of the
+   * ArrayType.
+   *
+   * @param conn The connection currently connection being used.
+   * @param tableName The name of the table which the column belongs to.
+   * @param columnName The name of the column.
+   * @return An Option[Int] which contains the number of array dimension.
+   *         If Some(n), the column is an array with n dimensions.
+   *         If the method is un-implemented, or some error encountered, return None.
+   *         Then, `getCatalystType` will try use 1 dimension as default for arrays.
+   */
+  @Since("4.0.0")
+  def getArrayDimension(conn: Connection, tableName: String, columnName: String): Option[Int] = None
 }
 
 /**

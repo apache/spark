@@ -2972,9 +2972,9 @@ private[spark] object Utils
   }
 
   /** Returns a string message about delegation token generation failure */
-  def createFailedToGetTokenMessage(serviceName: String): MessageWithContext = {
-    log"Failed to get token from service ${MDC(SERVICE_NAME, serviceName)}. " +
-      log"If ${MDC(SERVICE_NAME, serviceName)} is not used, " +
+  def createFailedToGetTokenMessage(serviceName: String, e: scala.Throwable): MessageWithContext = {
+    log"Failed to get token from service ${MDC(SERVICE_NAME, serviceName)} " +
+      log"due to ${MDC(ERROR, e)}. If ${MDC(SERVICE_NAME, serviceName)} is not used, " +
       log"set spark.security.credentials.${MDC(SERVICE_NAME, serviceName)}.enabled to false."
   }
 

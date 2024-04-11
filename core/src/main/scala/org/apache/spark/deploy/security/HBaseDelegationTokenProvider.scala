@@ -54,8 +54,8 @@ private[security] class HBaseDelegationTokenProvider
       creds.addToken(token.getService, token)
     } catch {
       case NonFatal(e) =>
-        logWarning(Utils.createFailedToGetTokenMessage(serviceName) + log" Retrying to fetch " +
-          log"HBase security token with ${MDC(SERVICE_NAME, serviceName)} connection parameter.", e)
+        logWarning(Utils.createFailedToGetTokenMessage(serviceName, e) + log" Retrying to fetch " +
+          log"HBase security token with ${MDC(SERVICE_NAME, serviceName)} connection parameter.")
         // Seems to be spark is trying to get the token from HBase 2.x.x  version or above where the
         // obtainToken(Configuration conf) API has been removed. Lets try obtaining the token from
         // another compatible API of HBase service.
@@ -98,7 +98,7 @@ private[security] class HBaseDelegationTokenProvider
       creds.addToken(token.getService, token)
     } catch {
       case NonFatal(e) =>
-        logWarning(Utils.createFailedToGetTokenMessage(serviceName), e)
+        logWarning(Utils.createFailedToGetTokenMessage(serviceName, e))
     } finally {
       if (null != hbaseConnection) {
         hbaseConnection.close()

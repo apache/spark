@@ -20,6 +20,7 @@ import unittest
 import shutil
 import tempfile
 
+from pyspark.util import is_remote_only
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql import SparkSession as PySparkSession, Row
 from pyspark.sql.types import (
@@ -52,6 +53,7 @@ if should_test_connect:
     from pyspark.sql.connect import functions as CF
 
 
+@unittest.skipIf(is_remote_only(), "Requires JVM access")
 class SparkConnectSQLTestCase(ReusedConnectTestCase, SQLTestUtils, PandasOnSparkTestUtils):
     """Parent test fixture class for all Spark Connect related
     test cases."""

@@ -120,7 +120,7 @@ private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], w
     logInfo(s"Shutdown:  Shutting down workerId $workerId with reason $reason")
     // null if not initialized before shutdown:
     if (shardId == null) {
-      logWarning(s"No shardId for workerId $workerId?")
+      logWarning(log"No shardId for workerId ${MDC(WORKER_URL, workerId)}?")
     } else {
       reason match {
         /*

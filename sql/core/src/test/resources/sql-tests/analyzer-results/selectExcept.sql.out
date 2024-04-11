@@ -549,12 +549,53 @@ Project [c1#x, c2#x, c3#x, c4#x, c5#x]
 
 
 -- !query
+SELECT DISTINCT * FROM v1
+-- !query analysis
+Distinct
++- Project [c1#x, c2#x, c3#x, c4#x, c5#x]
+   +- SubqueryAlias v1
+      +- View (`v1`, [c1#x, c2#x, c3#x, c4#x, c5#x])
+         +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x, cast(c3#x as void) AS c3#x, cast(c4#x as int) AS c4#x, cast(c5#x as int) AS c5#x]
+            +- SubqueryAlias T
+               +- LocalRelation [c1#x, c2#x, c3#x, c4#x, c5#x]
+
+
+-- !query
+SELECT DISTINCT(*) FROM v1
+-- !query analysis
+Distinct
++- SubqueryAlias v1
+   +- View (`v1`, [c1#x, c2#x, c3#x, c4#x, c5#x])
+      +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x, cast(c3#x as void) AS c3#x, cast(c4#x as int) AS c4#x, cast(c5#x as int) AS c5#x]
+         +- SubqueryAlias T
+            +- LocalRelation [c1#x, c2#x, c3#x, c4#x, c5#x]
+
+
+-- !query
 SET spark.sql.legacy.ignoreParenthesesAroundStar = false
 -- !query analysis
 SetCommand (spark.sql.legacy.ignoreParenthesesAroundStar,Some(false))
 
 
 -- !query
+SELECT DISTINCT(*) FROM v1
+-- !query analysis
+Distinct
++- SubqueryAlias v1
+   +- View (`v1`, [c1#x, c2#x, c3#x, c4#x, c5#x])
+      +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x, cast(c3#x as void) AS c3#x, cast(c4#x as int) AS c4#x, cast(c5#x as int) AS c5#x]
+         +- SubqueryAlias T
+            +- LocalRelation [c1#x, c2#x, c3#x, c4#x, c5#x]
+
+
+-- !query
 DROP VIEW v1
 -- !query analysis
 DropTempViewCommand v1
+
+
+-- !query
+SELECT DISTINCT(*)
+-- !query analysis
+Distinct
++- OneRowRelation

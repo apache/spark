@@ -114,7 +114,7 @@ private[spark] class HiveDelegationTokenProvider
       None
     } catch {
       case NonFatal(e) =>
-        logWarning(Utils.createFailedToGetTokenMessage(serviceName), e)
+        logWarning(Utils.createFailedToGetTokenMessage(serviceName, e))
         None
       case e: NoClassDefFoundError =>
         logWarning(classNotFoundErrorStr)

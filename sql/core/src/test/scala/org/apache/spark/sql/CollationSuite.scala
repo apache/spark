@@ -127,7 +127,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         "paramIndex" -> "first",
         "inputSql" -> "\"1\"",
         "inputType" -> "\"INT\"",
-        "requiredType" -> "\"STRING_ANY_COLLATION\""),
+        "requiredType" -> "\"STRING\""),
       context = ExpectedContext(
         fragment = s"collate(1, 'UTF8_BINARY')", start = 7, stop = 31))
   }

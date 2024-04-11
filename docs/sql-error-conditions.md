@@ -2236,7 +2236,7 @@ Please only use the StatefulProcessor within the transformWithState operator.
 
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Incorrect number of ordering columns=`<numOrderingCols>` for range scan encoder. Ordering columns cannot be zero or greater than num of schema columns.
+Incorrect number of ordering ordinals=`<numOrderingCols>` for range scan encoder. The number of ordering ordinals cannot be zero or greater than number of schema columns.
 
 ### STATE_STORE_INCORRECT_NUM_PREFIX_COLS_FOR_PREFIX_SCAN
 
@@ -2255,6 +2255,12 @@ Null type ordering column with name=`<fieldName>` at index=`<index>` is not supp
 [SQLSTATE: XXKST](sql-error-conditions-sqlstates.html#class-XX-internal-error)
 
 `<operationType>` operation not supported with `<entity>`
+
+### STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY
+
+[SQLSTATE: XXKST](sql-error-conditions-sqlstates.html#class-XX-internal-error)
+
+Binary inequality column is not supported with state store. Provided schema: `<schema>`.
 
 ### STATE_STORE_UNSUPPORTED_OPERATION_ON_MISSING_COLUMN_FAMILY
 

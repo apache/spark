@@ -19,8 +19,6 @@ package org.apache.spark.sql.hive.execution
 
 import java.io.File
 
-import org.apache.spark.internal.LogKey.{CONFIG, CONFIG2}
-import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.util._
 
 /**
@@ -50,8 +48,8 @@ abstract class HiveQueryFileTest extends HiveComparisonTest {
   val deprecatedIncludeListProperty: String = "spark.hive.whitelist"
   val includeListProperty: String = "spark.hive.includelist"
   if (System.getProperty(deprecatedIncludeListProperty) != null) {
-    logWarning(log"System property `${MDC(CONFIG, deprecatedIncludeListProperty)}` is " +
-      log"deprecated; please update to use new property: `${MDC(CONFIG2, includeListProperty)}`")
+    logWarning(s"System property `$deprecatedIncludeListProperty` is deprecated; please update " +
+      s"to use new property: $includeListProperty")
   }
   // Allow the includeList to be overridden by a system property
   val realIncludeList: Seq[String] =

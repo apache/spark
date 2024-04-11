@@ -31,8 +31,6 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkConf, TestUtils}
 import org.apache.spark.deploy.SparkSubmitTestUtils
-import org.apache.spark.internal.LogKey.{ERROR, SPARK_VERSION, URL}
-import org.apache.spark.internal.MDC
 import org.apache.spark.internal.config.MASTER_REST_SERVER_ENABLED
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.launcher.JavaModuleOptions
@@ -120,8 +118,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
         }
       } catch {
         case ex: Exception =>
-          logWarning(log"Failed to download Spark ${MDC(SPARK_VERSION, version)} from " +
-            log"${MDC(URL, url)}: ${MDC(ERROR, ex.getMessage)}")
+          logWarning(s"Failed to download Spark $version from $url: ${ex.getMessage}")
       }
     }
     fail(s"Unable to download Spark $version")

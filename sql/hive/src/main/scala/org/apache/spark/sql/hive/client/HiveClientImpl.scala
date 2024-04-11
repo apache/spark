@@ -47,7 +47,7 @@ import org.apache.hadoop.security.UserGroupInformation
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil.SOURCE_SPARK
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{ENGINE, RETRY_COUNT}
+import org.apache.spark.internal.LogKey._
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{DatabaseAlreadyExistsException, NoSuchDatabaseException, NoSuchPartitionException, NoSuchPartitionsException, NoSuchTableException, PartitionsAlreadyExistException}
@@ -687,17 +687,19 @@ private[hive] class HiveClientImpl(
       } catch {
         case e: Exception =>
           val remainingParts = matchingParts.toBuffer --= droppedParts
+          // scalastyle:off line.size.limit
           logError(
-            s"""
+            log"""
                |======================
-               |Attempt to drop the partition specs in table '$table' database '$db':
-               |${specs.mkString("\n")}
+               |Attempt to drop the partition specs in table '${MDC(TABLE_NAME, table)}' database '${MDC(DATABASE_NAME, db)}':
+               |${MDC(PARTITION_SPECS, specs.mkString("\n"))}
                |In this attempt, the following partitions have been dropped successfully:
-               |${droppedParts.mkString("\n")}
+               |${MDC(DROPPED_PARTITIONS, droppedParts.mkString("\n"))}
                |The remaining partitions have not been dropped:
-               |${remainingParts.mkString("\n")}
+               |${MDC(REMAINING_PARTITIONS, remainingParts.mkString("\n"))}
                |======================
              """.stripMargin)
+          // scalastyle:on line.size.limit
           throw e
       }
       droppedParts += partition
@@ -911,7 +913,7 @@ private[hive] class HiveClientImpl(
             |======================
             |END HIVE FAILURE OUTPUT
             |======================
-          """.stripMargin)
+          """.stripMargin, e)
         throw e
     } finally {
       if (state != null) {
@@ -1334,7 +1336,7 @@ private[hive] object HiveClientImpl extends Logging {
     val engine = hiveConf.get("hive.execution.engine")
     if (engine != "mr") {
       logWarning(log"Detected HiveConf hive.execution.engine is '${MDC(ENGINE, engine)}' and " +
-        log"will be reset to 'mr'to disable useless hive logic")
+        log"will be reset to 'mr' to disable useless hive logic")
       hiveConf.set("hive.execution.engine", "mr", SOURCE_SPARK)
     }
     hiveConf
