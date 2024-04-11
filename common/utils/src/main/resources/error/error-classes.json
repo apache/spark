@@ -3271,8 +3271,20 @@
   },
   "NUMERIC_VALUE_OUT_OF_RANGE" : {
     "message" : [
-      "<value> cannot be represented as Decimal(<precision>, <scale>). If necessary set <config> to \"false\" to bypass this error, and return NULL instead."
+      ""
     ],
+    "subClass" : {
+      "WITHOUT_SUGGESTION" : {
+        "message" : [
+          "The <roundedValue> rounded half up from <originalValue> cannot be represented as Decimal(<precision>, <scale>)."
+        ]
+      },
+      "WITH_SUGGESTION" : {
+        "message" : [
+          "<value> cannot be represented as Decimal(<precision>, <scale>). If necessary set <config> to \"false\" to bypass this error, and return NULL instead."
+        ]
+      }
+    },
     "sqlState" : "22003"
   },
   "NUM_COLUMNS_MISMATCH" : {
@@ -3649,6 +3661,12 @@
   "STATE_STORE_UNSUPPORTED_OPERATION" : {
     "message" : [
       "<operationType> operation not supported with <entity>"
+    ],
+    "sqlState" : "XXKST"
+  },
+  "STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY" : {
+    "message" : [
+      "Binary inequality column is not supported with state store. Provided schema: <schema>."
     ],
     "sqlState" : "XXKST"
   },

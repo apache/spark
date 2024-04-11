@@ -33,7 +33,8 @@ import com.amazonaws.services.dynamodbv2.document.DynamoDB
 import com.amazonaws.services.kinesis.{AmazonKinesis, AmazonKinesisClient}
 import com.amazonaws.services.kinesis.model._
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{STREAM_NAME, TABLE_NAME}
 
 /**
  * Shared utility methods for performing Kinesis tests that actually transfer data.
@@ -147,7 +148,7 @@ private[kinesis] class KinesisTestUtils(streamShardCount: Int = 2) extends Loggi
       }
     } catch {
       case e: Exception =>
-        logWarning(s"Could not delete stream $streamName")
+        logWarning(log"Could not delete stream ${MDC(STREAM_NAME, streamName)}", e)
     }
   }
 
@@ -158,7 +159,7 @@ private[kinesis] class KinesisTestUtils(streamShardCount: Int = 2) extends Loggi
       table.waitForDelete()
     } catch {
       case e: Exception =>
-        logWarning(s"Could not delete DynamoDB table $tableName")
+        logWarning(log"Could not delete DynamoDB table ${MDC(TABLE_NAME, tableName)}", e)
     }
   }
 

@@ -27,7 +27,8 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.RECEIVED_BLOCK_INFO
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.streaming.Time
 import org.apache.spark.streaming.util.{WriteAheadLog, WriteAheadLogUtils}
@@ -99,7 +100,8 @@ private[streaming] class ReceivedBlockTracker(
       writeResult
     } catch {
       case NonFatal(e) =>
-        logError(s"Error adding block $receivedBlockInfo", e)
+        logError(
+          log"Error adding block ${MDC(RECEIVED_BLOCK_INFO, receivedBlockInfo)}", e)
         false
     }
   }
