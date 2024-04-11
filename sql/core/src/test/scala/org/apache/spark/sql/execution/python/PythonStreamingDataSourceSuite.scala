@@ -59,19 +59,15 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
 
   protected def simpleDataStreamReaderScript: String =
     """
-      |from pyspark.sql.datasource import SimpleDataSourceStreamReader, InputPartition
+      |from pyspark.sql.datasource import SimpleDataSourceStreamReader
       |
       |class SimpleDataStreamReader(SimpleDataSourceStreamReader):
-      |    current = 0
       |    def initialOffset(self):
       |        return {"partition-1": 0}
       |    def read(self, start: dict):
       |        start_idx = start["partition-1"]
-      |        if start_idx > self.current:
-      |            self.current = start_idx
-      |        self.current += 2
-      |        it = iter([(i, ) for i in range(start_idx, self.current)])
-      |        return (it, {"partition-1": self.current})
+      |        it = iter([(i, ) for i in range(start_idx, start_idx + 2)])
+      |        return (it, {"partition-1": start_idx + 2})
       |    def readBetweenOffsets(self, start: dict, end: dict):
       |        start_idx = start["partition-1"]
       |        end_idx = end["partition-1"]
@@ -80,22 +76,18 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
 
   protected def simpleDataStreamReaderWithEmptyBatchScript: String =
     """
-      |from pyspark.sql.datasource import SimpleDataSourceStreamReader, InputPartition
+      |from pyspark.sql.datasource import SimpleDataSourceStreamReader
       |
       |class SimpleDataStreamReader(SimpleDataSourceStreamReader):
-      |    current = 0
       |    def initialOffset(self):
       |        return {"partition-1": 0}
       |    def read(self, start: dict):
       |        start_idx = start["partition-1"]
-      |        if start_idx > self.current:
-      |            self.current = start_idx
-      |        self.current += 2
       |        if start_idx % 4 == 0:
-      |            it = iter([(i, ) for i in range(start_idx, self.current)])
+      |            it = iter([(i, ) for i in range(start_idx, start_idx + 2)])
       |        else:
       |            it = iter([])
-      |        return (it, {"partition-1": self.current})
+      |        return (it, {"partition-1": start_idx + 2})
       |    def readBetweenOffsets(self, start: dict, end: dict):
       |        start_idx = start["partition-1"]
       |        end_idx = end["partition-1"]
