@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
-import org.antlr.v4.runtime.ParserRulCeontext
+import org.antlr.v4.runtime.ParserRuleContext
 
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.Expression
