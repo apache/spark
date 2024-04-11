@@ -26,7 +26,6 @@ import scala.util.Try
 
 import org.apache.commons.io.{FileUtils, IOUtils}
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.shims.ShimLoader
 
 import org.apache.spark.SparkConf
@@ -291,7 +290,7 @@ private[hive] class IsolatedClientLoader(
 
   /** The isolated client interface to Hive. */
   private[hive] def createClient(): HiveClient = synchronized {
-    val warehouseDir = Option(hadoopConf.get(ConfVars.METASTOREWAREHOUSE.varname))
+    val warehouseDir = Option(hadoopConf.get("hive.metastore.warehouse.dir"))
     if (!isolationOn) {
       return new HiveClientImpl(version, warehouseDir, sparkConf, hadoopConf, config,
         baseClassLoader, this)

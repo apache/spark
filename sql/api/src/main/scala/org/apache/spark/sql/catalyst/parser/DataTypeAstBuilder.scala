@@ -74,7 +74,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       case (TIMESTAMP_LTZ, Nil) => TimestampType
       case (STRING, Nil) =>
         typeCtx.children.asScala.toSeq match {
-          case Seq(_) => StringType
+          case Seq(_) => SqlApiConf.get.defaultStringType
           case Seq(_, ctx: CollateClauseContext) =>
             val collationName = visitCollateClause(ctx)
             val collationId = CollationFactory.collationNameToId(collationName)
@@ -201,7 +201,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   override def visitComplexColType(ctx: ComplexColTypeContext): StructField = withOrigin(ctx) {
     import ctx._
     val structField = StructField(
-      name = identifier.getText,
+      name = errorCapturingIdentifier.getText,
       dataType = typedVisit(dataType()),
       nullable = NULL == null)
     Option(commentSpec).map(visitCommentSpec).map(structField.withComment).getOrElse(structField)

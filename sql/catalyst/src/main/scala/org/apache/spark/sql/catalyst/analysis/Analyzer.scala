@@ -2413,13 +2413,19 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
           u.filter match {
             case Some(filter) if !filter.deterministic =>
-              throw QueryCompilationErrors.nonDeterministicFilterInAggregateError()
+              throw QueryCompilationErrors.nonDeterministicFilterInAggregateError(
+                filterExpr = filter)
             case Some(filter) if filter.dataType != BooleanType =>
-              throw QueryCompilationErrors.nonBooleanFilterInAggregateError()
+              throw QueryCompilationErrors.nonBooleanFilterInAggregateError(
+                filterExpr = filter)
             case Some(filter) if filter.exists(_.isInstanceOf[AggregateExpression]) =>
-              throw QueryCompilationErrors.aggregateInAggregateFilterError()
+              throw QueryCompilationErrors.aggregateInAggregateFilterError(
+                filterExpr = filter,
+                aggExpr = filter.find(_.isInstanceOf[AggregateExpression]).get)
             case Some(filter) if filter.exists(_.isInstanceOf[WindowExpression]) =>
-              throw QueryCompilationErrors.windowFunctionInAggregateFilterError()
+              throw QueryCompilationErrors.windowFunctionInAggregateFilterError(
+                filterExpr = filter,
+                windowExpr = filter.find(_.isInstanceOf[WindowExpression]).get)
             case _ =>
           }
           if (u.ignoreNulls) {

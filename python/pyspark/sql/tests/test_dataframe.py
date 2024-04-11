@@ -123,6 +123,13 @@ class DataFrameTestsMixin:
         df = df2.join(df1, df2["b"] == df1["a"])
         self.assertTrue(df.count() == 100)
 
+    def test_self_join_II(self):
+        df = self.spark.createDataFrame([(1, 2), (3, 4)], schema=["a", "b"])
+        df2 = df.select(df.a.alias("aa"), df.b)
+        df3 = df2.join(df, df2.b == df.b)
+        self.assertTrue(df3.columns, ["aa", "b", "a", "b"])
+        self.assertTrue(df3.count() == 2)
+
     def test_duplicated_column_names(self):
         df = self.spark.createDataFrame([(1, 2)], ["c", "c"])
         row = df.select("*").first()
@@ -479,6 +486,12 @@ class DataFrameTestsMixin:
         df = rdd.map(lambda row: row.key).toDF(IntegerType())
         self.assertEqual(df.schema.simpleString(), "struct<value:int>")
         self.assertEqual(df.collect(), [Row(key=i) for i in range(100)])
+
+    def test_create_df_with_collation(self):
+        schema = StructType([StructField("name", StringType("UNICODE_CI"), True)])
+        df = self.spark.createDataFrame([("Alice",), ("alice",)], schema)
+
+        self.assertEqual(df.select("name").distinct().count(), 1)
 
     def test_print_schema(self):
         df = self.spark.createDataFrame([(1, (2, 2))], ["a", "b"])

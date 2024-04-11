@@ -22,7 +22,8 @@ import java.util.concurrent._
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.ERROR
 import org.apache.spark.internal.config.EXECUTOR_ID
 import org.apache.spark.internal.config.Network._
 import org.apache.spark.rpc.{IsolatedRpcEndpoint, RpcEndpoint}
@@ -74,7 +75,7 @@ private sealed abstract class MessageLoop(dispatcher: Dispatcher) extends Loggin
           }
           inbox.process(dispatcher)
         } catch {
-          case NonFatal(e) => logError(e.getMessage, e)
+          case NonFatal(e) => logError(log"${MDC(ERROR, e.getMessage)}", e)
         }
       }
     } catch {

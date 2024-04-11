@@ -28,7 +28,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.common.ProtoUtils
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
-import org.apache.spark.sql.connect.service.{ExecuteHolder, ExecuteSessionTag}
+import org.apache.spark.sql.connect.service.{ExecuteHolder, ExecuteSessionTag, SparkConnectService}
 import org.apache.spark.sql.connect.utils.ErrorUtils
 import org.apache.spark.util.Utils
 
@@ -123,6 +123,7 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
           }
       } finally {
         executeHolder.sessionHolder.session.sparkContext.removeJobTag(executeHolder.jobTag)
+        SparkConnectService.executionListener.foreach(_.removeJobTag(executeHolder.jobTag))
         executeHolder.sparkSessionTags.foreach { tag =>
           executeHolder.sessionHolder.session.sparkContext.removeJobTag(
             ExecuteSessionTag(
@@ -158,6 +159,8 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
 
       // Set tag for query cancellation
       session.sparkContext.addJobTag(executeHolder.jobTag)
+      // Register the job for progress reports.
+      SparkConnectService.executionListener.foreach(_.registerJobTag(executeHolder.jobTag))
       // Also set all user defined tags as Spark Job tags.
       executeHolder.sparkSessionTags.foreach { tag =>
         session.sparkContext.addJobTag(

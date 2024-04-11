@@ -31,7 +31,8 @@ import org.apache.commons.codec.DecoderException
 import org.apache.commons.codec.binary.Hex
 
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException, SparkThrowable}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.PARTITION_SPECIFICATION
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, ClusterBySpec}
@@ -671,7 +672,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
         } else {
           // TODO For v2 commands, we will cast the string back to its actual value,
           //  which is a waste and can be improved in the future.
-          Cast(l, StringType, Some(conf.sessionLocalTimeZone)).eval().toString
+          Cast(l, conf.defaultStringType, Some(conf.sessionLocalTimeZone)).eval().toString
         }
       case other =>
         throw new SparkIllegalArgumentException(
@@ -1255,7 +1256,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       .flatMap(_.namedExpression.asScala)
       .map(typedVisit[Expression])
     val pivotColumn = if (ctx.pivotColumn.identifiers.size == 1) {
-      UnresolvedAttribute.quoted(ctx.pivotColumn.identifier.getText)
+      UnresolvedAttribute.quoted(ctx.pivotColumn.errorCapturingIdentifier.getText)
     } else {
       CreateStruct(
         ctx.pivotColumn.identifiers.asScala.map(
@@ -1270,8 +1271,8 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    */
   override def visitPivotValue(ctx: PivotValueContext): Expression = withOrigin(ctx) {
     val e = expression(ctx.expression)
-    if (ctx.identifier != null) {
-      Alias(e, ctx.identifier.getText)()
+    if (ctx.errorCapturingIdentifier != null) {
+      Alias(e, ctx.errorCapturingIdentifier.getText)()
     } else {
       e
     }
@@ -1334,8 +1335,8 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     }
 
     // alias unpivot result
-    if (ctx.identifier() != null) {
-      val alias = ctx.identifier().getText
+    if (ctx.errorCapturingIdentifier() != null) {
+      val alias = ctx.errorCapturingIdentifier().getText
       SubqueryAlias(alias, filtered)
     } else {
       filtered
@@ -1346,7 +1347,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    * Create an Unpivot column.
    */
   override def visitUnpivotColumn(ctx: UnpivotColumnContext): NamedExpression = withOrigin(ctx) {
-    UnresolvedAlias(UnresolvedAttribute(visitMultipartIdentifier(ctx.multipartIdentifier)))
+    UnresolvedAttribute(visitMultipartIdentifier(ctx.multipartIdentifier))
   }
 
   /**
@@ -1355,7 +1356,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   override def visitUnpivotColumnAndAlias(ctx: UnpivotColumnAndAliasContext):
   (NamedExpression, Option[String]) = withOrigin(ctx) {
     val attr = visitUnpivotColumn(ctx.unpivotColumn())
-    val alias = Option(ctx.unpivotAlias()).map(_.identifier().getText)
+    val alias = Option(ctx.unpivotAlias()).map(_.errorCapturingIdentifier().getText)
     (attr, alias)
   }
 
@@ -1367,7 +1368,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   (Seq[NamedExpression], Option[String]) =
     withOrigin(ctx) {
       val exprs = ctx.unpivotColumns.asScala.map(visitUnpivotColumn).toSeq
-      val alias = Option(ctx.unpivotAlias()).map(_.identifier().getText)
+      val alias = Option(ctx.unpivotAlias()).map(_.errorCapturingIdentifier().getText)
       (exprs, alias)
     }
 
@@ -2863,7 +2864,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    * Create a String literal expression.
    */
   override def visitStringLiteral(ctx: StringLiteralContext): Literal = withOrigin(ctx) {
-    Literal(createString(ctx))
+    Literal.create(createString(ctx), conf.defaultStringType)
   }
 
   /**
@@ -4599,8 +4600,9 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   override def visitAnalyze(ctx: AnalyzeContext): LogicalPlan = withOrigin(ctx) {
     def checkPartitionSpec(): Unit = {
       if (ctx.partitionSpec != null) {
-        logWarning("Partition specification is ignored when collecting column statistics: " +
-          ctx.partitionSpec.getText)
+        logWarning(
+          log"Partition specification is ignored when collecting column statistics: " +
+            log"${MDC(PARTITION_SPECIFICATION, ctx.partitionSpec.getText)}")
       }
     }
     if (ctx.identifier != null &&
