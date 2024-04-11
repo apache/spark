@@ -120,7 +120,6 @@ trait LoggingSuiteBase
       (Level.INFO, () => logInfo(msgWithMDCValueIsNull))).foreach {
       case (level, logFunc) =>
         val logOutput = captureLogOutput(logFunc)
-        println(logOutput)
         assert(expectedPatternForMsgWithMDCValueIsNull(level).r.matches(logOutput))
     }
   }
