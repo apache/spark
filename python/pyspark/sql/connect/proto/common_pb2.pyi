@@ -48,7 +48,6 @@ else:
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
-@typing_extensions.final
 class StorageLevel(google.protobuf.message.Message):
     """StorageLevel for persisting Datasets/Tables."""
 
@@ -96,7 +95,6 @@ class StorageLevel(google.protobuf.message.Message):
 
 global___StorageLevel = StorageLevel
 
-@typing_extensions.final
 class ResourceInformation(google.protobuf.message.Message):
     """ResourceInformation to hold information about a type of Resource.
     The corresponding class is 'org.apache.spark.resource.ResourceInformation'
@@ -125,7 +123,6 @@ class ResourceInformation(google.protobuf.message.Message):
 
 global___ResourceInformation = ResourceInformation
 
-@typing_extensions.final
 class ExecutorResourceRequest(google.protobuf.message.Message):
     """An executor resource request."""
 
@@ -192,7 +189,6 @@ class ExecutorResourceRequest(google.protobuf.message.Message):
 
 global___ExecutorResourceRequest = ExecutorResourceRequest
 
-@typing_extensions.final
 class TaskResourceRequest(google.protobuf.message.Message):
     """A task resource request."""
 
@@ -221,11 +217,9 @@ class TaskResourceRequest(google.protobuf.message.Message):
 
 global___TaskResourceRequest = TaskResourceRequest
 
-@typing_extensions.final
 class ResourceProfile(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    @typing_extensions.final
     class ExecutorResourcesEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -247,7 +241,6 @@ class ResourceProfile(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
         ) -> None: ...
 
-    @typing_extensions.final
     class TaskResourcesEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
