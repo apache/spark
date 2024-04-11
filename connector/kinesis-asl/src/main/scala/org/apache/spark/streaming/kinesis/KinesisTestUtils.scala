@@ -40,6 +40,7 @@ import org.apache.spark.internal.Logging
  *
  * PLEASE KEEP THIS FILE UNDER src/main AS PYTHON TESTS NEED ACCESS TO THIS FILE!
  */
+@deprecated("This class will be move to `test`.", "3.5.2")
 private[kinesis] class KinesisTestUtils(streamShardCount: Int = 2) extends Logging {
 
   val endpointUrl = KinesisTestUtils.endpointUrl
@@ -198,6 +199,7 @@ private[kinesis] class KinesisTestUtils(streamShardCount: Int = 2) extends Loggi
   }
 }
 
+@deprecated("This class will be move to `test`.", "3.5.2")
 private[kinesis] object KinesisTestUtils {
 
   val envVarNameForEnablingTests = "ENABLE_KINESIS_TESTS"
@@ -265,11 +267,13 @@ private[kinesis] object KinesisTestUtils {
 }
 
 /** A wrapper interface that will allow us to consolidate the code for synthetic data generation. */
+@deprecated("This class will be move to `test`.", "3.5.2")
 private[kinesis] trait KinesisDataGenerator {
   /** Sends the data to Kinesis and returns the metadata for everything that has been sent. */
   def sendData(streamName: String, data: Seq[Int]): Map[String, Seq[(Int, String)]]
 }
 
+@deprecated("This class will be move to `test`.", "3.5.2")
 private[kinesis] class SimpleDataGenerator(
     client: AmazonKinesisClient) extends KinesisDataGenerator {
   override def sendData(streamName: String, data: Seq[Int]): Map[String, Seq[(Int, String)]] = {
