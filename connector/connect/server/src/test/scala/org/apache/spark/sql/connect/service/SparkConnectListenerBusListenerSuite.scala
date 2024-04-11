@@ -36,8 +36,10 @@ import org.apache.spark.sql.streaming.{StreamingQuery, StreamingQueryListener}
 import org.apache.spark.sql.streaming.Trigger.ProcessingTime
 import org.apache.spark.sql.test.SharedSparkSession
 
-class SparkConnectListenerBusListenerSuite extends SparkFunSuite
-  with SharedSparkSession with MockitoSugar {
+class SparkConnectListenerBusListenerSuite
+    extends SparkFunSuite
+    with SharedSparkSession
+    with MockitoSugar {
 
   override def afterEach(): Unit = {
     try {
@@ -48,12 +50,11 @@ class SparkConnectListenerBusListenerSuite extends SparkFunSuite
     }
   }
 
-
   // A test listener that caches all events
   private class CacheEventsStreamingQueryListener(
       startEvents: ArrayBuffer[StreamingQueryListener.QueryStartedEvent],
-      otherEvents: ArrayBuffer[StreamingQueryListener.Event]
-  ) extends StreamingQueryListener {
+      otherEvents: ArrayBuffer[StreamingQueryListener.Event])
+      extends StreamingQueryListener {
 
     override def onQueryStarted(event: StreamingQueryListener.QueryStartedEvent): Unit = {
       startEvents += event
@@ -91,49 +92,50 @@ class SparkConnectListenerBusListenerSuite extends SparkFunSuite
     dsw.start()
   }
 
-  Seq(1, 5, 20).foreach {
-    queryNum =>
-      test("Basic functionalities - onQueryStart, onQueryProgress, onQueryTerminated" +
-          s" - $queryNum queries") {
-        val sessionHolder = SessionHolder.forTesting(spark)
-        val responseObserver = mock[StreamObserver[ExecutePlanResponse]]
-        val eventJsonBuffer = ArrayBuffer.empty[String]
-        val startEventsBuffer = ArrayBuffer.empty[StreamingQueryListener.QueryStartedEvent]
-        val otherEventsBuffer = ArrayBuffer.empty[StreamingQueryListener.Event]
+  Seq(1, 5, 20).foreach { queryNum =>
+    test(
+      "Basic functionalities - onQueryStart, onQueryProgress, onQueryTerminated" +
+        s" - $queryNum queries") {
+      val sessionHolder = SessionHolder.forTesting(spark)
+      val responseObserver = mock[StreamObserver[ExecutePlanResponse]]
+      val eventJsonBuffer = ArrayBuffer.empty[String]
+      val startEventsBuffer = ArrayBuffer.empty[StreamingQueryListener.QueryStartedEvent]
+      val otherEventsBuffer = ArrayBuffer.empty[StreamingQueryListener.Event]
 
-        doAnswer((invocation: InvocationOnMock) => {
-          val argument = invocation.getArgument[ExecutePlanResponse](0)
-          val eventJson = argument.getStreamingQueryListenerEventsResult().getEvents(0).getEventJson
-          eventJsonBuffer += eventJson
-        }).when(responseObserver).onNext(any[ExecutePlanResponse]())
+      doAnswer((invocation: InvocationOnMock) => {
+        val argument = invocation.getArgument[ExecutePlanResponse](0)
+        val eventJson = argument.getStreamingQueryListenerEventsResult().getEvents(0).getEventJson
+        eventJsonBuffer += eventJson
+      }).when(responseObserver).onNext(any[ExecutePlanResponse]())
 
-        val listenerHolder = sessionHolder.streamingServersideListenerHolder
-        listenerHolder.init(responseObserver)
-        val cachedEventsListener =
-          new CacheEventsStreamingQueryListener(startEventsBuffer, otherEventsBuffer)
+      val listenerHolder = sessionHolder.streamingServersideListenerHolder
+      listenerHolder.init(responseObserver)
+      val cachedEventsListener =
+        new CacheEventsStreamingQueryListener(startEventsBuffer, otherEventsBuffer)
 
-        spark.streams.addListener(cachedEventsListener)
+      spark.streams.addListener(cachedEventsListener)
 
-        for (_ <- 1 to queryNum) startQuery()
+      for (_ <- 1 to queryNum) startQuery()
 
-        // after all queries made some progresses
-        eventually(timeout(60.seconds), interval(2.seconds)) {
-          spark.streams.active.foreach {
-            q => assert(q.lastProgress.batchId > 5)
-          }
-        }
-
-        // stops all queries
-        spark.streams.active.foreach(_.stop())
-
-        eventually(timeout(60.seconds), interval(500.milliseconds)) {
-          assert(eventJsonBuffer.nonEmpty)
-          assert(!listenerHolder.streamingQueryStartedEventCache.isEmpty)
-          verifyEventsSent(otherEventsBuffer, eventJsonBuffer)
-          assert(startEventsBuffer.map(_.json).toSet ===
-            listenerHolder.streamingQueryStartedEventCache.asScala.map(_._2.json).toSet)
+      // after all queries made some progresses
+      eventually(timeout(60.seconds), interval(2.seconds)) {
+        spark.streams.active.foreach { q =>
+          assert(q.lastProgress.batchId > 5)
         }
       }
+
+      // stops all queries
+      spark.streams.active.foreach(_.stop())
+
+      eventually(timeout(60.seconds), interval(500.milliseconds)) {
+        assert(eventJsonBuffer.nonEmpty)
+        assert(!listenerHolder.streamingQueryStartedEventCache.isEmpty)
+        verifyEventsSent(otherEventsBuffer, eventJsonBuffer)
+        assert(
+          startEventsBuffer.map(_.json).toSet ===
+            listenerHolder.streamingQueryStartedEventCache.asScala.map(_._2.json).toSet)
+      }
+    }
   }
 
   test("Basic functionalities - Slow query") {
@@ -170,8 +172,9 @@ class SparkConnectListenerBusListenerSuite extends SparkFunSuite
       assert(eventJsonBuffer.nonEmpty)
       assert(!listenerHolder.streamingQueryStartedEventCache.isEmpty)
       verifyEventsSent(otherEventsBuffer, eventJsonBuffer)
-      assert(startEventsBuffer.map(_.json).toSet ===
-        listenerHolder.streamingQueryStartedEventCache.asScala.map(_._2.json).toSet)
+      assert(
+        startEventsBuffer.map(_.json).toSet ===
+          listenerHolder.streamingQueryStartedEventCache.asScala.map(_._2.json).toSet)
     }
   }
 
@@ -184,7 +187,8 @@ class SparkConnectListenerBusListenerSuite extends SparkFunSuite
 
     val responseObserver = mock[StreamObserver[ExecutePlanResponse]]
     doThrow(new RuntimeException("I'm dead"))
-      .when(responseObserver).onNext(any[ExecutePlanResponse]())
+      .when(responseObserver)
+      .onNext(any[ExecutePlanResponse]())
 
     val listenerCntBeforeThrow = spark.streams.listListeners().size
 
@@ -195,8 +199,8 @@ class SparkConnectListenerBusListenerSuite extends SparkFunSuite
 
     val listenerHolder = sessionHolder.streamingServersideListenerHolder
     eventually(timeout(5.seconds), interval(500.milliseconds)) {
-      assert(sessionHolder.streamingServersideListenerHolder
-        .streamingQueryServerSideListener.isEmpty)
+      assert(
+        sessionHolder.streamingServersideListenerHolder.streamingQueryServerSideListener.isEmpty)
       assert(spark.streams.listListeners().size === listenerCntBeforeThrow)
       assert(listenerHolder.streamingQueryStartedEventCache.isEmpty)
       assert(listenerHolder.streamingQueryListenerLatch.getCount === 0)
@@ -208,7 +212,8 @@ class SparkConnectListenerBusListenerSuite extends SparkFunSuite
     val sessionHolder = SessionHolder.forTesting(spark)
     val responseObserver = mock[StreamObserver[ExecutePlanResponse]]
     doThrow(new RuntimeException("I'm dead"))
-      .when(responseObserver).onNext(any[ExecutePlanResponse]())
+      .when(responseObserver)
+      .onNext(any[ExecutePlanResponse]())
 
     val listenerHolder = sessionHolder.streamingServersideListenerHolder
     listenerHolder.init(responseObserver)
@@ -216,9 +221,13 @@ class SparkConnectListenerBusListenerSuite extends SparkFunSuite
 
     // mock a QueryStartedEvent for cleanup test
     val queryStartedEvent = new StreamingQueryListener.QueryStartedEvent(
-      UUID.randomUUID, UUID.randomUUID, "name", "timestamp")
+      UUID.randomUUID,
+      UUID.randomUUID,
+      "name",
+      "timestamp")
     listenerHolder.streamingQueryStartedEventCache.put(
-      queryStartedEvent.runId.toString, queryStartedEvent)
+      queryStartedEvent.runId.toString,
+      queryStartedEvent)
 
     startQuery()
 

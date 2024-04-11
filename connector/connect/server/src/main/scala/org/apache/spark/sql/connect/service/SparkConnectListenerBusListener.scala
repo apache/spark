@@ -33,8 +33,8 @@ import org.apache.spark.sql.streaming.StreamingQueryListener
 import org.apache.spark.util.ArrayImplicits._
 
 /**
- * A holder for the server side listener and related resources. There should be only one
- * such holder for each sessionHolder.
+ * A holder for the server side listener and related resources. There should be only one such
+ * holder for each sessionHolder.
  */
 private[sql] class ServerSideListenerHolder(val sessionHolder: SessionHolder) {
   // The server side listener that is responsible to stream streaming query events back to client.
@@ -48,37 +48,37 @@ private[sql] class ServerSideListenerHolder(val sessionHolder: SessionHolder) {
   // the WriteStreamOperationStart response, so that the client can handle the event before
   // DataStreamWriter.start() returns. This special handling is to satisfy the contract of
   // onQueryStarted in StreamingQueryListener.
-  val streamingQueryStartedEventCache:
-  ConcurrentMap[String, StreamingQueryListener.QueryStartedEvent] = new ConcurrentHashMap()
+  val streamingQueryStartedEventCache
+      : ConcurrentMap[String, StreamingQueryListener.QueryStartedEvent] = new ConcurrentHashMap()
 
   def isServerSideListenerRegistered: Boolean = streamingQueryServerSideListener.isDefined
 
   /**
-   * The initialization of the server side listener and related resources.
-   * This method is called when the first ADD_LISTENER_BUS_LISTENER command is received.
-   * It is attached to a responseObserver, from the first executeThread (long running thread),
-   * so the lifecycle of the responseObserver is the same as the life cycle of the listener.
+   * The initialization of the server side listener and related resources. This method is called
+   * when the first ADD_LISTENER_BUS_LISTENER command is received. It is attached to a
+   * responseObserver, from the first executeThread (long running thread), so the lifecycle of the
+   * responseObserver is the same as the life cycle of the listener.
    *
-   * @param responseObserver the responseObserver created from the first long running executeThread.
+   * @param responseObserver
+   *   the responseObserver created from the first long running executeThread.
    */
   def init(responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
-    val serverListener = new SparkConnectListenerBusListener(
-      this, responseObserver)
+    val serverListener = new SparkConnectListenerBusListener(this, responseObserver)
     sessionHolder.session.streams.addListener(serverListener)
     streamingQueryServerSideListener = Some(serverListener)
     streamingQueryListenerLatch = new CountDownLatch(1)
   }
 
   /**
-   * The cleanup of the server side listener and related resources.
-   * This method is called when the REMOVE_LISTENER_BUS_LISTENER command is received or when
-   * responseObserver.onNext throws an exception.
-   * It removes the listener from the session, clears the cache. Also it counts down the latch,
-   * so the long-running thread can proceed to send back the final ResultComplete response.
+   * The cleanup of the server side listener and related resources. This method is called when the
+   * REMOVE_LISTENER_BUS_LISTENER command is received or when responseObserver.onNext throws an
+   * exception. It removes the listener from the session, clears the cache. Also it counts down
+   * the latch, so the long-running thread can proceed to send back the final ResultComplete
+   * response.
    */
   def cleanUp(): Unit = {
     streamingQueryServerSideListener.foreach { listener =>
-        sessionHolder.session.streams.removeListener(listener)
+      sessionHolder.session.streams.removeListener(listener)
     }
     streamingQueryStartedEventCache.clear()
     streamingQueryServerSideListener = None
@@ -87,14 +87,15 @@ private[sql] class ServerSideListenerHolder(val sessionHolder: SessionHolder) {
 }
 
 /**
- * A customized StreamingQueryListener used in Spark Connect for the client-side listeners.
- * Upon the invocation of each callback function, it serializes the event to json and
- * sent it to the client.
+ * A customized StreamingQueryListener used in Spark Connect for the client-side listeners. Upon
+ * the invocation of each callback function, it serializes the event to json and sent it to the
+ * client.
  */
 private[sql] class SparkConnectListenerBusListener(
     serverSideListenerHolder: ServerSideListenerHolder,
-    responseObserver: StreamObserver[ExecutePlanResponse]
-) extends StreamingQueryListener with Logging {
+    responseObserver: StreamObserver[ExecutePlanResponse])
+    extends StreamingQueryListener
+    with Logging {
 
   val sessionHolder = serverSideListenerHolder.sessionHolder
   // The method used to stream back the events to the client.
@@ -126,9 +127,10 @@ private[sql] class SparkConnectListenerBusListener(
           .build())
     } catch {
       case NonFatal(e) =>
-        logError(s"[SessionId: ${sessionHolder.sessionId}][UserId: ${sessionHolder.userId}] " +
-          s"Removing SparkConnectListenerBusListener and terminating the long-running thread " +
-          s"because of exception: $e")
+        logError(
+          s"[SessionId: ${sessionHolder.sessionId}][UserId: ${sessionHolder.userId}] " +
+            s"Removing SparkConnectListenerBusListener and terminating the long-running thread " +
+            s"because of exception: $e")
         // This likely means that the client is not responsive even with retry, we should
         // remove this listener and cleanup resources.
         serverSideListenerHolder.cleanUp()
@@ -144,8 +146,7 @@ private[sql] class SparkConnectListenerBusListener(
     send(event.json, StreamingQueryEventType.QUERY_PROGRESS_EVENT)
   }
 
-  override def onQueryTerminated(
-      event: StreamingQueryListener.QueryTerminatedEvent): Unit = {
+  override def onQueryTerminated(event: StreamingQueryListener.QueryTerminatedEvent): Unit = {
     send(event.json, StreamingQueryEventType.QUERY_TERMINATED_EVENT)
   }
 
