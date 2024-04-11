@@ -26,6 +26,10 @@ import static org.junit.jupiter.api.Assertions.*;
 
 public class CollationSupportSuite {
 
+  /**
+   * Collation-aware string expressions.
+   */
+
   private void assertContains(String pattern, String target, String collationName, boolean value)
           throws SparkException {
     UTF8String l = UTF8String.fromString(pattern);
@@ -34,24 +38,8 @@ public class CollationSupportSuite {
     assertEquals(CollationSupport.Contains.contains(l, r, collationId), value);
   }
 
-  private void assertStartsWith(String pattern, String prefix, String collationName, boolean value)
-      throws SparkException {
-    UTF8String l = UTF8String.fromString(pattern);
-    UTF8String r = UTF8String.fromString(prefix);
-    int collationId = CollationFactory.collationNameToId(collationName);
-    assertEquals(CollationSupport.StartsWith.startsWith(l, r, collationId), value);
-  }
-
-  private void assertEndsWith(String pattern, String suffix, String collationName, boolean value)
-      throws SparkException {
-    UTF8String l = UTF8String.fromString(pattern);
-    UTF8String r = UTF8String.fromString(suffix);
-    int collationId = CollationFactory.collationNameToId(collationName);
-    assertEquals(CollationSupport.EndsWith.endsWith(l, r, collationId), value);
-  }
-
   @Test
-  public void containsTest() throws SparkException {
+  public void testContains() throws SparkException {
     assertContains("", "", "UTF8_BINARY", true);
     assertContains("c", "", "UTF8_BINARY", true);
     assertContains("", "c", "UTF8_BINARY", false);
@@ -90,8 +78,16 @@ public class CollationSupportSuite {
     assertContains("abcde", "FGH", "UNICODE_CI", false);
   }
 
+  private void assertStartsWith(String pattern, String prefix, String collationName, boolean value)
+          throws SparkException {
+    UTF8String l = UTF8String.fromString(pattern);
+    UTF8String r = UTF8String.fromString(prefix);
+    int collationId = CollationFactory.collationNameToId(collationName);
+    assertEquals(CollationSupport.StartsWith.startsWith(l, r, collationId), value);
+  }
+
   @Test
-  public void startsWithTest() throws SparkException {
+  public void testStartsWith() throws SparkException {
     assertStartsWith("", "", "UTF8_BINARY", true);
     assertStartsWith("c", "", "UTF8_BINARY", true);
     assertStartsWith("", "c", "UTF8_BINARY", false);
@@ -130,8 +126,16 @@ public class CollationSupportSuite {
     assertStartsWith("abcde", "FGH", "UNICODE_CI", false);
   }
 
+  private void assertEndsWith(String pattern, String suffix, String collationName, boolean value)
+          throws SparkException {
+    UTF8String l = UTF8String.fromString(pattern);
+    UTF8String r = UTF8String.fromString(suffix);
+    int collationId = CollationFactory.collationNameToId(collationName);
+    assertEquals(CollationSupport.EndsWith.endsWith(l, r, collationId), value);
+  }
+
   @Test
-  public void endsWithTest() throws SparkException {
+  public void testEndsWith() throws SparkException {
     assertEndsWith("", "", "UTF8_BINARY", true);
     assertEndsWith("c", "", "UTF8_BINARY", true);
     assertEndsWith("", "c", "UTF8_BINARY", false);
@@ -169,4 +173,19 @@ public class CollationSupportSuite {
     assertEndsWith("abcde", "fgh", "UNICODE_CI", false);
     assertEndsWith("abcde", "FGH", "UNICODE_CI", false);
   }
+
+  // TODO: Test more collation-aware string expressions.
+
+  /**
+   * Collation-aware regexp expressions.
+   */
+
+  // TODO: Test more collation-aware regexp expressions.
+
+  /**
+   * Other collation-aware expressions.
+   */
+
+  // TODO: Test other collation-aware expressions.
+
 }

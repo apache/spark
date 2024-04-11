@@ -78,6 +78,12 @@ public final class CollationFactory {
      */
     public final boolean supportsBinaryOrdering;
 
+    /**
+     * Support for Lowercase Equality implies that it is possible to check equality on
+     * byte by byte level, but only after calling "UTF8String.toLowerCase" on both arguments.
+     * This allows custom collation support for UTF8_BINARY_LCASE collation in various Spark
+     * expressions, as this particular collation is not supported by the external ICU library.
+     */
     public final boolean supportsLowercaseEquality;
 
     public Collation(
@@ -95,17 +101,18 @@ public final class CollationFactory {
       this.hashFunction = hashFunction;
       this.supportsBinaryEquality = supportsBinaryEquality;
       this.supportsBinaryOrdering = supportsBinaryOrdering;
+      this.supportsLowercaseEquality = collationName.equals("UTF8_BINARY_LCASE");
 
       // De Morgan's Law to check supportsBinaryOrdering => supportsBinaryEquality
       assert(!supportsBinaryOrdering || supportsBinaryEquality);
+      // No Collation can simultaneously support binary equality and lowercase equality
+      assert(!supportsBinaryEquality || !supportsLowercaseEquality);
 
       if (supportsBinaryEquality) {
         this.equalsFunction = UTF8String::equals;
       } else {
         this.equalsFunction = (s1, s2) -> this.comparator.compare(s1, s2) == 0;
       }
-
-      supportsLowercaseEquality = collationName.equals("UTF8_BINARY_LCASE");
     }
 
     /**
@@ -176,9 +183,10 @@ public final class CollationFactory {
   }
 
   /**
-   * Auxiliary methods for collation aware string operations.
+   * Returns a StringSearch object for the given pattern and target strings, under collation
+   * rules corresponding to the given collationId. The external ICU library StringSearch object can
+   * be used to find occurrences of the pattern in the target string, while respecting collation.
    */
-
   public static StringSearch getStringSearch(
       final UTF8String targetUTF8String,
       final UTF8String patternUTF8String,
@@ -189,6 +197,11 @@ public final class CollationFactory {
     return new StringSearch(pattern, target, (RuleBasedCollator) collator);
   }
 
+  /**
+   * Returns a collation-unaware StringSearch object for the given pattern and target strings.
+   * While this object does not respect collation, it can be used to find occurrences of the pattern
+   * in the target string for UTF8_BINARY or UTF8_BINARY_LCASE (if arguments are lowercased).
+   */
   public static StringSearch getStringSearch(
           final UTF8String targetUTF8String,
           final UTF8String patternUTF8String) {

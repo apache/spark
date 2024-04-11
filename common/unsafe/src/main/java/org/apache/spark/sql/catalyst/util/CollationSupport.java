@@ -21,13 +21,16 @@ import com.ibm.icu.text.StringSearch;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
- * Static entry point for collation aware string expressions.
+ * Static entry point for collation-aware expressions (StringExpressions, RegexpExpressions, and
+ * other expressions that require custom collation support), as well as private utility methods for
+ * collation-aware UTF8String operations needed to implement .
  */
 public final class CollationSupport {
 
   /**
-   * Collation aware string expressions.
+   * Collation-aware string expressions.
    */
+
   public static class Contains {
     public static boolean contains(final UTF8String l, final UTF8String r, final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
@@ -134,10 +137,26 @@ public final class CollationSupport {
     }
   }
 
+  // TODO: Add more collation-aware string expressions.
+
   /**
-   * Utility class for collation support for UTF8String.
+   * Collation-aware regexp expressions.
    */
+
+  // TODO: Add more collation-aware regexp expressions.
+
+  /**
+   * Other collation-aware expressions.
+   */
+
+  // TODO: Add other collation-aware expressions.
+
+  /**
+   * Utility class for collation-aware UTF8String operations.
+   */
+
   private static class CollationAwareUTF8String {
+
     private static boolean matchAt(final UTF8String target, final UTF8String pattern,
         final int pos, final int collationId) {
       if (pattern.numChars() + pos > target.numChars() || pos < 0) {
@@ -149,6 +168,7 @@ public final class CollationSupport {
       return CollationFactory.getStringSearch(target.substring(
         pos, pos + pattern.numChars()), pattern, collationId).last() == 0;
     }
+
   }
 
 }

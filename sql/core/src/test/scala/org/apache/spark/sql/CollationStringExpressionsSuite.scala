@@ -21,7 +21,7 @@ import scala.collection.immutable.Seq
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.{Collation, ConcatWs, ExpressionEvalHelper, Literal, StringRepeat}
+import org.apache.spark.sql.catalyst.expressions.{ConcatWs, ExpressionEvalHelper, Literal}
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -141,17 +141,21 @@ class CollationStringExpressionsSuite
     assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
   }
 
-  test("REPEAT check output type on explicitly collated string") {
-    def testRepeat(expected: String, collationId: Int, input: String, n: Int): Unit = {
-      val s = Literal.create(input, StringType(collationId))
-
-      checkEvaluation(Collation(StringRepeat(s, Literal.create(n))).replacement, expected)
-    }
-
-    testRepeat("UTF8_BINARY", 0, "abc", 2)
-    testRepeat("UTF8_BINARY_LCASE", 1, "abc", 2)
-    testRepeat("UNICODE", 2, "abc", 2)
-    testRepeat("UNICODE_CI", 3, "abc", 2)
+  test("Support StringRepeat string expression with collation") {
+    // Supported collations
+    case class StringRepeatTestCase[R](s: String, n: Int, c: String, result: R)
+    val testCases = Seq(
+      StringRepeatTestCase("", 1, "UTF8_BINARY", ""),
+      StringRepeatTestCase("a", 0, "UNICODE", ""),
+      StringRepeatTestCase("XY", 3, "UTF8_BINARY_LCASE", "XYXYXY"),
+      StringRepeatTestCase("123", 2, "UNICODE_CI", "123123")
+    )
+    testCases.foreach(t => {
+      val query = s"SELECT repeat(collate('${t.s}', '${t.c}'), ${t.n})"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
+    })
   }
 
   // TODO: Add more tests for other string expressions
