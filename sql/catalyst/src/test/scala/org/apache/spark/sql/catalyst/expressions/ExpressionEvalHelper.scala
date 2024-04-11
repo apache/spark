@@ -170,18 +170,15 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
     def checkException(eval: => Unit, testMode: String): Unit = {
       val modes = Seq(CodegenObjectFactoryMode.CODEGEN_ONLY, CodegenObjectFactoryMode.NO_CODEGEN)
       withClue(s"($testMode)") {
-        val e = intercept[T] {
-          for (fallbackMode <- modes) {
-            withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> fallbackMode.toString) {
-              eval
-            }
+        for (fallbackMode <- modes) {
+          withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> fallbackMode.toString) {
+            checkError(
+              exception = intercept[T](eval),
+              errorClass = errorClass,
+              parameters = parameters
+            )
           }
         }
-        checkError(
-          exception = e,
-          errorClass = errorClass,
-          parameters = parameters
-        )
       }
     }
 
@@ -209,23 +206,21 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
     def checkException(eval: => Unit, testMode: String): Unit = {
       val modes = Seq(CodegenObjectFactoryMode.CODEGEN_ONLY, CodegenObjectFactoryMode.NO_CODEGEN)
       withClue(s"($testMode)") {
-        val errMsg = intercept[T] {
-          for (fallbackMode <- modes) {
-            withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> fallbackMode.toString) {
-              eval
+        for (fallbackMode <- modes) {
+          withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> fallbackMode.toString) {
+            val errMsg = intercept[T](eval).getMessage
+            if (errMsg == null) {
+              if (expectedErrMsg != null) {
+                fail(s"Expected `$expectedErrMsg` but null error message found")
+              }
+            } else if (expectedErrMsg == null) {
+              if (errMsg != null) {
+                fail(s"Expected null error message, but `$errMsg` found")
+              }
+            } else if (!errMsg.contains(expectedErrMsg)) {
+              fail(s"Expected error message is `$expectedErrMsg`, but `$errMsg` found")
             }
           }
-        }.getMessage
-        if (errMsg == null) {
-          if (expectedErrMsg != null) {
-            fail(s"Expected `$expectedErrMsg` but null error message found")
-          }
-        } else if (expectedErrMsg == null) {
-          if (errMsg != null) {
-            fail(s"Expected null error message, but `$errMsg` found")
-          }
-        } else if (!errMsg.contains(expectedErrMsg)) {
-          fail(s"Expected error message is `$expectedErrMsg`, but `$errMsg` found")
         }
       }
     }
