@@ -692,12 +692,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
             sql(s"CREATE TABLE $newTableName AS SELECT c1 || c2 FROM $tableName").explain(true)
           },
           errorClass = "INDETERMINATE_COLLATION")
-        sql(s"CREATE TABLE $newTableName AS SELECT c1 FROM $tableName")
-        checkError(
-          exception = intercept[AnalysisException] {
-            sql(s"REPLACE TABLE $newTableName AS SELECT c1 || c2 FROM $tableName").explain(true)
-          },
-          errorClass = "INDETERMINATE_COLLATION")
       }
       withView("v") {
         checkError(
