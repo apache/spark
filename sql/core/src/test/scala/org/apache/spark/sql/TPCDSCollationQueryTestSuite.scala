@@ -37,11 +37,12 @@ import org.apache.spark.util.Utils
  * with lowercase-converted data from tpc-ds kit and tables from second DB are populated with
  * randomized-case data.
  *
- * When running arbitrary SQL query, we convert the query to lowercase for execution
- * against first DB, we do this to ensure results are equivalent to case-insensitive collations
- * when queries contain uppercase string literals; second DB receives original query.
- * Results should compare equal ignoring case. We use this method to validate collations are
- * working with arbitrary standard SQL constructs.
+ * When running arbitrary SQL query, we convert the query to lowercase in order to move
+ * all string literals contained in the query to lowercase for execution against first DB,
+ * we do this to ensure results are equivalent to case-insensitive collations when queries contain
+ * uppercase string literals; second DB receives original unmodified query. Results should compare
+ * equal, ignoring case. We use this method to validate collations are working with arbitrary
+ * standard SQL constructs.
  *
  * Additionally, we perform trims on string data to properly convert it from CharType
  * to StringType and do sanity checks to verify that results are non-empty as expected.
