@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.internal
 
-import java.util.TimeZone
+import java.util.{Locale, TimeZone}
 
 import org.apache.hadoop.fs.Path
 import org.apache.logging.log4j.Level
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkIllegalArgumentException, SparkNoSuchElementException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkIllegalArgumentException, SparkNoSuchElementException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.MIT
@@ -505,7 +505,23 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
          |""".stripMargin)
   }
 
-  test("SPARK-43028: config not found error") {
+  test("set collation") {
+    Seq("UNICODE", "UNICODE_CI", "utf8_binary_lcase", "utf8_binary").foreach { collation =>
+      sql(s"set collation $collation")
+      assert(spark.conf.get(SQLConf.DEFAULT_COLLATION) === collation.toUpperCase(Locale.ROOT))
+    }
+
+    checkError(
+      exception = intercept[SparkException] {
+        sql(s"SET COLLATION unicode_c").collect()
+      },
+      errorClass = "COLLATION_INVALID_NAME",
+      parameters = Map(
+        "collationName" -> "UNICODE_C",
+        "proposal" -> "UNICODE_CI"))
+  }
+
+    test("SPARK-43028: config not found error") {
     checkError(
       exception = intercept[SparkNoSuchElementException](spark.conf.get("some.conf")),
       errorClass = "SQL_CONF_NOT_FOUND",
