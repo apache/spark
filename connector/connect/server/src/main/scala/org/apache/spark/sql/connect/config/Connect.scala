@@ -273,4 +273,26 @@ object Connect {
       .version("4.0.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("2s")
+
+  val CONNECT_SESSION_PLAN_CACHE_SIZE =
+    buildStaticConf("spark.connect.session.planCache.maxSize")
+      .doc(
+        "Sets the maximum number of cached resolved logical plans in Spark Connect Session." +
+        " If set to a value less or equal than zero will disable the plan cache."
+      )
+      .version("4.0.0")
+      .intConf
+      .createWithDefault(5)
+
+  val CONNECT_SESSION_PLAN_CACHE_ENABLED =
+    buildConf("spark.connect.session.planCache.enabled")
+      .doc(
+        "When true, the cache of resolved logical plans is enabled if" +
+        s" '${CONNECT_SESSION_PLAN_CACHE_SIZE.key}' is greater than zero." +
+        s" When false, the cache is disable even if '${CONNECT_SESSION_PLAN_CACHE_SIZE.key}' is" +
+        " greater than zero. The caching is best-effort and not guaranteed."
+      )
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
 }
