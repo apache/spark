@@ -38,7 +38,6 @@ license: |
   - `spark.sql.avro.datetimeRebaseModeInWrite` instead of `spark.sql.legacy.avro.datetimeRebaseModeInWrite`
   - `spark.sql.avro.datetimeRebaseModeInRead` instead of `spark.sql.legacy.avro.datetimeRebaseModeInRead`
 - Since Spark 4.0, the default value of `spark.sql.orc.compression.codec` is changed from `snappy` to `zstd`. To restore the previous behavior, set `spark.sql.orc.compression.codec` to `snappy`.
-- Since Spark 4.0, `SELECT (*)` is equivalent to `SELECT struct(*)` instead of `SELECT *`. To restore the previous behavior, set `spark.sql.legacy.ignoreParenthesesAroundStar` to `true`.
 - Since Spark 4.0, the SQL config `spark.sql.legacy.allowZeroIndexInFormatString` is deprecated. Consider to change `strfmt` of the `format_string` function to use 1-based indexes. The first argument must be referenced by "1$", the second by "2$", etc.
 - Since Spark 4.0, JDBC read option `preferTimestampNTZ=true` will not convert Postgres TIMESTAMP WITH TIME ZONE and TIME WITH TIME ZONE data types to TimestampNTZType, which is available in Spark 3.5. 
 - Since Spark 4.0, JDBC read option `preferTimestampNTZ=true` will not convert MySQL TIMESTAMP to TimestampNTZType, which is available in Spark 3.5. MySQL DATETIME is not affected.
