@@ -540,11 +540,10 @@ class DataStreamWriter:
         func = PySparkDataStreamWriter._construct_foreach_function(f)
         serializer = AutoBatchedSerializer(CPickleSerializer())
         command = (func, None, serializer, serializer)
-        dispatch_handlers = {SparkSession: lambda x: x.__custom_reduce_handler__()}
         # Python ForeachWriter isn't really a PythonUDF. But we reuse it for simplicity.
         try:
             self._write_proto.foreach_writer.python_function.command = (
-                CloudPickleSerializer().dumps(command, dispatch_handlers=dispatch_handlers)
+                CloudPickleSerializer().dumps(command)
             )
         except pickle.PicklingError:
             raise PySparkPicklingError(

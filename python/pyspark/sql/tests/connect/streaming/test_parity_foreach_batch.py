@@ -61,7 +61,7 @@ class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedCo
             print(no_pickle)
             df.count()
 
-        with self.assertRaises(PySparkPicklingError) as e:
+        with self.assertRaises(PySparkPicklingError):
             df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
             q = df.writeStream.foreachBatch(func).start()
             q.processAllAvailable()
