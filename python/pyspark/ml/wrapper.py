@@ -48,7 +48,7 @@ class JavaWrapper:
         self._java_obj = java_obj
 
     def __del__(self) -> None:
-        from pyspark.core import SparkContext
+        from pyspark.core.context import SparkContext
 
         if SparkContext._active_spark_context and self._java_obj is not None:
             SparkContext._active_spark_context._gateway.detach(  # type: ignore[union-attr]

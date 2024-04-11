@@ -97,7 +97,7 @@ from pyspark.storagelevel import StorageLevel
 if TYPE_CHECKING:
     from pyspark.ml._typing import P, ParamMap
     from py4j.java_gateway import JavaObject
-    from pyspark.core import SparkContext
+    from pyspark.core.context import SparkContext
 
 
 T = TypeVar("T")
@@ -3772,7 +3772,7 @@ class OneVsRestModel(
 
     def __init__(self, models: List[ClassificationModel]):
         super(OneVsRestModel, self).__init__()
-        from pyspark.core import SparkContext
+        from pyspark.core.context import SparkContext
 
         self.models = models
         if not isinstance(models[0], JavaMLWritable):
@@ -3916,7 +3916,7 @@ class OneVsRestModel(
         py4j.java_gateway.JavaObject
             Java object equivalent to this instance.
         """
-        from pyspark.core import SparkContext
+        from pyspark.core.context import SparkContext
 
         sc = SparkContext._active_spark_context
         assert sc is not None and sc._gateway is not None

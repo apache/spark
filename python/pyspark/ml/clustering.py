@@ -225,7 +225,7 @@ class GaussianMixtureModel(
         Array of :py:class:`MultivariateGaussian` where gaussians[i] represents
         the Multivariate Gaussian (Normal) Distribution for Gaussian i
         """
-        from pyspark.core import SparkContext
+        from pyspark.core.context import SparkContext
 
         sc = SparkContext._active_spark_context
         assert sc is not None and self._java_obj is not None

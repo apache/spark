@@ -1202,7 +1202,7 @@ class CountVectorizerModel(
         Construct the model directly from a vocabulary list of strings,
         requires an active SparkContext.
         """
-        from pyspark.core import SparkContext
+        from pyspark.core.context import SparkContext
 
         sc = SparkContext._active_spark_context
         assert sc is not None and sc._gateway is not None
@@ -4793,7 +4793,7 @@ class StringIndexerModel(
         Construct the model directly from an array of label strings,
         requires an active SparkContext.
         """
-        from pyspark.core import SparkContext
+        from pyspark.core.context import SparkContext
 
         sc = SparkContext._active_spark_context
         assert sc is not None and sc._gateway is not None
@@ -4822,7 +4822,7 @@ class StringIndexerModel(
         Construct the model directly from an array of array of label strings,
         requires an active SparkContext.
         """
-        from pyspark.core import SparkContext
+        from pyspark.core.context import SparkContext
 
         sc = SparkContext._active_spark_context
         assert sc is not None and sc._gateway is not None

@@ -45,7 +45,7 @@ if TYPE_CHECKING:
     from pyspark.ml._typing import PipelineStage
     from pyspark.ml.base import Params
     from pyspark.ml.wrapper import JavaWrapper
-    from pyspark.core import SparkContext
+    from pyspark.core.context import SparkContext
 
 T = TypeVar("T")
 RW = TypeVar("RW", bound="BaseReadWrite")
@@ -62,7 +62,7 @@ def _jvm() -> "JavaGateway":
     Returns the JVM view associated with SparkContext. Must be called
     after SparkContext is initialized.
     """
-    from pyspark.core import SparkContext
+    from pyspark.core.context import SparkContext
 
     jvm = SparkContext._jvm
     if jvm:

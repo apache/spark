@@ -62,7 +62,7 @@ class _ImageSchema:
 
         .. versionadded:: 2.3.0
         """
-        from pyspark.core import SparkContext
+        from pyspark.core.context import SparkContext
 
         if self._imageSchema is None:
             ctx = SparkContext._active_spark_context
@@ -83,7 +83,7 @@ class _ImageSchema:
 
         .. versionadded:: 2.3.0
         """
-        from pyspark.core import SparkContext
+        from pyspark.core.context import SparkContext
 
         if self._ocvTypes is None:
             ctx = SparkContext._active_spark_context
@@ -104,7 +104,7 @@ class _ImageSchema:
 
         .. versionadded:: 2.4.0
         """
-        from pyspark.core import SparkContext
+        from pyspark.core.context import SparkContext
 
         if self._columnSchema is None:
             ctx = SparkContext._active_spark_context
@@ -125,7 +125,7 @@ class _ImageSchema:
 
         .. versionadded:: 2.3.0
         """
-        from pyspark.core import SparkContext
+        from pyspark.core.context import SparkContext
 
         if self._imageFields is None:
             ctx = SparkContext._active_spark_context
@@ -140,7 +140,7 @@ class _ImageSchema:
 
         .. versionadded:: 2.3.0
         """
-        from pyspark.core import SparkContext
+        from pyspark.core.context import SparkContext
 
         if self._undefinedImageType is None:
             ctx = SparkContext._active_spark_context

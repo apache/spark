@@ -102,7 +102,7 @@ class ChiSquareTest:
         >>> row[0].statistic
         4.0
         """
-        from pyspark.core import SparkContext
+        from pyspark.core.context import SparkContext
 
         sc = SparkContext._active_spark_context
         assert sc is not None
@@ -173,7 +173,7 @@ class Correlation:
                      [        NaN,         NaN,  1.        ,         NaN],
                      [ 0.4       ,  0.9486... ,         NaN,  1.        ]])
         """
-        from pyspark.core import SparkContext
+        from pyspark.core.context import SparkContext
 
         sc = SparkContext._active_spark_context
         assert sc is not None
@@ -243,7 +243,7 @@ class KolmogorovSmirnovTest:
         >>> round(ksResult.statistic, 3)
         0.175
         """
-        from pyspark.core import SparkContext
+        from pyspark.core.context import SparkContext
 
         sc = SparkContext._active_spark_context
         assert sc is not None
@@ -430,7 +430,7 @@ class Summarizer:
         -------
         :py:class:`pyspark.ml.stat.SummaryBuilder`
         """
-        from pyspark.core import SparkContext
+        from pyspark.core.context import SparkContext
 
         sc = SparkContext._active_spark_context
         assert sc is not None
