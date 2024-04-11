@@ -254,12 +254,13 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
     }
     if (observedMetrics.nonEmpty) {
       val planId = executeHolder.request.getPlan.getRoot.getCommon.getPlanId
-      Some(SparkConnectPlanExecution
-        .createObservedMetricsResponse(
-          sessionId,
-          sessionHolder.serverSessionId,
-          planId,
-          observedMetrics))
+      Some(
+        SparkConnectPlanExecution
+          .createObservedMetricsResponse(
+            sessionId,
+            sessionHolder.serverSessionId,
+            planId,
+            observedMetrics))
     } else None
   }
 }

@@ -553,9 +553,7 @@ class SparkSession private[sql] (
 
   private[sql] def timeZoneId: String = conf.get(SqlApiConf.SESSION_LOCAL_TIMEZONE_KEY)
 
-  private[sql] def execute[T](
-      plan: proto.Plan,
-      encoder: AgnosticEncoder[T]): SparkResult[T] = {
+  private[sql] def execute[T](plan: proto.Plan, encoder: AgnosticEncoder[T]): SparkResult[T] = {
     val value = client.execute(plan)
     new SparkResult(value, allocator, encoder, timeZoneId, Some(this.observationRegistry.toMap))
   }
