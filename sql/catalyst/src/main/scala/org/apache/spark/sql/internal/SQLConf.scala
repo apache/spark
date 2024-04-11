@@ -772,8 +772,13 @@ object SQLConf {
         " produced by a builtin function such as to_char or CAST")
       .version("4.0.0")
       .stringConf
-      .checkValue(CollationFactory.collationNameToId(_) >= 0,
-        "Collation provided is not supported as a session level default.")
+      .checkValue(CollationFactory.isValidCollation,
+        "COLLATION_INVALID_NAME",
+        name =>
+          Map(
+            "collationName" -> name,
+            "proposal" -> CollationFactory.getClosestCollation(name)
+          ))
       .createWithDefault("UTF8_BINARY")
 
   val FETCH_SHUFFLE_BLOCKS_IN_BATCH =

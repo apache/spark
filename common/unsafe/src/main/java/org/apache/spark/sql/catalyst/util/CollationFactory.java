@@ -186,6 +186,23 @@ public final class CollationFactory {
   }
 
   /**
+   * Returns if the given collationName is valid one.
+   */
+  public static boolean isValidCollation(String collationName) {
+    return collationNameToIdMap.containsKey(collationName.toUpperCase());
+  }
+
+  /**
+   * Returns closest valid name to collationName
+   */
+  public static String getClosestCollation(String collationName) {
+    Collation suggestion = Collections.min(List.of(collationTable), Comparator.comparingInt(
+            c -> UTF8String.fromString(c.collationName).levenshteinDistance(
+                    UTF8String.fromString(collationName.toUpperCase()))));
+    return suggestion.collationName;
+  }
+
+  /**
    * Returns the collation id for the given collation name.
    */
   public static int collationNameToId(String collationName) throws SparkException {
