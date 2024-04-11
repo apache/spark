@@ -510,7 +510,7 @@ class SimpleInputPartition(InputPartition):
 class SimpleDataSourceStreamReader(ABC):
     """
     A base class for simplified streaming data source readers. Compared to DataSourceStreamReader,
-    SimpleDataSourceStreamReader doesn't require planning data partitioning. Also, the read api of
+    :class:`SimpleDataSourceStreamReader` doesn't require planning data partitioning. Also, the read api of
     SimpleDataSourceStreamReader allows reading data and planning the latest offset at the same time.
 
     .. versionadded: 4.0.0
