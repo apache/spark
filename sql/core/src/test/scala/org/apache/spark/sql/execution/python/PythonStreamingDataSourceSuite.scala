@@ -72,7 +72,7 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
       |        self.current += 2
       |        it = iter([(i, ) for i in range(start_idx, self.current)])
       |        return (it, {"partition-1": self.current})
-      |    def read2(self, start: dict, end: dict):
+      |    def readBetweenOffsets(self, start: dict, end: dict):
       |        start_idx = start["partition-1"]
       |        end_idx = end["partition-1"]
       |        return iter([(i, ) for i in range(start_idx, end_idx)])
@@ -96,7 +96,7 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
       |        else:
       |            it = iter([])
       |        return (it, {"partition-1": self.current})
-      |    def read2(self, start: dict, end: dict):
+      |    def readBetweenOffsets(self, start: dict, end: dict):
       |        start_idx = start["partition-1"]
       |        end_idx = end["partition-1"]
       |        return iter([(i, ) for i in range(start_idx, end_idx)])

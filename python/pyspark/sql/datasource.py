@@ -553,14 +553,14 @@ class SimpleDataSourceStreamReader(ABC):
         -------
         A :class:`Tuple` of an iterator of :class:`Tuple` and a dict\\s
             The iterator contains all the available records after start offset.
-            The dict is the end of this read attempt and the start of next read attempt.
+            The dict is the end offset of this read attempt and the start of next read attempt.
         """
         raise PySparkNotImplementedError(
             error_class="NOT_IMPLEMENTED",
             message_parameters={"feature": "read"},
         )
 
-    def read2(self, start: dict, end: dict) -> Iterator[Tuple]:
+    def readBetweenOffsets(self, start: dict, end: dict) -> Iterator[Tuple]:
         """
         Read all available data from specific start offset and end offset.
         This is invoked during failure recovery to re-read a batch deterministically
@@ -680,7 +680,7 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
         return it
 
     def read(self, input_partition: InputPartition):
-        return self.simple_reader.read2(input_partition.start, input_partition.end)
+        return self.simple_reader.readBetweenOffsets(input_partition.start, input_partition.end)
 
 
 class DataSourceWriter(ABC):
