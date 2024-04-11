@@ -90,7 +90,10 @@ object MimaExcludes {
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.types.DataType#JSortedObject.unapplySeq"),
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.mllib.tree.model.TreeEnsembleModel#SaveLoadV1_0.readMetadata"),
     // SPARK-47814: Move `WriteInputFormatTestDataGenerator.scala` from `main` to `test`
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.python.TestWritable")
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.python.TestWritable"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.python.TestWritable$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.python.WriteInputFormatTestDataGenerator"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.python.WriteInputFormatTestDataGenerator$")
   )
 
   // Default exclude rules
