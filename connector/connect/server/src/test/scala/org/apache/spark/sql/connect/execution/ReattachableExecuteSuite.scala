@@ -399,6 +399,17 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
     }
   }
 
+  test("observations") {
+    withClient { client =>
+      val p = buildPlan("select * from range(1999)")
+      val d = p.getRoot.getCommon.getPlanId
+      val o = proto.Relation.newBuilder()
+      o.getCommonBuilder.setPlanId(19L)
+      o.getCollectMetricsBuilder.setName("my_observation").setInput(p.getRoot)
+      client.execute(buildPlan("select * from range(1)"))
+    }
+  }
+
   test("SPARK-46660: reattach updates aliveness of session holder") {
     withRawBlockingStub { stub =>
       val operationId = UUID.randomUUID().toString

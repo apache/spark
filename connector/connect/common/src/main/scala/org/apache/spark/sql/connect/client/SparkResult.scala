@@ -40,7 +40,7 @@ private[sql] class SparkResult[T](
     allocator: BufferAllocator,
     encoder: AgnosticEncoder[T],
     timeZoneId: String,
-    observationsOpt: Option[Map[String, ObservationBase]] = None)
+    observationsOpt: Option[Map[Long, ObservationBase]] = None)
     extends AutoCloseable { self =>
 
   private[this] var opId: String = _
@@ -180,7 +180,7 @@ private[sql] class SparkResult[T](
       // If the metrics is registered by an Observation object, attach them and unblock any
       // blocked thread.
       observationsOpt.map { observations =>
-        observations.get(metric.getName).map(_.setMetricsAndNotify(Some(kv)))
+        observations.get(metric.getPlanId).map(_.setMetricsAndNotify(Some(kv)))
       }
     }
     processed

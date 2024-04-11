@@ -21,6 +21,7 @@ import java.net.URI
 import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
 
+import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
 
@@ -79,6 +80,8 @@ class SparkSession private[sql] (
   lazy val version: String = {
     client.analyze(proto.AnalyzePlanRequest.AnalyzeCase.SPARK_VERSION).getSparkVersion.getVersion
   }
+
+  private[sql] val observationRegistry = mutable.Map.empty[Long, Observation]
 
   /**
    * Runtime configuration interface for Spark.
@@ -482,21 +485,18 @@ class SparkSession private[sql] (
     }
   }
 
-  private[sql] def newDataFrame(
-      f: proto.Relation.Builder => Unit,
-      observationsOpt: Option[Map[String, Observation]] = None): DataFrame = {
-    newDataset(UnboundRowEncoder, observationsOpt)(f)
+  private[sql] def newDataFrame(f: proto.Relation.Builder => Unit): DataFrame = {
+    newDataset(UnboundRowEncoder)(f)
   }
 
   private[sql] def newDataset[T](
-      encoder: AgnosticEncoder[T],
-      observationsOpt: Option[Map[String, Observation]] = None)(
+      encoder: AgnosticEncoder[T])(
       f: proto.Relation.Builder => Unit): Dataset[T] = {
     val builder = proto.Relation.newBuilder()
     f(builder)
     builder.getCommonBuilder.setPlanId(planIdGenerator.getAndIncrement())
     val plan = proto.Plan.newBuilder().setRoot(builder).build()
-    new Dataset[T](this, plan, encoder, observationsOpt)
+    new Dataset[T](this, plan, encoder)
   }
 
   @DeveloperApi
@@ -545,7 +545,7 @@ class SparkSession private[sql] (
   private[sql] def execute[T](
       plan: proto.Plan,
       encoder: AgnosticEncoder[T],
-      observationsOpt: Option[Map[String, Observation]] = None): SparkResult[T] = {
+      observationsOpt: Option[Map[Long, Observation]] = None): SparkResult[T] = {
     val value = client.execute(plan)
     val result = new SparkResult(value, allocator, encoder, timeZoneId, observationsOpt)
     result
