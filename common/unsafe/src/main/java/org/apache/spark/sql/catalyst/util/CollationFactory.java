@@ -93,7 +93,8 @@ public final class CollationFactory {
         String version,
         ToLongFunction<UTF8String> hashFunction,
         boolean supportsBinaryEquality,
-        boolean supportsBinaryOrdering) {
+        boolean supportsBinaryOrdering,
+        boolean supportsLowercaseEquality) {
       this.collationName = collationName;
       this.collator = collator;
       this.comparator = comparator;
@@ -101,7 +102,7 @@ public final class CollationFactory {
       this.hashFunction = hashFunction;
       this.supportsBinaryEquality = supportsBinaryEquality;
       this.supportsBinaryOrdering = supportsBinaryOrdering;
-      this.supportsLowercaseEquality = collationName.equals("UTF8_BINARY_LCASE");
+      this.supportsLowercaseEquality = supportsLowercaseEquality;
 
       // De Morgan's Law to check supportsBinaryOrdering => supportsBinaryEquality
       assert(!supportsBinaryOrdering || supportsBinaryEquality);
@@ -123,7 +124,8 @@ public final class CollationFactory {
         Collator collator,
         String version,
         boolean supportsBinaryEquality,
-        boolean supportsBinaryOrdering) {
+        boolean supportsBinaryOrdering,
+        boolean supportsLowercaseEquality) {
       this(
         collationName,
         collator,
@@ -131,7 +133,8 @@ public final class CollationFactory {
         version,
         s -> (long)collator.getCollationKey(s.toString()).hashCode(),
         supportsBinaryEquality,
-        supportsBinaryOrdering);
+        supportsBinaryOrdering,
+        supportsLowercaseEquality);
     }
   }
 
@@ -152,7 +155,8 @@ public final class CollationFactory {
       "1.0",
       s -> (long)s.hashCode(),
       true,
-      true);
+      true,
+      false);
 
     // Case-insensitive UTF8 binary collation.
     // TODO: Do in place comparisons instead of creating new strings.
@@ -163,17 +167,18 @@ public final class CollationFactory {
       "1.0",
       (s) -> (long)s.toLowerCase().hashCode(),
       false,
-      false);
+      false,
+      true);
 
     // UNICODE case sensitive comparison (ROOT locale, in ICU).
     collationTable[2] = new Collation(
-      "UNICODE", Collator.getInstance(ULocale.ROOT), "153.120.0.0", true, false);
+      "UNICODE", Collator.getInstance(ULocale.ROOT), "153.120.0.0", true, false, false);
     collationTable[2].collator.setStrength(Collator.TERTIARY);
     collationTable[2].collator.freeze();
 
     // UNICODE case-insensitive comparison (ROOT locale, in ICU + Secondary strength).
     collationTable[3] = new Collation(
-      "UNICODE_CI", Collator.getInstance(ULocale.ROOT), "153.120.0.0", false, false);
+      "UNICODE_CI", Collator.getInstance(ULocale.ROOT), "153.120.0.0", false, false, false);
     collationTable[3].collator.setStrength(Collator.SECONDARY);
     collationTable[3].collator.freeze();
 
