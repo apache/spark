@@ -33,7 +33,8 @@ import org.apache.hadoop.hive.serde.serdeConstants.SERIALIZATION_FORMAT
 import org.apache.thrift.TException
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{DATABASE_NAME, SCHEMA, SCHEMA2, TABLE_NAME}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
@@ -175,9 +176,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   override def alterDatabase(dbDefinition: CatalogDatabase): Unit = withClient {
     val existingDb = getDatabase(dbDefinition.name)
     if (existingDb.properties == dbDefinition.properties) {
-      logWarning(s"Request to alter database ${dbDefinition.name} is a no-op because " +
-        s"the provided database properties are the same as the old ones. Hive does not " +
-        s"currently support altering other database fields.")
+      logWarning(log"Request to alter database ${MDC(DATABASE_NAME, dbDefinition.name)} is a " +
+        log"no-op because the provided database properties are the same as the old ones. Hive " +
+        log"does not currently support altering other database fields.")
     }
     client.alterDatabase(dbDefinition)
   }
@@ -380,8 +381,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         } catch {
           case NonFatal(e) =>
             val warningMessage =
-              s"Could not persist ${table.identifier.quotedString} in a Hive " +
-                "compatible way. Persisting it into Hive metastore in Spark SQL specific format."
+              log"Could not persist ${MDC(TABLE_NAME, table.identifier.quotedString)} in a Hive " +
+                log"compatible way. Persisting it into Hive metastore in Spark SQL specific format."
             logWarning(warningMessage, e)
             saveTableIntoHive(newSparkSQLSpecificMetastoreTable(), ignoreIfExists)
         }
@@ -676,9 +677,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         client.alterTableDataSchema(db, table, newDataSchema, schemaProps)
       } catch {
         case NonFatal(e) =>
-          val warningMessage =
-            s"Could not alter schema of table ${oldTable.identifier.quotedString} in a Hive " +
-              "compatible way. Updating Hive metastore in Spark SQL specific format."
+          val warningMessage = log"Could not alter schema of table " +
+            log"${MDC(TABLE_NAME, oldTable.identifier.quotedString)} in a Hive compatible way. " +
+            log"Updating Hive metastore in Spark SQL specific format."
           logWarning(warningMessage, e)
           client.alterTableDataSchema(db, table, EMPTY_DATA_SCHEMA, schemaProps)
       }
@@ -800,10 +801,11 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         // schema we read back is different(ignore case and nullability) from the one in table
         // properties which was written when creating table, we should respect the table schema
         // from hive.
-        logWarning(s"The table schema given by Hive metastore(${table.schema.catalogString}) is " +
-          "different from the schema when this table was created by Spark SQL" +
-          s"(${schemaFromTableProps.catalogString}). We have to fall back to the table schema " +
-          "from Hive metastore which is not case preserving.")
+        logWarning(log"The table schema given by Hive metastore" +
+          log"(${MDC(SCHEMA, table.schema.catalogString)}) is different from the schema when " +
+          log"this table was created by Spark SQL" +
+          log"(${MDC(SCHEMA2, schemaFromTableProps.catalogString)}). We have to fall back to " +
+          log"the table schema from Hive metastore which is not case preserving.")
         hiveTable.copy(schemaPreservesCase = false)
       }
     } else {

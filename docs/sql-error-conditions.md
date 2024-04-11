@@ -1873,11 +1873,13 @@ Execute immediate requires a non-null variable as the query string, but the prov
 
 The value `<value>` cannot be interpreted as a numeric since it has more than 38 digits.
 
-### NUMERIC_VALUE_OUT_OF_RANGE
+### [NUMERIC_VALUE_OUT_OF_RANGE](sql-error-conditions-numeric-value-out-of-range-error-class.html)
 
 [SQLSTATE: 22003](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
-`<value>` cannot be represented as Decimal(`<precision>`, `<scale>`). If necessary set `<config>` to "false" to bypass this error, and return NULL instead.
+
+
+For more details see [NUMERIC_VALUE_OUT_OF_RANGE](sql-error-conditions-numeric-value-out-of-range-error-class.html)
 
 ### NUM_COLUMNS_MISMATCH
 
