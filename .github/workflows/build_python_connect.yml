@@ -29,6 +29,7 @@ jobs:
     name: "Build modules: pyspark-connect"
     runs-on: ubuntu-latest
     timeout-minutes: 300
+    if: github.repository == 'apache/spark'
     steps:
       - name: Checkout Spark repository
         uses: actions/checkout@v4

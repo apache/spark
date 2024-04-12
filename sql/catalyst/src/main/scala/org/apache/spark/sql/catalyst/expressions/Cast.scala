@@ -1114,7 +1114,7 @@ case class Cast(
       _ => throw QueryExecutionErrors.cannotCastFromNullTypeError(to)
     } else if (from.isInstanceOf[VariantType]) {
       buildCast[VariantVal](_, v => {
-        variant.VariantGet.cast(v, to, evalMode != EvalMode.TRY, timeZoneId)
+        variant.VariantGet.cast(v, to, evalMode != EvalMode.TRY, timeZoneId, zoneId)
       })
     } else {
       to match {
@@ -1211,11 +1211,12 @@ case class Cast(
     case _ if from.isInstanceOf[VariantType] => (c, evPrim, evNull) =>
       val tmp = ctx.freshVariable("tmp", classOf[Object])
       val dataTypeArg = ctx.addReferenceObj("dataType", to)
-      val zoneIdArg = ctx.addReferenceObj("zoneId", timeZoneId)
+      val zoneStrArg = ctx.addReferenceObj("zoneStr", timeZoneId)
+      val zoneIdArg = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
       val failOnError = evalMode != EvalMode.TRY
       val cls = classOf[variant.VariantGet].getName
       code"""
-        Object $tmp = $cls.cast($c, $dataTypeArg, $failOnError, $zoneIdArg);
+        Object $tmp = $cls.cast($c, $dataTypeArg, $failOnError, $zoneStrArg, $zoneIdArg);
         if ($tmp == null) {
           $evNull = true;
         } else {

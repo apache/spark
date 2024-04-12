@@ -363,8 +363,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
           logDebug(s"Service url matched junk ${junk} - url ${url} - extra ${extra}")
           url
         case _ =>
-          logWarning(log"Response from minikube ${MDC(LogKey.MINIKUBE_URL, rawUrl)} " +
-            log"did not match URL regex")
+          logWarning(s"Response from minikube ${rawUrl} did not match URL regex")
           rawUrl
       }
       url

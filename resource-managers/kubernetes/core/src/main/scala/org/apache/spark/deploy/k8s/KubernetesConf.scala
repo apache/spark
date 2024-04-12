@@ -215,9 +215,9 @@ private[spark] class KubernetesExecutorConf(
     if (executorEnvRegex.pattern.matcher(key).matches()) {
       true
     } else {
-      logWarning(log"Invalid key: ${MDC(CONFIG, key)}: " +
+      logWarning(log"Invalid key: ${MDC(CONFIG, key)}, " +
         log"a valid environment variable name must consist of alphabetic characters, " +
-        log"digits, '_', '-', or '.', and must not start with a digit." +
+        log"digits, '_', '-', or '.', and must not start with a digit. " +
         log"Regex used for validation is '${MDC(EXECUTOR_ENV_REGEX, executorEnvRegex)}'")
       false
     }
