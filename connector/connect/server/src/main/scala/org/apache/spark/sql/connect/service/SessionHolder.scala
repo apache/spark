@@ -419,9 +419,12 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
       transform: proto.Relation => LogicalPlan): LogicalPlan = {
     val planCacheEnabled =
       Option(session).forall(_.conf.get(Connect.CONNECT_SESSION_PLAN_CACHE_ENABLED, true))
+    // We only cache plans that have a plan ID.
+    val hasPlanId = rel.hasCommon && rel.getCommon.hasPlanId
+
     def getPlanCache(rel: proto.Relation): Option[LogicalPlan] =
       planCache match {
-        case Some(cache) if planCacheEnabled =>
+        case Some(cache) if planCacheEnabled && hasPlanId =>
           Option(cache.getIfPresent(rel)) match {
             case Some(plan) =>
               logDebug(s"Using cached plan for relation '$rel': $plan")
@@ -432,7 +435,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
       }
     def putPlanCache(rel: proto.Relation, plan: LogicalPlan): Unit =
       planCache match {
-        case Some(cache) if planCacheEnabled =>
+        case Some(cache) if planCacheEnabled && hasPlanId =>
           cache.put(rel, plan)
         case _ =>
       }

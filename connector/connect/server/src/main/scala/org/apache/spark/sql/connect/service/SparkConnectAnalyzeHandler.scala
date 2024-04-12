@@ -59,13 +59,7 @@ private[connect] class SparkConnectAnalyzeHandler(
     val session = sessionHolder.session
     val builder = proto.AnalyzePlanResponse.newBuilder()
 
-    def transformRelation(rel: proto.Relation): LogicalPlan = {
-      if (rel.hasCommon && rel.getCommon.hasPlanId) {
-        planner.transformRelation(rel, cachePlan = true)
-      } else {
-        planner.transformRelation(rel, cachePlan = false)
-      }
-    }
+    def transformRelation(rel: proto.Relation) = planner.transformRelation(rel, cachePlan = true)
 
     request.getAnalyzeCase match {
       case proto.AnalyzePlanRequest.AnalyzeCase.SCHEMA =>
