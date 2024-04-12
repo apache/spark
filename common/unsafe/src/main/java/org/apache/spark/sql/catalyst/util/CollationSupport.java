@@ -64,7 +64,6 @@ public final class CollationSupport {
 
     @Override
     public Boolean execLowercase(UTF8String first, UTF8String second) {
-      CollationAwareBinaryFunction<UTF8String, UTF8String, Boolean> xx = new StartsWith();
       return first.toLowerCase().startsWith(second.toLowerCase());
     }
 
