@@ -23,6 +23,7 @@ import java.nio.file.Files
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.sys.process.Process
+import scala.util.Random
 
 import com.google.common.collect.Lists
 import org.scalatest.time.SpanSugar._
@@ -302,6 +303,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
           .setQuery(query)
           .build()
       )
+      .setCommon(proto.RelationCommon.newBuilder().setPlanId(Random.nextLong()).build())
       .build()
   }
 
@@ -342,9 +344,11 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
                 .build()
             )
         )
+        .setCommon(proto.RelationCommon.newBuilder().setPlanId(Random.nextLong()).build())
         .build()
       val query2 = proto.Relation.newBuilder
         .setLimit(proto.Limit.newBuilder.setLimit(5).setInput(query1))
+        .setCommon(proto.RelationCommon.newBuilder().setPlanId(Random.nextLong()).build())
         .build()
 
       // If cachePlan is false, the cache is still empty.
