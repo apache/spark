@@ -31,36 +31,35 @@ import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.types.{BinaryType, DataType, DoubleType, FloatType, IntegerType, StringType, StructType}
 
-
-class StreamingQueryHashPartitionVerifySuite  extends StreamTest {
+class StreamingQueryHashPartitionVerifySuite extends StreamTest {
   override protected def sparkConf: SparkConf =
     super.sparkConf
       .set(SQLConf.SHUFFLE_PARTITIONS.key, numShufflePartitions.toString)
 
   // Configs for golden file
-  val goldenFileURI = this.getClass.getResource("/structured-streaming/partition-tests/").toURI
+  private val goldenFileURI =
+    this.getClass.getResource("/structured-streaming/partition-tests/").toURI
 
-  val schemaFileName = "randomSchemas" // files for storing random input schemas
-  val rowAndPartIdFilename =
+  private val schemaFileName = "randomSchemas" // files for storing random input schemas
+  private val rowAndPartIdFilename =
     "rowsAndPartIds" // files for storing random input rows and resulting partition ids
-  val codec = CompressionCodec.createCodec(
+  private val codec = CompressionCodec.createCodec(
     sparkConf) // Used for compressing output to rowAndPartId file
 
   // Configs for random schema generation
   private val variableTypes = Seq(IntegerType, DoubleType, FloatType, BinaryType, StringType)
-  val numSchemaTypes = 5
-  val maxNumFields = 10
+  private val numSchemaTypes = 1
+  private val maxNumFields = 20
 
   // Configs for shuffle
-  val numRows = 10000
-  val numShufflePartitions = 100
+  private val numRows = 10000
+  private val numShufflePartitions = 100
   private def saveSchemas(schemas: Seq[StructType]) = {
     val writer = new BufferedWriter(new FileWriter(new File(goldenFileURI.getPath, schemaFileName)))
-    schemas.foreach{ schema =>
-      writer.write(schema.json)
+    schemas.foreach { schema =>
+      writer.write(schema.toDDL)
       writer.newLine()
     }
     writer.close()
@@ -68,26 +67,37 @@ class StreamingQueryHashPartitionVerifySuite  extends StreamTest {
 
   private def readSchemas(): Seq[StructType] = {
     val source = Source.fromFile(new File(goldenFileURI.getPath, schemaFileName))
-    try{
-      source.getLines().map{json => DataType.fromJson(json).asInstanceOf[StructType]}
+    try {
+      source
+        .getLines()
+        .map { ddl =>
+          StructType.fromDDL(ddl)
+        }
         .toArray // Avoid Stream lazy materialization
         .toSeq
-    } finally
-      source.close()
+    } finally source.close()
   }
 
   private def saveRowsAndPartIds(rows: Seq[UnsafeRow], partIds: Seq[Int], os: DataOutputStream) = {
+    // Save the total number of rows
     os.writeInt(rows.length)
+    // Save all rows
     rows.foreach { row =>
+      // Save the row's total number of bytes
       val rowBytes = row.getBytes()
+      // Save the row's actual bytes
       os.writeInt(rowBytes.size)
-      os.write(rowBytes)}
-    partIds.foreach {id => os.writeInt(id)}
+      os.write(rowBytes)
+    }
+    // Save all partIds, which should be in the same order as rows
+    partIds.foreach { id =>
+      os.writeInt(id)
+    }
   }
 
   private def readRowsAndPartIds(is: DataInputStream): (Seq[UnsafeRow], Seq[Int]) = {
     val numRows = is.readInt()
-    val rows = (1 to numRows).map{_ =>
+    val rows = (1 to numRows).map { _ =>
       val rowSize = is.readInt()
       val rowBuffer = new Array[Byte](rowSize)
       ByteStreams.readFully(is, rowBuffer, 0, rowSize)
@@ -101,7 +111,12 @@ class StreamingQueryHashPartitionVerifySuite  extends StreamTest {
 
   private def getRandomRows(schema: StructType, numRows: Int, rand: Random): Seq[UnsafeRow] = {
     val generator = RandomDataGenerator
-      .forType(schema, rand = new Random(rand.nextInt(RandomDataGenerator.MAX_STR_LEN)))
+      .forType(
+        schema,
+        rand = new Random(rand.nextInt(RandomDataGenerator.MAX_ARR_SIZE)),
+        maxStringLength = 100,
+        maxArrayLength = 4
+      )
       .get
 
     // Create the converters needed to convert from external row to internal
@@ -116,21 +131,23 @@ class StreamingQueryHashPartitionVerifySuite  extends StreamTest {
       val internalRow = new GenericInternalRow(1)
       internalRow.update(0, internalConverter(row).asInstanceOf[GenericInternalRow])
       val unsafeRow = unsafeConverter.apply(internalRow)
+
+      // UnsafeProjection returns the same UnsafeRow instance intentionally, so
+      // unless doing deep copy, the hash partitions below will evaluate on the
+      // same row thus return same value.
       unsafeRow.copy()
     }
   }
 
-  private def getRandomSchemas(numSchemaTypes: Int, rand: Random,
-                               maxNumFields: Int): Seq[StructType] = {
+  private def getRandomSchemas(rand: Random): Seq[StructType] = {
     (1 to numSchemaTypes).map { _ =>
-      val numField = rand.nextInt(maxNumFields)
-      RandomDataGenerator.randomSchema(rand, Math.max(1, numField), variableTypes)
+      RandomDataGenerator.randomNestedSchema(rand, maxNumFields, variableTypes)
     }
   }
 
   private def getPartitionId(rows: Seq[UnsafeRow], hash: HashPartitioning): Seq[Int] = {
     val partIdExpr = hash.partitionIdExpression
-    rows.map{row =>
+    rows.map { row =>
       partIdExpr.eval(row).asInstanceOf[Int]
     }
   }
@@ -143,39 +160,39 @@ class StreamingQueryHashPartitionVerifySuite  extends StreamTest {
       val random = new Random(seed)
       logInfo(s"Get random inputs with seed $seed")
 
-      val schemas = getRandomSchemas(numSchemaTypes, random, maxNumFields)
+      val schemas = getRandomSchemas(random)
 
       val os = new DataOutputStream(
         codec.compressedOutputStream(new FileOutputStream(rowAndPartIdFile))
       )
 
       saveSchemas(schemas)
+
       schemas.foreach { schema =>
-          // Streaming stateful ops rely on this distribution to partition the data.
-          // Spark should make sure this class's partition dependency remain unchanged.
-          val hash = StatefulOpClusteredDistribution(
-            Seq(BoundReference(0, schema, nullable = true)),
-            numShufflePartitions
-          ).createPartitioning(numShufflePartitions)
+        // Streaming stateful ops rely on this distribution to partition the data.
+        // Spark should make sure this class's partition dependency remain unchanged.
+        val hash = StatefulOpClusteredDistribution(
+          Seq(BoundReference(0, schema, nullable = true)),
+          numShufflePartitions
+        ).createPartitioning(numShufflePartitions)
 
-          assert(
-            hash.isInstanceOf[HashPartitioning],
-            "StatefulOpClusteredDistribution should " +
-            "rely on HashPartitioning to ensure partitions remain the same for streaming " +
-            "stateful operators."
-          )
-          val rows = getRandomRows(schema, numRows, random)
-          val partitions = getPartitionId(rows, hash.asInstanceOf[HashPartitioning])
-          saveRowsAndPartIds(rows, partitions, os)
-
+        assert(
+          hash.isInstanceOf[HashPartitioning],
+          "StatefulOpClusteredDistribution should " +
+          "rely on HashPartitioning to ensure partitions remain the same for streaming " +
+          "stateful operators."
+        )
+        val rows = getRandomRows(schema, numRows, random)
+        val partitions = getPartitionId(rows, hash.asInstanceOf[HashPartitioning])
+        saveRowsAndPartIds(rows, partitions, os)
       }
       os.close()
     } else {
       val schemas = readSchemas()
       val is = new DataInputStream(
-          codec.compressedInputStream(new FileInputStream(rowAndPartIdFile))
+        codec.compressedInputStream(new FileInputStream(rowAndPartIdFile))
       )
-     schemas.foreach { schema =>
+      schemas.foreach { schema =>
         val hash = StatefulOpClusteredDistribution(
           Seq(BoundReference(0, schema, nullable = true)),
           numShufflePartitions
@@ -190,8 +207,10 @@ class StreamingQueryHashPartitionVerifySuite  extends StreamTest {
 
         val (rows, expectedPartitions) = readRowsAndPartIds(is)
         val partitions = getPartitionId(rows, hash.asInstanceOf[HashPartitioning])
-        assert(partitions === expectedPartitions,
-          "The partition ids do not match the expected partitions generated before.")
+        assert(
+          partitions === expectedPartitions,
+          "The partition ids do not match the expected partitions generated before."
+        )
       }
       is.close()
     }
