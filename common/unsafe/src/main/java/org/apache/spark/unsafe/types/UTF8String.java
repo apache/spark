@@ -30,6 +30,7 @@ import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
+import com.ibm.icu.text.StringSearch;
 import org.apache.spark.sql.catalyst.util.CollationFactory;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.UTF8StringBuilder;
@@ -801,7 +802,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return -1;
   }
 
-  private int charPosToByte(int charPos) {
+  public int charPosToByte(int charPos) {
     if (charPos < 0) {
       return -1;
     }
@@ -815,7 +816,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return i;
   }
 
-  private int bytePosToChar(int bytePos) {
+  public int bytePosToChar(int bytePos) {
     int i = 0;
     int c = 0;
     while (i < numBytes && i < bytePos) {
@@ -840,30 +841,6 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Find the `str` from left to right considering different collations.
-   */
-  private int find(UTF8String str, int start, int collationId) {
-    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
-      return this.find(str, start);
-    }
-    return collationAwareFind(str, start, collationId);
-  }
-
-  /**
-   * Find the `str` from left to right considering non-binary collations.
-   */
-  private int collationAwareFind(UTF8String str, int start, int collationId) {
-    assert (str.numBytes > 0);
-
-    StringSearch stringSearch = CollationFactory.getStringSearch(this, str, collationId);
-    // Set search start position (start from character at start position)
-    stringSearch.setIndex(bytePosToChar(start));
-
-    // Return either the byte position or -1 if not found
-    return charPosToByte(stringSearch.next());
-  }
-
-  /**
    * Find the `str` from right to left.
    */
   private int rfind(UTF8String str, int start) {
@@ -875,43 +852,6 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       start -= 1;
     }
     return -1;
-  }
-
-  /**
-   * Find the `str` from right to left considering different collations.
-   */
-  private int rfind(UTF8String str, int start, int collationId) {
-    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
-      return this.rfind(str, start);
-    }
-    return collationAwareRFind(str, start, collationId);
-  }
-
-  /**
-   * Find the `str` from left to right considering non-binary collations.
-   */
-  private int collationAwareRFind(UTF8String str, int start, int collationId) {
-    assert (str.numBytes > 0);
-
-    if (numBytes == 0) {
-      return -1;
-    }
-
-    StringSearch stringSearch = CollationFactory.getStringSearch(this, str, collationId);
-
-    int prevStart = -1;
-    int matchStart = stringSearch.next();
-    while (charPosToByte(matchStart) <= start) {
-      if (matchStart != StringSearch.DONE) {
-        // Found a match, update the start position
-        prevStart = matchStart;
-        matchStart = stringSearch.next();
-      } else {
-        return charPosToByte(prevStart);
-      }
-    }
-
-    return charPosToByte(prevStart);
   }
 
   /**
@@ -947,60 +887,6 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       count = -count;
       while (count > 0) {
         idx = rfind(delim, idx - 1);
-        if (idx >= 0) {
-          count --;
-        } else {
-          // can not find enough delim
-          return this;
-        }
-      }
-      if (idx + delim.numBytes == numBytes) {
-        return EMPTY_UTF8;
-      }
-      int size = numBytes - delim.numBytes - idx;
-      byte[] bytes = new byte[size];
-      copyMemory(base, offset + idx + delim.numBytes, bytes, BYTE_ARRAY_OFFSET, size);
-      return fromBytes(bytes);
-    }
-  }
-
-  /**
-   * This is a collation aware implementation of subStringIndex.
-   * @param delim The delimiter to search for.
-   * @param count The number of occurrences of the delimiter to search for.
-   * @param collationId The collation to use for comparison.
-   * @return The substring from string str before count occurrences of the delimiter delim.
-   * If count is positive, everything the left of the final delimiter (counting from left) is
-   * returned. If count is negative, every to the right of the final delimiter (counting from the
-   * right) is returned. subStringIndex performs a case-sensitive match when searching for delim.
-   */
-  public UTF8String collationAwareSubStringIndex(UTF8String delim, int count, int collationId) {
-    if (delim.numBytes == 0 || count == 0) {
-      return EMPTY_UTF8;
-    }
-    if (count > 0) {
-      int idx = -1;
-      while (count > 0) {
-        idx = find(delim, idx + 1, collationId);
-        if (idx >= 0) {
-          count --;
-        } else {
-          // can not find enough delim
-          return this;
-        }
-      }
-      if (idx == 0) {
-        return EMPTY_UTF8;
-      }
-      byte[] bytes = new byte[idx];
-      copyMemory(base, offset, bytes, BYTE_ARRAY_OFFSET, idx);
-      return fromBytes(bytes);
-
-    } else {
-      int idx = numBytes - delim.numBytes + 1;
-      count = -count;
-      while (count > 0) {
-        idx = rfind(delim, idx - 1, collationId);
         if (idx >= 0) {
           count --;
         } else {
