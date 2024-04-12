@@ -201,12 +201,14 @@ case class TransformWithStateExec(
   private def processTimers(
       timeMode: TimeMode,
       processorHandle: StatefulProcessorHandleImpl): Iterator[InternalRow] = {
+    val numExpiredTimers = longMetric("numExpiredTimers")
     timeMode match {
       case ProcessingTime =>
         assert(batchTimestampMs.isDefined)
         val batchTimestamp = batchTimestampMs.get
         processorHandle.getExpiredTimers(batchTimestamp)
           .flatMap { case (keyObj, expiryTimestampMs) =>
+            numExpiredTimers += 1
             handleTimerRows(keyObj, expiryTimestampMs, processorHandle)
           }
 
@@ -215,6 +217,7 @@ case class TransformWithStateExec(
         val watermark = eventTimeWatermarkForEviction.get
         processorHandle.getExpiredTimers(watermark)
           .flatMap { case (keyObj, expiryTimestampMs) =>
+            numExpiredTimers += 1
             handleTimerRows(keyObj, expiryTimestampMs, processorHandle)
           }
 
@@ -291,6 +294,26 @@ case class TransformWithStateExec(
       statefulProcessor.setHandle(null)
       processorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
     })
+  }
+
+  // operator specific metrics
+  override def customStatefulOperatorMetrics: Seq[StatefulOperatorCustomMetric] = {
+    Seq(
+      // metrics around state variables
+      StatefulOperatorCustomSumMetric("numValueStateVars", "Number of value state variables"),
+      StatefulOperatorCustomSumMetric("numListStateVars", "Number of list state variables"),
+      StatefulOperatorCustomSumMetric("numMapStateVars", "Number of map state variables"),
+      StatefulOperatorCustomSumMetric("numDeletedStateVars", "Number of deleted state variables"),
+      // metrics around timers
+      StatefulOperatorCustomSumMetric("numRegisteredTimers", "Number of registered timers"),
+      StatefulOperatorCustomSumMetric("numDeletedTimers", "Number of deleted timers"),
+      StatefulOperatorCustomSumMetric("numExpiredTimers", "Number of expired timers"),
+      // metrics around TTL
+      StatefulOperatorCustomSumMetric("numValueStateWithTTLVars",
+        "Number of value state variables with TTL"),
+      StatefulOperatorCustomSumMetric("numValuesRemovedDueToTTLExpiry",
+        "Number of values removed due to TTL expiry")
+    )
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -412,7 +435,7 @@ case class TransformWithStateExec(
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
     val processorHandle = new StatefulProcessorHandleImpl(
       store, getStateInfo.queryRunId, keyEncoder, timeMode,
-      isStreaming, batchTimestampMs)
+      isStreaming, batchTimestampMs, metrics)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
     statefulProcessor.setHandle(processorHandle)
     statefulProcessor.init(outputMode, timeMode)
@@ -426,7 +449,7 @@ case class TransformWithStateExec(
       initStateIterator: Iterator[InternalRow]):
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
     val processorHandle = new StatefulProcessorHandleImpl(store, getStateInfo.queryRunId,
-      keyEncoder, timeMode, isStreaming)
+      keyEncoder, timeMode, isStreaming, batchTimestampMs, metrics)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
     statefulProcessor.setHandle(processorHandle)
     statefulProcessor.init(outputMode, timeMode)

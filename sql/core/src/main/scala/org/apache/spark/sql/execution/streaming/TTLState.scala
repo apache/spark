@@ -55,8 +55,10 @@ trait TTLState {
    * this state. NOTE that its not safe to call this operation concurrently
    * when the user can also modify the underlying State. Cleanup should be initiated
    * after arbitrary state operations are completed by the user.
+   *
+   * @return number of values cleaned up.
    */
-  def clearExpiredState(): Unit
+  def clearExpiredState(): Long
 
   /**
    * Clears the user state associated with this grouping key
@@ -70,8 +72,10 @@ trait TTLState {
    * on their own State data.
    *
    * @param groupingKey grouping key for which cleanup should be performed.
+   *
+   * @return true if the state was cleared, false otherwise.
    */
-  def clearIfExpired(groupingKey: Array[Byte]): Unit
+  def clearIfExpired(groupingKey: Array[Byte]): Boolean
 }
 
 /**
@@ -105,17 +109,21 @@ abstract class SingleKeyTTLStateImpl(
   /**
    * Clears any state which has ttl older than [[ttlExpirationMs]].
    */
-  override def clearExpiredState(): Unit = {
+  override def clearExpiredState(): Long = {
     val iterator = store.iterator(ttlColumnFamilyName)
+    var numValuesExpired = 0L
 
     iterator.takeWhile { kv =>
       val expirationMs = kv.key.getLong(0)
       StateTTL.isExpired(expirationMs, ttlExpirationMs)
     }.foreach { kv =>
       val groupingKey = kv.key.getBinary(1)
-      clearIfExpired(groupingKey)
+      if (clearIfExpired(groupingKey)) {
+        numValuesExpired += 1
+      }
       store.remove(kv.key, ttlColumnFamilyName)
     }
+    numValuesExpired
   }
 
   private[sql] def ttlIndexIterator(): Iterator[SingleKeyTTLRow] = {
