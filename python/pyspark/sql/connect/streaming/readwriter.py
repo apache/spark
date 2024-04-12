@@ -535,7 +535,6 @@ class DataStreamWriter:
 
     def foreach(self, f: Union[Callable[[Row], None], "SupportsProcess"]) -> "DataStreamWriter":
         from pyspark.serializers import CPickleSerializer, AutoBatchedSerializer
-        from pyspark.sql.connect.session import SparkSession
 
         func = PySparkDataStreamWriter._construct_foreach_function(f)
         serializer = AutoBatchedSerializer(CPickleSerializer())
