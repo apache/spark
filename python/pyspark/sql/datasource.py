@@ -642,7 +642,7 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
         if self.current_offset is None:
             self.current_offset = self.initialOffset()
         (iter, end) = self.simple_reader.read(self.current_offset)  # type: ignore[arg-type]
-        self.cache.append(PrefetchedCacheEntry(self.current_offset, end, iter))  # type: ignore[arg-type]
+        self.cache.append(PrefetchedCacheEntry(self.current_offset, end, iter))
         self.current_offset = end
         return end
 
