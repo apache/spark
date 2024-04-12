@@ -201,7 +201,7 @@ public final class CollationSupport {
     }
     public static int execICU(final UTF8String l, final UTF8String r, final int start,
                               final int collationId) {
-      return CollationAwareUTF8String.indexOf(l, r, start, collationId);
+      return Math.max(CollationAwareUTF8String.indexOf(l, r, start, collationId), 0);
     }
   }
 
@@ -274,9 +274,7 @@ public final class CollationSupport {
       StringSearch stringSearch = CollationFactory.getStringSearch(target, pattern, collationId);
       stringSearch.setIndex(start);
 
-      int result = stringSearch.next();
-
-      return Math.max(result, 0);
+      return stringSearch.next();
     }
 
   }
