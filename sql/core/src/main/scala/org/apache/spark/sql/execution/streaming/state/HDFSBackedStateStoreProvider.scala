@@ -229,7 +229,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       s"HDFSStateStore[id=(op=${id.operatorId},part=${id.partitionId}),dir=$baseDir]"
     }
 
-    override def removeColFamilyIfExists(colFamilyName: String): Unit = {
+    override def removeColFamilyIfExists(colFamilyName: String): Boolean = {
       throw StateStoreErrors.removingColumnFamiliesNotSupported(providerName)
     }
 
