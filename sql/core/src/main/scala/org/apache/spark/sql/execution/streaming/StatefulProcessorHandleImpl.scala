@@ -287,6 +287,23 @@ class StatefulProcessorHandleImpl(
     resultState
   }
 
+  override def getMapState[K, V](
+      stateName: String,
+      userKeyEnc: Encoder[K],
+      valEncoder: Encoder[V],
+      ttlConfig: TTLConfig): MapState[K, V] = {
+    verifyStateVarOperations("get_map_state")
+    validateTTLConfig(ttlConfig, stateName)
+
+    assert(batchTimestampMs.isDefined)
+    val mapStateWithTTL = new MapStateImplWithTTL[K, V](store, stateName, keyEncoder, userKeyEnc,
+      valEncoder, ttlConfig, batchTimestampMs.get)
+    incrementMetric("numMapStateWithTTLVars")
+    ttlStates.add(mapStateWithTTL)
+
+    mapStateWithTTL
+  }
+
   private def validateTTLConfig(ttlConfig: TTLConfig, stateName: String): Unit = {
     val ttlDuration = ttlConfig.ttlDuration
     if (timeMode != TimeMode.ProcessingTime()) {
