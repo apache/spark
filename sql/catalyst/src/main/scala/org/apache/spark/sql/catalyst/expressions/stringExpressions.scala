@@ -1471,15 +1471,8 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
           if (sVal < 1) {
             0
           } else {
-            if (collationId == CollationFactory.UTF8_BINARY_COLLATION_ID) {
-              l.asInstanceOf[UTF8String].indexOf(
-                r.asInstanceOf[UTF8String],
-                s.asInstanceOf[Int] - 1) + 1
-            } else {
-              l.asInstanceOf[UTF8String].indexOf(
-                r.asInstanceOf[UTF8String],
-                s.asInstanceOf[Int] - 1, collationId) + 1
-            }
+            CollationSupport.IndexOf.exec(l.asInstanceOf[UTF8String], r.asInstanceOf[UTF8String],
+              s.asInstanceOf[Int] - 1, collationId) + 1;
           }
         }
       }
@@ -1500,13 +1493,8 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
           ${strGen.code}
           if (!${strGen.isNull}) {
             if (${startGen.value} > 0) {
-              if (${collationId} == CollationFactory.UTF8_BINARY_COLLATION_ID) {
-                ${ev.value} = ${strGen.value}.indexOf(${substrGen.value},
-                  ${startGen.value} - 1) + 1;
-              } else {
-                ${ev.value} = ${strGen.value}.indexOf(${substrGen.value},
-                  ${startGen.value} - 1, ${collationId}) + 1;
-              }
+              ${ev.value} = CollationSupport.IndexOf.exec(${strGen.value},
+              ${substrGen.value}, ${startGen.value} - 1, $collationId) + 1;
             }
           } else {
             ${ev.isNull} = true;

@@ -137,6 +137,40 @@ public final class CollationSupport {
     }
   }
 
+  public static class IndexOf {
+    public static int exec(final UTF8String l, final UTF8String r, final int start, final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      if (collation.supportsBinaryEquality) {
+        return execBinary(l, r, start);
+      } else if (collation.supportsLowercaseEquality) {
+        return execLowercase(l, r, start);
+      } else {
+        return execICU(l, r, start, collationId);
+      }
+    }
+    public static String genCode(final String l, final String r, final int start, final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      String expr = "CollationSupport.IndexOf.exec";
+      if (collation.supportsBinaryEquality) {
+        return String.format(expr + "Binary(%s, %s, %d)", l, r, start);
+      } else if (collation.supportsLowercaseEquality) {
+        return String.format(expr + "Lowercase(%s, %s, %d)", l, r, start);
+      } else {
+        return String.format(expr + "ICU(%s, %s, %d, %d)", l, r, start, collationId);
+      }
+    }
+    public static int execBinary(final UTF8String l, final UTF8String r, final int start) {
+      return l.indexOf(r, start);
+    }
+    public static int execLowercase(final UTF8String l, final UTF8String r, final int start) {
+      return l.toLowerCase().indexOf(r.toLowerCase(), start);
+    }
+    public static int execICU(final UTF8String l, final UTF8String r, final int start,
+                              final int collationId) {
+      return CollationAwareUTF8String.indexOf(l, r, start, collationId);
+    }
+  }
+
   // TODO: Add more collation-aware string expressions.
 
   /**
@@ -167,6 +201,17 @@ public final class CollationSupport {
       }
       return CollationFactory.getStringSearch(target.substring(
         pos, pos + pattern.numChars()), pattern, collationId).last() == 0;
+    }
+
+    private static int indexOf(UTF8String target, UTF8String pattern, int start, int collationId) {
+      if (pattern.numBytes() == 0) {
+        return 0;
+      }
+
+      StringSearch stringSearch = CollationFactory.getStringSearch(target, pattern, collationId);
+      stringSearch.setIndex(start);
+
+      return stringSearch.next();
     }
 
   }
