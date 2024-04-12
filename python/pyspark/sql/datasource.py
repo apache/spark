@@ -627,16 +627,16 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
 
     def initialOffset(self) -> dict:
         if self.initial_offset is None:
-            self.initial_offset = self.simple_reader.initialOffset()
+            self.initial_offset = self.simple_reader.initialOffset()  # type: ignore[assignment]
         return self.initial_offset
 
     def latestOffset(self) -> dict:
         # when query start for the first time, use initial offset as the start offset.
         if self.current_offset is None:
             self.current_offset = self.initialOffset()  # type: ignore[assignment]
-        (iter, end) = self.simple_reader.read(self.current_offset)
-        self.cache.append((self.current_offset, end, iter))
-        self.current_offset = end
+        (iter, end) = self.simple_reader.read(self.current_offset)  # type: ignore[arg-type]
+        self.cache.append((self.current_offset, end, iter))  # type: ignore[arg-type]
+        self.current_offset = end  # type: ignore[assignment]
         return end
 
     def commit(self, end: dict) -> None:
@@ -658,7 +658,7 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
         # This depends on the current behavior that streaming engine call getBatch on the last
         # microbatch when query restart.
         if self.current_offset is None:
-            self.current_offset = end
+            self.current_offset = end  # type: ignore[assignment]
         if len(self.cache) > 0:
             assert self.cache[-1][1] == end
         return [SimpleInputPartition(start, end)]
@@ -674,17 +674,17 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
             if json.dumps(self.cache[i][1]) == json.dumps(end):
                 end_idx = i
         if start_idx == -1 or end_idx == -1:
-            return None
+            return None  # type: ignore[return-value]
         # Chain all the data iterator between start offset and end offset
         # need to copy here to avoid exhausting the original data iterator.
-        entries = [copy.copy(entry[2]) for entry in self.cache[start_idx : end_idx + 1]]
+        entries = [copy.copy(entry[2]) for entry in self.cache[start_idx: end_idx + 1]]
         it = chain(*entries)
         return it
 
     def read(self, input_partition: InputPartition) -> Iterator[Tuple]:
         return self.simple_reader.readBetweenOffsets(
-            input_partition.start, input_partition.end
-        )  # type: ignore[attr-defined]
+            input_partition.start, input_partition.end  # type: ignore[attr-defined]
+        )
 
 
 class DataSourceWriter(ABC):

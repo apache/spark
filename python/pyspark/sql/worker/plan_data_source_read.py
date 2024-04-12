@@ -20,7 +20,7 @@ import sys
 import functools
 import pyarrow as pa
 from itertools import islice
-from typing import IO, List, Iterator, Iterable
+from typing import IO, List, Iterator, Iterable, Tuple
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.errors import PySparkAssertionError, PySparkRuntimeError
@@ -53,7 +53,7 @@ from pyspark.worker_util import (
 
 
 def records_to_arrow_batches(
-    output_iter: Iterator[Row],
+    output_iter: Iterator[Tuple],
     max_arrow_batch_size: int,
     return_type: StructType,
     data_source: DataSource,
