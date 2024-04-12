@@ -255,15 +255,14 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
     }
   }
 
-
   test(s"ttl States are not populated for timeMode=None") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store,
         UUID.randomUUID(), keyExprEncoder, TimeMode.None())
 
-      handle.getValueState("testState", Encoders.STRING)
-      handle.getListState("testState", Encoders.STRING)
+      handle.getValueState("testValueState", Encoders.STRING)
+      handle.getListState("testListState", Encoders.STRING)
 
       assert(handle.ttlStates.isEmpty)
     }

@@ -163,9 +163,10 @@ case class MultipleValueStatesTTLProcessor(
 class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
 
   import testImplicits._
+
   override def getProcessor(ttlConfig: TTLConfig):
     StatefulProcessor[String, InputEvent, OutputEvent] = {
-    new ValueStateTTLProcessor(ttlConfig)
+      new ValueStateTTLProcessor(ttlConfig)
   }
 
   override def getStateTTLMetricName: String = "numValueStateWithTTLVars"

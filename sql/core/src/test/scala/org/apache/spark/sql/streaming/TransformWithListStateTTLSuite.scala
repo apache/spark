@@ -98,9 +98,10 @@ class ListStateTTLProcessor(ttlConfig: TTLConfig)
 class TransformWithListStateTTLSuite extends TransformWithStateTTLTest {
 
   import testImplicits._
+
   override def getProcessor(ttlConfig: TTLConfig):
-  StatefulProcessor[String, InputEvent, OutputEvent] = {
-    new ListStateTTLProcessor(ttlConfig)
+    StatefulProcessor[String, InputEvent, OutputEvent] = {
+      new ListStateTTLProcessor(ttlConfig)
   }
 
   override def getStateTTLMetricName: String = "numListStateWithTTLVars"

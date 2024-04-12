@@ -73,7 +73,7 @@ trait TTLState {
    *
    * @param groupingKey grouping key for which cleanup should be performed.
    *
-   * @return true if the state was cleared, false otherwise.
+   * @return how many state objects were cleaned up.
    */
   def clearIfExpired(groupingKey: Array[Byte]): Long
 }

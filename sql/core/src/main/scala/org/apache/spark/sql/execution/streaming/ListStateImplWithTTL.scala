@@ -24,14 +24,16 @@ import org.apache.spark.sql.streaming.{ListState, TTLConfig}
 import org.apache.spark.util.NextIterator
 
 /**
- * Provides concrete implementation for list of values associated with a state variable
- * used in the streaming transformWithState operator.
+ * Class that provides a concrete implementation for a list state state associated with state
+ * variables (with ttl expiration support) used in the streaming transformWithState operator.
  *
  * @param store - reference to the StateStore instance to be used for storing state
  * @param stateName - name of logical state partition
- * @param keyEnc - Spark SQL encoder for key
+ * @param keyExprEnc - Spark SQL encoder for key
  * @param valEncoder - Spark SQL encoder for value
- * @tparam S - data type of object that will be stored in the list
+ * @param ttlConfig  - TTL configuration for values  stored in this state
+ * @param batchTimestampMs - current batch processing timestamp.
+ * @tparam S - data type of object that will be stored
  */
 class ListStateImplWithTTL[S](
   store: StateStore,
@@ -147,7 +149,6 @@ class ListStateImplWithTTL[S](
   }
 
   /**
-   *
    * Loops through all the values associated with the grouping key, and removes
    * the expired elements from the list.
    * @param groupingKey grouping key for which cleanup should be performed.
