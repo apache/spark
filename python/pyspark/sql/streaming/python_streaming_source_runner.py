@@ -71,6 +71,7 @@ def partitions_func(
     reader: DataSourceStreamReader,
     data_source: DataSource,
     schema: StructType,
+    max_arrow_batch_size: int,
     infile: IO,
     outfile: IO,
 ) -> None:
@@ -86,7 +87,7 @@ def partitions_func(
         if it is None:
             write_int(PREFETCHED_RECORDS_NOT_FOUND, outfile)
         else:
-            send_batch_func(it, outfile, schema, data_source)
+            send_batch_func(it, outfile, schema, max_arrow_batch_size, data_source)
     else:
         write_int(PREFETCHED_RECORDS_NOT_FOUND, outfile)
 
@@ -98,9 +99,13 @@ def commit_func(reader: DataSourceStreamReader, infile: IO, outfile: IO) -> None
 
 
 def send_batch_func(
-    rows: Iterator[Tuple], outfile: IO, schema: StructType, data_source: DataSource
+    rows: Iterator[Tuple],
+    outfile: IO,
+    schema: StructType,
+    max_arrow_batch_size: int,
+    data_source: DataSource,
 ) -> None:
-    batches = list(records_to_arrow_batches(rows, 1000, schema, data_source))
+    batches = list(records_to_arrow_batches(rows, max_arrow_batch_size, schema, data_source))
     if len(batches) != 0:
         write_int(NON_EMPTY_PYARROW_RECORD_BATCHES, outfile)
         write_int(SpecialLengths.START_ARROW_STREAM, outfile)
@@ -144,6 +149,12 @@ def main(infile: IO, outfile: IO) -> None:
                 },
             )
 
+        max_arrow_batch_size = read_int(infile)
+        assert max_arrow_batch_size > 0, (
+            "The maximum arrow batch size should be greater than 0, but got "
+            f"'{max_arrow_batch_size}'"
+        )
+
         # Instantiate data source reader.
         try:
             reader = data_source._streamReader(schema=schema)
@@ -159,7 +170,9 @@ def main(infile: IO, outfile: IO) -> None:
                 elif func_id == LATEST_OFFSET_FUNC_ID:
                     latest_offset_func(reader, outfile)
                 elif func_id == PARTITIONS_FUNC_ID:
-                    partitions_func(reader, data_source, schema, infile, outfile)
+                    partitions_func(
+                        reader, data_source, schema, max_arrow_batch_size, infile, outfile
+                    )
                 elif func_id == COMMIT_FUNC_ID:
                     commit_func(reader, infile, outfile)
                 else:

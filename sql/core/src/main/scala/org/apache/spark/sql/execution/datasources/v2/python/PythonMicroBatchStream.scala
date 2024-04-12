@@ -42,7 +42,7 @@ class PythonMicroBatchStream(
   private var nextBlockId = 0L
 
   // planInputPartitions() maybe be called multiple times for the current microbatch.
-  // Cache the result of planInputPartitions() because it may involves sending data
+  // Cache the result of planInputPartitions() because it may involve sending data
   // from python to JVM.
   private var cachedInputPartition: Option[(String, String, PythonStreamingInputPartition)] = None
 

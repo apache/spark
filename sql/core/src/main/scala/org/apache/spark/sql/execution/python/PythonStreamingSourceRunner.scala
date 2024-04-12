@@ -32,6 +32,7 @@ import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.internal.config.Python.PYTHON_AUTH_SOCKET_TIMEOUT
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
@@ -111,6 +112,8 @@ class PythonStreamingSourceRunner(
     // Send output schema
     PythonWorkerUtils.writeUTF(outputSchema.json, dataOut)
 
+    dataOut.writeInt(SQLConf.get.arrowMaxRecordsPerBatch)
+
     dataOut.flush()
 
     dataIn = new DataInputStream(
@@ -176,18 +179,18 @@ class PythonStreamingSourceRunner(
       pickledPartitions.append(pickledPartition)
     }
     val prefetchedRecordsStatus = dataIn.readInt()
-    val iter: Option[Iterator[InternalRow]] =
-      if (prefetchedRecordsStatus == NON_EMPTY_PYARROW_RECORD_BATCHES) {
-        Some(readArrowRecordBatches())
-      } else if (prefetchedRecordsStatus == PREFETCHED_RECORDS_NOT_FOUND) {
-        None
-      } else {
-        // We differentiate empty and non empty prefetched batch because arrow reader
-        // throws exception when there is nothing written in the arrow stream and readings
-        // arrow stream must be skipped when record batch is empty.
-        assert(prefetchedRecordsStatus == EMPTY_PYARROW_RECORD_BATCHES)
-        Some(Iterator.empty)
-      }
+    val iter: Option[Iterator[InternalRow]] = prefetchedRecordsStatus match {
+      case NON_EMPTY_PYARROW_RECORD_BATCHES => Some(readArrowRecordBatches())
+      case PREFETCHED_RECORDS_NOT_FOUND => None
+      case EMPTY_PYARROW_RECORD_BATCHES => Some(Iterator.empty)
+      case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
+        val msg = PythonWorkerUtils.readUTF(dataIn)
+        throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
+          action = "planPartitions", msg)
+      case _ =>
+        throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
+          action = "planPartitions", s"unknown status code $prefetchedRecordsStatus")
+    }
     (pickledPartitions.toArray, iter)
   }
 
