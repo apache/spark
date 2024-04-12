@@ -129,7 +129,7 @@ class DataFrame:
 
         Returns
         -------
-        The typle containing the information needed to reconstruct the object.
+        The tuple containing the information needed to reconstruct the object.
 
         """
         return (
