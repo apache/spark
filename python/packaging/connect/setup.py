@@ -77,6 +77,7 @@ if "SPARK_TESTING" in os.environ:
         "pyspark.sql.tests.connect.shell",
         "pyspark.sql.tests.pandas",
         "pyspark.sql.tests.streaming",
+        "pyspark.ml.tests.connect",
     ]
 
 try:

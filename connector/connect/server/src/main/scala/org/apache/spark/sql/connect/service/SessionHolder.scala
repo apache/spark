@@ -93,6 +93,8 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   private[connect] lazy val streamingForeachBatchRunnerCleanerCache =
     new StreamingForeachBatchHelper.CleanerCache(this)
 
+  private[connect] lazy val streamingServersideListenerHolder = new ServerSideListenerHolder(this)
+
   def key: SessionKey = SessionKey(userId, sessionId)
 
   // Returns the server side session ID and asserts that it must be different from the client-side
@@ -270,6 +272,11 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     SparkConnectService.streamingSessionManager.cleanupRunningQueries(this)
     streamingForeachBatchRunnerCleanerCache.cleanUpAll() // Clean up any streaming workers.
     removeAllListeners() // removes all listener and stop python listener processes if necessary.
+
+    // if there is a server side listener, clean up related resources
+    if (streamingServersideListenerHolder.isServerSideListenerRegistered) {
+      streamingServersideListenerHolder.cleanUp()
+    }
 
     // Clean up all executions.
     // After closedTimeMs is defined, SessionHolder.addExecuteHolder() will not allow new executions
