@@ -217,6 +217,7 @@ public final class CollationFactory {
             c -> UTF8String.fromString(c.collationName).levenshteinDistance(
                     UTF8String.fromString(collationName.toUpperCase()))));
     return suggestion.collationName;
+  }
 
   /**
    * Returns a collation-unaware StringSearch object for the given pattern and target strings.
@@ -227,7 +228,6 @@ public final class CollationFactory {
           final UTF8String targetUTF8String,
           final UTF8String patternUTF8String) {
     return new StringSearch(patternUTF8String.toString(), targetUTF8String.toString());
-
   }
 
   /**

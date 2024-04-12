@@ -773,10 +773,9 @@ object SQLConf {
       .version("4.0.0")
       .stringConf
       .checkValue(CollationFactory.isValidCollation,
-        "COLLATION_INVALID_NAME",
+        "DEFAULT_COLLATION",
         name =>
           Map(
-            "collationName" -> name,
             "proposal" -> CollationFactory.getClosestCollation(name)
           ))
       .createWithDefault("UTF8_BINARY")
@@ -2811,7 +2810,7 @@ object SQLConf {
       "short names are not recommended to use because they can be ambiguous.")
     .version("2.2.0")
     .stringConf
-    .checkValue(isValidTimezone, errorClass = "TIME_ZONE", parameters = Map.empty)
+    .checkValue(isValidTimezone, errorClass = "TIME_ZONE", parameters = tz => Map.empty)
     .createWithDefaultFunction(() => TimeZone.getDefault.getID)
 
   val WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD =

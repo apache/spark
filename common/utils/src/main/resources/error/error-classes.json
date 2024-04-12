@@ -1881,6 +1881,11 @@
       "The value '<confValue>' in the config \"<confName>\" is invalid."
     ],
     "subClass" : {
+      "DEFAULT_COLLATION" : {
+        "message" : [
+          "Cannot resolve the given default collation. Did you mean '<proposal>'?"
+        ]
+      },
       "TIME_ZONE" : {
         "message" : [
           "Cannot resolve the given timezone."

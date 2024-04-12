@@ -22,7 +22,7 @@ import java.util.{Locale, TimeZone}
 import org.apache.hadoop.fs.Path
 import org.apache.logging.log4j.Level
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkIllegalArgumentException, SparkNoSuchElementException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkIllegalArgumentException, SparkNoSuchElementException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.MIT
@@ -505,20 +505,22 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
          |""".stripMargin)
   }
 
-  test("set collation") {
+  test("SPARK-47765: set collation") {
     Seq("UNICODE", "UNICODE_CI", "utf8_binary_lcase", "utf8_binary").foreach { collation =>
       sql(s"set collation $collation")
       assert(spark.conf.get(SQLConf.DEFAULT_COLLATION) === collation.toUpperCase(Locale.ROOT))
     }
 
     checkError(
-      exception = intercept[SparkException] {
+      exception = intercept[SparkIllegalArgumentException] {
         sql(s"SET COLLATION unicode_c").collect()
       },
-      errorClass = "COLLATION_INVALID_NAME",
+      errorClass = "INVALID_CONF_VALUE.DEFAULT_COLLATION",
       parameters = Map(
-        "collationName" -> "UNICODE_C",
-        "proposal" -> "UNICODE_CI"))
+        "confValue" -> "UNICODE_C",
+        "confName" -> "spark.sql.session.collation.default",
+        "proposal" -> "UNICODE_CI"
+      ))
   }
 
   test("SPARK-43028: config not found error") {
