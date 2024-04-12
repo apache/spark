@@ -578,8 +578,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       checkAnswer(
         sql(
           """EXECUTE IMMEDIATE stmtStr USING
-            | 'a' COLLATE UNICODE AS var1,
-            | 'b' COLLATE UNICODE_CI AS var2;""".stripMargin),
+            | 'a' AS var1,
+            | 'b' AS var2;""".stripMargin),
         Seq(Row("UTF8_BINARY"))
       )
 
@@ -587,8 +587,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         checkAnswer(
           sql(
             """EXECUTE IMMEDIATE stmtStr USING
-              | 'a' COLLATE UNICODE AS var1,
-              | 'b' COLLATE UNICODE_CI AS var2;""".stripMargin),
+              | 'a' AS var1,
+              | 'b' AS var2;""".stripMargin),
           Seq(Row("UNICODE"))
         )
       }
