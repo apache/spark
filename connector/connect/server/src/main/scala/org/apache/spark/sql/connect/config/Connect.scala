@@ -289,7 +289,7 @@ object Connect {
       .doc(
         "When true, the cache of resolved logical plans is enabled if" +
         s" '${CONNECT_SESSION_PLAN_CACHE_SIZE.key}' is greater than zero." +
-        s" When false, the cache is disable even if '${CONNECT_SESSION_PLAN_CACHE_SIZE.key}' is" +
+        s" When false, the cache is disabled even if '${CONNECT_SESSION_PLAN_CACHE_SIZE.key}' is" +
         " greater than zero. The caching is best-effort and not guaranteed."
       )
       .version("4.0.0")
