@@ -47,9 +47,9 @@ object VariantExpressionEvalUtils {
       // This is a SQL NULL, not a Variant NULL
       false
     } else {
-      val valMeta = input.getValue
+      val variantValue = input.getValue
       // Variant NULL is denoted by basic_type == 0 and val_header == 0
-      valMeta(0) == 0
+      variantValue(0) == 0
     }
   }
 }
