@@ -31,7 +31,8 @@ import com.google.common.cache.CacheBuilder
 
 import org.apache.spark.{SparkException, SparkSQLException}
 import org.apache.spark.api.python.PythonFunction.PythonAccumulator
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{LAST_ACCESS_TIME, SESSION_ID, SESSION_KEY, TIMEOUT, USER_ID}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.common.InvalidPlanInput
@@ -213,12 +214,14 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
 
   private[connect] def updateAccessTime(): Unit = {
     lastAccessTimeMs = System.currentTimeMillis()
-    logInfo(s"Session $key accessed, time $lastAccessTimeMs.")
+    logInfo(log"Session ${MDC(SESSION_KEY, key)} accessed, " +
+      log"time ${MDC(LAST_ACCESS_TIME, lastAccessTimeMs)} ms.")
   }
 
   private[connect] def setCustomInactiveTimeoutMs(newInactiveTimeoutMs: Option[Long]): Unit = {
     customInactiveTimeoutMs = newInactiveTimeoutMs
-    logInfo(s"Session $key inactive timout set to $customInactiveTimeoutMs ms.")
+    logInfo(log"Session ${MDC(SESSION_KEY, key)} " +
+      log"inactive timeout set to ${MDC(TIMEOUT, customInactiveTimeoutMs)} ms.")
   }
 
   /**
@@ -243,7 +246,8 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     if (closedTimeMs.isDefined) {
       throw new IllegalStateException(s"Session $key is already closed.")
     }
-    logInfo(s"Closing session with userId: $userId and sessionId: $sessionId")
+    logInfo(log"Closing session with userId: ${MDC(USER_ID, userId)} and " +
+      log"sessionId: ${MDC(SESSION_ID, sessionId)}")
     closedTimeMs = Some(System.currentTimeMillis())
 
     if (Utils.isTesting && eventManager.status == SessionStatus.Pending) {
