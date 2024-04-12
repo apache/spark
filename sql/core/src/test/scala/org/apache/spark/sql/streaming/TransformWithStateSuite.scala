@@ -40,8 +40,7 @@ class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (S
 
   override def init(
       outputMode: OutputMode,
-      timeoutMode: TimeoutMode,
-      ttlMode: TTLMode): Unit = {
+      timeMode: TimeMode): Unit = {
     _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong)
   }
 
@@ -104,9 +103,8 @@ class RunningCountStatefulProcessorWithProcTimeTimerUpdates
 
   override def init(
       outputMode: OutputMode,
-      timeoutMode: TimeoutMode,
-      ttlMode: TTLMode) : Unit = {
-    super.init(outputMode, timeoutMode, ttlMode)
+      timeMode: TimeMode) : Unit = {
+    super.init(outputMode, timeMode)
     _timerState = getHandle.getValueState[Long]("timerState", Encoders.scalaLong)
   }
 
@@ -196,8 +194,7 @@ class MaxEventTimeStatefulProcessor
 
   override def init(
       outputMode: OutputMode,
-      timeoutMode: TimeoutMode,
-      ttlMode: TTLMode): Unit = {
+      timeMode: TimeMode): Unit = {
     _maxEventTimeState = getHandle.getValueState[Long]("maxEventTimeState",
       Encoders.scalaLong)
     _timerState = getHandle.getValueState[Long]("timerState", Encoders.scalaLong)
@@ -242,8 +239,7 @@ class RunningCountMostRecentStatefulProcessor
 
   override def init(
       outputMode: OutputMode,
-      timeoutMode: TimeoutMode,
-      ttlMode: TTLMode): Unit = {
+      timeMode: TimeMode): Unit = {
     _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong)
     _mostRecent = getHandle.getValueState[String]("mostRecent", Encoders.STRING)
   }
@@ -273,8 +269,7 @@ class MostRecentStatefulProcessorWithDeletion
 
   override def init(
       outputMode: OutputMode,
-      timeoutMode: TimeoutMode,
-      ttlMode: TTLMode): Unit = {
+      timeMode: TimeMode): Unit = {
     getHandle.deleteIfExists("countState")
     _mostRecent = getHandle.getValueState[String]("mostRecent", Encoders.STRING)
   }
@@ -327,8 +322,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       val result = inputData.toDS()
         .groupByKey(x => x)
         .transformWithState(new RunningCountStatefulProcessorWithError(),
-          TimeoutMode.NoTimeouts(),
-          TTLMode.NoTTL(),
+          TimeMode.None(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
@@ -349,8 +343,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       val result = inputData.toDS()
         .groupByKey(x => x)
         .transformWithState(new RunningCountStatefulProcessor(),
-          TimeoutMode.NoTimeouts(),
-          TTLMode.NoTTL(),
+          TimeMode.None(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
@@ -384,8 +377,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       val result = inputData.toDS()
         .groupByKey(x => x)
         .transformWithState(new RunningCountStatefulProcessorWithProcTimeTimer(),
-          TimeoutMode.ProcessingTime(),
-          TTLMode.NoTTL(),
+          TimeMode.ProcessingTime(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
@@ -431,8 +423,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         .groupByKey(x => x)
         .transformWithState(
           new RunningCountStatefulProcessorWithProcTimeTimerUpdates(),
-          TimeoutMode.ProcessingTime(),
-          TTLMode.NoTTL(),
+          TimeMode.ProcessingTime(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
@@ -468,8 +459,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         .groupByKey(x => x)
         .transformWithState(
           new RunningCountStatefulProcessorWithMultipleTimers(),
-          TimeoutMode.ProcessingTime(),
-          TTLMode.NoTTL(),
+          TimeMode.ProcessingTime(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
@@ -505,8 +495,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         .groupByKey(_._1)
         .transformWithState(
           new MaxEventTimeStatefulProcessor(),
-          TimeoutMode.EventTime(),
-          TTLMode.NoTTL(),
+          TimeMode.EventTime(),
           OutputMode.Update())
 
     testStream(result, OutputMode.Update())(
@@ -557,8 +546,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     val result = inputData.toDS()
       .groupByKey(x => x)
       .transformWithState(new RunningCountStatefulProcessor(),
-        TimeoutMode.NoTimeouts(),
-        TTLMode.NoTTL(),
+        TimeMode.None(),
         OutputMode.Append())
 
     val df = result.toDF()
@@ -576,15 +564,13 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         val stream1 = inputData.toDS()
           .groupByKey(x => x._1)
           .transformWithState(new RunningCountMostRecentStatefulProcessor(),
-            TimeoutMode.NoTimeouts(),
-            TTLMode.NoTTL(),
+            TimeMode.None(),
             OutputMode.Update())
 
         val stream2 = inputData.toDS()
           .groupByKey(x => x._1)
           .transformWithState(new MostRecentStatefulProcessorWithDeletion(),
-            TimeoutMode.NoTimeouts(),
-            TTLMode.NoTTL(),
+            TimeMode.None(),
             OutputMode.Update())
 
         testStream(stream1, OutputMode.Update())(
@@ -620,8 +606,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         .union(inputData2.toDS())
         .groupByKey(x => x)
         .transformWithState(new RunningCountStatefulProcessor(),
-          TimeoutMode.NoTimeouts(),
-          TTLMode.NoTTL(),
+          TimeMode.None(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
@@ -654,8 +639,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         .union(inputData3.toDS())
         .groupByKey(x => x)
         .transformWithState(new RunningCountStatefulProcessor(),
-          TimeoutMode.NoTimeouts(),
-          TTLMode.NoTTL(),
+          TimeMode.None(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
@@ -688,8 +672,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         .union(inputData2.toDS().map(_.toString))
         .groupByKey(x => x)
         .transformWithState(new RunningCountStatefulProcessor(),
-          TimeoutMode.NoTimeouts(),
-          TTLMode.NoTTL(),
+          TimeMode.None(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
@@ -719,8 +702,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       .select("value").as[String]
       .groupByKey(x => x)
       .transformWithState(new RunningCountStatefulProcessor(),
-        TimeoutMode.NoTimeouts(),
-        TTLMode.NoTTL(),
+        TimeMode.None(),
         OutputMode.Update())
   }
 
@@ -812,8 +794,7 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
     val result = inputData.toDS()
       .groupByKey(x => x)
       .transformWithState(new RunningCountStatefulProcessor(),
-        TimeoutMode.NoTimeouts(),
-        TTLMode.NoTTL(),
+        TimeMode.None(),
         OutputMode.Update())
 
     testStream(result, OutputMode.Update())(
@@ -832,7 +813,7 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
     val result = inputData.toDS()
       .groupByKey(x => x.key)
       .transformWithState(new AccumulateStatefulProcessorWithInitState(),
-        TimeoutMode.NoTimeouts(), TTLMode.NoTTL(), OutputMode.Append(), initDf
+        TimeMode.None(), OutputMode.Append(), initDf
       )
     testStream(result, OutputMode.Update())(
       AddData(inputData, InitInputRow("a", "add", -1.0)),

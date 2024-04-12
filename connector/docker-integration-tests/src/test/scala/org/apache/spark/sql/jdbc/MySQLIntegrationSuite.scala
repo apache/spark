@@ -139,7 +139,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(row.getInt(3) == 77777)
     assert(row.getInt(4) == 123456789)
     assert(row.getLong(5) == 123456789012345L)
-    val bd = new BigDecimal("123456789012345.12345678901234500000")
+    val bd = new BigDecimal("123456789012345.123456789012345000")
     assert(row.getAs[BigDecimal](6).equals(bd))
     assert(row.getFloat(7) == 42.75)
     assert(row.getDouble(8) == 1.0000000000000002)
@@ -173,7 +173,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(rows.getInt(2) === 16777215)
     assert(rows.getLong(3) === 4294967295L)
     assert(rows.getAs[BigDecimal](4).equals(new BigDecimal("9223372036854775808")))
-    assert(rows.getAs[BigDecimal](5).equals(new BigDecimal("123456789012345.12345678901234500000")))
+    assert(rows.getAs[BigDecimal](5).equals(new BigDecimal("123456789012345.123456789012345000")))
     assert(rows.getDouble(6) === 1.0000000000000002)
     if (isMaria) {
       assert(rows.getBoolean(7) === false)

@@ -15,28 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.streaming;
+package org.apache.spark.sql.internal.types
 
-import org.apache.spark.annotation.Evolving;
-import org.apache.spark.annotation.Experimental;
-import org.apache.spark.sql.catalyst.plans.logical.*;
+import org.apache.spark.sql.types.{AbstractDataType, ArrayType, DataType}
+
 
 /**
- * Represents the type of ttl modes possible for the Dataset operations
- * {@code transformWithState}.
+ * Use AbstractArrayType(AbstractDataType) for defining expected types for expression parameters.
  */
-@Experimental
-@Evolving
-public class TTLMode {
+case class AbstractArrayType(elementType: AbstractDataType) extends AbstractDataType {
 
-  /**
-   * Specifies that there is no TTL for the user state. User state would not
-   * be cleaned up by Spark automatically.
-   */
-  public static final TTLMode NoTTL() { return NoTTL$.MODULE$; }
+  override private[sql] def defaultConcreteType: DataType =
+    ArrayType(elementType.defaultConcreteType, containsNull = true)
 
-  /**
-   * Specifies that all ttl durations for user state are in processing time.
-   */
-  public static final TTLMode ProcessingTimeTTL() { return ProcessingTimeTTL$.MODULE$; }
+  override private[sql] def acceptsType(other: DataType): Boolean = {
+    other.isInstanceOf[ArrayType] &&
+      elementType.acceptsType(other.asInstanceOf[ArrayType].elementType)
+  }
+
+  override private[spark] def simpleString: String = s"array<${elementType.simpleString}>"
 }

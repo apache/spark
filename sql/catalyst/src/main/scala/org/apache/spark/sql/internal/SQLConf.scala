@@ -3016,7 +3016,9 @@ object SQLConf {
   val ARROW_EXECUTION_MAX_RECORDS_PER_BATCH =
     buildConf("spark.sql.execution.arrow.maxRecordsPerBatch")
       .doc("When using Apache Arrow, limit the maximum number of records that can be written " +
-        "to a single ArrowRecordBatch in memory. If set to zero or negative there is no limit.")
+        "to a single ArrowRecordBatch in memory. This configuration is not effective for the " +
+        "grouping API such as DataFrame(.cogroup).groupby.applyInPandas because each group " +
+        "becomes each ArrowRecordBatch. If set to zero or negative there is no limit.")
       .version("2.3.0")
       .intConf
       .createWithDefault(10000)
@@ -4779,16 +4781,6 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val LEGACY_IGNORE_PARENTHESES_AROUND_STAR =
-    buildConf("spark.sql.legacy.ignoreParenthesesAroundStar")
-    .internal()
-    .doc("When set to true, SELECT (*) equals SELECT * FROM T instead of SELECT struct(*)." +
-      "SELECT (*) was never documented as defined behavior."
-    )
-    .version("4.0.0")
-    .booleanConf
-    .createWithDefault(false)
-
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -5713,9 +5705,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyJavaCharsets: Boolean = getConf(SQLConf.LEGACY_JAVA_CHARSETS)
 
   def legacyEvalCurrentTime: Boolean = getConf(SQLConf.LEGACY_EVAL_CURRENT_TIME)
-
-  def legacyIgnoreParenthesesAroundStar: Boolean =
-    getConf(SQLConf.LEGACY_IGNORE_PARENTHESES_AROUND_STAR)
 
   /** ********************** SQLConf functionality methods ************ */
 

@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.state._
-import org.apache.spark.sql.streaming.{ListState, MapState, QueryInfo, StatefulProcessorHandle, TimeoutMode, TTLConfig, TTLMode, ValueState}
+import org.apache.spark.sql.streaming.{ListState, MapState, QueryInfo, StatefulProcessorHandle, TimeMode, TTLConfig, ValueState}
 import org.apache.spark.util.Utils
 
 /**
@@ -81,8 +81,7 @@ class StatefulProcessorHandleImpl(
     store: StateStore,
     runId: UUID,
     keyEncoder: ExpressionEncoder[Any],
-    ttlMode: TTLMode,
-    timeoutMode: TimeoutMode,
+    timeMode: TimeMode,
     isStreaming: Boolean = true,
     batchTimestampMs: Option[Long] = None,
     metrics: Map[String, SQLMetric] = Map.empty)
@@ -152,7 +151,7 @@ class StatefulProcessorHandleImpl(
 
   override def getQueryInfo(): QueryInfo = currQueryInfo
 
-  private lazy val timerState = new TimerStateImpl(store, timeoutMode, keyEncoder)
+  private lazy val timerState = new TimerStateImpl(store, timeMode, keyEncoder)
 
   private def verifyStateVarOperations(operationType: String): Unit = {
     if (currState != CREATED) {
@@ -162,9 +161,9 @@ class StatefulProcessorHandleImpl(
   }
 
   private def verifyTimerOperations(operationType: String): Unit = {
-    if (timeoutMode == NoTimeouts) {
-      throw StateStoreErrors.cannotPerformOperationWithInvalidTimeoutMode(operationType,
-        timeoutMode.toString)
+    if (timeMode == NoTime) {
+      throw StateStoreErrors.cannotPerformOperationWithInvalidTimeMode(operationType,
+        timeMode.toString)
     }
 
     if (currState < INITIALIZED || currState >= TIMER_PROCESSED) {
@@ -258,8 +257,8 @@ class StatefulProcessorHandleImpl(
 
   private def validateTTLConfig(ttlConfig: TTLConfig, stateName: String): Unit = {
     val ttlDuration = ttlConfig.ttlDuration
-    if (ttlMode != TTLMode.ProcessingTimeTTL()) {
-      throw StateStoreErrors.cannotProvideTTLConfigForNoTTLMode(stateName)
+    if (timeMode != TimeMode.ProcessingTime()) {
+      throw StateStoreErrors.cannotProvideTTLConfigForTimeMode(stateName, timeMode.toString)
     } else if (ttlDuration == null || ttlDuration.isNegative || ttlDuration.isZero) {
       throw StateStoreErrors.ttlMustBePositive("update", stateName)
     }

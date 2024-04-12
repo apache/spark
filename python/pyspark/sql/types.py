@@ -48,6 +48,7 @@ from typing import (
 from pyspark.util import is_remote_only
 from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.utils import has_numpy, get_active_spark_context
+from pyspark.sql.variant_utils import VariantUtils
 from pyspark.errors import (
     PySparkNotImplementedError,
     PySparkTypeError,
@@ -95,6 +96,7 @@ __all__ = [
     "StructField",
     "StructType",
     "VariantType",
+    "VariantVal",
 ]
 
 
@@ -1341,7 +1343,13 @@ class VariantType(AtomicType):
     .. versionadded:: 4.0.0
     """
 
-    pass
+    def needConversion(self) -> bool:
+        return True
+
+    def fromInternal(self, obj: Dict) -> Optional["VariantVal"]:
+        if obj is None or not all(key in obj for key in ["value", "metadata"]):
+            return None
+        return VariantVal(obj["value"], obj["metadata"])
 
 
 class UserDefinedType(DataType):
@@ -1463,6 +1471,55 @@ class UserDefinedType(DataType):
 
     def __eq__(self, other: Any) -> bool:
         return type(self) == type(other)
+
+
+class VariantVal:
+    """
+    A class to represent a Variant value in Python.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    value : bytes
+        The bytes representing the value component of the Variant.
+    metadata : bytes
+        The bytes representing the metadata component of the Variant.
+
+    Methods
+    -------
+    toPython()
+        Convert the VariantVal to a Python data structure.
+
+    Examples
+    --------
+    >>> from pyspark.sql.functions import *
+    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
+    >>> v = df.select(parse_json(df.json).alias("var")).collect()[0].var
+    >>> v.toPython()
+    {'a': 1}
+    """
+
+    def __init__(self, value: bytes, metadata: bytes):
+        self.value = value
+        self.metadata = metadata
+
+    def __str__(self) -> str:
+        return VariantUtils.to_json(self.value, self.metadata)
+
+    def __repr__(self) -> str:
+        return "VariantVal(%r, %r)" % (self.value, self.metadata)
+
+    def toPython(self) -> Any:
+        """
+        Convert the VariantVal to a Python data structure.
+
+        Returns
+        -------
+        Any
+            A Python object that represents the Variant.
+        """
+        return VariantUtils.to_python(self.value, self.metadata)
 
 
 _atomic_types: List[Type[DataType]] = [

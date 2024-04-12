@@ -445,8 +445,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
     val excludedRules = excludedRulesConf.filter { ruleName =>
       val nonExcludable = nonExcludableRules.contains(ruleName)
       if (nonExcludable) {
-        logWarning(s"Optimization rule '${ruleName}' was not excluded from the optimizer " +
-          s"because this rule is a non-excludable rule.")
+        logWarning(log"Optimization rule '${MDC(RULE_NAME, ruleName)}' " +
+          log"was not excluded from the optimizer because this rule is a non-excludable rule.")
       }
       !nonExcludable
     }
@@ -1824,22 +1824,28 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
 
       if (pushDown.nonEmpty) {
         val pushDownCond = pushDown.reduceLeft(And)
+        // The union is the child of the filter so it's children are grandchildren.
+        // Moves filters down to the grandchild if there is an element in the grand child's
+        // output which is semantically equal to the filter being evaluated.
         val output = union.output
         val newGrandChildren = union.children.map { grandchild =>
           val newCond = pushDownCond transform {
-            case e if output.exists(_.semanticEquals(e)) =>
-              grandchild.output(output.indexWhere(_.semanticEquals(e)))
+            case a: Attribute if output.exists(_.exprId == a.exprId) =>
+              grandchild.output(output.indexWhere(_.exprId == a.exprId))
           }
           assert(newCond.references.subsetOf(grandchild.outputSet))
           Filter(newCond, grandchild)
         }
         val newUnion = union.withNewChildren(newGrandChildren)
         if (stayUp.nonEmpty) {
+          // If there is any filter we can't push evaluate them post union
           Filter(stayUp.reduceLeft(And), newUnion)
         } else {
+          // If we pushed all filters then just return the new union.
           newUnion
         }
       } else {
+        // If we can't push anything just return the initial filter.
         filter
       }
 
