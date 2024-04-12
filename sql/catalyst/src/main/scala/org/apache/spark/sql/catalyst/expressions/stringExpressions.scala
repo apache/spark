@@ -103,7 +103,7 @@ case class ConcatWs(children: Seq[Expression])
     val flatInputs = children.flatMap { child =>
       child.eval(input) match {
         case s: UTF8String => Iterator(s)
-        case arr: ArrayData => arr.toArray[UTF8String](child.dataType)
+        case arr: ArrayData => arr.toArray[UTF8String](StringType)
         case null => Iterator(null.asInstanceOf[UTF8String])
       }
     }

@@ -34,7 +34,10 @@ class CollationStringExpressionsSuite
     // Supported collations
     case class ConcatWsTestCase[R](s: String, a: Array[String], c: String, result: R)
     val testCases = Seq(
-      ConcatWsTestCase(" ", Array("Spark", "SQL"), "UTF8_BINARY", "Spark SQL")
+      ConcatWsTestCase(" ", Array("Spark", "SQL"), "UTF8_BINARY", "Spark SQL"),
+      ConcatWsTestCase(" ", Array("Spark", "SQL"), "UTF8_BINARY_LCASE", "Spark SQL"),
+      ConcatWsTestCase(" ", Array("Spark", "SQL"), "UNICODE", "Spark SQL"),
+      ConcatWsTestCase(" ", Array("Spark", "SQL"), "UNICODE_CI", "Spark SQL")
     )
     testCases.foreach(t => {
       val arrCollated = t.a.map(s => s"collate('$s', '${t.c}')").mkString(", ")
@@ -52,18 +55,7 @@ class CollationStringExpressionsSuite
       assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
     })
     // Unsupported collations
-    case class ConcatWsTestFail(s: String, a: Array[String], c: String)
-    val failCases = Seq(
-      ConcatWsTestFail(" ", Array("ABC", "%b%"), "UTF8_BINARY_LCASE"),
-      ConcatWsTestFail(" ", Array("ABC", "%B%"), "UNICODE"),
-      ConcatWsTestFail(" ", Array("ABC", "%b%"), "UNICODE_CI")
-    )
-    failCases.foreach(t => {
-      val arrCollated = t.a.map(s => s"collate('$s', '${t.c}')").mkString(", ")
-      val query = s"SELECT concat_ws(collate('${t.s}', '${t.c}'), $arrCollated)"
-      val unsupportedCollation = intercept[AnalysisException] { sql(query) }
-      assert(unsupportedCollation.getErrorClass === "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
-    })
+    // None
     // Collation mismatch
     val collationMismatch = intercept[AnalysisException] {
       sql("SELECT concat_ws(' ',collate('Spark', 'UTF8_BINARY_LCASE'),collate('SQL', 'UNICODE'))")
