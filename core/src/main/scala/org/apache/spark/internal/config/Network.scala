@@ -33,12 +33,6 @@ private[spark] object Network {
       .booleanConf
       .createWithDefault(false)
 
-  private[spark] val NETWORK_REMOTE_READ_NIO_BUFFER_CONVERSION =
-    ConfigBuilder("spark.network.remoteReadNioBufferConversion")
-      .version("2.4.0")
-      .booleanConf
-      .createWithDefault(false)
-
   private[spark] val NETWORK_TIMEOUT =
     ConfigBuilder("spark.network.timeout")
       .version("1.3.0")
