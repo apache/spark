@@ -1063,7 +1063,7 @@ class SparkSession:
         is the same active spark session that is unpickled.
         """
 
-        def creator(old_session_id: str):
+        def creator(old_session_id: str) -> "SparkSession":
             # We cannot perform the checks for session matching here because accessing the
             # session ID property causes the serialization of a WeakRef and in turn breaks
             # the serialization.

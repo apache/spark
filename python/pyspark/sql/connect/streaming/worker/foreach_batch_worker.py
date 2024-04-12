@@ -29,7 +29,7 @@ from pyspark.serializers import (
     CPickleSerializer,
 )
 from pyspark import worker
-from pyspark.sql import SparkSession
+from pyspark.sql.connect.session import SparkSession
 from pyspark.util import handle_worker_exception
 from typing import IO
 from pyspark.worker_util import check_python_version
@@ -38,7 +38,7 @@ pickle_ser = CPickleSerializer()
 utf8_deserializer = UTF8Deserializer()
 
 
-spark = None  # type: ignore[assignment]
+spark = None
 
 
 def main(infile: IO, outfile: IO) -> None:

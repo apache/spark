@@ -19,7 +19,6 @@ import unittest
 import time
 
 import pyspark.cloudpickle
-from pyspark.errors import PySparkPicklingError
 from pyspark.sql.tests.streaming.test_streaming_listener import StreamingListenerTestsMixin
 from pyspark.sql.streaming.listener import StreamingQueryListener
 from pyspark.sql.functions import count, lit
@@ -138,7 +137,9 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
 
         class TestListener(StreamingQueryListener):
             def onQueryStarted(self, event):
-                spark.createDataFrame([("do", "not"), ("serialize", "spark")]).collect()
+                spark.createDataFrame(
+                    [("you", "can"), ("serialize", "spark")]
+                ).createOrReplaceTempView("test_accessing_spark_session")
 
             def onQueryProgress(self, event):
                 pass
@@ -149,16 +150,10 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
             def onQueryTerminated(self, event):
                 pass
 
-        error_thrown = False
-        try:
-            self.spark.streams.addListener(TestListener())
-        except PySparkPicklingError as e:
-            self.assertEqual(e.getErrorClass(), "STREAMING_CONNECT_SERIALIZATION_ERROR")
-            error_thrown = True
-        self.assertTrue(error_thrown)
+        self.spark.streams.addListener(TestListener())
 
     def test_accessing_spark_session_through_df(self):
-        dataframe = self.spark.createDataFrame([("do", "not"), ("serialize", "dataframe")])
+        dataframe = self.spark.createDataFrame([("you", "can"), ("serialize", "dataframe")])
 
         class TestListener(StreamingQueryListener):
             def onQueryStarted(self, event):
@@ -173,13 +168,7 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
             def onQueryTerminated(self, event):
                 pass
 
-        error_thrown = False
-        try:
-            self.spark.streams.addListener(TestListener())
-        except PySparkPicklingError as e:
-            self.assertEqual(e.getErrorClass(), "STREAMING_CONNECT_SERIALIZATION_ERROR")
-            error_thrown = True
-        self.assertTrue(error_thrown)
+        self.spark.streams.addListener(TestListener())
 
 
 if __name__ == "__main__":

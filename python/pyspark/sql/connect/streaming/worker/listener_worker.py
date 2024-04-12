@@ -30,7 +30,7 @@ from pyspark.serializers import (
     CPickleSerializer,
 )
 from pyspark import worker
-from pyspark.sql import SparkSession
+from pyspark.sql.connect.session import SparkSession
 from pyspark.util import handle_worker_exception
 from typing import IO
 
@@ -46,7 +46,11 @@ pickle_ser = CPickleSerializer()
 utf8_deserializer = UTF8Deserializer()
 
 
+spark = None
+
+
 def main(infile: IO, outfile: IO) -> None:
+    global spark
     check_python_version(infile)
 
     connect_url = os.environ["SPARK_CONNECT_LOCAL_URL"]
@@ -57,8 +61,11 @@ def main(infile: IO, outfile: IO) -> None:
         f"url {connect_url} and sessionId {session_id}."
     )
 
+    # To attach to the existing SparkSession, we're setting the session_id in the URL.
+    connect_url = connect_url + ";session_id=" + session_id
     spark_connect_session = SparkSession.builder.remote(connect_url).getOrCreate()
-    spark_connect_session._client._session_id = session_id  # type: ignore[attr-defined]
+    assert spark_connect_session.session_id == session_id
+    spark = spark_connect_session
 
     # TODO(SPARK-44461): Enable Process Isolation
 
@@ -71,6 +78,7 @@ def main(infile: IO, outfile: IO) -> None:
     assert listener.spark == spark_connect_session
 
     def process(listener_event_str, listener_event_type):  # type: ignore[no-untyped-def]
+        global spark
         listener_event = json.loads(listener_event_str)
         if listener_event_type == 0:
             listener.onQueryStarted(QueryStartedEvent.fromJson(listener_event))
