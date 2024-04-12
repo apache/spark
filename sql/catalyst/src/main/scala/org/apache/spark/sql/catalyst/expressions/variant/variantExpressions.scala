@@ -99,7 +99,7 @@ case class IsVariantNull(child: Expression) extends UnaryExpression
 
   override lazy val replacement: Expression = StaticInvoke(
     VariantExpressionEvalUtils.getClass,
-    VariantType,
+    BooleanType,
     "isVariantNull",
     Seq(child),
     inputTypes,
