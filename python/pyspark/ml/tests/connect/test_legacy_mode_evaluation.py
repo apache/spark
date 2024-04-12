@@ -20,14 +20,17 @@ import tempfile
 
 import numpy as np
 
+from pyspark.util import is_remote_only
 from pyspark.sql import SparkSession
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 
 have_torcheval = True
+torcheval_requirement_message = None
 try:
     import torcheval  # noqa: F401
 except ImportError:
     have_torcheval = False
+    torcheval_requirement_message = "torcheval is required"
 
 if should_test_connect:
     from pyspark.ml.connect.evaluation import (
@@ -177,8 +180,10 @@ class EvaluationTestsMixin:
 
 
 @unittest.skipIf(
-    not should_test_connect or not have_torcheval,
-    connect_requirement_message or "torcheval is required",
+    not should_test_connect or not have_torcheval or is_remote_only(),
+    connect_requirement_message
+    or torcheval_requirement_message
+    or "pyspark-connect cannot test classic Spark",
 )
 class EvaluationTests(EvaluationTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
