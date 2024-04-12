@@ -25,7 +25,6 @@ import breeze.stats.distributions.Rand.FixedSeed.randBasis
 import breeze.stats.distributions.StudentsT
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{PipelineStage, PredictorParams}
@@ -428,9 +427,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
         featuresMean, featuresStd, initialSolution, regularization, optimizer)
 
     if (parameters == null) {
-      val msg = s"${optimizer.getClass.getName} failed."
-      instr.logError(msg)
-      throw new SparkException(msg)
+      MLUtils.optimizerFailed(instr, optimizer.getClass)
     }
 
     val model = createModel(parameters, yMean, yStd, featuresMean, featuresStd)

@@ -31,7 +31,8 @@ import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred.{JobConf, Reporter}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.CLASS_NAME
 import org.apache.spark.internal.config.SPECULATION_ENABLED
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
@@ -76,10 +77,10 @@ class HiveFileFormat(fileSinkConf: FileSinkDesc)
     val outputCommitterClass = conf.get("mapred.output.committer.class", "")
     if (speculationEnabled && outputCommitterClass.contains("Direct")) {
       val warningMessage =
-        s"$outputCommitterClass may be an output committer that writes data directly to " +
-          "the final location. Because speculation is enabled, this output committer may " +
-          "cause data loss (see the case in SPARK-10063). If possible, please use an output " +
-          "committer that does not have this behavior (e.g. FileOutputCommitter)."
+        log"${MDC(CLASS_NAME, outputCommitterClass)} may be an output committer that writes data " +
+          log"directly to the final location. Because speculation is enabled, this output " +
+          log"committer may cause data loss (see the case in SPARK-10063). If possible, please " +
+          log"use an output committer that does not have this behavior (e.g. FileOutputCommitter)."
       logWarning(warningMessage)
     }
 

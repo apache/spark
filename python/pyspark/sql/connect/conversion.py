@@ -40,6 +40,8 @@ from pyspark.sql.types import (
     DecimalType,
     StringType,
     UserDefinedType,
+    VariantType,
+    VariantVal,
 )
 
 from pyspark.storagelevel import StorageLevel
@@ -94,6 +96,8 @@ class LocalDataToArrowConversion:
             # Coercion to StringType is allowed
             return True
         elif isinstance(dataType, UserDefinedType):
+            return True
+        elif isinstance(dataType, VariantType):
             return True
         else:
             return False
@@ -290,6 +294,24 @@ class LocalDataToArrowConversion:
 
             return convert_udt
 
+        elif isinstance(dataType, VariantType):
+
+            def convert_variant(value: Any) -> Any:
+                if value is None:
+                    if not nullable:
+                        raise PySparkValueError(f"input for {dataType} must not be None")
+                    return None
+                elif (
+                    isinstance(value, dict)
+                    and all(key in value for key in ["value", "metadata"])
+                    and all(isinstance(value[key], bytes) for key in ["value", "metadata"])
+                ):
+                    return VariantVal(value["value"], value["metadata"])
+                else:
+                    raise PySparkValueError(error_class="MALFORMED_VARIANT")
+
+            return convert_variant
+
         elif not nullable:
 
             def convert_other(value: Any) -> Any:
@@ -380,6 +402,8 @@ class ArrowTableToRowsConversion:
             # Always remove the time zone info for now
             return True
         elif isinstance(dataType, UserDefinedType):
+            return True
+        elif isinstance(dataType, VariantType):
             return True
         else:
             return False
@@ -487,6 +511,22 @@ class ArrowTableToRowsConversion:
                     return udt.deserialize(conv(value))
 
             return convert_udt
+
+        elif isinstance(dataType, VariantType):
+
+            def convert_variant(value: Any) -> Any:
+                if value is None:
+                    return None
+                elif (
+                    isinstance(value, dict)
+                    and all(key in value for key in ["value", "metadata"])
+                    and all(isinstance(value[key], bytes) for key in ["value", "metadata"])
+                ):
+                    return VariantVal(value["value"], value["metadata"])
+                else:
+                    raise PySparkValueError(error_class="MALFORMED_VARIANT")
+
+            return convert_variant
 
         else:
             return lambda value: value
