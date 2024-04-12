@@ -320,7 +320,6 @@ class LogisticRegressionModel(
 
     def _get_transform_fn(self) -> Callable[["pd.Series"], Any]:
         import torch
-
         import torch.nn as torch_nn
 
         model_state_dict = self.torch_model.state_dict()
