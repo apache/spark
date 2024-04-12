@@ -296,11 +296,13 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
       } else if (streamFinished) {
         enqueueProgressMessage()
         // Stream is finished and all responses have been sent
+        // scalastyle:off line.size.limit
         logInfo(log"Stream finished for opId=${MDC(OP_ID, executeHolder.operationId)}, " +
           log"sent all responses up to last index ${MDC(STREAM_ID, nextIndex - 1)}. " +
           log"totalTime=${MDC(TOTAL_TIME, (System.nanoTime - startTime) / NANOS_PER_MILLIS.toDouble)} ms " +
           log"waitingForResults=${MDC(WAIT_RESULT_TIME, consumeSleep / NANOS_PER_MILLIS.toDouble)} ms " +
           log"waitingForSend=${MDC(WAIT_SEND_TIME, sendSleep / NANOS_PER_MILLIS.toDouble)} ms")
+        // scalastyle:on line.size.limit
         executionObserver.getError() match {
           case Some(t) => grpcObserver.onError(t)
           case None => grpcObserver.onCompleted()
@@ -309,12 +311,14 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
       } else if (deadlineLimitReached) {
         // The stream is not complete, but should be finished now.
         // The client needs to reattach with ReattachExecute.
+        // scalastyle:off line.size.limit
         logInfo(log"Deadline reached, shutting down stream for " +
           log"opId=${MDC(OP_ID, executeHolder.operationId)} " +
           log"after index ${MDC(STREAM_ID, nextIndex - 1)}. " +
           log"totalTime=${MDC(TOTAL_TIME, (System.nanoTime - startTime) / NANOS_PER_MILLIS.toDouble)} ms " +
           log"waitingForResults=${MDC(WAIT_RESULT_TIME, consumeSleep / NANOS_PER_MILLIS.toDouble)} ms " +
           log"waitingForSend=${MDC(WAIT_SEND_TIME, sendSleep / NANOS_PER_MILLIS.toDouble)} ms")
+        // scalastyle:on line.size.limit
         grpcObserver.onCompleted()
         finished = true
       }

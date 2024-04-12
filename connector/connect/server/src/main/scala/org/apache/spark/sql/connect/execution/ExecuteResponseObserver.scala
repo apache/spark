@@ -233,6 +233,7 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
   /** Remove all cached responses */
   def removeAll(): Unit = responseLock.synchronized {
     removeResponsesUntilIndex(lastProducedIndex)
+    // scalastyle:off line.size.limit
     logInfo(
       log"Release all for opId=${MDC(LogKey.OP_ID, executeHolder.operationId)}. Execution stats: " +
         log"total=${MDC(LogKey.TOTAL_SIZE, totalSize)} " +
@@ -241,6 +242,7 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
         log"cachedUntilProduced=${MDC(LogKey.CACHE_UNTIL_LAST_PRODUCED_SIZE, cachedSizeUntilLastProduced)} " +
         log"maxCachedUntilConsumed=${MDC(LogKey.MAX_CACHE_UNTIL_HIGHEST_CONSUMED_SIZE, cachedSizeUntilHighestConsumed.max)} " +
         log"maxCachedUntilProduced=${MDC(LogKey.MAX_CACHE_UNTIL_LAST_PRODUCED_SIZE, cachedSizeUntilLastProduced.max)}")
+    // scalastyle:on line.size.limit
   }
 
   /** Returns if the stream is finished. */
