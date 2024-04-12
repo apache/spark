@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.{AbstractArrayType, AbstractStringType}
+import org.apache.spark.sql.internal.types.{AbstractArrayType, AbstractStringType, StringTypeAnyCollation}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.UpCastRule.numericPrecedence
 
@@ -422,8 +422,9 @@ abstract class TypeCoercionBase {
           case None => c
         }
 
-      case aj @ ArrayJoin(arr, d, nr) if !ArrayType(StringType).acceptsType(arr.dataType) &&
-        ArrayType.acceptsType(arr.dataType) =>
+      case aj @ ArrayJoin(arr, d, nr)
+          if !AbstractArrayType(StringTypeAnyCollation).acceptsType(arr.dataType) &&
+          ArrayType.acceptsType(arr.dataType) =>
         val containsNull = arr.dataType.asInstanceOf[ArrayType].containsNull
         implicitCast(arr, ArrayType(StringType, containsNull)) match {
           case Some(castedArr) => ArrayJoin(castedArr, d, nr)

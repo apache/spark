@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Connection, Date, Driver, Statement, Timestamp}
+import java.sql.{Connection, Date, Driver, ResultSetMetaData, Statement, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime}
 import java.util
 import java.util.ServiceLoader
@@ -826,20 +826,19 @@ abstract class JdbcDialect extends Serializable with Logging {
   }
 
   /**
-   * Return the array dimension of the column. The array dimension will be carried in the
-   * metadata of the column and used by `getCatalystType` to determine the dimension of the
-   * ArrayType.
+   * Get extra column metadata for the given column.
    *
    * @param conn The connection currently connection being used.
-   * @param tableName The name of the table which the column belongs to.
-   * @param columnName The name of the column.
-   * @return An Option[Int] which contains the number of array dimension.
-   *         If Some(n), the column is an array with n dimensions.
-   *         If the method is un-implemented, or some error encountered, return None.
-   *         Then, `getCatalystType` will try use 1 dimension as default for arrays.
+   * @param rsmd The metadata of the current result set.
+   * @param columnIdx The index of the column.
+   * @param metadata The metadata builder to store the extra column information.
    */
   @Since("4.0.0")
-  def getArrayDimension(conn: Connection, tableName: String, columnName: String): Option[Int] = None
+  def updateExtraColumnMeta(
+      conn: Connection,
+      rsmd: ResultSetMetaData,
+      columnIdx: Int,
+      metadata: MetadataBuilder): Unit = {}
 }
 
 /**

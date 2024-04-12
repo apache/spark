@@ -16,9 +16,11 @@
  */
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.streaming.TTLMode
+import org.apache.spark.sql.streaming.TimeMode
 
-/** TTL types used in tranformWithState operator */
-case object NoTTL extends TTLMode
+/** TimeMode types used in transformWithState operator */
+case object NoTime extends TimeMode
 
-case object ProcessingTimeTTL extends TTLMode
+case object ProcessingTime extends TimeMode
+
+case object EventTime extends TimeMode
