@@ -53,8 +53,10 @@ def main(infile: IO, outfile: IO) -> None:
         f"url {connect_url} and sessionId {session_id}."
     )
 
+    # To attach to the existing SparkSession, we're setting the session_id in the URL.
+    connect_url = connect_url + ";session_id=" + session_id
     spark_connect_session = SparkSession.builder.remote(connect_url).getOrCreate()
-    spark_connect_session._client._session_id = session_id  # type: ignore[attr-defined]
+    assert spark_connect_session.session_id == session_id
     spark = spark_connect_session
 
     # TODO(SPARK-44461): Enable Process Isolation

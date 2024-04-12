@@ -556,12 +556,8 @@ class DataStreamWriter:
 
     def foreachBatch(self, func: Callable[["DataFrame", int], None]) -> "DataStreamWriter":
         try:
-            from pyspark.sql.connect.session import SparkSession
-
-            dispatch_handlers = {SparkSession: lambda x: x.__custom_reduce_handler__()}
             self._write_proto.foreach_batch.python_function.command = CloudPickleSerializer().dumps(
                 func,
-                dispatch_handlers=dispatch_handlers,
             )
         except pickle.PicklingError:
             raise PySparkPicklingError(
