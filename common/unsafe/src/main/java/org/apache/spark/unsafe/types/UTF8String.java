@@ -30,7 +30,6 @@ import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
-import com.ibm.icu.text.StringSearch;
 import org.apache.spark.sql.catalyst.util.CollationFactory;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.UTF8StringBuilder;
