@@ -784,7 +784,7 @@ object DataSource extends Logging {
           globResult
         }.flatten
       } catch {
-        case e: SparkException => throw e.getCause
+        case e: SparkException => throw ThreadUtils.wrapCallerStacktrace(e.getCause)
       }
 
     if (checkFilesExist) {
@@ -796,7 +796,7 @@ object DataSource extends Logging {
           }
         }
       } catch {
-        case e: SparkException => throw e.getCause
+        case e: SparkException => throw ThreadUtils.wrapCallerStacktrace(e.getCause)
       }
     }
 

@@ -128,6 +128,42 @@ class ThreadUtilsSuite extends SparkFunSuite {
     )
   }
 
+  test("wrapCallerStacktrace") {
+    var runnerThreadName: String = null
+    var exception: Throwable = null
+    val t = new Thread() {
+      override def run(): Unit = {
+        runnerThreadName = Thread.currentThread().getName
+        internalMethod()
+      }
+      private def internalMethod(): Unit = {
+        throw new RuntimeException(s"Error occurred on $runnerThreadName")
+      }
+    }
+    t.setDaemon(true)
+    t.setUncaughtExceptionHandler { case (_, e) => exception = e }
+    t.start()
+    t.join()
+
+    ThreadUtils.wrapCallerStacktrace(exception, s"run in separate thread: $runnerThreadName")
+
+    assert(exception.getStackTrace.mkString("\n").contains(
+      "internalMethod"),
+      "stack trace does not contain real exception stack trace"
+    )
+    assert(exception.getStackTrace.mkString("\n").contains(
+      s"... run in separate thread: $runnerThreadName ..."),
+      "stack trace does not contain expected place holder"
+    )
+    assert(exception.getStackTrace.mkString("\n").contains(
+      "org.scalatest.Suite.run"),
+      "stack trace does not contain caller stack trace"
+    )
+    assert(exception.getStackTrace.mkString("\n").contains("ThreadUtils.scala") === false,
+      "stack trace contains unexpected references to ThreadUtils"
+    )
+  }
+
   test("parmap should be interruptible") {
     val t = new Thread() {
       setDaemon(true)
