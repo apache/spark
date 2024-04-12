@@ -141,7 +141,8 @@ public final class CollationSupport {
   }
 
   public static class SubstringIndex {
-    public static UTF8String exec(final UTF8String string, final UTF8String delimiter, final int count, final int collationId) {
+    public static UTF8String exec(final UTF8String string, final UTF8String delimiter,
+        final int count, final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
       if (collation.supportsBinaryEquality) {
         return execBinary(string, delimiter, count);
@@ -151,7 +152,8 @@ public final class CollationSupport {
         return execICU(string, delimiter, count, collationId);
       }
     }
-    public static String genCode(final String string, final String delimiter, final int count, final int collationId) {
+    public static String genCode(final String string, final String delimiter,
+        final int count, final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
       String expr = "CollationSupport.SubstringIndex.exec";
       if (collation.supportsBinaryEquality) {
@@ -162,15 +164,18 @@ public final class CollationSupport {
         return String.format(expr + "ICU(%s, %s, %d, %d)", string, delimiter, count, collationId);
       }
     }
-    public static UTF8String execBinary(final UTF8String string, final UTF8String delimiter, final int count) {
+    public static UTF8String execBinary(final UTF8String string, final UTF8String delimiter,
+        final int count) {
       return string.subStringIndex(delimiter, count);
     }
-    public static UTF8String execLowercase(final UTF8String string, final UTF8String delimiter, final int count) {
+    public static UTF8String execLowercase(final UTF8String string, final UTF8String delimiter,
+        final int count) {
       return CollationAwareUTF8String.lowercaseSubStringIndex(string, delimiter, count);
     }
-    public static UTF8String execICU(final UTF8String string, final UTF8String delimiter, final int count,
-                              final int collationId) {
-      return CollationAwareUTF8String.collationAwareSubStringIndex(string, delimiter, count, collationId);
+    public static UTF8String execICU(final UTF8String string, final UTF8String delimiter,
+        final int count, final int collationId) {
+      return CollationAwareUTF8String.collationAwareSubStringIndex(string, delimiter, count,
+              collationId);
     }
   }
 
@@ -206,7 +211,8 @@ public final class CollationSupport {
         pos, pos + pattern.numChars()), pattern, collationId).last() == 0;
     }
 
-    private static int collationAwareFind(UTF8String target, UTF8String pattern, int start, int collationId) {
+    private static int collationAwareFind(UTF8String target, UTF8String pattern, int start,
+        int collationId) {
       assert (pattern.numBytes() > 0);
 
       StringSearch stringSearch = CollationFactory.getStringSearch(target, pattern, collationId);
@@ -217,7 +223,8 @@ public final class CollationSupport {
       return target.charPosToByte(stringSearch.next());
     }
 
-    private static int collationAwareRFind(UTF8String target, UTF8String pattern, int start, int collationId) {
+    private static int collationAwareRFind(UTF8String target, UTF8String pattern, int start,
+        int collationId) {
       assert (pattern.numBytes() > 0);
 
       if (target.numBytes() == 0) {
@@ -241,7 +248,8 @@ public final class CollationSupport {
       return target.charPosToByte(prevStart);
     }
 
-    private static UTF8String collationAwareSubStringIndex(final UTF8String string, final UTF8String delimiter, int count, final int collationId) {
+    private static UTF8String collationAwareSubStringIndex(final UTF8String string,
+        final UTF8String delimiter, int count, final int collationId) {
       if (delimiter.numBytes() == 0 || count == 0) {
         return UTF8String.EMPTY_UTF8;
       }
@@ -280,12 +288,14 @@ public final class CollationSupport {
         }
         int size = string.numBytes() - delimiter.numBytes() - idx;
         byte[] bytes = new byte[size];
-        copyMemory(string.getBaseObject(), string.getBaseOffset() + idx + delimiter.numBytes(), bytes, BYTE_ARRAY_OFFSET, size);
+        copyMemory(string.getBaseObject(), string.getBaseOffset() + idx + delimiter.numBytes(),
+                bytes, BYTE_ARRAY_OFFSET, size);
         return UTF8String.fromBytes(bytes);
       }
     }
 
-    private static UTF8String lowercaseSubStringIndex(final UTF8String string, final UTF8String delimiter, int count) {
+    private static UTF8String lowercaseSubStringIndex(final UTF8String string,
+      final UTF8String delimiter, int count) {
       if (delimiter.numBytes() == 0 || count == 0) {
         return UTF8String.EMPTY_UTF8;
       }
@@ -328,7 +338,8 @@ public final class CollationSupport {
         }
         int size = string.numBytes() - delimiter.numBytes() - idx;
         byte[] bytes = new byte[size];
-        copyMemory(string.getBaseObject(), string.getBaseOffset() + idx + delimiter.numBytes(), bytes, BYTE_ARRAY_OFFSET, size);
+        copyMemory(string.getBaseObject(), string.getBaseOffset() + idx + delimiter.numBytes(),
+                bytes, BYTE_ARRAY_OFFSET, size);
         return UTF8String.fromBytes(bytes);
       }
     }
