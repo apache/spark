@@ -1760,6 +1760,12 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     )
     log3.setLastModified(0L)
 
+    val inProgressLog = newLogFile("app3", Some("attempt1"), inProgress = true)
+    writeFile(inProgressLog, None,
+      SparkListenerApplicationStart("app3", Some("app3"), 3L, "test", Some("attempt1"))
+    )
+    inProgressLog.setLastModified(0L)
+
     provider.getListing().size should be (0)
 
     // Move the clock forward so log1 and log3 exceed the max age.
@@ -1767,12 +1773,13 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     // Avoid unnecessary parse, the expired log files would be cleaned by checkForLogs().
     provider.checkForLogs()
 
-    provider.doMergeApplicationListingCall should be (1)
-    provider.getListing().size should be (1)
+    provider.doMergeApplicationListingCall should be (2)
+    provider.getListing().size should be (2)
 
     assert(!log1.exists())
     assert(!log3.exists())
     assert(log2.exists())
+    assert(inProgressLog.exists())
   }
 
   /**
