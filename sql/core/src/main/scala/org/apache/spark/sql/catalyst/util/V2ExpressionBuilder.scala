@@ -192,7 +192,7 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
     case _: BitwiseNot => generateExpressionWithName("~", expr, isPredicate)
     case caseWhen @ CaseWhen(branches, elseValue) =>
       val conditions = branches.map(_._1).flatMap(generateExpression(_, true))
-      val values = branches.map(_._2).flatMap(generateExpression(_, false))
+      val values = branches.map(_._2).flatMap(generateExpression(_))
       val elseExprOpt = elseValue.flatMap(generateExpression(_))
       if (conditions.length == branches.length && values.length == branches.length &&
           elseExprOpt.size == elseValue.size) {
