@@ -2584,6 +2584,21 @@ class XmlSuite
 
     val expectedResults = Seq.range(1, 18).map(Row(_))
     checkAnswer(results, expectedResults)
+
+    val results2 = spark.read.format("xml")
+      .option("rowTag", "ROW")
+      .option("multiLine", "true")
+      .load(getTestResourcePath(resDir + "cdata-ending-eof.xml"))
+
+    val expectedResults2 = Seq.range(1, 18).map(Row(_))
+    checkAnswer(results2, expectedResults2)
+
+    val results3 = spark.read.format("xml")
+      .option("rowTag", "ROW")
+      .option("multiLine", "true")
+      .load(getTestResourcePath(resDir + "cdata-no-close.xml"))
+
+    val expectedResults3 = Seq.range(1, 18).map(Row(_))
   }
 
   test("capture values interspersed between elements - nested struct") {
