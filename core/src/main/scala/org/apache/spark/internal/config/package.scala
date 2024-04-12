@@ -1022,6 +1022,7 @@ package object config {
         "but allow the user to configure the waiting time.")
       .version("4.0.0")
       .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(_ >= 0, "Listener bus exit timeout must be non-negative duration")
       .createWithDefault(0)
 
   // This property sets the root namespace for metrics reporting
