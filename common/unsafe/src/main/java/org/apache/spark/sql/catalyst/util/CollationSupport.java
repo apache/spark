@@ -137,6 +137,74 @@ public final class CollationSupport {
     }
   }
 
+  public static class FindInSet {
+    public static int exec(final UTF8String l, final UTF8String r, final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      if (collation.supportsBinaryEquality) {
+        return execBinary(l, r);
+      } else if (collation.supportsLowercaseEquality) {
+        return execLowercase(l, r);
+      } else {
+        return execICU(l, r, collationId);
+      }
+    }
+    public static String genCode(final String l, final String r, final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      String expr = "CollationSupport.FindInSet.exec";
+      if (collation.supportsBinaryEquality) {
+        return String.format(expr + "Binary(%s, %s)", l, r);
+      } else if (collation.supportsLowercaseEquality) {
+        return String.format(expr + "Lowercase(%s, %s)", l, r);
+      } else {
+        return String.format(expr + "ICU(%s, %s, %d)", l, r, collationId);
+      }
+    }
+    public static int execBinary(final UTF8String l, final UTF8String r) {
+      return l.findInSet(r);
+    }
+    public static int execLowercase(final UTF8String l, final UTF8String r) {
+      return l.toLowerCase().findInSet(r.toLowerCase());
+    }
+    public static int execICU(final UTF8String l, final UTF8String r,
+                                  final int collationId) {
+      return CollationAwareUTF8String.findInSet(l, r, collationId);
+    }
+  }
+
+  public static class IndexOf {
+    public static int exec(final UTF8String l, final UTF8String r, final int start, final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      if (collation.supportsBinaryEquality) {
+        return execBinary(l, r, start);
+      } else if (collation.supportsLowercaseEquality) {
+        return execLowercase(l, r, start);
+      } else {
+        return execICU(l, r, start, collationId);
+      }
+    }
+    public static String genCode(final String l, final String r, final int start, final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      String expr = "CollationSupport.IndexOf.exec";
+      if (collation.supportsBinaryEquality) {
+        return String.format(expr + "Binary(%s, %s, %d)", l, r, start);
+      } else if (collation.supportsLowercaseEquality) {
+        return String.format(expr + "Lowercase(%s, %s, %d)", l, r, start);
+      } else {
+        return String.format(expr + "ICU(%s, %s, %d, %d)", l, r, start, collationId);
+      }
+    }
+    public static int execBinary(final UTF8String l, final UTF8String r, final int start) {
+      return l.indexOf(r, start);
+    }
+    public static int execLowercase(final UTF8String l, final UTF8String r, final int start) {
+      return l.toLowerCase().indexOf(r.toLowerCase(), start);
+    }
+    public static int execICU(final UTF8String l, final UTF8String r, final int start,
+                              final int collationId) {
+      return CollationAwareUTF8String.indexOf(l, r, start, collationId);
+    }
+  }
+
   // TODO: Add more collation-aware string expressions.
 
   /**
@@ -167,6 +235,46 @@ public final class CollationSupport {
       }
       return CollationFactory.getStringSearch(target.substring(
         pos, pos + pattern.numChars()), pattern, collationId).last() == 0;
+    }
+
+    private static int findInSet(UTF8String match, UTF8String set, int collationId) {
+      if (match.contains(UTF8String.fromString(","))) {
+        return 0;
+      }
+
+      StringSearch stringSearch = CollationFactory.getStringSearch(set, match, collationId);
+
+      String setString = set.toString();
+      int wordStart = 0;
+      while ((wordStart = stringSearch.next()) != StringSearch.DONE) {
+        boolean isValidStart = wordStart == 0 || setString.charAt(wordStart - 1) == ',';
+        boolean isValidEnd = wordStart + stringSearch.getMatchLength() == setString.length()
+                || setString.charAt(wordStart + stringSearch.getMatchLength()) == ',';
+
+        if (isValidStart && isValidEnd) {
+          int pos = 0;
+          for (int i = 0; i < setString.length() && i < wordStart; i++) {
+            if (setString.charAt(i) == ',') {
+              pos++;
+            }
+          }
+
+          return pos + 1;
+        }
+      }
+
+      return 0;
+    }
+
+    private static int indexOf(UTF8String target, UTF8String pattern, int start, int collationId) {
+      if (pattern.numBytes() == 0) {
+        return 0;
+      }
+
+      StringSearch stringSearch = CollationFactory.getStringSearch(target, pattern, collationId);
+      stringSearch.setIndex(start);
+
+      return stringSearch.next();
     }
 
   }

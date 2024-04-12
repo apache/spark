@@ -515,51 +515,6 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return 0;
   }
 
-  public int findInSet(UTF8String match, int collationId) {
-    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
-      return this.findInSet(match);
-    }
-    if (collationId == CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID) {
-      return this.toLowerCase().findInSet(match.toLowerCase());
-    }
-    return collationAwareFindInSet(match, collationId);
-  }
-
-  /*
-   * Works on Strings with collationId other than UTF8_BINARY_COLLATION_ID. Returns the index
-   * of the string `match` in this String. This string has to be a comma separated
-   * list. If `match` contains a comma 0 will be returned. If the `match` isn't part of this String,
-   * 0 will be returned, else the index of match (1-based index)
-   */
-  private int collationAwareFindInSet(UTF8String match, int collationId) {
-    if (match.contains(COMMA_UTF8)) {
-      return 0;
-    }
-
-    StringSearch stringSearch = CollationFactory.getStringSearch(this, match, collationId);
-
-    String setString = this.toString();
-    int wordStart = 0;
-    while ((wordStart = stringSearch.next()) != StringSearch.DONE) {
-      boolean isValidStart = wordStart == 0 || setString.charAt(wordStart - 1) == ',';
-      boolean isValidEnd = wordStart + stringSearch.getMatchLength() == setString.length()
-              || setString.charAt(wordStart + stringSearch.getMatchLength()) == ',';
-
-      if (isValidStart && isValidEnd) {
-        int pos = 0;
-        for (int i = 0; i < setString.length() && i < wordStart; i++) {
-          if (setString.charAt(i) == ',') {
-            pos++;
-          }
-        }
-
-        return pos + 1;
-      }
-    }
-
-    return 0;
-  }
-
   /**
    * Copy the bytes from the current UTF8String, and make a new UTF8String.
    * @param start the start position of the current UTF8String in bytes.
@@ -844,27 +799,6 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     } while (i < numBytes);
 
     return -1;
-  }
-
-  public int indexOf(UTF8String substring, int start, int collationId) {
-    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
-      return this.indexOf(substring, start);
-    }
-    if (collationId == CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID) {
-      return this.toLowerCase().indexOf(substring.toLowerCase(), start);
-    }
-    return collationAwareIndexOf(substring, start, collationId);
-  }
-
-  private int collationAwareIndexOf(UTF8String substring, int start, int collationId) {
-    if (substring.numBytes == 0) {
-      return 0;
-    }
-
-    StringSearch stringSearch = CollationFactory.getStringSearch(this, substring, collationId);
-    stringSearch.setIndex(start);
-
-    return stringSearch.next();
   }
 
   /**

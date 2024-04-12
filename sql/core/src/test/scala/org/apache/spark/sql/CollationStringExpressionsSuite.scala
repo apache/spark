@@ -199,9 +199,6 @@ class CollationStringExpressionsSuite
     // scalastyle:on
   }
 
-  test("REPEAT check output type on explicitly collated string") {
-    def testRepeat(input: String, n: Int, collationId: Int, expected: String): Unit = {
-      val s = Literal.create(input, StringType(collationId))
   test("Support StartsWith string expression with collation") {
     // Supported collations
     case class StartsWithTestCase[R](l: String, r: String, c: String, result: R)
@@ -252,20 +249,6 @@ class CollationStringExpressionsSuite
     assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
   }
 
-    // Not important for this test
-    val repeatNum = 2;
-
-    var collationId = CollationFactory.collationNameToId("UTF8_BINARY")
-    testRepeat("abc", repeatNum, collationId, "UTF8_BINARY")
-
-    collationId = CollationFactory.collationNameToId("UTF8_BINARY_LCASE")
-    testRepeat("abc", repeatNum, collationId, "UTF8_BINARY_LCASE")
-
-    collationId = CollationFactory.collationNameToId("UNICODE")
-    testRepeat("abc", repeatNum, collationId, "UNICODE")
-
-    collationId = CollationFactory.collationNameToId("UNICODE_CI")
-    testRepeat("abc", repeatNum, collationId, "UNICODE_CI")
   test("Support StringRepeat string expression with collation") {
     // Supported collations
     case class StringRepeatTestCase[R](s: String, n: Int, c: String, result: R)

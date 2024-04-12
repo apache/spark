@@ -980,19 +980,13 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
     Seq(StringTypeAnyCollation, StringTypeAnyCollation)
 
   override protected def nullSafeEval(word: Any, set: Any): Any = {
-    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
-      set.asInstanceOf[UTF8String].findInSet(word.asInstanceOf[UTF8String])
-    } else {
-      set.asInstanceOf[UTF8String].findInSet(word.asInstanceOf[UTF8String], collationId)
-    }
+    CollationSupport.FindInSet.
+      exec(word.asInstanceOf[UTF8String], set.asInstanceOf[UTF8String], collationId)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
-      nullSafeCodeGen(ctx, ev, (word, set) => s"${ev.value} = $set.findInSet($word);")
-    } else {
-      nullSafeCodeGen(ctx, ev, (word, set) => s"${ev.value} = $set.findInSet($word, $collationId);")
-    }
+      nullSafeCodeGen(ctx, ev, (word, set) =>
+        CollationSupport.FindInSet.genCode(word, set, collationId))
   }
 
   override def dataType: DataType = IntegerType
@@ -1365,11 +1359,8 @@ case class StringInstr(str: Expression, substr: Expression)
     Seq(StringTypeAnyCollation, StringTypeAnyCollation)
 
   override def nullSafeEval(string: Any, sub: Any): Any = {
-    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
-      string.asInstanceOf[UTF8String].indexOf(sub.asInstanceOf[UTF8String], 0) + 1
-    } else {
-      string.asInstanceOf[UTF8String].indexOf(sub.asInstanceOf[UTF8String], 0, collationId) + 1
-    }
+    CollationSupport.IndexOf.
+      exec(string.asInstanceOf[UTF8String], sub.asInstanceOf[UTF8String], collationId)
   }
 
   override def prettyName: String = "instr"
