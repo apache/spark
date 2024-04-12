@@ -219,7 +219,7 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
     }
   }
 
-  test(s"ttl States are populated for timeMode=ProcessingTime") {
+  test(s"ttl States are populated for valueState and timeMode=ProcessingTime") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store,
@@ -237,6 +237,25 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
     }
   }
 
+  test(s"ttl States are populated for listState and timeMode=ProcessingTime") {
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+      val store = provider.getStore(0)
+      val handle = new StatefulProcessorHandleImpl(store,
+        UUID.randomUUID(), keyExprEncoder, TimeMode.ProcessingTime(),
+        batchTimestampMs = Some(10))
+
+      val listStateWithTTL = handle.getListState("testState",
+        Encoders.STRING, TTLConfig(Duration.ofHours(1)))
+
+      // create another state without TTL, this should not be captured in the handle
+      handle.getListState("testState", Encoders.STRING)
+
+      assert(handle.ttlStates.size() === 1)
+      assert(handle.ttlStates.get(0) === listStateWithTTL)
+    }
+  }
+
+
   test(s"ttl States are not populated for timeMode=None") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
@@ -244,6 +263,7 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
         UUID.randomUUID(), keyExprEncoder, TimeMode.None())
 
       handle.getValueState("testState", Encoders.STRING)
+      handle.getListState("testState", Encoders.STRING)
 
       assert(handle.ttlStates.isEmpty)
     }

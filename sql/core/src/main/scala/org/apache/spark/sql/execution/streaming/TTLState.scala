@@ -75,7 +75,7 @@ trait TTLState {
    *
    * @return true if the state was cleared, false otherwise.
    */
-  def clearIfExpired(groupingKey: Array[Byte]): Boolean
+  def clearIfExpired(groupingKey: Array[Byte]): Long
 }
 
 /**
@@ -118,9 +118,7 @@ abstract class SingleKeyTTLStateImpl(
       StateTTL.isExpired(expirationMs, ttlExpirationMs)
     }.foreach { kv =>
       val groupingKey = kv.key.getBinary(1)
-      if (clearIfExpired(groupingKey)) {
-        numValuesExpired += 1
-      }
+      numValuesExpired += clearIfExpired(groupingKey)
       store.remove(kv.key, ttlColumnFamilyName)
     }
     numValuesExpired
@@ -138,6 +136,30 @@ abstract class SingleKeyTTLStateImpl(
           expirationMs = kv.key.getLong(0),
           groupingKey = kv.key.getBinary(1)
         )
+      }
+    }
+  }
+
+  private[sql] def getValuesInTTLState(groupingKey: Array[Byte]): Iterator[Long] = {
+    val ttlIterator = ttlIndexIterator()
+    var nextValue: Option[Long] = None
+
+    new Iterator[Long] {
+      override def hasNext: Boolean = {
+        while (nextValue.isEmpty && ttlIterator.hasNext) {
+          val nextTtlValue = ttlIterator.next()
+          val valueGroupingKey = nextTtlValue.groupingKey
+          if (valueGroupingKey sameElements groupingKey) {
+            nextValue = Some(nextTtlValue.expirationMs)
+          }
+        }
+        nextValue.isDefined
+      }
+
+      override def next(): Long = {
+        val result = nextValue.get
+        nextValue = None
+        result
       }
     }
   }
