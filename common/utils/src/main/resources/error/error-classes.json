@@ -736,6 +736,11 @@
           "Input to the function <functionName> cannot contain elements of the \"MAP\" type. In Spark, same maps may have different hashcode, thus hash expressions are prohibited on \"MAP\" elements. To restore previous behavior set \"spark.sql.legacy.allowHashOnMapType\" to \"true\"."
         ]
       },
+      "HASH_VARIANT_TYPE" : {
+        "message" : [
+          "Input to the function <functionName> cannot contain elements of the \"VARIANT\" type yet."
+        ]
+      },
       "INPUT_SIZE_NOT_ONE" : {
         "message" : [
           "Length of <exprName> should be 1."
@@ -912,11 +917,6 @@
       "VALUE_OUT_OF_RANGE" : {
         "message" : [
           "The <exprName> must be between <valueRange> (current value = <currentValue>)."
-        ]
-      },
-      "HASH_VARIANT_TYPE" : {
-        "message" : [
-          "Input to the function <functionName> cannot contain elements of the \"VARIANT\" type yet."
         ]
       },
       "WRONG_NUM_ARG_TYPES" : {
