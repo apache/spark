@@ -30,7 +30,6 @@ import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
-import com.ibm.icu.text.StringSearch;
 import org.apache.spark.sql.catalyst.util.CollationFactory;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.UTF8StringBuilder;
@@ -342,28 +341,6 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return false;
   }
 
-  public boolean contains(final UTF8String substring, int collationId) {
-    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
-      return this.contains(substring);
-    }
-    if (collationId == CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID) {
-      return this.toLowerCase().contains(substring.toLowerCase());
-    }
-    return collatedContains(substring, collationId);
-  }
-
-  private boolean collatedContains(final UTF8String substring, int collationId) {
-    if (substring.numBytes == 0) return true;
-    if (this.numBytes == 0) return false;
-    StringSearch stringSearch = CollationFactory.getStringSearch(this, substring, collationId);
-    while (stringSearch.next() != StringSearch.DONE) {
-      if (stringSearch.getMatchLength() == stringSearch.getPattern().length()) {
-        return true;
-      }
-    }
-    return false;
-  }
-
   /**
    * Returns the byte at position `i`.
    */
@@ -378,43 +355,12 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return ByteArrayMethods.arrayEquals(base, offset + pos, s.base, s.offset, s.numBytes);
   }
 
-  private boolean matchAt(final UTF8String s, int pos, int collationId) {
-    if (s.numChars() + pos > this.numChars() || pos < 0) {
-      return false;
-    }
-    if (s.numBytes == 0 || this.numBytes == 0) {
-      return s.numBytes == 0;
-    }
-    return CollationFactory.getStringSearch(this.substring(pos, pos + s.numChars()),
-      s, collationId).last() == 0;
-  }
-
   public boolean startsWith(final UTF8String prefix) {
     return matchAt(prefix, 0);
   }
 
-  public boolean startsWith(final UTF8String prefix, int collationId) {
-    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
-      return this.startsWith(prefix);
-    }
-    if (collationId == CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID) {
-      return this.toLowerCase().startsWith(prefix.toLowerCase());
-    }
-    return matchAt(prefix, 0, collationId);
-  }
-
   public boolean endsWith(final UTF8String suffix) {
     return matchAt(suffix, numBytes - suffix.numBytes);
-  }
-
-  public boolean endsWith(final UTF8String suffix, int collationId) {
-    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
-      return this.endsWith(suffix);
-    }
-    if (collationId == CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID) {
-      return this.toLowerCase().endsWith(suffix.toLowerCase());
-    }
-    return matchAt(suffix, numBytes - suffix.numBytes, collationId);
   }
 
   /**
@@ -424,21 +370,16 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (numBytes == 0) {
       return EMPTY_UTF8;
     }
-
-    byte[] bytes = new byte[numBytes];
-    bytes[0] = (byte) Character.toTitleCase(getByte(0));
+    // Optimization - do char level uppercase conversion in case of chars in ASCII range
     for (int i = 0; i < numBytes; i++) {
-      byte b = getByte(i);
-      if (numBytesForFirstByte(b) != 1) {
-        // fallback
+      if (getByte(i) < 0) {
+        // non-ASCII
         return toUpperCaseSlow();
       }
-      int upper = Character.toUpperCase(b);
-      if (upper > 127) {
-        // fallback
-        return toUpperCaseSlow();
-      }
-      bytes[i] = (byte) upper;
+    }
+    byte[] bytes = new byte[numBytes];
+    for (int i = 0; i < numBytes; i++) {
+      bytes[i] = (byte) Character.toUpperCase(getByte(i));
     }
     return fromBytes(bytes);
   }
@@ -448,27 +389,50 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
+   * Optimized lowercase comparison for UTF8_BINARY_LCASE collation
+   * a.compareLowerCase(b) is equivalent to a.toLowerCase().binaryCompare(b.toLowerCase())
+   */
+  public int compareLowerCase(UTF8String other) {
+    int curr;
+    for (curr = 0; curr < numBytes && curr < other.numBytes; curr++) {
+      byte left, right;
+      if ((left = getByte(curr)) < 0 || (right = other.getByte(curr)) < 0) {
+        return compareLowerCaseSuffixSlow(other, curr);
+      }
+      int lowerLeft = Character.toLowerCase(left);
+      int lowerRight = Character.toLowerCase(right);
+      if (lowerLeft != lowerRight) {
+        return lowerLeft - lowerRight;
+      }
+    }
+    return numBytes - other.numBytes;
+  }
+
+  private int compareLowerCaseSuffixSlow(UTF8String other, int pref) {
+    UTF8String suffixLeft = UTF8String.fromAddress(base, offset + pref,
+      numBytes - pref);
+    UTF8String suffixRight = UTF8String.fromAddress(other.base, other.offset + pref,
+      other.numBytes - pref);
+    return suffixLeft.toLowerCaseSlow().binaryCompare(suffixRight.toLowerCaseSlow());
+  }
+
+  /**
    * Returns the lower case of this string
    */
   public UTF8String toLowerCase() {
     if (numBytes == 0) {
       return EMPTY_UTF8;
     }
-
-    byte[] bytes = new byte[numBytes];
-    bytes[0] = (byte) Character.toTitleCase(getByte(0));
+    // Optimization - do char level lowercase conversion in case of chars in ASCII range
     for (int i = 0; i < numBytes; i++) {
-      byte b = getByte(i);
-      if (numBytesForFirstByte(b) != 1) {
-        // fallback
+      if (getByte(i) < 0) {
+        // non-ASCII
         return toLowerCaseSlow();
       }
-      int lower = Character.toLowerCase(b);
-      if (lower > 127) {
-        // fallback
-        return toLowerCaseSlow();
-      }
-      bytes[i] = (byte) lower;
+    }
+    byte[] bytes = new byte[numBytes];
+    for (int i = 0; i < numBytes; i++) {
+      bytes[i] = (byte) Character.toLowerCase(getByte(i));
     }
     return fromBytes(bytes);
   }
@@ -484,24 +448,26 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (numBytes == 0) {
       return EMPTY_UTF8;
     }
-
-    byte[] bytes = new byte[numBytes];
+    // Optimization - in case of ASCII chars we can skip copying the data to and from StringBuilder
+    byte prev = ' ', curr;
     for (int i = 0; i < numBytes; i++) {
-      byte b = getByte(i);
-      if (i == 0 || getByte(i - 1) == ' ') {
-        if (numBytesForFirstByte(b) != 1) {
-          // fallback
-          return toTitleCaseSlow();
-        }
-        int upper = Character.toTitleCase(b);
-        if (upper > 127) {
-          // fallback
-          return toTitleCaseSlow();
-        }
-        bytes[i] = (byte) upper;
-      } else {
-        bytes[i] = b;
+      curr = getByte(i);
+      if (prev == ' ' && curr < 0) {
+        // non-ASCII
+        return toTitleCaseSlow();
       }
+      prev = curr;
+    }
+    byte[] bytes = new byte[numBytes];
+    prev = ' ';
+    for (int i = 0; i < numBytes; i++) {
+      curr = getByte(i);
+      if (prev == ' ') {
+        bytes[i] = (byte) Character.toTitleCase(curr);
+      } else {
+        bytes[i] = curr;
+      }
+      prev = curr;
     }
     return fromBytes(bytes);
   }

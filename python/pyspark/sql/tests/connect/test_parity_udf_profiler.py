@@ -18,10 +18,13 @@ import inspect
 import os
 import unittest
 
+from pyspark.util import is_remote_only
 from pyspark.sql.tests.test_udf_profiler import UDFProfiler2TestsMixin, _do_computation
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
+# TODO(SPARK-47756): Reeanble UDFProfilerParityTests for pyspark-connect
+@unittest.skipIf(is_remote_only(), "Skipped for now")
 class UDFProfilerParityTests(UDFProfiler2TestsMixin, ReusedConnectTestCase):
     def setUp(self) -> None:
         super().setUp()

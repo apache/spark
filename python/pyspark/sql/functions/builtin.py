@@ -972,12 +972,13 @@ def mode(col: "ColumnOrName", deterministic: bool = False) -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([
     ...     ("Java", 2012, 20000), ("dotNET", 2012, 5000),
     ...     ("Java", 2012, 20000), ("dotNET", 2012, 5000),
     ...     ("dotNET", 2013, 48000), ("Java", 2013, 30000)],
     ...     schema=("course", "year", "earnings"))
-    >>> df.groupby("course").agg(mode("year")).show()
+    >>> df.groupby("course").agg(sf.mode("year")).sort("course").show()
     +------+----------+
     |course|mode(year)|
     +------+----------+
@@ -989,13 +990,20 @@ def mode(col: "ColumnOrName", deterministic: bool = False) -> Column:
     deterministic is false or is not defined, or the lowest value is returned if deterministic is
     true.
 
-    >>> df2 = spark.createDataFrame([(-10,), (0,), (10,)], ["col"])
-    >>> df2.select(mode("col", False), mode("col", True)).show()
-    +---------+---------------------------------------+
-    |mode(col)|mode() WITHIN GROUP (ORDER BY col DESC)|
-    +---------+---------------------------------------+
-    |        0|                                    -10|
-    +---------+---------------------------------------+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(-10,), (0,), (10,)], ["col"])
+    >>> df.select(sf.mode("col", False)).show() # doctest: +SKIP
+    +---------+
+    |mode(col)|
+    +---------+
+    |        0|
+    +---------+
+    >>> df.select(sf.mode("col", True)).show()
+    +---------------------------------------+
+    |mode() WITHIN GROUP (ORDER BY col DESC)|
+    +---------------------------------------+
+    |                                    -10|
+    +---------------------------------------+
     """
     return _invoke_function("mode", _to_java_column(col), deterministic)
 
@@ -1230,7 +1238,7 @@ def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     ...     ("Java", 2012, 20000), ("dotNET", 2012, 5000),
     ...     ("dotNET", 2013, 48000), ("Java", 2013, 30000)],
     ...     schema=("course", "year", "earnings"))
-    >>> df.groupby("course").agg(sf.max_by("year", "earnings")).show()
+    >>> df.groupby("course").agg(sf.max_by("year", "earnings")).sort("course").show()
     +------+----------------------+
     |course|max_by(year, earnings)|
     +------+----------------------+
@@ -1245,7 +1253,9 @@ def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     ...     ("Marketing", "Anna", 4), ("IT", "Bob", 2),
     ...     ("IT", "Charlie", 3), ("Marketing", "David", 1)],
     ...     schema=("department", "name", "years_in_dept"))
-    >>> df.groupby("department").agg(sf.max_by("name", "years_in_dept")).show()
+    >>> df.groupby("department").agg(
+    ...     sf.max_by("name", "years_in_dept")
+    ... ).sort("department").show()
     +----------+---------------------------+
     |department|max_by(name, years_in_dept)|
     +----------+---------------------------+
@@ -1260,7 +1270,9 @@ def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     ...     ("Consult", "Eva", 6), ("Finance", "Frank", 5),
     ...     ("Finance", "George", 5), ("Consult", "Henry", 7)],
     ...     schema=("department", "name", "years_in_dept"))
-    >>> df.groupby("department").agg(sf.max_by("name", "years_in_dept")).show()
+    >>> df.groupby("department").agg(
+    ...     sf.max_by("name", "years_in_dept")
+    ... ).sort("department").show()
     +----------+---------------------------+
     |department|max_by(name, years_in_dept)|
     +----------+---------------------------+
@@ -1307,7 +1319,7 @@ def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     ...     ("Java", 2012, 20000), ("dotNET", 2012, 5000),
     ...     ("dotNET", 2013, 48000), ("Java", 2013, 30000)],
     ...     schema=("course", "year", "earnings"))
-    >>> df.groupby("course").agg(sf.min_by("year", "earnings")).show()
+    >>> df.groupby("course").agg(sf.min_by("year", "earnings")).sort("course").show()
     +------+----------------------+
     |course|min_by(year, earnings)|
     +------+----------------------+
@@ -1322,7 +1334,9 @@ def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     ...     ("Marketing", "Anna", 4), ("IT", "Bob", 2),
     ...     ("IT", "Charlie", 3), ("Marketing", "David", 1)],
     ...     schema=("department", "name", "years_in_dept"))
-    >>> df.groupby("department").agg(sf.min_by("name", "years_in_dept")).show()
+    >>> df.groupby("department").agg(
+    ...     sf.min_by("name", "years_in_dept")
+    ... ).sort("department").show()
     +----------+---------------------------+
     |department|min_by(name, years_in_dept)|
     +----------+---------------------------+
@@ -1337,7 +1351,9 @@ def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     ...     ("Consult", "Eva", 6), ("Finance", "Frank", 5),
     ...     ("Finance", "George", 5), ("Consult", "Henry", 7)],
     ...     schema=("department", "name", "years_in_dept"))
-    >>> df.groupby("department").agg(sf.min_by("name", "years_in_dept")).show()
+    >>> df.groupby("department").agg(
+    ...     sf.min_by("name", "years_in_dept")
+    ... ).sort("department").show()
     +----------+---------------------------+
     |department|min_by(name, years_in_dept)|
     +----------+---------------------------+

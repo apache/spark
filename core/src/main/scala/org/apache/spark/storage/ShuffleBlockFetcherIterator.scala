@@ -37,7 +37,7 @@ import org.apache.spark.{MapOutputTracker, SparkException, TaskContext}
 import org.apache.spark.MapOutputTracker.SHUFFLE_PUSH_MAP_ID
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{BLOCK_ID, ERROR, MAX_ATTEMPTS}
+import org.apache.spark.internal.LogKey.{BLOCK_ID, ERROR, HOST, MAX_ATTEMPTS, PORT}
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.shuffle._
 import org.apache.spark.network.shuffle.checksum.{Cause, ShuffleChecksumHelper}
@@ -314,7 +314,8 @@ final class ShuffleBlockFetcherIterator(
 
       override def onBlockFetchFailure(blockId: String, e: Throwable): Unit = {
         ShuffleBlockFetcherIterator.this.synchronized {
-          logError(s"Failed to get block(s) from ${req.address.host}:${req.address.port}", e)
+          logError(log"Failed to get block(s) from " +
+            log"${MDC(HOST, req.address.host)}:${MDC(PORT, req.address.port)}", e)
           e match {
             // SPARK-27991: Catch the Netty OOM and set the flag `isNettyOOMOnShuffle` (shared among
             // tasks) to true as early as possible. The pending fetch requests won't be sent

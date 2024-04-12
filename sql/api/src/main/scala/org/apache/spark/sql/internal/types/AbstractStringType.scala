@@ -15,22 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.expressions
+package org.apache.spark.sql.internal.types
 
 import org.apache.spark.sql.types.{AbstractDataType, DataType, StringType}
 
 /**
  * StringTypeCollated is an abstract class for StringType with collation support.
  */
-abstract class StringTypeCollated extends AbstractDataType {
+abstract class AbstractStringType extends AbstractDataType {
   override private[sql] def defaultConcreteType: DataType = StringType
+  override private[sql] def simpleString: String = "string"
 }
 
 /**
  * Use StringTypeBinary for expressions supporting only binary collation.
  */
-case object StringTypeBinary extends StringTypeCollated {
-  override private[sql] def simpleString: String = "string_binary"
+case object StringTypeBinary extends AbstractStringType {
   override private[sql] def acceptsType(other: DataType): Boolean =
     other.isInstanceOf[StringType] && other.asInstanceOf[StringType].supportsBinaryEquality
 }
@@ -38,8 +38,7 @@ case object StringTypeBinary extends StringTypeCollated {
 /**
  * Use StringTypeBinaryLcase for expressions supporting only binary and lowercase collation.
  */
-case object StringTypeBinaryLcase extends StringTypeCollated {
-  override private[sql] def simpleString: String = "string_binary_lcase"
+case object StringTypeBinaryLcase extends AbstractStringType {
   override private[sql] def acceptsType(other: DataType): Boolean =
     other.isInstanceOf[StringType] && (other.asInstanceOf[StringType].supportsBinaryEquality ||
       other.asInstanceOf[StringType].isUTF8BinaryLcaseCollation)
@@ -48,7 +47,6 @@ case object StringTypeBinaryLcase extends StringTypeCollated {
 /**
  * Use StringTypeAnyCollation for expressions supporting all possible collation types.
  */
-case object StringTypeAnyCollation extends StringTypeCollated {
-  override private[sql] def simpleString: String = "string_any_collation"
+case object StringTypeAnyCollation extends AbstractStringType {
   override private[sql] def acceptsType(other: DataType): Boolean = other.isInstanceOf[StringType]
 }
