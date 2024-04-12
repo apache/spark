@@ -139,7 +139,8 @@ public final class CollationSupport {
   }
 
   public static class StringReplace {
-    public static UTF8String exec(final UTF8String src, final UTF8String search, final UTF8String replace, final int collationId) {
+    public static UTF8String exec(final UTF8String src, final UTF8String search,
+        final UTF8String replace, final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
       if (collation.supportsBinaryEquality) {
         return execBinary(src, search, replace);
@@ -149,7 +150,8 @@ public final class CollationSupport {
         return execICU(src, search, replace, collationId);
       }
     }
-    public static String genCode(final String src, final String search, final String replace, final int collationId) {
+    public static String genCode(final String src, final String search, final String replace,
+        final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
       String expr = "CollationSupport.StringReplace.exec";
       if (collation.supportsBinaryEquality) {
@@ -160,13 +162,16 @@ public final class CollationSupport {
         return String.format(expr + "ICU(%s, %s, %s, %d)", src, search, replace, collationId);
       }
     }
-    public static UTF8String execBinary(final UTF8String src, final UTF8String search, final UTF8String replace) {
+    public static UTF8String execBinary(final UTF8String src, final UTF8String search,
+        final UTF8String replace) {
       return src.replace(search, replace);
     }
-    public static UTF8String execLowercase(final UTF8String src, final UTF8String search, final UTF8String replace) {
+    public static UTF8String execLowercase(final UTF8String src, final UTF8String search,
+        final UTF8String replace) {
       return CollationAwareUTF8String.lowercaseReplace(src, search, replace);
     }
-    public static UTF8String execICU(final UTF8String src, final UTF8String search, final UTF8String replace, final int collationId) {
+    public static UTF8String execICU(final UTF8String src, final UTF8String search,
+        final UTF8String replace, final int collationId) {
       return CollationAwareUTF8String.replace(src, search, replace, collationId);
     }
   }
@@ -203,7 +208,8 @@ public final class CollationSupport {
         pos, pos + pattern.numChars()), pattern, collationId).last() == 0;
     }
 
-    private static UTF8String replace(final UTF8String src, final UTF8String search, final UTF8String replace, final int collationId) {
+    private static UTF8String replace(final UTF8String src, final UTF8String search,
+        final UTF8String replace, final int collationId) {
       // This collation aware implementation is based on existing implementation on UTF8String
       if (src.numBytes() == 0 || search.numBytes() == 0) {
         return src;
@@ -243,11 +249,13 @@ public final class CollationSupport {
           c += 1;
         }
       }
-      buf.appendBytes(src.getBaseObject(), src.getBaseOffset() + byteStart, src.numBytes() - byteStart);
+      buf.appendBytes(src.getBaseObject(), src.getBaseOffset() + byteStart,
+        src.numBytes() - byteStart);
       return buf.build();
     }
 
-    private static UTF8String lowercaseReplace(final UTF8String src, final UTF8String search, final UTF8String replace) {
+    private static UTF8String lowercaseReplace(final UTF8String src, final UTF8String search,
+        final UTF8String replace) {
       if (src.numBytes() == 0 || search.numBytes() == 0) {
         return src;
       }
@@ -287,7 +295,8 @@ public final class CollationSupport {
           c += 1;
         }
       }
-      buf.appendBytes(src.getBaseObject(), src.getBaseOffset() + byteStart, src.numBytes() - byteStart);
+      buf.appendBytes(src.getBaseObject(), src.getBaseOffset() + byteStart,
+        src.numBytes() - byteStart);
       return buf.build();
     }
 
