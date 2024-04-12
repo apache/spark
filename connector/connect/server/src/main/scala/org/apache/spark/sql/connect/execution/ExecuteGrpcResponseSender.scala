@@ -182,9 +182,10 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
    *   that. 0 means start from beginning (since first response has index 1)
    */
   def execute(lastConsumedStreamIndex: Long): Unit = {
-    logInfo(log"Starting for opId=${MDC(OP_ID, executeHolder.operationId)}, " +
-      log"reattachable=${MDC(REATTACHABLE, executeHolder.reattachable)}, " +
-      log"lastConsumedStreamIndex=${MDC(STREAM_ID, lastConsumedStreamIndex)}")
+    logInfo(
+      log"Starting for opId=${MDC(OP_ID, executeHolder.operationId)}, " +
+        log"reattachable=${MDC(REATTACHABLE, executeHolder.reattachable)}, " +
+        log"lastConsumedStreamIndex=${MDC(STREAM_ID, lastConsumedStreamIndex)}")
     val startTime = System.nanoTime()
 
     var nextIndex = lastConsumedStreamIndex + 1
@@ -295,14 +296,11 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
       } else if (streamFinished) {
         enqueueProgressMessage()
         // Stream is finished and all responses have been sent
-        logInfo(
-          log"Stream finished for opId=${MDC(OP_ID, executeHolder.operationId)}, " +
-            log"sent all responses up to last index ${MDC(STREAM_ID, nextIndex - 1)}. " +
-            log"totalTime=${MDC(LogKey.TOTAL_TIME,
-              (System.nanoTime - startTime) / NANOS_PER_MILLIS.toDouble)} ms " +
-            log"waitingForResults=${MDC(WAIT_RESULT_TIME,
-              consumeSleep / NANOS_PER_MILLIS.toDouble)} ms " +
-            log"waitingForSend=${MDC(WAIT_SEND_TIME, sendSleep / NANOS_PER_MILLIS.toDouble)} ms")
+        logInfo(log"Stream finished for opId=${MDC(OP_ID, executeHolder.operationId)}, " +
+          log"sent all responses up to last index ${MDC(STREAM_ID, nextIndex - 1)}. " +
+          log"totalTime=${MDC(TOTAL_TIME, (System.nanoTime - startTime) / NANOS_PER_MILLIS.toDouble)} ms " +
+          log"waitingForResults=${MDC(WAIT_RESULT_TIME, consumeSleep / NANOS_PER_MILLIS.toDouble)} ms " +
+          log"waitingForSend=${MDC(WAIT_SEND_TIME, sendSleep / NANOS_PER_MILLIS.toDouble)} ms")
         executionObserver.getError() match {
           case Some(t) => grpcObserver.onError(t)
           case None => grpcObserver.onCompleted()
@@ -311,15 +309,12 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
       } else if (deadlineLimitReached) {
         // The stream is not complete, but should be finished now.
         // The client needs to reattach with ReattachExecute.
-        logInfo(
-          log"Deadline reached, shutting down stream for " +
-            log"opId=${MDC(OP_ID, executeHolder.operationId)} " +
-            log"after index ${MDC(STREAM_ID, nextIndex - 1)}. " +
-            log"totalTime=${MDC(TOTAL_TIME,
-              (System.nanoTime - startTime) / NANOS_PER_MILLIS.toDouble)} ms " +
-            log"waitingForResults=${MDC(WAIT_RESULT_TIME,
-              consumeSleep / NANOS_PER_MILLIS.toDouble)} ms " +
-            log"waitingForSend=${MDC(WAIT_SEND_TIME, sendSleep / NANOS_PER_MILLIS.toDouble)} ms")
+        logInfo(log"Deadline reached, shutting down stream for " +
+          log"opId=${MDC(OP_ID, executeHolder.operationId)} " +
+          log"after index ${MDC(STREAM_ID, nextIndex - 1)}. " +
+          log"totalTime=${MDC(TOTAL_TIME, (System.nanoTime - startTime) / NANOS_PER_MILLIS.toDouble)} ms " +
+          log"waitingForResults=${MDC(WAIT_RESULT_TIME, consumeSleep / NANOS_PER_MILLIS.toDouble)} ms " +
+          log"waitingForSend=${MDC(WAIT_SEND_TIME, sendSleep / NANOS_PER_MILLIS.toDouble)} ms")
         grpcObserver.onCompleted()
         finished = true
       }

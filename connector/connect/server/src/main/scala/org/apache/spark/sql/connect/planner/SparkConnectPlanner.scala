@@ -3109,8 +3109,9 @@ class SparkConnectPlanner(
         }
       } catch {
         case NonFatal(ex) => // Failed to start the query, clean up foreach runner if any.
-          logInfo(log"Removing foreachBatch worker, query failed to start " +
-            log"for session ${MDC(SESSION_ID, sessionId)}.")
+          logInfo(
+            log"Removing foreachBatch worker, query failed to start " +
+              log"for session ${MDC(SESSION_ID, sessionId)}.")
           foreachBatchRunnerCleaner.foreach(_.close())
           throw ex
       }

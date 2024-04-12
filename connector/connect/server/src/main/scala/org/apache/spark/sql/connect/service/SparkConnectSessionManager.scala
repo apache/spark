@@ -204,8 +204,9 @@ class SparkConnectSessionManager extends Logging {
       case Some(_) => // Already running.
       case None =>
         val interval = SparkEnv.get.conf.get(CONNECT_SESSION_MANAGER_MAINTENANCE_INTERVAL)
-        logInfo(log"Starting thread for cleanup of expired sessions every " +
-          log"${MDC(INTERVAL, interval)} ms")
+        logInfo(
+          log"Starting thread for cleanup of expired sessions every " +
+            log"${MDC(INTERVAL, interval)} ms")
         scheduledExecutor = Some(Executors.newSingleThreadScheduledExecutor())
         scheduledExecutor.get.scheduleAtFixedRate(
           () => {
@@ -260,8 +261,9 @@ class SparkConnectSessionManager extends Logging {
         // Last chance - check expiration time and remove under lock if expired.
         val info = sessionHolder.getSessionHolderInfo
         if (shouldExpire(info, System.currentTimeMillis())) {
-          logInfo(log"Found session ${MDC(SESSION_HOLD_INFO, info)} that expired " +
-            log"and will be closed.")
+          logInfo(
+            log"Found session ${MDC(SESSION_HOLD_INFO, info)} that expired " +
+              log"and will be closed.")
           removeSessionHolder(info.key)
         } else {
           None

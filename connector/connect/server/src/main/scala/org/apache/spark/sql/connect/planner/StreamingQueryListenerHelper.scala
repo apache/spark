@@ -83,8 +83,9 @@ class PythonStreamingQueryListener(listener: SimplePythonFunction, sessionHolder
     try {
       dataIn.readInt() match {
         case 0 =>
-          logInfo(log"Streaming query listener function ${MDC(FUNCTION_NAME, functionName)} " +
-            log"completed (ret: 0)")
+          logInfo(
+            log"Streaming query listener function ${MDC(FUNCTION_NAME, functionName)} " +
+              log"completed (ret: 0)")
         case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
           val msg = PythonWorkerUtils.readUTF(dataIn)
           throw new PythonException(

@@ -216,14 +216,16 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
 
   private[connect] def updateAccessTime(): Unit = {
     lastAccessTimeMs = System.currentTimeMillis()
-    logInfo(log"Session ${MDC(SESSION_KEY, key)} accessed, " +
-      log"time ${MDC(LAST_ACCESS_TIME, lastAccessTimeMs)} ms.")
+    logInfo(
+      log"Session ${MDC(SESSION_KEY, key)} accessed, " +
+        log"time ${MDC(LAST_ACCESS_TIME, lastAccessTimeMs)} ms.")
   }
 
   private[connect] def setCustomInactiveTimeoutMs(newInactiveTimeoutMs: Option[Long]): Unit = {
     customInactiveTimeoutMs = newInactiveTimeoutMs
-    logInfo(log"Session ${MDC(SESSION_KEY, key)} " +
-      log"inactive timeout set to ${MDC(TIMEOUT, customInactiveTimeoutMs)} ms.")
+    logInfo(
+      log"Session ${MDC(SESSION_KEY, key)} " +
+        log"inactive timeout set to ${MDC(TIMEOUT, customInactiveTimeoutMs)} ms.")
   }
 
   /**
@@ -248,8 +250,9 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     if (closedTimeMs.isDefined) {
       throw new IllegalStateException(s"Session $key is already closed.")
     }
-    logInfo(log"Closing session with userId: ${MDC(USER_ID, userId)} and " +
-      log"sessionId: ${MDC(SESSION_ID, sessionId)}")
+    logInfo(
+      log"Closing session with userId: ${MDC(USER_ID, userId)} and " +
+        log"sessionId: ${MDC(SESSION_ID, sessionId)}")
     closedTimeMs = Some(System.currentTimeMillis())
 
     if (Utils.isTesting && eventManager.status == SessionStatus.Pending) {

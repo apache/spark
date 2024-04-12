@@ -45,8 +45,9 @@ class LoggingInterceptor extends ServerInterceptor with Logging {
       case m: Message =>
         logInfo(log"${MDC(DESCRIPTION, description)}:\n${MDC(MESSAGE, jsonPrinter.print(m))}")
       case other =>
-        logInfo(log"${MDC(DESCRIPTION, description)}: " +
-          log"(Unknown message type) ${MDC(MESSAGE, other)}")
+        logInfo(
+          log"${MDC(DESCRIPTION, description)}: " +
+            log"(Unknown message type) ${MDC(MESSAGE, other)}")
     }
   }
 

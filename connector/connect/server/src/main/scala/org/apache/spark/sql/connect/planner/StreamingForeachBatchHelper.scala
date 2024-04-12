@@ -135,8 +135,9 @@ object StreamingForeachBatchHelper extends Logging {
       try {
         dataIn.readInt() match {
           case 0 =>
-            logInfo(log"Python foreach batch for dfId ${MDC(DATAFRAME_ID, args.dfId)} " +
-              log"completed (ret: 0)")
+            logInfo(
+              log"Python foreach batch for dfId ${MDC(DATAFRAME_ID, args.dfId)} " +
+                log"completed (ret: 0)")
           case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
             val msg = PythonWorkerUtils.readUTF(dataIn)
             throw new PythonException(
@@ -172,8 +173,9 @@ object StreamingForeachBatchHelper extends Logging {
     private lazy val streamingListener = { // Initialized on first registered query
       val listener = new StreamingRunnerCleanerListener
       sessionHolder.session.streams.addListener(listener)
-      logInfo(log"Registered runner clean up listener for " +
-        log"session ${MDC(SESSION_ID, sessionHolder.sessionId)}")
+      logInfo(
+        log"Registered runner clean up listener for " +
+          log"session ${MDC(SESSION_ID, sessionHolder.sessionId)}")
       listener
     }
 
@@ -199,8 +201,9 @@ object StreamingForeachBatchHelper extends Logging {
 
     private def cleanupStreamingRunner(key: CacheKey): Unit = {
       Option(cleanerCache.remove(key)).foreach { cleaner =>
-        logInfo(log"Cleaning up runner for queryId ${MDC(QUERY_ID, key.queryId)} " +
-          log"runId ${MDC(RUN_ID, key.runId)}.")
+        logInfo(
+          log"Cleaning up runner for queryId ${MDC(QUERY_ID, key.queryId)} " +
+            log"runId ${MDC(RUN_ID, key.runId)}.")
         cleaner.close()
       }
     }
