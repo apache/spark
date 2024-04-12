@@ -149,7 +149,7 @@ private class AsyncEventQueue(
     //    or omit the thread join by set the waiting time to a negative value.
     val waitingTimeMs =
       conf.get(LISTENER_BUS_EVENT_QUEUE_EVENT_DISPATCH_EXIT_WAITING_TIME_ON_STOP)
-    if (waitingTimeMs >= 0 && Thread.currentThread() != dispatchThread) {
+    if (Thread.currentThread() != dispatchThread) {
       // By default, the `waitingTimeMs` is set to 0,
       // which means it will wait until all events are drained.
       dispatchThread.join(waitingTimeMs)
