@@ -829,7 +829,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   /**
    * Find the `str` from left to right.
    */
-  private int find(UTF8String str, int start) {
+  public int find(UTF8String str, int start) {
     assert (str.numBytes > 0);
     while (start <= numBytes - str.numBytes) {
       if (ByteArrayMethods.arrayEquals(base, offset + start, str.base, str.offset, str.numBytes)) {
@@ -843,7 +843,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   /**
    * Find the `str` from right to left.
    */
-  private int rfind(UTF8String str, int start) {
+  public int rfind(UTF8String str, int start) {
     assert (str.numBytes > 0);
     while (start >= 0) {
       if (ByteArrayMethods.arrayEquals(base, offset + start, str.base, str.offset, str.numBytes)) {

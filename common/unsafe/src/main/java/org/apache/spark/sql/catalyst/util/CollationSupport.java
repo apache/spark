@@ -166,7 +166,7 @@ public final class CollationSupport {
       return string.subStringIndex(delimiter, count);
     }
     public static UTF8String execLowercase(final UTF8String string, final UTF8String delimiter, final int count) {
-      return "";
+      return CollationAwareUTF8String.lowercaseSubStringIndex(string, delimiter, count);
     }
     public static UTF8String execICU(final UTF8String string, final UTF8String delimiter, final int count,
                               final int collationId) {
@@ -268,6 +268,54 @@ public final class CollationSupport {
         count = -count;
         while (count > 0) {
           idx = collationAwareRFind(string, delimiter, idx - 1, collationId);
+          if (idx >= 0) {
+            count --;
+          } else {
+            // can not find enough delim
+            return string;
+          }
+        }
+        if (idx + delimiter.numBytes() == string.numBytes()) {
+          return UTF8String.EMPTY_UTF8;
+        }
+        int size = string.numBytes() - delimiter.numBytes() - idx;
+        byte[] bytes = new byte[size];
+        copyMemory(string.getBaseObject(), string.getBaseOffset() + idx + delimiter.numBytes(), bytes, BYTE_ARRAY_OFFSET, size);
+        return UTF8String.fromBytes(bytes);
+      }
+    }
+
+    private static UTF8String lowercaseSubStringIndex(final UTF8String string, final UTF8String delimiter, int count) {
+      if (delimiter.numBytes() == 0 || count == 0) {
+        return UTF8String.EMPTY_UTF8;
+      }
+
+      UTF8String lowercaseString = string.toLowerCase();
+      UTF8String lowercaseDelimiter = delimiter.toLowerCase();
+
+      if (count > 0) {
+        int idx = -1;
+        while (count > 0) {
+          idx = lowercaseString.find(lowercaseDelimiter, idx + 1);
+          if (idx >= 0) {
+            count --;
+          } else {
+            // can not find enough delim
+            return string;
+          }
+        }
+        if (idx == 0) {
+          return UTF8String.EMPTY_UTF8;
+        }
+        byte[] bytes = new byte[idx];
+        copyMemory(string.getBaseObject(), string.getBaseOffset(), bytes, BYTE_ARRAY_OFFSET, idx);
+        return UTF8String.fromBytes(bytes);
+
+      } else {
+        int idx = string.numBytes() - delimiter.numBytes() + 1;
+        count = -count;
+        while (count > 0) {
+          idx = lowercaseString.rfind(lowercaseDelimiter, idx - 1);
           if (idx >= 0) {
             count --;
           } else {

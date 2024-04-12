@@ -108,6 +108,7 @@ class CollationStringExpressionsSuite
     var collationId = CollationFactory.collationNameToId("UTF8_BINARY")
     testSubstringIndex("wwwgapachegorg", "g", -3, collationId, "apachegorg")
     testSubstringIndex("www||apache||org", "||", 2, collationId, "www||apache")
+    testSubstringIndex("aaaaaaaaaa", "aa", 2, collationId, "a")
 
     collationId = CollationFactory.collationNameToId("UTF8_BINARY_LCASE")
     testSubstringIndex("AaAaAaAaAa", "aa", 2, collationId, "A")

@@ -1403,24 +1403,13 @@ case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr:
   override def prettyName: String = "substring_index"
 
   override def nullSafeEval(str: Any, delim: Any, count: Any): Any = {
-    if (CollationFactory.fetchCollation(collationId).supportsBinaryOrdering) {
-      str.asInstanceOf[UTF8String].subStringIndex(
-        delim.asInstanceOf[UTF8String],
-        count.asInstanceOf[Int])
-    } else {
-      str.asInstanceOf[UTF8String].collationAwareSubStringIndex(
-        delim.asInstanceOf[UTF8String],
-        count.asInstanceOf[Int], collationId)
-    }
+    CollationSupport.SubstringIndex.exec(str.asInstanceOf[UTF8String],
+      delim.asInstanceOf[UTF8String], count.asInstanceOf[Int], collationId);
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    if (CollationFactory.fetchCollation(collationId).supportsBinaryOrdering) {
-      defineCodeGen(ctx, ev, (str, delim, count) => s"$str.subStringIndex($delim, $count)")
-    } else {
-      defineCodeGen(ctx, ev, (str, delim, count) =>
-        s"$str.collationAwareSubStringIndex($delim, $count, $collationId)")
-    }
+    defineCodeGen(ctx, ev, (str, delim, count) =>
+      CollationSupport.SubstringIndex.genCode(str, delim, Integer.parseInt(count, 10), collationId))
   }
 
   override protected def withNewChildrenInternal(
