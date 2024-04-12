@@ -98,15 +98,15 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
       generateExpression(child).map(v => new V2Cast(v, dataType))
     case AggregateExpression(aggregateFunction, Complete, isDistinct, None, _) =>
       generateAggregateFunc(aggregateFunction, isDistinct)
-    case abs @ Abs(_, true) => generateExpressionWithName("ABS", abs, isPredicate)
+    case Abs(_, true) => generateExpressionWithName("ABS", expr, isPredicate)
     case _: Coalesce => generateExpressionWithName("COALESCE", expr, isPredicate)
     case _: Greatest => generateExpressionWithName("GREATEST", expr, isPredicate)
     case _: Least => generateExpressionWithName("LEAST", expr, isPredicate)
-    case rand @ Rand(_, hideSeed) =>
+    case Rand(_, hideSeed) =>
       if (hideSeed) {
         Some(new GeneralScalarExpression("RAND", Array.empty[V2Expression]))
       } else {
-        generateExpressionWithName("RAND", rand, isPredicate)
+        generateExpressionWithName("RAND", expr, isPredicate)
       }
     case _: Logarithm => generateExpressionWithName("LOG", expr, isPredicate)
     case _: Log10 => generateExpressionWithName("LOG10", expr, isPredicate)
@@ -187,8 +187,7 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
         assert(v.isInstanceOf[V2Predicate])
         new V2Not(v.asInstanceOf[V2Predicate])
       }
-    case unaryMinus @ UnaryMinus(_, true) =>
-      generateExpressionWithName("-", unaryMinus, isPredicate)
+    case UnaryMinus(_, true) => generateExpressionWithName("-", expr, isPredicate)
     case _: BitwiseNot => generateExpressionWithName("~", expr, isPredicate)
     case caseWhen @ CaseWhen(branches, elseValue) =>
       val conditions = branches.map(_._1).flatMap(generateExpression(_, true))
@@ -219,10 +218,10 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
       generateExpressionWithNameByChildren("SUBSTRING", children, substring.dataType, isPredicate)
     case _: Upper => generateExpressionWithName("UPPER", expr, isPredicate)
     case _: Lower => generateExpressionWithName("LOWER", expr, isPredicate)
-    case bitLength @ BitLength(child) if child.dataType.isInstanceOf[StringType] =>
-      generateExpressionWithName("BIT_LENGTH", bitLength, isPredicate)
-    case length @ Length(child) if child.dataType.isInstanceOf[StringType] =>
-      generateExpressionWithName("CHAR_LENGTH", length, isPredicate)
+    case BitLength(child) if child.dataType.isInstanceOf[StringType] =>
+      generateExpressionWithName("BIT_LENGTH", expr, isPredicate)
+    case Length(child) if child.dataType.isInstanceOf[StringType] =>
+      generateExpressionWithName("CHAR_LENGTH", expr, isPredicate)
     case _: Concat => generateExpressionWithName("CONCAT", expr, isPredicate)
     case _: StringTranslate => generateExpressionWithName("TRANSLATE", expr, isPredicate)
     case _: StringTrim => generateExpressionWithName("TRIM", expr, isPredicate)
