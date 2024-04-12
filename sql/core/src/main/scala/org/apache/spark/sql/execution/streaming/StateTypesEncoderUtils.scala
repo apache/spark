@@ -195,6 +195,12 @@ class CompositeKeyStateEncoder[GK, K, V](
     compositeKeyRow
   }
 
+  def decodeUserKeyFromTTLRow(row: CompositeKeyTTLRow): K = {
+    val bytes = row.userKey
+    reusedKeyRow.pointTo(bytes, bytes.length)
+    val userKey = userKeyRowToObjDeserializer.apply(reusedKeyRow)
+    userKey
+  }
 
   /**
    * Grouping key and user key are encoded as a row of `schemaForCompositeKeyRow` schema.

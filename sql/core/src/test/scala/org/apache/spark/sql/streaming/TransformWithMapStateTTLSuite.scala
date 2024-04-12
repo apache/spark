@@ -164,9 +164,9 @@ class MapStateTTLProcessor(ttlConfig: TTLConfig)
     } else if (row.action == "put") {
       mapState.updateValue(userKey, row.value)
     } else if (row.action == "get_values_in_ttl_state") {
-      val ttlValues = mapState.getValuesInTTLState()
-      ttlValues.foreach { v =>
-        results = MapOutputEvent(key, userKey, -1, isTTLValue = true, ttlValue = v) :: results
+      val ttlValues = mapState.getKeyValuesInTTLState()
+      ttlValues.foreach { elem =>
+        results = MapOutputEvent(key, elem._1, -1, isTTLValue = true, ttlValue = elem._2) :: results
       }
     } else if (row.action == "iterator") {
       val iter = mapState.iterator()
@@ -245,28 +245,65 @@ class TransformWithMapStateTTLSuite extends TransformWithStateTTLTest {
         StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
         AddData(inputStream,
           MapInputEvent("k1", "key1", "put", 1),
-          MapInputEvent("k1", "key2", "put", 2)),
+          MapInputEvent("k1", "key2", "put", 2)
+        ),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(),
         AddData(inputStream,
           MapInputEvent("k1", "key1", "get", -1),
-          MapInputEvent("k1", "key2", "get", -1)),
+          MapInputEvent("k1", "key2", "get", -1)
+        ),
         AdvanceManualClock(30 * 1000),
         CheckNewAnswer(
           MapOutputEvent("k1", "key1", 1, isTTLValue = false, -1),
-          MapOutputEvent("k1", "key2", 2, isTTLValue = false, -1)),
+          MapOutputEvent("k1", "key2", 2, isTTLValue = false, -1)
+        ),
+        // get values from ttl state
+        AddData(inputStream,
+          MapInputEvent("k1", "", "get_values_in_ttl_state", -1)
+        ),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(
+          MapOutputEvent("k1", "key1", -1, isTTLValue = true, 61000),
+          MapOutputEvent("k1", "key2", -1, isTTLValue = true, 61000)
+        ),
         // advance clock to expire first two values
         AdvanceManualClock(30 * 1000),
         AddData(inputStream,
           MapInputEvent("k1", "key3", "put", 3),
           MapInputEvent("k1", "key4", "put", 4),
           MapInputEvent("k1", "key5", "put", 5),
-          MapInputEvent("k1", "", "iterator", -1)),
+          MapInputEvent("k1", "", "iterator", -1)
+        ),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(
           MapOutputEvent("k1", "key3", 3, isTTLValue = false, -1),
           MapOutputEvent("k1", "key4", 4, isTTLValue = false, -1),
-          MapOutputEvent("k1", "key5", 5, isTTLValue = false, -1)),
+          MapOutputEvent("k1", "key5", 5, isTTLValue = false, -1)
+        ),
+        AddData(inputStream,
+          MapInputEvent("k1", "", "get_values_in_ttl_state", -1)
+        ),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(
+          MapOutputEvent("k1", "key3", -1, isTTLValue = true, 123000),
+          MapOutputEvent("k1", "key4", -1, isTTLValue = true, 123000),
+          MapOutputEvent("k1", "key5", -1, isTTLValue = true, 123000)
+        ),
+        // get all values without enforcing ttl
+        AddData(inputStream,
+          MapInputEvent("k1", "key1", "get_without_enforcing_ttl", -1),
+          MapInputEvent("k1", "key2", "get_without_enforcing_ttl", -1),
+          MapInputEvent("k1", "key3", "get_without_enforcing_ttl", -1),
+          MapInputEvent("k1", "key4", "get_without_enforcing_ttl", -1),
+          MapInputEvent("k1", "key5", "get_without_enforcing_ttl", -1)
+        ),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(
+          MapOutputEvent("k1", "key3", 3, isTTLValue = false, -1),
+          MapOutputEvent("k1", "key4", 4, isTTLValue = false, -1),
+          MapOutputEvent("k1", "key5", 5, isTTLValue = false, -1)
+        ),
         StopStream
       )
     }

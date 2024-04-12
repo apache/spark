@@ -232,4 +232,34 @@ class MapStateImplWithTTL[K, V](
       }
     }
   }
+
+  /**
+   * Get all ttl values stored in ttl state for current implicit
+   * grouping key.
+   */
+  private[sql] def getKeyValuesInTTLState(): Iterator[(K, Long)] = {
+    val ttlIterator = ttlIndexIterator()
+    val implicitGroupingKey = stateTypesEncoder.serializeGroupingKey()
+    var nextValue: Option[(K, Long)] = None
+
+    new Iterator[(K, Long)] {
+      override def hasNext: Boolean = {
+        while (nextValue.isEmpty && ttlIterator.hasNext) {
+          val nextTtlValue = ttlIterator.next()
+          val groupingKey = nextTtlValue.groupingKey
+          if (groupingKey sameElements implicitGroupingKey) {
+            val userKey = stateTypesEncoder.decodeUserKeyFromTTLRow(nextTtlValue)
+            nextValue = Some(userKey, nextTtlValue.expirationMs)
+          }
+        }
+        nextValue.isDefined
+      }
+
+      override def next(): (K, Long) = {
+        val result = nextValue.get
+        nextValue = None
+        result
+      }
+    }
+  }
 }
