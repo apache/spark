@@ -197,7 +197,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
       }
     }
     val sparkConf = new SparkConf()
-      .set(LISTENER_BUS_EVENT_QUEUE_WAIT_FOR_EVENT_DISPATCH_EXIT_ON_STOP, false)
+      .set(LISTENER_BUS_EVENT_QUEUE_EVENT_DISPATCH_EXIT_WAITING_TIME_ON_STOP, -1L)
     val bus = new LiveListenerBus(sparkConf)
     val blockingListener = new BlockingListener
 
