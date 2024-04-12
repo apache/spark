@@ -914,7 +914,7 @@
           "The <exprName> must be between <valueRange> (current value = <currentValue>)."
         ]
       },
-      "VARIANT_TYPE" : {
+      "HASH_VARIANT_TYPE" : {
         "message" : [
           "Input to the function <functionName> cannot contain elements of the \"VARIANT\" type yet."
         ]

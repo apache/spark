@@ -752,7 +752,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
     val murmur3Hash = new Murmur3Hash(Seq(argument))
     assert(murmur3Hash.checkInputDataTypes() ==
       DataTypeMismatch(
-        errorSubClass = "VARIANT_TYPE",
+        errorSubClass = "HASH_VARIANT_TYPE",
         messageParameters = Map("functionName" -> toSQLId(murmur3Hash.prettyName))
       )
     )

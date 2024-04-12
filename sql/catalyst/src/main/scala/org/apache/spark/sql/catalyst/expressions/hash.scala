@@ -287,7 +287,7 @@ abstract class HashExpression[E] extends Expression {
         messageParameters = Map("functionName" -> toSQLId(prettyName)))
     } else if (children.exists(child => hasVariantType(child.dataType))) {
       DataTypeMismatch(
-        errorSubClass = "VARIANT_TYPE",
+        errorSubClass = "HASH_VARIANT_TYPE",
         messageParameters = Map("functionName" -> toSQLId(prettyName)))
     } else {
       TypeCheckResult.TypeCheckSuccess
