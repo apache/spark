@@ -21,9 +21,7 @@ import java.io.UnsupportedEncodingException
 import java.text.{BreakIterator, DecimalFormat, DecimalFormatSymbols}
 import java.util.{Base64 => JBase64}
 import java.util.{HashMap, Locale, Map => JMap}
-
 import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, TypeCheckResult}
@@ -34,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UPPER_OR_LOWER}
-import org.apache.spark.sql.catalyst.util.{ArrayData, CollationSupport, GenericArrayData, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, CollationSupport, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeAnyCollation
@@ -853,9 +851,14 @@ case class Overlay(input: Expression, replace: Expression, pos: Expression, len:
 
 object StringTranslate {
 
-  def buildDict(matchingString: UTF8String, replaceString: UTF8String)
+  def buildDict(matchingString: UTF8String, replaceString: UTF8String, collationId: Int)
     : JMap[String, String] = {
-    val matching = matchingString.toString()
+    val matching = if (CollationFactory.fetchCollation(collationId).supportsLowercaseEquality) {
+      matchingString.toString().toLowerCase()
+    } else {
+      matchingString.toString()
+    }
+
     val replace = replaceString.toString()
     val dict = new HashMap[String, String]()
     var i = 0
@@ -912,14 +915,10 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
     if (matchingEval != lastMatching || replaceEval != lastReplace) {
       lastMatching = matchingEval.asInstanceOf[UTF8String].clone()
       lastReplace = replaceEval.asInstanceOf[UTF8String].clone()
-      dict = StringTranslate.buildDict(lastMatching, lastReplace)
+      dict = StringTranslate.buildDict(lastMatching, lastReplace, collationId)
     }
 
-    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
-      srcEval.asInstanceOf[UTF8String].translate(dict)
-    } else {
-      srcEval.asInstanceOf[UTF8String].translate(dict, collationId)
-    }
+    CollationSupport.StringTranslate.exec(srcEval.asInstanceOf[UTF8String], dict, collationId)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -940,13 +939,10 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
         $termLastMatching = $matching.clone();
         $termLastReplace = $replace.clone();
         $termDict = org.apache.spark.sql.catalyst.expressions.StringTranslate
-          .buildDict($termLastMatching, $termLastReplace);
+          .buildDict($termLastMatching, $termLastReplace, $collationId);
       }
-      if (CollationFactory.fetchCollation(${collationId}).supportsBinaryEquality) {
-        ${ev.value} = $src.translate($termDict);
-      } else {
-        ${ev.value} = $src.translate($termDict, ${collationId});
-      }
+      ${ev.value} = CollationSupport.StringTranslate.
+      exec($src, $termDict, $collationId);
       """
     })
   }

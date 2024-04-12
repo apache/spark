@@ -1123,53 +1123,6 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * A function translate any character which is key in input map by a corresponding character
-   * which is value. The translation will happen when any character in the string matching with
-   * the character in the input map keys.
-   * @param dict map representing relations between characters and their replacements
-   * @param collationId the collation id to use for comparison
-   * @return a new UTF8String with characters replaced
-   */
-  public UTF8String translate(Map<String, String> dict, int collationId) {
-    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
-      return translate(dict);
-    }
-    return translate(getCollationAwareDict(dict, collationId));
-  }
-
-  private Map<String, String> getCollationAwareDict(Map<String, String> dict, int collationId) {
-    String srcStr = this.toString();
-
-    Map<String, String> collationAwareDict = new HashMap<>();
-    for (String key : dict.keySet()) {
-      StringSearch stringSearch =
-        CollationFactory.getStringSearch(this, UTF8String.fromString(key), collationId);
-
-      int pos = 0;
-      while ((pos = stringSearch.next()) != StringSearch.DONE) {
-        int codePoint = srcStr.codePointAt(pos);
-        int charCount = Character.charCount(codePoint);
-        String newKey = srcStr.substring(pos, pos + charCount);
-
-        boolean exists = false;
-        for (String existingKey : collationAwareDict.keySet()) {
-          if (stringSearch.getCollator().compare(existingKey, newKey) == 0) {
-            collationAwareDict.put(newKey, collationAwareDict.get(existingKey));
-            exists = true;
-            break;
-          }
-        }
-
-        if (!exists) {
-          collationAwareDict.put(newKey, dict.get(key));
-        }
-      }
-    }
-
-    return collationAwareDict;
-  }
-
-  /**
    * Wrapper over `long` to allow result of parsing long from string to be accessed via reference.
    * This is done solely for better performance and is not expected to be used by end users.
    */

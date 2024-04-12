@@ -17,13 +17,9 @@
 
 package org.apache.spark.sql
 
-import scala.collection.immutable.Seq
-
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.{Collation, ConcatWs, ExpressionEvalHelper, Literal, StringRepeat, StringTranslate}
+import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, Literal, StringTranslate}
 import org.apache.spark.sql.catalyst.util.CollationFactory
-import org.apache.spark.sql.catalyst.expressions.ExpressionEvalHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, StringType}
@@ -170,10 +166,6 @@ class CollationStringExpressionsSuite
     testTranslate("大千世界大千世界tesT", "大千", "世世", collationId, "世世世界世世世界tesT")
     // scalastyle:on
   }
-
-  test("REPEAT check output type on explicitly collated string") {
-    def testRepeat(expected: String, collationId: Int, input: String, n: Int): Unit = {
-      val s = Literal.create(input, StringType(collationId))
 
   test("Support EndsWith string expression with collation") {
     // Supported collations

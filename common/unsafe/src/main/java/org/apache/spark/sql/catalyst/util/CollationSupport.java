@@ -20,6 +20,10 @@ import com.ibm.icu.text.StringSearch;
 
 import org.apache.spark.unsafe.types.UTF8String;
 
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
+
 /**
  * Static entry point for collation-aware expressions (StringExpressions, RegexpExpressions, and
  * other expressions that require custom collation support), as well as private utility methods for
@@ -137,6 +141,54 @@ public final class CollationSupport {
     }
   }
 
+  public static class StringTranslate {
+    public static UTF8String exec(final UTF8String source, Map<String, String> dict, final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      if (collation.supportsBinaryEquality) {
+        return execBinary(source, dict);
+      } else if (collation.supportsLowercaseEquality) {
+        return execLowercase(source, dict);
+      } else {
+        return execICU(source, dict, collationId);
+      }
+    }
+    public static String genCode(final String l, final String r, final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      String expr = "CollationSupport.EndsWith.exec";
+      if (collation.supportsBinaryEquality) {
+        return String.format(expr + "Binary(%s, %s)", l, r);
+      } else if (collation.supportsLowercaseEquality) {
+        return String.format(expr + "Lowercase(%s, %s)", l, r);
+      } else {
+        return String.format(expr + "ICU(%s, %s, %d)", l, r, collationId);
+      }
+    }
+    public static UTF8String execBinary(final UTF8String source, Map<String, String> dict) {
+      return source.translate(dict);
+    }
+    public static UTF8String execLowercase(final UTF8String source, Map<String, String> dict) {
+      String srcStr = source.toString();
+      StringBuilder sb = new StringBuilder();
+      int charCount = 0;
+      for (int k = 0; k < srcStr.length(); k += charCount) {
+        int codePoint = srcStr.codePointAt(k);
+        charCount = Character.charCount(codePoint);
+        String subStr = srcStr.substring(k, k + charCount);
+        String translated = dict.get(subStr.toLowerCase());
+        if (null == translated) {
+          sb.append(subStr);
+        } else if (!"\0".equals(translated)) {
+          sb.append(translated);
+        }
+      }
+      return UTF8String.fromString(sb.toString());
+    }
+    public static UTF8String execICU(final UTF8String source, Map<String, String> dict,
+                                  final int collationId) {
+      return source.translate(CollationAwareUTF8String.getCollationAwareDict(source, dict, collationId));
+    }
+  }
+
   // TODO: Add more collation-aware string expressions.
 
   /**
@@ -167,6 +219,39 @@ public final class CollationSupport {
       }
       return CollationFactory.getStringSearch(target.substring(
         pos, pos + pattern.numChars()), pattern, collationId).last() == 0;
+    }
+
+    private static Map<String, String> getCollationAwareDict(UTF8String string,
+        Map<String, String> dict, int collationId) {
+      String srcStr = string.toString();
+
+      Map<String, String> collationAwareDict = new HashMap<>();
+      for (String key : dict.keySet()) {
+        StringSearch stringSearch =
+                CollationFactory.getStringSearch(string, UTF8String.fromString(key), collationId);
+
+        int pos = 0;
+        while ((pos = stringSearch.next()) != StringSearch.DONE) {
+          int codePoint = srcStr.codePointAt(pos);
+          int charCount = Character.charCount(codePoint);
+          String newKey = srcStr.substring(pos, pos + charCount);
+
+          boolean exists = false;
+          for (String existingKey : collationAwareDict.keySet()) {
+            if (stringSearch.getCollator().compare(existingKey, newKey) == 0) {
+              collationAwareDict.put(newKey, collationAwareDict.get(existingKey));
+              exists = true;
+              break;
+            }
+          }
+
+          if (!exists) {
+            collationAwareDict.put(newKey, dict.get(key));
+          }
+        }
+      }
+
+      return collationAwareDict;
     }
 
   }
