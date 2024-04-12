@@ -60,17 +60,17 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   // memorizing `LogicalPlan`s which may be a sub-tree in a subsequent plan.
   private lazy val planCache: Option[Cache[proto.Relation, LogicalPlan]] = {
     if (SparkEnv.get.conf.get(Connect.CONNECT_SESSION_PLAN_CACHE_SIZE) <= 0) {
-      logWarning(s"Session plan cache is disabled due to non-positive cache size." +
-        s" Current value of '${Connect.CONNECT_SESSION_PLAN_CACHE_SIZE.key}' is" +
-        s" ${SparkEnv.get.conf.get(Connect.CONNECT_SESSION_PLAN_CACHE_SIZE)}.")
+      logWarning(
+        s"Session plan cache is disabled due to non-positive cache size." +
+          s" Current value of '${Connect.CONNECT_SESSION_PLAN_CACHE_SIZE.key}' is" +
+          s" ${SparkEnv.get.conf.get(Connect.CONNECT_SESSION_PLAN_CACHE_SIZE)}.")
       None
     } else {
       Some(
-          CacheBuilder
-            .newBuilder()
-            .maximumSize(SparkEnv.get.conf.get(Connect.CONNECT_SESSION_PLAN_CACHE_SIZE))
-            .build[proto.Relation, LogicalPlan]()
-        )
+        CacheBuilder
+          .newBuilder()
+          .maximumSize(SparkEnv.get.conf.get(Connect.CONNECT_SESSION_PLAN_CACHE_SIZE))
+          .build[proto.Relation, LogicalPlan]())
     }
   }
 
@@ -407,13 +407,17 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     Try(session.sparkContext.collectionAccumulator[Array[Byte]]).toOption
 
   /**
-   * Transform a relation into a logical plan, using the plan cache if enabled.
-   * The plan cache is enable only if `spark.connect.session.planCache.maxSize` is greater than zero
-   * AND `spark.connect.session.planCache.enabled` is true.
-   * @param rel The relation to transform.
-   * @param cachePlan Whether to cache the result logical plan.
-   * @param transform Function to transform the relation into a logical plan.
-   * @return The logical plan.
+   * Transform a relation into a logical plan, using the plan cache if enabled. The plan cache is
+   * enable only if `spark.connect.session.planCache.maxSize` is greater than zero AND
+   * `spark.connect.session.planCache.enabled` is true.
+   * @param rel
+   *   The relation to transform.
+   * @param cachePlan
+   *   Whether to cache the result logical plan.
+   * @param transform
+   *   Function to transform the relation into a logical plan.
+   * @return
+   *   The logical plan.
    */
   private[connect] def usePlanCache(rel: proto.Relation, cachePlan: Boolean)(
       transform: proto.Relation => LogicalPlan): LogicalPlan = {

@@ -301,8 +301,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
         proto.SQL
           .newBuilder()
           .setQuery(query)
-          .build()
-      )
+          .build())
       .setCommon(proto.RelationCommon.newBuilder().setPlanId(Random.nextLong()).build())
       .build()
   }
@@ -314,9 +313,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
       case Some(expectedCachedRelations) =>
         val cachedRelations = sessionHolder.getPlanCache.get.asMap().keySet().asScala
         assert(cachedRelations.size == expectedCachedRelations.size)
-        expectedCachedRelations.foreach(
-          relation => assert(cachedRelations.contains(relation))
-        )
+        expectedCachedRelations.foreach(relation => assert(cachedRelations.contains(relation)))
       case None => assert(sessionHolder.getPlanCache.isEmpty)
     }
   }
@@ -338,12 +335,8 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
             .setInput(
               proto.Relation
                 .newBuilder()
-                .setRange(
-                  proto.Range.newBuilder().setStart(0).setStep(1).setEnd(20)
-                )
-                .build()
-            )
-        )
+                .setRange(proto.Range.newBuilder().setStart(0).setStep(1).setEnd(20))
+                .build()))
         .setCommon(proto.RelationCommon.newBuilder().setPlanId(Random.nextLong()).build())
         .build()
       val query2 = proto.Relation.newBuilder

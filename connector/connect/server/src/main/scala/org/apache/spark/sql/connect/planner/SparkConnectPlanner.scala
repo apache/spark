@@ -116,22 +116,26 @@ class SparkConnectPlanner(
     sys.env.getOrElse("PYSPARK_PYTHON", sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python3"))
 
   /**
-   * The root of the query plan is a relation and we apply the transformations to it.
-   * The resolved logical plan will not get cached.
-   * If the result needs to be cached, use `transformRelation(rel, cachePlan = true)` instead.
-   * @param rel The relation to transform.
-   * @return The resolved logical plan.
+   * The root of the query plan is a relation and we apply the transformations to it. The resolved
+   * logical plan will not get cached. If the result needs to be cached, use
+   * `transformRelation(rel, cachePlan = true)` instead.
+   * @param rel
+   *   The relation to transform.
+   * @return
+   *   The resolved logical plan.
    */
   def transformRelation(rel: proto.Relation): LogicalPlan =
     transformRelation(rel, cachePlan = false)
 
   /**
    * The root of the query plan is a relation and we apply the transformations to it.
-   * @param rel The relation to transform.
-   * @param cachePlan Set to true for a performance optimization, if the plan is likely to be
-   *                  reused, e.g. built upon by further dataset transformation.
-   *                  The default is false.
-   * @return The resolved logical plan.
+   * @param rel
+   *   The relation to transform.
+   * @param cachePlan
+   *   Set to true for a performance optimization, if the plan is likely to be reused, e.g. built
+   *   upon by further dataset transformation. The default is false.
+   * @return
+   *   The resolved logical plan.
    */
   def transformRelation(rel: proto.Relation, cachePlan: Boolean): LogicalPlan = {
     sessionHolder.usePlanCache(rel, cachePlan) { rel =>
@@ -200,7 +204,8 @@ class SparkConnectPlanner(
         case proto.Relation.RelTypeCase.APPLY_IN_PANDAS_WITH_STATE =>
           transformApplyInPandasWithState(rel.getApplyInPandasWithState)
         case proto.Relation.RelTypeCase.COMMON_INLINE_USER_DEFINED_TABLE_FUNCTION =>
-          transformCommonInlineUserDefinedTableFunction(rel.getCommonInlineUserDefinedTableFunction)
+          transformCommonInlineUserDefinedTableFunction(
+            rel.getCommonInlineUserDefinedTableFunction)
         case proto.Relation.RelTypeCase.CACHED_REMOTE_RELATION =>
           transformCachedRemoteRelation(rel.getCachedRemoteRelation)
         case proto.Relation.RelTypeCase.COLLECT_METRICS =>
