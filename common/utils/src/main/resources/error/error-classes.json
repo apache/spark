@@ -1886,6 +1886,11 @@
       "The value '<confValue>' in the config \"<confName>\" is invalid."
     ],
     "subClass" : {
+      "DEFAULT_COLLATION" : {
+        "message" : [
+          "Cannot resolve the given default collation. Did you mean '<proposal>'?"
+        ]
+      },
       "TIME_ZONE" : {
         "message" : [
           "Cannot resolve the given timezone."
@@ -3596,27 +3601,27 @@
     ],
     "sqlState" : "0A000"
   },
-  "STATEFUL_PROCESSOR_CANNOT_ASSIGN_TTL_IN_NO_TTL_MODE" : {
-    "message" : [
-      "Cannot use TTL for state=<stateName> in NoTTL() mode."
-    ],
-    "sqlState" : "42802"
-  },
   "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_HANDLE_STATE" : {
     "message" : [
       "Failed to perform stateful processor operation=<operationType> with invalid handle state=<handleState>."
     ],
     "sqlState" : "42802"
   },
-  "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_TIMEOUT_MODE" : {
+  "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_TIME_MODE" : {
     "message" : [
-      "Failed to perform stateful processor operation=<operationType> with invalid timeoutMode=<timeoutMode>"
+      "Failed to perform stateful processor operation=<operationType> with invalid timeMode=<timeMode>"
     ],
     "sqlState" : "42802"
   },
   "STATEFUL_PROCESSOR_CANNOT_REINITIALIZE_STATE_ON_KEY" : {
     "message" : [
       "Cannot re-initialize state on the same grouping key during initial state handling for stateful processor. Invalid grouping key=<groupingKey>."
+    ],
+    "sqlState" : "42802"
+  },
+  "STATEFUL_PROCESSOR_INCORRECT_TIME_MODE_TO_ASSIGN_TTL" : {
+    "message" : [
+      "Cannot use TTL for state=<stateName> in timeMode=<timeMode>, use TimeMode.ProcessingTime() instead."
     ],
     "sqlState" : "42802"
   },

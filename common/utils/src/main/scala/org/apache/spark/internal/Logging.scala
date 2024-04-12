@@ -37,7 +37,10 @@ import org.apache.spark.util.SparkClassUtils
  * The values of the MDC will be inline in the log message, while the key-value pairs will be
  * part of the ThreadContext.
  */
-case class MDC(key: LogKey, value: Any)
+case class MDC(key: LogKey, value: Any) {
+  require(!value.isInstanceOf[MessageWithContext],
+    "the class of value cannot be MessageWithContext")
+}
 
 /**
  * Wrapper class for log messages that include a logging context.
@@ -105,9 +108,10 @@ trait Logging {
       val context = new java.util.HashMap[String, String]()
 
       args.foreach { mdc =>
-        sb.append(mdc.value.toString)
+        val value = if (mdc.value != null) mdc.value.toString else null
+        sb.append(value)
         if (Logging.isStructuredLoggingEnabled) {
-          context.put(mdc.key.toString.toLowerCase(Locale.ROOT), mdc.value.toString)
+          context.put(mdc.key.toString.toLowerCase(Locale.ROOT), value)
         }
 
         if (processedParts.hasNext) {
