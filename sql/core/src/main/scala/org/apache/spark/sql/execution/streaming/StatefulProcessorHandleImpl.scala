@@ -271,7 +271,7 @@ class StatefulProcessorHandleImpl(
     assert(batchTimestampMs.isDefined)
     val listStateWithTTL = new ListStateImplWithTTL[T](store, stateName,
       keyEncoder, valEncoder, ttlConfig, batchTimestampMs.get)
-    incrementMetric("numValueStateWithTTLVars")
+    incrementMetric("numListStateWithTTLVars")
     ttlStates.add(listStateWithTTL)
 
     listStateWithTTL
