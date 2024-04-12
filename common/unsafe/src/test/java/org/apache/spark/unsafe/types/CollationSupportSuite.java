@@ -35,7 +35,7 @@ public class CollationSupportSuite {
     UTF8String l = UTF8String.fromString(pattern);
     UTF8String r = UTF8String.fromString(target);
     int collationId = CollationFactory.collationNameToId(collationName);
-    assertEquals(CollationSupport.Contains.exec(l, r, collationId), value);
+    assertEquals(CollationSupport.Contains.INSTANCE.exec(l, r, collationId), value);
   }
 
   @Test
@@ -108,7 +108,7 @@ public class CollationSupportSuite {
     UTF8String l = UTF8String.fromString(pattern);
     UTF8String r = UTF8String.fromString(prefix);
     int collationId = CollationFactory.collationNameToId(collationName);
-    assertEquals(CollationSupport.StartsWith.exec(l, r, collationId), value);
+    assertEquals(CollationSupport.StartsWith.INSTANCE.exec(l, r, collationId), value);
   }
 
   @Test
@@ -181,7 +181,7 @@ public class CollationSupportSuite {
     UTF8String l = UTF8String.fromString(pattern);
     UTF8String r = UTF8String.fromString(suffix);
     int collationId = CollationFactory.collationNameToId(collationName);
-    assertEquals(CollationSupport.EndsWith.exec(l, r, collationId), value);
+    assertEquals(CollationSupport.EndsWith.INSTANCE.exec(l, r, collationId), value);
   }
 
   @Test

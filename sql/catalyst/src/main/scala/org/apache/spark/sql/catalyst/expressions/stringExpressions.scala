@@ -500,7 +500,14 @@ abstract class StringPredicate extends BinaryExpression
 
   final lazy val collationId: Int = left.dataType.asInstanceOf[StringType].collationId
 
-  def compare(l: UTF8String, r: UTF8String): Boolean
+  val collationAwareFn: CollationAwareBinaryFunction[UTF8String, UTF8String, java.lang.Boolean]
+
+  def compare(l: UTF8String, r: UTF8String): Boolean = collationAwareFn.exec(l, r, collationId)
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, (c1, c2) =>
+      collationAwareFn.genCode(c1, c2, collationId))
+  }
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeAnyCollation, StringTypeAnyCollation)
@@ -590,15 +597,10 @@ object ContainsExpressionBuilder extends StringBinaryPredicateExpressionBuilderB
 }
 
 case class Contains(left: Expression, right: Expression) extends StringPredicate {
-  override def compare(l: UTF8String, r: UTF8String): Boolean = {
-    CollationSupport.Contains.exec(l, r, collationId)
-  }
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (c1, c2) =>
-      CollationSupport.Contains.genCode(c1, c2, collationId))
-  }
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): Contains = copy(left = newLeft, right = newRight)
+
+  override val collationAwareFn = CollationSupport.Contains.INSTANCE
 }
 
 @ExpressionDescription(
@@ -630,14 +632,8 @@ object StartsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilde
 }
 
 case class StartsWith(left: Expression, right: Expression) extends StringPredicate {
-  override def compare(l: UTF8String, r: UTF8String): Boolean = {
-    CollationSupport.StartsWith.exec(l, r, collationId)
-  }
+  override val collationAwareFn = CollationSupport.StartsWith.INSTANCE
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (c1, c2) =>
-      CollationSupport.StartsWith.genCode(c1, c2, collationId))
-  }
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): StartsWith = copy(left = newLeft, right = newRight)
 }
@@ -671,14 +667,8 @@ object EndsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilderB
 }
 
 case class EndsWith(left: Expression, right: Expression) extends StringPredicate {
-  override def compare(l: UTF8String, r: UTF8String): Boolean = {
-    CollationSupport.EndsWith.exec(l, r, collationId)
-  }
+  override val collationAwareFn = CollationSupport.EndsWith.INSTANCE
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (c1, c2) =>
-      CollationSupport.EndsWith.genCode(c1, c2, collationId))
-  }
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): EndsWith = copy(left = newLeft, right = newRight)
 }
