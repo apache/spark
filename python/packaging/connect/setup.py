@@ -65,6 +65,20 @@ in_spark = os.path.isfile("../core/src/main/scala/org/apache/spark/SparkContext.
     os.path.isfile("../RELEASE") and len(glob.glob("../jars/spark*core*.jar")) == 1
 )
 
+test_packages = []
+if "SPARK_TESTING" in os.environ:
+    test_packages = [
+        "pyspark.tests",  # for Memory profiler parity tests
+        "pyspark.testing",
+        "pyspark.sql.tests",
+        "pyspark.sql.tests.connect",
+        "pyspark.sql.tests.connect.streaming",
+        "pyspark.sql.tests.connect.client",
+        "pyspark.sql.tests.connect.shell",
+        "pyspark.sql.tests.pandas",
+        "pyspark.sql.tests.streaming",
+    ]
+
 try:
     if in_spark:
         copyfile("packaging/connect/setup.py", "setup.py")
@@ -77,7 +91,7 @@ try:
     # python/packaging/classic/setup.py
     _minimum_pandas_version = "1.4.4"
     _minimum_numpy_version = "1.21"
-    _minimum_pyarrow_version = "4.0.0"
+    _minimum_pyarrow_version = "10.0.0"
     _minimum_grpc_version = "1.59.3"
     _minimum_googleapis_common_protos_version = "1.56.4"
 
@@ -103,6 +117,8 @@ try:
         "pyspark.sql.connect.client",
         "pyspark.sql.connect.functions",
         "pyspark.sql.connect.proto",
+        "pyspark.sql.connect.protobuf",
+        "pyspark.sql.connect.shell",
         "pyspark.sql.connect.streaming",
         "pyspark.sql.connect.streaming.worker",
         "pyspark.sql.functions",
@@ -134,7 +150,7 @@ try:
         author="Spark Developers",
         author_email="dev@spark.apache.org",
         url="https://github.com/apache/spark/tree/master/python",
-        packages=connect_packages,
+        packages=connect_packages + test_packages,
         license="http://www.apache.org/licenses/LICENSE-2.0",
         # Don't forget to update python/docs/source/getting_started/install.rst
         # if you're updating the versions or dependencies.

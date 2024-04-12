@@ -127,7 +127,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         "paramIndex" -> "first",
         "inputSql" -> "\"1\"",
         "inputType" -> "\"INT\"",
-        "requiredType" -> "\"STRING_ANY_COLLATION\""),
+        "requiredType" -> "\"STRING\""),
       context = ExpectedContext(
         fragment = s"collate(1, 'UTF8_BINARY')", start = 7, stop = 31))
   }
@@ -269,90 +269,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
           s"`string collate $leftCollationName`.`string collate $rightCollationName`"
       )
     )
-  }
-
-  case class CollationTestCase[R](left: String, right: String, collation: String, expectedResult: R)
-
-  test("Support contains string expression with Collation") {
-    // Supported collations
-    val checks = Seq(
-      CollationTestCase("", "", "UTF8_BINARY", true),
-      CollationTestCase("c", "", "UTF8_BINARY", true),
-      CollationTestCase("", "c", "UTF8_BINARY", false),
-      CollationTestCase("abcde", "c", "UTF8_BINARY", true),
-      CollationTestCase("abcde", "C", "UTF8_BINARY", false),
-      CollationTestCase("abcde", "bcd", "UTF8_BINARY", true),
-      CollationTestCase("abcde", "BCD", "UTF8_BINARY", false),
-      CollationTestCase("abcde", "fgh", "UTF8_BINARY", false),
-      CollationTestCase("abcde", "FGH", "UTF8_BINARY", false),
-      CollationTestCase("", "", "UNICODE", true),
-      CollationTestCase("c", "", "UNICODE", true),
-      CollationTestCase("", "c", "UNICODE", false),
-      CollationTestCase("abcde", "c", "UNICODE", true),
-      CollationTestCase("abcde", "C", "UNICODE", false),
-      CollationTestCase("abcde", "bcd", "UNICODE", true),
-      CollationTestCase("abcde", "BCD", "UNICODE", false),
-      CollationTestCase("abcde", "fgh", "UNICODE", false),
-      CollationTestCase("abcde", "FGH", "UNICODE", false),
-      CollationTestCase("", "", "UTF8_BINARY_LCASE", true),
-      CollationTestCase("c", "", "UTF8_BINARY_LCASE", true),
-      CollationTestCase("", "c", "UTF8_BINARY_LCASE", false),
-      CollationTestCase("abcde", "c", "UTF8_BINARY_LCASE", true),
-      CollationTestCase("abcde", "C", "UTF8_BINARY_LCASE", true),
-      CollationTestCase("abcde", "bcd", "UTF8_BINARY_LCASE", true),
-      CollationTestCase("abcde", "BCD", "UTF8_BINARY_LCASE", true),
-      CollationTestCase("abcde", "fgh", "UTF8_BINARY_LCASE", false),
-      CollationTestCase("abcde", "FGH", "UTF8_BINARY_LCASE", false),
-      CollationTestCase("", "", "UNICODE_CI", true),
-      CollationTestCase("c", "", "UNICODE_CI", true),
-      CollationTestCase("", "c", "UNICODE_CI", false),
-      CollationTestCase("abcde", "c", "UNICODE_CI", true),
-      CollationTestCase("abcde", "C", "UNICODE_CI", true),
-      CollationTestCase("abcde", "bcd", "UNICODE_CI", true),
-      CollationTestCase("abcde", "BCD", "UNICODE_CI", true),
-      CollationTestCase("abcde", "fgh", "UNICODE_CI", false),
-      CollationTestCase("abcde", "FGH", "UNICODE_CI", false)
-    )
-    checks.foreach(testCase => {
-      checkAnswer(sql(s"SELECT contains(collate('${testCase.left}', '${testCase.collation}')," +
-        s"collate('${testCase.right}', '${testCase.collation}'))"), Row(testCase.expectedResult))
-    })
-  }
-
-  test("Support startsWith string expression with Collation") {
-    // Supported collations
-    val checks = Seq(
-      CollationTestCase("abcde", "abc", "UTF8_BINARY", true),
-      CollationTestCase("abcde", "ABC", "UTF8_BINARY", false),
-      CollationTestCase("abcde", "abc", "UNICODE", true),
-      CollationTestCase("abcde", "ABC", "UNICODE", false),
-      CollationTestCase("abcde", "ABC", "UTF8_BINARY_LCASE", true),
-      CollationTestCase("abcde", "bcd", "UTF8_BINARY_LCASE", false),
-      CollationTestCase("abcde", "ABC", "UNICODE_CI", true),
-      CollationTestCase("abcde", "bcd", "UNICODE_CI", false)
-    )
-    checks.foreach(testCase => {
-      checkAnswer(sql(s"SELECT startswith(collate('${testCase.left}', '${testCase.collation}')," +
-        s"collate('${testCase.right}', '${testCase.collation}'))"), Row(testCase.expectedResult))
-    })
-  }
-
-  test("Support endsWith string expression with Collation") {
-    // Supported collations
-    val checks = Seq(
-      CollationTestCase("abcde", "cde", "UTF8_BINARY", true),
-      CollationTestCase("abcde", "CDE", "UTF8_BINARY", false),
-      CollationTestCase("abcde", "cde", "UNICODE", true),
-      CollationTestCase("abcde", "CDE", "UNICODE", false),
-      CollationTestCase("abcde", "CDE", "UTF8_BINARY_LCASE", true),
-      CollationTestCase("abcde", "bcd", "UTF8_BINARY_LCASE", false),
-      CollationTestCase("abcde", "CDE", "UNICODE_CI", true),
-      CollationTestCase("abcde", "bcd", "UNICODE_CI", false)
-    )
-    checks.foreach(testCase => {
-      checkAnswer(sql(s"SELECT endswith(collate('${testCase.left}', '${testCase.collation}')," +
-        s"collate('${testCase.right}', '${testCase.collation}'))"), Row(testCase.expectedResult))
-    })
   }
 
   test("aggregates count respects collation") {
@@ -645,6 +561,9 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         },
         errorClass = "COLLATION_MISMATCH.IMPLICIT"
       )
+
+      checkAnswer(sql("SELECT array_join(array('a', 'b' collate UNICODE), 'c' collate UNICODE_CI)"),
+        Seq(Row("acb")))
     }
   }
 
@@ -989,6 +908,58 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
            |join $tableRight on $tableLeft.s = $tableRight.s
            |""".stripMargin), Seq(Row("aaa")))
     }
+  }
+
+  test("Support operations on complex types containing collated strings") {
+    checkAnswer(sql("select reverse('abc' collate utf8_binary_lcase)"), Seq(Row("cba")))
+    checkAnswer(sql(
+      """
+        |select reverse(array('a' collate utf8_binary_lcase,
+        |'b' collate utf8_binary_lcase))
+        |""".stripMargin), Seq(Row(Seq("b", "a"))))
+    checkAnswer(sql(
+      """
+        |select array_join(array('a' collate utf8_binary_lcase,
+        |'b' collate utf8_binary_lcase), ', ' collate utf8_binary_lcase)
+        |""".stripMargin), Seq(Row("a, b")))
+    checkAnswer(sql(
+      """
+        |select array_join(array('a' collate utf8_binary_lcase,
+        |'b' collate utf8_binary_lcase, null), ', ' collate utf8_binary_lcase,
+        |'c' collate utf8_binary_lcase)
+        |""".stripMargin), Seq(Row("a, b, c")))
+    checkAnswer(sql(
+      """
+        |select concat('a' collate utf8_binary_lcase, 'b' collate utf8_binary_lcase)
+        |""".stripMargin), Seq(Row("ab")))
+    checkAnswer(sql(
+      """
+        |select concat(array('a' collate utf8_binary_lcase, 'b' collate utf8_binary_lcase))
+        |""".stripMargin), Seq(Row(Seq("a", "b"))))
+    checkAnswer(sql(
+      """
+        |select map('a' collate utf8_binary_lcase, 1, 'b' collate utf8_binary_lcase, 2)
+        |['A' collate utf8_binary_lcase]
+        |""".stripMargin), Seq(Row(1)))
+    val ctx = "map('aaa' collate utf8_binary_lcase, 1, 'AAA' collate utf8_binary_lcase, 2)['AaA']"
+    val query = s"select $ctx"
+    checkError(
+      exception = intercept[AnalysisException](sql(query)),
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"map(collate(aaa), 1, collate(AAA), 2)[AaA]\"",
+        "paramIndex" -> "second",
+        "inputSql" -> "\"AaA\"",
+        "inputType" -> toSQLType(StringType),
+        "requiredType" -> toSQLType(StringType(
+          CollationFactory.collationNameToId("UTF8_BINARY_LCASE")))
+      ),
+      context = ExpectedContext(
+        fragment = ctx,
+        start = query.length - ctx.length,
+        stop = query.length - 1
+      )
+    )
   }
 
   test("window aggregates should respect collation") {

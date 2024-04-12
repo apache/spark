@@ -81,4 +81,35 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     val expected = new VariantVal(v.getValue, v.getMetadata)
     checkAnswer(variantDF, Seq(Row(expected)))
   }
+
+  test("schema_of_variant") {
+    def check(json: String, expected: String): Unit = {
+      val df = Seq(json).toDF("j").selectExpr("schema_of_variant(parse_json(j))")
+      checkAnswer(df, Seq(Row(expected)))
+    }
+
+    check("null", "VOID")
+    check("1", "BIGINT")
+    check("1.0", "DECIMAL(1,0)")
+    check("1E0", "DOUBLE")
+    check("true", "BOOLEAN")
+    check("\"2000-01-01\"", "STRING")
+    check("""{"a":0}""", "STRUCT<a: BIGINT>")
+    check("""{"b": {"c": "c"}, "a":["a"]}""", "STRUCT<a: ARRAY<STRING>, b: STRUCT<c: STRING>>")
+    check("[]", "ARRAY<VOID>")
+    check("[false]", "ARRAY<BOOLEAN>")
+    check("[null, 1, 1.0]", "ARRAY<DECIMAL(20,0)>")
+    check("[null, 1, 1.1]", "ARRAY<DECIMAL(21,1)>")
+    check("[123456.789, 123.456789]", "ARRAY<DECIMAL(12,6)>")
+    check("[1, 11111111111111111111111111111111111111]", "ARRAY<DECIMAL(38,0)>")
+    check("[1.1, 11111111111111111111111111111111111111]", "ARRAY<DOUBLE>")
+    check("[1, \"1\"]", "ARRAY<VARIANT>")
+    check("[{}, true]", "ARRAY<VARIANT>")
+    check("""[{"c": ""}, {"a": null}, {"b": 1}]""", "ARRAY<STRUCT<a: VOID, b: BIGINT, c: STRING>>")
+    check("""[{"a": ""}, {"a": null}, {"b": 1}]""", "ARRAY<STRUCT<a: STRING, b: BIGINT>>")
+    check(
+      """[{"a": 1, "b": null}, {"b": true, "a": 1E0}]""",
+      "ARRAY<STRUCT<a: DOUBLE, b: BOOLEAN>>"
+    )
+  }
 }

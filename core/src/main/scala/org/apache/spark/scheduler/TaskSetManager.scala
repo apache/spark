@@ -534,9 +534,9 @@ private[spark] class TaskSetManager(
       // If the task cannot be serialized, then there's no point to re-attempt the task,
       // as it will always fail. So just abort the whole task-set.
       case NonFatal(e) =>
-        val msg = s"Failed to serialize task $taskId, not attempting to retry it."
+        val msg = log"Failed to serialize task ${MDC(TASK_ID, taskId)}, not attempting to retry it."
         logError(msg, e)
-        abort(s"$msg Exception during serialization: $e")
+        abort(s"${msg.message} Exception during serialization: $e")
         throw SparkCoreErrors.failToSerializeTaskError(e)
     }
     if (serializedTask.limit() > TaskSetManager.TASK_SIZE_TO_WARN_KIB * 1024 &&

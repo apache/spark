@@ -78,6 +78,14 @@ public final class CollationFactory {
      */
     public final boolean supportsBinaryOrdering;
 
+    /**
+     * Support for Lowercase Equality implies that it is possible to check equality on
+     * byte by byte level, but only after calling "UTF8String.toLowerCase" on both arguments.
+     * This allows custom collation support for UTF8_BINARY_LCASE collation in various Spark
+     * expressions, as this particular collation is not supported by the external ICU library.
+     */
+    public final boolean supportsLowercaseEquality;
+
     public Collation(
         String collationName,
         Collator collator,
@@ -85,7 +93,8 @@ public final class CollationFactory {
         String version,
         ToLongFunction<UTF8String> hashFunction,
         boolean supportsBinaryEquality,
-        boolean supportsBinaryOrdering) {
+        boolean supportsBinaryOrdering,
+        boolean supportsLowercaseEquality) {
       this.collationName = collationName;
       this.collator = collator;
       this.comparator = comparator;
@@ -93,9 +102,12 @@ public final class CollationFactory {
       this.hashFunction = hashFunction;
       this.supportsBinaryEquality = supportsBinaryEquality;
       this.supportsBinaryOrdering = supportsBinaryOrdering;
+      this.supportsLowercaseEquality = supportsLowercaseEquality;
 
       // De Morgan's Law to check supportsBinaryOrdering => supportsBinaryEquality
       assert(!supportsBinaryOrdering || supportsBinaryEquality);
+      // No Collation can simultaneously support binary equality and lowercase equality
+      assert(!supportsBinaryEquality || !supportsLowercaseEquality);
 
       if (supportsBinaryEquality) {
         this.equalsFunction = UTF8String::equals;
@@ -112,7 +124,8 @@ public final class CollationFactory {
         Collator collator,
         String version,
         boolean supportsBinaryEquality,
-        boolean supportsBinaryOrdering) {
+        boolean supportsBinaryOrdering,
+        boolean supportsLowercaseEquality) {
       this(
         collationName,
         collator,
@@ -120,7 +133,8 @@ public final class CollationFactory {
         version,
         s -> (long)collator.getCollationKey(s.toString()).hashCode(),
         supportsBinaryEquality,
-        supportsBinaryOrdering);
+        supportsBinaryOrdering,
+        supportsLowercaseEquality);
     }
   }
 
@@ -141,28 +155,30 @@ public final class CollationFactory {
       "1.0",
       s -> (long)s.hashCode(),
       true,
-      true);
+      true,
+      false);
 
     // Case-insensitive UTF8 binary collation.
     // TODO: Do in place comparisons instead of creating new strings.
     collationTable[1] = new Collation(
       "UTF8_BINARY_LCASE",
       null,
-      (s1, s2) -> s1.toLowerCase().binaryCompare(s2.toLowerCase()),
+      UTF8String::compareLowerCase,
       "1.0",
       (s) -> (long)s.toLowerCase().hashCode(),
       false,
-      false);
+      false,
+      true);
 
     // UNICODE case sensitive comparison (ROOT locale, in ICU).
     collationTable[2] = new Collation(
-      "UNICODE", Collator.getInstance(ULocale.ROOT), "153.120.0.0", true, false);
+      "UNICODE", Collator.getInstance(ULocale.ROOT), "153.120.0.0", true, false, false);
     collationTable[2].collator.setStrength(Collator.TERTIARY);
     collationTable[2].collator.freeze();
 
     // UNICODE case-insensitive comparison (ROOT locale, in ICU + Secondary strength).
     collationTable[3] = new Collation(
-      "UNICODE_CI", Collator.getInstance(ULocale.ROOT), "153.120.0.0", false, false);
+      "UNICODE_CI", Collator.getInstance(ULocale.ROOT), "153.120.0.0", false, false, false);
     collationTable[3].collator.setStrength(Collator.SECONDARY);
     collationTable[3].collator.freeze();
 
@@ -172,33 +188,29 @@ public final class CollationFactory {
   }
 
   /**
-   * Auxiliary methods for collation aware string operations.
+   * Returns a StringSearch object for the given pattern and target strings, under collation
+   * rules corresponding to the given collationId. The external ICU library StringSearch object can
+   * be used to find occurrences of the pattern in the target string, while respecting collation.
    */
-
   public static StringSearch getStringSearch(
       final UTF8String targetUTF8String,
       final UTF8String patternUTF8String,
       final int collationId) {
-
-    if (collationId == UTF8_BINARY_COLLATION_ID) {
-      return getStringSearch(targetUTF8String, patternUTF8String);
-    } else if (collationId == UTF8_BINARY_LCASE_COLLATION_ID) {
-      return getStringSearch(targetUTF8String.toLowerCase(), patternUTF8String.toLowerCase());
-    }
-
     String pattern = patternUTF8String.toString();
     CharacterIterator target = new StringCharacterIterator(targetUTF8String.toString());
     Collator collator = CollationFactory.fetchCollation(collationId).collator;
     return new StringSearch(pattern, target, (RuleBasedCollator) collator);
   }
 
+  /**
+   * Returns a collation-unaware StringSearch object for the given pattern and target strings.
+   * While this object does not respect collation, it can be used to find occurrences of the pattern
+   * in the target string for UTF8_BINARY or UTF8_BINARY_LCASE (if arguments are lowercased).
+   */
   public static StringSearch getStringSearch(
-      final UTF8String targetUTF8String,
-      final UTF8String patternUTF8String) {
-    String pattern = patternUTF8String.toString();
-    String target = targetUTF8String.toString();
-
-    return new StringSearch(pattern, target);
+          final UTF8String targetUTF8String,
+          final UTF8String patternUTF8String) {
+    return new StringSearch(patternUTF8String.toString(), targetUTF8String.toString());
   }
 
   /**

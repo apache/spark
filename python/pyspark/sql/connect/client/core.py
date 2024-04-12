@@ -56,6 +56,7 @@ import grpc
 from google.protobuf import text_format, any_pb2
 from google.rpc import error_details_pb2
 
+from pyspark.util import is_remote_only
 from pyspark.accumulators import SpecialAccumulatorIds
 from pyspark.loose_version import LooseVersion
 from pyspark.version import __version__
@@ -292,7 +293,7 @@ class DefaultChannelBuilder(ChannelBuilder):
 
     @staticmethod
     def default_port() -> int:
-        if "SPARK_TESTING" in os.environ:
+        if "SPARK_TESTING" in os.environ and not is_remote_only():
             from pyspark.sql.session import SparkSession as PySparkSession
 
             # In the case when Spark Connect uses the local mode, it starts the regular Spark
@@ -896,11 +897,12 @@ class SparkConnectClient(object):
         logger.info(f"Executing plan {self._proto_to_string(plan)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
-        for response in self._execute_and_fetch_as_iterator(req, observations):
-            if isinstance(response, StructType):
-                yield response
-            elif isinstance(response, pa.RecordBatch):
-                yield pa.Table.from_batches([response])
+        with Progress(handlers=self._progress_handlers, operation_id=req.operation_id) as progress:
+            for response in self._execute_and_fetch_as_iterator(req, observations, progress):
+                if isinstance(response, StructType):
+                    yield response
+                elif isinstance(response, pa.RecordBatch):
+                    yield pa.Table.from_batches([response])
 
     def to_table(
         self, plan: pb2.Plan, observations: Dict[str, Observation]
@@ -1330,7 +1332,7 @@ class SparkConnectClient(object):
             if b.HasField("execution_progress"):
                 if progress:
                     p = from_proto(b.execution_progress)
-                    progress.update_ticks(*p)
+                    progress.update_ticks(*p, operation_id=b.operation_id)
             if b.HasField("arrow_batch"):
                 logger.debug(
                     f"Received arrow batch rows={b.arrow_batch.row_count} "
@@ -1410,26 +1412,27 @@ class SparkConnectClient(object):
         schema: Optional[StructType] = None
         properties: Dict[str, Any] = {}
 
-        progress = Progress(handlers=self._progress_handlers)
-        for response in self._execute_and_fetch_as_iterator(req, observations, progress=progress):
-            if isinstance(response, StructType):
-                schema = response
-            elif isinstance(response, pa.RecordBatch):
-                batches.append(response)
-            elif isinstance(response, PlanMetrics):
-                metrics.append(response)
-            elif isinstance(response, PlanObservedMetrics):
-                observed_metrics.append(response)
-            elif isinstance(response, dict):
-                properties.update(**response)
-            else:
-                raise PySparkValueError(
-                    error_class="UNKNOWN_RESPONSE",
-                    message_parameters={
-                        "response": response,
-                    },
-                )
-        progress.finish()
+        with Progress(handlers=self._progress_handlers, operation_id=req.operation_id) as progress:
+            for response in self._execute_and_fetch_as_iterator(
+                req, observations, progress=progress
+            ):
+                if isinstance(response, StructType):
+                    schema = response
+                elif isinstance(response, pa.RecordBatch):
+                    batches.append(response)
+                elif isinstance(response, PlanMetrics):
+                    metrics.append(response)
+                elif isinstance(response, PlanObservedMetrics):
+                    observed_metrics.append(response)
+                elif isinstance(response, dict):
+                    properties.update(**response)
+                else:
+                    raise PySparkValueError(
+                        error_class="UNKNOWN_RESPONSE",
+                        message_parameters={
+                            "response": response,
+                        },
+                    )
 
         if len(batches) > 0:
             if self_destruct:
@@ -1719,6 +1722,7 @@ class SparkConnectClient(object):
         -------
         Throws the appropriate internal Python exception.
         """
+        logger.exception("GRPC Error received")
         # We have to cast the value here because, a RpcError is a Call as well.
         # https://grpc.github.io/grpc/python/grpc.html#grpc.UnaryUnaryMultiCallable.__call__
         status = rpc_status.from_call(cast(grpc.Call, rpc_error))

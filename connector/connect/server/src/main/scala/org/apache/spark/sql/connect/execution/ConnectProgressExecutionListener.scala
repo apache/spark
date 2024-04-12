@@ -82,10 +82,14 @@ private[connect] class ConnectProgressExecutionListener extends SparkListener wi
      *
      * If the tracker was marked as dirty, the state is reset after.
      */
-    def yieldWhenDirty(thunk: (Seq[StageInfo], Long) => Unit): Unit = {
-      if (dirty.get()) {
+    def yieldWhenDirty(force: Boolean = false)(thunk: (Seq[StageInfo], Long) => Unit): Unit = {
+      if (force) {
         thunk(stages.values.toSeq, inFlightTasks.get())
-        dirty.set(false)
+      } else {
+        if (dirty.get()) {
+          thunk(stages.values.toSeq, inFlightTasks.get())
+          dirty.set(false)
+        }
       }
     }
 
