@@ -60,6 +60,8 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   private[connect] lazy val streamingForeachBatchRunnerCleanerCache =
     new StreamingForeachBatchHelper.CleanerCache(this)
 
+  private[connect] lazy val streamingServersideListenerHolder = new ServerSideListenerHolder(this)
+
   /** Add ExecuteHolder to this session. Called only by SparkConnectExecutionManager. */
   private[service] def addExecuteHolder(executeHolder: ExecuteHolder): Unit = {
     val oldExecute = executions.putIfAbsent(executeHolder.operationId, executeHolder)
@@ -157,11 +159,16 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   private[connect] def expireSession(): Unit = {
     logDebug(s"Expiring session with userId: $userId and sessionId: $sessionId")
     artifactManager.cleanUpResources()
-    eventManager.postClosed()
     // Clean up running queries
     SparkConnectService.streamingSessionManager.cleanupRunningQueries(this)
     streamingForeachBatchRunnerCleanerCache.cleanUpAll() // Clean up any streaming workers.
     removeAllListeners() // removes all listener and stop python listener processes if necessary.
+
+    // if there is a server side listener, clean up related resources
+    if (streamingServersideListenerHolder.isServerSideListenerRegistered) {
+      streamingServersideListenerHolder.cleanUp()
+    }
+    eventManager.postClosed()
   }
 
   /**
