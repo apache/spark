@@ -323,6 +323,30 @@ class DatasetCacheSuite extends QueryTest
     checkIMRUseAndInvalidation(baseDfCreator, testDfCreator)
   }
 
+  test("SPARK-47609. Partial match IMR with partial filters match") {
+    val baseDfCreator = () => spark.range(0, 100).
+      selectExpr("id as a ", "id % 2 AS b", "id % 3 AS c").filter($"a" > 7)
+    val testDfCreator = () => spark.range(0, 100).filter($"id"> 7).filter(($"id" % 3) > 8).select(
+      (($"id" % 3) * ($"id" % 2)).as("c"), ($"id" - ($"id" % 3)).as("a"),
+      expr("100").cast(IntegerType).as("b"), $"b".as("d"))
+    checkIMRUseAndInvalidation(baseDfCreator, testDfCreator)
+  }
+
+  test("SPARK-47609. Because of filter mismatch partial match should not happen") {
+    val baseDfCreator = () => spark.range(0, 100).
+      selectExpr("id as a ", "id % 2 AS b", "id % 3 AS c").filter($"a" > 7)
+    val testDfCreator = () => spark.range(0, 100).filter(($"id" % 3) > 8).select(
+      (($"id" % 3) * ($"id" % 2)).as("c"), ($"id" - ($"id" % 3)).as("a"),
+      expr("100").cast(IntegerType).as("b"), $"b".as("d"))
+    val baseDf = baseDfCreator()
+    baseDf.cache()
+    val testDf = testDfCreator()
+    verifyCacheDependency(baseDfCreator(), 1)
+    // cache should not be used
+    verifyCacheDependency(testDf, 0)
+    baseDf.unpersist(true)
+  }
+
   test("SPARK-44653: non-trivial DataFrame unions should not break caching") {
     val df1 = Seq(1 -> 1).toDF("i", "j")
     val df2 = Seq(2 -> 2).toDF("i", "j")
@@ -364,22 +388,6 @@ class DatasetCacheSuite extends QueryTest
   protected def checkIMRUseAndInvalidation(
       baseDfCreator: () => DataFrame,
       testExec: () => DataFrame): Unit = {
-
-    def recurse(sparkPlan: SparkPlan): Int = {
-      val imrs = sparkPlan.collect {
-        case i: InMemoryTableScanExec => i
-      }
-      imrs.size + imrs.map(ime => recurse(ime.relation.cacheBuilder.cachedPlan)).sum
-    }
-
-    def verifyCacheDependency(df: DataFrame, numOfCachesExpected: Int): Unit = {
-      val cachedPlans = df.queryExecution.withCachedData.collect {
-        case i: InMemoryRelation => i.cacheBuilder.cachedPlan
-      }
-      val totalIMRs = cachedPlans.size + cachedPlans.map(ime => recurse(ime)).sum
-      assert(totalIMRs == numOfCachesExpected)
-    }
-
     // now check if the results of optimized dataframe and completely unoptimized dataframe are
     // same
     val baseDf = baseDfCreator()
@@ -393,7 +401,23 @@ class DatasetCacheSuite extends QueryTest
     verifyCacheDependency(testExec(), 0)
     baseDfCreator().cache()
     val newTestDf = testExec()
+    // re-verify cache dependency
+    verifyCacheDependency(newTestDf, 1)
     checkAnswer(newTestDf, testDfRows)
     baseDfCreator().unpersist(true)
+  }
+
+  def verifyCacheDependency(df: DataFrame, numOfCachesExpected: Int): Unit = {
+    def recurse(sparkPlan: SparkPlan): Int = {
+      val imrs = sparkPlan.collect {
+        case i: InMemoryTableScanExec => i
+      }
+      imrs.size + imrs.map(ime => recurse(ime.relation.cacheBuilder.cachedPlan)).sum
+    }
+    val cachedPlans = df.queryExecution.withCachedData.collect {
+      case i: InMemoryRelation => i.cacheBuilder.cachedPlan
+    }
+    val totalIMRs = cachedPlans.size + cachedPlans.map(ime => recurse(ime)).sum
+    assert(totalIMRs == numOfCachesExpected)
   }
 }
