@@ -19,24 +19,32 @@ package org.apache.spark.sql.streaming;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.annotation.Experimental;
-import org.apache.spark.sql.catalyst.plans.logical.*;
+import org.apache.spark.sql.catalyst.plans.logical.EventTime$;
+import org.apache.spark.sql.catalyst.plans.logical.NoTime$;
+import org.apache.spark.sql.catalyst.plans.logical.ProcessingTime$;
 
 /**
- * Represents the type of ttl modes possible for the Dataset operations
- * {@code transformWithState}.
+ * Represents the time modes (used for specifying timers and ttl) possible for
+ * the Dataset operations {@code transformWithState}.
  */
 @Experimental
 @Evolving
-public class TTLMode {
+public class TimeMode {
 
-  /**
-   * Specifies that there is no TTL for the user state. User state would not
-   * be cleaned up by Spark automatically.
-   */
-  public static final TTLMode NoTTL() { return NoTTL$.MODULE$; }
+    /**
+     * Neither timers nor ttl is supported in this mode.
+     */
+    public static final TimeMode None() { return NoTime$.MODULE$; }
 
-  /**
-   * Specifies that all ttl durations for user state are in processing time.
-   */
-  public static final TTLMode ProcessingTimeTTL() { return ProcessingTimeTTL$.MODULE$; }
+    /**
+     * Stateful processor that uses query processing time to register timers and
+     * calculate ttl expiration.
+     */
+    public static final TimeMode ProcessingTime() { return ProcessingTime$.MODULE$; }
+
+    /**
+     * Stateful processor that uses event time to register timers. Note that ttl is not
+     * supported in this TimeMode.
+     */
+    public static final TimeMode EventTime() { return EventTime$.MODULE$; }
 }

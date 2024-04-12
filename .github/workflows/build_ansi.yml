@@ -21,7 +21,7 @@ name: "Build / ANSI (master, Hadoop 3, JDK 17, Scala 2.13)"
 
 on:
   schedule:
-    - cron: '0 1 * * *'
+    - cron: '0 1,13 * * *'
 
 jobs:
   run-build:
