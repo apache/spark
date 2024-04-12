@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.execution.streaming
 
-import java.io.Serializable
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
