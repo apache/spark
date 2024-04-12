@@ -55,8 +55,8 @@ Resource allocation can be configured as follows, based on the cluster type:
   property) control the resources per executor. For more information, see the
   [YARN Spark Properties](running-on-yarn.html#spark-properties).
 * **K8s:** The same as the situation with Yarn, please refer to the description of Yarn above. Furthermore,
-  Spark on K8s offers higher priority versions of spark.kubernetes.executor.limit.cores and
-  spark.kubernetes.executor.request.cores than spark.executor.cores. For more information, see the
+  Spark on K8s offers higher priority versions of `spark.kubernetes.executor.limit.cores` and
+  `spark.kubernetes.executor.request.cores` than `spark.executor.cores`. For more information, see the
   [K8s Spark Properties](running-on-kubernetes.html#spark-properties).
 
 Note that none of the modes currently provide memory sharing across applications. If you would like to share
@@ -100,7 +100,7 @@ All other relevant configurations are optional and under the `spark.dynamicAlloc
 ### Caveats
 
 - In [standalone mode](spark-standalone.html), without explicitly setting `spark.executor.cores`, each executor will get all the available cores of a worker. In this case, when dynamic allocation enabled, spark will possibly acquire much more executors than expected. When you want to use dynamic allocation in [standalone mode](spark-standalone.html), you are recommended to explicitly set cores for each executor before the issue [SPARK-30299](https://issues.apache.org/jira/browse/SPARK-30299) got fixed.
-- In [K8s mode](running-on-kubernetes.html), we can't using this feature by set `spark.shuffle.service.enabled` to `true` due to Spark on K8s doesn't support external shuffle service yet.
+- In [K8s mode](running-on-kubernetes.html), we can not use this feature by setting `spark.shuffle.service.enabled` to `true` due to Spark on K8s doesn't yet support the external shuffle service.
 
 ### Resource Allocation Policy
 
