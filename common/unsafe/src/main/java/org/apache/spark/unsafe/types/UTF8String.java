@@ -224,7 +224,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Returns the number of bytes for a code point with the first byte as `b`
    * @param b The first byte of a code point
    */
-  private static int numBytesForFirstByte(final byte b) {
+  public static int numBytesForFirstByte(final byte b) {
     final int offset = b & 0xFF;
     byte numBytes = bytesOfCodePointInUTF8[offset];
     return (numBytes == 0) ? 1: numBytes; // Skip the first byte disallowed in UTF-8
@@ -344,7 +344,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   /**
    * Returns the byte at position `i`.
    */
-  private byte getByte(int i) {
+  public byte getByte(int i) {
     return Platform.getByte(base, offset + i);
   }
 
@@ -1099,64 +1099,6 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       end = this.find(search, start);
     }
     buf.appendBytes(this.base, this.offset + start, numBytes - start);
-    return buf.build();
-  }
-
-  /**
-   * Replace all occurrences of search in this with replace respecting given collation.
-   * @param search the string to be searched
-   * @param replace the start position of the current string for searching
-   * @param collationId the id of applied collation
-   * @return the string with replace instead of search in all places
-   */
-  public UTF8String replace(UTF8String search, UTF8String replace, int collationId) {
-    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
-      return this.replace(search, replace);
-    }
-    return collationAwareReplace(search, replace, collationId);
-  }
-
-  private UTF8String collationAwareReplace(UTF8String search, UTF8String replace, int collationId) {
-    // This collation aware implementation is based on existing implementation on UTF8String
-    if (numBytes == 0 || search.numBytes == 0) {
-      return this;
-    }
-
-    StringSearch stringSearch = CollationFactory.getStringSearch(this, search, collationId);
-
-    // Find the first occurrence of the search string.
-    int end = stringSearch.next();
-    if (end == StringSearch.DONE) {
-      // Search string was not found, so string is unchanged.
-      return this;
-    }
-
-    // Initialize byte positions
-    int c = 0;
-    int byteStart = 0; // position in byte
-    int byteEnd = 0; // position in byte
-    while (byteEnd < numBytes && c < end) {
-      byteEnd += numBytesForFirstByte(getByte(byteEnd));
-      c += 1;
-    }
-
-    // At least one match was found. Estimate space needed for result.
-    // The 16x multiplier here is chosen to match commons-lang3's implementation.
-    int increase = Math.max(0, Math.abs(replace.numBytes - search.numBytes)) * 16;
-    final UTF8StringBuilder buf = new UTF8StringBuilder(numBytes + increase);
-    while (end != StringSearch.DONE) {
-      buf.appendBytes(this.base, this.offset + byteStart, byteEnd - byteStart);
-      buf.append(replace);
-      byteStart = byteEnd + search.numBytes;
-      // Go to next match
-      end = stringSearch.next();
-      // Update byte positions
-      while (byteEnd < numBytes && c < end) {
-        byteEnd += numBytesForFirstByte(getByte(byteEnd));
-        c += 1;
-      }
-    }
-    buf.appendBytes(this.base, this.offset + byteStart, numBytes - byteStart);
     return buf.build();
   }
 

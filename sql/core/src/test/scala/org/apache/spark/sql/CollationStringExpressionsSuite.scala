@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql
 
-import scala.collection.immutable.Seq
-
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.catalyst.expressions.ExpressionEvalHelper
+import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, Literal, StringReplace}
+import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, StringType}
@@ -120,6 +119,7 @@ class CollationStringExpressionsSuite
     }
     assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
   }
+
   test("REPLACE check result on explicitly collated strings") {
     def testReplace(source: String, search: String, replace: String,
                     collationId: Integer, expected: String): Unit = {
@@ -162,10 +162,6 @@ class CollationStringExpressionsSuite
     testReplace("a世Bcdabcd", "bC", "", collationId, "a世dad")
     // scalastyle:on
   }
-
-  test("REPEAT check output type on explicitly collated string") {
-    def testRepeat(expected: String, collationId: Int, input: String, n: Int): Unit = {
-      val s = Literal.create(input, StringType(collationId))
 
   test("Support EndsWith string expression with collation") {
     // Supported collations

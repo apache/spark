@@ -714,20 +714,15 @@ case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExp
   }
 
   override def nullSafeEval(srcEval: Any, searchEval: Any, replaceEval: Any): Any = {
-    srcEval.asInstanceOf[UTF8String].replace(
-      searchEval.asInstanceOf[UTF8String], replaceEval.asInstanceOf[UTF8String], collationId)
+    CollationSupport.StringReplace.exec(srcEval.asInstanceOf[UTF8String],
+      searchEval.asInstanceOf[UTF8String], replaceEval.asInstanceOf[UTF8String], collationId);
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
-      nullSafeCodeGen(ctx, ev, (src, search, replace) => {
-        s"""${ev.value} = $src.replace($search, $replace);"""
-      })
-    } else {
-      nullSafeCodeGen(ctx, ev, (src, search, replace) => {
-        s"""${ev.value} = $src.replace($search, $replace, $collationId);"""
-      })
-    }
+    nullSafeCodeGen(ctx, ev, (src, search, replace) => {
+      s"${ev.value} = " +
+        CollationSupport.StringReplace.genCode(src, search, replace, collationId) + ";"
+    })
   }
 
   override def dataType: DataType = srcExpr.dataType
