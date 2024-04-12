@@ -209,7 +209,10 @@ class TransformWithMapStateSuite extends StreamTest
         AddData(inputData, InputMapRow("k2", "iterator", ("", ""))),
         CheckNewAnswer(),
         AddData(inputData, InputMapRow("k2", "exists", ("", ""))),
-        CheckNewAnswer(("k2", "exists", "false"))
+        CheckNewAnswer(("k2", "exists", "false")),
+        Execute { q =>
+          assert(q.lastProgress.stateOperators(0).customMetrics.get("numMapStateVars") > 0)
+        }
       )
     }
   }

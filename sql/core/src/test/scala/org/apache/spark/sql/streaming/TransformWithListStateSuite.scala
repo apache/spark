@@ -298,7 +298,10 @@ class TransformWithListStateSuite extends StreamTest
         AddData(inputData, InputRow("k5", "append", "v4")),
         AddData(inputData, InputRow("k5", "put", "v5,v6")),
         AddData(inputData, InputRow("k5", "emitAllInState", "")),
-        CheckNewAnswer(("k5", "v5"), ("k5", "v6"))
+        CheckNewAnswer(("k5", "v5"), ("k5", "v6")),
+        Execute { q =>
+          assert(q.lastProgress.stateOperators(0).customMetrics.get("numListStateVars") > 0)
+        }
       )
     }
   }
