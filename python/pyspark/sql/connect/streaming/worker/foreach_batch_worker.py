@@ -45,6 +45,9 @@ def main(infile: IO, outfile: IO) -> None:
     global spark
     check_python_version(infile)
 
+    # Enable Spark Connect Mode
+    os.environ["SPARK_CONNECT_MODE_ENABLED"] = "1"
+
     connect_url = os.environ["SPARK_CONNECT_LOCAL_URL"]
     session_id = utf8_deserializer.loads(infile)
 
