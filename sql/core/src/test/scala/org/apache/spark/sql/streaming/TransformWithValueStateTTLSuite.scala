@@ -240,7 +240,17 @@ class TransformWithValueStateTTLSuite
           CheckNewAnswer(),
           AddData(inputStream, InputEvent("k1", "get_values_in_ttl_state", -1)),
           AdvanceManualClock(1 * 1000),
-          CheckNewAnswer()
+          CheckNewAnswer(),
+          Execute { q =>
+            // Filter for idle progress events and then verify the custom metrics
+            // for stateful operator
+            val progData = q.recentProgress.filter(prog => prog.stateOperators.size > 0)
+            assert(progData.filter(prog =>
+              prog.stateOperators(0).customMetrics.get("numValueStateWithTTLVars") > 0).size > 0)
+            assert(progData.filter(prog =>
+              prog.stateOperators(0).customMetrics
+                .get("numValuesRemovedDueToTTLExpiry") > 0).size > 0)
+          }
         )
       }
     }
