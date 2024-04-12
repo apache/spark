@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.VariantVal
 
 class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with QueryErrorsBase {
 
@@ -749,8 +748,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
   }
 
   test("hash expressions are prohibited on VariantType elements") {
-    val rawVariant = new VariantVal(Array[Byte](0, 0, 0), Array[Byte](0, 0, 0))
-    val argument = Literal.create(rawVariant, VariantType)
+    val argument = Literal.create(null, VariantType)
     val murmur3Hash = new Murmur3Hash(Seq(argument))
     assert(murmur3Hash.checkInputDataTypes() ==
       DataTypeMismatch(
