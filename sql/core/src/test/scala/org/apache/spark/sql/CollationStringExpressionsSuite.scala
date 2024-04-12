@@ -20,8 +20,7 @@ package org.apache.spark.sql
 import scala.collection.immutable.Seq
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.{Collation, ConcatWs, ExpressionEvalHelper, Literal, StringRepeat}
+import org.apache.spark.sql.catalyst.expressions.{Collation, ConcatWs, CreateArray, ExpressionEvalHelper, Literal, StringRepeat}
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -48,32 +47,43 @@ class CollationStringExpressionsSuite
     }
     // Supported Collations
     val checks = Seq(
-      CollationTestCase("Spark", "SQL", "UTF8_BINARY", "Spark SQL")
+      CollationTestCase("Spark", "SQL", "UTF8_BINARY", "Spark SQL"),
+      CollationTestCase("Spark", "SQL", "UTF8_BINARY_LCASE", "Spark SQL"),
+      CollationTestCase("Spark", "SQL", "UNICODE", "Spark SQL"),
+      CollationTestCase("Spark", "SQL", "UNICODE_CI", "Spark SQL")
     )
     checks.foreach(ct =>
       checkEvaluation(prepareConcatWs(" ", ct.collation, ct.s1, ct.s2), ct.expectedResult)
     )
-
     // Unsupported Collations
-    val fails = Seq(
-      CollationTestFail("ABC", "%b%", "UTF8_BINARY_LCASE"),
-      CollationTestFail("ABC", "%B%", "UNICODE"),
-      CollationTestFail("ABC", "%b%", "UNICODE_CI")
+    // None for now
+  }
+
+  test("Support ConcatWs string expression with Collated arrays") {
+    def prepareConcatWs(
+                         sep: String,
+                         collation: String,
+                         inputs: Any*): ConcatWs = {
+      val collationId = CollationFactory.collationNameToId(collation)
+      val inputExprs = inputs.map(
+        s => CreateArray(s.asInstanceOf[Seq[String]]
+          .map(Literal.create(_, StringType(collationId)))))
+      val sepExpr = Literal.create(sep, StringType(collationId))
+      ConcatWs(sepExpr +: inputExprs)
+    }
+
+    // Supported Collations
+    val checks = Seq(
+      CollationTestCase("Spark", "SQL", "UTF8_BINARY", "Spark SQL"),
+      CollationTestCase("Spark", "SQL", "UTF8_BINARY_LCASE", "Spark SQL"),
+      CollationTestCase("Spark", "SQL", "UNICODE", "Spark SQL"),
+      CollationTestCase("Spark", "SQL", "UNICODE_CI", "Spark SQL")
     )
-    fails.foreach(ct =>
-      assert(prepareConcatWs(" ", ct.collation, ct.s1, ct.s2)
-        .checkInputDataTypes() ==
-        DataTypeMismatch(
-          errorSubClass = "UNEXPECTED_INPUT_TYPE",
-          messageParameters = Map(
-            "paramIndex" -> "first",
-            "requiredType" -> """"STRING"""",
-            "inputSql" -> s""""' ' collate ${ct.collation}"""",
-            "inputType" -> s""""STRING COLLATE ${ct.collation}""""
-          )
-        )
-      )
+    checks.foreach(ct =>
+      checkEvaluation(prepareConcatWs(" ", ct.collation, Seq(ct.s1, ct.s2)), ct.expectedResult)
     )
+    // Unsupported Collations
+    // None for now
   }
 
   test("REPEAT check output type on explicitly collated string") {

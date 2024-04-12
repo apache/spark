@@ -84,7 +84,7 @@ case class ConcatWs(children: Seq[Expression])
     StringTypeAnyCollation +: Seq.fill(children.size - 1)(arrayOrStr)
   }
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = children.head.dataType
 
   override def nullable: Boolean = children.head.nullable
   override def foldable: Boolean = children.forall(_.foldable)
@@ -103,7 +103,7 @@ case class ConcatWs(children: Seq[Expression])
     val flatInputs = children.flatMap { child =>
       child.eval(input) match {
         case s: UTF8String => Iterator(s)
-        case arr: ArrayData => arr.toArray[UTF8String](StringType)
+        case arr: ArrayData => arr.toArray[UTF8String](child.dataType)
         case null => Iterator(null.asInstanceOf[UTF8String])
       }
     }
@@ -111,7 +111,7 @@ case class ConcatWs(children: Seq[Expression])
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    if (children.forall(_.dataType == StringType)) {
+    if (children.forall(_.dataType.isInstanceOf[StringType])) {
       // All children are strings. In that case we can construct a fixed size array.
       val evals = children.map(_.genCode(ctx))
       val separator = evals.head
@@ -164,7 +164,7 @@ case class ConcatWs(children: Seq[Expression])
            """
 
         val (varCount, varBuild) = child.dataType match {
-          case StringType =>
+          case _: StringType =>
             val reprForValueCast = s"((UTF8String) $reprForValue)"
             ("", // we count all the StringType arguments num at once below.
               if (eval.isNull == TrueLiteral) {
