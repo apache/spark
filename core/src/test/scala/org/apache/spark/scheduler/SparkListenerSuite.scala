@@ -196,8 +196,8 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
         drainWait.release()
       }
     }
-    val sparkConf = new SparkConf()
-      .set(LISTENER_BUS_EVENT_QUEUE_EVENT_DISPATCH_EXIT_WAITING_TIME_ON_STOP, -1L)
+
+    val sparkConf = new SparkConf().set(LISTENER_BUS_EXIT_TIMEOUT, 100L)
     val bus = new LiveListenerBus(sparkConf)
     val blockingListener = new BlockingListener
 
@@ -208,13 +208,17 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     listenerStarted.acquire()
     // if reach here, the dispatch thread should be blocked at onJobEnd
 
-    // stop the bus now, without waiting for event drain completely
+    // stop the bus now, the queue will waiting for event drain with specified timeout
     bus.stop()
+    // if reach here, the bus has exited without draining completely,
+    // otherwise it will hung here forever.
 
     // the event dispatch thread should remain blocked after the bus has stopped.
+    // which means the bus exited upon reaching the timeout
+    // without all the events being completely drained
     assert(!drained)
 
-    // unblock the thread
+    // unblock the dispatch thread
     listenerWait.release()
 
     // let the event drained now
