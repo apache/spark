@@ -168,6 +168,7 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
     new ValueStateTTLProcessor(ttlConfig)
   }
 
+  override def getStateTTLMetricName: String = "numValueStateWithTTLVars"
 
   test("validate multiple value states") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->

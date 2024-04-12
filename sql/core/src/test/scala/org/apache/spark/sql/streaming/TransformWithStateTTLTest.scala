@@ -46,6 +46,8 @@ abstract class TransformWithStateTTLTest
 
   def getProcessor(ttlConfig: TTLConfig): StatefulProcessor[String, InputEvent, OutputEvent]
 
+  def getStateTTLMetricName: String
+
   test("validate state is evicted at ttl expiry") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName) {
@@ -113,7 +115,7 @@ abstract class TransformWithStateTTLTest
             // for stateful operator
             val progData = q.recentProgress.filter(prog => prog.stateOperators.size > 0)
             assert(progData.filter(prog =>
-              prog.stateOperators(0).customMetrics.get("numValueStateWithTTLVars") > 0).size > 0)
+              prog.stateOperators(0).customMetrics.get(getStateTTLMetricName) > 0).size > 0)
             assert(progData.filter(prog =>
               prog.stateOperators(0).customMetrics
                 .get("numValuesRemovedDueToTTLExpiry") > 0).size > 0)

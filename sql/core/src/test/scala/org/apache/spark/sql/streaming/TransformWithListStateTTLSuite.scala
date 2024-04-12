@@ -103,6 +103,8 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest {
     new ListStateTTLProcessor(ttlConfig)
   }
 
+  override def getStateTTLMetricName: String = "numListStateWithTTLVars"
+
   test("verify iterator works with expired values in middle of list") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
