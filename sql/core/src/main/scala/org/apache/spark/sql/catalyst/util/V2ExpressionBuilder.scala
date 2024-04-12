@@ -190,22 +190,21 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
     case unaryMinus @ UnaryMinus(_, true) =>
       generateExpressionWithName("-", unaryMinus, isPredicate)
     case _: BitwiseNot => generateExpressionWithName("~", expr, isPredicate)
-    case CaseWhen(branches, elseValue) =>
+    case caseWhen @ CaseWhen(branches, elseValue) =>
       val conditions = branches.map(_._1).flatMap(generateExpression(_, true))
-      val values = branches.map(_._2).flatMap(generateExpression(_, true))
-      if (conditions.length == branches.length && values.length == branches.length) {
+      val values = branches.map(_._2).flatMap(generateExpression(_, false))
+      val elseExprOpt = elseValue.flatMap(generateExpression(_))
+      if (conditions.length == branches.length && values.length == branches.length &&
+          elseExprOpt.size == elseValue.size) {
         val branchExpressions = conditions.zip(values).flatMap { case (c, v) =>
           Seq[V2Expression](c, v)
         }
-        if (elseValue.isDefined) {
-          elseValue.flatMap(generateExpression(_)).map { v =>
-            val children = (branchExpressions :+ v).toArray[V2Expression]
-            // The children looks like [condition1, value1, ..., conditionN, valueN, elseValue]
-            new V2Predicate("CASE_WHEN", children)
-          }
+        val children = (branchExpressions ++ elseExprOpt).toArray[V2Expression]
+        // The children looks like [condition1, value1, ..., conditionN, valueN (, elseValue)]
+        if (isPredicate && caseWhen.dataType.isInstanceOf[BooleanType]) {
+          Some(new V2Predicate("CASE_WHEN", children))
         } else {
-          // The children looks like [condition1, value1, ..., conditionN, valueN]
-          Some(new V2Predicate("CASE_WHEN", branchExpressions.toArray[V2Expression]))
+          Some(new GeneralScalarExpression("CASE_WHEN", children))
         }
       } else {
         None
