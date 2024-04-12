@@ -1014,7 +1014,7 @@ package object config {
       .timeConf(TimeUnit.NANOSECONDS)
       .createWithDefaultString("1s")
 
-  private[spark] val LISTENER_BUS_EVENT_QUEUE_EVENT_DISPATCH_EXIT_WAITING_TIME_ON_STOP =
+  private[spark] val LISTENER_BUS_EXIT_TIMEOUT =
     ConfigBuilder("spark.scheduler.listenerbus.exitTimeout")
       .doc("The time that event queue waits until the dispatch thread exits " +
         "when stop is invoked. " +
