@@ -16,7 +16,6 @@
 #
 import unittest
 
-from pyspark.errors import PySparkRuntimeError
 from pyspark.testing.connectutils import should_test_connect
 
 if should_test_connect:
