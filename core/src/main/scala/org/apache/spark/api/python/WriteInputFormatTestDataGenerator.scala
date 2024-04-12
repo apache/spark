@@ -57,14 +57,12 @@ case class TestWritable(var str: String, var int: Int, var double: Double) exten
   }
 }
 
-@deprecated("This class will be move to `test`.", "3.5.2")
 private[python] class TestInputKeyConverter extends Converter[Any, Any] {
   override def convert(obj: Any): Char = {
     obj.asInstanceOf[IntWritable].get().toChar
   }
 }
 
-@deprecated("This class will be move to `test`.", "3.5.2")
 private[python] class TestInputValueConverter extends Converter[Any, Any] {
   override def convert(obj: Any): ju.List[Double] = {
     val m = obj.asInstanceOf[MapWritable]
@@ -72,24 +70,20 @@ private[python] class TestInputValueConverter extends Converter[Any, Any] {
   }
 }
 
-@deprecated("This class will be move to `test`.", "3.5.2")
 private[python] class TestOutputKeyConverter extends Converter[Any, Any] {
   override def convert(obj: Any): Text = {
     new Text(obj.asInstanceOf[Int].toString)
   }
 }
 
-@deprecated("This class will be move to `test`.", "3.5.2")
 private[python] class TestOutputValueConverter extends Converter[Any, Any] {
   override def convert(obj: Any): DoubleWritable = {
     new DoubleWritable(obj.asInstanceOf[java.util.Map[Double, _]].keySet().iterator().next())
   }
 }
 
-@deprecated("This class will be move to `test`.", "3.5.2")
 private[python] class DoubleArrayWritable extends ArrayWritable(classOf[DoubleWritable])
 
-@deprecated("This class will be move to `test`.", "3.5.2")
 private[python] class DoubleArrayToWritableConverter extends Converter[Any, Writable] {
   override def convert(obj: Any): DoubleArrayWritable = obj match {
     case arr if arr.getClass.isArray && arr.getClass.getComponentType == classOf[Double] =>
@@ -100,7 +94,6 @@ private[python] class DoubleArrayToWritableConverter extends Converter[Any, Writ
   }
 }
 
-@deprecated("This class will be move to `test`.", "3.5.2")
 private[python] class WritableToDoubleArrayConverter extends Converter[Any, Array[Double]] {
   override def convert(obj: Any): Array[Double] = obj match {
     case daw : DoubleArrayWritable => daw.get().map(_.asInstanceOf[DoubleWritable].get())
