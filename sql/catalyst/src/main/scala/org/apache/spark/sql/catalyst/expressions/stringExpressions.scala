@@ -985,8 +985,8 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-      nullSafeCodeGen(ctx, ev, (word, set) =>
-        CollationSupport.FindInSet.genCode(word, set, collationId))
+    nullSafeCodeGen(ctx, ev, (l, r) =>
+      s"${ev.value} = " + CollationSupport.FindInSet.genCode(l, r, collationId) + ";")
   }
 
   override def dataType: DataType = IntegerType
@@ -1360,17 +1360,14 @@ case class StringInstr(str: Expression, substr: Expression)
 
   override def nullSafeEval(string: Any, sub: Any): Any = {
     CollationSupport.IndexOf.
-      exec(string.asInstanceOf[UTF8String], sub.asInstanceOf[UTF8String], collationId)
+      exec(string.asInstanceOf[UTF8String], sub.asInstanceOf[UTF8String], 0, collationId) + 1
   }
 
   override def prettyName: String = "instr"
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
-      defineCodeGen(ctx, ev, (l, r) => s"($l).indexOf($r, 0) + 1")
-    } else {
-      defineCodeGen(ctx, ev, (l, r) => s"($l).indexOf($r, 0, $collationId) + 1")
-    }
+      defineCodeGen(ctx, ev, (l, r) =>
+        CollationSupport.IndexOf.genCode(l, r, 0, collationId) + " + 1")
   }
 
   override protected def withNewChildrenInternal(

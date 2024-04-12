@@ -160,10 +160,10 @@ public final class CollationSupport {
       }
     }
     public static int execBinary(final UTF8String l, final UTF8String r) {
-      return l.findInSet(r);
+      return r.findInSet(l);
     }
     public static int execLowercase(final UTF8String l, final UTF8String r) {
-      return l.toLowerCase().findInSet(r.toLowerCase());
+      return r.toLowerCase().findInSet(l.toLowerCase());
     }
     public static int execICU(final UTF8String l, final UTF8String r,
                                   final int collationId) {
@@ -274,7 +274,9 @@ public final class CollationSupport {
       StringSearch stringSearch = CollationFactory.getStringSearch(target, pattern, collationId);
       stringSearch.setIndex(start);
 
-      return stringSearch.next();
+      int result = stringSearch.next();
+
+      return Math.max(result, 0);
     }
 
   }
