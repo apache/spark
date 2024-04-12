@@ -544,7 +544,7 @@ are also available to connect MySQL, may have different mapping rules.
     <tr>
       <td>DECIMAL(p,s) [UNSIGNED]</td>
       <td>DecimalType(min(38, p),(min(18,s)))</td>
-      <td>The column type is bounded to DecimalType(38, 18), thus if any value of this column have a actual presion greater 38 will fail with DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION </td>
+      <td>The column type is bounded to DecimalType(38, 18), if 'p>38', the fraction part will be truncated if exceeded. And if any value of this column have an actual precision greater 38 will fail with NUMERIC_VALUE_OUT_OF_RANGE.WITHOUT_SUGGESTION error</td>
     </tr>
     <tr>
       <td>DATE</td>
@@ -845,7 +845,7 @@ as the activated JDBC Driver. Note that, different JDBC drivers, or different ve
     <tr>
       <td>numeric, decimal</td>
       <td>DecimalType</td>
-      <td></td>
+      <td>Since PostgreSQL 15, 's' can be negative. If 's<0' it'll be adjusted to DecimalType(min(p-s, 38), 0); Otherwise, DecimalType(p, s), and if 'p>38', the fraction part will be truncated if exceeded. And if any value of this column have an actual precision greater 38 will fail with NUMERIC_VALUE_OUT_OF_RANGE.WITHOUT_SUGGESTION error</td>
     </tr>
     <tr>
       <td>character varying(n), varchar(n)</td>
@@ -1009,3 +1009,185 @@ as the activated JDBC Driver. Note that, different JDBC drivers, or different ve
     </tr>
   </tbody>
 </table>
+
+
+### Mapping Spark SQL Data Types to PostgreSQL
+
+The below table describes the data type conversions from Spark SQL Data Types to PostgreSQL data types,
+when creating, altering, or writing data to a PostgreSQL table using the built-in jdbc data source with
+the [PostgreSQL JDBC Driver](https://mvnrepository.com/artifact/org.postgresql/postgresql) as the activated JDBC Driver.
+
+
+<table>
+  <thead>
+    <tr>
+      <th><b>Spark SQL Data Type</b></th>
+      <th><b>PostgreSQL Data Type</b></th>
+      <th><b>Remarks</b></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>BooleanType</td>
+      <td>boolean</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>ByteType</td>
+      <td>smallint</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>ShortType</td>
+      <td>smallint</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>IntegerType</td>
+      <td>integer</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>LongType</td>
+      <td>bigint</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>FloatType</td>
+      <td>float4</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>DoubleType</td>
+      <td>float8</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>DecimalType(p, s)</td>
+      <td>numeric(p,s)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>DateType</td>
+      <td>date</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>TimestampType</td>
+      <td>timestamp</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>TimestampNTZType</td>
+      <td>timestamp</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>StringType</td>
+      <td>text</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>BinaryType</td>
+      <td>bytea</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>CharType(n)</td>
+      <td>CHAR(n)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>VarcharType(n)</td>
+      <td>VARCHAR(n)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>ArrayType</td>
+      <td><table>
+          <thead>
+            <tr>
+              <th><b>Element type</b></th>
+              <th><b>PG Array</b></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>BooleanType</td>
+              <td>boolean[]</td>
+            </tr>
+            <tr>
+              <td>ByteType</td>
+              <td>smallint[]</td>
+            </tr>
+            <tr>
+              <td>ShortType</td>
+              <td>smallint[]</td>
+            </tr>
+            <tr>
+              <td>IntegerType</td>
+              <td>integer[]</td>
+            </tr>
+            <tr>
+              <td>LongType</td>
+              <td>bigint[]</td>
+            </tr>
+            <tr>
+              <td>FloatType</td>
+              <td>float4[]</td>
+            </tr>
+            <tr>
+              <td>DoubleType</td>
+              <td>float8[]</td>
+            </tr>
+            <tr>
+              <td>DecimalType(p, s)</td>
+              <td>numeric(p,s)[]</td>
+            </tr>
+            <tr>
+              <td>DateType</td>
+              <td>date[]</td>
+            </tr>
+            <tr>
+              <td>TimestampType</td>
+              <td>timestamp[]</td>
+            </tr>
+            <tr>
+              <td>TimestampNTZType</td>
+              <td>timestamp[]</td>
+            </tr>
+            <tr>
+              <td>StringType</td>
+              <td>text[]</td>
+            </tr>
+            <tr>
+              <td>BinaryType</td>
+              <td>bytea[]</td>
+            </tr>
+            <tr>
+              <td>CharType(n)</td>
+              <td>char(n)[]</td>
+            </tr>
+            <tr>
+              <td>VarcharType(n)</td>
+              <td>varchar(n)[]</td>
+            </tr>
+          </tbody>
+        </table></td>
+      <td>If the element type is an ArrayType, it converts to Postgres multidimensional array. <br>For instance, <br><code>ArrayType(ArrayType(StringType))</code> converts to <code>text[][]</code>, <br><code>ArrayType(ArrayType(ArrayType(LongType)))</code> converts to <code>bigint[][][]</code></td>
+    </tr>
+  </tbody>
+</table>
+
+The Spark Catalyst data types below are not supported with suitable PostgreSQL types.
+
+- DayTimeIntervalType
+- YearMonthIntervalType
+- CalendarIntervalType
+- ArrayType - if the element type is not listed above
+- MapType
+- StructType
+- UserDefinedType
+- NullType
+- ObjectType
+- VariantType

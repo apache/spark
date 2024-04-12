@@ -37,7 +37,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.{config, Logging, MDC}
-import org.apache.spark.internal.LogKey.{JOB_ID, STAGE_ID}
+import org.apache.spark.internal.LogKey.{ACCUMULATOR_ID, CLASS_NAME, JOB_ID, PARTITION_ID, STAGE_ID, TASK_ID}
 import org.apache.spark.internal.config.{LEGACY_ABORT_STAGE_AFTER_KILL_TASKS, RDD_CACHE_VISIBILITY_TRACKING_ENABLED}
 import org.apache.spark.internal.config.Tests.TEST_NO_STAGE_RETRY
 import org.apache.spark.network.shuffle.{BlockStoreClient, MergeFinalizerListener}
@@ -1749,8 +1749,8 @@ private[spark] class DAGScheduler(
             case None => "Unknown class"
           }
           logError(
-            s"Failed to update accumulator $id ($accumClassName) for task ${task.partitionId}",
-            e)
+            log"Failed to update accumulator ${MDC(ACCUMULATOR_ID, id)} (${MDC(CLASS_NAME, accumClassName)}) " +
+              log"for task ${MDC(PARTITION_ID, task.partitionId)}", e)
       }
     }
   }
@@ -1763,7 +1763,9 @@ private[spark] class DAGScheduler(
         } catch {
           case NonFatal(e) =>
             val taskId = event.taskInfo.taskId
-            logError(s"Error when attempting to reconstruct metrics for task $taskId", e)
+            logError(
+              log"Error when attempting to reconstruct metrics for task ${MDC(TASK_ID, taskId)}",
+              e)
             null
         }
       } else {

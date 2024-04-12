@@ -200,7 +200,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
   test("running with range scan encoder should fail") {
     val ex = intercept[SparkUnsupportedOperationException] {
       tryWithProviderResource(newStoreProvider(keySchemaWithRangeScan,
-        keyStateEncoderSpec = RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, 1),
+        keyStateEncoderSpec = RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)),
         useColumnFamilies = false)) { provider =>
         provider.getStore(0)
       }

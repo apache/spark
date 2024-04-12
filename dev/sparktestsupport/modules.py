@@ -430,9 +430,9 @@ pyspark_core = Module(
     source_file_regexes=["python/(?!pyspark/(ml|mllib|sql|streaming))"],
     python_test_goals=[
         # doctests
+        "pyspark.conf",
         "pyspark.core.rdd",
         "pyspark.core.context",
-        "pyspark.core.conf",
         "pyspark.core.broadcast",
         "pyspark.accumulators",
         "pyspark.core.files",

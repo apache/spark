@@ -30,7 +30,6 @@ import scala.collection.mutable
 import scala.io.Source
 import scala.jdk.CollectionConverters._
 
-import org.apache.commons.lang3.StringUtils
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FSDataInputStream
@@ -2451,10 +2450,10 @@ class XmlSuite
           exp.write.option("timestampNTZFormat", pattern)
             .option("rowTag", "ROW").xml(path.getAbsolutePath)
         }
-        checkError(
+        checkErrorMatchPVals(
           exception = err,
           errorClass = "TASK_WRITE_FAILED",
-          parameters = Map("path" -> actualPath))
+          parameters = Map("path" -> s"$actualPath.*"))
         val msg = err.getCause.getMessage
         assert(
           msg.contains("Unsupported field: OffsetSeconds") ||
@@ -2948,11 +2947,11 @@ class XmlSuite
                 .mode(SaveMode.Overwrite)
                 .xml(path)
             }
-            val actualPath = Path.of(dir.getAbsolutePath).toUri.toURL.toString
-            checkError(
+            val actualPath = Path.of(dir.getAbsolutePath).toUri.toURL.toString.stripSuffix("/")
+            checkErrorMatchPVals(
               exception = e,
               errorClass = "TASK_WRITE_FAILED",
-              parameters = Map("path" -> StringUtils.removeEnd(actualPath, "/")))
+              parameters = Map("path" -> s"$actualPath.*"))
             assert(e.getCause.isInstanceOf[XMLStreamException])
             assert(e.getCause.getMessage.contains(errorMsg))
         }

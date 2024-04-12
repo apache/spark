@@ -53,7 +53,7 @@ Resource allocation can be configured as follows, based on the cluster type:
   on the cluster (`spark.executor.instances` as configuration property), while `--executor-memory`
   (`spark.executor.memory` configuration property) and `--executor-cores` (`spark.executor.cores` configuration
   property) control the resources per executor. For more information, see the
-  [YARN Spark Properties](running-on-yarn.html).
+  [YARN Spark Properties](running-on-yarn.html#spark-properties).
 
 Note that none of the modes currently provide memory sharing across applications. If you would like to share
 data this way, we recommend running a single server application that can serve multiple requests by querying
