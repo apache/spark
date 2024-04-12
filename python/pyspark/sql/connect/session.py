@@ -1064,8 +1064,9 @@ class SparkSession:
         """
 
         def creator(old_session_id: str):
-            # We cannot perform the checks for session matching here because accessing the session ID
-            # property causes the serialization of a WeakRef and in turn breaks the serialization.
+            # We cannot perform the checks for session matching here because accessing the
+            # session ID property causes the serialization of a WeakRef and in turn breaks
+            # the serialization.
             return SparkSession._getActiveSessionIfMatches(old_session_id)
 
         return creator, (self._session_id,)
