@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalAggregation
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, PlanHelper, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{ALIAS, COMMON_EXPR_REF, WITH_EXPRESSION}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMON_EXPR_REF, WITH_EXPRESSION}
 
 /**
  * Rewrites the `With` expressions by adding a `Project` to pre-evaluate the common expressions, or
@@ -40,15 +40,15 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.transformUpWithSubqueriesAndPruning(_.containsPattern(WITH_EXPRESSION)) {
       case p @ PhysicalAggregation(
-          groupingExpressions, aggregateExpressions, resultExpressions, child, limit)
+          groupingExpressions, aggregateExpressions, resultExpressions, child)
           if p.expressions.exists(_.containsPattern(WITH_EXPRESSION)) =>
         // For aggregates, separate computation of the aggregations themselves from the final
         // result by moving the final result computation into a projection above. This prevents
         // this rule from producing an invalid Aggregate operator.
         // TODO: the names of these aliases will become outdated after the rewrite
-        val aggExprs = aggregateExpressions.map(ae => Alias(ae, ae.toString)(ae.resultIds.head))
+        val aggExprs = aggregateExpressions.map(ae => Alias(ae, ae.toString)(ae.resultId))
         // Rewrite the projection and the aggregate separately and then piece them together.
-        val agg = Aggregate(groupingExpressions, groupingExpressions ++ aggExprs, child, limit)
+        val agg = Aggregate(groupingExpressions, groupingExpressions ++ aggExprs, child)
         val rewrittenAgg = applyInternal(agg)
         val proj = Project(resultExpressions, rewrittenAgg)
         applyInternal(proj)
