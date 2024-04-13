@@ -557,7 +557,7 @@ class DataStreamWriter:
     def foreachBatch(self, func: Callable[["DataFrame", int], None]) -> "DataStreamWriter":
         try:
             self._write_proto.foreach_batch.python_function.command = CloudPickleSerializer().dumps(
-                func,
+                func
             )
         except pickle.PicklingError:
             raise PySparkPicklingError(
