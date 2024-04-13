@@ -35,7 +35,7 @@ import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
-import org.apache.spark.sql.catalyst.analysis.Resolver
+import org.apache.spark.sql.catalyst.analysis.{DecimalPrecision, Resolver}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -196,9 +196,12 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case java.sql.Types.CHAR => CharType(precision)
     case java.sql.Types.CLOB => StringType
     case java.sql.Types.DATE => DateType
-    case java.sql.Types.DECIMAL if precision != 0 || scale != 0 =>
-      DecimalType.bounded(precision, scale)
-    case java.sql.Types.DECIMAL => DecimalType.SYSTEM_DEFAULT
+    case java.sql.Types.DECIMAL | java.sql.Types.NUMERIC if precision == 0 && scale == 0 =>
+      DecimalType.SYSTEM_DEFAULT
+    case java.sql.Types.DECIMAL | java.sql.Types.NUMERIC if scale < 0 =>
+      DecimalType.bounded(precision - scale, 0)
+    case java.sql.Types.DECIMAL | java.sql.Types.NUMERIC =>
+      DecimalPrecision.bounded(precision, scale)
     case java.sql.Types.DOUBLE => DoubleType
     case java.sql.Types.FLOAT => FloatType
     case java.sql.Types.INTEGER => if (signed) IntegerType else LongType
@@ -207,9 +210,6 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case java.sql.Types.LONGVARCHAR => StringType
     case java.sql.Types.NCHAR => StringType
     case java.sql.Types.NCLOB => StringType
-    case java.sql.Types.NUMERIC if precision != 0 || scale != 0 =>
-      DecimalType.bounded(precision, scale)
-    case java.sql.Types.NUMERIC => DecimalType.SYSTEM_DEFAULT
     case java.sql.Types.NVARCHAR => StringType
     case java.sql.Types.REAL => DoubleType
     case java.sql.Types.REF => StringType
@@ -307,16 +307,13 @@ object JdbcUtils extends Logging with SQLConfHelper {
           metadata.putBoolean("logical_time_type", true)
         case java.sql.Types.ROWID =>
           metadata.putBoolean("rowid", true)
-        case java.sql.Types.ARRAY =>
-          val tableName = rsmd.getTableName(i + 1)
-          dialect.getArrayDimension(conn, tableName, columnName).foreach { dimension =>
-            metadata.putLong("arrayDimension", dimension)
-          }
         case _ =>
       }
       metadata.putBoolean("isSigned", isSigned)
       metadata.putBoolean("isTimestampNTZ", isTimestampNTZ)
       metadata.putLong("scale", fieldScale)
+      dialect.updateExtraColumnMeta(conn, rsmd, i + 1, metadata)
+
       val columnType =
         dialect.getCatalystType(dataType, typeName, fieldSize, metadata).getOrElse(
           getCatalystType(dataType, typeName, fieldSize, fieldScale, isSigned, isTimestampNTZ))

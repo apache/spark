@@ -154,7 +154,7 @@ class CogroupedApplyInPandasTestsMixin:
         ):
             (left.groupby("id", "k").cogroup(right.groupby("id"))).applyInPandas(
                 merge_pandas, "id long, k int, v int"
-            )
+            ).schema
 
     def test_apply_in_pandas_not_returning_pandas_dataframe(self):
         with self.quiet():

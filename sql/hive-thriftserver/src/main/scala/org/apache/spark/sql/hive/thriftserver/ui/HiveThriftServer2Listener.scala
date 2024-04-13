@@ -164,7 +164,7 @@ private[thriftserver] class HiveThriftServer2Listener(
         sessionData.totalExecution += 1
         updateLiveStore(sessionData)
       case None => logWarning(
-        log"onOperationStart called with unknown session id: ${MDC(SESSION_ID, e.sessionId)}." +
+        log"onOperationStart called with unknown session id: ${MDC(STATEMENT_ID, e.sessionId)}." +
         log"Regardless, the operation has been registered.")
     }
   }
@@ -176,7 +176,7 @@ private[thriftserver] class HiveThriftServer2Listener(
         executionData.state = ExecutionState.COMPILED
         updateLiveStore(executionData)
       case None => logWarning(
-        log"onOperationParsed called with unknown operation id: ${MDC(OP_ID, e.id)}"
+        log"onOperationParsed called with unknown operation id: ${MDC(STATEMENT_ID, e.id)}"
       )
     }
 
@@ -187,7 +187,7 @@ private[thriftserver] class HiveThriftServer2Listener(
         executionData.state = ExecutionState.CANCELED
         updateLiveStore(executionData)
       case None => logWarning(
-        log"onOperationCanceled called with unknown operation id: ${MDC(OP_ID, e.id)}"
+        log"onOperationCanceled called with unknown operation id: ${MDC(STATEMENT_ID, e.id)}"
       )
     }
 
@@ -198,7 +198,7 @@ private[thriftserver] class HiveThriftServer2Listener(
         executionData.state = ExecutionState.TIMEDOUT
         updateLiveStore(executionData)
       case None => logWarning(
-        log"onOperationCanceled called with unknown operation id: ${MDC(OP_ID, e.id)}"
+        log"onOperationCanceled called with unknown operation id: ${MDC(STATEMENT_ID, e.id)}"
       )
     }
 
@@ -210,7 +210,7 @@ private[thriftserver] class HiveThriftServer2Listener(
         executionData.state = ExecutionState.FAILED
         updateLiveStore(executionData)
       case None => logWarning(
-        log"onOperationError called with unknown operation id: ${MDC(OP_ID, e.id)}"
+        log"onOperationError called with unknown operation id: ${MDC(STATEMENT_ID, e.id)}"
       )
     }
 
@@ -221,7 +221,7 @@ private[thriftserver] class HiveThriftServer2Listener(
         executionData.state = ExecutionState.FINISHED
         updateLiveStore(executionData)
       case None => logWarning(
-        log"onOperationFinished called with unknown operation id: ${MDC(OP_ID, e.id)}"
+        log"onOperationFinished called with unknown operation id: ${MDC(STATEMENT_ID, e.id)}"
       )
     }
 
@@ -233,7 +233,7 @@ private[thriftserver] class HiveThriftServer2Listener(
         updateStoreWithTriggerEnabled(executionData)
         executionList.remove(e.id)
       case None => logWarning(
-        log"onOperationClosed called with unknown operation id: ${MDC(OP_ID, e.id)}"
+        log"onOperationClosed called with unknown operation id: ${MDC(STATEMENT_ID, e.id)}"
       )
     }
 

@@ -19,33 +19,32 @@ package org.apache.spark.sql.streaming;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.annotation.Experimental;
-import org.apache.spark.sql.catalyst.plans.logical.*;
+import org.apache.spark.sql.catalyst.plans.logical.EventTime$;
+import org.apache.spark.sql.catalyst.plans.logical.NoTime$;
+import org.apache.spark.sql.catalyst.plans.logical.ProcessingTime$;
 
 /**
- * Represents the type of timeouts possible for the Dataset operations
- * {@code transformWithState}.
+ * Represents the time modes (used for specifying timers and ttl) possible for
+ * the Dataset operations {@code transformWithState}.
  */
 @Experimental
 @Evolving
-public class TimeoutMode {
-  /**
-   * Stateful processor that does not register timers
-   */
-  public static final TimeoutMode NoTimeouts() {
-    return NoTimeouts$.MODULE$;
-  }
+public class TimeMode {
 
-  /**
-   * Stateful processor that only registers processing time based timers
-   */
-  public static final TimeoutMode ProcessingTime() {
-    return ProcessingTime$.MODULE$;
-  }
+    /**
+     * Neither timers nor ttl is supported in this mode.
+     */
+    public static final TimeMode None() { return NoTime$.MODULE$; }
 
-  /**
-   * Stateful processor that only registers event time based timers
-   */
-  public static final TimeoutMode EventTime() {
-    return EventTime$.MODULE$;
-  }
+    /**
+     * Stateful processor that uses query processing time to register timers and
+     * calculate ttl expiration.
+     */
+    public static final TimeMode ProcessingTime() { return ProcessingTime$.MODULE$; }
+
+    /**
+     * Stateful processor that uses event time to register timers. Note that ttl is not
+     * supported in this TimeMode.
+     */
+    public static final TimeMode EventTime() { return EventTime$.MODULE$; }
 }

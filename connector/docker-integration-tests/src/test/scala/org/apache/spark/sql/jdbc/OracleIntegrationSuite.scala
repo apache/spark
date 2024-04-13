@@ -121,10 +121,11 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
       """.stripMargin.replaceAll("\n", " "))
 
 
-    conn.prepareStatement("CREATE TABLE numerics (b DECIMAL(1), f DECIMAL(3, 2), i DECIMAL(10))")
+    conn.prepareStatement("CREATE TABLE numerics (b DECIMAL(1), f DECIMAL(3, 2), i DECIMAL(10)," +
+        "n NUMBER(7,-2))")
       .executeUpdate()
     conn.prepareStatement(
-      "INSERT INTO numerics VALUES (4, 1.23, 9999999999)").executeUpdate()
+      "INSERT INTO numerics VALUES (4, 1.23, 9999999999, 7456123.89)").executeUpdate()
     conn.commit()
 
     conn.prepareStatement("CREATE TABLE oracle_types (d BINARY_DOUBLE, f BINARY_FLOAT)")
@@ -159,19 +160,14 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
     conn.commit()
   }
 
-  test("SPARK-16625 : Importing Oracle numeric types") {
-    val df = sqlContext.read.jdbc(jdbcUrl, "numerics", new Properties)
-    val rows = df.collect()
-    assert(rows.length == 1)
-    val row = rows(0)
-    // The main point of the below assertions is not to make sure that these Oracle types are
-    // mapped to decimal types, but to make sure that the returned values are correct.
-    // A value > 1 from DECIMAL(1) is correct:
-    assert(row.getDecimal(0).compareTo(BigDecimal.valueOf(4)) == 0)
-    // A value with fractions from DECIMAL(3, 2) is correct:
-    assert(row.getDecimal(1).compareTo(BigDecimal.valueOf(1.23)) == 0)
-    // A value > Int.MaxValue from DECIMAL(10) is correct:
-    assert(row.getDecimal(2).compareTo(BigDecimal.valueOf(9999999999L)) == 0)
+  test("SPARK-16625: Importing Oracle numeric types") {
+    Seq("true", "false").foreach { flag =>
+      withSQLConf((SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key, flag)) {
+        val df = sqlContext.read.jdbc(jdbcUrl, "numerics", new Properties)
+        checkAnswer(df, Seq(Row(BigDecimal.valueOf(4), BigDecimal.valueOf(1.23),
+          BigDecimal.valueOf(9999999999L), BigDecimal.valueOf(7456100))))
+      }
+    }
   }
 
 
@@ -359,7 +355,9 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
     val e = intercept[org.apache.spark.SparkArithmeticException] {
       spark.read.jdbc(jdbcUrl, "tableWithCustomSchema", new Properties()).collect()
     }
-    assert(e.getMessage.contains("Decimal precision 39 exceeds max precision 38"))
+    assert(e.getMessage.contains(
+      "The 12312321321321312312312312123.0000000000 rounded half up from" +
+        " 12312321321321312312312312123 cannot be represented as Decimal(38, 10)"))
 
     // custom schema can read data
     val props = new Properties()

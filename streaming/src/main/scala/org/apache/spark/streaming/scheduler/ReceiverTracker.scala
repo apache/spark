@@ -24,7 +24,8 @@ import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success}
 
 import org.apache.spark._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{ERROR, STREAM_ID}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler.{ExecutorCacheTaskLocation, TaskLocation}
@@ -330,7 +331,8 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     } else {
       s"$message"
     }
-    logError(s"Deregistered receiver for stream $streamId: $messageWithError")
+    logError(log"Deregistered receiver for stream ${MDC(STREAM_ID, streamId)}: " +
+      log"${MDC(ERROR, messageWithError)}")
   }
 
   /** Update a receiver's maximum ingestion rate */
