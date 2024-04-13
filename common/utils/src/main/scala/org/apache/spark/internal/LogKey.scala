@@ -140,6 +140,7 @@ object LogKey extends Enumeration {
   val REDUCE_ID = Value
   val RELATION_NAME = Value
   val REMAINING_PARTITIONS = Value
+  val RESOURCE_NAME = Value
   val RETRY_COUNT = Value
   val RETRY_INTERVAL = Value
   val RPC_ADDRESS = Value
