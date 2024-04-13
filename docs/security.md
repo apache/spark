@@ -165,7 +165,7 @@ The following table describes the different options available for configuring th
   <td><code>spark.network.crypto.authEngineVersion</code></td>
   <td>1</td>
   <td>Version of AES-based RPC encryption to use. Valid versions are 1 or 2. Version 2 is recommended.</td>
-  <td>3.4.3</td>
+  <td>3.4.3, 3.5.2</td>
 </tr>
 <tr>
   <td><code>spark.network.crypto.config.*</code></td>
