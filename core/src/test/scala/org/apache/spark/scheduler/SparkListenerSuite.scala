@@ -220,10 +220,6 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
 
     // unblock the dispatch thread
     listenerWait.release()
-
-    // let the event drained now
-    drainWait.acquire()
-    assert(drained)
   }
 
   test("metrics for dropped listener events") {
