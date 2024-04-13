@@ -24,6 +24,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.streaming.{ListState, MapState, QueryInfo, StatefulProcessorHandle, TimeMode, TTLConfig, ValueState}
 import org.apache.spark.util.Utils
@@ -73,6 +74,8 @@ class QueryInfoImpl(
  * @param runId - unique id for the current run
  * @param keyEncoder - encoder for the key
  * @param isStreaming - defines whether the query is streaming or batch
+ * @param batchTimestampMs - timestamp for the current batch if available
+ * @param metrics - metrics to be updated as part of stateful processing
  */
 class StatefulProcessorHandleImpl(
     store: StateStore,
@@ -80,7 +83,8 @@ class StatefulProcessorHandleImpl(
     keyEncoder: ExpressionEncoder[Any],
     timeMode: TimeMode,
     isStreaming: Boolean = true,
-    batchTimestampMs: Option[Long] = None)
+    batchTimestampMs: Option[Long] = None,
+    metrics: Map[String, SQLMetric] = Map.empty)
   extends StatefulProcessorHandle with Logging {
   import StatefulProcessorHandleState._
 
@@ -111,6 +115,10 @@ class StatefulProcessorHandleImpl(
 
   private var currState: StatefulProcessorHandleState = CREATED
 
+  private def incrementMetric(metricName: String): Unit = {
+    metrics.get(metricName).foreach(_.add(1))
+  }
+
   def setHandleState(newState: StatefulProcessorHandleState): Unit = {
     currState = newState
   }
@@ -121,8 +129,9 @@ class StatefulProcessorHandleImpl(
       stateName: String,
       valEncoder: Encoder[T]): ValueState[T] = {
     verifyStateVarOperations("get_value_state")
-
-    new ValueStateImpl[T](store, stateName, keyEncoder, valEncoder)
+    incrementMetric("numValueStateVars")
+    val resultState = new ValueStateImpl[T](store, stateName, keyEncoder, valEncoder)
+    resultState
   }
 
   override def getValueState[T](
@@ -135,8 +144,8 @@ class StatefulProcessorHandleImpl(
     assert(batchTimestampMs.isDefined)
     val valueStateWithTTL = new ValueStateImplWithTTL[T](store, stateName,
       keyEncoder, valEncoder, ttlConfig, batchTimestampMs.get)
+    incrementMetric("numValueStateWithTTLVars")
     ttlStates.add(valueStateWithTTL)
-
     valueStateWithTTL
   }
 
@@ -169,6 +178,7 @@ class StatefulProcessorHandleImpl(
    */
   override def registerTimer(expiryTimestampMs: Long): Unit = {
     verifyTimerOperations("register_timer")
+    incrementMetric("numRegisteredTimers")
     timerState.registerTimer(expiryTimestampMs)
   }
 
@@ -178,6 +188,7 @@ class StatefulProcessorHandleImpl(
    */
   override def deleteTimer(expiryTimestampMs: Long): Unit = {
     verifyTimerOperations("delete_timer")
+    incrementMetric("numDeletedTimers")
     timerState.deleteTimer(expiryTimestampMs)
   }
 
@@ -209,8 +220,9 @@ class StatefulProcessorHandleImpl(
    * which is expired will be cleaned up from StateStore.
    */
   def doTtlCleanup(): Unit = {
+    val numValuesRemovedDueToTTLExpiry = metrics.get("numValuesRemovedDueToTTLExpiry").get
     ttlStates.forEach { s =>
-      s.clearExpiredState()
+      numValuesRemovedDueToTTLExpiry += s.clearExpiredState()
     }
   }
 
@@ -221,11 +233,14 @@ class StatefulProcessorHandleImpl(
    */
   override def deleteIfExists(stateName: String): Unit = {
     verifyStateVarOperations("delete_if_exists")
-    store.removeColFamilyIfExists(stateName)
+    if (store.removeColFamilyIfExists(stateName)) {
+      incrementMetric("numDeletedStateVars")
+    }
   }
 
   override def getListState[T](stateName: String, valEncoder: Encoder[T]): ListState[T] = {
     verifyStateVarOperations("get_list_state")
+    incrementMetric("numListStateVars")
     val resultState = new ListStateImpl[T](store, stateName, keyEncoder, valEncoder)
     resultState
   }
@@ -235,6 +250,7 @@ class StatefulProcessorHandleImpl(
       userKeyEnc: Encoder[K],
       valEncoder: Encoder[V]): MapState[K, V] = {
     verifyStateVarOperations("get_map_state")
+    incrementMetric("numMapStateVars")
     val resultState = new MapStateImpl[K, V](store, stateName, keyEncoder, userKeyEnc, valEncoder)
     resultState
   }

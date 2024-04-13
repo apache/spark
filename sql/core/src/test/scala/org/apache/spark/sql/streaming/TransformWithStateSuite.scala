@@ -349,6 +349,10 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       testStream(result, OutputMode.Update())(
         AddData(inputData, "a"),
         CheckNewAnswer(("a", "1")),
+        Execute { q =>
+          assert(q.lastProgress.stateOperators(0).customMetrics.get("numValueStateVars") > 0)
+          assert(q.lastProgress.stateOperators(0).customMetrics.get("numRegisteredTimers") == 0)
+        },
         AddData(inputData, "a", "b"),
         CheckNewAnswer(("a", "2"), ("b", "1")),
         StopStream,
@@ -381,7 +385,10 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         AddData(inputData, "a"),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("a", "1")),
-
+        Execute { q =>
+          assert(q.lastProgress.stateOperators(0).customMetrics.get("numValueStateVars") > 0)
+          assert(q.lastProgress.stateOperators(0).customMetrics.get("numRegisteredTimers") === 1)
+        },
         AddData(inputData, "b"),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("b", "1")),
@@ -463,6 +470,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         AddData(inputData, "a"),
         AdvanceManualClock(6 * 1000),
         CheckNewAnswer(("a", "2")), // at ts = 7, first timer expires and produces ("a", "2")
+
         AddData(inputData, "a"),
         AdvanceManualClock(5 * 1000),
         CheckNewAnswer(("a", "3")), // at ts = 12, second timer expires and produces ("a", "3")
@@ -507,7 +515,17 @@ class TransformWithStateSuite extends StateStoreMetricsTest
 
       AddData(inputData, ("b", 31)), // Add data newer than watermark for "b", not "a"
       // Watermark = 31 - 10 = 21, so "a" should be timed out as timeout timestamp for "a" is 20.
-      CheckNewAnswer(("a", -1), ("b", 31)) // State for "a" should timeout and emit -1
+      CheckNewAnswer(("a", -1), ("b", 31)), // State for "a" should timeout and emit -1
+      Execute { q =>
+        // Filter for idle progress events and then verify the custom metrics for stateful operator
+        val progData = q.recentProgress.filter(prog => prog.stateOperators.size > 0)
+        assert(progData.filter(prog =>
+          prog.stateOperators(0).customMetrics.get("numValueStateVars") > 0).size > 0)
+        assert(progData.filter(prog =>
+          prog.stateOperators(0).customMetrics.get("numRegisteredTimers") > 0).size > 0)
+        assert(progData.filter(prog =>
+          prog.stateOperators(0).customMetrics.get("numDeletedTimers") > 0).size > 0)
+      }
     )
   }
 
@@ -566,6 +584,10 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           AddData(inputData, ("a", "str2"), ("b", "str3")),
           CheckNewAnswer(("a", "str1"),
             ("b", "")), // should not factor in previous count state
+          Execute { q =>
+            assert(q.lastProgress.stateOperators(0).customMetrics.get("numValueStateVars") > 0)
+            assert(q.lastProgress.stateOperators(0).customMetrics.get("numDeletedStateVars") > 0)
+          },
           StopStream
         )
       }
