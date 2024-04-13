@@ -178,7 +178,27 @@ class CollationStringExpressionsSuite
     })
   }
 
-  test("left/right/substr on collated proper string returns proper value") { // scalastyle:ignore
+  test("left/right/substr on implicitly collated string returns proper value and type") {
+    case class QTestCase(query: String, collation: String, result: Row)
+    val longString = "In the course of human events"
+    val checks = Seq("utf8_binary_lcase", "utf8_binary", "unicode", "unicode_ci").flatMap(
+      c => Seq(
+        QTestCase(s"select left(left('$longString' collate " + c + ", 5), 1)", c, Row("I")),
+        QTestCase(s"select right(right('$longString' collate " + c + ", 5), 1)", c, Row("s")),
+        QTestCase(
+          s"select substr(substr('$longString' collate " + c + ", 4), 2)", c,
+          Row("he course of human events"))
+      )
+    )
+
+    checks.foreach { check =>
+      // Result & data type
+      checkAnswer(sql(check.query), check.result)
+      assert(sql(check.query).schema.fields.head.dataType.sameType(StringType(check.collation)))
+    }
+  }
+
+  test("left/right/substr on explicitly collated proper string returns proper value and type") {
     case class QTestCase(query: String, collation: String, result: Row)
     val checks = Seq("utf8_binary_lcase", "utf8_binary", "unicode", "unicode_ci").flatMap(
       c => Seq(
@@ -217,12 +237,12 @@ class CollationStringExpressionsSuite
 
     checks.foreach { check =>
       // Result & data type
-      checkAnswer(sql(check.query), Row(check.result))
+      checkAnswer(sql(check.query), check.result)
       assert(sql(check.query).schema.fields.head.dataType.sameType(StringType(check.collation)))
     }
   }
 
-  test("left/right/substr on collated improper string returns proper value") {
+  test("left/right/substr on explicitly collated improper string returns proper value and type") {
     case class QTestCase(query: String, collation: String, result: Row)
     val checks = Seq("utf8_binary_lcase", "utf8_binary", "unicode", "unicode_ci").flatMap(
       c => Seq(
@@ -238,12 +258,12 @@ class CollationStringExpressionsSuite
     )
     checks.foreach(check => {
       // Result & data type
-      checkAnswer(sql(check.query), Row(check.result))
+      checkAnswer(sql(check.query), check.result)
       assert(sql(check.query).schema.fields.head.dataType.sameType(StringType(check.collation)))
     })
   }
 
-  test("left/right/substr on collated improper length and position returns proper value") {
+  test("left/right/substr on explicitly collated improper length & position") {
     case class QTestCase(query: String, collation: String, result: Row)
     val checks = Seq("utf8_binary_lcase", "utf8_binary", "unicode", "unicode_ci").flatMap(
       c => Seq(
@@ -257,43 +277,28 @@ class CollationStringExpressionsSuite
     )
     checks.foreach(check => {
       // Result & data type
-      checkAnswer(sql(check.query), Row(check.result))
+      checkAnswer(sql(check.query), check.result)
       assert(sql(check.query).schema.fields.head.dataType.sameType(StringType(check.collation)))
     })
   }
 
-  test("left/right/substr on session-collated string returns proper type") {
-    Seq("utf8_binary_lcase", "utf8_binary", "unicode", "unicode_ci").foreach { collationName =>
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collationName) {
-        assert(sql("select left('abc', 1)")
-          .schema.fields.head.dataType.sameType(StringType(collationName)))
-        assert(sql("select right('def', 1)")
-          .schema.fields.head.dataType.sameType(StringType(collationName)))
-        assert(sql("select substr('ghi', 1)")
-          .schema.fields.head.dataType.sameType(StringType(collationName)))
+  test("left/right/substr on session-collated string returns proper and value type") {
+    case class QTestCase(query: String, collation: String, result: Row)
+    val checks = Seq("utf8_binary_lcase", "utf8_binary", "unicode", "unicode_ci")
+      .flatMap { c =>
+        Seq(
+          QTestCase("select left('abc', 1)", c, Row("a")),
+          QTestCase("select right('def', 1)", c, Row("f")),
+          QTestCase("select substr('ghi', 1)", c, Row("ghi"))
+        )
       }
-    }
-  }
-
-  test("left/right/substr on collated improper string returns proper type") {
-    Seq("utf8_binary_lcase", "utf8_binary", "unicode", "unicode_ci").foreach { collationName =>
-      assert(sql(s"select left(null collate $collationName, 1)")
-        .schema.fields.head.dataType.sameType(StringType(collationName)))
-      assert(sql(s"select right(null collate $collationName, 1)")
-        .schema.fields.head.dataType.sameType(StringType(collationName)))
-      assert(sql(s"select substr(null collate $collationName, 1)")
-        .schema.fields.head.dataType.sameType(StringType(collationName)))
-    }
-  }
-  test("left/right/substr on collated proper string returns proper type") {
-    Seq("utf8_binary_lcase", "utf8_binary", "unicode", "unicode_ci").foreach { collationName =>
-      assert(sql(s"select left('hij' collate $collationName, 1)")
-        .schema.fields.head.dataType.sameType(StringType(collationName)))
-      assert(sql(s"select right('klm' collate $collationName, 1)")
-        .schema.fields.head.dataType.sameType(StringType(collationName)))
-      assert(sql(s"select substr('nop' collate $collationName, 1)")
-        .schema.fields.head.dataType.sameType(StringType(collationName)))
-    }
+    checks.foreach(check => {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> check.collation) {
+        // Result & data type
+        checkAnswer(sql(check.query), check.result)
+        assert(sql(check.query).schema.fields.head.dataType.sameType(StringType(check.collation)))
+      }
+    })
   }
 
   // TODO: Add more tests for other string expressions
