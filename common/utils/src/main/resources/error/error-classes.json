@@ -2621,6 +2621,12 @@
     ],
     "sqlState" : "42000"
   },
+  "INVALID_SINGLE_VARIANT_COLUMN" : {
+    "message" : [
+      "The `singleVariantColumn` option cannot be used if there is also a user specified schema."
+    ],
+    "sqlState" : "42613"
+  },
   "INVALID_SQL_ARG" : {
     "message" : [
       "The argument <name> of `sql()` is invalid. Consider to replace it either by a SQL literal or by collection constructor functions such as `map()`, `array()`, `struct()`."
