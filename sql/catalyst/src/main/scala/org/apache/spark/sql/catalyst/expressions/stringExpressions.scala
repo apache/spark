@@ -1987,10 +1987,10 @@ case class Right(str: Expression, len: Expression) extends RuntimeReplaceable
 
   override lazy val replacement: Expression = If(
     IsNull(str),
-    Literal(null, StringType),
+    Literal(null, str.dataType),
     If(
       LessThanOrEqual(len, Literal(0)),
-      Literal(UTF8String.EMPTY_UTF8, StringType),
+      Literal(UTF8String.EMPTY_UTF8, str.dataType),
       new Substring(str, UnaryMinus(len))
     )
   )
