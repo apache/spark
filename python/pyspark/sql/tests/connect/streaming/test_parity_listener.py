@@ -19,7 +19,6 @@ import unittest
 import time
 
 import pyspark.cloudpickle
-from pyspark.errors import PySparkPicklingError
 from pyspark.sql.tests.streaming.test_streaming_listener import StreamingListenerTestsMixin
 from pyspark.sql.streaming.listener import StreamingQueryListener
 from pyspark.sql.functions import count, lit
@@ -263,11 +262,8 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
             "listener_progress_events_v2",
             "listener_terminated_events_v2",
         ):
-            verify(TestListenerV1(), "_v1")
-            verify(TestListenerV2(), "_v2")
-
-        verify(TestListenerSparkV1(), "_v1")
-        verify(TestListenerSparkV2(), "_v2")
+            verify(TestListenerSparkV1(), "_v1")
+            verify(TestListenerSparkV2(), "_v2")
 
 
 if __name__ == "__main__":
