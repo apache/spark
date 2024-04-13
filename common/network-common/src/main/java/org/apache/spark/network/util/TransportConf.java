@@ -213,6 +213,15 @@ public class TransportConf {
   }
 
   /**
+   * Version number to be used by the AuthEngine key agreement protocol. Valid values are 1 or 2.
+   * The default version is 1 for backward compatibility. Version 2 is recommended for stronger
+   * security properties.
+   */
+  public int authEngineVersion() {
+    return conf.getInt("spark.network.crypto.authEngineVersion", 1);
+  }
+
+  /**
    * The cipher transformation to use for encrypting session data.
    */
   public String cipherTransformation() {
