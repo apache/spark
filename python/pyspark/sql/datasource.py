@@ -630,7 +630,7 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
         self.simple_reader = simple_reader
         self.initial_offset: Optional[dict] = None
         self.current_offset: Optional[dict] = None
-        self.cache: List[Tuple[SimpleInputPartition, Iterator[Tuple]]] = []
+        self.cache: List[PrefetchedCacheEntry] = []
 
     def initialOffset(self) -> dict:
         if self.initial_offset is None:
@@ -641,7 +641,7 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
         # when query start for the first time, use initial offset as the start offset.
         if self.current_offset is None:
             self.current_offset = self.initialOffset()
-        (iter, end) = self.simple_reader.read(self.current_offset)  # type: ignore[arg-type]
+        (iter, end) = self.simple_reader.read(self.current_offset)
         self.cache.append(PrefetchedCacheEntry(self.current_offset, end, iter))
         self.current_offset = end
         return end
