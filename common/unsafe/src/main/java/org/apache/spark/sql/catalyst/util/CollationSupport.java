@@ -138,7 +138,8 @@ public final class CollationSupport {
   }
 
   public static class IndexOf {
-    public static int exec(final UTF8String l, final UTF8String r, final int start, final int collationId) {
+    public static int exec(final UTF8String l, final UTF8String r, final int start,
+        final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
       if (collation.supportsBinaryEquality) {
         return execBinary(l, r, start);
@@ -148,7 +149,8 @@ public final class CollationSupport {
         return execICU(l, r, start, collationId);
       }
     }
-    public static String genCode(final String l, final String r, final int start, final int collationId) {
+    public static String genCode(final String l, final String r, final int start,
+        final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
       String expr = "CollationSupport.IndexOf.exec";
       if (collation.supportsBinaryEquality) {
