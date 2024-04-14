@@ -176,20 +176,27 @@ object RandomDataGenerator {
    * @param rand an optional random number generator
    * @param validJulianDatetime whether to generate dates and timestamps that are valid
    *                            in the Julian calendar.
+   * @param maxStringLength the maximum length for StringType
+   * @param maxArrayLength the maximum size for ArrayType
+   * @param maxMapLength the maximum size of MapType
    * @return a function which can be called to generate random values.
    */
   def forType(
       dataType: DataType,
       nullable: Boolean = true,
       rand: Random = new Random,
-      validJulianDatetime: Boolean = false): Option[() => Any] = {
+      validJulianDatetime: Boolean = false,
+      maxStringLength: Int = MAX_STR_LEN,
+      maxArrayLength: Int = MAX_ARR_SIZE,
+      maxMapLength: Int = MAX_MAP_SIZE): Option[() => Any] = {
     val valueGenerator: Option[() => Any] = dataType match {
-      case StringType => Some(() => rand.nextString(rand.nextInt(MAX_STR_LEN)))
-      case BinaryType => Some(() => {
-        val arr = new Array[Byte](rand.nextInt(MAX_STR_LEN))
-        rand.nextBytes(arr)
-        arr
-      })
+      case StringType => Some(() => rand.nextString(rand.nextInt(maxStringLength)))
+      case BinaryType =>
+        Some(() => {
+          val arr = new Array[Byte](rand.nextInt(maxStringLength))
+          rand.nextBytes(arr)
+          arr
+        })
       case BooleanType => Some(() => rand.nextBoolean())
       case DateType =>
         def uniformDaysRand(rand: Random): Int = {
@@ -232,12 +239,10 @@ object RandomDataGenerator {
               }
               LocalDate.ofEpochDay(days)
             },
-            specialDates.map(LocalDate.parse))
+            specialDates.map(LocalDate.parse)
+          )
         } else {
-          randomNumeric[java.sql.Date](
-            rand,
-            getRandomDate,
-            specialDates.map(java.sql.Date.valueOf))
+          randomNumeric[java.sql.Date](rand, getRandomDate, specialDates.map(java.sql.Date.valueOf))
         }
       case TimestampType =>
         def getRandomTimestamp(rand: Random): java.sql.Timestamp = {
@@ -266,12 +271,14 @@ object RandomDataGenerator {
             specialTs.map { s =>
               val ldt = LocalDateTime.parse(s.replace(" ", "T"))
               ldt.atZone(ZoneId.systemDefault()).toInstant
-            })
+            }
+          )
         } else {
           randomNumeric[java.sql.Timestamp](
             rand,
             getRandomTimestamp,
-            specialTs.map(java.sql.Timestamp.valueOf))
+            specialTs.map(java.sql.Timestamp.valueOf)
+          )
         }
       case TimestampNTZType =>
         randomNumeric[LocalDateTime](
@@ -279,14 +286,17 @@ object RandomDataGenerator {
           (rand: Random) => {
             DateTimeUtils.microsToLocalDateTime(uniformMicrosRand(rand))
           },
-          specialTs.map { s => LocalDateTime.parse(s.replace(" ", "T")) }
+          specialTs.map { s =>
+            LocalDateTime.parse(s.replace(" ", "T"))
+          }
         )
-      case CalendarIntervalType => Some(() => {
-        val months = rand.nextInt(1000)
-        val days = rand.nextInt(10000)
-        val ns = rand.nextLong()
-        new CalendarInterval(months, days, ns)
-      })
+      case CalendarIntervalType =>
+        Some(() => {
+          val months = rand.nextInt(1000)
+          val days = rand.nextInt(10000)
+          val ns = rand.nextLong()
+          new CalendarInterval(months, days, ns)
+        })
       case DayTimeIntervalType(_, DAY) =>
         val mircoSeconds = rand.nextLong()
         Some(() => Duration.of(mircoSeconds - mircoSeconds % MICROS_PER_DAY, ChronoUnit.MICROS))
@@ -301,43 +311,94 @@ object RandomDataGenerator {
       case YearMonthIntervalType(_, YEAR) =>
         Some(() => Period.ofYears(rand.nextInt() / MONTHS_PER_YEAR).normalized())
       case YearMonthIntervalType(_, _) => Some(() => Period.ofMonths(rand.nextInt()).normalized())
-      case DecimalType.Fixed(precision, scale) => Some(
-        () => BigDecimal.apply(
-          rand.nextLong() % math.pow(10, precision).toLong,
-          scale,
-          new MathContext(precision)).bigDecimal)
-      case DoubleType => randomNumeric[Double](
-        rand, r => longBitsToDouble(r.nextLong()), Seq(Double.MinValue, Double.MinPositiveValue,
-          Double.MaxValue, Double.PositiveInfinity, Double.NegativeInfinity, Double.NaN, 0.0, -0.0))
-      case FloatType => randomNumeric[Float](
-        rand, r => intBitsToFloat(r.nextInt()), Seq(Float.MinValue, Float.MinPositiveValue,
-          Float.MaxValue, Float.PositiveInfinity, Float.NegativeInfinity, Float.NaN, 0.0f, -0.0f))
-      case ByteType => randomNumeric[Byte](
-        rand, _.nextInt().toByte, Seq(Byte.MinValue, Byte.MaxValue, 0.toByte))
-      case IntegerType => randomNumeric[Int](
-        rand, _.nextInt(), Seq(Int.MinValue, Int.MaxValue, 0))
-      case LongType => randomNumeric[Long](
-        rand, _.nextLong(), Seq(Long.MinValue, Long.MaxValue, 0L))
-      case ShortType => randomNumeric[Short](
-        rand, _.nextInt().toShort, Seq(Short.MinValue, Short.MaxValue, 0.toShort))
+      case DecimalType.Fixed(precision, scale) =>
+        Some(
+          () =>
+            BigDecimal
+              .apply(
+                rand.nextLong() % math.pow(10, precision).toLong,
+                scale,
+                new MathContext(precision)
+              )
+              .bigDecimal
+        )
+      case DoubleType =>
+        randomNumeric[Double](
+          rand,
+          r => longBitsToDouble(r.nextLong()),
+          Seq(
+            Double.MinValue,
+            Double.MinPositiveValue,
+            Double.MaxValue,
+            Double.PositiveInfinity,
+            Double.NegativeInfinity,
+            Double.NaN,
+            0.0,
+            -0.0
+          )
+        )
+      case FloatType =>
+        randomNumeric[Float](
+          rand,
+          r => intBitsToFloat(r.nextInt()),
+          Seq(
+            Float.MinValue,
+            Float.MinPositiveValue,
+            Float.MaxValue,
+            Float.PositiveInfinity,
+            Float.NegativeInfinity,
+            Float.NaN,
+            0.0f,
+            -0.0f
+          )
+        )
+      case ByteType =>
+        randomNumeric[Byte](rand, _.nextInt().toByte, Seq(Byte.MinValue, Byte.MaxValue, 0.toByte))
+      case IntegerType => randomNumeric[Int](rand, _.nextInt(), Seq(Int.MinValue, Int.MaxValue, 0))
+      case LongType =>
+        randomNumeric[Long](rand, _.nextLong(), Seq(Long.MinValue, Long.MaxValue, 0L))
+      case ShortType =>
+        randomNumeric[Short](
+          rand,
+          _.nextInt().toShort,
+          Seq(Short.MinValue, Short.MaxValue, 0.toShort)
+        )
       case NullType => Some(() => null)
       case ArrayType(elementType, containsNull) =>
-        forType(elementType, nullable = containsNull, rand).map {
-          elementGenerator => () => Seq.fill(rand.nextInt(MAX_ARR_SIZE))(elementGenerator())
+        forType(
+          elementType,
+          nullable = containsNull,
+          rand,
+          maxStringLength = maxStringLength,
+          maxArrayLength = maxArrayLength,
+          maxMapLength = maxMapLength
+        ).map { elementGenerator => () =>
+          Seq.fill(rand.nextInt(maxArrayLength))(elementGenerator())
         }
       case MapType(keyType, valueType, valueContainsNull) =>
-        for (
-          keyGenerator <- forType(keyType, nullable = false, rand);
-          valueGenerator <-
-            forType(valueType, nullable = valueContainsNull, rand)
-        ) yield {
-          () => {
-            val length = rand.nextInt(MAX_MAP_SIZE)
+        for (keyGenerator <- forType(
+            keyType,
+            nullable = false,
+            rand,
+            maxStringLength = maxStringLength,
+            maxArrayLength = maxArrayLength,
+            maxMapLength = maxMapLength
+          );
+          valueGenerator <- forType(
+            valueType,
+            nullable = valueContainsNull,
+            rand,
+            maxStringLength = maxStringLength,
+            maxArrayLength = maxArrayLength,
+            maxMapLength = maxMapLength
+          )) yield { () =>
+          {
+            val length = rand.nextInt(maxMapLength)
             val keys = scala.collection.mutable.HashSet(Seq.fill(length)(keyGenerator()): _*)
             // In case the number of different keys is not enough, set a max iteration to avoid
             // infinite loop.
             var count = 0
-            while (keys.size < length && count < MAX_MAP_SIZE) {
+            while (keys.size < length && count < maxMapLength) {
               keys += keyGenerator()
               count += 1
             }
@@ -347,7 +408,14 @@ object RandomDataGenerator {
         }
       case StructType(fields) =>
         val maybeFieldGenerators: Seq[Option[() => Any]] = fields.map { field =>
-          forType(field.dataType, nullable = field.nullable, rand)
+          forType(
+            field.dataType,
+            nullable = field.nullable,
+            rand,
+            maxStringLength = maxStringLength,
+            maxArrayLength = maxArrayLength,
+            maxMapLength = maxMapLength
+          )
         }.toImmutableArraySeq
         if (maybeFieldGenerators.forall(_.isDefined)) {
           val fieldGenerators: Seq[() => Any] = maybeFieldGenerators.map(_.get)
@@ -356,13 +424,20 @@ object RandomDataGenerator {
           None
         }
       case udt: UserDefinedType[_] =>
-        val maybeSqlTypeGenerator = forType(udt.sqlType, nullable, rand)
+        val maybeSqlTypeGenerator = forType(
+          udt.sqlType,
+          nullable,
+          rand,
+          maxStringLength = maxStringLength,
+          maxArrayLength = maxArrayLength,
+          maxMapLength = maxMapLength
+        )
         // Because random data generator at here returns scala value, we need to
         // convert it to catalyst value to call udt's deserialize.
         val toCatalystType = CatalystTypeConverters.createToCatalystConverter(udt.sqlType)
 
-        maybeSqlTypeGenerator.map { sqlTypeGenerator =>
-          () => {
+        maybeSqlTypeGenerator.map { sqlTypeGenerator => () =>
+          {
             val generatedScalaValue = sqlTypeGenerator.apply()
             if (generatedScalaValue == null) {
               null
@@ -375,8 +450,8 @@ object RandomDataGenerator {
     }
     // Handle nullability by wrapping the non-null value generator:
     valueGenerator.map { valueGenerator =>
-      if (nullable) {
-        () => {
+      if (nullable) { () =>
+        {
           if (rand.nextFloat() <= PROBABILITY_OF_NULL) {
             null
           } else {
