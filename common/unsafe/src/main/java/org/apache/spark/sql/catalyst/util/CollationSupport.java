@@ -137,39 +137,39 @@ public final class CollationSupport {
     }
   }
 
-  public static class IndexOf {
-    public static int exec(final UTF8String l, final UTF8String r, final int start,
+  public static class StringLocate {
+    public static int exec(final UTF8String string, final UTF8String substring, final int start,
         final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
       if (collation.supportsBinaryEquality) {
-        return execBinary(l, r, start);
+        return execBinary(string, substring, start);
       } else if (collation.supportsLowercaseEquality) {
-        return execLowercase(l, r, start);
+        return execLowercase(string, substring, start);
       } else {
-        return execICU(l, r, start, collationId);
+        return execICU(string, substring, start, collationId);
       }
     }
-    public static String genCode(final String l, final String r, final int start,
+    public static String genCode(final String string, final String substring, final int start,
         final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
       String expr = "CollationSupport.IndexOf.exec";
       if (collation.supportsBinaryEquality) {
-        return String.format(expr + "Binary(%s, %s, %d)", l, r, start);
+        return String.format(expr + "Binary(%s, %s, %d)", string, substring, start);
       } else if (collation.supportsLowercaseEquality) {
-        return String.format(expr + "Lowercase(%s, %s, %d)", l, r, start);
+        return String.format(expr + "Lowercase(%s, %s, %d)", string, substring, start);
       } else {
-        return String.format(expr + "ICU(%s, %s, %d, %d)", l, r, start, collationId);
+        return String.format(expr + "ICU(%s, %s, %d, %d)", string, substring, start, collationId);
       }
     }
-    public static int execBinary(final UTF8String l, final UTF8String r, final int start) {
-      return l.indexOf(r, start);
+    public static int execBinary(final UTF8String string, final UTF8String substring, final int start) {
+      return string.indexOf(substring, start);
     }
-    public static int execLowercase(final UTF8String l, final UTF8String r, final int start) {
-      return l.toLowerCase().indexOf(r.toLowerCase(), start);
+    public static int execLowercase(final UTF8String string, final UTF8String substring, final int start) {
+      return string.toLowerCase().indexOf(substring.toLowerCase(), start);
     }
-    public static int execICU(final UTF8String l, final UTF8String r, final int start,
+    public static int execICU(final UTF8String string, final UTF8String substring, final int start,
                               final int collationId) {
-      return CollationAwareUTF8String.indexOf(l, r, start, collationId);
+      return CollationAwareUTF8String.indexOf(string, substring, start, collationId);
     }
   }
 

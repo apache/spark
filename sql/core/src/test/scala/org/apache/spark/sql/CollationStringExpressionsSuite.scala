@@ -162,7 +162,7 @@ class CollationStringExpressionsSuite
     })
   }
 
-  test("LOCATE check result on explicitly collated string") {
+  test("Support Locate string expression with collation") {
     def testStringLocate(substring: String, string: String, start: Integer,
                          collationId: Integer, expected: Integer): Unit = {
       val substr = Literal.create(substring, StringType(collationId))

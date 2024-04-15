@@ -1471,8 +1471,8 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
           if (sVal < 1) {
             0
           } else {
-            CollationSupport.IndexOf.exec(l.asInstanceOf[UTF8String], r.asInstanceOf[UTF8String],
-              s.asInstanceOf[Int] - 1, collationId) + 1;
+            CollationSupport.StringLocate.exec(l.asInstanceOf[UTF8String],
+              r.asInstanceOf[UTF8String], s.asInstanceOf[Int] - 1, collationId) + 1;
           }
         }
       }
@@ -1493,7 +1493,7 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
           ${strGen.code}
           if (!${strGen.isNull}) {
             if (${startGen.value} > 0) {
-              ${ev.value} = CollationSupport.IndexOf.exec(${strGen.value},
+              ${ev.value} = CollationSupport.StringLocate.exec(${strGen.value},
               ${substrGen.value}, ${startGen.value} - 1, $collationId) + 1;
             }
           } else {

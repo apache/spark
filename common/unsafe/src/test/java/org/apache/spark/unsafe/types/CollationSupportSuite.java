@@ -249,6 +249,19 @@ public class CollationSupportSuite {
     assertEndsWith("äbćδe", "ÄBcΔÉ", "UNICODE_CI", false);
   }
 
+  private void assertLocate(String substring, String string, Integer start, String collationName,
+        Integer expected) throws SparkException {
+    UTF8String substr = UTF8String.fromString(substring);
+    UTF8String str = UTF8String.fromString(string);
+    int collationId = CollationFactory.collationNameToId(collationName);
+    assertEquals(expected, CollationSupport.StringLocate.exec(str, substr, start, collationId));
+  }
+
+  @Test
+  public void testLocate() throws SparkException {
+
+  }
+
   // TODO: Test more collation-aware string expressions.
 
   /**
