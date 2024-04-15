@@ -16,6 +16,8 @@
  */
 package org.apache.spark.unsafe.types;
 
+import java.util.Arrays;
+
 import org.apache.spark.SparkException;
 import org.apache.spark.sql.catalyst.util.CollationFactory;
 import org.apache.spark.sql.catalyst.util.CollationSupport;
@@ -254,6 +256,82 @@ public class CollationSupportSuite {
   /**
    * Collation-aware regexp expressions.
    */
+
+  @Test
+  public void testStringSplit() throws SparkException {
+    // binary equality
+    assertStringSplit("ABC", "[B]", "UTF8_BINARY", new String[]{"A", "C"});
+    assertStringSplit("ABC", "[b]", "UTF8_BINARY", new String[]{"ABC"});
+    assertStringSplit("aaaa", "", "UTF8_BINARY", new String[]{"a", "a", "a", "a"});
+    assertStringSplit("aaaa", "[a-z]", "UTF8_BINARY", new String[]{"", "", "", "", ""});
+    assertStringSplit("aaaa", "[0-9]", "UTF8_BINARY", new String[]{"aaaa"});
+    assertStringSplit("a1b2", "[a-z0-9]", "UTF8_BINARY", new String[]{"", "", "", "", ""});
+    assertStringSplit("ABC", "[B]", "UNICODE", new String[]{"A", "C"});
+    assertStringSplit("ABC", "[b]", "UNICODE", new String[]{"ABC"});
+    assertStringSplit("aaaa", "", "UNICODE", new String[]{"a", "a", "a", "a"});
+    assertStringSplit("aaaa", "[a-z]", "UNICODE", new String[]{"", "", "", "", ""});
+    assertStringSplit("aaaa", "[0-9]", "UNICODE", new String[]{"aaaa"});
+    assertStringSplit("a1b2", "[a-z0-9]", "UNICODE", new String[]{"", "", "", "", ""});
+    // non-binary equality (lowercase)
+    assertStringSplit("ABC", "[B]", "UTF8_BINARY_LCASE", new String[]{"A", "C"});
+    assertStringSplit("ABC", "[b]", "UTF8_BINARY_LCASE", new String[]{"A", "C"});
+    assertStringSplit("aaaa", "", "UTF8_BINARY_LCASE", new String[]{"a", "a", "a", "a"});
+    assertStringSplit("aaaa", "[a-z]", "UTF8_BINARY_LCASE", new String[]{"", "", "", "", ""});
+    assertStringSplit("aaaa", "[0-9]", "UTF8_BINARY_LCASE", new String[]{"aaaa"});
+    assertStringSplit("a1b2", "[a-z0-9]", "UTF8_BINARY_LCASE", new String[]{"", "", "", "", ""});
+    assertStringSplit("AAA", "[a]", "UTF8_BINARY_LCASE", new String[]{"", "", "", ""});
+    assertStringSplit("AAA", "[b]", "UTF8_BINARY_LCASE", new String[]{"AAA"});
+    assertStringSplit("aAbB", "[ab]", "UTF8_BINARY_LCASE",new String[]{"", "", "", "", ""});
+    assertStringSplit("", "", "UTF8_BINARY_LCASE", new String[]{""});
+    assertStringSplit("", "[a]", "UTF8_BINARY_LCASE", new String[]{""});
+    assertStringSplit("xAxBxaxbx", "[AB]", "UTF8_BINARY_LCASE",
+      new String[]{"x", "x", "x", "x", "x"});
+    assertStringSplit("ABC", "", "UTF8_BINARY_LCASE", new String[]{"A", "B", "C"});
+    // special characters
+    assertStringSplit("ä", "", "UTF8_BINARY", new String[]{"ä"});
+    assertStringSplit("ääää", "", "UTF8_BINARY", new String[]{"ä", "ä", "ä", "ä"});
+    assertStringSplit("äbćδ", "", "UTF8_BINARY", new String[]{"ä", "b", "ć", "δ"});
+    assertStringSplit("äbćδ", "[äbćδ]", "UTF8_BINARY", new String[]{"", "", "", "", ""});
+    assertStringSplit("ä", "", "UTF8_BINARY_LCASE", new String[]{"ä"});
+    assertStringSplit("ääää", "", "UTF8_BINARY_LCASE", new String[]{"ä", "ä", "ä", "ä"});
+    assertStringSplit("äbćδ", "", "UTF8_BINARY_LCASE", new String[]{"ä", "b", "ć", "δ"});
+    assertStringSplit("äbćδ", "[äbćδ]", "UTF8_BINARY_LCASE", new String[]{"", "", "", "", ""});
+    assertStringSplit("äbćδ", "[ÄBĆΔ]", "UTF8_BINARY_LCASE", new String[]{"", "", "", "", ""});
+    assertStringSplit("äbćδ", "[äBćΔ]", "UTF8_BINARY_LCASE", new String[]{"", "", "", "", ""});
+    assertStringSplit("ääää", "Ä", "UTF8_BINARY_LCASE", new String[]{"", "", "", "", ""});
+    assertStringSplit("AäBÄCä", "Ä", "UTF8_BINARY_LCASE", new String[]{"A", "B", "C", ""});
+    assertStringSplit("AäBÄCäD", "Ä", "UTF8_BINARY_LCASE", new String[]{"A", "B", "C", "D"});
+    assertStringSplit("ä", "", "UNICODE", new String[]{"ä"});
+    assertStringSplit("ääää", "", "UNICODE", new String[]{"ä", "ä", "ä", "ä"});
+    assertStringSplit("äbćδ", "", "UNICODE", new String[]{"ä", "b", "ć", "δ"});
+    assertStringSplit("äbćδ", "[äbćδ]", "UNICODE", new String[]{"", "", "", "", ""});
+    // set limit
+    assertStringSplit("ABC", "[B]", 0, "UTF8_BINARY", new String[]{"A", "C"});
+    assertStringSplit("ABC", "[B]", 1, "UTF8_BINARY", new String[]{"ABC"});
+    assertStringSplit("ABC", "[B]", 2, "UTF8_BINARY", new String[]{"A", "C"});
+    assertStringSplit("ABC", "[B]", 3, "UTF8_BINARY", new String[]{"A", "C"});
+    assertStringSplit("ABC", "[b]", 0, "UTF8_BINARY_LCASE", new String[]{"A", "C"});
+    assertStringSplit("ABC", "[b]", 1, "UTF8_BINARY_LCASE", new String[]{"ABC"});
+    assertStringSplit("ABC", "[b]", 2, "UTF8_BINARY_LCASE", new String[]{"A", "C"});
+    assertStringSplit("ABC", "[b]", 3, "UTF8_BINARY_LCASE", new String[]{"A", "C"});
+    assertStringSplit("ABC", "[B]", 0, "UNICODE", new String[]{"A", "C"});
+    assertStringSplit("ABC", "[B]", 1, "UNICODE", new String[]{"ABC"});
+    assertStringSplit("ABC", "[B]", 2, "UNICODE", new String[]{"A", "C"});
+    assertStringSplit("ABC", "[B]", 3, "UNICODE", new String[]{"A", "C"});
+  }
+
+  private void assertStringSplit(String string, String regex, int limit, String collationName,
+      String[] value) throws SparkException {
+    UTF8String[] result = CollationSupport.StringSplit.exec(UTF8String.fromString(string),
+      UTF8String.fromString(regex), limit, CollationFactory.collationNameToId(collationName));
+    String[] actual = Arrays.stream(result).map(UTF8String::toString).toArray(String[]::new);
+    assertArrayEquals(value, actual);
+  }
+
+  private void assertStringSplit(String string, String regex, String collationName,
+      String[] value) throws SparkException {
+    assertStringSplit(string, regex, -1, collationName, value);
+  }
 
   // TODO: Test more collation-aware regexp expressions.
 

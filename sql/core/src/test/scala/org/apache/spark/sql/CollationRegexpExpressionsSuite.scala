@@ -122,18 +122,10 @@ class CollationRegexpExpressionsSuite
       StringSplitTestCase("ABC", "[b]", "UTF8_BINARY", Seq("ABC")),
       StringSplitTestCase("ABC", "[b]", "UTF8_BINARY_LCASE", Seq("A", "C")),
       StringSplitTestCase("AAA", "[a]", "UTF8_BINARY_LCASE", Seq("", "", "", "")),
-      StringSplitTestCase("AAA", "[b]", "UTF8_BINARY_LCASE", Seq("AAA")),
-      StringSplitTestCase("aAbB", "[ab]", "UTF8_BINARY_LCASE", Seq("", "", "", "", "")),
-      StringSplitTestCase("", "", "UTF8_BINARY_LCASE", Seq("")),
-      StringSplitTestCase("", "[a]", "UTF8_BINARY_LCASE", Seq("")),
-      StringSplitTestCase("xAxBxaxbx", "[AB]", "UTF8_BINARY_LCASE", Seq("x", "x", "x", "x", "x")),
-      StringSplitTestCase("ABC", "", "UTF8_BINARY_LCASE", Seq("A", "B", "C")),
-      // test split with limit
-      StringSplitTestCase("ABC", "[b]", "UTF8_BINARY_LCASE", Seq("ABC"), 1),
-      StringSplitTestCase("ABC", "[b]", "UTF8_BINARY_LCASE", Seq("A", "C"), 2),
-      StringSplitTestCase("ABC", "[b]", "UTF8_BINARY_LCASE", Seq("A", "C"), 3),
       StringSplitTestCase("ABC", "[B]", "UNICODE", Seq("A", "C")),
-      StringSplitTestCase("ABC", "[b]", "UNICODE", Seq("ABC"))
+      StringSplitTestCase("ABC", "[b]", "UTF8_BINARY", Seq("ABC"), 1),
+      StringSplitTestCase("ABC", "[b]", "UTF8_BINARY_LCASE", Seq("ABC"), 1),
+      StringSplitTestCase("ABC", "[b]", "UTF8_BINARY_LCASE", Seq("A", "C"), 2)
     )
     testCases.foreach(t => {
       val query = s"SELECT split(collate('${t.l}', '${t.c}'), '${t.r}', ${t.limit})"

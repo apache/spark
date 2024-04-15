@@ -150,6 +150,7 @@ public final class CollationSupport {
       if (collation.supportsBinaryEquality) {
         return execBinary(string, regex, limit);
       } else {
+        assert(collation.supportsLowercaseEquality);
         return execLowercase(string, regex, limit);
       }
     }
