@@ -32,7 +32,8 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 
 import org.apache.spark.{SparkConf, SparkEnv}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
+import org.apache.spark.internal.LogKey.{FILE_VERSION, OP_ID, PARTITION_ID, PATH}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -341,7 +342,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       cleanup()
     } catch {
       case NonFatal(e) =>
-        logWarning(s"Error performing snapshot and cleaning up $this")
+        logWarning(log"Error performing snapshot and cleaning up " + toMessageWithContext)
     }
   }
 
@@ -354,9 +355,13 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       Nil
   }
 
+  private def toMessageWithContext: MessageWithContext = {
+    log"HDFSStateStoreProvider[id = (op=${MDC(OP_ID, stateStoreId.operatorId)}," +
+      log"part=${MDC(PARTITION_ID, stateStoreId.partitionId)}),dir = ${MDC(PATH, baseDir)}]"
+  }
+
   override def toString(): String = {
-    s"HDFSStateStoreProvider[" +
-      s"id = (op=${stateStoreId.operatorId},part=${stateStoreId.partitionId}),dir = $baseDir]"
+    toMessageWithContext.message
   }
 
   /* Internal fields and methods */
@@ -463,9 +468,9 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       return loadedCurrentVersionMap.get
     }
 
-    logWarning(s"The state for version $version doesn't exist in loadedMaps. " +
-      "Reading snapshot file and delta files if needed..." +
-      "Note that this is normal for the first batch of starting query.")
+    logWarning(log"The state for version ${MDC(FILE_VERSION, version)} doesn't exist in " +
+      log"loadedMaps. Reading snapshot file and delta files if needed..." +
+      log"Note that this is normal for the first batch of starting query.")
 
     loadedMapCacheMissCount.increment()
 
@@ -720,7 +725,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       }
     } catch {
       case NonFatal(e) =>
-        logWarning(s"Error doing snapshots for $this", e)
+        logWarning(log"Error doing snapshots for " + toMessageWithContext, e)
     }
   }
 
@@ -751,7 +756,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       }
     } catch {
       case NonFatal(e) =>
-        logWarning(s"Error cleaning up files for $this", e)
+        logWarning(log"Error cleaning up files for " + toMessageWithContext, e)
     }
   }
 
@@ -805,7 +810,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
           case "snapshot" =>
             versionToFiles.put(version, StoreFile(version, path, isSnapshot = true))
           case _ =>
-            logWarning(s"Could not identify file $path for $this")
+            logWarning(log"Could not identify file ${MDC(PATH, path)} for " + toMessageWithContext)
         }
       }
     }

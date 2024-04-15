@@ -26,7 +26,8 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.{SparkContext, TaskContext}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{NUM_EXPECTED_FILES, NUM_FILES}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.BasicWriteJobStatsTracker._
@@ -166,9 +167,9 @@ class BasicWriteTaskStatsTracker(
     }
 
     if (numSubmittedFiles != numFiles) {
-      logWarning(s"Expected $numSubmittedFiles files, but only saw $numFiles. " +
-        "This could be due to the output format not writing empty files, " +
-        "or files being not immediately visible in the filesystem.")
+      logWarning(log"Expected ${MDC(NUM_EXPECTED_FILES, numSubmittedFiles)} files, but only saw " +
+        log"${MDC(NUM_FILES, numFiles)}. This could be due to the output format not writing " +
+        log"empty files, or files being not immediately visible in the filesystem.")
     }
     taskCommitTimeMetric.foreach(_ += taskCommitTime)
     BasicWriteTaskStats(partitions.toSeq, numFiles, numBytes, numRows)

@@ -25,7 +25,8 @@ import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable.ListBuffer
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{HOST, PORT}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
@@ -79,7 +80,7 @@ class TextSocketMicroBatchStream(host: String, port: Int, numPartitions: Int)
             val line = reader.readLine()
             if (line == null) {
               // End of file reached
-              logWarning(s"Stream closed by $host:$port")
+              logWarning(log"Stream closed by ${MDC(HOST, host)}:${MDC(PORT, port)}")
               return
             }
             TextSocketMicroBatchStream.this.synchronized {
