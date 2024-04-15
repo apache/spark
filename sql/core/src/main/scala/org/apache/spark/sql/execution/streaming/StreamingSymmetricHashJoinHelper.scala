@@ -206,7 +206,6 @@ object StreamingSymmetricHashJoinHelper extends Logging {
         oneSideJoinKeys: Seq[Expression],
         otherSideInputAttributes: Seq[Attribute]): Option[JoinStateWatermarkPredicate] = {
       val watermarkAttribute = otherSideInputAttributes.find(_.metadata.contains(delayKey))
-      val isWatermarkDefinedOnInput = watermarkAttribute.isDefined
       val isWatermarkDefinedOnJoinKey = joinKeyOrdinalForWatermark.isDefined
 
       if (isWatermarkDefinedOnJoinKey) { // case 1 and 3 in the StreamingSymmetricHashJoinExec docs
@@ -217,13 +216,13 @@ object StreamingSymmetricHashJoinHelper extends Logging {
         val expr = watermarkExpression(Some(keyExprWithWatermark), eventTimeWatermarkForEviction)
         expr.map(JoinStateKeyWatermarkPredicate.apply _)
 
-      } else if (isWatermarkDefinedOnInput) { // case 2 in the StreamingSymmetricHashJoinExec docs
+      } else if (watermarkAttribute.isDefined) {
+        // case 2 in the StreamingSymmetricHashJoinExec docs
         val stateValueWatermark = StreamingJoinHelper.getStateValueWatermark(
           attributesToFindStateWatermarkFor = AttributeSet(oneSideInputAttributes),
           attributesWithEventWatermark = AttributeSet(otherSideInputAttributes),
           condition,
-          eventTimeWatermarkForEviction
-        )
+          eventTimeWatermarkForEviction)
 
         // For example, if the condition is of the form:
         //    left_time > right_time + INTERVAL 30 MINUTES
