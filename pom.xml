@@ -190,8 +190,8 @@
     <snappy.version>1.1.10.5</snappy.version>
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
     <commons-codec.version>1.16.1</commons-codec.version>
-    <commons-compress.version>1.26.0</commons-compress.version>
-    <commons-io.version>2.16.0</commons-io.version>
+    <commons-compress.version>1.26.1</commons-compress.version>
+    <commons-io.version>2.16.1</commons-io.version>
     <!-- org.apache.commons/commons-lang/-->
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
@@ -214,7 +214,7 @@
     <maven-antrun.version>3.1.0</maven-antrun.version>
     <commons-crypto.version>1.1.0</commons-crypto.version>
     <commons-cli.version>1.6.0</commons-cli.version>
-    <bouncycastle.version>1.77</bouncycastle.version>
+    <bouncycastle.version>1.78</bouncycastle.version>
     <tink.version>1.13.0</tink.version>
     <datasketches.version>5.0.1</datasketches.version>
     <netty.version>4.1.108.Final</netty.version>
@@ -320,7 +320,7 @@
     </extraJavaTestArgs>
     <mariadb.java.client.version>2.7.12</mariadb.java.client.version>
     <mysql.connector.version>8.3.0</mysql.connector.version>
-    <postgresql.version>42.7.2</postgresql.version>
+    <postgresql.version>42.7.3</postgresql.version>
     <db2.jcc.version>11.5.9.0</db2.jcc.version>
     <mssql.jdbc.version>9.4.1.jre8</mssql.jdbc.version>
     <ojdbc11.version>23.3.0.23.09</ojdbc11.version>
@@ -1119,7 +1119,7 @@
       <dependency>
         <groupId>org.json4s</groupId>
         <artifactId>json4s-jackson_${scala.binary.version}</artifactId>
-        <version>3.7.0-M11</version>
+        <version>4.0.7</version>
         <exclusions>
           <exclusion>
             <groupId>com.fasterxml.jackson.core</groupId>

@@ -36,7 +36,7 @@ Python 3.8 and above.
 Using PyPI
 ----------
 
-PySpark installation using `PyPI <https://pypi.org/project/pyspark/>`_ is as follows:
+PySpark installation using `PyPI (pyspark) <https://pypi.org/project/pyspark/>`_ is as follows:
 
 .. code-block:: bash
 
@@ -79,6 +79,19 @@ Supported values in ``PYSPARK_HADOOP_VERSION`` are:
 - ``3``: Spark pre-built for Apache Hadoop 3.3 and later (default)
 
 Note that this installation of PySpark with/without a specific Hadoop version is experimental. It can change or be removed between minor releases.
+
+
+Python Spark Connect Client
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The Python Spark Connect client is a pure Python library that does not rely on any non-Python dependencies such as jars and JRE in your environment.
+To install the Python Spark Connect client via `PyPI (pyspark-connect) <https://pypi.org/project/pyspark-connect/>`_, execute the following command:
+
+.. code-block:: bash
+
+    pip install pyspark-connect
+
+See also `Quickstart: Spark Connect <quickstart_connect.html>`_ for how to use it.
 
 
 Using Conda
@@ -157,7 +170,7 @@ Package                    Supported version Note
 ========================== ========================= ======================================================================================
 `py4j`                     >=0.10.9.7                Required
 `pandas`                   >=1.4.4                   Required for pandas API on Spark and Spark Connect; Optional for Spark SQL
-`pyarrow`                  >=4.0.0                   Required for pandas API on Spark and Spark Connect; Optional for Spark SQL
+`pyarrow`                  >=10.0.0                  Required for pandas API on Spark and Spark Connect; Optional for Spark SQL
 `numpy`                    >=1.21                    Required for pandas API on Spark and MLLib DataFrame-based API; Optional for Spark SQL
 `grpcio`                   >=1.62.0                  Required for Spark Connect
 `grpcio-status`            >=1.62.0                  Required for Spark Connect

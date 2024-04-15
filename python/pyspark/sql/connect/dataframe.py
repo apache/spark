@@ -122,6 +122,28 @@ class DataFrame:
         self._support_repr_html = False
         self._cached_schema: Optional[StructType] = None
 
+    def __reduce__(self) -> Tuple:
+        """
+        Custom method for serializing the DataFrame object using Pickle. Since the DataFrame
+        overrides "__getattr__" method, the default serialization method does not work.
+
+        Returns
+        -------
+        The tuple containing the information needed to reconstruct the object.
+
+        """
+        return (
+            DataFrame,
+            (
+                self._plan,
+                self._session,
+            ),
+            {
+                "_support_repr_html": self._support_repr_html,
+                "_cached_schema": self._cached_schema,
+            },
+        )
+
     def __repr__(self) -> str:
         if not self._support_repr_html:
             (
@@ -2279,7 +2301,7 @@ def _test() -> None:
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.dataframe tests")
-        .remote("local[4]")
+        .remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[4]"))
         .getOrCreate()
     )
 

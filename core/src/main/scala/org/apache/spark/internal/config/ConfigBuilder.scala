@@ -117,12 +117,12 @@ private[spark] class TypedConfigBuilder[T](
   def checkValue(
       validator: T => Boolean,
       errorClass: String,
-      parameters: Map[String, String]): TypedConfigBuilder[T] = {
+      parameters: T => Map[String, String]): TypedConfigBuilder[T] = {
     transform { v =>
       if (!validator(v)) {
         throw new SparkIllegalArgumentException(
           errorClass = "INVALID_CONF_VALUE." + errorClass,
-          messageParameters = parameters ++ Map(
+          messageParameters = parameters(v) ++ Map(
             "confValue" -> v.toString,
             "confName" -> parent.key))
       }

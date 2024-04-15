@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.sql.streaming.{ExpiredTimerInfo, TimeoutMode}
+import org.apache.spark.sql.streaming.{ExpiredTimerInfo, TimeMode}
 
 /**
  * Class that provides a concrete implementation that can be used to provide access to expired
@@ -28,7 +28,7 @@ import org.apache.spark.sql.streaming.{ExpiredTimerInfo, TimeoutMode}
 class ExpiredTimerInfoImpl(
     isValid: Boolean,
     expiryTimeInMsOpt: Option[Long] = None,
-    timeoutMode: TimeoutMode = TimeoutMode.NoTimeouts()) extends ExpiredTimerInfo {
+    timeMode: TimeMode = TimeMode.None()) extends ExpiredTimerInfo {
 
   override def isValid(): Boolean = isValid
 
