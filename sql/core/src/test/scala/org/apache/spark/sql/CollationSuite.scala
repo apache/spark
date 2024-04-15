@@ -988,6 +988,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       val attrRef: AttributeReference = AttributeReference("attr", StringType(collationId))()
       // generate CollationKey for the input string
       val collationKey: CollationKey = CollationKey(attrRef)
+      assert(collationKey.resolved)
       val str: UTF8String = UTF8String.fromString(input)
       assert(collationKey.nullSafeEval(str) === expected)
     }
@@ -1018,6 +1019,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       val attrRef: AttributeReference = AttributeReference("attr", array)()
       // generate CollationKey for the input string
       val collationKey: CollationKey = CollationKey(attrRef)
+      assert(collationKey.resolved)
       val arr: Array[UTF8String] = Array(UTF8String.fromString(input))
       assert(collationKey.nullSafeEval(arr) === expected)
     }
@@ -1099,13 +1101,14 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     assert(originalPlan.groupingExpressions.head == attrRef)
     // plan level rewrite should replace attr with CollationKey in Aggregate logical plan
     val newPlan = RewriteGroupByCollation(originalPlan).asInstanceOf[Aggregate]
+    assert(newPlan.resolved)
     assert(newPlan.groupingExpressions.size == 1)
     assert(newPlan.groupingExpressions.head.isInstanceOf[CollationKey])
     assert(newPlan.groupingExpressions.head.asInstanceOf[CollationKey].expr == attrRef)
   }
 
   test("RewriteGroupByCollation rule works in SQL query analysis") {
-    spark.conf.set("spark.sql.codegen.wholeStage", value = false)
+//    spark.conf.set("spark.sql.codegen.wholeStage", value = false)
     val dataType = StringType(CollationFactory.collationNameToId("UNICODE_CI"))
     val schema = StructType(Seq(StructField("name", dataType)))
     val data = Seq(Row("AA"), Row("aa"), Row("BB"))
@@ -1122,7 +1125,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   }
 
   test("RewriteGroupByCollation rule works in SQL query analysis with array type") {
-    spark.conf.set("spark.sql.codegen.wholeStage", value = false)
+//    spark.conf.set("spark.sql.codegen.wholeStage", value = false)
     val collationId = CollationFactory.collationNameToId("UNICODE_CI")
     val dataType = ArrayType(StringType(collationId))
     val schema = StructType(Seq(StructField("name", dataType)))

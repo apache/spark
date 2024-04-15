@@ -19,13 +19,14 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.util.Locale
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, ExpectsInputTypes, Expression, StringTypeAnyCollation, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, ExpectsInputTypes, Expression, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.First
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.{CollationFactory, GenericArrayData}
-import org.apache.spark.sql.types.{AbstractDataType, ArrayType, DataType, StringType}
+import org.apache.spark.sql.internal.types.{AbstractArrayType, StringTypeAnyCollation}
+import org.apache.spark.sql.types.{AbstractDataType, ArrayType, DataType, StringType, TypeCollection}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -65,7 +66,7 @@ object RewriteGroupByCollation extends Rule[LogicalPlan] {
 
 case class CollationKey(expr: Expression) extends UnaryExpression with ExpectsInputTypes {
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeAnyCollation, ArrayType(StringType))
+    Seq(TypeCollection(StringTypeAnyCollation, AbstractArrayType(StringTypeAnyCollation)))
   override def dataType: DataType = expr.dataType
 
   final lazy val collationId: Int = dataType match {
@@ -124,7 +125,7 @@ case class CollationKey(expr: Expression) extends UnaryExpression with ExpectsIn
       val arrIndex = ctx.freshName("arrIndex")
       nullSafeCodeGen(ctx, ev, eval => {
         s"""
-           |if ($eval instanceof GenericArrayData) {
+           |if ($eval instanceof ArrayData) {
            |  ArrayData $arrData = (ArrayData)$eval;
            |  int $arrLength = $arrData.numElements();
            |  UTF8String[] $arrResult = new UTF8String[$arrLength];
