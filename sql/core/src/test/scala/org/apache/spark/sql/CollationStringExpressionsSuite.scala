@@ -23,7 +23,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.expressions.ExpressionEvalHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{BooleanType, StringType}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, DataType, IntegerType, StringType}
 
 class CollationStringExpressionsSuite
   extends QueryTest
@@ -160,6 +160,78 @@ class CollationStringExpressionsSuite
       // Result & data type
       checkAnswer(sql(query), Row(t.result))
       assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
+    })
+  }
+
+  test("Ascii & UnBase64 expressions with collation") {
+    case class AsciiUnBase64TestCase[R](q: String, dt: DataType, r: R)
+    val testCases = Seq(
+      AsciiUnBase64TestCase("select ascii('a' collate utf8_binary)", IntegerType, Row(97)),
+      AsciiUnBase64TestCase("select ascii('a' collate utf8_binary_lcase)", IntegerType, Row(97)),
+      AsciiUnBase64TestCase("select unbase64('YQ==' collate utf8_binary)", BinaryType,
+        Row(Seq(97))),
+      AsciiUnBase64TestCase("select unbase64('YQ==' collate utf8_binary_lcase)", BinaryType,
+        Row(Seq(97)))
+    )
+    testCases.foreach(t => {
+      // Result & data type
+      checkAnswer(sql(t.q), t.r)
+      assert(sql(t.q).schema.fields.head.dataType.sameType(t.dt))
+    })
+  }
+
+  test("Chr, Base64, Decode & FormatNumber expressions with collation") {
+    case class DefaultCollationTestCase[R](q: String, c: String, r: R)
+    val testCases = Seq(
+      DefaultCollationTestCase("select chr(97)", "UTF8_BINARY", Row("a")),
+      DefaultCollationTestCase("select chr(97)", "UTF8_BINARY_LCASE", Row("a")),
+      DefaultCollationTestCase("select base64('a')", "UTF8_BINARY", Row("YQ==")),
+      DefaultCollationTestCase("select base64('a')", "UTF8_BINARY_LCASE", Row("YQ==")),
+      DefaultCollationTestCase("select decode(encode('a', 'utf-8'), 'utf-8')", "UTF8_BINARY",
+        Row("a")),
+      DefaultCollationTestCase("select decode(encode('a', 'utf-8'), 'utf-8')",
+        "UTF8_BINARY_LCASE", Row("a")),
+      DefaultCollationTestCase("select format_number(123.123, '###.###')", "UTF8_BINARY",
+        Row("123.123")),
+      DefaultCollationTestCase("select format_number(123.123, '###.###')", "UTF8_BINARY_LCASE",
+        Row("123.123"))
+    )
+    testCases.foreach(t => {
+      withSQLConf(SQLConf.DEFAULT_COLLATION.key -> t.c) {
+        // Result & data type
+        checkAnswer(sql(t.q), t.r)
+        assert(sql(t.q).schema.fields.head.dataType.sameType(StringType(t.c)))
+      }
+    })
+  }
+
+  test("Encode, ToBinary & Sentences expressions with collation") {
+    case class EncodeToBinarySentencesTestCase[R](q: String, dt: DataType, r: R)
+    val testCases = Seq(
+      EncodeToBinarySentencesTestCase("select encode('a' collate utf8_binary, 'utf-8')",
+        BinaryType, Row(Seq(97))),
+      EncodeToBinarySentencesTestCase("select encode('a' collate utf8_binary_lcase, 'utf-8')",
+        BinaryType, Row(Seq(97))),
+      EncodeToBinarySentencesTestCase("select to_binary('a' collate utf8_binary, 'utf-8')",
+        BinaryType, Row(Seq(97))),
+      EncodeToBinarySentencesTestCase("select to_binary('a' collate utf8_binary_lcase, 'utf-8')",
+        BinaryType, Row(Seq(97))),
+      EncodeToBinarySentencesTestCase(
+        """
+          |select sentences('Hello, world! Nice day.' collate utf8_binary)
+          |""".stripMargin,
+        ArrayType(ArrayType(StringType)), Row(Seq(Seq("Hello", "world"), Seq("Nice", "day")))),
+      EncodeToBinarySentencesTestCase(
+        """
+          |select sentences('Hello, world! Nice day.' collate utf8_binary_lcase)
+          |""".stripMargin,
+        ArrayType(ArrayType(StringType("UTF8_BINARY_LCASE"))),
+        Row(Seq(Seq("Hello", "world"), Seq("Nice", "day"))))
+    )
+    testCases.foreach(t => {
+      // Result & data type
+      checkAnswer(sql(t.q), t.r)
+      assert(sql(t.q).schema.fields.head.dataType.sameType(t.dt))
     })
   }
 

@@ -2395,7 +2395,7 @@ case class Ascii(child: Expression)
 case class Chr(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
   override def inputTypes: Seq[DataType] = Seq(LongType)
 
   protected override def nullSafeEval(lon: Any): Any = {
@@ -2444,7 +2444,7 @@ case class Chr(child: Expression)
 case class Base64(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
 
   protected override def nullSafeEval(bytes: Any): Any = {
@@ -2669,7 +2669,7 @@ case class StringDecode(bin: Expression, charset: Expression, legacyCharsets: Bo
 
   override def left: Expression = bin
   override def right: Expression = charset
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, StringTypeAnyCollation)
 
   private val supportedCharsets = Set(
@@ -2927,7 +2927,7 @@ case class FormatNumber(x: Expression, d: Expression)
 
   override def left: Expression = x
   override def right: Expression = d
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
   override def nullable: Boolean = true
   override def inputTypes: Seq[AbstractDataType] =
     Seq(NumericType, TypeCollection(IntegerType, StringTypeAnyCollation))
