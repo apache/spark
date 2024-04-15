@@ -751,15 +751,17 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case TransformWithState(
         keyDeserializer, valueDeserializer, groupingAttributes,
-        dataAttributes, statefulProcessor, timeoutMode, outputMode,
-        keyEncoder, outputAttr, child) =>
+        dataAttributes, statefulProcessor, timeMode, outputMode,
+        keyEncoder, outputAttr, child, hasInitialState,
+        initialStateGroupingAttrs, initialStateDataAttrs,
+        initialStateDeserializer, initialState) =>
         val execPlan = TransformWithStateExec(
           keyDeserializer,
           valueDeserializer,
           groupingAttributes,
           dataAttributes,
           statefulProcessor,
-          timeoutMode,
+          timeMode,
           outputMode,
           keyEncoder,
           outputAttr,
@@ -767,7 +769,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           batchTimestampMs = None,
           eventTimeWatermarkForLateEvents = None,
           eventTimeWatermarkForEviction = None,
-          planLater(child))
+          planLater(child),
+          isStreaming = true,
+          hasInitialState,
+          initialStateGroupingAttrs,
+          initialStateDataAttrs,
+          initialStateDeserializer,
+          planLater(initialState))
         execPlan :: Nil
       case _ =>
         Nil
@@ -917,11 +925,15 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           hasInitialState, planLater(initialState), planLater(child)
         ) :: Nil
       case logical.TransformWithState(keyDeserializer, valueDeserializer, groupingAttributes,
-          dataAttributes, statefulProcessor, timeoutMode, outputMode, keyEncoder,
-          outputObjAttr, child) =>
+          dataAttributes, statefulProcessor, timeMode, outputMode, keyEncoder,
+          outputObjAttr, child, hasInitialState,
+          initialStateGroupingAttrs, initialStateDataAttrs,
+          initialStateDeserializer, initialState) =>
         TransformWithStateExec.generateSparkPlanForBatchQueries(keyDeserializer, valueDeserializer,
-          groupingAttributes, dataAttributes, statefulProcessor, timeoutMode, outputMode,
-          keyEncoder, outputObjAttr, planLater(child)) :: Nil
+          groupingAttributes, dataAttributes, statefulProcessor, timeMode, outputMode,
+          keyEncoder, outputObjAttr, planLater(child), hasInitialState,
+          initialStateGroupingAttrs, initialStateDataAttrs,
+          initialStateDeserializer, planLater(initialState)) :: Nil
 
       case _: FlatMapGroupsInPandasWithState =>
         // TODO(SPARK-40443): support applyInPandasWithState in batch query

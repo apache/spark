@@ -22,47 +22,17 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_help_command(self):
-        super().test_help_command()
-
-    # TODO(SPARK-41625): Support Structured Streaming
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_observe_str(self):
-        super().test_observe_str()
-
-    # Spark Connect throws `IllegalArgumentException` when calling `collect` instead of `sample`.
-    def test_sample(self):
-        super().test_sample()
+        df = self.spark.createDataFrame(data=[{"foo": "bar"}, {"foo": "baz"}])
+        super().check_help_command(df)
 
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_toDF_with_schema_string(self):
         super().test_toDF_with_schema_string()
 
-    def test_to_local_iterator_not_fully_consumed(self):
-        self.check_to_local_iterator_not_fully_consumed()
-
-    def test_to_pandas_for_array_of_struct(self):
-        # Spark Connect's implementation is based on Arrow.
-        super().check_to_pandas_for_array_of_struct(True)
-
-    def test_to_pandas_from_null_dataframe(self):
-        self.check_to_pandas_from_null_dataframe()
-
-    def test_to_pandas_on_cross_join(self):
-        self.check_to_pandas_on_cross_join()
-
-    def test_to_pandas_from_empty_dataframe(self):
-        self.check_to_pandas_from_empty_dataframe()
-
-    def test_to_pandas_with_duplicated_column_names(self):
-        self.check_to_pandas_with_duplicated_column_names()
-
-    def test_to_pandas_from_mixed_dataframe(self):
-        self.check_to_pandas_from_mixed_dataframe()
-
-    def test_toDF_with_string(self):
-        super().test_toDF_with_string()
+    @unittest.skip("Spark Connect does not support DataFrameQueryContext currently.")
+    def test_dataframe_error_context(self):
+        super().test_dataframe_error_context()
 
 
 if __name__ == "__main__":

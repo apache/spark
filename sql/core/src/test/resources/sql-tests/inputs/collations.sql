@@ -7,6 +7,9 @@ insert into t1 values('AAA', 'AAA');
 insert into t1 values('bbb', 'bbb');
 insert into t1 values('BBB', 'BBB');
 
+-- describe
+describe table t1;
+
 -- group by and count utf8_binary
 select count(*) from t1 group by utf8_binary;
 
@@ -49,8 +52,8 @@ select col1 collate utf8_binary_lcase from values ('aaa'), ('bbb'), ('BBB'), ('z
 -- create table with struct field
 create table t1 (c1 struct<utf8_binary: string collate utf8_binary, utf8_binary_lcase: string collate utf8_binary_lcase>) USING PARQUET;
 
-INSERT INTO t1 VALUES (named_struct('utf8_binary', 'aaa', 'utf8_binary_lcase', 'aaa'));
-INSERT INTO t1 VALUES (named_struct('utf8_binary', 'AAA', 'utf8_binary_lcase', 'AAA'));
+insert into t1 values (named_struct('utf8_binary', 'aaa', 'utf8_binary_lcase', 'aaa'));
+insert into t1 values (named_struct('utf8_binary', 'AAA', 'utf8_binary_lcase', 'AAA'));
 
 -- aggregate against nested field utf8_binary
 select count(*) from t1 group by c1.utf8_binary;
@@ -59,3 +62,18 @@ select count(*) from t1 group by c1.utf8_binary;
 select count(*) from t1 group by c1.utf8_binary_lcase;
 
 drop table t1;
+
+-- array function tests
+select array_contains(ARRAY('aaa' collate utf8_binary_lcase),'AAA' collate utf8_binary_lcase);
+select array_position(ARRAY('aaa' collate utf8_binary_lcase, 'bbb' collate utf8_binary_lcase),'BBB' collate utf8_binary_lcase);
+
+-- utility
+select nullif('aaa' COLLATE utf8_binary_lcase, 'AAA' COLLATE utf8_binary_lcase);
+select least('aaa' COLLATE utf8_binary_lcase, 'AAA' collate utf8_binary_lcase, 'a' collate utf8_binary_lcase);
+
+-- array operations
+select arrays_overlap(array('aaa' collate utf8_binary_lcase), array('AAA' collate utf8_binary_lcase));
+select array_distinct(array('aaa' collate utf8_binary_lcase, 'AAA' collate utf8_binary_lcase));
+select array_union(array('aaa' collate utf8_binary_lcase), array('AAA' collate utf8_binary_lcase));
+select array_intersect(array('aaa' collate utf8_binary_lcase), array('AAA' collate utf8_binary_lcase));
+select array_except(array('aaa' collate utf8_binary_lcase), array('AAA' collate utf8_binary_lcase));

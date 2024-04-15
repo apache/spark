@@ -173,7 +173,7 @@ private[ui] class StreamingQueryPagedTable(
 
   override def row(query: StructuredStreamingRow): Seq[Node] = {
     val streamingQuery = query.streamingUIData
-    val statisticsLink = "%s/%s/statistics?id=%s"
+    val statisticsLink = "%s/%s/statistics/?id=%s"
       .format(SparkUIUtils.prependBaseUri(request, parent.basePath), parent.prefix,
         streamingQuery.summary.runId)
 

@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Connection, Date, Driver, Statement, Timestamp}
+import java.sql.{Connection, Date, Driver, ResultSetMetaData, Statement, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime}
 import java.util
+import java.util.ServiceLoader
+import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.ArrayBuilder
 import scala.util.control.NonFatal
@@ -33,6 +35,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{localDateTimeToMicros, toJavaTimestampNoRebase}
+import org.apache.spark.sql.catalyst.util.IntervalUtils.{fromDayTimeString, fromYearMonthString, getDuration}
 import org.apache.spark.sql.connector.catalog.{Identifier, TableChange}
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
@@ -46,6 +49,7 @@ import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProv
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 /**
  * :: DeveloperApi ::
@@ -153,6 +157,38 @@ abstract class JdbcDialect extends Serializable with Logging {
    */
   @Since("3.5.0")
   def convertJavaTimestampToTimestamp(t: Timestamp): Timestamp = t
+
+  /**
+   * Converts an instance of `java.sql.Date` to a custom `java.sql.Date` value.
+   * @param d the date value returned from JDBC ResultSet getDate method.
+   * @return the date value after conversion
+   */
+  @Since("4.0.0")
+  def convertJavaDateToDate(d: Date): Date = d
+
+  /**
+   * Converts an year-month interval string to an int value `months`.
+   *
+   * @param yearmonthStr the year-month interval string
+   * @return the number of total months in the interval
+   * @throws IllegalArgumentException if the input string is invalid
+   */
+  @Since("4.0.0")
+  def getYearMonthIntervalAsMonths(yearmonthStr: String): Int = {
+    fromYearMonthString(yearmonthStr).months
+  }
+
+  /**
+   * Converts a day-time interval string to a long value `micros`.
+   *
+   * @param daytimeStr the day-time interval string
+   * @return the number of total microseconds in the interval
+   * @throws IllegalArgumentException if the input string is invalid
+   */
+  @Since("4.0.0")
+  def getDayTimeIntervalAsMicros(daytimeStr: String): Long = {
+    getDuration(fromDayTimeString(daytimeStr), TimeUnit.MICROSECONDS)
+  }
 
   /**
    * Convert java.sql.Timestamp to a LocalDateTime representing the same wall-clock time as the
@@ -788,6 +824,21 @@ abstract class JdbcDialect extends Serializable with Logging {
   protected final def getTimestampType(md: Metadata): DataType = {
     JdbcUtils.getTimestampType(md.getBoolean("isTimestampNTZ"))
   }
+
+  /**
+   * Get extra column metadata for the given column.
+   *
+   * @param conn The connection currently connection being used.
+   * @param rsmd The metadata of the current result set.
+   * @param columnIdx The index of the column.
+   * @param metadata The metadata builder to store the extra column information.
+   */
+  @Since("4.0.0")
+  def updateExtraColumnMeta(
+      conn: Connection,
+      rsmd: ResultSetMetaData,
+      columnIdx: Int,
+      metadata: MetadataBuilder): Unit = {}
 }
 
 /**
@@ -825,16 +876,14 @@ object JdbcDialects {
 
   private[this] var dialects = List[JdbcDialect]()
 
-  registerDialect(MySQLDialect)
-  registerDialect(PostgresDialect)
-  registerDialect(DB2Dialect)
-  registerDialect(MsSqlServerDialect)
-  registerDialect(DerbyDialect)
-  registerDialect(OracleDialect)
-  registerDialect(TeradataDialect)
-  registerDialect(H2Dialect)
-  registerDialect(SnowflakeDialect)
-  registerDialect(DatabricksDialect)
+  private def registerDialects(): Unit = {
+    val loader = ServiceLoader.load(classOf[JdbcDialect], Utils.getContextOrSparkClassLoader)
+    val iter = loader.iterator()
+    while (iter.hasNext) {
+      registerDialect(iter.next())
+    }
+  }
+  registerDialects()
 
   /**
    * Fetch the JdbcDialect class corresponding to a given database url.

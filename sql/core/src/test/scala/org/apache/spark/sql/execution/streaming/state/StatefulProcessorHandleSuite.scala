@@ -17,93 +17,40 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
+import java.time.Duration
 import java.util.UUID
-
-import scala.util.Random
-
-import org.apache.hadoop.conf.Configuration
-import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleState}
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.TimeoutMode
-import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.streaming.{TimeMode, TTLConfig}
+
 
 /**
  * Class that adds tests to verify operations based on stateful processor handle
  * used primarily in queries based on the `transformWithState` operator.
  */
-class StatefulProcessorHandleSuite extends SharedSparkSession
-  with BeforeAndAfter {
-
-  before {
-    StateStore.stop()
-    require(!StateStore.isMaintenanceRunning)
-  }
-
-  after {
-    StateStore.stop()
-    require(!StateStore.isMaintenanceRunning)
-  }
-
-  import StateStoreTestsHelper._
-
-  val schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
-
-  val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
+class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
 
   private def keyExprEncoder: ExpressionEncoder[Any] =
     Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]]
 
-  private def newStoreProviderWithHandle(useColumnFamilies: Boolean):
-    RocksDBStateStoreProvider = {
-    newStoreProviderWithHandle(StateStoreId(newDir(), Random.nextInt(), 0),
-      numColsPrefixKey = 0,
-      useColumnFamilies = useColumnFamilies)
-  }
-
-  private def newStoreProviderWithHandle(
-      storeId: StateStoreId,
-      numColsPrefixKey: Int,
-      sqlConf: Option[SQLConf] = None,
-      conf: Configuration = new Configuration,
-      useColumnFamilies: Boolean = false): RocksDBStateStoreProvider = {
-    val provider = new RocksDBStateStoreProvider()
-    provider.init(
-      storeId, schemaForKeyRow, schemaForValueRow, numColsPrefixKey = numColsPrefixKey,
-      useColumnFamilies,
-      new StateStoreConf(sqlConf.getOrElse(SQLConf.get)), conf)
-    provider
-  }
-
-  private def tryWithProviderResource[T](
-      provider: StateStoreProvider)(f: StateStoreProvider => T): T = {
-    try {
-      f(provider)
-    } finally {
-      provider.close()
+  private def getTimeMode(timeMode: String): TimeMode = {
+    timeMode match {
+      case "None" => TimeMode.None()
+      case "ProcessingTime" => TimeMode.ProcessingTime()
+      case "EventTime" => TimeMode.EventTime()
+      case _ => throw new IllegalArgumentException(s"Invalid timeMode=$timeMode")
     }
   }
 
-  private def getTimeoutMode(timeoutMode: String): TimeoutMode = {
-    timeoutMode match {
-      case "NoTimeouts" => TimeoutMode.NoTimeouts()
-      case "ProcessingTime" => TimeoutMode.ProcessingTime()
-      case "EventTime" => TimeoutMode.EventTime()
-      case _ => throw new IllegalArgumentException(s"Invalid timeoutMode=$timeoutMode")
-    }
-  }
-
-  Seq("NoTimeouts", "ProcessingTime", "EventTime").foreach { timeoutMode =>
-    test(s"value state creation with timeoutMode=$timeoutMode should succeed") {
-      tryWithProviderResource(newStoreProviderWithHandle(true)) { provider =>
+  Seq("None", "ProcessingTime", "EventTime").foreach { timeMode =>
+    test(s"value state creation with timeMode=$timeMode should succeed") {
+      tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
         val store = provider.getStore(0)
         val handle = new StatefulProcessorHandleImpl(store,
-          UUID.randomUUID(), keyExprEncoder, getTimeoutMode(timeoutMode))
+          UUID.randomUUID(), keyExprEncoder, getTimeMode(timeMode))
         assert(handle.getHandleState === StatefulProcessorHandleState.CREATED)
         handle.getValueState[Long]("testState", Encoders.scalaLong)
       }
@@ -138,13 +85,13 @@ class StatefulProcessorHandleSuite extends SharedSparkSession
     handle.registerTimer(1000L)
   }
 
-  Seq("NoTimeouts", "ProcessingTime", "EventTime").foreach { timeoutMode =>
-    test(s"value state creation with timeoutMode=$timeoutMode " +
+  Seq("None", "ProcessingTime", "EventTime").foreach { timeMode =>
+    test(s"value state creation with timeMode=$timeMode " +
       "and invalid state should fail") {
-      tryWithProviderResource(newStoreProviderWithHandle(true)) { provider =>
+      tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
         val store = provider.getStore(0)
         val handle = new StatefulProcessorHandleImpl(store,
-          UUID.randomUUID(), keyExprEncoder, getTimeoutMode(timeoutMode))
+          UUID.randomUUID(), keyExprEncoder, getTimeMode(timeMode))
 
         Seq(StatefulProcessorHandleState.INITIALIZED,
           StatefulProcessorHandleState.DATA_PROCESSED,
@@ -158,21 +105,21 @@ class StatefulProcessorHandleSuite extends SharedSparkSession
     }
   }
 
-  test("registering processing/event time timeouts with NoTimeout mode should fail") {
-    tryWithProviderResource(newStoreProviderWithHandle(true)) { provider =>
+  test("registering processing/event time timeouts with None timeMode should fail") {
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store,
-        UUID.randomUUID(), keyExprEncoder, TimeoutMode.NoTimeouts())
+        UUID.randomUUID(), keyExprEncoder, TimeMode.None())
       val ex = intercept[SparkUnsupportedOperationException] {
         handle.registerTimer(10000L)
       }
 
       checkError(
         ex,
-        errorClass = "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_TIMEOUT_MODE",
+        errorClass = "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_TIME_MODE",
         parameters = Map(
           "operationType" -> "register_timer",
-          "timeoutMode" -> TimeoutMode.NoTimeouts().toString
+          "timeMode" -> TimeMode.None().toString
         ),
         matchPVals = true
       )
@@ -183,22 +130,22 @@ class StatefulProcessorHandleSuite extends SharedSparkSession
 
       checkError(
         ex2,
-        errorClass = "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_TIMEOUT_MODE",
+        errorClass = "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_TIME_MODE",
         parameters = Map(
           "operationType" -> "delete_timer",
-          "timeoutMode" -> TimeoutMode.NoTimeouts().toString
+          "timeMode" -> TimeMode.None().toString
         ),
         matchPVals = true
       )
     }
   }
 
-  Seq("ProcessingTime", "EventTime").foreach { timeoutMode =>
-    test(s"registering timeouts with timeoutMode=$timeoutMode should succeed") {
-      tryWithProviderResource(newStoreProviderWithHandle(true)) { provider =>
+  Seq("ProcessingTime", "EventTime").foreach { timeMode =>
+    test(s"registering timeouts with timeMode=$timeMode should succeed") {
+      tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
         val store = provider.getStore(0)
         val handle = new StatefulProcessorHandleImpl(store,
-          UUID.randomUUID(), keyExprEncoder, getTimeoutMode(timeoutMode))
+          UUID.randomUUID(), keyExprEncoder, getTimeMode(timeMode))
         handle.setHandleState(StatefulProcessorHandleState.INITIALIZED)
         assert(handle.getHandleState === StatefulProcessorHandleState.INITIALIZED)
 
@@ -214,12 +161,12 @@ class StatefulProcessorHandleSuite extends SharedSparkSession
     }
   }
 
-  Seq("ProcessingTime", "EventTime").foreach { timeoutMode =>
-    test(s"verify listing of registered timers with timeoutMode=$timeoutMode") {
-      tryWithProviderResource(newStoreProviderWithHandle(true)) { provider =>
+  Seq("ProcessingTime", "EventTime").foreach { timeMode =>
+    test(s"verify listing of registered timers with timeMode=$timeMode") {
+      tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
         val store = provider.getStore(0)
         val handle = new StatefulProcessorHandleImpl(store,
-          UUID.randomUUID(), keyExprEncoder, getTimeoutMode(timeoutMode))
+          UUID.randomUUID(), keyExprEncoder, getTimeMode(timeMode))
         handle.setHandleState(StatefulProcessorHandleState.DATA_PROCESSED)
         assert(handle.getHandleState === StatefulProcessorHandleState.DATA_PROCESSED)
 
@@ -254,12 +201,12 @@ class StatefulProcessorHandleSuite extends SharedSparkSession
     }
   }
 
-  Seq("ProcessingTime", "EventTime").foreach { timeoutMode =>
-    test(s"registering timeouts with timeoutMode=$timeoutMode and invalid state should fail") {
-      tryWithProviderResource(newStoreProviderWithHandle(true)) { provider =>
+  Seq("ProcessingTime", "EventTime").foreach { timeMode =>
+    test(s"registering timeouts with timeMode=$timeMode and invalid state should fail") {
+      tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
         val store = provider.getStore(0)
         val handle = new StatefulProcessorHandleImpl(store,
-          UUID.randomUUID(), keyExprEncoder, getTimeoutMode(timeoutMode))
+          UUID.randomUUID(), keyExprEncoder, getTimeMode(timeMode))
 
         Seq(StatefulProcessorHandleState.CREATED,
           StatefulProcessorHandleState.TIMER_PROCESSED,
@@ -269,6 +216,36 @@ class StatefulProcessorHandleSuite extends SharedSparkSession
           }
         }
       }
+    }
+  }
+
+  test(s"ttl States are populated for timeMode=ProcessingTime") {
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+      val store = provider.getStore(0)
+      val handle = new StatefulProcessorHandleImpl(store,
+        UUID.randomUUID(), keyExprEncoder, TimeMode.ProcessingTime(),
+        batchTimestampMs = Some(10))
+
+      val valueStateWithTTL = handle.getValueState("testState",
+        Encoders.STRING, TTLConfig(Duration.ofHours(1)))
+
+      // create another state without TTL, this should not be captured in the handle
+      handle.getValueState("testState", Encoders.STRING)
+
+      assert(handle.ttlStates.size() === 1)
+      assert(handle.ttlStates.get(0) === valueStateWithTTL)
+    }
+  }
+
+  test(s"ttl States are not populated for timeMode=None") {
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+      val store = provider.getStore(0)
+      val handle = new StatefulProcessorHandleImpl(store,
+        UUID.randomUUID(), keyExprEncoder, TimeMode.None())
+
+      handle.getValueState("testState", Encoders.STRING)
+
+      assert(handle.ttlStates.isEmpty)
     }
   }
 }

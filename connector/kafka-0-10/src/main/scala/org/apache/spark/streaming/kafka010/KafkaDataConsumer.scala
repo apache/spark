@@ -26,7 +26,8 @@ import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord, KafkaC
 import org.apache.kafka.common.{KafkaException, TopicPartition}
 
 import org.apache.spark.TaskContext
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{KEY, MAX_CAPACITY}
 import org.apache.spark.kafka010.KafkaConfigUpdater
 
 private[kafka010] sealed trait KafkaDataConsumer[K, V] {
@@ -256,8 +257,8 @@ private[kafka010] object KafkaDataConsumer extends Logging {
 
           if (entry.getValue.inUse == false && this.size > maxCapacity) {
             logWarning(
-                s"KafkaConsumer cache hitting max capacity of $maxCapacity, " +
-                s"removing consumer for ${entry.getKey}")
+              log"KafkaConsumer cache hitting max capacity of ${MDC(MAX_CAPACITY, maxCapacity)}, " +
+                log"removing consumer for ${MDC(KEY, entry.getKey)}")
                try {
               entry.getValue.close()
             } catch {

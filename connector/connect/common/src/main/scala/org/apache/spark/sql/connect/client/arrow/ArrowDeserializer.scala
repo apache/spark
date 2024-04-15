@@ -29,10 +29,9 @@ import scala.collection.mutable
 import scala.reflect.ClassTag
 
 import org.apache.arrow.memory.BufferAllocator
-import org.apache.arrow.vector.{FieldVector, VarCharVector, VectorSchemaRoot}
+import org.apache.arrow.vector.{FieldVector, VectorSchemaRoot}
 import org.apache.arrow.vector.complex.{ListVector, MapVector, StructVector}
 import org.apache.arrow.vector.ipc.ArrowReader
-import org.apache.arrow.vector.util.Text
 
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
@@ -467,16 +466,6 @@ object ArrowDeserializers {
   }
 
   private def isTuple(cls: Class[_]): Boolean = cls.getName.startsWith("scala.Tuple")
-
-  private def getString(v: VarCharVector, i: Int): String = {
-    // This is currently a bit heavy on allocations:
-    // - byte array created in VarCharVector.get
-    // - CharBuffer created CharSetEncoder
-    // - char array in String
-    // By using direct buffers and reusing the char buffer
-    // we could get rid of the first two allocations.
-    Text.decode(v.get(i))
-  }
 
   private def loadListIntoBuilder(
       v: ListVector,

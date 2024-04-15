@@ -20,6 +20,8 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.annotation.tailrec
 import scala.util.control.NonFatal
 
+import org.apache.spark.internal.LogKey.JOIN_CONDITION
+import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractFiltersAndInnerJoins}
@@ -262,8 +264,9 @@ object ExtractPythonUDFFromJoinCondition extends Rule[LogicalPlan] with Predicat
       // the new join conditions.
       val (udf, rest) = splitConjunctivePredicates(cond).partition(hasUnevaluablePythonUDF(_, j))
       val newCondition = if (rest.isEmpty) {
-        logWarning(s"The join condition:$cond of the join plan contains PythonUDF only," +
-          s" it will be moved out and the join plan will be turned to cross join.")
+        logWarning(log"The join condition:${MDC(JOIN_CONDITION, cond)} " +
+          log"of the join plan contains PythonUDF only," +
+          log" it will be moved out and the join plan will be turned to cross join.")
         None
       } else {
         Some(rest.reduceLeft(And))

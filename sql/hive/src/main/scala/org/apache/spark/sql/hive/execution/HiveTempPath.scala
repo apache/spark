@@ -31,7 +31,8 @@ import org.apache.hadoop.hive.common.FileUtils
 import org.apache.hadoop.hive.ql.exec.TaskRunner
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.PATH
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.hive.HiveExternalCatalog
@@ -140,7 +141,7 @@ class HiveTempPath(session: SparkSession, val hadoopConf: Configuration, path: P
     } catch {
       case NonFatal(e) =>
         val stagingDir = hadoopConf.get("hive.exec.stagingdir", ".hive-staging")
-        logWarning(s"Unable to delete staging directory: $stagingDir.\n" + e)
+        logWarning(log"Unable to delete staging directory: ${MDC(PATH, stagingDir)}.", e)
     }
   }
 

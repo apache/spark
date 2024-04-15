@@ -23,7 +23,8 @@ import scala.xml.{Node, Unparsed}
 
 import jakarta.servlet.http.HttpServletRequest
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{LOG_TYPE, PATH}
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 import org.apache.spark.util.logging.RollingFileAppender
@@ -174,7 +175,8 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
       (logText, startIndex, endIndex, totalLength)
     } catch {
       case e: Exception =>
-        logError(s"Error getting $logType logs from directory $logDirectory", e)
+        logError(log"Error getting ${MDC(LOG_TYPE, logType)} logs from " +
+          log"directory ${MDC(PATH, logDirectory)}", e)
         ("Error getting logs due to exception: " + e.getMessage, 0, 0, 0)
     }
   }

@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.columnar.CachedBatch
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
+import org.apache.spark.sql.execution.columnar.InMemoryTableScanLike
 import org.apache.spark.sql.execution.exchange._
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
@@ -261,7 +261,7 @@ case class BroadcastQueryStageExec(
 }
 
 /**
- * A table cache query stage whose child is a [[InMemoryTableScanExec]].
+ * A table cache query stage whose child is a [[InMemoryTableScanLike]].
  *
  * @param id the query stage id.
  * @param plan the underlying plan.
@@ -271,7 +271,7 @@ case class TableCacheQueryStageExec(
     override val plan: SparkPlan) extends QueryStageExec {
 
   @transient val inMemoryTableScan = plan match {
-    case i: InMemoryTableScanExec => i
+    case i: InMemoryTableScanLike => i
     case _ =>
       throw SparkException.internalError(s"wrong plan for table cache stage:\n ${plan.treeString}")
   }
@@ -294,5 +294,5 @@ case class TableCacheQueryStageExec(
 
   override protected def doMaterialize(): Future[Any] = future
 
-  override def getRuntimeStatistics: Statistics = inMemoryTableScan.relation.computeStats()
+  override def getRuntimeStatistics: Statistics = inMemoryTableScan.runtimeStatistics
 }
