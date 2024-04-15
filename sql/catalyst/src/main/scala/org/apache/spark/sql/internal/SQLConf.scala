@@ -1610,6 +1610,7 @@ object SQLConf {
     .createWithDefault(StorageLevelMapper.MEMORY_AND_DISK.name())
 
   val DATAFRAME_CACHE_LOG_LEVEL = buildConf("spark.sql.dataframeCache.logLevel")
+    .internal()
     .doc("Configures the log level of Dataframe cache operations, including adding and removing " +
       "entries from Dataframe cache, hit and miss on cache application. The default log " +
       "level is 'trace'. This log should only be used for debugging purposes and not in the " +
