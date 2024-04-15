@@ -140,7 +140,6 @@ class CollationRegexpExpressionsSuite
       // Result & data type
       checkAnswer(sql(query), Row(t.result))
       assert(sql(query).schema.fields.head.dataType.sameType(ArrayType(StringType(t.c))))
-      // TODO: Implicit casting (not currently supported)
     })
     // Unsupported collations
     case class StringSplitTestFail(l: String, r: String, c: String)
@@ -150,7 +149,6 @@ class CollationRegexpExpressionsSuite
       val unsupportedCollation = intercept[AnalysisException] { sql(query) }
       assert(unsupportedCollation.getErrorClass === "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
     })
-    // TODO: Collation mismatch (not currently supported)
   }
 
   test("Support RegExpReplace string expression with collation") {

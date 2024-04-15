@@ -563,10 +563,9 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val arrayClass = classOf[GenericArrayData].getName
-    nullSafeCodeGen(ctx, ev, (str, regex, limit) => {
+    defineCodeGen(ctx, ev, (str, regex, limit) => {
       // Array in java is covariant, so we don't need to cast UTF8String[] to Object[].
-      val genCode = CollationSupport.StringSplit.genCode(str, regex, limit, collationId)
-      s"""${ev.value} = new $arrayClass($genCode);""".stripMargin
+      s"new $arrayClass(${CollationSupport.StringSplit.genCode(str, regex, limit, collationId)})"
     })
   }
 

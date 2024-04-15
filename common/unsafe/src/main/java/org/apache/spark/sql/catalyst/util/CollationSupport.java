@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.catalyst.util;
 
-import java.util.regex.Pattern;
-
 import com.ibm.icu.text.StringSearch;
 
 import org.apache.spark.unsafe.types.UTF8String;
@@ -146,32 +144,37 @@ public final class CollationSupport {
    */
 
   public static class StringSplit {
-    public static UTF8String[] exec(final UTF8String l, final UTF8String r, final int limit,
-        final int collationId) {
+    public static UTF8String[] exec(final UTF8String string, final UTF8String regex,
+        final int limit, final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
       if (collation.supportsBinaryEquality) {
-        return execBinary(l, r, limit);
+        return execBinary(string, regex, limit);
       } else {
-        return execLowercase(l, r, limit);
+        return execLowercase(string, regex, limit);
       }
     }
-    public static String genCode(final String l, final String r, final String limit,
+    public static String genCode(final String string, final String regex, final String limit,
         final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
       String expr = "CollationSupport.StringSplit.exec";
       if (collation.supportsBinaryEquality) {
-        return String.format(expr + "Binary(%s, %s, %s)", l, r, limit);
+        return String.format(expr + "Binary(%s, %s, %s)", string, regex, limit);
       } else {
-        return String.format(expr + "Lowercase(%s, %s, %s)", l, r, limit);
+        return String.format(expr + "Lowercase(%s, %s, %s)", string, regex, limit);
       }
     }
-    public static UTF8String[] execBinary(final UTF8String l, final UTF8String r,
+    public static UTF8String[] execBinary(final UTF8String string, final UTF8String regex,
         final int limit) {
-      return l.split(r, limit);
+      return string.split(regex, limit);
     }
-    public static UTF8String[] execLowercase(final UTF8String l, final UTF8String r,
+    public static UTF8String[] execLowercase(final UTF8String string, final UTF8String regex,
         final int limit) {
-      return l.split(r, limit, Pattern.UNICODE_CASE | Pattern.CASE_INSENSITIVE);
+      if (string.numBytes() != 0 && regex.numBytes() == 0) {
+        return string.split(regex, limit);
+      } else {
+        // ui flags toggle unicode case-insensitive matching
+        return string.split(UTF8String.fromString("(?ui)" + regex.toString()), limit);
+      }
     }
   }
 
