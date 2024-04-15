@@ -130,7 +130,7 @@ class ChannelBuilder:
     ):
         self._interceptors: List[grpc.UnaryStreamClientInterceptor] = []
         self._params: Dict[str, str] = params or dict()
-        self._channel_options: List[Tuple[str, Any]] = ChannelBuilder.GRPC_DEFAULT_OPTIONS
+        self._channel_options: List[Tuple[str, Any]] = ChannelBuilder.GRPC_DEFAULT_OPTIONS.copy()
 
         if channelOptions is not None:
             for key, value in channelOptions:

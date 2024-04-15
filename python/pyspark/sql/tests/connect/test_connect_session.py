@@ -498,7 +498,7 @@ class ChannelBuilderTests(unittest.TestCase):
     def test_channel_options(self):
         # SPARK-47694
         chan = DefaultChannelBuilder(
-            "sc://host", [("grpc.max_send_message_length", 1860000), ("test", "robert")]
+            "sc://host", [("grpc.max_send_message_length", 1860), ("test", "robert")]
         )
         options = chan._channel_options
         self.assertEqual(
@@ -508,7 +508,7 @@ class ChannelBuilderTests(unittest.TestCase):
         )
         self.assertEqual(
             next(v for k, v in options if k == "grpc.max_send_message_length"),
-            1860000,
+            1860,
             "overwrites defaults",
         )
         self.assertEqual(
