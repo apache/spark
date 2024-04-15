@@ -154,6 +154,16 @@ private[spark] object HiveUtils extends Logging {
       .booleanConf
       .createWithDefault(true)
 
+  val CONVERT_INSERTING_UNPARTITIONED_TABLE =
+    buildConf("spark.sql.hive.convertInsertingUnpartitionedTable")
+      .doc("When set to true, and `spark.sql.hive.convertMetastoreParquet` or " +
+        "`spark.sql.hive.convertMetastoreOrc` is true, the built-in ORC/Parquet writer is used" +
+        "to process inserting into unpartitioned ORC/Parquet tables created by using the HiveSQL " +
+        "syntax.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val CONVERT_METASTORE_CTAS = buildConf("spark.sql.hive.convertMetastoreCtas")
     .doc("When set to true,  Spark will try to use built-in data source writer " +
       "instead of Hive serde in CTAS. This flag is effective only if " +

@@ -284,6 +284,43 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
     }
   }
 
+  test("SPARK-47850 ORC conversation could be applied for unpartitioned table insertion") {
+    withTempView("single") {
+      val singleRowDF = Seq((0, "foo")).toDF("key", "value")
+      singleRowDF.createOrReplaceTempView("single")
+      Seq("true", "false").foreach { conversion =>
+        withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "true",
+          HiveUtils.CONVERT_INSERTING_UNPARTITIONED_TABLE.key -> conversion) {
+          withTable("dummy_orc_unpartitioned") {
+            spark.sql(
+              s"""
+                 |CREATE TABLE dummy_orc_unpartitioned(key INT, value STRING)
+                 |STORED AS ORC
+                 """.stripMargin)
+
+            spark.sql(
+              s"""
+                 |INSERT INTO TABLE dummy_orc_unpartitioned
+                 |SELECT key, value FROM single
+                 """.stripMargin)
+
+            val orcUnpartitionedTable = TableIdentifier("dummy_orc_unpartitioned", Some("default"))
+            if (conversion == "true") {
+              // if converted, we refresh the cached relation.
+              assert(getCachedDataSourceTable(orcUnpartitionedTable) === null)
+            } else {
+              // otherwise, not cached.
+              assert(getCachedDataSourceTable(orcUnpartitionedTable) === null)
+            }
+
+            val df = spark.sql("SELECT key, value FROM dummy_orc_unpartitioned WHERE key=0")
+            checkAnswer(df, singleRowDF)
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-32234 read ORC table with column names all starting with '_col'") {
     Seq("native", "hive").foreach { orcImpl =>
       Seq("false", "true").foreach { vectorized =>
