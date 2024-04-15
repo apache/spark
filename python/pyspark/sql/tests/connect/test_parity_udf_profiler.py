@@ -35,7 +35,6 @@ class UDFProfilerParityTests(UDFProfiler2TestsMixin, ReusedConnectTestCase):
         with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
             _do_computation(self.spark, action=action)
 
-        # Without the plan cache, UDF ID will be different for each action
         self.assertEqual(6, len(self.profile_results), str(list(self.profile_results)))
 
         for id in self.profile_results:

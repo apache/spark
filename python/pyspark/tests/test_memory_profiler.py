@@ -280,12 +280,7 @@ class MemoryProfiler2TestsMixin:
             df.collect()
             df.show()
 
-        with self.sql_conf(
-            {
-                "spark.sql.pyspark.udf.profiler": "memory",
-                "spark.connect.session.planCache.enabled": False,
-            }
-        ):
+        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "memory"}):
             _do_computation(self.spark, action=action)
 
         self.assertEqual(3, len(self.profile_results), str(list(self.profile_results)))
