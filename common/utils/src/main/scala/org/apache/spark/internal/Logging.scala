@@ -153,8 +153,40 @@ trait Logging {
     if (log.isDebugEnabled) log.debug(msg)
   }
 
+  protected def logDebug(entry: LogEntry): Unit = {
+    if (log.isDebugEnabled) {
+      withLogContext(entry.context) {
+        log.debug(entry.message)
+      }
+    }
+  }
+
+  protected def logDebug(entry: LogEntry, throwable: Throwable): Unit = {
+    if (log.isDebugEnabled) {
+      withLogContext(entry.context) {
+        log.debug(entry.message, throwable)
+      }
+    }
+  }
+
   protected def logTrace(msg: => String): Unit = {
     if (log.isTraceEnabled) log.trace(msg)
+  }
+
+  protected def logTrace(entry: LogEntry): Unit = {
+    if (log.isTraceEnabled) {
+      withLogContext(entry.context) {
+        log.trace(entry.message)
+      }
+    }
+  }
+
+  protected def logTrace(entry: LogEntry, throwable: Throwable): Unit = {
+    if (log.isTraceEnabled) {
+      withLogContext(entry.context) {
+        log.trace(entry.message, throwable)
+      }
+    }
   }
 
   protected def logWarning(msg: => String): Unit = {

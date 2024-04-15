@@ -80,7 +80,9 @@ trait LoggingSuiteBase
     Seq(
       (Level.ERROR, () => logError(basicMsg)),
       (Level.WARN, () => logWarning(basicMsg)),
-      (Level.INFO, () => logInfo(basicMsg))).foreach { case (level, logFunc) =>
+      (Level.INFO, () => logInfo(basicMsg)),
+      (Level.DEBUG, () => logDebug(basicMsg)),
+      (Level.TRACE, () => logTrace(basicMsg))).foreach { case (level, logFunc) =>
       val logOutput = captureLogOutput(logFunc)
       assert(expectedPatternForBasicMsg(level).r.matches(logOutput))
     }
@@ -91,7 +93,9 @@ trait LoggingSuiteBase
     Seq(
       (Level.ERROR, () => logError(basicMsg, exception)),
       (Level.WARN, () => logWarning(basicMsg, exception)),
-      (Level.INFO, () => logInfo(basicMsg, exception))).foreach { case (level, logFunc) =>
+      (Level.INFO, () => logInfo(basicMsg, exception)),
+      (Level.DEBUG, () => logDebug(basicMsg, exception)),
+      (Level.TRACE, () => logTrace(basicMsg, exception))).foreach { case (level, logFunc) =>
       val logOutput = captureLogOutput(logFunc)
       assert(expectedPatternForBasicMsgWithException(level).r.matches(logOutput))
     }
@@ -101,7 +105,9 @@ trait LoggingSuiteBase
     Seq(
       (Level.ERROR, () => logError(msgWithMDC)),
       (Level.WARN, () => logWarning(msgWithMDC)),
-      (Level.INFO, () => logInfo(msgWithMDC))).foreach {
+      (Level.INFO, () => logInfo(msgWithMDC)),
+      (Level.DEBUG, () => logDebug(msgWithMDC)),
+      (Level.TRACE, () => logTrace(msgWithMDC))).foreach {
         case (level, logFunc) =>
           val logOutput = captureLogOutput(logFunc)
           assert(expectedPatternForMsgWithMDC(level).r.matches(logOutput))
@@ -113,7 +119,9 @@ trait LoggingSuiteBase
     Seq(
       (Level.ERROR, () => logError(msgWithMDCAndException, exception)),
       (Level.WARN, () => logWarning(msgWithMDCAndException, exception)),
-      (Level.INFO, () => logInfo(msgWithMDCAndException, exception))).foreach {
+      (Level.INFO, () => logInfo(msgWithMDCAndException, exception)),
+      (Level.DEBUG, () => logDebug(msgWithMDCAndException, exception)),
+      (Level.TRACE, () => logTrace(msgWithMDCAndException, exception))).foreach {
         case (level, logFunc) =>
           val logOutput = captureLogOutput(logFunc)
           assert(expectedPatternForMsgWithMDCAndException(level).r.matches(logOutput))
@@ -124,7 +132,9 @@ trait LoggingSuiteBase
     Seq(
       (Level.ERROR, () => logError(msgWithConcat)),
       (Level.WARN, () => logWarning(msgWithConcat)),
-      (Level.INFO, () => logInfo(msgWithConcat))).foreach {
+      (Level.INFO, () => logInfo(msgWithConcat)),
+      (Level.DEBUG, () => logDebug(msgWithConcat)),
+      (Level.TRACE, () => logTrace(msgWithConcat))).foreach {
         case (level, logFunc) =>
           val logOutput = captureLogOutput(logFunc)
           verifyMsgWithConcat(level, logOutput)
