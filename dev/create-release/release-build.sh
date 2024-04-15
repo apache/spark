@@ -123,6 +123,12 @@ if [[ "$1" == "finalize" ]]; then
     --repository-url https://upload.pypi.org/legacy/ \
     "pyspark-$RELEASE_VERSION.tar.gz" \
     "pyspark-$RELEASE_VERSION.tar.gz.asc"
+  svn update "pyspark-connect-$RELEASE_VERSION.tar.gz"
+  svn update "pyspark-connect-$RELEASE_VERSION.tar.gz.asc"
+  TWINE_USERNAME=spark-upload TWINE_PASSWORD="$PYPI_PASSWORD" twine upload \
+    --repository-url https://upload.pypi.org/legacy/ \
+    "pyspark-connect-$RELEASE_VERSION.tar.gz" \
+    "pyspark-connect-$RELEASE_VERSION.tar.gz.asc"
   cd ..
   rm -rf svn-spark
   echo "PySpark uploaded"
@@ -302,6 +308,14 @@ if [[ "$1" == "package" ]]; then
         --output $PYTHON_DIST_NAME.asc \
         --detach-sig $PYTHON_DIST_NAME
       shasum -a 512 $PYTHON_DIST_NAME > $PYTHON_DIST_NAME.sha512
+
+      PYTHON_CONNECT_DIST_NAME=pyspark-connect-$PYSPARK_VERSION.tar.gz
+      cp spark-$SPARK_VERSION-bin-$NAME/python/dist/$PYTHON_CONNECT_DIST_NAME .
+
+      echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour \
+        --output $PYTHON_CONNECT_DIST_NAME.asc \
+        --detach-sig $PYTHON_CONNECT_DIST_NAME
+      shasum -a 512 $PYTHON_CONNECT_DIST_NAME > $PYTHON_CONNECT_DIST_NAME.sha512
     fi
 
     echo "Copying and signing regular binary distribution"

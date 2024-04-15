@@ -99,15 +99,18 @@ class ValueStateImplWithTTL[S](
     store.remove(stateTypesEncoder.encodeGroupingKey(), stateName)
   }
 
-  def clearIfExpired(groupingKey: Array[Byte]): Unit = {
+  def clearIfExpired(groupingKey: Array[Byte]): Boolean = {
     val encodedGroupingKey = stateTypesEncoder.encodeSerializedGroupingKey(groupingKey)
     val retRow = store.get(encodedGroupingKey, stateName)
 
+    var result = false
     if (retRow != null) {
       if (isExpired(retRow)) {
         store.remove(encodedGroupingKey, stateName)
+        result = true
       }
     }
+    result
   }
 
   private def isExpired(valueRow: UnsafeRow): Boolean = {

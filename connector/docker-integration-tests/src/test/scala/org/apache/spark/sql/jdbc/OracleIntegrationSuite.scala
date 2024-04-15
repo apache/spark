@@ -25,6 +25,7 @@ import java.util.{Properties, TimeZone}
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.{DataFrame, Row, SaveMode}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -157,6 +158,31 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
     conn.prepareStatement(
       "INSERT INTO test_ltz (t) VALUES (TIMESTAMP '2018-11-17 13:33:33')")
       .executeUpdate()
+    conn.commit()
+
+    conn.prepareStatement(
+      "CREATE TABLE ch (c0 VARCHAR2(100 BYTE), c1 VARCHAR2(100 CHAR), c2 NCHAR(100)," +
+        "c3 NVARCHAR2(100))").executeUpdate()
+    // scalastyle:off nonascii
+    val statement = conn.prepareStatement("INSERT INTO ch VALUES (?,?,?,?)")
+    statement.setString(1, "上海")
+    statement.setString(2, "杭州")
+    statement.setString(3, "北京")
+    statement.setString(4, "广州")
+    statement.addBatch()
+    statement.setString(1, "한국")
+    statement.setString(2, "서울")
+    statement.setString(3, "부산")
+    statement.setString(4, "대구")
+    statement.addBatch()
+    statement.setString(1, "العربية")
+    statement.setString(2, "القاهرة")
+    statement.setString(3, "الجيزة")
+    statement.setString(4, "الإسكندرية")
+    statement.addBatch()
+    statement.executeBatch()
+    // insert a row with AL16UTF16 but not UTF8
+    // scalastyle:on nonascii
     conn.commit()
   }
 
@@ -564,5 +590,26 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
     checkAnswer(df("SELECT INTERVAL '1 12:23:56.12345678' DAY TO SECOND(8) as i7 FROM dual"),
       Row(Duration.ofDays(1).plusHours(12).plusMinutes(23).plusSeconds(56).plusMillis(123)
         .plusNanos(456000)))
+  }
+
+  test("SPARK-47856: NCHAR and NVARCHAR") {
+    val df = spark.read.jdbc(jdbcUrl, "ch", new Properties)
+    // scalastyle:off nonascii
+    checkAnswer(df, Seq(
+      Row("上海", "杭州", "北京".padTo(100, ' '), "广州"),
+      Row("한국", "서울", "부산".padTo(100, ' '), "대구"),
+      Row("العربية", "القاهرة", "الجيزة".padTo(100, ' '), "الإسكندرية")
+    ))
+    // scalastyle:on nonascii
+    val schema = df.schema
+    Seq(0, 1).foreach { i =>
+      assert(schema(i).dataType === StringType)
+      assert(schema(i).metadata.getString(CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY)
+        === VarcharType(100).catalogString)
+    }
+    Seq(2, 3).foreach { i =>
+      assert(schema(i).dataType === StringType)
+      assert(!schema(i).metadata.contains(CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY))
+    }
   }
 }
