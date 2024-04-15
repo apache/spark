@@ -244,7 +244,7 @@
       },
       "UNRELEASED_THREAD_ERROR" : {
         "message" : [
-          "<loggingId>: RocksDB instance could not be acquired by <newAcquiredThreadInfo> as it was not released by <acquiredThreadInfo> after <timeWaitedMs> ms.",
+          "<loggingId>: RocksDB instance could not be acquired by <newAcquiredThreadInfo> for operationType=<operationType> as it was not released by <acquiredThreadInfo> after <timeWaitedMs> ms.",
           "Thread holding the lock has trace: <stackTraceOutput>"
         ]
       }
@@ -303,14 +303,6 @@
       "<message>. If necessary set <ansiConfig> to \"false\" to bypass this error."
     ],
     "sqlState" : "22007"
-  },
-  "CANNOT_READ_FILE_FOOTER" : {
-    "message" : [
-      "Could not read footer for file: <file>. Please ensure that the file is in either ORC or Parquet format.",
-      "If not, please convert it to a valid format. If the file is in the valid format, please check if it is corrupt.",
-      "If it is, you can choose to either ignore it or fix the corruption."
-    ],
-    "sqlState" : "KD001"
   },
   "CANNOT_RECOGNIZE_HIVE_TYPE" : {
     "message" : [
@@ -474,6 +466,24 @@
       "The value <collationName> does not represent a correct collation name. Suggested valid collation name: [<proposal>]."
     ],
     "sqlState" : "42704"
+  },
+  "COLLATION_MISMATCH" : {
+    "message" : [
+      "Could not determine which collation to use for string functions and operators."
+    ],
+    "subClass" : {
+      "EXPLICIT" : {
+        "message" : [
+          "Error occurred due to the mismatch between explicit collations: <explicitTypes>. Decide on a single explicit collation and remove others."
+        ]
+      },
+      "IMPLICIT" : {
+        "message" : [
+          "Error occurred due to the mismatch between multiple implicit non-default collations. Use COLLATE function to set the collation explicitly."
+        ]
+      }
+    },
+    "sqlState" : "42P21"
   },
   "COLLECTION_SIZE_LIMIT_EXCEEDED" : {
     "message" : [
@@ -694,11 +704,6 @@
         "message" : [
           "cannot cast <srcType> to <targetType>.",
           "To convert values from <srcType> to <targetType>, you can use the functions <functionNames> instead."
-        ]
-      },
-      "COLLATION_MISMATCH" : {
-        "message" : [
-          "Collations <collationNameLeft> and <collationNameRight> are not compatible. Please use the same collation for both strings."
         ]
       },
       "CREATE_MAP_KEY_DIFF_TYPES" : {
@@ -1257,6 +1262,31 @@
     "message" : [
       "Encountered error while reading file <path>."
     ],
+    "subClass" : {
+      "CANNOT_READ_FILE_FOOTER" : {
+        "message" : [
+          "Could not read footer. Please ensure that the file is in either ORC or Parquet format.",
+          "If not, please convert it to a valid format. If the file is in the valid format, please check if it is corrupt.",
+          "If it is, you can choose to either ignore it or fix the corruption."
+        ]
+      },
+      "FILE_NOT_EXIST" : {
+        "message" : [
+          "File does not exist. It is possible the underlying files have been updated.",
+          "You can explicitly invalidate the cache in Spark by running 'REFRESH TABLE tableName' command in SQL or by recreating the Dataset/DataFrame involved."
+        ]
+      },
+      "NO_HINT" : {
+        "message" : [
+          ""
+        ]
+      },
+      "PARQUET_COLUMN_DATA_TYPE_MISMATCH" : {
+        "message" : [
+          "Data type mismatches when reading Parquet column <column>. Expected Spark type <expectedType>, actual Parquet type <actualType>."
+        ]
+      }
+    },
     "sqlState" : "KD001"
   },
   "FAILED_REGISTER_CLASS_WITH_KRYO" : {
@@ -1587,6 +1617,12 @@
     ],
     "sqlState" : "22003"
   },
+  "INDETERMINATE_COLLATION" : {
+    "message" : [
+      "Function called requires knowledge of the collation it should apply, but indeterminate collation was found. Use COLLATE function to set the collation explicitly."
+    ],
+    "sqlState" : "42P22"
+  },
   "INDEX_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create the index <indexName> on table <tableName> because it already exists."
@@ -1746,6 +1782,34 @@
     ],
     "sqlState" : "22012"
   },
+  "INVALID_AGGREGATE_FILTER" : {
+    "message" : [
+      "The FILTER expression <filterExpr> in an aggregate function is invalid."
+    ],
+    "subClass" : {
+      "CONTAINS_AGGREGATE" : {
+        "message" : [
+          "Expected a FILTER expression without an aggregation, but found <aggExpr>."
+        ]
+      },
+      "CONTAINS_WINDOW_FUNCTION" : {
+        "message" : [
+          "Expected a FILTER expression without a window function, but found <windowExpr>."
+        ]
+      },
+      "NON_DETERMINISTIC" : {
+        "message" : [
+          "Expected a deterministic FILTER expression."
+        ]
+      },
+      "NOT_BOOLEAN" : {
+        "message" : [
+          "Expected a FILTER expression of the BOOLEAN type."
+        ]
+      }
+    },
+    "sqlState" : "42903"
+  },
   "INVALID_ARRAY_INDEX" : {
     "message" : [
       "The index <indexValue> is out of bounds. The array has <arraySize> elements. Use the SQL function `get()` to tolerate accessing element at invalid index and return NULL instead. If necessary set <ansiConfig> to \"false\" to bypass this error."
@@ -1817,6 +1881,11 @@
       "The value '<confValue>' in the config \"<confName>\" is invalid."
     ],
     "subClass" : {
+      "DEFAULT_COLLATION" : {
+        "message" : [
+          "Cannot resolve the given default collation. Did you mean '<proposal>'?"
+        ]
+      },
       "TIME_ZONE" : {
         "message" : [
           "Cannot resolve the given timezone."
@@ -2081,6 +2150,11 @@
       "OPERATION_NOT_FOUND" : {
         "message" : [
           "Operation not found."
+        ]
+      },
+      "SESSION_CHANGED" : {
+        "message" : [
+          "The existing Spark server driver instance has restarted. Please reconnect."
         ]
       },
       "SESSION_CLOSED" : {
@@ -2757,6 +2831,19 @@
     ],
     "sqlState" : "42K09"
   },
+  "INVALID_VARIANT_CAST" : {
+    "message" : [
+      "The variant value `<value>` cannot be cast into `<dataType>`. Please use `try_variant_get` instead."
+    ],
+    "sqlState" : "22023"
+  },
+  "INVALID_VARIANT_GET_PATH" : {
+    "message" : [
+      "The path `<path>` is not a valid variant extraction path in `<functionName>`.",
+      "A valid path should start with `$` and is followed by zero or more segments like `[123]`, `.name`, `['name']`, or `[\"name\"]`."
+    ],
+    "sqlState" : "22023"
+  },
   "INVALID_VIEW_TEXT" : {
     "message" : [
       "The view <viewName> cannot be displayed due to invalid view text: <viewText>. This may be caused by an unauthorized modification of the view or an incorrect query syntax. Please check your query syntax and verify that the view has not been tampered with."
@@ -2869,6 +2956,12 @@
         ]
       }
     },
+    "sqlState" : "22023"
+  },
+  "MALFORMED_VARIANT" : {
+    "message" : [
+      "Variant binary is malformed. Please check the data source is valid."
+    ],
     "sqlState" : "22023"
   },
   "MERGE_CARDINALITY_VIOLATION" : {
@@ -3183,8 +3276,20 @@
   },
   "NUMERIC_VALUE_OUT_OF_RANGE" : {
     "message" : [
-      "<value> cannot be represented as Decimal(<precision>, <scale>). If necessary set <config> to \"false\" to bypass this error, and return NULL instead."
+      ""
     ],
+    "subClass" : {
+      "WITHOUT_SUGGESTION" : {
+        "message" : [
+          "The <roundedValue> rounded half up from <originalValue> cannot be represented as Decimal(<precision>, <scale>)."
+        ]
+      },
+      "WITH_SUGGESTION" : {
+        "message" : [
+          "<value> cannot be represented as Decimal(<precision>, <scale>). If necessary set <config> to \"false\" to bypass this error, and return NULL instead."
+        ]
+      }
+    },
     "sqlState" : "22003"
   },
   "NUM_COLUMNS_MISMATCH" : {
@@ -3497,9 +3602,27 @@
     ],
     "sqlState" : "42802"
   },
-  "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_TIMEOUT_MODE" : {
+  "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_TIME_MODE" : {
     "message" : [
-      "Failed to perform stateful processor operation=<operationType> with invalid timeoutMode=<timeoutMode>"
+      "Failed to perform stateful processor operation=<operationType> with invalid timeMode=<timeMode>"
+    ],
+    "sqlState" : "42802"
+  },
+  "STATEFUL_PROCESSOR_CANNOT_REINITIALIZE_STATE_ON_KEY" : {
+    "message" : [
+      "Cannot re-initialize state on the same grouping key during initial state handling for stateful processor. Invalid grouping key=<groupingKey>."
+    ],
+    "sqlState" : "42802"
+  },
+  "STATEFUL_PROCESSOR_INCORRECT_TIME_MODE_TO_ASSIGN_TTL" : {
+    "message" : [
+      "Cannot use TTL for state=<stateName> in timeMode=<timeMode>, use TimeMode.ProcessingTime() instead."
+    ],
+    "sqlState" : "42802"
+  },
+  "STATEFUL_PROCESSOR_TTL_DURATION_MUST_BE_POSITIVE" : {
+    "message" : [
+      "TTL duration must be greater than zero for State store operation=<operationType> on state=<stateName>."
     ],
     "sqlState" : "42802"
   },
@@ -3522,15 +3645,45 @@
     ],
     "sqlState" : "42802"
   },
+  "STATE_STORE_INCORRECT_NUM_ORDERING_COLS_FOR_RANGE_SCAN" : {
+    "message" : [
+      "Incorrect number of ordering ordinals=<numOrderingCols> for range scan encoder. The number of ordering ordinals cannot be zero or greater than number of schema columns."
+    ],
+    "sqlState" : "42802"
+  },
+  "STATE_STORE_INCORRECT_NUM_PREFIX_COLS_FOR_PREFIX_SCAN" : {
+    "message" : [
+      "Incorrect number of prefix columns=<numPrefixCols> for prefix scan encoder. Prefix columns cannot be zero or greater than or equal to num of schema columns."
+    ],
+    "sqlState" : "42802"
+  },
+  "STATE_STORE_NULL_TYPE_ORDERING_COLS_NOT_SUPPORTED" : {
+    "message" : [
+      "Null type ordering column with name=<fieldName> at index=<index> is not supported for range scan encoder."
+    ],
+    "sqlState" : "42802"
+  },
   "STATE_STORE_UNSUPPORTED_OPERATION" : {
     "message" : [
       "<operationType> operation not supported with <entity>"
     ],
     "sqlState" : "XXKST"
   },
+  "STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY" : {
+    "message" : [
+      "Binary inequality column is not supported with state store. Provided schema: <schema>."
+    ],
+    "sqlState" : "XXKST"
+  },
   "STATE_STORE_UNSUPPORTED_OPERATION_ON_MISSING_COLUMN_FAMILY" : {
     "message" : [
       "State store operation=<operationType> not supported on missing column family=<colFamilyName>."
+    ],
+    "sqlState" : "42802"
+  },
+  "STATE_STORE_VARIABLE_SIZE_ORDERING_COLS_NOT_SUPPORTED" : {
+    "message" : [
+      "Variable size ordering column with name=<fieldName> at index=<index> is not supported for range scan encoder."
     ],
     "sqlState" : "42802"
   },
@@ -4273,6 +4426,11 @@
           "Removing column families with <stateStoreProvider> is not supported."
         ]
       },
+      "STATE_STORE_TTL" : {
+        "message" : [
+          "State TTL with <stateStoreProvider> is not supported. Please use RocksDBStateStoreProvider."
+        ]
+      },
       "TABLE_OPERATION" : {
         "message" : [
           "Table <tableName> does not support <operation>. Please check the current catalog and namespace to make sure the qualified table name is expected, and also check the catalog implementation which is configured by \"spark.sql.catalog\"."
@@ -4340,6 +4498,11 @@
       "Can't insert into the target."
     ],
     "subClass" : {
+      "MULTI_PATH" : {
+        "message" : [
+          "Can only write data to relations with a single path but given paths are <paths>."
+        ]
+      },
       "NOT_ALLOWED" : {
         "message" : [
           "The target relation <relationId> does not allow insertion."
@@ -4429,7 +4592,8 @@
     "subClass" : {
       "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED" : {
         "message" : [
-          "Accessing outer query column is not allowed in this location<treeNode>."
+          "Accessing outer query column is not allowed in this location:",
+          "<treeNode>"
         ]
       },
       "AGGREGATE_FUNCTION_MIXED_OUTER_LOCAL_REFERENCES" : {
@@ -4439,7 +4603,8 @@
       },
       "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE" : {
         "message" : [
-          "Correlated column is not allowed in predicate: <treeNode>."
+          "Correlated column is not allowed in predicate:",
+          "<treeNode>"
         ]
       },
       "CORRELATED_COLUMN_NOT_FOUND" : {
@@ -4450,6 +4615,11 @@
       "CORRELATED_REFERENCE" : {
         "message" : [
           "Expressions referencing the outer query are not supported outside of WHERE/HAVING clauses: <sqlExprs>."
+        ]
+      },
+      "HIGHER_ORDER_FUNCTION" : {
+        "message" : [
+          "Subquery expressions are not supported within higher-order functions. Please remove all subquery expressions from higher-order functions and then try the query again."
         ]
       },
       "LATERAL_JOIN_CONDITION_NON_DETERMINISTIC" : {
@@ -4469,7 +4639,8 @@
       },
       "NON_DETERMINISTIC_LATERAL_SUBQUERIES" : {
         "message" : [
-          "Non-deterministic lateral subqueries are not supported when joining with outer relations that produce more than one row<treeNode>."
+          "Non-deterministic lateral subqueries are not supported when joining with outer relations that produce more than one row:",
+          "<treeNode>"
         ]
       },
       "UNSUPPORTED_CORRELATED_REFERENCE_DATA_TYPE" : {
@@ -4479,17 +4650,20 @@
       },
       "UNSUPPORTED_CORRELATED_SCALAR_SUBQUERY" : {
         "message" : [
-          "Correlated scalar subqueries can only be used in filters, aggregations, projections, and UPDATE/MERGE/DELETE commands<treeNode>."
+          "Correlated scalar subqueries can only be used in filters, aggregations, projections, and UPDATE/MERGE/DELETE commands:",
+          "<treeNode>"
         ]
       },
       "UNSUPPORTED_IN_EXISTS_SUBQUERY" : {
         "message" : [
-          "IN/EXISTS predicate subqueries can only be used in filters, joins, aggregations, window functions, projections, and UPDATE/MERGE/DELETE commands<treeNode>."
+          "IN/EXISTS predicate subqueries can only be used in filters, joins, aggregations, window functions, projections, and UPDATE/MERGE/DELETE commands:",
+          "<treeNode>"
         ]
       },
       "UNSUPPORTED_TABLE_ARGUMENT" : {
         "message" : [
-          "Table arguments are used in a function where they are not supported<treeNode>."
+          "Table arguments are used in a function where they are not supported:",
+          "<treeNode>"
         ]
       }
     },
@@ -4544,6 +4718,18 @@
       "To tolerate the error on drop use DROP VARIABLE IF EXISTS."
     ],
     "sqlState" : "42883"
+  },
+  "VARIANT_CONSTRUCTOR_SIZE_LIMIT" : {
+    "message" : [
+      "Cannot construct a Variant larger than 16 MiB. The maximum allowed size of a Variant value is 16 MiB."
+    ],
+    "sqlState" : "22023"
+  },
+  "VARIANT_DUPLICATE_KEY" : {
+    "message" : [
+      "Failed to build variant because of a duplicate object key `<key>`."
+    ],
+    "sqlState" : "22023"
   },
   "VARIANT_SIZE_LIMIT" : {
     "message" : [
@@ -4866,26 +5052,6 @@
   "_LEGACY_ERROR_TEMP_1021" : {
     "message" : [
       "count(<targetString>.*) is not allowed. Please use count(*) or expand the columns manually, e.g. count(col1, col2)."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1024" : {
-    "message" : [
-      "FILTER expression is non-deterministic, it cannot be used in aggregate functions."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1025" : {
-    "message" : [
-      "FILTER expression is not of type boolean. It cannot be used in an aggregate function."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1026" : {
-    "message" : [
-      "FILTER expression contains aggregate. It cannot be used in an aggregate function."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1027" : {
-    "message" : [
-      "FILTER expression contains window function. It cannot be used in an aggregate function."
     ]
   },
   "_LEGACY_ERROR_TEMP_1030" : {
@@ -5262,11 +5428,6 @@
   "_LEGACY_ERROR_TEMP_1147" : {
     "message" : [
       "The ordering of partition columns is <partColumns>. All partition columns having constant values need to appear before other partition columns that do not have an assigned constant value."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1148" : {
-    "message" : [
-      "Can only write data to relations with a single path."
     ]
   },
   "_LEGACY_ERROR_TEMP_1149" : {
@@ -6071,12 +6232,6 @@
       "buildReader is not supported for <format>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2055" : {
-    "message" : [
-      "<message>",
-      "It is possible the underlying files have been updated. You can explicitly invalidate the cache in Spark by running 'REFRESH TABLE tableName' command in SQL or by recreating the Dataset/DataFrame involved."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2056" : {
     "message" : [
       "Unable to clear output directory <staticPrefixPath> prior to writing to it."
@@ -6107,17 +6262,6 @@
   "_LEGACY_ERROR_TEMP_2061" : {
     "message" : [
       "No records should be returned from EmptyDataReader."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2062" : {
-    "message" : [
-      "<message>",
-      "It is possible the underlying files have been updated. You can explicitly invalidate the cache in Spark by recreating the Dataset/DataFrame involved."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2063" : {
-    "message" : [
-      "Parquet column cannot be converted in file <filePath>. Column: <column>, Expected: <logicalType>, Found: <physicalType>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2065" : {
