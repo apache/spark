@@ -632,6 +632,10 @@ object IndeterminateCheck extends (LogicalPlan => Unit) {
         if (plan.schema.exists(sf => sf.dataType == StringType(-1))) {
           throw QueryCompilationErrors.indeterminateCollationError()
         }
+      case Sort(order, _, child) if child.resolved =>
+        if (order.exists(sf => sf.dataType == StringType(-1))) {
+          throw QueryCompilationErrors.indeterminateCollationError()
+        }
       case _ => ()
     }
   }

@@ -870,9 +870,6 @@ class TypesTestsMixin:
             StringType.fromCollationId(0), _parse_datatype_string("string COLLATE   UTF8_BINARY")
         )
         self.assertEqual(
-            StringType.fromCollationId(-1), _parse_datatype_string("string COLLATE INDETERMINATE")
-        )
-        self.assertEqual(
             StringType.fromCollationId(1),
             _parse_datatype_string("string COLLATE UTF8_BINARY_LCASE"),
         )
