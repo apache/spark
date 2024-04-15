@@ -719,10 +719,8 @@ case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExp
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (src, search, replace) => {
-      s"${ev.value} = " +
-        CollationSupport.StringReplace.genCode(src, search, replace, collationId) + ";"
-    })
+    defineCodeGen(ctx, ev, (src, search, replace) =>
+      CollationSupport.StringReplace.genCode(src, search, replace, collationId))
   }
 
   override def dataType: DataType = srcExpr.dataType

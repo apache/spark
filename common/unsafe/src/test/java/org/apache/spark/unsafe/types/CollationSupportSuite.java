@@ -249,6 +249,42 @@ public class CollationSupportSuite {
     assertEndsWith("äbćδe", "ÄBcΔÉ", "UNICODE_CI", false);
   }
 
+  private void assertReplace(String source, String search, String replace, String collationName,
+        String expected) throws SparkException {
+    UTF8String src = UTF8String.fromString(source);
+    UTF8String sear = UTF8String.fromString(search);
+    UTF8String repl = UTF8String.fromString(replace);
+    int collationId = CollationFactory.collationNameToId(collationName);
+    assertEquals(expected, CollationSupport.StringReplace.
+      exec(src, sear, repl, collationId).toString());
+  }
+
+  @Test
+  public void testReplace() throws SparkException {
+    assertReplace("r世eplace", "pl", "123", "UTF8_BINARY", "r世e123ace");
+    assertReplace("replace", "pl", "", "UTF8_BINARY", "reace");
+    assertReplace("repl世ace", "Pl", "", "UTF8_BINARY", "repl世ace");
+    assertReplace("replace", "", "123", "UTF8_BINARY", "replace");
+    assertReplace("abcabc", "b", "12", "UTF8_BINARY", "a12ca12c");
+    assertReplace("abcdabcd", "bc", "", "UTF8_BINARY", "adad");
+    assertReplace("r世eplace", "pl", "xx", "UTF8_BINARY_LCASE", "r世exxace");
+    assertReplace("repl世ace", "PL", "AB", "UTF8_BINARY_LCASE", "reAB世ace");
+    assertReplace("Replace", "", "123", "UTF8_BINARY_LCASE", "Replace");
+    assertReplace("re世place", "世", "x", "UTF8_BINARY_LCASE", "rexplace");
+    assertReplace("abcaBc", "B", "12", "UTF8_BINARY_LCASE", "a12ca12c");
+    assertReplace("AbcdabCd", "Bc", "", "UTF8_BINARY_LCASE", "Adad");
+    assertReplace("re世place", "plx", "123", "UNICODE", "re世place");
+    assertReplace("世Replace", "re", "", "UNICODE", "世Replace");
+    assertReplace("replace世", "", "123", "UNICODE", "replace世");
+    assertReplace("aBc世abc", "b", "12", "UNICODE", "aBc世a12c");
+    assertReplace("abcdabcd", "bc", "", "UNICODE", "adad");
+    assertReplace("replace", "plx", "123", "UNICODE_CI", "replace");
+    assertReplace("Replace", "re", "", "UNICODE_CI", "place");
+    assertReplace("replace", "", "123", "UNICODE_CI", "replace");
+    assertReplace("aBc世abc", "b", "12", "UNICODE_CI", "a12c世a12c");
+    assertReplace("a世Bcdabcd", "bC", "", "UNICODE_CI", "a世dad");
+  }
+
   // TODO: Test more collation-aware string expressions.
 
   /**

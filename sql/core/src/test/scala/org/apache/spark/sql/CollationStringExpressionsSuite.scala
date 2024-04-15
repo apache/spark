@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, Literal, StringReplace}
+import org.apache.spark.sql.catalyst.expressions.ExpressionEvalHelper
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -120,47 +120,37 @@ class CollationStringExpressionsSuite
     assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
   }
 
-  test("REPLACE check result on explicitly collated strings") {
-    def testReplace(source: String, search: String, replace: String,
-                    collationId: Integer, expected: String): Unit = {
-      val sourceLiteral = Literal.create(source, StringType(collationId))
-      val searchLiteral = Literal.create(search, StringType(collationId))
-      val replaceLiteral = Literal.create(replace, StringType(collationId))
-
-      checkEvaluation(StringReplace(sourceLiteral, searchLiteral, replaceLiteral), expected)
+  test("Support Replace string expression with collation") {
+    case class StartsWithTestCase[R](source: String, search: String, replace: String,
+        c: String, result: R)
+    val testCases = Seq(
+      // scalastyle:off
+      StartsWithTestCase("r世eplace", "pl", "123", "UTF8_BINARY", "r世e123ace"),
+      StartsWithTestCase("repl世ace", "PL", "AB", "UTF8_BINARY_LCASE", "reAB世ace"),
+      StartsWithTestCase("abcdabcd", "bc", "", "UNICODE", "adad"),
+      StartsWithTestCase("aBc世abc", "b", "12", "UNICODE_CI", "a12c世a12c")
+      // scalastyle:on
+    )
+    testCases.foreach(t => {
+      val query = s"SELECT replace(collate('${t.source}','${t.c}'),collate('${t.search}'," +
+        s"'${t.c}'),collate('${t.replace}','${t.c}'))"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(
+        StringType(CollationFactory.collationNameToId(t.c))))
+      // Implicit casting
+      checkAnswer(sql(s"SELECT replace(collate('${t.source}','${t.c}'),'${t.search}'," +
+        s"'${t.replace}')"), Row(t.result))
+      checkAnswer(sql(s"SELECT replace('${t.source}',collate('${t.search}','${t.c}')," +
+        s"'${t.replace}')"), Row(t.result))
+      checkAnswer(sql(s"SELECT replace('${t.source}','${t.search}'," +
+        s"collate('${t.replace}','${t.c}'))"), Row(t.result))
+    })
+    // Collation mismatch
+    val collationMismatch = intercept[AnalysisException] {
+      sql("SELECT startswith(collate('abcde', 'UTF8_BINARY_LCASE'),collate('C', 'UNICODE_CI'))")
     }
-
-    // scalastyle:off
-    var collationId = CollationFactory.collationNameToId("UTF8_BINARY")
-    testReplace("r世eplace", "pl", "123", collationId, "r世e123ace")
-    testReplace("replace", "pl", "", collationId, "reace")
-    testReplace("repl世ace", "Pl", "", collationId, "repl世ace")
-    testReplace("replace", "", "123", collationId, "replace")
-    testReplace("abcabc", "b", "12", collationId, "a12ca12c")
-    testReplace("abcdabcd", "bc", "", collationId, "adad")
-
-    collationId = CollationFactory.collationNameToId("UTF8_BINARY_LCASE")
-    testReplace("r世eplace", "pl", "xx", collationId, "r世exxace")
-    testReplace("repl世ace", "PL", "AB", collationId, "reAB世ace")
-    testReplace("Replace", "", "123", collationId, "Replace")
-    testReplace("re世place", "世", "x", collationId, "rexplace")
-    testReplace("abcaBc", "B", "12", collationId, "a12ca12c")
-    testReplace("AbcdabCd", "Bc", "", collationId, "Adad")
-
-    collationId = CollationFactory.collationNameToId("UNICODE")
-    testReplace("re世place", "plx", "123", collationId, "re世place")
-    testReplace("世Replace", "re", "", collationId, "世Replace")
-    testReplace("replace世", "", "123", collationId, "replace世")
-    testReplace("aBc世abc", "b", "12", collationId, "aBc世a12c")
-    testReplace("abcdabcd", "bc", "", collationId, "adad")
-
-    collationId = CollationFactory.collationNameToId("UNICODE_CI")
-    testReplace("replace", "plx", "123", collationId, "replace")
-    testReplace("Replace", "re", "", collationId, "place")
-    testReplace("replace", "", "123", collationId, "replace")
-    testReplace("aBc世abc", "b", "12", collationId, "a12c世a12c")
-    testReplace("a世Bcdabcd", "bC", "", collationId, "a世dad")
-    // scalastyle:on
+    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
   }
 
   test("Support EndsWith string expression with collation") {
