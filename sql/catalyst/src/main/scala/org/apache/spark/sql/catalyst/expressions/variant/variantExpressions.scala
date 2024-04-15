@@ -539,10 +539,10 @@ case class SchemaOfVariantAgg(
 
   override def eval(buffer: DataType): Any = UTF8String.fromString(buffer.sql)
 
-  override def serialize(buffer: DataType): Array[Byte] = buffer.sql.getBytes("UTF-8")
+  override def serialize(buffer: DataType): Array[Byte] = buffer.json.getBytes("UTF-8")
 
   override def deserialize(storageFormat: Array[Byte]): DataType =
-    DataType.fromDDL(new String(storageFormat, "UTF-8"))
+    DataType.fromJson(new String(storageFormat, "UTF-8"))
 
   override def prettyName: String = "schema_of_variant_agg"
 
