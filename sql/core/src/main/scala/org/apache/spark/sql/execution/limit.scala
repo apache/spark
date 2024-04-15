@@ -358,7 +358,8 @@ case class TakeOrderedAndProjectExec(
     val orderByString = truncatedString(sortOrder, "[", ",", "]", maxFields)
     val outputString = truncatedString(output, "[", ",", "]", maxFields)
 
-    s"TakeOrderedAndProject(limit=$limit, offset=$offset, " +
+    val offsetStr = if (offset > 0) { s" offset=$offset, " } else { "" }
+    s"TakeOrderedAndProject(limit=$limit, $offsetStr" +
       s"orderBy=$orderByString, output=$outputString)"
   }
 
