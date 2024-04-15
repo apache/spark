@@ -225,22 +225,28 @@ object StreamingSymmetricHashJoinHelper extends Logging {
           eventTimeWatermarkForEviction
         )
 
+        // For example, if the condition is of the form:
+        //    left_time > right_time + INTERVAL 30 MINUTES
+        // Then this extracts left_time and right_time.
         val attributesInCondition = AttributeSet(
           condition.get.collect { case a: AttributeReference => a }
         )
 
-        // Find the attribute that isn't the watermark attribute
-        val stateWatermarkAttributeSeq = attributesInCondition
-          .filterNot(_.semanticEquals(watermarkAttribute.get))
-          .toSeq
+        // oneSideInputAttributes could be left_value and left_time, and we just
+        // want the attribute _in_ the time-interval condition.
+        val oneSideStateWatermarkAttributes = attributesInCondition.filter { a =>
+            oneSideInputAttributes.contains(a)
+        }
 
-        if (stateWatermarkAttributeSeq.size == 1) {
-          val expr = watermarkExpression(Some(stateWatermarkAttributeSeq.head), stateValueWatermark)
+        // There should be a single attribute per side in the time-interval condition, so,
+        // filtering for oneSideInputAttributes as done above should lead us with 1 attribute.
+        if (oneSideStateWatermarkAttributes.size == 1) {
+          val expr = watermarkExpression(
+            Some(oneSideStateWatermarkAttributes.head), stateValueWatermark)
           expr.map(JoinStateValueWatermarkPredicate.apply _)
         } else {
-          // This should never happen, since if we have two attributes from the condition
-          // and one watermark (which we have, since isWatermarkDefinedOnInput is true),
-          // we should have one state watermark.
+          // But, if there are more state watermark attributes, we can't solve the contraints,
+          // and we don't issue a removal predicate.
           None
         }
       } else {
