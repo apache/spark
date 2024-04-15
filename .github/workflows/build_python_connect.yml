@@ -82,7 +82,9 @@ jobs:
           cp conf/log4j2.properties.template conf/log4j2.properties
           sed -i 's/rootLogger.level = info/rootLogger.level = warn/g' conf/log4j2.properties
           # Start a Spark Connect server
-          ./sbin/start-connect-server.sh --driver-java-options "-Dlog4j.configurationFile=file:$GITHUB_WORKSPACE/conf/log4j2.properties" --jars `find connector/connect/server/target -name spark-connect*SNAPSHOT.jar`
+          PYTHONPATH="python/lib/pyspark.zip:python/lib/py4j-0.10.9.7-src.zip:$PYTHONPATH" ./sbin/start-connect-server.sh --driver-java-options "-Dlog4j.configurationFile=file:$GITHUB_WORKSPACE/conf/log4j2.properties" --jars `find connector/connect/server/target -name spark-connect*SNAPSHOT.jar`
+          # Make sure running Python workers that contains pyspark.core once. They will be reused.
+          python -c "from pyspark.sql import SparkSession; _ = SparkSession.builder.remote('sc://localhost').getOrCreate().range(100).repartition(100).mapInPandas(lambda x: x, 'id INT').collect()"
           # Remove Py4J and PySpark zipped library to make sure there is no JVM connection
           rm python/lib/*
           rm -r python/pyspark
