@@ -203,7 +203,7 @@ public final class CollationSupport {
     }
     public static int execICU(final UTF8String string, final UTF8String substring,
         final int collationId) {
-      return Math.max(CollationAwareUTF8String.indexOf(string, substring, 0, collationId), 0);
+      return CollationAwareUTF8String.indexOf(string, substring, 0, collationId);
     }
   }
 

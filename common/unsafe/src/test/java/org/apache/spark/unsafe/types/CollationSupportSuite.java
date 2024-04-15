@@ -282,6 +282,7 @@ public class CollationSupportSuite {
     assertStringInstr("test大千世界X大千世界", "界X", "UNICODE", 8);
     assertStringInstr("aaads", "AD", "UNICODE_CI", 3);
     assertStringInstr("aaads", "dS", "UNICODE_CI", 4);
+    assertStringInstr("test大千世界X大千世界", "界y", "UNICODE_CI", 0);
     assertStringInstr("test大千世界X大千世界", "界x", "UNICODE_CI", 8);
   }
 
