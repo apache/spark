@@ -76,6 +76,12 @@ object CurrentOrigin {
       value.get.copy(line = Some(line), startPosition = Some(start)))
   }
 
+  def setPySparkErrorContext(pysparkFragment: String, pysparkCallSite: String): Unit = {
+    val tupleInfo = (pysparkFragment, pysparkCallSite)
+    value.set(
+      value.get.copy(pysparkErrorContext = Some(tupleInfo)))
+  }
+
   def withOrigin[A](o: Origin)(f: => A): A = {
     // remember the previous one so it can be reset to this
     // this way withOrigin can be recursive
