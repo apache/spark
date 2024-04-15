@@ -1302,7 +1302,7 @@
   },
   "FAILED_TO_PARSE_TOO_COMPLEX" : {
     "message" : [
-      "The statement, including potential SQL functions and referenced views,  was too complex to parse.",
+      "The statement, including potential SQL functions and referenced views, was too complex to parse.",
       "To mitigate this error divide the statement into multiple, less complex chunks."
     ],
     "sqlState" : "54001"

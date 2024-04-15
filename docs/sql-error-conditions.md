@@ -760,7 +760,7 @@ Failed to convert the row value `<value>` of the class `<class>` to the target S
 
 [SQLSTATE: 54001](sql-error-conditions-sqlstates.html#class-54-program-limit-exceeded)
 
-The statement, including potential SQL functions and referenced views,  was too complex to parse.
+The statement, including potential SQL functions and referenced views, was too complex to parse.
 To mitigate this error divide the statement into multiple, less complex chunks.
 
 ### FIELDS_ALREADY_EXISTS
