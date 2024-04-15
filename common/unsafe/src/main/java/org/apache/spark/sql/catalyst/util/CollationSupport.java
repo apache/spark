@@ -152,7 +152,7 @@ public final class CollationSupport {
     public static String genCode(final String string, final String substring, final int start,
         final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
-      String expr = "CollationSupport.IndexOf.exec";
+      String expr = "CollationSupport.StringLocate.exec";
       if (collation.supportsBinaryEquality) {
         return String.format(expr + "Binary(%s, %s, %d)", string, substring, start);
       } else if (collation.supportsLowercaseEquality) {

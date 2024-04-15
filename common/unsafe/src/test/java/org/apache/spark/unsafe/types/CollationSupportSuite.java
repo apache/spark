@@ -254,12 +254,57 @@ public class CollationSupportSuite {
     UTF8String substr = UTF8String.fromString(substring);
     UTF8String str = UTF8String.fromString(string);
     int collationId = CollationFactory.collationNameToId(collationName);
-    assertEquals(expected, CollationSupport.StringLocate.exec(str, substr, start, collationId));
+    assertEquals(expected, CollationSupport.StringLocate.exec(str, substr,
+      start - 1, collationId) + 1);
   }
 
   @Test
   public void testLocate() throws SparkException {
-
+    // If you add tests with start < 1 be careful to understand the behavior of the indexOf method
+    // and usage of indexOf in the StringLocate class.
+    assertLocate("aa", "aaads", 1, "UTF8_BINARY", 1);
+    assertLocate("aa", "aaads", 2, "UTF8_BINARY", 2);
+    assertLocate("aa", "aaads", 3, "UTF8_BINARY", 0);
+    assertLocate("Aa", "aaads", 1, "UTF8_BINARY", 0);
+    assertLocate("Aa", "aAads", 1, "UTF8_BINARY", 2);
+    assertLocate("界x", "test大千世界X大千世界", 1, "UTF8_BINARY", 0);
+    assertLocate("界X", "test大千世界X大千世界", 1, "UTF8_BINARY", 8);
+    assertLocate("界", "test大千世界X大千世界", 13, "UTF8_BINARY", 13);
+    assertLocate("AA", "aaads", 1, "UTF8_BINARY_LCASE", 1);
+    assertLocate("aa", "aAads", 2, "UTF8_BINARY_LCASE", 2);
+    assertLocate("aa", "aaAds", 3, "UTF8_BINARY_LCASE", 0);
+    assertLocate("abC", "abcabc", 1, "UTF8_BINARY_LCASE", 1);
+    assertLocate("abC", "abCabc", 2, "UTF8_BINARY_LCASE", 4);
+    assertLocate("abc", "abcabc", 4, "UTF8_BINARY_LCASE", 4);
+    assertLocate("界x", "test大千世界X大千世界", 1, "UTF8_BINARY_LCASE", 8);
+    assertLocate("界X", "test大千世界Xtest大千世界", 1, "UTF8_BINARY_LCASE", 8);
+    assertLocate("界", "test大千世界X大千世界", 13, "UTF8_BINARY_LCASE", 13);
+    assertLocate("大千", "test大千世界大千世界", 1, "UTF8_BINARY_LCASE", 5);
+    assertLocate("大千", "test大千世界大千世界", 9, "UTF8_BINARY_LCASE", 9);
+    assertLocate("大千", "大千世界大千世界", 1, "UTF8_BINARY_LCASE", 1);
+    assertLocate("aa", "Aaads", 1, "UNICODE", 2);
+    assertLocate("AA", "aaads", 1, "UNICODE", 0);
+    assertLocate("aa", "aAads", 2, "UNICODE", 0);
+    assertLocate("aa", "aaAds", 3, "UNICODE", 0);
+    assertLocate("abC", "abcabc", 1, "UNICODE", 0);
+    assertLocate("abC", "abCabc", 2, "UNICODE", 0);
+    assertLocate("abC", "abCabC", 2, "UNICODE", 4);
+    assertLocate("abc", "abcabc", 1, "UNICODE", 1);
+    assertLocate("abc", "abcabc", 3, "UNICODE", 4);
+    assertLocate("界x", "test大千世界X大千世界", 1, "UNICODE", 0);
+    assertLocate("界X", "test大千世界X大千世界", 1, "UNICODE", 8);
+    assertLocate("界", "test大千世界X大千世界", 13, "UNICODE", 13);
+    assertLocate("AA", "aaads", 1, "UNICODE_CI", 1);
+    assertLocate("aa", "aAads", 2, "UNICODE_CI", 2);
+    assertLocate("aa", "aaAds", 3, "UNICODE_CI", 0);
+    assertLocate("abC", "abcabc", 1, "UNICODE_CI", 1);
+    assertLocate("abC", "abCabc", 2, "UNICODE_CI", 4);
+    assertLocate("abc", "abcabc", 4, "UNICODE_CI", 4);
+    assertLocate("界x", "test大千世界X大千世界", 1, "UNICODE_CI", 8);
+    assertLocate("界", "test大千世界X大千世界", 13, "UNICODE_CI", 13);
+    assertLocate("大千", "test大千世界大千世界", 1, "UNICODE_CI", 5);
+    assertLocate("大千", "test大千世界大千世界", 9, "UNICODE_CI", 9);
+    assertLocate("大千", "大千世界大千世界", 1, "UNICODE_CI", 1);
   }
 
   // TODO: Test more collation-aware string expressions.

@@ -18,11 +18,10 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, Literal, StringLocate}
-import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.catalyst.expressions.ExpressionEvalHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{BooleanType, StringType}
+import org.apache.spark.sql.types.{BooleanType, IntegerType, StringType}
 
 class CollationStringExpressionsSuite
   extends QueryTest
@@ -163,77 +162,37 @@ class CollationStringExpressionsSuite
   }
 
   test("Support Locate string expression with collation") {
-    def testStringLocate(substring: String, string: String, start: Integer,
-                         collationId: Integer, expected: Integer): Unit = {
-      val substr = Literal.create(substring, StringType(collationId))
-      val str = Literal.create(string, StringType(collationId))
-      val startFrom = Literal.create(start)
-
-      checkEvaluation(StringLocate(substr, str, startFrom), expected)
+    case class StringLocateTestCase[R](substring: String, string: String, start: Integer,
+        c: String, result: R)
+    val testCases = Seq(
+      // scalastyle:off
+      StringLocateTestCase("aa", "aaads", 0, "UTF8_BINARY", 0),
+      StringLocateTestCase("aa", "Aaads", 0, "UTF8_BINARY_LCASE", 0),
+      StringLocateTestCase("界x", "test大千世界X大千世界", 1, "UTF8_BINARY_LCASE", 8),
+      StringLocateTestCase("aBc", "abcabc", 4, "UTF8_BINARY_LCASE", 4),
+      StringLocateTestCase("aa", "Aaads", 0, "UNICODE", 0),
+      StringLocateTestCase("abC", "abCabC", 2, "UNICODE", 4),
+      StringLocateTestCase("aa", "Aaads", 0, "UNICODE_CI", 0),
+      StringLocateTestCase("界x", "test大千世界X大千世界", 1, "UNICODE_CI", 8)
+      // scalastyle:on
+    )
+    testCases.foreach(t => {
+      val query = s"SELECT locate(collate('${t.substring}','${t.c}')," +
+        s"collate('${t.string}','${t.c}'),${t.start})"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(IntegerType))
+      // Implicit casting
+      checkAnswer(sql(s"SELECT locate(collate('${t.substring}','${t.c}')," +
+        s"'${t.string}',${t.start})"), Row(t.result))
+      checkAnswer(sql(s"SELECT locate('${t.substring}',collate('${t.string}'," +
+        s"'${t.c}'),${t.start})"), Row(t.result))
+    })
+    // Collation mismatch
+    val collationMismatch = intercept[AnalysisException] {
+      sql("SELECT locate(collate('aBc', 'UTF8_BINARY'),collate('abcabc', 'UTF8_BINARY_LCASE'),4)")
     }
-
-    var collationId = CollationFactory.collationNameToId("UTF8_BINARY")
-    testStringLocate("aa", "aaads", 0, collationId, 0)
-    testStringLocate("aa", "aaads", 1, collationId, 1)
-    testStringLocate("aa", "aaads", 2, collationId, 2)
-    testStringLocate("aa", "aaads", 3, collationId, 0)
-    testStringLocate("Aa", "aaads", 1, collationId, 0)
-    testStringLocate("Aa", "aAads", 1, collationId, 2)
-    // scalastyle:off
-    testStringLocate("界x", "test大千世界X大千世界", 1, collationId, 0)
-    testStringLocate("界X", "test大千世界X大千世界", 1, collationId, 8)
-    testStringLocate("界", "test大千世界X大千世界", 13, collationId, 13)
-    // scalastyle:on
-
-    collationId = CollationFactory.collationNameToId("UTF8_BINARY_LCASE")
-    testStringLocate("aa", "Aaads", 0, collationId, 0)
-    testStringLocate("AA", "aaads", 1, collationId, 1)
-    testStringLocate("aa", "aAads", 2, collationId, 2)
-    testStringLocate("aa", "aaAds", 3, collationId, 0)
-    testStringLocate("abC", "abcabc", 1, collationId, 1)
-    testStringLocate("abC", "abCabc", 2, collationId, 4)
-    testStringLocate("abc", "abcabc", 4, collationId, 4)
-    // scalastyle:off
-    testStringLocate("界x", "test大千世界X大千世界", 1, collationId, 8)
-    testStringLocate("界X", "test大千世界Xtest大千世界", 1, collationId, 8)
-    testStringLocate("界", "test大千世界X大千世界", 13, collationId, 13)
-    testStringLocate("大千", "test大千世界大千世界", 1, collationId, 5)
-    testStringLocate("大千", "test大千世界大千世界", 9, collationId, 9)
-    testStringLocate("大千", "大千世界大千世界", 1, collationId, 1)
-    // scalastyle:on
-
-    collationId = CollationFactory.collationNameToId("UNICODE")
-    testStringLocate("aa", "Aaads", 0, collationId, 0)
-    testStringLocate("aa", "Aaads", 1, collationId, 2)
-    testStringLocate("AA", "aaads", 1, collationId, 0)
-    testStringLocate("aa", "aAads", 2, collationId, 0)
-    testStringLocate("aa", "aaAds", 3, collationId, 0)
-    testStringLocate("abC", "abcabc", 1, collationId, 0)
-    testStringLocate("abC", "abCabc", 2, collationId, 0)
-    testStringLocate("abC", "abCabC", 2, collationId, 4)
-    testStringLocate("abc", "abcabc", 1, collationId, 1)
-    testStringLocate("abc", "abcabc", 3, collationId, 4)
-    // scalastyle:off
-    testStringLocate("界x", "test大千世界X大千世界", 1, collationId, 0)
-    testStringLocate("界X", "test大千世界X大千世界", 1, collationId, 8)
-    testStringLocate("界", "test大千世界X大千世界", 13, collationId, 13)
-    // scalastyle:on
-
-    collationId = CollationFactory.collationNameToId("UNICODE_CI")
-    testStringLocate("aa", "Aaads", 0, collationId, 0)
-    testStringLocate("AA", "aaads", 1, collationId, 1)
-    testStringLocate("aa", "aAads", 2, collationId, 2)
-    testStringLocate("aa", "aaAds", 3, collationId, 0)
-    testStringLocate("abC", "abcabc", 1, collationId, 1)
-    testStringLocate("abC", "abCabc", 2, collationId, 4)
-    testStringLocate("abc", "abcabc", 4, collationId, 4)
-    // scalastyle:off
-    testStringLocate("界x", "test大千世界X大千世界", 1, collationId, 8)
-    testStringLocate("界", "test大千世界X大千世界", 13, collationId, 13)
-    testStringLocate("大千", "test大千世界大千世界", 1, collationId, 5)
-    testStringLocate("大千", "test大千世界大千世界", 9, collationId, 9)
-    testStringLocate("大千", "大千世界大千世界", 1, collationId, 1)
-    // scalastyle:on
+    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
   }
 
   // TODO: Add more tests for other string expressions
