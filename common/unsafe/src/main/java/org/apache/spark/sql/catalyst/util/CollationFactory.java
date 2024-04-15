@@ -203,6 +203,20 @@ public final class CollationFactory {
   }
 
   /**
+   * Returns a StringSearch object for the given pattern and target strings, under collation
+   * rules corresponding to the given collationId. The external ICU library StringSearch object can
+   * be used to find occurrences of the pattern in the target string, while respecting collation.
+   */
+  public static StringSearch getStringSearch(
+          final String targetString,
+          final String patternString,
+          final int collationId) {
+    CharacterIterator target = new StringCharacterIterator(targetString);
+    Collator collator = CollationFactory.fetchCollation(collationId).collator;
+    return new StringSearch(patternString, target, (RuleBasedCollator) collator);
+  }
+
+  /**
    * Returns a collation-unaware StringSearch object for the given pattern and target strings.
    * While this object does not respect collation, it can be used to find occurrences of the pattern
    * in the target string for UTF8_BINARY or UTF8_BINARY_LCASE (if arguments are lowercased).
