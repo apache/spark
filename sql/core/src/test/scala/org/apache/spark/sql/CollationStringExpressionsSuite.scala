@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, Literal, StringTranslate}
+import org.apache.spark.sql.catalyst.expressions.ExpressionEvalHelper
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -120,51 +120,66 @@ class CollationStringExpressionsSuite
     assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
   }
   test("TRANSLATE check result on explicitly collated string") {
-    def testTranslate(input: String, matchExpression: String, replaceExpression: String,
-        collationId: Int, expected: String): Unit = {
-      val srcExpr = Literal.create(input, StringType(collationId))
-      val matchExpr = Literal.create(matchExpression, StringType(collationId))
-      val replaceExpr = Literal.create(replaceExpression, StringType(collationId))
+    // Supported collations
+    case class TranslateTestCase[R](input: String, matchExpression: String,
+        replaceExpression: String, collation: String, result: R)
+    val testCases = Seq(
+      TranslateTestCase("Translate", "Rnlt", "1234", "UTF8_BINARY_LCASE", "41a2s3a4e"),
+      TranslateTestCase("Translate", "Rnlt", "1234", "UTF8_BINARY_LCASE", "41a2s3a4e"),
+      TranslateTestCase("TRanslate", "rnlt", "XxXx", "UTF8_BINARY_LCASE", "xXaxsXaxe"),
+      TranslateTestCase("TRanslater", "Rrnlt", "xXxXx", "UTF8_BINARY_LCASE", "xxaxsXaxex"),
+      TranslateTestCase("TRanslater", "Rrnlt", "XxxXx", "UTF8_BINARY_LCASE", "xXaxsXaxeX"),
+      // scalastyle:off
+      TranslateTestCase("test大千世界X大千世界", "界x", "AB", "UTF8_BINARY_LCASE", "test大千世AB大千世A"),
+      TranslateTestCase("大千世界test大千世界", "TEST", "abcd", "UTF8_BINARY_LCASE", "大千世界abca大千世界"),
+      TranslateTestCase("Test大千世界大千世界", "tT", "oO", "UTF8_BINARY_LCASE", "oeso大千世界大千世界"),
+      TranslateTestCase("大千世界大千世界tesT", "Tt", "Oo", "UTF8_BINARY_LCASE", "大千世界大千世界OesO"),
+      TranslateTestCase("大千世界大千世界tesT", "大千", "世世", "UTF8_BINARY_LCASE", "世世世界世世世界tesT"),
+      // scalastyle:on
+      TranslateTestCase("Translate", "Rnlt", "1234", "UNICODE", "Tra2s3a4e"),
+      TranslateTestCase("TRanslate", "rnlt", "XxXx", "UNICODE", "TRaxsXaxe"),
+      TranslateTestCase("TRanslater", "Rrnlt", "xXxXx", "UNICODE", "TxaxsXaxeX"),
+      TranslateTestCase("TRanslater", "Rrnlt", "XxxXx", "UNICODE", "TXaxsXaxex"),
+      // scalastyle:off
+      TranslateTestCase("test大千世界X大千世界", "界x", "AB", "UNICODE", "test大千世AX大千世A"),
+      TranslateTestCase("Test大千世界大千世界", "tT", "oO", "UNICODE", "Oeso大千世界大千世界"),
+      TranslateTestCase("大千世界大千世界tesT", "Tt", "Oo", "UNICODE", "大千世界大千世界oesO"),
+      // scalastyle:on
+      TranslateTestCase("Translate", "Rnlt", "1234", "UNICODE_CI", "41a2s3a4e"),
+      TranslateTestCase("TRanslate", "rnlt", "XxXx", "UNICODE_CI", "xXaxsXaxe"),
+      TranslateTestCase("TRanslater", "Rrnlt", "xXxXx", "UNICODE_CI", "xxaxsXaxex"),
+      TranslateTestCase("TRanslater", "Rrnlt", "XxxXx", "UNICODE_CI", "xXaxsXaxeX"),
+      // scalastyle:off
+      TranslateTestCase("test大千世界X大千世界", "界x", "AB", "UNICODE_CI", "test大千世AB大千世A"),
+      TranslateTestCase("大千世界test大千世界", "TEST", "abcd", "UNICODE_CI", "大千世界abca大千世界"),
+      TranslateTestCase("Test大千世界大千世界", "tT", "oO", "UNICODE_CI", "oeso大千世界大千世界"),
+      TranslateTestCase("大千世界大千世界tesT", "Tt", "Oo", "UNICODE_CI", "大千世界大千世界OesO"),
+      TranslateTestCase("大千世界大千世界tesT", "大千", "世世", "UNICODE_CI", "世世世界世世世界tesT")
+      // scalastyle:on
+    )
 
-      checkEvaluation(StringTranslate(srcExpr, matchExpr, replaceExpr), expected)
+    testCases.foreach(t => {
+      val query = s"SELECT translate(collate('${t.input}', '${t.collation}')," +
+        s"collate('${t.matchExpression}', '${t.collation}')," +
+        s"collate('${t.replaceExpression}', '${t.collation}'))"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(
+        StringType(CollationFactory.collationNameToId(t.collation))))
+      // Implicit casting
+      checkAnswer(sql(s"SELECT translate(collate('${t.input}', '${t.collation}')," +
+        s"'${t.matchExpression}', '${t.replaceExpression}')"), Row(t.result))
+      checkAnswer(sql(s"SELECT translate('${t.input}', collate('${t.matchExpression}'," +
+        s"'${t.collation}'), '${t.replaceExpression}')"), Row(t.result))
+      checkAnswer(sql(s"SELECT translate('${t.input}', '${t.matchExpression}'," +
+        s"collate('${t.replaceExpression}', '${t.collation}'))"), Row(t.result))
+    })
+    // Collation mismatch
+    val collationMismatch = intercept[AnalysisException] {
+      sql(s"SELECT translate(collate('Translate', 'UTF8_BINARY_LCASE')," +
+        s"collate('Rnlt', 'UNICODE'), '1234')")
     }
-
-    var collationId = CollationFactory.collationNameToId("UTF8_BINARY_LCASE")
-    testTranslate("Translate", "Rnlt", "1234", collationId, "41a2s3a4e")
-    testTranslate("TRanslate", "rnlt", "XxXx", collationId, "xXaxsXaxe")
-    testTranslate("TRanslater", "Rrnlt", "xXxXx", collationId, "xxaxsXaxex")
-    testTranslate("TRanslater", "Rrnlt", "XxxXx", collationId, "xXaxsXaxeX")
-    // scalastyle:off
-    testTranslate("test大千世界X大千世界", "界x", "AB", collationId, "test大千世AB大千世A")
-    testTranslate("大千世界test大千世界", "TEST", "abcd", collationId, "大千世界abca大千世界")
-    testTranslate("Test大千世界大千世界", "tT", "oO", collationId, "oeso大千世界大千世界")
-    testTranslate("大千世界大千世界tesT", "Tt", "Oo", collationId, "大千世界大千世界OesO")
-    testTranslate("大千世界大千世界tesT", "大千", "世世", collationId, "世世世界世世世界tesT")
-    // scalastyle:on
-
-    collationId = CollationFactory.collationNameToId("UNICODE")
-    testTranslate("Translate", "Rnlt", "1234", collationId, "Tra2s3a4e")
-    testTranslate("TRanslate", "rnlt", "XxXx", collationId, "TRaxsXaxe")
-    testTranslate("TRanslater", "Rrnlt", "xXxXx", collationId, "TxaxsXaxeX")
-    testTranslate("TRanslater", "Rrnlt", "XxxXx", collationId, "TXaxsXaxex")
-    // scalastyle:off
-    testTranslate("test大千世界X大千世界", "界x", "AB", collationId, "test大千世AX大千世A")
-    testTranslate("Test大千世界大千世界", "tT", "oO", collationId, "Oeso大千世界大千世界")
-    testTranslate("大千世界大千世界tesT", "Tt", "Oo", collationId, "大千世界大千世界oesO")
-    // scalastyle:on
-
-    collationId = CollationFactory.collationNameToId("UNICODE_CI")
-    testTranslate("Translate", "Rnlt", "1234", collationId, "41a2s3a4e")
-    testTranslate("TRanslate", "rnlt", "XxXx", collationId, "xXaxsXaxe")
-    testTranslate("TRanslater", "Rrnlt", "xXxXx", collationId, "xxaxsXaxex")
-    testTranslate("TRanslater", "Rrnlt", "XxxXx", collationId, "xXaxsXaxeX")
-    // scalastyle:off
-    testTranslate("test大千世界X大千世界", "界x", "AB", collationId, "test大千世AB大千世A")
-    testTranslate("大千世界test大千世界", "TEST", "abcd", collationId, "大千世界abca大千世界")
-    testTranslate("Test大千世界大千世界", "tT", "oO", collationId, "oeso大千世界大千世界")
-    testTranslate("大千世界大千世界tesT", "Tt", "Oo", collationId, "大千世界大千世界OesO")
-    testTranslate("大千世界大千世界tesT", "大千", "世世", collationId, "世世世界世世世界tesT")
-    // scalastyle:on
+    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
   }
 
   test("Support EndsWith string expression with collation") {
