@@ -45,6 +45,11 @@ object CollationTypeCasts extends TypeCoercionRule {
           caseWhenExpr.elseValue.map(e => castStringType(e, outputStringType).getOrElse(e))
         CaseWhen(newBranches, newElseValue)
 
+    case substringIndex: SubstringIndex =>
+      substringIndex.withNewChildren(
+        collateToSingleType(
+          Seq(substringIndex.first, substringIndex.second)) :+ substringIndex.third)
+
     case otherExpr @ (
       _: In | _: InSubquery | _: CreateArray | _: ArrayJoin | _: Concat | _: Greatest | _: Least |
       _: Coalesce | _: BinaryExpression | _: ConcatWs | _: SubstringIndex) =>
