@@ -71,7 +71,8 @@ class CollationStringExpressionsSuite
       EltTestCase(2, Array("Spark", "SQL"), "UNICODE_CI", "SQL")
     )
     testCases.foreach(t => {
-      var query = s"SELECT elt(${t.index}, collate('${t.inputs(0)}', '${t.c}'), collate('${t.inputs(1)}', '${t.c}'))"
+      var query = s"SELECT elt(${t.index}, collate('${t.inputs(0)}', '${t.c}')," +
+        s" collate('${t.inputs(1)}', '${t.c}'))"
       // Result & data type
       checkAnswer(sql(query), Row(t.result))
       assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
