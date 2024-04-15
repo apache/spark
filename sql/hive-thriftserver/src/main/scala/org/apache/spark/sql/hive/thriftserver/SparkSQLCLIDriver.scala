@@ -251,7 +251,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
           } catch {
             case e: IOException =>
               logWarning(
-                log"Failed to write command history file: ${MDC(ERROR, e.getMessage)}", e)
+                log"Failed to write command history file: ${MDC(ERROR, e.getMessage)}")
           }
         case _ =>
       }
