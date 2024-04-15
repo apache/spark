@@ -1359,15 +1359,15 @@ case class StringInstr(str: Expression, substr: Expression)
     Seq(StringTypeAnyCollation, StringTypeAnyCollation)
 
   override def nullSafeEval(string: Any, sub: Any): Any = {
-    CollationSupport.IndexOf.
+    CollationSupport.StringInstr.
       exec(string.asInstanceOf[UTF8String], sub.asInstanceOf[UTF8String], 0, collationId) + 1
   }
 
   override def prettyName: String = "instr"
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-      defineCodeGen(ctx, ev, (l, r) =>
-        CollationSupport.IndexOf.genCode(l, r, 0, collationId) + " + 1")
+      defineCodeGen(ctx, ev, (string, substring) =>
+        CollationSupport.StringInstr.genCode(string, substring, 0, collationId) + " + 1")
   }
 
   override protected def withNewChildrenInternal(
