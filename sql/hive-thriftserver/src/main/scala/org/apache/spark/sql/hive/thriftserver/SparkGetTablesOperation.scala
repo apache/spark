@@ -59,10 +59,12 @@ private[hive] class SparkGetTablesOperation(
     val tableTypesStr = if (tableTypes == null) "null" else tableTypes.asScala.mkString(",")
     val logMsg = s"Listing tables '$cmdStr, tableTypes : $tableTypesStr, tableName : $tableName'"
 
-    logInfo(log"Listing tables 'catalog : ${MDC(CATALOG_NAME, catalogName)}, " +
-      log"schemaPattern : ${MDC(DATABASE_NAME, schemaName)}, " +
-      log"tableTypes : ${MDC(TABLE_TYPES, tableTypesStr)}, " +
-      log"tableName : ${MDC(TABLE_NAME, tableName)}' " +
+    val catalogNameStr = if (catalogName == null) "null" else catalogName
+    val schemaNameStr = if (schemaName == null) "null" else schemaName
+    logInfo(log"Listing tables 'catalog: ${MDC(CATALOG_NAME, catalogNameStr)}, " +
+      log"schemaPattern: ${MDC(DATABASE_NAME, schemaNameStr)}, " +
+      log"tableTypes: ${MDC(TABLE_TYPES, tableTypesStr)}, " +
+      log"tableName: ${MDC(TABLE_NAME, tableName)}' " +
       log"with ${MDC(STATEMENT_ID, statementId)}")
     setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
