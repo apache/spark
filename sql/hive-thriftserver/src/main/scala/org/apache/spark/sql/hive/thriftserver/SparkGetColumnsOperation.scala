@@ -62,7 +62,7 @@ private[hive] class SparkGetColumnsOperation(
     val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName, tablePattern : $tableName"
     val logMsg = s"Listing columns '$cmdStr, columnName : $columnName'"
 
-    logInfo(log"Listing columns 'catalog: ${MDC(CATALOG_NAME, catalogName)}, " +
+    logInfo(log"Listing columns 'catalog : ${MDC(CATALOG_NAME, catalogName)}, " +
       log"schemaPattern : ${MDC(DATABASE_NAME, schemaName)}, " +
       log"tablePattern : ${MDC(TABLE_NAME, tableName)}, " +
       log"columnName : ${MDC(COLUMN_NAME, columnName)}' " +
