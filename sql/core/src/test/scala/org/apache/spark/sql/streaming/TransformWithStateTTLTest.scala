@@ -36,9 +36,9 @@ case class OutputEvent(
     value: Int,
     isTTLValue: Boolean,
     ttlValue: Long)
+
 /**
- * Tests that ttl works as expected for Value State for
- * processing time and event time based ttl.
+ * Test suite base for TransformWithState with TTL support.
  */
 abstract class TransformWithStateTTLTest
   extends StreamTest {

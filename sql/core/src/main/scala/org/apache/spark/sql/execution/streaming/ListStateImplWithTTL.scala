@@ -36,12 +36,12 @@ import org.apache.spark.util.NextIterator
  * @tparam S - data type of object that will be stored
  */
 class ListStateImplWithTTL[S](
-  store: StateStore,
-  stateName: String,
-  keyExprEnc: ExpressionEncoder[Any],
-  valEncoder: Encoder[S],
-  ttlConfig: TTLConfig,
-  batchTimestampMs: Long)
+    store: StateStore,
+    stateName: String,
+    keyExprEnc: ExpressionEncoder[Any],
+    valEncoder: Encoder[S],
+    ttlConfig: TTLConfig,
+    batchTimestampMs: Long)
   extends SingleKeyTTLStateImpl(stateName, store, batchTimestampMs) with ListState[S] {
 
   private lazy val keySerializer = keyExprEnc.createSerializer()
@@ -193,9 +193,8 @@ class ListStateImplWithTTL[S](
   private[sql] def getWithoutEnforcingTTL(): Iterator[S] = {
     val encodedGroupingKey = stateTypesEncoder.encodeGroupingKey()
     val unsafeRowValuesIterator = store.valuesIterator(encodedGroupingKey, stateName)
-    unsafeRowValuesIterator.map{
-      valueUnsafeRow =>
-        stateTypesEncoder.decodeValue(valueUnsafeRow)
+    unsafeRowValuesIterator.map { valueUnsafeRow =>
+      stateTypesEncoder.decodeValue(valueUnsafeRow)
     }
   }
 
@@ -205,12 +204,12 @@ class ListStateImplWithTTL[S](
   private[sql] def getTTLValues(): Iterator[(S, Long)] = {
     val encodedGroupingKey = stateTypesEncoder.encodeGroupingKey()
     val unsafeRowValuesIterator = store.valuesIterator(encodedGroupingKey, stateName)
-    unsafeRowValuesIterator.map{
-      valueUnsafeRow =>
-        (stateTypesEncoder.decodeValue(valueUnsafeRow),
-          stateTypesEncoder.decodeTtlExpirationMs(valueUnsafeRow).get)
+    unsafeRowValuesIterator.map { valueUnsafeRow =>
+      (stateTypesEncoder.decodeValue(valueUnsafeRow),
+        stateTypesEncoder.decodeTtlExpirationMs(valueUnsafeRow).get)
     }
   }
+
   /**
    * Get all ttl values stored in ttl state for current implicit
    * grouping key.

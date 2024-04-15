@@ -88,9 +88,9 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
    * @return - instance of ListState of type T that can be used to store state persistently
    */
   def getListState[T](
-     stateName: String,
-     valEncoder: Encoder[T],
-     ttlConfig: TTLConfig): ListState[T]
+      stateName: String,
+      valEncoder: Encoder[T],
+      ttlConfig: TTLConfig): ListState[T]
 
   /**
    * Creates new or returns existing map state associated with stateName.

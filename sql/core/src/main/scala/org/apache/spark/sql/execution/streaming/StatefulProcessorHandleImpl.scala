@@ -261,9 +261,9 @@ class StatefulProcessorHandleImpl(
    * @return - instance of ListState of type T that can be used to store state persistently
    */
   override def getListState[T](
-    stateName: String,
-    valEncoder: Encoder[T],
-    ttlConfig: TTLConfig): ListState[T] = {
+      stateName: String,
+      valEncoder: Encoder[T],
+      ttlConfig: TTLConfig): ListState[T] = {
 
     verifyStateVarOperations("get_list_state")
     validateTTLConfig(ttlConfig, stateName)

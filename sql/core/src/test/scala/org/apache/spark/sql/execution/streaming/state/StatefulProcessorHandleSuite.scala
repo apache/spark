@@ -219,7 +219,7 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
     }
   }
 
-  test(s"ttl States are populated for valueState and timeMode=ProcessingTime") {
+  test("ttl States are populated for valueState and timeMode=ProcessingTime") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store,
@@ -237,7 +237,7 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
     }
   }
 
-  test(s"ttl States are populated for listState and timeMode=ProcessingTime") {
+  test("ttl States are populated for listState and timeMode=ProcessingTime") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store,
@@ -255,7 +255,7 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
     }
   }
 
-  test(s"ttl States are not populated for timeMode=None") {
+  test("ttl States are not populated for timeMode=None") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store,
