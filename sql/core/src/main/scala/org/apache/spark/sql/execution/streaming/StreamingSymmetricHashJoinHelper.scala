@@ -205,7 +205,7 @@ object StreamingSymmetricHashJoinHelper extends Logging {
         oneSideInputAttributes: Seq[Attribute],
         oneSideJoinKeys: Seq[Expression],
         otherSideInputAttributes: Seq[Attribute]): Option[JoinStateWatermarkPredicate] = {
-      val watermarkAttribute = otherSideInputAttributes.find(_.metadata.contains(delayKey))
+      val isWatermarkDefinedOnInput = oneSideInputAttributes.exists(_.metadata.contains(delayKey))
       val isWatermarkDefinedOnJoinKey = joinKeyOrdinalForWatermark.isDefined
 
       if (isWatermarkDefinedOnJoinKey) { // case 1 and 3 in the StreamingSymmetricHashJoinExec docs
@@ -216,8 +216,7 @@ object StreamingSymmetricHashJoinHelper extends Logging {
         val expr = watermarkExpression(Some(keyExprWithWatermark), eventTimeWatermarkForEviction)
         expr.map(JoinStateKeyWatermarkPredicate.apply _)
 
-      } else if (watermarkAttribute.isDefined) {
-        // case 2 in the StreamingSymmetricHashJoinExec docs
+      } else if (isWatermarkDefinedOnInput) { // case 2 in the StreamingSymmetricHashJoinExec docs
         val stateValueWatermark = StreamingJoinHelper.getStateValueWatermark(
           attributesToFindStateWatermarkFor = AttributeSet(oneSideInputAttributes),
           attributesWithEventWatermark = AttributeSet(otherSideInputAttributes),
