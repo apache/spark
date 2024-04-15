@@ -20,7 +20,7 @@ import shutil
 import tempfile
 
 from pyspark.errors import AnalysisException
-from pyspark.sql.functions import col
+from pyspark.sql.functions import col, lit
 from pyspark.sql.readwriter import DataFrameWriterV2
 from pyspark.sql.types import StructType, StructField, StringType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
