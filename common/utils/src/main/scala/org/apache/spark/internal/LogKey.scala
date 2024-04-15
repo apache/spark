@@ -75,8 +75,8 @@ object LogKey extends Enumeration {
   val ERROR = Value
   val EVENT_LOOP = Value
   val EVENT_QUEUE = Value
+  val EXECUTE_HOLDER_KEY = Value
   val EXECUTE_INFO = Value
-  val EXECUTE_KEY = Value
   val EXECUTOR_ID = Value
   val EXECUTOR_STATE = Value
   val EXIT_CODE = Value
@@ -127,7 +127,6 @@ object LogKey extends Enumeration {
   val OBJECT_ID = Value
   val OFFSET = Value
   val OFFSETS = Value
-  val OFFSET_RANGE = Value
   val OLD_BLOCK_MANAGER_ID = Value
   val OLD_VALUE = Value
   val OPTIMIZER_CLASS_NAME = Value
@@ -202,6 +201,7 @@ object LogKey extends Enumeration {
   val TOPIC_PARTITION = Value
   val TOPIC_PARTITIONS = Value
   val TOPIC_PARTITION_OFFSET = Value
+  val TOPIC_PARTITION_OFFSET_RANGE = Value
   val TOTAL_EFFECTIVE_TIME = Value
   val TOTAL_RECORDS_READ = Value
   val TOTAL_SIZE = Value

@@ -95,7 +95,7 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
       sessionHolder.addExecuteHolder(executeHolder)
       executions.put(executeHolder.key, executeHolder)
       lastExecutionTimeMs = None
-      logInfo(log"ExecuteHolder ${MDC(LogKey.EXECUTE_KEY, executeHolder.key)} is created.")
+      logInfo(log"ExecuteHolder ${MDC(LogKey.EXECUTE_HOLDER_KEY, executeHolder.key)} is created.")
     }
 
     schedulePeriodicChecks() // Starts the maintenance thread if it hasn't started.
@@ -122,7 +122,7 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
       if (executions.isEmpty) {
         lastExecutionTimeMs = Some(System.currentTimeMillis())
       }
-      logInfo(log"ExecuteHolder ${MDC(LogKey.EXECUTE_KEY, key)} is removed.")
+      logInfo(log"ExecuteHolder ${MDC(LogKey.EXECUTE_HOLDER_KEY, key)} is removed.")
     }
     // close the execution outside the lock
     executeHolder.foreach { e =>
