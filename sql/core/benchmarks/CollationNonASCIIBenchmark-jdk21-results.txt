@@ -1,0 +1,27 @@
+OpenJDK 64-Bit Server VM 21.0.2+13-LTS on Linux 6.5.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+collation unit benchmarks - equalsFunction:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------
+UTF8_BINARY_LCASE                                   18244          18258          20          0.0      456096.4       1.0X
+UNICODE                                               498            498           0          0.1       12440.3      36.7X
+UTF8_BINARY                                           499            500           1          0.1       12467.7      36.6X
+UNICODE_CI                                          13429          13443          19          0.0      335725.4       1.4X
+
+OpenJDK 64-Bit Server VM 21.0.2+13-LTS on Linux 6.5.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+collation unit benchmarks - compareFunction:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------
+UTF8_BINARY_LCASE                                    18377          18399          31          0.0      459430.5       1.0X
+UNICODE                                              14238          14240           3          0.0      355957.4       1.3X
+UTF8_BINARY                                            975            976           1          0.0       24371.3      18.9X
+UNICODE_CI                                           13819          13826          10          0.0      345482.6       1.3X
+
+OpenJDK 64-Bit Server VM 21.0.2+13-LTS on Linux 6.5.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+collation unit benchmarks - hashFunction:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+UTF8_BINARY_LCASE                                  9183           9230          67          0.0      229564.0       1.0X
+UNICODE                                           38937          38952          22          0.0      973421.3       0.2X
+UTF8_BINARY                                        1376           1376           0          0.0       34397.5       6.7X
+UNICODE_CI                                        32881          32882           1          0.0      822027.4       0.3X
+

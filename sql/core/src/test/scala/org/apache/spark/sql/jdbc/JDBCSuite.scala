@@ -953,6 +953,8 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       Some(DoubleType))
     assert(mySqlDialect.getCatalystType(java.sql.Types.FLOAT, "FLOAT", 1, metadata) ===
       Some(DoubleType))
+    assert(mySqlDialect.getCatalystType(java.sql.Types.CHAR, "JSON", Int.MaxValue, metadata) ===
+      Some(StringType))
   }
 
   test("SPARK-35446: MySQLDialect type mapping of float") {
@@ -2010,6 +2012,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     when(mockRsmd.isSigned(anyInt())).thenReturn(false)
     when(mockRsmd.isNullable(anyInt())).thenReturn(java.sql.ResultSetMetaData.columnNoNulls)
 
+    val mockConn = mock(classOf[java.sql.Connection])
     val mockRs = mock(classOf[java.sql.ResultSet])
     when(mockRs.getMetaData).thenReturn(mockRsmd)
 
@@ -2017,7 +2020,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     when(mockDialect.getCatalystType(anyInt(), anyString(), anyInt(), any[MetadataBuilder]))
       .thenReturn(None)
 
-    val schema = JdbcUtils.getSchema(mockRs, mockDialect)
+    val schema = JdbcUtils.getSchema(mockConn, mockRs, mockDialect)
     val fields = schema.fields
     assert(fields.length === 1)
     assert(fields(0).dataType === StringType)

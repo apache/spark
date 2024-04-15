@@ -32,8 +32,6 @@ from typing import (
     cast,
 )
 
-from py4j.java_gateway import JavaObject
-
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
 from pyspark.sql.session import _monkey_patch_RDD, SparkSession
@@ -43,12 +41,13 @@ from pyspark.sql.streaming import DataStreamReader
 from pyspark.sql.udf import UDFRegistration  # noqa: F401
 from pyspark.sql.udtf import UDTFRegistration
 from pyspark.errors.exceptions.captured import install_exception_handler
-from pyspark.context import SparkContext
-from pyspark.rdd import RDD
 from pyspark.sql.types import AtomicType, DataType, StructType
 from pyspark.sql.streaming import StreamingQueryManager
 
 if TYPE_CHECKING:
+    from py4j.java_gateway import JavaObject
+    from pyspark.core.rdd import RDD
+    from pyspark.core.context import SparkContext
     from pyspark.sql._typing import (
         AtomicValue,
         RowLike,
@@ -104,9 +103,9 @@ class SQLContext:
 
     def __init__(
         self,
-        sparkContext: SparkContext,
+        sparkContext: "SparkContext",
         sparkSession: Optional[SparkSession] = None,
-        jsqlContext: Optional[JavaObject] = None,
+        jsqlContext: Optional["JavaObject"] = None,
     ):
         if sparkSession is None:
             warnings.warn(
@@ -132,7 +131,7 @@ class SQLContext:
             SQLContext._instantiatedContext = self
 
     @property
-    def _ssql_ctx(self) -> JavaObject:
+    def _ssql_ctx(self) -> "JavaObject":
         """Accessor for the JVM Spark SQL context.
 
         Subclasses can override this property to provide their own
@@ -141,7 +140,7 @@ class SQLContext:
         return self._jsqlContext
 
     @classmethod
-    def getOrCreate(cls: Type["SQLContext"], sc: SparkContext) -> "SQLContext":
+    def getOrCreate(cls: Type["SQLContext"], sc: "SparkContext") -> "SQLContext":
         """
         Get the existing SQLContext or create a new one with given SparkContext.
 
@@ -162,7 +161,7 @@ class SQLContext:
 
     @classmethod
     def _get_or_create(
-        cls: Type["SQLContext"], sc: SparkContext, **static_conf: Any
+        cls: Type["SQLContext"], sc: "SparkContext", **static_conf: Any
     ) -> "SQLContext":
         if (
             cls._instantiatedContext is None
@@ -359,7 +358,7 @@ class SQLContext:
 
     def createDataFrame(  # type: ignore[misc]
         self,
-        data: Union[RDD[Any], Iterable[Any], "PandasDataFrameLike"],
+        data: Union["RDD[Any]", Iterable[Any], "PandasDataFrameLike"],
         schema: Optional[Union[AtomicType, StructType, str]] = None,
         samplingRatio: Optional[float] = None,
         verifySchema: bool = True,
@@ -714,9 +713,9 @@ class HiveContext(SQLContext):
 
     def __init__(
         self,
-        sparkContext: SparkContext,
+        sparkContext: "SparkContext",
         sparkSession: Optional[SparkSession] = None,
-        jhiveContext: Optional[JavaObject] = None,
+        jhiveContext: Optional["JavaObject"] = None,
     ):
         warnings.warn(
             "HiveContext is deprecated in Spark 2.0.0. Please use "
@@ -734,12 +733,12 @@ class HiveContext(SQLContext):
 
     @classmethod
     def _get_or_create(
-        cls: Type["SQLContext"], sc: SparkContext, **static_conf: Any
+        cls: Type["SQLContext"], sc: "SparkContext", **static_conf: Any
     ) -> "SQLContext":
         return SQLContext._get_or_create(sc, **HiveContext._static_conf)
 
     @classmethod
-    def _createForTesting(cls, sparkContext: SparkContext) -> "HiveContext":
+    def _createForTesting(cls, sparkContext: "SparkContext") -> "HiveContext":
         """(Internal use only) Create a new HiveContext for testing.
 
         All test code that touches HiveContext *must* go through this method. Otherwise,
@@ -765,7 +764,7 @@ def _test() -> None:
     import os
     import doctest
     import tempfile
-    from pyspark.context import SparkContext
+    from pyspark.core.context import SparkContext
     from pyspark.sql import Row, SQLContext
     import pyspark.sql.context
 

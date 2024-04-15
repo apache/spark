@@ -22,7 +22,7 @@ import java.util.UUID
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl}
-import org.apache.spark.sql.streaming.{ListState, MapState, TimeoutMode, ValueState}
+import org.apache.spark.sql.streaming.{ListState, MapState, TimeMode, ValueState}
 import org.apache.spark.sql.types.{BinaryType, StructType}
 
 /**
@@ -39,7 +39,7 @@ class MapStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeoutMode.NoTimeouts())
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
 
       val testState: MapState[String, Double] =
         handle.getMapState[String, Double]("testState", Encoders.STRING, Encoders.scalaDouble)
@@ -73,7 +73,7 @@ class MapStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeoutMode.NoTimeouts())
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
 
       val testState1: MapState[Long, Double] =
         handle.getMapState[Long, Double]("testState1", Encoders.scalaLong, Encoders.scalaDouble)
@@ -112,7 +112,7 @@ class MapStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeoutMode.NoTimeouts())
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
 
       val mapTestState1: MapState[String, Int] =
         handle.getMapState[String, Int]("mapTestState1", Encoders.STRING, Encoders.scalaInt)

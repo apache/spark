@@ -25,7 +25,8 @@ import scala.util.control.NonFatal
 
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.CLASS_LOADER
 import org.apache.spark.serializer.{SerializerHelper, SerializerInstance}
 import org.apache.spark.util.{LongAccumulator, ThreadUtils, Utils}
 
@@ -148,7 +149,8 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
             // Log an error but keep going here -- the task failed, so not catastrophic
             // if we can't deserialize the reason.
             logError(
-              "Could not deserialize TaskEndReason: ClassNotFound with classloader " + loader)
+              log"Could not deserialize TaskEndReason: ClassNotFound with classloader " +
+                log"${MDC(CLASS_LOADER, loader)}")
           case _: Exception => // No-op
         } finally {
           // If there's an error while deserializing the TaskEndReason, this Runnable

@@ -171,6 +171,29 @@ class Column(val expr: Expression) extends Logging {
     Column.fn(name, this, lit(other))
   }
 
+  /**
+   * A version of the `fn` method specifically designed for binary operations in PySpark
+   * that require logging information.
+   * This method is used when the operation involves another Column.
+   *
+   * @param name                The name of the operation to be performed.
+   * @param other               The value to be used in the operation, which will be converted to a
+   *                            Column if not already one.
+   * @param pysparkFragment     A string representing the 'fragment' of the PySpark error context,
+   *                            typically indicates the name of PySpark function.
+   * @param pysparkCallSite     A string representing the 'callSite' of the PySpark error context,
+   *                            providing the exact location within the PySpark code where the
+   *                            operation originated.
+   * @return A Column resulting from the operation.
+   */
+  private def fn(
+      name: String, other: Any, pysparkFragment: String, pysparkCallSite: String): Column = {
+    val tupleInfo = (pysparkFragment, pysparkCallSite)
+    withOrigin(Some(tupleInfo)) {
+      Column.fn(name, this, lit(other))
+    }
+  }
+
   override def toString: String = toPrettySQL(expr)
 
   override def equals(that: Any): Boolean = that match {
@@ -1221,6 +1244,43 @@ class Column(val expr: Expression) extends Logging {
    * @since 1.3.0
    */
   def cast(to: String): Column = cast(CatalystSqlParser.parseDataType(to))
+
+  /**
+   * Casts the column to a different data type and the result is null on failure.
+   * {{{
+   *   // Casts colA to IntegerType.
+   *   import org.apache.spark.sql.types.IntegerType
+   *   df.select(df("colA").try_cast(IntegerType))
+   *
+   *   // equivalent to
+   *   df.select(df("colA").try_cast("int"))
+   * }}}
+   *
+   * @group expr_ops
+   * @since 4.0.0
+   */
+  def try_cast(to: DataType): Column = withExpr {
+    val cast = Cast(
+      child = expr,
+      dataType = CharVarcharUtils.replaceCharVarcharWithStringForCast(to),
+      evalMode = EvalMode.TRY)
+    cast.setTagValue(Cast.USER_SPECIFIED_CAST, ())
+    cast
+  }
+
+  /**
+   * Casts the column to a different data type and the result is null on failure.
+   * {{{
+   *   // Casts colA to integer.
+   *   df.select(df("colA").try_cast("int"))
+   * }}}
+   *
+   * @group expr_ops
+   * @since 4.0.0
+   */
+  def try_cast(to: String): Column = {
+    try_cast(CatalystSqlParser.parseDataType(to))
+  }
 
   /**
    * Returns a sort expression based on the descending order of the column.

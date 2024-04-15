@@ -19,7 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.lang.reflect.{Method, Modifier}
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{FUNCTION_NAME, FUNCTION_PARAMETER}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
@@ -134,9 +135,10 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
     } catch {
       case _: NoSuchFunctionException =>
         val parameterString = args.map(_.dataType.typeName).mkString("(", ", ", ")")
-        logWarning(s"V2 function $name with parameter types $parameterString is used in " +
-            "partition transforms, but its definition couldn't be found in the function catalog " +
-            "provided")
+        logWarning(log"V2 function ${MDC(FUNCTION_NAME, name)} " +
+          log"with parameter types ${MDC(FUNCTION_PARAMETER, parameterString)} is used in " +
+          log"partition transforms, but its definition couldn't be found in the function catalog " +
+          log"provided")
         None
       case _: UnsupportedOperationException =>
         None

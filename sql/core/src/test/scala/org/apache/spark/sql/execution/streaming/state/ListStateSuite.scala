@@ -23,7 +23,7 @@ import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl}
-import org.apache.spark.sql.streaming.{ListState, TimeoutMode, ValueState}
+import org.apache.spark.sql.streaming.{ListState, TimeMode, ValueState}
 
 /**
  * Class that adds unit tests for ListState types used in arbitrary stateful
@@ -37,7 +37,7 @@ class ListStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeoutMode.NoTimeouts())
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
 
       val listState: ListState[Long] = handle.getListState[Long]("listState", Encoders.scalaLong)
 
@@ -47,7 +47,7 @@ class ListStateSuite extends StateVariableSuiteBase {
       }
 
       checkError(
-        exception = e.asInstanceOf[SparkIllegalArgumentException],
+        exception = e,
         errorClass = "ILLEGAL_STATE_STORE_VALUE.NULL_VALUE",
         sqlState = Some("42601"),
         parameters = Map("stateName" -> "listState")
@@ -70,7 +70,7 @@ class ListStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeoutMode.NoTimeouts())
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
 
       val testState: ListState[Long] = handle.getListState[Long]("testState", Encoders.scalaLong)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
@@ -98,7 +98,7 @@ class ListStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeoutMode.NoTimeouts())
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
 
       val testState1: ListState[Long] = handle.getListState[Long]("testState1", Encoders.scalaLong)
       val testState2: ListState[Long] = handle.getListState[Long]("testState2", Encoders.scalaLong)
@@ -136,7 +136,7 @@ class ListStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeoutMode.NoTimeouts())
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
 
       val listState1: ListState[Long] = handle.getListState[Long]("listState1", Encoders.scalaLong)
       val listState2: ListState[Long] = handle.getListState[Long]("listState2", Encoders.scalaLong)

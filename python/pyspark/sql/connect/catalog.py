@@ -166,6 +166,12 @@ class Catalog:
     listFunctions.__doc__ = PySparkCatalog.listFunctions.__doc__
 
     def functionExists(self, functionName: str, dbName: Optional[str] = None) -> bool:
+        if dbName is not None:
+            warnings.warn(
+                "`dbName` has been deprecated since Spark 3.4 and might be removed in "
+                "a future version. Use functionExists(`dbName.tableName`) instead.",
+                FutureWarning,
+            )
         table = self._execute_and_fetch(
             plan.FunctionExists(function_name=functionName, db_name=dbName)
         )
@@ -187,6 +193,12 @@ class Catalog:
     getFunction.__doc__ = PySparkCatalog.getFunction.__doc__
 
     def listColumns(self, tableName: str, dbName: Optional[str] = None) -> List[Column]:
+        if dbName is not None:
+            warnings.warn(
+                "`dbName` has been deprecated since Spark 3.4 and might be removed in "
+                "a future version. Use listColumns(`dbName.tableName`) instead.",
+                FutureWarning,
+            )
         table = self._execute_and_fetch(plan.ListColumns(table_name=tableName, db_name=dbName))
         return [
             Column(
@@ -203,6 +215,12 @@ class Catalog:
     listColumns.__doc__ = PySparkCatalog.listColumns.__doc__
 
     def tableExists(self, tableName: str, dbName: Optional[str] = None) -> bool:
+        if dbName is not None:
+            warnings.warn(
+                "`dbName` has been deprecated since Spark 3.4 and might be removed in "
+                "a future version. Use tableExists(`dbName.tableName`) instead.",
+                FutureWarning,
+            )
         table = self._execute_and_fetch(plan.TableExists(table_name=tableName, db_name=dbName))
         return table[0][0].as_py()
 
@@ -316,6 +334,7 @@ Catalog.__doc__ = PySparkCatalog.__doc__
 
 
 def _test() -> None:
+    import os
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
@@ -323,7 +342,9 @@ def _test() -> None:
 
     globs = pyspark.sql.connect.catalog.__dict__.copy()
     globs["spark"] = (
-        PySparkSession.builder.appName("sql.connect.catalog tests").remote("local[4]").getOrCreate()
+        PySparkSession.builder.appName("sql.connect.catalog tests")
+        .remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[4]"))
+        .getOrCreate()
     )
 
     (failure_count, test_count) = doctest.testmod(

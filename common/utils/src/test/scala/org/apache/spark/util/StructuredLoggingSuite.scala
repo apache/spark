@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.util
 
 import java.io.File
@@ -55,16 +56,27 @@ trait LoggingSuiteBase
 
   def msgWithMDC: LogEntry = log"Lost executor ${MDC(EXECUTOR_ID, "1")}."
 
-  def msgWithMDCAndException: LogEntry = log"Error in executor ${MDC(EXECUTOR_ID, "1")}."
+  def msgWithMDCValueIsNull: LogEntry = log"Lost executor ${MDC(EXECUTOR_ID, null)}."
 
-  def expectedPatternForBasicMsg(level: Level): String
+  def msgWithMDCAndException: LogEntry = log"Error in executor ${MDC(EXECUTOR_ID, "1")}."
 
   def msgWithConcat: LogEntry = log"Min Size: ${MDC(MIN_SIZE, "2")}, " +
     log"Max Size: ${MDC(MAX_SIZE, "4")}. " +
     log"Please double check."
 
+  // test for basic message (without any mdc)
+  def expectedPatternForBasicMsg(level: Level): String
+
+  // test for basic message and exception
+  def expectedPatternForBasicMsgWithException(level: Level): String
+
+  // test for message (with mdc)
   def expectedPatternForMsgWithMDC(level: Level): String
 
+  // test for message (with mdc - the value is null)
+  def expectedPatternForMsgWithMDCValueIsNull(level: Level): String
+
+  // test for message and exception
   def expectedPatternForMsgWithMDCAndException(level: Level): String
 
   def verifyMsgWithConcat(level: Level, logOutput: String): Unit
@@ -79,6 +91,17 @@ trait LoggingSuiteBase
     }
   }
 
+  test("Basic logging with Exception") {
+    val exception = new RuntimeException("OOM")
+    Seq(
+      (Level.ERROR, () => logError(basicMsg, exception)),
+      (Level.WARN, () => logWarning(basicMsg, exception)),
+      (Level.INFO, () => logInfo(basicMsg, exception))).foreach { case (level, logFunc) =>
+      val logOutput = captureLogOutput(logFunc)
+      assert(expectedPatternForBasicMsgWithException(level).r.matches(logOutput))
+    }
+  }
+
   test("Logging with MDC") {
     Seq(
       (Level.ERROR, () => logError(msgWithMDC)),
@@ -90,6 +113,17 @@ trait LoggingSuiteBase
       }
   }
 
+  test("Logging with MDC(the value is null)") {
+    Seq(
+      (Level.ERROR, () => logError(msgWithMDCValueIsNull)),
+      (Level.WARN, () => logWarning(msgWithMDCValueIsNull)),
+      (Level.INFO, () => logInfo(msgWithMDCValueIsNull))).foreach {
+      case (level, logFunc) =>
+        val logOutput = captureLogOutput(logFunc)
+        assert(expectedPatternForMsgWithMDCValueIsNull(level).r.matches(logOutput))
+    }
+  }
+
   test("Logging with MDC and Exception") {
     val exception = new RuntimeException("OOM")
     Seq(
@@ -98,7 +132,7 @@ trait LoggingSuiteBase
       (Level.INFO, () => logInfo(msgWithMDCAndException, exception))).foreach {
         case (level, logFunc) =>
           val logOutput = captureLogOutput(logFunc)
-          assert(expectedPatternForMsgWithMDCAndException(level).r.findFirstIn(logOutput).isDefined)
+          assert(expectedPatternForMsgWithMDCAndException(level).r.matches(logOutput))
       }
   }
 
@@ -137,6 +171,22 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
         }""")
   }
 
+  override def expectedPatternForBasicMsgWithException(level: Level): String = {
+    compactAndToRegexPattern(
+      s"""
+        {
+          "ts": "<timestamp>",
+          "level": "$level",
+          "msg": "This is a log message",
+          "exception": {
+            "class": "java.lang.RuntimeException",
+            "msg": "OOM",
+            "stacktrace": "<stacktrace>"
+          },
+          "logger": "$className"
+        }""")
+  }
+
   override def expectedPatternForMsgWithMDC(level: Level): String = {
     compactAndToRegexPattern(
       s"""
@@ -150,6 +200,20 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
           "logger": "$className"
         }""")
     }
+
+  def expectedPatternForMsgWithMDCValueIsNull(level: Level): String = {
+    compactAndToRegexPattern(
+      s"""
+        {
+          "ts": "<timestamp>",
+          "level": "$level",
+          "msg": "Lost executor null.",
+          "context": {
+             "executor_id": null
+          },
+          "logger": "$className"
+        }""")
+  }
 
   override def expectedPatternForMsgWithMDCAndException(level: Level): String = {
     compactAndToRegexPattern(

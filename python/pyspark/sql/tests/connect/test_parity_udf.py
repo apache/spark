@@ -52,10 +52,6 @@ class UDFParityTests(BaseUDFTestsMixin, ReusedConnectTestCase):
     def test_broadcast_in_udf(self):
         super().test_broadcast_in_udf()
 
-    @unittest.skip("Spark Connect does not support cache() but the test depends on it.")
-    def test_udf_cache(self):
-        super().test_udf_cache()
-
     @unittest.skip("Requires JVM access.")
     def test_udf_defers_judf_initialization(self):
         super().test_udf_defers_judf_initialization()

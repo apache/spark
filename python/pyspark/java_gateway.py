@@ -20,7 +20,6 @@ import os
 import signal
 import shlex
 import shutil
-import socket
 import platform
 import tempfile
 import time
@@ -28,10 +27,13 @@ from subprocess import Popen, PIPE
 
 from py4j.java_gateway import java_import, JavaGateway, JavaObject, GatewayParameters
 from py4j.clientserver import ClientServer, JavaParameters, PythonParameters
+from pyspark.serializers import read_int, UTF8Deserializer
 
 from pyspark.find_spark_home import _find_spark_home
-from pyspark.serializers import read_int, write_with_length, UTF8Deserializer
 from pyspark.errors import PySparkRuntimeError
+
+# for backward compatibility references.
+from pyspark.util import local_connect_and_auth  # noqa: F401
 
 
 def launch_gateway(conf=None, popen_kwargs=None):
@@ -165,65 +167,6 @@ def launch_gateway(conf=None, popen_kwargs=None):
     java_import(gateway.jvm, "scala.Tuple2")
 
     return gateway
-
-
-def _do_server_auth(conn, auth_secret):
-    """
-    Performs the authentication protocol defined by the SocketAuthHelper class on the given
-    file-like object 'conn'.
-    """
-    write_with_length(auth_secret.encode("utf-8"), conn)
-    conn.flush()
-    reply = UTF8Deserializer().loads(conn)
-    if reply != "ok":
-        conn.close()
-        raise PySparkRuntimeError(
-            error_class="UNEXPECTED_RESPONSE_FROM_SERVER",
-            message_parameters={},
-        )
-
-
-def local_connect_and_auth(port, auth_secret):
-    """
-    Connect to local host, authenticate with it, and return a (sockfile,sock) for that connection.
-    Handles IPV4 & IPV6, does some error handling.
-
-    Parameters
-    ----------
-    port : str or int or None
-    auth_secret : str
-
-    Returns
-    -------
-    tuple
-        with (sockfile, sock)
-    """
-    sock = None
-    errors = []
-    # Support for both IPv4 and IPv6.
-    addr = "127.0.0.1"
-    if os.environ.get("SPARK_PREFER_IPV6", "false").lower() == "true":
-        addr = "::1"
-    for res in socket.getaddrinfo(addr, port, socket.AF_UNSPEC, socket.SOCK_STREAM):
-        af, socktype, proto, _, sa = res
-        try:
-            sock = socket.socket(af, socktype, proto)
-            sock.settimeout(int(os.environ.get("SPARK_AUTH_SOCKET_TIMEOUT", 15)))
-            sock.connect(sa)
-            sockfile = sock.makefile("rwb", int(os.environ.get("SPARK_BUFFER_SIZE", 65536)))
-            _do_server_auth(sockfile, auth_secret)
-            return (sockfile, sock)
-        except socket.error as e:
-            emsg = str(e)
-            errors.append("tried to connect to %s, but an error occurred: %s" % (sa, emsg))
-            sock.close()
-            sock = None
-    raise PySparkRuntimeError(
-        error_class="CANNOT_OPEN_SOCKET",
-        message_parameters={
-            "errors": str(errors),
-        },
-    )
 
 
 def ensure_callback_server_started(gw):

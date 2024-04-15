@@ -28,7 +28,8 @@ import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.MapOutputTracker
 import org.apache.spark.MapOutputTracker.SHUFFLE_PUSH_MAP_ID
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{HOST, PORT, REDUCE_ID, SHUFFLE_ID, SHUFFLE_MERGE_ID}
 import org.apache.spark.network.shuffle.{BlockStoreClient, MergedBlockMeta, MergedBlocksMetaListener}
 import org.apache.spark.shuffle.ShuffleReadMetricsReporter
 import org.apache.spark.storage.BlockManagerId.SHUFFLE_MERGER_IDENTIFIER
@@ -170,9 +171,10 @@ private class PushBasedFetchHelper(
             reduceId, sizeMap((shuffleId, reduceId)), meta.readChunkBitmaps(), address))
         } catch {
           case exception: Exception =>
-            logError(s"Failed to parse the meta of push-merged block for ($shuffleId, " +
-              s"$shuffleMergeId, $reduceId) from" +
-              s" ${req.address.host}:${req.address.port}", exception)
+            logError(log"Failed to parse the meta of push-merged block for (" +
+              log"${MDC(SHUFFLE_ID, shuffleId)}, ${MDC(SHUFFLE_MERGE_ID, shuffleMergeId)}, " +
+              log"${MDC(REDUCE_ID, reduceId)}) from ${MDC(HOST, req.address.host)}" +
+              log":${MDC(PORT, req.address.port)}", exception)
             iterator.addToResultsQueue(
               PushMergedRemoteMetaFailedFetchResult(shuffleId, shuffleMergeId, reduceId,
                 address))
@@ -181,8 +183,9 @@ private class PushBasedFetchHelper(
 
       override def onFailure(shuffleId: Int, shuffleMergeId: Int, reduceId: Int,
           exception: Throwable): Unit = {
-        logError(s"Failed to get the meta of push-merged block for ($shuffleId, $reduceId) " +
-          s"from ${req.address.host}:${req.address.port}", exception)
+        logError(log"Failed to get the meta of push-merged block for " +
+          log"(${MDC(SHUFFLE_ID, shuffleId)}, ${MDC(REDUCE_ID, reduceId)}) " +
+          log"from ${MDC(HOST, req.address.host)}:${MDC(PORT, req.address.port)}", exception)
         iterator.addToResultsQueue(
           PushMergedRemoteMetaFailedFetchResult(shuffleId, shuffleMergeId, reduceId, address))
       }

@@ -17,14 +17,13 @@
 import sys
 from typing import Union, TYPE_CHECKING, Optional
 
-from py4j.java_gateway import JavaObject
-
 from pyspark.resource.requests import ExecutorResourceRequests, TaskResourceRequests
-from pyspark.rdd import PythonEvalType
 from pyspark.resource import ResourceProfile
+from pyspark.util import PythonEvalType
 from pyspark.sql.types import StructType
 
 if TYPE_CHECKING:
+    from py4j.java_gateway import JavaObject
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.pandas._typing import PandasMapIterFunction, ArrowMapIterFunction
 
@@ -252,7 +251,7 @@ class PandasMapOpsMixin:
 
     def _build_java_profile(
         self, profile: Optional[ResourceProfile] = None
-    ) -> Optional[JavaObject]:
+    ) -> Optional["JavaObject"]:
         """Build the java ResourceProfile based on PySpark ResourceProfile"""
         from pyspark.sql import DataFrame
 
