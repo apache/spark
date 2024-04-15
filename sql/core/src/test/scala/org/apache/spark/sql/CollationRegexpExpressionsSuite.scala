@@ -138,7 +138,7 @@ class CollationRegexpExpressionsSuite
     testCases.foreach(t => {
       val query = s"SELECT split(collate('${t.l}', '${t.c}'), '${t.r}', ${t.limit})"
       // Result & data type
-      checkAnswer(sql(query), Seq(Row(t.result)))
+      checkAnswer(sql(query), Row(t.result))
       assert(sql(query).schema.fields.head.dataType.sameType(ArrayType(StringType(t.c))))
       // TODO: Implicit casting (not currently supported)
     })
