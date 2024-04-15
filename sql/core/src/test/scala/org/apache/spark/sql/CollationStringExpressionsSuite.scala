@@ -20,15 +20,13 @@ package org.apache.spark.sql
 import scala.collection.immutable.Seq
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.catalyst.expressions.{Collation, ExpressionEvalHelper, InitCap, Literal, Lower, Upper}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, StringType}
 
 class CollationStringExpressionsSuite
   extends QueryTest
-  with SharedSparkSession
-  with ExpressionEvalHelper {
+  with SharedSparkSession {
 
   test("Support ConcatWs string expression with collation") {
     // Supported collations
@@ -163,43 +161,55 @@ class CollationStringExpressionsSuite
     })
   }
 
-  test("UPPER check output type on collated string") {
-    def testUpper(expected: String, collationId: Int, input: String): Unit = {
-      val s = Literal.create(input, StringType(collationId))
-
-      checkEvaluation(Collation(Upper(s)).replacement, expected)
-    }
-
-    testUpper("UTF8_BINARY", 0, "abc")
-    testUpper("UTF8_BINARY_LCASE", 1, "abc")
-    testUpper("UNICODE", 2, "abc")
-    testUpper("UNICODE_CI", 3, "abc")
+  test("SPARK-47357: Support Upper string expression with collation") {
+    // Supported collations
+    case class UpperTestCase[R](s: String, c: String, result: R)
+    val testCases = Seq(
+      UpperTestCase("aBc", "UTF8_BINARY", "ABC"),
+      UpperTestCase("aBc", "UTF8_BINARY_LCASE", "ABC"),
+      UpperTestCase("aBc", "UNICODE", "ABC"),
+      UpperTestCase("aBc", "UNICODE_CI", "ABC")
+    )
+    testCases.foreach(t => {
+      val query = s"SELECT upper(collate('${t.s}', '${t.c}'))"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
+    })
   }
 
-  test("LOWER check output type on collated string") {
-    def testLower(expected: String, collationId: Int, input: String): Unit = {
-      val s = Literal.create(input, StringType(collationId))
-
-      checkEvaluation(Collation(Lower(s)).replacement, expected)
-    }
-
-    testLower("UTF8_BINARY", 0, "abc")
-    testLower("UTF8_BINARY_LCASE", 1, "abc")
-    testLower("UNICODE", 2, "abc")
-    testLower("UNICODE_CI", 3, "abc")
+  test("SPARK-47357: Support Lower string expression with collation") {
+    // Supported collations
+    case class LowerTestCase[R](s: String, c: String, result: R)
+    val testCases = Seq(
+      LowerTestCase("aBc", "UTF8_BINARY", "abc"),
+      LowerTestCase("aBc", "UTF8_BINARY_LCASE", "abc"),
+      LowerTestCase("aBc", "UNICODE", "abc"),
+      LowerTestCase("aBc", "UNICODE_CI", "abc")
+    )
+    testCases.foreach(t => {
+      val query = s"SELECT lower(collate('${t.s}', '${t.c}'))"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
+    })
   }
 
-  test("INITCAP check output type on collated string") {
-    def testInitCap(expected: String, collationId: Int, input: String): Unit = {
-      val s = Literal.create(input, StringType(collationId))
-
-      checkEvaluation(Collation(InitCap(s)).replacement, expected)
-    }
-
-    testInitCap("UTF8_BINARY", 0, "abc")
-    testInitCap("UTF8_BINARY_LCASE", 1, "abc")
-    testInitCap("UNICODE", 2, "abc")
-    testInitCap("UNICODE_CI", 3, "abc")
+  test("SPARK-47357: Support InitCap string expression with collation") {
+    // Supported collations
+    case class InitCapTestCase[R](s: String, c: String, result: R)
+    val testCases = Seq(
+      InitCapTestCase("aBc ABc", "UTF8_BINARY", "Abc Abc"),
+      InitCapTestCase("aBc ABc", "UTF8_BINARY_LCASE", "Abc Abc"),
+      InitCapTestCase("aBc ABc", "UNICODE", "Abc Abc"),
+      InitCapTestCase("aBc ABc", "UNICODE_CI", "Abc Abc")
+    )
+    testCases.foreach(t => {
+      val query = s"SELECT initcap(collate('${t.s}', '${t.c}'))"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
+    })
   }
 
   // TODO: Add more tests for other string expressions
