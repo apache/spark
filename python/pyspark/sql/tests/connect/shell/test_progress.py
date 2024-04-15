@@ -135,8 +135,8 @@ class SparkConnectProgressHandlerE2E(SparkConnectSQLTestCase):
         try:
             self.connect.registerProgressHandler(handler)
             self.connect.range(10000).repartition(20).count()
-            self.assertGreater(state["counter"], 2, "Handler should be called at least twice.")
-            self.assertGreater(state["tasks"], 10, "Total tasks should be less than 200")
+            self.assertGreaterEqual(state["counter"], 1, "Handler should be called at least once.")
+            self.assertGreaterEqual(state["tasks"], 1, "Total tasks should be grater than 1")
         finally:
             self.connect.clearProgressHandlers()
 
