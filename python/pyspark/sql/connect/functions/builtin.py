@@ -2476,8 +2476,26 @@ def repeat(col: "ColumnOrName", n: Union["ColumnOrName", int]) -> Column:
 repeat.__doc__ = pysparkfuncs.repeat.__doc__
 
 
-def split(str: "ColumnOrName", pattern: str, limit: int = -1) -> Column:
-    return _invoke_function("split", _to_col(str), lit(pattern), lit(limit))
+def split(
+    str: "ColumnOrName",
+    pattern: Union[Column, str],
+    limit: Union["ColumnOrName", int] = -1,
+) -> Column:
+    # work around shadowing of str in the input variable name
+    from builtins import str as py_str
+
+    if isinstance(pattern, py_str):
+        _pattern = lit(pattern)
+    elif isinstance(pattern, Column):
+        _pattern = pattern
+    else:
+        raise PySparkTypeError(
+            error_class="NOT_COLUMN_OR_STR",
+            message_parameters={"arg_name": "pattern", "arg_type": type(pattern).__name__},
+        )
+
+    limit = lit(limit) if isinstance(limit, int) else _to_col(limit)
+    return _invoke_function("split", _to_col(str), _pattern, limit)
 
 
 split.__doc__ = pysparkfuncs.split.__doc__
