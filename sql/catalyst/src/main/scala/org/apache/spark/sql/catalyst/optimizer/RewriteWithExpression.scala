@@ -39,18 +39,25 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMON_EXPR_REF, WITH_EX
 object RewriteWithExpression extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.transformUpWithSubqueriesAndPruning(_.containsPattern(WITH_EXPRESSION)) {
+      // For aggregates, separate the computation of the aggregations themselves from the final
+      // result by moving the final result computation into a projection above it. This prevents
+      // this rule from producing an invalid Aggregate operator.
       case p @ PhysicalAggregation(
           groupingExpressions, aggregateExpressions, resultExpressions, child)
           if p.expressions.exists(_.containsPattern(WITH_EXPRESSION)) =>
-        // For aggregates, separate computation of the aggregations themselves from the final
-        // result by moving the final result computation into a projection above. This prevents
-        // this rule from producing an invalid Aggregate operator.
-        // TODO: the names of these aliases will become outdated after the rewrite
-        val aggExprs = aggregateExpressions.map(ae => Alias(ae, ae.toString)(ae.resultId))
+        // PhysicalAggregation returns aggregateExpressions as attribute references, which we change
+        // to aliases so that they can be referred to by resultExpressions.
+        val aggExprs = aggregateExpressions.map(
+          ae => Alias(ae, "_aggregateexpression")(ae.resultId))
+        val aggExprIds = aggExprs.map(_.exprId).toSet
+        val resExprs = resultExpressions.map(_.transform {
+          case a: AttributeReference if aggExprIds.contains(a.exprId) =>
+            a.withName("_aggregateexpression")
+        }.asInstanceOf[NamedExpression])
         // Rewrite the projection and the aggregate separately and then piece them together.
         val agg = Aggregate(groupingExpressions, groupingExpressions ++ aggExprs, child)
         val rewrittenAgg = applyInternal(agg)
-        val proj = Project(resultExpressions, rewrittenAgg)
+        val proj = Project(resExprs, rewrittenAgg)
         applyInternal(proj)
       case p if p.expressions.exists(_.containsPattern(WITH_EXPRESSION)) =>
         applyInternal(p)
@@ -62,7 +69,7 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
     var newPlan: LogicalPlan = p.mapExpressions { expr =>
       rewriteWithExprAndInputPlans(expr, inputPlans)
     }
-    newPlan = newPlan.withNewChildren(inputPlans)
+    newPlan = newPlan.withNewChildren(inputPlans.toIndexedSeq)
     // Since we add extra Projects with extra columns to pre-evaluate the common expressions,
     // the current operator may have extra columns if it inherits the output columns from its
     // child, and we need to project away the extra columns to keep the plan schema unchanged.

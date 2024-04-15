@@ -256,7 +256,7 @@ class RewriteWithExpressionSuite extends PlanTest {
     // Note that _common_expr_1 gets deduplicated by PullOutGroupingExpressions.
     val commonExpr2Name = "_common_expr_2"
     val groupingExprName = "_groupingexpression"
-    val countAlias = count(expr3 - 3).toString
+    val aggExprName = "_aggregateexpression"
     comparePlans(
       Optimizer.execute(plan),
       testRelation
@@ -266,9 +266,9 @@ class RewriteWithExpressionSuite extends PlanTest {
         .select(testRelation.output ++ Seq($"$groupingExprName", (a + 1).as(commonExpr2Name)): _*)
         .groupBy($"$groupingExprName")(
           $"$groupingExprName",
-          count($"$commonExpr2Name" * $"$commonExpr2Name" - 3).as(countAlias)
+          count($"$commonExpr2Name" * $"$commonExpr2Name" - 3).as(aggExprName)
         )
-        .select(($"$groupingExprName" + 2).as("col1"), $"`$countAlias`".as("col2"))
+        .select(($"$groupingExprName" + 2).as("col1"), $"`$aggExprName`".as("col2"))
         .analyze
     )
     // Running CollapseProject after the rule cleans up the unnecessary projections.
@@ -302,18 +302,61 @@ class RewriteWithExpressionSuite extends PlanTest {
     )
     val commonExpr1Name = "_common_expr_0"
     val commonExpr2Name = "_common_expr_1"
-    val maxAlias = max(expr2).toString
+    val aggExprName = "_aggregateexpression"
     comparePlans(
       Optimizer.execute(plan),
       testRelation
         .select(testRelation.output :+ (b + 2).as(commonExpr2Name): _*)
-        .groupBy(a)(a, max($"$commonExpr2Name" * $"$commonExpr2Name").as(maxAlias))
-        .select(a, $"`$maxAlias`", (a + 1).as(commonExpr1Name))
+        .groupBy(a)(a, max($"$commonExpr2Name" * $"$commonExpr2Name").as(aggExprName))
+        .select(a, $"`$aggExprName`", (a + 1).as(commonExpr1Name))
         .select(
           (a + 3).as("col1"),
           ($"$commonExpr1Name" * $"$commonExpr1Name").as("col2"),
-          $"`$maxAlias`".as("col3")
+          $"`$aggExprName`".as("col3")
         )
+        .analyze
+    )
+  }
+
+  test("WITH common expression is aggregate function") {
+    val a = testRelation.output.head
+    val expr = With.create((count(a - 1), 0)) { case Seq(ref) =>
+      ref * ref
+    }
+    val plan = testRelation.groupBy(a)(
+      (a - 1).as("col1"),
+      expr.as("col2"),
+    )
+    val aggExprName = "_aggregateexpression"
+    comparePlans(
+      Optimizer.execute(plan),
+      testRelation
+        .groupBy(a)(a, count(a - 1).as(aggExprName))
+        .select(
+          (a - 1).as("col1"),
+          ($"$aggExprName" * $"$aggExprName").as("col2")
+        )
+        .analyze
+    )
+  }
+
+  test("WITH expression is aggregate function") {
+    val a = testRelation.output.head
+    val expr = With.create((a - 1, 0)) { case Seq(ref) =>
+      sum(ref * ref)
+    }
+    val plan = testRelation.groupBy(a)(
+      (a - 1).as("col1"),
+      expr.as("col2")
+    )
+    val commonExpr1Name = "_common_expr_0"
+    val aggExprName = "_aggregateexpression"
+    comparePlans(
+      Optimizer.execute(plan),
+      testRelation
+        .select(testRelation.output :+ (a - 1).as(commonExpr1Name): _*)
+        .groupBy(a)(a, sum($"$commonExpr1Name" * $"$commonExpr1Name").as(aggExprName))
+        .select((a - 1).as("col1"), $"$aggExprName".as("col2"))
         .analyze
     )
   }
