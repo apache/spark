@@ -101,6 +101,7 @@ class CollationStringExpressionsSuite
       StringInStrTestCase("test大千世界X大千世界", "大千", "UTF8_BINARY", 5),
       StringInStrTestCase("test大千世界X大千世界", "界x", "UTF8_BINARY_LCASE", 8),
       StringInStrTestCase("test大千世界X大千世界", "界x", "UNICODE", 0),
+      StringInStrTestCase("test大千世界X大千世界", "界y", "UNICODE_CI", 0),
       StringInStrTestCase("test大千世界X大千世界", "界x", "UNICODE_CI", 8)
       // scalastyle:on
     )
