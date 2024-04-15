@@ -270,13 +270,13 @@ class StreamingQueryListenerBus:
     receive listener events and invoke correct listener call backs.
     """
 
-    def __init__(self, sqm: "StreamingQueryManager"):
+    def __init__(self, sqm: "StreamingQueryManager") -> None:
         self._sqm = sqm
         self._listener_bus: List[StreamingQueryListener] = []
         self._execution_thread: Optional[Thread] = None
         self._lock = Lock()
 
-    def append(self, listener: StreamingQueryListener):
+    def append(self, listener: StreamingQueryListener) -> None:
         """
         Append a listener to the local listener bus. When the added listener is
         the first listener, request the server to create the server side listener
@@ -301,7 +301,7 @@ class StreamingQueryListenerBus:
                 )
                 self._execution_thread.start()
 
-    def remove(self, listener: StreamingQueryListener):
+    def remove(self, listener: StreamingQueryListener) -> None:
         """
         Remove the listener from the local listener bus.
 
@@ -384,7 +384,7 @@ class StreamingQueryListenerBus:
 
     @staticmethod
     def deserialize(
-        event: str,
+        event: pb2.StreamingQueryListenerEvent,
     ) -> Union["QueryProgressEvent", "QueryIdleEvent", "QueryTerminatedEvent"]:
         if event.event_type == proto.StreamingQueryEventType.QUERY_PROGRESS_EVENT:
             return QueryProgressEvent.fromJson(json.loads(event.event_json))

@@ -1068,14 +1068,14 @@ class SparkConnectClient(object):
         if self._user_id:
             req.user_context.user_id = self._user_id
         req.plan.command.CopyFrom(command)
-        for response in self._execute_and_fetch_as_iterator(req, observations):
+        for response in self._execute_and_fetch_as_iterator(req, observations or {}):
             if isinstance(response, dict):
                 yield response
             else:
                 raise PySparkValueError(
                     error_class="UNKNOWN_RESPONSE",
                     message_parameters={
-                        "response": response,
+                        "response": str(response),
                     },
                 )
 
@@ -1343,8 +1343,8 @@ class SparkConnectClient(object):
                 cmd_result = b.streaming_query_manager_command_result
                 yield {"streaming_query_manager_command_result": cmd_result}
             if b.HasField("streaming_query_listener_events_result"):
-                cmd_result = b.streaming_query_listener_events_result
-                yield {"streaming_query_listener_events_result": cmd_result}
+                event_result = b.streaming_query_listener_events_result
+                yield {"streaming_query_listener_events_result": event_result}
             if b.HasField("get_resources_command_result"):
                 resources = {}
                 for key, resource in b.get_resources_command_result.resources.items():
