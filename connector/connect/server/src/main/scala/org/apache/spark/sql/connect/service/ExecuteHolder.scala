@@ -129,13 +129,6 @@ private[connect] class ExecuteHolder(
   }
 
   /**
-   * Wait for the execution thread to finish and join it.
-   */
-  def join(): Unit = {
-    runner.join()
-  }
-
-  /**
    * Attach an ExecuteGrpcResponseSender that will consume responses from the query and send them
    * out on the Grpc response stream. The sender will start from the start of the response stream.
    * @param responseSender
