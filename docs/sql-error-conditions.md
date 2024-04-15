@@ -2823,6 +2823,12 @@ To tolerate the error on drop use DROP VARIABLE IF EXISTS.
 
 Cannot construct a Variant larger than 16 MiB. The maximum allowed size of a Variant value is 16 MiB.
 
+### VARIANT_DUPLICATE_KEY
+
+[SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Failed to build variant because of a duplicate object key ``<key>``.
+
 ### VARIANT_SIZE_LIMIT
 
 [SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)

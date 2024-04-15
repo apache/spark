@@ -1881,6 +1881,11 @@
       "The value '<confValue>' in the config \"<confName>\" is invalid."
     ],
     "subClass" : {
+      "DEFAULT_COLLATION" : {
+        "message" : [
+          "Cannot resolve the given default collation. Did you mean '<proposal>'?"
+        ]
+      },
       "TIME_ZONE" : {
         "message" : [
           "Cannot resolve the given timezone."
@@ -4717,6 +4722,12 @@
   "VARIANT_CONSTRUCTOR_SIZE_LIMIT" : {
     "message" : [
       "Cannot construct a Variant larger than 16 MiB. The maximum allowed size of a Variant value is 16 MiB."
+    ],
+    "sqlState" : "22023"
+  },
+  "VARIANT_DUPLICATE_KEY" : {
+    "message" : [
+      "Failed to build variant because of a duplicate object key `<key>`."
     ],
     "sqlState" : "22023"
   },
