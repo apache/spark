@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connect.execution
 
+import scala.concurrent.{ExecutionContext, Promise}
+import scala.util.Try
 import scala.util.control.NonFatal
 
 import com.google.protobuf.Message
@@ -29,7 +31,7 @@ import org.apache.spark.sql.connect.common.ProtoUtils
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.service.{ExecuteHolder, ExecuteSessionTag}
 import org.apache.spark.sql.connect.utils.ErrorUtils
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * This class launches the actual execution in an execution thread. The execution pushes the
@@ -37,10 +39,12 @@ import org.apache.spark.util.Utils
  */
 private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends Logging {
 
+  private val promise: Promise[Unit] = Promise[Unit]()
+
   // The newly created thread will inherit all InheritableThreadLocals used by Spark,
   // e.g. SparkContext.localProperties. If considering implementing a thread-pool,
   // forwarding of thread locals needs to be taken into account.
-  private var executionThread: Thread = new ExecutionThread()
+  private val executionThread: Thread = new ExecutionThread(promise)
 
   private var interrupted: Boolean = false
 
@@ -53,9 +57,11 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
     executionThread.start()
   }
 
-  /** Joins the background execution thread after it is finished. */
-  def join(): Unit = {
-    executionThread.join()
+  /**
+   * Register a callback that gets executed after completion/interruption of the execution
+   */
+  private[connect] def processOnCompletion(callback: Try[Unit] => Unit): Unit = {
+    promise.future.onComplete(callback)(ExecuteThreadRunner.namedExecutionContext)
   }
 
   /**
@@ -222,10 +228,21 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
       .build()
   }
 
-  private class ExecutionThread
+  private class ExecutionThread(onCompletionPromise: Promise[Unit])
       extends Thread(s"SparkConnectExecuteThread_opId=${executeHolder.operationId}") {
     override def run(): Unit = {
-      execute()
+      try {
+        execute()
+        onCompletionPromise.success(())
+      } catch {
+        case NonFatal(e) =>
+          onCompletionPromise.failure(e)
+      }
     }
   }
+}
+
+private[connect] object ExecuteThreadRunner {
+  private implicit val namedExecutionContext: ExecutionContext = ExecutionContext
+    .fromExecutor(ThreadUtils.newDaemonSingleThreadExecutor("SparkConnectExecuteThreadCallback"))
 }
