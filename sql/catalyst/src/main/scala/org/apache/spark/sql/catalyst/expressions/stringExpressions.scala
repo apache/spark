@@ -103,7 +103,7 @@ case class ConcatWs(children: Seq[Expression])
     val flatInputs = children.flatMap { child =>
       child.eval(input) match {
         case s: UTF8String => Iterator(s)
-        case arr: ArrayData => arr.toArray[UTF8String](StringType)
+        case arr: ArrayData => arr.toArray[UTF8String](child.asInstanceOf[ArrayType].elementType)
         case null => Iterator(null.asInstanceOf[UTF8String])
       }
     }
@@ -164,7 +164,7 @@ case class ConcatWs(children: Seq[Expression])
            """
 
         val (varCount, varBuild) = child.dataType match {
-          case StringType =>
+          case _: StringType =>
             val reprForValueCast = s"((UTF8String) $reprForValue)"
             ("", // we count all the StringType arguments num at once below.
               if (eval.isNull == TrueLiteral) {
@@ -172,7 +172,7 @@ case class ConcatWs(children: Seq[Expression])
               } else {
                 s"$array[$idxVararg ++] = $reprForIsNull ? (UTF8String) null : $reprForValueCast;"
               })
-          case _: ArrayType =>
+          case arr: ArrayType =>
             val reprForValueCast = s"((ArrayData) $reprForValue)"
             val size = ctx.freshName("n")
             if (eval.isNull == TrueLiteral) {
@@ -188,7 +188,7 @@ case class ConcatWs(children: Seq[Expression])
                 if (!$reprForIsNull) {
                   final int $size = $reprForValueCast.numElements();
                   for (int j = 0; j < $size; j ++) {
-                    $array[$idxVararg ++] = ${CodeGenerator.getValue(reprForValueCast, StringType, "j")};
+                    $array[$idxVararg ++] = ${CodeGenerator.getValue(reprForValueCast, arr.elementType, "j")};
                   }
                 }
                 """)
@@ -236,7 +236,7 @@ case class ConcatWs(children: Seq[Expression])
         boolean[] $isNullArgs = new boolean[${children.length - 1}];
         Object[] $valueArgs = new Object[${children.length - 1}];
         $argBuilds
-        int $varargNum = ${children.count(_.dataType == StringType) - 1};
+        int $varargNum = ${children.count(_.dataType.isInstanceOf[StringType]) - 1};
         int $idxVararg = 0;
         $varargCounts
         UTF8String[] $array = new UTF8String[$varargNum];
