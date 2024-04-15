@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.jdbc
 
 import java.math.{BigDecimal => JBigDecimal}
 import java.nio.charset.StandardCharsets
-import java.sql.{Connection, Date, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException, Timestamp}
+import java.sql.{Connection, Date, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, RowId, SQLException, Timestamp}
 import java.time.{Instant, LocalDate}
 import java.util
 import java.util.concurrent.TimeUnit
@@ -467,12 +467,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
     case StringType if metadata.contains("rowid") =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
-        val rawRowId = rs.getRowId(pos + 1)
-        if (rawRowId == null) {
-          row.update(pos, null)
-        } else {
-          row.update(pos, UTF8String.fromString(rawRowId.toString))
-        }
+        val id = nullSafeConvert[RowId](rs.getRowId(pos + 1), r => UTF8String.fromBytes(r.getBytes))
+        row.update(pos, id)
 
     case StringType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
