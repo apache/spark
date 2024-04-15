@@ -113,9 +113,7 @@ class StreamingQueryHashPartitionVerifySuite extends StreamTest {
     val generator = RandomDataGenerator
       .forType(
         schema,
-        rand = new Random(rand.nextInt(RandomDataGenerator.MAX_ARR_SIZE)),
-        maxStringLength = 100,
-        maxArrayLength = 4
+        rand = new Random(rand.nextInt())
       )
       .get
 
@@ -156,6 +154,9 @@ class StreamingQueryHashPartitionVerifySuite extends StreamTest {
     val rowAndPartIdFile = new File(goldenFileURI.getPath, rowAndPartIdFilename)
 
     if (regenerateGoldenFiles) {
+      // To limit the golden file size under 10Mb, please set the final val MAX_STR_LEN: Int = 100
+      // and final val MAX_ARR_SIZE: Int = 4 in org.apache.spark.sql.RandomDataGenerator
+
       val seed = Random.nextInt()
       val random = new Random(seed)
       logInfo(s"Get random inputs with seed $seed")
@@ -176,7 +177,7 @@ class StreamingQueryHashPartitionVerifySuite extends StreamTest {
           numShufflePartitions
         ).createPartitioning(numShufflePartitions)
 
-        assert(
+        assert(sql/catalyst/src/test/scala/org/apache/spark/sql/RandomDataGenerator.scala
           hash.isInstanceOf[HashPartitioning],
           "StatefulOpClusteredDistribution should " +
           "rely on HashPartitioning to ensure partitions remain the same for streaming " +
