@@ -205,7 +205,7 @@ class CollationStringExpressionsSuite
     })
   }
 
-  test("Encode, ToBinary & Sentences expressions with collation") {
+  test("Encode, ToBinary & Sentences string expressions with collation") {
     case class EncodeToBinarySentencesTestCase[R](q: String, dt: DataType, r: R)
     val testCases = Seq(
       EncodeToBinarySentencesTestCase("select encode('a' collate utf8_binary, 'utf-8')",
