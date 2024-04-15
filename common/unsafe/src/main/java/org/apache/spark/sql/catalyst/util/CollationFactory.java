@@ -214,4 +214,15 @@ public final class CollationFactory {
     int collationId = collationNameToId(collationName);
     return collationTable[collationId];
   }
+
+  public static UTF8String getCollationKeyLcase(UTF8String str) {
+    return str.toLowerCase();
+  }
+
+  public static UTF8String[] getCollationKeyLcase(UTF8String[] arr) {
+    for (int i = 0; i < arr.length; i++) {
+      arr[i] = arr[i].toLowerCase();
+    }
+    return arr;
+  }
 }

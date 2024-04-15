@@ -2223,7 +2223,8 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
 object ReplaceDistinctWithAggregate extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(DISTINCT_LIKE), ruleId) {
-    case Distinct(child) => Aggregate(child.output, child.output, child)
+    case Distinct(child) =>
+      Aggregate(child.output, child.output, child)
   }
 }
 

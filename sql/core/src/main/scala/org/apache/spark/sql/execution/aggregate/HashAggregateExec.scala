@@ -98,7 +98,7 @@ case class HashAggregateExec(
         case st: StringType =>
           val str: UTF8String = row.getUTF8String(i)
           val collationId: Int = st.collationId
-          if (collationId == CollationFactory.UTF8_BINARY_COLLATION_ID) {
+          if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
             newRow(i) = str
           } else if (collationId == CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID) {
             newRow(i) = UTF8String.fromString(str.toString.toLowerCase(Locale.ROOT))
