@@ -1751,16 +1751,16 @@ class WriteOperationV2(LogicalPlan):
                 plan.write_operation_v2.mode = proto.WriteOperationV2.Mode.MODE_CREATE
             elif wm == "overwrite":
                 plan.write_operation_v2.mode = proto.WriteOperationV2.Mode.MODE_OVERWRITE
+                if self.overwrite_condition is not None:
+                    plan.write_operation_v2.overwrite_condition.CopyFrom(
+                        self.overwrite_condition.to_plan(session)
+                    )
             elif wm == "overwrite_partitions":
                 plan.write_operation_v2.mode = proto.WriteOperationV2.Mode.MODE_OVERWRITE_PARTITIONS
             elif wm == "append":
                 plan.write_operation_v2.mode = proto.WriteOperationV2.Mode.MODE_APPEND
             elif wm == "replace":
                 plan.write_operation_v2.mode = proto.WriteOperationV2.Mode.MODE_REPLACE
-                if self.overwrite_condition is not None:
-                    plan.write_operation_v2.overwrite_condition.CopyFrom(
-                        self.overwrite_condition.to_plan(session)
-                    )
             elif wm == "create_or_replace":
                 plan.write_operation_v2.mode = proto.WriteOperationV2.Mode.MODE_CREATE_OR_REPLACE
             else:
