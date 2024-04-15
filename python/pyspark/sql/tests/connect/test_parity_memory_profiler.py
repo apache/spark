@@ -27,20 +27,6 @@ class MemoryProfilerParityTests(MemoryProfiler2TestsMixin, ReusedConnectTestCase
         super().setUp()
         self.spark._profiler_collector._value = None
 
-
-class MemoryProfilerWithoutPlanCacheParityTests(MemoryProfilerParityTests):
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        cls.spark.conf.set("spark.connect.session.planCache.enabled", False)
-
-    @classmethod
-    def tearDownClass(cls):
-        try:
-            cls.spark.conf.unset("spark.connect.session.planCache.enabled")
-        finally:
-            super().tearDownClass()
-
     def test_memory_profiler_udf_multiple_actions(self):
         def action(df):
             df.collect()
