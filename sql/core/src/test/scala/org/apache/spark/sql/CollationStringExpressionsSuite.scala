@@ -163,7 +163,7 @@ class CollationStringExpressionsSuite
     })
   }
 
-  test("Ascii & UnBase64 expressions with collation") {
+  test("Ascii & UnBase64 string expressions with collation") {
     case class AsciiUnBase64TestCase[R](q: String, dt: DataType, r: R)
     val testCases = Seq(
       AsciiUnBase64TestCase("select ascii('a' collate utf8_binary)", IntegerType, Row(97)),
