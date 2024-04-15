@@ -128,6 +128,7 @@ object Cast extends QueryErrorsBase {
     case (TimestampType, _: NumericType) => true
 
     case (VariantType, _) => variant.VariantGet.checkDataType(to)
+    case (_, VariantType) => variant.VariantGet.checkDataType(from)
 
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
       canAnsiCast(fromType, toType) && resolvableNullability(fn, tn)
@@ -236,6 +237,7 @@ object Cast extends QueryErrorsBase {
     case (_: NumericType, _: NumericType) => true
 
     case (VariantType, _) => variant.VariantGet.checkDataType(to)
+    case (_, VariantType) => variant.VariantGet.checkDataType(from)
 
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
       canCast(fromType, toType) &&
@@ -1119,6 +1121,7 @@ case class Cast(
     } else {
       to match {
         case dt if dt == from => identity[Any]
+        case VariantType => input => variant.VariantExpressionEvalUtils.castToVariant(input, from)
         case _: StringType => castToString(from)
         case BinaryType => castToBinary(from)
         case DateType => castToDate(from)
@@ -1223,6 +1226,10 @@ case class Cast(
           $evPrim = (${CodeGenerator.boxedType(to)})$tmp;
         }
       """
+    case VariantType =>
+      val cls = variant.VariantExpressionEvalUtils.getClass.getName.stripSuffix("$")
+      val fromArg = ctx.addReferenceObj("from", from)
+      (c, evPrim, evNull) => code"$evPrim = $cls.castToVariant($c, $fromArg);"
     case _: StringType => (c, evPrim, _) => castToStringCode(from, ctx).apply(c, evPrim)
     case BinaryType => castToBinaryCode(from)
     case DateType => castToDateCode(from, ctx)
