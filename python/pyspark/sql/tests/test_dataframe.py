@@ -1317,6 +1317,145 @@ class DataFrameTestsMixin:
                 query_context_type=None,
             )
 
+    def test_dataframe_error_context_reverse_op(self):
+        # SPARK-47852: Support DataFrameQueryContext for reverse operations.
+        with self.sql_conf({"spark.sql.ansi.enabled": True}):
+            df = self.spark.createDataFrame([(0,), (1,), (2,)], ["id"])
+
+            # DataFrameQueryContext with pysparkLoggingInfo - rdiv
+            with self.assertRaises(ArithmeticException) as pe:
+                df.withColumn("div_zero_reverse", 10 / df.id).collect()
+            self.check_error(
+                exception=pe.exception,
+                error_class="DIVIDE_BY_ZERO",
+                message_parameters={"config": '"spark.sql.ansi.enabled"'},
+                query_context_type=QueryContextType.DataFrame,
+                pyspark_fragment="divide",
+            )
+
+            # DataFrameQueryContext with pysparkLoggingInfo - rsub
+            with self.assertRaises(NumberFormatException) as pe:
+                df.withColumn("minus_invalid_type", "string" - df.id).collect()
+            self.check_error(
+                exception=pe.exception,
+                error_class="CAST_INVALID_INPUT",
+                message_parameters={
+                    "expression": "'string'",
+                    "sourceType": '"STRING"',
+                    "targetType": '"BIGINT"',
+                    "ansiConfig": '"spark.sql.ansi.enabled"',
+                },
+                query_context_type=QueryContextType.DataFrame,
+                pyspark_fragment="minus",
+            )
+
+            # DataFrameQueryContext with pysparkLoggingInfo - rmod
+            with self.assertRaises(NumberFormatException) as pe:
+                df.withColumn("mod_invalid_type", df.id.__rmod__("string")).collect()
+            self.check_error(
+                exception=pe.exception,
+                error_class="CAST_INVALID_INPUT",
+                message_parameters={
+                    "expression": "'string'",
+                    "sourceType": '"STRING"',
+                    "targetType": '"BIGINT"',
+                    "ansiConfig": '"spark.sql.ansi.enabled"',
+                },
+                query_context_type=QueryContextType.DataFrame,
+                pyspark_fragment="mod",
+            )
+
+            # DataFrameQueryContext with pysparkLoggingInfo - chained (`rdiv` is problematic)
+            with self.assertRaises(ArithmeticException) as pe:
+                df.withColumn("multiply_ten", df.id * 10).withColumn(
+                    "divide_zero", 10 / df.id
+                ).withColumn("plus_ten", df.id + 10).withColumn("minus_ten", df.id - 10).collect()
+            self.check_error(
+                exception=pe.exception,
+                error_class="DIVIDE_BY_ZERO",
+                message_parameters={"config": '"spark.sql.ansi.enabled"'},
+                query_context_type=QueryContextType.DataFrame,
+                pyspark_fragment="divide",
+            )
+
+            # DataFrameQueryContext with pysparkLoggingInfo - chained (`rsub` is problematic)
+            with self.assertRaises(NumberFormatException) as pe:
+                df.withColumn("multiply_ten", df.id * 10).withColumn(
+                    "divide_ten", df.id / 10
+                ).withColumn("plus_ten", df.id + 10).withColumn(
+                    "minus_string", "string" - df.id
+                ).collect()
+            self.check_error(
+                exception=pe.exception,
+                error_class="CAST_INVALID_INPUT",
+                message_parameters={
+                    "expression": "'string'",
+                    "sourceType": '"STRING"',
+                    "targetType": '"BIGINT"',
+                    "ansiConfig": '"spark.sql.ansi.enabled"',
+                },
+                query_context_type=QueryContextType.DataFrame,
+                pyspark_fragment="minus",
+            )
+
+            # Multiple expressions in df.select (`rdiv` is problematic)
+            with self.assertRaises(ArithmeticException) as pe:
+                df.select(df.id - 10, df.id + 4, 10 / df.id, df.id * 5).collect()
+            self.check_error(
+                exception=pe.exception,
+                error_class="DIVIDE_BY_ZERO",
+                message_parameters={"config": '"spark.sql.ansi.enabled"'},
+                query_context_type=QueryContextType.DataFrame,
+                pyspark_fragment="divide",
+            )
+
+            # Multiple expressions in df.select (`rsub` is problematic)
+            with self.assertRaises(NumberFormatException) as pe:
+                df.select("string" - df.id, df.id + 4, df.id / 10, df.id * 5).collect()
+            self.check_error(
+                exception=pe.exception,
+                error_class="CAST_INVALID_INPUT",
+                message_parameters={
+                    "expression": "'string'",
+                    "sourceType": '"STRING"',
+                    "targetType": '"BIGINT"',
+                    "ansiConfig": '"spark.sql.ansi.enabled"',
+                },
+                query_context_type=QueryContextType.DataFrame,
+                pyspark_fragment="minus",
+            )
+
+            # Multiple expressions with pre-declared expressions (`rdiv` is problematic)
+            a = df.id / 10
+            b = 10 / df.id
+            with self.assertRaises(ArithmeticException) as pe:
+                df.select(a, df.id + 4, b, df.id * 5).collect()
+            self.check_error(
+                exception=pe.exception,
+                error_class="DIVIDE_BY_ZERO",
+                message_parameters={"config": '"spark.sql.ansi.enabled"'},
+                query_context_type=QueryContextType.DataFrame,
+                pyspark_fragment="divide",
+            )
+
+            # Multiple expressions with pre-declared expressions (`rsub` is problematic)
+            a = "string" - df.id
+            b = df.id - 5
+            with self.assertRaises(NumberFormatException) as pe:
+                df.select(a, df.id / 10, b, df.id * 5).collect()
+            self.check_error(
+                exception=pe.exception,
+                error_class="CAST_INVALID_INPUT",
+                message_parameters={
+                    "expression": "'string'",
+                    "sourceType": '"STRING"',
+                    "targetType": '"BIGINT"',
+                    "ansiConfig": '"spark.sql.ansi.enabled"',
+                },
+                query_context_type=QueryContextType.DataFrame,
+                pyspark_fragment="minus",
+            )
+
 
 class DataFrameTests(DataFrameTestsMixin, ReusedSQLTestCase):
     pass

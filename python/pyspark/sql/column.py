@@ -227,13 +227,33 @@ def _reverse_op(
     doc: str = "binary operator",
 ) -> Callable[["Column", Union["LiteralType", "DecimalLiteral"]], "Column"]:
     """Create a method for binary operator (this object is on right side)"""
+    binary_operator_map = {
+        "minus": "-",
+        "divide": "/",
+        "mod": "%",
+    }
 
     def _(self: "Column", other: Union["LiteralType", "DecimalLiteral"]) -> "Column":
         jother = _create_column_from_literal(other)
-        jc = getattr(jother, name)(self._jc)
+        if name in binary_operator_map:
+            from pyspark.sql import SparkSession
+
+            spark = SparkSession._getActiveSessionOrCreate()
+            stack = list(reversed(inspect.stack()))
+            depth = int(
+                spark.conf.get("spark.sql.stackTracesInDataFrameContext")  # type: ignore[arg-type]
+            )
+            selected_frames = stack[:depth]
+            call_sites = [f"{frame.filename}:{frame.lineno}" for frame in selected_frames]
+            call_site_str = "\n".join(call_sites)
+
+            jc = getattr(jother, "fn")(binary_operator_map[name], self._jc, name, call_site_str)
+        else:
+            jc = getattr(jother, name)(self._jc)
         return Column(jc)
 
     _.__doc__ = doc
+    _.__name__ = name
     return _
 
 
