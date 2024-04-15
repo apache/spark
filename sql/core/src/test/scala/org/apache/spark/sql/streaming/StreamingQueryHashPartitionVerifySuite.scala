@@ -24,19 +24,14 @@ import scala.util.Random
 
 import com.google.common.io.ByteStreams
 
-import org.apache.spark.SparkConf
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BinaryType, DataType, DoubleType, FloatType, IntegerType, StringType, StructType}
+import org.apache.spark.sql.types.{BinaryType, DataType, DoubleType, FloatType, IntegerType, LongType, StringType, StructType, TimestampType}
 
 class StreamingQueryHashPartitionVerifySuite extends StreamTest {
-  override protected def sparkConf: SparkConf =
-    super.sparkConf
-      .set(SQLConf.SHUFFLE_PARTITIONS.key, numShufflePartitions.toString)
 
   // Configs for golden file
   private val goldenFileURI =
@@ -49,13 +44,15 @@ class StreamingQueryHashPartitionVerifySuite extends StreamTest {
     sparkConf) // Used for compressing output to rowAndPartId file
 
   // Configs for random schema generation
-  private val variableTypes = Seq(IntegerType, DoubleType, FloatType, BinaryType, StringType)
+  private val variableTypes = Seq(IntegerType, DoubleType, FloatType, BinaryType,
+    StringType, TimestampType, LongType)
   private val numSchemaTypes = 1
   private val maxNumFields = 20
 
   // Configs for shuffle
   private val numRows = 10000
   private val numShufflePartitions = 100
+
   private def saveSchemas(schemas: Seq[StructType]) = {
     val writer = new BufferedWriter(new FileWriter(new File(goldenFileURI.getPath, schemaFileName)))
     schemas.foreach { schema =>
@@ -150,16 +147,15 @@ class StreamingQueryHashPartitionVerifySuite extends StreamTest {
     }
   }
 
-  test("SPARK-47788: Ensure the same hash function is used across batches.") {
+  test("SPARK-47788: Ensure hash function for streaming stateful ops is compatibility" +
+    "across Spark versions.") {
     val rowAndPartIdFile = new File(goldenFileURI.getPath, rowAndPartIdFilename)
 
     if (regenerateGoldenFiles) {
       // To limit the golden file size under 10Mb, please set the final val MAX_STR_LEN: Int = 100
       // and final val MAX_ARR_SIZE: Int = 4 in org.apache.spark.sql.RandomDataGenerator
 
-      val seed = Random.nextInt()
-      val random = new Random(seed)
-      logInfo(s"Get random inputs with seed $seed")
+      val random = new Random()
 
       val schemas = getRandomSchemas(random)
 
@@ -177,9 +173,8 @@ class StreamingQueryHashPartitionVerifySuite extends StreamTest {
           numShufflePartitions
         ).createPartitioning(numShufflePartitions)
 
-        assert(sql/catalyst/src/test/scala/org/apache/spark/sql/RandomDataGenerator.scala
-          hash.isInstanceOf[HashPartitioning],
-          "StatefulOpClusteredDistribution should " +
+        assert(hash.isInstanceOf[HashPartitioning],
+        "StatefulOpClusteredDistribution should " +
           "rely on HashPartitioning to ensure partitions remain the same for streaming " +
           "stateful operators."
         )
@@ -194,6 +189,8 @@ class StreamingQueryHashPartitionVerifySuite extends StreamTest {
         codec.compressedInputStream(new FileInputStream(rowAndPartIdFile))
       )
       schemas.foreach { schema =>
+        logInfo(s"Schema of the input rows: ${schema.treeString}")
+
         val hash = StatefulOpClusteredDistribution(
           Seq(BoundReference(0, schema, nullable = true)),
           numShufflePartitions
@@ -202,15 +199,29 @@ class StreamingQueryHashPartitionVerifySuite extends StreamTest {
         assert(
           hash.isInstanceOf[HashPartitioning],
           "StatefulOpClusteredDistribution should " +
-          "rely on HashPartitioning to ensure partitions remain the same for streaming " +
-          "stateful operators."
+            "rely on HashPartitioning to ensure partitions remain the same for streaming " +
+            "stateful operators."
         )
 
         val (rows, expectedPartitions) = readRowsAndPartIds(is)
-        val partitions = getPartitionId(rows, hash.asInstanceOf[HashPartitioning])
+        val actualPartitions = getPartitionId(rows, hash.asInstanceOf[HashPartitioning])
+
+        val mismatches = rows
+          .zip(expectedPartitions.zip(actualPartitions))
+          .filter { case (_, (expected, actual)) => expected != actual }
+          .map {
+            case (row, (expected, actual)) =>
+              s"Row: $row, Expected: $expected, Actual: $actual"
+          }
+
+        val mismatchCount = mismatches.size
+        val sampleMismatches = mismatches.take(10)
+
         assert(
-          partitions === expectedPartitions,
-          "The partition ids do not match the expected partitions generated before."
+          mismatchCount == 0,
+          s"The partition ids do not match the expected partitions." +
+            s"Total mismatches: $mismatchCount. " +
+          s"Sample of mismatches: ${sampleMismatches.mkString("\n")}"
         )
       }
       is.close()
