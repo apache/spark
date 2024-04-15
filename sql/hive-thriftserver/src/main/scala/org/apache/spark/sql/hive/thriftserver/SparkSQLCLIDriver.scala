@@ -240,7 +240,6 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       case e: Exception =>
         logWarning("Encountered an error while trying to initialize Hive's " +
                      "history file. History will not be available during this session.", e)
-        logWarning(log"${MDC(ERROR, e.getMessage)}", e)
     }
 
     // add shutdown hook to flush the history to history file
