@@ -172,8 +172,7 @@ public final class CollationSupport {
       if (string.numBytes() != 0 && regex.numBytes() == 0) {
         return string.split(regex, limit);
       } else {
-        // ui flags toggle unicode case-insensitive matching
-        return string.split(UTF8String.fromString("(?ui)" + regex.toString()), limit);
+        return string.split(CollationAwareUTF8String.getLowercaseRegex(regex), limit);
       }
     }
   }
@@ -202,6 +201,13 @@ public final class CollationSupport {
       }
       return CollationFactory.getStringSearch(target.substring(
         pos, pos + pattern.numChars()), pattern, collationId).last() == 0;
+    }
+
+    // ui flags toggle unicode case-insensitive matching
+    private static final UTF8String lowercaseRegexPrefix = UTF8String.fromString("(?ui)");
+
+    private static UTF8String getLowercaseRegex(UTF8String regex) {
+      return UTF8String.concat(lowercaseRegexPrefix, regex);
     }
 
   }
