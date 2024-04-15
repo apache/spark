@@ -56,6 +56,8 @@ trait LoggingSuiteBase
 
   def msgWithMDC: LogEntry = log"Lost executor ${MDC(EXECUTOR_ID, "1")}."
 
+  def msgWithMDCValueIsNull: LogEntry = log"Lost executor ${MDC(EXECUTOR_ID, null)}."
+
   def msgWithMDCAndException: LogEntry = log"Error in executor ${MDC(EXECUTOR_ID, "1")}."
 
   def msgWithConcat: LogEntry = log"Min Size: ${MDC(MIN_SIZE, "2")}, " +
@@ -70,6 +72,9 @@ trait LoggingSuiteBase
 
   // test for message (with mdc)
   def expectedPatternForMsgWithMDC(level: Level): String
+
+  // test for message (with mdc - the value is null)
+  def expectedPatternForMsgWithMDCValueIsNull(level: Level): String
 
   // test for message and exception
   def expectedPatternForMsgWithMDCAndException(level: Level): String
@@ -106,6 +111,17 @@ trait LoggingSuiteBase
           val logOutput = captureLogOutput(logFunc)
           assert(expectedPatternForMsgWithMDC(level).r.matches(logOutput))
       }
+  }
+
+  test("Logging with MDC(the value is null)") {
+    Seq(
+      (Level.ERROR, () => logError(msgWithMDCValueIsNull)),
+      (Level.WARN, () => logWarning(msgWithMDCValueIsNull)),
+      (Level.INFO, () => logInfo(msgWithMDCValueIsNull))).foreach {
+      case (level, logFunc) =>
+        val logOutput = captureLogOutput(logFunc)
+        assert(expectedPatternForMsgWithMDCValueIsNull(level).r.matches(logOutput))
+    }
   }
 
   test("Logging with MDC and Exception") {
@@ -184,6 +200,20 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
           "logger": "$className"
         }""")
     }
+
+  def expectedPatternForMsgWithMDCValueIsNull(level: Level): String = {
+    compactAndToRegexPattern(
+      s"""
+        {
+          "ts": "<timestamp>",
+          "level": "$level",
+          "msg": "Lost executor null.",
+          "context": {
+             "executor_id": null
+          },
+          "logger": "$className"
+        }""")
+  }
 
   override def expectedPatternForMsgWithMDCAndException(level: Level): String = {
     compactAndToRegexPattern(

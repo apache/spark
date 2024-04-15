@@ -37,8 +37,7 @@ public class TestStatefulProcessorWithInitialState
   @Override
   public void init(
       OutputMode outputMode,
-      TimeoutMode timeoutMode,
-      TTLMode ttlMode) {
+      TimeMode timeMode) {
     testState = this.getHandle().getValueState("testState",
       Encoders.STRING());
   }

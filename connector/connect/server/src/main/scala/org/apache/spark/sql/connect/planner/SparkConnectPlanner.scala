@@ -2574,6 +2574,11 @@ class SparkConnectPlanner(
         handleStreamingQueryManagerCommand(
           command.getStreamingQueryManagerCommand,
           responseObserver)
+      case proto.Command.CommandTypeCase.STREAMING_QUERY_LISTENER_BUS_COMMAND =>
+        val handler = new SparkConnectStreamingQueryListenerHandler(executeHolder)
+        handler.handleListenerCommand(
+          command.getStreamingQueryListenerBusCommand,
+          responseObserver)
       case proto.Command.CommandTypeCase.GET_RESOURCES_COMMAND =>
         handleGetResourcesCommand(responseObserver)
       case proto.Command.CommandTypeCase.CREATE_RESOURCE_PROFILE_COMMAND =>
@@ -3141,7 +3146,7 @@ class SparkConnectPlanner(
     }
     executeHolder.eventsManager.postFinished()
 
-    val result = WriteStreamOperationStartResult
+    val resultBuilder = WriteStreamOperationStartResult
       .newBuilder()
       .setQueryId(
         StreamingQueryInstanceId
@@ -3150,14 +3155,37 @@ class SparkConnectPlanner(
           .setRunId(query.runId.toString)
           .build())
       .setName(Option(query.name).getOrElse(""))
-      .build()
+
+    // The query started event for this query is sent to the client, and is handled by
+    // the client side listeners before client's DataStreamWriter.start() returns.
+    // This is to ensure that the onQueryStarted call back is called before the start() call, which
+    // is defined in the onQueryStarted API.
+    // So the flow is:
+    // 1. On the server side, the query is started above.
+    // 2. Per the contract of the onQueryStarted API, the queryStartedEvent is added to the
+    //    streamingServersideListenerHolder.streamingQueryStartedEventCache, by the onQueryStarted
+    //    call back of streamingServersideListenerHolder.streamingQueryServerSideListener.
+    // 3. The queryStartedEvent is sent to the client.
+    // 4. The client side listener handles the queryStartedEvent and calls the onQueryStarted API,
+    //    before the client side DataStreamWriter.start().
+    // This way we ensure that the onQueryStarted API is called before the start() call in Connect.
+    val queryStartedEvent = Option(
+      sessionHolder.streamingServersideListenerHolder.streamingQueryStartedEventCache.remove(
+        query.runId.toString))
+    queryStartedEvent.foreach {
+      logDebug(
+        s"[SessionId: $sessionId][UserId: $userId][operationId: " +
+          s"${executeHolder.operationId}][query id: ${query.id}][query runId: ${query.runId}] " +
+          s"Adding QueryStartedEvent to response")
+      e => resultBuilder.setQueryStartedEventJson(e.json)
+    }
 
     responseObserver.onNext(
       ExecutePlanResponse
         .newBuilder()
         .setSessionId(sessionId)
         .setServerSideSessionId(sessionHolder.serverSessionId)
-        .setWriteStreamOperationStartResult(result)
+        .setWriteStreamOperationStartResult(resultBuilder.build())
         .build())
   }
 
