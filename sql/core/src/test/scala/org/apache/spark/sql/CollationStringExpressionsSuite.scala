@@ -34,7 +34,10 @@ class CollationStringExpressionsSuite
     // Supported collations
     case class ConcatWsTestCase[R](s: String, a: Array[String], c: String, result: R)
     val testCases = Seq(
-      ConcatWsTestCase(" ", Array("Spark", "SQL"), "UTF8_BINARY", "Spark SQL")
+      ConcatWsTestCase(" ", Array("Spark", "SQL"), "UTF8_BINARY", "Spark SQL"),
+      ConcatWsTestCase(" ", Array("Spark", "SQL"), "UTF8_BINARY_LCASE", "Spark SQL"),
+      ConcatWsTestCase(" ", Array("Spark", "SQL"), "UNICODE", "Spark SQL"),
+      ConcatWsTestCase(" ", Array("Spark", "SQL"), "UNICODE_CI", "Spark SQL")
     )
     testCases.foreach(t => {
       val arrCollated = t.a.map(s => s"collate('$s', '${t.c}')").mkString(", ")
@@ -51,22 +54,38 @@ class CollationStringExpressionsSuite
       checkAnswer(sql(query), Row(t.result))
       assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
     })
-    // Unsupported collations
-    case class ConcatWsTestFail(s: String, a: Array[String], c: String)
-    val failCases = Seq(
-      ConcatWsTestFail(" ", Array("ABC", "%b%"), "UTF8_BINARY_LCASE"),
-      ConcatWsTestFail(" ", Array("ABC", "%B%"), "UNICODE"),
-      ConcatWsTestFail(" ", Array("ABC", "%b%"), "UNICODE_CI")
-    )
-    failCases.foreach(t => {
-      val arrCollated = t.a.map(s => s"collate('$s', '${t.c}')").mkString(", ")
-      val query = s"SELECT concat_ws(collate('${t.s}', '${t.c}'), $arrCollated)"
-      val unsupportedCollation = intercept[AnalysisException] { sql(query) }
-      assert(unsupportedCollation.getErrorClass === "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
-    })
     // Collation mismatch
     val collationMismatch = intercept[AnalysisException] {
       sql("SELECT concat_ws(' ',collate('Spark', 'UTF8_BINARY_LCASE'),collate('SQL', 'UNICODE'))")
+    }
+    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+  }
+
+  test("Support Elt string expression with collation") {
+    // Supported collations
+    case class EltTestCase[R](index: Int, inputs: Array[String], c: String, result: R)
+    val testCases = Seq(
+      EltTestCase(1, Array("Spark", "SQL"), "UTF8_BINARY", "Spark"),
+      EltTestCase(1, Array("Spark", "SQL"), "UTF8_BINARY_LCASE", "Spark"),
+      EltTestCase(2, Array("Spark", "SQL"), "UNICODE", "SQL"),
+      EltTestCase(2, Array("Spark", "SQL"), "UNICODE_CI", "SQL")
+    )
+    testCases.foreach(t => {
+      var query = s"SELECT elt(${t.index}, collate('${t.inputs(0)}', '${t.c}'), collate('${t.inputs(1)}', '${t.c}'))"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
+      // Implicit casting
+      query = s"SELECT elt(${t.index}, collate('${t.inputs(0)}', '${t.c}'), '${t.inputs(1)}')"
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
+      query = s"SELECT elt(${t.index}, '${t.inputs(0)}', collate('${t.inputs(1)}', '${t.c}'))"
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
+    })
+    // Collation mismatch
+    val collationMismatch = intercept[AnalysisException] {
+      sql("SELECT elt(0 ,collate('Spark', 'UTF8_BINARY_LCASE'), collate('SQL', 'UNICODE'))")
     }
     assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
   }
