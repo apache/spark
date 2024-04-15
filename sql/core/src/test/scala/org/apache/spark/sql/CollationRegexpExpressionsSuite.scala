@@ -115,6 +115,7 @@ class CollationRegexpExpressionsSuite
   }
 
   test("Support StringSplit string expression with collation") {
+    // Supported collations
     case class StringSplitTestCase[R](l: String, r: String, c: String, result: R, limit: Int = -1)
     val testCases = Seq(
       StringSplitTestCase("ABC", "[B]", "UTF8_BINARY", Seq("A", "C")),
@@ -136,11 +137,14 @@ class CollationRegexpExpressionsSuite
     )
     testCases.foreach(t => {
       val query = s"SELECT split(collate('${t.l}', '${t.c}'), '${t.r}', ${t.limit})"
+      // Result & data type
       checkAnswer(sql(query), Seq(Row(t.result)))
       assert(sql(query).schema.fields.head.dataType.sameType(ArrayType(StringType(t.c))))
+      // TODO: Implicit casting (not currently supported)
     })
-    case class StringSplitFail(l: String, r: String, c: String)
-    val failCases = Seq(StringSplitFail("ABC", "[b]", "UNICODE_CI"))
+    // Unsupported collations
+    case class StringSplitTestFail(l: String, r: String, c: String)
+    val failCases = Seq(StringSplitTestFail("ABC", "[b]", "UNICODE_CI"))
     failCases.foreach(t => {
       val query = s"SELECT split(collate('${t.l}', '${t.c}'), '${t.r}')"
       val unsupportedCollation = intercept[AnalysisException] { sql(query) }

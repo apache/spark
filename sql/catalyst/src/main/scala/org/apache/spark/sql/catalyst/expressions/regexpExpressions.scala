@@ -547,7 +547,6 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
   override def dataType: DataType = ArrayType(str.dataType, containsNull = false)
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeBinaryLcase, StringTypeAnyCollation, IntegerType)
-
   override def first: Expression = str
   override def second: Expression = regex
   override def third: Expression = limit

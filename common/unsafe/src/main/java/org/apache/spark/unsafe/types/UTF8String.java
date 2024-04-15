@@ -1087,7 +1087,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   private UTF8String[] split(String delimiter, int limit) {
-    return split(delimiter, limit, 0);
+    return split(delimiter, limit, 0); // Pattern without regex flags
   }
 
   public UTF8String replace(UTF8String search, UTF8String replace) {
