@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, Literal, SubstringIndex}
+import org.apache.spark.sql.catalyst.expressions.ExpressionEvalHelper
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -95,87 +95,35 @@ class CollationStringExpressionsSuite
     assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
   }
 
-  test("SUBSTRING_INDEX check result on explicitly collated strings") {
-    def testSubstringIndex(str: String, delim: String, cnt: Integer,
-                           collationId: Integer, expected: String): Unit = {
-      val string = Literal.create(str, StringType(collationId))
-      val delimiter = Literal.create(delim, StringType(collationId))
-      val count = Literal(cnt)
-
-      checkEvaluation(SubstringIndex(string, delimiter, count), expected)
+  test("Support SubstringIndex expression with collation") {
+    case class SubstringIndexTestCase[R](string: String, delimiter: String, count: Integer,
+      c: String, result: R)
+    val testCases = Seq(
+      SubstringIndexTestCase("wwwgapachegorg", "g", -3, "UTF8_BINARY", "apachegorg"),
+      SubstringIndexTestCase("www||apache||org", "||", 2, "UTF8_BINARY", "www||apache"),
+      SubstringIndexTestCase("wwwXapacheXorg", "x", 2, "UTF8_BINARY_LCASE", "wwwXapache"),
+      SubstringIndexTestCase("aaaaaaaaaa", "aa", 2, "UNICODE", "a"),
+      SubstringIndexTestCase("wwwmapacheMorg", "M", -2, "UNICODE_CI", "apacheMorg")
+    )
+    testCases.foreach(t => {
+      val query = s"SELECT substring_index(collate('${t.string}','${t.c}')," +
+        s"collate('${t.delimiter}','${t.c}'),${t.count})"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(
+        StringType(CollationFactory.collationNameToId(t.c))))
+      // Implicit casting
+      checkAnswer(sql(s"SELECT substring_index(collate('${t.string}','${t.c}')," +
+        s"'${t.delimiter}',${t.count})"), Row(t.result))
+      checkAnswer(sql(s"SELECT substring_index('${t.string}',collate('${t.delimiter}','${t.c}')," +
+        s"${t.count})"), Row(t.result))
+    })
+    // Collation mismatch
+    val collationMismatch = intercept[AnalysisException] {
+      sql("SELECT substring_index(collate('abcde','UTF8_BINARY_LCASE')," +
+        "collate('C','UNICODE_CI'),1)")
     }
-
-    var collationId = CollationFactory.collationNameToId("UTF8_BINARY")
-    testSubstringIndex("wwwgapachegorg", "g", -3, collationId, "apachegorg")
-    testSubstringIndex("www||apache||org", "||", 2, collationId, "www||apache")
-    testSubstringIndex("aaaaaaaaaa", "aa", 2, collationId, "a")
-
-    collationId = CollationFactory.collationNameToId("UTF8_BINARY_LCASE")
-    testSubstringIndex("AaAaAaAaAa", "aa", 2, collationId, "A")
-    testSubstringIndex("www.apache.org", ".", 3, collationId, "www.apache.org")
-    testSubstringIndex("wwwXapacheXorg", "x", 2, collationId, "wwwXapache")
-    testSubstringIndex("wwwxapachexorg", "X", 1, collationId, "www")
-    testSubstringIndex("www.apache.org", ".", 0, collationId, "")
-    testSubstringIndex("www.apache.ORG", ".", -3, collationId, "www.apache.ORG")
-    testSubstringIndex("wwwGapacheGorg", "g", 1, collationId, "www")
-    testSubstringIndex("wwwGapacheGorg", "g", 3, collationId, "wwwGapacheGor")
-    testSubstringIndex("gwwwGapacheGorg", "g", 3, collationId, "gwwwGapache")
-    testSubstringIndex("wwwGapacheGorg", "g", -3, collationId, "apacheGorg")
-    testSubstringIndex("wwwmapacheMorg", "M", -2, collationId, "apacheMorg")
-    testSubstringIndex("www.apache.org", ".", -1, collationId, "org")
-    testSubstringIndex("www.apache.org.", ".", -1, collationId, "")
-    testSubstringIndex("", ".", -2, collationId, "")
-    // scalastyle:off
-    testSubstringIndex("test大千世界X大千世界", "x", -1, collationId, "大千世界")
-    testSubstringIndex("test大千世界X大千世界", "X", 1, collationId, "test大千世界")
-    testSubstringIndex("test大千世界大千世界", "千", 2, collationId, "test大千世界大")
-    // scalastyle:on
-    testSubstringIndex("www||APACHE||org", "||", 2, collationId, "www||APACHE")
-    testSubstringIndex("www||APACHE||org", "||", -1, collationId, "org")
-
-    collationId = CollationFactory.collationNameToId("UNICODE")
-    testSubstringIndex("AaAaAaAaAa", "Aa", 2, collationId, "Aa")
-    testSubstringIndex("wwwYapacheyorg", "y", 3, collationId, "wwwYapacheyorg")
-    testSubstringIndex("www.apache.org", ".", 2, collationId, "www.apache")
-    testSubstringIndex("wwwYapacheYorg", "Y", 1, collationId, "www")
-    testSubstringIndex("wwwYapacheYorg", "y", 1, collationId, "wwwYapacheYorg")
-    testSubstringIndex("wwwGapacheGorg", "g", 1, collationId, "wwwGapacheGor")
-    testSubstringIndex("GwwwGapacheGorG", "G", 3, collationId, "GwwwGapache")
-    testSubstringIndex("wwwGapacheGorG", "G", -3, collationId, "apacheGorG")
-    testSubstringIndex("www.apache.org", ".", 0, collationId, "")
-    testSubstringIndex("www.apache.org", ".", -3, collationId, "www.apache.org")
-    testSubstringIndex("www.apache.org", ".", -2, collationId, "apache.org")
-    testSubstringIndex("www.apache.org", ".", -1, collationId, "org")
-    testSubstringIndex("", ".", -2, collationId, "")
-    // scalastyle:off
-    testSubstringIndex("test大千世界X大千世界", "X", -1, collationId, "大千世界")
-    testSubstringIndex("test大千世界X大千世界", "X", 1, collationId, "test大千世界")
-    testSubstringIndex("大x千世界大千世x界", "x", 1, collationId, "大")
-    testSubstringIndex("大x千世界大千世x界", "x", -1, collationId, "界")
-    testSubstringIndex("大x千世界大千世x界", "x", -2, collationId, "千世界大千世x界")
-    testSubstringIndex("大千世界大千世界", "千", 2, collationId, "大千世界大")
-    // scalastyle:on
-    testSubstringIndex("www||apache||org", "||", 2, collationId, "www||apache")
-
-    collationId = CollationFactory.collationNameToId("UNICODE_CI")
-    testSubstringIndex("AaAaAaAaAa", "aa", 2, collationId, "A")
-    testSubstringIndex("www.apache.org", ".", 3, collationId, "www.apache.org")
-    testSubstringIndex("wwwXapacheXorg", "x", 2, collationId, "wwwXapache")
-    testSubstringIndex("wwwxapacheXorg", "X", 1, collationId, "www")
-    testSubstringIndex("www.apache.org", ".", 0, collationId, "")
-    testSubstringIndex("wwwGapacheGorg", "G", 3, collationId, "wwwGapacheGor")
-    testSubstringIndex("gwwwGapacheGorg", "g", 3, collationId, "gwwwGapache")
-    testSubstringIndex("gwwwGapacheGorg", "g", -3, collationId, "apacheGorg")
-    testSubstringIndex("www.apache.ORG", ".", -3, collationId, "www.apache.ORG")
-    testSubstringIndex("wwwmapacheMorg", "M", -2, collationId, "apacheMorg")
-    testSubstringIndex("www.apache.org", ".", -1, collationId, "org")
-    testSubstringIndex("", ".", -2, collationId, "")
-    // scalastyle:off
-    testSubstringIndex("test大千世界X大千世界", "X", -1, collationId, "大千世界")
-    testSubstringIndex("test大千世界X大千世界", "X", 1, collationId, "test大千世界")
-    testSubstringIndex("test大千世界大千世界", "千", 2, collationId, "test大千世界大")
-    // scalastyle:on
-    testSubstringIndex("www||APACHE||org", "||", 2, collationId, "www||APACHE")
+    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
   }
 
   test("Support StartsWith string expression with collation") {
