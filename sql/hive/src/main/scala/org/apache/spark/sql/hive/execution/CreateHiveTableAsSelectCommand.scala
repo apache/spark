@@ -98,13 +98,15 @@ case class CreateHiveTableAsSelectCommand(
       tableExists: Boolean): DataWritingCommand = {
     // For CTAS, there is no static partition values to insert.
     val partition = tableDesc.partitionColumnNames.map(_ -> None).toMap
-    InsertIntoHiveTable(
+    val insertHive = InsertIntoHiveTable(
       tableDesc,
       partition,
       query,
       overwrite = false,
       ifPartitionNotExists = false,
       outputColumnNames = outputColumnNames)
+    insertHive.setTagValue(insertHive.BY_CTAS, ())
+    insertHive
   }
 
   override def argString(maxFields: Int): String = {

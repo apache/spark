@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
@@ -79,6 +80,11 @@ case class InsertIntoHiveTable(
     fileFormat: FileFormat,
     @transient hiveTmpPath: HiveTempPath
   ) extends SaveAsHiveFile with V1WriteCommand with V1WritesHiveUtils {
+
+  /**
+   * A tag to identify if this command is created by a CTAS.
+   */
+  val BY_CTAS = TreeNodeTag[Unit]("by_ctas")
 
   override def staticPartitions: TablePartitionSpec = {
     partition.filter(_._2.nonEmpty).map { case (k, v) => k -> v.get }
