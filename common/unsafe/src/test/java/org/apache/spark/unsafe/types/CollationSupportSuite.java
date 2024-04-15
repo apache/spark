@@ -250,12 +250,11 @@ public class CollationSupportSuite {
   }
 
   private void assertStringInstr(String string, String substring, String collationName,
-          Integer value) throws SparkException {
+          Integer expected) throws SparkException {
     UTF8String str = UTF8String.fromString(string);
     UTF8String substr = UTF8String.fromString(substring);
     int collationId = CollationFactory.collationNameToId(collationName);
-
-    assertEquals(CollationSupport.StringInstr.exec(str, substr, collationId) + 1, value);
+    assertEquals(expected, CollationSupport.StringInstr.exec(str, substr, collationId) + 1);
   }
   
   @Test
@@ -286,14 +285,12 @@ public class CollationSupportSuite {
     assertStringInstr("test大千世界X大千世界", "界x", "UNICODE_CI", 8);
   }
 
-  //word: String, set: String, collationId: Integer, expected: Integer
   private void assertFindInSet(String word, String set, String collationName,
-                                 Integer value) throws SparkException {
+        Integer expected) throws SparkException {
     UTF8String w = UTF8String.fromString(word);
     UTF8String s = UTF8String.fromString(set);
     int collationId = CollationFactory.collationNameToId(collationName);
-
-    assertEquals(CollationSupport.FindInSet.exec(w, s, collationId), value);
+    assertEquals(expected, CollationSupport.FindInSet.exec(w, s, collationId));
   }
 
   @Test
