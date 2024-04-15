@@ -20,7 +20,6 @@ import com.ibm.icu.text.StringSearch;
 
 import org.apache.spark.unsafe.types.UTF8String;
 
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -142,7 +141,8 @@ public final class CollationSupport {
   }
 
   public static class StringTranslate {
-    public static UTF8String exec(final UTF8String source, Map<String, String> dict, final int collationId) {
+    public static UTF8String exec(final UTF8String source, Map<String, String> dict,
+        final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
       if (collation.supportsBinaryEquality) {
         return execBinary(source, dict);
@@ -185,7 +185,8 @@ public final class CollationSupport {
     }
     public static UTF8String execICU(final UTF8String source, Map<String, String> dict,
                                   final int collationId) {
-      return source.translate(CollationAwareUTF8String.getCollationAwareDict(source, dict, collationId));
+      return source.translate(CollationAwareUTF8String.
+        getCollationAwareDict(source, dict, collationId));
     }
   }
 
