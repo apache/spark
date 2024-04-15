@@ -985,8 +985,10 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (l, r) =>
-      s"${ev.value} = " + CollationSupport.FindInSet.genCode(l, r, collationId) + ";")
+    defineCodeGen(ctx, ev, (word, set) => CollationSupport.FindInSet.
+      genCode(word, set, collationId))
+//    nullSafeCodeGen(ctx, ev, (word, set) =>
+//      s"${ev.value} = " + CollationSupport.FindInSet.genCode(word, set, collationId) + ";")
   }
 
   override def dataType: DataType = IntegerType

@@ -186,7 +186,7 @@ public final class CollationSupport {
     public static String genCode(final String string, final String substring, final int start,
         final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
-      String expr = "CollationSupport.IndexOf.exec";
+      String expr = "CollationSupport.StringInstr.exec";
       if (collation.supportsBinaryEquality) {
         return String.format(expr + "Binary(%s, %s, %d)", string, substring, start);
       } else if (collation.supportsLowercaseEquality) {
@@ -239,14 +239,15 @@ public final class CollationSupport {
         pos, pos + pattern.numChars()), pattern, collationId).last() == 0;
     }
 
-    private static int findInSet(UTF8String match, UTF8String set, int collationId) {
+    private static int findInSet(final UTF8String match, final UTF8String set, int collationId) {
       if (match.contains(UTF8String.fromString(","))) {
         return 0;
       }
 
-      StringSearch stringSearch = CollationFactory.getStringSearch(set, match, collationId);
-
       String setString = set.toString();
+      StringSearch stringSearch = CollationFactory.getStringSearch(setString, match.toString(),
+        collationId);
+
       int wordStart = 0;
       while ((wordStart = stringSearch.next()) != StringSearch.DONE) {
         boolean isValidStart = wordStart == 0 || setString.charAt(wordStart - 1) == ',';
@@ -268,7 +269,8 @@ public final class CollationSupport {
       return 0;
     }
 
-    private static int indexOf(UTF8String target, UTF8String pattern, int start, int collationId) {
+    private static int indexOf(final UTF8String target, final UTF8String pattern,
+        final int start, final int collationId) {
       if (pattern.numBytes() == 0) {
         return 0;
       }
