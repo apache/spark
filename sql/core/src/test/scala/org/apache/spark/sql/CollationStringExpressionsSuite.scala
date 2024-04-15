@@ -180,7 +180,7 @@ class CollationStringExpressionsSuite
     })
   }
 
-  test("Chr, Base64, Decode & FormatNumber expressions with collation") {
+  test("Chr, Base64, Decode & FormatNumber string expressions with collation") {
     case class DefaultCollationTestCase[R](q: String, c: String, r: R)
     val testCases = Seq(
       DefaultCollationTestCase("select chr(97)", "UTF8_BINARY", Row("a")),
