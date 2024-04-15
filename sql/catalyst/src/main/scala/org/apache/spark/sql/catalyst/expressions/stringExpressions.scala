@@ -34,9 +34,10 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UPPER_OR_LOWER}
-import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, GenericArrayData, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CollationSupport, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.types.StringTypeAnyCollation
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.array.ByteArrayMethods
@@ -304,7 +305,7 @@ case class Elt(
             "inputSql" -> toSQLExpr(indexExpr),
             "inputType" -> toSQLType(indexType)))
       }
-      if (inputTypes.exists(tpe => !Seq(StringType, BinaryType).contains(tpe))) {
+      if (inputTypes.exists(tpe => !tpe.isInstanceOf[StringType] && tpe != BinaryType)) {
         return DataTypeMismatch(
           errorSubClass = "UNEXPECTED_INPUT_TYPE",
           messageParameters = Map(
@@ -504,14 +505,6 @@ abstract class StringPredicate extends BinaryExpression
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeAnyCollation, StringTypeAnyCollation)
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    val defaultCheck = super.checkInputDataTypes()
-    if (defaultCheck.isFailure) {
-      return defaultCheck
-    }
-    CollationTypeConstraints.checkCollationCompatibility(collationId, children.map(_.dataType))
-  }
-
   protected override def nullSafeEval(input1: Any, input2: Any): Any =
     compare(input1.asInstanceOf[UTF8String], input2.asInstanceOf[UTF8String])
 
@@ -598,18 +591,11 @@ object ContainsExpressionBuilder extends StringBinaryPredicateExpressionBuilderB
 
 case class Contains(left: Expression, right: Expression) extends StringPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = {
-    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
-      l.contains(r)
-    } else {
-      l.contains(r, collationId)
-    }
+    CollationSupport.Contains.exec(l, r, collationId)
   }
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
-      defineCodeGen(ctx, ev, (c1, c2) => s"$c1.contains($c2)")
-    } else {
-      defineCodeGen(ctx, ev, (c1, c2) => s"$c1.contains($c2, $collationId)")
-    }
+    defineCodeGen(ctx, ev, (c1, c2) =>
+      CollationSupport.Contains.genCode(c1, c2, collationId))
   }
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): Contains = copy(left = newLeft, right = newRight)
@@ -645,19 +631,12 @@ object StartsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilde
 
 case class StartsWith(left: Expression, right: Expression) extends StringPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = {
-    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
-      l.startsWith(r)
-    } else {
-      l.startsWith(r, collationId)
-    }
+    CollationSupport.StartsWith.exec(l, r, collationId)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
-      defineCodeGen(ctx, ev, (c1, c2) => s"$c1.startsWith($c2)")
-    } else {
-      defineCodeGen(ctx, ev, (c1, c2) => s"$c1.startsWith($c2, $collationId)")
-    }
+    defineCodeGen(ctx, ev, (c1, c2) =>
+      CollationSupport.StartsWith.genCode(c1, c2, collationId))
   }
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): StartsWith = copy(left = newLeft, right = newRight)
@@ -693,19 +672,12 @@ object EndsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilderB
 
 case class EndsWith(left: Expression, right: Expression) extends StringPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = {
-    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
-      l.endsWith(r)
-    } else {
-      l.endsWith(r, collationId)
-    }
+    CollationSupport.EndsWith.exec(l, r, collationId)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
-      defineCodeGen(ctx, ev, (c1, c2) => s"$c1.endsWith($c2)")
-    } else {
-      defineCodeGen(ctx, ev, (c1, c2) => s"$c1.endsWith($c2, $collationId)")
-    }
+    defineCodeGen(ctx, ev, (c1, c2) =>
+      CollationSupport.EndsWith.genCode(c1, c2, collationId))
   }
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): EndsWith = copy(left = newLeft, right = newRight)
@@ -1973,7 +1945,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
 
   override def nullSafeEval(string: Any, pos: Any, len: Any): Any = {
     str.dataType match {
-      case StringType => string.asInstanceOf[UTF8String]
+      case _: StringType => string.asInstanceOf[UTF8String]
         .substringSQL(pos.asInstanceOf[Int], len.asInstanceOf[Int])
       case BinaryType => ByteArray.subStringSQL(string.asInstanceOf[Array[Byte]],
         pos.asInstanceOf[Int], len.asInstanceOf[Int])
@@ -1984,7 +1956,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
 
     defineCodeGen(ctx, ev, (string, pos, len) => {
       str.dataType match {
-        case StringType => s"$string.substringSQL($pos, $len)"
+        case _: StringType => s"$string.substringSQL($pos, $len)"
         case BinaryType => s"${classOf[ByteArray].getName}.subStringSQL($string, $pos, $len)"
       }
     })

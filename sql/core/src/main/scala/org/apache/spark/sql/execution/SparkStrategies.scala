@@ -751,7 +751,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case TransformWithState(
         keyDeserializer, valueDeserializer, groupingAttributes,
-        dataAttributes, statefulProcessor, timeoutMode, outputMode,
+        dataAttributes, statefulProcessor, timeMode, outputMode,
         keyEncoder, outputAttr, child, hasInitialState,
         initialStateGroupingAttrs, initialStateDataAttrs,
         initialStateDeserializer, initialState) =>
@@ -761,7 +761,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           groupingAttributes,
           dataAttributes,
           statefulProcessor,
-          timeoutMode,
+          timeMode,
           outputMode,
           keyEncoder,
           outputAttr,
@@ -925,12 +925,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           hasInitialState, planLater(initialState), planLater(child)
         ) :: Nil
       case logical.TransformWithState(keyDeserializer, valueDeserializer, groupingAttributes,
-          dataAttributes, statefulProcessor, timeoutMode, outputMode, keyEncoder,
+          dataAttributes, statefulProcessor, timeMode, outputMode, keyEncoder,
           outputObjAttr, child, hasInitialState,
           initialStateGroupingAttrs, initialStateDataAttrs,
           initialStateDeserializer, initialState) =>
         TransformWithStateExec.generateSparkPlanForBatchQueries(keyDeserializer, valueDeserializer,
-          groupingAttributes, dataAttributes, statefulProcessor, timeoutMode, outputMode,
+          groupingAttributes, dataAttributes, statefulProcessor, timeMode, outputMode,
           keyEncoder, outputObjAttr, planLater(child), hasInitialState,
           initialStateGroupingAttrs, initialStateDataAttrs,
           initialStateDeserializer, planLater(initialState)) :: Nil

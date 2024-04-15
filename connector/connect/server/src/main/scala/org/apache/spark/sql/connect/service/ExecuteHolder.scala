@@ -117,6 +117,9 @@ private[connect] class ExecuteHolder(
       : mutable.ArrayBuffer[ExecuteGrpcResponseSender[proto.ExecutePlanResponse]] =
     new mutable.ArrayBuffer[ExecuteGrpcResponseSender[proto.ExecutePlanResponse]]()
 
+  /** For testing. Whether the async completion callback is called. */
+  @volatile private[connect] var completionCallbackCalled: Boolean = false
+
   /**
    * Start the execution. The execution is started in a background thread in ExecuteThreadRunner.
    * Responses are produced and cached in ExecuteResponseObserver. A GRPC thread consumes the
@@ -238,8 +241,15 @@ private[connect] class ExecuteHolder(
     if (closedTimeMs.isEmpty) {
       // interrupt execution, if still running.
       runner.interrupt()
-      // wait for execution to finish, to make sure no more results get pushed to responseObserver
-      runner.join()
+      // Do not wait for the execution to finish, clean up resources immediately.
+      runner.processOnCompletion { _ =>
+        completionCallbackCalled = true
+        // The execution may not immediately get interrupted, clean up any remaining resources when
+        // it does.
+        responseObserver.removeAll()
+        // post closed to UI
+        eventsManager.postClosed()
+      }
       // interrupt any attached grpcResponseSenders
       grpcResponseSenders.foreach(_.interrupt())
       // if there were still any grpcResponseSenders, register detach time
@@ -249,8 +259,6 @@ private[connect] class ExecuteHolder(
       }
       // remove all cached responses from observer
       responseObserver.removeAll()
-      // post closed to UI
-      eventsManager.postClosed()
       closedTimeMs = Some(System.currentTimeMillis())
     }
   }

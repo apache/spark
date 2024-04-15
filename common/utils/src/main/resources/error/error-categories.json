@@ -85,6 +85,6 @@
     "HZ": "RDA-specific condition",
     "IM": "ODBC driver",
     "KD": "datasource specific errors",
-    "P0": "PL/pgSQL Error",
+    "P0": "Procedural logic Error",
     "XX": "Internal Error"
 }

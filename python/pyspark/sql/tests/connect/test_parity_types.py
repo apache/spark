@@ -86,6 +86,10 @@ class TypesParityTests(TypesTestsMixin, ReusedConnectTestCase):
     def test_udt(self):
         super().test_udt()
 
+    @unittest.skip("Does not test anything related to Spark Connect")
+    def test_parse_datatype_string(self):
+        super().test_parse_datatype_string()
+
 
 if __name__ == "__main__":
     import unittest

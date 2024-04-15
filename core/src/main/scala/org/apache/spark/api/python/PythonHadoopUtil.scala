@@ -25,7 +25,8 @@ import org.apache.hadoop.io._
 
 import org.apache.spark.SparkException
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.CLASS_NAME
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
@@ -49,7 +50,7 @@ private[python] object Converter extends Logging {
       } match {
         case Success(c) => c
         case Failure(err) =>
-          logError(s"Failed to load converter: $cc")
+          logError(log"Failed to load converter: ${MDC(CLASS_NAME, cc)}")
           throw err
       }
     }.getOrElse { defaultConverter }

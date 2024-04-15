@@ -15,9 +15,7 @@
 # limitations under the License.
 #
 from threading import RLock
-from typing import overload, Dict, Union, Optional
-
-from py4j.java_gateway import JavaObject
+from typing import overload, Dict, Union, Optional, TYPE_CHECKING
 
 from pyspark.resource.requests import (
     TaskResourceRequest,
@@ -25,6 +23,9 @@ from pyspark.resource.requests import (
     ExecutorResourceRequests,
     ExecutorResourceRequest,
 )
+
+if TYPE_CHECKING:
+    from py4j.java_gateway import JavaObject
 
 
 class ResourceProfile:
@@ -84,7 +85,7 @@ class ResourceProfile:
     """
 
     @overload
-    def __init__(self, _java_resource_profile: JavaObject):
+    def __init__(self, _java_resource_profile: "JavaObject"):
         ...
 
     @overload
@@ -98,7 +99,7 @@ class ResourceProfile:
 
     def __init__(
         self,
-        _java_resource_profile: Optional[JavaObject] = None,
+        _java_resource_profile: Optional["JavaObject"] = None,
         _exec_req: Optional[Dict[str, ExecutorResourceRequest]] = None,
         _task_req: Optional[Dict[str, TaskResourceRequest]] = None,
     ):
@@ -200,7 +201,7 @@ class ResourceProfileBuilder:
     """
 
     def __init__(self) -> None:
-        from pyspark.context import SparkContext
+        from pyspark.core.context import SparkContext
 
         # TODO: ignore[attr-defined] will be removed, once SparkContext is inlined
         _jvm = SparkContext._jvm

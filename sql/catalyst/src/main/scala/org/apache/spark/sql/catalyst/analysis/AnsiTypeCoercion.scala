@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.internal.types.{AbstractArrayType, AbstractStringType}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.UpCastRule.numericPrecedence
 
@@ -77,6 +78,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
     UnpivotCoercion ::
     WidenSetOperationTypes ::
     new AnsiCombinedTypeCoercionRule(
+      CollationTypeCasts ::
       InConversion ::
       PromoteStrings ::
       DecimalPrecision ::
@@ -92,7 +94,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       ImplicitTypeCasts ::
       DateTimeOperations ::
       WindowFrameCoercion ::
-      GetDateFieldOperations:: Nil) :: Nil
+      GetDateFieldOperations :: Nil) :: Nil
 
   val findTightestCommonType: (DataType, DataType) => Option[DataType] = {
     case (t1, t2) if t1 == t2 => Some(t1)
@@ -138,15 +140,16 @@ object AnsiTypeCoercion extends TypeCoercionBase {
   @scala.annotation.tailrec
   private def findWiderTypeForString(dt1: DataType, dt2: DataType): Option[DataType] = {
     (dt1, dt2) match {
-      case (StringType, _: IntegralType) => Some(LongType)
-      case (StringType, _: FractionalType) => Some(DoubleType)
-      case (StringType, NullType) => Some(StringType)
+      case (_: StringType, _: IntegralType) => Some(LongType)
+      case (_: StringType, _: FractionalType) => Some(DoubleType)
+      case (st: StringType, NullType) => Some(st)
       // If a binary operation contains interval type and string, we can't decide which
       // interval type the string should be promoted as. There are many possible interval
       // types, such as year interval, month interval, day interval, hour interval, etc.
-      case (StringType, _: AnsiIntervalType) => None
-      case (StringType, a: AtomicType) => Some(a)
-      case (other, StringType) if other != StringType => findWiderTypeForString(StringType, other)
+      case (_: StringType, _: AnsiIntervalType) => None
+      case (_: StringType, a: AtomicType) => Some(a)
+      case (other, st: StringType) if !other.isInstanceOf[StringType] =>
+        findWiderTypeForString(st, other)
       case _ => None
     }
   }
@@ -182,8 +185,8 @@ object AnsiTypeCoercion extends TypeCoercionBase {
 
       // If a function expects a StringType, no StringType instance should be implicitly cast to
       // StringType with a collation that's not accepted (aka. lockdown unsupported collations).
-      case (_: StringType, StringType) => None
-      case (_: StringType, _: StringTypeCollated) => None
+      case (_: StringType, _: StringType) => None
+      case (_: StringType, _: AbstractStringType) => None
 
       // If a function expects integral type, fractional input is not allowed.
       case (_: FractionalType, IntegralType) => None
@@ -191,8 +194,11 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       // Ideally the implicit cast rule should be the same as `Cast.canANSIStoreAssign` so that it's
       // consistent with table insertion. To avoid breaking too many existing Spark SQL queries,
       // we make the system to allow implicitly converting String type as other primitive types.
-      case (StringType, a @ (_: AtomicType | NumericType | DecimalType | AnyTimestampType)) =>
+      case (_: StringType, a @ (_: AtomicType | NumericType | DecimalType | AnyTimestampType)) =>
         Some(a.defaultConcreteType)
+
+      case (ArrayType(fromType, _), AbstractArrayType(toType)) =>
+        Some(implicitCast(fromType, toType).map(ArrayType(_, true)).orNull)
 
       // When the target type is `TypeCollection`, there is another branch to find the
       // "closet convertible data type" below.

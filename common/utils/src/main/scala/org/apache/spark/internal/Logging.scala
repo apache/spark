@@ -29,6 +29,7 @@ import org.apache.logging.log4j.core.filter.AbstractFilter
 import org.slf4j.{Logger, LoggerFactory}
 
 import org.apache.spark.internal.Logging.SparkShellLoggingFilter
+import org.apache.spark.internal.LogKey.LogKey
 import org.apache.spark.util.SparkClassUtils
 
 /**
@@ -36,7 +37,10 @@ import org.apache.spark.util.SparkClassUtils
  * The values of the MDC will be inline in the log message, while the key-value pairs will be
  * part of the ThreadContext.
  */
-case class MDC(key: LogKey.Value, value: String)
+case class MDC(key: LogKey, value: Any) {
+  require(!value.isInstanceOf[MessageWithContext],
+    "the class of value cannot be MessageWithContext")
+}
 
 /**
  * Wrapper class for log messages that include a logging context.
@@ -48,6 +52,8 @@ case class MessageWithContext(message: String, context: java.util.HashMap[String
     resultMap.putAll(mdc.context)
     MessageWithContext(message + mdc.message, resultMap)
   }
+
+  def stripMargin: MessageWithContext = copy(message = message.stripMargin)
 }
 
 /**
@@ -102,9 +108,10 @@ trait Logging {
       val context = new java.util.HashMap[String, String]()
 
       args.foreach { mdc =>
-        sb.append(mdc.value)
+        val value = if (mdc.value != null) mdc.value.toString else null
+        sb.append(value)
         if (Logging.isStructuredLoggingEnabled) {
-          context.put(mdc.key.toString.toLowerCase(Locale.ROOT), mdc.value)
+          context.put(mdc.key.toString.toLowerCase(Locale.ROOT), value)
         }
 
         if (processedParts.hasNext) {
@@ -116,7 +123,7 @@ trait Logging {
     }
   }
 
-  private def withLogContext(context: java.util.HashMap[String, String])(body: => Unit): Unit = {
+  protected def withLogContext(context: java.util.HashMap[String, String])(body: => Unit): Unit = {
     val threadContext = CloseableThreadContext.putAll(context)
     try {
       body
