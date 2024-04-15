@@ -987,8 +987,6 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (word, set) => CollationSupport.FindInSet.
       genCode(word, set, collationId))
-//    nullSafeCodeGen(ctx, ev, (word, set) =>
-//      s"${ev.value} = " + CollationSupport.FindInSet.genCode(word, set, collationId) + ";")
   }
 
   override def dataType: DataType = IntegerType
@@ -1362,7 +1360,7 @@ case class StringInstr(str: Expression, substr: Expression)
 
   override def nullSafeEval(string: Any, sub: Any): Any = {
     CollationSupport.StringInstr.
-      exec(string.asInstanceOf[UTF8String], sub.asInstanceOf[UTF8String], 0, collationId) + 1
+      exec(string.asInstanceOf[UTF8String], sub.asInstanceOf[UTF8String], collationId) + 1
   }
 
   override def prettyName: String = "instr"

@@ -18,11 +18,10 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, FindInSet, Literal, StringInstr}
-import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.catalyst.expressions.ExpressionEvalHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{BooleanType, StringType}
+import org.apache.spark.sql.types.{BooleanType, IntegerType, StringType}
 
 class CollationStringExpressionsSuite
   extends QueryTest
@@ -95,105 +94,61 @@ class CollationStringExpressionsSuite
     assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
   }
 
-  test("INSTR check result on explicitly collated strings") {
-    def testInStr(str: String, substr: String, collationId: Integer, expected: Integer): Unit = {
-      val string = Literal.create(str, StringType(collationId))
-      val substring = Literal.create(substr, StringType(collationId))
-
-      checkEvaluation(StringInstr(string, substring), expected)
+  test("Support StringInStr string expression with collation") {
+    case class StringInStrTestCase[R](string: String, substring: String, c: String, result: R)
+    val testCases = Seq(
+      // scalastyle:off
+      StringInStrTestCase("test大千世界X大千世界", "大千", "UTF8_BINARY", 5),
+      StringInStrTestCase("test大千世界X大千世界", "界x", "UTF8_BINARY_LCASE", 8),
+      StringInStrTestCase("test大千世界X大千世界", "界x", "UNICODE", 0),
+      StringInStrTestCase("test大千世界X大千世界", "界x", "UNICODE_CI", 8)
+      // scalastyle:on
+    )
+    testCases.foreach(t => {
+      val query = s"SELECT instr(collate('${t.string}','${t.c}')," +
+        s"collate('${t.substring}','${t.c}'))"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(IntegerType))
+      // Implicit casting
+      checkAnswer(sql(s"SELECT instr(collate('${t.string}','${t.c}')," +
+        s"'${t.substring}')"), Row(t.result))
+      checkAnswer(sql(s"SELECT instr('${t.string}'," +
+        s"collate('${t.substring}','${t.c}'))"), Row(t.result))
+    })
+    // Collation mismatch
+    val collationMismatch = intercept[AnalysisException] {
+      sql(s"SELECT instr(collate('aaads','UTF8_BINARY'), collate('Aa','UTF8_BINARY_LCASE'))")
     }
-
-    var collationId = CollationFactory.collationNameToId("UTF8_BINARY")
-    testInStr("aaads", "Aa", collationId, 0)
-    testInStr("aaaDs", "de", collationId, 0)
-    testInStr("aaads", "ds", collationId, 4)
-    testInStr("xxxx", "", collationId, 1)
-    testInStr("", "xxxx", collationId, 0)
-    // scalastyle:off
-    testInStr("test大千世界X大千世界", "大千", collationId, 5)
-    testInStr("test大千世界X大千世界", "界X", collationId, 8)
-    // scalastyle:on
-
-    collationId = CollationFactory.collationNameToId("UTF8_BINARY_LCASE")
-    testInStr("aaads", "Aa", collationId, 1)
-    testInStr("aaaDs", "de", collationId, 0)
-    testInStr("aaaDs", "ds", collationId, 4)
-    testInStr("xxxx", "", collationId, 1)
-    testInStr("", "xxxx", collationId, 0)
-    // scalastyle:off
-    testInStr("test大千世界X大千世界", "大千", collationId, 5)
-    testInStr("test大千世界X大千世界", "界x", collationId, 8)
-    // scalastyle:on
-
-    collationId = CollationFactory.collationNameToId("UNICODE")
-    testInStr("aaads", "Aa", collationId, 0)
-    testInStr("aaads", "aa", collationId, 1)
-    testInStr("aaads", "de", collationId, 0)
-    testInStr("xxxx", "", collationId, 1)
-    testInStr("", "xxxx", collationId, 0)
-    // scalastyle:off
-    testInStr("test大千世界X大千世界", "界x", collationId, 0)
-    testInStr("test大千世界X大千世界", "界X", collationId, 8)
-    // scalastyle:on
-
-    collationId = CollationFactory.collationNameToId("UNICODE_CI")
-    testInStr("aaads", "AD", collationId, 3)
-    testInStr("aaads", "dS", collationId, 4)
-    // scalastyle:off
-    testInStr("test大千世界X大千世界", "界x", collationId, 8)
-    // scalastyle:on
+    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
   }
 
-  test("FIND_IN_SET check result on explicitly collated strings") {
-    def testFindInSet(word: String, set: String, collationId: Integer, expected: Integer): Unit = {
-      val w = Literal.create(word, StringType(collationId))
-      val s = Literal.create(set, StringType(collationId))
-
-      checkEvaluation(FindInSet(w, s), expected)
+  test("Support FindInSet string expression with collation") {
+    case class FindInSetTestCase[R](word: String, set: String, c: String, result: R)
+    val testCases = Seq(
+      FindInSetTestCase("AB", "abc,b,ab,c,def", "UTF8_BINARY", 0),
+      FindInSetTestCase("C", "abc,b,ab,c,def", "UTF8_BINARY_LCASE", 4),
+      FindInSetTestCase("d,ef", "abc,b,ab,c,def", "UNICODE", 0),
+      FindInSetTestCase("DeF", "abc,b,ab,c,dEf", "UNICODE_CI", 5)
+    )
+    testCases.foreach(t => {
+      val query = s"SELECT find_in_set(collate('${t.word}', '${t.c}')," +
+        s"collate('${t.set}', '${t.c}'))"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(IntegerType))
+      // Implicit casting
+      checkAnswer(sql(s"SELECT find_in_set(collate('${t.word}', '${t.c}')," +
+        s"'${t.set}')"), Row(t.result))
+      checkAnswer(sql(s"SELECT find_in_set('${t.word}'," +
+        s"collate('${t.set}', '${t.c}'))"), Row(t.result))
+    })
+    // Collation mismatch
+    val collationMismatch = intercept[AnalysisException] {
+      sql(s"SELECT find_in_set(collate('AB','UTF8_BINARY')," +
+        s"collate('ab,xyz,fgh','UTF8_BINARY_LCASE'))")
     }
-
-    var collationId = CollationFactory.collationNameToId("UTF8_BINARY")
-    testFindInSet("AB", "abc,b,ab,c,def", collationId, 0)
-    testFindInSet("abc", "abc,b,ab,c,def", collationId, 1)
-    testFindInSet("def", "abc,b,ab,c,def", collationId, 5)
-    testFindInSet("d,ef", "abc,b,ab,c,def", collationId, 0)
-    testFindInSet("", "abc,b,ab,c,def", collationId, 0)
-
-    collationId = CollationFactory.collationNameToId("UTF8_BINARY_LCASE")
-    testFindInSet("a", "abc,b,ab,c,def", collationId, 0)
-    testFindInSet("c", "abc,b,ab,c,def", collationId, 4)
-    testFindInSet("AB", "abc,b,ab,c,def", collationId, 3)
-    testFindInSet("AbC", "abc,b,ab,c,def", collationId, 1)
-    testFindInSet("abcd", "abc,b,ab,c,def", collationId, 0)
-    testFindInSet("d,ef", "abc,b,ab,c,def", collationId, 0)
-    testFindInSet("XX", "xx", collationId, 1)
-    testFindInSet("", "abc,b,ab,c,def", collationId, 0)
-    // scalastyle:off
-    testFindInSet("界x", "test,大千,世,界X,大,千,世界", collationId, 4)
-    // scalastyle:on
-
-    collationId = CollationFactory.collationNameToId("UNICODE")
-    testFindInSet("a", "abc,b,ab,c,def", collationId, 0)
-    testFindInSet("ab", "abc,b,ab,c,def", collationId, 3)
-    testFindInSet("Ab", "abc,b,ab,c,def", collationId, 0)
-    testFindInSet("d,ef", "abc,b,ab,c,def", collationId, 0)
-    testFindInSet("xx", "xx", collationId, 1)
-    // scalastyle:off
-    testFindInSet("界x", "test,大千,世,界X,大,千,世界", collationId, 0)
-    testFindInSet("大", "test,大千,世,界X,大,千,世界", collationId, 5)
-    // scalastyle:on
-
-    collationId = CollationFactory.collationNameToId("UNICODE_CI")
-    testFindInSet("a", "abc,b,ab,c,def", collationId, 0)
-    testFindInSet("C", "abc,b,ab,c,def", collationId, 4)
-    testFindInSet("DeF", "abc,b,ab,c,dEf", collationId, 5)
-    testFindInSet("DEFG", "abc,b,ab,c,def", collationId, 0)
-    testFindInSet("XX", "xx", collationId, 1)
-    // scalastyle:off
-    testFindInSet("界x", "test,大千,世,界X,大,千,世界", collationId, 4)
-    testFindInSet("界x", "test,大千,界Xx,世,界X,大,千,世界", collationId, 5)
-    testFindInSet("大", "test,大千,世,界X,大,千,世界", collationId, 5)
-    // scalastyle:on
+    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
   }
 
   test("Support StartsWith string expression with collation") {

@@ -196,10 +196,7 @@ public final class CollationFactory {
       final UTF8String targetUTF8String,
       final UTF8String patternUTF8String,
       final int collationId) {
-    String pattern = patternUTF8String.toString();
-    CharacterIterator target = new StringCharacterIterator(targetUTF8String.toString());
-    Collator collator = CollationFactory.fetchCollation(collationId).collator;
-    return new StringSearch(pattern, target, (RuleBasedCollator) collator);
+    return getStringSearch(targetUTF8String.toString(), patternUTF8String.toString(), collationId);
   }
 
   /**
