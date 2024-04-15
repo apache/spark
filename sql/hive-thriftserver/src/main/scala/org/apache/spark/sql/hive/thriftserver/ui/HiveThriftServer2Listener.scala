@@ -164,7 +164,7 @@ private[thriftserver] class HiveThriftServer2Listener(
         sessionData.totalExecution += 1
         updateLiveStore(sessionData)
       case None => logWarning(
-        log"onOperationStart called with unknown session id: ${MDC(STATEMENT_ID, e.sessionId)}." +
+        log"onOperationStart called with unknown session id: ${MDC(SESSION_ID, e.sessionId)}." +
         log"Regardless, the operation has been registered.")
     }
   }
