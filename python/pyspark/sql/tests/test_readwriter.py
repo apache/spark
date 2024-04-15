@@ -229,6 +229,11 @@ class ReadwriterV2TestsMixin:
         with self.assertRaisesRegex(AnalysisException, "Hive support is required"):
             df.writeTo("test_table").create()
 
+    def test_table_overwrite(self):
+        df = self.df
+        with self.assertRaisesRegex(AnalysisException, "TABLE_OR_VIEW_NOT_FOUND"):
+            df.writeTo("test_table").overwrite(lit(True))
+
 
 class ReadwriterTests(ReadwriterTestsMixin, ReusedSQLTestCase):
     pass
