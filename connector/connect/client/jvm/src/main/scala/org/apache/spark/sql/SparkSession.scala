@@ -40,7 +40,6 @@ import org.apache.spark.sql.connect.client.{ClassFinder, SparkConnectClient, Spa
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.connect.common.ProtoUtils
-import org.apache.spark.sql.connect.common.config.ConnectCommon
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.{CatalogImpl, SqlApiConf}
 import org.apache.spark.sql.streaming.DataStreamReader
