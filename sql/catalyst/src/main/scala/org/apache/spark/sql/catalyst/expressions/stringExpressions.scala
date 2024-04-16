@@ -1820,8 +1820,8 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
 case class InitCap(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
-  override def inputTypes: Seq[DataType] = Seq(StringType)
-  override def dataType: DataType = StringType
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
+  override def dataType: DataType = child.dataType
 
   override def nullSafeEval(string: Any): Any = {
     // scalastyle:off caselocale

@@ -41,12 +41,12 @@ import static org.apache.spark.types.variant.VariantUtil.*;
  * define a new class to avoid depending on or modifying Spark.
  */
 public final class Variant {
-  private final byte[] value;
-  private final byte[] metadata;
+  final byte[] value;
+  final byte[] metadata;
   // The variant value doesn't use the whole `value` binary, but starts from its `pos` index and
   // spans a size of `valueSize(value, pos)`. This design avoids frequent copies of the value binary
   // when reading a sub-variant in the array/object element.
-  private final int pos;
+  final int pos;
 
   public Variant(byte[] value, byte[] metadata) {
     this(value, metadata, 0);
