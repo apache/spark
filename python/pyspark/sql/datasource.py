@@ -508,7 +508,7 @@ class SimpleInputPartition(InputPartition):
 
 
 class PrefetchedCacheEntry(InputPartition):
-    def __init__(self, start: dict, end: dict, it: Iterator[Row]):
+    def __init__(self, start: dict, end: dict, it: Iterator[Tuple]):
         self.start = start
         self.end = end
         self.it = it
