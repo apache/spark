@@ -57,8 +57,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, CoGroup, Coll
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
-import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket}
-import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, InvalidPlanInput, LiteralValueProtoConverter, ProtoUtils, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket}
+import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_ARROW_MAX_BATCH_SIZE, CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT}
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.{ExecuteHolder, SessionHolder, SparkConnectService}
 import org.apache.spark.sql.connect.utils.MetricGenerator
@@ -232,7 +232,10 @@ class SparkConnectPlanner(
 
   @DeveloperApi
   def transformRelation(bytes: Array[Byte]): LogicalPlan = {
-    transformRelation(proto.Relation.parseFrom(bytes))
+    val recursionLimit = session.conf.get(CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT)
+    val relation =
+      ProtoUtils.parseWithRecursionLimit(bytes, proto.Relation.parser(), recursionLimit)
+    transformRelation(relation)
   }
 
   private def transformRelationPlugin(extension: ProtoAny): LogicalPlan = {
@@ -1512,7 +1515,10 @@ class SparkConnectPlanner(
 
   @DeveloperApi
   def transformExpression(bytes: Array[Byte]): Expression = {
-    transformExpression(proto.Expression.parseFrom(bytes))
+    val recursionLimit = session.conf.get(CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT)
+    val expression =
+      ProtoUtils.parseWithRecursionLimit(bytes, proto.Expression.parser(), recursionLimit)
+    transformExpression(expression)
   }
 
   private def toNamedExpression(expr: Expression): NamedExpression = expr match {
