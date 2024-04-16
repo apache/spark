@@ -358,9 +358,8 @@ case class TakeOrderedAndProjectExec(
     val orderByString = truncatedString(sortOrder, "[", ",", "]", maxFields)
     val outputString = truncatedString(output, "[", ",", "]", maxFields)
 
-    val offsetStr = if (offset == 0) { "" } else {  s" offset=$offset, "  }
-    s"TakeOrderedAndProject(limit=$limit, $offsetStr" +
-      s"orderBy=$orderByString, output=$outputString)"
+    val offsetStr = if (offset == 0) { "" } else {  s" offset=$offset,"  }
+    s"TakeOrderedAndProject(limit=$limit,$offsetStr orderBy=$orderByString, output=$outputString)"
   }
 
   override def stringArgs: Iterator[Any] = {
