@@ -28,12 +28,12 @@ import org.apache.spark.sql.types.DecimalType
  * initialize variable and make this test flaky
  */
 abstract class AvroLogicalTypeInitSuite
-    extends QueryTest
-      with SharedSparkSession {
+  extends QueryTest
+  with SharedSparkSession {
 
-  test("custom logical type registration test") {
+  test("SPARK-47739: custom logical type registration test") {
     val avroTypeJson =
-      s"""
+      """
          |{
          |  "type": "record",
          |  "name": "Entry",
