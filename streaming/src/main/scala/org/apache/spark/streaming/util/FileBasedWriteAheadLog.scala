@@ -32,7 +32,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.RETRY_COUNT
+import org.apache.spark.internal.LogKey.{AHEAD_LOG_INFO, RETRY_COUNT}
 import org.apache.spark.util.{CompletionIterator, ThreadUtils}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -181,7 +181,7 @@ private[streaming] class FileBasedWriteAheadLog(
         logDebug(s"Cleared log file $walInfo")
       } catch {
         case ex: Exception =>
-          logWarning(s"Error clearing write ahead log file $walInfo", ex)
+          logWarning(log"Error clearing write ahead log file ${MDC(AHEAD_LOG_INFO, walInfo)}", ex)
       }
       logInfo(s"Cleared log files in $logDirectory older than $threshTime")
     }

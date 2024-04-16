@@ -26,7 +26,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
-import org.apache.spark.internal.LogKey.PATH
+import org.apache.spark.internal.LogKey.{PATH, TAKE_TIME}
 import org.apache.spark.internal.MDC
 import org.apache.spark.rdd.{RDD, UnionRDD}
 import org.apache.spark.streaming._
@@ -206,18 +206,18 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
       logDebug(s"Finding new files took $timeTaken ms")
       if (timeTaken > slideDuration.milliseconds) {
         logWarning(
-          s"Time taken to find new files $timeTaken exceeds the batch size. " +
-            "Consider increasing the batch size or reducing the number of " +
-            "files in the monitored directories."
+          log"Time taken to find new files ${MDC(TAKE_TIME, timeTaken)} exceeds the batch size. " +
+            log"Consider increasing the batch size or reducing the number of " +
+            log"files in the monitored directories."
         )
       }
       newFiles
     } catch {
       case e: FileNotFoundException =>
-        logWarning(s"No directory to scan: $directoryPath: $e")
+        logWarning(log"No directory to scan: ${MDC(PATH, directoryPath)}:", e)
         Array.empty
       case e: Exception =>
-        logWarning(s"Error finding new files under $directoryPath", e)
+        logWarning(log"Error finding new files under ${MDC(PATH, directoryPath)}", e)
         reset()
         Array.empty
     }
