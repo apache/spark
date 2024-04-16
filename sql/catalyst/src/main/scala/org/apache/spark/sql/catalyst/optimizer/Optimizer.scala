@@ -2071,7 +2071,6 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       // If nothing changes there's no double eval to be avoided & we don't need to
       // move any project elements around.
       if (condition != replaced) {
-        println(s"Used $usedAliases on $replaced (prev $condition)")
         filterAliases ++= usedAliases
         usedAliases.iterator.foreach {
           e: (Attribute, Alias) =>
@@ -2082,8 +2081,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         }
       }
 
-      println(s"Aliases to push for filter $filterAliases and left behind $leftBehindAliases")
       // If we need everything in this projection for the push we try and split the filter.
+      // This can also occur if there are no aliases introduced the projection.
       if (leftBehindAliases.isEmpty) {
         val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
           val (replaced, usedAliases) = replaceAliasWhileTracking(cond, aliasMap)
@@ -2094,14 +2093,13 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
             false
           }
         }
-        // stay up should always have something since we had an empty left behind aliased
-        // which mean that the filter references all aliases so at least on elem in our split
-        // filter must reference something and therefor not be eligible for pushdown.
         if (!pushDown.isEmpty) {
-          Filter(stayUp.reduce(And),
-            project.copy(child = Filter(pushDown.reduce(And), grandChild)))
           val childCondition = replaceAlias(pushDown.reduce(And), aliasMap)
-          Filter(stayUp.reduce(And), project.copy(child = Filter(childCondition, grandChild)))
+          if (!stayUp.isEmpty) {
+            Filter(stayUp.reduce(And), project.copy(child = Filter(childCondition, grandChild)))
+          } else {
+            project.copy(child = Filter(childCondition, grandChild))
+          }
         } else {
           f
         }
@@ -2120,12 +2118,12 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         }
 
         // Our top level projection is going to be the existing projection minus the filterAliases
-        // which is leftBehindAliases + all of the output fields which we've effectively pushed down.
+        // which is leftBehindAliases + all of the output fields which we've effectively
+        // pushed down.
+        val pushedAliasNames = project.output.filter(a => !leftBehindAliases.contains(a)).toSeq
+        val remainingAliasesToEval = leftBehindAliases.iterator.map(_._2).toSeq
         val topLevelProjection = project.copy(
-          projectList = (
-            project.output.filter(a => !leftBehindAliases.contains(a)).toSeq ++
-            leftBehindAliases.iterator.map(_._2).toSeq
-          ),
+          projectList = (pushedAliasNames ++ remainingAliasesToEval),
           child = f.copy(child = filterChild)
         )
         topLevelProjection
