@@ -27,6 +27,7 @@ import org.apache.spark.sql.connector.catalog.functions.ScalarFunction
 import org.apache.spark.sql.connector.distributions._
 import org.apache.spark.sql.connector.write.{RequiresDistributionAndOrdering, Write}
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.util.ArrayImplicits._
 
 object DistributionAndOrderingUtils {
 
@@ -44,7 +45,7 @@ object DistributionAndOrderingUtils {
             .map(e => resolveTransformExpression(e).asInstanceOf[SortOrder])
         case d: ClusteredDistribution =>
           d.clustering.map(e => toCatalyst(e, query, funCatalogOpt))
-            .map(e => resolveTransformExpression(e)).toSeq
+            .map(e => resolveTransformExpression(e)).toImmutableArraySeq
         case _: UnspecifiedDistribution => Seq.empty[Expression]
       }
 

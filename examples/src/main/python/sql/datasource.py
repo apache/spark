@@ -103,36 +103,41 @@ def generic_file_source_options_example(spark: SparkSession) -> None:
 
 def basic_datasource_example(spark: SparkSession) -> None:
     # $example on:generic_load_save_functions$
-    df = spark.read.load("examples/src/main/resources/users.parquet")
-    df.select("name", "favorite_color").write.save("namesAndFavColors.parquet")
+    users_df = spark.read.load("examples/src/main/resources/users.parquet")
+    users_df.select("name", "favorite_color").write.save("namesAndFavColors.parquet")
     # $example off:generic_load_save_functions$
 
     # $example on:write_partitioning$
-    df.write.partitionBy("favorite_color").format("parquet").save("namesPartByColor.parquet")
+    users_df = spark.read.load("examples/src/main/resources/users.parquet")
+    users_df.write.partitionBy("favorite_color").format("parquet").save("namesPartByColor.parquet")
     # $example off:write_partitioning$
 
     # $example on:write_partition_and_bucket$
-    df = spark.read.parquet("examples/src/main/resources/users.parquet")
-    (df
-        .write
+    users_df = spark.read.parquet("examples/src/main/resources/users.parquet")
+    (users_df.write
         .partitionBy("favorite_color")
         .bucketBy(42, "name")
         .saveAsTable("users_partitioned_bucketed"))
     # $example off:write_partition_and_bucket$
 
     # $example on:manual_load_options$
-    df = spark.read.load("examples/src/main/resources/people.json", format="json")
-    df.select("name", "age").write.save("namesAndAges.parquet", format="parquet")
+    people_df = spark.read.load("examples/src/main/resources/people.json", format="json")
+    people_df.select("name", "age").write.save("namesAndAges.parquet", format="parquet")
     # $example off:manual_load_options$
 
     # $example on:manual_load_options_csv$
-    df = spark.read.load("examples/src/main/resources/people.csv",
-                         format="csv", sep=";", inferSchema="true", header="true")
+    people_df = spark.read.load(
+        "examples/src/main/resources/people.csv",
+        format="csv",
+        sep=";",
+        inferSchema="true",
+        header="true"
+    )
     # $example off:manual_load_options_csv$
 
     # $example on:manual_save_options_orc$
-    df = spark.read.orc("examples/src/main/resources/users.orc")
-    (df.write.format("orc")
+    users_df = spark.read.orc("examples/src/main/resources/users.orc")
+    (users_df.write.format("orc")
         .option("orc.bloom.filter.columns", "favorite_color")
         .option("orc.dictionary.key.threshold", "1.0")
         .option("orc.column.encoding.direct", "name")
@@ -140,8 +145,8 @@ def basic_datasource_example(spark: SparkSession) -> None:
     # $example off:manual_save_options_orc$
 
     # $example on:manual_save_options_parquet$
-    df = spark.read.parquet("examples/src/main/resources/users.parquet")
-    (df.write.format("parquet")
+    users_df = spark.read.parquet("examples/src/main/resources/users.parquet")
+    (users_df.write.format("parquet")
         .option("parquet.bloom.filter.enabled#favorite_color", "true")
         .option("parquet.bloom.filter.expected.ndv#favorite_color", "1000000")
         .option("parquet.enable.dictionary", "true")
@@ -150,7 +155,8 @@ def basic_datasource_example(spark: SparkSession) -> None:
     # $example off:manual_save_options_parquet$
 
     # $example on:write_sorting_and_bucketing$
-    df.write.bucketBy(42, "name").sortBy("age").saveAsTable("people_bucketed")
+    people_df = spark.read.json("examples/src/main/resources/people.json")
+    people_df.write.bucketBy(42, "name").sortBy("age").saveAsTable("people_bucketed")
     # $example off:write_sorting_and_bucketing$
 
     # $example on:direct_sql$

@@ -21,7 +21,7 @@ import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.charset.StandardCharsets
 import java.time.{Duration, Period}
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection}
@@ -129,7 +129,7 @@ class ColumnTypeSuite extends SparkFunSuite {
         val extracted = converter(columnType.extract(buffer))
         assert(expected === extracted,
           s"Extracted value didn't equal to the original one. $expected != $extracted, buffer =" +
-          dumpBuffer(buffer.duplicate().rewind().asInstanceOf[ByteBuffer]))
+          dumpBuffer(buffer.duplicate().rewind()))
       }
     }
   }
@@ -163,10 +163,12 @@ class ColumnTypeSuite extends SparkFunSuite {
         override def typeName: String = "invalid type name"
     }
 
-    val message = intercept[java.lang.Exception] {
-      ColumnType(invalidType)
-    }.getMessage
-
-    assert(message.contains("Unsupported type: invalid type name"))
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        ColumnType(invalidType)
+      },
+      errorClass = "UNSUPPORTED_DATATYPE",
+      parameters = Map("typeName" -> "\"INVALID TYPE NAME\"")
+    )
   }
 }

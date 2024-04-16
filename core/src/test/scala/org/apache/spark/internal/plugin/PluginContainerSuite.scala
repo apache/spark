@@ -36,6 +36,7 @@ import org.apache.spark.TestUtils._
 import org.apache.spark.api.plugin._
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher
+import org.apache.spark.memory.MemoryMode
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.resource.ResourceUtils.GPU
 import org.apache.spark.resource.TestResourceIDs.{DRIVER_GPU_ID, EXECUTOR_GPU_ID, WORKER_GPU_ID}
@@ -214,11 +215,11 @@ class PluginContainerSuite extends SparkFunSuite with LocalSparkContext {
       }
       val execFiles =
         children.filter(_.getName.startsWith(NonLocalModeSparkPlugin.executorFileStr))
-      assert(execFiles.size === 1)
+      assert(execFiles.length === 1)
       val allLines = Files.readLines(execFiles(0), StandardCharsets.UTF_8)
       assert(allLines.size === 1)
       val addrs = NonLocalModeSparkPlugin.extractGpuAddrs(allLines.get(0))
-      assert(addrs.size === 2)
+      assert(addrs.length === 2)
       assert(addrs.sorted === Array("3", "4"))
 
       assert(NonLocalModeSparkPlugin.driverContext != null)
@@ -228,6 +229,58 @@ class PluginContainerSuite extends SparkFunSuite with LocalSparkContext {
       assert(driverResources.get(GPU).name === GPU)
     }
   }
+
+  test("memory override in plugin") {
+    val conf = new SparkConf()
+      .setAppName(getClass().getName())
+      .set(SparkLauncher.SPARK_MASTER, "local-cluster[2,1,1024]")
+      .set(PLUGINS, Seq(classOf[MemoryOverridePlugin].getName()))
+
+    var sc: SparkContext = null
+    try {
+      sc = new SparkContext(conf)
+      val memoryManager = sc.env.memoryManager
+
+      assert(memoryManager.tungstenMemoryMode == MemoryMode.OFF_HEAP)
+      assert(memoryManager.maxOffHeapStorageMemory == MemoryOverridePlugin.offHeapMemory)
+
+      // Ensure all executors has started
+      TestUtils.waitUntilExecutorsUp(sc, 1, 60000)
+
+      // Check executor memory is also updated
+      val execInfo = sc.statusTracker.getExecutorInfos.head
+      assert(execInfo.totalOffHeapStorageMemory() == MemoryOverridePlugin.offHeapMemory)
+    } finally {
+      if (sc != null) {
+        sc.stop()
+      }
+    }
+  }
+}
+
+class MemoryOverridePlugin extends SparkPlugin {
+  override def driverPlugin(): DriverPlugin = {
+    new DriverPlugin {
+      override def init(sc: SparkContext, pluginContext: PluginContext): JMap[String, String] = {
+        // Take the original executor memory, and set `spark.memory.offHeap.size` to be the
+        // same value. Also set `spark.memory.offHeap.enabled` to true.
+        val originalExecutorMemBytes =
+          sc.conf.getSizeAsMb(EXECUTOR_MEMORY.key, EXECUTOR_MEMORY.defaultValueString)
+        sc.conf.set(MEMORY_OFFHEAP_ENABLED.key, "true")
+        sc.conf.set(MEMORY_OFFHEAP_SIZE.key, s"${originalExecutorMemBytes}M")
+        MemoryOverridePlugin.offHeapMemory = sc.conf.getSizeAsBytes(MEMORY_OFFHEAP_SIZE.key)
+        Map.empty[String, String].asJava
+      }
+    }
+  }
+
+  override def executorPlugin(): ExecutorPlugin = {
+    new ExecutorPlugin {}
+  }
+}
+
+object MemoryOverridePlugin {
+  var offHeapMemory: Long = _
 }
 
 class NonLocalModeSparkPlugin extends SparkPlugin {
@@ -264,7 +317,7 @@ object NonLocalModeSparkPlugin {
       resources: Map[String, ResourceInformation]): String = {
     // try to keep this simple and only write the gpus addresses, if we add more resources need to
     // make more complex
-    val resourcesString = resources.view.filterKeys(_.equals(GPU)).map {
+    val resourcesString = resources.filter { case (k, _) => k.equals(GPU) }.map {
       case (_, ri) =>
         s"${ri.addresses.mkString(",")}"
     }.mkString(",")

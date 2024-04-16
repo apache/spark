@@ -1,7 +1,0 @@
-# this must be run as the jenkins user!
-SHELL=/bin/bash
-PATH=/home/jenkins/git2/bin:/usr/local/bin:/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/sbin
-
-*/5 * * * *     cd /home/jenkins/gitcaches/adam.reference && git remote update >/dev/null 2>&1
-*/5 * * * *     cd /home/jenkins/gitcaches/alluxio.reference && git remote update >/dev/null 2>&1
-*/5 * * * *     cd /home/jenkins/gitcaches/spark.reference && git remote update >/dev/null 2>&1

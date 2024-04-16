@@ -175,6 +175,8 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SparkSessionExtensions"),
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.SparkSessionExtensionsProvider"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.ExtendedExplainGenerator"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.UDTFRegistration"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.UDFRegistration$"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.DataSourceRegistration"),
@@ -248,6 +250,8 @@ object CheckConnectJvmClientCompatibility {
 
       // RuntimeConfig
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.RuntimeConfig$"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.RuntimeConfig.sqlConf"),
 
       // DataStreamWriter
       ProblemFilters.exclude[MissingClassProblem](
@@ -286,7 +290,26 @@ object CheckConnectJvmClientCompatibility {
 
       // SQLImplicits
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits.rddToDatasetHolder"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits._sqlContext"))
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits._sqlContext"),
+
+      // Artifact Manager
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.artifact.ArtifactManager"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.artifact.ArtifactManager$"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.artifact.util.ArtifactUtils"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.artifact.util.ArtifactUtils$"),
+
+      // MergeIntoWriter
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.MergeIntoWriter"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.WhenMatched"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.WhenMatched$"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.WhenNotMatched"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.WhenNotMatched$"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.WhenNotMatchedBySource"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.WhenNotMatchedBySource$"))
     checkMiMaCompatibility(clientJar, sqlJar, includedRules, excludeRules)
   }
 

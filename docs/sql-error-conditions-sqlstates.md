@@ -33,7 +33,7 @@ Spark SQL uses the following `SQLSTATE` classes:
 
 ## Class `0A`: feature not supported
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>SQLSTATE</th><th>Description and issuing error classes</th></tr></thead>
 <tr>
   <td>0A000</td>
@@ -48,7 +48,7 @@ Spark SQL uses the following `SQLSTATE` classes:
 </table>
 ## Class `21`: cardinality violation
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>SQLSTATE</th><th>Description and issuing error classes</th></tr></thead>
 <tr>
   <td>21000</td>
@@ -63,7 +63,7 @@ Spark SQL uses the following `SQLSTATE` classes:
 </table>
 ## Class `22`: data exception
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>SQLSTATE</th><th>Description and issuing error classes</th></tr></thead>
 <tr>
   <td>22003</td>
@@ -71,7 +71,7 @@ Spark SQL uses the following `SQLSTATE` classes:
 </tr>
 <tr>
   <td></td>
-  <td><a href="arithmetic-overflow-error-class.md">ARITHMETIC_OVERFLOW</a>, <a href="sql-error-conditions.html#cast_overflow">CAST_OVERFLOW</a>, <a href="sql-error-conditions.html#cast_overflow_in_table_insert">CAST_OVERFLOW_IN_TABLE_INSERT</a>, <a href="sql-error-conditions.html#decimal_precision_exceeds_max_precision">DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION</a>, <a href="sql-error-conditions.html#invalid_index_of_zero">INVALID_INDEX_OF_ZERO</a>, <a href="sql-error-conditions.html#incorrect_end_offset">INCORRECT_END_OFFSET</a>, <a href="sql-error-conditions.html#incorrect_ramp_up_rate">INCORRECT_RAMP_UP_RATE</a>, <a href="invalid-array-index-error-class.md">INVALID_ARRAY_INDEX</a>, <a href="invalid-array-index-in-element-at-error-class.md">INVALID_ARRAY_INDEX_IN_ELEMENT_AT</a>, <a href="sql-error-conditions.html#numeric_out_of_supported_range">NUMERIC_OUT_OF_SUPPORTED_RANGE</a>, <a href="sql-error-conditions.html#numeric_value_out_of_range">NUMERIC_VALUE_OUT_OF_RANGE</a>
+  <td><a href="arithmetic-overflow-error-class.md">ARITHMETIC_OVERFLOW</a>, <a href="sql-error-conditions.html#cast_overflow">CAST_OVERFLOW</a>, <a href="sql-error-conditions.html#cast_overflow_in_table_insert">CAST_OVERFLOW_IN_TABLE_INSERT</a>, <a href="sql-error-conditions.html#decimal_precision_exceeds_max_precision">DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION</a>, <a href="sql-error-conditions.html#invalid_index_of_zero">INVALID_INDEX_OF_ZERO</a>, <a href="sql-error-conditions.html#incorrect_ramp_up_rate">INCORRECT_RAMP_UP_RATE</a>, <a href="invalid-array-index-error-class.md">INVALID_ARRAY_INDEX</a>, <a href="invalid-array-index-in-element-at-error-class.md">INVALID_ARRAY_INDEX_IN_ELEMENT_AT</a>, <a href="sql-error-conditions.html#numeric_out_of_supported_range">NUMERIC_OUT_OF_SUPPORTED_RANGE</a>, <a href="sql-error-conditions.html#numeric_value_out_of_range">NUMERIC_VALUE_OUT_OF_RANGE</a>
   </td>
 </tr>
     <tr>
@@ -168,7 +168,7 @@ Spark SQL uses the following `SQLSTATE` classes:
 </table>
 ## Class `23`: integrity constraint violation
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>SQLSTATE</th><th>Description and issuing error classes</th></tr></thead>
 <tr>
   <td>23505</td>
@@ -183,7 +183,7 @@ Spark SQL uses the following `SQLSTATE` classes:
 </table>
 ## Class `2B`: dependent privilege descriptors still exist
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>SQLSTATE</th><th>Description and issuing error classes</th></tr></thead>
 <tr>
   <td>2BP01</td>
@@ -198,7 +198,7 @@ Spark SQL uses the following `SQLSTATE` classes:
 </table>
 ## Class `38`: external routine exception
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>SQLSTATE</th><th>Description and issuing error classes</th></tr></thead>
 <tr>
   <td>38000</td>
@@ -213,7 +213,7 @@ Spark SQL uses the following `SQLSTATE` classes:
 </table>
 ## Class `39`: external routine invocation exception
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>SQLSTATE</th><th>Description and issuing error classes</th></tr></thead>
 <tr>
   <td>39000</td>
@@ -228,7 +228,7 @@ Spark SQL uses the following `SQLSTATE` classes:
 </table>
 ## Class `42`: syntax error or access rule violation
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>SQLSTATE</th><th>Description and issuing error classes</th></tr></thead>
 <tr>
   <td>42000</td>
@@ -238,6 +238,15 @@ Spark SQL uses the following `SQLSTATE` classes:
   <td></td>
   <td><a href="sql-error-conditions.html#ambiguous_reference_to_fields">AMBIGUOUS_REFERENCE_TO_FIELDS</a>, <a href="sql-error-conditions.html#invalid_column_or_field_data_type">INVALID_COLUMN_OR_FIELD_DATA_TYPE</a>, <a href="sql-error-conditions.html#invalid_extract_base_field_type">INVALID_EXTRACT_BASE_FIELD_TYPE</a>, <a href="sql-error-conditions.html#invalid_extract_field_type">INVALID_EXTRACT_FIELD_TYPE</a>, <a href="sql-error-conditions.html#invalid_field_name">INVALID_FIELD_NAME</a>, <a href="sql-error-conditions.html#invalid_set_syntax">INVALID_SET_SYNTAX</a>, <a href="sql-error-conditions.html#invalid_sql_syntax">INVALID_SQL_SYNTAX</a>, <a href="sql-error-conditions.html#non_partition_column">NON_PARTITION_COLUMN</a>, <a href="not-null-constraint-violation-error-class.md">NOT_NULL_CONSTRAINT_VIOLATION</a>, <a href="sql-error-conditions.html#nullable_column_or_field">NULLABLE_COLUMN_OR_FIELD</a>, <a href="sql-error-conditions.html#nullable_row_id_attributes">NULLABLE_ROW_ID_ATTRIBUTES</a>
   </td>
+</tr>
+<tr>
+  <td>42001</td>
+  <td>Invalid encoder error</td>
+</tr>
+<tr>
+  <td></td>
+  <td><a href="sql-error-conditions.html#invalid_expression_encoder">INVALID_EXPRESSION_ENCODER</a>
+</td>
 </tr>
     <tr>
   <td>42601</td>
@@ -648,7 +657,7 @@ Spark SQL uses the following `SQLSTATE` classes:
 </table>
 ## Class `46`: java ddl 1
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>SQLSTATE</th><th>Description and issuing error classes</th></tr></thead>
 <tr>
   <td>46110</td>
@@ -672,7 +681,7 @@ Spark SQL uses the following `SQLSTATE` classes:
 </table>
 ## Class `53`: insufficient resources
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>SQLSTATE</th><th>Description and issuing error classes</th></tr></thead>
 <tr>
   <td>53200</td>
@@ -687,7 +696,7 @@ Spark SQL uses the following `SQLSTATE` classes:
 </table>
 ## Class `54`: program limit exceeded
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>SQLSTATE</th><th>Description and issuing error classes</th></tr></thead>
 <tr>
   <td>54000</td>
@@ -702,7 +711,7 @@ Spark SQL uses the following `SQLSTATE` classes:
 </table>
 ## Class `HY`: CLI-specific condition
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>SQLSTATE</th><th>Description and issuing error classes</th></tr></thead>
 <tr>
   <td>HY008</td>
@@ -717,7 +726,7 @@ Spark SQL uses the following `SQLSTATE` classes:
 </table>
 ## Class `XX`: internal error
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>SQLSTATE</th><th>Description and issuing error classes</th></tr></thead>
 <tr>
   <td>XX000</td>
@@ -730,6 +739,3 @@ Spark SQL uses the following `SQLSTATE` classes:
 </tr>
 
 </table>
-
-
-.. include:: /shared/replacements.md

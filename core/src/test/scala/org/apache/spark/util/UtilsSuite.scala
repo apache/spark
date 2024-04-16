@@ -344,7 +344,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     }
     IOUtils.write(content, outputStream)
     outputStream.close()
-    content.size
+    content.length
   }
 
   private val workerConf = new SparkConf()

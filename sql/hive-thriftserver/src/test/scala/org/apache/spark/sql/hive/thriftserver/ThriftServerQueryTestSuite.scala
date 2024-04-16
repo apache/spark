@@ -101,7 +101,9 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     "subquery/in-subquery/in-order-by.sql",
     "subquery/in-subquery/in-set-operations.sql",
     // SPARK-42921
-    "timestampNTZ/datetime-special-ansi.sql"
+    "timestampNTZ/datetime-special-ansi.sql",
+    // SPARK-47264
+    "collations.sql"
   )
 
   override def runQueries(
@@ -246,7 +248,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
 
   override lazy val listTestCases: Seq[TestCase] = {
     listFilesRecursively(new File(inputFilePath)).flatMap { file =>
-      var resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
+      var resultFile = resultFileForInputFile(file)
       // JDK-4511638 changes 'toString' result of Float/Double
       // JDK-8282081 changes DataTimeFormatter 'F' symbol
       if (Utils.isJavaVersionAtLeast21 && (new File(resultFile + ".java21")).exists()) {

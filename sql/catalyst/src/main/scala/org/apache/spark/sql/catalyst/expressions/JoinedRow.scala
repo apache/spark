@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String, VariantVal}
 
 /**
  * A mutable wrapper that makes two rows appear as a single concatenated row.  Designed to
@@ -119,6 +119,9 @@ class JoinedRow extends InternalRow {
 
   override def getInterval(i: Int): CalendarInterval =
     if (i < row1.numFields) row1.getInterval(i) else row2.getInterval(i - row1.numFields)
+
+  override def getVariant(i: Int): VariantVal =
+    if (i < row1.numFields) row1.getVariant(i) else row2.getVariant(i - row1.numFields)
 
   override def getMap(i: Int): MapData =
     if (i < row1.numFields) row1.getMap(i) else row2.getMap(i - row1.numFields)

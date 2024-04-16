@@ -450,10 +450,15 @@ object SerializerBuildHelper {
   private def validateAndSerializeElement(
       enc: AgnosticEncoder[_],
       nullable: Boolean): Expression => Expression = { input =>
+    val expected = enc match {
+      case OptionEncoder(_) => lenientExternalDataTypeFor(enc)
+      case _ => enc.dataType
+    }
+
     expressionWithNullSafety(
       createSerializer(
         enc,
-        ValidateExternalType(input, enc.dataType, lenientExternalDataTypeFor(enc))),
+        ValidateExternalType(input, expected, lenientExternalDataTypeFor(enc))),
       nullable,
       WalkedTypePath())
   }

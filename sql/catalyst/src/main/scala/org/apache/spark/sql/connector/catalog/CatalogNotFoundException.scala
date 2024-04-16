@@ -21,8 +21,12 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.Experimental
 
 @Experimental
-class CatalogNotFoundException(message: String, cause: Throwable)
-  extends SparkException(message, cause) {
+class CatalogNotFoundException(
+    errorClass: String,
+    messageParameters: Map[String, String],
+    cause: Throwable)
+  extends SparkException(errorClass, messageParameters, cause) {
 
-  def this(message: String) = this(message, null)
+  def this(errorClass: String, messageParameters: Map[String, String]) =
+    this(errorClass, messageParameters, null)
 }

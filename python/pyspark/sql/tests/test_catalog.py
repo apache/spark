@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 from pyspark import StorageLevel
-from pyspark.errors import AnalysisException
+from pyspark.errors import AnalysisException, PySparkTypeError
 from pyspark.sql.types import StructType, StructField, IntegerType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
@@ -81,6 +81,13 @@ class CatalogTestsMixin:
 
                     schema = StructType([StructField("a", IntegerType(), True)])
                     description = "this a table created via Catalog.createTable()"
+
+                    with self.assertRaisesRegex(PySparkTypeError, "should be a struct type"):
+                        # Test deprecated API and negative error case.
+                        spark.catalog.createExternalTable(
+                            "invalid_table_creation", schema=IntegerType(), description=description
+                        )
+
                     spark.catalog.createTable(
                         "tab3_via_catalog", schema=schema, description=description
                     )
@@ -470,7 +477,7 @@ class CatalogTestsMixin:
         import tempfile
 
         spark = self.spark
-        with tempfile.TemporaryDirectory() as tmp_dir:
+        with tempfile.TemporaryDirectory(prefix="test_refresh_table") as tmp_dir:
             with self.table("my_tab"):
                 spark.sql(
                     "CREATE TABLE my_tab (col STRING) USING TEXT LOCATION '{}'".format(tmp_dir)

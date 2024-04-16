@@ -402,7 +402,14 @@ object functions {
    * @group agg_funcs
    * @since 3.4.0
    */
-  def count(e: Column): Column = Column.fn("count", e)
+  def count(e: Column): Column = {
+    val withoutStar = e.expr.getExprTypeCase match {
+      // Turn count(*) into count(1)
+      case proto.Expression.ExprTypeCase.UNRESOLVED_STAR => lit(1)
+      case _ => e
+    }
+    Column.fn("count", withoutStar)
+  }
 
   /**
    * Aggregate function: returns the number of items in a group.
@@ -3319,14 +3326,6 @@ object functions {
   def raise_error(c: Column): Column = Column.fn("raise_error", c)
 
   /**
-   * Throws an exception with the provided error message.
-   *
-   * @group misc_funcs
-   * @since 4.0.0
-   */
-  def raise_error(c: Column, e: Column): Column = Column.fn("raise_error", c, e)
-
-  /**
    * Returns the estimated number of unique values given the binary representation of a
    * Datasketches HllSketch.
    *
@@ -4846,6 +4845,22 @@ object functions {
       otherChar: Column): Column =
     Column.fn("mask", input, upperChar, lowerChar, digitChar, otherChar)
 
+  /**
+   * Marks a given column with specified collation.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def collate(e: Column, collation: String): Column = Column.fn("collate", e, lit(collation))
+
+  /**
+   * Returns the collation name of a given column.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def collation(e: Column): Column = Column.fn("collation", e)
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // DateTime functions
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -5952,6 +5967,24 @@ object functions {
   def to_unix_timestamp(timeExp: Column): Column =
     Column.fn("to_unix_timestamp", timeExp)
 
+  /**
+   * Extracts the three-letter abbreviated month name from a given date/timestamp/string.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def monthname(timeExp: Column): Column =
+    Column.fn("monthname", timeExp)
+
+  /**
+   * Extracts the three-letter abbreviated month name from a given date/timestamp/string.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def dayname(timeExp: Column): Column =
+    Column.fn("dayname", timeExp)
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Collection functions
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -6932,6 +6965,17 @@ object functions {
   }
 
   /**
+   * Parses a JSON string and constructs a Variant value.
+   *
+   * @param json
+   *   a string column that contains JSON data.
+   *
+   * @group json_funcs
+   * @since 4.0.0
+   */
+  def parse_json(json: Column): Column = Column.fn("parse_json", json)
+
+  /**
    * Parses a JSON string and infers its schema in DDL format.
    *
    * @param json
@@ -7545,36 +7589,36 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * A transform for timestamps and dates to partition data into years.
+   * (Java-specific) A transform for timestamps and dates to partition data into years.
    *
    * @group partition_transforms
    * @since 3.4.0
    */
-  def years(e: Column): Column = Column.fn("years", e)
+  def years(e: Column): Column = partitioning.years(e)
 
   /**
-   * A transform for timestamps and dates to partition data into months.
+   * (Java-specific) A transform for timestamps and dates to partition data into months.
    *
    * @group partition_transforms
    * @since 3.4.0
    */
-  def months(e: Column): Column = Column.fn("months", e)
+  def months(e: Column): Column = partitioning.months(e)
 
   /**
-   * A transform for timestamps and dates to partition data into days.
+   * (Java-specific) A transform for timestamps and dates to partition data into days.
    *
    * @group partition_transforms
    * @since 3.4.0
    */
-  def days(e: Column): Column = Column.fn("days", e)
+  def days(e: Column): Column = partitioning.days(e)
 
   /**
-   * A transform for timestamps to partition data into hours.
+   * (Java-specific) A transform for timestamps to partition data into hours.
    *
    * @group partition_transforms
    * @since 3.4.0
    */
-  def hours(e: Column): Column = Column.fn("hours", e)
+  def hours(e: Column): Column = partitioning.hours(e)
 
   /**
    * Converts the timestamp without time zone `sourceTs` from the `sourceTz` time zone to
@@ -7856,22 +7900,20 @@ object functions {
   def make_ym_interval(): Column = Column.fn("make_ym_interval")
 
   /**
-   * A transform for any type that partitions by a hash of the input column.
+   * (Java-specific) A transform for any type that partitions by a hash of the input column.
    *
    * @group partition_transforms
    * @since 3.4.0
    */
-  def bucket(numBuckets: Column, e: Column): Column =
-    Column.fn("bucket", numBuckets, e)
+  def bucket(numBuckets: Column, e: Column): Column = partitioning.bucket(numBuckets, e)
 
   /**
-   * A transform for any type that partitions by a hash of the input column.
+   * (Java-specific) A transform for any type that partitions by a hash of the input column.
    *
    * @group partition_transforms
    * @since 3.4.0
    */
-  def bucket(numBuckets: Int, e: Column): Column =
-    Column.fn("bucket", lit(numBuckets), e)
+  def bucket(numBuckets: Int, e: Column): Column = partitioning.bucket(numBuckets, e)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Predicates functions
@@ -8404,4 +8446,58 @@ object functions {
       .addAllArguments(cols.map(_.expr).asJava)
   }
 
+  // scalastyle:off
+  // TODO(SPARK-45970): Use @static annotation so Java can access to those
+  //   API in the same way. Once we land this fix, should deprecate
+  //   functions.hours, days, months, years and bucket.
+  object partitioning {
+    // scalastyle:on
+    /**
+     * (Scala-specific) A transform for timestamps and dates to partition data into years.
+     *
+     * @group partition_transforms
+     * @since 4.0.0
+     */
+    def years(e: Column): Column = Column.fn("years", e)
+
+    /**
+     * (Scala-specific) A transform for timestamps and dates to partition data into months.
+     *
+     * @group partition_transforms
+     * @since 4.0.0
+     */
+    def months(e: Column): Column = Column.fn("months", e)
+
+    /**
+     * (Scala-specific) A transform for timestamps and dates to partition data into days.
+     *
+     * @group partition_transforms
+     * @since 4.0.0
+     */
+    def days(e: Column): Column = Column.fn("days", e)
+
+    /**
+     * (Scala-specific) A transform for timestamps to partition data into hours.
+     *
+     * @group partition_transforms
+     * @since 4.0.0
+     */
+    def hours(e: Column): Column = Column.fn("hours", e)
+
+    /**
+     * (Scala-specific) A transform for any type that partitions by a hash of the input column.
+     *
+     * @group partition_transforms
+     * @since 4.0.0
+     */
+    def bucket(numBuckets: Column, e: Column): Column = Column.fn("bucket", numBuckets, e)
+
+    /**
+     * (Scala-specific) A transform for any type that partitions by a hash of the input column.
+     *
+     * @group partition_transforms
+     * @since 4.0.0
+     */
+    def bucket(numBuckets: Int, e: Column): Column = Column.fn("bucket", lit(numBuckets), e)
+  }
 }

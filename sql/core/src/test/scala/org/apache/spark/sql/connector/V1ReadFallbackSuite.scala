@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.connector
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, QueryTest, Row, SparkSession, SQLContext}
-import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, Identifier, SupportsRead, Table, TableCapability}
+import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, CatalogV2Util, Column, Identifier, SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns, V1Scan}
 import org.apache.spark.sql.execution.RowDataSourceScanExec
@@ -100,12 +101,13 @@ class V1ReadFallbackWithCatalogSuite extends V1ReadFallbackSuite {
 class V1ReadFallbackCatalog extends BasicInMemoryTableCatalog {
   override def createTable(
       ident: Identifier,
-      schema: StructType,
+      columns: Array[Column],
       partitions: Array[Transform],
       properties: java.util.Map[String, String]): Table = {
     // To simplify the test implementation, only support fixed schema.
+    val schema = CatalogV2Util.v2ColumnsToStructType(columns)
     if (schema != V1ReadFallbackCatalog.schema || partitions.nonEmpty) {
-      throw new UnsupportedOperationException
+      throw SparkUnsupportedOperationException()
     }
     val table = new TableWithV1ReadFallback(ident.toString)
     tables.put(ident, table)
@@ -188,7 +190,7 @@ class V1TableScan(
     } else if (requiredSchema.map(_.name) == Seq("j")) {
       data.map(row => Row(row.getInt(1)))
     } else {
-      throw new UnsupportedOperationException
+      throw SparkUnsupportedOperationException()
     }
 
     SparkSession.active.sparkContext.makeRDD(result)

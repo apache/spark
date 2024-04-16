@@ -29,6 +29,7 @@ import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A column that will be computed based on the data in a `DataFrame`.
@@ -1004,7 +1005,7 @@ class Column private[sql] (@DeveloperApi val expr: proto.Expression) extends Log
    * @group expr_ops
    * @since 3.4.0
    */
-  def as(aliases: Array[String]): Column = as(aliases.toSeq)
+  def as(aliases: Array[String]): Column = as(aliases.toImmutableArraySeq)
 
   /**
    * Gives the column an alias.
@@ -1088,6 +1089,41 @@ class Column private[sql] (@DeveloperApi val expr: proto.Expression) extends Log
    * @since 3.4.0
    */
   def cast(to: String): Column = cast(DataTypeParser.parseDataType(to))
+
+  /**
+   * Casts the column to a different data type and the result is null on failure.
+   * {{{
+   *   // Casts colA to IntegerType.
+   *   import org.apache.spark.sql.types.IntegerType
+   *   df.select(df("colA").try_cast(IntegerType))
+   *
+   *   // equivalent to
+   *   df.select(df("colA").try_cast("int"))
+   * }}}
+   *
+   * @group expr_ops
+   * @since 4.0.0
+   */
+  def try_cast(to: DataType): Column = Column { builder =>
+    builder.getCastBuilder
+      .setExpr(expr)
+      .setType(DataTypeProtoConverter.toConnectProtoType(to))
+      .setEvalMode(proto.Expression.Cast.EvalMode.EVAL_MODE_TRY)
+  }
+
+  /**
+   * Casts the column to a different data type and the result is null on failure.
+   * {{{
+   *   // Casts colA to integer.
+   *   df.select(df("colA").try_cast("int"))
+   * }}}
+   *
+   * @group expr_ops
+   * @since 4.0.0
+   */
+  def try_cast(to: String): Column = {
+    try_cast(DataTypeParser.parseDataType(to))
+  }
 
   /**
    * Returns a sort expression based on the descending order of the column.
@@ -1297,7 +1333,8 @@ private[sql] object Column {
     val builder = proto.Expression.newBuilder()
     name match {
       case "*" =>
-        builder.getUnresolvedStarBuilder
+        val starBuilder = builder.getUnresolvedStarBuilder
+        planId.foreach(starBuilder.setPlanId)
       case _ if name.endsWith(".*") =>
         builder.getUnresolvedStarBuilder.setUnparsedTarget(name)
       case _ =>
@@ -1314,8 +1351,14 @@ private[sql] object Column {
   }
 
   @DeveloperApi
+  @deprecated("Use forExtension(Array[Byte]) instead", "4.0.0")
   def apply(extension: com.google.protobuf.Any): Column = {
     apply(_.setExtension(extension))
+  }
+
+  @DeveloperApi
+  def forExtension(extension: Array[Byte]): Column = {
+    apply(_.setExtension(com.google.protobuf.Any.parseFrom(extension)))
   }
 
   private[sql] def fn(name: String, inputs: Column*): Column = {

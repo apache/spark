@@ -36,7 +36,7 @@ object ResolveIdentifierClause extends Rule[LogicalPlan] with AliasHelper with E
     case other =>
       other.transformExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_IDENTIFIER)) {
         case e: ExpressionWithUnresolvedIdentifier if e.identifierExpr.resolved =>
-          e.exprBuilder.apply(evalIdentifierExpr(e.identifierExpr))
+          e.exprBuilder.apply(evalIdentifierExpr(e.identifierExpr), e.otherExprs)
       }
   }
 

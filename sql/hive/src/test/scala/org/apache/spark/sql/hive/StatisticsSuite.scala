@@ -970,7 +970,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
    */
   private def getStatsProperties(tableName: String): Map[String, String] = {
     val hTable = hiveClient.getTable(spark.sessionState.catalog.getCurrentDatabase, tableName)
-    hTable.properties.view.filterKeys(_.startsWith(STATISTICS_PREFIX)).toMap
+    hTable.properties.filter { case (k, _) => k.startsWith(STATISTICS_PREFIX) }
   }
 
   test("change stats after insert command for hive table") {
@@ -1209,7 +1209,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS " + stats.keys.mkString(", "))
       val table = hiveClient.getTable("default", tableName)
       val props =
-        table.properties.view.filterKeys(_.startsWith("spark.sql.statistics.colStats")).toMap
+        table.properties.filter { case (k, _) => k.startsWith("spark.sql.statistics.colStats") }
       assert(props == expected)
     }
 
@@ -1278,11 +1278,11 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS cint, ctimestamp")
         val table = hiveClient.getTable("default", tableName)
         val intHistogramProps = table.properties
-          .view.filterKeys(_.startsWith("spark.sql.statistics.colStats.cint.histogram"))
+          .filter { case (k, _) => k.startsWith("spark.sql.statistics.colStats.cint.histogram") }
         assert(intHistogramProps.size == 1)
 
-        val tsHistogramProps = table.properties
-          .view.filterKeys(_.startsWith("spark.sql.statistics.colStats.ctimestamp.histogram"))
+        val tsHistogramProps = table.properties.filter {
+          case (k, _) => k.startsWith("spark.sql.statistics.colStats.ctimestamp.histogram") }
         assert(tsHistogramProps.size == 1)
 
         // Validate histogram after deserialization.

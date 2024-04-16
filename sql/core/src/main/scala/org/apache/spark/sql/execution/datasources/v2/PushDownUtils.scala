@@ -72,7 +72,7 @@ object PushDownUtils {
         // faster, while the untranslated filters are complicated filters that take more time to
         // evaluate, so we want to evaluate the postScanFilters filters first.
         (Left(r.pushedFilters().toImmutableArraySeq),
-          (postScanFilters ++ untranslatableExprs).toSeq)
+          (postScanFilters ++ untranslatableExprs).toImmutableArraySeq)
 
       case r: SupportsPushDownV2Filters =>
         // A map from translated data source leaf node filters to original catalyst filter
@@ -105,7 +105,7 @@ object PushDownUtils {
         // faster, while the untranslated filters are complicated filters that take more time to
         // evaluate, so we want to evaluate the postScanFilters filters first.
         (Right(r.pushedPredicates.toImmutableArraySeq),
-          (postScanFilters ++ untranslatableExprs).toSeq)
+          (postScanFilters ++ untranslatableExprs).toImmutableArraySeq)
 
       case f: FileScanBuilder =>
         val postScanFilters = f.pushFilters(filters)

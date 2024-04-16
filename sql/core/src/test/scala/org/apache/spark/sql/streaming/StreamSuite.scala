@@ -42,7 +42,7 @@ import org.apache.spark.sql.execution.{LocalLimitExec, SimpleMode, SparkPlan}
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemoryStream, MemorySink}
-import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreConf, StateStoreId, StateStoreProvider}
+import org.apache.spark.sql.execution.streaming.state.{KeyStateEncoderSpec, StateStore, StateStoreConf, StateStoreId, StateStoreProvider}
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -174,7 +174,7 @@ class StreamSuite extends StreamTest {
         try {
           query.processAllAvailable()
           val outputDf = spark.read.parquet(outputDir.getAbsolutePath).as[Long]
-          checkDatasetUnorderly[Long](outputDf, (0L to 10L).concat(0L to 10L): _*)
+          checkDatasetUnorderly[Long](outputDf, (0L to 10L) ++ (0L to 10L): _*)
         } finally {
           query.stop()
         }
@@ -511,7 +511,7 @@ class StreamSuite extends StreamTest {
 
       val explainWithoutExtended = q.explainInternal(false)
       // `extended = false` only displays the physical plan.
-      assert("StreamingDataSourceV2Relation".r
+      assert("StreamingDataSourceV2ScanRelation".r
         .findAllMatchIn(explainWithoutExtended).size === 0)
       assert("BatchScan".r
         .findAllMatchIn(explainWithoutExtended).size === 1)
@@ -521,7 +521,7 @@ class StreamSuite extends StreamTest {
       val explainWithExtended = q.explainInternal(true)
       // `extended = true` displays 3 logical plans (Parsed/Optimized/Optimized) and 1 physical
       // plan.
-      assert("StreamingDataSourceV2Relation".r
+      assert("StreamingDataSourceV2ScanRelation".r
         .findAllMatchIn(explainWithExtended).size === 3)
       assert("BatchScan".r
         .findAllMatchIn(explainWithExtended).size === 1)
@@ -566,7 +566,7 @@ class StreamSuite extends StreamTest {
       val explainWithoutExtended = q.explainInternal(false)
 
       // `extended = false` only displays the physical plan.
-      assert("StreamingDataSourceV2Relation".r
+      assert("StreamingDataSourceV2ScanRelation".r
         .findAllMatchIn(explainWithoutExtended).size === 0)
       assert("ContinuousScan".r
         .findAllMatchIn(explainWithoutExtended).size === 1)
@@ -574,7 +574,7 @@ class StreamSuite extends StreamTest {
       val explainWithExtended = q.explainInternal(true)
       // `extended = true` displays 3 logical plans (Parsed/Optimized/Optimized) and 1 physical
       // plan.
-      assert("StreamingDataSourceV2Relation".r
+      assert("StreamingDataSourceV2ScanRelation".r
         .findAllMatchIn(explainWithExtended).size === 3)
       assert("ContinuousScan".r
         .findAllMatchIn(explainWithExtended).size === 1)
@@ -713,9 +713,7 @@ class StreamSuite extends StreamTest {
         "columnName" -> "`rn_col`",
         "windowSpec" ->
           ("(PARTITION BY COL1 ORDER BY COL2 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING " +
-          "AND CURRENT ROW)")),
-      queryContext = Array(
-        ExpectedContext(fragment = "withColumn", callSitePattern = getCurrentClassCallSitePattern)))
+          "AND CURRENT ROW)")))
   }
 
 
@@ -1317,7 +1315,7 @@ class StreamSuite extends StreamTest {
           .map(_.asInstanceOf[RepartitionByExpression].numPartitions)
         // Before the fix of SPARK-34482, the numPartition is the value of
         // `COALESCE_PARTITIONS_INITIAL_PARTITION_NUM`.
-        assert(numPartition.get === spark.sqlContext.conf.getConf(SQLConf.SHUFFLE_PARTITIONS))
+        assert(numPartition.get === spark.sessionState.conf.getConf(SQLConf.SHUFFLE_PARTITIONS))
       } finally {
         if (query != null) {
           query.stop()
@@ -1417,9 +1415,11 @@ class TestStateStoreProvider extends StateStoreProvider {
       stateStoreId: StateStoreId,
       keySchema: StructType,
       valueSchema: StructType,
-      numColsPrefixKey: Int,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
+      useColumnFamilies: Boolean,
       storeConfs: StateStoreConf,
-      hadoopConf: Configuration): Unit = {
+      hadoopConf: Configuration,
+      useMultipleValuesPerKey: Boolean = false): Unit = {
     throw new Exception("Successfully instantiated")
   }
 

@@ -151,8 +151,8 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
         _.output.map(_.exprId.id),
         newMap => newMap.copy(output = newMap.output.map(_.newInstance())))
 
-    case p: PythonMapInArrow =>
-      deduplicateAndRenew[PythonMapInArrow](
+    case p: MapInArrow =>
+      deduplicateAndRenew[MapInArrow](
         existingRelations,
         p,
         _.output.map(_.exprId.id),
@@ -382,13 +382,13 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
         newVersion.copyTagsFrom(oldVersion)
         Seq((oldVersion, newVersion))
 
-      case oldVersion @ MapInPandas(_, output, _, _)
+      case oldVersion @ MapInPandas(_, output, _, _, _)
         if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
         val newVersion = oldVersion.copy(output = output.map(_.newInstance()))
         newVersion.copyTagsFrom(oldVersion)
         Seq((oldVersion, newVersion))
 
-      case oldVersion @ PythonMapInArrow(_, output, _, _)
+      case oldVersion @ MapInArrow(_, output, _, _, _)
         if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
         val newVersion = oldVersion.copy(output = output.map(_.newInstance()))
         newVersion.copyTagsFrom(oldVersion)

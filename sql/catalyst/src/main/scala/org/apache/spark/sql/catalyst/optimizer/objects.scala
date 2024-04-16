@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.SparkException
 import org.apache.spark.api.java.function.FilterFunction
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
@@ -261,12 +262,12 @@ object ReassignLambdaVariableID extends Rule[LogicalPlan] {
 
     plan.transformAllExpressionsWithPruning(_.containsPattern(LAMBDA_VARIABLE), ruleId) {
       case lr: LambdaVariable if lr.id == 0 =>
-        throw new IllegalStateException("LambdaVariable should never has 0 as its ID.")
+        throw SparkException.internalError("LambdaVariable should never has 0 as its ID.")
 
       case lr: LambdaVariable if lr.id < 0 =>
         hasNegativeIds = true
         if (hasPositiveIds) {
-          throw new IllegalStateException(
+          throw SparkException.internalError(
             "LambdaVariable IDs in a query should be all positive or negative.")
 
         }
@@ -275,7 +276,7 @@ object ReassignLambdaVariableID extends Rule[LogicalPlan] {
       case lr: LambdaVariable if lr.id > 0 =>
         hasPositiveIds = true
         if (hasNegativeIds) {
-          throw new IllegalStateException(
+          throw SparkException.internalError(
             "LambdaVariable IDs in a query should be all positive or negative.")
         }
 

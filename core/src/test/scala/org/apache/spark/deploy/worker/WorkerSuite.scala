@@ -23,7 +23,7 @@ import java.util.function.Supplier
 
 import scala.concurrent.duration._
 
-import org.json4s.{DefaultFormats, Extraction}
+import org.json4s.{DefaultFormats, Extraction, Formats}
 import org.mockito.{Mock, MockitoAnnotations}
 import org.mockito.Answers.RETURNS_SMART_NULLS
 import org.mockito.ArgumentMatchers.any
@@ -60,7 +60,7 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter with P
   }
   def conf(opts: (String, String)*): SparkConf = new SparkConf(loadDefaults = false).setAll(opts)
 
-  implicit val formats = DefaultFormats
+  implicit val formats: Formats = DefaultFormats
 
   private val _generateWorkerId = PrivateMethod[String](Symbol("generateWorkerId"))
 

@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
+import scala.collection.immutable.HashSet
 import scala.reflect.ClassTag
 import scala.util.Random
 
@@ -28,7 +29,7 @@ import org.scalatest.Assertions._
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.TableDrivenPropertyChecks._
 
-import org.apache.spark.{SparkConf, SparkException, TaskContext}
+import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.TestUtils.withListener
 import org.apache.spark.internal.config.MAX_RESULT_SIZE
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
@@ -71,7 +72,7 @@ class DatasetSuite extends QueryTest
   with AdaptiveSparkPlanHelper {
   import testImplicits._
 
-  private implicit val ordering = Ordering.by((c: ClassData) => c.a -> c.b)
+  private implicit val ordering: Ordering[ClassData] = Ordering.by((c: ClassData) => c.a -> c.b)
 
   test("checkAnswer should compare map correctly") {
     val data = Seq((1, "2", Map(1 -> 2, 2 -> 1)))
@@ -272,6 +273,13 @@ class DatasetSuite extends QueryTest
     checkDatasetUnorderly(
       ds,
       (ClassData("one", 2), 1L), (ClassData("two", 3), 1L))
+  }
+
+  test("SPARK-45896: seq of option of seq") {
+    val ds = Seq(DataSeqOptSeq(Seq(Some(Seq(0))))).toDS()
+    checkDataset(
+      ds,
+      DataSeqOptSeq(Seq(Some(List(0)))))
   }
 
   test("select") {
@@ -1387,10 +1395,11 @@ class DatasetSuite extends QueryTest
   test("row nullability mismatch") {
     val schema = new StructType().add("a", StringType, true).add("b", StringType, false)
     val rdd = spark.sparkContext.parallelize(Row(null, "123") :: Row("234", null) :: Nil)
-    val message = intercept[Exception] {
+    val ex = intercept[SparkRuntimeException] {
       spark.createDataFrame(rdd, schema).collect()
-    }.getMessage
-    assert(message.contains("The 1th field 'b' of input row cannot be null"))
+    }
+    assert(ex.getErrorClass == "EXPRESSION_ENCODING_FAILED")
+    assert(ex.getCause.getMessage.contains("The 1th field 'b' of input row cannot be null"))
   }
 
   test("createTempView") {
@@ -1411,18 +1420,20 @@ class DatasetSuite extends QueryTest
     dataset.sparkSession.catalog.dropTempView("tempView")
 
     withDatabase("test_db") {
-      withSQLConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_MULTIPLE_NAME_PARTS.key -> "false") {
-        spark.sql("CREATE DATABASE IF NOT EXISTS test_db")
-        val e = intercept[AnalysisException](
-          dataset.createTempView("test_db.tempView"))
-        checkError(e,
-          errorClass = "TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS",
-          parameters = Map("actualName" -> "test_db.tempView"))
-      }
+      withTempView("tempView") {
+        withSQLConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_MULTIPLE_NAME_PARTS.key -> "false") {
+          spark.sql("CREATE DATABASE IF NOT EXISTS test_db")
+          val e = intercept[AnalysisException](
+            dataset.createTempView("test_db.tempView"))
+          checkError(e,
+            errorClass = "TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS",
+            parameters = Map("actualName" -> "test_db.tempView"))
+        }
 
-      withSQLConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_MULTIPLE_NAME_PARTS.key -> "true") {
-          dataset.createTempView("test_db.tempView")
-          assert(spark.catalog.tableExists("tempView"))
+        withSQLConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_MULTIPLE_NAME_PARTS.key -> "true") {
+            dataset.createTempView("test_db.tempView")
+            assert(spark.catalog.tableExists("tempView"))
+        }
       }
     }
   }
@@ -1874,21 +1885,24 @@ class DatasetSuite extends QueryTest
   }
 
   test("SPARK-19896: cannot have circular references in case class") {
-    val errMsg1 = intercept[UnsupportedOperationException] {
-      Seq(CircularReferenceClassA(null)).toDS()
-    }
-    assert(errMsg1.getMessage.startsWith("cannot have circular references in class, but got the " +
-      "circular reference of class"))
-    val errMsg2 = intercept[UnsupportedOperationException] {
-      Seq(CircularReferenceClassC(null)).toDS()
-    }
-    assert(errMsg2.getMessage.startsWith("cannot have circular references in class, but got the " +
-      "circular reference of class"))
-    val errMsg3 = intercept[UnsupportedOperationException] {
-      Seq(CircularReferenceClassD(null)).toDS()
-    }
-    assert(errMsg3.getMessage.startsWith("cannot have circular references in class, but got the " +
-      "circular reference of class"))
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        Seq(CircularReferenceClassA(null)).toDS()
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_2139",
+      parameters = Map("t" -> "org.apache.spark.sql.CircularReferenceClassA"))
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        Seq(CircularReferenceClassC(null)).toDS()
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_2139",
+      parameters = Map("t" -> "org.apache.spark.sql.CircularReferenceClassC"))
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        Seq(CircularReferenceClassD(null)).toDS()
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_2139",
+      parameters = Map("t" -> "org.apache.spark.sql.CircularReferenceClassD"))
   }
 
   test("SPARK-20125: option of map") {
@@ -2562,6 +2576,18 @@ class DatasetSuite extends QueryTest
     assert(result == expected)
   }
 
+  test("SPARK-47385: Tuple encoder with Option inputs") {
+    implicit val enc: Encoder[(SingleData, Option[SingleData])] =
+      Encoders.tuple(Encoders.product[SingleData], Encoders.product[Option[SingleData]])
+
+    val input = Seq(
+      (SingleData(1), Some(SingleData(1))),
+      (SingleData(2), None)
+    )
+    val ds = spark.createDataFrame(input).as[(SingleData, Option[SingleData])]
+    checkDataset(ds, input: _*)
+  }
+
   test("SPARK-43124: Show does not trigger job execution on CommandResults") {
     withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "") {
       withTable("t1") {
@@ -2656,16 +2682,29 @@ class DatasetSuite extends QueryTest
   }
 
   test("SPARK-45592: Coaleasced shuffle read is not compatible with hash partitioning") {
-    val ee = spark.range(0, 1000000, 1, 5).map(l => (l, l)).toDF()
-      .persist(org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK)
-    ee.count()
+    withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "20",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "2000") {
+      val ee = spark.range(0, 1000, 1, 5).map(l => (l, l - 1)).toDF()
+        .persist(org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK)
+      ee.count()
 
-    val minNbrs1 = ee
-      .groupBy("_1").agg(min(col("_2")).as("min_number"))
-      .persist(org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK)
+      // `minNbrs1` will start with 20 partitions and without the fix would coalesce to ~10
+      // partitions.
+      val minNbrs1 = ee
+        .groupBy("_2").agg(min(col("_1")).as("min_number"))
+        .select(col("_2") as "_1", col("min_number"))
+        .persist(org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK)
+      minNbrs1.count()
 
-    val join = ee.join(minNbrs1, "_1")
-    assert(join.count() == 1000000)
+      // shuffle on `ee` will start with 2 partitions, smaller than `minNbrs1`'s partition num,
+      // and `EnsureRequirements` will change its partition num to `minNbrs1`'s partition num.
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "5") {
+        val join = ee.join(minNbrs1, "_1")
+        assert(join.count() == 999)
+      }
+    }
   }
 
   test("SPARK-45022: exact DatasetQueryContext call site") {
@@ -2684,6 +2723,31 @@ class DatasetSuite extends QueryTest
         parameters = Map("objectName" -> "`a`", "proposal" -> "`value`"),
         context = ExpectedContext(fragment = "col", callSitePattern = callSitePattern))
       assert(exception.context.head.asInstanceOf[DataFrameQueryContext].stackTrace.length == 2)
+    }
+  }
+
+  test("SPARK-46791: Dataset with set field") {
+    val ds = Seq(WithSet(0, HashSet("foo", "bar")), WithSet(1, HashSet("bar", "zoo"))).toDS()
+    checkDataset(ds.map(t => t),
+      WithSet(0, HashSet("foo", "bar")), WithSet(1, HashSet("bar", "zoo")))
+  }
+
+  test("SPARK-47270: isEmpty does not trigger job execution on CommandResults") {
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "") {
+      withTable("t1") {
+        sql("create table t1(c int) using parquet")
+
+        @volatile var jobCounter = 0
+        val listener = new SparkListener {
+          override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+            jobCounter += 1
+          }
+        }
+        withListener(spark.sparkContext, listener) { _ =>
+          sql("show tables").isEmpty
+        }
+        assert(jobCounter === 0)
+      }
     }
   }
 }
@@ -2739,6 +2803,8 @@ case class WithImmutableMap(id: String, map_test: scala.collection.immutable.Map
 case class WithMap(id: String, map_test: scala.collection.Map[Long, String])
 case class WithMapInOption(m: Option[scala.collection.Map[Int, Int]])
 
+case class WithSet(id: Int, values: Set[String])
+
 case class Generic[T](id: T, value: Double)
 
 case class OtherTuple(_1: String, _2: Int)
@@ -2760,17 +2826,19 @@ case class ClassNullableData(a: String, b: Integer)
 case class NestedStruct(f: ClassData)
 case class DeepNestedStruct(f: NestedStruct)
 
+case class DataSeqOptSeq(a: Seq[Option[Seq[Int]]])
+
 /**
  * A class used to test serialization using encoders. This class throws exceptions when using
  * Java serialization -- so the only way it can be "serialized" is through our encoders.
  */
 case class NonSerializableCaseClass(value: String) extends Externalizable {
   override def readExternal(in: ObjectInput): Unit = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 
   override def writeExternal(out: ObjectOutput): Unit = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 }
 

@@ -246,7 +246,7 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
       table.copy(
         createTime = 0L,
         lastAccessTime = 0L,
-        properties = table.properties.view.filterKeys(!nondeterministicProps.contains(_)).toMap,
+        properties = table.properties.filter { case (k, _) => !nondeterministicProps.contains(k) },
         stats = None,
         ignoredProperties = Map.empty,
         storage = table.storage.copy(properties = Map.empty),

@@ -291,7 +291,7 @@ Amazon EMR has its own S3-aware committers for parquet data.
 For instructions on use, see
 [the EMRFS S3-optimized committer](https://docs.aws.amazon.com/emr/latest/ReleaseGuide/emr-spark-s3-optimized-committer.html)
 
-For implementation and performanc details, see
+For implementation and performance details, see
 ["Improve Apache Spark write performance on Apache Parquet formats with the EMRFS S3-optimized committer"](https://aws.amazon.com/blogs/big-data/improve-apache-spark-write-performance-on-apache-parquet-formats-with-the-emrfs-s3-optimized-committer/
 
 
@@ -330,7 +330,7 @@ It is not available on Hadoop 3.3.4 or earlier.
 IBM provide the Stocator output committer for IBM Cloud Object Storage and OpenStack Swift.
 
 Source, documentation and releasea can be found at
-[https://github.com/CODAIT/stocator](Stocator - Storage Connector for Apache Spark).
+[Stocator - Storage Connector for Apache Spark](https://github.com/CODAIT/stocator).
 
 
 ## Cloud Committers and `INSERT OVERWRITE TABLE`
@@ -396,4 +396,3 @@ The Cloud Committer problem and hive-compatible solutions
 * [The Manifest Committer for Azure and Google Cloud Storage](https://github.com/apache/hadoop/blob/trunk/hadoop-mapreduce-project/hadoop-mapreduce-client/hadoop-mapreduce-client-core/src/site/markdown/manifest_committer.md)
 * [A Zero-rename committer](https://github.com/steveloughran/zero-rename-committer/releases/).
 * [Stocator: A High Performance Object Store Connector for Spark](http://arxiv.org/abs/1709.01812)
-

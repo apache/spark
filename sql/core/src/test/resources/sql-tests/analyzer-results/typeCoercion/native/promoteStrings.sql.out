@@ -171,7 +171,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"1\"",
     "inputType" : "\"DOUBLE\"",
-    "paramIndex" : "2",
+    "paramIndex" : "second",
     "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
     "sqlExpr" : "\"date_add(CAST(2017-12-11 09:30:00 AS DATE), 1)\""
   },
@@ -327,7 +327,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"1\"",
     "inputType" : "\"STRING\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
     "sqlExpr" : "\"(1 - CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
@@ -1209,7 +1209,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"1\"",
     "inputType" : "\"DOUBLE\"",
-    "paramIndex" : "2",
+    "paramIndex" : "second",
     "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
     "sqlExpr" : "\"date_add(CAST(2017-12-11 09:30:00 AS DATE), 1)\""
   },
@@ -1354,7 +1354,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"1\"",
     "inputType" : "\"STRING\"",
-    "paramIndex" : "2",
+    "paramIndex" : "second",
     "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
     "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) - 1)\""
   },
@@ -1378,7 +1378,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"1\"",
     "inputType" : "\"DOUBLE\"",
-    "paramIndex" : "2",
+    "paramIndex" : "second",
     "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
     "sqlExpr" : "\"date_sub(CAST(2017-12-11 09:30:00 AS DATE), 1)\""
   },
@@ -2121,7 +2121,7 @@ Project [(cast(1 as double) = cast(1 as double)) AS (1 = CAST(1 AS DOUBLE))#x]
 -- !query
 SELECT '1' = cast(1 as decimal(10, 0))                  FROM t
 -- !query analysis
-Project [(cast(1 as double) = cast(cast(1 as decimal(10,0)) as double)) AS (1 = CAST(1 AS DECIMAL(10,0)))#x]
+Project [(cast(1 as decimal(10,0)) = cast(1 as decimal(10,0))) AS (1 = CAST(1 AS DECIMAL(10,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -2253,7 +2253,7 @@ Project [(cast(1 as double) = cast(1 as double)) AS (CAST(1 AS DOUBLE) = 1)#x]
 -- !query
 SELECT cast(1 as decimal(10, 0))                  = '1' FROM t
 -- !query analysis
-Project [(cast(cast(1 as decimal(10,0)) as double) = cast(1 as double)) AS (CAST(1 AS DECIMAL(10,0)) = 1)#x]
+Project [(cast(1 as decimal(10,0)) = cast(1 as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) = 1)#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -2374,7 +2374,7 @@ Project [(cast(1 as double) <=> cast(1 as double)) AS (1 <=> CAST(1 AS DOUBLE))#
 -- !query
 SELECT '1' <=> cast(1 as decimal(10, 0))                  FROM t
 -- !query analysis
-Project [(cast(1 as double) <=> cast(cast(1 as decimal(10,0)) as double)) AS (1 <=> CAST(1 AS DECIMAL(10,0)))#x]
+Project [(cast(1 as decimal(10,0)) <=> cast(1 as decimal(10,0))) AS (1 <=> CAST(1 AS DECIMAL(10,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -2506,7 +2506,7 @@ Project [(cast(1 as double) <=> cast(1 as double)) AS (CAST(1 AS DOUBLE) <=> 1)#
 -- !query
 SELECT cast(1 as decimal(10, 0))                  <=> '1' FROM t
 -- !query analysis
-Project [(cast(cast(1 as decimal(10,0)) as double) <=> cast(1 as double)) AS (CAST(1 AS DECIMAL(10,0)) <=> 1)#x]
+Project [(cast(1 as decimal(10,0)) <=> cast(1 as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) <=> 1)#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -2627,7 +2627,7 @@ Project [(cast(1 as double) < cast(1 as double)) AS (1 < CAST(1 AS DOUBLE))#x]
 -- !query
 SELECT '1' < cast(1 as decimal(10, 0))                  FROM t
 -- !query analysis
-Project [(cast(1 as double) < cast(cast(1 as decimal(10,0)) as double)) AS (1 < CAST(1 AS DECIMAL(10,0)))#x]
+Project [(cast(1 as decimal(10,0)) < cast(1 as decimal(10,0))) AS (1 < CAST(1 AS DECIMAL(10,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -2759,7 +2759,7 @@ Project [(cast(1 as double) <= cast(1 as double)) AS (1 <= CAST(1 AS DOUBLE))#x]
 -- !query
 SELECT '1' <= cast(1 as decimal(10, 0))                  FROM t
 -- !query analysis
-Project [(cast(1 as double) <= cast(cast(1 as decimal(10,0)) as double)) AS (1 <= CAST(1 AS DECIMAL(10,0)))#x]
+Project [(cast(1 as decimal(10,0)) <= cast(1 as decimal(10,0))) AS (1 <= CAST(1 AS DECIMAL(10,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -2891,7 +2891,7 @@ Project [(cast(1 as double) > cast(1 as double)) AS (1 > CAST(1 AS DOUBLE))#x]
 -- !query
 SELECT '1' > cast(1 as decimal(10, 0))                  FROM t
 -- !query analysis
-Project [(cast(1 as double) > cast(cast(1 as decimal(10,0)) as double)) AS (1 > CAST(1 AS DECIMAL(10,0)))#x]
+Project [(cast(1 as decimal(10,0)) > cast(1 as decimal(10,0))) AS (1 > CAST(1 AS DECIMAL(10,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -3023,7 +3023,7 @@ Project [(cast(1 as double) >= cast(1 as double)) AS (1 >= CAST(1 AS DOUBLE))#x]
 -- !query
 SELECT '1' >= cast(1 as decimal(10, 0))                  FROM t
 -- !query analysis
-Project [(cast(1 as double) >= cast(cast(1 as decimal(10,0)) as double)) AS (1 >= CAST(1 AS DECIMAL(10,0)))#x]
+Project [(cast(1 as decimal(10,0)) >= cast(1 as decimal(10,0))) AS (1 >= CAST(1 AS DECIMAL(10,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -3155,7 +3155,7 @@ Project [NOT (cast(1 as double) = cast(1 as double)) AS (NOT (1 = CAST(1 AS DOUB
 -- !query
 SELECT '1' <> cast(1 as decimal(10, 0))                  FROM t
 -- !query analysis
-Project [NOT (cast(1 as double) = cast(cast(1 as decimal(10,0)) as double)) AS (NOT (1 = CAST(1 AS DECIMAL(10,0))))#x]
+Project [NOT (cast(1 as decimal(10,0)) = cast(1 as decimal(10,0))) AS (NOT (1 = CAST(1 AS DECIMAL(10,0))))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -3287,7 +3287,7 @@ Project [(cast(1 as double) < cast(1 as double)) AS (CAST(1 AS DOUBLE) < 1)#x]
 -- !query
 SELECT cast(1 as decimal(10, 0))                  < '1' FROM t
 -- !query analysis
-Project [(cast(cast(1 as decimal(10,0)) as double) < cast(1 as double)) AS (CAST(1 AS DECIMAL(10,0)) < 1)#x]
+Project [(cast(1 as decimal(10,0)) < cast(1 as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) < 1)#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -3419,7 +3419,7 @@ Project [(cast(1 as double) <= cast(1 as double)) AS (CAST(1 AS DOUBLE) <= 1)#x]
 -- !query
 SELECT cast(1 as decimal(10, 0))                  <= '1' FROM t
 -- !query analysis
-Project [(cast(cast(1 as decimal(10,0)) as double) <= cast(1 as double)) AS (CAST(1 AS DECIMAL(10,0)) <= 1)#x]
+Project [(cast(1 as decimal(10,0)) <= cast(1 as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) <= 1)#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -3551,7 +3551,7 @@ Project [(cast(1 as double) > cast(1 as double)) AS (CAST(1 AS DOUBLE) > 1)#x]
 -- !query
 SELECT cast(1 as decimal(10, 0))                  > '1' FROM t
 -- !query analysis
-Project [(cast(cast(1 as decimal(10,0)) as double) > cast(1 as double)) AS (CAST(1 AS DECIMAL(10,0)) > 1)#x]
+Project [(cast(1 as decimal(10,0)) > cast(1 as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) > 1)#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -3683,7 +3683,7 @@ Project [(cast(1 as double) >= cast(1 as double)) AS (CAST(1 AS DOUBLE) >= 1)#x]
 -- !query
 SELECT cast(1 as decimal(10, 0))                  >= '1' FROM t
 -- !query analysis
-Project [(cast(cast(1 as decimal(10,0)) as double) >= cast(1 as double)) AS (CAST(1 AS DECIMAL(10,0)) >= 1)#x]
+Project [(cast(1 as decimal(10,0)) >= cast(1 as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) >= 1)#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -3815,7 +3815,7 @@ Project [NOT (cast(1 as double) = cast(1 as double)) AS (NOT (CAST(1 AS DOUBLE) 
 -- !query
 SELECT cast(1 as decimal(10, 0))                  <> '1' FROM t
 -- !query analysis
-Project [NOT (cast(cast(1 as decimal(10,0)) as double) = cast(1 as double)) AS (NOT (CAST(1 AS DECIMAL(10,0)) = 1))#x]
+Project [NOT (cast(1 as decimal(10,0)) = cast(1 as decimal(10,0))) AS (NOT (CAST(1 AS DECIMAL(10,0)) = 1))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]

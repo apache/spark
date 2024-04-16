@@ -65,10 +65,10 @@ trait CheckpointFileManager {
   /** Open a file for reading, or throw exception if it does not exist. */
   def open(path: Path): FSDataInputStream
 
-  /** List the files in a path that match a filter. */
+  /** List the files/directories in a path that match a filter. */
   def list(path: Path, filter: PathFilter): Array[FileStatus]
 
-  /** List all the files in a path. */
+  /** List all the files/directories in a path. */
   def list(path: Path): Array[FileStatus] = {
     list(path, (_: Path) => true)
   }

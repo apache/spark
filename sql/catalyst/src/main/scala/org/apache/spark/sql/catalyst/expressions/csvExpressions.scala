@@ -21,12 +21,14 @@ import java.io.CharArrayWriter
 
 import com.univocity.parsers.csv.CsvParser
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.csv._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -92,7 +94,7 @@ case class CsvToStructs(
       assert(!rows.hasNext)
       result
     } else {
-      throw new IllegalStateException("Expected one row from CSV parser.")
+      throw SparkException.internalError("Expected one row from CSV parser.")
     }
   }
 
@@ -259,15 +261,34 @@ case class StructsToCsv(
       child = child,
       timeZoneId = None)
 
+  override def checkInputDataTypes(): TypeCheckResult = {
+    child.dataType match {
+      case schema: StructType if schema.map(_.dataType).forall(
+        dt => isSupportedDataType(dt)) => TypeCheckSuccess
+      case _ => DataTypeMismatch(
+        errorSubClass = "UNSUPPORTED_INPUT_TYPE",
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName),
+          "dataType" -> toSQLType(child.dataType)
+        )
+      )
+    }
+  }
+
+  private def isSupportedDataType(dataType: DataType): Boolean = dataType match {
+    case _: VariantType => false
+    case array: ArrayType => isSupportedDataType(array.elementType)
+    case map: MapType => isSupportedDataType(map.keyType) && isSupportedDataType(map.valueType)
+    case st: StructType => st.map(_.dataType).forall(dt => isSupportedDataType(dt))
+    case udt: UserDefinedType[_] => isSupportedDataType(udt.sqlType)
+    case _ => true
+  }
+
   @transient
   lazy val writer = new CharArrayWriter()
 
   @transient
-  lazy val inputSchema: StructType = child.dataType match {
-    case st: StructType => st
-    case other =>
-      throw new IllegalArgumentException(s"Unsupported input type ${other.catalogString}")
-  }
+  lazy val inputSchema: StructType = child.dataType.asInstanceOf[StructType]
 
   @transient
   lazy val gen = new UnivocityGenerator(

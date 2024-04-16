@@ -248,11 +248,6 @@ FROM VALUES
   (1,4),(2,3),(1,4),(2,4) AS v(a,b)
 GROUP BY a;
 
-
-SELECT mode(a), mode(b) FROM testData;
-SELECT a, mode(b) FROM testData GROUP BY a ORDER BY a;
-
-
 -- SPARK-44846: PushFoldableIntoBranches in complex grouping expressions cause bindReference error
 SELECT c * 2 AS d
 FROM (
@@ -265,13 +260,17 @@ FROM (
      ) t3
 GROUP BY c;
 
--- SPARK-45034: Support deterministic mode function
-SELECT mode(col) FROM VALUES (-10), (0), (10) AS tab(col);
-SELECT mode(col, false) FROM VALUES (-10), (0), (10) AS tab(col);
-SELECT mode(col, true) FROM VALUES (-10), (0), (10) AS tab(col);
-SELECT mode(col, 'true') FROM VALUES (-10), (0), (10) AS tab(col);
-SELECT mode(col, null) FROM VALUES (-10), (0), (10) AS tab(col);
-SELECT mode(col, b) FROM VALUES (-10, false), (0, false), (10, false) AS tab(col, b);
-SELECT mode(col) FROM VALUES (map(1, 'a')) AS tab(col);
-SELECT mode(col, false) FROM VALUES (map(1, 'a')) AS tab(col);
-SELECT mode(col, true) FROM VALUES (map(1, 'a')) AS tab(col);
+-- SPARK-45599: Check that "weird" doubles group and sort as desired.
+SELECT col1, count(*) AS cnt
+FROM VALUES
+  (0.0),
+  (-0.0),
+  (double('NaN')),
+  (double('NaN')),
+  (double('Infinity')),
+  (double('Infinity')),
+  (-double('Infinity')),
+  (-double('Infinity'))
+GROUP BY col1
+ORDER BY col1
+;

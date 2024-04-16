@@ -154,15 +154,7 @@ public class ShuffleTransportContext extends TransportContext {
    * accepted by {@link FinalizedHandler} instead, which is configured to execute in a separate
    * EventLoopGroup.
    */
-  static class RpcRequestInternal {
-    public final BlockTransferMessage.Type messageType;
-    public final RpcRequest rpcRequest;
-
-    RpcRequestInternal(BlockTransferMessage.Type messageType,
-        RpcRequest rpcRequest) {
-      this.messageType = messageType;
-      this.rpcRequest = rpcRequest;
-    }
+  record RpcRequestInternal(BlockTransferMessage.Type messageType, RpcRequest rpcRequest) {
   }
 
   static class FinalizedHandler extends SimpleChannelInboundHandler<RpcRequestInternal> {

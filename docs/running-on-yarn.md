@@ -143,7 +143,7 @@ To use a custom metrics.properties for the application master and executors, upd
 
 #### Spark Properties
 
-<table class="table table-striped">
+<table class="spark-config">
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.yarn.am.memory</code></td>
@@ -290,14 +290,6 @@ To use a custom metrics.properties for the application master and executors, upd
     <code>spark.yarn.scheduler.heartbeat.interval-ms</code> is reached.
   </td>
   <td>1.4.0</td>
-</tr>
-<tr>
-  <td><code>spark.yarn.max.executor.failures</code></td>
-  <td>numExecutors * 2, with minimum of 3</td>
-  <td>
-    The maximum number of executor failures before failing the application.
-  </td>
-  <td>1.0.0</td>
 </tr>
 <tr>
   <td><code>spark.yarn.historyServer.address</code></td>
@@ -500,15 +492,6 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>3.3.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.executor.failuresValidityInterval</code></td>
-  <td>(none)</td>
-  <td>
-  Defines the validity interval for executor failure tracking.
-  Executor failures which are older than the validity interval will be ignored.
-  </td>
-  <td>2.0.0</td>
-</tr>
-<tr>
   <td><code>spark.yarn.submit.waitAppCompletion</code></td>
   <td><code>true</code></td>
   <td>
@@ -696,7 +679,7 @@ To use a custom metrics.properties for the application master and executors, upd
 
 #### Available patterns for SHS custom executor log URL
 
-<table class="table table-striped">
+<table>
     <thead><tr><th>Pattern</th><th>Meaning</th></tr></thead>
     <tr>
       <td>&#123;&#123;HTTP_SCHEME&#125;&#125;</td>
@@ -783,7 +766,7 @@ staging directory of the Spark application.
 
 ## YARN-specific Kerberos Configuration
 
-<table class="table table-striped">
+<table class="spark-config">
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.kerberos.keytab</code></td>
@@ -882,8 +865,8 @@ to avoid garbage collection issues during shuffle.
 
 The following extra configuration options are available when the shuffle service is running on YARN:
 
-<table class="table table-striped">
-<thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr></thead>
+<table class="spark-config">
+<thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.yarn.shuffle.stopOnFailure</code></td>
   <td><code>false</code></td>
@@ -892,6 +875,7 @@ The following extra configuration options are available when the shuffle service
     initialization. This prevents application failures caused by running containers on
     NodeManagers where the Spark Shuffle Service is not running.
   </td>
+  <td>2.1.0</td>
 </tr>
 <tr>
   <td><code>spark.yarn.shuffle.service.metrics.namespace</code></td>
@@ -900,6 +884,7 @@ The following extra configuration options are available when the shuffle service
     The namespace to use when emitting shuffle service metrics into Hadoop metrics2 system of the
     NodeManager.
   </td>
+  <td>3.2.0</td>
 </tr>
 <tr>
   <td><code>spark.yarn.shuffle.service.logs.namespace</code></td>
@@ -911,6 +896,7 @@ The following extra configuration options are available when the shuffle service
     may expect the logger name to look like a class name, it's generally recommended to provide a value which
     would be a valid Java package or class name and not include spaces.
   </td>
+  <td>3.3.0</td>
 </tr>
 <tr>
   <td><code>spark.shuffle.service.db.backend</code></td>

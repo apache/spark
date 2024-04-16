@@ -70,18 +70,9 @@ WITH
   )
 SELECT * FROM t2
 -- !query schema
-struct<>
+struct<2:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
-  "sqlState" : "42KD0",
-  "messageParameters" : {
-    "config" : "\"spark.sql.legacy.ctePrecedencePolicy\"",
-    "docroot" : "https://spark.apache.org/docs/latest",
-    "name" : "`t`"
-  }
-}
+2
 
 
 -- !query
@@ -115,18 +106,9 @@ WITH
   )
 SELECT * FROM t2
 -- !query schema
-struct<>
+struct<3:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
-  "sqlState" : "42KD0",
-  "messageParameters" : {
-    "config" : "\"spark.sql.legacy.ctePrecedencePolicy\"",
-    "docroot" : "https://spark.apache.org/docs/latest",
-    "name" : "`t`"
-  }
-}
+3
 
 
 -- !query
@@ -177,18 +159,9 @@ SELECT (
   SELECT * FROM t
 )
 -- !query schema
-struct<>
+struct<scalarsubquery():int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
-  "sqlState" : "42KD0",
-  "messageParameters" : {
-    "config" : "\"spark.sql.legacy.ctePrecedencePolicy\"",
-    "docroot" : "https://spark.apache.org/docs/latest",
-    "name" : "`t`"
-  }
-}
+2
 
 
 -- !query
@@ -200,18 +173,9 @@ SELECT (
   )
 )
 -- !query schema
-struct<>
+struct<scalarsubquery():int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
-  "sqlState" : "42KD0",
-  "messageParameters" : {
-    "config" : "\"spark.sql.legacy.ctePrecedencePolicy\"",
-    "docroot" : "https://spark.apache.org/docs/latest",
-    "name" : "`t`"
-  }
-}
+2
 
 
 -- !query
@@ -224,18 +188,9 @@ SELECT (
   )
 )
 -- !query schema
-struct<>
+struct<scalarsubquery():int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
-  "sqlState" : "42KD0",
-  "messageParameters" : {
-    "config" : "\"spark.sql.legacy.ctePrecedencePolicy\"",
-    "docroot" : "https://spark.apache.org/docs/latest",
-    "name" : "`t`"
-  }
-}
+3
 
 
 -- !query
@@ -246,18 +201,9 @@ WHERE c IN (
   SELECT * FROM t
 )
 -- !query schema
-struct<>
+struct<c:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
-  "sqlState" : "42KD0",
-  "messageParameters" : {
-    "config" : "\"spark.sql.legacy.ctePrecedencePolicy\"",
-    "docroot" : "https://spark.apache.org/docs/latest",
-    "name" : "`t`"
-  }
-}
+
 
 
 -- !query
@@ -283,18 +229,9 @@ WITH
   )
 SELECT * FROM t
 -- !query schema
-struct<>
+struct<2:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
-  "sqlState" : "42KD0",
-  "messageParameters" : {
-    "config" : "\"spark.sql.legacy.ctePrecedencePolicy\"",
-    "docroot" : "https://spark.apache.org/docs/latest",
-    "name" : "`aBc`"
-  }
-}
+2
 
 
 -- !query
@@ -304,18 +241,9 @@ SELECT (
   SELECT * FROM aBC
 )
 -- !query schema
-struct<>
+struct<scalarsubquery():int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
-  "sqlState" : "42KD0",
-  "messageParameters" : {
-    "config" : "\"spark.sql.legacy.ctePrecedencePolicy\"",
-    "docroot" : "https://spark.apache.org/docs/latest",
-    "name" : "`aBc`"
-  }
-}
+2
 
 
 -- !query

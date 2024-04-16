@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{ExecutionErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
@@ -231,7 +231,7 @@ class JacksonParser(
               Float.PositiveInfinity
             case "-INF" | "-Infinity" if options.allowNonNumericNumbers =>
               Float.NegativeInfinity
-            case _ => throw StringAsDataTypeException(parser.getCurrentName, parser.getText,
+            case _ => throw StringAsDataTypeException(parser.currentName, parser.getText,
               FloatType)
           }
       }
@@ -250,7 +250,7 @@ class JacksonParser(
               Double.PositiveInfinity
             case "-INF" | "-Infinity" if options.allowNonNumericNumbers =>
               Double.NegativeInfinity
-            case _ => throw StringAsDataTypeException(parser.getCurrentName, parser.getText,
+            case _ => throw StringAsDataTypeException(parser.currentName, parser.getText,
               DoubleType)
           }
       }
@@ -381,7 +381,7 @@ class JacksonParser(
       }
 
     // We don't actually hit this exception though, we keep it for understandability
-    case _ => throw QueryExecutionErrors.unsupportedTypeError(dataType)
+    case _ => throw ExecutionErrors.unsupportedDataTypeError(dataType)
   }
 
   /**
@@ -430,7 +430,7 @@ class JacksonParser(
     case token =>
       // We cannot parse this token based on the given data type. So, we throw a
       // RuntimeException and this exception will be caught by `parse` method.
-      throw CannotParseJSONFieldException(parser.getCurrentName, parser.getText, token, dataType)
+      throw CannotParseJSONFieldException(parser.currentName, parser.getText, token, dataType)
   }
 
   /**
@@ -451,7 +451,7 @@ class JacksonParser(
     lazy val bitmask = ResolveDefaultColumns.existenceDefaultsBitmask(schema)
     resetExistenceDefaultsBitmask(schema, bitmask)
     while (!skipRow && nextUntil(parser, JsonToken.END_OBJECT)) {
-      schema.getFieldIndex(parser.getCurrentName) match {
+      schema.getFieldIndex(parser.currentName) match {
         case Some(index) =>
           try {
             row.update(index, fieldConverters(index).apply(parser))
@@ -493,13 +493,13 @@ class JacksonParser(
     var badRecordException: Option[Throwable] = None
 
     while (nextUntil(parser, JsonToken.END_OBJECT)) {
-      keys += UTF8String.fromString(parser.getCurrentName)
+      keys += UTF8String.fromString(parser.currentName)
       try {
         values += fieldConverter.apply(parser)
       } catch {
-        case PartialResultException(row, cause) if enablePartialResults =>
-          badRecordException = badRecordException.orElse(Some(cause))
-          values += row
+        case err: PartialValueException if enablePartialResults =>
+          badRecordException = badRecordException.orElse(Some(err.cause))
+          values += err.partialResult
         case NonFatal(e) if enablePartialResults =>
           badRecordException = badRecordException.orElse(Some(e))
           parser.skipChildren()
@@ -534,9 +534,9 @@ class JacksonParser(
         if (isRoot && v == null) throw QueryExecutionErrors.rootConverterReturnNullError()
         values += v
       } catch {
-        case PartialResultException(row, cause) if enablePartialResults =>
-          badRecordException = badRecordException.orElse(Some(cause))
-          values += row
+        case err: PartialValueException if enablePartialResults =>
+          badRecordException = badRecordException.orElse(Some(err.cause))
+          values += err.partialResult
       }
     }
 

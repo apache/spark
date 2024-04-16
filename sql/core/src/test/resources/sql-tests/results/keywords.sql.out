@@ -44,6 +44,7 @@ CLUSTER	false
 CLUSTERED	false
 CODEGEN	false
 COLLATE	false
+COLLATION	false
 COLLECTION	false
 COLUMN	false
 COLUMNS	false
@@ -99,6 +100,7 @@ ESCAPED	false
 EXCEPT	false
 EXCHANGE	false
 EXCLUDE	false
+EXECUTE	false
 EXISTS	false
 EXPLAIN	false
 EXPORT	false
@@ -133,6 +135,7 @@ IDENTIFIER	false
 IF	false
 IGNORE	false
 ILIKE	false
+IMMEDIATE	false
 IMPORT	false
 IN	false
 INCLUDE	false
@@ -188,6 +191,7 @@ NANOSECOND	false
 NANOSECONDS	false
 NATURAL	false
 NO	false
+NOT	false
 NULL	false
 NULLS	false
 NUMERIC	false
@@ -320,6 +324,7 @@ VALUES	false
 VAR	false
 VARCHAR	false
 VARIABLE	false
+VARIANT	false
 VERSION	false
 VIEW	false
 VIEWS	false

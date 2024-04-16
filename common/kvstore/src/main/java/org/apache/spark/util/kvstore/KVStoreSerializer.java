@@ -50,8 +50,8 @@ public class KVStoreSerializer {
   }
 
   public byte[] serialize(Object o) throws Exception {
-    if (o instanceof String) {
-      return ((String) o).getBytes(UTF_8);
+    if (o instanceof String str) {
+      return str.getBytes(UTF_8);
     } else {
       ByteArrayOutputStream bytes = new ByteArrayOutputStream();
       try (GZIPOutputStream out = new GZIPOutputStream(bytes)) {

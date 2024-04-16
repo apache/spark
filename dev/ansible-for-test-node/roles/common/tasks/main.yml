@@ -1,4 +1,0 @@
----
-# tasks file for common
-- include: system_packages.yml
-- include: setup_local_userspace.yml

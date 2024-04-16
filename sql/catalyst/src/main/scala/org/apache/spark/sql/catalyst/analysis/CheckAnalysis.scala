@@ -23,7 +23,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Median, PercentileCont, PercentileDisc}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Median, PercentileCont, PercentileDisc}
 import org.apache.spark.sql.catalyst.optimizer.{BooleanSimplification, DecorrelateInnerQuery, InlineCTE}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -64,12 +64,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     throw new AnalysisException(
       errorClass = errorClass,
       messageParameters = messageParameters)
-  }
-
-  protected def containsMultipleGenerators(exprs: Seq[Expression]): Boolean = {
-    exprs.flatMap(_.collect {
-      case e: Generator => e
-    }).length > 1
   }
 
   protected def hasMapType(dt: DataType): Boolean = {
@@ -223,8 +217,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       case p if p.analyzed => // Skip already analyzed sub-plans
 
       case leaf: LeafNode if leaf.output.map(_.dataType).exists(CharVarcharUtils.hasCharVarchar) =>
-        throw new IllegalStateException(
-          "[BUG] logical plan should not have output of char/varchar type: " + leaf)
+        throw SparkException.internalError(
+          "Logical plan should not have output of char/varchar type: " + leaf)
 
       case u: UnresolvedNamespace =>
         u.schemaNotFound(u.multipartIdentifier)
@@ -271,9 +265,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           case _ =>
         }
 
-      // `ShowTableExtended` should have been converted to the v1 command if the table is v1.
-      case _: ShowTableExtended =>
-        throw QueryCompilationErrors.commandUnsupportedInV2TableError("SHOW TABLE EXTENDED")
+      case o: OverwriteByExpression if o.deleteExpr.exists(_.isInstanceOf[SubqueryExpression]) =>
+        o.deleteExpr.failAnalysis (
+          errorClass = "UNSUPPORTED_FEATURE.OVERWRITE_BY_SUBQUERY",
+          messageParameters = Map.empty)
 
       case operator: LogicalPlan =>
         operator transformExpressionsDown {
@@ -300,6 +295,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         // Fail if we still have an unresolved all in group by. This needs to run before the
         // general unresolved check below to throw a more tailored error message.
         new ResolveReferencesInAggregate(catalogManager).checkUnresolvedGroupByAll(operator)
+
+        // Early checks for column definitions, to produce better error messages
+        ColumnDefinition.checkColumnDefinitions(operator)
 
         getAllExpressions(operator).foreach(_.foreachUp {
           case a: Attribute if !a.resolved =>
@@ -476,10 +474,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                   e.failAnalysis(
                     "INVALID_OBSERVED_METRICS.WINDOW_EXPRESSIONS_UNSUPPORTED",
                     Map("expr" -> toSQLExpr(s)))
-                case _ if !e.deterministic && !seenAggregate =>
-                  e.failAnalysis(
-                    "INVALID_OBSERVED_METRICS.NON_AGGREGATE_FUNC_ARG_IS_NON_DETERMINISTIC",
-                    Map("expr" -> toSQLExpr(s)))
                 case a: AggregateExpression if seenAggregate =>
                   e.failAnalysis(
                     "INVALID_OBSERVED_METRICS.NESTED_AGGREGATES_UNSUPPORTED",
@@ -492,12 +486,18 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                   e.failAnalysis(
                     "INVALID_OBSERVED_METRICS.AGGREGATE_EXPRESSION_WITH_FILTER_UNSUPPORTED",
                     Map("expr" -> toSQLExpr(s)))
+                case _: AggregateExpression | _: AggregateFunction =>
+                  e.children.foreach(checkMetric (s, _, seenAggregate = true))
                 case _: Attribute if !seenAggregate =>
                   e.failAnalysis(
                     "INVALID_OBSERVED_METRICS.NON_AGGREGATE_FUNC_ARG_IS_ATTRIBUTE",
                     Map("expr" -> toSQLExpr(s)))
-                case _: AggregateExpression =>
-                  e.children.foreach(checkMetric (s, _, seenAggregate = true))
+                case a: Alias =>
+                  checkMetric(s, a.child, seenAggregate)
+                case a if !e.deterministic && !seenAggregate =>
+                  e.failAnalysis(
+                    "INVALID_OBSERVED_METRICS.NON_AGGREGATE_FUNC_ARG_IS_NON_DETERMINISTIC",
+                    Map("expr" -> toSQLExpr(s)))
                 case _ =>
                   e.children.foreach(checkMetric (s, _, seenAggregate))
               }
@@ -537,6 +537,19 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               }
             }
 
+          case Window(_, partitionSpec, _, _) =>
+            // Both `partitionSpec` and `orderSpec` must be orderable. We only need an extra check
+            // for `partitionSpec` here because `orderSpec` has the type check itself.
+            partitionSpec.foreach { p =>
+              if (!RowOrdering.isOrderable(p.dataType)) {
+                p.failAnalysis(
+                  errorClass = "EXPRESSION_TYPE_IS_NOT_ORDERABLE",
+                  messageParameters = Map(
+                    "expr" -> toSQLExpr(p),
+                    "exprType" -> toSQLType(p.dataType)))
+              }
+            }
+
           case GlobalLimit(limitExpr, _) => checkLimitLikeClause("limit", limitExpr)
 
           case LocalLimit(limitExpr, child) =>
@@ -561,12 +574,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
           case e @ (_: Union | _: SetOperation) if operator.children.length > 1 =>
             def dataTypes(plan: LogicalPlan): Seq[DataType] = plan.output.map(_.dataType)
-            def ordinalNumber(i: Int): String = i match {
-              case 0 => "first"
-              case 1 => "second"
-              case 2 => "third"
-              case i => s"${i + 1}th"
-            }
+
             val ref = dataTypes(operator.children.head)
             operator.children.tail.zipWithIndex.foreach { case (child, ti) =>
               // Check the number of columns
@@ -668,10 +676,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                 ))
             }
 
-          case p @ Project(exprs, _) if containsMultipleGenerators(exprs) =>
-            val generators = exprs.filter(expr => expr.exists(_.isInstanceOf[Generator]))
-            throw QueryCompilationErrors.moreThanOneGeneratorError(generators, "SELECT")
-
           case p @ Project(projectList, _) =>
             projectList.foreach(_.transformDownWithPruning(
               _.containsPattern(UNRESOLVED_WINDOW_EXPRESSION)) {
@@ -734,11 +738,18 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                 "dataType" -> toSQLType(mapCol.dataType)))
 
           case o if o.expressions.exists(!_.deterministic) &&
-            !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] &&
-            !o.isInstanceOf[Aggregate] && !o.isInstanceOf[Window] &&
+            !o.isInstanceOf[Project] &&
+            // non-deterministic expressions inside CollectMetrics have been
+            // already validated inside checkMetric function
+            !o.isInstanceOf[CollectMetrics] &&
+            !o.isInstanceOf[Filter] &&
+            !o.isInstanceOf[Aggregate] &&
+            !o.isInstanceOf[Window] &&
             !o.isInstanceOf[Expand] &&
             !o.isInstanceOf[Generate] &&
             !o.isInstanceOf[CreateVariable] &&
+            !o.isInstanceOf[MapInPandas] &&
+            !o.isInstanceOf[MapInArrow] &&
             // Lateral join is checked in checkSubqueryExpression.
             !o.isInstanceOf[LateralJoin] =>
             // The rule above is used to check Aggregate operator.
@@ -747,7 +758,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               messageParameters = Map("sqlExprs" -> o.expressions.map(toSQLExpr(_)).mkString(", "))
             )
 
-          case _: UnresolvedHint => throw new IllegalStateException(
+          case _: UnresolvedHint => throw SparkException.internalError(
             "Logical hint operator should be removed during analysis.")
 
           case f @ Filter(condition, _)
@@ -1364,11 +1375,17 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         // Correlated subquery can have a LIMIT clause
         case l @ Limit(_, input) =>
           failOnInvalidOuterReference(l)
-          checkPlan(input, aggregated, canContainOuter)
+          checkPlan(
+            input,
+            aggregated,
+            canContainOuter && SQLConf.get.getConf(SQLConf.DECORRELATE_LIMIT_ENABLED))
 
         case o @ Offset(_, input) =>
           failOnInvalidOuterReference(o)
-          checkPlan(input, aggregated, canContainOuter)
+          checkPlan(
+            input,
+            aggregated,
+            canContainOuter && SQLConf.get.getConf(SQLConf.DECORRELATE_OFFSET_ENABLED))
 
         // Category 4: Any other operators not in the above 3 categories
         // cannot be on a correlation path, that is they are allowed only

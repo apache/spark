@@ -104,7 +104,8 @@ case class AvroPartitionReaderFactory(
           options.positionalFieldMatching,
           datetimeRebaseMode,
           avroFilters,
-          options.useStableIdForUnionType)
+          options.useStableIdForUnionType,
+          options.stableIdPrefixForUnionType)
         override val stopPosition = partitionedFile.start + partitionedFile.length
 
         override def next(): Boolean = hasNextRow

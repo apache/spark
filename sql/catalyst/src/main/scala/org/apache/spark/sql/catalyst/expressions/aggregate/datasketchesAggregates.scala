@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import org.apache.datasketches.common.SketchesArgumentException
 import org.apache.datasketches.hll.{HllSketch, TgtHllType, Union}
 import org.apache.datasketches.memory.Memory
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, Literal}
 import org.apache.spark.sql.catalyst.trees.BinaryLike
@@ -137,8 +139,9 @@ case class HllSketchAgg(
         case LongType => sketch.update(v.asInstanceOf[Long])
         case StringType => sketch.update(v.asInstanceOf[UTF8String].toString)
         case BinaryType => sketch.update(v.asInstanceOf[Array[Byte]])
-        case dataType => throw new UnsupportedOperationException(
-          s"A HllSketch instance cannot be updates with a Spark ${dataType.toString} type")
+        case dataType => throw new SparkUnsupportedOperationException(
+          errorClass = "_LEGACY_ERROR_TEMP_3121",
+          messageParameters = Map("dataType" -> dataType.toString))
       }
     }
     sketch
@@ -193,7 +196,7 @@ object HllSketchAgg {
   def checkLgK(lgConfigK: Int): Unit = {
     if (lgConfigK < minLgConfigK || lgConfigK > maxLgConfigK) {
       throw QueryExecutionErrors.hllInvalidLgK(function = "hll_sketch_agg",
-        min = minLgConfigK, max = maxLgConfigK, value = lgConfigK.toString)
+        min = minLgConfigK, max = maxLgConfigK, value = lgConfigK)
     }
   }
 }
@@ -315,7 +318,7 @@ case class HllUnionAgg(
             union.update(sketch)
             Some(union)
           } catch {
-            case _: java.lang.Error =>
+            case _: SketchesArgumentException | _: java.lang.Error =>
               throw QueryExecutionErrors.hllInvalidInputSketchBuffer(prettyName)
           }
         case _ =>

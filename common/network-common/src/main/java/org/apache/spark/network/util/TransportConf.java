@@ -214,6 +214,15 @@ public class TransportConf {
   }
 
   /**
+   * Version number to be used by the AuthEngine key agreement protocol. Valid values are 1 or 2.
+   * The default version is 1 for backward compatibility. Version 2 is recommended for stronger
+   * security properties.
+   */
+  public int authEngineVersion() {
+    return conf.getInt("spark.network.crypto.authEngineVersion", 1);
+  }
+
+  /**
    * The cipher transformation to use for encrypting session data.
    */
   public String cipherTransformation() {
@@ -300,6 +309,13 @@ public class TransportConf {
   }
 
   /**
+   * The password to the private key in the key store
+   */
+  public String sslRpcKeyPassword() {
+    return conf.get("spark.ssl.rpc.keyPassword", null);
+  }
+
+  /**
    * A PKCS#8 private key file in PEM format; can be relative to the current directory
    */
   public File sslRpcPrivateKey() {
@@ -314,8 +330,8 @@ public class TransportConf {
   /**
    * The password to the private key
    */
-  public String sslRpcKeyPassword() {
-    return conf.get("spark.ssl.rpc.keyPassword", null);
+  public String sslRpcPrivateKeyPassword() {
+    return conf.get("spark.ssl.rpc.privateKeyPassword", null);
   }
 
   /**

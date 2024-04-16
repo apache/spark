@@ -24,7 +24,6 @@ import java.nio.file.Files
 import java.security.PrivilegedExceptionAction
 import java.util.ServiceLoader
 import java.util.jar.JarInputStream
-import javax.ws.rs.core.UriBuilder
 
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
@@ -40,7 +39,8 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.spark._
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.rest._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.CLASS_NAME
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher.SparkLauncher
@@ -229,6 +229,11 @@ private[spark] class SparkSubmit extends Logging {
     val childClasspath = new ArrayBuffer[String]()
     val sparkConf = args.toSparkConf()
     if (sparkConf.contains("spark.local.connect")) sparkConf.remove("spark.remote")
+    if (sparkConf.getBoolean(STRUCTURED_LOGGING_ENABLED.key, defaultValue = true)) {
+      Logging.enableStructuredLogging()
+    } else {
+      Logging.disableStructuredLogging()
+    }
     var childMainClass = ""
 
     // Set the cluster manager
@@ -402,16 +407,23 @@ private[spark] class SparkSubmit extends Logging {
         // SPARK-33782 : This downloads all the files , jars , archiveFiles and pyfiles to current
         // working directory
         // SPARK-43540: add current working directory into driver classpath
+        // SPARK-47475: make download to driver optional so executors may fetch resource from remote
+        // url directly to avoid overwhelming driver network when resource is big and executor count
+        // is high
         val workingDirectory = "."
         childClasspath += workingDirectory
-        def downloadResourcesToCurrentDirectory(uris: String, isArchive: Boolean = false):
-        String = {
+        def downloadResourcesToCurrentDirectory(
+            uris: String,
+            isArchive: Boolean = false,
+            avoidDownload: String => Boolean = _ => false): String = {
           val resolvedUris = Utils.stringToSeq(uris).map(Utils.resolveURI)
+          val (avoidDownloads, toDownloads) =
+            resolvedUris.partition(uri => avoidDownload(uri.getScheme))
           val localResources = downloadFileList(
-            resolvedUris.map(
-              UriBuilder.fromUri(_).fragment(null).build().toString).mkString(","),
+            toDownloads.map(
+              Utils.getUriBuilder(_).fragment(null).build().toString).mkString(","),
             targetDir, sparkConf, hadoopConf)
-          Utils.stringToSeq(localResources).map(Utils.resolveURI).zip(resolvedUris).map {
+          (Utils.stringToSeq(localResources).map(Utils.resolveURI).zip(toDownloads).map {
             case (localResources, resolvedUri) =>
               val source = new File(localResources.getPath).getCanonicalFile
               val dest = new File(
@@ -426,16 +438,21 @@ private[spark] class SparkSubmit extends Logging {
                 Files.copy(source.toPath, dest.toPath)
               }
               // Keep the URIs of local files with the given fragments.
-              UriBuilder.fromUri(
+              Utils.getUriBuilder(
                 localResources).fragment(resolvedUri.getFragment).build().toString
-          }.mkString(",")
+          } ++ avoidDownloads.map(_.toString)).mkString(",")
         }
+
+        val avoidJarDownloadSchemes = sparkConf.get(KUBERNETES_JARS_AVOID_DOWNLOAD_SCHEMES)
+
+        def avoidJarDownload(scheme: String): Boolean =
+          avoidJarDownloadSchemes.contains("*") || avoidJarDownloadSchemes.contains(scheme)
 
         val filesLocalFiles = Option(args.files).map {
           downloadResourcesToCurrentDirectory(_)
         }.orNull
-        val jarsLocalJars = Option(args.jars).map {
-          downloadResourcesToCurrentDirectory(_)
+        val updatedJars = Option(args.jars).map {
+          downloadResourcesToCurrentDirectory(_, avoidDownload = avoidJarDownload)
         }.orNull
         val archiveLocalFiles = Option(args.archives).map {
           downloadResourcesToCurrentDirectory(_, true)
@@ -446,7 +463,7 @@ private[spark] class SparkSubmit extends Logging {
         args.files = filesLocalFiles
         args.archives = archiveLocalFiles
         args.pyFiles = pyLocalFiles
-        args.jars = jarsLocalJars
+        args.jars = updatedJars
       }
     }
 
@@ -539,7 +556,7 @@ private[spark] class SparkSubmit extends Logging {
     }
 
     if (localPyFiles != null) {
-      sparkConf.set(SUBMIT_PYTHON_FILES, localPyFiles.split(",").toSeq)
+      sparkConf.set(SUBMIT_PYTHON_FILES, localPyFiles.split(",").toImmutableArraySeq)
     }
 
     // In YARN mode for an R app, add the SparkR package archive and the R package
@@ -727,15 +744,19 @@ private[spark] class SparkSubmit extends Logging {
       }
     }
 
-    // In case of shells, spark.ui.showConsoleProgress can be true by default or by user.
-    if (isShell(args.primaryResource) && !sparkConf.contains(UI_SHOW_CONSOLE_PROGRESS)) {
+    // In case of shells, spark.ui.showConsoleProgress can be true by default or by user. Except,
+    // when Spark Connect is in local mode, because Spark Connect support its own progress
+    // reporting.
+    if (isShell(args.primaryResource) && !sparkConf.contains(UI_SHOW_CONSOLE_PROGRESS) &&
+        !sparkConf.contains("spark.local.connect")) {
       sparkConf.set(UI_SHOW_CONSOLE_PROGRESS, true)
     }
 
     // Add the application jar automatically so the user doesn't have to call sc.addJar
+    // For isKubernetesClusterModeDriver, the jar is already added in the previous spark-submit
     // For YARN cluster mode, the jar is already distributed on each node as "app.jar"
     // For python and R files, the primary resource is already distributed as a regular file
-    if (!isYarnCluster && !args.isPython && !args.isR) {
+    if (!isKubernetesClusterModeDriver && !isYarnCluster && !args.isPython && !args.isR) {
       var jars = sparkConf.get(JARS)
       if (isUserJar(args.primaryResource)) {
         jars = jars ++ Seq(args.primaryResource)
@@ -861,7 +882,7 @@ private[spark] class SparkSubmit extends Logging {
       // locally.
       resolvedPyFiles
     }
-    sparkConf.set(SUBMIT_PYTHON_FILES, formattedPyFiles.split(",").toSeq)
+    sparkConf.set(SUBMIT_PYTHON_FILES, formattedPyFiles.split(",").toImmutableArraySeq)
 
     if (args.verbose && isSqlShell(childMainClass)) {
       childArgs ++= Seq("--verbose")
@@ -949,7 +970,7 @@ private[spark] class SparkSubmit extends Logging {
       mainClass = Utils.classForName(childMainClass)
     } catch {
       case e: ClassNotFoundException =>
-        logError(s"Failed to load class $childMainClass.")
+        logError(log"Failed to load class ${MDC(CLASS_NAME, childMainClass)}.")
         if (childMainClass.contains("thriftserver")) {
           logInfo(s"Failed to load main class $childMainClass.")
           logInfo("You need to build Spark with -Phive and -Phive-thriftserver.")
@@ -960,7 +981,7 @@ private[spark] class SparkSubmit extends Logging {
         }
         throw new SparkUserAppException(CLASS_NOT_FOUND_EXIT_STATUS)
       case e: NoClassDefFoundError =>
-        logError(s"Failed to load $childMainClass: ${e.getMessage()}")
+        logError(log"Failed to load ${MDC(CLASS_NAME, childMainClass)}", e)
         if (e.getMessage.contains("org/apache/hadoop/hive")) {
           logInfo(s"Failed to load hive class.")
           logInfo("You need to build Spark with -Phive and -Phive-thriftserver.")
@@ -996,7 +1017,7 @@ private[spark] class SparkSubmit extends Logging {
         try {
           SparkContext.getActive.foreach(_.stop())
         } catch {
-          case e: Throwable => logError(s"Failed to close SparkContext: $e")
+          case e: Throwable => logError("Failed to close SparkContext", e)
         }
       }
     }
@@ -1162,7 +1183,7 @@ private[spark] object SparkSubmitUtils {
   }
 
   def parseSparkConfProperty(pair: String): (String, String) = {
-    pair.split("=", 2).toSeq match {
+    pair.split("=", 2).toImmutableArraySeq match {
       case Seq(k, v) => (k, v)
       case _ => throw new SparkException(s"Spark config without '=': $pair")
     }

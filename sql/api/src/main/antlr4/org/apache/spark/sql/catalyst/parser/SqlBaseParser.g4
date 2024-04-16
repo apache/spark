@@ -72,10 +72,11 @@ singleTableSchema
 
 statement
     : query                                                            #statementDefault
+    | executeImmediate                                                 #visitExecuteImmediate
     | ctes? dmlStatementNoWith                                         #dmlStatement
     | USE identifierReference                                          #use
     | USE namespace identifierReference                                #useNamespace
-    | SET CATALOG (identifier | stringLit)                             #setCatalog
+    | SET CATALOG (errorCapturingIdentifier | stringLit)                  #setCatalog
     | CREATE namespace (IF NOT EXISTS)? identifierReference
         (commentSpec |
          locationSpec |
@@ -209,6 +210,7 @@ statement
     | (MSCK)? REPAIR TABLE identifierReference
         (option=(ADD|DROP|SYNC) PARTITIONS)?                           #repairTable
     | op=(ADD | LIST) identifier .*?                                   #manageResource
+    | SET COLLATION collationName=identifier                           #setCollation
     | SET ROLE .*?                                                     #failNativeCommand
     | SET TIME ZONE interval                                           #setTimeZone
     | SET TIME ZONE timezone                                           #setTimeZone
@@ -228,6 +230,28 @@ statement
         (OPTIONS options=propertyList)?                                #createIndex
     | DROP INDEX (IF EXISTS)? identifier ON TABLE? identifierReference #dropIndex
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand
+    ;
+
+executeImmediate
+    : EXECUTE IMMEDIATE queryParam=executeImmediateQueryParam (INTO targetVariable=multipartIdentifierList)? executeImmediateUsing?
+    ;
+
+executeImmediateUsing
+    : USING LEFT_PAREN params=namedExpressionSeq RIGHT_PAREN
+    | USING params=namedExpressionSeq
+    ;
+
+executeImmediateQueryParam
+    : stringLit
+    | multipartIdentifier
+    ;
+
+executeImmediateArgument
+    : (constant|multipartIdentifier) (AS name=errorCapturingIdentifier)?
+    ;
+
+executeImmediateArgumentSeq
+    : executeImmediateArgument (COMMA executeImmediateArgument)*
     ;
 
 timezone
@@ -365,10 +389,11 @@ describeFuncName
     | comparisonOperator
     | arithmeticOperator
     | predicateOperator
+    | BANG
     ;
 
 describeColName
-    : nameParts+=identifier (DOT nameParts+=identifier)*
+    : nameParts+=errorCapturingIdentifier (DOT nameParts+=errorCapturingIdentifier)*
     ;
 
 ctes
@@ -405,7 +430,7 @@ property
     ;
 
 propertyKey
-    : identifier (DOT identifier)*
+    : errorCapturingIdentifier (DOT errorCapturingIdentifier)*
     | stringLit
     ;
 
@@ -587,6 +612,10 @@ notMatchedBySourceAction
     | UPDATE SET assignmentList
     ;
 
+exceptClause
+    : EXCEPT LEFT_PAREN exceptCols=multipartIdentifierList RIGHT_PAREN
+    ;
+
 assignmentList
     : assignment (COMMA assignment)*
     ;
@@ -655,18 +684,18 @@ pivotClause
     ;
 
 pivotColumn
-    : identifiers+=identifier
-    | LEFT_PAREN identifiers+=identifier (COMMA identifiers+=identifier)* RIGHT_PAREN
+    : identifiers+=errorCapturingIdentifier
+    | LEFT_PAREN identifiers+=errorCapturingIdentifier (COMMA identifiers+=errorCapturingIdentifier)* RIGHT_PAREN
     ;
 
 pivotValue
-    : expression (AS? identifier)?
+    : expression (AS? errorCapturingIdentifier)?
     ;
 
 unpivotClause
     : UNPIVOT nullOperator=unpivotNullClause? LEFT_PAREN
         operator=unpivotOperator
-      RIGHT_PAREN (AS? identifier)?
+      RIGHT_PAREN (AS? errorCapturingIdentifier)?
     ;
 
 unpivotNullClause
@@ -708,7 +737,7 @@ unpivotColumn
     ;
 
 unpivotAlias
-    : AS? identifier
+    : AS? errorCapturingIdentifier
     ;
 
 lateralView
@@ -919,7 +948,7 @@ expressionSeq
     ;
 
 booleanExpression
-    : NOT booleanExpression                                        #logicalNot
+    : (NOT | BANG) booleanExpression                               #logicalNot
     | EXISTS LEFT_PAREN query RIGHT_PAREN                          #exists
     | valueExpression predicate?                                   #predicated
     | left=booleanExpression operator=AND right=booleanExpression  #logicalBinary
@@ -962,6 +991,7 @@ primaryExpression
     | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
     | CASE value=expression whenClause+ (ELSE elseExpression=expression)? END                  #simpleCase
     | name=(CAST | TRY_CAST) LEFT_PAREN expression AS dataType RIGHT_PAREN                     #cast
+    | primaryExpression collateClause                                                      #collate
     | primaryExpression DOUBLE_COLON dataType                                                  #castByColon
     | STRUCT LEFT_PAREN (argument+=namedExpression (COMMA argument+=namedExpression)*)? RIGHT_PAREN #struct
     | FIRST LEFT_PAREN expression (IGNORE NULLS)? RIGHT_PAREN                                  #first
@@ -969,12 +999,13 @@ primaryExpression
     | LAST LEFT_PAREN expression (IGNORE NULLS)? RIGHT_PAREN                                   #last
     | POSITION LEFT_PAREN substr=valueExpression IN str=valueExpression RIGHT_PAREN            #position
     | constant                                                                                 #constantDefault
-    | ASTERISK                                                                                 #star
-    | qualifiedName DOT ASTERISK                                                               #star
+    | ASTERISK exceptClause?                                                                   #star
+    | qualifiedName DOT ASTERISK exceptClause?                                                 #star
     | LEFT_PAREN namedExpression (COMMA namedExpression)+ RIGHT_PAREN                          #rowConstructor
     | LEFT_PAREN query RIGHT_PAREN                                                             #subqueryExpression
     | functionName LEFT_PAREN (setQuantifier? argument+=functionArgument
        (COMMA argument+=functionArgument)*)? RIGHT_PAREN
+       (WITHIN GROUP LEFT_PAREN ORDER BY sortItem (COMMA sortItem)* RIGHT_PAREN)?
        (FILTER LEFT_PAREN WHERE where=booleanExpression RIGHT_PAREN)?
        (nullsOption=(IGNORE | RESPECT) NULLS)? ( OVER windowSpec)?                             #functionCall
     | identifier ARROW expression                                                              #lambda
@@ -990,9 +1021,6 @@ primaryExpression
        FROM srcStr=valueExpression RIGHT_PAREN                                                 #trim
     | OVERLAY LEFT_PAREN input=valueExpression PLACING replace=valueExpression
       FROM position=valueExpression (FOR length=valueExpression)? RIGHT_PAREN                  #overlay
-    | name=(PERCENTILE_CONT | PERCENTILE_DISC) LEFT_PAREN percentage=valueExpression RIGHT_PAREN
-        WITHIN GROUP LEFT_PAREN ORDER BY sortItem RIGHT_PAREN
-        (FILTER LEFT_PAREN WHERE where=booleanExpression RIGHT_PAREN)? ( OVER windowSpec)?     #percentile
     ;
 
 literalType
@@ -1069,6 +1097,10 @@ colPosition
     : position=FIRST | position=AFTER afterCol=errorCapturingIdentifier
     ;
 
+collateClause
+    : COLLATE collationName=identifier
+    ;
+
 type
     : BOOLEAN
     | TINYINT | BYTE
@@ -1079,13 +1111,14 @@ type
     | DOUBLE
     | DATE
     | TIMESTAMP | TIMESTAMP_NTZ | TIMESTAMP_LTZ
-    | STRING
+    | STRING collateClause?
     | CHARACTER | CHAR
     | VARCHAR
     | BINARY
     | DECIMAL | DEC | NUMERIC
     | VOID
     | INTERVAL
+    | VARIANT
     | ARRAY | STRUCT | MAP
     | unsupportedType=identifier
     ;
@@ -1156,7 +1189,7 @@ complexColTypeList
     ;
 
 complexColType
-    : identifier COLON? dataType (NOT NULL)? commentSpec?
+    : errorCapturingIdentifier COLON? dataType (NOT NULL)? commentSpec?
     ;
 
 whenClause
@@ -1391,6 +1424,7 @@ ansiNonReserved
     | IDENTIFIER_KW
     | IF
     | IGNORE
+    | IMMEDIATE
     | IMPORT
     | INCLUDE
     | INDEX
@@ -1545,6 +1579,7 @@ ansiNonReserved
     | VARCHAR
     | VAR
     | VARIABLE
+    | VARIANT
     | VERSION
     | VIEW
     | VIEWS
@@ -1628,6 +1663,7 @@ nonReserved
     | CLUSTERED
     | CODEGEN
     | COLLATE
+    | COLLATION
     | COLLECTION
     | COLUMN
     | COLUMNS
@@ -1681,6 +1717,7 @@ nonReserved
     | ESCAPED
     | EXCHANGE
     | EXCLUDE
+    | EXECUTE
     | EXISTS
     | EXPLAIN
     | EXPORT
@@ -1713,6 +1750,7 @@ nonReserved
     | IDENTIFIER_KW
     | IF
     | IGNORE
+    | IMMEDIATE
     | IMPORT
     | IN
     | INCLUDE
@@ -1893,6 +1931,7 @@ nonReserved
     | VARCHAR
     | VAR
     | VARIABLE
+    | VARIANT
     | VERSION
     | VIEW
     | VIEWS

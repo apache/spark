@@ -29,6 +29,7 @@ import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{AliasIdentifier, CatalystIdentifier}
 import org.apache.spark.sql.catalyst.ScalaReflection._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, FunctionResource}
@@ -363,8 +364,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       case s: Seq[_] =>
         s.map(mapChild)
       case m: Map[_, _] =>
-        // `mapValues` is lazy and we need to force it to materialize by converting to Map
-        m.view.mapValues(mapChild).toMap
+        m.toMap.transform((_, v) => mapChild(v))
       case arg: TreeNode[_] if containsChild(arg) => mapTreeNode(arg)
       case Some(child) => Some(mapChild(child))
       case nonChild: AnyRef => nonChild
@@ -746,7 +746,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       }
     } catch {
       case e: java.lang.IllegalArgumentException =>
-        throw new IllegalStateException(
+        throw SparkException.internalError(
           s"""
              |Failed to copy node.
              |Is otherCopyArgs specified correctly for $nodeName.
@@ -784,11 +784,11 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       case Some(arg: TreeNode[_]) if containsChild(arg) =>
         Some(arg.asInstanceOf[BaseType].clone())
       // `mapValues` is lazy and we need to force it to materialize by converting to Map
-      case m: Map[_, _] => m.view.mapValues {
-        case arg: TreeNode[_] if containsChild(arg) =>
+      case m: Map[_, _] => m.toMap.transform {
+        case (_, arg: TreeNode[_]) if containsChild(arg) =>
           arg.asInstanceOf[BaseType].clone()
-        case other => other
-      }.toMap
+        case (_, other) => other
+      }
       case d: DataType => d // Avoid unpacking Structs
       case args: LazyList[_] => args.map(mapChild).force // Force materialization on stream
       case args: Iterable[_] => args.map(mapChild)
@@ -1000,21 +1000,20 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
 
     val str = if (verbose) {
       if (addSuffix) verboseStringWithSuffix(maxFields) else verboseString(maxFields)
+    } else if (printNodeId) {
+      simpleStringWithNodeId()
     } else {
-      if (printNodeId) {
-        simpleStringWithNodeId()
-      } else {
-        simpleString(maxFields)
-      }
+      simpleString(maxFields)
     }
     append(prefix)
     append(str)
     append("\n")
 
-    if (innerChildren.nonEmpty) {
+    val innerChildrenLocal = innerChildren
+    if (innerChildrenLocal.nonEmpty) {
       lastChildren.add(children.isEmpty)
       lastChildren.add(false)
-      innerChildren.init.foreach(_.generateTreeString(
+      innerChildrenLocal.init.foreach(_.generateTreeString(
         depth + 2, lastChildren, append, verbose,
         addSuffix = addSuffix, maxFields = maxFields, printNodeId = printNodeId, indent = indent))
       lastChildren.remove(lastChildren.size() - 1)
@@ -1022,7 +1021,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
 
       lastChildren.add(children.isEmpty)
       lastChildren.add(true)
-      innerChildren.last.generateTreeString(
+      innerChildrenLocal.last.generateTreeString(
         depth + 2, lastChildren, append, verbose,
         addSuffix = addSuffix, maxFields = maxFields, printNodeId = printNodeId, indent = indent)
       lastChildren.remove(lastChildren.size() - 1)

@@ -306,7 +306,7 @@ object ShuffleExchangeExec {
           case (partition, index) => (partition.toSeq(expressions.map(_.dataType)), index)
         }.toMap
         new KeyGroupedPartitioner(mutable.Map(valueMap.toSeq: _*), n)
-      case _ => throw new IllegalStateException(s"Exchange not implemented for $newPartitioning")
+      case _ => throw SparkException.internalError(s"Exchange not implemented for $newPartitioning")
       // TODO: Handle BroadcastPartitioning.
     }
     def getPartitionKeyExtractor(): InternalRow => Any = newPartitioning match {
@@ -334,7 +334,7 @@ object ShuffleExchangeExec {
       case SinglePartition => identity
       case KeyGroupedPartitioning(expressions, _, _, _) =>
         row => bindReferences(expressions, outputAttributes).map(_.eval(row))
-      case _ => throw new IllegalStateException(s"Exchange not implemented for $newPartitioning")
+      case _ => throw SparkException.internalError(s"Exchange not implemented for $newPartitioning")
     }
 
     val isRoundRobin = newPartitioning.isInstanceOf[RoundRobinPartitioning] &&

@@ -19,6 +19,7 @@ package org.apache.spark.streaming.scheduler
 
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 
+import scala.concurrent.duration.FiniteDuration
 import scala.jdk.CollectionConverters._
 import scala.util.Failure
 
@@ -123,17 +124,15 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
 
     // Stop the executor for receiving new jobs
     logDebug("Stopping job executor")
-    jobExecutor.shutdown()
 
     // Wait for the queued jobs to complete if indicated
-    val terminated = if (processAllReceivedData) {
-      jobExecutor.awaitTermination(1, TimeUnit.HOURS)  // just a very large period of time
+    if (processAllReceivedData) {
+      // just a very large period of time
+      ThreadUtils.shutdown(jobExecutor, FiniteDuration(1, TimeUnit.HOURS))
     } else {
-      jobExecutor.awaitTermination(2, TimeUnit.SECONDS)
+      ThreadUtils.shutdown(jobExecutor, FiniteDuration(2, TimeUnit.SECONDS))
     }
-    if (!terminated) {
-      jobExecutor.shutdownNow()
-    }
+
     logDebug("Stopped job executor")
 
     // Stop everything else

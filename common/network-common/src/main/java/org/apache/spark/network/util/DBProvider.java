@@ -38,17 +38,17 @@ public class DBProvider {
         StoreVersion version,
         ObjectMapper mapper) throws IOException {
       if (dbFile != null) {
-        switch (dbBackend) {
-          case LEVELDB:
+        return switch (dbBackend) {
+          case LEVELDB -> {
             org.iq80.leveldb.DB levelDB = LevelDBProvider.initLevelDB(dbFile, version, mapper);
             logger.warn("The LEVELDB is deprecated. Please use ROCKSDB instead.");
-            return levelDB != null ? new LevelDB(levelDB) : null;
-          case ROCKSDB:
+            yield levelDB != null ? new LevelDB(levelDB) : null;
+          }
+          case ROCKSDB -> {
             org.rocksdb.RocksDB rocksDB = RocksDBProvider.initRockDB(dbFile, version, mapper);
-            return rocksDB != null ? new RocksDB(rocksDB) : null;
-          default:
-            throw new IllegalArgumentException("Unsupported DBBackend: " + dbBackend);
-        }
+            yield rocksDB != null ? new RocksDB(rocksDB) : null;
+          }
+        };
       }
       return null;
     }

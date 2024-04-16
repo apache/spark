@@ -139,11 +139,11 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
       Some(Histogram(1, Array(HistogramBin(d1Internal, d1Internal, 1),
         HistogramBin(d1Internal, d2Internal, 1))))))
     colStats.update("ctimestamp", stats("ctimestamp").copy(histogram =
-      Some(Histogram(1, Array(HistogramBin(t1Internal, t1Internal, 1),
-        HistogramBin(t1Internal, t2Internal, 1))))))
+      Some(Histogram(1, Array(HistogramBin(t1Internal.toDouble, t1Internal.toDouble, 1),
+        HistogramBin(t1Internal.toDouble, t2Internal.toDouble, 1))))))
     colStats.update("ctimestamp_ntz", stats("ctimestamp_ntz").copy(histogram =
-      Some(Histogram(1, Array(HistogramBin(t1Internal, t1Internal, 1),
-        HistogramBin(t1Internal, t2Internal, 1))))))
+      Some(Histogram(1, Array(HistogramBin(t1Internal.toDouble, t1Internal.toDouble, 1),
+        HistogramBin(t1Internal.toDouble, t2Internal.toDouble, 1))))))
     colStats
   }
 

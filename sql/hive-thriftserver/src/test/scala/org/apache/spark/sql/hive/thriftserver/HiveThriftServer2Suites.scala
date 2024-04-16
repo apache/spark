@@ -25,7 +25,7 @@ import java.util.{Locale, UUID}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future, Promise}
 import scala.concurrent.duration._
 import scala.io.Source
 import scala.jdk.CollectionConverters._
@@ -441,7 +441,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftServer2Test {
         s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE test_map")
 
       queries.foreach(statement.execute)
-      implicit val ec = ExecutionContext.fromExecutorService(
+      implicit val ec: ExecutionContextExecutorService = ExecutionContext.fromExecutorService(
         ThreadUtils.newDaemonSingleThreadExecutor("test-jdbc-cancel"))
       try {
         // Start a very-long-running query that will take hours to finish, then cancel it in order
@@ -1120,7 +1120,7 @@ class HiveThriftCleanUpScratchDirSuite extends HiveThriftServer2TestBase {
 
   override protected def extraConf: Seq[String] =
     s" --hiveconf ${ConfVars.HIVE_START_CLEANUP_SCRATCHDIR}=true " ::
-       s"--hiveconf ${ConfVars.SCRATCHDIR}=${tempScratchDir.getAbsolutePath}" :: Nil
+       s"--hiveconf hive.exec.scratchdir=${tempScratchDir.getAbsolutePath}" :: Nil
 
   test("Cleanup the Hive scratchdir when starting the Hive Server") {
     assert(!tempScratchDir.exists())
@@ -1206,7 +1206,7 @@ abstract class HiveThriftServer2TestBase extends SparkFunSuite with BeforeAndAft
   protected var operationLogPath: File = _
   protected var lScratchDir: File = _
   private var logTailingProcess: Process = _
-  private var diagnosisBuffer: ArrayBuffer[String] = ArrayBuffer.empty[String]
+  private val diagnosisBuffer: ArrayBuffer[String] = ArrayBuffer.empty[String]
 
   protected def extraConf: Seq[String] = Nil
 
@@ -1239,12 +1239,12 @@ abstract class HiveThriftServer2TestBase extends SparkFunSuite with BeforeAndAft
 
     s"""$startScript
        |  --master local
-       |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}=$metastoreJdbcUri
-       |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
+       |  --hiveconf javax.jdo.option.ConnectionURL=$metastoreJdbcUri
+       |  --hiveconf hive.metastore.warehouse.dir=$warehousePath
        |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST}=$localhost
        |  --hiveconf ${ConfVars.HIVE_SERVER2_TRANSPORT_MODE}=$mode
        |  --hiveconf ${ConfVars.HIVE_SERVER2_LOGGING_OPERATION_LOG_LOCATION}=$operationLogPath
-       |  --hiveconf ${ConfVars.LOCALSCRATCHDIR}=$lScratchDir
+       |  --hiveconf hive.exec.local.scratchdir=$lScratchDir
        |  --hiveconf $portConf=0
        |  --driver-class-path $driverClassPath
        |  --driver-java-options -Dlog4j2.debug

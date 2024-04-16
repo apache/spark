@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Connection, SQLException, Timestamp, Types}
+import java.sql.{Connection, Date, ResultSetMetaData, SQLException, Timestamp, Types}
 import java.time.{LocalDateTime, ZoneOffset}
 import java.util
 import java.util.Locale
+
+import scala.util.Using
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
@@ -33,7 +35,7 @@ import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.types._
 
 
-private object PostgresDialect extends JdbcDialect with SQLConfHelper {
+private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
 
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:postgresql")
@@ -49,39 +51,61 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
 
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
-    if (sqlType == Types.REAL) {
-      Some(FloatType)
-    } else if (sqlType == Types.SMALLINT) {
-      Some(ShortType)
-    } else if (sqlType == Types.BIT && typeName == "bit" && size != 1) {
-      Some(BinaryType)
-    } else if (sqlType == Types.DOUBLE && typeName == "money") {
-      // money type seems to be broken but one workaround is to handle it as string.
-      // See SPARK-34333 and https://github.com/pgjdbc/pgjdbc/issues/100
-      Some(StringType)
-    } else if (sqlType == Types.OTHER) {
-      Some(StringType)
-    } else if ("text".equalsIgnoreCase(typeName)) {
-      Some(StringType) // sqlType is  Types.VARCHAR
-    } else if (sqlType == Types.ARRAY) {
-      val scale = md.build().getLong("scale").toInt
-      // postgres array type names start with underscore
-      toCatalystType(typeName.drop(1), size, scale).map(ArrayType(_))
-    } else None
+    sqlType match {
+      case Types.REAL => Some(FloatType)
+      case Types.SMALLINT => Some(ShortType)
+      case Types.BIT if typeName == "bit" && size != 1 => Some(BinaryType)
+      case Types.DOUBLE if typeName == "money" =>
+        // money type seems to be broken but one workaround is to handle it as string.
+        // See SPARK-34333 and https://github.com/pgjdbc/pgjdbc/issues/100
+        Some(StringType)
+      case Types.TIMESTAMP
+        if "timestamptz".equalsIgnoreCase(typeName) =>
+        // timestamptz represents timestamp with time zone, currently it maps to Types.TIMESTAMP.
+        // We need to change to Types.TIMESTAMP_WITH_TIMEZONE if the upstream changes.
+        Some(TimestampType)
+      case Types.TIME if "timetz".equalsIgnoreCase(typeName) =>
+        // timetz represents time with time zone, currently it maps to Types.TIME.
+        // We need to change to Types.TIME_WITH_TIMEZONE if the upstream changes.
+        Some(TimestampType)
+      case Types.CHAR if "bpchar".equalsIgnoreCase(typeName) && size == Int.MaxValue =>
+        // bpchar with unspecified length same as text in postgres with blank-trimmed
+        Some(StringType)
+      case Types.OTHER if "void".equalsIgnoreCase(typeName) => Some(NullType)
+      case Types.OTHER => Some(StringType)
+      case _ if "text".equalsIgnoreCase(typeName) => Some(StringType) // sqlType is Types.VARCHAR
+      case Types.ARRAY =>
+        // postgres array type names start with underscore
+        val elementType = toCatalystType(typeName.drop(1), size, md)
+        elementType.map { et =>
+          val metadata = md.build()
+          val dim = if (metadata.contains("arrayDimension")) {
+            metadata.getLong("arrayDimension").toInt
+          } else {
+            1
+          }
+          (0 until dim).foldLeft(et)((acc, _) => ArrayType(acc))
+        }
+      case _ => None
+    }
   }
 
   private def toCatalystType(
       typeName: String,
       precision: Int,
-      scale: Int): Option[DataType] = typeName match {
+      md: MetadataBuilder): Option[DataType] = typeName match {
     case "bool" => Some(BooleanType)
-    case "bit" => Some(BinaryType)
+    case "bit" if precision == 1 => Some(BooleanType)
+    case "bit" =>
+      md.putBoolean("pg_bit_array_type", value = true)
+      Some(BinaryType)
     case "int2" => Some(ShortType)
     case "int4" => Some(IntegerType)
     case "int8" | "oid" => Some(LongType)
     case "float4" => Some(FloatType)
     case "float8" => Some(DoubleType)
     case "varchar" => Some(VarcharType(precision))
+    case "bpchar" if precision == Int.MaxValue => Some(StringType)
     case "char" | "bpchar" => Some(CharType(precision))
     case "text" | "cidr" | "inet" | "json" | "jsonb" | "uuid" |
          "xml" | "tsvector" | "tsquery" | "macaddr" | "macaddr8" | "txid_snapshot" | "point" |
@@ -89,9 +113,12 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
          "interval" | "pg_snapshot" =>
       Some(StringType)
     case "bytea" => Some(BinaryType)
-    case "timestamp" | "timestamptz" | "time" | "timetz" => Some(TimestampType)
+    case "timestamptz" | "timetz" => Some(TimestampType)
+    case "timestamp" | "time" => Some(getTimestampType(md.build()))
     case "date" => Some(DateType)
-    case "numeric" | "decimal" if precision > 0 => Some(DecimalType.bounded(precision, scale))
+    case "numeric" | "decimal" if precision > 0 =>
+      val scale = md.build().getLong("scale").toInt
+      Some(DecimalType.bounded(precision, scale))
     case "numeric" | "decimal" =>
       // SPARK-26538: handle numeric without explicit precision and scale.
       Some(DecimalType.SYSTEM_DEFAULT)
@@ -122,15 +149,11 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
     case ShortType | ByteType => Some(JdbcType("SMALLINT", Types.SMALLINT))
     case t: DecimalType => Some(
       JdbcType(s"NUMERIC(${t.precision},${t.scale})", java.sql.Types.NUMERIC))
-    case ArrayType(et, _) if et.isInstanceOf[AtomicType] =>
+    case ArrayType(et, _) if et.isInstanceOf[AtomicType] || et.isInstanceOf[ArrayType] =>
       getJDBCType(et).map(_.databaseTypeDefinition)
         .orElse(JdbcUtils.getCommonJDBCType(et).map(_.databaseTypeDefinition))
         .map(typeName => JdbcType(s"$typeName[]", java.sql.Types.ARRAY))
     case _ => None
-  }
-
-  override def getTableExistsQuery(table: String): String = {
-    s"SELECT 1 FROM $table LIMIT 1"
   }
 
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
@@ -225,40 +248,48 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
     s"DROP INDEX ${quoteIdentifier(indexName)}"
   }
 
-  override def classifyException(message: String, e: Throwable): AnalysisException = {
+  // Message pattern defined by postgres specification
+  private final val pgAlreadyExistsRegex = """(?:.*)relation "(.*)" already exists""".r
+
+  override def classifyException(
+      e: Throwable,
+      errorClass: String,
+      messageParameters: Map[String, String],
+      description: String): AnalysisException = {
     e match {
       case sqlException: SQLException =>
         sqlException.getSQLState match {
           // https://www.postgresql.org/docs/14/errcodes-appendix.html
           case "42P07" =>
-            // Message patterns defined at caller sides of spark
-            val indexRegex = "(?s)Failed to create index (.*) in (.*)".r
-            val renameRegex = "(?s)Failed table renaming from (.*) to (.*)".r
-            // Message pattern defined by postgres specification
-            val pgRegex = """(?:.*)relation "(.*)" already exists""".r
-
-            message match {
-              case indexRegex(index, table) =>
-                throw new IndexAlreadyExistsException(
-                  indexName = index, tableName = table, cause = Some(e))
-              case renameRegex(_, newTable) =>
-                throw QueryCompilationErrors.tableAlreadyExistsError(newTable)
-              case _ if pgRegex.findFirstMatchIn(sqlException.getMessage).nonEmpty =>
-                val tableName = pgRegex.findFirstMatchIn(sqlException.getMessage).get.group(1)
-                throw QueryCompilationErrors.tableAlreadyExistsError(tableName)
-              case _ => super.classifyException(message, e)
+            if (errorClass == "FAILED_JDBC.CREATE_INDEX") {
+              throw new IndexAlreadyExistsException(
+                indexName = messageParameters("indexName"),
+                tableName = messageParameters("tableName"),
+                cause = Some(e))
+            } else if (errorClass == "FAILED_JDBC.RENAME_TABLE") {
+              val newTable = messageParameters("newName")
+              throw QueryCompilationErrors.tableAlreadyExistsError(newTable)
+            } else {
+              val tblRegexp = pgAlreadyExistsRegex.findFirstMatchIn(sqlException.getMessage)
+              if (tblRegexp.nonEmpty) {
+                throw QueryCompilationErrors.tableAlreadyExistsError(tblRegexp.get.group(1))
+              } else {
+                super.classifyException(e, errorClass, messageParameters, description)
+              }
             }
-          case "42704" =>
-            // The message is: Failed to drop index indexName in tableName
-            val regex = "(?s)Failed to drop index (.*) in (.*)".r
-            val indexName = regex.findFirstMatchIn(message).get.group(1)
-            val tableName = regex.findFirstMatchIn(message).get.group(2)
+          case "42704" if errorClass == "FAILED_JDBC.DROP_INDEX" =>
+            val indexName = messageParameters("indexName")
+            val tableName = messageParameters("tableName")
             throw new NoSuchIndexException(indexName, tableName, cause = Some(e))
-          case "2BP01" => throw NonEmptyNamespaceException(message, cause = Some(e))
-          case _ => super.classifyException(message, e)
+          case "2BP01" =>
+            throw NonEmptyNamespaceException(
+              namespace = messageParameters.get("namespace").toArray,
+              details = sqlException.getMessage,
+              cause = Some(e))
+          case _ => super.classifyException(e, errorClass, messageParameters, description)
         }
       case unsupported: UnsupportedOperationException => throw unsupported
-      case _ => super.classifyException(message, e)
+      case _ => super.classifyException(e, errorClass, messageParameters, description)
     }
   }
 
@@ -292,23 +323,54 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
   override def convertJavaTimestampToTimestamp(t: Timestamp): Timestamp = {
     // Variable names come from PostgreSQL "constant field docs":
     // https://jdbc.postgresql.org/documentation/publicapi/index.html?constant-values.html
-    val POSTGRESQL_DATE_NEGATIVE_INFINITY = -9223372036832400000L
-    val POSTGRESQL_DATE_NEGATIVE_SMALLER_INFINITY = -185543533774800000L
-    val POSTGRESQL_DATE_POSITIVE_INFINITY = 9223372036825200000L
-    val POSTGRESQL_DATE_DATE_POSITIVE_SMALLER_INFINITY = 185543533774800000L
+   t.getTime match {
+     case 9223372036825200000L =>
+       new Timestamp(LocalDateTime.of(9999, 12, 31, 23, 59, 59, 999999999)
+         .toInstant(ZoneOffset.UTC).toEpochMilli)
+     case -9223372036832400000L =>
+       new Timestamp(LocalDateTime.of(1, 1, 1, 0, 0, 0).toInstant(ZoneOffset.UTC).toEpochMilli)
+     case _ => t
+   }
+  }
 
-    val minTimeStamp = LocalDateTime.of(1, 1, 1, 0, 0, 0).toEpochSecond(ZoneOffset.UTC)
-    val maxTimestamp = LocalDateTime.of(9999, 12, 31, 23, 59, 59).toEpochSecond(ZoneOffset.UTC)
+  override def convertJavaDateToDate(d: Date): Date = {
+    d.getTime match {
+      case 9223372036825200000L =>
+        new Date(LocalDateTime.of(9999, 12, 31, 0, 0, 0).toInstant(ZoneOffset.UTC).toEpochMilli)
+      case -9223372036832400000L =>
+        new Date(LocalDateTime.of(1, 1, 1, 0, 0, 0).toInstant(ZoneOffset.UTC).toEpochMilli)
+      case _ => d
+    }
+  }
 
-    val time = t.getTime
-    if (time == POSTGRESQL_DATE_POSITIVE_INFINITY ||
-      time == POSTGRESQL_DATE_DATE_POSITIVE_SMALLER_INFINITY) {
-      new Timestamp(maxTimestamp)
-    } else if (time == POSTGRESQL_DATE_NEGATIVE_INFINITY ||
-      time == POSTGRESQL_DATE_NEGATIVE_SMALLER_INFINITY) {
-      new Timestamp(minTimeStamp)
-    } else {
-      t
+  override def updateExtraColumnMeta(
+      conn: Connection,
+      rsmd: ResultSetMetaData,
+      columnIdx: Int,
+      metadata: MetadataBuilder): Unit = {
+    rsmd.getColumnType(columnIdx) match {
+      case Types.ARRAY =>
+        val tableName = rsmd.getTableName(columnIdx)
+        val columnName = rsmd.getColumnName(columnIdx)
+        val query =
+          s"""
+             |SELECT pg_attribute.attndims
+             |FROM pg_attribute
+             |  JOIN pg_class ON pg_attribute.attrelid = pg_class.oid
+             |  JOIN pg_namespace ON pg_class.relnamespace = pg_namespace.oid
+             |WHERE pg_class.relname = '$tableName' and pg_attribute.attname = '$columnName'
+             |""".stripMargin
+        try {
+          Using.resource(conn.createStatement()) { stmt =>
+            Using.resource(stmt.executeQuery(query)) { rs =>
+              if (rs.next()) metadata.putLong("arrayDimension", rs.getLong(1))
+            }
+          }
+        } catch {
+          case e: SQLException =>
+            logWarning(s"Failed to get array dimension for column $columnName", e)
+        }
+      case _ =>
     }
   }
 }

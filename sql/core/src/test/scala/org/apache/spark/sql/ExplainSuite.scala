@@ -193,8 +193,8 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
         """.stripMargin)
       checkKeywordsExistsInExplain(df2,
         "Project [concat(cast(id#xL as string), cast((id#xL + 1) as string), " +
-          "cast(encode(cast((id#xL + 2) as string), utf-8) as string), " +
-          "cast(encode(cast((id#xL + 3) as string), utf-8) as string)) AS col#x]")
+          "cast(encode(cast((id#xL + 2) as string), utf-8, false) as string), " +
+          "cast(encode(cast((id#xL + 3) as string), utf-8, false) as string)) AS col#x]")
 
       val df3 = sql(
         """
@@ -209,8 +209,8 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
         """.stripMargin)
       checkKeywordsExistsInExplain(df3,
         "Project [concat(cast(id#xL as string), " +
-          "cast(encode(cast((id#xL + 2) as string), utf-8) as string), " +
-          "cast(encode(cast((id#xL + 3) as string), utf-8) as string)) AS col#x]")
+          "cast(encode(cast((id#xL + 2) as string), utf-8, false) as string), " +
+          "cast(encode(cast((id#xL + 3) as string), utf-8, false) as string)) AS col#x]")
     }
   }
 

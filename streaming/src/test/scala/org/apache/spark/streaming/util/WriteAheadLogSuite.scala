@@ -20,7 +20,6 @@ import java.io._
 import java.nio.ByteBuffer
 import java.util.{Iterator => JIterator}
 import java.util.concurrent.{CountDownLatch, RejectedExecutionException, ThreadPoolExecutor, TimeUnit}
-import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent._
@@ -238,14 +237,14 @@ class FileBasedWriteAheadLogSuite
     val executionContext = ExecutionContext.fromExecutorService(fpool)
 
     class GetMaxCounter {
-      private val value = new AtomicInteger()
-      @volatile private var max: Int = 0
+      private var value = 0
+      private var max: Int = 0
       def increment(): Unit = synchronized {
-        val atInstant = value.incrementAndGet()
-        if (atInstant > max) max = atInstant
+        value = value + 1
+        if (value > max) max = value
       }
-      def decrement(): Unit = synchronized { value.decrementAndGet() }
-      def get(): Int = synchronized { value.get() }
+      def decrement(): Unit = synchronized { value = value - 1 }
+      def get(): Int = synchronized { value }
       def getMax(): Int = synchronized { max }
     }
     try {
@@ -615,9 +614,9 @@ object WriteAheadLogSuite {
     val writer = HdfsUtils.getOutputStream(file, hadoopConf)
     def writeToStream(bytes: Array[Byte]): Unit = {
       val offset = writer.getPos
-      writer.writeInt(bytes.size)
+      writer.writeInt(bytes.length)
       writer.write(bytes)
-      segments += FileBasedWriteAheadLogSegment(file, offset, bytes.size)
+      segments += FileBasedWriteAheadLogSegment(file, offset, bytes.length)
     }
     if (allowBatching) {
       writeToStream(wrapArrayArrayByte(data.toArray[String]).array())

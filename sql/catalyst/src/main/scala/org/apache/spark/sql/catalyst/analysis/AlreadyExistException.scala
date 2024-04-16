@@ -55,13 +55,6 @@ class PartitionAlreadyExistsException private(
         .map( kv => quoteIdentifier(s"${kv._2}") + s" = ${kv._1}").mkString(", ") + ")"),
         "tableName" -> quoteNameParts(UnresolvedAttribute.parseAttributeName(tableName))))
   }
-
-  def this(message: String) = {
-    this(
-      message,
-      errorClass = Some("PARTITIONS_ALREADY_EXIST"),
-      messageParameters = Map.empty[String, String])
-  }
 }
 
 // any changes to this class should be backward compatible as it may be used by external connectors
@@ -105,11 +98,4 @@ class PartitionsAlreadyExistException private(
 
   def this(tableName: String, partitionIdent: InternalRow, partitionSchema: StructType) =
     this(tableName, Seq(partitionIdent), partitionSchema)
-
-  def this(message: String) = {
-    this(
-      message,
-      errorClass = Some("PARTITIONS_ALREADY_EXIST"),
-      messageParameters = Map.empty[String, String])
-  }
 }

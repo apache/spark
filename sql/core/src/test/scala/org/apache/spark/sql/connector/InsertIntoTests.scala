@@ -126,7 +126,11 @@ abstract class InsertIntoTests(
     val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
 
     verifyTable(t1, Seq.empty[(Long, String, String)].toDF("id", "data", "missing"))
-    val tableName = if (catalogAndNamespace.isEmpty) toSQLId(s"default.$t1") else toSQLId(t1)
+    val tableName = if (catalogAndNamespace.isEmpty) {
+      toSQLId(s"spark_catalog.default.$t1")
+    } else {
+      toSQLId(t1)
+    }
     checkError(
       exception = intercept[AnalysisException] {
         doInsert(t1, df)
@@ -145,7 +149,11 @@ abstract class InsertIntoTests(
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
       val df = Seq((1L, "a", "mango")).toDF("id", "data", "fruit")
       verifyTable(t1, Seq.empty[(Long, String)].toDF("id", "data"))
-      val tableName = if (catalogAndNamespace.isEmpty) toSQLId(s"default.$t1") else toSQLId(t1)
+      val tableName = if (catalogAndNamespace.isEmpty) {
+        toSQLId(s"spark_catalog.default.$t1")
+      } else {
+        toSQLId(t1)
+      }
       checkError(
         exception = intercept[AnalysisException] {
           doInsert(t1, df)

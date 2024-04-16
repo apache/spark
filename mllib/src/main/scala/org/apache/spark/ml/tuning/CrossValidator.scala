@@ -37,6 +37,7 @@ import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -191,7 +192,7 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
       foldMetrics
     }.transpose.map(_.sum / $(numFolds)) // Calculate average metric over all splits
 
-    instr.logInfo(s"Average cross-validation metrics: ${metrics.toSeq}")
+    instr.logInfo(s"Average cross-validation metrics: ${metrics.toImmutableArraySeq}")
     val (bestMetric, bestIndex) =
       if (eval.isLargerBetter) metrics.zipWithIndex.maxBy(_._1)
       else metrics.zipWithIndex.minBy(_._1)
@@ -398,7 +399,7 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
       val persistSubModels = persistSubModelsParam.toBoolean
 
       import org.json4s.JsonDSL._
-      val extraMetadata = ("avgMetrics" -> instance.avgMetrics.toSeq) ~
+      val extraMetadata = ("avgMetrics" -> instance.avgMetrics.toImmutableArraySeq) ~
         ("persistSubModels" -> persistSubModels)
       ValidatorParams.saveImpl(path, instance, sc, Some(extraMetadata))
       val bestModelPath = new Path(path, "bestModel").toString

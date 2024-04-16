@@ -31,7 +31,7 @@ import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkUpgradeException}
 import org.apache.spark.SparkBuildInfo.{spark_version => SPARK_VERSION}
-import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException, TempTableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchDatabaseException, TableAlreadyExistsException, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -74,7 +74,9 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
 
   for (enrichErrorEnabled <- Seq(false, true)) {
     test(s"cause exception - ${enrichErrorEnabled}") {
-      withSQLConf("spark.sql.connect.enrichError.enabled" -> enrichErrorEnabled.toString) {
+      withSQLConf(
+        "spark.sql.connect.enrichError.enabled" -> enrichErrorEnabled.toString,
+        "spark.sql.legacy.timeParserPolicy" -> "EXCEPTION") {
         val ex = intercept[SparkUpgradeException] {
           spark
             .sql("""
@@ -85,6 +87,13 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
                 |""".stripMargin)
             .collect()
         }
+        assert(
+          ex.getErrorClass ===
+            "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER")
+        assert(
+          ex.getMessageParameters.asScala == Map(
+            "datetime" -> "'02-29'",
+            "config" -> "\"spark.sql.legacy.timeParserPolicy\""))
         if (enrichErrorEnabled) {
           assert(ex.getCause.isInstanceOf[DateTimeException])
         } else {
@@ -156,8 +165,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     assert(ex.getErrorClass != null)
   }
 
-  test("throw NoSuchTableException") {
-    val ex = intercept[NoSuchTableException] {
+  test("table not found for spark.catalog.getTable") {
+    val ex = intercept[AnalysisException] {
       spark.catalog.getTable("test_table")
     }
     assert(ex.getErrorClass != null)
@@ -871,6 +880,31 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     assert(joined2.schema.catalogString === "struct<id:bigint,a:double>")
   }
 
+  test("join with dataframe star") {
+    val left = spark.range(100)
+    val right = spark.range(100).select(col("id"), rand(12).as("a"))
+    val join1 = left.join(right, left("id") === right("id"))
+    assert(
+      join1.select(join1.col("*")).schema.catalogString ===
+        "struct<id:bigint,id:bigint,a:double>")
+    assert(join1.select(left.col("*")).schema.catalogString === "struct<id:bigint>")
+    assert(join1.select(right.col("*")).schema.catalogString === "struct<id:bigint,a:double>")
+
+    val join2 = left.join(right)
+    assert(
+      join2.select(join2.col("*")).schema.catalogString ===
+        "struct<id:bigint,id:bigint,a:double>")
+    assert(join2.select(left.col("*")).schema.catalogString === "struct<id:bigint>")
+    assert(join2.select(right.col("*")).schema.catalogString === "struct<id:bigint,a:double>")
+
+    val join3 = left.join(right, "id")
+    assert(
+      join3.select(join3.col("*")).schema.catalogString ===
+        "struct<id:bigint,a:double>")
+    assert(join3.select(left.col("*")).schema.catalogString === "struct<id:bigint>")
+    assert(join3.select(right.col("*")).schema.catalogString === "struct<id:bigint,a:double>")
+  }
+
   test("SPARK-45509: ambiguous column reference") {
     val session = spark
     import session.implicits._
@@ -887,7 +921,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
       // df1("i") is not ambiguous, but it's not valid in the projected df.
       df1.select((df1("i") + 1).as("plus")).select(df1("i")).collect()
     }
-    assert(e1.getMessage.contains("MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT"))
+    assert(e1.getMessage.contains("UNRESOLVED_COLUMN.WITH_SUGGESTION"))
 
     checkSameResult(
       Seq(Row(1, "a")),
@@ -906,11 +940,12 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     }
     assert(e3.getMessage.contains("AMBIGUOUS_COLUMN_REFERENCE"))
 
-    val e4 = intercept[AnalysisException] {
-      // df1("i") is ambiguous as df1 appears in both join sides (df1_filter contains df1).
-      df1.join(df1_filter, df1("i") === 1).collect()
-    }
-    assert(e4.getMessage.contains("AMBIGUOUS_COLUMN_REFERENCE"))
+    // TODO(SPARK-47749): Dataframe.collect should accept duplicated column names
+    assert(
+      // df1.join(df1_filter, df1("i") === 1) fails in classic spark due to:
+      // org.apache.spark.sql.AnalysisException: Column i#24 are ambiguous
+      df1.join(df1_filter, df1("i") === 1).columns ===
+        Array("i", "j", "i", "j"))
 
     checkSameResult(
       Seq(Row("a")),

@@ -39,7 +39,8 @@ class RelationalGroupedDataset private[sql] (
     private[sql] val df: DataFrame,
     private[sql] val groupingExprs: Seq[Column],
     groupType: proto.Aggregate.GroupType,
-    pivot: Option[proto.Aggregate.Pivot] = None) {
+    pivot: Option[proto.Aggregate.Pivot] = None,
+    groupingSets: Option[Seq[proto.Aggregate.GroupingSets]] = None) {
 
   private[this] def toDF(aggExprs: Seq[Column]): DataFrame = {
     df.sparkSession.newDataFrame { builder =>
@@ -60,6 +61,11 @@ class RelationalGroupedDataset private[sql] (
           builder.getAggregateBuilder
             .setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_PIVOT)
             .setPivot(pivot.get)
+        case proto.Aggregate.GroupType.GROUP_TYPE_GROUPING_SETS =>
+          assert(groupingSets.isDefined)
+          val aggBuilder = builder.getAggregateBuilder
+            .setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_GROUPING_SETS)
+          groupingSets.get.foreach(aggBuilder.addGroupingSets)
         case g => throw new UnsupportedOperationException(g.toString)
       }
     }
@@ -253,15 +259,12 @@ class RelationalGroupedDataset private[sql] (
   /**
    * Pivots a column of the current `DataFrame` and performs the specified aggregation.
    *
-   * There are two versions of `pivot` function: one that requires the caller to specify the list
-   * of distinct values to pivot on, and one that does not. The latter is more concise but less
-   * efficient, because Spark needs to first compute the list of distinct values internally.
+   * Spark will eagerly compute the distinct values in `pivotColumn` so it can determine the
+   * resulting schema of the transformation. To avoid any eager computations, provide an explicit
+   * list of values via `pivot(pivotColumn: String, values: Seq[Any])`.
    *
    * {{{
    *   // Compute the sum of earnings for each year by course with each course as a separate column
-   *   df.groupBy("year").pivot("course", Seq("dotNET", "Java")).sum("earnings")
-   *
-   *   // Or without specifying column values (less efficient)
    *   df.groupBy("year").pivot("course").sum("earnings")
    * }}}
    *
@@ -386,11 +389,14 @@ class RelationalGroupedDataset private[sql] (
   }
 
   /**
-   * Pivots a column of the current `DataFrame` and performs the specified aggregation. This is an
-   * overloaded version of the `pivot` method with `pivotColumn` of the `String` type.
+   * Pivots a column of the current `DataFrame` and performs the specified aggregation.
+   *
+   * Spark will eagerly compute the distinct values in `pivotColumn` so it can determine the
+   * resulting schema of the transformation. To avoid any eager computations, provide an explicit
+   * list of values via `pivot(pivotColumn: Column, values: Seq[Any])`.
    *
    * {{{
-   *   // Or without specifying column values (less efficient)
+   *   // Compute the sum of earnings for each year by course with each course as a separate column
    *   df.groupBy($"year").pivot($"course").sum($"earnings");
    * }}}
    *

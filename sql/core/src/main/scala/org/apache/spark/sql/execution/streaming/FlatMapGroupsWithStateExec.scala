@@ -226,8 +226,10 @@ trait FlatMapGroupsWithStateExecBase
             storeProviderId,
             groupingAttributes.toStructType,
             stateManager.stateSchema,
-            numColsPrefixKey = 0,
-            stateInfo.get.storeVersion, storeConf, hadoopConfBroadcast.value.value)
+            NoPrefixKeyStateEncoderSpec(groupingAttributes.toStructType),
+            stateInfo.get.storeVersion,
+            useColumnFamilies = false,
+            storeConf, hadoopConfBroadcast.value.value)
           val processor = createInputProcessor(store)
           processDataWithPartition(childDataIterator, store, processor, Some(initStateIterator))
       }
@@ -236,7 +238,7 @@ trait FlatMapGroupsWithStateExecBase
         getStateInfo,
         groupingAttributes.toStructType,
         stateManager.stateSchema,
-        numColsPrefixKey = 0,
+        NoPrefixKeyStateEncoderSpec(groupingAttributes.toStructType),
         session.sqlContext.sessionState,
         Some(session.sqlContext.streams.stateStoreCoordinator)
       ) { case (store: StateStore, singleIterator: Iterator[InternalRow]) =>

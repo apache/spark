@@ -18,7 +18,7 @@
 package org.apache.spark.scheduler.cluster
 
 import java.util.Locale
-import java.util.concurrent.{Semaphore, TimeUnit}
+import java.util.concurrent.{RejectedExecutionException, Semaphore, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.concurrent.Future
@@ -27,7 +27,8 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.deploy.{ApplicationDescription, Command}
 import org.apache.spark.deploy.client.{StandaloneAppClient, StandaloneAppClientListener}
 import org.apache.spark.executor.ExecutorExitCode
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKey.REASON
 import org.apache.spark.internal.config.EXECUTOR_REMOVE_DELAY
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
@@ -36,6 +37,7 @@ import org.apache.spark.rpc.{RpcAddress, RpcEndpointAddress}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RemoveExecutor
 import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A [[SchedulerBackend]] implementation for Spark's standalone cluster manager.
@@ -94,16 +96,16 @@ private[spark] class StandaloneSchedulerBackend(
     val extraJavaOpts = sc.conf.get(config.EXECUTOR_JAVA_OPTIONS)
       .map(Utils.splitCommandString).getOrElse(Seq.empty)
     val classPathEntries = sc.conf.get(config.EXECUTOR_CLASS_PATH)
-      .map(_.split(java.io.File.pathSeparator).toSeq).getOrElse(Nil)
+      .map(_.split(java.io.File.pathSeparator).toImmutableArraySeq).getOrElse(Nil)
     val libraryPathEntries = sc.conf.get(config.EXECUTOR_LIBRARY_PATH)
-      .map(_.split(java.io.File.pathSeparator).toSeq).getOrElse(Nil)
+      .map(_.split(java.io.File.pathSeparator).toImmutableArraySeq).getOrElse(Nil)
 
     // When testing, expose the parent class path to the child. This is processed by
     // compute-classpath.{cmd,sh} and makes all needed jars available to child processes
     // when the assembly is built with the "*-provided" profiles enabled.
     val testingClassPath =
       if (sys.props.contains(IS_TESTING.key)) {
-        sys.props("java.class.path").split(java.io.File.pathSeparator).toSeq
+        sys.props("java.class.path").split(java.io.File.pathSeparator).toImmutableArraySeq
       } else {
         Nil
       }
@@ -160,7 +162,7 @@ private[spark] class StandaloneSchedulerBackend(
     notifyContext()
     if (!stopping.get) {
       launcherBackend.setState(SparkAppHandle.State.KILLED)
-      logError("Application has been killed. Reason: " + reason)
+      logError(log"Application has been killed. Reason: ${MDC(REASON, reason)}")
       try {
         scheduler.error(reason)
       } finally {
@@ -253,8 +255,8 @@ private[spark] class StandaloneSchedulerBackend(
 
   override def getDriverLogUrls: Option[Map[String, String]] = {
     val prefix = "SPARK_DRIVER_LOG_URL_"
-    val driverLogUrls = sys.env.view.filterKeys(_.startsWith(prefix))
-      .map(e => (e._1.substring(prefix.length).toLowerCase(Locale.ROOT), e._2)).toMap
+    val driverLogUrls = sys.env.filter { case (k, _) => k.startsWith(prefix) }
+      .map(e => (e._1.substring(prefix.length).toLowerCase(Locale.ROOT), e._2))
     if (driverLogUrls.nonEmpty) Some(driverLogUrls) else None
   }
 
@@ -342,8 +344,14 @@ private[spark] class StandaloneSchedulerBackend(
             }
           }
         }
-        executorDelayRemoveThread.schedule(removeExecutorTask,
-          _executorRemoveDelay, TimeUnit.MILLISECONDS)
+        try {
+          executorDelayRemoveThread.schedule(removeExecutorTask,
+            _executorRemoveDelay, TimeUnit.MILLISECONDS)
+        } catch {
+          case _: RejectedExecutionException if stopping.get() =>
+            logWarning(
+              "Skipping onDisconnected RemoveExecutor call because the scheduler is stopping")
+        }
       }
     }
   }

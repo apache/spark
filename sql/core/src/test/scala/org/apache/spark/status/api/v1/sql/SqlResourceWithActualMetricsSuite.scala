@@ -19,8 +19,8 @@ package org.apache.spark.status.api.v1.sql
 
 import java.net.URL
 import java.text.SimpleDateFormat
-import javax.servlet.http.HttpServletResponse
 
+import jakarta.servlet.http.HttpServletResponse
 import org.json4s.DefaultFormats
 import org.json4s.jackson.JsonMethods
 import org.scalatest.time.SpanSugar._
@@ -48,7 +48,7 @@ class SqlResourceWithActualMetricsSuite
   // Exclude nodes which may not have the metrics
   val excludedNodes = List("WholeStageCodegen", "Project", "SerializeFromObject")
 
-  implicit val formats = new DefaultFormats {
+  implicit val formats: DefaultFormats = new DefaultFormats {
     override def dateFormatter = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss")
   }
 

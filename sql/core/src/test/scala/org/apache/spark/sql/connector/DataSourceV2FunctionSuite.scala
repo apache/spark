@@ -24,6 +24,7 @@ import test.org.apache.spark.sql.connector.catalog.functions.JavaLongAdd._
 import test.org.apache.spark.sql.connector.catalog.functions.JavaRandomAdd._
 import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen._
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode.{FALLBACK, NO_CODEGEN}
@@ -321,7 +322,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
   test("scalar function: bad magic method") {
     catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
     addFunction(Identifier.of(Array("ns"), "strlen"), StrLen(StrLenBadMagic))
-    intercept[UnsupportedOperationException](sql("SELECT testcat.ns.strlen('abc')").collect())
+    intercept[SparkUnsupportedOperationException](sql("SELECT testcat.ns.strlen('abc')").collect())
   }
 
   test("scalar function: bad magic method with default impl") {
@@ -333,7 +334,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
   test("scalar function: no implementation found") {
     catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
     addFunction(Identifier.of(Array("ns"), "strlen"), StrLen(StrLenNoImpl))
-    intercept[UnsupportedOperationException](sql("SELECT testcat.ns.strlen('abc')").collect())
+    intercept[SparkUnsupportedOperationException](sql("SELECT testcat.ns.strlen('abc')").collect())
   }
 
   test("scalar function: invalid parameter type or length") {
@@ -411,11 +412,10 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
     addFunction(Identifier.of(Array("ns"), "strlen"),
       new JavaStrLen(new JavaStrLenNoImpl))
-    // TODO assign a error-classes name
     checkError(
       exception = intercept[AnalysisException](sql("SELECT testcat.ns.strlen('abc')").collect()),
-      errorClass = null,
-      parameters = Map.empty,
+      errorClass = "_LEGACY_ERROR_TEMP_3055",
+      parameters = Map("scalarFunc" -> "strlen"),
       context = ExpectedContext(
         fragment = "testcat.ns.strlen('abc')",
         start = 7,
@@ -446,11 +446,10 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
   test("SPARK-35390: scalar function w/ mismatch type parameters from magic method") {
     catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
     addFunction(Identifier.of(Array("ns"), "add"), new JavaLongAdd(new JavaLongAddMismatchMagic))
-    // TODO assign a error-classes name
     checkError(
       exception = intercept[AnalysisException](sql("SELECT testcat.ns.add(1L, 2L)").collect()),
-      errorClass = null,
-      parameters = Map.empty,
+      errorClass = "_LEGACY_ERROR_TEMP_3055",
+      parameters = Map("scalarFunc" -> "long_add_mismatch_magic"),
       context = ExpectedContext(
         fragment = "testcat.ns.add(1L, 2L)",
         start = 7,
@@ -471,9 +470,9 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
       checkAnswer(sql(s"SELECT testcat.ns.$name(42, 58L)"), Row(100) :: Nil)
 
       val paramIndex = name match {
-        case "add" => "1"
-        case "add2" => "2"
-        case "add3" => "1"
+        case "add" => "first"
+        case "add2" => "second"
+        case "add3" => "first"
       }
 
       // can't cast date time interval to long
@@ -641,7 +640,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
         errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         parameters = Map(
           "sqlExpr" -> "\"v2aggregator(col1)\"",
-          "paramIndex" -> "1",
+          "paramIndex" -> "first",
           "inputSql" -> "\"col1\"",
           "inputType" -> "\"INTERVAL DAY\"",
           "requiredType" -> "\"DECIMAL(38,18)\""
@@ -809,7 +808,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     override def description(): String = name()
 
     override def bind(inputType: StructType): BoundFunction = {
-      throw new UnsupportedOperationException(s"Not implemented")
+      throw SparkUnsupportedOperationException()
     }
   }
 }

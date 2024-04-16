@@ -55,6 +55,12 @@ class NumberConverterSuite extends SparkFunSuite {
     checkConv("-10", 11, 7, "45012021522523134134555")
   }
 
+  test("SPARK-44973: conv must allocate enough space for all digits plus negative sign") {
+    checkConv(s"${Long.MinValue}", 10, -2, BigInt(Long.MinValue).toString(2))
+    checkConv((BigInt(Long.MaxValue) + 1).toString(16), 16, -2, BigInt(Long.MinValue).toString(2))
+    checkConv(BigInt(Long.MinValue).toString(16), 16, -2, BigInt(Long.MinValue).toString(2))
+  }
+
   test("byte to binary") {
     checkToBinary(0.toByte)
     checkToBinary(1.toByte)

@@ -29,7 +29,7 @@ import org.apache.spark.sql.execution.command.{DescribeCommandBase, ExecutedComm
 import org.apache.spark.sql.execution.datasources.v2.{DescribeTableExec, ShowTablesExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.{CalendarInterval, VariantVal}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -74,7 +74,7 @@ object HiveResult {
         executedPlan.executeCollect().map(_.getString(1)).toImmutableArraySeq
       case other =>
         val timeFormatters = getTimeFormatters
-        val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toSeq
+        val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toImmutableArraySeq
         // We need the types so we can output struct field names
         val types = executedPlan.output.map(_.dataType)
         // Reformat to match hive tab delimited output.
@@ -106,7 +106,7 @@ object HiveResult {
     case (bin: Array[Byte], BinaryType) => new String(bin, StandardCharsets.UTF_8)
     case (decimal: java.math.BigDecimal, DecimalType()) => decimal.toPlainString
     case (n, _: NumericType) => n.toString
-    case (s: String, StringType) => if (nested) "\"" + s + "\"" else s
+    case (s: String, _: StringType) => if (nested) "\"" + s + "\"" else s
     case (interval: CalendarInterval, CalendarIntervalType) => interval.toString
     case (seq: scala.collection.Seq[_], ArrayType(typ, _)) =>
       seq.map(v => (v, typ)).map(e => toHiveString(e, true, formatters)).mkString("[", ",", "]")
@@ -131,6 +131,7 @@ object HiveResult {
         HIVE_STYLE,
         startField,
         endField)
+    case (v: VariantVal, VariantType) => v.toString
     case (other, _: UserDefinedType[_]) => other.toString
   }
 }

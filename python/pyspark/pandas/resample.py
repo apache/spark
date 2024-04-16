@@ -91,20 +91,21 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
         self._resamplekey = resamplekey
 
         self._offset = to_offset(rule)
-        if self._offset.rule_code not in ["A-DEC", "M", "D", "H", "T", "S"]:
+
+        if self._offset.rule_code not in ["A-DEC", "M", "ME", "D", "H", "h", "T", "min", "S", "s"]:
             raise ValueError("rule code {} is not supported".format(self._offset.rule_code))
         if not getattr(self._offset, "n") > 0:
             raise ValueError("rule offset must be positive")
 
         if closed is None:
-            self._closed = "right" if self._offset.rule_code in ["A-DEC", "M"] else "left"
+            self._closed = "right" if self._offset.rule_code in ["A-DEC", "M", "ME"] else "left"
         elif closed in ["left", "right"]:
             self._closed = closed
         else:
             raise ValueError("invalid closed: '{}'".format(closed))
 
         if label is None:
-            self._label = "right" if self._offset.rule_code in ["A-DEC", "M"] else "left"
+            self._label = "right" if self._offset.rule_code in ["A-DEC", "M", "ME"] else "left"
         elif label in ["left", "right"]:
             self._label = label
         else:
@@ -184,7 +185,7 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
                 )
             )
 
-        elif rule_code == "M":
+        elif rule_code in ["ME", "M"]:
             assert (
                 origin.is_month_end
                 and origin.hour == 0
@@ -264,8 +265,15 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
 
                 ret = F.when(edge_cond, edge_label).otherwise(non_edge_label)
 
-        elif rule_code in ["H", "T", "S"]:
-            unit_mapping = {"H": "HOUR", "T": "MINUTE", "S": "SECOND"}
+        elif rule_code in ["h", "min", "s", "H", "T", "S"]:
+            unit_mapping = {
+                "h": "HOUR",
+                "min": "MINUTE",
+                "s": "SECOND",
+                "H": "HOUR",
+                "T": "MINUTE",
+                "S": "SECOND",
+            }
             unit_str = unit_mapping[rule_code]
 
             truncated_ts_scol = F.date_trunc(unit_str, ts_scol)
@@ -274,10 +282,10 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
             diff = timestampdiff(unit_str, origin_scol, truncated_ts_scol)
             mod = F.lit(0) if n == 1 else (diff % F.lit(n))
 
-            if rule_code == "H":
+            if rule_code in ["h", "H"]:
                 assert origin.minute == 0 and origin.second == 0
                 edge_cond = (mod == 0) & (F.minute(ts_scol) == 0) & (F.second(ts_scol) == 0)
-            elif rule_code == "T":
+            elif rule_code in ["min", "T"]:
                 assert origin.second == 0
                 edge_cond = (mod == 0) & (F.second(ts_scol) == 0)
             else:

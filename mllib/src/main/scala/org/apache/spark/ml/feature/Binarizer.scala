@@ -29,6 +29,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Binarize a column of continuous features given a threshold.
@@ -104,9 +105,11 @@ final class Binarizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     val (inputColNames, outputColNames, tds) =
       if (isSet(inputCols)) {
         if (isSet(thresholds)) {
-          ($(inputCols).toSeq, $(outputCols).toSeq, $(thresholds).toSeq)
+          ($(inputCols).toImmutableArraySeq,
+            $(outputCols).toImmutableArraySeq, $(thresholds).toImmutableArraySeq)
         } else {
-          ($(inputCols).toSeq, $(outputCols).toSeq, Seq.fill($(inputCols).length)($(threshold)))
+          ($(inputCols).toImmutableArraySeq,
+            $(outputCols).toImmutableArraySeq, Seq.fill($(inputCols).length)($(threshold)))
         }
       } else {
         (Seq($(inputCol)), Seq($(outputCol)), Seq($(threshold)))
@@ -185,7 +188,7 @@ final class Binarizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     }
 
     val (inputColNames, outputColNames) = if (isSet(inputCols)) {
-      ($(inputCols).toSeq, $(outputCols).toSeq)
+      ($(inputCols).toImmutableArraySeq, $(outputCols).toImmutableArraySeq)
     } else {
       (Seq($(inputCol)), Seq($(outputCol)))
     }

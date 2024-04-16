@@ -192,9 +192,9 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter {
 
     // verify whether the earliest file has been deleted
     val rolledOverFiles = allGeneratedFiles.filter { _ != testFile.toString }.toArray.sorted
-    logInfo(s"All rolled over files generated:${rolledOverFiles.size}\n" +
+    logInfo(s"All rolled over files generated:${rolledOverFiles.length}\n" +
       rolledOverFiles.mkString("\n"))
-    assert(rolledOverFiles.size > 2)
+    assert(rolledOverFiles.length > 2)
     val earliestRolledOverFile = rolledOverFiles.head
     val existingRolledOverFiles = RollingFileAppender.getSortedRolledOverFiles(
       testFile.getParentFile.toString, testFile.getName).map(_.toString)

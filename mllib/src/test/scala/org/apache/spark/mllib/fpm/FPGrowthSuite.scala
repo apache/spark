@@ -172,7 +172,7 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext {
       .generateAssociationRules(0.9)
       .collect()
 
-    assert(rules.size === 23)
+    assert(rules.length === 23)
     assert(rules.count(rule => rule.confidence ~= 1.0D absTol 1e-6) == 23)
   }
 

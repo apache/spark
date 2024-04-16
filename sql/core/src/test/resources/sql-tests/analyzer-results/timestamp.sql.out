@@ -247,7 +247,7 @@ select typeof(current_date), typeof(current_timestamp) from ttf1
 -- !query analysis
 Project [typeof(current_date#x) AS typeof(current_date)#x, typeof(current_timestamp#x) AS typeof(current_timestamp)#x]
 +- SubqueryAlias ttf1
-   +- View (`ttf1`, [current_date#x,current_timestamp#x])
+   +- View (`ttf1`, [current_date#x, current_timestamp#x])
       +- Project [cast(current_date#x as int) AS current_date#x, cast(current_timestamp#x as int) AS current_timestamp#x]
          +- Project [current_date#x, current_timestamp#x]
             +- SubqueryAlias ttf1
@@ -558,7 +558,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"2011-11-11 11:11:10\"",
     "inputType" : "\"STRING\"",
-    "paramIndex" : "2",
+    "paramIndex" : "second",
     "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
     "sqlExpr" : "\"(TIMESTAMP '2011-11-11 11:11:11' - 2011-11-11 11:11:10)\""
   },
@@ -582,7 +582,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"2011-11-11 11:11:11\"",
     "inputType" : "\"STRING\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
     "sqlExpr" : "\"(2011-11-11 11:11:11 - TIMESTAMP '2011-11-11 11:11:10')\""
   },
@@ -626,7 +626,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"str\"",
     "inputType" : "\"STRING\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
     "sqlExpr" : "\"(str - TIMESTAMP '2011-11-11 11:11:11')\""
   },
@@ -650,7 +650,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"str\"",
     "inputType" : "\"STRING\"",
-    "paramIndex" : "2",
+    "paramIndex" : "second",
     "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
     "sqlExpr" : "\"(TIMESTAMP '2011-11-11 11:11:11' - str)\""
   },

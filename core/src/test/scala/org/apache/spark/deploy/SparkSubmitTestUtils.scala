@@ -42,7 +42,8 @@ trait SparkSubmitTestUtils extends SparkFunSuite with TimeLimits {
       args: Seq[String],
       sparkHomeOpt: Option[String] = None,
       timeout: Span = defaultSparkSubmitTimeout,
-      isSparkTesting: Boolean = true): Unit = {
+      isSparkTesting: Boolean = true,
+      expectFailure: Boolean = false): Int = {
     val sparkHome = sparkHomeOpt.getOrElse(
       sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!")))
     val history = ArrayBuffer.empty[String]
@@ -77,7 +78,7 @@ trait SparkSubmitTestUtils extends SparkFunSuite with TimeLimits {
 
     try {
       val exitCode = failAfter(timeout) { process.waitFor() }
-      if (exitCode != 0) {
+      if (exitCode != 0 && !expectFailure) {
         // include logs in output. Note that logging is async and may not have completed
         // at the time this exception is raised
         Thread.sleep(1000)
@@ -90,6 +91,7 @@ trait SparkSubmitTestUtils extends SparkFunSuite with TimeLimits {
            """.stripMargin
         }
       }
+      exitCode
     } catch {
       case to: TestFailedDueToTimeoutException =>
         val historyLog = history.mkString("\n")

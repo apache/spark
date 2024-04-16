@@ -18,8 +18,10 @@
 package org.apache.spark.sql.connect.service
 
 import java.util.concurrent.{Executors, ScheduledExecutorService, TimeUnit}
+import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
+import scala.concurrent.duration.FiniteDuration
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
@@ -29,6 +31,7 @@ import org.apache.spark.{SparkEnv, SparkSQLException}
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.config.Connect.{CONNECT_EXECUTE_MANAGER_ABANDONED_TOMBSTONES_SIZE, CONNECT_EXECUTE_MANAGER_DETACHED_TIMEOUT, CONNECT_EXECUTE_MANAGER_MAINTENANCE_INTERVAL}
+import org.apache.spark.util.ThreadUtils
 
 // Unique key identifying execution by combination of user, session and operation id
 case class ExecuteKey(userId: String, sessionId: String, operationId: String)
@@ -42,6 +45,7 @@ case class ExecuteKey(userId: String, sessionId: String, operationId: String)
 private[connect] class SparkConnectExecutionManager() extends Logging {
 
   /** Hash table containing all current executions. Guarded by executionsLock. */
+  @GuardedBy("executionsLock")
   private val executions: mutable.HashMap[ExecuteKey, ExecuteHolder] =
     new mutable.HashMap[ExecuteKey, ExecuteHolder]()
   private val executionsLock = new Object
@@ -53,7 +57,8 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
     .build[ExecuteKey, ExecuteInfo]()
 
   /** None if there are no executions. Otherwise, the time when the last execution was removed. */
-  private var lastExecutionTime: Option[Long] = Some(System.currentTimeMillis())
+  @GuardedBy("executionsLock")
+  private var lastExecutionTimeMs: Option[Long] = Some(System.currentTimeMillis())
 
   /** Executor for the periodic maintenance */
   private var scheduledExecutor: Option[ScheduledExecutorService] = None
@@ -62,8 +67,15 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
    * Create a new ExecuteHolder and register it with this global manager and with its session.
    */
   private[connect] def createExecuteHolder(request: proto.ExecutePlanRequest): ExecuteHolder = {
+    val previousSessionId = request.hasClientObservedServerSideSessionId match {
+      case true => Some(request.getClientObservedServerSideSessionId)
+      case false => None
+    }
     val sessionHolder = SparkConnectService
-      .getOrCreateIsolatedSession(request.getUserContext.getUserId, request.getSessionId)
+      .getOrCreateIsolatedSession(
+        request.getUserContext.getUserId,
+        request.getSessionId,
+        previousSessionId)
     val executeHolder = new ExecuteHolder(request, sessionHolder)
     executionsLock.synchronized {
       // Check if the operation already exists, both in active executions, and in the graveyard
@@ -82,7 +94,7 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
       }
       sessionHolder.addExecuteHolder(executeHolder)
       executions.put(executeHolder.key, executeHolder)
-      lastExecutionTime = None
+      lastExecutionTimeMs = None
       logInfo(s"ExecuteHolder ${executeHolder.key} is created.")
     }
 
@@ -100,18 +112,26 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
     executionsLock.synchronized {
       executeHolder = executions.remove(key)
       executeHolder.foreach { e =>
+        // Put into abandonedTombstones under lock, so that if it's accessed it will end up
+        // with INVALID_HANDLE.OPERATION_ABANDONED error.
         if (abandoned) {
           abandonedTombstones.put(key, e.getExecuteInfo)
         }
         e.sessionHolder.removeExecuteHolder(e.operationId)
       }
       if (executions.isEmpty) {
-        lastExecutionTime = Some(System.currentTimeMillis())
+        lastExecutionTimeMs = Some(System.currentTimeMillis())
       }
       logInfo(s"ExecuteHolder $key is removed.")
     }
     // close the execution outside the lock
-    executeHolder.foreach(_.close())
+    executeHolder.foreach { e =>
+      e.close()
+      if (abandoned) {
+        // Update in abandonedTombstones: above it wasn't yet updated with closedTime etc.
+        abandonedTombstones.put(key, e.getExecuteInfo)
+      }
+    }
   }
 
   private[connect] def getExecuteHolder(key: ExecuteKey): Option[ExecuteHolder] = {
@@ -142,7 +162,7 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
    */
   def listActiveExecutions: Either[Long, Seq[ExecuteInfo]] = executionsLock.synchronized {
     if (executions.isEmpty) {
-      Left(lastExecutionTime.get)
+      Left(lastExecutionTimeMs.get)
     } else {
       Right(executions.values.map(_.getExecuteInfo).toBuffer.toSeq)
     }
@@ -153,19 +173,19 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
    * cache, and the tombstones will be eventually removed.
    */
   def listAbandonedExecutions: Seq[ExecuteInfo] = {
-    abandonedTombstones.asMap.asScala.values.toBuffer.toSeq
+    abandonedTombstones.asMap.asScala.values.toSeq
   }
 
   private[connect] def shutdown(): Unit = executionsLock.synchronized {
     scheduledExecutor.foreach { executor =>
-      executor.shutdown()
-      executor.awaitTermination(1, TimeUnit.MINUTES)
+      ThreadUtils.shutdown(executor, FiniteDuration(1, TimeUnit.MINUTES))
     }
     scheduledExecutor = None
+    // note: this does not cleanly shut down the executions, but the server is shutting down.
     executions.clear()
     abandonedTombstones.invalidateAll()
-    if (!lastExecutionTime.isDefined) {
-      lastExecutionTime = Some(System.currentTimeMillis())
+    if (lastExecutionTimeMs.isEmpty) {
+      lastExecutionTimeMs = Some(System.currentTimeMillis())
     }
   }
 
@@ -175,18 +195,18 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
    * removes them after a timeout.
    */
   private def schedulePeriodicChecks(): Unit = executionsLock.synchronized {
-    val interval = SparkEnv.get.conf.get(CONNECT_EXECUTE_MANAGER_MAINTENANCE_INTERVAL).toLong
-    val timeout = SparkEnv.get.conf.get(CONNECT_EXECUTE_MANAGER_DETACHED_TIMEOUT).toLong
-
     scheduledExecutor match {
       case Some(_) => // Already running.
       case None =>
+        val interval = SparkEnv.get.conf.get(CONNECT_EXECUTE_MANAGER_MAINTENANCE_INTERVAL)
         logInfo(s"Starting thread for cleanup of abandoned executions every $interval ms")
         scheduledExecutor = Some(Executors.newSingleThreadScheduledExecutor())
         scheduledExecutor.get.scheduleAtFixedRate(
           () => {
-            try periodicMaintenance(timeout)
-            catch {
+            try {
+              val timeout = SparkEnv.get.conf.get(CONNECT_EXECUTE_MANAGER_DETACHED_TIMEOUT)
+              periodicMaintenance(timeout)
+            } catch {
               case NonFatal(ex) => logWarning("Unexpected exception in periodic task", ex)
             }
           },
@@ -206,7 +226,7 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
       val nowMs = System.currentTimeMillis()
 
       executions.values.foreach { executeHolder =>
-        executeHolder.lastAttachedRpcTime match {
+        executeHolder.lastAttachedRpcTimeMs match {
           case Some(detached) =>
             if (detached + timeout <= nowMs) {
               toRemove += executeHolder
@@ -215,13 +235,11 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
         }
       }
     }
-    if (!toRemove.isEmpty) {
-      // .. and remove them.
-      toRemove.foreach { executeHolder =>
-        val info = executeHolder.getExecuteInfo
-        logInfo(s"Found execution $info that was abandoned and expired and will be removed.")
-        removeExecuteHolder(executeHolder.key, abandoned = true)
-      }
+    // .. and remove them.
+    toRemove.foreach { executeHolder =>
+      val info = executeHolder.getExecuteInfo
+      logInfo(s"Found execution $info that was abandoned and expired and will be removed.")
+      removeExecuteHolder(executeHolder.key, abandoned = true)
     }
     logInfo("Finished periodic run of SparkConnectExecutionManager maintenance.")
   }
@@ -236,7 +254,7 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
     executions.values.foreach(_.interruptGrpcResponseSenders())
   }
 
-  private[connect] def listExecuteHolders = executionsLock.synchronized {
-    executions.values.toBuffer.toSeq
+  private[connect] def listExecuteHolders: Seq[ExecuteHolder] = executionsLock.synchronized {
+    executions.values.toSeq
   }
 }

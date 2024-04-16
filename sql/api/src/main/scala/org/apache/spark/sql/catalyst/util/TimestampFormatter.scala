@@ -29,6 +29,7 @@ import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.time.FastDateFormat
 
+import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.{LegacyDateFormat, LENIENT_SIMPLE_DATE_FORMAT}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime._
@@ -90,7 +91,7 @@ sealed trait TimestampFormatter extends Serializable {
   @throws(classOf[DateTimeException])
   @throws(classOf[IllegalStateException])
   def parseWithoutTimeZone(s: String, allowTimeZone: Boolean): Long =
-    throw new IllegalStateException(
+    throw SparkException.internalError(
       s"The method `parseWithoutTimeZone(s: String, allowTimeZone: Boolean)` should be " +
         "implemented in the formatter of timestamp without time zone")
 
@@ -137,7 +138,7 @@ sealed trait TimestampFormatter extends Serializable {
 
   @throws(classOf[IllegalStateException])
   def format(localDateTime: LocalDateTime): String =
-    throw new IllegalStateException(
+    throw SparkException.internalError(
       s"The method `format(localDateTime: LocalDateTime)` should be implemented in the formatter " +
         "of timestamp without time zone")
 
@@ -407,17 +408,23 @@ class LegacyFastTimestampFormatter(
   override def parse(s: String): Long = {
     cal.clear() // Clear the calendar because it can be re-used many times
     if (!fastDateFormat.parse(s, new ParsePosition(0), cal)) {
-      throw new IllegalArgumentException(s"'$s' is an invalid timestamp")
+      throw new SparkIllegalArgumentException(
+        errorClass = "_LEGACY_ERROR_TEMP_3260",
+        messageParameters = Map("s" -> s))
     }
     extractMicros(cal)
   }
 
   override def parseOptional(s: String): Option[Long] = {
     cal.clear() // Clear the calendar because it can be re-used many times
-    if (fastDateFormat.parse(s, new ParsePosition(0), cal)) {
-      Some(extractMicros(cal))
-    } else {
-      None
+    try {
+      if (fastDateFormat.parse(s, new ParsePosition(0), cal)) {
+        Some(extractMicros(cal))
+      } else {
+        None
+      }
+    } catch {
+      case NonFatal(_) => None
     }
   }
 

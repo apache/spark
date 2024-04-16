@@ -32,7 +32,8 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.scalatest.Assertions._
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.PATH
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.util.Utils
 
@@ -45,7 +46,7 @@ object MasterFailureTest extends Logging {
 
   def main(args: Array[String]): Unit = {
     // scalastyle:off println
-    if (args.size < 2) {
+    if (args.length < 2) {
       println(
         "Usage: MasterFailureTest <local/HDFS directory> <# batches> " +
           "[<batch size in milliseconds>]")
@@ -53,7 +54,7 @@ object MasterFailureTest extends Logging {
     }
     val directory = args(0)
     val numBatches = args(1).toInt
-    val batchDuration = if (args.size > 2) Milliseconds(args(2).toInt) else Seconds(1)
+    val batchDuration = if (args.length > 2) Milliseconds(args(2).toInt) else Seconds(1)
 
     println("\n\n========================= MAP TEST =========================\n\n")
     testMap(directory, numBatches, batchDuration)
@@ -392,7 +393,7 @@ class FileGeneratingThread(input: Seq[String], testDir: Path, interval: Long)
           }
         }
         if (!done) {
-          logError("Could not generate file " + hadoopFile)
+          logError(log"Could not generate file ${MDC(PATH, hadoopFile)}")
         } else {
           logInfo("Generated file " + hadoopFile + " at " + System.currentTimeMillis)
         }

@@ -22,6 +22,7 @@ import java.util.regex.PatternSyntaxException
 
 import scala.util.matching.Regex
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.network.util.{ByteUnit, JavaUtils}
 import org.apache.spark.util.Utils
 
@@ -106,6 +107,24 @@ private[spark] class TypedConfigBuilder[T](
     transform { v =>
       if (!validator(v)) {
         throw new IllegalArgumentException(s"'$v' in ${parent.key} is invalid. $errorMsg")
+      }
+      v
+    }
+  }
+
+  /** Checks if the user-provided value for the config matches the validator.
+   * If it doesn't match, raise Spark's exception with the given error class. */
+  def checkValue(
+      validator: T => Boolean,
+      errorClass: String,
+      parameters: T => Map[String, String]): TypedConfigBuilder[T] = {
+    transform { v =>
+      if (!validator(v)) {
+        throw new SparkIllegalArgumentException(
+          errorClass = "INVALID_CONF_VALUE." + errorClass,
+          messageParameters = parameters(v) ++ Map(
+            "confValue" -> v.toString,
+            "confName" -> parent.key))
       }
       v
     }

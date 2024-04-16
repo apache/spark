@@ -4,8 +4,6 @@ cache
 .gitattributes
 .project
 .classpath
-.mima-excludes
-.generated-mima-excludes
 .generated-mima-class-excludes
 .generated-mima-member-excludes
 .rat-excludes
@@ -48,15 +46,7 @@ jquery.mustache.js
 pyspark-coverage-site/*
 cloudpickle/*
 join.py
-SparkExprTyper.scala
 SparkILoop.scala
-SparkILoopInit.scala
-SparkIMain.scala
-SparkImports.scala
-SparkJLineCompletion.scala
-SparkJLineReader.scala
-SparkMemberHandlers.scala
-SparkReplReporter.scala
 sbt
 sbt-launch-lib.bash
 plugins.sbt
@@ -132,7 +122,6 @@ flights_tiny.txt.1
 over1k
 over10k
 exported_table/*
-ansible-for-test-node/*
 node_modules
 spark-events-broken/*
 SqlBaseLexer.tokens
@@ -146,3 +135,7 @@ TimSort.java
 xml-resources/*
 loose_version.py
 people.xml
+ui-test/package.json
+ui-test/package-lock.json
+core/src/main/resources/org/apache/spark/ui/static/package.json
+.*\.har

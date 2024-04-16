@@ -26,6 +26,10 @@ import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.ByteString
+import com.google.rpc.ErrorInfo
+import io.grpc.Status.Code
+import io.grpc.StatusRuntimeException
+import io.grpc.protobuf.StatusProto
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto
@@ -371,9 +375,15 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
       val name = "/absolute/path/"
       val request = createDummyArtifactRequests(name)
       request.foreach { req =>
-        intercept[IllegalArgumentException] {
+        val e = intercept[StatusRuntimeException] {
           handler.onNext(req)
         }
+        assert(e.getStatus.getCode == Code.INTERNAL)
+        val statusProto = StatusProto.fromThrowable(e)
+        assert(statusProto.getDetailsCount == 1)
+        val details = statusProto.getDetails(0)
+        val info = details.unpack(classOf[ErrorInfo])
+        assert(info.getReason.contains("java.lang.IllegalArgumentException"))
       }
       handler.onCompleted()
     } finally {
@@ -388,9 +398,15 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
       val names = Seq("..", "../sibling", "../nephew/directory", "a/../../b", "x/../y/../..")
       val request = names.flatMap(createDummyArtifactRequests)
       request.foreach { req =>
-        intercept[IllegalArgumentException] {
+        val e = intercept[StatusRuntimeException] {
           handler.onNext(req)
         }
+        assert(e.getStatus.getCode == Code.INTERNAL)
+        val statusProto = StatusProto.fromThrowable(e)
+        assert(statusProto.getDetailsCount == 1)
+        val details = statusProto.getDetails(0)
+        val info = details.unpack(classOf[ErrorInfo])
+        assert(info.getReason.contains("java.lang.IllegalArgumentException"))
       }
       handler.onCompleted()
     } finally {

@@ -62,7 +62,6 @@ from pyspark.sql.types import (
     DoubleType,
     FloatType,
     IntegerType,
-    IntegralType,
     LongType,
     NumericType,
     Row,
@@ -393,8 +392,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     ):
         assert data is not None
 
-        self._anchor: DataFrame
-        self._col_label: Label
+        self._anchor: DataFrame  # type: ignore[annotation-unchecked]
+        self._col_label: Label  # type: ignore[annotation-unchecked]
         if isinstance(data, DataFrame):
             assert dtype is None
             assert name is None
@@ -703,9 +702,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
     # create accessor for pandas-on-Spark specific methods.
     pandas_on_spark = CachedAccessor("pandas_on_spark", PandasOnSparkSeriesMethods)
-
-    # keep the name "koalas" for backward compatibility.
-    koalas = CachedAccessor("koalas", PandasOnSparkSeriesMethods)
 
     # Comparison Operators
     def eq(self, other: Any) -> "Series":
@@ -1635,7 +1631,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         >>> from collections import OrderedDict, defaultdict
         >>> s.to_dict(OrderedDict)
-        OrderedDict([(0, 1), (1, 2), (2, 3), (3, 4)])
+        OrderedDict(...)
 
         >>> dd = defaultdict(list)
         >>> s.to_dict(dd)  # doctest: +ELLIPSIS
@@ -2235,6 +2231,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         limit_direction: Optional[str] = None,
         limit_area: Optional[str] = None,
     ) -> "Series":
+        if self.dtype == "object":
+            warnings.warn(
+                "Series.interpolate with object dtype is deprecated and will raise in a "
+                "future version. Convert to a specific numeric type before interpolating.",
+                FutureWarning,
+            )
         if method not in ["linear"]:
             raise NotImplementedError("interpolate currently works only for method='linear'")
         if (limit is not None) and (not limit > 0):
@@ -5868,7 +5870,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                     # then return monotonically_increasing_id. This will let max by
                     # to return last index value, which is the behaviour of pandas
                     else spark_column.isNotNull(),
-                    monotonically_increasing_id_column,
+                    F.col(monotonically_increasing_id_column),
                 ),
             )
             for index in where
@@ -6976,36 +6978,17 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         return psser._cum(F.sum, skipna, part_cols)
 
     def _cumprod(self, skipna: bool, part_cols: Sequence["ColumnOrName"] = ()) -> "Series":
-        if isinstance(self.spark.data_type, BooleanType):
-            scol = self._cum(
-                lambda scol: F.min(F.coalesce(scol, F.lit(True))), skipna, part_cols
-            ).spark.column.cast(LongType())
-        elif isinstance(self.spark.data_type, NumericType):
-            num_zeros = self._cum(
-                lambda scol: F.sum(F.when(scol == 0, 1).otherwise(0)), skipna, part_cols
-            ).spark.column
-            num_negatives = self._cum(
-                lambda scol: F.sum(F.when(scol < 0, 1).otherwise(0)), skipna, part_cols
-            ).spark.column
-            sign = F.when(num_negatives % 2 == 0, 1).otherwise(-1)
-
-            abs_prod = F.exp(
-                self._cum(lambda scol: F.sum(F.log(F.abs(scol))), skipna, part_cols).spark.column
-            )
-
-            scol = F.when(num_zeros > 0, 0).otherwise(sign * abs_prod)
-
-            if isinstance(self.spark.data_type, IntegralType):
-                scol = F.round(scol).cast(LongType())
-        else:
+        psser = self
+        if isinstance(psser.spark.data_type, BooleanType):
+            psser = psser.spark.transform(lambda scol: scol.cast(LongType()))
+        elif not isinstance(psser.spark.data_type, NumericType):
             raise TypeError(
                 "Could not convert {} ({}) to numeric".format(
-                    spark_type_to_pandas_dtype(self.spark.data_type),
-                    self.spark.data_type.simpleString(),
+                    spark_type_to_pandas_dtype(psser.spark.data_type),
+                    psser.spark.data_type.simpleString(),
                 )
             )
-
-        return self._with_new_scol(scol)
+        return psser._cum(lambda c: SF.product(c, skipna), skipna, part_cols)
 
     # ----------------------------------------------------------------------
     # Accessor Methods
@@ -7109,15 +7092,15 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         ----------
         rule : str
             The offset string or object representing target conversion.
-            Currently, supported units are {'Y', 'A', 'M', 'D', 'H',
-            'T', 'MIN', 'S'}.
+            Currently, supported units are {'YE', 'A', 'ME', 'D', 'h',
+            'min', 'MIN', 's'}.
         closed : {{'right', 'left'}}, default None
             Which side of bin interval is closed. The default is 'left'
-            for all frequency offsets except for 'A', 'Y' and 'M' which all
+            for all frequency offsets except for 'A', 'YE' and 'ME' which all
             have a default of 'right'.
         label : {{'right', 'left'}}, default None
             Which bin edge label to label bucket with. The default is 'left'
-            for all frequency offsets except for 'A', 'Y' and 'M' which all
+            for all frequency offsets except for 'A', 'YE' and 'ME' which all
             have a default of 'right'.
         on : Series, optional
             For a DataFrame, column to use instead of index for resampling.

@@ -27,7 +27,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.hadoop.hive.ql.io.sarg.{PredicateLeaf, SearchArgument, SearchArgumentImpl}
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgumentFactory.newBuilder
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Row}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
@@ -70,8 +70,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
           s"${o.pushedFilters.mkString("pushedFilters(", ", ", ")")}")
         checker(maybeFilter.get)
 
-      case _ =>
-        throw new AnalysisException("Can not match OrcTable in the query.")
+      case _ => assert(false, "Can not match OrcTable in the query.")
     }
   }
 
@@ -704,10 +703,12 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
                |CREATE TABLE $tableName (A LONG) USING ORC LOCATION '$tableDir1'
              """.stripMargin)
 
-          val e = intercept[SparkException] {
+          val ex = intercept[SparkException] {
             sql(s"select A from $tableName where A < 0").collect()
           }
-          assert(e.getCause.isInstanceOf[RuntimeException] && e.getCause.getMessage.contains(
+          assert(ex.getErrorClass.startsWith("FAILED_READ_FILE"))
+          assert(ex.getCause.isInstanceOf[SparkRuntimeException])
+          assert(ex.getCause.getMessage.contains(
             """Found duplicate field(s) "A": [A, a] in case-insensitive mode"""))
         }
       }

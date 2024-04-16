@@ -133,8 +133,7 @@ trait OrcTest extends QueryTest with FileBasedDataSourceTest with BeforeAndAfter
             s"${o.pushedFilters.mkString("pushedFilters(", ", ", ")")}")
         }
 
-      case _ =>
-        throw new AnalysisException("Can not match OrcTable in the query.")
+      case _ => assert(false, "Can not match OrcTable in the query.")
     }
   }
 

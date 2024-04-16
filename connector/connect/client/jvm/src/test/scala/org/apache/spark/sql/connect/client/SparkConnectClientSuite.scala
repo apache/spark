@@ -26,10 +26,13 @@ import io.grpc.{CallOptions, Channel, ClientCall, ClientInterceptor, MethodDescr
 import io.grpc.netty.NettyServerBuilder
 import io.grpc.stub.StreamObserver
 import org.scalatest.BeforeAndAfterEach
+import org.scalatest.concurrent.Eventually
+import org.scalatest.concurrent.Futures.timeout
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, AnalyzePlanRequest, AnalyzePlanResponse, ArtifactStatusesRequest, ArtifactStatusesResponse, ExecutePlanRequest, ExecutePlanResponse, SparkConnectServiceGrpc}
+import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, AnalyzePlanRequest, AnalyzePlanResponse, ArtifactStatusesRequest, ArtifactStatusesResponse, ExecutePlanRequest, ExecutePlanResponse, Relation, SparkConnectServiceGrpc, SQL}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 import org.apache.spark.sql.test.ConnectFunSuite
@@ -119,7 +122,7 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     client = SparkConnectClient
       .builder()
       .connectionString(s"sc://localhost:${server.getPort}/;use_ssl=true")
-      .retryPolicy(GrpcRetryHandler.RetryPolicy(maxRetries = 0))
+      .retryPolicy(RetryPolicy(maxRetries = Some(0), canRetry = _ => false, name = "TestPolicy"))
       .build()
 
     val request = AnalyzePlanRequest.newBuilder().setSessionId("abc123").build()
@@ -208,23 +211,36 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     }
   }
 
-  for ((name, constructor) <- GrpcExceptionConverter.errorFactory) {
-    test(s"error framework parameters - $name") {
-      val testParams = GrpcExceptionConverter.ErrorParams(
-        message = "Found duplicate keys `abc`",
-        cause = None,
-        errorClass = Some("DUPLICATE_KEY"),
-        messageParameters = Map("keyColumn" -> "`abc`"),
-        queryContext = Array.empty)
-      val error = constructor(testParams)
-      assert(error.getMessage.contains(testParams.message))
-      assert(error.getCause == null)
-      error match {
-        case sparkThrowable: SparkThrowable =>
-          assert(sparkThrowable.getErrorClass == testParams.errorClass.get)
-          assert(sparkThrowable.getMessageParameters.asScala == testParams.messageParameters)
-          assert(sparkThrowable.getQueryContext.isEmpty)
-        case _ =>
+  test("error framework parameters") {
+    val errors = GrpcExceptionConverter.errorFactory
+    for ((name, constructor) <- errors if name.startsWith("org.apache.spark")) {
+      withClue(name) {
+        val testParams = GrpcExceptionConverter.ErrorParams(
+          message = "",
+          cause = None,
+          errorClass = Some("DUPLICATE_KEY"),
+          messageParameters = Map("keyColumn" -> "`abc`"),
+          queryContext = Array.empty)
+        val error = constructor(testParams).asInstanceOf[Throwable with SparkThrowable]
+        assert(error.getMessage.contains(testParams.message))
+        assert(error.getCause == null)
+        assert(error.getErrorClass == testParams.errorClass.get)
+        assert(error.getMessageParameters.asScala == testParams.messageParameters)
+        assert(error.getQueryContext.isEmpty)
+      }
+    }
+
+    for ((name, constructor) <- errors if !name.startsWith("org.apache.spark")) {
+      withClue(name) {
+        val testParams = GrpcExceptionConverter.ErrorParams(
+          message = "Found duplicate keys `abc`",
+          cause = None,
+          errorClass = None,
+          messageParameters = Map.empty,
+          queryContext = Array.empty)
+        val error = constructor(testParams)
+        assert(error.getMessage.contains(testParams.message))
+        assert(error.getCause == null)
       }
     }
   }
@@ -294,7 +310,14 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
         assert(client.userAgent.contains("scala/"))
         assert(client.userAgent.contains("jvm/"))
         assert(client.userAgent.contains("os/"))
-      }))
+      }),
+    TestPackURI(
+      "sc://SPARK-47694:123/;grpc_max_message_size=1860",
+      isCorrect = true,
+      client => {
+        assert(client.configuration.grpcMaxMessageSize == 1860)
+      }),
+    TestPackURI("sc://SPARK-47694:123/;grpc_max_message_size=abc", isCorrect = false))
 
   private def checkTestPack(testPack: TestPackURI): Unit = {
     val client = SparkConnectClient.builder().connectionString(testPack.connectionString).build()
@@ -311,7 +334,7 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     }
   }
 
-  private class DummyFn(val e: Throwable, numFails: Int = 3) {
+  private class DummyFn(e: => Throwable, numFails: Int = 3) {
     var counter = 0
     def fn(): Int = {
       if (counter < numFails) {
@@ -333,9 +356,9 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
       }
 
       val dummyFn = new DummyFn(new StatusRuntimeException(Status.UNAVAILABLE), numFails = 100)
-      val retryHandler = new GrpcRetryHandler(GrpcRetryHandler.RetryPolicy(), sleep)
+      val retryHandler = new GrpcRetryHandler(RetryPolicy.defaultPolicies(), sleep)
 
-      assertThrows[StatusRuntimeException] {
+      assertThrows[RetriesExceeded] {
         retryHandler.retry {
           dummyFn.fn()
         }
@@ -347,8 +370,8 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
   test("SPARK-44275: retry actually retries") {
     val dummyFn = new DummyFn(new StatusRuntimeException(Status.UNAVAILABLE))
-    val retryPolicy = GrpcRetryHandler.RetryPolicy()
-    val retryHandler = new GrpcRetryHandler(retryPolicy)
+    val retryPolicies = RetryPolicy.defaultPolicies()
+    val retryHandler = new GrpcRetryHandler(retryPolicies, sleep = _ => {})
     val result = retryHandler.retry { dummyFn.fn() }
 
     assert(result == 42)
@@ -357,8 +380,8 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
   test("SPARK-44275: default retryException retries only on UNAVAILABLE") {
     val dummyFn = new DummyFn(new StatusRuntimeException(Status.ABORTED))
-    val retryPolicy = GrpcRetryHandler.RetryPolicy()
-    val retryHandler = new GrpcRetryHandler(retryPolicy)
+    val retryPolicies = RetryPolicy.defaultPolicies()
+    val retryHandler = new GrpcRetryHandler(retryPolicies, sleep = _ => {})
 
     assertThrows[StatusRuntimeException] {
       retryHandler.retry { dummyFn.fn() }
@@ -368,7 +391,7 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
   test("SPARK-44275: retry uses canRetry to filter exceptions") {
     val dummyFn = new DummyFn(new StatusRuntimeException(Status.UNAVAILABLE))
-    val retryPolicy = GrpcRetryHandler.RetryPolicy(canRetry = _ => false)
+    val retryPolicy = RetryPolicy(canRetry = _ => false, name = "TestPolicy")
     val retryHandler = new GrpcRetryHandler(retryPolicy)
 
     assertThrows[StatusRuntimeException] {
@@ -379,13 +402,204 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
   test("SPARK-44275: retry does not exceed maxRetries") {
     val dummyFn = new DummyFn(new StatusRuntimeException(Status.UNAVAILABLE))
-    val retryPolicy = GrpcRetryHandler.RetryPolicy(canRetry = _ => true, maxRetries = 1)
-    val retryHandler = new GrpcRetryHandler(retryPolicy)
+    val retryPolicy = RetryPolicy(canRetry = _ => true, maxRetries = Some(1), name = "TestPolicy")
+    val retryHandler = new GrpcRetryHandler(retryPolicy, sleep = _ => {})
 
-    assertThrows[StatusRuntimeException] {
+    assertThrows[RetriesExceeded] {
       retryHandler.retry { dummyFn.fn() }
     }
     assert(dummyFn.counter == 2)
+  }
+
+  def testPolicySpecificError(maxRetries: Int, status: Status): RetryPolicy = {
+    RetryPolicy(
+      maxRetries = Some(maxRetries),
+      name = s"Policy for ${status.getCode}",
+      canRetry = {
+        case e: StatusRuntimeException => e.getStatus.getCode == status.getCode
+        case _ => false
+      })
+  }
+
+  test("Test multiple policies") {
+    val policy1 = testPolicySpecificError(maxRetries = 2, status = Status.UNAVAILABLE)
+    val policy2 = testPolicySpecificError(maxRetries = 4, status = Status.INTERNAL)
+
+    // Tolerate 2 UNAVAILABLE errors and 4 INTERNAL errors
+
+    val errors = (List.fill(2)(Status.UNAVAILABLE) ++ List.fill(4)(Status.INTERNAL)).iterator
+
+    new GrpcRetryHandler(List(policy1, policy2), sleep = _ => {}).retry({
+      val e = errors.nextOption()
+      if (e.isDefined) {
+        throw e.get.asRuntimeException()
+      }
+    })
+
+    assert(!errors.hasNext)
+  }
+
+  test("Test multiple policies exceed") {
+    val policy1 = testPolicySpecificError(maxRetries = 2, status = Status.INTERNAL)
+    val policy2 = testPolicySpecificError(maxRetries = 4, status = Status.INTERNAL)
+
+    val errors = List.fill(10)(Status.INTERNAL).iterator
+    var countAttempted = 0
+
+    assertThrows[RetriesExceeded](
+      new GrpcRetryHandler(List(policy1, policy2), sleep = _ => {}).retry({
+        countAttempted += 1
+        val e = errors.nextOption()
+        if (e.isDefined) {
+          throw e.get.asRuntimeException()
+        }
+      }))
+
+    assert(countAttempted == 7)
+  }
+
+  test("ArtifactManager retries errors") {
+    var attempt = 0
+
+    startDummyServer(0)
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .interceptor(new ClientInterceptor {
+        override def interceptCall[ReqT, RespT](
+            methodDescriptor: MethodDescriptor[ReqT, RespT],
+            callOptions: CallOptions,
+            channel: Channel): ClientCall[ReqT, RespT] = {
+          attempt += 1;
+          if (attempt <= 3) {
+            throw Status.UNAVAILABLE.withDescription("").asRuntimeException()
+          }
+
+          channel.newCall(methodDescriptor, callOptions)
+        }
+      })
+      .build()
+
+    val session = SparkSession.builder().client(client).create()
+    val artifactFilePath = commonResourcePath.resolve("artifact-tests")
+    session.addArtifact(artifactFilePath.resolve("smallClassFile.class").toString)
+  }
+
+  private def buildPlan(query: String): proto.Plan = {
+    proto.Plan
+      .newBuilder()
+      .setRoot(Relation.newBuilder().setSql(SQL.newBuilder().setQuery(query)).build())
+      .build()
+  }
+
+  test("SPARK-45871: Client execute iterator.toSeq consumes the reattachable iterator") {
+    startDummyServer(0)
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .enableReattachableExecute()
+      .build()
+
+    val plan = buildPlan("select * from range(10000000)")
+    val iter = client.execute(plan)
+    val reattachableIter =
+      ExecutePlanResponseReattachableIterator.fromIterator(iter)
+    iter.toSeq
+    // In several places in SparkSession, we depend on `.toSeq` to consume and close the iterator.
+    // If this assertion fails, we need to double check the correctness of that.
+    // In scala 2.12 `s.c.TraversableOnce#toSeq` builds an `immutable.Stream`,
+    // which is a tail lazy structure and this would fail.
+    // In scala 2.13 `s.c.IterableOnceOps#toSeq` builds an `immutable.Seq` which is not
+    // lazy and will consume and close the iterator.
+    assert(reattachableIter.resultComplete)
+  }
+
+  test("SPARK-45871: Client execute iterator.foreach consumes the reattachable iterator") {
+    startDummyServer(0)
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .enableReattachableExecute()
+      .build()
+
+    val plan = buildPlan("select * from range(10000000)")
+    val iter = client.execute(plan)
+    val reattachableIter =
+      ExecutePlanResponseReattachableIterator.fromIterator(iter)
+    iter.foreach(_ => ())
+    assert(reattachableIter.resultComplete)
+  }
+
+  test("GRPC stub unary call throws error immediately") {
+    // Spark Connect error retry handling depends on the error being returned from the unary
+    // call immediately.
+    val channel = SparkConnectClient.Configuration(host = "ABC").createChannel()
+    val stub = proto.SparkConnectServiceGrpc.newBlockingStub(channel)
+    // The request is invalid, but it shouldn't even reach the server.
+    val request = proto.AnalyzePlanRequest.newBuilder().build()
+
+    // calling unary call immediately throws connection exception
+    val ex = intercept[StatusRuntimeException] {
+      stub.analyzePlan(request)
+    }
+    assert(ex.getMessage.contains("UNAVAILABLE: Unable to resolve host ABC"))
+  }
+
+  test("GRPC stub server streaming call throws error on first next() / hasNext()") {
+    // Spark Connect error retry handling depends on the error being returned from the response
+    // iterator and not immediately upon iterator creation.
+    val channel = SparkConnectClient.Configuration(host = "ABC").createChannel()
+    val stub = proto.SparkConnectServiceGrpc.newBlockingStub(channel)
+    // The request is invalid, but it shouldn't even reach the server.
+    val request = proto.ExecutePlanRequest.newBuilder().build()
+
+    // creating the iterator doesn't throw exception
+    val iter = stub.executePlan(request)
+    // error is thrown only when the iterator is open.
+    val ex = intercept[StatusRuntimeException] {
+      iter.hasNext()
+    }
+    assert(ex.getMessage.contains("UNAVAILABLE: Unable to resolve host ABC"))
+  }
+
+  test("GRPC stub client streaming call throws error on first client request sent") {
+    // Spark Connect error retry handling depends on the error being returned from the response
+    // iterator and not immediately upon iterator creation or request being sent.
+    val channel = SparkConnectClient.Configuration(host = "ABC").createChannel()
+    val stub = proto.SparkConnectServiceGrpc.newStub(channel)
+
+    var onNextResponse: Option[proto.AddArtifactsResponse] = None
+    var onErrorThrowable: Option[Throwable] = None
+    var onCompletedCalled: Boolean = false
+
+    val responseObserver = new StreamObserver[proto.AddArtifactsResponse] {
+      override def onNext(value: proto.AddArtifactsResponse): Unit = {
+        onNextResponse = Some(value)
+      }
+
+      override def onError(t: Throwable): Unit = {
+        onErrorThrowable = Some(t)
+      }
+
+      override def onCompleted(): Unit = {
+        onCompletedCalled = false
+      }
+    }
+
+    // calling client streaming call doesn't throw exception
+    val observer = stub.addArtifacts(responseObserver)
+
+    // but exception will get returned on the responseObserver.
+    Eventually.eventually(timeout(30.seconds)) {
+      assert(onNextResponse == None)
+      assert(onErrorThrowable.isDefined)
+      assert(onErrorThrowable.get.getMessage.contains("UNAVAILABLE: Unable to resolve host ABC"))
+      assert(onCompletedCalled == false)
+    }
+
+    // despite that, requests can be sent to the request observer without error being thrown.
+    observer.onNext(proto.AddArtifactsRequest.newBuilder().build())
+    observer.onCompleted()
   }
 }
 

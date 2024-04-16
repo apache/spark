@@ -26,11 +26,12 @@ import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 import org.apache.orc.TypeDescription
 
 import org.apache.spark.TestUtils
+import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.vectorized.ConstantColumnVector
+import org.apache.spark.sql.execution.vectorized.{ConstantColumnVector, OffHeapColumnVector}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -53,7 +54,7 @@ class OrcColumnarBatchReaderSuite extends QueryTest with SharedSparkSession {
         requestedDataColIds: Array[Int],
         requestedPartitionColIds: Array[Int],
         resultFields: Array[StructField]): OrcColumnarBatchReader = {
-      val reader = new OrcColumnarBatchReader(4096)
+      val reader = new OrcColumnarBatchReader(4096, MemoryMode.ON_HEAP)
       reader.initBatch(
         orcFileSchema,
         resultFields,
@@ -117,7 +118,7 @@ class OrcColumnarBatchReaderSuite extends QueryTest with SharedSparkSession {
         val fileSplit = new FileSplit(new Path(file.getCanonicalPath), 0L, file.length, Array.empty)
         val taskConf = sqlContext.sessionState.newHadoopConf()
         val orcFileSchema = TypeDescription.fromString(schema.simpleString)
-        val vectorizedReader = new OrcColumnarBatchReader(4096)
+        val vectorizedReader = new OrcColumnarBatchReader(4096, MemoryMode.ON_HEAP)
         val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
         val taskAttemptContext = new TaskAttemptContextImpl(taskConf, attemptId)
 
@@ -147,5 +148,16 @@ class OrcColumnarBatchReaderSuite extends QueryTest with SharedSparkSession {
         }
       }
     }
+  }
+
+  test("SPARK-46598: off-heap mode") {
+    val reader = new OrcColumnarBatchReader(4096, MemoryMode.OFF_HEAP)
+    reader.initBatch(
+      TypeDescription.fromString("struct<col1:int,col2:int>"),
+      StructType.fromDDL("col1 int, col2 int, col3 int").fields,
+      Array(0, 1, -1),
+      Array(-1, -1, -1),
+      InternalRow.empty)
+    assert(reader.columnarBatch.column(2).isInstanceOf[OffHeapColumnVector])
   }
 }

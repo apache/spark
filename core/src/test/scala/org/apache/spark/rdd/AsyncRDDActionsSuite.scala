@@ -91,7 +91,7 @@ class AsyncRDDActionsSuite extends SparkFunSuite with TimeLimits {
       val expected = input.take(num)
       val saw = rdd.takeAsync(num).get()
       assert(saw == expected, "incorrect result for rdd with %d partitions (expected %s, saw %s)"
-        .format(rdd.partitions.size, expected, saw))
+        .format(rdd.partitions.length, expected, saw))
     }
     val input = Range(1, 1000)
 

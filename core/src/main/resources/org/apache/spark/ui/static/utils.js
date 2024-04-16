@@ -15,8 +15,15 @@
  * limitations under the License.
  */
 
+export {
+  ConvertDurationString, createRESTEndPointForExecutorsPage, createRESTEndPointForMiscellaneousProcess, createTemplateURI,
+  errorMessageCell, errorSummary,
+  formatBytes, formatDate, formatDuration, formatLogsCells, formatTimeMillis,
+  getBaseURI, getStandAloneAppId, getTimeZone,
+  setDataTableDefaults, stringAbbreviate
+};
+
 /* global $, uiRoot */
-/* eslint-disable no-unused-vars */
 // this function works exactly the same as UIUtils.formatDuration
 function formatDuration(milliseconds) {
   if (milliseconds < 100) {
@@ -48,13 +55,11 @@ function formatBytes(bytes, type) {
   var i = Math.floor(Math.log(bytes) / Math.log(k));
   return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 }
-/* eslint-enable no-unused-vars */
 
 function padZeroes(num) {
   return ("0" + num).slice(-2);
 }
 
-/* eslint-disable no-unused-vars */
 function formatTimeMillis(timeMillis) {
   if (timeMillis <= 0) {
     return "-";
@@ -63,7 +68,6 @@ function formatTimeMillis(timeMillis) {
     return formatDateString(dt);
   }
 }
-/* eslint-enable no-unused-vars */
 
 function formatDateString(dt) {
   return dt.getFullYear() + "-" +
@@ -74,11 +78,10 @@ function formatDateString(dt) {
     padZeroes(dt.getSeconds());
 }
 
-/* eslint-disable no-unused-vars */
 function getTimeZone() {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone;
-  } catch(ex) {
+  } catch(_ignored_ex) {
     // Get time zone from a string representing the date,
     // e.g. "Thu Nov 16 2017 01:13:32 GMT+0800 (CST)" -> "CST"
     return new Date().toString().match(/\((.*)\)/)[1];
@@ -112,7 +115,7 @@ function getStandAloneAppId(cb) {
   }
   // Looks like Web UI is running in standalone mode
   // Let's get application-id using REST End Point
-  $.getJSON(uiRoot + "/api/v1/applications", function(response, status, jqXHR) {
+  $.getJSON(uiRoot + "/api/v1/applications", function(response, _ignored_status, _ignored_jqXHR) {
     if (response && response.length > 0) {
       var appId = response[0].id;
       cb(appId);
@@ -251,7 +254,7 @@ function errorSummary(errorMessage) {
   let isMultiline = true;
   const maybeErrorClass = errorMessage.match(ERROR_CLASS_REGEX);
   let errorClassOrBrief;
-  if (maybeErrorClass.length === 2) {
+  if (maybeErrorClass) {
     errorClassOrBrief = maybeErrorClass[1];
   } else if (errorMessage.indexOf('\n') >= 0) {
     errorClassOrBrief = errorMessage.substring(0, errorMessage.indexOf('\n'));
@@ -269,4 +272,16 @@ function errorMessageCell(errorMessage) {
   const details = detailsUINode(isMultiline, errorMessage);
   return summary + details;
 }
-/* eslint-enable no-unused-vars */
+
+function stringAbbreviate(content, limit) {
+  if (content && content.length > limit) {
+    const summary = content.substring(0, limit) + '...';
+    // TODO: Reused stacktrace-details* style for convenience, but it's not really a stacktrace
+    // Consider creating a new style for this case if stacktrace-details is not appropriate in
+    // the future.
+    const details = detailsUINode(true, content);
+    return summary + details;
+  } else {
+    return content;
+  }
+}

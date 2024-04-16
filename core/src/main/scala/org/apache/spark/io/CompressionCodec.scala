@@ -28,7 +28,7 @@ import org.xerial.snappy.{Snappy, SnappyInputStream, SnappyOutputStream}
 
 import org.apache.spark.{SparkConf, SparkIllegalArgumentException}
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.errors.SparkCoreErrors.{toConf, toConfVal}
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
 
@@ -92,12 +92,7 @@ private[spark] object CompressionCodec {
     } catch {
       case _: ClassNotFoundException | _: IllegalArgumentException => None
     }
-    codec.getOrElse(throw new SparkIllegalArgumentException(
-      errorClass = "CODEC_NOT_AVAILABLE",
-      messageParameters = Map(
-        "codecName" -> codecName,
-        "configKey" -> toConf(IO_COMPRESSION_CODEC.key),
-        "configVal" -> toConfVal(FALLBACK_COMPRESSION_CODEC))))
+    codec.getOrElse(throw SparkCoreErrors.codecNotAvailableError(codecName))
   }
 
   /**
@@ -233,10 +228,12 @@ class ZStdCompressionCodec(conf: SparkConf) extends CompressionCodec {
     NoPool.INSTANCE
   }
 
+  private val workers = conf.get(IO_COMPRESSION_ZSTD_WORKERS)
+
   override def compressedOutputStream(s: OutputStream): OutputStream = {
     // Wrap the zstd output stream in a buffered output stream, so that we can
     // avoid overhead excessive of JNI call while trying to compress small amount of data.
-    val os = new ZstdOutputStreamNoFinalizer(s, bufferPool).setLevel(level)
+    val os = new ZstdOutputStreamNoFinalizer(s, bufferPool).setLevel(level).setWorkers(workers)
     new BufferedOutputStream(os, bufferSize)
   }
 
@@ -244,7 +241,9 @@ class ZStdCompressionCodec(conf: SparkConf) extends CompressionCodec {
     // SPARK-29322: Set "closeFrameOnFlush" to 'true' to let continuous input stream not being
     // stuck on reading open frame.
     val os = new ZstdOutputStreamNoFinalizer(s, bufferPool)
-      .setLevel(level).setCloseFrameOnFlush(true)
+      .setLevel(level)
+      .setWorkers(workers)
+      .setCloseFrameOnFlush(true)
     new BufferedOutputStream(os, bufferSize)
   }
 

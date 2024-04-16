@@ -1,8 +1,0 @@
----
-# top-level setup for jenkins workers
-- name: set up ubuntu jenkins workers
-  hosts: ubuntu-build-node
-  roles:
-    - common
-    - jenkins-worker
-  become: yes

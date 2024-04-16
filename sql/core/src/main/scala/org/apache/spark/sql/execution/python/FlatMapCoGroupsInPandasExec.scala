@@ -17,15 +17,9 @@
 
 package org.apache.spark.sql.execution.python
 
-import org.apache.spark.JobArtifactSet
-import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
-import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.execution.{BinaryExecNode, CoGroupedIterator, SparkPlan}
-import org.apache.spark.sql.execution.python.PandasGroupUtils._
+import org.apache.spark.sql.execution.SparkPlan
 
 
 /**
@@ -54,57 +48,9 @@ case class FlatMapCoGroupsInPandasExec(
     output: Seq[Attribute],
     left: SparkPlan,
     right: SparkPlan)
-  extends SparkPlan with BinaryExecNode with PythonSQLMetrics {
+  extends FlatMapCoGroupsInBatchExec {
 
-  private val sessionLocalTimeZone = conf.sessionLocalTimeZone
-  private val pythonRunnerConf = ArrowPythonRunner.getPythonRunnerConfMap(conf)
-  private val pandasFunction = func.asInstanceOf[PythonUDF].func
-  private val chainedFunc = Seq(ChainedPythonFunctions(Seq(pandasFunction)))
-
-  override def producedAttributes: AttributeSet = AttributeSet(output)
-
-  override def outputPartitioning: Partitioning = left.outputPartitioning
-
-  override def requiredChildDistribution: Seq[Distribution] = {
-    val leftDist = if (leftGroup.isEmpty) AllTuples else ClusteredDistribution(leftGroup)
-    val rightDist = if (rightGroup.isEmpty) AllTuples else ClusteredDistribution(rightGroup)
-    leftDist :: rightDist :: Nil
-  }
-
-  override def requiredChildOrdering: Seq[Seq[SortOrder]] = {
-    leftGroup
-      .map(SortOrder(_, Ascending)) :: rightGroup.map(SortOrder(_, Ascending)) :: Nil
-  }
-
-  override protected def doExecute(): RDD[InternalRow] = {
-    val (leftDedup, leftArgOffsets) = resolveArgOffsets(left.output, leftGroup)
-    val (rightDedup, rightArgOffsets) = resolveArgOffsets(right.output, rightGroup)
-    val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
-
-    // Map cogrouped rows to ArrowPythonRunner results, Only execute if partition is not empty
-    left.execute().zipPartitions(right.execute())  { (leftData, rightData) =>
-      if (leftData.isEmpty && rightData.isEmpty) Iterator.empty else {
-
-        val leftGrouped = groupAndProject(leftData, leftGroup, left.output, leftDedup)
-        val rightGrouped = groupAndProject(rightData, rightGroup, right.output, rightDedup)
-        val data = new CoGroupedIterator(leftGrouped, rightGrouped, leftGroup)
-          .map { case (_, l, r) => (l, r) }
-
-        val runner = new CoGroupedArrowPythonRunner(
-          chainedFunc,
-          PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
-          Array(leftArgOffsets ++ rightArgOffsets),
-          DataTypeUtils.fromAttributes(leftDedup),
-          DataTypeUtils.fromAttributes(rightDedup),
-          sessionLocalTimeZone,
-          pythonRunnerConf,
-          pythonMetrics,
-          jobArtifactUUID)
-
-        executePython(data, output, runner)
-      }
-    }
-  }
+  protected val pythonEvalType: Int = PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF
 
   override protected def withNewChildrenInternal(
       newLeft: SparkPlan, newRight: SparkPlan): FlatMapCoGroupsInPandasExec =

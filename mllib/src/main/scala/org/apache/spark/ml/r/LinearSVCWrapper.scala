@@ -28,6 +28,7 @@ import org.apache.spark.ml.feature.{IndexToString, RFormula}
 import org.apache.spark.ml.r.RWrapperUtils._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.util.ArrayImplicits._
 
 private[r] class LinearSVCWrapper private (
     val pipeline: PipelineModel,
@@ -133,8 +134,8 @@ private[r] object LinearSVCWrapper
       val pipelinePath = new Path(path, "pipeline").toString
 
       val rMetadata = ("class" -> instance.getClass.getName) ~
-        ("features" -> instance.features.toSeq) ~
-        ("labels" -> instance.labels.toSeq)
+        ("features" -> instance.features.toImmutableArraySeq) ~
+        ("labels" -> instance.labels.toImmutableArraySeq)
       val rMetadataJson: String = compact(render(rMetadata))
       sc.parallelize(Seq(rMetadataJson), 1).saveAsTextFile(rMetadataPath)
 

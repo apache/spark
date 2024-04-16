@@ -26,8 +26,8 @@ import scala.util.control.NonFatal
 
 import org.apache.spark._
 import org.apache.spark.errors.SparkCoreErrors
-import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config
+import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKey.SHUFFLE_BLOCK_INFO
 import org.apache.spark.shuffle.ShuffleBlockInfo
 import org.apache.spark.storage.BlockManagerMessages.ReplicateBlock
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -152,11 +152,13 @@ private[storage] class BlockManagerDecommissioner(
                   isTargetDecommissioned = true
                   keepRunning = false
                 } else {
-                  logError(s"Error occurred during migrating $shuffleBlockInfo", e)
+                  logError(log"Error occurred during migrating " +
+                    log"${MDC(SHUFFLE_BLOCK_INFO, shuffleBlockInfo)}", e)
                   keepRunning = false
                 }
               case e: Exception =>
-                logError(s"Error occurred during migrating $shuffleBlockInfo", e)
+                logError(log"Error occurred during migrating " +
+                  log"${MDC(SHUFFLE_BLOCK_INFO, shuffleBlockInfo)}", e)
                 keepRunning = false
             }
           }

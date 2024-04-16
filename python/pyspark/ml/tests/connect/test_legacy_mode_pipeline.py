@@ -21,6 +21,7 @@ import unittest
 
 import numpy as np
 
+from pyspark.util import is_remote_only
 from pyspark.sql import SparkSession
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 
@@ -91,7 +92,7 @@ class PipelineTestsMixin:
         pd.testing.assert_frame_equal(local_eval_dataset, local_eval_dataset_copy)
         self._check_result(local_transform_result2, expected_predictions, expected_probabilities)
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
+        with tempfile.TemporaryDirectory(prefix="test_pipeline") as tmp_dir:
             pipeline_local_path = os.path.join(tmp_dir, "pipeline")
             pipeline.saveToLocal(pipeline_local_path)
             loaded_pipeline = Pipeline.loadFromLocal(pipeline_local_path)
@@ -167,7 +168,10 @@ class PipelineTestsMixin:
         assert lorv2.getOrDefault(lorv2.maxIter) == 200
 
 
-@unittest.skipIf(not should_test_connect, connect_requirement_message)
+@unittest.skipIf(
+    not should_test_connect or is_remote_only(),
+    connect_requirement_message or "pyspark-connect cannot test classic Spark",
+)
 class PipelineTests(PipelineTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
         self.spark = SparkSession.builder.master("local[2]").getOrCreate()

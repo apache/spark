@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.{ErrorMessageFormat, SparkThrowable, SparkThrowableHelper}
+import org.apache.spark.{ErrorMessageFormat, JobArtifactSet, SparkException, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.SparkContext.{SPARK_JOB_DESCRIPTION, SPARK_JOB_INTERRUPT_ON_CANCEL}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{SPARK_DRIVER_PREFIX, SPARK_EXECUTOR_PREFIX}
@@ -58,7 +58,7 @@ object SQLExecution extends Logging {
       // started execution of a query didn't call withNewExecutionId. The execution ID should be
       // set by calling withNewExecutionId in the action that begins execution, like
       // Dataset.collect or DataFrameWriter.insertInto.
-      throw new IllegalStateException("Execution ID should be set")
+      throw SparkException.internalError("Execution ID should be set")
     }
   }
 
@@ -255,7 +255,8 @@ object SQLExecution extends Logging {
     val activeSession = sparkSession
     val sc = sparkSession.sparkContext
     val localProps = Utils.cloneProperties(sc.getLocalProperties)
-    exec.submit(() => {
+    val artifactState = JobArtifactSet.getCurrentJobArtifactState.orNull
+    exec.submit(() => JobArtifactSet.withActiveJobArtifactState(artifactState) {
       val originalSession = SparkSession.getActiveSession
       val originalLocalProps = sc.getLocalProperties
       SparkSession.setActiveSession(activeSession)

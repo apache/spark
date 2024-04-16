@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.io.FileNotFoundException
+
 import scala.collection.mutable
 
 import org.apache.hadoop.conf.Configuration
@@ -157,8 +159,8 @@ abstract class PartitioningAwareFileIndex(
         typeInference = sparkSession.sessionState.conf.partitionColumnTypeInferenceEnabled,
         basePaths = basePaths,
         userSpecifiedSchema = userSpecifiedSchema,
-        caseSensitive = sparkSession.sqlContext.conf.caseSensitiveAnalysis,
-        validatePartitionColumns = sparkSession.sqlContext.conf.validatePartitionColumns,
+        caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis,
+        validatePartitionColumns = sparkSession.sessionState.conf.validatePartitionColumns,
         timeZoneId = timeZoneId)
     }
   }
@@ -222,9 +224,15 @@ abstract class PartitioningAwareFileIndex(
     caseInsensitiveMap.get(FileIndexOptions.BASE_PATH_PARAM).map(new Path(_)) match {
       case Some(userDefinedBasePath) =>
         val fs = userDefinedBasePath.getFileSystem(hadoopConf)
-        if (!fs.isDirectory(userDefinedBasePath)) {
-          throw new IllegalArgumentException(s"Option '${FileIndexOptions.BASE_PATH_PARAM}' " +
-            s"must be a directory")
+        try {
+          if (!fs.getFileStatus(userDefinedBasePath).isDirectory) {
+            throw new IllegalArgumentException(s"Option '${FileIndexOptions.BASE_PATH_PARAM}' " +
+              s"must be a directory")
+          }
+        } catch {
+          case _: FileNotFoundException =>
+            throw new IllegalArgumentException(s"Option '${FileIndexOptions.BASE_PATH_PARAM}' " +
+             s"not found")
         }
         val qualifiedBasePath = fs.makeQualified(userDefinedBasePath)
         val qualifiedBasePathStr = qualifiedBasePath.toString

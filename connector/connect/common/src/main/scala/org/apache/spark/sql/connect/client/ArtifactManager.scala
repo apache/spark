@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.connect.client
 
-import java.io.{ByteArrayInputStream, InputStream, PrintStream}
+import java.io.{ByteArrayInputStream, File, InputStream, PrintStream}
 import java.net.URI
 import java.nio.file.{Files, Path, Paths}
 import java.util.Arrays
@@ -31,10 +31,12 @@ import scala.util.control.NonFatal
 
 import Artifact._
 import com.google.protobuf.ByteString
+import io.grpc.StatusRuntimeException
 import io.grpc.stub.StreamObserver
 import org.apache.commons.codec.digest.DigestUtils.sha256Hex
 import org.apache.commons.lang3.StringUtils
 
+import org.apache.spark.SparkException
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.AddArtifactsResponse
 import org.apache.spark.connect.proto.AddArtifactsResponse.ArtifactSummary
@@ -63,6 +65,7 @@ class ArtifactManager(
   private val CHUNK_SIZE: Int = 32 * 1024
 
   private[this] val classFinders = new CopyOnWriteArrayList[ClassFinder]
+  private[this] val stubState = stub.stubState
 
   /**
    * Register a [[ClassFinder]] for dynamically generated classes.
@@ -83,14 +86,10 @@ class ArtifactManager(
     uri.getScheme match {
       case "file" =>
         val path = Paths.get(uri)
-        val artifact = path.getFileName.toString match {
-          case jar if jar.endsWith(".jar") =>
-            newJarArtifact(path.getFileName, new LocalFile(path))
-          case cf if cf.endsWith(".class") =>
-            newClassArtifact(path.getFileName, new LocalFile(path))
-          case other =>
-            throw new UnsupportedOperationException(s"Unsupported file format: $other")
-        }
+        val artifact = Artifact.newArtifactFromExtension(
+          path.getFileName.toString,
+          path.getFileName,
+          new LocalFile(path))
         Seq[Artifact](artifact)
 
       case "ivy" =>
@@ -109,6 +108,55 @@ class ArtifactManager(
   def addArtifact(uri: URI): Unit = addArtifacts(parseArtifacts(uri))
 
   /**
+   * Add a single in-memory artifact to the session while preserving the directory structure
+   * specified by `target` under the session's working directory of that particular file
+   * extension.
+   *
+   * Supported target file extensions are .jar and .class.
+   *
+   * ==Example==
+   * {{{
+   *  addArtifact(bytesBar, "foo/bar.class")
+   *  addArtifact(bytesFlat, "flat.class")
+   *  // Directory structure of the session's working directory for class files would look like:
+   *  // ${WORKING_DIR_FOR_CLASS_FILES}/flat.class
+   *  // ${WORKING_DIR_FOR_CLASS_FILES}/foo/bar.class
+   * }}}
+   */
+  def addArtifact(bytes: Array[Byte], target: String): Unit = {
+    val targetPath = Paths.get(target)
+    val artifact = Artifact.newArtifactFromExtension(
+      targetPath.getFileName.toString,
+      targetPath,
+      new InMemory(bytes))
+    addArtifacts(artifact :: Nil)
+  }
+
+  /**
+   * Add a single artifact to the session while preserving the directory structure specified by
+   * `target` under the session's working directory of that particular file extension.
+   *
+   * Supported target file extensions are .jar and .class.
+   *
+   * ==Example==
+   * {{{
+   *  addArtifact("/Users/dummyUser/files/foo/bar.class", "foo/bar.class")
+   *  addArtifact("/Users/dummyUser/files/flat.class", "flat.class")
+   *  // Directory structure of the session's working directory for class files would look like:
+   *  // ${WORKING_DIR_FOR_CLASS_FILES}/flat.class
+   *  // ${WORKING_DIR_FOR_CLASS_FILES}/foo/bar.class
+   * }}}
+   */
+  def addArtifact(source: String, target: String): Unit = {
+    val targetPath = Paths.get(target)
+    val artifact = Artifact.newArtifactFromExtension(
+      targetPath.getFileName.toString,
+      targetPath,
+      new LocalFile(Paths.get(source)))
+    addArtifacts(artifact :: Nil)
+  }
+
+  /**
    * Add multiple artifacts to the session.
    *
    * Currently it supports local files with extensions .jar and .class and Apache Ivy URIs
@@ -125,7 +173,9 @@ class ArtifactManager(
       .addAllNames(Arrays.asList(artifactName))
       .build()
     val response = bstub.artifactStatus(request)
-    if (response.getSessionId != sessionId) {
+    if (StringUtils.isNotEmpty(response.getSessionId) && response.getSessionId != sessionId) {
+      // In older versions of the Spark cluster, the session ID is not set in the response.
+      // Ignore this check to keep compatibility.
       throw new IllegalStateException(
         s"Session ID mismatch: $sessionId != ${response.getSessionId}")
     }
@@ -181,11 +231,24 @@ class ArtifactManager(
       return
     }
 
+    try {
+      stubState.retryHandler.retry {
+        addArtifactsImpl(artifacts)
+      }
+    } catch {
+      case ex: StatusRuntimeException =>
+        throw new SparkException(ex.toString, ex.getCause)
+    }
+  }
+
+  private[client] def addArtifactsImpl(artifacts: Iterable[Artifact]): Unit = {
     val promise = Promise[Seq[ArtifactSummary]]()
     val responseHandler = new StreamObserver[proto.AddArtifactsResponse] {
       private val summaries = mutable.Buffer.empty[ArtifactSummary]
       override def onNext(v: AddArtifactsResponse): Unit = {
-        if (v.getSessionId != sessionId) {
+        if (StringUtils.isNotEmpty(v.getSessionId) && v.getSessionId != sessionId) {
+          // In older versions of the Spark cluster, the session ID is not set in the response.
+          // Ignore this check to keep compatibility.
           throw new IllegalStateException(s"Session ID mismatch: $sessionId != ${v.getSessionId}")
         }
         v.getArtifactsList.forEach { summary =>
@@ -235,7 +298,10 @@ class ArtifactManager(
       writeBatch()
     }
     stream.onCompleted()
-    SparkThreadUtils.awaitResult(promise.future, Duration.Inf)
+    // Don't convert to SparkException yet for the sake of retrying.
+    // retryPolicies are designed around underlying grpc StatusRuntimeException's.
+    // Convert to sparkException only if retrying fails.
+    SparkThreadUtils.awaitResultNoSparkExceptionConversion(promise.future, Duration.Inf)
     // TODO(SPARK-42658): Handle responses containing CRC failures.
   }
 
@@ -362,12 +428,26 @@ object Artifact {
   val JAR_PREFIX: Path = Paths.get("jars")
   val CACHE_PREFIX: Path = Paths.get("cache")
 
-  def newJarArtifact(fileName: Path, storage: LocalData): Artifact = {
-    newArtifact(JAR_PREFIX, ".jar", fileName, storage)
+  def newArtifactFromExtension(
+      fileName: String,
+      targetFilePath: Path,
+      storage: LocalData): Artifact = {
+    fileName match {
+      case jar if jar.endsWith(".jar") =>
+        newJarArtifact(targetFilePath, storage)
+      case cf if cf.endsWith(".class") =>
+        newClassArtifact(targetFilePath, storage)
+      case other =>
+        throw new UnsupportedOperationException(s"Unsupported file format: $other")
+    }
   }
 
-  def newClassArtifact(fileName: Path, storage: LocalData): Artifact = {
-    newArtifact(CLASS_PREFIX, ".class", fileName, storage)
+  def newJarArtifact(targetFilePath: Path, storage: LocalData): Artifact = {
+    newArtifact(JAR_PREFIX, ".jar", targetFilePath, storage)
+  }
+
+  def newClassArtifact(targetFilePath: Path, storage: LocalData): Artifact = {
+    newArtifact(CLASS_PREFIX, ".class", targetFilePath, storage)
   }
 
   def newCacheArtifact(id: String, storage: LocalData): Artifact = {
@@ -408,14 +488,29 @@ object Artifact {
     jars.map(p => Paths.get(p)).map(path => newJarArtifact(path.getFileName, new LocalFile(path)))
   }
 
+  private def concatenatePaths(basePath: Path, otherPath: Path): Path = {
+    // We avoid using the `.resolve()` method here to ensure that we're concatenating the two
+    // paths even if `otherPath` is absolute.
+    val concatenatedPath = Paths.get(basePath.toString, otherPath.toString)
+    // Note: The normalized resulting path may still reference parent directories if the
+    // `otherPath` contains sufficient number of parent operators (i.e "..").
+    // Example: `basePath` = "/base", `otherPath` = "subdir/../../file.txt"
+    // Then, `concatenatedPath` = "/base/subdir/../../file.txt"
+    // and `normalizedPath` = "/base/file.txt".
+    val normalizedPath = concatenatedPath.normalize()
+    // Verify that the prefix of the `normalizedPath` starts with `basePath/`.
+    require(
+      normalizedPath != basePath && normalizedPath.startsWith(s"$basePath${File.separator}"))
+    normalizedPath
+  }
+
   private def newArtifact(
       prefix: Path,
       requiredSuffix: String,
-      fileName: Path,
+      targetFilePath: Path,
       storage: LocalData): Artifact = {
-    require(!fileName.isAbsolute)
-    require(fileName.toString.endsWith(requiredSuffix))
-    new Artifact(prefix.resolve(fileName), storage)
+    require(targetFilePath.toString.endsWith(requiredSuffix))
+    new Artifact(concatenatePaths(prefix, targetFilePath), storage)
   }
 
   /**

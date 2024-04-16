@@ -21,6 +21,7 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 import pyspark.pandas as ps
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 
 
@@ -202,7 +203,11 @@ class TimedeltaOpsTestsMixin:
         self.assert_eq(pdf["this"] >= pdf["this"], psdf["this"] >= psdf["this"])
 
 
-class TimedeltaOpsTests(TimedeltaOpsTestsMixin, OpsTestBase):
+class TimedeltaOpsTests(
+    TimedeltaOpsTestsMixin,
+    OpsTestBase,
+    PandasOnSparkTestCase,
+):
     pass
 
 

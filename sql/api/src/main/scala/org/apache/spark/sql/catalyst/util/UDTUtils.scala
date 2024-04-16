@@ -18,6 +18,7 @@ package org.apache.spark.sql.catalyst.util
 
 import scala.util.control.NonFatal
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.types.UserDefinedType
 import org.apache.spark.util.SparkClassUtils
 
@@ -53,6 +54,6 @@ private[sql] object UDTUtils extends UDTUtils {
 
 private[sql] object DefaultUDTUtils extends UDTUtils {
   override def toRow(value: Any, udt: UserDefinedType[Any]): Any = {
-    throw new UnsupportedOperationException()
+    throw SparkUnsupportedOperationException()
   }
 }

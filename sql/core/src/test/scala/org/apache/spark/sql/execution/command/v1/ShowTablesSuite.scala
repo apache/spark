@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
-import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf
 
@@ -134,16 +133,6 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase with command.Tests
       }
     }
   }
-
-  test("show table in a not existing namespace") {
-    val e = intercept[NoSuchDatabaseException] {
-      runShowTablesSql(s"SHOW TABLES IN $catalog.unknown", Seq())
-    }
-    checkError(e,
-      errorClass = "SCHEMA_NOT_FOUND",
-      parameters = Map("schemaName" -> "`unknown`"))
-  }
-
 }
 
 /**
@@ -162,6 +151,65 @@ class ShowTablesSuite extends ShowTablesSuiteBase with CommandSuiteBase {
         val df = (1 to 3).map(i => (i, s"val_$i", i * 2)).toDF("a", "b", "c")
         df.write.partitionBy("a").format("parquet").mode(SaveMode.Overwrite).saveAsTable(t)
         assert(sql(s"SHOW TABLE EXTENDED LIKE '$t' PARTITION(a = 1)").count() === 1)
+      }
+    }
+  }
+
+  override protected def extendedPartInNonPartedTableError(
+      catalog: String,
+      namespace: String,
+      table: String): (String, Map[String, String]) = {
+    ("_LEGACY_ERROR_TEMP_1251",
+      Map("action" -> "SHOW TABLE EXTENDED", "tableName" -> table))
+  }
+
+  protected override def extendedPartExpectedResult: String =
+    super.extendedPartExpectedResult +
+    """
+      |Location: <location>
+      |Created Time: <created time>
+      |Last Access: <last access>""".stripMargin
+
+  protected override def extendedTableInfo: String =
+    """Created Time: <created time>
+      |Last Access: <last access>
+      |Created By: <created by>
+      |Type: MANAGED
+      |Provider: parquet
+      |Location: <location>""".stripMargin
+
+  test("show table extended in permanent view") {
+    val namespace = "ns"
+    val table = "tbl"
+    withNamespaceAndTable(namespace, table, catalog) { t =>
+      sql(s"CREATE TABLE $t (id int) $defaultUsing")
+      val viewName = table + "_view"
+      withView(viewName) {
+        sql(s"CREATE VIEW $catalog.$namespace.$viewName AS SELECT id FROM $t")
+        val result = sql(s"SHOW TABLE EXTENDED in $namespace LIKE '$viewName*'").sort("tableName")
+        assert(result.schema.fieldNames ===
+          Seq("namespace", "tableName", "isTemporary", "information"))
+        val resultCollect = result.collect()
+        assert(resultCollect.length == 1)
+        assert(resultCollect(0).length == 4)
+        assert(resultCollect(0)(1) === viewName)
+        assert(resultCollect(0)(2) === false)
+        val actualResult = replace(resultCollect(0)(3).toString)
+        val expectedResult =
+          s"""Catalog: $catalog
+             |Database: $namespace
+             |Table: $viewName
+             |Created Time: <created time>
+             |Last Access: <last access>
+             |Created By: <created by>
+             |Type: VIEW
+             |View Text: SELECT id FROM $catalog.$namespace.$table
+             |View Original Text: SELECT id FROM $catalog.$namespace.$table
+             |View Catalog and Namespace: $catalog.$namespace
+             |View Query Output Columns: [id]
+             |Schema: root
+             | |-- id: integer (nullable = true)""".stripMargin
+        assert(actualResult === expectedResult)
       }
     }
   }

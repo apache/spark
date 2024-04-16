@@ -18,6 +18,8 @@
 package org.apache.spark.util.kvstore;
 
 import java.io.File;
+import java.lang.ref.Reference;
+import java.lang.ref.WeakReference;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
@@ -379,6 +381,43 @@ public class RocksDBSuite {
     // skip should always return false after db close
     assertFalse(iter.skip(0));
     assertFalse(iter.skip(1));
+  }
+
+  @Test
+  public void testResourceCleaner() throws Exception {
+    File dbPathForCleanerTest = File.createTempFile(
+      "test_db_cleaner.", ".rdb");
+    dbPathForCleanerTest.delete();
+
+    RocksDB dbForCleanerTest = new RocksDB(dbPathForCleanerTest);
+    try {
+      for (int i = 0; i < 8192; i++) {
+        dbForCleanerTest.write(createCustomType1(i));
+      }
+      RocksDBIterator<CustomType1> rocksDBIterator =
+        (RocksDBIterator<CustomType1>) dbForCleanerTest.view(CustomType1.class).iterator();
+      Reference<RocksDBIterator<?>> reference = new WeakReference<>(rocksDBIterator);
+      assertNotNull(reference);
+      RocksDBIterator.ResourceCleaner resourceCleaner = rocksDBIterator.getResourceCleaner();
+      assertFalse(resourceCleaner.isCompleted());
+      // Manually set rocksDBIterator to null, to be GC.
+      rocksDBIterator = null;
+      // 100 times gc, the rocksDBIterator should be GCed.
+      int count = 0;
+      while (count < 100 && !reference.refersTo(null)) {
+        System.gc();
+        count++;
+        Thread.sleep(100);
+      }
+      // check rocksDBIterator should be GCed
+      assertTrue(reference.refersTo(null));
+      // Verify that the Cleaner will be executed after a period of time,
+      // and status will become false.
+      assertTrue(resourceCleaner.isCompleted());
+    } finally {
+      dbForCleanerTest.close();
+      FileUtils.deleteQuietly(dbPathForCleanerTest);
+    }
   }
 
   private CustomType1 createCustomType1(int i) {

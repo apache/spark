@@ -37,7 +37,8 @@ class TypedFilterOptimizationSuite extends PlanTest {
         CombineTypedFilters) :: Nil
   }
 
-  implicit private def productEncoder[T <: Product : TypeTag] = ExpressionEncoder[T]()
+  implicit private def productEncoder[T <: Product : TypeTag]: ExpressionEncoder[T] =
+    ExpressionEncoder[T]()
 
   val testRelation = LocalRelation($"_1".int, $"_2".int)
 

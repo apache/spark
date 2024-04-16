@@ -283,9 +283,12 @@ Serialization / IO / Conversion
    DataFrame.to_numpy
    DataFrame.to_spark
    DataFrame.to_string
+   DataFrame.to_feather
+   DataFrame.to_stata
    DataFrame.to_json
    DataFrame.to_dict
    DataFrame.to_excel
+   DataFrame.to_hdf
    DataFrame.to_clipboard
    DataFrame.to_markdown
    DataFrame.to_records
@@ -299,6 +302,7 @@ in Spark. These can be accessed by ``DataFrame.spark.<function/property>``.
 
 .. autosummary::
    :toctree: api/
+   :template: autosummary/accessor_method.rst
 
    DataFrame.spark.frame
    DataFrame.spark.cache
@@ -319,8 +323,8 @@ specific plotting methods of the form ``DataFrame.plot.<kind>``.
 
 .. autosummary::
    :toctree: api/
+   :template: autosummary/accessor_method.rst
 
-   DataFrame.plot
    DataFrame.plot.area
    DataFrame.plot.barh
    DataFrame.plot.bar
@@ -330,6 +334,10 @@ specific plotting methods of the form ``DataFrame.plot.<kind>``.
    DataFrame.plot.pie
    DataFrame.plot.scatter
    DataFrame.plot.density
+
+.. autosummary::
+   :toctree: api/
+
    DataFrame.hist
    DataFrame.boxplot
    DataFrame.kde
@@ -341,6 +349,7 @@ These can be accessed by ``DataFrame.pandas_on_spark.<function/property>``.
 
 .. autosummary::
    :toctree: api/
+   :template: autosummary/accessor_method.rst
 
    DataFrame.pandas_on_spark.apply_batch
    DataFrame.pandas_on_spark.transform_batch

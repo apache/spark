@@ -33,7 +33,8 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesConf
 import org.apache.spark.deploy.k8s.KubernetesUtils.addOwnerReference
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKey, MDC}
+import org.apache.spark.internal.LogKey.{COUNT, EXECUTOR_IDS, TIMEOUT}
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.cluster.SchedulerBackendUtils.DEFAULT_NUMBER_EXECUTORS
@@ -143,7 +144,8 @@ class ExecutorPodsAllocator(
     snapshotsStore.addSubscriber(podAllocationDelay) { executorPodsSnapshot =>
       onNewSnapshots(applicationId, schedulerBackend, executorPodsSnapshot)
       if (failureTracker.numFailedExecutors > maxNumExecutorFailures) {
-        logError(s"Max number of executor failures ($maxNumExecutorFailures) reached")
+        logError(log"Max number of executor failures " +
+          log"(${MDC(LogKey.MAX_EXECUTOR_FAILURES, maxNumExecutorFailures)}) reached")
         stopApplication(EXCEED_MAX_EXECUTOR_FAILURES)
       }
     }
@@ -187,7 +189,8 @@ class ExecutorPodsAllocator(
     // to the schedulerKnownNewlyCreatedExecs
     val schedulerKnownExecs = schedulerBackend.getExecutorIds().map(_.toLong).toSet
     schedulerKnownNewlyCreatedExecs ++=
-      newlyCreatedExecutors.view.filterKeys(schedulerKnownExecs.contains(_)).mapValues(_._1)
+      newlyCreatedExecutors.filter { case (k, _) => schedulerKnownExecs.contains(k) }
+        .map { case (k, v) => (k, v._1) }
     newlyCreatedExecutors --= schedulerKnownNewlyCreatedExecs.keySet
 
     // For all executors we've created against the API but have not seen in a snapshot
@@ -208,10 +211,10 @@ class ExecutorPodsAllocator(
     }
 
     if (timedOut.nonEmpty) {
-      logWarning(s"Executors with ids ${timedOut.mkString(",")} were not detected in the" +
-        s" Kubernetes cluster after $podCreationTimeout ms despite the fact that a previous" +
-        " allocation attempt tried to create them. The executors may have been deleted but the" +
-        " application missed the deletion event.")
+      logWarning(log"Executors with ids ${MDC(EXECUTOR_IDS, timedOut.mkString(","))}} were not " +
+        log"detected in the Kubernetes cluster after ${MDC(TIMEOUT, podCreationTimeout)} ms " +
+        log"despite the fact that a previous allocation attempt tried to create them. " +
+        log"The executors may have been deleted but the application missed the deletion event.")
 
       newlyCreatedExecutors --= timedOut
       if (shouldDeleteExecutors) {
@@ -239,7 +242,8 @@ class ExecutorPodsAllocator(
       _deletedExecutorIds = _deletedExecutorIds.intersect(existingExecs)
     }
 
-    val notDeletedPods = lastSnapshot.executorPods.view.filterKeys(!_deletedExecutorIds.contains(_))
+    val notDeletedPods = lastSnapshot.executorPods
+      .filter { case (k, _) => !_deletedExecutorIds.contains(k) }
     // Map the pods into per ResourceProfile id so we can check per ResourceProfile,
     // add a fast path if not using other ResourceProfiles.
     val rpIdToExecsAndPodState =
@@ -279,7 +283,7 @@ class ExecutorPodsAllocator(
 
       val newFailedExecutorIds = currentFailedExecutorIds.diff(failedExecutorIds)
       if (newFailedExecutorIds.nonEmpty) {
-        logWarning(s"${newFailedExecutorIds.size} new failed executors.")
+        logWarning(log"${MDC(COUNT, newFailedExecutorIds.size)} new failed executors.")
         newFailedExecutorIds.foreach { _ => failureTracker.registerExecutorFailure() }
       }
       failedExecutorIds = failedExecutorIds ++ currentFailedExecutorIds
@@ -364,7 +368,6 @@ class ExecutorPodsAllocator(
       // in the snapshot state. Since the messages are a little spammy, avoid them when we know
       // there are no useful updates.
       if (log.isDebugEnabled && snapshots.nonEmpty) {
-        val outstanding = pendingCountForRpId + newlyCreatedExecutorsForRpId.size
         if (currentRunningCount >= targetNum && !dynamicAllocationEnabled) {
           logDebug(s"Current number of running executors for ResourceProfile Id $rpId is " +
             "equal to the number of requested executors. Not scaling up further.")
@@ -531,7 +534,8 @@ class ExecutorPodsAllocator(
       currentTime - creationTime > executorIdleTimeout
     } catch {
       case e: Exception =>
-        logError(s"Cannot get the creationTimestamp of the pod: ${state.pod}", e)
+        logError(log"Cannot get the creationTimestamp of the pod: " +
+          log"${MDC(LogKey.POD_ID, state.pod)}", e)
         true
     }
   }

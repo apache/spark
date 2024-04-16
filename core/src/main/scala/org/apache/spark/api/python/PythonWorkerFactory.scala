@@ -31,7 +31,6 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark._
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.Python._
 import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.util.{RedirectThread, Utils}
 
@@ -47,14 +46,17 @@ private[spark] class PythonWorkerFactory(
     pythonExec: String,
     workerModule: String,
     daemonModule: String,
-    envVars: Map[String, String])
+    envVars: Map[String, String],
+    val useDaemonEnabled: Boolean)
   extends Logging { self =>
 
   def this(
       pythonExec: String,
       workerModule: String,
-      envVars: Map[String, String]) =
-    this(pythonExec, workerModule, PythonWorkerFactory.defaultDaemonModule, envVars)
+      envVars: Map[String, String],
+      useDaemonEnabled: Boolean) =
+    this(pythonExec, workerModule, PythonWorkerFactory.defaultDaemonModule,
+      envVars, useDaemonEnabled)
 
   import PythonWorkerFactory._
 
@@ -63,8 +65,6 @@ private[spark] class PythonWorkerFactory(
   // currently only works on UNIX-based systems now because it uses signals for child management,
   // so we can also fall back to launching workers, pyspark/worker.py (by default) directly.
   private val useDaemon = {
-    val useDaemonEnabled = SparkEnv.get.conf.get(PYTHON_USE_DAEMON)
-
     // This flag is ignored on Windows as it's unable to fork.
     !System.getProperty("os.name").startsWith("Windows") && useDaemonEnabled
   }
@@ -77,7 +77,7 @@ private[spark] class PythonWorkerFactory(
   @GuardedBy("self")
   private var daemonPort: Int = 0
   @GuardedBy("self")
-  private val daemonWorkers = new mutable.WeakHashMap[PythonWorker, Long]()
+  private val daemonWorkers = new mutable.WeakHashMap[PythonWorker, ProcessHandle]()
   @GuardedBy("self")
   private val idleWorkers = new mutable.Queue[PythonWorker]()
   @GuardedBy("self")
@@ -95,10 +95,20 @@ private[spark] class PythonWorkerFactory(
   def create(): (PythonWorker, Option[Long]) = {
     if (useDaemon) {
       self.synchronized {
-        if (idleWorkers.nonEmpty) {
+        // Pull from idle workers until we one that is alive, otherwise create a new one.
+        while (idleWorkers.nonEmpty) {
           val worker = idleWorkers.dequeue()
-          worker.selectionKey.interestOps(SelectionKey.OP_READ | SelectionKey.OP_WRITE)
-          return (worker, daemonWorkers.get(worker))
+          val workerHandle = daemonWorkers(worker)
+          if (workerHandle.isAlive()) {
+            try {
+              worker.selectionKey.interestOps(SelectionKey.OP_READ | SelectionKey.OP_WRITE)
+              return (worker, Some(workerHandle.pid()))
+            } catch {
+              case c: CancelledKeyException => /* pass */
+            }
+          }
+          logWarning(s"Worker ${worker} process from idle queue is dead, discarding.")
+          stopWorker(worker)
         }
       }
       createThroughDaemon()
@@ -121,15 +131,16 @@ private[spark] class PythonWorkerFactory(
       if (pid < 0) {
         throw new IllegalStateException("Python daemon failed to launch worker with code " + pid)
       }
-
+      val processHandle = ProcessHandle.of(pid).orElseThrow(
+        () => new IllegalStateException("Python daemon failed to launch worker.")
+      )
       authHelper.authToServer(socketChannel.socket())
       socketChannel.configureBlocking(false)
       val selector = Selector.open()
       val selectionKey = socketChannel.register(selector,
         SelectionKey.OP_READ | SelectionKey.OP_WRITE)
       val worker = PythonWorker(socketChannel, selector, selectionKey)
-
-      daemonWorkers.put(worker, pid)
+      daemonWorkers.put(worker, processHandle)
       (worker, Some(pid))
     }
 
@@ -378,7 +389,7 @@ private[spark] class PythonWorkerFactory(
         daemon = null
         daemonPort = 0
       } else {
-        simpleWorkers.view.mapValues(_.destroy())
+        simpleWorkers.values.foreach(_.destroy())
       }
     }
   }
@@ -391,10 +402,10 @@ private[spark] class PythonWorkerFactory(
     self.synchronized {
       if (useDaemon) {
         if (daemon != null) {
-          daemonWorkers.get(worker).foreach { pid =>
+          daemonWorkers.get(worker).foreach { processHandle =>
             // tell daemon to kill worker by pid
             val output = new DataOutputStream(daemon.getOutputStream)
-            output.writeLong(pid)
+            output.writeLong(processHandle.pid())
             output.flush()
             daemon.getOutputStream.flush()
           }

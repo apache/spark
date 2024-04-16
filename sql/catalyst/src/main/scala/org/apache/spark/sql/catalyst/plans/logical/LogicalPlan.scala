@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
@@ -27,7 +28,7 @@ import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, TreeNodeTag, U
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.types.{MapType, StructType}
+import org.apache.spark.sql.types.StructType
 
 
 abstract class LogicalPlan
@@ -207,7 +208,8 @@ trait LeafNode extends LogicalPlan with LeafLike[LogicalPlan] {
   override def producedAttributes: AttributeSet = outputSet
 
   /** Leaf nodes that can survive analysis must define their own statistics. */
-  def computeStats(): Statistics = throw new UnsupportedOperationException
+  def computeStats(): Statistics =
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3114")
 }
 
 /**
@@ -347,23 +349,6 @@ object LogicalPlanIntegrity {
   }
 
   /**
-   * Validate that the grouping key types in Aggregate plans are valid.
-   * Returns an error message if the check fails, or None if it succeeds.
-   */
-  def validateGroupByTypes(plan: LogicalPlan): Option[String] = {
-    plan.collectFirst {
-      case a @ Aggregate(groupingExprs, _, _) =>
-        val badExprs = groupingExprs.filter(_.dataType.isInstanceOf[MapType]).map(_.toString)
-        if (badExprs.nonEmpty) {
-          Some(s"Grouping expressions ${badExprs.mkString(", ")} cannot be of type Map " +
-            s"for plan:\n ${a.treeString}")
-        } else {
-          None
-        }
-    }.flatten
-  }
-
-  /**
    * Validate that the aggregation expressions in Aggregate plans are valid.
    * Returns an error message if the check fails, or None if it succeeds.
    */
@@ -381,6 +366,15 @@ object LogicalPlanIntegrity {
     }.flatten
   }
 
+  def validateSchemaOutput(previousPlan: LogicalPlan, currentPlan: LogicalPlan): Option[String] = {
+    if (!DataTypeUtils.equalsIgnoreNullability(previousPlan.schema, currentPlan.schema)) {
+      Some(s"The plan output schema has changed from ${previousPlan.schema.sql} to " +
+        currentPlan.schema.sql + s". The previous plan: ${previousPlan.treeString}\nThe new " +
+        "plan:\n" + currentPlan.treeString)
+    } else {
+      None
+    }
+  }
 
   /**
    * Validate the structural integrity of an optimized plan.
@@ -400,19 +394,12 @@ object LogicalPlanIntegrity {
     } else if (currentPlan.exists(PlanHelper.specialExpressionsInUnsupportedOperator(_).nonEmpty)) {
       Some("Special expressions are placed in the wrong plan: " + currentPlan.treeString)
     } else {
-      LogicalPlanIntegrity.validateExprIdUniqueness(currentPlan).orElse {
-        if (!DataTypeUtils.equalsIgnoreNullability(previousPlan.schema, currentPlan.schema)) {
-          Some(s"The plan output schema has changed from ${previousPlan.schema.sql} to " +
-            currentPlan.schema.sql + s". The previous plan: ${previousPlan.treeString}\nThe new " +
-            "plan:\n" + currentPlan.treeString)
-        } else {
-          None
-        }
-      }
+      None
     }
     validation = validation
+      .orElse(LogicalPlanIntegrity.validateExprIdUniqueness(currentPlan))
+      .orElse(LogicalPlanIntegrity.validateSchemaOutput(previousPlan, currentPlan))
       .orElse(LogicalPlanIntegrity.validateNoDanglingReferences(currentPlan))
-      .orElse(LogicalPlanIntegrity.validateGroupByTypes(currentPlan))
       .orElse(LogicalPlanIntegrity.validateAggregateExpressions(currentPlan))
       .map(err => s"${err}\nPrevious schema:${previousPlan.output.mkString(", ")}" +
         s"\nPrevious plan: ${previousPlan.treeString}")

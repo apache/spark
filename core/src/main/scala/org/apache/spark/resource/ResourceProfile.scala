@@ -49,6 +49,8 @@ class ResourceProfile(
     val executorResources: Map[String, ExecutorResourceRequest],
     val taskResources: Map[String, TaskResourceRequest]) extends Serializable with Logging {
 
+  validate()
+
   // _id is only a var for testing purposes
   private var _id = ResourceProfile.getNextProfileId
   // This is used for any resources that use fractional amounts, the key is the resource name
@@ -58,6 +60,19 @@ class ResourceProfile(
   private var _limitingResource: Option[String] = None
   private var _maxTasksPerExecutor: Option[Int] = None
   private var _coresLimitKnown: Boolean = false
+
+  /**
+   * Validate the ResourceProfile
+   */
+  protected def validate(): Unit = {
+    // The task.amount in ResourceProfile falls within the range of 0 to 0.5,
+    // or it's a whole number
+    for ((_, taskReq) <- taskResources) {
+      val taskAmount = taskReq.amount
+      assert(taskAmount <= 0.5 || taskAmount % 1 == 0,
+        s"The task resource amount ${taskAmount} must be either <= 0.5, or a whole number.")
+    }
+  }
 
   /**
    * A unique id of this ResourceProfile
@@ -95,22 +110,18 @@ class ResourceProfile(
   }
 
   private[spark] def getCustomTaskResources(): Map[String, TaskResourceRequest] = {
-    taskResources.view.filterKeys(k => !k.equals(ResourceProfile.CPUS)).toMap
+    taskResources.filter { case (k, _) => !k.equals(ResourceProfile.CPUS) }
   }
 
   protected[spark] def getCustomExecutorResources(): Map[String, ExecutorResourceRequest] = {
     executorResources.
-      view.filterKeys(k => !ResourceProfile.allSupportedExecutorResources.contains(k)).toMap
+      filter { case (k, _) => !ResourceProfile.allSupportedExecutorResources.contains(k) }
   }
 
   /*
    * This function takes into account fractional amounts for the task resource requirement.
-   * Spark only supports fractional amounts < 1 to basically allow for multiple tasks
-   * to use the same resource address.
-   * The way the scheduler handles this is it adds the same address the number of slots per
-   * address times and then the amount becomes 1. This way it re-uses the same address
-   * the correct number of times. ie task requirement amount=0.25 -> addrs["0", "0", "0", "0"]
-   * and scheduler task amount=1. See ResourceAllocator.slotsPerAddress.
+   * Spark only supports fractional amounts &lt; 1 to basically allow for multiple tasks
+   * to use the same resource address or a whole number to use the multiple whole addresses.
    */
   private[spark] def getSchedulerTaskResourceAmount(resource: String): Int = {
     val taskAmount = taskResources.getOrElse(resource,
@@ -280,6 +291,11 @@ private[spark] class TaskResourceProfile(
     override val taskResources: Map[String, TaskResourceRequest])
   extends ResourceProfile(Map.empty, taskResources) {
 
+  // The task.amount in TaskResourceProfile falls within the range of 0 to 1.0,
+  // or it's a whole number, and it has been checked in the TaskResourceRequest.
+  // Therefore, we can safely skip this check.
+  override protected def validate(): Unit = {}
+
   override protected[spark] def getCustomExecutorResources()
       : Map[String, ExecutorResourceRequest] = {
     if (SparkEnv.get == null) {
@@ -335,8 +351,6 @@ object ResourceProfile extends Logging {
 
   val UNKNOWN_RESOURCE_PROFILE_ID = -1
   val DEFAULT_RESOURCE_PROFILE_ID = 0
-
-  private[spark] val MEMORY_OVERHEAD_MIN_MIB = 384L
 
   private lazy val nextProfileId = new AtomicInteger(0)
   private val DEFAULT_PROFILE_LOCK = new Object()
@@ -473,10 +487,11 @@ object ResourceProfile extends Logging {
 
   private[spark] def calculateOverHeadMemory(
       overHeadMemFromConf: Option[Long],
+      minimumOverHeadMemoryFromConf: Long,
       executorMemoryMiB: Long,
       overheadFactor: Double): Long = {
     overHeadMemFromConf.getOrElse(math.max((overheadFactor * executorMemoryMiB).toInt,
-        ResourceProfile.MEMORY_OVERHEAD_MIN_MIB))
+      minimumOverHeadMemoryFromConf))
   }
 
   /**
@@ -488,6 +503,7 @@ object ResourceProfile extends Logging {
   private[spark] def getResourcesForClusterManager(
       rpId: Int,
       execResources: Map[String, ExecutorResourceRequest],
+      minimumOverheadMemory: Long,
       overheadFactor: Double,
       conf: SparkConf,
       isPythonApp: Boolean,
@@ -499,7 +515,7 @@ object ResourceProfile extends Logging {
     var memoryOffHeapMiB = defaultResources.memoryOffHeapMiB
     var pysparkMemoryMiB = defaultResources.pysparkMemoryMiB.getOrElse(0L)
     var memoryOverheadMiB = calculateOverHeadMemory(defaultResources.memoryOverheadMiB,
-      executorMemoryMiB, overheadFactor)
+      minimumOverheadMemory, executorMemoryMiB, overheadFactor)
 
     val finalCustomResources = if (rpId != DEFAULT_RESOURCE_PROFILE_ID) {
       val customResources = new mutable.HashMap[String, ExecutorResourceRequest]

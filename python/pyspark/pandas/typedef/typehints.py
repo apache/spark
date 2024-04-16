@@ -31,6 +31,7 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype, pandas_dtype  # type: ignore[attr-defined]
 from pandas.api.extensions import ExtensionDtype
 
+
 extension_dtypes: Tuple[type, ...]
 try:
     from pandas import Int8Dtype, Int16Dtype, Int32Dtype, Int64Dtype
@@ -147,19 +148,19 @@ def as_spark_type(
     - dictionaries of field_name -> type
     - Python3's typing system
     """
-    # For NumPy typing, NumPy version should be 1.21+ and Python version should be 3.8+
-    if sys.version_info >= (3, 8):
+    from pyspark.loose_version import LooseVersion
+
+    # For NumPy typing, NumPy version should be 1.21+
+    if LooseVersion(np.__version__) >= LooseVersion("1.21"):
         if (
             hasattr(tpe, "__origin__")
-            and tpe.__origin__ is np.ndarray  # type: ignore[union-attr]
+            and tpe.__origin__ is np.ndarray
             and hasattr(tpe, "__args__")
-            and len(tpe.__args__) > 1  # type: ignore[union-attr]
+            and len(tpe.__args__) > 1
         ):
             # numpy.typing.NDArray
             return types.ArrayType(
-                as_spark_type(
-                    tpe.__args__[1].__args__[0], raise_error=raise_error  # type: ignore[union-attr]
-                )
+                as_spark_type(tpe.__args__[1].__args__[0], raise_error=raise_error)
             )
 
     if isinstance(tpe, np.dtype) and tpe == np.dtype("object"):
@@ -167,9 +168,7 @@ def as_spark_type(
     # ArrayType
     elif tpe in (np.ndarray,):
         return types.ArrayType(types.StringType())
-    elif hasattr(tpe, "__origin__") and issubclass(
-        tpe.__origin__, list  # type: ignore[union-attr]
-    ):
+    elif hasattr(tpe, "__origin__") and issubclass(tpe.__origin__, list):
         element_type = as_spark_type(
             tpe.__args__[0], raise_error=raise_error  # type: ignore[union-attr]
         )
@@ -780,7 +779,7 @@ def _new_type_holders(
 ) -> Tuple:
     if isinstance(params, zip):
         #   DataFrame[zip(names, types)]
-        params = tuple(slice(name, tpe) for name, tpe in params)  # type: ignore[misc, has-type]
+        params = tuple(slice(name, tpe) for name, tpe in params)
 
     if isinstance(params, Iterable):
         #   DataFrame[type, type, ...]
@@ -796,9 +795,21 @@ def _new_type_holders(
         isinstance(param, slice) and param.step is None and param.stop is not None
         for param in params
     )
-    is_unnamed_params = all(
-        not isinstance(param, slice) and not isinstance(param, Iterable) for param in params
-    )
+    if sys.version_info < (3, 11):
+        is_unnamed_params = all(
+            not isinstance(param, slice) and not isinstance(param, Iterable) for param in params
+        )
+    else:
+        # PEP 646 changes `GenericAlias` instances into iterable ones at Python 3.11
+        is_unnamed_params = all(
+            not isinstance(param, slice)
+            and (
+                not isinstance(param, Iterable)
+                or isinstance(param, typing.GenericAlias)  # type: ignore[attr-defined]
+                or isinstance(param, typing._GenericAlias)  # type: ignore[attr-defined]
+            )
+            for param in params
+        )
 
     if is_named_params:
         # DataFrame["id": int, "A": int]

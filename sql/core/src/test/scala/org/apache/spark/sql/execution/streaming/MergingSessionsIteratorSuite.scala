@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, Literal, MutableProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
@@ -192,18 +193,27 @@ class MergingSessionsIteratorSuite extends SharedSparkSession {
     assert(iterator.hasNext)
 
     // when calling next() it can detect error and throws IllegalStateException
-    intercept[IllegalStateException] {
-      iterator.next()
-    }
+    checkError(
+      exception = intercept[SparkException] {
+        iterator.next()
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> "Input iterator is not sorted based on session!"))
 
     // afterwards, calling either hasNext() or next() will throw IllegalStateException
-    intercept[IllegalStateException] {
-      iterator.hasNext
-    }
+    checkError(
+      exception = intercept[SparkException] {
+        iterator.hasNext
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> "The iterator is already corrupted."))
 
-    intercept[IllegalStateException] {
-      iterator.next()
-    }
+    checkError(
+      exception = intercept[SparkException] {
+        iterator.next()
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> "The iterator is already corrupted."))
   }
 
   test("no key") {

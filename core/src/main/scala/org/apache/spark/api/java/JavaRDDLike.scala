@@ -59,7 +59,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   def rdd: RDD[T]
 
   /** Set of partitions in this RDD. */
-  def partitions: JList[Partition] = rdd.partitions.toSeq.asJava
+  def partitions: JList[Partition] = rdd.partitions.toImmutableArraySeq.asJava
 
   /** Return the number of partitions in this RDD. */
   @Since("1.6.0")
@@ -224,7 +224,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * Return an RDD created by coalescing all elements within each partition into an array.
    */
   def glom(): JavaRDD[JList[T]] =
-    new JavaRDD(rdd.glom().map(_.toSeq.asJava))
+    new JavaRDD(rdd.glom().map(_.toImmutableArraySeq.asJava))
 
   /**
    * Return the Cartesian product of this RDD and another one, that is, the RDD of all pairs of
@@ -360,7 +360,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * all the data is loaded into the driver's memory.
    */
   def collect(): JList[T] =
-    rdd.collect().toSeq.asJava
+    rdd.collect().toImmutableArraySeq.asJava
 
   /**
    * Return an iterator that contains all of the elements in this RDD.
@@ -377,7 +377,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
     // This is useful for implementing `take` from other language frontends
     // like Python where the data is serialized.
     val res = context.runJob(rdd, (it: Iterator[T]) => it.toArray, partitionIds.toImmutableArraySeq)
-    res.map(_.toSeq.asJava)
+    res.map(_.toImmutableArraySeq.asJava)
   }
 
   /**
@@ -539,13 +539,13 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * all the data is loaded into the driver's memory.
    */
   def take(num: Int): JList[T] =
-    rdd.take(num).toSeq.asJava
+    rdd.take(num).toImmutableArraySeq.asJava
 
   def takeSample(withReplacement: Boolean, num: Int): JList[T] =
     takeSample(withReplacement, num, Utils.random.nextLong)
 
   def takeSample(withReplacement: Boolean, num: Int, seed: Long): JList[T] =
-    rdd.takeSample(withReplacement, num, seed).toSeq.asJava
+    rdd.takeSample(withReplacement, num, seed).toImmutableArraySeq.asJava
 
   /**
    * Return the first element in this RDD.
@@ -628,7 +628,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * @return an array of top elements
    */
   def top(num: Int, comp: Comparator[T]): JList[T] = {
-    rdd.top(num)(Ordering.comparatorToOrdering(comp)).toSeq.asJava
+    rdd.top(num)(Ordering.comparatorToOrdering(comp)).toImmutableArraySeq.asJava
   }
 
   /**
@@ -656,7 +656,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * @return an array of top elements
    */
   def takeOrdered(num: Int, comp: Comparator[T]): JList[T] = {
-    rdd.takeOrdered(num)(Ordering.comparatorToOrdering(comp)).toSeq.asJava
+    rdd.takeOrdered(num)(Ordering.comparatorToOrdering(comp)).toImmutableArraySeq.asJava
   }
 
   /**

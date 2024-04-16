@@ -42,7 +42,7 @@ object EnsembleTestHelper {
       epsilon: Double): Unit = {
     val values = new mutable.ArrayBuffer[Double]()
     data.foreach { row =>
-      assert(row.size == numCols)
+      assert(row.length == numCols)
       values ++= row
     }
     val stats = new StatCounter(values)

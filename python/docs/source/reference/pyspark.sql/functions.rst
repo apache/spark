@@ -140,8 +140,6 @@ Mathematical Functions
     sqrt
     tan
     tanh
-    toDegrees
-    toRadians
     try_add
     try_divide
     try_multiply
@@ -162,6 +160,8 @@ String Functions
     char
     char_length
     character_length
+    collate
+    collation
     concat_ws
     contains
     decode
@@ -225,14 +225,10 @@ Bitwise Functions
 
     bit_count
     bit_get
-    bitwiseNOT
     bitwise_not
     getbit
-    shiftLeft
     shiftleft
-    shiftRight
     shiftright
-    shiftRightUnsigned
     shiftrightunsigned
 
 
@@ -258,6 +254,7 @@ Date and Timestamp Functions
     datediff
     datepart
     day
+    dayname
     dayofmonth
     dayofweek
     dayofyear
@@ -276,6 +273,7 @@ Date and Timestamp Functions
     make_ym_interval
     minute
     month
+    monthname
     months_between
     next_day
     now
@@ -407,7 +405,6 @@ Aggregate Functions
     :toctree: api/
 
     any_value
-    approxCountDistinct
     approx_count_distinct
     approx_percentile
     array_agg
@@ -465,7 +462,6 @@ Aggregate Functions
     stddev_pop
     stddev_samp
     sum
-    sumDistinct
     sum_distinct
     try_avg
     try_sum
@@ -509,11 +505,11 @@ Partition Transformation Functions
 .. autosummary::
     :toctree: api/
 
-    years
-    months
-    days
-    hours
-    bucket
+    partitioning.years
+    partitioning.months
+    partitioning.days
+    partitioning.hours
+    partitioning.bucket
 
 
 CSV Functions
@@ -536,6 +532,7 @@ JSON Functions
     json_array_length
     json_object_keys
     json_tuple
+    parse_json
     schema_of_json
     to_json
 
@@ -593,6 +590,7 @@ Misc Functions
     monotonically_increasing_id
     raise_error
     reflect
+    session_user
     spark_partition_id
     try_aes_decrypt
     try_reflect

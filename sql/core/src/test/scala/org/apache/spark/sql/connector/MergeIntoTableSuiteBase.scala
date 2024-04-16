@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, In, Not}
 import org.apache.spark.sql.catalyst.optimizer.BuildLeft
@@ -31,6 +31,38 @@ import org.apache.spark.sql.types.{IntegerType, StringType}
 abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase {
 
   import testImplicits._
+
+  test("SPARK-45974: merge into non filter attributes table") {
+    val tableName: String = "cat.ns1.non_partitioned_table"
+    withTable(tableName) {
+      withTempView("source") {
+        val sourceRows = Seq(
+          (1, 100, "hr"),
+          (2, 200, "finance"),
+          (3, 300, "hr"))
+        sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
+
+        sql(s"CREATE TABLE $tableName (pk INT NOT NULL, salary INT, dep STRING)".stripMargin)
+
+        val df = sql(
+          s"""MERGE INTO $tableName t
+             |USING (select * from source) s
+             |ON t.pk = s.pk
+             |WHEN MATCHED THEN
+             | UPDATE SET t.salary = s.salary
+             |WHEN NOT MATCHED THEN
+             | INSERT *
+             |""".stripMargin)
+
+        checkAnswer(
+          sql(s"SELECT * FROM $tableName"),
+          Seq(
+            Row(1, 100, "hr"), // insert
+            Row(2, 200, "finance"), // insert
+            Row(3, 300, "hr"))) // insert
+      }
+    }
+  }
 
   test("merge into empty table with NOT MATCHED clause") {
     withTempView("source") {
@@ -1579,9 +1611,9 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase {
   }
 
   private def assertCardinalityError(query: String): Unit = {
-    val e = intercept[SparkException] {
+    val e = intercept[SparkRuntimeException] {
       sql(query)
     }
-    assert(e.getCause.getMessage.contains("ON search condition of the MERGE statement"))
+    assert(e.getMessage.contains("ON search condition of the MERGE statement"))
   }
 }

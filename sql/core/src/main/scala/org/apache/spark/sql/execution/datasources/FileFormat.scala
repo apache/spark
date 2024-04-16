@@ -223,6 +223,12 @@ trait FileFormat {
    */
   def fileConstantMetadataExtractors: Map[String, PartitionedFile => Any] =
     FileFormat.BASE_METADATA_EXTRACTORS
+
+  /**
+   * Returns whether the file format supports filter push down
+   * for non utf8 binary collated columns.
+   */
+  def supportsCollationPushDown: Boolean = false
 }
 
 object FileFormat {
@@ -311,7 +317,7 @@ object FileFormat {
     // file split information yet, nor do we have a way to provide custom metadata column values.
     val validFieldNames = Set(FILE_PATH, FILE_NAME, FILE_SIZE, FILE_MODIFICATION_TIME)
     val extractors =
-      FileFormat.BASE_METADATA_EXTRACTORS.view.filterKeys(validFieldNames.contains).toMap
+      FileFormat.BASE_METADATA_EXTRACTORS.filter { case (k, _) => validFieldNames.contains(k) }
     assert(fieldNames.forall(validFieldNames.contains))
     val pf = PartitionedFile(
       partitionValues = partitionValues,

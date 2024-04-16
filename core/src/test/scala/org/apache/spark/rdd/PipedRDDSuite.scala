@@ -47,7 +47,7 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext with Eventuall
     val piped = nums.pipe(Seq("cat"))
 
     val c = piped.collect()
-    assert(c.size === 4)
+    assert(c.length === 4)
     assert(c(0) === "1")
     assert(c(1) === "2")
     assert(c(2) === "3")
@@ -61,7 +61,7 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext with Eventuall
     // verify that both RDD.pipe(command: String) and RDD.pipe(command: String, env) work good
     for (piped <- Seq(nums.pipe("wc -l"), nums.pipe("wc -l", Map[String, String]()))) {
       val c = piped.collect()
-      assert(c.size === 2)
+      assert(c.length === 2)
       assert(c(0).trim === "2")
       assert(c(1).trim === "2")
     }
@@ -129,7 +129,7 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext with Eventuall
 
     val c = piped.collect()
 
-    assert(c.size === 8)
+    assert(c.length === 8)
     assert(c(0) === "0")
     assert(c(1) === "\u0001")
     assert(c(2) === "1_")
@@ -151,7 +151,7 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext with Eventuall
             f(e + "_")
           }
         }).collect()
-    assert(d.size === 8)
+    assert(d.length === 8)
     assert(d(0) === "0")
     assert(d(1) === "\u0001")
     assert(d(2) === "b\t2_")
@@ -216,7 +216,7 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext with Eventuall
     val nums = sc.makeRDD(Array(1, 2, 3, 4).toImmutableArraySeq, 2)
     val piped = nums.pipe(Seq("cat"), separateWorkingDir = true)
     val c = piped.collect()
-    assert(c.size === 4)
+    assert(c.length === 4)
     assert(c(0) === "1")
     assert(c(1) === "2")
     assert(c(2) === "3")

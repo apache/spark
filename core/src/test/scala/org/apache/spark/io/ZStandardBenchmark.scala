@@ -17,11 +17,11 @@
 
 package org.apache.spark.io
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectOutputStream}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
-import org.apache.spark.internal.config.{IO_COMPRESSION_ZSTD_BUFFERPOOL_ENABLED, IO_COMPRESSION_ZSTD_BUFFERSIZE, IO_COMPRESSION_ZSTD_LEVEL}
+import org.apache.spark.internal.config.{IO_COMPRESSION_ZSTD_BUFFERPOOL_ENABLED, IO_COMPRESSION_ZSTD_BUFFERSIZE, IO_COMPRESSION_ZSTD_LEVEL, IO_COMPRESSION_ZSTD_WORKERS}
 
 
 /**
@@ -49,6 +49,7 @@ object ZStandardBenchmark extends BenchmarkBase {
       val benchmark2 = new Benchmark(name, N, output = output)
       decompressionBenchmark(benchmark2, N)
       benchmark2.run()
+      parallelCompressionBenchmark()
     }
   }
 
@@ -99,6 +100,31 @@ object ZStandardBenchmark extends BenchmarkBase {
           }
         }
       }
+    }
+  }
+
+  private def parallelCompressionBenchmark(): Unit = {
+    val numberOfLargeObjectToWrite = 128
+    val data: Array[Byte] = (1 until 256 * 1024 * 1024).map(_.toByte).toArray
+
+    Seq(3, 9).foreach { level =>
+      val benchmark = new Benchmark(
+        s"Parallel Compression at level $level", numberOfLargeObjectToWrite, output = output)
+      Seq(0, 1, 2, 4, 8, 16).foreach { workers =>
+        val conf = new SparkConf(false)
+          .set(IO_COMPRESSION_ZSTD_LEVEL, level)
+          .set(IO_COMPRESSION_ZSTD_WORKERS, workers)
+        benchmark.addCase(s"Parallel Compression with $workers workers") { _ =>
+          val baos = new ByteArrayOutputStream()
+          val zcos = new ZStdCompressionCodec(conf).compressedOutputStream(baos)
+          val oos = new ObjectOutputStream(zcos)
+          1 to numberOfLargeObjectToWrite foreach { _ =>
+            oos.writeObject(data)
+          }
+          oos.close()
+        }
+      }
+      benchmark.run()
     }
   }
 }

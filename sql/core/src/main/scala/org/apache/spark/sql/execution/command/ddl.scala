@@ -374,6 +374,9 @@ case class AlterTableChangeColumnCommand(
   // TODO: support change column name/dataType/metadata/position.
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
+    // This command may change column default values, so we need to refresh the table relation cache
+    // here so that DML commands can resolve these default values correctly.
+    catalog.refreshTable(tableName)
     val table = catalog.getTableRawMetadata(tableName)
     val resolver = sparkSession.sessionState.conf.resolver
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
@@ -387,7 +390,7 @@ case class AlterTableChangeColumnCommand(
     // Throw an AnalysisException if the column name/dataType is changed.
     if (!columnEqual(originColumn, newColumn, resolver)) {
       throw QueryCompilationErrors.alterTableChangeColumnNotSupportedForColumnTypeError(
-        toSQLId(table.identifier.nameParts), originColumn, newColumn)
+        toSQLId(table.identifier.nameParts), originColumn, newColumn, this.origin)
     }
 
     val newDataSchema = table.dataSchema.fields.map { field =>
@@ -715,7 +718,7 @@ case class RepairTableCommand(
       val total = partitionSpecsAndLocs.length
       logInfo(s"Found $total partitions in $root")
 
-      val partitionStats = if (spark.sqlContext.conf.gatherFastStats) {
+      val partitionStats = if (spark.sessionState.conf.gatherFastStats) {
         gatherPartitionStats(spark, partitionSpecsAndLocs, fs, pathFilter, threshold)
       } else {
         Map.empty[Path, PartitionStatistics]
@@ -957,7 +960,7 @@ object DDLUtils extends Logging {
   def verifyPartitionProviderIsHive(
       spark: SparkSession, table: CatalogTable, action: String): Unit = {
     val tableName = table.identifier.table
-    if (!spark.sqlContext.conf.manageFilesourcePartitions && isDatasourceTable(table)) {
+    if (!spark.sessionState.conf.manageFilesourcePartitions && isDatasourceTable(table)) {
       throw QueryCompilationErrors
         .actionNotAllowedOnTableWithFilesourcePartitionManagementDisabledError(action, tableName)
     }

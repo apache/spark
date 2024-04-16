@@ -30,9 +30,11 @@ import org.apache.hive.service.cli.operation.ExecuteStatementOperation
 import org.apache.hive.service.cli.session.HiveSession
 import org.apache.hive.service.rpc.thrift.{TCLIServiceConstants, TColumnDesc, TPrimitiveTypeEntry, TRowSet, TTableSchema, TTypeDesc, TTypeEntry, TTypeId, TTypeQualifiers, TTypeQualifierValue}
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{HIVE_OPERATION_STATE, STATEMENT_ID, TIMEOUT, USER_NAME}
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_SECOND
 import org.apache.spark.sql.execution.HiveResult.getTimeFormatters
 import org.apache.spark.sql.internal.{SQLConf, VariableSubstitution}
 import org.apache.spark.sql.types._
@@ -49,11 +51,13 @@ private[hive] class SparkExecuteStatementOperation(
   with SparkOperation
   with Logging {
 
+  val session = sqlContext.sparkSession
+
   // If a timeout value `queryTimeout` is specified by users and it is smaller than
   // a global timeout value, we use the user-specified value.
   // This code follows the Hive timeout behaviour (See #29933 for details).
   private val timeout = {
-    val globalTimeout = sqlContext.conf.getConf(SQLConf.THRIFTSERVER_QUERY_TIMEOUT)
+    val globalTimeout = session.sessionState.conf.getConf(SQLConf.THRIFTSERVER_QUERY_TIMEOUT)
     if (globalTimeout > 0 && (queryTimeout <= 0 || globalTimeout < queryTimeout)) {
       globalTimeout
     } else {
@@ -61,13 +65,13 @@ private[hive] class SparkExecuteStatementOperation(
     }
   }
 
-  private val forceCancel = sqlContext.conf.getConf(SQLConf.THRIFTSERVER_FORCE_CANCEL)
+  private val forceCancel = session.sessionState.conf.getConf(SQLConf.THRIFTSERVER_FORCE_CANCEL)
 
   private val redactedStatement = {
-    val substitutorStatement = SQLConf.withExistingConf(sqlContext.conf) {
+    val substitutorStatement = SQLConf.withExistingConf(session.sessionState.conf) {
       new VariableSubstitution().substitute(statement)
     }
-    SparkUtils.redact(sqlContext.conf.stringRedactionPattern, substitutorStatement)
+    SparkUtils.redact(session.sessionState.conf.stringRedactionPattern, substitutorStatement)
   }
 
   private var result: DataFrame = _
@@ -114,7 +118,7 @@ private[hive] class SparkExecuteStatementOperation(
     val offset = iter.getPosition
     val rows = iter.take(maxRows).toList
     log.debug(s"Returning result set with ${rows.length} rows from offsets " +
-      s"[${iter.getFetchStart}, ${offset}) with $statementId")
+      s"[${iter.getFetchStart}, ${iter.getPosition}) with $statementId")
     RowSetUtils.toTRowSet(offset, rows, dataTypes, getProtocolVersion, getTimeFormatters)
   }
 
@@ -140,7 +144,9 @@ private[hive] class SparkExecuteStatementOperation(
           } catch {
             case NonFatal(e) =>
               setOperationException(new HiveSQLException(e))
-              logError(s"Error cancelling the query after timeout: $timeout seconds")
+              val timeout_ms = timeout * MILLIS_PER_SECOND
+              logError(
+                log"Error cancelling the query after timeout: ${MDC(TIMEOUT, timeout_ms)} ms")
           } finally {
             timeoutExecutor.shutdown()
           }
@@ -176,8 +182,8 @@ private[hive] class SparkExecuteStatementOperation(
           } catch {
             case e: Exception =>
               setOperationException(new HiveSQLException(e))
-              logError("Error running hive query as user : " +
-                sparkServiceUGI.getShortUserName(), e)
+              logError(log"Error running hive query as user : " +
+                log"${MDC(USER_NAME, sparkServiceUGI.getShortUserName())}", e)
           }
         }
       }
@@ -194,7 +200,7 @@ private[hive] class SparkExecuteStatementOperation(
             statementId, rejected.getMessage, SparkUtils.exceptionString(rejected))
           throw HiveThriftServerErrors.taskExecutionRejectedError(rejected)
         case NonFatal(e) =>
-          logError(s"Error executing query in background", e)
+          logError("Error executing query in background", e)
           setState(OperationState.ERROR)
           HiveThriftServer2.eventManager.onStatementError(
             statementId, e.getMessage, SparkUtils.exceptionString(e))
@@ -252,14 +258,15 @@ private[hive] class SparkExecuteStatementOperation(
           // This may happen if the execution was cancelled, and then closed from another thread.
           logWarning(s"Ignore exception in terminal state with $statementId: $e")
         } else {
-          logError(s"Error executing query with $statementId, currentState $currentState, ", e)
+          logError(log"Error executing query with ${MDC(STATEMENT_ID, statementId)}, " +
+            log"currentState ${MDC(HIVE_OPERATION_STATE, currentState)}, ", e)
           setState(OperationState.ERROR)
           HiveThriftServer2.eventManager.onStatementError(
             statementId, e.getMessage, SparkUtils.exceptionString(e))
           e match {
             case _: HiveSQLException => throw e
             case _ => throw HiveThriftServerErrors.runningQueryError(
-              e, sqlContext.conf.errorMessageFormat)
+              e, sqlContext.sparkSession.sessionState.conf.errorMessageFormat)
           }
         }
     } finally {

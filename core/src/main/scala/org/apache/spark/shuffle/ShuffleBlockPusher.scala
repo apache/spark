@@ -19,7 +19,6 @@ package org.apache.spark.shuffle
 
 import java.io.{File, FileNotFoundException}
 import java.net.ConnectException
-import java.nio.ByteBuffer
 import java.util.concurrent.ExecutorService
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
@@ -295,7 +294,7 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
         case (offset, size) =>
           new NioManagedBuffer(inMemoryBuffer.duplicate()
             .position(offset)
-            .limit(offset + size).asInstanceOf[ByteBuffer].slice())
+            .limit(offset + size).slice())
       }.toArray
     }
   }

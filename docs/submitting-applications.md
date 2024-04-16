@@ -148,7 +148,7 @@ export HADOOP_CONF_DIR=XXX
 
 The master URL passed to Spark can be in one of the following formats:
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Master URL</th><th>Meaning</th></tr></thead>
 <tr><td> <code>local</code> </td><td> Run Spark locally with one worker thread (i.e. no parallelism at all). </td></tr>
 <tr><td> <code>local[K]</code> </td><td> Run Spark locally with K worker threads (ideally, set this to the number of cores on your machine). </td></tr>
@@ -179,8 +179,7 @@ The master URL passed to Spark can be in one of the following formats:
 
 The `spark-submit` script can load default [Spark configuration values](configuration.html) from a
 properties file and pass them on to your application. By default, it will read options
-from `conf/spark-defaults.conf` in the Spark directory. For more detail, see the section on
-[loading default configurations](configuration.html#loading-default-configurations).
+from `conf/spark-defaults.conf` in the `SPARK_HOME` directory.
 
 Loading default Spark configurations this way can obviate the need for certain flags to
 `spark-submit`. For instance, if the `spark.master` property is set, you can safely omit the

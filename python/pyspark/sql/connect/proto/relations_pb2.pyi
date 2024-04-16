@@ -101,6 +101,8 @@ class Relation(google.protobuf.message.Message):
     CACHED_REMOTE_RELATION_FIELD_NUMBER: builtins.int
     COMMON_INLINE_USER_DEFINED_TABLE_FUNCTION_FIELD_NUMBER: builtins.int
     AS_OF_JOIN_FIELD_NUMBER: builtins.int
+    COMMON_INLINE_USER_DEFINED_DATA_SOURCE_FIELD_NUMBER: builtins.int
+    WITH_RELATIONS_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -196,6 +198,12 @@ class Relation(google.protobuf.message.Message):
     @property
     def as_of_join(self) -> global___AsOfJoin: ...
     @property
+    def common_inline_user_defined_data_source(
+        self,
+    ) -> global___CommonInlineUserDefinedDataSource: ...
+    @property
+    def with_relations(self) -> global___WithRelations: ...
+    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
@@ -272,6 +280,9 @@ class Relation(google.protobuf.message.Message):
         common_inline_user_defined_table_function: global___CommonInlineUserDefinedTableFunction
         | None = ...,
         as_of_join: global___AsOfJoin | None = ...,
+        common_inline_user_defined_data_source: global___CommonInlineUserDefinedDataSource
+        | None = ...,
+        with_relations: global___WithRelations | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -310,6 +321,8 @@ class Relation(google.protobuf.message.Message):
             b"collect_metrics",
             "common",
             b"common",
+            "common_inline_user_defined_data_source",
+            b"common_inline_user_defined_data_source",
             "common_inline_user_defined_table_function",
             b"common_inline_user_defined_table_function",
             "corr",
@@ -396,6 +409,8 @@ class Relation(google.protobuf.message.Message):
             b"with_columns",
             "with_columns_renamed",
             b"with_columns_renamed",
+            "with_relations",
+            b"with_relations",
             "with_watermark",
             b"with_watermark",
         ],
@@ -423,6 +438,8 @@ class Relation(google.protobuf.message.Message):
             b"collect_metrics",
             "common",
             b"common",
+            "common_inline_user_defined_data_source",
+            b"common_inline_user_defined_data_source",
             "common_inline_user_defined_table_function",
             b"common_inline_user_defined_table_function",
             "corr",
@@ -509,6 +526,8 @@ class Relation(google.protobuf.message.Message):
             b"with_columns",
             "with_columns_renamed",
             b"with_columns_renamed",
+            "with_relations",
+            b"with_relations",
             "with_watermark",
             b"with_watermark",
         ],
@@ -555,6 +574,8 @@ class Relation(google.protobuf.message.Message):
             "cached_remote_relation",
             "common_inline_user_defined_table_function",
             "as_of_join",
+            "common_inline_user_defined_data_source",
+            "with_relations",
             "fill_na",
             "drop_na",
             "replace",
@@ -742,6 +763,45 @@ class SQL(google.protobuf.message.Message):
     ) -> None: ...
 
 global___SQL = SQL
+
+class WithRelations(google.protobuf.message.Message):
+    """Relation of type [[WithRelations]].
+
+    This relation contains a root plan, and one or more references that are used by the root plan.
+    There are two ways of referencing a relation, by name (through a subquery alias), or by plan_id
+    (using RelationCommon.plan_id).
+
+    This relation can be used to implement CTEs, describe DAGs, or to reduce tree depth.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ROOT_FIELD_NUMBER: builtins.int
+    REFERENCES_FIELD_NUMBER: builtins.int
+    @property
+    def root(self) -> global___Relation:
+        """(Required) Plan at the root of the query tree. This plan is expected to contain one or more
+        references. Those references get expanded later on by the engine.
+        """
+    @property
+    def references(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Relation]:
+        """(Required) Plans referenced by the root plan. Relations in this list are also allowed to
+        contain references to other relations in this list, as long they do not form cycles.
+        """
+    def __init__(
+        self,
+        *,
+        root: global___Relation | None = ...,
+        references: collections.abc.Iterable[global___Relation] | None = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing_extensions.Literal["root", b"root"]) -> builtins.bool: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["references", b"references", "root", b"root"]
+    ) -> None: ...
+
+global___WithRelations = WithRelations
 
 class Read(google.protobuf.message.Message):
     """Relation that reads from a file / table or other data source. Does not have additional
@@ -1380,6 +1440,7 @@ class Aggregate(google.protobuf.message.Message):
         GROUP_TYPE_ROLLUP: Aggregate._GroupType.ValueType  # 2
         GROUP_TYPE_CUBE: Aggregate._GroupType.ValueType  # 3
         GROUP_TYPE_PIVOT: Aggregate._GroupType.ValueType  # 4
+        GROUP_TYPE_GROUPING_SETS: Aggregate._GroupType.ValueType  # 5
 
     class GroupType(_GroupType, metaclass=_GroupTypeEnumTypeWrapper): ...
     GROUP_TYPE_UNSPECIFIED: Aggregate.GroupType.ValueType  # 0
@@ -1387,6 +1448,7 @@ class Aggregate(google.protobuf.message.Message):
     GROUP_TYPE_ROLLUP: Aggregate.GroupType.ValueType  # 2
     GROUP_TYPE_CUBE: Aggregate.GroupType.ValueType  # 3
     GROUP_TYPE_PIVOT: Aggregate.GroupType.ValueType  # 4
+    GROUP_TYPE_GROUPING_SETS: Aggregate.GroupType.ValueType  # 5
 
     class Pivot(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -1423,11 +1485,35 @@ class Aggregate(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["col", b"col", "values", b"values"]
         ) -> None: ...
 
+    class GroupingSets(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        GROUPING_SET_FIELD_NUMBER: builtins.int
+        @property
+        def grouping_set(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            pyspark.sql.connect.proto.expressions_pb2.Expression
+        ]:
+            """(Required) Individual grouping set"""
+        def __init__(
+            self,
+            *,
+            grouping_set: collections.abc.Iterable[
+                pyspark.sql.connect.proto.expressions_pb2.Expression
+            ]
+            | None = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["grouping_set", b"grouping_set"]
+        ) -> None: ...
+
     INPUT_FIELD_NUMBER: builtins.int
     GROUP_TYPE_FIELD_NUMBER: builtins.int
     GROUPING_EXPRESSIONS_FIELD_NUMBER: builtins.int
     AGGREGATE_EXPRESSIONS_FIELD_NUMBER: builtins.int
     PIVOT_FIELD_NUMBER: builtins.int
+    GROUPING_SETS_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
         """(Required) Input relation for a RelationalGroupedDataset."""
@@ -1450,6 +1536,13 @@ class Aggregate(google.protobuf.message.Message):
     @property
     def pivot(self) -> global___Aggregate.Pivot:
         """(Optional) Pivots a column of the current `DataFrame` and performs the specified aggregation."""
+    @property
+    def grouping_sets(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___Aggregate.GroupingSets
+    ]:
+        """(Optional) List of values that will be translated to columns in the output DataFrame."""
     def __init__(
         self,
         *,
@@ -1464,6 +1557,7 @@ class Aggregate(google.protobuf.message.Message):
         ]
         | None = ...,
         pivot: global___Aggregate.Pivot | None = ...,
+        grouping_sets: collections.abc.Iterable[global___Aggregate.GroupingSets] | None = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["input", b"input", "pivot", b"pivot"]
@@ -1477,6 +1571,8 @@ class Aggregate(google.protobuf.message.Message):
             b"group_type",
             "grouping_expressions",
             b"grouping_expressions",
+            "grouping_sets",
+            b"grouping_sets",
             "input",
             b"input",
             "pivot",
@@ -2752,8 +2848,31 @@ class WithColumnsRenamed(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
         ) -> None: ...
 
+    class Rename(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        COL_NAME_FIELD_NUMBER: builtins.int
+        NEW_COL_NAME_FIELD_NUMBER: builtins.int
+        col_name: builtins.str
+        """(Required) The existing column name."""
+        new_col_name: builtins.str
+        """(Required) The new column name."""
+        def __init__(
+            self,
+            *,
+            col_name: builtins.str = ...,
+            new_col_name: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "col_name", b"col_name", "new_col_name", b"new_col_name"
+            ],
+        ) -> None: ...
+
     INPUT_FIELD_NUMBER: builtins.int
     RENAME_COLUMNS_MAP_FIELD_NUMBER: builtins.int
+    RENAMES_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
         """(Required) The input relation."""
@@ -2761,18 +2880,25 @@ class WithColumnsRenamed(google.protobuf.message.Message):
     def rename_columns_map(
         self,
     ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
-        """(Required)
+        """(Optional)
 
         Renaming column names of input relation from A to B where A is the map key
         and B is the map value. This is a no-op if schema doesn't contain any A. It
         does not require that all input relation column names to present as keys.
         duplicated B are not allowed.
         """
+    @property
+    def renames(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___WithColumnsRenamed.Rename
+    ]: ...
     def __init__(
         self,
         *,
         input: global___Relation | None = ...,
         rename_columns_map: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
+        renames: collections.abc.Iterable[global___WithColumnsRenamed.Rename] | None = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["input", b"input"]
@@ -2780,7 +2906,7 @@ class WithColumnsRenamed(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "input", b"input", "rename_columns_map", b"rename_columns_map"
+            "input", b"input", "rename_columns_map", b"rename_columns_map", "renames", b"renames"
         ],
     ) -> None: ...
 
@@ -3086,6 +3212,7 @@ class MapPartitions(google.protobuf.message.Message):
     INPUT_FIELD_NUMBER: builtins.int
     FUNC_FIELD_NUMBER: builtins.int
     IS_BARRIER_FIELD_NUMBER: builtins.int
+    PROFILE_ID_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
         """(Required) Input relation for a mapPartitions-equivalent API: mapInPandas, mapInArrow."""
@@ -3094,6 +3221,8 @@ class MapPartitions(google.protobuf.message.Message):
         """(Required) Input user-defined function."""
     is_barrier: builtins.bool
     """(Optional) Whether to use barrier mode execution or not."""
+    profile_id: builtins.int
+    """(Optional) ResourceProfile id used for the stage level scheduling."""
     def __init__(
         self,
         *,
@@ -3101,18 +3230,23 @@ class MapPartitions(google.protobuf.message.Message):
         func: pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction
         | None = ...,
         is_barrier: builtins.bool | None = ...,
+        profile_id: builtins.int | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
             "_is_barrier",
             b"_is_barrier",
+            "_profile_id",
+            b"_profile_id",
             "func",
             b"func",
             "input",
             b"input",
             "is_barrier",
             b"is_barrier",
+            "profile_id",
+            b"profile_id",
         ],
     ) -> builtins.bool: ...
     def ClearField(
@@ -3120,17 +3254,26 @@ class MapPartitions(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "_is_barrier",
             b"_is_barrier",
+            "_profile_id",
+            b"_profile_id",
             "func",
             b"func",
             "input",
             b"input",
             "is_barrier",
             b"is_barrier",
+            "profile_id",
+            b"profile_id",
         ],
     ) -> None: ...
+    @typing.overload
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["_is_barrier", b"_is_barrier"]
     ) -> typing_extensions.Literal["is_barrier"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_profile_id", b"_profile_id"]
+    ) -> typing_extensions.Literal["profile_id"] | None: ...
 
 global___MapPartitions = MapPartitions
 
@@ -3553,6 +3696,66 @@ class PythonUDTF(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["return_type"] | None: ...
 
 global___PythonUDTF = PythonUDTF
+
+class CommonInlineUserDefinedDataSource(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    NAME_FIELD_NUMBER: builtins.int
+    PYTHON_DATA_SOURCE_FIELD_NUMBER: builtins.int
+    name: builtins.str
+    """(Required) Name of the data source."""
+    @property
+    def python_data_source(self) -> global___PythonDataSource: ...
+    def __init__(
+        self,
+        *,
+        name: builtins.str = ...,
+        python_data_source: global___PythonDataSource | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "data_source", b"data_source", "python_data_source", b"python_data_source"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "data_source",
+            b"data_source",
+            "name",
+            b"name",
+            "python_data_source",
+            b"python_data_source",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["data_source", b"data_source"]
+    ) -> typing_extensions.Literal["python_data_source"] | None: ...
+
+global___CommonInlineUserDefinedDataSource = CommonInlineUserDefinedDataSource
+
+class PythonDataSource(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    COMMAND_FIELD_NUMBER: builtins.int
+    PYTHON_VER_FIELD_NUMBER: builtins.int
+    command: builtins.bytes
+    """(Required) The encoded commands of the Python data source."""
+    python_ver: builtins.str
+    """(Required) Python version being used in the client."""
+    def __init__(
+        self,
+        *,
+        command: builtins.bytes = ...,
+        python_ver: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal["command", b"command", "python_ver", b"python_ver"],
+    ) -> None: ...
+
+global___PythonDataSource = PythonDataSource
 
 class CollectMetrics(google.protobuf.message.Message):
     """Collect arbitrary (named) metrics from a dataset."""

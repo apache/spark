@@ -23,15 +23,14 @@ import java.util.concurrent.TimeUnit
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
-import scala.concurrent.duration.Duration
-import scala.concurrent.duration.DurationInt
+import scala.concurrent.duration.{Duration, DurationInt, FiniteDuration}
 import scala.util.control.NonFatal
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{NEW_VALUE, OLD_VALUE, QUERY_ID}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.streaming.StreamingQuery
-import org.apache.spark.util.Clock
-import org.apache.spark.util.SystemClock
+import org.apache.spark.util.{Clock, SystemClock, ThreadUtils}
 
 /**
  * Caches Spark-Connect streaming query references and the sessions. When a query is stopped (i.e.
@@ -67,9 +66,9 @@ private[connect] class SparkConnectStreamingQueryCache(
 
       queryCache.put(QueryCacheKey(query.id.toString, query.runId.toString), value) match {
         case Some(existing) => // Query is being replace. Not really expected.
-          logWarning(
-            s"Replacing existing query in the cache (unexpected). Query Id: ${query.id}." +
-              s"Existing value $existing, new value $value.")
+          logWarning(log"Replacing existing query in the cache (unexpected). " +
+            log"Query Id: ${MDC(QUERY_ID, query.id)}.Existing value ${MDC(OLD_VALUE, existing)}, " +
+            log"new value ${MDC(NEW_VALUE, value)}.")
         case None =>
           logInfo(s"Adding new query to the cache. Query Id ${query.id}, value $value.")
       }
@@ -117,7 +116,10 @@ private[connect] class SparkConnectStreamingQueryCache(
             v.query.stop()
           } catch {
             case NonFatal(ex) =>
-              logWarning(s"Failed to stop the query ${k.queryId}. Error is ignored.", ex)
+              logWarning(
+                log"Failed to stop the query ${MDC(QUERY_ID, k.queryId)}. " +
+                  log"Error is ignored.",
+                ex)
           }
         }
       }
@@ -131,8 +133,7 @@ private[connect] class SparkConnectStreamingQueryCache(
   // Visible for testing.
   private[service] def shutdown(): Unit = queryCacheLock.synchronized {
     scheduledExecutor.foreach { executor =>
-      executor.shutdown()
-      executor.awaitTermination(1, TimeUnit.MINUTES)
+      ThreadUtils.shutdown(executor, FiniteDuration(1, TimeUnit.MINUTES))
     }
     scheduledExecutor = None
   }

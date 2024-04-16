@@ -25,6 +25,7 @@ import scala.util.parsing.combinator.RegexParsers
 import com.fasterxml.jackson.core._
 import com.fasterxml.jackson.core.json.JsonReadFeature
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -36,7 +37,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 import org.apache.spark.util.Utils
 
 private[this] sealed trait PathInstruction
@@ -75,7 +76,7 @@ private[this] object JsonPathParser extends RegexParsers {
   // parse `.name` or `['name']` child expressions
   def named: Parser[List[PathInstruction]] =
     for {
-      name <- '.' ~> "[^\\.\\[]+".r | "['" ~> "[^\\'\\?]+".r <~ "']"
+      name <- '.' ~> "[^\\.\\[]+".r | "['" ~> "[^\\']+".r <~ "']"
     } yield {
       Key :: Named(name) :: Nil
     }
@@ -361,7 +362,7 @@ class GetJsonObjectEvaluator(cachedPath: UTF8String) {
         val nextStyle = style match {
           case RawStyle => QuotedStyle
           case FlattenStyle => FlattenStyle
-          case QuotedStyle => throw new IllegalStateException()
+          case QuotedStyle => throw SparkException.internalError("Unexpected the quoted style.")
         }
 
         // temporarily buffer child matches, the emitted json will need to be
@@ -410,7 +411,7 @@ class GetJsonObjectEvaluator(cachedPath: UTF8String) {
         p.nextToken()
         arrayIndex(p, () => evaluatePath(p, g, style, xs))(idx)
 
-      case (FIELD_NAME, Named(name) :: xs) if p.getCurrentName == name =>
+      case (FIELD_NAME, Named(name) :: xs) if p.currentName == name =>
         // exact field match
         if (p.nextToken() != JsonToken.VALUE_NULL) {
           evaluatePath(p, g, style, xs)
@@ -545,7 +546,7 @@ case class JsonTuple(children: Seq[Expression])
     while (parser.nextToken() != JsonToken.END_OBJECT) {
       if (parser.getCurrentToken == JsonToken.FIELD_NAME) {
         // check to see if this field is desired in the output
-        val jsonField = parser.getCurrentName
+        val jsonField = parser.currentName
         var idx = fieldNames.indexOf(jsonField)
         if (idx >= 0) {
           // it is, copy the child tree to the correct location in the output row
@@ -593,7 +594,7 @@ case class JsonTuple(children: Seq[Expression])
         // a special case that needs to be handled outside of this method.
         // if a requested field is null, the result must be null. the easiest
         // way to achieve this is just by ignoring null tokens entirely
-        throw new IllegalStateException("Do not attempt to copy a null field.")
+        throw SparkException.internalError("Do not attempt to copy a null field.")
 
       case _ =>
         // handle other types including objects, arrays, booleans and numbers
@@ -812,13 +813,17 @@ case class StructsToJson(
         (map: Any) =>
           gen.write(map.asInstanceOf[MapData])
           getAndReset()
+      case _: VariantType =>
+        (v: Any) =>
+          gen.write(v.asInstanceOf[VariantVal])
+          getAndReset()
     }
   }
 
   override def dataType: DataType = StringType
 
   override def checkInputDataTypes(): TypeCheckResult = inputSchema match {
-    case dt @ (_: StructType | _: MapType | _: ArrayType) =>
+    case dt @ (_: StructType | _: MapType | _: ArrayType | _: VariantType) =>
       JacksonUtils.verifyType(prettyName, dt)
     case _ =>
       DataTypeMismatch(
@@ -1055,7 +1060,7 @@ case class JsonObjectKeys(child: Expression) extends UnaryExpression with Codege
     // traverse until the end of input and ensure it returns valid key
     while(parser.nextValue() != null && parser.currentName() != null) {
       // add current fieldName to the ArrayBuffer
-      arrayBufferOfKeys += UTF8String.fromString(parser.getCurrentName)
+      arrayBufferOfKeys += UTF8String.fromString(parser.currentName)
 
       // skip all the children of inner object or array
       parser.skipChildren()

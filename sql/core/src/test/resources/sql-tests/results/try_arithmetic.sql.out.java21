@@ -171,7 +171,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"INTERVAL '2' YEAR\"",
     "inputType" : "\"INTERVAL YEAR\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
     "sqlExpr" : "\"INTERVAL '2' YEAR + INTERVAL '02' SECOND\""
   },

@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.connect.execution
 
+import scala.concurrent.{ExecutionContext, Promise}
+import scala.jdk.CollectionConverters._
+import scala.util.Try
 import scala.util.control.NonFatal
 
 import com.google.protobuf.Message
@@ -27,9 +30,9 @@ import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.common.ProtoUtils
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
-import org.apache.spark.sql.connect.service.{ExecuteHolder, ExecuteSessionTag}
+import org.apache.spark.sql.connect.service.{ExecuteHolder, ExecuteSessionTag, SparkConnectService}
 import org.apache.spark.sql.connect.utils.ErrorUtils
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * This class launches the actual execution in an execution thread. The execution pushes the
@@ -37,10 +40,14 @@ import org.apache.spark.util.Utils
  */
 private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends Logging {
 
+  private val promise: Promise[Unit] = Promise[Unit]()
+
   // The newly created thread will inherit all InheritableThreadLocals used by Spark,
   // e.g. SparkContext.localProperties. If considering implementing a thread-pool,
   // forwarding of thread locals needs to be taken into account.
-  private val executionThread: Thread = new ExecutionThread()
+  private val executionThread: ExecutionThread = new ExecutionThread(promise)
+
+  private var started: Boolean = false
 
   private var interrupted: Boolean = false
 
@@ -49,13 +56,22 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
   private val lock = new Object
 
   /** Launches the execution in a background thread, returns immediately. */
-  def start(): Unit = {
-    executionThread.start()
+  private[connect] def start(): Unit = {
+    lock.synchronized {
+      assert(!started)
+      // Do not start if already interrupted.
+      if (!interrupted) {
+        executionThread.start()
+        started = true
+      }
+    }
   }
 
-  /** Joins the background execution thread after it is finished. */
-  def join(): Unit = {
-    executionThread.join()
+  /**
+   * Register a callback that gets executed after completion/interruption of the execution thread.
+   */
+  private[connect] def processOnCompletion(callback: Try[Unit] => Unit): Unit = {
+    promise.future.onComplete(callback)(ExecuteThreadRunner.namedExecutionContext)
   }
 
   /**
@@ -63,9 +79,21 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
    * @return
    *   true if it was not interrupted before, false if it was already interrupted or completed.
    */
-  def interrupt(): Boolean = {
+  private[connect] def interrupt(): Boolean = {
     lock.synchronized {
-      if (!interrupted && !completed) {
+      if (!started && !interrupted) {
+        // execution thread hasn't started yet, and will not be started.
+        // handle the interrupted error here directly.
+        interrupted = true
+        ErrorUtils.handleError(
+          "execute",
+          executeHolder.responseObserver,
+          executeHolder.sessionHolder.userId,
+          executeHolder.sessionHolder.sessionId,
+          Some(executeHolder.eventsManager),
+          interrupted)(new SparkSQLException("OPERATION_CANCELED", Map.empty))
+        true
+      } else if (!interrupted && !completed) {
         // checking completed prevents sending interrupt onError after onCompleted
         interrupted = true
         executionThread.interrupt()
@@ -99,6 +127,7 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
           }
       } finally {
         executeHolder.sessionHolder.session.sparkContext.removeJobTag(executeHolder.jobTag)
+        SparkConnectService.executionListener.foreach(_.removeJobTag(executeHolder.jobTag))
         executeHolder.sparkSessionTags.foreach { tag =>
           executeHolder.sessionHolder.session.sparkContext.removeJobTag(
             ExecuteSessionTag(
@@ -134,6 +163,8 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
 
       // Set tag for query cancellation
       session.sparkContext.addJobTag(executeHolder.jobTag)
+      // Register the job for progress reports.
+      SparkConnectService.executionListener.foreach(_.registerJobTag(executeHolder.jobTag))
       // Also set all user defined tags as Spark Job tags.
       executeHolder.sparkSessionTags.foreach { tag =>
         session.sparkContext.addJobTag(
@@ -160,6 +191,36 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
         case _ =>
           throw new UnsupportedOperationException(
             s"${executeHolder.request.getPlan.getOpTypeCase} not supported.")
+      }
+
+      val observedMetrics: Map[String, Seq[(Option[String], Any)]] = {
+        executeHolder.observations.map { case (name, observation) =>
+          val values = observation.getOrEmpty.map { case (key, value) =>
+            (Some(key), value)
+          }.toSeq
+          name -> values
+        }.toMap
+      }
+      val accumulatedInPython: Map[String, Seq[(Option[String], Any)]] = {
+        executeHolder.sessionHolder.pythonAccumulator.flatMap { accumulator =>
+          accumulator.synchronized {
+            val value = accumulator.value.asScala.toSeq
+            if (value.nonEmpty) {
+              accumulator.reset()
+              Some("__python_accumulator__" -> value.map(value => (None, value)))
+            } else {
+              None
+            }
+          }
+        }.toMap
+      }
+      if (observedMetrics.nonEmpty || accumulatedInPython.nonEmpty) {
+        executeHolder.responseObserver.onNext(
+          SparkConnectPlanExecution
+            .createObservedMetricsResponse(
+              executeHolder.sessionHolder.sessionId,
+              executeHolder.sessionHolder.serverSessionId,
+              observedMetrics ++ accumulatedInPython))
       }
 
       lock.synchronized {
@@ -219,10 +280,21 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
       .build()
   }
 
-  private class ExecutionThread
+  private class ExecutionThread(onCompletionPromise: Promise[Unit])
       extends Thread(s"SparkConnectExecuteThread_opId=${executeHolder.operationId}") {
     override def run(): Unit = {
-      execute()
+      try {
+        execute()
+        onCompletionPromise.success(())
+      } catch {
+        case NonFatal(e) =>
+          onCompletionPromise.failure(e)
+      }
     }
   }
+}
+
+private[connect] object ExecuteThreadRunner {
+  private implicit val namedExecutionContext: ExecutionContext = ExecutionContext
+    .fromExecutor(ThreadUtils.newDaemonSingleThreadExecutor("SparkConnectExecuteThreadCallback"))
 }

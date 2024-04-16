@@ -236,7 +236,7 @@ A typical example of this using S3 is via passing the following options:
 
 ```
 ...
---packages org.apache.hadoop:hadoop-aws:3.2.2
+--packages org.apache.hadoop:hadoop-aws:3.4.0
 --conf spark.kubernetes.file.upload.path=s3a://<s3-bucket>/path
 --conf spark.hadoop.fs.s3a.access.key=...
 --conf spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem
@@ -592,7 +592,7 @@ See the [configuration page](configuration.html) for information on Spark config
 
 #### Spark Properties
 
-<table class="table table-striped">
+<table class="spark-config">
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.kubernetes.context</code></td>
@@ -683,6 +683,18 @@ See the [configuration page](configuration.html) for information on Spark config
     excessive CPU usage on the spark driver.
   </td>
   <td>2.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.jars.avoidDownloadSchemes</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Comma-separated list of schemes for which jars will NOT be downloaded to the 
+    driver local disk prior to be distributed to executors, only for kubernetes deployment. 
+    For use in cases when the jars are big and executor counts are high, 
+    concurrent download causes network saturation and timeouts. 
+    Wildcard '*' is denoted to not downloading jars for any the schemes.
+  </td>
+  <td>4.0.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.authenticate.submission.caCertFile</code></td>
@@ -1658,7 +1670,7 @@ See the below table for the full list of pod specifications that will be overwri
 
 ### Pod Metadata
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Pod metadata key</th><th>Modified value</th><th>Description</th></tr></thead>
 <tr>
   <td>name</td>
@@ -1694,7 +1706,7 @@ See the below table for the full list of pod specifications that will be overwri
 
 ### Pod Spec
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Pod spec key</th><th>Modified value</th><th>Description</th></tr></thead>
 <tr>
   <td>imagePullSecrets</td>
@@ -1747,7 +1759,7 @@ See the below table for the full list of pod specifications that will be overwri
 
 The following affect the driver and executor containers. All other containers in the pod spec will be unaffected.
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Container spec key</th><th>Modified value</th><th>Description</th></tr></thead>
 <tr>
   <td>env</td>
@@ -1927,10 +1939,10 @@ Install Apache YuniKorn:
 ```bash
 helm repo add yunikorn https://apache.github.io/yunikorn-release
 helm repo update
-helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.3.0 --create-namespace --set embedAdmissionController=false
+helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.5.0 --create-namespace --set embedAdmissionController=false
 ```
 
-The above steps will install YuniKorn v1.3.0 on an existing Kubernetes cluster.
+The above steps will install YuniKorn v1.5.0 on an existing Kubernetes cluster.
 
 ##### Get started
 

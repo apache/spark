@@ -77,7 +77,7 @@ class PartitioningSuite extends SparkFunSuite with SharedSparkContext with Priva
       for (element <- 1 to 1000) {
         val partition = partitioner.getPartition(element)
         if (numPartitions > 1) {
-          if (partition < rangeBounds.size) {
+          if (partition < rangeBounds.length) {
             assert(element <= rangeBounds(partition))
           }
           if (partition > 0) {
@@ -111,7 +111,7 @@ class PartitioningSuite extends SparkFunSuite with SharedSparkContext with Priva
     assert(count === rdd.count())
     sketched.foreach { case (idx, n, sample) =>
       assert(n === idx)
-      assert(sample.size === math.min(n, sampleSizePerPartition))
+      assert(sample.length === math.min(n, sampleSizePerPartition))
     }
   }
 

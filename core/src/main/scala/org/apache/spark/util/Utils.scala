@@ -48,9 +48,10 @@ import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import com.google.common.collect.Interners
 import com.google.common.io.{ByteStreams, Files => GFiles}
 import com.google.common.net.InetAddresses
+import jakarta.ws.rs.core.UriBuilder
 import org.apache.commons.codec.binary.Hex
 import org.apache.commons.io.IOUtils
-import org.apache.commons.lang3.SystemUtils
+import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompressionCodec}
@@ -67,7 +68,8 @@ import org.slf4j.Logger
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
+import org.apache.spark.internal.LogKey._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Streaming._
 import org.apache.spark.internal.config.Tests.IS_TESTING
@@ -674,7 +676,7 @@ private[spark] object Utils
       throw new IOException(s"Failed to create directory ${targetDir.getPath}")
     }
     val dest = new File(targetDir, filename.getOrElse(path.getName))
-    if (fs.isFile(path)) {
+    if (fs.getFileStatus(path).isFile) {
       val in = fs.open(path)
       try {
         downloadFile(path.toString, in, dest, fileOverwrite)
@@ -769,7 +771,6 @@ private[spark] object Utils
    * logic of locating the local directories according to deployment mode.
    */
   def getConfiguredLocalDirs(conf: SparkConf): Array[String] = {
-    val shuffleServiceEnabled = conf.get(config.SHUFFLE_SERVICE_ENABLED)
     if (isRunningInYarnContainer(conf)) {
       // If we are in yarn mode, systems can have different disk layouts so we must set it
       // to what Yarn on this system said was available. Note this assumes that Yarn has
@@ -808,12 +809,14 @@ private[spark] object Utils
           chmod700(dir)
           Some(dir.getAbsolutePath)
         } else {
-          logError(s"Failed to create dir in $root. Ignoring this directory.")
+          logError(log"Failed to create dir in ${MDC(PATH, root)}. Ignoring this directory.")
+
           None
         }
       } catch {
         case e: IOException =>
-          logError(s"Failed to create local root dir in $root. Ignoring this directory.")
+          logError(
+            log"Failed to create local root dir in ${MDC(PATH, root)}. Ignoring this directory.")
           None
       }
     }
@@ -1216,7 +1219,8 @@ private[spark] object Utils
     val exitCode = process.waitFor()
     stdoutThread.join()   // Wait for it to finish reading output
     if (exitCode != 0) {
-      logError(s"Process $command exited with code $exitCode: $output")
+      logError(log"Process ${MDC(COMMAND, command)} exited with code " +
+        log"${MDC(EXIT_CODE, exitCode)}: ${MDC(COMMAND_OUTPUT, output)}")
       throw new SparkException(s"Process $command exited with code $exitCode")
     }
     output.toString
@@ -1272,11 +1276,13 @@ private[spark] object Utils
       case t: Throwable =>
         val currentThreadName = Thread.currentThread().getName
         if (sc != null) {
-          logError(s"uncaught error in thread $currentThreadName, stopping SparkContext", t)
+          logError(log"uncaught error in thread ${MDC(THREAD_NAME, currentThreadName)}, " +
+              log"stopping SparkContext", t)
           sc.stopInNewThread()
         }
         if (!NonFatal(t)) {
-          logError(s"throw uncaught fatal error in thread $currentThreadName", t)
+          logError(
+            log"throw uncaught fatal error in thread ${MDC(THREAD_NAME, currentThreadName)}", t)
           throw t
         }
     }
@@ -1288,7 +1294,8 @@ private[spark] object Utils
       block
     } catch {
       case NonFatal(t) =>
-        logError(s"Uncaught exception in thread ${Thread.currentThread().getName}", t)
+        logError(
+          log"Uncaught exception in thread ${MDC(THREAD_NAME, Thread.currentThread().getName)}", t)
     }
   }
 
@@ -1465,7 +1472,7 @@ private[spark] object Utils
       fileSize
     } catch {
       case e: Throwable =>
-        logError(s"Cannot get file length of ${file}", e)
+        logError(log"Cannot get file length of ${MDC(PATH, file)}", e)
         throw e
     } finally {
       if (gzInputStream != null) {
@@ -1774,8 +1781,7 @@ private[spark] object Utils
   /**
    * Whether the underlying Java version is at least 21.
    */
-  val isJavaVersionAtLeast21 =
-    System.getProperty("java.version").split("[+.\\-]+", 3)(0).toInt >= 21
+  val isJavaVersionAtLeast21 = SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_21)
 
   /**
    * Whether the underlying operating system is Mac OS X and processor is Apple Silicon.
@@ -1844,7 +1850,8 @@ private[spark] object Utils
       case ct: ControlThrowable =>
         throw ct
       case t: Throwable =>
-        logError(s"Uncaught exception in thread ${Thread.currentThread().getName}", t)
+        logError(
+          log"Uncaught exception in thread ${MDC(THREAD_NAME, Thread.currentThread().getName)}", t)
         throw t
     }
   }
@@ -1858,7 +1865,8 @@ private[spark] object Utils
       case ct: ControlThrowable =>
         throw ct
       case t: Throwable =>
-        logError(s"Uncaught exception in thread ${Thread.currentThread().getName}", t)
+        logError(
+          log"Uncaught exception in thread ${MDC(THREAD_NAME, Thread.currentThread().getName)}", t)
         scala.util.Failure(t)
     }
   }
@@ -1883,17 +1891,6 @@ private[spark] object Utils
       ""
     } else {
       paths.split(",").filter(_.trim.nonEmpty).map { p => Utils.resolveURI(p) }.mkString(",")
-    }
-  }
-
-  /** Check whether a path is an absolute URI. */
-  def isAbsoluteURI(path: String): Boolean = {
-    try {
-      val uri = new URI(path: String)
-      uri.isAbsolute
-    } catch {
-      case _: URISyntaxException =>
-        false
     }
   }
 
@@ -1931,20 +1928,6 @@ private[spark] object Utils
       }
     }
     path
-  }
-
-  /**
-   * Updates Spark config with properties from a set of Properties.
-   * Provided properties have the highest priority.
-   */
-  def updateSparkConfigFromProperties(
-      conf: SparkConf,
-      properties: Map[String, String]) : Unit = {
-    properties.filter { case (k, v) =>
-      k.startsWith("spark.")
-    }.foreach { case (k, v) =>
-      conf.set(k, v)
-    }
   }
 
   /**
@@ -2370,7 +2353,8 @@ private[spark] object Utils
         val currentUserGroups = groupMappingServiceProvider.getGroups(username)
         return currentUserGroups
       } catch {
-        case e: Exception => logError(s"Error getting groups for user=$username", e)
+        case e: Exception =>
+          logError(log"Error getting groups for user=${MDC(USER_NAME, username)}", e)
       }
     }
     EMPTY_USER_GROUPS
@@ -2853,7 +2837,7 @@ private[spark] object Utils
     else {
       // The last char is a dollar sign
       // Find last non-dollar char
-      val lastNonDollarChar = s.reverse.find(_ != '$')
+      val lastNonDollarChar = s.findLast(_ != '$')
       lastNonDollarChar match {
         case None => s
         case Some(c) =>
@@ -2910,6 +2894,20 @@ private[spark] object Utils
   /** Returns whether the URI is a "local:" URI. */
   def isLocalUri(uri: String): Boolean = {
     uri.startsWith(s"$LOCAL_SCHEME:")
+  }
+
+  /** Create a UriBuilder from URI object. */
+  def getUriBuilder(uri: URI): UriBuilder = {
+    // scalastyle:off uribuilder
+    UriBuilder.fromUri(uri)
+    // scalastyle:on uribuilder
+  }
+
+  /** Create a UriBuilder from URI string. */
+  def getUriBuilder(uri: String): UriBuilder = {
+    // scalastyle:off uribuilder
+    UriBuilder.fromUri(uri)
+    // scalastyle:on uribuilder
   }
 
   /** Check whether the file of the path is splittable. */
@@ -2974,10 +2972,10 @@ private[spark] object Utils
   }
 
   /** Returns a string message about delegation token generation failure */
-  def createFailedToGetTokenMessage(serviceName: String, e: scala.Throwable): String = {
-    val message = "Failed to get token from service %s due to %s. " +
-      "If %s is not used, set spark.security.credentials.%s.enabled to false."
-    message.format(serviceName, e, serviceName, serviceName)
+  def createFailedToGetTokenMessage(serviceName: String, e: scala.Throwable): MessageWithContext = {
+    log"Failed to get token from service ${MDC(SERVICE_NAME, serviceName)} " +
+      log"due to ${MDC(ERROR, e)}. If ${MDC(SERVICE_NAME, serviceName)} is not used, " +
+      log"set spark.security.credentials.${MDC(SERVICE_NAME, serviceName)}.enabled to false."
   }
 
   /**
@@ -3027,6 +3025,23 @@ private[spark] object Utils
         math.max((sortedSize(len / 2) + sortedSize(len / 2 - 1)) / 2, 1)
       case _ => math.max(sortedSize(len / 2), 1)
     }
+  }
+
+  /**
+   * Check if a command is available.
+   */
+  def checkCommandAvailable(command: String): Boolean = {
+    // To avoid conflicts with java.lang.Process
+    import scala.sys.process.{Process, ProcessLogger}
+
+    val attempt = if (Utils.isWindows) {
+      Try(Process(Seq(
+        "cmd.exe", "/C", s"where $command")).run(ProcessLogger(_ => ())).exitValue())
+    } else {
+      Try(Process(Seq(
+        "sh", "-c", s"command -v $command")).run(ProcessLogger(_ => ())).exitValue())
+    }
+    attempt.isSuccess && attempt.get == 0
   }
 
   /**

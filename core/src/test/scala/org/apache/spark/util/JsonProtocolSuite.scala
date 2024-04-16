@@ -1292,7 +1292,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       assert(opt2.isDefined)
       assertEquals(opt1.get, opt2.get)
     } else {
-      assert(!opt2.isDefined)
+      assert(opt2.isEmpty)
     }
   }
 

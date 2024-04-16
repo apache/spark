@@ -153,7 +153,7 @@ private [connector] trait SessionCatalogTest[T <: Table, Catalog <: TestV2Sessio
     spark.sessionState.catalogManager.catalog(name)
   }
 
-  protected val v2Format: String = classOf[FakeV2Provider].getName
+  protected val v2Format: String = classOf[FakeV2ProviderWithCustomSchema].getName
 
   protected val catalogClassName: String = classOf[InMemoryTableSessionCatalog].getName
 

@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.{Objects, UUID}
 
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -160,7 +161,7 @@ case class Alias(child: Expression, name: String)(
   /** Just a simple passthrough for code generation. */
   override def genCode(ctx: CodegenContext): ExprCode = child.genCode(ctx)
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    throw new IllegalStateException("Alias.doGenCode should not be called.")
+    throw SparkException.internalError("Alias.doGenCode should not be called.")
   }
 
   override def dataType: DataType = child.dataType
@@ -394,19 +395,23 @@ case class PrettyAttribute(
   override def sql: String = toString
 
   override def withNullability(newNullability: Boolean): Attribute =
-    throw new UnsupportedOperationException
-  override def newInstance(): Attribute = throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
+  override def newInstance(): Attribute =
+    throw SparkUnsupportedOperationException()
   override def withQualifier(newQualifier: Seq[String]): Attribute =
-    throw new UnsupportedOperationException
-  override def withName(newName: String): Attribute = throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
+  override def withName(newName: String): Attribute =
+    throw SparkUnsupportedOperationException()
   override def withMetadata(newMetadata: Metadata): Attribute =
-    throw new UnsupportedOperationException
-  override def qualifier: Seq[String] = throw new UnsupportedOperationException
-  override def exprId: ExprId = throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
+  override def qualifier: Seq[String] =
+    throw SparkUnsupportedOperationException()
+  override def exprId: ExprId =
+    throw SparkUnsupportedOperationException()
   override def withExprId(newExprId: ExprId): Attribute =
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   override def withDataType(newType: DataType): Attribute =
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   override def nullable: Boolean = true
 }
 
@@ -567,7 +572,7 @@ object FileSourceMetadataAttribute {
   def isSupportedType(dataType: DataType): Boolean = PhysicalDataType(dataType) match {
     // PhysicalPrimitiveType covers: Boolean, Byte, Double, Float, Integer, Long, Null, Short
     case _: PhysicalPrimitiveType | _: PhysicalDecimalType => true
-    case PhysicalBinaryType | PhysicalStringType | PhysicalCalendarIntervalType => true
+    case PhysicalBinaryType | PhysicalStringType(_) | PhysicalCalendarIntervalType => true
     case _ => false
   }
 

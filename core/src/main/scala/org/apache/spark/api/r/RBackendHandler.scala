@@ -26,9 +26,11 @@ import io.netty.handler.timeout.ReadTimeoutException
 
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.api.r.SerDe._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{METHOD_NAME, OBJECT_ID}
 import org.apache.spark.internal.config.R._
 import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Handler for RBackend
@@ -75,7 +77,7 @@ private[r] class RBackendHandler(server: RBackend)
             writeObject(dos, null, server.jvmObjectTracker)
           } catch {
             case e: Exception =>
-              logError(s"Removing $objId failed", e)
+              logError(log"Removing ${MDC(OBJECT_ID, objId)} failed", e)
               writeInt(dos, -1)
               writeString(dos, s"Removing $objId failed: ${e.getMessage}")
           }
@@ -191,7 +193,7 @@ private[r] class RBackendHandler(server: RBackend)
       }
     } catch {
       case e: Exception =>
-        logError(s"$methodName on $objId failed", e)
+        logError(log"${MDC(METHOD_NAME, methodName)} on ${MDC(OBJECT_ID, objId)} failed", e)
         writeInt(dos, -1)
         // Writing the error message of the cause for the exception. This will be returned
         // to user in the R process.
@@ -266,7 +268,7 @@ private[r] class RBackendHandler(server: RBackend)
           for (i <- 0 until numArgs) {
             if (parameterTypes(i) == classOf[Seq[Any]] && args(i).getClass.isArray) {
               // Convert a Java array to scala Seq
-              args(i) = args(i).asInstanceOf[Array[_]].toSeq
+              args(i) = args(i).asInstanceOf[Array[_]].toImmutableArraySeq
             }
           }
 

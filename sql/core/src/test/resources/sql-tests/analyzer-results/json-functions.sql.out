@@ -252,7 +252,7 @@ SELECT json_tuple(jsonField, 'b', CAST(NULL AS STRING), a) FROM jsonTable
 Project [c0#x, c1#x, c2#x]
 +- Generate json_tuple(jsonField#x, b, cast(null as string), a#x), false, [c0#x, c1#x, c2#x]
    +- SubqueryAlias jsontable
-      +- View (`jsonTable`, [jsonField#x,a#x])
+      +- View (`jsonTable`, [jsonField#x, a#x])
          +- Project [cast(col1#x as string) AS jsonField#x, cast(col2#x as string) AS a#x]
             +- Project [col1#x, col2#x]
                +- LocalRelation [col1#x, col2#x]
@@ -494,7 +494,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"2\"",
     "inputType" : "\"INT\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"STRING\"",
     "sqlExpr" : "\"json_array_length(2)\""
   },
@@ -627,7 +627,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"200\"",
     "inputType" : "\"INT\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"STRING\"",
     "sqlExpr" : "\"json_object_keys(200)\""
   },

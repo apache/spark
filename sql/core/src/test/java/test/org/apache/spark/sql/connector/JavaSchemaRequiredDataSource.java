@@ -44,7 +44,9 @@ public class JavaSchemaRequiredDataSource implements TableProvider {
 
     @Override
     public InputPartition[] planInputPartitions() {
-      return new InputPartition[0];
+      InputPartition[] partitions = new InputPartition[1];
+      partitions[0] = new JavaRangeInputPartition(0, 2);
+      return partitions;
     }
   }
 

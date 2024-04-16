@@ -28,6 +28,7 @@ import org.apache.spark.ml.clustering.{BisectingKMeans, BisectingKMeansModel}
 import org.apache.spark.ml.feature.RFormula
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.util.ArrayImplicits._
 
 private[r] class BisectingKMeansWrapper private (
     val pipeline: PipelineModel,
@@ -115,8 +116,8 @@ private[r] object BisectingKMeansWrapper extends MLReadable[BisectingKMeansWrapp
       val pipelinePath = new Path(path, "pipeline").toString
 
       val rMetadata = ("class" -> instance.getClass.getName) ~
-        ("features" -> instance.features.toSeq) ~
-        ("size" -> instance.size.toSeq)
+        ("features" -> instance.features.toImmutableArraySeq) ~
+        ("size" -> instance.size.toImmutableArraySeq)
       val rMetadataJson: String = compact(render(rMetadata))
 
       sc.parallelize(Seq(rMetadataJson), 1).saveAsTextFile(rMetadataPath)

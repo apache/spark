@@ -867,7 +867,7 @@ case class NTile(buckets: Expression) extends RowNumberLike with SizeBasedWindow
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "1",
+          "paramIndex" -> ordinalNumber(0),
           "requiredType" -> toSQLType(IntegerType),
           "inputSql" -> toSQLExpr(buckets),
           "inputType" -> toSQLType(buckets.dataType))

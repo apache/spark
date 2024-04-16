@@ -135,7 +135,7 @@ private[ml] object FValueTest {
         } else Iterator.empty
       }.reduceByKey(_ + _
       ).mapPartitions { iter =>
-        val fd = new FDistribution(1, degreesOfFreedom)
+        val fd = new FDistribution(1.0, degreesOfFreedom.toDouble)
         iter.map { case (col, sumForCov) =>
           // Cov(X,Y) = Sum(((Xi - Avg(X)) * ((Yi-Avg(Y))) / (N-1)
           val covariance = sumForCov / (numSamples - 1)

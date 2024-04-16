@@ -21,6 +21,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkClassUtils
 
 /**
@@ -44,7 +45,7 @@ object DataTypeProtoConverter {
       case proto.DataType.KindCase.DOUBLE => DoubleType
       case proto.DataType.KindCase.DECIMAL => toCatalystDecimalType(t.getDecimal)
 
-      case proto.DataType.KindCase.STRING => StringType
+      case proto.DataType.KindCase.STRING => toCatalystStringType(t.getString)
       case proto.DataType.KindCase.CHAR => CharType(t.getChar.getLength)
       case proto.DataType.KindCase.VAR_CHAR => VarcharType(t.getVarChar.getLength)
 
@@ -61,6 +62,7 @@ object DataTypeProtoConverter {
       case proto.DataType.KindCase.ARRAY => toCatalystArrayType(t.getArray)
       case proto.DataType.KindCase.STRUCT => toCatalystStructType(t.getStruct)
       case proto.DataType.KindCase.MAP => toCatalystMapType(t.getMap)
+      case proto.DataType.KindCase.VARIANT => VariantType
 
       case proto.DataType.KindCase.UDT => toCatalystUDT(t.getUdt)
 
@@ -76,6 +78,9 @@ object DataTypeProtoConverter {
       case _ => new DecimalType()
     }
   }
+
+  private def toCatalystStringType(t: proto.DataType.String): StringType =
+    StringType(t.getCollationId)
 
   private def toCatalystYearMonthIntervalType(t: proto.DataType.YearMonthInterval) = {
     (t.hasStartField, t.hasEndField) match {
@@ -169,7 +174,11 @@ object DataTypeProtoConverter {
             proto.DataType.Decimal.newBuilder().setPrecision(precision).setScale(scale).build())
           .build()
 
-      case StringType => ProtoDataTypes.StringType
+      case s: StringType =>
+        proto.DataType
+          .newBuilder()
+          .setString(proto.DataType.String.newBuilder().setCollationId(s.collationId).build())
+          .build()
 
       case CharType(length) =>
         proto.DataType
@@ -225,7 +234,7 @@ object DataTypeProtoConverter {
           .build()
 
       case StructType(fields: Array[StructField]) =>
-        val protoFields = fields.toSeq.map {
+        val protoFields = fields.toImmutableArraySeq.map {
           case StructField(
                 name: String,
                 dataType: DataType,
@@ -268,6 +277,8 @@ object DataTypeProtoConverter {
               .setValueContainsNull(valueContainsNull)
               .build())
           .build()
+
+      case VariantType => ProtoDataTypes.VariantType
 
       case pyudt: PythonUserDefinedType =>
         // Python UDT

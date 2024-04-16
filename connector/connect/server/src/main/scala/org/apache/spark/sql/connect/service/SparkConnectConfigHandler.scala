@@ -30,9 +30,16 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
     extends Logging {
 
   def handle(request: proto.ConfigRequest): Unit = {
+    val previousSessionId = request.hasClientObservedServerSideSessionId match {
+      case true => Some(request.getClientObservedServerSideSessionId)
+      case false => None
+    }
     val holder =
       SparkConnectService
-        .getOrCreateIsolatedSession(request.getUserContext.getUserId, request.getSessionId)
+        .getOrCreateIsolatedSession(
+          request.getUserContext.getUserId,
+          request.getSessionId,
+          previousSessionId)
     val session = holder.session
 
     val builder = request.getOperation.getOpTypeCase match {
@@ -161,7 +168,8 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
 
 object SparkConnectConfigHandler {
 
-  private[connect] val unsupportedConfigurations = Set("spark.sql.execution.arrow.enabled")
+  private[connect] val unsupportedConfigurations =
+    Set("spark.sql.execution.arrow.enabled", "spark.sql.execution.arrow.pyspark.fallback.enabled")
 
   def toKeyValue(pair: proto.KeyValue): (String, Option[String]) = {
     val key = pair.getKey

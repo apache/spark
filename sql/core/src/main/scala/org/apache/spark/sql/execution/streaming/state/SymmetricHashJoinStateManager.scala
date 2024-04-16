@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.util.Locale
 
+import scala.annotation.tailrec
+
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.TaskContext
@@ -48,6 +50,12 @@ import org.apache.spark.util.NextIterator
  * @param hadoopConf            Hadoop configuration for reading state data from storage
  * @param partitionId           A partition ID of source RDD.
  * @param stateFormatVersion    The version of format for state.
+ * @param skippedNullValueCount The instance of SQLMetric tracking the number of skipped null
+ *                              values.
+ * @param useStateStoreCoordinator  Whether to use a state store coordinator to maintain the state
+ *                                  store providers being used in this class. If true, Spark will
+ *                                  take care of management for state store providers, e.g. running
+ *                                  maintenance task for these providers.
  *
  * Internally, the key -> multiple values is stored in two [[StateStore]]s.
  * - Store 1 ([[KeyToNumValuesStore]]) maintains mapping between key -> number of values
@@ -77,7 +85,8 @@ class SymmetricHashJoinStateManager(
     hadoopConf: Configuration,
     partitionId: Int,
     stateFormatVersion: Int,
-    skippedNullValueCount: Option[SQLMetric] = None) extends Logging {
+    skippedNullValueCount: Option[SQLMetric] = None,
+    useStateStoreCoordinator: Boolean = true) extends Logging {
   import SymmetricHashJoinStateManager._
 
   /*
@@ -182,6 +191,57 @@ class SymmetricHashJoinStateManager(
       }
 
       override def close(): Unit = {}
+    }
+  }
+
+  /**
+   * Perform a full scan to provide all available data.
+   *
+   * This produces an iterator over the (key, value, match) tuples. Callers are expected
+   * to consume fully to clean up underlying iterators correctly.
+   */
+  def iterator: Iterator[KeyToValuePair] = {
+    new NextIterator[KeyToValuePair] {
+      // Reuse this object to avoid creation+GC overhead.
+      private val reusedRet = new KeyToValuePair()
+
+      private val allKeyToNumValues = keyToNumValues.iterator
+
+      private var currentKey: UnsafeRow = null
+      private var numValues: Long = 0L
+      private var index: Long = 0L
+
+      @tailrec
+      override def getNext(): KeyToValuePair = {
+        if (currentKey != null) {
+          assert(index < numValues)
+
+          val valueAndMatched = keyWithIndexToValue.get(currentKey, index)
+          index += 1
+
+          reusedRet.withNew(currentKey, valueAndMatched)
+
+          if (index == numValues) {
+            currentKey = null
+            numValues = 0L
+            index = 0L
+          }
+
+          reusedRet
+        } else if (allKeyToNumValues.hasNext) {
+          val newKeyToNumValues = allKeyToNumValues.next()
+          currentKey = newKeyToNumValues.key
+          numValues = newKeyToNumValues.numValue
+          index = 0L
+
+          getNext()
+        } else {
+          finished = true
+          null
+        }
+      }
+
+      override protected def close(): Unit = {}
     }
   }
 
@@ -390,6 +450,7 @@ class SymmetricHashJoinStateManager(
 
   /** Helper trait for invoking common functionalities of a state store. */
   private abstract class StateStoreHandler(stateStoreType: StateStoreType) extends Logging {
+    private var stateStoreProvider: StateStoreProvider = _
 
     /** StateStore that the subclasses of this class is going to operate on */
     protected def stateStore: StateStore
@@ -404,6 +465,11 @@ class SymmetricHashJoinStateManager(
         logInfo(s"Aborted store ${stateStore.id}")
         stateStore.abort()
       }
+      // If this class manages a state store provider by itself, it should take care of closing
+      // provider instance as well.
+      if (stateStoreProvider != null) {
+        stateStoreProvider.close()
+      }
     }
 
     def metrics: StateStoreMetrics = stateStore.metrics
@@ -412,9 +478,18 @@ class SymmetricHashJoinStateManager(
     protected def getStateStore(keySchema: StructType, valueSchema: StructType): StateStore = {
       val storeProviderId = StateStoreProviderId(
         stateInfo.get, partitionId, getStateStoreName(joinSide, stateStoreType))
-      val store = StateStore.get(
-        storeProviderId, keySchema, valueSchema, numColsPrefixKey = 0,
-        stateInfo.get.storeVersion, storeConf, hadoopConf)
+      val store = if (useStateStoreCoordinator) {
+        StateStore.get(
+          storeProviderId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
+          stateInfo.get.storeVersion, useColumnFamilies = false, storeConf, hadoopConf)
+      } else {
+        // This class will manage the state store provider by itself.
+        stateStoreProvider = StateStoreProvider.createAndInit(
+          storeProviderId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
+          useColumnFamilies = false, storeConf, hadoopConf,
+          useMultipleValuesPerKey = false)
+        stateStoreProvider.getStore(stateInfo.get.storeVersion)
+      }
       logInfo(s"Loaded store ${store.id}")
       store
     }

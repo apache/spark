@@ -20,10 +20,11 @@ package org.apache.spark.sql.streaming.ui
 import java.{util => ju}
 import java.lang.{Long => JLong}
 import java.util.Locale
-import javax.servlet.http.HttpServletRequest
 
 import scala.jdk.CollectionConverters._
 import scala.xml.{Node, NodeBuffer, Unparsed}
+
+import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.streaming.state.StateStoreProvider
@@ -50,8 +51,8 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
     // scalastyle:off
     <script src={SparkUIUtils.prependBaseUri(request, "/static/d3.min.js")}></script>
         <link rel="stylesheet" href={SparkUIUtils.prependBaseUri(request, "/static/streaming-page.css")} type="text/css"/>
-      <script src={SparkUIUtils.prependBaseUri(request, "/static/streaming-page.js")}></script>
-      <script src={SparkUIUtils.prependBaseUri(request, "/static/structured-streaming-page.js")}></script>
+      <script type="module" src={SparkUIUtils.prependBaseUri(request, "/static/streaming-page.js")}></script>
+      <script type="module" src={SparkUIUtils.prependBaseUri(request, "/static/structured-streaming-page.js")}></script>
     // scalastyle:on
   }
 
@@ -68,7 +69,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
     val content =
       resources ++
         basicInfo ++
-        generateStatTable(query)
+        generateStatTable(query, request)
     SparkUIUtils.headerSparkPage(request, "Streaming Query Statistics", content, parent)
   }
 
@@ -210,6 +211,10 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
         p.stateOperators.map(_.numRowsUpdated).sum.toDouble))
       val maxNumRowsUpdated = numRowsUpdatedData.maxBy(_._2)._2
 
+      val numRowsRemovedData = query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
+        p.stateOperators.map(_.numRowsRemoved).sum.toDouble))
+      val maxNumRowsRemoved = numRowsRemovedData.maxBy(_._2)._2
+
       val memoryUsedBytesData = query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
         p.stateOperators.map(_.memoryUsedBytes).sum.toDouble))
       val maxMemoryUsedBytes = memoryUsedBytesData.maxBy(_._2)._2
@@ -242,6 +247,18 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
           maxNumRowsUpdated,
           "records")
       graphUIDataForNumberUpdatedRows.generateDataJs(jsCollector)
+
+      val graphUIDataForNumberRemovedRows =
+        new GraphUIData(
+          "aggregated-num-removed-state-rows-timeline",
+          "aggregated-num-removed-state-rows-histogram",
+          numRowsRemovedData.toImmutableArraySeq,
+          minBatchTime,
+          maxBatchTime,
+          0,
+          maxNumRowsRemoved,
+          "records")
+      graphUIDataForNumberRemovedRows.generateDataJs(jsCollector)
 
       val graphUIDataForMemoryUsedBytes =
         new GraphUIData(
@@ -290,6 +307,15 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
         <tr>
           <td style="vertical-align: middle;">
             <div style="width: 160px;">
+              <div><strong>Aggregated Number Of Removed State Rows{SparkUIUtils.tooltip("Aggregated number of state rows removed from the state. Normally it means the number of rows evicted from the state because watermark has passed, except in flatMapGroupsWithState, where users can manually remove the state.", "right")}</strong></div>
+            </div>
+          </td>
+          <td class={"aggregated-num-removed-state-rows-timeline"}>{graphUIDataForNumberRemovedRows.generateTimelineHtml(jsCollector)}</td>
+          <td class={"aggregated-num-removed-state-rows-histogram"}>{graphUIDataForNumberRemovedRows.generateHistogramHtml(jsCollector)}</td>
+        </tr>
+        <tr>
+          <td style="vertical-align: middle;">
+            <div style="width: 160px;">
               <div><strong>Aggregated State Memory Used In Bytes {SparkUIUtils.tooltip("Aggregated state memory used in bytes.", "right")}</strong></div>
             </div>
           </td>
@@ -299,7 +325,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
         <tr>
           <td style="vertical-align: middle;">
             <div style="width: 160px;">
-              <div><strong>Aggregated Number Of Rows Dropped By Watermark {SparkUIUtils.tooltip("Accumulates all input rows being dropped in stateful operators by watermark. 'Inputs' are relative to operators.", "right")}</strong></div>
+              <div><strong>Aggregated Number Of Late Rows Dropped By Watermark {SparkUIUtils.tooltip("Accumulates all late input rows being dropped in stateful operators by watermark. This only represents the late rows ever reached to stateful operators, not rows from the source. A row could be filtered out at an earlier stage.", "right")}</strong></div>
             </div>
           </td>
           <td class={"aggregated-num-rows-dropped-by-watermark-timeline"}>{graphUIDataForNumRowsDroppedByWatermark.generateTimelineHtml(jsCollector)}</td>
@@ -361,7 +387,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
     result
   }
 
-  def generateStatTable(query: StreamingQueryUIData): Seq[Node] = {
+  def generateStatTable(query: StreamingQueryUIData, request: HttpServletRequest): Seq[Node] = {
     val batchToTimestamps = withNoProgress(query,
       query.recentProgress.map(p => (p.batchId, parseProgressTimestamp(p.timestamp))),
       Array.empty[(Long, Long)])
@@ -390,10 +416,10 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
         withNumberInvalid { p.processedRowsPerSecond })), Array.empty[(Long, Double)])
     val inputRowsData = withNoProgress(query,
       query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
-        withNumberInvalid { p.numInputRows })), Array.empty[(Long, Double)])
+        withNumberInvalid { p.numInputRows.toDouble })), Array.empty[(Long, Double)])
     val batchDurations = withNoProgress(query,
       query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
-        withNumberInvalid { p.batchDuration })), Array.empty[(Long, Double)])
+        withNumberInvalid { p.batchDuration.toDouble })), Array.empty[(Long, Double)])
     val operationDurationData = withNoProgress(
       query,
       query.recentProgress.map { p =>
@@ -404,7 +430,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
       },
       Array.empty[(Long, ju.Map[String, JLong])])
 
-    val jsCollector = new JsCollector
+    val jsCollector = new JsCollector(request)
     val graphUIDataForInputRate =
       new GraphUIData(
         "input-rate-timeline",
@@ -412,7 +438,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
         inputRateData.toImmutableArraySeq,
         minBatchTime,
         maxBatchTime,
-        minRecordRate,
+        minRecordRate.toDouble,
         maxRecordRate,
         "records/sec")
     graphUIDataForInputRate.generateDataJs(jsCollector)
@@ -424,7 +450,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
         processRateData.toImmutableArraySeq,
         minBatchTime,
         maxBatchTime,
-        minProcessRate,
+        minProcessRate.toDouble,
         maxProcessRate,
         "records/sec")
     graphUIDataForProcessRate.generateDataJs(jsCollector)
@@ -436,8 +462,8 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
         inputRowsData.toImmutableArraySeq,
         minBatchTime,
         maxBatchTime,
-        minRows,
-        maxRows,
+        minRows.toDouble,
+        maxRows.toDouble,
         "records")
     graphUIDataForInputRows.generateDataJs(jsCollector)
 
@@ -448,8 +474,8 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
         batchDurations.toImmutableArraySeq,
         minBatchTime,
         maxBatchTime,
-        minBatchDuration,
-        maxBatchDuration,
+        minBatchDuration.toDouble,
+        maxBatchDuration.toDouble,
         "ms")
     graphUIDataForBatchDuration.generateDataJs(jsCollector)
 

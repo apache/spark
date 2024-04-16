@@ -17,7 +17,8 @@
 
 package org.apache.spark.storage
 
-import org.apache.spark.{SparkConf, SslTestUtils}
+import org.apache.spark.SparkConf
+import org.apache.spark.util.SslTestUtils
 
 class SslBlockManagerReplicationSuite extends BlockManagerReplicationSuite {
   override def createConf(): SparkConf = {

@@ -22,13 +22,13 @@ import java.util.Locale
 import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
-import org.json4s.NoTypeHints
+import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
-import org.apache.spark.SparkUpgradeException
+import org.apache.spark.{SparkException, SparkUpgradeException}
 import org.apache.spark.sql.{SPARK_LEGACY_DATETIME_METADATA_KEY, SPARK_LEGACY_INT96_METADATA_KEY, SPARK_TIMEZONE_METADATA_KEY, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogUtils}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, ExpressionSet, PredicateHelper}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, ExpressionSet, GetStructField, PredicateHelper}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -36,7 +36,7 @@ import org.apache.spark.sql.execution.datasources.parquet.ParquetOptions
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils}
 import org.apache.spark.util.Utils
 
 
@@ -55,7 +55,7 @@ object DataSourceUtils extends PredicateHelper {
   /**
    * Utility methods for converting partitionBy columns to options and back.
    */
-  private implicit val formats = Serialization.formats(NoTypeHints)
+  private implicit val formats: Formats = Serialization.formats(NoTypeHints)
 
   def encodePartitioningColumns(columns: Seq[String]): String = {
     Serialization.write(columns)
@@ -172,7 +172,7 @@ object DataSourceUtils extends PredicateHelper {
         (SQLConf.PARQUET_REBASE_MODE_IN_READ.key, ParquetOptions.DATETIME_REBASE_MODE)
       case "Avro" =>
         (SQLConf.AVRO_REBASE_MODE_IN_READ.key, "datetimeRebaseMode")
-      case _ => throw new IllegalStateException(s"Unrecognized format $format.")
+      case _ => throw SparkException.internalError(s"Unrecognized format $format.")
     }
     QueryExecutionErrors.sparkUpgradeInReadingDatesError(format, config, option)
   }
@@ -182,7 +182,7 @@ object DataSourceUtils extends PredicateHelper {
       case "Parquet INT96" => SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key
       case "Parquet" => SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key
       case "Avro" => SQLConf.AVRO_REBASE_MODE_IN_WRITE.key
-      case _ => throw new IllegalStateException(s"Unrecognized format $format.")
+      case _ => throw SparkException.internalError(s"Unrecognized format $format.")
     }
     QueryExecutionErrors.sparkUpgradeInWritingDatesError(format, config)
   }
@@ -278,5 +278,25 @@ object DataSourceUtils extends PredicateHelper {
     val extraPartitionFilter =
       dataFilters.flatMap(extractPredicatesWithinOutputSet(_, partitionSet))
     (ExpressionSet(partitionFilters ++ extraPartitionFilter).toSeq, dataFilters)
+  }
+
+  /**
+   * Determines whether a filter should be pushed down to the data source or not.
+   *
+   * @param expression The filter expression to be evaluated.
+   * @param isCollationPushDownSupported Whether the data source supports collation push down.
+   * @return A boolean indicating whether the filter should be pushed down or not.
+   */
+  def shouldPushFilter(expression: Expression, isCollationPushDownSupported: Boolean): Boolean = {
+    if (!expression.deterministic) return false
+
+    isCollationPushDownSupported || !expression.exists {
+      case childExpression @ (_: Attribute | _: GetStructField) =>
+        // don't push down filters for types with non-binary sortable collation
+        // as it could lead to incorrect results
+        SchemaUtils.hasNonBinarySortableCollatedString(childExpression.dataType)
+
+      case _ => false
+    }
   }
 }

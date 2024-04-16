@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream, File, IOException}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream, File, FileNotFoundException, IOException}
 import java.net.InetAddress
 import java.security.PrivilegedExceptionAction
 import java.text.DateFormat
@@ -237,7 +237,7 @@ private[spark] class SparkHadoopUtil extends Logging {
 
   def globPath(fs: FileSystem, pattern: Path): Seq[Path] = {
     Option(fs.globStatus(pattern)).map { statuses =>
-      statuses.map(_.getPath.makeQualified(fs.getUri, fs.getWorkingDirectory)).toSeq
+      statuses.map(_.getPath.makeQualified(fs.getUri, fs.getWorkingDirectory)).toImmutableArraySeq
     }.getOrElse(Seq.empty[Path])
   }
 
@@ -529,16 +529,6 @@ private[spark] object SparkHadoopUtil extends Logging {
     if (conf.getOption("spark.hadoop.fs.s3a.downgrade.syncable.exceptions").isEmpty) {
       hadoopConf.set("fs.s3a.downgrade.syncable.exceptions", "true", setBySpark)
     }
-    // In Hadoop 3.3.1, AWS region handling with the default "" endpoint only works
-    // in EC2 deployments or when the AWS CLI is installed.
-    // The workaround is to set the name of the S3 endpoint explicitly,
-    // if not already set. See HADOOP-17771.
-    if (hadoopConf.get("fs.s3a.endpoint", "").isEmpty &&
-      hadoopConf.get("fs.s3a.endpoint.region") == null) {
-      // set to US central endpoint which can also connect to buckets
-      // in other regions at the expense of a HEAD request during fs creation
-      hadoopConf.set("fs.s3a.endpoint", "s3.amazonaws.com", setBySpark)
-    }
   }
 
   private def appendSparkHiveConfigs(conf: SparkConf, hadoopConf: Configuration): Unit = {
@@ -593,4 +583,11 @@ private[spark] object SparkHadoopUtil extends Logging {
     }
   }
 
+  def isFile(fs: FileSystem, path: Path): Boolean = {
+    try {
+      fs.getFileStatus(path).isFile
+    } catch {
+      case _: FileNotFoundException => false
+    }
+  }
 }

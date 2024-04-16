@@ -131,7 +131,7 @@ private[stat] object StudentTTest extends StreamingTestMethod with Logging {
       statsA: StatCounter,
       statsB: StatCounter): StreamingTestResult = {
     def studentDF(sample1: StatisticalSummaryValues, sample2: StatisticalSummaryValues): Double =
-      sample1.getN + sample2.getN - 2
+      sample1.getN + sample2.getN - 2.0
 
     new StreamingTestResult(
       tTester.get.homoscedasticTTest(statsA, statsB),

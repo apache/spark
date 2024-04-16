@@ -27,12 +27,12 @@ import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.SparkThrowable
+import org.apache.spark.{SparkIllegalArgumentException, SparkThrowable}
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.analysis.SqlApiAnalysis
 import org.apache.spark.sql.catalyst.parser.DataTypeParser
+import org.apache.spark.sql.catalyst.util.{CollationFactory, StringConcat}
 import org.apache.spark.sql.catalyst.util.DataTypeJsonUtils.{DataTypeJsonDeserializer, DataTypeJsonSerializer}
-import org.apache.spark.sql.catalyst.util.StringConcat
 import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.DayTimeIntervalType._
@@ -102,7 +102,7 @@ abstract class DataType extends AbstractDataType {
    */
   private[spark] def existsRecursively(f: (DataType) => Boolean): Boolean = f(this)
 
-  override private[sql] def defaultConcreteType: DataType = this
+  final override private[sql] def defaultConcreteType: DataType = this
 
   override private[sql] def acceptsType(other: DataType): Boolean = sameType(other)
 }
@@ -117,6 +117,7 @@ object DataType {
   private val FIXED_DECIMAL = """decimal\(\s*(\d+)\s*,\s*(\-?\d+)\s*\)""".r
   private val CHAR_TYPE = """char\(\s*(\d+)\s*\)""".r
   private val VARCHAR_TYPE = """varchar\(\s*(\d+)\s*\)""".r
+  private val COLLATED_STRING_TYPE = """string\s+collate\s+([\w_]+|`[\w_]`)""".r
 
   def fromDDL(ddl: String): DataType = {
     parseTypeWithFallback(
@@ -173,13 +174,17 @@ object DataType {
       YearMonthIntervalType(YEAR),
       YearMonthIntervalType(MONTH),
       YearMonthIntervalType(YEAR, MONTH),
-      TimestampNTZType)
+      TimestampNTZType,
+      VariantType)
       .map(t => t.typeName -> t).toMap
   }
 
   /** Given the string representation of a type, return its DataType */
   private def nameToType(name: String): DataType = {
     name match {
+      case COLLATED_STRING_TYPE(collation) =>
+        val collationId = CollationFactory.collationNameToId(collation)
+        StringType(collationId)
       case "decimal" => DecimalType.USER_DEFAULT
       case FIXED_DECIMAL(precision, scale) => DecimalType(precision.toInt, scale.toInt)
       case CHAR_TYPE(length) => CharType(length.toInt)
@@ -189,8 +194,9 @@ object DataType {
       case "timestamp_ltz" => TimestampType
       case other => otherTypes.getOrElse(
         other,
-        throw new IllegalArgumentException(
-          s"Failed to convert the JSON string '$name' to a data type."))
+        throw new SparkIllegalArgumentException(
+          errorClass = "INVALID_JSON_DATA_TYPE",
+          messageParameters = Map("invalidType" -> name)))
     }
   }
 
@@ -240,9 +246,9 @@ object DataType {
     ("type", JString("udt"))) =>
         new PythonUserDefinedType(parseDataType(v), pyClass, serialized)
 
-    case other =>
-      throw new IllegalArgumentException(
-        s"Failed to convert the JSON string '${compact(render(other))}' to a data type.")
+    case other => throw new SparkIllegalArgumentException(
+      errorClass = "INVALID_JSON_DATA_TYPE",
+      messageParameters = Map("invalidType" -> compact(render(other))))
   }
 
   private def parseStructField(json: JValue): StructField = json match {
@@ -263,9 +269,9 @@ object DataType {
     ("name", JString(name)),
     ("type", dataType: JValue)) =>
       StructField(name, parseDataType(dataType))
-    case other =>
-      throw new IllegalArgumentException(
-        s"Failed to convert the JSON string '${compact(render(other))}' to a field.")
+    case other => throw new SparkIllegalArgumentException(
+      errorClass = "_LEGACY_ERROR_TEMP_3250",
+      messageParameters = Map("other" -> compact(render(other))))
   }
 
   protected[types] def buildFormattedString(

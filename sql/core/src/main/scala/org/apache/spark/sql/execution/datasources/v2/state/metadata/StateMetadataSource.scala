@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.execution.datasources.v2.state
+package org.apache.spark.sql.execution.datasources.v2.state.metadata
 
 import java.util
 
@@ -25,9 +25,12 @@ import org.apache.hadoop.fs.{Path, PathFilter}
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.connector.catalog.{MetadataColumn, SupportsMetadataColumns, SupportsRead, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder}
+import org.apache.spark.sql.execution.datasources.v2.state.StateDataSourceErrors
+import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.PATH
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadata, OperatorStateMetadataReader, OperatorStateMetadataV1}
 import org.apache.spark.sql.sources.DataSourceRegister
@@ -45,8 +48,8 @@ case class StateMetadataTableEntry(
     maxBatchId: Long,
     numColsPrefixKey: Int) {
   def toRow(): InternalRow = {
-    InternalRow.fromSeq(
-      Seq(operatorId,
+    new GenericInternalRow(
+      Array[Any](operatorId,
         UTF8String.fromString(operatorName),
         UTF8String.fromString(stateStoreName),
         numPartitions,
@@ -95,8 +98,7 @@ class StateMetadataTable extends Table with SupportsRead with SupportsMetadataCo
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     () => {
       if (!options.containsKey("path")) {
-        throw new IllegalArgumentException("Checkpoint path is not specified for" +
-          " state metadata data source.")
+        throw StateDataSourceErrors.requiredOptionUnspecified(PATH)
       }
       new StateMetadataScan(options.get("path"))
     }
@@ -186,7 +188,7 @@ class StateMetadataPartitionReader(
     } else Array.empty
   }
 
-  private def allOperatorStateMetadata: Array[OperatorStateMetadata] = {
+  private[sql] def allOperatorStateMetadata: Array[OperatorStateMetadata] = {
     val stateDir = new Path(checkpointLocation, "state")
     val opIds = fileManager
       .list(stateDir, pathNameCanBeParsedAsLongFilter).map(f => pathToLong(f.getPath)).sorted
@@ -195,7 +197,7 @@ class StateMetadataPartitionReader(
     }
   }
 
-  private lazy val stateMetadata: Iterator[StateMetadataTableEntry] = {
+  private[state] lazy val stateMetadata: Iterator[StateMetadataTableEntry] = {
     allOperatorStateMetadata.flatMap { operatorStateMetadata =>
       require(operatorStateMetadata.version == 1)
       val operatorStateMetadataV1 = operatorStateMetadata.asInstanceOf[OperatorStateMetadataV1]

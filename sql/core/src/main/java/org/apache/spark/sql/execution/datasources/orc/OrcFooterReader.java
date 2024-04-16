@@ -52,15 +52,15 @@ public class OrcFooterReader {
   private static OrcColumnStatistics convertStatistics(
       DataType sparkSchema, Queue<ColumnStatistics> orcStatistics) {
     OrcColumnStatistics statistics = new OrcColumnStatistics(orcStatistics.remove());
-    if (sparkSchema instanceof StructType) {
-      for (StructField field : ((StructType) sparkSchema).fields()) {
+    if (sparkSchema instanceof StructType structType) {
+      for (StructField field : structType.fields()) {
         statistics.add(convertStatistics(field.dataType(), orcStatistics));
       }
-    } else if (sparkSchema instanceof MapType) {
-      statistics.add(convertStatistics(((MapType) sparkSchema).keyType(), orcStatistics));
-      statistics.add(convertStatistics(((MapType) sparkSchema).valueType(), orcStatistics));
-    } else if (sparkSchema instanceof ArrayType) {
-      statistics.add(convertStatistics(((ArrayType) sparkSchema).elementType(), orcStatistics));
+    } else if (sparkSchema instanceof MapType mapType) {
+      statistics.add(convertStatistics(mapType.keyType(), orcStatistics));
+      statistics.add(convertStatistics(mapType.valueType(), orcStatistics));
+    } else if (sparkSchema instanceof ArrayType arrayType) {
+      statistics.add(convertStatistics(arrayType.elementType(), orcStatistics));
     }
     return statistics;
   }

@@ -31,7 +31,9 @@ import org.apache.commons.lang3.StringUtils
 import org.json4s.JsonAST.{JArray, JString}
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.SparkException
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey._
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CurrentUserContext, FunctionIdentifier, InternalRow, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, Resolver, UnresolvedLeafNode}
@@ -42,7 +44,7 @@ import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUti
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
+import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldReference, NamedReference, Transform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -222,6 +224,12 @@ object ClusterBySpec {
       resolver)
 
     ClusterBySpec(normalizedColumns)
+  }
+
+  def extractClusterBySpec(transforms: Seq[Transform]): Option[ClusterBySpec] = {
+    transforms.collectFirst {
+      case ClusterByTransform(columnNames) => ClusterBySpec(columnNames)
+    }
   }
 }
 
@@ -461,7 +469,7 @@ case class CatalogTable(
   def toLinkedHashMap: mutable.LinkedHashMap[String, String] = {
     val map = new mutable.LinkedHashMap[String, String]()
     val tableProperties =
-      SQLConf.get.redactOptions(properties.view.filterKeys(!_.startsWith(VIEW_PREFIX)).toMap)
+      SQLConf.get.redactOptions(properties.filter { case (k, _) => !k.startsWith(VIEW_PREFIX) })
         .toSeq.sortBy(_._1)
         .map(p => p._1 + "=" + p._2)
     val partitionColumns = partitionColumnNames.map(quoteIdentifier).mkString("[", ", ", "]")
@@ -621,10 +629,8 @@ object CatalogTable {
       createTime = 0L,
       lastAccessTime = 0L,
       properties = table.properties
-        .view
-        .filterKeys(!nondeterministicProps.contains(_))
-        .map(identity)
-        .toMap,
+        .filter { case (k, _) => !nondeterministicProps.contains(k) }
+        .map(identity),
       stats = None,
       ignoredProperties = Map.empty
     )
@@ -827,7 +833,8 @@ object CatalogColumnStat extends Logging {
       ))
     } catch {
       case NonFatal(e) =>
-        logWarning(s"Failed to parse column statistics for column ${colName} in table $table", e)
+        logWarning(log"Failed to parse column statistics for column " +
+          log"${MDC(COLUMN_NAME, colName)} in table ${MDC(RELATION_NAME, table)}", e)
         None
     }
   }
@@ -925,7 +932,7 @@ case class HiveTableRelation(
     tableMeta.stats.map(_.toPlanStats(output, conf.cboEnabled || conf.planStatsEnabled))
       .orElse(tableStats)
       .getOrElse {
-      throw new IllegalStateException("Table stats must be specified.")
+      throw SparkException.internalError("Table stats must be specified.")
     }
   }
 

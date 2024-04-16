@@ -384,21 +384,21 @@ Project [btrim(xyxtrimyyx, xy) AS btrim(xyxtrimyyx, xy)#x]
 -- !query
 SELECT btrim(encode(" xyz ", 'utf-8'))
 -- !query analysis
-Project [btrim(encode( xyz , utf-8)) AS btrim(encode( xyz , utf-8))#x]
+Project [btrim(encode( xyz , utf-8, false)) AS btrim(encode( xyz , utf-8))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT btrim(encode('yxTomxx', 'utf-8'), encode('xyz', 'utf-8'))
 -- !query analysis
-Project [btrim(encode(yxTomxx, utf-8), encode(xyz, utf-8)) AS btrim(encode(yxTomxx, utf-8), encode(xyz, utf-8))#x]
+Project [btrim(encode(yxTomxx, utf-8, false), encode(xyz, utf-8, false)) AS btrim(encode(yxTomxx, utf-8), encode(xyz, utf-8))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT btrim(encode('xxxbarxxx', 'utf-8'), encode('x', 'utf-8'))
 -- !query analysis
-Project [btrim(encode(xxxbarxxx, utf-8), encode(x, utf-8)) AS btrim(encode(xxxbarxxx, utf-8), encode(x, utf-8))#x]
+Project [btrim(encode(xxxbarxxx, utf-8, false), encode(x, utf-8, false)) AS btrim(encode(xxxbarxxx, utf-8), encode(x, utf-8))#x]
 +- OneRowRelation
 
 
@@ -641,6 +641,63 @@ Project [rpad(cast(0x57 as string), 5, abc) AS rpad(X'57', 5, abc)#x]
 
 
 -- !query
+set spark.sql.legacy.javaCharsets=true
+-- !query analysis
+SetCommand (spark.sql.legacy.javaCharsets,Some(true))
+
+
+-- !query
+select encode('hello', 'WINDOWS-1252')
+-- !query analysis
+Project [encode(hello, WINDOWS-1252, true) AS encode(hello, WINDOWS-1252)#x]
++- OneRowRelation
+
+
+-- !query
+select encode(scol, ecol) from values('hello', 'WINDOWS-1252') as t(scol, ecol)
+-- !query analysis
+Project [encode(scol#x, ecol#x, true) AS encode(scol, ecol)#x]
++- SubqueryAlias t
+   +- LocalRelation [scol#x, ecol#x]
+
+
+-- !query
+set spark.sql.legacy.javaCharsets=false
+-- !query analysis
+SetCommand (spark.sql.legacy.javaCharsets,Some(false))
+
+
+-- !query
+select encode('hello', 'WINDOWS-1252')
+-- !query analysis
+Project [encode(hello, WINDOWS-1252, false) AS encode(hello, WINDOWS-1252)#x]
++- OneRowRelation
+
+
+-- !query
+select encode(scol, ecol) from values('hello', 'WINDOWS-1252') as t(scol, ecol)
+-- !query analysis
+Project [encode(scol#x, ecol#x, false) AS encode(scol, ecol)#x]
++- SubqueryAlias t
+   +- LocalRelation [scol#x, ecol#x]
+
+
+-- !query
+select encode('hello', 'Windows-xxx')
+-- !query analysis
+Project [encode(hello, Windows-xxx, false) AS encode(hello, Windows-xxx)#x]
++- OneRowRelation
+
+
+-- !query
+select encode(scol, ecol) from values('hello', 'Windows-xxx') as t(scol, ecol)
+-- !query analysis
+Project [encode(scol#x, ecol#x, false) AS encode(scol, ecol)#x]
++- SubqueryAlias t
+   +- LocalRelation [scol#x, ecol#x]
+
+
+-- !query
 select decode()
 -- !query analysis
 org.apache.spark.sql.AnalysisException
@@ -689,7 +746,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select decode(encode('abc', 'utf-8'), 'utf-8')
 -- !query analysis
-Project [decode(encode(abc, utf-8), utf-8) AS decode(encode(abc, utf-8), utf-8)#x]
+Project [decode(encode(abc, utf-8, false), utf-8) AS decode(encode(abc, utf-8), utf-8)#x]
 +- OneRowRelation
 
 
@@ -740,6 +797,63 @@ select decode(null, 6, 'Spark', NULL, 'SQL', 4, 'rocks', NULL, '.')
 -- !query analysis
 Project [decode(null, 6, Spark, null, SQL, 4, rocks, null, .) AS decode(NULL, 6, Spark, NULL, SQL, 4, rocks, NULL, .)#x]
 +- OneRowRelation
+
+
+-- !query
+select decode(X'68656c6c6f', 'Windows-xxx')
+-- !query analysis
+Project [decode(0x68656C6C6F, Windows-xxx) AS decode(X'68656C6C6F', Windows-xxx)#x]
++- OneRowRelation
+
+
+-- !query
+select decode(scol, ecol) from values(X'68656c6c6f', 'Windows-xxx') as t(scol, ecol)
+-- !query analysis
+Project [decode(scol#x, ecol#x) AS decode(scol, ecol)#x]
++- SubqueryAlias t
+   +- LocalRelation [scol#x, ecol#x]
+
+
+-- !query
+set spark.sql.legacy.javaCharsets=true
+-- !query analysis
+SetCommand (spark.sql.legacy.javaCharsets,Some(true))
+
+
+-- !query
+select decode(X'68656c6c6f', 'WINDOWS-1252')
+-- !query analysis
+Project [decode(0x68656C6C6F, WINDOWS-1252) AS decode(X'68656C6C6F', WINDOWS-1252)#x]
++- OneRowRelation
+
+
+-- !query
+select decode(scol, ecol) from values(X'68656c6c6f', 'WINDOWS-1252') as t(scol, ecol)
+-- !query analysis
+Project [decode(scol#x, ecol#x) AS decode(scol, ecol)#x]
++- SubqueryAlias t
+   +- LocalRelation [scol#x, ecol#x]
+
+
+-- !query
+set spark.sql.legacy.javaCharsets=false
+-- !query analysis
+SetCommand (spark.sql.legacy.javaCharsets,Some(false))
+
+
+-- !query
+select decode(X'68656c6c6f', 'WINDOWS-1252')
+-- !query analysis
+Project [decode(0x68656C6C6F, WINDOWS-1252) AS decode(X'68656C6C6F', WINDOWS-1252)#x]
++- OneRowRelation
+
+
+-- !query
+select decode(scol, ecol) from values(X'68656c6c6f', 'WINDOWS-1252') as t(scol, ecol)
+-- !query analysis
+Project [decode(scol#x, ecol#x) AS decode(scol, ecol)#x]
++- SubqueryAlias t
+   +- LocalRelation [scol#x, ecol#x]
 
 
 -- !query

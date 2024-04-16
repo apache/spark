@@ -113,7 +113,7 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
         case _: VectorUDT =>
           val attributeGroup = AttributeGroup.fromStructField(field)
           if (attributeGroup.attributes.isDefined) {
-            attributeGroup.attributes.get.zipWithIndex.toSeq.map { case (attr, i) =>
+            attributeGroup.attributes.get.zipWithIndex.toImmutableArraySeq.map { case (attr, i) =>
               if (attr.name.isDefined) {
                 // TODO: Define a rigorous naming scheme.
                 attr.withName(c + "_" + attr.name.get)

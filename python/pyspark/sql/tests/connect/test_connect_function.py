@@ -18,6 +18,7 @@ import os
 import unittest
 from inspect import getmembers, isfunction
 
+from pyspark.util import is_remote_only
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql import SparkSession as PySparkSession
 from pyspark.sql.types import StringType, StructType, StructField, ArrayType, IntegerType
@@ -37,6 +38,7 @@ if should_test_connect:
     from pyspark.sql.connect.dataframe import DataFrame as CDF
 
 
+@unittest.skipIf(is_remote_only(), "Requires JVM access")
 class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, SQLTestUtils):
     """These test cases exercise the interface to the proto plan
     generation but do not call Spark."""
@@ -604,10 +606,12 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
             self.assert_eq(
                 cdf.select(cfunc("b"), cfunc(cdf.c)).toPandas(),
                 sdf.select(sfunc("b"), sfunc(sdf.c)).toPandas(),
+                check_exact=False,
             )
             self.assert_eq(
                 cdf.groupBy("a").agg(cfunc("b"), cfunc(cdf.c)).toPandas(),
                 sdf.groupBy("a").agg(sfunc("b"), sfunc(sdf.c)).toPandas(),
+                check_exact=False,
             )
 
         for cfunc, sfunc in [
@@ -646,14 +650,17 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         self.assert_eq(
             cdf.select(CF.percentile_approx(cdf.b, [0.1, 0.9])).toPandas(),
             sdf.select(SF.percentile_approx(sdf.b, [0.1, 0.9])).toPandas(),
+            check_exact=False,
         )
         self.assert_eq(
             cdf.groupBy("a").agg(CF.percentile_approx("b", 0.5)).toPandas(),
             sdf.groupBy("a").agg(SF.percentile_approx("b", 0.5)).toPandas(),
+            check_exact=False,
         )
         self.assert_eq(
             cdf.groupBy("a").agg(CF.percentile_approx(cdf.b, [0.1, 0.9])).toPandas(),
             sdf.groupBy("a").agg(SF.percentile_approx(sdf.b, [0.1, 0.9])).toPandas(),
+            check_exact=False,
         )
 
         # test count_distinct
@@ -1000,6 +1007,7 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
             self.assert_eq(
                 cdf.select(cfunc("a"), cfunc(cdf.b)).toPandas(),
                 sdf.select(sfunc("a"), sfunc(sdf.b)).toPandas(),
+                check_exact=False,
             )
 
         for cfunc, sfunc in [
@@ -1011,6 +1019,7 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
             self.assert_eq(
                 cdf.select(cfunc("b", cdf.c)).toPandas(),
                 sdf.select(sfunc("b", sdf.c)).toPandas(),
+                check_exact=False,
             )
 
         for cfunc, sfunc in [
@@ -1020,64 +1029,77 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
             self.assert_eq(
                 cdf.select(cfunc(cdf.a, "ab")).toPandas(),
                 sdf.select(sfunc(sdf.a, "ab")).toPandas(),
+                check_exact=False,
             )
 
         # test array
         self.assert_eq(
             cdf.select(CF.array(cdf.d, "e")).toPandas(),
             sdf.select(SF.array(sdf.d, "e")).toPandas(),
+            check_exact=False,
         )
         self.assert_eq(
             cdf.select(CF.array(cdf.d, "e", CF.lit(99))).toPandas(),
             sdf.select(SF.array(sdf.d, "e", SF.lit(99))).toPandas(),
+            check_exact=False,
         )
 
         # test array_contains
         self.assert_eq(
             cdf.select(CF.array_contains(cdf.a, "ab")).toPandas(),
             sdf.select(SF.array_contains(sdf.a, "ab")).toPandas(),
+            check_exact=False,
         )
         self.assert_eq(
             cdf.select(CF.array_contains(cdf.a, cdf.f)).toPandas(),
             sdf.select(SF.array_contains(sdf.a, sdf.f)).toPandas(),
+            check_exact=False,
         )
 
         # test array_append
         self.assert_eq(
             cdf.select(CF.array_append(cdf.a, "xyz")).toPandas(),
             sdf.select(SF.array_append(sdf.a, "xyz")).toPandas(),
+            check_exact=False,
         )
         self.assert_eq(
             cdf.select(CF.array_append(cdf.a, CF.lit("ab"))).toPandas(),
             sdf.select(SF.array_append(sdf.a, SF.lit("ab"))).toPandas(),
+            check_exact=False,
         )
         self.assert_eq(
             cdf.select(CF.array_append(cdf.a, cdf.f)).toPandas(),
             sdf.select(SF.array_append(sdf.a, sdf.f)).toPandas(),
+            check_exact=False,
         )
 
         # test array_prepend
         self.assert_eq(
             cdf.select(CF.array_prepend(cdf.a, "xyz")).toPandas(),
             sdf.select(SF.array_prepend(sdf.a, "xyz")).toPandas(),
+            check_exact=False,
         )
         self.assert_eq(
             cdf.select(CF.array_prepend(cdf.a, CF.lit("ab"))).toPandas(),
             sdf.select(SF.array_prepend(sdf.a, SF.lit("ab"))).toPandas(),
+            check_exact=False,
         )
         self.assert_eq(
             cdf.select(CF.array_prepend(cdf.a, cdf.f)).toPandas(),
             sdf.select(SF.array_prepend(sdf.a, sdf.f)).toPandas(),
+            check_exact=False,
         )
 
         # test array_insert
         self.assert_eq(
             cdf.select(CF.array_insert(cdf.a, -5, "ab")).toPandas(),
             sdf.select(SF.array_insert(sdf.a, -5, "ab")).toPandas(),
+            check_exact=False,
         )
         self.assert_eq(
             cdf.select(CF.array_insert(cdf.a, 3, cdf.f)).toPandas(),
             sdf.select(SF.array_insert(sdf.a, 3, sdf.f)).toPandas(),
+            check_exact=False,
         )
 
         # test array_join
@@ -1088,6 +1110,7 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
             sdf.select(
                 SF.array_join(sdf.a, ","), SF.array_join("b", ":"), SF.array_join("c", "~")
             ).toPandas(),
+            check_exact=False,
         )
         self.assert_eq(
             cdf.select(
@@ -1100,20 +1123,24 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
                 SF.array_join("b", ":", ".null."),
                 SF.array_join("c", "~", "NULL"),
             ).toPandas(),
+            check_exact=False,
         )
 
         # test array_repeat
         self.assert_eq(
             cdf.select(CF.array_repeat(cdf.f, "d")).toPandas(),
             sdf.select(SF.array_repeat(sdf.f, "d")).toPandas(),
+            check_exact=False,
         )
         self.assert_eq(
             cdf.select(CF.array_repeat("f", cdf.d)).toPandas(),
             sdf.select(SF.array_repeat("f", sdf.d)).toPandas(),
+            check_exact=False,
         )
         self.assert_eq(
             cdf.select(CF.array_repeat("f", 3)).toPandas(),
             sdf.select(SF.array_repeat("f", 3)).toPandas(),
+            check_exact=False,
         )
 
         # test arrays_zip
@@ -1174,6 +1201,7 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         self.assert_eq(
             cdf.select(CF.slice(cdf.a, 1, 2), CF.slice("c", 2, 3)).toPandas(),
             sdf.select(SF.slice(sdf.a, 1, 2), SF.slice("c", 2, 3)).toPandas(),
+            check_exact=False,
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -1198,6 +1226,7 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         self.assert_eq(
             cdf.select(CF.sort_array(cdf.a, True), CF.sort_array("c", False)).toPandas(),
             sdf.select(SF.sort_array(sdf.a, True), SF.sort_array("c", False)).toPandas(),
+            check_exact=False,
         )
 
         # test struct
@@ -1210,18 +1239,22 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         self.assert_eq(
             cdf.select(CF.sequence(CF.lit(1), CF.lit(5))).toPandas(),
             sdf.select(SF.sequence(SF.lit(1), SF.lit(5))).toPandas(),
+            check_exact=False,
         )
         self.assert_eq(
             cdf.select(CF.sequence(CF.lit(1), CF.lit(5), CF.lit(1))).toPandas(),
             sdf.select(SF.sequence(SF.lit(1), SF.lit(5), SF.lit(1))).toPandas(),
+            check_exact=False,
         )
         self.assert_eq(
             cdf.select(CF.sequence(cdf.d, "e")).toPandas(),
             sdf.select(SF.sequence(sdf.d, "e")).toPandas(),
+            check_exact=False,
         )
         self.assert_eq(
             cdf.select(CF.sequence(cdf.d, "e", CF.lit(1))).toPandas(),
             sdf.select(SF.sequence(sdf.d, "e", SF.lit(1))).toPandas(),
+            check_exact=False,
         )
 
     def test_map_collection_functions(self):
@@ -1305,44 +1338,53 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         self.assert_eq(
             cdf.select(CF.explode(cdf.a), CF.col("b")).toPandas(),
             sdf.select(SF.explode(sdf.a), SF.col("b")).toPandas(),
+            check_exact=False,
         )
         self.assert_eq(
             cdf.select(CF.explode("a"), "b").toPandas(),
             sdf.select(SF.explode("a"), "b").toPandas(),
+            check_exact=False,
         )
         # test explode with maps
         self.assert_eq(
             cdf.select(CF.explode(cdf.d), CF.col("c")).toPandas(),
             sdf.select(SF.explode(sdf.d), SF.col("c")).toPandas(),
+            check_exact=False,
         )
         self.assert_eq(
             cdf.select(CF.explode("d"), "c").toPandas(),
             sdf.select(SF.explode("d"), "c").toPandas(),
+            check_exact=False,
         )
 
         # test explode_outer with arrays
         self.assert_eq(
             cdf.select(CF.explode_outer(cdf.a), CF.col("b")).toPandas(),
             sdf.select(SF.explode_outer(sdf.a), SF.col("b")).toPandas(),
+            check_exact=False,
         )
         self.assert_eq(
             cdf.select(CF.explode_outer("a"), "b").toPandas(),
             sdf.select(SF.explode_outer("a"), "b").toPandas(),
+            check_exact=False,
         )
         # test explode_outer with maps
         self.assert_eq(
             cdf.select(CF.explode_outer(cdf.d), CF.col("c")).toPandas(),
             sdf.select(SF.explode_outer(sdf.d), SF.col("c")).toPandas(),
+            check_exact=False,
         )
         self.assert_eq(
             cdf.select(CF.explode_outer("d"), "c").toPandas(),
             sdf.select(SF.explode_outer("d"), "c").toPandas(),
+            check_exact=False,
         )
 
         # test flatten
         self.assert_eq(
             cdf.select(CF.flatten(CF.array("b", cdf.c)), CF.col("b")).toPandas(),
             sdf.select(SF.flatten(SF.array("b", sdf.c)), SF.col("b")).toPandas(),
+            check_exact=False,
         )
 
         # test inline
@@ -1353,6 +1395,7 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
             sdf.select(SF.expr("ARRAY(STRUCT(e, f), STRUCT(g AS e, f))").alias("X"))
             .select(SF.inline("X"))
             .toPandas(),
+            check_exact=False,
         )
 
         # test inline_outer
@@ -1363,44 +1406,53 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
             sdf.select(SF.expr("ARRAY(STRUCT(e, f), STRUCT(g AS e, f))").alias("X"))
             .select(SF.inline_outer("X"))
             .toPandas(),
+            check_exact=False,
         )
 
         # test posexplode with arrays
         self.assert_eq(
             cdf.select(CF.posexplode(cdf.a), CF.col("b")).toPandas(),
             sdf.select(SF.posexplode(sdf.a), SF.col("b")).toPandas(),
+            check_exact=False,
         )
         self.assert_eq(
             cdf.select(CF.posexplode("a"), "b").toPandas(),
             sdf.select(SF.posexplode("a"), "b").toPandas(),
+            check_exact=False,
         )
         # test posexplode with maps
         self.assert_eq(
             cdf.select(CF.posexplode(cdf.d), CF.col("c")).toPandas(),
             sdf.select(SF.posexplode(sdf.d), SF.col("c")).toPandas(),
+            check_exact=False,
         )
         self.assert_eq(
             cdf.select(CF.posexplode("d"), "c").toPandas(),
             sdf.select(SF.posexplode("d"), "c").toPandas(),
+            check_exact=False,
         )
 
         # test posexplode_outer with arrays
         self.assert_eq(
             cdf.select(CF.posexplode_outer(cdf.a), CF.col("b")).toPandas(),
             sdf.select(SF.posexplode_outer(sdf.a), SF.col("b")).toPandas(),
+            check_exact=False,
         )
         self.assert_eq(
             cdf.select(CF.posexplode_outer("a"), "b").toPandas(),
             sdf.select(SF.posexplode_outer("a"), "b").toPandas(),
+            check_exact=False,
         )
         # test posexplode_outer with maps
         self.assert_eq(
             cdf.select(CF.posexplode_outer(cdf.d), CF.col("c")).toPandas(),
             sdf.select(SF.posexplode_outer(sdf.d), SF.col("c")).toPandas(),
+            check_exact=False,
         )
         self.assert_eq(
             cdf.select(CF.posexplode_outer("d"), "c").toPandas(),
             sdf.select(SF.posexplode_outer("d"), "c").toPandas(),
+            check_exact=False,
         )
 
     def test_lambda_functions(self):
@@ -1465,6 +1517,7 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         self.assert_eq(
             cdf.select(CF.array_sort(cdf.b, lambda x, y: CF.abs(x) - CF.abs(y))).toPandas(),
             sdf.select(SF.array_sort(sdf.b, lambda x, y: SF.abs(x) - SF.abs(y))).toPandas(),
+            check_exact=False,
         )
         self.assert_eq(
             cdf.select(
@@ -1483,26 +1536,31 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
                     ),
                 )
             ).toPandas(),
+            check_exact=False,
         )
 
         # test filter
         self.assert_eq(
             cdf.select(CF.filter(cdf.b, lambda x: x < 0)).toPandas(),
             sdf.select(SF.filter(sdf.b, lambda x: x < 0)).toPandas(),
+            check_exact=False,
         )
         self.assert_eq(
             cdf.select(CF.filter("a", lambda x: ~CF.isnull(x))).toPandas(),
             sdf.select(SF.filter("a", lambda x: ~SF.isnull(x))).toPandas(),
+            check_exact=False,
         )
 
         # test forall
         self.assert_eq(
             cdf.select(CF.filter(cdf.b, lambda x: x != 0)).toPandas(),
             sdf.select(SF.filter(sdf.b, lambda x: x != 0)).toPandas(),
+            check_exact=False,
         )
         self.assert_eq(
             cdf.select(CF.filter("a", lambda x: ~CF.isnull(x))).toPandas(),
             sdf.select(SF.filter("a", lambda x: ~SF.isnull(x))).toPandas(),
+            check_exact=False,
         )
 
         # test transform
@@ -1510,30 +1568,36 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         self.assert_eq(
             cdf.select(CF.transform(cdf.b, lambda x: x + 1)).toPandas(),
             sdf.select(SF.transform(sdf.b, lambda x: x + 1)).toPandas(),
+            check_exact=False,
         )
         self.assert_eq(
             cdf.select(CF.transform("b", lambda x: x + 1)).toPandas(),
             sdf.select(SF.transform("b", lambda x: x + 1)).toPandas(),
+            check_exact=False,
         )
 
         # transform with index
         self.assert_eq(
             cdf.select(CF.transform(cdf.b, lambda x, i: x + 1 - i)).toPandas(),
             sdf.select(SF.transform(sdf.b, lambda x, i: x + 1 - i)).toPandas(),
+            check_exact=False,
         )
         self.assert_eq(
             cdf.select(CF.transform("b", lambda x, i: x + 1 - i)).toPandas(),
             sdf.select(SF.transform("b", lambda x, i: x + 1 - i)).toPandas(),
+            check_exact=False,
         )
 
         # test zip_with
         self.assert_eq(
             cdf.select(CF.zip_with(cdf.b, "c", lambda v1, v2: v1 - CF.abs(v2))).toPandas(),
             sdf.select(SF.zip_with(sdf.b, "c", lambda v1, v2: v1 - SF.abs(v2))).toPandas(),
+            check_exact=False,
         )
         self.assert_eq(
             cdf.select(CF.zip_with("b", cdf.c, lambda v1, v2: v1 - CF.abs(v2))).toPandas(),
             sdf.select(SF.zip_with("b", sdf.c, lambda v1, v2: v1 - SF.abs(v2))).toPandas(),
+            check_exact=False,
         )
 
         # test map_filter
@@ -2065,6 +2129,7 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         self.assert_eq(
             cdf.select(CF.split(cdf.b, "[bd]")).toPandas(),
             sdf.select(SF.split(sdf.b, "[bd]")).toPandas(),
+            check_exact=False,
         )
         self.assert_eq(
             cdf.select(CF.regexp_extract(cdf.b, "(a+)(b)?(c)", 1)).toPandas(),

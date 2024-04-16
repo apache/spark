@@ -6,6 +6,7 @@
 --CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=CODEGEN_ONLY
 --CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=NO_CODEGEN
 
+--ONLY_IF spark
 create temporary view t1 as select * from values
   ("t1a", 6S, 8, 10L, float(15.0), 20D, 20E2BD, timestamp '2014-04-04 01:00:00.000', date '2014-04-04'),
   ("t1b", 8S, 16, 19L, float(17.0), 25D, 26E2BD, timestamp '2014-05-04 01:01:00.000', date '2014-05-04'),
@@ -139,7 +140,7 @@ FROM   (SELECT t2a,
                   t2b) t2;
 
 -- TC 01.09
-SELECT Count(DISTINCT( * ))
+SELECT Count(DISTINCT * )
 FROM   t1
 WHERE  t1b IN (SELECT Min(t2b)
                FROM   t2
@@ -245,3 +246,74 @@ select t1a
 from t1
 where t1f IN (SELECT RANK() OVER (partition by t3c  order by t2b) as s
                              FROM t2, t3 where t2.t2c = t3.t3c and t2.t2a < t1.t1a);
+
+-- Plain in-subquery with a top-level aggregation
+SELECT
+  t1.t1a,
+  t1.t1a IN (SELECT t2a FROM t2) as v1
+FROM t1
+GROUP BY t1.t1a ORDER BY t1.t1a;
+
+-- Aggregate function over expression with subquery, without explicit GROUP BY, with NOT IN
+SELECT
+  count(cast(t1.t1a IN (SELECT t2a FROM t2) as INT)),
+  sum(cast(t1.t1b NOT IN (SELECT t2b FROM t2) as INT))
+FROM t1;
+
+-- Derived table from subquery
+SELECT
+    agg_results.t1a,
+    COUNT(*)
+    FROM (SELECT t1.t1a FROM t1 WHERE t1.t1a IN (SELECT t2a FROM t2)) AS agg_results
+GROUP BY agg_results.t1a ORDER BY agg_results.t1a;
+
+-- CASE statement with an in-subquery and aggregation
+SELECT
+  t1.t1a,
+  CASE
+    WHEN t1.t1a IN (SELECT t2a FROM t2) THEN 10
+    ELSE -10
+  END AS v1
+FROM t1
+GROUP BY t1.t1a
+ORDER BY t1.t1a;
+
+-- CASE statement with an in-subquery inside an agg function
+SELECT
+  t1.t1c,
+  -- sums over t1.t1c
+  SUM(CASE
+    WHEN t1.t1c IN (SELECT t2c FROM t2) THEN 10
+    ELSE -10
+  END) AS v1,
+  -- sums over t1.t1d
+  SUM(CASE
+      WHEN t1.t1d IN (SELECT t2c FROM t2) THEN 10
+      ELSE -10
+    END) AS v2,
+  -- no agg function, uses t1.t1c
+  t1.t1c + 10 IN (SELECT t2c + 2 FROM t2) AS v3,
+  count(t1.t1c) as ct,
+  count(t1.t1d)
+FROM t1
+GROUP BY t1.t1c
+ORDER BY t1.t1c;
+
+-- CASE statement with an in-subquery inside an agg function, without group-by
+SELECT
+  SUM(CASE
+    WHEN t1.t1c IN (SELECT t2c FROM t2) THEN 10
+    ELSE -10
+  END) AS v1,
+  count(t1.t1c) as ct
+FROM t1;
+
+-- Group-by statement contains an in-subquery, and there's an additional exists in select clause.
+SELECT
+    cast(t1a in (select t2a from t2) as int) + 1 as groupExpr,
+    sum(cast(t1a in (select t2a from t2) as int) + 1) as aggExpr,
+    cast(t1a in (select t2a from t2) as int) + 1 + cast(exists (select t2a from t2) as int)
+        as complexExpr
+FROM t1
+GROUP BY
+    cast(t1a in (select t2a from t2) as int) + 1;

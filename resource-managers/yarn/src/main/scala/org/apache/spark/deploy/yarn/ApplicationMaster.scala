@@ -43,7 +43,8 @@ import org.apache.spark.deploy.{ExecutorFailureTracker, SparkHadoopUtil}
 import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.deploy.yarn.config._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{EXIT_CODE, FAILURES, RPC_ADDRESS}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
@@ -596,7 +597,8 @@ private[spark] class ApplicationMaster(
               ApplicationMaster.EXIT_REPORTER_FAILURE, "Exception was thrown " +
                 s"$failureCount time(s) from Reporter thread.")
           } else {
-            logWarning(s"Reporter thread fails $failureCount time(s) in a row.", e)
+            logWarning(
+              log"Reporter thread fails ${MDC(FAILURES, failureCount)} time(s) in a row.", e)
           }
       }
       try {
@@ -745,9 +747,10 @@ private[spark] class ApplicationMaster(
               case _: InterruptedException =>
                 // Reporter thread can interrupt to stop user class
               case SparkUserAppException(exitCode) =>
-                val msg = s"User application exited with status $exitCode"
+                val msg = log"User application exited with status " +
+                  log"${MDC(EXIT_CODE, exitCode)}"
                 logError(msg)
-                finish(FinalApplicationStatus.FAILED, exitCode, msg)
+                finish(FinalApplicationStatus.FAILED, exitCode, msg.message)
               case cause: Throwable =>
                 logError("User class threw exception: ", cause)
                 finish(FinalApplicationStatus.FAILED,
@@ -854,7 +857,8 @@ private[spark] class ApplicationMaster(
             logInfo(s"Driver terminated or disconnected! Shutting down. $remoteAddress")
             finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
           } else {
-            logError(s"Driver terminated with exit code ${exitCode}! Shutting down. $remoteAddress")
+            logError(log"Driver terminated with exit code ${MDC(EXIT_CODE, exitCode)}! " +
+              log"Shutting down. ${MDC(RPC_ADDRESS, remoteAddress)}")
             finish(FinalApplicationStatus.FAILED, exitCode)
           }
         } else {

@@ -36,7 +36,7 @@ Python 3.8 and above.
 Using PyPI
 ----------
 
-PySpark installation using `PyPI <https://pypi.org/project/pyspark/>`_ is as follows:
+PySpark installation using `PyPI (pyspark) <https://pypi.org/project/pyspark/>`_ is as follows:
 
 .. code-block:: bash
 
@@ -81,12 +81,25 @@ Supported values in ``PYSPARK_HADOOP_VERSION`` are:
 Note that this installation of PySpark with/without a specific Hadoop version is experimental. It can change or be removed between minor releases.
 
 
+Python Spark Connect Client
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The Python Spark Connect client is a pure Python library that does not rely on any non-Python dependencies such as jars and JRE in your environment.
+To install the Python Spark Connect client via `PyPI (pyspark-connect) <https://pypi.org/project/pyspark-connect/>`_, execute the following command:
+
+.. code-block:: bash
+
+    pip install pyspark-connect
+
+See also `Quickstart: Spark Connect <quickstart_connect.html>`_ for how to use it.
+
+
 Using Conda
 -----------
 
 Conda is an open-source package management and environment management system (developed by
 `Anaconda <https://www.anaconda.com/>`_), which is best installed through
-`Miniconda <https://docs.conda.io/en/latest/miniconda.html/>`_ or `Miniforge <https://github.com/conda-forge/miniforge/>`_.
+`Miniconda <https://docs.conda.io/en/latest/miniconda.html>`_ or `Miniforge <https://github.com/conda-forge/miniforge/>`_.
 The tool is both cross-platform and language agnostic, and in practice, conda can replace both
 `pip <https://pip.pypa.io/en/latest/>`_ and `virtualenv <https://virtualenv.pypa.io/en/latest/>`_.
 
@@ -119,7 +132,7 @@ While using pip in a conda environment is technically feasible (with the same co
 because pip does not interoperate with conda.
 
 For a short summary about useful conda commands, see their
-`cheat sheet <https://docs.conda.io/projects/conda/en/latest/user-guide/cheatsheet.html/>`_.
+`cheat sheet <https://docs.conda.io/projects/conda/en/latest/user-guide/cheatsheet.html>`_.
 
 
 Manually Downloading
@@ -157,14 +170,11 @@ Package                    Supported version Note
 ========================== ========================= ======================================================================================
 `py4j`                     >=0.10.9.7                Required
 `pandas`                   >=1.4.4                   Required for pandas API on Spark and Spark Connect; Optional for Spark SQL
-`pyarrow`                  >=4.0.0                   Required for pandas API on Spark and Spark Connect; Optional for Spark SQL
+`pyarrow`                  >=10.0.0                  Required for pandas API on Spark and Spark Connect; Optional for Spark SQL
 `numpy`                    >=1.21                    Required for pandas API on Spark and MLLib DataFrame-based API; Optional for Spark SQL
-`grpcio`                   >=1.48,<1.57              Required for Spark Connect
-`grpcio-status`            >=1.48,<1.57              Required for Spark Connect
-`googleapis-common-protos` ==1.56.4                  Required for Spark Connect
+`grpcio`                   >=1.62.0                  Required for Spark Connect
+`grpcio-status`            >=1.62.0                  Required for Spark Connect
+`googleapis-common-protos` >=1.56.4                  Required for Spark Connect
 ========================== ========================= ======================================================================================
 
-Note that PySpark requires Java 17 or later with ``JAVA_HOME`` properly set.
-Need set ``-Dio.netty.tryReflectionSetAccessible=true`` for Arrow related features and refer
-to |downloading|_.
-
+Note that PySpark requires Java 17 or later with ``JAVA_HOME`` properly set and refer to |downloading|_.

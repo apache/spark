@@ -95,7 +95,7 @@ private[spark] class VarianceAggregator()
    * @param offset    Start index of stats for this (node, feature, bin).
    */
   def getCalculator(allStats: Array[Double], offset: Int): VarianceCalculator = {
-    new VarianceCalculator(allStats.view.slice(offset, offset + statsSize - 1).toArray,
+    new VarianceCalculator(allStats.slice(offset, offset + statsSize - 1),
       allStats(offset + statsSize - 1).toLong)
   }
 }

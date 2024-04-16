@@ -20,6 +20,7 @@ import java.util.concurrent.TimeUnit
 
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.connect.common.config.ConnectCommon
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.buildConf
 
 object Connect {
@@ -77,7 +78,8 @@ object Connect {
   val CONNECT_SESSION_MANAGER_DEFAULT_SESSION_TIMEOUT =
     buildStaticConf("spark.connect.session.manager.defaultSessionTimeout")
       .internal()
-      .doc("Timeout after which sessions without any new incoming RPC will be removed.")
+      .doc("Timeout after which sessions without any new incoming RPC will be removed. " +
+        "Setting it to -1 indicates that sessions should be kept forever.")
       .version("4.0.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("60m")
@@ -91,6 +93,14 @@ object Connect {
       .version("4.0.0")
       .intConf
       .createWithDefaultString("1000")
+
+  val CONNECT_SESSION_MANAGER_MAINTENANCE_INTERVAL =
+    buildStaticConf("spark.connect.session.manager.maintenanceInterval")
+      .internal()
+      .doc("Interval at which session manager will search for expired sessions to remove.")
+      .version("4.0.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("30s")
 
   val CONNECT_EXECUTE_MANAGER_DETACHED_TIMEOUT =
     buildStaticConf("spark.connect.execute.manager.detachedTimeout")
@@ -206,26 +216,23 @@ object Connect {
       .intConf
       .createWithDefault(1024)
 
-  val CONNECT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL =
-    buildStaticConf("spark.connect.copyFromLocalToFs.allowDestLocal")
-      .internal()
-      .doc("""
-            |Allow `spark.copyFromLocalToFs` destination to be local file system
-            | path on spark driver node when
-            |`spark.connect.copyFromLocalToFs.allowDestLocal` is true.
-            |This will allow user to overwrite arbitrary file on spark
-            |driver node we should only enable it for testing purpose.
-            |""".stripMargin)
-      .version("3.5.0")
-      .booleanConf
-      .createWithDefault(false)
-
   val CONNECT_UI_STATEMENT_LIMIT =
     buildStaticConf("spark.sql.connect.ui.retainedStatements")
       .doc("The number of statements kept in the Spark Connect UI history.")
       .version("3.5.0")
       .intConf
       .createWithDefault(200)
+
+  val CONNECT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL =
+    buildStaticConf("spark.connect.copyFromLocalToFs.allowDestLocal")
+      .internal()
+      .doc(s"""
+             |(Deprecated since Spark 4.0, please set
+             |'${SQLConf.ARTIFACT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL.key}' instead.
+             |""".stripMargin)
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val CONNECT_UI_SESSION_LIMIT = buildStaticConf("spark.sql.connect.ui.retainedSessions")
     .doc("The number of client sessions kept in the Spark Connect UI history.")
@@ -246,6 +253,41 @@ object Connect {
   val CONNECT_SERVER_STACKTRACE_ENABLED =
     buildConf("spark.sql.connect.serverStacktrace.enabled")
       .doc("When true, it sets the server-side stacktrace in the user-facing Spark exception.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val CONNECT_GRPC_MAX_METADATA_SIZE =
+    buildStaticConf("spark.connect.grpc.maxMetadataSize")
+      .doc(
+        "Sets the maximum size of metadata fields. For instance, it restricts metadata fields " +
+          "in `ErrorInfo`.")
+      .version("4.0.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefault(1024)
+
+  val CONNECT_PROGRESS_REPORT_INTERVAL =
+    buildConf("spark.connect.progress.reportInterval")
+      .doc("The interval at which the progress of a query is reported to the client." +
+        " If the value is set to a negative value the progress reports will be disabled.")
+      .version("4.0.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("2s")
+
+  val CONNECT_SESSION_PLAN_CACHE_SIZE =
+    buildStaticConf("spark.connect.session.planCache.maxSize")
+      .doc("Sets the maximum number of cached resolved logical plans in Spark Connect Session." +
+        " If set to a value less or equal than zero will disable the plan cache.")
+      .version("4.0.0")
+      .intConf
+      .createWithDefault(5)
+
+  val CONNECT_SESSION_PLAN_CACHE_ENABLED =
+    buildConf("spark.connect.session.planCache.enabled")
+      .doc("When true, the cache of resolved logical plans is enabled if" +
+        s" '${CONNECT_SESSION_PLAN_CACHE_SIZE.key}' is greater than zero." +
+        s" When false, the cache is disabled even if '${CONNECT_SESSION_PLAN_CACHE_SIZE.key}' is" +
+        " greater than zero. The caching is best-effort and not guaranteed.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(true)

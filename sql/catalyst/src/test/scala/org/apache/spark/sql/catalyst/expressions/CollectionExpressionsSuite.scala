@@ -32,10 +32,11 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{outstandingZoneIds, LA, UTC}
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
+import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.errors.DataTypeErrorsBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.array.ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
+import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.UTF8String
 
 class CollectionExpressionsSuite
@@ -411,13 +412,36 @@ class CollectionExpressionsSuite
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "1",
+          "paramIndex" -> ordinalNumber(0),
           "inputSql" -> "\"1\"",
           "inputType" -> "\"INT\"",
           "requiredType" -> "\"ARRAY\" of pair \"STRUCT\""
         )
       )
     )
+  }
+
+  test("Sort Map") {
+    val intKey = Literal.create(Map(2 -> 2, 1 -> 1, 3 -> 3), MapType(IntegerType, IntegerType))
+    val boolKey = Literal.create(Map(true -> 2, false -> 1), MapType(BooleanType, IntegerType))
+    val stringKey = Literal.create(Map("2" -> 2, "1" -> 1, "3" -> 3),
+      MapType(StringType, IntegerType))
+    val arrayKey = Literal.create(Map(Seq(2) -> 2, Seq(1) -> 1, Seq(3) -> 3),
+      MapType(ArrayType(IntegerType), IntegerType))
+    val nestedArrayKey = Literal.create(Map(Seq(Seq(2)) -> 2, Seq(Seq(1)) -> 1, Seq(Seq(3)) -> 3),
+      MapType(ArrayType(ArrayType(IntegerType)), IntegerType))
+    val structKey = Literal.create(
+      Map(create_row(2) -> 2, create_row(1) -> 1, create_row(3) -> 3),
+      MapType(StructType(Seq(StructField("a", IntegerType))), IntegerType))
+
+    checkEvaluation(MapSort(intKey), Map(1 -> 1, 2 -> 2, 3 -> 3))
+    checkEvaluation(MapSort(boolKey), Map(false -> 1, true -> 2))
+    checkEvaluation(MapSort(stringKey), Map("1" -> 1, "2" -> 2, "3" -> 3))
+    checkEvaluation(MapSort(arrayKey), Map(Seq(1) -> 1, Seq(2) -> 2, Seq(3) -> 3))
+    checkEvaluation(MapSort(nestedArrayKey),
+      Map(Seq(Seq(1)) -> 1, Seq(Seq(2)) -> 2, Seq(Seq(3)) -> 3))
+    checkEvaluation(MapSort(structKey),
+      Map(create_row(1) -> 1, create_row(2) -> 2, create_row(3) -> 3))
   }
 
   test("Sort Array") {
@@ -796,10 +820,6 @@ class CollectionExpressionsSuite
     // test sequence boundaries checking
 
     checkExceptionInExpression[IllegalArgumentException](
-      new Sequence(Literal(Int.MinValue), Literal(Int.MaxValue), Literal(1)),
-      EmptyRow, s"Too long sequence: 4294967296. Should be <= $MAX_ROUNDED_ARRAY_LENGTH")
-
-    checkExceptionInExpression[IllegalArgumentException](
       new Sequence(Literal(1), Literal(2), Literal(0)), EmptyRow, "boundaries: 1 to 2 by 0")
     checkExceptionInExpression[IllegalArgumentException](
       new Sequence(Literal(2), Literal(1), Literal(0)), EmptyRow, "boundaries: 2 to 1 by 0")
@@ -807,6 +827,56 @@ class CollectionExpressionsSuite
       new Sequence(Literal(2), Literal(1), Literal(1)), EmptyRow, "boundaries: 2 to 1 by 1")
     checkExceptionInExpression[IllegalArgumentException](
       new Sequence(Literal(1), Literal(2), Literal(-1)), EmptyRow, "boundaries: 1 to 2 by -1")
+
+    // SPARK-43393: test Sequence overflow checking
+    checkErrorInExpression[SparkRuntimeException](
+      new Sequence(Literal(Int.MinValue), Literal(Int.MaxValue), Literal(1)),
+      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
+      parameters = Map(
+        "numberOfElements" -> (BigInt(Int.MaxValue) - BigInt { Int.MinValue } + 1).toString,
+        "functionName" -> toSQLId("sequence"),
+        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString(),
+        "parameter" -> toSQLId("count")))
+    checkErrorInExpression[SparkRuntimeException](
+      new Sequence(Literal(0L), Literal(Long.MaxValue), Literal(1L)),
+      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
+      parameters = Map(
+        "numberOfElements" -> (BigInt(Long.MaxValue) + 1).toString,
+        "functionName" -> toSQLId("sequence"),
+        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString(),
+        "parameter" -> toSQLId("count")))
+    checkErrorInExpression[SparkRuntimeException](
+      new Sequence(Literal(0L), Literal(Long.MinValue), Literal(-1L)),
+      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
+      parameters = Map(
+        "numberOfElements" -> ((0 - BigInt(Long.MinValue)) + 1).toString(),
+        "functionName" -> toSQLId("sequence"),
+        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString(),
+        "parameter" -> toSQLId("count")))
+    checkErrorInExpression[SparkRuntimeException](
+      new Sequence(Literal(Long.MinValue), Literal(Long.MaxValue), Literal(1L)),
+      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
+      parameters = Map(
+        "numberOfElements" -> (BigInt(Long.MaxValue) - BigInt { Long.MinValue } + 1).toString,
+        "functionName" -> toSQLId("sequence"),
+        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString(),
+        "parameter" -> toSQLId("count")))
+    checkErrorInExpression[SparkRuntimeException](
+      new Sequence(Literal(Long.MaxValue), Literal(Long.MinValue), Literal(-1L)),
+      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
+      parameters = Map(
+        "numberOfElements" -> (BigInt(Long.MaxValue) - BigInt { Long.MinValue } + 1).toString,
+        "functionName" -> toSQLId("sequence"),
+        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString(),
+        "parameter" -> toSQLId("count")))
+    checkErrorInExpression[SparkRuntimeException](
+      new Sequence(Literal(Long.MaxValue), Literal(-1L), Literal(-1L)),
+      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
+      parameters = Map(
+        "numberOfElements" -> (BigInt(Long.MaxValue) - BigInt { -1L } + 1).toString,
+        "functionName" -> toSQLId("sequence"),
+        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString(),
+        "parameter" -> toSQLId("count")))
 
     // test sequence with one element (zero step or equal start and stop)
 

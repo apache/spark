@@ -160,7 +160,7 @@ private[spark] object ThreadUtils {
   }
 
   /**
-   * Wrapper over newSingleThreadExecutor.
+   * Wrapper over newFixedThreadPool with single daemon thread.
    */
   def newDaemonSingleThreadExecutor(threadName: String): ThreadPoolExecutor = {
     val threadFactory = new ThreadFactoryBuilder().setDaemon(true).setNameFormat(threadName).build()
@@ -189,10 +189,22 @@ private[spark] object ThreadUtils {
   }
 
   /**
-   * Wrapper over ScheduledThreadPoolExecutor.
+   * Wrapper over ScheduledThreadPoolExecutor the pool with daemon threads.
    */
   def newDaemonSingleThreadScheduledExecutor(threadName: String): ScheduledExecutorService = {
     val threadFactory = new ThreadFactoryBuilder().setDaemon(true).setNameFormat(threadName).build()
+    val executor = new ScheduledThreadPoolExecutor(1, threadFactory)
+    // By default, a cancelled task is not automatically removed from the work queue until its delay
+    // elapses. We have to enable it manually.
+    executor.setRemoveOnCancelPolicy(true)
+    executor
+  }
+
+  /**
+   * Wrapper over ScheduledThreadPoolExecutor the pool with non-daemon threads.
+   */
+  def newSingleThreadScheduledExecutor(threadName: String): ScheduledThreadPoolExecutor = {
+    val threadFactory = new ThreadFactoryBuilder().setNameFormat(threadName).build()
     val executor = new ScheduledThreadPoolExecutor(1, threadFactory)
     // By default, a cancelled task is not automatically removed from the work queue until its delay
     // elapses. We have to enable it manually.
@@ -379,7 +391,7 @@ private[spark] object ThreadUtils {
   def parmap[I, O](in: Seq[I], prefix: String, maxThreads: Int)(f: I => O): Seq[O] = {
     val pool = newForkJoinPool(prefix, maxThreads)
     try {
-      implicit val ec = ExecutionContext.fromExecutor(pool)
+      implicit val ec: ExecutionContextExecutor = ExecutionContext.fromExecutor(pool)
 
       val futures = in.map(x => Future(f(x)))
       val futureSeq = Future.sequence(futures)

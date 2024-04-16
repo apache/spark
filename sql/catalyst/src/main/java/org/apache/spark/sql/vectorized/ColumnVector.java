@@ -22,6 +22,7 @@ import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.sql.types.UserDefinedType;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
+import org.apache.spark.unsafe.types.VariantVal;
 
 /**
  * An interface representing in-memory columnar data in Spark. This interface defines the main APIs
@@ -297,6 +298,16 @@ public abstract class ColumnVector implements AutoCloseable {
     final int days = getChild(1).getInt(rowId);
     final long microseconds = getChild(2).getLong(rowId);
     return new CalendarInterval(months, days, microseconds);
+  }
+
+  /**
+   * Returns the Variant value for {@code rowId}. Similar to {@link #getInterval(int)}, the
+   * implementation must implement {@link #getChild(int)} and define 2 child vectors of binary type
+   * for the Variant value and metadata.
+   */
+  public final VariantVal getVariant(int rowId) {
+    if (isNullAt(rowId)) return null;
+    return new VariantVal(getChild(0).getBinary(rowId), getChild(1).getBinary(rowId));
   }
 
   /**

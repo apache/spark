@@ -1,5 +1,6 @@
 -- The test file contains negative test cases
 -- of invalid queries where error messages are expected.
+--ONLY_IF spark
 
 CREATE TEMPORARY VIEW t1 AS SELECT * FROM VALUES
   (1, 2, 3)

@@ -28,15 +28,15 @@ whichever version of Spark you currently have checked out of revision control.
 
 ## Prerequisites
 
-The Spark documentation build uses a number of tools to build HTML docs and API docs in Scala, Java,
-Python, R and SQL.
+The Spark documentation build uses a number of tools to build HTML docs and API docs in Scala, Java, Python, R, and SQL.
 
-You need to have [Ruby](https://www.ruby-lang.org/en/documentation/installation/) and
-[Python](https://docs.python.org/2/using/unix.html#getting-and-installing-the-latest-version-of-python)
-installed. Make sure the `bundle` command is available, if not install the Gem containing it:
+You need to have [Ruby 3][ruby] and [Python 3][python] installed. Make sure the `bundle` command is available. If not, install it as follows:
+
+[ruby]: https://www.ruby-lang.org/en/documentation/installation/
+[python]: https://www.python.org/downloads/
 
 ```sh
-$ sudo gem install bundler
+$ gem install bundler
 ```
 
 After this all the required ruby dependencies can be installed from the `docs/` directory via the Bundler:
@@ -46,19 +46,12 @@ $ cd docs
 $ bundle install
 ```
 
-Note: If you are on a system with both Ruby 1.9 and Ruby 2.0 you may need to replace gem with gem2.0.
+To generate the Python or R docs, you'll need to [install Pandoc](https://pandoc.org/installing.html).
 
 ### SQL and Python API Documentation (Optional)
 
 To generate SQL and Python API docs, you'll need to install these libraries:
 
-<!--
-TODO(SPARK-32407): Sphinx 3.1+ does not correctly index nested classes.
-See also https://github.com/sphinx-doc/sphinx/issues/7551.
-
-TODO(SPARK-35375): Jinja2 3.0.0+ causes error when building with Sphinx.
-See also https://issues.apache.org/jira/browse/SPARK-35375.
--->
 Run the following command from $SPARK_HOME:
 ```sh
 $ pip install --upgrade -r dev/requirements.txt
@@ -66,8 +59,7 @@ $ pip install --upgrade -r dev/requirements.txt
 
 ### R API Documentation (Optional)
 
-If you'd like to generate R API documentation, you'll need to [install Pandoc](https://pandoc.org/installing.html)
-and install these libraries:
+If you'd like to generate R API documentation, install these libraries:
 
 ```sh
 $ sudo Rscript -e 'install.packages(c("knitr", "devtools", "testthat", "rmarkdown"), repos="https://cloud.r-project.org/")'

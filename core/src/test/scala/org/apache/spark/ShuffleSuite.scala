@@ -51,7 +51,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalRootDi
     sc = new SparkContext("local", "test", myConf)
     val pairs = sc.parallelize(Seq((1, 1), (1, 2), (1, 3), (2, 1)), 4)
     val groups = pairs.groupByKey(4).collect()
-    assert(groups.size === 2)
+    assert(groups.length === 2)
     val valuesFor1 = groups.find(_._1 == 1).get._2
     assert(valuesFor1.toList.sorted === List(1, 2, 3))
     val valuesFor2 = groups.find(_._1 == 2).get._2
@@ -482,6 +482,17 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalRootDi
       rdd.count()
     }
     assert(e.getMessage.contains("corrupted due to DISK_ISSUE"))
+  }
+
+  test("SPARK-39771: warn when shuffle block number is too large") {
+    sc = new SparkContext("local", "test", conf)
+    val logAppender = new LogAppender("warn when shuffle block number is too large")
+    withLogAppender(logAppender) {
+      sc.parallelize(1 to 100000, 100000).map(x => (x, x)).reduceByKey(_ + _).toDebugString
+    }
+    assert(logAppender
+      .loggingEvents
+      .count(_.getMessage.getFormattedMessage.contains(s"The number of shuffle blocks")) == 1)
   }
 }
 

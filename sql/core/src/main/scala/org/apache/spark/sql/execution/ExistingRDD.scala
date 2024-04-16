@@ -81,7 +81,7 @@ case class ExternalRDDScanExec[T](
   }
 
   override def simpleString(maxFields: Int): String = {
-    s"$nodeName${output.mkString("[", ",", "]")}"
+    s"$nodeName${truncatedString(output, "[", ", ", "]", maxFields)}"
   }
 }
 
@@ -150,6 +150,13 @@ case class LogicalRDD(
   }
 
   override lazy val constraints: ExpressionSet = originConstraints.getOrElse(ExpressionSet())
+    // Subqueries can have non-deterministic results even when they only contain deterministic
+    // expressions (e.g. consider a LIMIT 1 subquery without an ORDER BY). Propagating predicates
+    // containing a subquery causes the subquery to be executed twice (as the result of the subquery
+    // in the checkpoint computation cannot be reused), which could result in incorrect results.
+    // Therefore we assume that all subqueries are non-deterministic, and we do not expose any
+    // constraints that contain a subquery.
+    .filterNot(SubqueryExpression.hasSubquery)
 }
 
 object LogicalRDD extends Logging {

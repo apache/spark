@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 
 import java.util.Locale
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.{HiveTableRelation, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
@@ -150,7 +151,7 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
             LocalRelation(partAttrs, partitionData)
 
           case _ =>
-            throw new IllegalStateException(s"unrecognized table scan node: $relation, " +
+            throw SparkException.internalError(s"unrecognized table scan node: $relation, " +
               s"please turn off ${SQLConf.OPTIMIZER_METADATA_ONLY.key} and try again.")
         }
     }

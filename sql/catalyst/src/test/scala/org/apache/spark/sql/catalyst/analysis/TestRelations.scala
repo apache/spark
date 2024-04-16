@@ -68,4 +68,18 @@ object TestRelations {
 
   val mapRelation = LocalRelation(
     AttributeReference("map", MapType(IntegerType, IntegerType))())
+
+  val streamingRelation = LocalRelation(
+    Seq(
+      AttributeReference("a", IntegerType)(),
+      AttributeReference("ts", TimestampType)()
+    ),
+    isStreaming = true)
+
+  val batchRelationWithTs = LocalRelation(
+    Seq(
+      AttributeReference("a", IntegerType)(),
+      AttributeReference("ts", TimestampType)()
+    ),
+    isStreaming = false)
 }

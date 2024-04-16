@@ -22,7 +22,8 @@ import java.{util => ju}
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.SparkContext
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{ERROR, TIP}
 import org.apache.spark.internal.config.Network.NETWORK_TIMEOUT
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql._
@@ -344,14 +345,14 @@ private[kafka010] class KafkaSource(
   override def toString(): String = s"KafkaSourceV1[$kafkaReader]"
 
   /**
-   * If `failOnDataLoss` is true, this method will throw an `IllegalStateException`.
+   * If `failOnDataLoss` is true, this method will throw the exception.
    * Otherwise, just log a warning.
    */
-  private def reportDataLoss(message: String): Unit = {
+  private def reportDataLoss(message: String, getException: () => Throwable): Unit = {
     if (failOnDataLoss) {
-      throw new IllegalStateException(message + s". $INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE")
+      throw getException()
     } else {
-      logWarning(message + s". $INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE")
+      logWarning(log"${MDC(ERROR, message)}. ${MDC(TIP, INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE)}")
     }
   }
 

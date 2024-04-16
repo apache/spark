@@ -45,10 +45,8 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
-import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.sources.SimpleScanSource
 import org.apache.spark.sql.types.{LongType, StringType, StructType}
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 
 abstract class DataSourceV2SQLSuite
@@ -56,7 +54,7 @@ abstract class DataSourceV2SQLSuite
   with DeleteFromTests with DatasourceV2SQLBase with StatsEstimationTestBase
   with AdaptiveSparkPlanHelper {
 
-  protected val v2Source = classOf[FakeV2Provider].getName
+  protected val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
   override protected val v2Format = v2Source
 
   protected def doInsert(tableName: String, insert: DataFrame, mode: SaveMode): Unit = {
@@ -1120,7 +1118,7 @@ class DataSourceV2SQLSuiteV1Filter
         },
         errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
         parameters = Map(
-          "tableName" -> "`default`.`tbl`",
+          "tableName" -> "`spark_catalog`.`default`.`tbl`",
           "tableColumns" -> "`id`, `data`",
           "dataColumns" -> "`col1`"
         )
@@ -1155,7 +1153,7 @@ class DataSourceV2SQLSuiteV1Filter
         },
         errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
         parameters = Map(
-          "tableName" -> "`default`.`tbl`",
+          "tableName" -> "`spark_catalog`.`default`.`tbl`",
           "tableColumns" -> "`id`, `data`",
           "dataColumns" -> "`col1`"
         )
@@ -1191,7 +1189,7 @@ class DataSourceV2SQLSuiteV1Filter
         },
         errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
         parameters = Map(
-          "tableName" -> "`default`.`tbl`",
+          "tableName" -> "`spark_catalog`.`default`.`tbl`",
           "tableColumns" -> "`id`, `data`, `data2`",
           "dataColumns" -> "`col1`, `col2`"
         )
@@ -1737,6 +1735,14 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-46972: asymmetrical replacement for char/varchar in V2SessionCatalog.createTable") {
+    // unset this config to use the default v2 session catalog.
+    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+    withTable("t") {
+      sql(s"CREATE TABLE t(c char(1), v varchar(2)) USING $v2Source")
+    }
+  }
+
   test("ShowCurrentNamespace: basic tests") {
     def testShowCurrentNamespace(expectedCatalogName: String, expectedNamespace: String): Unit = {
       val schema = new StructType()
@@ -1790,23 +1796,31 @@ class DataSourceV2SQLSuiteV1Filter
   }
 
   test("tableCreation: partition column case sensitive resolution") {
-    def checkFailure(statement: String): Unit = {
+    def checkFailure(statement: String, i: String): Unit = {
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
         checkError(
           exception = intercept[AnalysisException] {
             sql(statement)
           },
-          errorClass = null,
-          parameters = Map.empty)
+          errorClass = "_LEGACY_ERROR_TEMP_3060",
+          parameters = Map(
+            "i" -> i,
+            "schema" ->
+              """root
+                | |-- a: integer (nullable = true)
+                | |-- b: string (nullable = true)
+                |""".stripMargin))
       }
     }
 
-    checkFailure(s"CREATE TABLE tbl (a int, b string) USING $v2Source PARTITIONED BY (A)")
-    checkFailure(s"CREATE TABLE testcat.tbl (a int, b string) USING $v2Source PARTITIONED BY (A)")
+    checkFailure(s"CREATE TABLE tbl (a int, b string) USING $v2Source PARTITIONED BY (A)", "A")
+    checkFailure(s"CREATE TABLE testcat.tbl (a int, b string) USING $v2Source PARTITIONED BY (A)",
+      "A")
     checkFailure(
-      s"CREATE OR REPLACE TABLE tbl (a int, b string) USING $v2Source PARTITIONED BY (B)")
+      s"CREATE OR REPLACE TABLE tbl (a int, b string) USING $v2Source PARTITIONED BY (B)", "B")
     checkFailure(
-      s"CREATE OR REPLACE TABLE testcat.tbl (a int, b string) USING $v2Source PARTITIONED BY (B)")
+      s"CREATE OR REPLACE TABLE testcat.tbl (a int, b string) USING $v2Source PARTITIONED BY (B)",
+      "B")
   }
 
   test("tableCreation: duplicate column names in the table definition") {
@@ -1868,23 +1882,47 @@ class DataSourceV2SQLSuiteV1Filter
     checkError(
       exception = analysisException(
         s"CREATE TABLE tbl (a int, b string) USING $v2Source CLUSTERED BY (c) INTO 4 BUCKETS"),
-      errorClass = null,
-      parameters = Map.empty)
+      errorClass = "_LEGACY_ERROR_TEMP_3060",
+      parameters = Map(
+        "i" -> "c",
+        "schema" ->
+          """root
+            | |-- a: integer (nullable = true)
+            | |-- b: string (nullable = true)
+            |""".stripMargin))
     checkError(
       exception = analysisException(s"CREATE TABLE testcat.tbl (a int, b string) " +
         s"USING $v2Source CLUSTERED BY (c) INTO 4 BUCKETS"),
-      errorClass = null,
-      parameters = Map.empty)
+      errorClass = "_LEGACY_ERROR_TEMP_3060",
+      parameters = Map(
+        "i" -> "c",
+        "schema" ->
+          """root
+            | |-- a: integer (nullable = true)
+            | |-- b: string (nullable = true)
+            |""".stripMargin))
     checkError(
       exception = analysisException(s"CREATE OR REPLACE TABLE tbl (a int, b string) " +
         s"USING $v2Source CLUSTERED BY (c) INTO 4 BUCKETS"),
-      errorClass = null,
-      parameters = Map.empty)
+      errorClass = "_LEGACY_ERROR_TEMP_3060",
+      parameters = Map(
+        "i" -> "c",
+        "schema" ->
+          """root
+            | |-- a: integer (nullable = true)
+            | |-- b: string (nullable = true)
+            |""".stripMargin))
     checkError(
       exception = analysisException(s"CREATE OR REPLACE TABLE testcat.tbl (a int, b string) " +
         s"USING $v2Source CLUSTERED BY (c) INTO 4 BUCKETS"),
-      errorClass = null,
-      parameters = Map.empty)
+      errorClass = "_LEGACY_ERROR_TEMP_3060",
+      parameters = Map(
+        "i" -> "c",
+        "schema" ->
+          """root
+            | |-- a: integer (nullable = true)
+            | |-- b: string (nullable = true)
+            |""".stripMargin))
   }
 
   test("tableCreation: bucket column name containing dot") {
@@ -1908,26 +1946,27 @@ class DataSourceV2SQLSuiteV1Filter
   test("tableCreation: column repeated in partition columns") {
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        val dupCol = c1.toLowerCase(Locale.ROOT)
         checkError(
           exception = analysisException(
             s"CREATE TABLE t ($c0 INT) USING $v2Source PARTITIONED BY ($c0, $c1)"),
-          errorClass = null,
-          parameters = Map.empty)
+          errorClass = "_LEGACY_ERROR_TEMP_3058",
+          parameters = Map("checkType" -> "in the partitioning", "duplicateColumns" -> dupCol))
         checkError(
           exception = analysisException(
             s"CREATE TABLE testcat.t ($c0 INT) USING $v2Source PARTITIONED BY ($c0, $c1)"),
-          errorClass = null,
-          parameters = Map.empty)
+          errorClass = "_LEGACY_ERROR_TEMP_3058",
+          parameters = Map("checkType" -> "in the partitioning", "duplicateColumns" -> dupCol))
         checkError(
           exception = analysisException(
             s"CREATE OR REPLACE TABLE t ($c0 INT) USING $v2Source PARTITIONED BY ($c0, $c1)"),
-          errorClass = null,
-          parameters = Map.empty)
+          errorClass = "_LEGACY_ERROR_TEMP_3058",
+          parameters = Map("checkType" -> "in the partitioning", "duplicateColumns" -> dupCol))
         checkError(
           exception = analysisException(s"CREATE OR REPLACE TABLE testcat.t ($c0 INT) " +
             s"USING $v2Source PARTITIONED BY ($c0, $c1)"),
-          errorClass = null,
-          parameters = Map.empty)
+          errorClass = "_LEGACY_ERROR_TEMP_3058",
+          parameters = Map("checkType" -> "in the partitioning", "duplicateColumns" -> dupCol))
       }
     }
   }
@@ -2765,8 +2804,10 @@ class DataSourceV2SQLSuiteV1Filter
       exception = intercept[CatalogNotFoundException] {
         sql("SET CATALOG not_exist_catalog")
       },
-      errorClass = null,
-      parameters = Map.empty)
+      errorClass = "CATALOG_NOT_FOUND",
+      parameters = Map(
+        "catalogName" -> "`not_exist_catalog`",
+        "config" -> "\"spark.sql.catalog.not_exist_catalog\""))
   }
 
   test("SPARK-35973: ShowCatalogs") {
@@ -2887,6 +2928,67 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("Check HasPartitionStatistics from InMemoryPartitionTable") {
+    val t = "testpart.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id string) USING foo PARTITIONED BY (key int)")
+      val table = catalog("testpart").asTableCatalog
+        .loadTable(Identifier.of(Array(), "tbl"))
+        .asInstanceOf[InMemoryPartitionTable]
+
+      var partSizes = table.data.map(_.sizeInBytes().getAsLong)
+      var partRowCounts = table.data.map(_.numRows().getAsLong)
+      var partFiles = table.data.map(_.filesCount().getAsLong)
+      assert(partSizes.length == 0)
+      assert(partRowCounts.length == 0)
+      assert(partFiles.length == 0)
+
+      sql(s"INSERT INTO $t VALUES ('a', 1), ('b', 2), ('c', 3)")
+      partSizes = table.data.map(_.sizeInBytes().getAsLong)
+      assert(partSizes.length == 3)
+      assert(partSizes.toSet == Set(100, 100, 100))
+      partRowCounts = table.data.map(_.numRows().getAsLong)
+      assert(partRowCounts.length == 3)
+      assert(partRowCounts.toSet == Set(1, 1, 1))
+      partFiles = table.data.map(_.filesCount().getAsLong)
+      assert(partFiles.length == 3)
+      assert(partFiles.toSet == Set(100, 100, 100))
+
+      sql(s"ALTER TABLE $t DROP PARTITION (key=3)")
+      partSizes = table.data.map(_.sizeInBytes().getAsLong)
+      assert(partSizes.length == 2)
+      assert(partSizes.toSet == Set(100, 100))
+      partRowCounts = table.data.map(_.numRows().getAsLong)
+      assert(partRowCounts.length == 2)
+      assert(partRowCounts.toSet == Set(1, 1))
+      partFiles = table.data.map(_.filesCount().getAsLong)
+      assert(partFiles.length == 2)
+      assert(partFiles.toSet == Set(100, 100))
+
+      sql(s"ALTER TABLE $t ADD PARTITION (key=4)")
+      partSizes = table.data.map(_.sizeInBytes().getAsLong)
+      assert(partSizes.length == 3)
+      assert(partSizes.toSet == Set(100, 100, 100))
+      partRowCounts = table.data.map(_.numRows().getAsLong)
+      assert(partRowCounts.length == 3)
+      assert(partRowCounts.toSet == Set(1, 1, 0))
+      partFiles = table.data.map(_.filesCount().getAsLong)
+      assert(partFiles.length == 3)
+      assert(partFiles.toSet == Set(100, 100, 100))
+
+      sql(s"INSERT INTO $t VALUES ('c', 3), ('e', 5)")
+      partSizes = table.data.map(_.sizeInBytes().getAsLong)
+      assert(partSizes.length == 5)
+      assert(partSizes.toSet == Set(100, 100, 100, 100, 100))
+      partRowCounts = table.data.map(_.numRows().getAsLong)
+      assert(partRowCounts.length == 5)
+      assert(partRowCounts.toSet == Set(1, 1, 0, 1, 1))
+      partFiles = table.data.map(_.filesCount().getAsLong)
+      assert(partFiles.length == 5)
+      assert(partFiles.toSet == Set(100, 100, 100, 100, 100))
+    }
+  }
+
   test("time travel") {
     sql("use testcat")
     // The testing in-memory table simply append the version/timestamp to the table name when
@@ -2964,6 +3066,19 @@ class DataSourceV2SQLSuiteV1Filter
 
       checkError(
         exception = intercept[AnalysisException] {
+          // `current_date()` is a valid expression for time travel timestamp, but the test uses
+          // a fake time travel implementation that only supports two hardcoded timestamp values.
+          sql("SELECT * FROM t TIMESTAMP AS OF current_date()")
+        },
+        errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relationName" -> "`t`"),
+        context = ExpectedContext(
+          fragment = "t",
+          start = 14,
+          stop = 14))
+
+      checkError(
+        exception = intercept[AnalysisException] {
           sql("SELECT * FROM t TIMESTAMP AS OF INTERVAL 1 DAY").collect()
         },
         errorClass = "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.INPUT",
@@ -3016,7 +3131,7 @@ class DataSourceV2SQLSuiteV1Filter
         sqlState = None,
         parameters = Map(
           "sqlExpr" -> "\"abs(true)\"",
-          "paramIndex" -> "1",
+          "paramIndex" -> "first",
           "inputSql" -> "\"true\"",
           "inputType" -> "\"BOOLEAN\"",
           "requiredType" ->
@@ -3226,6 +3341,32 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-46144: Fail overwrite statement if the condition contains subquery") {
+    val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
+    df.createOrReplaceTempView("source")
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(
+        s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      spark.sql(s"INSERT INTO TABLE $t SELECT * FROM source")
+      val invalidQuery = s"INSERT INTO $t REPLACE WHERE id = (select c2 from values(1) as t(c2))" +
+        s" SELECT * FROM source"
+      val exception = intercept[AnalysisException] {
+        spark.sql(invalidQuery)
+      }
+      checkError(
+        exception,
+        errorClass = "UNSUPPORTED_FEATURE.OVERWRITE_BY_SUBQUERY",
+        sqlState = "0A000",
+        parameters = Map.empty,
+        context = ExpectedContext(
+          fragment = "id = (select c2 from values(1) as t(c2))",
+          start = 38,
+          stop = 77
+        ))
+    }
+  }
+
   test("SPARK-41154: Incorrect relation caching for queries with time travel spec") {
     sql("use testcat")
     val t1 = "testcat.t1"
@@ -3283,7 +3424,8 @@ class DataSourceV2SQLSuiteV1Filter
             Row("# Column Default Values", "", ""),
             Row("# Metadata Columns", "", ""),
             Row("id", "bigint", "42"),
-            Row("id", "bigint", null)
+            Row("id", "bigint", null),
+            Row("Statistics", "0 bytes, 0 rows", null)
           ))
       }
     }
@@ -3362,13 +3504,6 @@ class DataSourceV2SQLSuiteV1Filter
 
 class DataSourceV2SQLSuiteV2Filter extends DataSourceV2SQLSuite {
   override protected val catalogAndNamespace = "testv2filter.ns1.ns2."
-}
-
-/** Used as a V2 DataSource for V2SessionCatalog DDL */
-class FakeV2Provider extends SimpleTableProvider {
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
-    throw new UnsupportedOperationException("Unnecessary for DDL tests")
-  }
 }
 
 class ReserveSchemaNullabilityCatalog extends InMemoryCatalog {

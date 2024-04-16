@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.regression
 
-import org.json4s.{DefaultFormats, JValue}
+import org.json4s.{DefaultFormats, Formats, JValue}
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
@@ -64,7 +64,7 @@ private[mllib] object RegressionModel {
    * @return numFeatures
    */
   def getNumFeatures(metadata: JValue): Int = {
-    implicit val formats = DefaultFormats
+    implicit val formats: Formats = DefaultFormats
     (metadata \ "numFeatures").extract[Int]
   }
 }

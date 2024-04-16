@@ -18,7 +18,7 @@ Sort [two#x ASC NULLS FIRST], true
 +- Distinct
    +- Project [two#x]
       +- SubqueryAlias tmp
-         +- View (`tmp`, [two#x,stringu1#x,ten#x,string4#x])
+         +- View (`tmp`, [two#x, stringu1#x, ten#x, string4#x])
             +- Project [cast(two#x as int) AS two#x, cast(stringu1#x as string) AS stringu1#x, cast(ten#x as int) AS ten#x, cast(string4#x as string) AS string4#x]
                +- Project [two#x, stringu1#x, ten#x, string4#x]
                   +- SubqueryAlias spark_catalog.default.onek
@@ -32,7 +32,7 @@ Sort [ten#x ASC NULLS FIRST], true
 +- Distinct
    +- Project [ten#x]
       +- SubqueryAlias tmp
-         +- View (`tmp`, [two#x,stringu1#x,ten#x,string4#x])
+         +- View (`tmp`, [two#x, stringu1#x, ten#x, string4#x])
             +- Project [cast(two#x as int) AS two#x, cast(stringu1#x as string) AS stringu1#x, cast(ten#x as int) AS ten#x, cast(string4#x as string) AS string4#x]
                +- Project [two#x, stringu1#x, ten#x, string4#x]
                   +- SubqueryAlias spark_catalog.default.onek
@@ -46,7 +46,7 @@ Sort [string4#x ASC NULLS FIRST], true
 +- Distinct
    +- Project [string4#x]
       +- SubqueryAlias tmp
-         +- View (`tmp`, [two#x,stringu1#x,ten#x,string4#x])
+         +- View (`tmp`, [two#x, stringu1#x, ten#x, string4#x])
             +- Project [cast(two#x as int) AS two#x, cast(stringu1#x as string) AS stringu1#x, cast(ten#x as int) AS ten#x, cast(string4#x as string) AS string4#x]
                +- Project [two#x, stringu1#x, ten#x, string4#x]
                   +- SubqueryAlias spark_catalog.default.onek
@@ -62,7 +62,7 @@ Sort [two#x ASC NULLS FIRST, string4#x ASC NULLS FIRST, ten#x ASC NULLS FIRST], 
 +- Distinct
    +- Project [two#x, string4#x, ten#x]
       +- SubqueryAlias tmp
-         +- View (`tmp`, [two#x,stringu1#x,ten#x,string4#x])
+         +- View (`tmp`, [two#x, stringu1#x, ten#x, string4#x])
             +- Project [cast(two#x as int) AS two#x, cast(stringu1#x as string) AS stringu1#x, cast(ten#x as int) AS ten#x, cast(string4#x as string) AS string4#x]
                +- Project [two#x, stringu1#x, ten#x, string4#x]
                   +- SubqueryAlias spark_catalog.default.onek

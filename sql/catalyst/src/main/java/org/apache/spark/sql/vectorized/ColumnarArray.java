@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.vectorized;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.expressions.SpecializedGettersReader;
 import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData;
@@ -24,6 +25,7 @@ import org.apache.spark.sql.catalyst.util.GenericArrayData;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
+import org.apache.spark.unsafe.types.VariantVal;
 
 /**
  * Array abstraction in {@link ColumnVector}.
@@ -161,6 +163,11 @@ public final class ColumnarArray extends ArrayData {
   }
 
   @Override
+  public VariantVal getVariant(int ordinal) {
+    return data.getVariant(offset + ordinal);
+  }
+
+  @Override
   public ColumnarRow getStruct(int ordinal, int numFields) {
     return data.getStruct(offset + ordinal);
   }
@@ -181,8 +188,12 @@ public final class ColumnarArray extends ArrayData {
   }
 
   @Override
-  public void update(int ordinal, Object value) { throw new UnsupportedOperationException(); }
+  public void update(int ordinal, Object value) {
+    throw SparkUnsupportedOperationException.apply();
+  }
 
   @Override
-  public void setNullAt(int ordinal) { throw new UnsupportedOperationException(); }
+  public void setNullAt(int ordinal) {
+    throw SparkUnsupportedOperationException.apply();
+  }
 }

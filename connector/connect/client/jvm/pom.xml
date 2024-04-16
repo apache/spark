@@ -51,9 +51,14 @@
       <version>${project.version}</version>
     </dependency>
     <!--
-      We need to define guava and protobuf here because we need to change the scope of both from
+      We need to define protobuf here because we need to change the scope of both from
       provided to compile. If we don't do this we can't shade these libraries.
     -->
+    <dependency>
+      <groupId>com.google.protobuf</groupId>
+      <artifactId>protobuf-java</artifactId>
+      <scope>compile</scope>
+    </dependency>
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
@@ -61,8 +66,9 @@
       <scope>compile</scope>
     </dependency>
     <dependency>
-      <groupId>com.google.protobuf</groupId>
-      <artifactId>protobuf-java</artifactId>
+      <groupId>com.google.guava</groupId>
+      <artifactId>failureaccess</artifactId>
+      <version>${guava.failureaccess.version}</version>
       <scope>compile</scope>
     </dependency>
     <dependency>
@@ -72,8 +78,21 @@
       <scope>provided</scope>
     </dependency>
     <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-tags_${scala.binary.version}</artifactId>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
       <groupId>org.scalacheck</groupId>
       <artifactId>scalacheck_${scala.binary.version}</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-common-utils_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <classifier>tests</classifier>
       <scope>test</scope>
     </dependency>
     <!-- Use mima to perform the compatibility check -->
@@ -98,6 +117,7 @@
           <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
           <artifactSet>
             <includes>
+              <include>com.google.guava:*</include>
               <include>com.google.android:*</include>
               <include>com.google.api.grpc:*</include>
               <include>com.google.code.findbugs:*</include>
@@ -118,6 +138,13 @@
           </artifactSet>
           <relocations>
             <relocation>
+              <pattern>com.google.common</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.guava</shadedPattern>
+              <includes>
+                <include>com.google.common.**</include>
+              </includes>
+            </relocation>
+            <relocation>
               <pattern>io.grpc</pattern>
               <shadedPattern>${spark.shade.packageName}.io.grpc</shadedPattern>
               <includes>
@@ -128,7 +155,7 @@
               <pattern>com.google</pattern>
               <shadedPattern>${spark.shade.packageName}.com.google</shadedPattern>
               <excludes>
-                <!-- Guava is relocated to ${spark.shade.packageName}.guava (see the parent pom.xml) -->
+                <!-- Guava is relocated to ${spark.shade.packageName}.connect.guava -->
                 <exclude>com.google.common.**</exclude>
               </excludes>
             </relocation>

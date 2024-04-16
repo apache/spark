@@ -160,6 +160,7 @@ class Column:
 
     isNull = _unary_op("isnull", PySparkColumn.isNull.__doc__)
     isNotNull = _unary_op("isnotnull", PySparkColumn.isNotNull.__doc__)
+    isNaN = _unary_op("isNaN", PySparkColumn.isNaN.__doc__)
 
     def __ne__(  # type: ignore[override]
         self,
@@ -256,7 +257,7 @@ class Column:
         else:
             raise PySparkTypeError(
                 error_class="NOT_COLUMN_OR_INT",
-                message_parameters={"arg_name": "length", "arg_type": type(length).__name__},
+                message_parameters={"arg_name": "startPos", "arg_type": type(length).__name__},
             )
         return Column(UnresolvedFunction("substr", [self._expr, start_expr, length_expr]))
 
@@ -329,6 +330,23 @@ class Column:
     cast.__doc__ = PySparkColumn.cast.__doc__
 
     astype = cast
+
+    def try_cast(self, dataType: Union[DataType, str]) -> "Column":
+        if isinstance(dataType, (DataType, str)):
+            return Column(
+                CastExpression(
+                    expr=self._expr,
+                    data_type=dataType,
+                    eval_mode="try",
+                )
+            )
+        else:
+            raise PySparkTypeError(
+                error_class="NOT_DATATYPE_OR_STR",
+                message_parameters={"arg_name": "dataType", "arg_type": type(dataType).__name__},
+            )
+
+    try_cast.__doc__ = PySparkColumn.try_cast.__doc__
 
     def __repr__(self) -> str:
         return "Column<'%s'>" % self._expr.__repr__()
@@ -461,6 +479,8 @@ class Column:
                     message_parameters={},
                 )
             return self.substr(k.start, k.stop)
+        elif isinstance(k, Column):
+            return Column(UnresolvedExtractValue(self._expr, k._expr))
         else:
             return Column(UnresolvedExtractValue(self._expr, LiteralExpression._from_value(k)))
 
@@ -483,6 +503,7 @@ Column.__doc__ = PySparkColumn.__doc__
 
 
 def _test() -> None:
+    import os
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
@@ -490,7 +511,9 @@ def _test() -> None:
 
     globs = pyspark.sql.connect.column.__dict__.copy()
     globs["spark"] = (
-        PySparkSession.builder.appName("sql.connect.column tests").remote("local[4]").getOrCreate()
+        PySparkSession.builder.appName("sql.connect.column tests")
+        .remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[4]"))
+        .getOrCreate()
     )
 
     (failure_count, test_count) = doctest.testmod(

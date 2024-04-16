@@ -18,6 +18,7 @@
 import numbers
 from abc import ABCMeta
 from typing import Any, Optional, Union
+from itertools import chain
 
 import numpy as np
 import pandas as pd
@@ -129,26 +130,11 @@ def _as_categorical_type(
         if len(categories) == 0:
             scol = F.lit(-1)
         else:
-            scol = F.lit(-1)
-            if isinstance(
-                index_ops._internal.spark_type_for(index_ops._internal.column_labels[0]), BinaryType
-            ):
-                from pyspark.sql.functions import base64
-
-                stringified_column = base64(index_ops.spark.column)
-                for code, category in enumerate(categories):
-                    # Convert each category to base64 before comparison
-                    base64_category = F.base64(F.lit(category))
-                    scol = F.when(stringified_column == base64_category, F.lit(code)).otherwise(
-                        scol
-                    )
-            else:
-                stringified_column = F.format_string("%s", index_ops.spark.column)
-
-                for code, category in enumerate(categories):
-                    scol = F.when(stringified_column == F.lit(category), F.lit(code)).otherwise(
-                        scol
-                    )
+            kvs = chain(
+                *[(F.lit(category), F.lit(code)) for code, category in enumerate(categories)]
+            )
+            map_scol = F.create_map(*kvs)
+            scol = F.coalesce(map_scol[index_ops.spark.column], F.lit(-1))
 
         return index_ops._with_new_scol(
             scol.cast(spark_type),
@@ -164,7 +150,10 @@ def _as_bool_type(index_ops: IndexOpsLike, dtype: Dtype) -> IndexOpsLike:
     if isinstance(dtype, extension_dtypes):
         scol = index_ops.spark.column.cast(spark_type)
     else:
-        scol = F.when(index_ops.spark.column.isNull(), F.lit(False)).otherwise(
+        null_value = (
+            F.lit(True) if isinstance(index_ops.spark.data_type, DecimalType) else F.lit(False)
+        )
+        scol = F.when(index_ops.spark.column.isNull(), null_value).otherwise(
             index_ops.spark.column.cast(spark_type)
         )
     return index_ops._with_new_scol(

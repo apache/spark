@@ -33,7 +33,7 @@ import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
  *   2. build/sbt "core/Test/runMain <this class>"
  *   3. generate result:
  *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "core/Test/runMain <this class>"
- *      Results will be written to "benchmarks/CoalescedRDD-results.txt".
+ *      Results will be written to "benchmarks/CoalescedRDDBenchmark-results.txt".
  * }}}
  * */
 object CoalescedRDDBenchmark extends BenchmarkBase {

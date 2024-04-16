@@ -16,12 +16,14 @@
 #
 
 import sys
-from typing import Any, Optional, Union
+from typing import Any, Dict, Optional, Union, TYPE_CHECKING
 
-from py4j.java_gateway import JavaObject
-
-from pyspark import since, _NoValue
+from pyspark import _NoValue
 from pyspark._globals import _NoValueType
+from pyspark.errors import PySparkTypeError
+
+if TYPE_CHECKING:
+    from py4j.java_gateway import JavaObject
 
 
 class RuntimeConfig:
@@ -33,46 +35,119 @@ class RuntimeConfig:
         Supports Spark Connect.
     """
 
-    def __init__(self, jconf: JavaObject) -> None:
+    def __init__(self, jconf: "JavaObject") -> None:
         """Create a new RuntimeConfig that wraps the underlying JVM object."""
         self._jconf = jconf
 
-    @since(2.0)
     def set(self, key: str, value: Union[str, int, bool]) -> None:
-        """Sets the given Spark runtime configuration property."""
+        """
+        Sets the given Spark runtime configuration property.
+
+        .. versionadded:: 2.0.0
+
+        Parameters
+        ----------
+        key : str
+            key of the configuration to set.
+        value : str, int, or bool
+            value of the configuration to set.
+
+        Examples
+        --------
+        >>> spark.conf.set("key1", "value1")
+        """
         self._jconf.set(key, value)
 
-    @since(2.0)
     def get(
         self, key: str, default: Union[Optional[str], _NoValueType] = _NoValue
     ) -> Optional[str]:
-        """Returns the value of Spark runtime configuration property for the given key,
-        assuming it is set.
         """
-        self._checkType(key, "key")
+        Returns the value of Spark runtime configuration property for the given key,
+        assuming it is set.
+
+        .. versionadded:: 2.0.0
+
+        Parameters
+        ----------
+        key : str
+            key of the configuration to get.
+        default : str, optional
+            value of the configuration to get if the key does not exist.
+
+        Returns
+        -------
+        The string value of the configuration set, or None.
+
+        Examples
+        --------
+        >>> spark.conf.get("non-existent-key", "my_default")
+        'my_default'
+        >>> spark.conf.set("my_key", "my_value")
+        >>> spark.conf.get("my_key")
+        'my_value'
+        """
+        self._check_type(key, "key")
         if default is _NoValue:
             return self._jconf.get(key)
         else:
             if default is not None:
-                self._checkType(default, "default")
+                self._check_type(default, "default")
             return self._jconf.get(key, default)
 
-    @since(2.0)
+    @property
+    def getAll(self) -> Dict[str, str]:
+        """
+        Returns all properties set in this conf.
+
+        .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        dict
+            A dictionary containing all properties set in this conf.
+        """
+        return dict(self._jconf.getAllAsJava())
+
     def unset(self, key: str) -> None:
-        """Resets the configuration property for the given key."""
+        """
+        Resets the configuration property for the given key.
+
+        .. versionadded:: 2.0.0
+
+        Parameters
+        ----------
+        key : str
+            key of the configuration to unset.
+
+        Examples
+        --------
+        >>> spark.conf.set("my_key", "my_value")
+        >>> spark.conf.get("my_key")
+        'my_value'
+        >>> spark.conf.unset("my_key")
+        >>> spark.conf.get("my_key")
+        Traceback (most recent call last):
+           ...
+        pyspark...SparkNoSuchElementException: ... The SQL config "my_key" cannot be found...
+        """
         self._jconf.unset(key)
 
-    def _checkType(self, obj: Any, identifier: str) -> None:
+    def _check_type(self, obj: Any, identifier: str) -> None:
         """Assert that an object is of type str."""
         if not isinstance(obj, str):
-            raise TypeError(
-                "expected %s '%s' to be a string (was '%s')" % (identifier, obj, type(obj).__name__)
+            raise PySparkTypeError(
+                error_class="NOT_STR",
+                message_parameters={
+                    "arg_name": identifier,
+                    "arg_type": type(obj).__name__,
+                },
             )
 
-    @since(2.4)
     def isModifiable(self, key: str) -> bool:
         """Indicates whether the configuration property with the given key
         is modifiable in the current session.
+
+        .. versionadded:: 2.4.0
         """
         return self._jconf.isModifiable(key)
 
@@ -87,9 +162,10 @@ def _test() -> None:
 
     globs = pyspark.sql.conf.__dict__.copy()
     spark = SparkSession.builder.master("local[4]").appName("sql.conf tests").getOrCreate()
-    globs["sc"] = spark.sparkContext
     globs["spark"] = spark
-    (failure_count, test_count) = doctest.testmod(pyspark.sql.conf, globs=globs)
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.sql.conf, globs=globs, optionflags=doctest.ELLIPSIS
+    )
     spark.stop()
     if failure_count:
         sys.exit(-1)

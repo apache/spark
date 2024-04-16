@@ -24,7 +24,7 @@ check_dependencies(__name__)
 import warnings
 from typing import List, Type, TYPE_CHECKING, Optional, Union
 
-from pyspark.rdd import PythonEvalType
+from pyspark.util import PythonEvalType
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import ColumnReference, Expression, NamedArgumentExpression
 from pyspark.sql.connect.plan import (
@@ -78,7 +78,7 @@ def _create_py_udtf(
                 == "true"
             )
         except PySparkRuntimeError as e:
-            if e.error_class == "NO_ACTIVE_OR_DEFAULT_SESSION":
+            if e.getErrorClass() == "NO_ACTIVE_OR_DEFAULT_SESSION":
                 pass  # Just uses the default if no session found.
             else:
                 raise e
@@ -167,7 +167,7 @@ class UserDefinedTableFunction:
         session = SparkSession.active()
 
         plan = self._build_common_inline_user_defined_table_function(*args, **kwargs)
-        return DataFrame.withPlan(plan, session)
+        return DataFrame(plan, session)
 
     def asDeterministic(self) -> "UserDefinedTableFunction":
         self.deterministic = True

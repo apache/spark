@@ -99,8 +99,8 @@ public class ChunkFetchRequestHandler extends SimpleChannelInboundHandler<ChunkF
     }
     ManagedBuffer buf;
     try {
-      streamManager.checkAuthorization(client, msg.streamChunkId.streamId);
-      buf = streamManager.getChunk(msg.streamChunkId.streamId, msg.streamChunkId.chunkIndex);
+      streamManager.checkAuthorization(client, msg.streamChunkId.streamId());
+      buf = streamManager.getChunk(msg.streamChunkId.streamId(), msg.streamChunkId.chunkIndex());
       if (buf == null) {
         throw new IllegalStateException("Chunk was not found");
       }
@@ -112,9 +112,9 @@ public class ChunkFetchRequestHandler extends SimpleChannelInboundHandler<ChunkF
       return;
     }
 
-    streamManager.chunkBeingSent(msg.streamChunkId.streamId);
+    streamManager.chunkBeingSent(msg.streamChunkId.streamId());
     respond(channel, new ChunkFetchSuccess(msg.streamChunkId, buf)).addListener(
-      (ChannelFutureListener) future -> streamManager.chunkSent(msg.streamChunkId.streamId));
+      (ChannelFutureListener) future -> streamManager.chunkSent(msg.streamChunkId.streamId()));
   }
 
   /**

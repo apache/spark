@@ -95,7 +95,9 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
             case InsertAction(cond, assignments) =>
               Keep(cond.getOrElse(TrueLiteral), assignments.map(_.value))
             case other =>
-              throw new AnalysisException(s"Unexpected WHEN NOT MATCHED action: $other")
+              throw new AnalysisException(
+                errorClass = "_LEGACY_ERROR_TEMP_3053",
+                messageParameters = Map("other" -> other.toString))
           }
 
           val outputs = notMatchedInstructions.flatMap(_.outputs)
@@ -440,7 +442,9 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
         Keep(cond.getOrElse(TrueLiteral), output)
 
       case other =>
-        throw new AnalysisException(s"Unexpected action: $other")
+        throw new AnalysisException(
+          errorClass = "_LEGACY_ERROR_TEMP_3052",
+          messageParameters = Map("other" -> other.toString))
     }
   }
 
@@ -472,7 +476,9 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
         Keep(cond.getOrElse(TrueLiteral), output)
 
       case other =>
-        throw new AnalysisException(s"Unexpected action: $other")
+        throw new AnalysisException(
+          errorClass = "_LEGACY_ERROR_TEMP_3052",
+          messageParameters = Map("other" -> other.toString))
     }
   }
 

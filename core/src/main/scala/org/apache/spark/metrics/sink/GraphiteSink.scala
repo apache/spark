@@ -42,11 +42,11 @@ private[spark] class GraphiteSink(
 
   def propertyToOption(prop: String): Option[String] = Option(property.getProperty(prop))
 
-  if (!propertyToOption(GRAPHITE_KEY_HOST).isDefined) {
+  if (propertyToOption(GRAPHITE_KEY_HOST).isEmpty) {
     throw SparkCoreErrors.graphiteSinkPropertyMissingError("host")
   }
 
-  if (!propertyToOption(GRAPHITE_KEY_PORT).isDefined) {
+  if (propertyToOption(GRAPHITE_KEY_PORT).isEmpty) {
     throw SparkCoreErrors.graphiteSinkPropertyMissingError("port")
   }
 

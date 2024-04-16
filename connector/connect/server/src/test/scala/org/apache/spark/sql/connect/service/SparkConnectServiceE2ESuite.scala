@@ -32,16 +32,25 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
   // were all already in the buffer.
   val BIG_ENOUGH_QUERY = "select * from range(1000000)"
 
+  test("Execute is sent eagerly to the server upon iterator creation") {
+    // This behavior changed with grpc upgrade from 1.56.0 to 1.59.0.
+    // Testing to be aware of future changes.
+    withClient { client =>
+      val query = client.execute(buildPlan(BIG_ENOUGH_QUERY))
+      // just creating the iterator triggers query to be sent to server.
+      Eventually.eventually(timeout(eventuallyTimeout)) {
+        assert(SparkConnectService.executionManager.listExecuteHolders.length == 1)
+      }
+      assert(query.hasNext)
+    }
+  }
+
   test("ReleaseSession releases all queries and does not allow more requests in the session") {
     withClient { client =>
       val query1 = client.execute(buildPlan(BIG_ENOUGH_QUERY))
       val query2 = client.execute(buildPlan(BIG_ENOUGH_QUERY))
-      val query3 = client.execute(buildPlan("select 1"))
-      // just creating the iterator is lazy, trigger query1 and query2 to be sent.
-      query1.hasNext
-      query2.hasNext
       Eventually.eventually(timeout(eventuallyTimeout)) {
-        SparkConnectService.executionManager.listExecuteHolders.length == 2
+        assert(SparkConnectService.executionManager.listExecuteHolders.length == 2)
       }
 
       // Close session
@@ -51,41 +60,57 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
 
       // Check that queries get cancelled
       Eventually.eventually(timeout(eventuallyTimeout)) {
-        SparkConnectService.executionManager.listExecuteHolders.length == 0
-        // SparkConnectService.sessionManager.
+        assert(SparkConnectService.executionManager.listExecuteHolders.length == 0)
       }
 
       // query1 and query2 could get either an:
       // OPERATION_CANCELED if it happens fast - when closing the session interrupted the queries,
       // and that error got pushed to the client buffers before the client got disconnected.
-      // OPERATION_ABANDONED if it happens slow - when closing the session interrupted the client
-      // RPCs before it pushed out the error above. The client would then get an
+      // INVALID_HANDLE.SESSION_CLOSED if it happens slow - when closing the session interrupted the
+      // client RPCs before it pushed out the error above. The client would then get an
       // INVALID_CURSOR.DISCONNECTED, which it will retry with a ReattachExecute, and then get an
-      // INVALID_HANDLE.OPERATION_ABANDONED.
+      // INVALID_HANDLE.SESSION_CLOSED.
       val query1Error = intercept[SparkException] {
         while (query1.hasNext) query1.next()
       }
       assert(
         query1Error.getMessage.contains("OPERATION_CANCELED") ||
-          query1Error.getMessage.contains("INVALID_HANDLE.OPERATION_ABANDONED"))
+          query1Error.getMessage.contains("INVALID_HANDLE.SESSION_CLOSED"))
       val query2Error = intercept[SparkException] {
         while (query2.hasNext) query2.next()
       }
       assert(
         query2Error.getMessage.contains("OPERATION_CANCELED") ||
-          query2Error.getMessage.contains("INVALID_HANDLE.OPERATION_ABANDONED"))
-
-      // query3 has not been submitted before, so it should now fail with SESSION_CLOSED
-      val query3Error = intercept[SparkException] {
-        query3.hasNext
-      }
-      assert(query3Error.getMessage.contains("INVALID_HANDLE.SESSION_CLOSED"))
+          query2Error.getMessage.contains("INVALID_HANDLE.SESSION_CLOSED"))
 
       // No other requests should be allowed in the session, failing with SESSION_CLOSED
       val requestError = intercept[SparkException] {
         client.interruptAll()
       }
       assert(requestError.getMessage.contains("INVALID_HANDLE.SESSION_CLOSED"))
+    }
+  }
+
+  test("Async cleanup callback gets called after the execution is closed") {
+    withClient(UUID.randomUUID().toString, defaultUserId) { client =>
+      val query1 = client.execute(buildPlan(BIG_ENOUGH_QUERY))
+      // just creating the iterator is lazy, trigger query1 and query2 to be sent.
+      query1.hasNext
+      Eventually.eventually(timeout(eventuallyTimeout)) {
+        assert(SparkConnectService.executionManager.listExecuteHolders.length == 1)
+      }
+      val executeHolder1 = SparkConnectService.executionManager.listExecuteHolders.head
+      // Close session
+      client.releaseSession()
+      // Check that queries get cancelled
+      Eventually.eventually(timeout(eventuallyTimeout)) {
+        assert(SparkConnectService.executionManager.listExecuteHolders.length == 0)
+        // SparkConnectService.sessionManager.
+      }
+      // Check the async execute cleanup get called
+      Eventually.eventually(timeout(eventuallyTimeout)) {
+        assert(executeHolder1.completionCallbackCalled)
+      }
     }
   }
 
@@ -98,25 +123,22 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
       withClient(sessionId = sessionIdB, userId = userIdB) { clientB =>
         val queryA = clientA.execute(buildPlan(BIG_ENOUGH_QUERY))
         val queryB = clientB.execute(buildPlan(BIG_ENOUGH_QUERY))
-        // just creating the iterator is lazy, trigger query1 and query2 to be sent.
-        queryA.hasNext
-        queryB.hasNext
         Eventually.eventually(timeout(eventuallyTimeout)) {
-          SparkConnectService.executionManager.listExecuteHolders.length == 2
+          assert(SparkConnectService.executionManager.listExecuteHolders.length == 2)
         }
         // Close session A
         clientA.releaseSession()
 
         // A's query gets kicked out.
         Eventually.eventually(timeout(eventuallyTimeout)) {
-          SparkConnectService.executionManager.listExecuteHolders.length == 1
+          assert(SparkConnectService.executionManager.listExecuteHolders.length == 1)
         }
         val queryAError = intercept[SparkException] {
           while (queryA.hasNext) queryA.next()
         }
         assert(
           queryAError.getMessage.contains("OPERATION_CANCELED") ||
-            queryAError.getMessage.contains("INVALID_HANDLE.OPERATION_ABANDONED"))
+            queryAError.getMessage.contains("INVALID_HANDLE.SESSION_CLOSED"))
 
         // B's query can run.
         while (queryB.hasNext) queryB.next()
@@ -150,7 +172,7 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
     withClient(sessionId = sessionId, userId = userId) { client =>
       // this will create the session, and then ReleaseSession at the end of withClient.
       val query = client.execute(buildPlan("SELECT 1"))
-      query.hasNext // trigger execution
+      query.hasNext // guarantees the request was received by server.
       client.releaseSession()
     }
     withClient(sessionId = sessionId, userId = userId) { client =>
@@ -168,17 +190,17 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
     val userId = "Y"
     withClient(sessionId = sessionId, userId = userId) { client =>
       val query = client.execute(buildPlan("SELECT 1"))
-      query.hasNext // trigger execution
+      query.hasNext // guarantees the request was received by server.
       client.releaseSession()
     }
     withClient(sessionId = UUID.randomUUID.toString, userId = userId) { client =>
       val query = client.execute(buildPlan("SELECT 1"))
-      query.hasNext // trigger execution
+      query.hasNext // guarantees the request was received by server.
       client.releaseSession()
     }
     withClient(sessionId = sessionId, userId = "YY") { client =>
       val query = client.execute(buildPlan("SELECT 1"))
-      query.hasNext // trigger execution
+      query.hasNext // guarantees the request was received by server.
       client.releaseSession()
     }
   }
@@ -187,10 +209,9 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
     withRawBlockingStub { stub =>
       val iter =
         stub.executePlan(buildExecutePlanRequest(buildPlan("select * from range(1000000)")))
-      iter.hasNext
       val execution = eventuallyGetExecutionHolder
       Eventually.eventually(timeout(30.seconds)) {
-        execution.eventsManager.status == ExecuteStatus.Finished
+        assert(execution.eventsManager.status == ExecuteStatus.Finished)
       }
     }
   }
@@ -198,11 +219,30 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
   test("SPARK-45133 local relation should reach FINISHED state when results are not consumed") {
     withClient { client =>
       val iter = client.execute(buildLocalRelation((1 to 1000000).map(i => (i, i + 1))))
-      iter.hasNext
       val execution = eventuallyGetExecutionHolder
       Eventually.eventually(timeout(30.seconds)) {
-        execution.eventsManager.status == ExecuteStatus.Finished
+        assert(execution.eventsManager.status == ExecuteStatus.Finished)
       }
+    }
+  }
+
+  test("SessionValidation: server validates that the client is talking to the same session.") {
+    val sessionId = UUID.randomUUID.toString()
+    val userId = "Y"
+    withClient(sessionId = sessionId, userId = userId) { client =>
+      // this will create the session, and then ReleaseSession at the end of withClient.
+      val query = client.execute(buildPlan("SELECT 1"))
+      query.hasNext // trigger execution
+      // Same session id.
+      val new_query = client.execute(buildPlan("SELECT 1 + 1"))
+      new_query.hasNext // trigger execution
+      // Change the server session id in the client for testing and try to run something.
+      client.hijackServerSideSessionIdForTesting("-testing")
+      val queryError = intercept[SparkException] {
+        val newest_query = client.execute(buildPlan("SELECT 1 + 1 + 1"))
+        newest_query.hasNext
+      }
+      assert(queryError.getMessage.contains("INVALID_HANDLE.SESSION_CHANGED"))
     }
   }
 }

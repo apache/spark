@@ -33,7 +33,7 @@ import org.apache.spark.tags.DockerTest
  *   ENABLE_DOCKER_INTEGRATION_TESTS=1
  *   MSSQLSERVER_DOCKER_IMAGE_NAME=mcr.microsoft.com/mssql/server:2019-CU13-ubuntu-20.04
  *     ./build/sbt -Pdocker-integration-tests
- *     "testOnly org.apache.spark.sql.jdbc.MsSqlServerIntegrationSuite"
+ *     "docker-integration-tests/testOnly org.apache.spark.sql.jdbc.MsSqlServerIntegrationSuite"
  * }}}
  */
 @DockerTest

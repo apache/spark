@@ -19,13 +19,13 @@ package org.apache.spark.ui
 
 import java.net.{URI, URL, URLDecoder}
 import java.util.EnumSet
-import javax.servlet.DispatcherType
-import javax.servlet.http._
 
 import scala.language.implicitConversions
 import scala.util.Try
 import scala.xml.Node
 
+import jakarta.servlet.DispatcherType
+import jakarta.servlet.http._
 import org.eclipse.jetty.client.HttpClient
 import org.eclipse.jetty.client.api.Response
 import org.eclipse.jetty.client.http.HttpClientTransportOverHTTP
@@ -204,7 +204,7 @@ private[spark] object JettyUtils extends Logging {
         // SPARK-21176: Use the Jetty logic to calculate the number of selector threads (#CPUs/2),
         // but limit it to 8 max.
         val numSelectors = math.max(1, math.min(8, Runtime.getRuntime().availableProcessors() / 2))
-        new HttpClient(new HttpClientTransportOverHTTP(numSelectors), null)
+        new HttpClient(new HttpClientTransportOverHTTP(numSelectors))
       }
 
       override def filterServerResponseHeader(
@@ -246,6 +246,7 @@ private[spark] object JettyUtils extends Logging {
       serverName: String = "",
       poolSize: Int = 200): ServerInfo = {
 
+    val stopTimeout = conf.get(UI_JETTY_STOP_TIMEOUT)
     logInfo(s"Start Jetty $hostName:$port for $serverName")
     // Start the server first, with no connectors.
     val pool = new QueuedThreadPool(poolSize)
@@ -276,6 +277,7 @@ private[spark] object JettyUtils extends Logging {
     val serverExecutor = new ScheduledExecutorScheduler(s"$serverName-JettyScheduler", true)
 
     try {
+      server.setStopTimeout(stopTimeout)
       server.start()
 
       // As each acceptor and each selector will use one thread, the number of threads should at
@@ -314,10 +316,24 @@ private[spark] object JettyUtils extends Logging {
       logDebug(s"Using requestHeaderSize: $requestHeaderSize")
       httpConfig.setRequestHeaderSize(requestHeaderSize)
 
+      // Hide information.
+      logDebug("Using setSendServerVersion: false")
+      httpConfig.setSendServerVersion(false)
+      logDebug("Using setSendXPoweredBy: false")
+      httpConfig.setSendXPoweredBy(false)
+
       // If SSL is configured, create the secure connector first.
-      val securePort = sslOptions.createJettySslContextFactory().map { factory =>
+      val securePort = sslOptions.createJettySslContextFactoryServer().map { factory =>
+
+        // SPARK-45522: SniHostCheck defaulted to true since Jetty 10,
+        // this will affect the standalone deployment.
+        val src = new SecureRequestCustomizer()
+        src.setSniHostCheck(false)
+        httpConfig.addCustomizer(src)
+
         val securePort = sslOptions.port.getOrElse(if (port > 0) Utils.userPort(port, 400) else 0)
         val secureServerName = if (serverName.nonEmpty) s"$serverName (HTTPS)" else serverName
+
         val connectionFactories = AbstractConnectionFactory.getFactories(factory,
           new HttpConnectionFactory(httpConfig))
 

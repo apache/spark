@@ -608,7 +608,10 @@ def lazy_property(fn: Callable[[Any], Any]) -> property:
 
 def scol_for(sdf: PySparkDataFrame, column_name: str) -> Column:
     """Return Spark Column for the given column name."""
-    return sdf["`{}`".format(column_name)]
+    if is_remote():
+        return sdf._col("`{}`".format(column_name))  # type: ignore[operator]
+    else:
+        return sdf["`{}`".format(column_name)]
 
 
 def column_labels_level(column_labels: List[Label]) -> int:
@@ -1031,6 +1034,23 @@ def validate_index_loc(index: "Index", loc: int) -> None:
             raise IndexError(
                 "index {} is out of bounds for axis 0 with size {}".format(loc, length)
             )
+
+
+def xor(df1: PySparkDataFrame, df2: PySparkDataFrame) -> PySparkDataFrame:
+    colNames = df1.columns
+
+    tmp_tag_col = verify_temp_column_name(df1, "__temporary_tag__")
+    tmp_max_col = verify_temp_column_name(df1, "__temporary_max_tag__")
+    tmp_min_col = verify_temp_column_name(df1, "__temporary_min_tag__")
+
+    return (
+        df1.withColumn(tmp_tag_col, F.lit(0))
+        .union(df2.withColumn(tmp_tag_col, F.lit(1)))
+        .groupBy(*colNames)
+        .agg(F.min(tmp_tag_col).alias(tmp_min_col), F.max(tmp_tag_col).alias(tmp_max_col))
+        .where(F.col(tmp_min_col) == F.col(tmp_max_col))
+        .select(*colNames)
+    )
 
 
 def _test() -> None:

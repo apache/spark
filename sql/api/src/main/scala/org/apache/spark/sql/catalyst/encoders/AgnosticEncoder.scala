@@ -25,7 +25,7 @@ import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.sql.{Encoder, Row}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.{CalendarInterval, VariantVal}
 import org.apache.spark.util.SparkClassUtils
 
 /**
@@ -216,6 +216,7 @@ object AgnosticEncoders {
   case object CalendarIntervalEncoder extends LeafEncoder[CalendarInterval](CalendarIntervalType)
   case object DayTimeIntervalEncoder extends LeafEncoder[Duration](DayTimeIntervalType())
   case object YearMonthIntervalEncoder extends LeafEncoder[Period](YearMonthIntervalType())
+  case object VariantEncoder extends LeafEncoder[VariantVal](VariantType)
   case class DateEncoder(override val lenientSerialization: Boolean)
     extends LeafEncoder[jsql.Date](DateType)
   case class LocalDateEncoder(override val lenientSerialization: Boolean)

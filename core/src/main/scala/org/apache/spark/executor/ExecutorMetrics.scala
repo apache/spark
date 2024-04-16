@@ -46,7 +46,7 @@ class ExecutorMetrics private[spark] extends Serializable {
 
   private[spark] def this(metrics: Array[Long]) = {
     this()
-    Array.copy(metrics, 0, this.metrics, 0, Math.min(metrics.size, this.metrics.size))
+    Array.copy(metrics, 0, this.metrics, 0, Math.min(metrics.length, this.metrics.length))
   }
 
   private[spark] def this(metrics: AtomicLongArray) = {

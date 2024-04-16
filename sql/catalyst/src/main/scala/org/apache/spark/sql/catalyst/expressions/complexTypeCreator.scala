@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{Resolver, TypeCheckResult, TypeCoercion, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.{FUNC_ALIAS, FunctionBuilder}
@@ -77,7 +78,7 @@ case class CreateArray(children: Seq[Expression], useStringTypeWhenEmpty: Boolea
 
   private val defaultElementType: DataType = {
     if (useStringTypeWhenEmpty) {
-      StringType
+      SQLConf.get.defaultStringType
     } else {
       NullType
     }
@@ -373,6 +374,7 @@ object CreateStruct {
       // alias name inside CreateNamedStruct.
       case (u: UnresolvedAttribute, _) => Seq(Literal(u.nameParts.last), u)
       case (u @ UnresolvedExtractValue(_, e: Literal), _) if e.dataType == StringType => Seq(e, u)
+      case (a: Alias, _) => Seq(Literal(a.name), a)
       case (e: NamedExpression, _) if e.resolved => Seq(Literal(e.name), e)
       case (e: NamedExpression, _) => Seq(NamePlaceholder, e)
       case (g @ GetStructField(_, _, Some(name)), _) => Seq(Literal(name), g)
@@ -626,10 +628,10 @@ trait StructFieldsOperation extends Expression with Unevaluable {
 
   val resolver: Resolver = SQLConf.get.resolver
 
-  override def dataType: DataType = throw new IllegalStateException(
+  override def dataType: DataType = throw SparkException.internalError(
     "StructFieldsOperation.dataType should not be called.")
 
-  override def nullable: Boolean = throw new IllegalStateException(
+  override def nullable: Boolean = throw SparkException.internalError(
     "StructFieldsOperation.nullable should not be called.")
 
   /**
@@ -695,7 +697,7 @@ case class UpdateFields(structExpr: Expression, fieldOps: Seq[StructFieldsOperat
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "1",
+          "paramIndex" -> ordinalNumber(0),
           "requiredType" -> toSQLType(StructType),
           "inputSql" -> toSQLExpr(structExpr),
           "inputType" -> toSQLType(structExpr.dataType))

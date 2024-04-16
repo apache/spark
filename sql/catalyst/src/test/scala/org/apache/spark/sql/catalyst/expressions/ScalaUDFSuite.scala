@@ -50,13 +50,15 @@ class ScalaUDFSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.create(null, StringType) :: Nil,
       Option(resolvedEncoder[String]()) :: Nil)
 
+    val pattern = "User defined function .+ failed due to: java.lang.NullPointerException".r
+
     val e1 = intercept[SparkException](udf.eval())
-    assert(e1.getMessage.contains("Failed to execute user defined function"))
+    assert(pattern.findFirstIn(e1.getMessage).isDefined)
 
     val e2 = intercept[SparkException] {
       checkEvaluationWithUnsafeProjection(udf, null)
     }
-    assert(e2.getMessage.contains("Failed to execute user defined function"))
+    assert(pattern.findFirstIn(e2.getMessage).isDefined)
   }
 
   test("SPARK-22695: ScalaUDF should not use global variables") {

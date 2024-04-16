@@ -103,18 +103,18 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
 
   @Override
   public void handle(RequestMessage request) throws Exception {
-    if (request instanceof ChunkFetchRequest) {
-      chunkFetchRequestHandler.processFetchRequest(channel, (ChunkFetchRequest) request);
-    } else if (request instanceof RpcRequest) {
-      processRpcRequest((RpcRequest) request);
-    } else if (request instanceof OneWayMessage) {
-      processOneWayMessage((OneWayMessage) request);
-    } else if (request instanceof StreamRequest) {
-      processStreamRequest((StreamRequest) request);
-    } else if (request instanceof UploadStream) {
-      processStreamUpload((UploadStream) request);
-    } else if (request instanceof MergedBlockMetaRequest) {
-      processMergedBlockMetaRequest((MergedBlockMetaRequest) request);
+    if (request instanceof ChunkFetchRequest chunkFetchRequest) {
+      chunkFetchRequestHandler.processFetchRequest(channel, chunkFetchRequest);
+    } else if (request instanceof RpcRequest rpcRequest) {
+      processRpcRequest(rpcRequest);
+    } else if (request instanceof OneWayMessage oneWayMessage) {
+      processOneWayMessage(oneWayMessage);
+    } else if (request instanceof StreamRequest streamRequest) {
+      processStreamRequest(streamRequest);
+    } else if (request instanceof UploadStream uploadStream) {
+      processStreamUpload(uploadStream);
+    } else if (request instanceof MergedBlockMetaRequest mergedBlockMetaRequest) {
+      processMergedBlockMetaRequest(mergedBlockMetaRequest);
     } else {
       throw new IllegalArgumentException("Unknown request type: " + request);
     }
@@ -249,13 +249,13 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
         wrappedCallback.onComplete(wrappedCallback.getID());
       }
     } catch (Exception e) {
-      if (e instanceof BlockPushNonFatalFailure) {
+      if (e instanceof BlockPushNonFatalFailure blockPushNonFatalFailure) {
         // Thrown by rpcHandler.receiveStream(reverseClient, meta, callback), the same as
         // onComplete method. Respond an RPC message with the error code to client instead of
         // using exceptions encoded in the RPCFailure. Using a proper RPCResponse is more
         // efficient, and now only include the too old attempt case here.
         respond(new RpcResponse(req.requestId,
-          new NioManagedBuffer(((BlockPushNonFatalFailure) e).getResponse())));
+          new NioManagedBuffer(blockPushNonFatalFailure.getResponse())));
       } else {
         logger.error("Error while invoking RpcHandler#receive() on RPC id " + req.requestId, e);
         respond(new RpcFailure(req.requestId, Throwables.getStackTraceAsString(e)));

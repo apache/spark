@@ -35,8 +35,9 @@ class EliminateSerializationSuite extends PlanTest {
         EliminateSerialization) :: Nil
   }
 
-  implicit private def productEncoder[T <: Product : TypeTag] = ExpressionEncoder[T]()
-  implicit private def intEncoder = ExpressionEncoder[Int]()
+  implicit private def productEncoder[T <: Product : TypeTag]: ExpressionEncoder[T] =
+    ExpressionEncoder[T]()
+  implicit private def intEncoder: ExpressionEncoder[Int] = ExpressionEncoder[Int]()
 
   test("back to back serialization") {
     val input = LocalRelation($"obj".obj(classOf[(Int, Int)]))

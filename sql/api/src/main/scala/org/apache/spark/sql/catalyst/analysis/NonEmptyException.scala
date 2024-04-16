@@ -26,11 +26,14 @@ import org.apache.spark.sql.catalyst.util.QuotingUtils.quoted
  * as an [[org.apache.spark.sql.AnalysisException]] with the correct position information.
  */
 case class NonEmptyNamespaceException(
-    override val message: String,
+    namespace: Array[String],
+    details: String,
     override val cause: Option[Throwable] = None)
-  extends AnalysisException(message, cause = cause) {
+  extends AnalysisException(
+    errorClass = "_LEGACY_ERROR_TEMP_3103",
+    messageParameters = Map(
+      "namespace" -> quoted(namespace),
+      "details" -> details)) {
 
-  def this(namespace: Array[String]) = {
-    this(s"Namespace '${quoted(namespace)}' is non empty.")
-  }
+  def this(namespace: Array[String]) = this(namespace, "", None)
 }

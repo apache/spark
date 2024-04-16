@@ -28,7 +28,6 @@ import org.scalatest.BeforeAndAfter
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
-import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
@@ -74,14 +73,15 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     // Make sure `largeValue` will cause overflow if we use a Long sum to calc avg.
     assert(largeValue * largeValue != BigInt(largeValue) * BigInt(largeValue))
     val stats =
-      EventTimeStats(max = largeValue, min = largeValue, avg = largeValue, count = largeValue - 1)
+      EventTimeStats(
+        max = largeValue, min = largeValue, avg = largeValue.toDouble, count = largeValue - 1)
     stats.add(largeValue)
     stats.avg should be (largeValue.toDouble +- epsilon)
 
     val stats2 = EventTimeStats(
       max = largeValue + 1,
       min = largeValue,
-      avg = largeValue + 1,
+      avg = largeValue + 1.0,
       count = largeValue)
     stats.merge(stats2)
     stats.avg should be ((largeValue + 0.5) +- epsilon)
@@ -651,10 +651,9 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
           (input1, Seq(("A", 200L), ("B", 300L))),
           (input2, Seq(("A", 190L), ("C", 350L)))
         ),
-        ExpectFailure[SparkException](assertFailure = exc => {
-          val cause = exc.getCause
-          assert(cause.getMessage.contains("More than one event time columns are available."))
-          assert(cause.getMessage.contains(
+        ExpectFailure[AnalysisException](assertFailure = ex => {
+          assert(ex.getMessage.contains("More than one event time columns are available."))
+          assert(ex.getMessage.contains(
             "Please ensure there is at most one event time column per stream."))
         })
       )

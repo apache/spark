@@ -19,14 +19,16 @@
 package org.apache.spark.deploy.master
 
 import java.net.ServerSocket
+import java.nio.file.{Files, Paths}
 import java.util.concurrent.ThreadLocalRandom
 
 import org.apache.curator.test.TestingServer
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config.Deploy.ZOOKEEPER_URL
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rpc.{RpcEndpoint, RpcEnv}
-import org.apache.spark.serializer.{JavaSerializer, Serializer}
+import org.apache.spark.serializer.{JavaSerializer, KryoSerializer, Serializer}
 import org.apache.spark.util.Utils
 
 class PersistenceEngineSuite extends SparkFunSuite {
@@ -37,6 +39,91 @@ class PersistenceEngineSuite extends SparkFunSuite {
       testPersistenceEngine(conf, serializer =>
         new FileSystemPersistenceEngine(dir.getAbsolutePath, serializer)
       )
+    }
+  }
+
+  test("SPARK-46258: RocksDBPersistenceEngine") {
+    withTempDir { dir =>
+      val conf = new SparkConf()
+      testPersistenceEngine(conf, serializer =>
+        new RocksDBPersistenceEngine(dir.getAbsolutePath, serializer)
+      )
+    }
+  }
+
+  test("SPARK-46191: FileSystemPersistenceEngine.persist error message for the existing file") {
+    withTempDir { dir =>
+      val conf = new SparkConf()
+      val serializer = new JavaSerializer(conf)
+      val engine = new FileSystemPersistenceEngine(dir.getAbsolutePath, serializer)
+      engine.persist("test_1", "test_1_value")
+      val m = intercept[IllegalStateException] {
+        engine.persist("test_1", "test_1_value")
+      }.getMessage
+      assert(m.contains("File already exists"))
+    }
+  }
+
+  test("SPARK-46215: FileSystemPersistenceEngine with a non-existent parent dir") {
+    withTempDir { dir =>
+      val conf = new SparkConf()
+      testPersistenceEngine(conf, serializer =>
+        new FileSystemPersistenceEngine(dir.getAbsolutePath + "/a/b/c/dir", serializer)
+      )
+    }
+  }
+
+  test("SPARK-46215: FileSystemPersistenceEngine with a symbolic link") {
+    withTempDir { dir =>
+      val target = Paths.get(dir.getAbsolutePath(), "target")
+      val link = Paths.get(dir.getAbsolutePath(), "symbolic_link");
+
+      Files.createDirectories(target)
+      Files.createSymbolicLink(link, target);
+
+      val conf = new SparkConf()
+      testPersistenceEngine(conf, serializer =>
+        new FileSystemPersistenceEngine(link.toAbsolutePath.toString, serializer)
+      )
+    }
+  }
+
+  test("SPARK-46827: RocksDBPersistenceEngine with a symbolic link") {
+    withTempDir { dir =>
+      val target = Paths.get(dir.getAbsolutePath(), "target")
+      val link = Paths.get(dir.getAbsolutePath(), "symbolic_link");
+
+      Files.createDirectories(target)
+      Files.createSymbolicLink(link, target);
+
+      val conf = new SparkConf()
+      testPersistenceEngine(conf, serializer =>
+        new RocksDBPersistenceEngine(link.toAbsolutePath.toString, serializer)
+      )
+    }
+  }
+
+  test("SPARK-46205: Support KryoSerializer in FileSystemPersistenceEngine") {
+    withTempDir { dir =>
+      val conf = new SparkConf()
+      val serializer = new KryoSerializer(conf)
+      val engine = new FileSystemPersistenceEngine(dir.getAbsolutePath, serializer)
+      engine.persist("test_1", "test_1_value")
+      engine.read[String]("test_1")
+      engine.unpersist("test_1")
+      engine.close()
+    }
+  }
+
+  test("SPARK-46216: FileSystemPersistenceEngine with compression") {
+    val conf = new SparkConf()
+    CompressionCodec.ALL_COMPRESSION_CODECS.foreach { c =>
+      val codec = CompressionCodec.createCodec(conf, c)
+      withTempDir { dir =>
+        testPersistenceEngine(conf, serializer =>
+          new FileSystemPersistenceEngine(dir.getAbsolutePath, serializer, Some(codec))
+        )
+      }
     }
   }
 

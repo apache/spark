@@ -157,8 +157,10 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("between expressions") {
-    assertEqual("a between b and c", $"a" >= $"b" && $"a" <= $"c")
-    assertEqual("a not between b and c", !($"a" >= $"b" && $"a" <= $"c"))
+    assertEqual("a between b and c",
+      UnresolvedFunction("between", Seq($"a", $"b", $"c"), isDistinct = false))
+    assertEqual("a not between b and c",
+      !UnresolvedFunction("between", Seq($"a", $"b", $"c"), isDistinct = false))
   }
 
   test("in expressions") {
@@ -1040,17 +1042,6 @@ class ExpressionParserSuite extends AnalysisTest {
       checkIntervals("1.001 second",
         Literal(IntervalUtils.stringToInterval("1 second 1 millisecond")))
     }
-
-    // Non Existing unit
-    checkError(
-      exception = parseException("interval 10 nanoseconds"),
-      errorClass = "_LEGACY_ERROR_TEMP_0062",
-      parameters = Map(
-        "msg" -> "Error parsing ' 10 nanoseconds' to interval, invalid unit 'nanoseconds'"),
-      context = ExpectedContext(
-        fragment = "10 nanoseconds",
-        start = 9,
-        stop = 22))
 
     withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
       // Year-Month intervals.

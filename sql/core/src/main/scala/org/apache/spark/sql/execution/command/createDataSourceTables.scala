@@ -28,6 +28,7 @@ import org.apache.spark.sql.execution.CommandExecutionMode
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A command used to create a data source table.
@@ -84,7 +85,7 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
       // This is guaranteed in `PreprocessDDL`.
       assert(table.partitionColumnNames.isEmpty)
       dataSource match {
-        case r: HadoopFsRelation => r.partitionSchema.fieldNames.toSeq
+        case r: HadoopFsRelation => r.partitionSchema.fieldNames.toImmutableArraySeq
         case _ => Nil
       }
     }
@@ -194,7 +195,7 @@ case class CreateDataSourceTableAsSelectCommand(
 
       result match {
         case fs: HadoopFsRelation if table.partitionColumnNames.nonEmpty &&
-            sparkSession.sqlContext.conf.manageFilesourcePartitions =>
+            sparkSession.sessionState.conf.manageFilesourcePartitions =>
           // Need to recover partitions into the metastore so our saved data is visible.
           sessionState.executePlan(RepairTableCommand(
             table.identifier,

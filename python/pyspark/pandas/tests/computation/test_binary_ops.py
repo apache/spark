@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
@@ -36,10 +36,8 @@ class FrameBinaryOpsMixin:
         )
 
     @property
-    def df_pair(self):
-        pdf = self.pdf
-        psdf = ps.from_pandas(pdf)
-        return pdf, psdf
+    def psdf(self):
+        return ps.from_pandas(self.pdf)
 
     def test_binary_operators(self):
         pdf = pd.DataFrame(
@@ -213,7 +211,11 @@ class FrameBinaryOpsMixin:
         self.assert_eq(psdf.rfloordiv(10), expected_result)
 
 
-class FrameBinaryOpsTests(FrameBinaryOpsMixin, ComparisonTestBase, SQLTestUtils):
+class FrameBinaryOpsTests(
+    FrameBinaryOpsMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

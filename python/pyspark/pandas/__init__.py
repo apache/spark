@@ -122,17 +122,16 @@ def _auto_patch_pandas() -> None:
     _frame_has_class_getitem = hasattr(pd.DataFrame, "__class_getitem__")
     _series_has_class_getitem = hasattr(pd.Series, "__class_getitem__")
 
-    if sys.version_info >= (3, 7):
-        # Just in case pandas implements '__class_getitem__' later.
-        if not _frame_has_class_getitem:
-            pd.DataFrame.__class_getitem__ = (  # type: ignore[attr-defined]
-                lambda params: DataFrame.__class_getitem__(params)
-            )
+    # Just in case pandas implements '__class_getitem__' later.
+    if not _frame_has_class_getitem:
+        pd.DataFrame.__class_getitem__ = (  # type: ignore[attr-defined]
+            lambda params: DataFrame.__class_getitem__(params)
+        )
 
-        if not _series_has_class_getitem:
-            pd.Series.__class_getitem__ = (  # type: ignore[attr-defined]
-                lambda params: Series.__class_getitem__(params)
-            )
+    if not _series_has_class_getitem:
+        pd.Series.__class_getitem__ = (  # type: ignore[attr-defined]
+            lambda params: Series.__class_getitem__(params)
+        )
 
 
 _auto_patch_spark()

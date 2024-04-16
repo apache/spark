@@ -343,7 +343,7 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
   }
 
   private implicit def intsToDF(seq: Seq[Int])(implicit schema: StructType): DataFrame = {
-    require(schema.fields.size === 1)
+    require(schema.fields.length === 1)
     sqlContext.createDataset(seq).toDF(schema.fieldNames.head)
   }
 }

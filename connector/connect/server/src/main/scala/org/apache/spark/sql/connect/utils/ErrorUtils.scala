@@ -38,7 +38,8 @@ import org.json4s.jackson.JsonMethods
 import org.apache.spark.{SparkEnv, SparkException, SparkThrowable}
 import org.apache.spark.api.python.PythonException
 import org.apache.spark.connect.proto.FetchErrorDetailsResponse
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{OP_TYPE, SESSION_ID, USER_ID}
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.service.{ExecuteEventsManager, SessionHolder, SessionKey, SparkConnectService}
 import org.apache.spark.sql.internal.SQLConf
@@ -153,7 +154,15 @@ private[connect] object ErrorUtils extends Logging {
       .build()
   }
 
-  private def buildStatusFromThrowable(
+  /**
+   * This is a helper method that can be used by any GRPC handler to convert existing Throwables
+   * into GRPC conform status objects.
+   *
+   * @param st
+   * @param sessionHolderOpt
+   * @return
+   */
+  private[connect] def buildStatusFromThrowable(
       st: Throwable,
       sessionHolderOpt: Option[SessionHolder]): RPCStatus = {
     val errorInfo = ErrorInfo
@@ -164,6 +173,7 @@ private[connect] object ErrorUtils extends Logging {
         "classes",
         JsonMethods.compact(JsonMethods.render(allClasses(st.getClass).map(_.getName))))
 
+    val maxMetadataSize = SparkEnv.get.conf.get(Connect.CONNECT_GRPC_MAX_METADATA_SIZE)
     // Add the SQL State and Error Class to the response metadata of the ErrorInfoObject.
     st match {
       case e: SparkThrowable =>
@@ -173,7 +183,12 @@ private[connect] object ErrorUtils extends Logging {
         }
         val errorClass = e.getErrorClass
         if (errorClass != null && errorClass.nonEmpty) {
-          errorInfo.putMetadata("errorClass", errorClass)
+          val messageParameters = JsonMethods.compact(
+            JsonMethods.render(map2jvalue(e.getMessageParameters.asScala.toMap)))
+          if (messageParameters.length <= maxMetadataSize) {
+            errorInfo.putMetadata("errorClass", errorClass)
+            errorInfo.putMetadata("messageParameters", messageParameters)
+          }
         }
       case _ =>
     }
@@ -192,8 +207,10 @@ private[connect] object ErrorUtils extends Logging {
     val withStackTrace =
       if (sessionHolderOpt.exists(
           _.session.conf.get(SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED) && stackTrace.nonEmpty)) {
-        val maxSize = SparkEnv.get.conf.get(Connect.CONNECT_JVM_STACK_TRACE_MAX_SIZE)
-        errorInfo.putMetadata("stackTrace", StringUtils.abbreviate(stackTrace.get, maxSize))
+        val maxSize = Math.min(
+          SparkEnv.get.conf.get(Connect.CONNECT_JVM_STACK_TRACE_MAX_SIZE),
+          maxMetadataSize)
+        errorInfo.putMetadata("stackTrace", StringUtils.abbreviate(stackTrace.get, maxSize.toInt))
       } else {
         errorInfo
       }
@@ -221,6 +238,17 @@ private[connect] object ErrorUtils extends Logging {
    *   String value indicating the operation type (analysis, execution)
    * @param observer
    *   The GRPC response observer.
+   * @param userId
+   *   The user id.
+   * @param sessionId
+   *   The session id.
+   * @param events
+   *   The ExecuteEventsManager if present to report about failures.
+   * @param isInterrupted
+   *   Whether the error is caused by an interruption or during execution.
+   * @param callback
+   *   Optional callback to be called after the error has been sent that allows to caller to
+   *   execute additional cleanup logic.
    * @tparam V
    * @return
    */
@@ -230,7 +258,8 @@ private[connect] object ErrorUtils extends Logging {
       userId: String,
       sessionId: String,
       events: Option[ExecuteEventsManager] = None,
-      isInterrupted: Boolean = false): PartialFunction[Throwable, Unit] = {
+      isInterrupted: Boolean = false,
+      callback: Option[() => Unit] = None): PartialFunction[Throwable, Unit] = {
 
     // SessionHolder may not be present, e.g. if the session was already closed.
     // When SessionHolder is not present error details will not be available for FetchErrorDetails.
@@ -267,8 +296,8 @@ private[connect] object ErrorUtils extends Logging {
         } else {
           // Other errors are server RPC errors, return them as ERROR.
           logError(
-            s"Spark Connect RPC error " +
-              s"during: $opType. UserId: $userId. SessionId: $sessionId.",
+            log"Spark Connect RPC error during: ${MDC(OP_TYPE, opType)}. " +
+              log"UserId: ${MDC(USER_ID, userId)}. SessionId: ${MDC(SESSION_ID, sessionId)}.",
             original)
         }
 
@@ -281,6 +310,7 @@ private[connect] object ErrorUtils extends Logging {
             executeEventsManager.postFailed(wrapped.getMessage)
           }
         }
+        callback.foreach(_.apply())
         observer.onError(wrapped)
       }
   }

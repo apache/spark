@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A serializer to serialize data in catalyst format to data in avro format.
@@ -309,7 +310,7 @@ private[sql] class AvroSerializer(
       avroPath: Seq[String]): InternalRow => Any = {
     val nonNullTypes = nonNullUnionBranches(unionType)
     val expectedFieldNames = nonNullTypes.indices.map(i => s"member$i")
-    val catalystFieldNames = catalystStruct.fieldNames.toSeq
+    val catalystFieldNames = catalystStruct.fieldNames.toImmutableArraySeq
     if (positionalFieldMatch) {
       if (expectedFieldNames.length != catalystFieldNames.length) {
         throw new IncompatibleSchemaException(s"Generic Avro union at ${toFieldStr(avroPath)} " +

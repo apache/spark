@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COALESCE, NULL_CHECK, TreePattern}
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -69,6 +70,10 @@ case class Coalesce(children: Seq[Expression])
    * We should only return the first child, because others may not get accessed.
    */
   override def alwaysEvaluatedInputs: Seq[Expression] = children.head :: Nil
+
+  override def withNewAlwaysEvaluatedInputs(alwaysEvaluatedInputs: Seq[Expression]): Coalesce = {
+    withNewChildrenInternal(alwaysEvaluatedInputs.toIndexedSeq ++ children.drop(1))
+  }
 
   override def branchGroups: Seq[Seq[Expression]] = if (children.length > 1) {
     // If there is only one child, the first child is already covered by
@@ -154,11 +159,15 @@ case class NullIf(left: Expression, right: Expression, replacement: Expression)
   extends RuntimeReplaceable with InheritAnalysisRules {
 
   def this(left: Expression, right: Expression) = {
-    this(left, right, {
-      val commonExpr = CommonExpressionDef(left)
-      val ref = new CommonExpressionRef(commonExpr)
-      With(If(EqualTo(ref, right), Literal.create(null, left.dataType), ref), Seq(commonExpr))
-    })
+    this(left, right,
+      if (!SQLConf.get.getConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR)) {
+        With(left) { case Seq(ref) =>
+          If(EqualTo(ref, right), Literal.create(null, left.dataType), ref)
+        }
+      } else {
+        If(EqualTo(left, right), Literal.create(null, left.dataType), left)
+      }
+    )
   }
 
   override def parameters: Seq[Expression] = Seq(left, right)
@@ -289,6 +298,10 @@ case class NaNvl(left: Expression, right: Expression)
    * the right child will not be accessed.
    */
   override def alwaysEvaluatedInputs: Seq[Expression] = left :: Nil
+
+  override def withNewAlwaysEvaluatedInputs(alwaysEvaluatedInputs: Seq[Expression]): NaNvl = {
+    copy(left = alwaysEvaluatedInputs.head)
+  }
 
   override def branchGroups: Seq[Seq[Expression]] = Seq(children)
 

@@ -256,9 +256,7 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
   private def assertStatus(
       validStatuses: List[ExecuteStatus],
       eventStatus: ExecuteStatus): Unit = {
-    if (!validStatuses
-        .find(s => s == status)
-        .isDefined) {
+    if (validStatuses.find(s => s == status).isEmpty) {
       throw new IllegalStateException(s"""
         operationId: $operationId with status ${status}
         is not within statuses $validStatuses for event $eventStatus

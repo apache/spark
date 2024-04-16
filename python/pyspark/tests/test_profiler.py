@@ -54,9 +54,9 @@ class ProfilerTests(PySparkTestCase):
         self.assertTrue("heavy_foo" in io.getvalue())
         sys.stdout = old_stdout
 
-        d = tempfile.gettempdir()
-        self.sc.dump_profiles(d)
-        self.assertTrue("rdd_%d.pstats" % id in os.listdir(d))
+        with tempfile.TemporaryDirectory(prefix="test_profiler") as d:
+            self.sc.dump_profiles(d)
+            self.assertTrue("rdd_%d.pstats" % id in os.listdir(d))
 
     def test_custom_profiler(self):
         class TestCustomProfiler(BasicProfiler):
@@ -123,11 +123,16 @@ class ProfilerTests2(unittest.TestCase, PySparkErrorTestUtils):
             return v + 1
 
         try:
-            self.assertRaisesRegex(
-                RuntimeError,
-                "'spark.python.profile' and 'spark.python.profile.memory' configuration"
-                " cannot be enabled together",
-                lambda: spark.range(10).select(plus_one("id")).collect(),
+            with self.assertRaises(PySparkRuntimeError) as pe:
+                spark.range(10).select(plus_one("id")).collect()
+
+            self.check_error(
+                exception=pe.exception,
+                error_class="CANNOT_SET_TOGETHER",
+                message_parameters={
+                    "arg_list": "'spark.python.profile' and "
+                    "'spark.python.profile.memory' configuration"
+                },
             )
         finally:
             sc.stop()

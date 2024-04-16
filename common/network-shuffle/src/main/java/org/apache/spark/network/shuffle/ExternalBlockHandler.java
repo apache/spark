@@ -145,13 +145,12 @@ public class ExternalBlockHandler extends RpcHandler
       try {
         int numBlockIds;
         long streamId;
-        if (msgObj instanceof AbstractFetchShuffleBlocks) {
-          AbstractFetchShuffleBlocks msg = (AbstractFetchShuffleBlocks) msgObj;
+        if (msgObj instanceof AbstractFetchShuffleBlocks msg) {
           checkAuth(client, msg.appId);
-          numBlockIds = ((AbstractFetchShuffleBlocks) msgObj).getNumBlocks();
+          numBlockIds = msg.getNumBlocks();
           Iterator<ManagedBuffer> iterator;
-          if (msgObj instanceof  FetchShuffleBlocks) {
-            iterator = new ShuffleManagedBufferIterator((FetchShuffleBlocks)msgObj);
+          if (msgObj instanceof FetchShuffleBlocks blocks) {
+            iterator = new ShuffleManagedBufferIterator(blocks);
           } else {
             iterator = new ShuffleChunkManagedBufferIterator((FetchShuffleBlockChunks) msgObj);
           }
@@ -178,11 +177,10 @@ public class ExternalBlockHandler extends RpcHandler
         responseDelayContext.stop();
       }
 
-    } else if (msgObj instanceof RegisterExecutor) {
+    } else if (msgObj instanceof RegisterExecutor msg) {
       final Timer.Context responseDelayContext =
         metrics.registerExecutorRequestLatencyMillis.time();
       try {
-        RegisterExecutor msg = (RegisterExecutor) msgObj;
         checkAuth(client, msg.appId);
         blockManager.registerExecutor(msg.appId, msg.execId, msg.executorInfo);
         mergeManager.registerExecutor(msg.appId, msg.executorInfo);
@@ -191,14 +189,12 @@ public class ExternalBlockHandler extends RpcHandler
         responseDelayContext.stop();
       }
 
-    } else if (msgObj instanceof RemoveBlocks) {
-      RemoveBlocks msg = (RemoveBlocks) msgObj;
+    } else if (msgObj instanceof RemoveBlocks msg) {
       checkAuth(client, msg.appId);
       int numRemovedBlocks = blockManager.removeBlocks(msg.appId, msg.execId, msg.blockIds);
       callback.onSuccess(new BlocksRemoved(numRemovedBlocks).toByteBuffer());
 
-    } else if (msgObj instanceof GetLocalDirsForExecutors) {
-      GetLocalDirsForExecutors msg = (GetLocalDirsForExecutors) msgObj;
+    } else if (msgObj instanceof GetLocalDirsForExecutors msg) {
       checkAuth(client, msg.appId);
       Set<String> execIdsForBlockResolver = Sets.newHashSet(msg.execIds);
       boolean fetchMergedBlockDirs = execIdsForBlockResolver.remove(SHUFFLE_MERGER_IDENTIFIER);
@@ -208,10 +204,9 @@ public class ExternalBlockHandler extends RpcHandler
         localDirs.put(SHUFFLE_MERGER_IDENTIFIER, mergeManager.getMergedBlockDirs(msg.appId));
       }
       callback.onSuccess(new LocalDirsForExecutors(localDirs).toByteBuffer());
-    } else if (msgObj instanceof FinalizeShuffleMerge) {
+    } else if (msgObj instanceof FinalizeShuffleMerge msg) {
       final Timer.Context responseDelayContext =
           metrics.finalizeShuffleMergeLatencyMillis.time();
-      FinalizeShuffleMerge msg = (FinalizeShuffleMerge) msgObj;
       try {
         checkAuth(client, msg.appId);
         MergeStatuses statuses = mergeManager.finalizeShuffleMerge(msg);
@@ -223,14 +218,12 @@ public class ExternalBlockHandler extends RpcHandler
       } finally {
         responseDelayContext.stop();
       }
-    } else if (msgObj instanceof RemoveShuffleMerge) {
-      RemoveShuffleMerge msg = (RemoveShuffleMerge) msgObj;
+    } else if (msgObj instanceof RemoveShuffleMerge msg) {
       checkAuth(client, msg.appId);
       logger.info("Removing shuffle merge data for application {} shuffle {} shuffleMerge {}",
           msg.appId, msg.shuffleId, msg.shuffleMergeId);
       mergeManager.removeShuffleMerge(msg);
-    } else if (msgObj instanceof DiagnoseCorruption) {
-      DiagnoseCorruption msg = (DiagnoseCorruption) msgObj;
+    } else if (msgObj instanceof DiagnoseCorruption msg) {
       checkAuth(client, msg.appId);
       Cause cause = blockManager.diagnoseShuffleBlockCorruption(
         msg.appId, msg.execId, msg.shuffleId, msg.mapId, msg.reduceId, msg.checksum, msg.algorithm);

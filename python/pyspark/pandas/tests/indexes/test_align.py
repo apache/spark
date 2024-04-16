@@ -16,28 +16,14 @@
 #
 import unittest
 
-import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class FrameAlignMixin:
-    @property
-    def pdf(self):
-        return pd.DataFrame(
-            {"a": [1, 2, 3, 4, 5, 6, 7, 8, 9], "b": [4, 5, 6, 3, 2, 1, 0, 0, 0]},
-            index=np.random.rand(9),
-        )
-
-    @property
-    def df_pair(self):
-        pdf = self.pdf
-        psdf = ps.from_pandas(pdf)
-        return pdf, psdf
-
     def test_align(self):
         pdf1 = pd.DataFrame({"a": [1, 2, 3], "b": ["a", "b", "c"]}, index=[10, 20, 30])
         psdf1 = ps.from_pandas(pdf1)
@@ -84,7 +70,11 @@ class FrameAlignMixin:
             self.assert_eq(psdf_r.sort_index(), pdf_r.sort_index())
 
 
-class FrameAlignTests(FrameAlignMixin, ComparisonTestBase, SQLTestUtils):
+class FrameAlignTests(
+    FrameAlignMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

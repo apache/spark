@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.connector.read;
 
+import java.util.Map;
+
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.metric.CustomMetric;
 import org.apache.spark.sql.connector.metric.CustomTaskMetric;
@@ -74,7 +77,8 @@ public interface Scan {
    * @throws UnsupportedOperationException
    */
   default Batch toBatch() {
-    throw new UnsupportedOperationException(description() + ": Batch scan are not supported");
+    throw new SparkUnsupportedOperationException(
+      "_LEGACY_ERROR_TEMP_3147", Map.of("description", description()));
   }
 
   /**
@@ -90,7 +94,8 @@ public interface Scan {
    * @throws UnsupportedOperationException
    */
   default MicroBatchStream toMicroBatchStream(String checkpointLocation) {
-    throw new UnsupportedOperationException(description() + ": Micro-batch scan are not supported");
+    throw new SparkUnsupportedOperationException(
+      "_LEGACY_ERROR_TEMP_3148", Map.of("description", description()));
   }
 
   /**
@@ -106,7 +111,8 @@ public interface Scan {
    * @throws UnsupportedOperationException
    */
   default ContinuousStream toContinuousStream(String checkpointLocation) {
-    throw new UnsupportedOperationException(description() + ": Continuous scan are not supported");
+    throw new SparkUnsupportedOperationException(
+      "_LEGACY_ERROR_TEMP_3149", Map.of("description", description()));
   }
 
   /**
@@ -121,6 +127,8 @@ public interface Scan {
    * Returns an array of custom metrics which are collected with values at the driver side only.
    * Note that these metrics must be included in the supported custom metrics reported by
    * `supportedCustomMetrics`.
+   *
+   * @since 3.4.0
    */
   default CustomTaskMetric[] reportDriverMetrics() {
     return new CustomTaskMetric[]{};

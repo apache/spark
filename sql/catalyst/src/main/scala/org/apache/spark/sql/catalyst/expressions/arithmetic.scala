@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.math.{max, min}
 
-import org.apache.spark.QueryContext
+import org.apache.spark.{QueryContext, SparkException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -60,20 +60,7 @@ case class UnaryMinus(
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = dataType match {
     case _: DecimalType => defineCodeGen(ctx, ev, c => s"$c.unary_$$minus()")
-    case ByteType | ShortType if failOnError =>
-      nullSafeCodeGen(ctx, ev, eval => {
-        val javaBoxedType = CodeGenerator.boxedType(dataType)
-        val javaType = CodeGenerator.javaType(dataType)
-        val originValue = ctx.freshName("origin")
-        s"""
-           |$javaType $originValue = ($javaType)($eval);
-           |if ($originValue == $javaBoxedType.MIN_VALUE) {
-           |  throw QueryExecutionErrors.unaryMinusCauseOverflowError($originValue);
-           |}
-           |${ev.value} = ($javaType)(-($originValue));
-           """.stripMargin
-      })
-    case IntegerType | LongType if failOnError =>
+    case ByteType | ShortType | IntegerType | LongType if failOnError =>
       val mathUtils = MathUtils.getClass.getCanonicalName.stripSuffix("$")
       nullSafeCodeGen(ctx, ev, eval => {
         s"${ev.value} = $mathUtils.negateExact($eval);"
@@ -181,21 +168,7 @@ case class Abs(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled
     case _: DecimalType =>
       defineCodeGen(ctx, ev, c => s"$c.abs()")
 
-    case ByteType | ShortType if failOnError =>
-      val javaBoxedType = CodeGenerator.boxedType(dataType)
-      val javaType = CodeGenerator.javaType(dataType)
-      nullSafeCodeGen(ctx, ev, eval =>
-        s"""
-          |if ($eval == $javaBoxedType.MIN_VALUE) {
-          |  throw QueryExecutionErrors.unaryMinusCauseOverflowError($eval);
-          |} else if ($eval < 0) {
-          |  ${ev.value} = ($javaType)-$eval;
-          |} else {
-          |  ${ev.value} = $eval;
-          |}
-          |""".stripMargin)
-
-    case IntegerType | LongType if failOnError =>
+    case ByteType | ShortType | IntegerType | LongType if failOnError =>
       val mathUtils = MathUtils.getClass.getCanonicalName.stripSuffix("$")
       defineCodeGen(ctx, ev, c => s"$c < 0 ? $mathUtils.negateExact($c) : $c")
 
@@ -248,7 +221,7 @@ abstract class BinaryArithmetic extends BinaryOperator
   protected def allowPrecisionLoss: Boolean = SQLConf.get.decimalOperationsAllowPrecisionLoss
 
   protected def resultDecimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType = {
-    throw new IllegalStateException(
+    throw SparkException.internalError(
       s"${getClass.getSimpleName} must override `resultDecimalType`.")
   }
 
@@ -280,12 +253,12 @@ abstract class BinaryArithmetic extends BinaryOperator
 
   /** Name of the function for this expression on a [[Decimal]] type. */
   def decimalMethod: String =
-    throw QueryExecutionErrors.notOverrideExpectedMethodsError("BinaryArithmetics",
+    throw QueryExecutionErrors.notOverrideExpectedMethodsError(this.getClass.getName,
       "decimalMethod", "genCode")
 
   /** Name of the function for this expression on a [[CalendarInterval]] type. */
   def calendarIntervalMethod: String =
-    throw QueryExecutionErrors.notOverrideExpectedMethodsError("BinaryArithmetics",
+    throw QueryExecutionErrors.notOverrideExpectedMethodsError(this.getClass.getName,
       "calendarIntervalMethod", "genCode")
 
   protected def isAnsiInterval: Boolean = dataType.isInstanceOf[AnsiIntervalType]
@@ -810,7 +783,7 @@ case class Divide(
       DecimalType.adjustPrecisionScale(prec, scale)
     } else {
       var intDig = min(DecimalType.MAX_SCALE, p1 - s1 + s2)
-      var decDig = min(DecimalType.MAX_SCALE, max(6, s1 + p2 + 1))
+      var decDig = min(DecimalType.MAX_SCALE, max(DecimalType.MINIMUM_ADJUSTED_SCALE, s1 + p2 + 1))
       val diff = (intDig + decDig) - DecimalType.MAX_SCALE
       if (diff > 0) {
         decDig -= diff / 2 + 1

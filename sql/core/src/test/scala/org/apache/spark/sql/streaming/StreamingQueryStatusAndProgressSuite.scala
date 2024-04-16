@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.streaming
 
+import java.sql.Timestamp
+import java.time.Instant
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 import scala.jdk.CollectionConverters._
@@ -276,7 +279,7 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
 
       // Make sure it generates the progress objects we want to test
       assert(progress.exists { p =>
-        p.sources.size >= 1 && p.stateOperators.size >= 1 && p.sink != null
+        p.sources.length >= 1 && p.stateOperators.length >= 1 && p.sink != null
       })
 
       val array = spark.sparkContext.parallelize(progress.toImmutableArraySeq).collect()
@@ -355,6 +358,47 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
     )
   }
 
+  test("SPARK-45655: Use current batch timestamp in observe API") {
+    import testImplicits._
+
+    val inputData = MemoryStream[Timestamp]
+
+    // current_date() internally uses current batch timestamp on streaming query
+    val query = inputData.toDF()
+      .filter("value < current_date()")
+      .observe("metrics", count(expr("value >= current_date()")).alias("dropped"))
+      .writeStream
+      .queryName("ts_metrics_test")
+      .format("memory")
+      .outputMode("append")
+      .start()
+
+    val timeNow = Instant.now().truncatedTo(ChronoUnit.SECONDS)
+
+    // this value would be accepted by the filter and would not count towards
+    // dropped metrics.
+    val validValue = Timestamp.from(timeNow.minus(2, ChronoUnit.DAYS))
+    inputData.addData(validValue)
+
+    // would be dropped by the filter and count towards dropped metrics
+    inputData.addData(Timestamp.from(timeNow.plus(2, ChronoUnit.DAYS)))
+
+    query.processAllAvailable()
+    query.stop()
+
+    val dropped = query.recentProgress.map { p =>
+      val metricVal = Option(p.observedMetrics.get("metrics"))
+      metricVal.map(_.getLong(0)).getOrElse(0L)
+    }.sum
+    // ensure dropped metrics are correct
+    assert(dropped == 1)
+
+    val data = spark.read.table("ts_metrics_test").collect()
+
+    // ensure valid value ends up in output
+    assert(data(0).getAs[Timestamp](0).equals(validValue))
+  }
+
   def waitUntilBatchProcessed: AssertOnQuery = Execute { q =>
     eventually(Timeout(streamingTimeout)) {
       if (q.exception.isEmpty) {
@@ -392,7 +436,7 @@ object StreamingQueryStatusAndProgressSuite {
     timestamp = "2016-12-05T20:54:20.827Z",
     batchId = 2L,
     batchDuration = 0L,
-    durationMs = new java.util.HashMap(Map("total" -> 0L).view.mapValues(long2Long).toMap.asJava),
+    durationMs = new java.util.HashMap(Map("total" -> 0L).transform((_, v) => long2Long(v)).asJava),
     eventTime = new java.util.HashMap(Map(
       "max" -> "2016-12-05T20:54:20.827Z",
       "min" -> "2016-12-05T20:54:20.827Z",
@@ -404,7 +448,7 @@ object StreamingQueryStatusAndProgressSuite {
       numShufflePartitions = 2, numStateStoreInstances = 2,
       customMetrics = new java.util.HashMap(Map("stateOnCurrentVersionSizeBytes" -> 2L,
         "loadedMapCacheHitCount" -> 1L, "loadedMapCacheMissCount" -> 0L)
-        .view.mapValues(long2Long).toMap.asJava)
+        .transform((_, v) => long2Long(v)).asJava)
     )),
     sources = Array(
       new SourceProgress(
@@ -430,7 +474,7 @@ object StreamingQueryStatusAndProgressSuite {
     timestamp = "2016-12-05T20:54:20.827Z",
     batchId = 2L,
     batchDuration = 0L,
-    durationMs = new java.util.HashMap(Map("total" -> 0L).view.mapValues(long2Long).toMap.asJava),
+    durationMs = new java.util.HashMap(Map("total" -> 0L).transform((_, v) => long2Long(v)).asJava),
     // empty maps should be handled correctly
     eventTime = new java.util.HashMap(Map.empty[String, String].asJava),
     stateOperators = Array(new StateOperatorProgress(operatorName = "op2",

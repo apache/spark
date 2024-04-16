@@ -30,6 +30,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * `Bucketizer` maps a column of continuous features to a column of feature buckets.
@@ -143,7 +144,7 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
     val transformedSchema = transformSchema(dataset.schema)
 
     val (inputColumns, outputColumns) = if (isSet(inputCols)) {
-      ($(inputCols).toSeq, $(outputCols).toSeq)
+      ($(inputCols).toImmutableArraySeq, $(outputCols).toImmutableArraySeq)
     } else {
       (Seq($(inputCol)), Seq($(outputCol)))
     }
@@ -158,7 +159,7 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
     }
 
     val seqOfSplits = if (isSet(inputCols)) {
-      $(splitsArray).toSeq
+      $(splitsArray).toImmutableArraySeq
     } else {
       Seq($(splits))
     }

@@ -504,6 +504,25 @@ class SparkSubmitSuite
     }
   }
 
+  test("SPARK-47495: Not to add primary resource to jars again" +
+    " in k8s client mode & driver runs inside a POD") {
+    val clArgs = Seq(
+      "--deploy-mode", "client",
+      "--proxy-user", "test.user",
+      "--master", "k8s://host:port",
+      "--executor-memory", "1g",
+      "--class", "org.SomeClass",
+      "--driver-memory", "1g",
+      "--conf", "spark.kubernetes.submitInDriver=true",
+      "--jars", "src/test/resources/TestUDTF.jar",
+      "/home/jarToIgnore.jar",
+      "arg1")
+    val appArgs = new SparkSubmitArguments(clArgs)
+    val (_, _, sparkConf, _) = submit.prepareSubmitEnvironment(appArgs)
+    sparkConf.get("spark.jars").contains("jarToIgnore") shouldBe false
+    sparkConf.get("spark.jars").contains("TestUDTF") shouldBe true
+  }
+
   test("SPARK-33782: handles k8s files download to current directory") {
     val clArgs = Seq(
       "--deploy-mode", "client",
@@ -537,6 +556,48 @@ class SparkSubmitSuite
     Files.delete(Paths.get("test_metrics_system.properties"))
     Files.delete(Paths.get("log4j2.properties"))
     Files.delete(Paths.get("TestUDTF.jar"))
+  }
+
+  test("SPARK-47475: Avoid jars download if scheme matches " +
+    "spark.kubernetes.jars.avoidDownloadSchemes " +
+    "in k8s client mode & driver runs inside a POD") {
+    val hadoopConf = new Configuration()
+    updateConfWithFakeS3Fs(hadoopConf)
+    withTempDir { tmpDir =>
+      val notToDownload = File.createTempFile("NotToDownload", ".jar", tmpDir)
+      val remoteJarFile = s"s3a://${notToDownload.getAbsolutePath}"
+
+      val clArgs = Seq(
+        "--deploy-mode", "client",
+        "--proxy-user", "test.user",
+        "--master", "k8s://host:port",
+        "--class", "org.SomeClass",
+        "--conf", "spark.kubernetes.submitInDriver=true",
+        "--conf", "spark.kubernetes.jars.avoidDownloadSchemes=s3a",
+        "--conf", "spark.hadoop.fs.s3a.impl=org.apache.spark.deploy.TestFileSystem",
+        "--conf", "spark.hadoop.fs.s3a.impl.disable.cache=true",
+        "--files", "src/test/resources/test_metrics_config.properties",
+        "--py-files", "src/test/resources/test_metrics_system.properties",
+        "--archives", "src/test/resources/log4j2.properties",
+        "--jars", s"src/test/resources/TestUDTF.jar,$remoteJarFile",
+        "/home/jarToIgnore.jar",
+        "arg1")
+      val appArgs = new SparkSubmitArguments(clArgs)
+      val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs, Some(hadoopConf))
+      conf.get("spark.master") should be("k8s://https://host:port")
+      conf.get("spark.jars").contains(remoteJarFile) shouldBe true
+      conf.get("spark.jars").contains("TestUDTF") shouldBe true
+
+      Files.exists(Paths.get("test_metrics_config.properties")) should be(true)
+      Files.exists(Paths.get("test_metrics_system.properties")) should be(true)
+      Files.exists(Paths.get("log4j2.properties")) should be(true)
+      Files.exists(Paths.get("TestUDTF.jar")) should be(true)
+      Files.exists(Paths.get(notToDownload.getName)) should be(false)
+      Files.delete(Paths.get("test_metrics_config.properties"))
+      Files.delete(Paths.get("test_metrics_system.properties"))
+      Files.delete(Paths.get("log4j2.properties"))
+      Files.delete(Paths.get("TestUDTF.jar"))
+    }
   }
 
   test("SPARK-43014: Set `spark.app.submitTime` if missing ") {
@@ -697,7 +758,7 @@ class SparkSubmitSuite
     var sc2: SparkContext = null
     try {
       sc2 = new SparkContext(conf2)
-      assert(!sc2.progressBar.isDefined)
+      assert(sc2.progressBar.isEmpty)
     } finally {
       if (sc2 != null) {
         sc2.stop()
@@ -1414,6 +1475,83 @@ class SparkSubmitSuite
     runSparkSubmit(args)
   }
 
+  test("SPARK-45762: The ShuffleManager plugin to use can be defined in a user jar") {
+    val shuffleManagerBody = """
+      |@Override
+      |public <K, V, C> org.apache.spark.shuffle.ShuffleHandle registerShuffle(
+      |    int shuffleId,
+      |    org.apache.spark.ShuffleDependency<K, V, C> dependency) {
+      |  throw new java.lang.UnsupportedOperationException("This is a test ShuffleManager!");
+      |}
+      |
+      |@Override
+      |public <K, V> org.apache.spark.shuffle.ShuffleWriter<K, V> getWriter(
+      |    org.apache.spark.shuffle.ShuffleHandle handle,
+      |    long mapId,
+      |    org.apache.spark.TaskContext context,
+      |    org.apache.spark.shuffle.ShuffleWriteMetricsReporter metrics) {
+      |  throw new java.lang.UnsupportedOperationException("This is a test ShuffleManager!");
+      |}
+      |
+      |@Override
+      |public <K, C> org.apache.spark.shuffle.ShuffleReader<K, C> getReader(
+      |    org.apache.spark.shuffle.ShuffleHandle handle,
+      |    int startMapIndex,
+      |    int endMapIndex,
+      |    int startPartition,
+      |    int endPartition,
+      |    org.apache.spark.TaskContext context,
+      |    org.apache.spark.shuffle.ShuffleReadMetricsReporter metrics) {
+      |  throw new java.lang.UnsupportedOperationException("This is a test ShuffleManager!");
+      |}
+      |
+      |@Override
+      |public boolean unregisterShuffle(int shuffleId) {
+      |  throw new java.lang.UnsupportedOperationException("This is a test ShuffleManager!");
+      |}
+      |
+      |@Override
+      |public org.apache.spark.shuffle.ShuffleBlockResolver shuffleBlockResolver() {
+      |  throw new java.lang.UnsupportedOperationException("This is a test ShuffleManager!");
+      |}
+      |
+      |@Override
+      |public void stop() {
+      |}
+  """.stripMargin
+
+    val tempDir = Utils.createTempDir()
+    val compiledShuffleManager = TestUtils.createCompiledClass(
+      "TestShuffleManager",
+      tempDir,
+      "",
+      null,
+      Seq.empty,
+      Seq("org.apache.spark.shuffle.ShuffleManager"),
+      shuffleManagerBody)
+
+    val jarUrl = TestUtils.createJar(
+      Seq(compiledShuffleManager),
+      new File(tempDir, "testplugin.jar"))
+
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val argsBase = Seq(
+      "--class", SimpleApplicationTest.getClass.getName.stripSuffix("$"),
+      "--name", "testApp",
+      "--master", "local-cluster[1,1,1024]",
+      "--conf", "spark.shuffle.manager=TestShuffleManager",
+      "--conf", "spark.ui.enabled=false")
+
+    val argsError = argsBase :+ unusedJar.toString
+    // check process error exit code
+    assertResult(1)(runSparkSubmit(argsError, expectFailure = true))
+
+    val argsSuccess = (argsBase ++ Seq("--jars", jarUrl.toString)) :+ unusedJar.toString
+    // check process success exit code
+    assertResult(0)(
+      runSparkSubmit(argsSuccess, expectFailure = false))
+  }
+
   private def testRemoteResources(
       enableHttpFs: Boolean,
       forceDownloadSchemes: Seq[String] = Nil): Unit = {
@@ -1659,7 +1797,7 @@ object SimpleApplicationTest {
         .map(x => SparkEnv.get.conf.get(config))
         .collect()
         .distinct
-      if (executorValues.size != 1) {
+      if (executorValues.length != 1) {
         throw new SparkException(s"Inconsistent values for $config: " +
           s"${executorValues.mkString("values(", ", ", ")")}")
       }
@@ -1697,7 +1835,7 @@ class TestFileSystem extends org.apache.hadoop.fs.LocalFileSystem {
     status
   }
 
-  override def isFile(path: Path): Boolean = super.isFile(local(path))
+  override def getFileStatus(path: Path): FileStatus = super.getFileStatus(local(path))
 
   override def globStatus(pathPattern: Path): Array[FileStatus] = {
     val newPath = new Path(pathPattern.toUri.getPath)
@@ -1718,7 +1856,7 @@ class TestFileSystem extends org.apache.hadoop.fs.LocalFileSystem {
 class TestSparkApplication extends SparkApplication with Matchers {
 
   override def start(args: Array[String], conf: SparkConf): Unit = {
-    assert(args.size === 1)
+    assert(args.length === 1)
     assert(args(0) === "hello")
     assert(conf.get("spark.test.hello") === "world")
     assert(sys.props.get("spark.test.hello") === None)

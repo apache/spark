@@ -53,13 +53,9 @@ public class UnsafeAlignedOffset {
 
   public static void putSize(Object object, long offset, int value) {
     switch (getUaoSize()) {
-      case 4:
-        Platform.putInt(object, offset, value);
-        break;
-      case 8:
-        Platform.putLong(object, offset, value);
-        break;
-      default:
+      case 4 -> Platform.putInt(object, offset, value);
+      case 8 -> Platform.putLong(object, offset, value);
+      default ->
         // checkstyle.off: RegexpSinglelineJava
         throw new AssertionError("Illegal UAO_SIZE");
         // checkstyle.on: RegexpSinglelineJava

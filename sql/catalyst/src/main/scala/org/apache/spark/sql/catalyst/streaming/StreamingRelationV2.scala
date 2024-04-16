@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.streaming
 
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.{ExposesMetadataColumns, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, SupportsMetadataColumns, Table, TableProvider}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits
@@ -36,7 +36,7 @@ case class StreamingRelationV2(
     sourceName: String,
     table: Table,
     extraOptions: CaseInsensitiveStringMap,
-    output: Seq[Attribute],
+    output: Seq[AttributeReference],
     catalog: Option[CatalogPlugin],
     identifier: Option[Identifier],
     v1Relation: Option[LogicalPlan])

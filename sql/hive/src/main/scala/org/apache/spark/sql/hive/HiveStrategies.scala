@@ -47,7 +47,8 @@ class ResolveHiveSerdeTable(session: SparkSession) extends Rule[LogicalPlan] {
       table
     } else {
       if (table.bucketSpec.isDefined) {
-        throw new AnalysisException("Creating bucketed Hive serde table is not supported yet.")
+        throw new AnalysisException(
+          errorClass = "_LEGACY_ERROR_TEMP_3082", messageParameters = Map.empty)
       }
 
       val defaultStorage = HiveSerDe.getDefaultStorage(conf)
@@ -101,8 +102,9 @@ class ResolveHiveSerdeTable(session: SparkSession) extends Rule[LogicalPlan] {
       val withSchema = if (query.isEmpty) {
         val inferred = HiveUtils.inferSchema(withStorage)
         if (inferred.schema.length <= 0) {
-          throw new AnalysisException("Unable to infer the schema. " +
-            s"The schema specification is required to create the table ${inferred.identifier}.")
+          throw new AnalysisException(
+            errorClass = "_LEGACY_ERROR_TEMP_3083",
+            messageParameters = Map("tableName" -> inferred.identifier.toString))
         }
         inferred
       } else {
@@ -161,7 +163,7 @@ object HiveAnalysis extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case InsertIntoStatement(
         r: HiveTableRelation, partSpec, _, query, overwrite, ifPartitionNotExists, _)
-        if DDLUtils.isHiveTable(r.tableMeta) =>
+        if DDLUtils.isHiveTable(r.tableMeta) && query.resolved =>
       InsertIntoHiveTable(r.tableMeta, partSpec, query, overwrite,
         ifPartitionNotExists, query.output.map(_.name))
 

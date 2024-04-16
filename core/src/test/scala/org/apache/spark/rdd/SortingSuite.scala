@@ -35,7 +35,7 @@ class SortingSuite extends SparkFunSuite with SharedSparkContext with Matchers {
     val pairArr = Array.fill(1000) { (rand.nextInt(), rand.nextInt()) }
     val pairs = sc.parallelize(pairArr.toImmutableArraySeq, 2)
     val sorted = pairs.sortByKey()
-    assert(sorted.partitions.size === 2)
+    assert(sorted.partitions.length === 2)
     assert(sorted.collect() === pairArr.sortBy(_._1))
   }
 
@@ -44,7 +44,7 @@ class SortingSuite extends SparkFunSuite with SharedSparkContext with Matchers {
     val pairArr = Array.fill(1000) { (rand.nextInt(), rand.nextInt()) }
     val pairs = sc.parallelize(pairArr.toImmutableArraySeq, 2)
     val sorted = pairs.sortByKey(true, 1)
-    assert(sorted.partitions.size === 1)
+    assert(sorted.partitions.length === 1)
     assert(sorted.collect() === pairArr.sortBy(_._1))
   }
 
@@ -53,7 +53,7 @@ class SortingSuite extends SparkFunSuite with SharedSparkContext with Matchers {
     val pairArr = Array.fill(1000) { (rand.nextInt(), rand.nextInt()) }
     val pairs = sc.parallelize(pairArr.toImmutableArraySeq, 2)
     val sorted = pairs.sortByKey(true, 20)
-    assert(sorted.partitions.size === 20)
+    assert(sorted.partitions.length === 20)
     assert(sorted.collect() === pairArr.sortBy(_._1))
   }
 

@@ -361,7 +361,7 @@ class InMemoryColumnarQuerySuite extends QueryTest
     checkAnswer(cached, expectedAnswer)
 
     // Check that the right size was calculated.
-    assert(cached.cacheBuilder.sizeInBytesStats.value === expectedAnswer.size * INT.defaultSize)
+    assert(cached.cacheBuilder.sizeInBytesStats.value === expectedAnswer.length * INT.defaultSize)
   }
 
    test("cached row count should be calculated") {

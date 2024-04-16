@@ -19,6 +19,7 @@ import sys
 import warnings
 from typing import Any, Callable, NamedTuple, List, Optional, TYPE_CHECKING
 
+from pyspark.errors import PySparkTypeError
 from pyspark.storagelevel import StorageLevel
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.session import SparkSession
@@ -126,7 +127,7 @@ class Catalog:
 
         Parameters
         ----------
-        pattern : str
+        pattern : str, optional
             The pattern that the catalog name needs to match.
 
             .. versionadded: 3.5.0
@@ -197,7 +198,7 @@ class Catalog:
 
         Parameters
         ----------
-        pattern : str
+        pattern : str, optional
             The pattern that the database name needs to match.
 
             .. versionadded: 3.5.0
@@ -314,13 +315,13 @@ class Catalog:
 
         Parameters
         ----------
-        dbName : str
+        dbName : str, optional
             name of the database to list the tables.
 
             .. versionchanged:: 3.4.0
                Allow ``dbName`` to be qualified with catalog name.
 
-        pattern : str
+        pattern : str, optional
             The pattern that the database name needs to match.
 
             .. versionadded: 3.5.0
@@ -446,10 +447,10 @@ class Catalog:
 
         Parameters
         ----------
-        dbName : str
+        dbName : str, optional
             name of the database to list the functions.
             ``dbName`` can be qualified with catalog name.
-        pattern : str
+        pattern : str, optional
             The pattern that the function name needs to match.
 
             .. versionadded: 3.5.0
@@ -835,7 +836,7 @@ class Catalog:
         Creating an external table
 
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="createTable") as d:
         ...     _ = spark.catalog.createTable(
         ...         "tbl2", schema=spark.range(1).schema, path=d, source='parquet')
         >>> _ = spark.sql("DROP TABLE tbl2")
@@ -851,7 +852,13 @@ class Catalog:
             df = self._jcatalog.createTable(tableName, source, description, options)
         else:
             if not isinstance(schema, StructType):
-                raise TypeError("schema should be StructType")
+                raise PySparkTypeError(
+                    error_class="NOT_STRUCT",
+                    message_parameters={
+                        "arg_name": "schema",
+                        "arg_type": type(schema).__name__,
+                    },
+                )
             scala_datatype = self._jsparkSession.parseDataType(schema.json())
             df = self._jcatalog.createTable(tableName, source, scala_datatype, description, options)
         return DataFrame(df, self._sparkSession)
@@ -1005,7 +1012,7 @@ class Catalog:
             .. versionchanged:: 3.4.0
                 Allow ``tableName`` to be qualified with catalog name.
 
-        storageLevel : :class:`StorageLevel`
+        storageLevel : :class:`StorageLevel`, optional
             storage level to set for persistence.
 
             .. versionchanged:: 3.5.0
@@ -1112,7 +1119,7 @@ class Catalog:
         The example below caches a table, and then removes the data.
 
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="refreshTable") as d:
         ...     _ = spark.sql("DROP TABLE IF EXISTS tbl1")
         ...     _ = spark.sql(
         ...         "CREATE TABLE tbl1 (col STRING) USING TEXT LOCATION '{}'".format(d))
@@ -1163,7 +1170,7 @@ class Catalog:
         the partitioned table. After that, it recovers the partitions.
 
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="recoverPartitions") as d:
         ...     _ = spark.sql("DROP TABLE IF EXISTS tbl1")
         ...     spark.range(1).selectExpr(
         ...         "id as key", "id as value").write.partitionBy("key").mode("overwrite").save(d)
@@ -1202,7 +1209,7 @@ class Catalog:
         The example below caches a table, and then removes the data.
 
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="refreshByPath") as d:
         ...     _ = spark.sql("DROP TABLE IF EXISTS tbl1")
         ...     _ = spark.sql(
         ...         "CREATE TABLE tbl1 (col STRING) USING TEXT LOCATION '{}'".format(d))
@@ -1229,14 +1236,6 @@ class Catalog:
         >>> _ = spark.sql("DROP TABLE tbl1")
         """
         self._jcatalog.refreshByPath(path)
-
-    def _reset(self) -> None:
-        """(Internal use only) Drop all existing databases (except "default"), tables,
-        partitions and functions, and set the current database to "default".
-
-        This is mainly used for tests.
-        """
-        self._jsparkSession.sessionState().catalog().reset()
 
 
 def _test() -> None:

@@ -19,15 +19,6 @@ import functools
 import os
 from typing import Any, Callable, Optional, Sequence, TYPE_CHECKING, cast, TypeVar, Union, Type
 
-from py4j.java_collections import JavaArray
-from py4j.java_gateway import (
-    JavaClass,
-    JavaGateway,
-    JavaObject,
-)
-
-from pyspark import SparkContext
-
 # For backward compatibility.
 from pyspark.errors import (  # noqa: F401
     AnalysisException,
@@ -39,18 +30,27 @@ from pyspark.errors import (  # noqa: F401
     UnknownException,
     SparkUpgradeException,
     PySparkNotImplementedError,
+    PySparkRuntimeError,
 )
+from pyspark.util import is_remote_only
 from pyspark.errors.exceptions.captured import CapturedException  # noqa: F401
 from pyspark.find_spark_home import _find_spark_home
 
 if TYPE_CHECKING:
+    from py4j.java_collections import JavaArray
+    from py4j.java_gateway import (
+        JavaClass,
+        JavaGateway,
+        JavaObject,
+    )
+    from pyspark import SparkContext
     from pyspark.sql.session import SparkSession
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.column import Column
     from pyspark.sql.window import Window
     from pyspark.pandas._typing import IndexOpsLike, SeriesOrIndex
 
-has_numpy = False
+has_numpy: bool = False
 try:
     import numpy as np  # noqa: F401
 
@@ -62,7 +62,7 @@ except ImportError:
 FuncT = TypeVar("FuncT", bound=Callable[..., Any])
 
 
-def toJArray(gateway: JavaGateway, jtype: JavaClass, arr: Sequence[Any]) -> JavaArray:
+def toJArray(gateway: "JavaGateway", jtype: "JavaClass", arr: Sequence[Any]) -> "JavaArray":
     """
     Convert python list to java type array
 
@@ -75,7 +75,7 @@ def toJArray(gateway: JavaGateway, jtype: JavaClass, arr: Sequence[Any]) -> Java
     arr :
         python type list
     """
-    jarray: JavaArray = gateway.new_array(jtype, len(arr))
+    jarray: "JavaArray" = gateway.new_array(jtype, len(arr))
     for i in range(0, len(arr)):
         jarray[i] = arr[i]
     return jarray
@@ -90,8 +90,9 @@ def require_test_compiled() -> None:
     paths = glob.glob(test_class_path)
 
     if len(paths) == 0:
-        raise RuntimeError(
-            "%s doesn't exist. Spark sql test classes are not compiled." % test_class_path
+        raise PySparkRuntimeError(
+            error_class="TEST_CLASS_NOT_COMPILED",
+            message_parameters={"test_class_path": test_class_path},
         )
 
 
@@ -106,7 +107,7 @@ class ForeachBatchFunction:
         self.func = func
         self.session = session
 
-    def call(self, jdf: JavaObject, batch_id: int) -> None:
+    def call(self, jdf: "JavaObject", batch_id: int) -> None:
         from pyspark.sql.dataframe import DataFrame
         from pyspark.sql.session import SparkSession
 
@@ -149,6 +150,8 @@ def is_timestamp_ntz_preferred() -> bool:
         else:
             return session.conf.get("spark.sql.timestampType", None) == "TIMESTAMP_NTZ"
     else:
+        from pyspark import SparkContext
+
         jvm = SparkContext._jvm
         return jvm is not None and jvm.PythonSQLUtils.isTimestampNTZPreferred()
 
@@ -176,7 +179,7 @@ def is_remote() -> bool:
     >>> is_remote()
     False
     """
-    return "SPARK_CONNECT_MODE_ENABLED" in os.environ
+    return ("SPARK_CONNECT_MODE_ENABLED" in os.environ) or is_remote_only()
 
 
 def try_remote_functions(f: FuncT) -> FuncT:
@@ -188,6 +191,21 @@ def try_remote_functions(f: FuncT) -> FuncT:
             from pyspark.sql.connect import functions
 
             return getattr(functions, f.__name__)(*args, **kwargs)
+        else:
+            return f(*args, **kwargs)
+
+    return cast(FuncT, wrapped)
+
+
+def try_partitioning_remote_functions(f: FuncT) -> FuncT:
+    """Mark API supported from Spark Connect."""
+
+    @functools.wraps(f)
+    def wrapped(*args: Any, **kwargs: Any) -> Any:
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
+            from pyspark.sql.connect.functions import partitioning
+
+            return getattr(partitioning, f.__name__)(*args, **kwargs)
         else:
             return f(*args, **kwargs)
 
@@ -230,7 +248,7 @@ def try_remote_window(f: FuncT) -> FuncT:
     @functools.wraps(f)
     def wrapped(*args: Any, **kwargs: Any) -> Any:
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
-            from pyspark.sql.connect.window import Window  # type: ignore[misc]
+            from pyspark.sql.connect.window import Window
 
             return getattr(Window, f.__name__)(*args, **kwargs)
         else:
@@ -254,12 +272,17 @@ def try_remote_windowspec(f: FuncT) -> FuncT:
     return cast(FuncT, wrapped)
 
 
-def get_active_spark_context() -> SparkContext:
+def get_active_spark_context() -> "SparkContext":
     """Raise RuntimeError if SparkContext is not initialized,
     otherwise, returns the active SparkContext."""
+    from pyspark import SparkContext
+
     sc = SparkContext._active_spark_context
     if sc is None or sc._jvm is None:
-        raise RuntimeError("SparkContext or SparkSession should be created first.")
+        raise PySparkRuntimeError(
+            error_class="SESSION_OR_CONTEXT_NOT_EXISTS",
+            message_parameters={},
+        )
     return sc
 
 
@@ -269,7 +292,7 @@ def try_remote_session_classmethod(f: FuncT) -> FuncT:
     @functools.wraps(f)
     def wrapped(*args: Any, **kwargs: Any) -> Any:
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
-            from pyspark.sql.connect.session import SparkSession  # type: ignore[misc]
+            from pyspark.sql.connect.session import SparkSession
 
             assert inspect.isclass(args[0])
             return getattr(SparkSession, f.__name__)(*args[1:], **kwargs)
@@ -334,3 +357,10 @@ def get_window_class() -> Type["Window"]:
         return ConnectWindow  # type: ignore[return-value]
     else:
         return PySparkWindow
+
+
+def get_lit_sql_str(val: str) -> str:
+    # Equivalent to `lit(val)._jc.expr().sql()` for string typed val
+    # See `sql` definition in `sql/catalyst/src/main/scala/org/apache/spark/
+    # sql/catalyst/expressions/literals.scala`
+    return "'" + val.replace("\\", "\\\\").replace("'", "\\'") + "'"

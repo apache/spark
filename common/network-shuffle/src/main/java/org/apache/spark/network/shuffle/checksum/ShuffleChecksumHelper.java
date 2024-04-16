@@ -50,24 +50,25 @@ public class ShuffleChecksumHelper {
   private static Checksum[] getChecksumsByAlgorithm(int num, String algorithm) {
     Checksum[] checksums;
     switch (algorithm) {
-      case "ADLER32":
+      case "ADLER32" -> {
         checksums = new Adler32[num];
         for (int i = 0; i < num; i++) {
           checksums[i] = new Adler32();
         }
-        return checksums;
+      }
 
-      case "CRC32":
+      case "CRC32" -> {
         checksums = new CRC32[num];
         for (int i = 0; i < num; i++) {
           checksums[i] = new CRC32();
         }
-        return checksums;
+      }
 
-      default:
-        throw new UnsupportedOperationException(
-          "Unsupported shuffle checksum algorithm: " + algorithm);
+      default -> throw new UnsupportedOperationException(
+        "Unsupported shuffle checksum algorithm: " + algorithm);
     }
+
+    return checksums;
   }
 
   public static Checksum getChecksumByAlgorithm(String algorithm) {

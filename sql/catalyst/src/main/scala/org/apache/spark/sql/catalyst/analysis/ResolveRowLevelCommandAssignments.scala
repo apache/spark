@@ -116,7 +116,9 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
       case i @ InsertAction(_, assignments) =>
         i.copy(assignments = AssignmentUtils.alignInsertAssignments(attrs, assignments))
       case other =>
-        throw new AnalysisException(s"Unexpected resolved action: $other")
+        throw new AnalysisException(
+          errorClass = "_LEGACY_ERROR_TEMP_3052",
+          messageParameters = Map("other" -> other.toString))
     }
   }
 }

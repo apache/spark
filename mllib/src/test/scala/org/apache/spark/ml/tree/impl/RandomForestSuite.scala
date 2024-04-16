@@ -694,7 +694,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(prunedTree.numNodes === 5)
     assert(unprunedTree.numNodes === 7)
 
-    assert(RandomForestSuite.getSumLeafCounters(List(prunedTree.rootNode)) === arr.size)
+    assert(RandomForestSuite.getSumLeafCounters(List(prunedTree.rootNode)) === arr.length)
   }
 
   test("SPARK-3159 tree model redundancy - regression") {
@@ -723,7 +723,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     assert(prunedTree.numNodes === 3)
     assert(unprunedTree.numNodes === 5)
-    assert(RandomForestSuite.getSumLeafCounters(List(prunedTree.rootNode)) === arr.size)
+    assert(RandomForestSuite.getSumLeafCounters(List(prunedTree.rootNode)) === arr.length)
   }
 
   test("weights at arbitrary scale") {

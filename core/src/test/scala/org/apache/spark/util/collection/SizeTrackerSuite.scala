@@ -104,7 +104,7 @@ private object SizeTrackerSuite {
    * Run speed tests for size tracking collections.
    */
   def main(args: Array[String]): Unit = {
-    if (args.size < 1) {
+    if (args.length < 1) {
       // scalastyle:off println
       println("Usage: SizeTrackerSuite [num elements]")
       // scalastyle:on println

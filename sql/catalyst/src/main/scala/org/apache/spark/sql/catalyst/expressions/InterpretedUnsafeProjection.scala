@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{UnsafeArrayWriter, UnsafeRowWriter, UnsafeWriter}
 import org.apache.spark.sql.catalyst.types._
@@ -160,7 +161,9 @@ object InterpretedUnsafeProjection {
 
         case PhysicalBinaryType => (v, i) => writer.write(i, v.getBinary(i))
 
-        case PhysicalStringType => (v, i) => writer.write(i, v.getUTF8String(i))
+        case _: PhysicalStringType => (v, i) => writer.write(i, v.getUTF8String(i))
+
+        case PhysicalVariantType => (v, i) => writer.write(i, v.getVariant(i))
 
         case PhysicalStructType(fields) =>
           val numFields = fields.length
@@ -231,7 +234,8 @@ object InterpretedUnsafeProjection {
         case PhysicalNullType => (_, _) => {}
 
         case _ =>
-          throw new IllegalStateException(s"The data type '${dt.typeName}' is not supported in " +
+          throw SparkException.internalError(
+            s"The data type '${dt.typeName}' is not supported in " +
             "generating a writer function for a struct field, array element, map key or map value.")
       }
     }
@@ -292,7 +296,7 @@ object InterpretedUnsafeProjection {
    */
   @scala.annotation.tailrec
   private def getElementSize(dataType: DataType): Int = dataType match {
-    case NullType | StringType | BinaryType | CalendarIntervalType |
+    case NullType | _: StringType | BinaryType | CalendarIntervalType | VariantType |
          _: DecimalType | _: StructType | _: ArrayType | _: MapType => 8
     case udt: UserDefinedType[_] =>
       getElementSize(udt.sqlType)

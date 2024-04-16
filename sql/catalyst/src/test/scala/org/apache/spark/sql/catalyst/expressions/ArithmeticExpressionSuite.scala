@@ -29,7 +29,8 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.Origin
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLConf
+import org.apache.spark.sql.internal.{SqlApiConf, SQLConf}
 import org.apache.spark.sql.types._
 
 class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -116,14 +117,22 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkEvaluation(UnaryMinus(Literal(Byte.MinValue)), Byte.MinValue)
     }
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      checkExceptionInExpression[ArithmeticException](
-        UnaryMinus(Literal(Long.MinValue)), "overflow")
-      checkExceptionInExpression[ArithmeticException](
-        UnaryMinus(Literal(Int.MinValue)), "overflow")
-      checkExceptionInExpression[ArithmeticException](
-        UnaryMinus(Literal(Short.MinValue)), "overflow")
-      checkExceptionInExpression[ArithmeticException](
-        UnaryMinus(Literal(Byte.MinValue)), "overflow")
+      checkErrorInExpression[SparkArithmeticException](
+        UnaryMinus(Literal(Long.MinValue)), "ARITHMETIC_OVERFLOW",
+        Map("message" -> "long overflow", "alternative" -> "",
+          "config" -> toSQLConf(SqlApiConf.ANSI_ENABLED_KEY)))
+      checkErrorInExpression[SparkArithmeticException](
+        UnaryMinus(Literal(Int.MinValue)), "ARITHMETIC_OVERFLOW",
+        Map("message" -> "integer overflow", "alternative" -> "",
+          "config" -> toSQLConf(SqlApiConf.ANSI_ENABLED_KEY)))
+      checkErrorInExpression[SparkArithmeticException](
+        UnaryMinus(Literal(Short.MinValue)), "ARITHMETIC_OVERFLOW",
+        Map("message" -> "short overflow", "alternative" -> "",
+          "config" -> toSQLConf(SqlApiConf.ANSI_ENABLED_KEY)))
+      checkErrorInExpression[SparkArithmeticException](
+        UnaryMinus(Literal(Byte.MinValue)), "ARITHMETIC_OVERFLOW",
+        Map("message" -> "byte overflow", "alternative" -> "",
+          "config" -> toSQLConf(SqlApiConf.ANSI_ENABLED_KEY)))
       checkEvaluation(UnaryMinus(positiveShortLit), (- positiveShort).toShort)
       checkEvaluation(UnaryMinus(negativeShortLit), (- negativeShort).toShort)
       checkEvaluation(UnaryMinus(positiveIntLit), - positiveInt)
@@ -308,27 +317,36 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
           val mulResult = Decimal(mulExact.setScale(mulType.scale, RoundingMode.HALF_UP))
           val mulExpected =
             if (mulResult.precision > DecimalType.MAX_PRECISION) null else mulResult
-          checkEvaluation(mulActual, mulExpected)
+          checkEvaluationOrException(mulActual, mulExpected)
 
           val divType = Divide(null, null).resultDecimalType(p1, s1, p2, s2)
           val divResult = Decimal(divExact.setScale(divType.scale, RoundingMode.HALF_UP))
           val divExpected =
             if (divResult.precision > DecimalType.MAX_PRECISION) null else divResult
-          checkEvaluation(divActual, divExpected)
+          checkEvaluationOrException(divActual, divExpected)
 
           val remType = Remainder(null, null).resultDecimalType(p1, s1, p2, s2)
           val remResult = Decimal(remExact.setScale(remType.scale, RoundingMode.HALF_UP))
           val remExpected =
             if (remResult.precision > DecimalType.MAX_PRECISION) null else remResult
-          checkEvaluation(remActual, remExpected)
+          checkEvaluationOrException(remActual, remExpected)
 
           val quotType = IntegralDivide(null, null).resultDecimalType(p1, s1, p2, s2)
           val quotResult = Decimal(quotExact.setScale(quotType.scale, RoundingMode.HALF_UP))
           val quotExpected =
             if (quotResult.precision > DecimalType.MAX_PRECISION) null else quotResult
-          checkEvaluation(quotActual, quotExpected.toLong)
+          checkEvaluationOrException(quotActual,
+            if (quotExpected == null) null else quotExpected.toLong)
         }
       }
+
+      def checkEvaluationOrException(actual: BinaryArithmetic, expected: Any): Unit =
+        if (SQLConf.get.ansiEnabled && expected == null) {
+          checkExceptionInExpression[SparkArithmeticException](actual,
+            "NUMERIC_VALUE_OUT_OF_RANGE")
+        } else {
+          checkEvaluation(actual, expected)
+        }
     }
   }
 

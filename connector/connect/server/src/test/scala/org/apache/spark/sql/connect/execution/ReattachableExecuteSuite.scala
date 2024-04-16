@@ -23,6 +23,7 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkEnv, SparkException}
+import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.SparkConnectServerTest
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.service.SparkConnectService
@@ -40,8 +41,7 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
       val reattachableIter = getReattachableIterator(iter)
       val initialInnerIter = reattachableIter.innerIterator
 
-      // open the iterator
-      iter.next()
+      iter.next() // open iterator, guarantees that the RPC reached the server
       // expire all RPCs on server
       SparkConnectService.executionManager.setAllRPCsDeadline(System.currentTimeMillis() - 1)
       assertEventuallyNoActiveRpcs()
@@ -59,7 +59,7 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
   test("raw interrupted RPC results in INVALID_CURSOR.DISCONNECTED error") {
     withRawBlockingStub { stub =>
       val iter = stub.executePlan(buildExecutePlanRequest(buildPlan(MEDIUM_RESULTS_QUERY)))
-      iter.next() // open the iterator
+      iter.next() // open iterator, guarantees that the RPC reached the server
       // interrupt all RPCs on server
       SparkConnectService.executionManager.interruptAllRPCs()
       assertEventuallyNoActiveRpcs()
@@ -76,11 +76,11 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
       val operationId = UUID.randomUUID().toString
       val iter = stub.executePlan(
         buildExecutePlanRequest(buildPlan(MEDIUM_RESULTS_QUERY), operationId = operationId))
-      iter.next() // open the iterator
+      iter.next() // open the iterator, guarantees that the RPC reached the server
 
       // send reattach
       val iter2 = stub.reattachExecute(buildReattachExecuteRequest(operationId, None))
-      iter2.next() // open the iterator
+      iter2.next() // open the iterator, guarantees that the RPC reached the server
 
       // should result in INVALID_CURSOR.DISCONNECTED error on the original iterator
       val e = intercept[StatusRuntimeException] {
@@ -91,7 +91,7 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
       // send another reattach
       val iter3 = stub.reattachExecute(buildReattachExecuteRequest(operationId, None))
       assert(iter3.hasNext)
-      iter3.next() // open the iterator
+      iter3.next() // open the iterator, guarantees that the RPC reached the server
 
       // should result in INVALID_CURSOR.DISCONNECTED error on the previous reattach iterator
       val e2 = intercept[StatusRuntimeException] {
@@ -108,7 +108,7 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
       val initialInnerIter = reattachableIter.innerIterator
       val operationId = getReattachableIterator(iter).operationId
 
-      // open the iterator
+      // open the iterator, guarantees that the RPC reached the server
       iter.next()
 
       // interrupt all RPCs on server
@@ -129,7 +129,7 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
       val initialInnerIter = reattachableIter.innerIterator
       val operationId = getReattachableIterator(iter).operationId
 
-      // open the iterator
+      // open the iterator, guarantees that the RPC reached the server
       val response = iter.next()
 
       // Send another Reattach request, it should preempt this request with an
@@ -152,7 +152,7 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
       val plan = buildPlan("select * from range(100000)")
       val iter = client.execute(buildPlan(MEDIUM_RESULTS_QUERY))
       val operationId = getReattachableIterator(iter).operationId
-      // open the iterator
+      // open the iterator, guarantees that the RPC reached the server
       iter.next()
       // disconnect and remove on server
       SparkConnectService.executionManager.setAllRPCsDeadline(System.currentTimeMillis() - 1)
@@ -190,7 +190,7 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
       val initialInnerIter = reattachableIter.innerIterator
       val operationId = getReattachableIterator(iter).operationId
 
-      assert(iter.hasNext) // open iterator
+      assert(iter.hasNext) // open iterator, guarantees that the RPC reached the server
       val execution = getExecutionHolder
       assert(execution.responseObserver.releasedUntilIndex == 0)
 
@@ -249,7 +249,7 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
         .get(Connect.CONNECT_EXECUTE_REATTACHABLE_OBSERVER_RETRY_BUFFER_SIZE)
         .toLong
 
-      iter.hasNext // open iterator
+      iter.hasNext // open iterator, guarantees that the RPC reached the server
       val execution = getExecutionHolder
 
       // after consuming enough from the iterator, server should automatically start releasing
@@ -294,6 +294,43 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
         stub.reattachExecute(buildReattachExecuteRequest(operationId, Some(lastSeenResponse)))
       assert(reattach2.hasNext)
       while (reattach2.hasNext) reattach2.next()
+    }
+  }
+
+  test("SPARK-46186 interrupt directly after query start") {
+    // register a sleep udf in the session
+    val serverSession =
+      SparkConnectService
+        .getOrCreateIsolatedSession(defaultUserId, defaultSessionId, None)
+        .session
+    serverSession.udf.register(
+      "sleep",
+      ((ms: Int) => {
+        Thread.sleep(ms);
+        ms
+      }))
+    // This test depends on fast timing.
+    // If something is wrong, it can fail only from time to time.
+    withRawBlockingStub { stub =>
+      val operationId = UUID.randomUUID().toString
+      val interruptRequest = proto.InterruptRequest.newBuilder
+        .setUserContext(userContext)
+        .setSessionId(defaultSessionId)
+        .setInterruptType(proto.InterruptRequest.InterruptType.INTERRUPT_TYPE_OPERATION_ID)
+        .setOperationId(operationId)
+        .build()
+      val iter = stub.executePlan(
+        buildExecutePlanRequest(buildPlan("select sleep(30000) as s"), operationId = operationId))
+      // wait for execute holder to exist, but the execute thread may not have started yet.
+      Eventually.eventually(timeout(eventuallyTimeout)) {
+        assert(SparkConnectService.executionManager.listExecuteHolders.length == 1)
+      }
+      stub.interrupt(interruptRequest)
+      // make sure the client gets the OPERATION_CANCELED error
+      val e = intercept[StatusRuntimeException] {
+        while (iter.hasNext) iter.next()
+      }
+      assert(e.getMessage.contains("OPERATION_CANCELED"))
     }
   }
 
@@ -349,7 +386,9 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
   test("long sleeping query") {
     // register udf directly on the server, we're not testing client UDFs here...
     val serverSession =
-      SparkConnectService.getOrCreateIsolatedSession(defaultUserId, defaultSessionId).session
+      SparkConnectService
+        .getOrCreateIsolatedSession(defaultUserId, defaultSessionId, None)
+        .session
     serverSession.udf.register("sleep", ((ms: Int) => { Thread.sleep(ms); ms }))
     // query will be sleeping and not returning results, while having multiple reattach
     withSparkEnvConfs(
@@ -358,5 +397,36 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
       // Check that execution is released on the server.
       assertEventuallyNoActiveExecutions()
     }
+  }
+
+  test("SPARK-46660: reattach updates aliveness of session holder") {
+    withRawBlockingStub { stub =>
+      val operationId = UUID.randomUUID().toString
+      val iter = stub.executePlan(
+        buildExecutePlanRequest(buildPlan(MEDIUM_RESULTS_QUERY), operationId = operationId))
+      iter.next() // open the iterator, guarantees that the RPC reached the server
+
+      val executionHolder = getExecutionHolder
+      val lastAccessTime = executionHolder.sessionHolder.getSessionHolderInfo.lastAccessTimeMs
+
+      // send reattach
+      val iter2 = stub.reattachExecute(buildReattachExecuteRequest(operationId, None))
+      iter2.next() // open the iterator, guarantees that the RPC reached the server
+      val newAccessTime = executionHolder.sessionHolder.getSessionHolderInfo.lastAccessTimeMs
+
+      assert(newAccessTime > lastAccessTime, "reattach should update session holder access time")
+    }
+  }
+
+  test("SPARK-47249: non-abandoned executions are not added to tombstone cache upon close") {
+    val dummyOpId = UUID.randomUUID().toString
+    val dummyRequest =
+      buildExecutePlanRequest(buildPlan("select * from range(1)"), operationId = dummyOpId)
+    val manager = SparkConnectService.executionManager
+    val holder = manager.createExecuteHolder(dummyRequest)
+    holder.eventsManager.postStarted()
+    manager.removeExecuteHolder(holder.key, abandoned = false)
+    val abandonedExecutions = manager.listAbandonedExecutions
+    assert(abandonedExecutions.forall(_.operationId != dummyOpId))
   }
 }

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.api.r
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
-import java.util.{Locale, Map => JMap}
+import java.util.{Map => JMap}
 
 import scala.jdk.CollectionConverters._
 import scala.util.matching.Regex
@@ -46,8 +46,7 @@ private[sql] object SQLUtils extends Logging {
       enableHiveSupport: Boolean): SparkSession = {
     val spark =
       if (enableHiveSupport &&
-          jsc.sc.conf.get(CATALOG_IMPLEMENTATION.key, "hive").toLowerCase(Locale.ROOT) ==
-            "hive" &&
+          jsc.sc.conf.get(CATALOG_IMPLEMENTATION.key, "hive") == "hive" &&
           // Note that the order of conditions here are on purpose.
           // `SparkSession.hiveClassesArePresent` checks if Hive's `HiveConf` is loadable or not;
           // however, `HiveConf` itself has some static logic to check if Hadoop version is

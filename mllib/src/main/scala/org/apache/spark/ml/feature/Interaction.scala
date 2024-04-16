@@ -162,7 +162,7 @@ class Interaction @Since("1.6.0") (@Since("1.6.0") override val uid: String) ext
           val attr = Attribute.decodeStructField(f, preserveName = true)
           if (attr == UnresolvedAttribute) {
             encodedFeatureAttrs(Seq(NumericAttribute.defaultAttr.withName(f.name)), None)
-          } else if (!attr.name.isDefined) {
+          } else if (attr.name.isEmpty) {
             encodedFeatureAttrs(Seq(attr.withName(f.name)), None)
           } else {
             encodedFeatureAttrs(Seq(attr), None)

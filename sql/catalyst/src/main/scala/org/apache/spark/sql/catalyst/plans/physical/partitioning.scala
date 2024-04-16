@@ -20,9 +20,11 @@ package org.apache.spark.sql.catalyst.plans.physical
 import scala.annotation.tailrec
 import scala.collection.mutable
 
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
+import org.apache.spark.sql.connector.catalog.functions.Reducer
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
@@ -55,7 +57,8 @@ case object UnspecifiedDistribution extends Distribution {
   override def requiredNumPartitions: Option[Int] = None
 
   override def createPartitioning(numPartitions: Int): Partitioning = {
-    throw new IllegalStateException("UnspecifiedDistribution does not have default partitioning.")
+    throw SparkException.internalError(
+      "UnspecifiedDistribution does not have default partitioning.")
   }
 }
 
@@ -220,7 +223,7 @@ trait Partitioning {
    * @param distribution the required clustered distribution for this partitioning
    */
   def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec =
-    throw new IllegalStateException(s"Unexpected partitioning: ${getClass.getSimpleName}")
+    throw SparkException.internalError(s"Unexpected partitioning: ${getClass.getSimpleName}")
 
   /**
    * The actual method that defines whether this [[Partitioning]] can satisfy the given
@@ -258,18 +261,8 @@ case object SinglePartition extends Partitioning {
     SinglePartitionShuffleSpec
 }
 
-/**
- * Represents a partitioning where rows are split up across partitions based on the hash
- * of `expressions`.  All rows where `expressions` evaluate to the same values are guaranteed to be
- * in the same partition.
- *
- * Since [[StatefulOpClusteredDistribution]] relies on this partitioning and Spark requires
- * stateful operators to retain the same physical partitioning during the lifetime of the query
- * (including restart), the result of evaluation on `partitionIdExpression` must be unchanged
- * across Spark versions. Violation of this requirement may bring silent correctness issue.
- */
-case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
-  extends Expression with Partitioning with Unevaluable {
+trait HashPartitioningLike extends Expression with Partitioning with Unevaluable {
+  def expressions: Seq[Expression]
 
   override def children: Seq[Expression] = expressions
   override def nullable: Boolean = false
@@ -294,6 +287,20 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
       }
     }
   }
+}
+
+/**
+ * Represents a partitioning where rows are split up across partitions based on the hash
+ * of `expressions`.  All rows where `expressions` evaluate to the same values are guaranteed to be
+ * in the same partition.
+ *
+ * Since [[StatefulOpClusteredDistribution]] relies on this partitioning and Spark requires
+ * stateful operators to retain the same physical partitioning during the lifetime of the query
+ * (including restart), the result of evaluation on `partitionIdExpression` must be unchanged
+ * across Spark versions. Violation of this requirement may bring silent correctness issue.
+ */
+case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
+  extends HashPartitioningLike {
 
   override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec =
     HashShuffleSpec(this, distribution)
@@ -306,7 +313,6 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
 
   override protected def withNewChildrenInternal(
     newChildren: IndexedSeq[Expression]): HashPartitioning = copy(expressions = newChildren)
-
 }
 
 case class CoalescedBoundary(startReducerIndex: Int, endReducerIndex: Int)
@@ -316,25 +322,18 @@ case class CoalescedBoundary(startReducerIndex: Int, endReducerIndex: Int)
  * fewer number of partitions.
  */
 case class CoalescedHashPartitioning(from: HashPartitioning, partitions: Seq[CoalescedBoundary])
-  extends Expression with Partitioning with Unevaluable {
+  extends HashPartitioningLike {
 
-  override def children: Seq[Expression] = from.expressions
-  override def nullable: Boolean = from.nullable
-  override def dataType: DataType = from.dataType
-
-  override def satisfies0(required: Distribution): Boolean = from.satisfies0(required)
+  override def expressions: Seq[Expression] = from.expressions
 
   override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec =
     CoalescedHashShuffleSpec(from.createShuffleSpec(distribution), partitions)
 
-  override protected def withNewChildrenInternal(
-    newChildren: IndexedSeq[Expression]): CoalescedHashPartitioning =
-      copy(from = from.copy(expressions = newChildren))
-
   override val numPartitions: Int = partitions.length
 
-  override def toString: String = from.toString
-  override def sql: String = from.sql
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): CoalescedHashPartitioning =
+    copy(from = from.copy(expressions = newChildren))
 }
 
 /**
@@ -636,8 +635,7 @@ trait ShuffleSpec {
    *  - [[isCompatibleWith]] returns false on the side where the `clustering` is from.
    */
   def createPartitioning(clustering: Seq[Expression]): Partitioning =
-    throw new UnsupportedOperationException("Operation unsupported for " +
-        s"${getClass.getCanonicalName}")
+    throw SparkUnsupportedOperationException()
 }
 
 case object SinglePartitionShuffleSpec extends ShuffleSpec {
@@ -836,9 +834,41 @@ case class KeyGroupedShuffleSpec(
     (left, right) match {
       case (_: LeafExpression, _: LeafExpression) => true
       case (left: TransformExpression, right: TransformExpression) =>
-        left.isSameFunction(right)
+        if (SQLConf.get.v2BucketingPushPartValuesEnabled &&
+          !SQLConf.get.v2BucketingPartiallyClusteredDistributionEnabled &&
+          SQLConf.get.v2BucketingAllowCompatibleTransforms) {
+          left.isCompatible(right)
+        } else {
+          left.isSameFunction(right)
+        }
       case _ => false
     }
+
+  /**
+   * Return a set of [[Reducer]] for the partition expressions of this shuffle spec,
+   * on the partition expressions of another shuffle spec.
+   * <p>
+   * A [[Reducer]] exists for a partition expression function of this shuffle spec if it is
+   * 'reducible' on the corresponding partition expression function of the other shuffle spec.
+   * <p>
+   * If a value is returned, there must be one [[Reducer]] per partition expression.
+   * A None value in the set indicates that the particular partition expression is not reducible
+   * on the corresponding expression on the other shuffle spec.
+   * <p>
+   * Returning none also indicates that none of the partition expressions can be reduced on the
+   * corresponding expression on the other shuffle spec.
+   *
+   * @param other other key-grouped shuffle spec
+   */
+  def reducers(other: KeyGroupedShuffleSpec): Option[Seq[Option[Reducer[_, _]]]] = {
+     val results = partitioning.expressions.zip(other.partitioning.expressions).map {
+       case (e1: TransformExpression, e2: TransformExpression) => e1.reducers(e2)
+       case (_, _) => None
+     }
+
+    // optimize to not return a value, if none of the partition expressions are reducible
+    if (results.forall(p => p.isEmpty)) None else Some(results)
+  }
 
   override def canCreatePartitioning: Boolean = SQLConf.get.v2BucketingShuffleEnabled &&
     // Only support partition expressions are AttributeReference for now
@@ -846,6 +876,21 @@ case class KeyGroupedShuffleSpec(
 
   override def createPartitioning(clustering: Seq[Expression]): Partitioning = {
     KeyGroupedPartitioning(clustering, partitioning.numPartitions, partitioning.partitionValues)
+  }
+}
+
+object KeyGroupedShuffleSpec {
+  def reducePartitionValue(
+      row: InternalRow,
+      expressions: Seq[Expression],
+      reducers: Seq[Option[Reducer[_, _]]]):
+    InternalRowComparableWrapper = {
+    val partitionVals = row.toSeq(expressions.map(_.dataType))
+    val reducedRow = partitionVals.zip(reducers).map{
+      case (v, Some(reducer: Reducer[Any, Any])) => reducer.reduce(v)
+      case (v, _) => v
+    }.toArray
+    InternalRowComparableWrapper(new GenericInternalRow(reducedRow), expressions)
   }
 }
 

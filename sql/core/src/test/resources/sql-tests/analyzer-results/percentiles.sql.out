@@ -67,7 +67,7 @@ FROM aggr
 -- !query analysis
 Aggregate [percentile_cont(v#x, cast(0.25 as double), false) AS percentile_cont(0.25) WITHIN GROUP (ORDER BY v)#x, percentile_cont(v#x, cast(0.25 as double), false) FILTER (WHERE (k#x > 0)) AS percentile_cont(0.25) WITHIN GROUP (ORDER BY v) FILTER (WHERE (k > 0))#x, percentile_cont(v#x, cast(0.25 as double), true) AS percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC)#x, percentile_cont(v#x, cast(0.25 as double), true) FILTER (WHERE (k#x > 0)) AS percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC) FILTER (WHERE (k > 0))#x]
 +- SubqueryAlias aggr
-   +- View (`aggr`, [k#x,v#x])
+   +- View (`aggr`, [k#x, v#x])
       +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
          +- Project [k#x, v#x]
             +- SubqueryAlias aggr
@@ -88,7 +88,7 @@ ORDER BY k
 Sort [k#x ASC NULLS FIRST], true
 +- Aggregate [k#x], [k#x, percentile_cont(v#x, cast(0.25 as double), false) AS percentile_cont(0.25) WITHIN GROUP (ORDER BY v)#x, percentile_cont(v#x, cast(0.25 as double), false) FILTER (WHERE (k#x > 0)) AS percentile_cont(0.25) WITHIN GROUP (ORDER BY v) FILTER (WHERE (k > 0))#x, percentile_cont(v#x, cast(0.25 as double), true) AS percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC)#x, percentile_cont(v#x, cast(0.25 as double), true) FILTER (WHERE (k#x > 0)) AS percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC) FILTER (WHERE (k > 0))#x]
    +- SubqueryAlias aggr
-      +- View (`aggr`, [k#x,v#x])
+      +- View (`aggr`, [k#x, v#x])
          +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias aggr
@@ -105,7 +105,7 @@ FROM aggr
 -- !query analysis
 Aggregate [percentile_disc(v#x, cast(0.25 as double), false, 0, 0, false) AS percentile_disc(0.25) WITHIN GROUP (ORDER BY v)#x, percentile_disc(v#x, cast(0.25 as double), false, 0, 0, false) FILTER (WHERE (k#x > 0)) AS percentile_disc(0.25) WITHIN GROUP (ORDER BY v) FILTER (WHERE (k > 0))#x, percentile_disc(v#x, cast(0.25 as double), true, 0, 0, false) AS percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC)#x, percentile_disc(v#x, cast(0.25 as double), true, 0, 0, false) FILTER (WHERE (k#x > 0)) AS percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC) FILTER (WHERE (k > 0))#x]
 +- SubqueryAlias aggr
-   +- View (`aggr`, [k#x,v#x])
+   +- View (`aggr`, [k#x, v#x])
       +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
          +- Project [k#x, v#x]
             +- SubqueryAlias aggr
@@ -126,7 +126,7 @@ ORDER BY k
 Sort [k#x ASC NULLS FIRST], true
 +- Aggregate [k#x], [k#x, percentile_disc(v#x, cast(0.25 as double), false, 0, 0, false) AS percentile_disc(0.25) WITHIN GROUP (ORDER BY v)#x, percentile_disc(v#x, cast(0.25 as double), false, 0, 0, false) FILTER (WHERE (k#x > 0)) AS percentile_disc(0.25) WITHIN GROUP (ORDER BY v) FILTER (WHERE (k > 0))#x, percentile_disc(v#x, cast(0.25 as double), true, 0, 0, false) AS percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC)#x, percentile_disc(v#x, cast(0.25 as double), true, 0, 0, false) FILTER (WHERE (k#x > 0)) AS percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC) FILTER (WHERE (k > 0))#x]
    +- SubqueryAlias aggr
-      +- View (`aggr`, [k#x,v#x])
+      +- View (`aggr`, [k#x, v#x])
          +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias aggr
@@ -142,11 +142,290 @@ FROM aggr
 -- !query analysis
 Aggregate [median(v#x) AS median(v)#x, percentile(v#x, cast(0.5 as double), 1, 0, 0, false) AS percentile(v, 0.5, 1)#x, percentile_cont(v#x, cast(0.5 as double), false) AS percentile_cont(0.5) WITHIN GROUP (ORDER BY v)#x]
 +- SubqueryAlias aggr
-   +- View (`aggr`, [k#x,v#x])
+   +- View (`aggr`, [k#x, v#x])
       +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
          +- Project [k#x, v#x]
             +- SubqueryAlias aggr
                +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT
+  round(v, 0) WITHIN GROUP (ORDER BY v)
+FROM aggr
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_SQL_SYNTAX.FUNCTION_WITH_UNSUPPORTED_SYNTAX",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "prettyName" : "`round`",
+    "syntax" : "WITHIN GROUP (ORDER BY ...)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 46,
+    "fragment" : "round(v, 0) WITHIN GROUP (ORDER BY v)"
+  } ]
+}
+
+
+-- !query
+SELECT
+  round(v, 0) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY k)
+FROM aggr
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_SQL_SYNTAX.FUNCTION_WITH_UNSUPPORTED_SYNTAX",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "prettyName" : "`round`",
+    "syntax" : "WITHIN GROUP (ORDER BY ...)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 68,
+    "fragment" : "round(v, 0) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY k)"
+  } ]
+}
+
+
+-- !query
+SELECT
+  percentile(v, 0.5) WITHIN GROUP (ORDER BY v)
+FROM aggr
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_SQL_SYNTAX.FUNCTION_WITH_UNSUPPORTED_SYNTAX",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "prettyName" : "`percentile`",
+    "syntax" : "WITHIN GROUP (ORDER BY ...)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 53,
+    "fragment" : "percentile(v, 0.5) WITHIN GROUP (ORDER BY v)"
+  } ]
+}
+
+
+-- !query
+SELECT
+  percentile(v, 0.5) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY k)
+FROM aggr
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_SQL_SYNTAX.FUNCTION_WITH_UNSUPPORTED_SYNTAX",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "prettyName" : "`percentile`",
+    "syntax" : "WITHIN GROUP (ORDER BY ...)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 75,
+    "fragment" : "percentile(v, 0.5) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY k)"
+  } ]
+}
+
+
+-- !query
+SELECT
+  percentile_cont(DISTINCT 0.5) WITHIN GROUP (ORDER BY v)
+FROM aggr
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.DISTINCT_UNSUPPORTED",
+  "sqlState" : "42K0K",
+  "messageParameters" : {
+    "funcName" : "`percentile_cont`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 64,
+    "fragment" : "percentile_cont(DISTINCT 0.5) WITHIN GROUP (ORDER BY v)"
+  } ]
+}
+
+
+-- !query
+SELECT
+  percentile_cont(DISTINCT 0.5) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY k)
+FROM aggr
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.DISTINCT_UNSUPPORTED",
+  "sqlState" : "42K0K",
+  "messageParameters" : {
+    "funcName" : "`percentile_cont`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 86,
+    "fragment" : "percentile_cont(DISTINCT 0.5) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY k)"
+  } ]
+}
+
+
+-- !query
+SELECT
+  percentile_cont() WITHIN GROUP (ORDER BY v)
+FROM aggr
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "0",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "1",
+    "functionName" : "`percentile_cont`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 52,
+    "fragment" : "percentile_cont() WITHIN GROUP (ORDER BY v)"
+  } ]
+}
+
+
+-- !query
+SELECT
+  percentile_cont() WITHIN GROUP (ORDER BY v) OVER (PARTITION BY k)
+FROM aggr
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "0",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "1",
+    "functionName" : "`percentile_cont`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 74,
+    "fragment" : "percentile_cont() WITHIN GROUP (ORDER BY v) OVER (PARTITION BY k)"
+  } ]
+}
+
+
+-- !query
+SELECT
+  percentile_cont(0.5)
+FROM aggr
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.WITHIN_GROUP_MISSING",
+  "sqlState" : "42K0K",
+  "messageParameters" : {
+    "funcName" : "`percentile_cont`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 29,
+    "fragment" : "percentile_cont(0.5)"
+  } ]
+}
+
+
+-- !query
+SELECT
+  percentile_cont(0.5) OVER (PARTITION BY k)
+FROM aggr
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.WITHIN_GROUP_MISSING",
+  "sqlState" : "42K0K",
+  "messageParameters" : {
+    "funcName" : "`percentile_cont`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 51,
+    "fragment" : "percentile_cont(0.5) OVER (PARTITION BY k)"
+  } ]
+}
+
+
+-- !query
+SELECT
+  percentile_cont(0.5) WITHIN GROUP (ORDER BY k, v)
+FROM aggr
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.WRONG_NUM_ORDERINGS",
+  "sqlState" : "42K0K",
+  "messageParameters" : {
+    "actualNum" : "2",
+    "expectedNum" : "1",
+    "funcName" : "`percentile_cont`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 58,
+    "fragment" : "percentile_cont(0.5) WITHIN GROUP (ORDER BY k, v)"
+  } ]
+}
+
+
+-- !query
+SELECT
+  percentile_cont(k, 0.5) WITHIN GROUP (ORDER BY v)
+FROM aggr
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "2",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "1",
+    "functionName" : "`percentile_cont`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 58,
+    "fragment" : "percentile_cont(k, 0.5) WITHIN GROUP (ORDER BY v)"
+  } ]
+}
 
 
 -- !query
@@ -162,7 +441,7 @@ ORDER BY k
 Sort [k#x ASC NULLS FIRST], true
 +- Aggregate [k#x], [k#x, median(v#x) AS median(v)#x, percentile(v#x, cast(0.5 as double), 1, 0, 0, false) AS percentile(v, 0.5, 1)#x, percentile_cont(v#x, cast(0.5 as double), false) AS percentile_cont(0.5) WITHIN GROUP (ORDER BY v)#x]
    +- SubqueryAlias aggr
-      +- View (`aggr`, [k#x,v#x])
+      +- View (`aggr`, [k#x, v#x])
          +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias aggr
@@ -187,7 +466,7 @@ Sort [salary#x ASC NULLS FIRST], true
       +- Window [percentile_cont(salary#x, cast(0.25 as double), false) windowspecdefinition(department#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS percentile_cont(0.25) WITHIN GROUP (ORDER BY salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x, percentile_disc(salary#x, cast(0.25 as double), false, 0, 0, false) windowspecdefinition(department#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS percentile_disc(0.25) WITHIN GROUP (ORDER BY salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x, percentile_cont(salary#x, cast(0.25 as double), true) windowspecdefinition(department#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS percentile_cont(0.25) WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x, percentile_disc(salary#x, cast(0.25 as double), true, 0, 0, false) windowspecdefinition(department#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS percentile_disc(0.25) WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x], [department#x]
          +- Project [employee_name#x, department#x, salary#x]
             +- SubqueryAlias basic_pays
-               +- View (`basic_pays`, [employee_name#x,department#x,salary#x])
+               +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
                   +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
                      +- Project [employee_name#x, department#x, salary#x]
                         +- SubqueryAlias basic_pays
@@ -373,7 +652,7 @@ Sort [salary#x ASC NULLS FIRST], true
       +- Window [percentile_cont(salary#x, cast(0.25 as double), false) windowspecdefinition(department#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS percentile_cont(0.25) WITHIN GROUP (ORDER BY salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x, percentile_disc(salary#x, cast(0.25 as double), false, 0, 0, false) windowspecdefinition(department#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS percentile_disc(0.25) WITHIN GROUP (ORDER BY salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x, percentile_cont(salary#x, cast(0.25 as double), true) windowspecdefinition(department#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS percentile_cont(0.25) WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x, percentile_disc(salary#x, cast(0.25 as double), true, 0, 0, false) windowspecdefinition(department#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS percentile_disc(0.25) WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x], [department#x]
          +- Project [employee_name#x, department#x, salary#x]
             +- SubqueryAlias basic_pays
-               +- View (`basic_pays`, [employee_name#x,department#x,salary#x])
+               +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
                   +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
                      +- Project [employee_name#x, department#x, salary#x]
                         +- SubqueryAlias basic_pays
@@ -402,7 +681,7 @@ Sort [salary#x ASC NULLS FIRST], true
          +- Project [employee_name#x, department#x, salary#x]
             +- Filter (salary#x > 8900)
                +- SubqueryAlias basic_pays
-                  +- View (`basic_pays`, [employee_name#x,department#x,salary#x])
+                  +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
                      +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
                         +- Project [employee_name#x, department#x, salary#x]
                            +- SubqueryAlias basic_pays
@@ -620,7 +899,7 @@ FROM intervals
 -- !query analysis
 Aggregate [percentile_cont(dt#x, cast(0.25 as double), false) AS percentile_cont(0.25) WITHIN GROUP (ORDER BY dt)#x, percentile_cont(dt#x, cast(0.25 as double), true) AS percentile_cont(0.25) WITHIN GROUP (ORDER BY dt DESC)#x]
 +- SubqueryAlias intervals
-   +- View (`intervals`, [k#x,dt#x,ym#x,dt2#x])
+   +- View (`intervals`, [k#x, dt#x, ym#x, dt2#x])
       +- Project [cast(k#x as int) AS k#x, cast(dt#x as interval month) AS dt#x, cast(ym#x as interval second) AS ym#x, cast(dt2#x as interval minute) AS dt2#x]
          +- Project [k#x, dt#x, ym#x, dt2#x]
             +- SubqueryAlias intervals
@@ -639,7 +918,7 @@ ORDER BY k
 Sort [k#x ASC NULLS FIRST], true
 +- Aggregate [k#x], [k#x, percentile_cont(ym#x, cast(0.25 as double), false) AS percentile_cont(0.25) WITHIN GROUP (ORDER BY ym)#x, percentile_cont(ym#x, cast(0.25 as double), true) AS percentile_cont(0.25) WITHIN GROUP (ORDER BY ym DESC)#x]
    +- SubqueryAlias intervals
-      +- View (`intervals`, [k#x,dt#x,ym#x,dt2#x])
+      +- View (`intervals`, [k#x, dt#x, ym#x, dt2#x])
          +- Project [cast(k#x as int) AS k#x, cast(dt#x as interval month) AS dt#x, cast(ym#x as interval second) AS ym#x, cast(dt2#x as interval minute) AS dt2#x]
             +- Project [k#x, dt#x, ym#x, dt2#x]
                +- SubqueryAlias intervals
@@ -658,7 +937,7 @@ ORDER BY k
 Sort [k#x ASC NULLS FIRST], true
 +- Aggregate [k#x], [k#x, percentile_cont(dt2#x, cast(0.25 as double), false) AS percentile_cont(0.25) WITHIN GROUP (ORDER BY dt2)#x, percentile_cont(dt2#x, cast(0.25 as double), true) AS percentile_cont(0.25) WITHIN GROUP (ORDER BY dt2 DESC)#x]
    +- SubqueryAlias intervals
-      +- View (`intervals`, [k#x,dt#x,ym#x,dt2#x])
+      +- View (`intervals`, [k#x, dt#x, ym#x, dt2#x])
          +- Project [cast(k#x as int) AS k#x, cast(dt#x as interval month) AS dt#x, cast(ym#x as interval second) AS ym#x, cast(dt2#x as interval minute) AS dt2#x]
             +- Project [k#x, dt#x, ym#x, dt2#x]
                +- SubqueryAlias intervals
@@ -673,7 +952,7 @@ FROM intervals
 -- !query analysis
 Aggregate [percentile_disc(dt#x, cast(0.25 as double), false, 0, 0, false) AS percentile_disc(0.25) WITHIN GROUP (ORDER BY dt)#x, percentile_disc(dt#x, cast(0.25 as double), true, 0, 0, false) AS percentile_disc(0.25) WITHIN GROUP (ORDER BY dt DESC)#x]
 +- SubqueryAlias intervals
-   +- View (`intervals`, [k#x,dt#x,ym#x,dt2#x])
+   +- View (`intervals`, [k#x, dt#x, ym#x, dt2#x])
       +- Project [cast(k#x as int) AS k#x, cast(dt#x as interval month) AS dt#x, cast(ym#x as interval second) AS ym#x, cast(dt2#x as interval minute) AS dt2#x]
          +- Project [k#x, dt#x, ym#x, dt2#x]
             +- SubqueryAlias intervals
@@ -692,7 +971,7 @@ ORDER BY k
 Sort [k#x ASC NULLS FIRST], true
 +- Aggregate [k#x], [k#x, percentile_disc(ym#x, cast(0.25 as double), false, 0, 0, false) AS percentile_disc(0.25) WITHIN GROUP (ORDER BY ym)#x, percentile_disc(ym#x, cast(0.25 as double), true, 0, 0, false) AS percentile_disc(0.25) WITHIN GROUP (ORDER BY ym DESC)#x]
    +- SubqueryAlias intervals
-      +- View (`intervals`, [k#x,dt#x,ym#x,dt2#x])
+      +- View (`intervals`, [k#x, dt#x, ym#x, dt2#x])
          +- Project [cast(k#x as int) AS k#x, cast(dt#x as interval month) AS dt#x, cast(ym#x as interval second) AS ym#x, cast(dt2#x as interval minute) AS dt2#x]
             +- Project [k#x, dt#x, ym#x, dt2#x]
                +- SubqueryAlias intervals
@@ -711,7 +990,7 @@ ORDER BY k
 Sort [k#x ASC NULLS FIRST], true
 +- Aggregate [k#x], [k#x, percentile_disc(dt2#x, cast(0.25 as double), false, 0, 0, false) AS percentile_disc(0.25) WITHIN GROUP (ORDER BY dt2)#x, percentile_disc(dt2#x, cast(0.25 as double), true, 0, 0, false) AS percentile_disc(0.25) WITHIN GROUP (ORDER BY dt2 DESC)#x]
    +- SubqueryAlias intervals
-      +- View (`intervals`, [k#x,dt#x,ym#x,dt2#x])
+      +- View (`intervals`, [k#x, dt#x, ym#x, dt2#x])
          +- Project [cast(k#x as int) AS k#x, cast(dt#x as interval month) AS dt#x, cast(ym#x as interval second) AS ym#x, cast(dt2#x as interval minute) AS dt2#x]
             +- Project [k#x, dt#x, ym#x, dt2#x]
                +- SubqueryAlias intervals
@@ -727,7 +1006,7 @@ FROM intervals
 -- !query analysis
 Aggregate [median(dt#x) AS median(dt)#x, percentile(dt#x, cast(0.5 as double), 1, 0, 0, false) AS percentile(dt, 0.5, 1)#x, percentile_cont(dt#x, cast(0.5 as double), false) AS percentile_cont(0.5) WITHIN GROUP (ORDER BY dt)#x]
 +- SubqueryAlias intervals
-   +- View (`intervals`, [k#x,dt#x,ym#x,dt2#x])
+   +- View (`intervals`, [k#x, dt#x, ym#x, dt2#x])
       +- Project [cast(k#x as int) AS k#x, cast(dt#x as interval month) AS dt#x, cast(ym#x as interval second) AS ym#x, cast(dt2#x as interval minute) AS dt2#x]
          +- Project [k#x, dt#x, ym#x, dt2#x]
             +- SubqueryAlias intervals
@@ -747,7 +1026,7 @@ ORDER BY k
 Sort [k#x ASC NULLS FIRST], true
 +- Aggregate [k#x], [k#x, median(ym#x) AS median(ym)#x, percentile(ym#x, cast(0.5 as double), 1, 0, 0, false) AS percentile(ym, 0.5, 1)#x, percentile_cont(ym#x, cast(0.5 as double), false) AS percentile_cont(0.5) WITHIN GROUP (ORDER BY ym)#x]
    +- SubqueryAlias intervals
-      +- View (`intervals`, [k#x,dt#x,ym#x,dt2#x])
+      +- View (`intervals`, [k#x, dt#x, ym#x, dt2#x])
          +- Project [cast(k#x as int) AS k#x, cast(dt#x as interval month) AS dt#x, cast(ym#x as interval second) AS ym#x, cast(dt2#x as interval minute) AS dt2#x]
             +- Project [k#x, dt#x, ym#x, dt2#x]
                +- SubqueryAlias intervals
@@ -767,7 +1046,7 @@ ORDER BY k
 Sort [k#x ASC NULLS FIRST], true
 +- Aggregate [k#x], [k#x, median(dt2#x) AS median(dt2)#x, percentile(dt2#x, cast(0.5 as double), 1, 0, 0, false) AS percentile(dt2, 0.5, 1)#x, percentile_cont(dt2#x, cast(0.5 as double), false) AS percentile_cont(0.5) WITHIN GROUP (ORDER BY dt2)#x]
    +- SubqueryAlias intervals
-      +- View (`intervals`, [k#x,dt#x,ym#x,dt2#x])
+      +- View (`intervals`, [k#x, dt#x, ym#x, dt2#x])
          +- Project [cast(k#x as int) AS k#x, cast(dt#x as interval month) AS dt#x, cast(ym#x as interval second) AS ym#x, cast(dt2#x as interval minute) AS dt2#x]
             +- Project [k#x, dt#x, ym#x, dt2#x]
                +- SubqueryAlias intervals

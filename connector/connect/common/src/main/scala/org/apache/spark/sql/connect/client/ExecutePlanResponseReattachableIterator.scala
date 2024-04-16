@@ -27,6 +27,7 @@ import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.connect.client.GrpcRetryHandler.RetryException
 
 /**
  * Retryable iterator of ExecutePlanResponses to an ExecutePlan call.
@@ -50,9 +51,14 @@ import org.apache.spark.internal.Logging
 class ExecutePlanResponseReattachableIterator(
     request: proto.ExecutePlanRequest,
     channel: ManagedChannel,
-    retryPolicy: GrpcRetryHandler.RetryPolicy)
+    retryHandler: GrpcRetryHandler)
     extends WrappedCloseableIterator[proto.ExecutePlanResponse]
     with Logging {
+
+  /**
+   * Retries the given function with exponential backoff according to the client's retryPolicy.
+   */
+  private def retry[T](fn: => T): T = retryHandler.retry(fn)
 
   val operationId = if (request.hasOperationId) {
     request.getOperationId
@@ -236,7 +242,7 @@ class ExecutePlanResponseReattachableIterator(
         }
         // Try a new ExecutePlan, and throw upstream for retry.
         iter = Some(rawBlockingStub.executePlan(initialRequest))
-        val error = new GrpcRetryHandler.RetryException()
+        val error = new RetryException()
         error.addSuppressed(ex)
         throw error
       case NonFatal(e) =>
@@ -271,7 +277,7 @@ class ExecutePlanResponseReattachableIterator(
           }
         } catch {
           case NonFatal(e) =>
-            logWarning(s"ReleaseExecute failed with exception: $e.")
+            logWarning(log"ReleaseExecute failed with exception:", e)
         }
       }
     }
@@ -319,10 +325,14 @@ class ExecutePlanResponseReattachableIterator(
 
     release.build()
   }
+}
 
-  /**
-   * Retries the given function with exponential backoff according to the client's retryPolicy.
-   */
-  private def retry[T](fn: => T): T =
-    GrpcRetryHandler.retry(retryPolicy)(fn)
+private[connect] object ExecutePlanResponseReattachableIterator {
+  @scala.annotation.tailrec
+  private[connect] def fromIterator(
+      iter: Iterator[proto.ExecutePlanResponse]): ExecutePlanResponseReattachableIterator =
+    iter match {
+      case e: ExecutePlanResponseReattachableIterator => e
+      case w: WrappedCloseableIterator[proto.ExecutePlanResponse] => fromIterator(w.innerIterator)
+    }
 }

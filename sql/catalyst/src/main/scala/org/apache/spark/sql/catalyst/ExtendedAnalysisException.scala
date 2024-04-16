@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 /**
  * Internal [[AnalysisException]] that also captures a [[LogicalPlan]].
  */
-class ExtendedAnalysisException(
+class ExtendedAnalysisException private(
     message: String,
     line: Option[Int] = None,
     startPosition: Option[Int] = None,

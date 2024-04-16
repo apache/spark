@@ -117,6 +117,16 @@ SELECT lpad(x'57', 5, 'abc');
 SELECT rpad('abc', 5, x'57');
 SELECT rpad(x'57', 5, 'abc');
 
+-- encode
+set spark.sql.legacy.javaCharsets=true;
+select encode('hello', 'WINDOWS-1252');
+select encode(scol, ecol) from values('hello', 'WINDOWS-1252') as t(scol, ecol);
+set spark.sql.legacy.javaCharsets=false;
+select encode('hello', 'WINDOWS-1252');
+select encode(scol, ecol) from values('hello', 'WINDOWS-1252') as t(scol, ecol);
+select encode('hello', 'Windows-xxx');
+select encode(scol, ecol) from values('hello', 'Windows-xxx') as t(scol, ecol);
+
 -- decode
 select decode();
 select decode(encode('abc', 'utf-8'));
@@ -128,6 +138,14 @@ select decode(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattl
 select decode(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle');
 select decode(null, 6, 'Spark', NULL, 'SQL', 4, 'rocks');
 select decode(null, 6, 'Spark', NULL, 'SQL', 4, 'rocks', NULL, '.');
+select decode(X'68656c6c6f', 'Windows-xxx');
+select decode(scol, ecol) from values(X'68656c6c6f', 'Windows-xxx') as t(scol, ecol);
+set spark.sql.legacy.javaCharsets=true;
+select decode(X'68656c6c6f', 'WINDOWS-1252');
+select decode(scol, ecol) from values(X'68656c6c6f', 'WINDOWS-1252') as t(scol, ecol);
+set spark.sql.legacy.javaCharsets=false;
+select decode(X'68656c6c6f', 'WINDOWS-1252');
+select decode(scol, ecol) from values(X'68656c6c6f', 'WINDOWS-1252') as t(scol, ecol);
 
 -- contains
 SELECT CONTAINS(null, 'Spark');

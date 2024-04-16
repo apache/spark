@@ -368,3 +368,85 @@ select null not in (1, 2, null)
 -- !query analysis
 Project [NOT cast(null as int) IN (cast(1 as int),cast(2 as int),cast(null as int)) AS (NOT (NULL IN (1, 2, NULL)))#x]
 +- OneRowRelation
+
+
+-- !query
+select 1 between 0 and 2
+-- !query analysis
+Project [between(1, 0, 2) AS between(1, 0, 2)#x]
++- OneRowRelation
+
+
+-- !query
+select 0.5 between 0 and 1
+-- !query analysis
+Project [between(0.5, 0, 1) AS between(0.5, 0, 1)#x]
++- OneRowRelation
+
+
+-- !query
+select 2.0 between '1.0' and '3.0'
+-- !query analysis
+Project [between(2.0, 1.0, 3.0) AS between(2.0, 1.0, 3.0)#x]
++- OneRowRelation
+
+
+-- !query
+select 'b' between 'a' and 'c'
+-- !query analysis
+Project [between(b, a, c) AS between(b, a, c)#x]
++- OneRowRelation
+
+
+-- !query
+select to_timestamp('2022-12-26 00:00:01') between to_date('2022-03-01') and to_date('2022-12-31')
+-- !query analysis
+Project [between(to_timestamp(2022-12-26 00:00:01, None, TimestampType, Some(America/Los_Angeles), false), to_date(2022-03-01, None, Some(America/Los_Angeles), false), to_date(2022-12-31, None, Some(America/Los_Angeles), false)) AS between(to_timestamp(2022-12-26 00:00:01), to_date(2022-03-01), to_date(2022-12-31))#x]
++- OneRowRelation
+
+
+-- !query
+select rand(123) between 0.1 AND 0.2
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+select 1 not between 0 and 2
+-- !query analysis
+Project [NOT between(1, 0, 2) AS (NOT between(1, 0, 2))#x]
++- OneRowRelation
+
+
+-- !query
+select 0.5 not between 0 and 1
+-- !query analysis
+Project [NOT between(0.5, 0, 1) AS (NOT between(0.5, 0, 1))#x]
++- OneRowRelation
+
+
+-- !query
+select 2.0 not between '1.0' and '3.0'
+-- !query analysis
+Project [NOT between(2.0, 1.0, 3.0) AS (NOT between(2.0, 1.0, 3.0))#x]
++- OneRowRelation
+
+
+-- !query
+select 'b' not between 'a' and 'c'
+-- !query analysis
+Project [NOT between(b, a, c) AS (NOT between(b, a, c))#x]
++- OneRowRelation
+
+
+-- !query
+select to_timestamp('2022-12-26 00:00:01') not between to_date('2022-03-01') and to_date('2022-12-31')
+-- !query analysis
+Project [NOT between(to_timestamp(2022-12-26 00:00:01, None, TimestampType, Some(America/Los_Angeles), false), to_date(2022-03-01, None, Some(America/Los_Angeles), false), to_date(2022-12-31, None, Some(America/Los_Angeles), false)) AS (NOT between(to_timestamp(2022-12-26 00:00:01), to_date(2022-03-01), to_date(2022-12-31)))#x]
++- OneRowRelation
+
+
+-- !query
+select rand(123) not between 0.1 AND 0.2
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]

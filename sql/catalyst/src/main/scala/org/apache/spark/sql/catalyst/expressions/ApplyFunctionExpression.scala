@@ -31,7 +31,7 @@ case class ApplyFunctionExpression(
   override def nullable: Boolean = function.isResultNullable
   override def name: String = function.name()
   override def dataType: DataType = function.resultType()
-  override def inputTypes: Seq[AbstractDataType] = function.inputTypes().toSeq
+  override def inputTypes: Seq[AbstractDataType] = function.inputTypes().toImmutableArraySeq
   override lazy val deterministic: Boolean = function.isDeterministic &&
       children.forall(_.deterministic)
   override def foldable: Boolean = deterministic && children.forall(_.foldable)

@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.execution.{CollectLimitExec, ColumnarToRowExec, LocalTableScanExec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, SparkPlanInfo, UnionExec}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
-import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
+import org.apache.spark.sql.execution.columnar.{InMemoryTableScanExec, InMemoryTableScanLike}
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
@@ -1014,11 +1014,13 @@ class AdaptiveQueryExecSuite
       val read = reads.head
       val c = read.canonicalized.asInstanceOf[AQEShuffleReadExec]
       // we can't just call execute() because that has separate checks for canonicalized plans
-      val ex = intercept[IllegalStateException] {
-        val doExecute = PrivateMethod[Unit](Symbol("doExecute"))
-        c.invokePrivate(doExecute())
-      }
-      assert(ex.getMessage === "operating on canonicalized plan")
+      checkError(
+        exception = intercept[SparkException] {
+          val doExecute = PrivateMethod[Unit](Symbol("doExecute"))
+          c.invokePrivate(doExecute())
+        },
+        errorClass = "INTERNAL_ERROR",
+        parameters = Map("message" -> "operating on canonicalized plan"))
     }
   }
 
@@ -2761,7 +2763,7 @@ class AdaptiveQueryExecSuite
           case s: SortExec => s
         }.size == (if (firstAccess) 2 else 0))
         assert(collect(initialExecutedPlan) {
-          case i: InMemoryTableScanExec => i
+          case i: InMemoryTableScanLike => i
         }.head.isMaterialized != firstAccess)
 
         df.collect()
@@ -2773,7 +2775,7 @@ class AdaptiveQueryExecSuite
           case s: SortExec => s
         }.isEmpty)
         assert(collect(initialExecutedPlan) {
-          case i: InMemoryTableScanExec => i
+          case i: InMemoryTableScanLike => i
         }.head.isMaterialized)
       }
 
@@ -2823,12 +2825,17 @@ class AdaptiveQueryExecSuite
   }
 
   test("SPARK-43026: Apply AQE with non-exchange table cache") {
-    withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true") {
-      val df = spark.range(0).cache()
-      df.collect()
-      assert(df.queryExecution.executedPlan.isInstanceOf[AdaptiveSparkPlanExec])
-      assert(df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
-        .executedPlan.isInstanceOf[LocalTableScanExec])
+    Seq(true, false).foreach { canChangeOP =>
+      withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> canChangeOP.toString) {
+        // No exchange, no need for AQE
+        val df = spark.range(0).cache()
+        df.collect()
+        assert(!df.queryExecution.executedPlan.isInstanceOf[AdaptiveSparkPlanExec])
+        // Has exchange, apply AQE
+        val df2 = spark.range(0).repartition(1).cache()
+        df2.collect()
+        assert(df2.queryExecution.executedPlan.isInstanceOf[AdaptiveSparkPlanExec])
+      }
     }
   }
 
@@ -2853,6 +2860,26 @@ class AdaptiveQueryExecSuite
     val aggDf2 = emptyDf.agg(sum("id").as("id")).withColumn("name", lit("df2"))
     val unionDF = aggDf1.union(aggDf2)
     checkAnswer(unionDF.select("id").distinct(), Seq(Row(null)))
+  }
+
+  test("SPARK-47247: coalesce differently for BNLJ") {
+    Seq(true, false).foreach { expectCoalesce =>
+      val minPartitionSize = if (expectCoalesce) "64MB" else "1B"
+      withSQLConf(
+        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "64MB",
+        SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_SIZE.key -> minPartitionSize) {
+        val (_, adaptivePlan) = runAdaptiveAndVerifyResult(
+          "SELECT /*+ broadcast(testData2) */ * " +
+            "FROM (SELECT value v, max(key) k from testData group by value) " +
+            "JOIN testData2 ON k + a > 0")
+        val bnlj = findTopLevelBroadcastNestedLoopJoin(adaptivePlan)
+        assert(bnlj.size == 1)
+        val coalescedReads = collect(adaptivePlan) {
+          case read: AQEShuffleReadExec if read.isCoalescedRead => read
+        }
+        assert(coalescedReads.nonEmpty == expectCoalesce)
+      }
+    }
   }
 }
 

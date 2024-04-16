@@ -17,11 +17,10 @@
 import inspect
 import os
 import sys
-from typing import IO, List
+from typing import IO
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.errors import PySparkAssertionError, PySparkRuntimeError, PySparkTypeError
-from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import (
     read_bool,
     read_int,
@@ -29,9 +28,9 @@ from pyspark.serializers import (
     write_with_length,
     SpecialLengths,
 )
-from pyspark.sql.datasource import DataSource
+from pyspark.sql.datasource import DataSource, CaseInsensitiveDict
 from pyspark.sql.types import _parse_datatype_json_string, StructType
-from pyspark.util import handle_worker_exception
+from pyspark.util import handle_worker_exception, local_connect_and_auth
 from pyspark.worker_util import (
     check_python_version,
     read_command,
@@ -55,7 +54,6 @@ def main(infile: IO, outfile: IO) -> None:
     The JVM sends the following information to this process:
     - a `DataSource` class representing the data source to be created.
     - a provider name in string.
-    - a list of paths in string.
     - an optional user-specified schema in json string.
     - a dictionary of options in string.
 
@@ -107,12 +105,6 @@ def main(infile: IO, outfile: IO) -> None:
                 },
             )
 
-        # Receive the paths.
-        num_paths = read_int(infile)
-        paths: List[str] = []
-        for _ in range(num_paths):
-            paths.append(utf8_deserializer.loads(infile))
-
         # Receive the user-specified schema
         user_specified_schema = None
         if read_bool(infile):
@@ -127,7 +119,7 @@ def main(infile: IO, outfile: IO) -> None:
                 )
 
         # Receive the options.
-        options = dict()
+        options = CaseInsensitiveDict()
         num_options = read_int(infile)
         for _ in range(num_options):
             key = utf8_deserializer.loads(infile)
@@ -136,15 +128,11 @@ def main(infile: IO, outfile: IO) -> None:
 
         # Instantiate a data source.
         try:
-            data_source = data_source_cls(
-                paths=paths,
-                userSpecifiedSchema=user_specified_schema,  # type: ignore
-                options=options,
-            )
+            data_source = data_source_cls(options=options)  # type: ignore
         except Exception as e:
             raise PySparkRuntimeError(
-                error_class="PYTHON_DATA_SOURCE_CREATE_ERROR",
-                message_parameters={"type": "instance", "error": str(e)},
+                error_class="DATA_SOURCE_CREATE_ERROR",
+                message_parameters={"error": str(e)},
             )
 
         # Get the schema of the data source.
@@ -161,8 +149,8 @@ def main(infile: IO, outfile: IO) -> None:
                     is_ddl_string = True
             except NotImplementedError:
                 raise PySparkRuntimeError(
-                    error_class="PYTHON_DATA_SOURCE_METHOD_NOT_IMPLEMENTED",
-                    message_parameters={"type": "instance", "method": "schema"},
+                    error_class="NOT_IMPLEMENTED",
+                    message_parameters={"feature": "DataSource.schema"},
                 )
         else:
             schema = user_specified_schema  # type: ignore

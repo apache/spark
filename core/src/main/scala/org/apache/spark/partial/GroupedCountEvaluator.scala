@@ -41,7 +41,9 @@ private[spark] class GroupedCountEvaluator[T : ClassTag](totalOutputs: Int, conf
 
   override def currentResult(): Map[T, BoundedDouble] = {
     if (outputsMerged == totalOutputs) {
-      sums.map { case (key, sum) => (key, new BoundedDouble(sum, 1.0, sum, sum)) }.toMap
+      sums.map { case (key, sum) =>
+        (key, new BoundedDouble(sum.toDouble, 1.0, sum.toDouble, sum.toDouble))
+      }.toMap
     } else if (outputsMerged == 0) {
       new HashMap[T, BoundedDouble]
     } else {

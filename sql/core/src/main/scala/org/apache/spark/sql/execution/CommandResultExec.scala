@@ -77,7 +77,7 @@ case class CommandResultExec(
   }
 
   override def executeCollect(): Array[InternalRow] = {
-    longMetric("numOutputRows").add(unsafeRows.size)
+    longMetric("numOutputRows").add(unsafeRows.length)
     sendDriverMetrics()
     unsafeRows
   }
@@ -86,7 +86,7 @@ case class CommandResultExec(
 
   override def executeTake(limit: Int): Array[InternalRow] = {
     val taken = unsafeRows.take(limit)
-    longMetric("numOutputRows").add(taken.size)
+    longMetric("numOutputRows").add(taken.length)
     sendDriverMetrics()
     taken
   }

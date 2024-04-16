@@ -19,10 +19,11 @@ package org.apache.spark.status.api.v1
 import java.io.OutputStream
 import java.util.{List => JList}
 import java.util.zip.ZipOutputStream
-import javax.ws.rs.{NotFoundException => _, _}
-import javax.ws.rs.core.{MediaType, Response, StreamingOutput}
 
 import scala.util.control.NonFatal
+
+import jakarta.ws.rs.{NotFoundException => _, _}
+import jakarta.ws.rs.core.{MediaType, Response, StreamingOutput}
 
 import org.apache.spark.{JobExecutionStatus, SparkContext}
 import org.apache.spark.status.api.v1

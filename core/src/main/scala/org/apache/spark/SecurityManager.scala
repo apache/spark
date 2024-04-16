@@ -429,6 +429,8 @@ private[spark] class SecurityManager(
       val map = scala.collection.mutable.Map[String, String]()
       rpcSSLOptions.keyPassword.foreach(password =>
         map += (SSLOptions.ENV_RPC_SSL_KEY_PASSWORD -> password))
+      rpcSSLOptions.privateKeyPassword.foreach(password =>
+        map += (SSLOptions.ENV_RPC_SSL_PRIVATE_KEY_PASSWORD -> password))
       rpcSSLOptions.keyStorePassword.foreach(password =>
         map += (SSLOptions.ENV_RPC_SSL_KEY_STORE_PASSWORD -> password))
       rpcSSLOptions.trustStorePassword.foreach(password =>

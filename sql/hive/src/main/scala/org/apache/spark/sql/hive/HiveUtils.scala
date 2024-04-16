@@ -20,7 +20,6 @@ package org.apache.spark.sql.hive
 import java.io.File
 import java.net.URL
 import java.util.Locale
-import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.HashMap
 import scala.jdk.CollectionConverters._
@@ -37,7 +36,8 @@ import org.apache.hive.common.util.HiveVersionInfo
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.PATH
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.execution.command.DDLUtils
@@ -47,6 +47,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 
@@ -259,60 +260,6 @@ private[spark] object HiveUtils extends Logging {
   }
 
   /**
-   * Change time configurations needed to create a [[HiveClient]] into unified [[Long]] format.
-   */
-  private[hive] def formatTimeVarsForHiveClient(hadoopConf: Configuration): Map[String, String] = {
-    // Hive 0.14.0 introduces timeout operations in HiveConf, and changes default values of a bunch
-    // of time `ConfVar`s by adding time suffixes (`s`, `ms`, and `d` etc.).  This breaks backwards-
-    // compatibility when users are trying to connecting to a Hive metastore of lower version,
-    // because these options are expected to be integral values in lower versions of Hive.
-    //
-    // Here we enumerate all time `ConfVar`s and convert their values to numeric strings according
-    // to their output time units.
-    Seq(
-      ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY -> TimeUnit.SECONDS,
-      ConfVars.METASTORE_CLIENT_SOCKET_TIMEOUT -> TimeUnit.SECONDS,
-      ConfVars.METASTORE_CLIENT_SOCKET_LIFETIME -> TimeUnit.SECONDS,
-      ConfVars.HMSHANDLERINTERVAL -> TimeUnit.MILLISECONDS,
-      ConfVars.METASTORE_EVENT_DB_LISTENER_TTL -> TimeUnit.SECONDS,
-      ConfVars.METASTORE_EVENT_CLEAN_FREQ -> TimeUnit.SECONDS,
-      ConfVars.METASTORE_EVENT_EXPIRY_DURATION -> TimeUnit.SECONDS,
-      ConfVars.METASTORE_AGGREGATE_STATS_CACHE_TTL -> TimeUnit.SECONDS,
-      ConfVars.METASTORE_AGGREGATE_STATS_CACHE_MAX_WRITER_WAIT -> TimeUnit.MILLISECONDS,
-      ConfVars.METASTORE_AGGREGATE_STATS_CACHE_MAX_READER_WAIT -> TimeUnit.MILLISECONDS,
-      ConfVars.HIVES_AUTO_PROGRESS_TIMEOUT -> TimeUnit.SECONDS,
-      ConfVars.HIVE_LOG_INCREMENTAL_PLAN_PROGRESS_INTERVAL -> TimeUnit.MILLISECONDS,
-      ConfVars.HIVE_LOCK_SLEEP_BETWEEN_RETRIES -> TimeUnit.SECONDS,
-      ConfVars.HIVE_ZOOKEEPER_SESSION_TIMEOUT -> TimeUnit.MILLISECONDS,
-      ConfVars.HIVE_ZOOKEEPER_CONNECTION_BASESLEEPTIME -> TimeUnit.MILLISECONDS,
-      ConfVars.HIVE_TXN_TIMEOUT -> TimeUnit.SECONDS,
-      ConfVars.HIVE_COMPACTOR_WORKER_TIMEOUT -> TimeUnit.SECONDS,
-      ConfVars.HIVE_COMPACTOR_CHECK_INTERVAL -> TimeUnit.SECONDS,
-      ConfVars.HIVE_COMPACTOR_CLEANER_RUN_INTERVAL -> TimeUnit.MILLISECONDS,
-      ConfVars.HIVE_SERVER2_THRIFT_HTTP_MAX_IDLE_TIME -> TimeUnit.MILLISECONDS,
-      ConfVars.HIVE_SERVER2_THRIFT_HTTP_WORKER_KEEPALIVE_TIME -> TimeUnit.SECONDS,
-      ConfVars.HIVE_SERVER2_THRIFT_HTTP_COOKIE_MAX_AGE -> TimeUnit.SECONDS,
-      ConfVars.HIVE_SERVER2_THRIFT_LOGIN_BEBACKOFF_SLOT_LENGTH -> TimeUnit.MILLISECONDS,
-      ConfVars.HIVE_SERVER2_THRIFT_LOGIN_TIMEOUT -> TimeUnit.SECONDS,
-      ConfVars.HIVE_SERVER2_THRIFT_WORKER_KEEPALIVE_TIME -> TimeUnit.SECONDS,
-      ConfVars.HIVE_SERVER2_ASYNC_EXEC_SHUTDOWN_TIMEOUT -> TimeUnit.SECONDS,
-      ConfVars.HIVE_SERVER2_ASYNC_EXEC_KEEPALIVE_TIME -> TimeUnit.SECONDS,
-      ConfVars.HIVE_SERVER2_LONG_POLLING_TIMEOUT -> TimeUnit.MILLISECONDS,
-      ConfVars.HIVE_SERVER2_SESSION_CHECK_INTERVAL -> TimeUnit.MILLISECONDS,
-      ConfVars.HIVE_SERVER2_IDLE_SESSION_TIMEOUT -> TimeUnit.MILLISECONDS,
-      ConfVars.HIVE_SERVER2_IDLE_OPERATION_TIMEOUT -> TimeUnit.MILLISECONDS,
-      ConfVars.SERVER_READ_SOCKET_TIMEOUT -> TimeUnit.SECONDS,
-      ConfVars.HIVE_LOCALIZE_RESOURCE_WAIT_INTERVAL -> TimeUnit.MILLISECONDS,
-      ConfVars.SPARK_CLIENT_FUTURE_TIMEOUT -> TimeUnit.SECONDS,
-      ConfVars.SPARK_JOB_MONITOR_TIMEOUT -> TimeUnit.SECONDS,
-      ConfVars.SPARK_RPC_CLIENT_CONNECT_TIMEOUT -> TimeUnit.MILLISECONDS,
-      ConfVars.SPARK_RPC_CLIENT_HANDSHAKE_TIMEOUT -> TimeUnit.MILLISECONDS
-    ).map { case (confVar, unit) =>
-      confVar.varname -> HiveConf.getTimeVar(hadoopConf, confVar, unit).toString
-    }.toMap
-  }
-
-  /**
    * Check current Thread's SessionState type
    * @return true when SessionState.get returns an instance of CliSessionState,
    *         false when it gets non-CliSessionState instance or null
@@ -360,15 +307,8 @@ private[spark] object HiveUtils extends Logging {
    */
   protected[hive] def newClientForMetadata(
       conf: SparkConf,
-      hadoopConf: Configuration): HiveClient = {
-    val configurations = formatTimeVarsForHiveClient(hadoopConf)
-    newClientForMetadata(conf, hadoopConf, configurations)
-  }
-
-  protected[hive] def newClientForMetadata(
-      conf: SparkConf,
       hadoopConf: Configuration,
-      configurations: Map[String, String]): HiveClient = {
+      configurations: Map[String, String] = Map.empty): HiveClient = {
     val sqlConf = new SQLConf
     sqlConf.setConf(SQLContext.getSQLProperties(conf))
     val hiveMetastoreVersion = HiveUtils.hiveMetastoreVersion(sqlConf)
@@ -381,10 +321,11 @@ private[spark] object HiveUtils extends Logging {
       if (file.getName == "*") {
         val files = file.getParentFile.listFiles()
         if (files == null) {
-          logWarning(s"Hive jar path '${file.getPath}' does not exist.")
+          logWarning(log"Hive jar path '${MDC(PATH, file.getPath)}' does not exist.")
           Nil
         } else {
-          files.filter(_.getName.toLowerCase(Locale.ROOT).endsWith(".jar")).map(_.toURI.toURL).toSeq
+          files.filter(_.getName.toLowerCase(Locale.ROOT).endsWith(".jar")).map(_.toURI.toURL)
+            .toImmutableArraySeq
         }
       } else {
         file.toURI.toURL :: Nil
@@ -468,7 +409,7 @@ private[spark] object HiveUtils extends Logging {
         version = metaVersion,
         sparkConf = conf,
         hadoopConf = hadoopConf,
-        execJars = jars.toSeq,
+        execJars = jars.toImmutableArraySeq,
         config = configurations,
         isolationOn = true,
         barrierPrefixes = hiveMetastoreBarrierPrefixes,
@@ -493,7 +434,7 @@ private[spark] object HiveUtils extends Logging {
       }
     }
     propMap.put(WAREHOUSE_PATH.key, localMetastore.toURI.toString)
-    propMap.put(HiveConf.ConfVars.METASTORECONNECTURLKEY.varname,
+    propMap.put("javax.jdo.option.ConnectionURL",
       s"jdbc:derby:${withInMemoryMode};databaseName=${localMetastore.getAbsolutePath};create=true")
     propMap.put("datanucleus.rdbms.datastoreAdapterClassName",
       "org.datanucleus.store.rdbms.adapter.DerbyAdapter")
@@ -514,10 +455,10 @@ private[spark] object HiveUtils extends Logging {
     // Because execution Hive should always connects to an embedded derby metastore.
     // We have to remove the value of hive.metastore.uris. So, the execution Hive client connects
     // to the actual embedded derby metastore instead of the remote metastore.
-    // You can search HiveConf.ConfVars.METASTOREURIS in the code of HiveConf (in Hive's repo).
+    // You can search hive.metastore.uris in the code of HiveConf (in Hive's repo).
     // Then, you will find that the local metastore mode is only set to true when
     // hive.metastore.uris is not set.
-    propMap.put(ConfVars.METASTOREURIS.varname, "")
+    propMap.put("hive.metastore.uris", "")
 
     // The execution client will generate garbage events, therefore the listeners that are generated
     // for the execution clients are useless. In order to not output garbage, we don't generate

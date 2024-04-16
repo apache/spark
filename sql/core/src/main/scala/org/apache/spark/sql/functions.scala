@@ -41,22 +41,20 @@ import org.apache.spark.sql.types.DataType.parseTypeWithFallback
 import org.apache.spark.util.Utils
 
 /**
- * Commonly used functions available for DataFrame operations. Using functions defined here provides
- * a little bit more compile-time safety to make sure the function exists.
+ * Commonly used functions available for DataFrame operations. Using functions defined here
+ * provides a little bit more compile-time safety to make sure the function exists.
  *
- * Spark also includes more built-in functions that are less common and are not defined here.
- * You can still access them (and all the functions defined here) using the `functions.expr()` API
- * and calling them through a SQL expression string. You can find the entire list of functions
- * at SQL API documentation of your Spark version, see also
- * <a href="https://spark.apache.org/docs/latest/api/sql/index.html">the latest list</a>
+ * You can call the functions defined here by two ways: `_FUNC_(...)` and
+ * `functions.expr("_FUNC_(...)")`.
  *
- * As an example, `isnan` is a function that is defined here. You can use `isnan(col("myCol"))`
- * to invoke the `isnan` function. This way the programming language's compiler ensures `isnan`
- * exists and is of the proper form. You can also use `expr("isnan(myCol)")` function to invoke the
- * same function. In this case, Spark itself will ensure `isnan` exists when it analyzes the query.
+ * As an example, `regr_count` is a function that is defined here. You can use
+ * `regr_count(col("yCol", col("xCol")))` to invoke the `regr_count` function. This way the
+ * programming language's compiler ensures `regr_count` exists and is of the proper form. You can
+ * also use `expr("regr_count(yCol, xCol)")` function to invoke the same function. In this case,
+ * Spark itself will ensure `regr_count` exists when it analyzes the query.
  *
- * `regr_count` is an example of a function that is built-in but not defined here, because it is
- * less commonly used. To invoke it, use `expr("regr_count(yCol, xCol)")`.
+ * You can find the entire list of functions at SQL API documentation of your Spark version, see
+ * also <a href="https://spark.apache.org/docs/latest/api/sql/index.html">the latest list</a>
  *
  * This function APIs usually have methods with `Column` signature only because it can support not
  * only `Column` but also other types such as a native string. The other variants currently exist
@@ -3270,14 +3268,6 @@ object functions {
   def raise_error(c: Column): Column = Column.fn("raise_error", c)
 
   /**
-   * Throws an exception with the provided error class and parameter map.
-   *
-   * @group misc_funcs
-   * @since 4.0.0
-   */
-  def raise_error(c: Column, e: Column): Column = Column.fn("raise_error", c, e)
-
-  /**
    * Returns the estimated number of unique values given the binary representation
    * of a Datasketches HllSketch.
    *
@@ -3953,6 +3943,22 @@ object functions {
    * @since 3.3.0
    */
   def octet_length(e: Column): Column = Column.fn("octet_length", e)
+
+  /**
+   * Marks a given column with specified collation.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def collate(e: Column, collation: String): Column = Column.fn("collate", e, lit(collation))
+
+  /**
+   * Returns the collation name of a given column.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def collation(e: Column): Column = Column.fn("collation", e)
 
   /**
    * Returns true if `str` matches `regexp`, or false otherwise.
@@ -5746,6 +5752,24 @@ object functions {
   def to_unix_timestamp(timeExp: Column): Column =
     Column.fn("to_unix_timestamp", timeExp)
 
+  /**
+   * Extracts the three-letter abbreviated month name from a given date/timestamp/string.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def monthname(timeExp: Column): Column =
+    Column.fn("monthname", timeExp)
+
+  /**
+   * Extracts the three-letter abbreviated day name from a given date/timestamp/string.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def dayname(timeExp: Column): Column =
+    Column.fn("dayname", timeExp)
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Collection functions
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -6571,6 +6595,16 @@ object functions {
   }
 
   /**
+   * Parses a JSON string and constructs a Variant value.
+   *
+   * @param json a string column that contains JSON data.
+   *
+   * @group json_funcs
+   * @since 4.0.0
+   */
+  def parse_json(json: Column): Column = Column.fn("parse_json", json)
+
+  /**
    * Parses a JSON string and infers its schema in DDL format.
    *
    * @param json a JSON string.
@@ -7263,28 +7297,28 @@ object functions {
   def to_xml(e: Column): Column = to_xml(e, Map.empty[String, String].asJava)
 
   /**
-   * A transform for timestamps and dates to partition data into years.
+   * (Java-specific) A transform for timestamps and dates to partition data into years.
    *
    * @group partition_transforms
    * @since 3.0.0
    */
-  def years(e: Column): Column = withExpr { Years(e.expr) }
+  def years(e: Column): Column = partitioning.years(e)
 
   /**
-   * A transform for timestamps and dates to partition data into months.
+   * (Java-specific) A transform for timestamps and dates to partition data into months.
    *
    * @group partition_transforms
    * @since 3.0.0
    */
-  def months(e: Column): Column = withExpr { Months(e.expr) }
+  def months(e: Column): Column = partitioning.months(e)
 
   /**
-   * A transform for timestamps and dates to partition data into days.
+   * (Java-specific) A transform for timestamps and dates to partition data into days.
    *
    * @group partition_transforms
    * @since 3.0.0
    */
-  def days(e: Column): Column = withExpr { Days(e.expr) }
+  def days(e: Column): Column = partitioning.days(e)
 
   /**
    * Returns a string array of values within the nodes of xml that match the XPath expression.
@@ -7374,12 +7408,12 @@ object functions {
     Column.fn("xpath_string", xml, path)
 
   /**
-   * A transform for timestamps to partition data into hours.
+   * (Java-specific) A transform for timestamps to partition data into hours.
    *
    * @group partition_transforms
    * @since 3.0.0
    */
-  def hours(e: Column): Column = withExpr { Hours(e.expr) }
+  def hours(e: Column): Column = partitioning.hours(e)
 
   /**
    * Converts the timestamp without time zone `sourceTs`
@@ -7657,29 +7691,20 @@ object functions {
   def make_ym_interval(): Column = Column.fn("make_ym_interval")
 
   /**
-   * A transform for any type that partitions by a hash of the input column.
+   * (Java-specific) A transform for any type that partitions by a hash of the input column.
    *
    * @group partition_transforms
    * @since 3.0.0
    */
-  def bucket(numBuckets: Column, e: Column): Column = withExpr {
-    numBuckets.expr match {
-      case lit @ Literal(_, IntegerType) =>
-        Bucket(lit, e.expr)
-      case _ =>
-        throw QueryCompilationErrors.invalidBucketsNumberError(numBuckets.toString, e.toString)
-    }
-  }
+  def bucket(numBuckets: Column, e: Column): Column = partitioning.bucket(numBuckets, e)
 
   /**
-   * A transform for any type that partitions by a hash of the input column.
+   * (Java-specific) A transform for any type that partitions by a hash of the input column.
    *
    * @group partition_transforms
    * @since 3.0.0
    */
-  def bucket(numBuckets: Int, e: Column): Column = withExpr {
-    Bucket(Literal(numBuckets), e.expr)
-  }
+  def bucket(numBuckets: Int, e: Column): Column = partitioning.bucket(numBuckets, e)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Predicates functions
@@ -8288,5 +8313,69 @@ object functions {
    */
   def unwrap_udt(column: Column): Column = withExpr {
     UnwrapUDT(column.expr)
+  }
+
+  // scalastyle:off
+  // TODO(SPARK-45970): Use @static annotation so Java can access to those
+  //   API in the same way. Once we land this fix, should deprecate
+  //   functions.hours, days, months, years and bucket.
+  object partitioning {
+  // scalastyle:on
+    /**
+     * (Scala-specific) A transform for timestamps and dates to partition data into years.
+     *
+     * @group partition_transforms
+     * @since 4.0.0
+     */
+    def years(e: Column): Column = withExpr { Years(e.expr) }
+
+    /**
+     * (Scala-specific) A transform for timestamps and dates to partition data into months.
+     *
+     * @group partition_transforms
+     * @since 4.0.0
+     */
+    def months(e: Column): Column = withExpr { Months(e.expr) }
+
+    /**
+     * (Scala-specific) A transform for timestamps and dates to partition data into days.
+     *
+     * @group partition_transforms
+     * @since 4.0.0
+     */
+    def days(e: Column): Column = withExpr { Days(e.expr) }
+
+    /**
+     * (Scala-specific) A transform for timestamps to partition data into hours.
+     *
+     * @group partition_transforms
+     * @since 4.0.0
+     */
+    def hours(e: Column): Column = withExpr { Hours(e.expr) }
+
+    /**
+     * (Scala-specific) A transform for any type that partitions by a hash of the input column.
+     *
+     * @group partition_transforms
+     * @since 4.0.0
+     */
+    def bucket(numBuckets: Column, e: Column): Column = withExpr {
+      numBuckets.expr match {
+        case lit @ Literal(_, IntegerType) =>
+          Bucket(lit, e.expr)
+        case _ =>
+          throw QueryCompilationErrors.invalidBucketsNumberError(numBuckets.toString, e.toString)
+      }
+    }
+
+    /**
+     * (Scala-specific) A transform for any type that partitions by a hash of the input column.
+     *
+     * @group partition_transforms
+     * @since 4.0.0
+     */
+    def bucket(numBuckets: Int, e: Column): Column = withExpr {
+      Bucket(Literal(numBuckets), e.expr)
+    }
   }
 }

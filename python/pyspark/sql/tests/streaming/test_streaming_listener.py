@@ -58,19 +58,19 @@ class StreamingListenerTestsMixin:
         if exception:
             self.assertTrue(exception in event.exception)
         else:
-            self.assertEquals(event.exception, None)
+            self.assertEqual(event.exception, None)
 
         if error_class:
             self.assertTrue(error_class in event.errorClassOnException)
         else:
-            self.assertEquals(event.errorClassOnException, None)
+            self.assertEqual(event.errorClassOnException, None)
 
     def check_streaming_query_progress(self, progress):
         """Check StreamingQueryProgress"""
         self.assertTrue(isinstance(progress, StreamingQueryProgress))
         self.assertTrue(isinstance(progress.id, uuid.UUID))
         self.assertTrue(isinstance(progress.runId, uuid.UUID))
-        self.assertEquals(progress.name, "test")
+        self.assertEqual(progress.name, "test")
         try:
             json.loads(progress.json)
         except Exception:
@@ -208,41 +208,41 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
                 ).getMethods()
             )
 
-        self.assertEquals(
+        self.assertEqual(
             get_number_of_public_methods(
                 "org.apache.spark.sql.streaming.StreamingQueryListener$QueryStartedEvent"
             ),
             15,
             msg,
         )
-        self.assertEquals(
+        self.assertEqual(
             get_number_of_public_methods(
                 "org.apache.spark.sql.streaming.StreamingQueryListener$QueryProgressEvent"
             ),
             12,
             msg,
         )
-        self.assertEquals(
+        self.assertEqual(
             get_number_of_public_methods(
                 "org.apache.spark.sql.streaming.StreamingQueryListener$QueryTerminatedEvent"
             ),
             15,
             msg,
         )
-        self.assertEquals(
+        self.assertEqual(
             get_number_of_public_methods("org.apache.spark.sql.streaming.StreamingQueryProgress"),
             38,
             msg,
         )
-        self.assertEquals(
+        self.assertEqual(
             get_number_of_public_methods("org.apache.spark.sql.streaming.StateOperatorProgress"),
             27,
             msg,
         )
-        self.assertEquals(
+        self.assertEqual(
             get_number_of_public_methods("org.apache.spark.sql.streaming.SourceProgress"), 21, msg
         )
-        self.assertEquals(
+        self.assertEqual(
             get_number_of_public_methods("org.apache.spark.sql.streaming.SinkProgress"), 19, msg
         )
 

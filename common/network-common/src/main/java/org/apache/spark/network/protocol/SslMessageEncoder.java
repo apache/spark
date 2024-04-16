@@ -65,8 +65,7 @@ public final class SslMessageEncoder extends MessageToMessageEncoder<Message> {
         isBodyInFrame = in.isBodyInFrame();
       } catch (Exception e) {
         in.body().release();
-        if (in instanceof AbstractResponseMessage) {
-          AbstractResponseMessage resp = (AbstractResponseMessage) in;
+        if (in instanceof AbstractResponseMessage resp) {
           // Re-encode this message as a failure response.
           String error = e.getMessage() != null ? e.getMessage() : "null";
           logger.error(String.format("Error processing %s for client %s",
@@ -92,8 +91,8 @@ public final class SslMessageEncoder extends MessageToMessageEncoder<Message> {
     assert header.writableBytes() == 0;
 
     if (body != null && bodyLength > 0) {
-      if (body instanceof ByteBuf) {
-        out.add(Unpooled.wrappedBuffer(header, (ByteBuf) body));
+      if (body instanceof ByteBuf byteBuf) {
+        out.add(Unpooled.wrappedBuffer(header, byteBuf));
       } else if (body instanceof InputStream || body instanceof ChunkedStream) {
         // For now, assume the InputStream is doing proper chunking.
         out.add(new EncryptedMessageWithHeader(in.body(), header, body, bodyLength));

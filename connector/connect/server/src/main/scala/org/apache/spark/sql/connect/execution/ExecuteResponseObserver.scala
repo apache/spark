@@ -102,14 +102,14 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
    * value greater than 0 will buffer the response from getResponse.
    */
   private val retryBufferSize = if (executeHolder.reattachable) {
-    SparkEnv.get.conf.get(CONNECT_EXECUTE_REATTACHABLE_OBSERVER_RETRY_BUFFER_SIZE).toLong
+    SparkEnv.get.conf.get(CONNECT_EXECUTE_REATTACHABLE_OBSERVER_RETRY_BUFFER_SIZE)
   } else {
     0
   }
 
-  def onNext(r: T): Unit = responseLock.synchronized {
+  def tryOnNext(r: T): Boolean = responseLock.synchronized {
     if (finalProducedIndex.nonEmpty) {
-      throw new IllegalStateException("Stream onNext can't be called after stream completed")
+      return false
     }
     lastProducedIndex += 1
     val processedResponse = setCommonResponseFields(r)
@@ -127,6 +127,13 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
       s"Execution opId=${executeHolder.operationId} produced response " +
         s"responseId=${responseId} idx=$lastProducedIndex")
     responseLock.notifyAll()
+    true
+  }
+
+  def onNext(r: T): Unit = {
+    if (!tryOnNext(r)) {
+      throw new IllegalStateException("Stream onNext can't be called after stream completed")
+    }
   }
 
   def onError(t: Throwable): Unit = responseLock.synchronized {

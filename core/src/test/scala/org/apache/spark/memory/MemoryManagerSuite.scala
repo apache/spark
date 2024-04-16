@@ -20,7 +20,7 @@ package org.apache.spark.memory
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.concurrent.duration.Duration
 
 import org.mockito.ArgumentMatchers.{any, anyLong}
@@ -148,7 +148,7 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite {
   // -- Tests of sharing of execution memory between tasks ----------------------------------------
   // Prior to Spark 1.6, these tests were part of ShuffleMemoryManagerSuite.
 
-  implicit val ec = ExecutionContext.global
+  implicit val ec: ExecutionContextExecutor = ExecutionContext.global
 
   test("single task requesting on-heap execution memory") {
     val manager = createMemoryManager(1000L)

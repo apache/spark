@@ -177,121 +177,106 @@ org.apache.spark.SparkRuntimeException
 
 
 -- !query
-SELECT raise_error('VIEW_NOT_FOUND', Map('relationName', '`v`'))
+SELECT raise_error('error message', Map())
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkRuntimeException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
   "messageParameters" : {
-    "relationName" : "`v`"
-  }
+    "actualNum" : "2",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "1",
+    "functionName" : "`raise_error`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 42,
+    "fragment" : "raise_error('error message', Map())"
+  } ]
 }
 
 
 -- !query
-SELECT raise_error('VIEW_NOT_FOund', Map('relationName', '`v`'))
+SELECT raise_error('error message', 'some args')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkRuntimeException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
   "messageParameters" : {
-    "relationName" : "`v`"
-  }
+    "actualNum" : "2",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "1",
+    "functionName" : "`raise_error`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 48,
+    "fragment" : "raise_error('error message', 'some args')"
+  } ]
 }
 
 
 -- !query
-SELECT raise_error('VIEW_NOT_FOund', Map('relationNAME', '`v`'))
+SELECT raise_error()
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "0",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "1",
+    "functionName" : "`raise_error`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 20,
+    "fragment" : "raise_error()"
+  } ]
+}
+
+
+-- !query
+SELECT raise_error(NULL)
 -- !query schema
 struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "USER_RAISED_EXCEPTION_PARAMETER_MISMATCH",
+  "errorClass" : "USER_RAISED_EXCEPTION",
   "sqlState" : "P0001",
   "messageParameters" : {
-    "errorClass" : "'VIEW_NOT_FOUND'",
-    "expectedParms" : "'relationName'",
-    "providedParms" : "'relationNAME'"
+    "errorMessage" : "null"
   }
 }
 
 
 -- !query
-SELECT raise_error('VIEW_NOT_FOUND', Map())
+SELECT raise_error(1)
 -- !query schema
 struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "USER_RAISED_EXCEPTION_PARAMETER_MISMATCH",
+  "errorClass" : "USER_RAISED_EXCEPTION",
   "sqlState" : "P0001",
   "messageParameters" : {
-    "errorClass" : "'VIEW_NOT_FOUND'",
-    "expectedParms" : "'relationName'",
-    "providedParms" : ""
-  }
-}
-
-
--- !query
-SELECT raise_error('VIEW_NOT_FOUND', Map('relationName', '`v`', 'totallymadeup', '5'))
--- !query schema
-struct<>
--- !query output
-org.apache.spark.SparkRuntimeException
-{
-  "errorClass" : "USER_RAISED_EXCEPTION_PARAMETER_MISMATCH",
-  "sqlState" : "P0001",
-  "messageParameters" : {
-    "errorClass" : "'VIEW_NOT_FOUND'",
-    "expectedParms" : "'relationName'",
-    "providedParms" : "'relationName','totallymadeup'"
-  }
-}
-
-
--- !query
-SELECT raise_error('ALL_PARTITION_COLUMNS_NOT_ALLOWED', Map())
--- !query schema
-struct<>
--- !query output
-org.apache.spark.SparkRuntimeException
-{
-  "errorClass" : "ALL_PARTITION_COLUMNS_NOT_ALLOWED",
-  "sqlState" : "KD005"
-}
-
-
--- !query
-SELECT raise_error('ALL_PARTITION_COLUMNS_NOT_ALLOWED', NULL)
--- !query schema
-struct<>
--- !query output
-org.apache.spark.SparkRuntimeException
-{
-  "errorClass" : "ALL_PARTITION_COLUMNS_NOT_ALLOWED",
-  "sqlState" : "KD005"
-}
-
-
--- !query
-SELECT raise_error(NULL, NULL)
--- !query schema
-struct<>
--- !query output
-org.apache.spark.SparkRuntimeException
-{
-  "errorClass" : "USER_RAISED_EXCEPTION_UNKNOWN_ERROR_CLASS",
-  "sqlState" : "P0001",
-  "messageParameters" : {
-    "errorClass" : "'null'"
+    "errorMessage" : "1"
   }
 }
 

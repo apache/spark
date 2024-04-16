@@ -140,8 +140,9 @@ public final class UnsafeInMemorySorter {
     this.initialSize = array.size();
     if (recordComparator != null) {
       this.sortComparator = new SortComparator(recordComparator, prefixComparator, memoryManager);
-      if (canUseRadixSort && prefixComparator instanceof PrefixComparators.RadixSortSupport) {
-        this.radixSortSupport = (PrefixComparators.RadixSortSupport)prefixComparator;
+      if (canUseRadixSort &&
+        prefixComparator instanceof PrefixComparators.RadixSortSupport radixSortSupport) {
+        this.radixSortSupport = radixSortSupport;
       } else {
         this.radixSortSupport = null;
       }

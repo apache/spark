@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.spark.SPARK_DOC_ROOT
 import org.apache.spark.annotation.Stable
 import org.apache.spark.internal.config.{ConfigEntry, OptionalConfigEntry}
@@ -31,7 +33,7 @@ import org.apache.spark.sql.internal.SQLConf
  * @since 2.0.0
  */
 @Stable
-class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
+class RuntimeConfig private[sql](val sqlConf: SQLConf = new SQLConf) {
 
   /**
    * Sets the given Spark runtime configuration property.
@@ -116,6 +118,10 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
    */
   def getAll: Map[String, String] = {
     sqlConf.getAllConfs
+  }
+
+  private[sql] def getAllAsJava: java.util.Map[String, String] = {
+    getAll.asJava
   }
 
   /**

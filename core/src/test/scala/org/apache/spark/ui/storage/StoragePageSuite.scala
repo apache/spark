@@ -17,10 +17,9 @@
 
 package org.apache.spark.ui.storage
 
-import javax.servlet.http.HttpServletRequest
-
 import scala.xml.{Node, Text}
 
+import jakarta.servlet.http.HttpServletRequest
 import org.mockito.Mockito._
 
 import org.apache.spark.SparkFunSuite
@@ -78,7 +77,7 @@ class StoragePageSuite extends SparkFunSuite {
       "Size on Disk")
 
     val headerRow: Seq[Node] = {
-      headers.view.zipWithIndex.map { x =>
+      headers.zipWithIndex.map { x =>
         storagePage.tooltips(x._2) match {
           case Some(tooltip) =>
             <th width={""} class={""}>
@@ -88,7 +87,7 @@ class StoragePageSuite extends SparkFunSuite {
             </th>
           case None => <th width={""} class={""}>{Text(x._1)}</th>
         }
-      }.toList
+      }
     }
     assert((xmlNodes \\ "th").map(_.text) === headerRow.map(_.text))
 

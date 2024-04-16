@@ -74,7 +74,7 @@ CreateVariable defaultvalueexpression(null, null), false
 -- !query
 SELECT 'Expect: INT, NULL', typeof(var1), var1
 -- !query analysis
-Project [Expect: INT, NULL AS Expect: INT, NULL#x, typeof(variablereference(system.session.var1=CAST(NULL AS INT))) AS typeof(variablereference(system.session.var1=CAST(NULL AS INT)) AS var1)#x, variablereference(system.session.var1=CAST(NULL AS INT)) AS var1#x]
+Project [Expect: INT, NULL AS Expect: INT, NULL#x, typeof(variablereference(system.session.var1=CAST(NULL AS INT))) AS typeof(variablereference(system.session.var1=CAST(NULL AS INT)))#x, variablereference(system.session.var1=CAST(NULL AS INT)) AS var1#x]
 +- OneRowRelation
 
 
@@ -88,7 +88,7 @@ CreateVariable defaultvalueexpression(null, null), true
 -- !query
 SELECT 'Expect: DOUBLE, NULL', typeof(var1), var1
 -- !query analysis
-Project [Expect: DOUBLE, NULL AS Expect: DOUBLE, NULL#x, typeof(variablereference(system.session.var1=CAST(NULL AS DOUBLE))) AS typeof(variablereference(system.session.var1=CAST(NULL AS DOUBLE)) AS var1)#x, variablereference(system.session.var1=CAST(NULL AS DOUBLE)) AS var1#x]
+Project [Expect: DOUBLE, NULL AS Expect: DOUBLE, NULL#x, typeof(variablereference(system.session.var1=CAST(NULL AS DOUBLE))) AS typeof(variablereference(system.session.var1=CAST(NULL AS DOUBLE)))#x, variablereference(system.session.var1=CAST(NULL AS DOUBLE)) AS var1#x]
 +- OneRowRelation
 
 
@@ -108,7 +108,7 @@ DECLARE OR REPLACE VARIABLE var1 TIMESTAMP
 -- !query
 SELECT 'Expect: TIMESTAMP, NULL', typeof(var1), var1
 -- !query analysis
-Project [Expect: TIMESTAMP, NULL AS Expect: TIMESTAMP, NULL#x, typeof(variablereference(system.session.var1=CAST(NULL AS TIMESTAMP))) AS typeof(variablereference(system.session.var1=CAST(NULL AS TIMESTAMP)) AS var1)#x, variablereference(system.session.var1=CAST(NULL AS TIMESTAMP)) AS var1#x]
+Project [Expect: TIMESTAMP, NULL AS Expect: TIMESTAMP, NULL#x, typeof(variablereference(system.session.var1=CAST(NULL AS TIMESTAMP))) AS typeof(variablereference(system.session.var1=CAST(NULL AS TIMESTAMP)))#x, variablereference(system.session.var1=CAST(NULL AS TIMESTAMP)) AS var1#x]
 +- OneRowRelation
 
 
@@ -1969,21 +1969,21 @@ Project [variablereference(system.session.var1=1) AS var1#x]
 -- !query
 SELECT sum(var1) FROM VALUES(1)
 -- !query analysis
-Aggregate [sum(variablereference(system.session.var1=1)) AS sum(variablereference(system.session.var1=1) AS var1)#xL]
+Aggregate [sum(variablereference(system.session.var1=1)) AS sum(variablereference(system.session.var1=1))#xL]
 +- LocalRelation [col1#x]
 
 
 -- !query
 SELECT var1 + SUM(0) FROM VALUES(1)
 -- !query analysis
-Aggregate [(cast(variablereference(system.session.var1=1) as bigint) + sum(0)) AS (variablereference(system.session.var1=1) AS var1 + sum(0))#xL]
+Aggregate [(cast(variablereference(system.session.var1=1) as bigint) + sum(0)) AS (variablereference(system.session.var1=1) + sum(0))#xL]
 +- LocalRelation [col1#x]
 
 
 -- !query
 SELECT substr('12345', var1, 1)
 -- !query analysis
-Project [substr(12345, variablereference(system.session.var1=1), 1) AS substr(12345, variablereference(system.session.var1=1) AS var1, 1)#x]
+Project [substr(12345, variablereference(system.session.var1=1), 1) AS substr(12345, variablereference(system.session.var1=1), 1)#x]
 +- OneRowRelation
 
 
@@ -2031,7 +2031,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 SELECT array(1, 2, 4)[var1]
 -- !query analysis
-Project [array(1, 2, 4)[variablereference(system.session.var1=1)] AS array(1, 2, 4)[variablereference(system.session.var1=1) AS var1]#x]
+Project [array(1, 2, 4)[variablereference(system.session.var1=1)] AS array(1, 2, 4)[variablereference(system.session.var1=1)]#x]
 +- OneRowRelation
 
 
@@ -2054,7 +2054,7 @@ WithCTE
 :        +- OneRowRelation
 +- Project [c1#x AS 1#x]
    +- SubqueryAlias v1
-      +- CTERelationRef xxxx, true, [c1#x]
+      +- CTERelationRef xxxx, true, [c1#x], false
 
 
 -- !query
@@ -2124,6 +2124,35 @@ org.apache.spark.sql.AnalysisException
 DROP VIEW IF EXISTS V
 -- !query analysis
 DropTableCommand `spark_catalog`.`default`.`V`, true, true, false
+
+
+-- !query
+DROP TEMPORARY VARIABLE var1
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
+
+
+-- !query
+SET VARIABLE title = 'variable references -- test constant folding'
+-- !query analysis
+SetVariable [variablereference(system.session.title='variable references -- prohibited')]
++- Project [variable references -- test constant folding AS title#x]
+   +- OneRowRelation
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE var1 STRING DEFAULT 'a INT'
+-- !query analysis
+CreateVariable defaultvalueexpression(cast(a INT as string), 'a INT'), true
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
+
+
+-- !query
+SELECT from_json('{"a": 1}', var1)
+-- !query analysis
+Project [from_json(StructField(a,IntegerType,true), {"a": 1}, Some(America/Los_Angeles)) AS from_json({"a": 1})#x]
++- OneRowRelation
 
 
 -- !query

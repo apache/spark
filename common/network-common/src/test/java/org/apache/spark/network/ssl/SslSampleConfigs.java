@@ -50,28 +50,35 @@ public class SslSampleConfigs {
   public static final String certChainPath = getAbsolutePath("/certchain.pem");
   public static final String untrustedKeyStorePath = getAbsolutePath("/untrusted-keystore");
   public static final String trustStorePath = getAbsolutePath("/truststore");
-
+  public static final String unencryptedPrivateKeyPath = getAbsolutePath("/unencrypted-key.pem");
+  public static final String unencryptedCertChainPath =
+    getAbsolutePath("/unencrypted-certchain.pem");
 
   /**
    * Creates a config map containing the settings needed to enable the RPC SSL feature
    * All the settings (except the enabled one) are intentionally set on the parent namespace
-   * so that we can verify settings inheritance works
+   * so that we can verify settings inheritance works. We intentionally set conflicting
+   * options for the key password to verify that is handled correctly.
    */
   public static Map<String, String> createDefaultConfigMap() {
     Map<String, String> confMap = new HashMap<String, String>();
     confMap.put("spark.ssl.rpc.enabled", "true");
-    // Need this so the other settings get parsed
+    confMap.put("spark.ssl.rpc.openSslEnabled", "true");
+    confMap.put("spark.ssl.rpc.privateKey", SslSampleConfigs.unencryptedPrivateKeyPath);
+    // intentionally not set
+    // confMap.put("spark.ssl.rpc.privateKeyPassword", "password");
+    confMap.put("spark.ssl.rpc.certChain", SslSampleConfigs.unencryptedCertChainPath);
     confMap.put("spark.ssl.enabled", "true");
+    confMap.put("spark.ssl.keyPassword", "password");
     confMap.put("spark.ssl.trustStoreReloadingEnabled", "false");
-    confMap.put("spark.ssl.openSslEnabled", "false");
     confMap.put("spark.ssl.trustStoreReloadIntervalMs", "10000");
     confMap.put("spark.ssl.keyStore", SslSampleConfigs.keyStorePath);
     confMap.put("spark.ssl.keyStorePassword", "password");
-    confMap.put("spark.ssl.privateKey", SslSampleConfigs.privateKeyPath);
-    confMap.put("spark.ssl.keyPassword", "password");
-    confMap.put("spark.ssl.certChain", SslSampleConfigs.certChainPath);
     confMap.put("spark.ssl.trustStore", SslSampleConfigs.trustStorePath);
     confMap.put("spark.ssl.trustStorePassword", "password");
+    confMap.put("spark.ssl.protocol", "TLSv1.3");
+    confMap.put("spark.ssl.standalone.enabled", "true");
+    confMap.put("spark.ssl.ui.enabled", "true");
     return confMap;
   }
 
@@ -90,6 +97,7 @@ public class SslSampleConfigs {
     confMap.put("spark.ssl.rpc.keyStorePassword", "password");
     confMap.put("spark.ssl.rpc.privateKey", SslSampleConfigs.privateKeyPath);
     confMap.put("spark.ssl.rpc.keyPassword", "password");
+    confMap.put("spark.ssl.rpc.privateKeyPassword", "password");
     confMap.put("spark.ssl.rpc.certChain", SslSampleConfigs.certChainPath);
     confMap.put("spark.ssl.rpc.trustStore", SslSampleConfigs.trustStorePath);
     confMap.put("spark.ssl.rpc.trustStorePassword", "password");

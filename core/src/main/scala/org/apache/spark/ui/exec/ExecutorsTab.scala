@@ -17,9 +17,9 @@
 
 package org.apache.spark.ui.exec
 
-import javax.servlet.http.HttpServletRequest
+import scala.xml.{Node, Unparsed}
 
-import scala.xml.Node
+import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.ui.{SparkUI, SparkUITab, UIUtils, WebUIPage}
@@ -52,13 +52,25 @@ private[ui] class ExecutorsPage(
   extends WebUIPage("") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
+    val imported = UIUtils.formatImportJavaScript(
+      request,
+      "/static/executorspage.js",
+      "setThreadDumpEnabled",
+      "setHeapHistogramEnabled")
+    val js =
+      s"""
+         |$imported
+         |
+         |setThreadDumpEnabled($threadDumpEnabled);
+         |setHeapHistogramEnabled($heapHistogramEnabled)
+         |""".stripMargin
     val content =
       {
         <div id="active-executors"></div> ++
-        <script src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script> ++
-        <script src={UIUtils.prependBaseUri(request, "/static/executorspage.js")}></script> ++
-        <script>setThreadDumpEnabled({threadDumpEnabled})</script>
-        <script>setHeapHistogramEnabled({heapHistogramEnabled})</script>
+        <script type="module" src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script> ++
+        <script type="module"
+                src={UIUtils.prependBaseUri(request, "/static/executorspage.js")}></script> ++
+        <script type="module">{Unparsed(js)}</script>
       }
 
     UIUtils.headerSparkPage(request, "Executors", content, parent, useDataTables = true)

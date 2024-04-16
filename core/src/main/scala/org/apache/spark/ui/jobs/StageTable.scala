@@ -20,9 +20,10 @@ package org.apache.spark.ui.jobs
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Date
-import javax.servlet.http.HttpServletRequest
 
 import scala.xml._
+
+import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1
@@ -89,13 +90,6 @@ private[ui] class StageTableRowData(
     val shuffleReadWithUnit: String,
     val shuffleWrite: Long,
     val shuffleWriteWithUnit: String)
-
-private[ui] class MissingStageTableRowData(
-    stageInfo: v1.StageData,
-    stageId: Int,
-    attemptId: Int) extends StageTableRowData(
-  stageInfo, None, stageId, attemptId, "", None, new Date(0), "", -1, "", 0, "", 0, "", 0, "", 0,
-    "")
 
 /** Page showing list of all ongoing and recently finished stages */
 private[ui] class StagePagedTable(

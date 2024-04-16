@@ -163,7 +163,7 @@ private[spark] class Benchmark(
     // scalastyle:on
     assert(runTimes.nonEmpty)
     val best = runTimes.min
-    val avg = runTimes.sum / runTimes.size
+    val avg = runTimes.sum.toDouble / runTimes.size
     val stdev = if (runTimes.size > 1) {
       math.sqrt(runTimes.map(time => (time - avg) * (time - avg)).sum / (runTimes.size - 1))
     } else 0

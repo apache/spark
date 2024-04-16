@@ -325,8 +325,8 @@ public class ExternalShuffleBlockResolver {
             executor.localDirs,
             executor.subDirsPerLocalDir,
             "shuffle_" + shuffleId + "_" + mapId + "_0.data")),
-        shuffleIndexRecord.getOffset(),
-        shuffleIndexRecord.getLength());
+        shuffleIndexRecord.offset(),
+        shuffleIndexRecord.length());
     } catch (ExecutionException e) {
       throw new RuntimeException("Failed to open file: " + indexFilePath, e);
     }

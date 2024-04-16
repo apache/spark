@@ -21,8 +21,8 @@ import io.grpc.stub.StreamObserver
 
 import org.apache.spark.internal.Logging
 
-// This is common logic to be shared between different stub instances to validate responses as
-// seen by the client.
+// This is common logic to be shared between different stub instances to keep the server-side
+// session id and to validate responses as seen by the client.
 class ResponseValidator extends Logging {
 
   // Server side session ID, used to detect if the server side session changed. This is set upon
@@ -30,23 +30,37 @@ class ResponseValidator extends Logging {
   // do not use server-side streaming.
   private var serverSideSessionId: Option[String] = None
 
+  // Returns the server side session ID, used to send it back to the server in the follow-up
+  // requests so the server can validate it session id against the previous requests.
+  def getServerSideSessionId: Option[String] = serverSideSessionId
+
+  /**
+   * Hijacks the stored server side session ID with the given suffix. Used for testing to make
+   * sure that server is validating the session ID.
+   */
+  private[sql] def hijackServerSideSessionIdForTesting(suffix: String): Unit = {
+    serverSideSessionId = Some(serverSideSessionId.getOrElse("") + suffix)
+  }
+
   def verifyResponse[RespT <: GeneratedMessageV3](fn: => RespT): RespT = {
     val response = fn
     val field = response.getDescriptorForType.findFieldByName("server_side_session_id")
     // If the field does not exist, we ignore it. New / Old message might not contain it and this
     // behavior allows us to be compatible.
-    if (field != null) {
+    if (field != null && response.hasField(field)) {
       val value = response.getField(field).asInstanceOf[String]
       // Ignore, if the value is unset.
-      if (response.hasField(field) && value != null && value.nonEmpty) {
+      if (value != null && value.nonEmpty) {
         serverSideSessionId match {
-          case Some(id) if value != id && value != "" =>
-            throw new IllegalStateException(s"Server side session ID changed from $id to $value")
-          case _ if value != "" =>
-            synchronized {
-              serverSideSessionId = Some(value.toString)
+          case Some(id) =>
+            if (value != id) {
+              throw new IllegalStateException(
+                s"Server side session ID changed from $id to $value")
             }
-          case _ => // No-op
+          case _ =>
+            synchronized {
+              serverSideSessionId = Some(value)
+            }
         }
       }
     } else {
@@ -65,20 +79,9 @@ class ResponseValidator extends Logging {
 
       override def innerIterator: Iterator[T] = inner
 
-      override def hasNext: Boolean = {
-        innerIterator.hasNext
-      }
-
       override def next(): T = {
         verifyResponse {
           innerIterator.next()
-        }
-      }
-
-      override def close(): Unit = {
-        innerIterator match {
-          case it: CloseableIterator[T] => it.close()
-          case _ => // nothing
         }
       }
     }

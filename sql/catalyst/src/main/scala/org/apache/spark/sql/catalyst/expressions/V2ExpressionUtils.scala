@@ -19,7 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.lang.reflect.{Method, Modifier}
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{FUNCTION_NAME, FUNCTION_PARAMETER}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
@@ -45,7 +46,7 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       case Some(namedExpr) =>
         namedExpr.asInstanceOf[T]
       case None =>
-        val name = ref.fieldNames.toSeq.quoted
+        val name = ref.fieldNames.toImmutableArraySeq.quoted
         val outputString = plan.output.map(_.name).mkString(",")
         throw QueryCompilationErrors.cannotResolveAttributeError(name, outputString)
     }
@@ -70,7 +71,8 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       query: LogicalPlan,
       funCatalogOpt: Option[FunctionCatalog] = None): Expression =
     toCatalystOpt(expr, query, funCatalogOpt)
-        .getOrElse(throw new AnalysisException(s"$expr is not currently supported"))
+        .getOrElse(throw new AnalysisException(
+          errorClass = "_LEGACY_ERROR_TEMP_3054", messageParameters = Map("expr" -> expr.toString)))
 
   def toCatalystOpt(
       expr: V2Expression,
@@ -88,7 +90,9 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       case ref: FieldReference =>
         Some(resolveRef[NamedExpression](ref, query))
       case _ =>
-        throw new AnalysisException(s"$expr is not currently supported")
+        throw new AnalysisException(
+          errorClass = "_LEGACY_ERROR_TEMP_3054",
+          messageParameters = Map("expr" -> expr.toString))
     }
   }
 
@@ -131,9 +135,10 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
     } catch {
       case _: NoSuchFunctionException =>
         val parameterString = args.map(_.dataType.typeName).mkString("(", ", ", ")")
-        logWarning(s"V2 function $name with parameter types $parameterString is used in " +
-            "partition transforms, but its definition couldn't be found in the function catalog " +
-            "provided")
+        logWarning(log"V2 function ${MDC(FUNCTION_NAME, name)} " +
+          log"with parameter types ${MDC(FUNCTION_PARAMETER, parameterString)} is used in " +
+          log"partition transforms, but its definition couldn't be found in the function catalog " +
+          log"provided")
         None
       case _: UnsupportedOperationException =>
         None
@@ -153,7 +158,7 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
   def resolveScalarFunction(
       scalarFunc: ScalarFunction[_],
       arguments: Seq[Expression]): Expression = {
-    val declaredInputTypes = scalarFunc.inputTypes().toSeq
+    val declaredInputTypes = scalarFunc.inputTypes().toImmutableArraySeq
     val argClasses = declaredInputTypes.map(EncoderUtils.dataTypeJavaClass)
     findMethod(scalarFunc, MAGIC_METHOD_NAME, argClasses) match {
       case Some(m) if Modifier.isStatic(m.getModifiers) =>
@@ -176,8 +181,9 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
           case Some(_) =>
             ApplyFunctionExpression(scalarFunc, arguments)
           case _ =>
-            throw new AnalysisException(s"ScalarFunction '${scalarFunc.name()}'" +
-              s" neither implement magic method nor override 'produceResult'")
+            throw new AnalysisException(
+              errorClass = "_LEGACY_ERROR_TEMP_3055",
+              messageParameters = Map("scalarFunc" -> scalarFunc.name()))
         }
     }
   }

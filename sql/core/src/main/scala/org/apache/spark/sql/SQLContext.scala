@@ -29,7 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst._
-import org.apache.spark.sql.catalyst.analysis.UnresolvedNamespace
+import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, UnresolvedNamespace}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.ShowTables
 import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
@@ -78,6 +78,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
 
   private[sql] def sessionState: SessionState = sparkSession.sessionState
   private[sql] def sharedState: SharedState = sparkSession.sharedState
+  @deprecated("Use SparkSession.sessionState.conf instead", "4.0.0")
   private[sql] def conf: SQLConf = sessionState.conf
 
   def sparkContext: SparkContext = sparkSession.sparkContext
@@ -669,7 +670,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 1.3.0
    */
   def tables(): DataFrame = {
-    Dataset.ofRows(sparkSession, ShowTables(UnresolvedNamespace(Nil), None))
+    Dataset.ofRows(sparkSession, ShowTables(CurrentNamespace, None))
   }
 
   /**

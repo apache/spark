@@ -32,11 +32,12 @@ class JdbcRelationProvider extends CreatableRelationProvider
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
     val jdbcOptions = new JDBCOptions(parameters)
-    val resolver = sqlContext.conf.resolver
-    val timeZoneId = sqlContext.conf.sessionLocalTimeZone
+    val sparkSession = sqlContext.sparkSession
+    val resolver = sparkSession.sessionState.conf.resolver
+    val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
     val schema = JDBCRelation.getSchema(resolver, jdbcOptions)
     val parts = JDBCRelation.columnPartition(schema, resolver, timeZoneId, jdbcOptions)
-    JDBCRelation(schema, parts, jdbcOptions)(sqlContext.sparkSession)
+    JDBCRelation(schema, parts, jdbcOptions)(sparkSession)
   }
 
   override def createRelation(
@@ -45,7 +46,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
       parameters: Map[String, String],
       df: DataFrame): BaseRelation = {
     val options = new JdbcOptionsInWrite(parameters)
-    val isCaseSensitive = sqlContext.conf.caseSensitiveAnalysis
+    val isCaseSensitive = sqlContext.sparkSession.sessionState.conf.caseSensitiveAnalysis
     val dialect = JdbcDialects.get(options.url)
     val conn = dialect.createConnectionFactory(options)(-1)
     try {

@@ -50,10 +50,10 @@ case class ShowCreateTableExec(
     showTableDataColumns(table, builder)
     showTableUsing(table, builder)
 
-    val tableOptions = table.properties.asScala.view
-      .filterKeys(_.startsWith(TableCatalog.OPTION_PREFIX)).map {
-      case (k, v) => k.drop(TableCatalog.OPTION_PREFIX.length) -> v
-    }.toMap
+    val tableOptions = table.properties.asScala
+      .filter { case (k, _) => k.startsWith(TableCatalog.OPTION_PREFIX) }.map {
+        case (k, v) => k.drop(TableCatalog.OPTION_PREFIX.length) -> v
+      }.toMap
     showTableOptions(builder, tableOptions)
     showTablePartitioning(table, builder)
     showTableComment(table, builder)
@@ -132,10 +132,12 @@ case class ShowCreateTableExec(
       builder: StringBuilder,
       tableOptions: Map[String, String]): Unit = {
 
-    val showProps = table.properties.asScala.view
-      .filterKeys(key => !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(key)
-        && !key.startsWith(TableCatalog.OPTION_PREFIX)
-        && !tableOptions.contains(key))
+    val showProps = table.properties.asScala
+      .filter { case (key, _) =>
+        !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(key) &&
+        !key.startsWith(TableCatalog.OPTION_PREFIX) &&
+        !tableOptions.contains(key)
+      }
     if (showProps.nonEmpty) {
       val props = conf.redactOptions(showProps.toMap).toSeq.sortBy(_._1).map {
         case (key, value) =>

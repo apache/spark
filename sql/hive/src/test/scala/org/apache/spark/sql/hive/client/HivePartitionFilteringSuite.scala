@@ -49,13 +49,10 @@ class HivePartitionFilteringSuite(version: String)
   private val fallbackKey = SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION.key
   private val pruningFastFallback = SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FAST_FALLBACK.key
 
-  // Support default partition in metastoredirectsql since HIVE-11898(Hive 2.0.0).
-  private val defaultPartition = if (version >= "2.0") Some(DEFAULT_PARTITION_NAME) else None
-
   private val dsValue = 20170101 to 20170103
   private val hValue = 0 to 4
   private val chunkValue = Seq("aa", "ab", "ba", "bb")
-  private val dateValue = Seq("2019-01-01", "2019-01-02", "2019-01-03") ++ defaultPartition
+  private val dateValue = Seq("2019-01-01", "2019-01-02", "2019-01-03", DEFAULT_PARTITION_NAME)
   private val dateStrValue = Seq("2020-01-01", "2020-01-02", "2020-01-03", "20200104", "20200105")
   private val timestampStrValue = Seq("2021-01-01 00:00:00", "2021-01-02 00:00:00")
   private val testPartitionCount =

@@ -268,7 +268,7 @@ class MapStatusSuite extends SparkFunSuite {
       "number of skewed block sizes")
 
     val smallAndUntrackedBlocks =
-      nonEmptyBlocks.slice(0, nonEmptyBlocks.size - trackedSkewedBlocksLength)
+      nonEmptyBlocks.slice(0, nonEmptyBlocks.length - trackedSkewedBlocksLength)
     val avg = smallAndUntrackedBlocks.sum / smallAndUntrackedBlocks.length
 
     val loc = BlockManagerId("a", "b", 10)

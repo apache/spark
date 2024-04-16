@@ -28,34 +28,19 @@ class GroupedApplyInPandasTests(GroupedApplyInPandasTestsMixin, ReusedConnectTes
 
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_wrong_return_type(self):
-        self.check_wrong_return_type()
+        super().test_wrong_return_type()
 
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_wrong_args(self):
-        self.check_wrong_args()
+        super().test_wrong_args()
 
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_unsupported_types(self):
-        self.check_unsupported_types()
-
-    def test_register_grouped_map_udf(self):
-        self.check_register_grouped_map_udf()
-
-    def test_column_order(self):
-        self.check_column_order()
-
-    def test_apply_in_pandas_returning_wrong_column_names(self):
-        self.check_apply_in_pandas_returning_wrong_column_names()
-
-    def test_apply_in_pandas_returning_no_column_names_and_wrong_amount(self):
-        self.check_apply_in_pandas_returning_no_column_names_and_wrong_amount()
+        super().test_unsupported_types()
 
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_apply_in_pandas_returning_incompatible_type(self):
-        self.check_apply_in_pandas_returning_incompatible_type()
-
-    def test_apply_in_pandas_not_returning_pandas_dataframe(self):
-        self.check_apply_in_pandas_not_returning_pandas_dataframe()
+        super().test_apply_in_pandas_returning_incompatible_type()
 
     @unittest.skip("Spark Connect doesn't support RDD but the test depends on it.")
     def test_grouped_with_empty_partition(self):

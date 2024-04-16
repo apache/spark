@@ -51,6 +51,12 @@ private[connect] object MetricGenerator extends AdaptiveSparkPlanHelper {
     allChildren(p).flatMap(c => transformPlan(c, p.id))
   }
 
+  private[connect] def transformPlan(
+      rows: DataFrame): Seq[ExecutePlanResponse.Metrics.MetricObject] = {
+    val executedPlan = rows.queryExecution.executedPlan
+    transformPlan(executedPlan, executedPlan.id)
+  }
+
   private def transformPlan(
       p: SparkPlan,
       parentId: Int): Seq[ExecutePlanResponse.Metrics.MetricObject] = {

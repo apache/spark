@@ -37,6 +37,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -167,7 +168,7 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     trainingDataset.unpersist()
     validationDataset.unpersist()
 
-    instr.logInfo(s"Train validation split metrics: ${metrics.toSeq}")
+    instr.logInfo(s"Train validation split metrics: ${metrics.toImmutableArraySeq}")
     val (bestMetric, bestIndex) =
       if (eval.isLargerBetter) metrics.zipWithIndex.maxBy(_._1)
       else metrics.zipWithIndex.minBy(_._1)
@@ -362,7 +363,7 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
       val persistSubModels = persistSubModelsParam.toBoolean
 
       import org.json4s.JsonDSL._
-      val extraMetadata = ("validationMetrics" -> instance.validationMetrics.toSeq) ~
+      val extraMetadata = ("validationMetrics" -> instance.validationMetrics.toImmutableArraySeq) ~
         ("persistSubModels" -> persistSubModels)
       ValidatorParams.saveImpl(path, instance, sc, Some(extraMetadata))
       val bestModelPath = new Path(path, "bestModel").toString

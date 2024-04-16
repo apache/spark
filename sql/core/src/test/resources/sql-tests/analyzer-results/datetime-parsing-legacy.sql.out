@@ -112,6 +112,13 @@ Project [to_timestamp(99, Some(DD), TimestampType, Some(America/Los_Angeles), fa
 
 
 -- !query
+select to_timestamp('100', 'DD')
+-- !query analysis
+Project [to_timestamp(100, Some(DD), TimestampType, Some(America/Los_Angeles), false) AS to_timestamp(100, DD)#x]
++- OneRowRelation
+
+
+-- !query
 select to_timestamp('009', 'DDD')
 -- !query analysis
 Project [to_timestamp(009, Some(DDD), TimestampType, Some(America/Los_Angeles), false) AS to_timestamp(009, DDD)#x]
