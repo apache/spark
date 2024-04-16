@@ -26,20 +26,6 @@ private[spark] object Deploy {
     .stringConf
     .createWithDefault("NONE")
 
-  object RecoverySerializer extends Enumeration {
-    val JAVA, KRYO = Value
-  }
-
-  val RECOVERY_SERIALIZER = ConfigBuilder("spark.deploy.recoverySerializer")
-    .doc("Serializer for writing/reading objects to/from persistence engines; " +
-      "JAVA or KRYO. Java serializer has been the default mode since Spark 0.8.1." +
-      "KRYO serializer is a new fast and compact mode from Spark 4.0.0.")
-    .version("4.0.0")
-    .stringConf
-    .transform(_.toUpperCase(Locale.ROOT))
-    .checkValues(RecoverySerializer.values.map(_.toString))
-    .createWithDefault(RecoverySerializer.JAVA.toString)
-
   val RECOVERY_COMPRESSION_CODEC = ConfigBuilder("spark.deploy.recoveryCompressionCodec")
     .doc("A compression codec for persistence engines. none (default), lz4, lzf, snappy, and " +
       "zstd. Currently, only FILESYSTEM mode supports this configuration.")
