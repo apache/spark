@@ -38,7 +38,8 @@ import org.apache.spark.connect.proto.ExecutePlanResponse.SqlCommandResult
 import org.apache.spark.connect.proto.Parse.ParseFormat
 import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.StreamingQueryInstance
 import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.SESSION_ID
 import org.apache.spark.ml.{functions => MLFunctions}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
 import org.apache.spark.sql.{Column, Dataset, Encoders, ForeachWriter, Observation, RelationalGroupedDataset, SparkSession}
@@ -3131,7 +3132,9 @@ class SparkConnectPlanner(
         }
       } catch {
         case NonFatal(ex) => // Failed to start the query, clean up foreach runner if any.
-          logInfo(s"Removing foreachBatch worker, query failed to start for session $sessionId.")
+          logInfo(
+            log"Removing foreachBatch worker, query failed to start " +
+              log"for session ${MDC(SESSION_ID, sessionId)}.")
           foreachBatchRunnerCleaner.foreach(_.close())
           throw ex
       }

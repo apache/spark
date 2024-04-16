@@ -28,7 +28,8 @@ import com.amazonaws.services.kinesis.clientlibrary.lib.worker.{KinesisClientLib
 import com.amazonaws.services.kinesis.metrics.interfaces.MetricsLevel
 import com.amazonaws.services.kinesis.model.Record
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.WORKER_URL
 import org.apache.spark.storage.{StorageLevel, StreamBlockId}
 import org.apache.spark.streaming.Duration
 import org.apache.spark.streaming.kinesis.KinesisInitialPositions.AtTimestamp
@@ -209,7 +210,7 @@ private[kinesis] class KinesisReceiver[T](
     workerThread.setDaemon(true)
     workerThread.start()
 
-    logInfo(s"Started receiver with workerId $workerId")
+    logInfo(log"Started receiver with workerId ${MDC(WORKER_URL, workerId)}")
   }
 
   /**
@@ -225,7 +226,7 @@ private[kinesis] class KinesisReceiver[T](
       }
       workerThread.join()
       workerThread = null
-      logInfo(s"Stopped receiver for workerId $workerId")
+      logInfo(log"Stopped receiver for workerId ${MDC(WORKER_URL, workerId)}")
     }
     workerId = null
     if (kinesisCheckpointer != null) {
