@@ -171,4 +171,18 @@ public final class CollationSupport {
 
   }
 
+  private static final UTF8String lowercaseRegexPrefix = UTF8String.fromString("(?ui)");
+
+  public static UTF8String collationAwareRegex(final UTF8String regex, final int collationId) {
+    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
+      return regex;
+    } else {
+      return lowercaseRegex(regex);
+    }
+  }
+
+  public static UTF8String lowercaseRegex(final UTF8String regex) {
+    return UTF8String.concat(lowercaseRegexPrefix, regex);
+  }
+
 }
