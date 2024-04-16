@@ -28,7 +28,7 @@ import org.json4s.jackson.Serialization
 import org.apache.spark.SparkUpgradeException
 import org.apache.spark.sql.{SPARK_LEGACY_DATETIME_METADATA_KEY, SPARK_LEGACY_INT96_METADATA_KEY, SPARK_TIMEZONE_METADATA_KEY, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogUtils}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, ExpressionSet, PredicateHelper}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, BinaryComparison, Cast, EqualNullSafe, EqualTo, Expression, ExpressionSet, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Literal, PredicateHelper}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -265,6 +265,17 @@ object DataSourceUtils extends PredicateHelper {
   def getPartitionFiltersAndDataFilters(
       partitionSchema: StructType,
       normalizedFilters: Seq[Expression]): (Seq[Expression], Seq[Expression]) = {
+
+    def swap(e: Expression, left: Expression, right: Expression): Expression = e match {
+      case EqualNullSafe(_, _) => EqualNullSafe(left, right)
+      case EqualTo(_, _) => EqualTo(left, right)
+      case GreaterThan(_, _) => GreaterThan(left, right)
+      case GreaterThanOrEqual(_, _) => GreaterThanOrEqual(left, right)
+      case LessThan(_, _) => LessThan(left, right)
+      case LessThanOrEqual(_, _) => LessThanOrEqual(left, right)
+      case _ => e
+    }
+
     val partitionColumns = normalizedFilters.flatMap { expr =>
       expr.collect {
         case attr: AttributeReference if partitionSchema.names.contains(attr.name) =>
@@ -275,8 +286,19 @@ object DataSourceUtils extends PredicateHelper {
     val (partitionFilters, dataFilters) = normalizedFilters.partition(f =>
       f.references.nonEmpty && f.references.subsetOf(partitionSet)
     )
+    val optimizedPartitionFilters = partitionFilters.map {
+      case op @ BinaryComparison(Cast(childExp, _, tz, evalMode),
+            literalValue @ Literal(_, dataType)) if Cast.canCast(dataType, childExp.dataType) =>
+        swap(op, childExp, Literal.create(
+          Cast(literalValue, childExp.dataType, tz, evalMode).eval(), childExp.dataType))
+      case op @ BinaryComparison(literalValue @ Literal(_, dataType),
+            Cast(childExp, _, tz, evalMode)) if Cast.canCast(dataType, childExp.dataType) =>
+        swap(op, Literal.create(
+          Cast(literalValue, childExp.dataType, tz, evalMode).eval(), childExp.dataType), childExp)
+      case e => e
+    }
     val extraPartitionFilter =
       dataFilters.flatMap(extractPredicatesWithinOutputSet(_, partitionSet))
-    (ExpressionSet(partitionFilters ++ extraPartitionFilter).toSeq, dataFilters)
+    (ExpressionSet(optimizedPartitionFilters ++ extraPartitionFilter).toSeq, dataFilters)
   }
 }
