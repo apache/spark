@@ -138,17 +138,20 @@ public final class CollationFactory {
     }
   }
 
-  private static final Collation[] collationTable = new Collation[4];
+  private static final Collation[] collationTable;
   private static final HashMap<String, Integer> collationNameToIdMap = new HashMap<>();
 
   public static final int UTF8_BINARY_COLLATION_ID = 0;
   public static final int UTF8_BINARY_LCASE_COLLATION_ID = 1;
 
   static {
+    List<Collation> collationPrepareTable = new LinkedList<>();
+    Collation currCollation;
+
     // Binary comparison. This is the default collation.
     // No custom comparators will be used for this collation.
     // Instead, we rely on byte for byte comparison.
-    collationTable[0] = new Collation(
+    collationPrepareTable.add(new Collation(
       "UTF8_BINARY",
       null,
       UTF8String::binaryCompare,
@@ -156,11 +159,11 @@ public final class CollationFactory {
       s -> (long)s.hashCode(),
       true,
       true,
-      false);
+      false));
 
     // Case-insensitive UTF8 binary collation.
     // TODO: Do in place comparisons instead of creating new strings.
-    collationTable[1] = new Collation(
+    collationPrepareTable.add(new Collation(
       "UTF8_BINARY_LCASE",
       null,
       UTF8String::compareLowerCase,
@@ -168,20 +171,43 @@ public final class CollationFactory {
       (s) -> (long)s.toLowerCase().hashCode(),
       false,
       false,
-      true);
+      true));
 
     // UNICODE case sensitive comparison (ROOT locale, in ICU).
-    collationTable[2] = new Collation(
+    currCollation = new Collation(
       "UNICODE", Collator.getInstance(ULocale.ROOT), "153.120.0.0", true, false, false);
-    collationTable[2].collator.setStrength(Collator.TERTIARY);
-    collationTable[2].collator.freeze();
+    currCollation.collator.setStrength(Collator.TERTIARY);
+    currCollation.collator.freeze();
+    collationPrepareTable.add(currCollation);
 
     // UNICODE case-insensitive comparison (ROOT locale, in ICU + Secondary strength).
-    collationTable[3] = new Collation(
+    currCollation = new Collation(
       "UNICODE_CI", Collator.getInstance(ULocale.ROOT), "153.120.0.0", false, false, false);
-    collationTable[3].collator.setStrength(Collator.SECONDARY);
-    collationTable[3].collator.freeze();
+    currCollation.collator.setStrength(Collator.SECONDARY);
+    currCollation.collator.freeze();
+    collationPrepareTable.add(currCollation);
 
+    for (ULocale ulocale : ULocale.getAvailableLocales()) {
+      currCollation = new Collation(
+        ulocale.getName(), Collator.getInstance(ulocale), "153.120.0.0", true, false, false);
+      currCollation.collator.setStrength(Collator.TERTIARY);
+      currCollation.collator.freeze();
+      collationPrepareTable.add(currCollation);
+
+      currCollation = new Collation(
+        ulocale.getName() + "_CI", Collator.getInstance(ulocale), "153.120.0.0", false, false, false);
+      currCollation.collator.setStrength(Collator.SECONDARY);
+      currCollation.collator.freeze();
+      collationPrepareTable.add(currCollation);
+
+      currCollation = new Collation(
+              ulocale.getName() + "_CI_AI", Collator.getInstance(ulocale), "153.120.0.0", false, false, false);
+      currCollation.collator.setStrength(Collator.PRIMARY);
+      currCollation.collator.freeze();
+      collationPrepareTable.add(currCollation);
+    }
+
+    collationTable = collationPrepareTable.toArray(new Collation[0]);
     for (int i = 0; i < collationTable.length; i++) {
       collationNameToIdMap.put(collationTable[i].collationName, i);
     }
