@@ -205,7 +205,7 @@ object StreamingSymmetricHashJoinHelper extends Logging {
         oneSideInputAttributes: Seq[Attribute],
         oneSideJoinKeys: Seq[Expression],
         otherSideInputAttributes: Seq[Attribute]): Option[JoinStateWatermarkPredicate] = {
-      val isWatermarkDefinedOnInput = oneSideInputAttributes.exists(_.metadata.contains(delayKey))
+      val isWatermarkDefinedOnInput = otherSideInputAttributes.exists(_.metadata.contains(delayKey))
       val isWatermarkDefinedOnJoinKey = joinKeyOrdinalForWatermark.isDefined
 
       if (isWatermarkDefinedOnJoinKey) { // case 1 and 3 in the StreamingSymmetricHashJoinExec docs
@@ -230,10 +230,14 @@ object StreamingSymmetricHashJoinHelper extends Logging {
           condition.get.collect { case a: AttributeReference => a }
         )
 
-        // oneSideInputAttributes could be left_value and left_time, and we just
+        // Construct an AttributeSet so that we can perform equality between attributes,
+        // which we do in the filter below.
+        val oneSideInputAttributeSet = AttributeSet(oneSideInputAttributes)
+
+        // oneSideInputAttributes could be [left_value, left_time], and we just
         // want the attribute _in_ the time-interval condition.
         val oneSideStateWatermarkAttributes = attributesInCondition.filter { a =>
-            oneSideInputAttributes.contains(a)
+            oneSideInputAttributeSet.contains(a)
         }
 
         // There should be a single attribute per side in the time-interval condition, so,
