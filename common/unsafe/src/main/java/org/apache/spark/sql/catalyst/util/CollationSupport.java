@@ -183,16 +183,16 @@ public final class CollationSupport {
         return execICU(string, substring, collationId);
       }
     }
-    public static String genCode(final String string, final String substring, final int start,
+    public static String genCode(final String string, final String substring,
         final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
       String expr = "CollationSupport.StringInstr.exec";
       if (collation.supportsBinaryEquality) {
-        return String.format(expr + "Binary(%s, %s, %d)", string, substring, start);
+        return String.format(expr + "Binary(%s, %s)", string, substring);
       } else if (collation.supportsLowercaseEquality) {
-        return String.format(expr + "Lowercase(%s, %s, %d)", string, substring, start);
+        return String.format(expr + "Lowercase(%s, %s)", string, substring);
       } else {
-        return String.format(expr + "ICU(%s, %s, %d, %d)", string, substring, start, collationId);
+        return String.format(expr + "ICU(%s, %s, %d)", string, substring, collationId);
       }
     }
     public static int execBinary(final UTF8String string, final UTF8String substring) {

@@ -1367,7 +1367,7 @@ case class StringInstr(str: Expression, substr: Expression)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
       defineCodeGen(ctx, ev, (string, substring) =>
-        CollationSupport.StringInstr.genCode(string, substring, 0, collationId) + " + 1")
+        CollationSupport.StringInstr.genCode(string, substring, collationId) + " + 1")
   }
 
   override protected def withNewChildrenInternal(

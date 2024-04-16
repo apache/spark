@@ -256,7 +256,7 @@ public class CollationSupportSuite {
     int collationId = CollationFactory.collationNameToId(collationName);
     assertEquals(expected, CollationSupport.StringInstr.exec(str, substr, collationId) + 1);
   }
-  
+
   @Test
   public void testStringInstr() throws SparkException {
     assertStringInstr("aaads", "Aa", "UTF8_BINARY", 0);
