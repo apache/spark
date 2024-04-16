@@ -65,6 +65,7 @@ object LogKey extends Enumeration {
   val CSV_SOURCE = Value
   val DATA = Value
   val DATABASE_NAME = Value
+  val DATAFRAME_CACHE_ENTRY = Value
   val DATAFRAME_ID = Value
   val DESCRIPTION = Value
   val DRIVER_ID = Value
@@ -154,6 +155,7 @@ object LogKey extends Enumeration {
   val QUERY_HINT = Value
   val QUERY_ID = Value
   val QUERY_PLAN = Value
+  val QUERY_PLAN_COMPARISON = Value
   val QUERY_PLAN_LENGTH_ACTUAL = Value
   val QUERY_PLAN_LENGTH_MAX = Value
   val RANGE = Value
