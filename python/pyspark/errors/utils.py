@@ -129,12 +129,14 @@ class ErrorClassesReader:
 def _capture_call_site(fragment: str) -> None:
     """
     Capture the call site information including file name, line number, and function name.
-    This function updates the thread-local storage from server side (PySparkCurrentOrigin)
+    This function updates the thread-local storage from JVM side (PySparkCurrentOrigin)
     with the current call site information when a PySpark API function is called.
+
     Parameters
     ----------
-    func_name : str
+    fragment : str
         The name of the PySpark API function being captured.
+
     Notes
     -----
     The call site information is used to enhance error messages with the exact location
