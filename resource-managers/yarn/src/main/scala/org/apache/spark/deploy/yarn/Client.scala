@@ -55,8 +55,8 @@ import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.deploy.yarn.ResourceRequestHelper._
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.deploy.yarn.config._
-import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.APP_ID
+import org.apache.spark.internal.{Logging, LogKey, MDC}
+import org.apache.spark.internal.LogKey.{APP_ID, CONFIG, CONFIG2, PATH}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Python._
 import org.apache.spark.launcher.{JavaModuleOptions, LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
@@ -258,7 +258,7 @@ private[spark] class Client(
         }
       } catch {
         case ioe: IOException =>
-          logWarning("Failed to cleanup staging dir " + stagingDirPath, ioe)
+          logWarning(log"Failed to cleanup staging dir ${MDC(PATH, stagingDirPath)}", ioe)
       }
     }
 
@@ -332,8 +332,8 @@ private[spark] class Client(
         appContext.setLogAggregationContext(logAggregationContext)
       } catch {
         case NonFatal(e) =>
-          logWarning(s"Ignoring ${ROLLED_LOG_INCLUDE_PATTERN.key} because the version of YARN " +
-            "does not support it", e)
+          logWarning(log"Ignoring ${MDC(CONFIG, ROLLED_LOG_INCLUDE_PATTERN.key)}} " +
+            log"because the version of YARN does not support it", e)
       }
     }
     appContext.setUnmanagedAM(isClientUnmanagedAMEnabled)
@@ -558,10 +558,12 @@ private[spark] class Client(
       val uriStr = uri.toString()
       val fileName = new File(uri.getPath).getName
       if (distributedUris.contains(uriStr)) {
-        logWarning(s"Same path resource $uri added multiple times to distributed cache.")
+        logWarning(log"Same path resource ${MDC(LogKey.URI, uri)} added multiple times " +
+          log"to distributed cache.")
         false
       } else if (distributedNames.contains(fileName)) {
-        logWarning(s"Same name resource $uri added multiple times to distributed cache")
+        logWarning(log"Same name resource ${MDC(LogKey.URI, uri)} added multiple times " +
+          log"to distributed cache")
         false
       } else {
         distributedUris += uriStr
@@ -698,8 +700,9 @@ private[spark] class Client(
 
         case None =>
           // No configuration, so fall back to uploading local jar files.
-          logWarning(s"Neither ${SPARK_JARS.key} nor ${SPARK_ARCHIVE.key} is set, falling back " +
-            "to uploading libraries under SPARK_HOME.")
+          logWarning(
+            log"Neither ${MDC(CONFIG, SPARK_JARS.key)} nor ${MDC(CONFIG2, SPARK_ARCHIVE.key)}} " +
+            log"is set, falling back to uploading libraries under SPARK_HOME.")
           val jarsDir = new File(YarnCommandBuilderUtils.findJarsDir(
             sparkConf.getenv("SPARK_HOME")))
           val jarsArchive = File.createTempFile(LOCALIZED_LIB_DIR, ".zip",
@@ -878,7 +881,7 @@ private[spark] class Client(
         if (dir.isDirectory()) {
           val files = dir.listFiles()
           if (files == null) {
-            logWarning("Failed to list files under directory " + dir)
+            logWarning(log"Failed to list files under directory ${MDC(PATH, dir)}")
           } else {
             files.foreach { file =>
               if (file.isFile && !hadoopConfFiles.contains(file.getName())) {
@@ -1067,7 +1070,7 @@ private[spark] class Client(
           sparkConf))
       }
       if (sparkConf.get(AM_JAVA_OPTIONS).isDefined) {
-        logWarning(s"${AM_JAVA_OPTIONS.key} will not take effect in cluster mode")
+        logWarning(log"${MDC(CONFIG, AM_JAVA_OPTIONS.key)} will not take effect in cluster mode")
       }
     } else {
       // Validate and include yarn am specific java options in yarn-client mode.
@@ -1344,7 +1347,7 @@ private[spark] class Client(
         .getOrElse(IMap.empty)
     } catch {
       case e: Exception =>
-        logWarning(s"Unable to get driver log links for $appId: $e")
+        logWarning(log"Unable to get driver log links for ${MDC(APP_ID, appId)}: ", e)
         // Include the full stack trace only at DEBUG level to reduce verbosity
         logDebug(s"Unable to get driver log links for $appId", e)
         IMap.empty
