@@ -1762,8 +1762,16 @@ class PlanGenerationTestSuite
     fn.split(fn.col("g"), ";")
   }
 
+  functionTest("split using columns") {
+    fn.split(fn.col("g"), fn.col("g"))
+  }
+
   functionTest("split with limit") {
     fn.split(fn.col("g"), ";", 10)
+  }
+
+  functionTest("split with limit using columns") {
+    fn.split(fn.col("g"), lit(";"), fn.col("a"))
   }
 
   functionTest("substring") {
