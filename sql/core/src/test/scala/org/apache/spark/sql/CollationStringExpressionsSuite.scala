@@ -22,7 +22,7 @@ import scala.collection.immutable.Seq
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{BooleanType, StringType}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, DataType, IntegerType, StringType}
 
 class CollationStringExpressionsSuite
   extends QueryTest
@@ -178,6 +178,81 @@ class CollationStringExpressionsSuite
       // Result & data type
       checkAnswer(sql(query), Row(t.result))
       assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
+    })
+  }
+
+  test("Ascii & UnBase64 string expressions with collation") {
+    case class AsciiUnBase64TestCase[R](q: String, dt: DataType, r: R)
+    val testCases = Seq(
+      AsciiUnBase64TestCase("select ascii('a' collate utf8_binary)", IntegerType, 97),
+      AsciiUnBase64TestCase("select ascii('B' collate utf8_binary_lcase)", IntegerType, 66),
+      AsciiUnBase64TestCase("select ascii('#' collate unicode)", IntegerType, 35),
+      AsciiUnBase64TestCase("select ascii('!' collate unicode_ci)", IntegerType, 33),
+      AsciiUnBase64TestCase("select unbase64('QUJD' collate utf8_binary)", BinaryType,
+        Seq(65, 66, 67)),
+      AsciiUnBase64TestCase("select unbase64('eHl6' collate utf8_binary_lcase)", BinaryType,
+        Seq(120, 121, 122)),
+      AsciiUnBase64TestCase("select unbase64('IyMj' collate utf8_binary)", BinaryType,
+        Seq(35, 35, 35)),
+      AsciiUnBase64TestCase("select unbase64('IQ==' collate utf8_binary_lcase)", BinaryType,
+        Seq(33))
+    )
+    testCases.foreach(t => {
+      // Result & data type
+      checkAnswer(sql(t.q), Row(t.r))
+      assert(sql(t.q).schema.fields.head.dataType.sameType(t.dt))
+    })
+  }
+
+  test("Chr, Base64, Decode & FormatNumber string expressions with collation") {
+    case class DefaultCollationTestCase[R](q: String, c: String, r: R)
+    val testCases = Seq(
+      DefaultCollationTestCase("select chr(97)", "UTF8_BINARY", "a"),
+      DefaultCollationTestCase("select chr(66)", "UTF8_BINARY_LCASE", "B"),
+      DefaultCollationTestCase("select base64('xyz')", "UNICODE", "eHl6"),
+      DefaultCollationTestCase("select base64('!')", "UNICODE_CI", "IQ=="),
+      DefaultCollationTestCase("select decode(encode('$', 'utf-8'), 'utf-8')", "UTF8_BINARY", "$"),
+      DefaultCollationTestCase("select decode(encode('X', 'utf-8'), 'utf-8')", "UTF8_BINARY_LCASE",
+        "X"),
+      DefaultCollationTestCase("select format_number(123.123, '###.###')", "UNICODE", "123.123"),
+      DefaultCollationTestCase("select format_number(99.99, '##.##')", "UNICODE_CI", "99.99")
+    )
+    testCases.foreach(t => {
+      withSQLConf(SQLConf.DEFAULT_COLLATION.key -> t.c) {
+        // Result & data type
+        checkAnswer(sql(t.q), Row(t.r))
+        assert(sql(t.q).schema.fields.head.dataType.sameType(StringType(t.c)))
+      }
+    })
+  }
+
+  test("Encode, ToBinary & Sentences string expressions with collation") {
+    case class EncodeToBinarySentencesTestCase[R](q: String, dt: DataType, r: R)
+    val testCases = Seq(
+      EncodeToBinarySentencesTestCase("select encode('a' collate utf8_binary, 'utf-8')",
+        BinaryType, Seq(97)),
+      EncodeToBinarySentencesTestCase("select encode('$' collate utf8_binary_lcase, 'utf-8')",
+        BinaryType, Seq(36)),
+      EncodeToBinarySentencesTestCase("select to_binary('B' collate unicode, 'utf-8')",
+        BinaryType, Seq(66)),
+      EncodeToBinarySentencesTestCase("select to_binary('#' collate unicode_ci, 'utf-8')",
+        BinaryType, Seq(35)),
+      EncodeToBinarySentencesTestCase(
+        """
+          |select sentences('Hello, world! Nice day.' collate utf8_binary)
+          |""".stripMargin,
+        ArrayType(ArrayType(StringType)), Seq(Seq("Hello", "world"), Seq("Nice", "day"))),
+      EncodeToBinarySentencesTestCase(
+        """
+          |select sentences('Something else. Nothing here.' collate utf8_binary_lcase)
+          |""".stripMargin,
+        ArrayType(ArrayType(StringType("UTF8_BINARY_LCASE"))),
+        Seq(Seq("Something", "else"), Seq("Nothing", "here")))
+    )
+    testCases.foreach(t => {
+      // Result & data type
+      checkAnswer(sql(t.q), Row(t.r))
+      assert(sql(t.q).schema.fields.head.dataType.sameType(t.dt))
     })
   }
 
