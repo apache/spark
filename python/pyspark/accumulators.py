@@ -27,7 +27,7 @@ from pyspark.errors import PySparkRuntimeError
 
 if TYPE_CHECKING:
     from pyspark._typing import SupportsIAdd  # noqa: F401
-    import socketserver.BaseRequestHandler  # type: ignore[import]
+    import socketserver.BaseRequestHandler  # type: ignore[import-not-found]
 
 
 __all__ = ["Accumulator", "AccumulatorParam"]
@@ -55,6 +55,10 @@ def _deserialize_accumulator(
         accum._deserialized = True
         _accumulatorRegistry[aid] = accum
         return accum
+
+
+class SpecialAccumulatorIds:
+    SQL_UDF_PROFIER = -1
 
 
 class Accumulator(Generic[T]):
@@ -329,7 +333,7 @@ def _start_update_server(auth_token: str) -> AccumulatorServer:
 if __name__ == "__main__":
     import doctest
 
-    from pyspark.context import SparkContext
+    from pyspark.core.context import SparkContext
 
     globs = globals().copy()
     # The small batch size here ensures that we see multiple batches,

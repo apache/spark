@@ -47,9 +47,9 @@ private[sql] object ArrowUtils {
     case LongType => new ArrowType.Int(8 * 8, true)
     case FloatType => new ArrowType.FloatingPoint(FloatingPointPrecision.SINGLE)
     case DoubleType => new ArrowType.FloatingPoint(FloatingPointPrecision.DOUBLE)
-    case StringType if !largeVarTypes => ArrowType.Utf8.INSTANCE
+    case _: StringType if !largeVarTypes => ArrowType.Utf8.INSTANCE
     case BinaryType if !largeVarTypes => ArrowType.Binary.INSTANCE
-    case StringType if largeVarTypes => ArrowType.LargeUtf8.INSTANCE
+    case _: StringType if largeVarTypes => ArrowType.LargeUtf8.INSTANCE
     case BinaryType if largeVarTypes => ArrowType.LargeBinary.INSTANCE
     case DecimalType.Fixed(precision, scale) => new ArrowType.Decimal(precision, scale)
     case DateType => new ArrowType.Date(DateUnit.DAY)
@@ -125,6 +125,12 @@ private[sql] object ArrowUtils {
             largeVarTypes)).asJava)
       case udt: UserDefinedType[_] =>
         toArrowField(name, udt.sqlType, nullable, timeZoneId, largeVarTypes)
+      case _: VariantType =>
+        val fieldType = new FieldType(nullable, ArrowType.Struct.INSTANCE, null,
+          Map("variant" -> "true").asJava)
+        new Field(name, fieldType,
+          Seq(toArrowField("value", BinaryType, false, timeZoneId, largeVarTypes),
+            toArrowField("metadata", BinaryType, false, timeZoneId, largeVarTypes)).asJava)
       case dataType =>
         val fieldType = new FieldType(nullable, toArrowType(dataType, timeZoneId,
           largeVarTypes), null)
@@ -143,6 +149,10 @@ private[sql] object ArrowUtils {
         val elementField = field.getChildren().get(0)
         val elementType = fromArrowField(elementField)
         ArrayType(elementType, containsNull = elementField.isNullable)
+      case ArrowType.Struct.INSTANCE if field.getMetadata.getOrDefault("variant", "") == "true"
+        && field.getChildren.asScala.map(_.getName).asJava
+          .containsAll(Seq("value", "metadata").asJava) =>
+        VariantType
       case ArrowType.Struct.INSTANCE =>
         val fields = field.getChildren().asScala.map { child =>
           val dt = fromArrowField(child)

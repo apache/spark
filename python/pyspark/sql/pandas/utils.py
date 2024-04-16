@@ -27,7 +27,15 @@ def require_minimum_pandas_version() -> None:
     try:
         import pandas
 
-        have_pandas = True
+        # Even if pandas is deleted, if the pandas extension package (e.g. pandas-stubs) is still
+        # installed, the pandas path will not be completely deleted.
+        # Therefore, even if the import is successful, additional check is required here to verify
+        # that pandas is actually installed properly.
+        if hasattr(pandas, "__version__"):
+            have_pandas = True
+        else:
+            have_pandas = False
+            raised_error = None
     except ImportError as error:
         have_pandas = False
         raised_error = error
@@ -53,7 +61,7 @@ def require_minimum_pandas_version() -> None:
 def require_minimum_pyarrow_version() -> None:
     """Raise ImportError if minimum version of pyarrow is not installed"""
     # TODO(HyukjinKwon): Relocate and deduplicate the version specification.
-    minimum_pyarrow_version = "4.0.0"
+    minimum_pyarrow_version = "10.0.0"
 
     import os
 

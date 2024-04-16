@@ -30,6 +30,7 @@ import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.spark._
+import org.apache.spark.api.python.PythonFunction.PythonAccumulator
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{BUFFER_SIZE, EXECUTOR_CORES, Python}
 import org.apache.spark.internal.config.Python._
@@ -146,10 +147,10 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     }.getOrElse("pyspark.worker")
 
   // TODO: support accumulator in multiple UDF
-  protected val accumulator: PythonAccumulatorV2 = funcs.head.funcs.head.accumulator
+  protected val accumulator: PythonAccumulator = funcs.head.funcs.head.accumulator
 
   // Python accumulator is always set in production except in tests. See SPARK-27893
-  private val maybeAccumulator: Option[PythonAccumulatorV2] = Option(accumulator)
+  private val maybeAccumulator: Option[PythonAccumulator] = Option(accumulator)
 
   // Expose a ServerSocket to support method calls via socket from Python side. Only relevant for
   // for tasks that are a part of barrier stage, refer [[BarrierTaskContext]] for details.

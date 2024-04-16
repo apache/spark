@@ -27,7 +27,7 @@ import warnings
 from inspect import getfullargspec
 from typing import cast, Callable, Any, List, TYPE_CHECKING, Optional, Union
 
-from pyspark.rdd import PythonEvalType
+from pyspark.util import PythonEvalType
 from pyspark.sql.connect.expressions import (
     ColumnReference,
     CommonInlineUserDefinedFunction,
@@ -85,7 +85,8 @@ def _create_py_udf(
             eval_type = PythonEvalType.SQL_ARROW_BATCHED_UDF
         else:
             warnings.warn(
-                "Arrow optimization for Python UDFs cannot be enabled.",
+                "Arrow optimization for Python UDFs cannot be enabled for functions"
+                " without arguments.",
                 UserWarning,
             )
 

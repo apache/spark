@@ -2,24 +2,24 @@
 PersistenceEngineBenchmark
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.1+12-LTS on Linux 5.15.0-1051-azure
+OpenJDK 64-Bit Server VM 21.0.2+13-LTS on Linux 6.5.0-1016-azure
 AMD EPYC 7763 64-Core Processor
 1000 Workers:                                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ----------------------------------------------------------------------------------------------------------------------------------------
-ZooKeeperPersistenceEngine with JavaSerializer                     5863           6053         265          0.0     5862988.1       1.0X
-ZooKeeperPersistenceEngine with KryoSerializer                     4553           4612          54          0.0     4553477.9       1.3X
-FileSystemPersistenceEngine with JavaSerializer                    1619           1632          17          0.0     1618500.5       3.6X
-FileSystemPersistenceEngine with JavaSerializer (lz4)               619            631          10          0.0      619255.8       9.5X
-FileSystemPersistenceEngine with JavaSerializer (lzf)               623            640          20          0.0      623222.4       9.4X
-FileSystemPersistenceEngine with JavaSerializer (snappy)            553            596          37          0.0      553417.4      10.6X
-FileSystemPersistenceEngine with JavaSerializer (zstd)              747            767          26          0.0      747197.1       7.8X
-FileSystemPersistenceEngine with KryoSerializer                     394            460          57          0.0      393534.6      14.9X
-FileSystemPersistenceEngine with KryoSerializer (lz4)               368            406          33          0.0      367925.8      15.9X
-FileSystemPersistenceEngine with KryoSerializer (lzf)               509            532          35          0.0      509170.2      11.5X
-FileSystemPersistenceEngine with KryoSerializer (snappy)            515            540          28          0.0      515190.9      11.4X
-FileSystemPersistenceEngine with KryoSerializer (zstd)              632            656          32          0.0      631522.4       9.3X
-RocksDBPersistenceEngine with JavaSerializer                        265            266           1          0.0      265026.0      22.1X
-RocksDBPersistenceEngine with KryoSerializer                         93             94           2          0.0       92732.3      63.2X
-BlackHolePersistenceEngine                                            0              0           0          6.0         166.8   35151.7X
+ZooKeeperPersistenceEngine with JavaSerializer                     5036           5232         229          0.0     5035730.1       1.0X
+ZooKeeperPersistenceEngine with KryoSerializer                     4038           4053          16          0.0     4038447.8       1.2X
+FileSystemPersistenceEngine with JavaSerializer                    2902           2906           5          0.0     2902453.3       1.7X
+FileSystemPersistenceEngine with JavaSerializer (lz4)               816            829          19          0.0      816173.1       6.2X
+FileSystemPersistenceEngine with JavaSerializer (lzf)               755            780          33          0.0      755209.0       6.7X
+FileSystemPersistenceEngine with JavaSerializer (snappy)            814            832          16          0.0      813672.5       6.2X
+FileSystemPersistenceEngine with JavaSerializer (zstd)              987           1014          45          0.0      986834.7       5.1X
+FileSystemPersistenceEngine with KryoSerializer                     687            698          14          0.0      687313.5       7.3X
+FileSystemPersistenceEngine with KryoSerializer (lz4)               590            599          15          0.0      589867.9       8.5X
+FileSystemPersistenceEngine with KryoSerializer (lzf)               915            922           9          0.0      915432.2       5.5X
+FileSystemPersistenceEngine with KryoSerializer (snappy)            768            795          37          0.0      768494.4       6.6X
+FileSystemPersistenceEngine with KryoSerializer (zstd)              898            950          45          0.0      898118.6       5.6X
+RocksDBPersistenceEngine with JavaSerializer                        299            299           0          0.0      298800.0      16.9X
+RocksDBPersistenceEngine with KryoSerializer                        112            113           1          0.0      111779.6      45.1X
+BlackHolePersistenceEngine                                            0              0           0          5.5         180.3   27924.2X
 
 

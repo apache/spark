@@ -269,4 +269,43 @@ class OpenHashSetSuite extends SparkFunSuite with Matchers {
       assert(pos1 == pos2)
     }
   }
+
+  test("SPARK-45599: 0.0 and -0.0 are equal but not the same") {
+    // Therefore, 0.0 and -0.0 should get separate entries in the hash set.
+    //
+    // Exactly these elements provided in roughly this order will trigger the following scenario:
+    // When probing the bitset in `getPos(-0.0)`, the loop will happen upon the entry for 0.0.
+    // In the old logic pre-SPARK-45599, the loop will find that the bit is set and, because
+    // -0.0 == 0.0, it will think that's the position of -0.0. But in reality this is the position
+    // of 0.0. So -0.0 and 0.0 will be stored at different positions, but `getPos()` will return
+    // the same position for them. This can cause users of OpenHashSet, like OpenHashMap, to
+    // return the wrong value for a key based on whether or not this bitset lookup collision
+    // happens.
+    val spark45599Repro = Seq(
+      Double.NaN,
+      2.0,
+      168.0,
+      Double.NaN,
+      Double.NaN,
+      -0.0,
+      153.0,
+      0.0
+    )
+    val set = new OpenHashSet[Double]()
+    spark45599Repro.foreach(set.add)
+    assert(set.size == 6)
+    val zeroPos = set.getPos(0.0)
+    val negZeroPos = set.getPos(-0.0)
+    assert(zeroPos != negZeroPos)
+  }
+
+  test("SPARK-45599: NaN and NaN are the same but not equal") {
+    // Any mathematical comparison to NaN will return false, but when we place it in
+    // a hash set we want the lookup to work like a "normal" value.
+    val set = new OpenHashSet[Double]()
+    set.add(Double.NaN)
+    set.add(Double.NaN)
+    assert(set.contains(Double.NaN))
+    assert(set.size == 1)
+  }
 }

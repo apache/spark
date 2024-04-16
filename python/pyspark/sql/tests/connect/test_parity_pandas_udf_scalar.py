@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 import unittest
+from pyspark.sql.connect.column import Column
 from pyspark.sql.tests.pandas.test_pandas_udf_scalar import ScalarPandasUDFTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
@@ -31,25 +32,13 @@ class PandasUDFScalarParityTests(ScalarPandasUDFTestsMixin, ReusedConnectTestCas
     def test_vectorized_udf_struct_with_empty_partition(self):
         super().test_vectorized_udf_struct_with_empty_partition()
 
-    def test_vectorized_udf_exception(self):
-        self.check_vectorized_udf_exception()
-
-    def test_vectorized_udf_nested_struct(self):
-        self.check_vectorized_udf_nested_struct()
-
-    def test_vectorized_udf_return_scalar(self):
-        self.check_vectorized_udf_return_scalar()
-
-    def test_scalar_iter_udf_close(self):
-        self.check_scalar_iter_udf_close()
-
     # TODO(SPARK-43727): Parity returnType check in Spark Connect
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_vectorized_udf_wrong_return_type(self):
-        self.check_vectorized_udf_wrong_return_type()
+        super().test_vectorized_udf_wrong_return_type()
 
-    def test_vectorized_udf_invalid_length(self):
-        self.check_vectorized_udf_invalid_length()
+    def test_mixed_udf_and_sql(self):
+        self._test_mixed_udf_and_sql(Column)
 
 
 if __name__ == "__main__":

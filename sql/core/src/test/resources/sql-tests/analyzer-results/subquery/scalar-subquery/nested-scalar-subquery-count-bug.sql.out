@@ -42,11 +42,11 @@ Sort [a#xL DESC NULLS LAST], true
    :        +- Aggregate [count(1) AS cnt#xL]
    :           +- Filter (outer(a1#x) = b1#x)
    :              +- SubqueryAlias spark_catalog.default.t2
-   :                 +- View (`spark_catalog`.`default`.`t2`, [b1#x,b2#x])
+   :                 +- View (`spark_catalog`.`default`.`t2`, [b1#x, b2#x])
    :                    +- Project [cast(col1#x as int) AS b1#x, cast(col2#x as int) AS b2#x]
    :                       +- LocalRelation [col1#x, col2#x]
    +- SubqueryAlias spark_catalog.default.t1
-      +- View (`spark_catalog`.`default`.`t1`, [a1#x,a2#x])
+      +- View (`spark_catalog`.`default`.`t1`, [a1#x, a2#x])
          +- Project [cast(col1#x as int) AS a1#x, cast(col2#x as int) AS a2#x]
             +- LocalRelation [col1#x, col2#x]
 
@@ -61,11 +61,11 @@ Sort [a#xL DESC NULLS LAST], true
    :        +- Aggregate [count(1) AS cnt#xL]
    :           +- Filter (outer(a1#x) = b1#x)
    :              +- SubqueryAlias spark_catalog.default.t2
-   :                 +- View (`spark_catalog`.`default`.`t2`, [b1#x,b2#x])
+   :                 +- View (`spark_catalog`.`default`.`t2`, [b1#x, b2#x])
    :                    +- Project [cast(col1#x as int) AS b1#x, cast(col2#x as int) AS b2#x]
    :                       +- LocalRelation [col1#x, col2#x]
    +- SubqueryAlias spark_catalog.default.t1
-      +- View (`spark_catalog`.`default`.`t1`, [a1#x,a2#x])
+      +- View (`spark_catalog`.`default`.`t1`, [a1#x, a2#x])
          +- Project [cast(col1#x as int) AS a1#x, cast(col2#x as int) AS a2#x]
             +- LocalRelation [col1#x, col2#x]
 
@@ -87,7 +87,7 @@ Sort [a#xL DESC NULLS LAST], true
    :        :     +- Aggregate [count(1) AS cnt#xL]
    :        :        +- Filter (outer(a1#x) = b1#x)
    :        :           +- SubqueryAlias spark_catalog.default.t2
-   :        :              +- View (`spark_catalog`.`default`.`t2`, [b1#x,b2#x])
+   :        :              +- View (`spark_catalog`.`default`.`t2`, [b1#x, b2#x])
    :        :                 +- Project [cast(col1#x as int) AS b1#x, cast(col2#x as int) AS b2#x]
    :        :                    +- LocalRelation [col1#x, col2#x]
    :        +- SubqueryAlias r
@@ -95,11 +95,11 @@ Sort [a#xL DESC NULLS LAST], true
    :              +- Aggregate [count(1) AS cnt#xL]
    :                 +- Filter (outer(a1#x) = c1#x)
    :                    +- SubqueryAlias spark_catalog.default.t3
-   :                       +- View (`spark_catalog`.`default`.`t3`, [c1#x,c2#x])
+   :                       +- View (`spark_catalog`.`default`.`t3`, [c1#x, c2#x])
    :                          +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
    :                             +- LocalRelation [col1#x, col2#x]
    +- SubqueryAlias spark_catalog.default.t1
-      +- View (`spark_catalog`.`default`.`t1`, [a1#x,a2#x])
+      +- View (`spark_catalog`.`default`.`t1`, [a1#x, a2#x])
          +- Project [cast(col1#x as int) AS a1#x, cast(col2#x as int) AS a2#x]
             +- LocalRelation [col1#x, col2#x]
 
@@ -120,18 +120,18 @@ Sort [a#xL DESC NULLS LAST], true
    :        :  +- Aggregate [count(1) AS cnt#xL]
    :        :     +- Filter (outer(a1#x) = b1#x)
    :        :        +- SubqueryAlias spark_catalog.default.t2
-   :        :           +- View (`spark_catalog`.`default`.`t2`, [b1#x,b2#x])
+   :        :           +- View (`spark_catalog`.`default`.`t2`, [b1#x, b2#x])
    :        :              +- Project [cast(col1#x as int) AS b1#x, cast(col2#x as int) AS b2#x]
    :        :                 +- LocalRelation [col1#x, col2#x]
    :        +- SubqueryAlias r
    :           +- Aggregate [count(1) AS cnt#xL]
    :              +- Filter (outer(a1#x) = c1#x)
    :                 +- SubqueryAlias spark_catalog.default.t3
-   :                    +- View (`spark_catalog`.`default`.`t3`, [c1#x,c2#x])
+   :                    +- View (`spark_catalog`.`default`.`t3`, [c1#x, c2#x])
    :                       +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
    :                          +- LocalRelation [col1#x, col2#x]
    +- SubqueryAlias spark_catalog.default.t1
-      +- View (`spark_catalog`.`default`.`t1`, [a1#x,a2#x])
+      +- View (`spark_catalog`.`default`.`t1`, [a1#x, a2#x])
          +- Project [cast(col1#x as int) AS a1#x, cast(col2#x as int) AS a2#x]
             +- LocalRelation [col1#x, col2#x]
 

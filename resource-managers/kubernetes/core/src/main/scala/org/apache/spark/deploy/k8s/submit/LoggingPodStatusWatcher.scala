@@ -96,7 +96,7 @@ private[k8s] class LoggingPodStatusWatcherImpl(conf: KubernetesDriverConf)
   }
 
   override def watchOrStop(sId: String): Boolean = {
-    logInfo(s"Waiting for application ${conf.appName} with application ID ${conf.appId} " +
+    logInfo(s"Waiting for application ${conf.appName} with application ID $appId " +
       s"and submission ID $sId to finish...")
     val interval = conf.get(REPORT_INTERVAL)
     synchronized {
@@ -110,7 +110,7 @@ private[k8s] class LoggingPodStatusWatcherImpl(conf: KubernetesDriverConf)
       logInfo(
         pod.map { p => s"Container final statuses:\n\n${containersDescription(p)}" }
           .getOrElse("No containers were found in the driver pod."))
-      logInfo(s"Application ${conf.appName} with application ID ${conf.appId} " +
+      logInfo(s"Application ${conf.appName} with application ID $appId " +
         s"and submission ID $sId finished")
     }
     podCompleted

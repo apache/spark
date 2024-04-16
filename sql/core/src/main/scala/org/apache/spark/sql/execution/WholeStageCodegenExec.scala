@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
-import org.apache.spark.{broadcast, SparkException}
+import org.apache.spark.{broadcast, SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -339,7 +339,7 @@ trait CodegenSupport extends SparkPlan {
    *       different inputs(join build side, aggregate buffer, etc.), or other special cases.
    */
   def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 
   /**
@@ -356,7 +356,9 @@ trait CodegenSupport extends SparkPlan {
     } else if (children.length == 1) {
       children.head.asInstanceOf[CodegenSupport].needCopyResult
     } else {
-      throw new UnsupportedOperationException
+      throw new SparkUnsupportedOperationException(
+        errorClass = "_LEGACY_ERROR_TEMP_3163",
+        messageParameters = Map("num" -> children.length.toString))
     }
   }
 
@@ -750,8 +752,9 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
     // but the output must be rows.
     val rdds = child.asInstanceOf[CodegenSupport].inputRDDs()
     assert(rdds.size <= 2, "Up to two input RDDs can be supported")
+    val cleanedSourceOpt = tryBroadcastCleanedSource(cleanedSource)
     val evaluatorFactory = new WholeStageCodegenEvaluatorFactory(
-      cleanedSource, durationMs, references)
+      cleanedSourceOpt, durationMs, references)
     if (rdds.length == 1) {
       if (conf.usePartitionEvaluator) {
         rdds.head.mapPartitionsWithEvaluator(evaluatorFactory)
@@ -779,11 +782,11 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 
   override def doProduce(ctx: CodegenContext): String = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
@@ -828,6 +831,23 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
 
   override protected def withNewChildInternal(newChild: SparkPlan): WholeStageCodegenExec =
     copy(child = newChild)(codegenStageId)
+
+  // Use broadcast if the conf is enabled and the code + comment size exceeds the threshold,
+  // otherwise, fallback to use cleanedSource directly. The method returns either a
+  // broadcast variable or the original form of cleanedSource.
+  private[spark] def tryBroadcastCleanedSource(code: CodeAndComment):
+      Either[broadcast.Broadcast[CodeAndComment], CodeAndComment] = {
+    def exceedThreshold(): Boolean = {
+      code.body.length + code.comment.iterator.map(
+        e => e._1.length + e._2.length).sum > conf.broadcastCleanedSourceThreshold
+    }
+    val enabled = conf.broadcastCleanedSourceThreshold >= 0
+    if (enabled && exceedThreshold()) {
+      scala.util.Left(sparkContext.broadcast(code))
+    } else {
+      scala.util.Right(code)
+    }
+  }
 }
 
 

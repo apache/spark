@@ -518,7 +518,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
         }
       }
 
-      val parts = partsScanned.until(math.min(partsScanned + numPartsToTry, totalParts).toInt)
+      val parts = partsScanned.until(math.min(partsScanned + numPartsToTry, totalParts))
       val partsToScan = if (takeFromEnd) {
         // Reverse partitions to scan. So, if parts was [1, 2, 3] in 200 partitions (0 to 199),
         // it becomes [198, 197, 196].

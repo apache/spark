@@ -34,6 +34,7 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, OutputFormat 
 
 import org.apache.spark._
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD, JavaSparkContext}
+import org.apache.spark.api.python.PythonFunction.PythonAccumulator
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.input.PortableDataStream
 import org.apache.spark.internal.Logging
@@ -83,7 +84,11 @@ private[spark] trait PythonFunction {
   def pythonExec: String
   def pythonVer: String
   def broadcastVars: JList[Broadcast[PythonBroadcast]]
-  def accumulator: PythonAccumulatorV2
+  def accumulator: PythonAccumulator
+}
+
+private[spark] object PythonFunction {
+  type PythonAccumulator = CollectionAccumulator[Array[Byte]]
 }
 
 /**
@@ -96,7 +101,7 @@ private[spark] case class SimplePythonFunction(
     pythonExec: String,
     pythonVer: String,
     broadcastVars: JList[Broadcast[PythonBroadcast]],
-    accumulator: PythonAccumulatorV2) extends PythonFunction {
+    accumulator: PythonAccumulator) extends PythonFunction {
 
   def this(
       command: Array[Byte],
@@ -105,7 +110,7 @@ private[spark] case class SimplePythonFunction(
       pythonExec: String,
       pythonVer: String,
       broadcastVars: JList[Broadcast[PythonBroadcast]],
-      accumulator: PythonAccumulatorV2) = {
+      accumulator: PythonAccumulator) = {
     this(command.toImmutableArraySeq,
       envVars, pythonIncludes, pythonExec, pythonVer, broadcastVars, accumulator)
   }

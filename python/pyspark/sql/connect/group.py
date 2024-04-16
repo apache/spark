@@ -21,7 +21,6 @@ check_dependencies(__name__)
 
 import warnings
 from typing import (
-    Any,
     Dict,
     List,
     Sequence,
@@ -32,7 +31,7 @@ from typing import (
     cast,
 )
 
-from pyspark.rdd import PythonEvalType
+from pyspark.util import PythonEvalType
 from pyspark.sql.group import GroupedData as PySparkGroupedData
 from pyspark.sql.pandas.group_ops import PandasCogroupedOps as PySparkPandasCogroupedOps
 from pyspark.sql.types import NumericType
@@ -40,7 +39,7 @@ from pyspark.sql.types import StructType
 
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.connect.column import Column
-from pyspark.sql.connect.functions.builtin import _invoke_function, col, lit
+from pyspark.sql.connect.functions import builtin as F
 from pyspark.errors import PySparkNotImplementedError, PySparkTypeError
 
 if TYPE_CHECKING:
@@ -85,12 +84,14 @@ class GroupedData:
         self._grouping_cols: List[Column] = grouping_cols
 
         self._pivot_col: Optional["Column"] = None
-        self._pivot_values: Optional[List[Any]] = None
+        self._pivot_values: Optional[List["Column"]] = None
         if group_type == "pivot":
             assert pivot_col is not None and isinstance(pivot_col, Column)
-            assert pivot_values is None or isinstance(pivot_values, list)
             self._pivot_col = pivot_col
-            self._pivot_values = pivot_values
+
+            if pivot_values is not None:
+                assert isinstance(pivot_values, list)
+                self._pivot_values = [F.lit(v) for v in pivot_values]
 
         self._grouping_sets: Optional[Sequence[Sequence["Column"]]] = None
         if group_type == "grouping_sets":
@@ -132,7 +133,7 @@ class GroupedData:
         assert exprs, "exprs should not be empty"
         if len(exprs) == 1 and isinstance(exprs[0], dict):
             # Convert the dict into key value pairs
-            aggregate_cols = [_invoke_function(exprs[0][k], col(k)) for k in exprs[0]]
+            aggregate_cols = [F._invoke_function(exprs[0][k], F.col(k)) for k in exprs[0]]
         else:
             # Columns
             assert all(isinstance(c, Column) for c in exprs), "all exprs should be Column"
@@ -166,8 +167,6 @@ class GroupedData:
             field.name for field in schema.fields if isinstance(field.dataType, NumericType)
         ]
 
-        agg_cols: List[str] = []
-
         if len(cols) > 0:
             invalid_cols = [c for c in cols if c not in numerical_cols]
             if len(invalid_cols) > 0:
@@ -185,7 +184,7 @@ class GroupedData:
                 child=self._df._plan,
                 group_type=self._group_type,
                 grouping_cols=self._grouping_cols,
-                aggregate_cols=[_invoke_function(function, col(c)) for c in agg_cols],
+                aggregate_cols=[F._invoke_function(function, F.col(c)) for c in agg_cols],
                 pivot_col=self._pivot_col,
                 pivot_values=self._pivot_values,
                 grouping_sets=self._grouping_sets,
@@ -216,7 +215,7 @@ class GroupedData:
     mean = avg
 
     def count(self) -> "DataFrame":
-        return self.agg(_invoke_function("count", lit(1)).alias("count"))
+        return self.agg(F._invoke_function("count", F.lit(1)).alias("count"))
 
     count.__doc__ = PySparkGroupedData.count.__doc__
 
@@ -444,16 +443,12 @@ class PandasCogroupedOps:
 
     applyInArrow.__doc__ = PySparkPandasCogroupedOps.applyInArrow.__doc__
 
-    @staticmethod
-    def _extract_cols(gd: "GroupedData") -> List[Column]:
-        df = gd._df
-        return [df[col] for col in df.columns]
-
 
 PandasCogroupedOps.__doc__ = PySparkPandasCogroupedOps.__doc__
 
 
 def _test() -> None:
+    import os
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
@@ -462,7 +457,9 @@ def _test() -> None:
     globs = pyspark.sql.connect.group.__dict__.copy()
 
     globs["spark"] = (
-        PySparkSession.builder.appName("sql.connect.group tests").remote("local[4]").getOrCreate()
+        PySparkSession.builder.appName("sql.connect.group tests")
+        .remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[4]"))
+        .getOrCreate()
     )
 
     (failure_count, test_count) = doctest.testmod(

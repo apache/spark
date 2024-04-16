@@ -206,6 +206,18 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     finalizeTask = Option(task)
   }
 
+  // Set the threshold to 1 billion which leads to an 128MB bitmap and
+  // the actual size of `HighlyCompressedMapStatus` can be much larger than 128MB.
+  // This may crash the driver with an OOM error.
+  if (numPartitions.toLong * partitioner.numPartitions.toLong > (1L << 30)) {
+    logWarning(
+      s"The number of shuffle blocks (${numPartitions.toLong * partitioner.numPartitions.toLong})" +
+        s" for shuffleId ${shuffleId} for ${_rdd} with ${numPartitions} partitions" +
+        " is possibly too large, which could cause the driver to crash with an out-of-memory" +
+        " error. Consider decreasing the number of partitions in this shuffle stage."
+    )
+  }
+
   _rdd.sparkContext.cleaner.foreach(_.registerShuffleForCleanup(this))
   _rdd.sparkContext.shuffleDriverComponents.registerShuffle(shuffleId)
 }

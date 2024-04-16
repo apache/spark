@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.objects
 
 import java.lang.reflect.{Method, Modifier}
 
+import scala.collection.immutable
 import scala.collection.mutable
 import scala.collection.mutable.Builder
 import scala.jdk.CollectionConverters._
@@ -906,6 +907,8 @@ case class MapObjects private(
       _.asInstanceOf[Array[_]].toImmutableArraySeq
     case ObjectType(cls) if classOf[java.util.List[_]].isAssignableFrom(cls) =>
       _.asInstanceOf[java.util.List[_]].asScala.toSeq
+    case ObjectType(cls) if classOf[java.util.Set[_]].isAssignableFrom(cls) =>
+      _.asInstanceOf[java.util.Set[_]].asScala.toSeq
     case ObjectType(cls) if cls == classOf[Object] =>
       (inputCollection) => {
         if (inputCollection.getClass.isArray) {
@@ -938,6 +941,14 @@ case class MapObjects private(
         executeFuncOnCollection(input).foreach(builder += _)
         mutable.ArraySeq.make(builder.result())
       }
+    case Some(cls) if classOf[immutable.ArraySeq[_]].isAssignableFrom(cls) =>
+      implicit val tag: ClassTag[Any] = elementClassTag()
+      input => {
+        val builder = mutable.ArrayBuilder.make[Any]
+        builder.sizeHint(input.size)
+        executeFuncOnCollection(input).foreach(builder += _)
+        immutable.ArraySeq.unsafeWrapArray(builder.result())
+      }
     case Some(cls) if classOf[scala.collection.Seq[_]].isAssignableFrom(cls) =>
       // Scala sequence
       executeFuncOnCollection(_).toSeq
@@ -969,6 +980,34 @@ case class MapObjects private(
         (inputs) => {
           val results = executeFuncOnCollection(inputs)
           val builder = constructor(inputs.length).asInstanceOf[java.util.List[Any]]
+          results.foreach(builder.add(_))
+          builder
+        }
+      }
+    case Some(cls) if classOf[java.util.Set[_]].isAssignableFrom(cls) =>
+      // Java set
+      if (cls == classOf[java.util.Set[_]] || cls == classOf[java.util.AbstractSet[_]]) {
+        // Specifying non concrete implementations of `java.util.Set`
+        executeFuncOnCollection(_).toSet.asJava
+      } else {
+        val constructors = cls.getConstructors()
+        val intParamConstructor = constructors.find { constructor =>
+          constructor.getParameterCount == 1 && constructor.getParameterTypes()(0) == classOf[Int]
+        }
+        val noParamConstructor = constructors.find { constructor =>
+          constructor.getParameterCount == 0
+        }
+
+        val constructor = intParamConstructor.map { intConstructor =>
+          (len: Int) => intConstructor.newInstance(len.asInstanceOf[Object])
+        }.getOrElse {
+          (_: Int) => noParamConstructor.get.newInstance()
+        }
+
+        // Specifying concrete implementations of `java.util.Set`
+        (inputs) => {
+          val results = executeFuncOnCollection(inputs)
+          val builder = constructor(inputs.length).asInstanceOf[java.util.Set[Any]]
           results.foreach(builder.add(_))
           builder
         }
@@ -1058,6 +1097,13 @@ case class MapObjects private(
           s"java.util.Iterator $it = ${genInputData.value}.iterator();",
           s"$it.next()"
         )
+      case ObjectType(cls) if classOf[java.util.Set[_]].isAssignableFrom(cls) =>
+        val it = ctx.freshName("it")
+        (
+          s"${genInputData.value}.size()",
+          s"java.util.Iterator $it = ${genInputData.value}.iterator();",
+          s"$it.next()"
+        )
       case ArrayType(et, _) =>
         (
           s"${genInputData.value}.numElements()",
@@ -1108,7 +1154,20 @@ case class MapObjects private(
             s"(${cls.getName}) ${classOf[mutable.ArraySeq[_]].getName}$$." +
               s"MODULE$$.make($builder.result());"
           )
-
+        case Some(cls) if classOf[immutable.ArraySeq[_]].isAssignableFrom(cls) =>
+          val tag = ctx.addReferenceObj("tag", elementClassTag())
+          val builderClassName = classOf[mutable.ArrayBuilder[_]].getName
+          val getBuilder = s"$builderClassName$$.MODULE$$.make($tag)"
+          val builder = ctx.freshName("collectionBuilder")
+          (
+            s"""
+               ${classOf[Builder[_, _]].getName} $builder = $getBuilder;
+               $builder.sizeHint($dataLength);
+             """,
+            (genValue: String) => s"$builder.$$plus$$eq($genValue);",
+            s"(${cls.getName}) ${classOf[immutable.ArraySeq[_]].getName}$$." +
+              s"MODULE$$.unsafeWrapArray($builder.result());"
+          )
         case Some(cls) if classOf[scala.collection.Seq[_]].isAssignableFrom(cls) ||
           classOf[scala.collection.Set[_]].isAssignableFrom(cls) =>
           // Scala sequence or set
@@ -1129,6 +1188,19 @@ case class MapObjects private(
             if (cls == classOf[java.util.List[_]] || cls == classOf[java.util.AbstractList[_]] ||
               cls == classOf[java.util.AbstractSequentialList[_]]) {
               s"${cls.getName} $builder = new java.util.ArrayList($dataLength);"
+            } else {
+              val param = Try(cls.getConstructor(Integer.TYPE)).map(_ => dataLength).getOrElse("")
+              s"${cls.getName} $builder = new ${cls.getName}($param);"
+            },
+            (genValue: String) => s"$builder.add($genValue);",
+            s"$builder;"
+          )
+        case Some(cls) if classOf[java.util.Set[_]].isAssignableFrom(cls) =>
+          // Java set
+          val builder = ctx.freshName("collectionBuilder")
+          (
+            if (cls == classOf[java.util.Set[_]] || cls == classOf[java.util.AbstractSet[_]]) {
+              s"${cls.getName} $builder = new java.util.HashSet($dataLength);"
             } else {
               val param = Try(cls.getConstructor(Integer.TYPE)).map(_ => dataLength).getOrElse("")
               s"${cls.getName} $builder = new ${cls.getName}($param);"
@@ -1442,7 +1514,7 @@ case class ExternalMapToCatalyst private(
     keyConverter.dataType, valueConverter.dataType, valueContainsNull = valueConverter.nullable)
 
   private lazy val mapCatalystConverter: Any => (Array[Any], Array[Any]) = {
-    val rowBuffer = InternalRow.fromSeq(Array[Any](1).toImmutableArraySeq)
+    val rowBuffer = new GenericInternalRow(Array[Any](1))
     def rowWrapper(data: Any): InternalRow = {
       rowBuffer.update(0, data)
       rowBuffer

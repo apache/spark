@@ -20,7 +20,7 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 import pyspark.pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase, TestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
 class CategoricalTestsMixin:
@@ -34,6 +34,10 @@ class CategoricalTestsMixin:
                 ),
             },
         )
+
+    @property
+    def psdf(self):
+        return ps.from_pandas(self.pdf)
 
     @property
     def df_pair(self):
@@ -658,7 +662,11 @@ class CategoricalTestsMixin:
         )
 
 
-class CategoricalTests(CategoricalTestsMixin, ComparisonTestBase, TestUtils):
+class CategoricalTests(
+    CategoricalTestsMixin,
+    PandasOnSparkTestCase,
+    TestUtils,
+):
     pass
 
 

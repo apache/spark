@@ -1092,6 +1092,34 @@ setMethod("dayofyear",
           })
 
 #' @details
+#' \code{monthname}: Extracts the three-letter abbreviated month name from a
+#' given date/timestamp/string.
+#'
+#' @rdname column_datetime_functions
+#' @aliases monthname monthname,Column-method
+#' @note monthname since 4.0.0
+setMethod("monthname",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "monthname", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{dayname}: Extracts the three-letter abbreviated day name from a
+#' given date/timestamp/string.
+#'
+#' @rdname column_datetime_functions
+#' @aliases dayname dayname,Column-method
+#' @note dayname since 4.0.0
+setMethod("dayname",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "dayname", x@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{decode}: Computes the first argument into a string from a binary using the provided
 #' character set.
 #'
@@ -2485,6 +2513,35 @@ setMethod("upper",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "upper", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{collate}: Marks a given column with specified collation.
+#'
+#' @param x a Column on which to perform collate.
+#' @param collation specified collation name.
+#' @rdname column_string_functions
+#' @aliases collate collate,Column-method
+#' @note collate since 4.0.0
+setMethod("collate",
+          signature(x = "Column", collation = "character"),
+          function(x, collation) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "collate", x@jc, collation)
+            column(jc)
+          })
+
+#' @details
+#' \code{collation}: Returns the collation name of a given column.
+#'
+#' @param x a Column on which to return collation name.
+#' @rdname column_string_functions
+#' @aliases collation collation,Column-method
+#' @note collation since 4.0.0
+setMethod("collation",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "collation", x@jc)
             column(jc)
           })
 

@@ -392,8 +392,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     ):
         assert data is not None
 
-        self._anchor: DataFrame
-        self._col_label: Label
+        self._anchor: DataFrame  # type: ignore[annotation-unchecked]
+        self._col_label: Label  # type: ignore[annotation-unchecked]
         if isinstance(data, DataFrame):
             assert dtype is None
             assert name is None
@@ -2231,6 +2231,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         limit_direction: Optional[str] = None,
         limit_area: Optional[str] = None,
     ) -> "Series":
+        if self.dtype == "object":
+            warnings.warn(
+                "Series.interpolate with object dtype is deprecated and will raise in a "
+                "future version. Convert to a specific numeric type before interpolating.",
+                FutureWarning,
+            )
         if method not in ["linear"]:
             raise NotImplementedError("interpolate currently works only for method='linear'")
         if (limit is not None) and (not limit > 0):
@@ -5864,7 +5870,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                     # then return monotonically_increasing_id. This will let max by
                     # to return last index value, which is the behaviour of pandas
                     else spark_column.isNotNull(),
-                    monotonically_increasing_id_column,
+                    F.col(monotonically_increasing_id_column),
                 ),
             )
             for index in where
@@ -7086,15 +7092,15 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         ----------
         rule : str
             The offset string or object representing target conversion.
-            Currently, supported units are {'Y', 'A', 'M', 'D', 'H',
-            'T', 'MIN', 'S'}.
+            Currently, supported units are {'YE', 'A', 'ME', 'D', 'h',
+            'min', 'MIN', 's'}.
         closed : {{'right', 'left'}}, default None
             Which side of bin interval is closed. The default is 'left'
-            for all frequency offsets except for 'A', 'Y' and 'M' which all
+            for all frequency offsets except for 'A', 'YE' and 'ME' which all
             have a default of 'right'.
         label : {{'right', 'left'}}, default None
             Which bin edge label to label bucket with. The default is 'left'
-            for all frequency offsets except for 'A', 'Y' and 'M' which all
+            for all frequency offsets except for 'A', 'YE' and 'ME' which all
             have a default of 'right'.
         on : Series, optional
             For a DataFrame, column to use instead of index for resampling.

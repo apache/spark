@@ -709,7 +709,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       pythonUdf,
       output,
       project,
-      false)
+      false,
+      None)
     val left = SubqueryAlias("temp0", mapInPandas)
     val right = SubqueryAlias("temp1", mapInPandas)
     val join = Join(left, right, Inner, None, JoinHint.NONE)
@@ -729,7 +730,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       pythonUdf,
       output,
       project,
-      false)
+      false,
+      None)
     assertAnalysisSuccess(mapInPandas)
   }
 
@@ -741,11 +743,12 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       false)
     val output = DataTypeUtils.toAttributes(pythonUdf.dataType.asInstanceOf[StructType])
     val project = Project(Seq(UnresolvedAttribute("a")), testRelation)
-    val mapInArrow = PythonMapInArrow(
+    val mapInArrow = MapInArrow(
       pythonUdf,
       output,
       project,
-      false)
+      false,
+      None)
     assertAnalysisSuccess(mapInArrow)
   }
 
@@ -1348,7 +1351,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       expectedErrorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       expectedMessageParameters = Map(
         "sqlExpr" -> "\"mean(c)\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> "first",
         "inputSql" -> "\"c\"",
         "inputType" -> "\"BOOLEAN\"",
         "requiredType" -> "\"NUMERIC\" or \"ANSI INTERVAL\""),
@@ -1367,7 +1370,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       expectedErrorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       expectedMessageParameters = Map(
         "sqlExpr" -> "\"mean(c)\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> "first",
         "inputSql" -> "\"c\"",
         "inputType" -> "\"BOOLEAN\"",
         "requiredType" -> "\"NUMERIC\" or \"ANSI INTERVAL\""),
@@ -1385,7 +1388,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       expectedErrorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       expectedMessageParameters = Map(
         "sqlExpr" -> "\"abs(c)\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> "first",
         "inputSql" -> "\"c\"",
         "inputType" -> "\"BOOLEAN\"",
         "requiredType" ->
@@ -1405,7 +1408,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       expectedErrorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       expectedMessageParameters = Map(
         "sqlExpr" -> "\"abs(c)\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> "first",
         "inputSql" -> "\"c\"",
         "inputType" -> "\"BOOLEAN\"",
         "requiredType" ->
@@ -1463,6 +1466,30 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     }
 
     assertAnalysisSuccess(finalPlan)
+  }
+
+  test("Execute Immediate plan transformation") {
+    try {
+    SimpleAnalyzer.catalogManager.tempVariableManager.create(
+      "res", "1", Literal(1), overrideIfExists = true)
+    SimpleAnalyzer.catalogManager.tempVariableManager.create(
+      "res2", "1", Literal(1), overrideIfExists = true)
+    val actual1 = parsePlan("EXECUTE IMMEDIATE 'SELECT 42 WHERE ? = 1' USING 2").analyze
+    val expected1 = parsePlan("SELECT 42 where 2 = 1").analyze
+    comparePlans(actual1, expected1)
+    val actual2 = parsePlan(
+      "EXECUTE IMMEDIATE 'SELECT 42 WHERE :first = 1' USING 2 as first").analyze
+    val expected2 = parsePlan("SELECT 42 where 2 = 1").analyze
+    comparePlans(actual2, expected2)
+    // Test that plan is transformed to SET operation
+    val actual3 = parsePlan(
+      "EXECUTE IMMEDIATE 'SELECT 17, 7 WHERE ? = 1' INTO res, res2 USING 2").analyze
+    val expected3 = parsePlan("SET var (res, res2) = (SELECT 17, 7 where 2 = 1)").analyze
+      comparePlans(actual3, expected3)
+    } finally {
+      SimpleAnalyzer.catalogManager.tempVariableManager.remove("res")
+      SimpleAnalyzer.catalogManager.tempVariableManager.remove("res2")
+    }
   }
 
   test("SPARK-41271: bind named parameters to literals") {
@@ -1718,9 +1745,9 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val name = Literal("a").as("name")
     val replaceable = new Nvl(Literal("a"), Literal("b"))
     withClue("IDENTIFIER as column") {
-      val ident = ExpressionWithUnresolvedIdentifier(name, UnresolvedAttribute.apply)
+      val ident = new ExpressionWithUnresolvedIdentifier(name, UnresolvedAttribute.apply)
       checkAnalysis(testRelation.select(ident), testRelation.select($"a").analyze)
-      val ident2 = ExpressionWithUnresolvedIdentifier(replaceable, UnresolvedAttribute.apply)
+      val ident2 = new ExpressionWithUnresolvedIdentifier(replaceable, UnresolvedAttribute.apply)
       checkAnalysis(testRelation.select(ident2), testRelation.select($"a").analyze)
     }
     withClue("IDENTIFIER as table") {

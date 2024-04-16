@@ -52,8 +52,10 @@ except ImportError:
     # No NumPy, but that's okay, we'll skip those tests
     pass
 
-from pyspark import SparkContext, SparkConf
+from pyspark import SparkConf
 from pyspark.errors import PySparkAssertionError, PySparkException
+from pyspark.errors.exceptions.captured import CapturedException
+from pyspark.errors.exceptions.base import QueryContextType
 from pyspark.find_spark_home import _find_spark_home
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql import Row
@@ -154,6 +156,8 @@ class QuietTest:
 
 class PySparkTestCase(unittest.TestCase):
     def setUp(self):
+        from pyspark import SparkContext
+
         self._old_sys_path = list(sys.path)
         class_name = self.__class__.__name__
         self.sc = SparkContext("local[4]", class_name)
@@ -173,11 +177,23 @@ class ReusedPySparkTestCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        from pyspark import SparkContext
+
         cls.sc = SparkContext("local[4]", cls.__name__, conf=cls.conf())
 
     @classmethod
     def tearDownClass(cls):
         cls.sc.stop()
+
+    def test_assert_vanilla_mode(self):
+        from pyspark.sql import is_remote
+
+        self.assertFalse(is_remote())
+
+    def quiet(self):
+        from pyspark.testing.utils import QuietTest
+
+        return QuietTest(self.sc)
 
 
 class ByteArrayOutput:
@@ -270,7 +286,14 @@ class PySparkErrorTestUtils:
         exception: PySparkException,
         error_class: str,
         message_parameters: Optional[Dict[str, str]] = None,
+        query_context_type: Optional[QueryContextType] = None,
+        pyspark_fragment: Optional[str] = None,
     ):
+        query_context = exception.getQueryContext()
+        assert bool(query_context) == (query_context_type is not None), (
+            "`query_context_type` is required when QueryContext exists. "
+            f"QueryContext: {query_context}."
+        )
         # Test if given error is an instance of PySparkException.
         self.assertIsInstance(
             exception,
@@ -291,6 +314,27 @@ class PySparkErrorTestUtils:
         self.assertEqual(
             expected, actual, f"Expected message parameters was '{expected}', got '{actual}'"
         )
+
+        # Test query context
+        if query_context:
+            expected = query_context_type
+            actual_contexts = exception.getQueryContext()
+            for actual_context in actual_contexts:
+                actual = actual_context.contextType()
+                self.assertEqual(
+                    expected, actual, f"Expected QueryContext was '{expected}', got '{actual}'"
+                )
+                if actual == QueryContextType.DataFrame:
+                    assert (
+                        pyspark_fragment is not None
+                    ), "`pyspark_fragment` is required when QueryContextType is DataFrame."
+                    expected = pyspark_fragment
+                    actual = actual_context.pysparkFragment()
+                    self.assertEqual(
+                        expected,
+                        actual,
+                        f"Expected PySpark fragment was '{expected}', got '{actual}'",
+                    )
 
 
 def assertSchemaEqual(
@@ -600,10 +644,11 @@ def assertDataFrameEqual(
     >>> list_of_rows = [Row(1, 1000), Row(2, 3000)]
     >>> assertDataFrameEqual(df1, list_of_rows)  # pass, actual and expected data are equal
 
-    >>> import pyspark.pandas as ps
-    >>> df1 = ps.DataFrame({'a': [1, 2, 3], 'b': [4, 5, 6], 'c': [7, 8, 9]})
-    >>> df2 = ps.DataFrame({'a': [1, 2, 3], 'b': [4, 5, 6], 'c': [7, 8, 9]})
-    >>> assertDataFrameEqual(df1, df2)  # pass, pandas-on-Spark DataFrames are equal
+    >>> import pyspark.pandas as ps  # doctest: +SKIP
+    >>> df1 = ps.DataFrame({'a': [1, 2, 3], 'b': [4, 5, 6], 'c': [7, 8, 9]})  # doctest: +SKIP
+    >>> df2 = ps.DataFrame({'a': [1, 2, 3], 'b': [4, 5, 6], 'c': [7, 8, 9]})  # doctest: +SKIP
+    >>> # pass, pandas-on-Spark DataFrames are equal
+    >>> assertDataFrameEqual(df1, df2)  # doctest: +SKIP
 
     >>> df1 = spark.createDataFrame(
     ...     data=[("1", 1000.00), ("2", 3000.00), ("3", 2000.00)], schema=["id", "amount"])
@@ -753,16 +798,25 @@ def assertDataFrameEqual(
     has_pandas = False
     try:
         # If pandas dependencies are available, allow pandas or pandas-on-Spark DataFrame
-        import pyspark.pandas as ps
         import pandas as pd
-        from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
         has_pandas = True
     except ImportError:
         # no pandas, so we won't call pandasutils functions
         pass
 
-    if has_pandas:
+    has_arrow = False
+    try:
+        import pyarrow
+
+        has_arrow = True
+    except ImportError:
+        pass
+
+    if has_pandas and has_arrow:
+        import pyspark.pandas as ps
+        from pyspark.testing.pandasutils import PandasOnSparkTestUtils
+
         if (
             isinstance(actual, pd.DataFrame)
             or isinstance(expected, pd.DataFrame)
@@ -775,29 +829,29 @@ def assertDataFrameEqual(
                 actual, expected, almost=True, rtol=rtol, atol=atol, check_row_order=checkRowOrder
             )
 
-        from pyspark.sql.utils import get_dataframe_class
+    from pyspark.sql.utils import get_dataframe_class
 
-        # if is_remote(), allow Connect DataFrame
-        SparkDataFrame = get_dataframe_class()
+    # if is_remote(), allow Connect DataFrame
+    SparkDataFrame = get_dataframe_class()
 
-        if not isinstance(actual, (DataFrame, SparkDataFrame, list)):
-            raise PySparkAssertionError(
-                error_class="INVALID_TYPE_DF_EQUALITY_ARG",
-                message_parameters={
-                    "expected_type": "Union[DataFrame, ps.DataFrame, List[Row]]",
-                    "arg_name": "actual",
-                    "actual_type": type(actual),
-                },
-            )
-        elif not isinstance(expected, (DataFrame, SparkDataFrame, list)):
-            raise PySparkAssertionError(
-                error_class="INVALID_TYPE_DF_EQUALITY_ARG",
-                message_parameters={
-                    "expected_type": "Union[DataFrame, ps.DataFrame, List[Row]]",
-                    "arg_name": "expected",
-                    "actual_type": type(expected),
-                },
-            )
+    if not isinstance(actual, (DataFrame, SparkDataFrame, list)):
+        raise PySparkAssertionError(
+            error_class="INVALID_TYPE_DF_EQUALITY_ARG",
+            message_parameters={
+                "expected_type": "Union[DataFrame, ps.DataFrame, List[Row]]",
+                "arg_name": "actual",
+                "actual_type": type(actual),
+            },
+        )
+    elif not isinstance(expected, (DataFrame, SparkDataFrame, list)):
+        raise PySparkAssertionError(
+            error_class="INVALID_TYPE_DF_EQUALITY_ARG",
+            message_parameters={
+                "expected_type": "Union[DataFrame, ps.DataFrame, List[Row]]",
+                "arg_name": "expected",
+                "actual_type": type(expected),
+            },
+        )
 
     if ignoreColumnOrder:
         actual = actual.select(*sorted(actual.columns))
@@ -918,11 +972,21 @@ def assertDataFrameEqual(
             )
 
     if not isinstance(actual, list):
+        if actual.isStreaming:
+            raise PySparkAssertionError(
+                error_class="UNSUPPORTED_OPERATION",
+                message_parameters={"operation": "assertDataFrameEqual on streaming DataFrame"},
+            )
         actual_list = actual.collect()
     else:
         actual_list = actual
 
     if not isinstance(expected, list):
+        if expected.isStreaming:
+            raise PySparkAssertionError(
+                error_class="UNSUPPORTED_OPERATION",
+                message_parameters={"operation": "assertDataFrameEqual on streaming DataFrame"},
+            )
         expected_list = expected.collect()
     else:
         expected_list = expected

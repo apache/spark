@@ -71,6 +71,9 @@ class OrcCodecSuite extends FileSourceCodecSuite {
 
   override def format: String = "orc"
   override val codecConfigName: String = SQLConf.ORC_COMPRESSION.key
+  // Exclude "BROTLI" because its dependencies
+  // require adding different jars according to different OSs
   override protected def availableCodecs =
-    OrcCompressionCodec.values().map(_.lowerCaseName()).toSeq
+    OrcCompressionCodec.values().filter(_ != OrcCompressionCodec.BROTLI)
+      .map(_.lowerCaseName()).toSeq
 }

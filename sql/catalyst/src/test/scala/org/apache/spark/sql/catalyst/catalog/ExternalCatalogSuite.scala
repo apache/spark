@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -569,8 +570,10 @@ abstract class ExternalCatalogSuite extends SparkFunSuite {
         // then be caught and converted to a RuntimeException with a descriptive message.
         case ex: RuntimeException if ex.getMessage.contains("MetaException") =>
           throw new AnalysisException(
-            errorClass = "_LEGACY_ERROR_TEMP_3066",
-            messageParameters = Map("msg" -> ex.getMessage))
+            errorClass = "_LEGACY_ERROR_TEMP_2193",
+            messageParameters = Map(
+              "hiveMetastorePartitionPruningFallbackOnException" ->
+                SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION.key))
       }
     }
   }

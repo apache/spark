@@ -25,7 +25,7 @@ import numpy as np
 from numpy import array, random, tile
 
 from pyspark import SparkContext, since
-from pyspark.rdd import RDD
+from pyspark.core.rdd import RDD
 from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc, callJavaFunc, _py2java, _java2py
 from pyspark.mllib.linalg import SparseVector, _convert_to_vector, DenseVector  # noqa: F401
 from pyspark.mllib.stat.distribution import MultivariateGaussian
@@ -1130,7 +1130,7 @@ class LDAModel(JavaModelWrapper, JavaSaveable, Loader["LDAModel"]):
 
     .. [1] Blei, D. et al. "Latent Dirichlet Allocation."
         J. Mach. Learn. Res. 3 (2003): 993-1022.
-        https://www.jmlr.org/papers/v3/blei03a
+        https://web.archive.org/web/20220128160306/https://www.jmlr.org/papers/v3/blei03a
 
     Examples
     --------

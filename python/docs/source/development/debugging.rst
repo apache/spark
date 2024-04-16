@@ -215,13 +215,10 @@ Python/Pandas UDF
 ~~~~~~~~~~~~~~~~~
 
 PySpark provides remote `memory_profiler <https://github.com/pythonprofilers/memory_profiler>`_ for
-Python/Pandas UDFs, which can be enabled by setting ``spark.python.profile.memory`` configuration to ``true``. That
-can be used on editors with line numbers such as Jupyter notebooks. An example on a Jupyter notebook is as shown below.
+Python/Pandas UDFs. That can be used on editors with line numbers such as Jupyter notebooks. UDFs with iterators as inputs/outputs are not supported.
 
-.. code-block:: bash
-
-    pyspark --conf spark.python.profile.memory=true
-
+SparkSession-based memory profiler can be enabled by setting the `Runtime SQL configuration <https://spark.apache.org/docs/latest/configuration.html#runtime-sql-configuration>`_
+``spark.sql.pyspark.udf.profiler`` to ``memory``. An example on a Jupyter notebook is as shown below.
 
 .. code-block:: python
 
@@ -232,10 +229,11 @@ can be used on editors with line numbers such as Jupyter notebooks. An example o
     def add1(x):
       return x + 1
 
+    spark.conf.set("spark.sql.pyspark.udf.profiler", "memory")
+
     added = df.select(add1("id"))
     added.show()
-    sc.show_profiles()
-
+    spark.profile.show(type="memory")
 
 The result profile is as shown below.
 
@@ -258,7 +256,6 @@ The UDF IDs can be seen in the query plan, for example, ``add1(...)#2L`` in ``Ar
 
     added.explain()
 
-
 .. code-block:: text
 
     == Physical Plan ==
@@ -266,8 +263,11 @@ The UDF IDs can be seen in the query plan, for example, ``add1(...)#2L`` in ``Ar
     +- ArrowEvalPython [add1(id#0L)#2L], [pythonUDF0#11L], 200
        +- *(1) Range (0, 10, step=1, splits=16)
 
-This feature is not supported with registered UDFs or UDFs with iterators as inputs/outputs.
+We can clear the result memory profile as shown below.
 
+.. code-block:: python
+
+    spark.profile.clear(id=2, type="memory")
 
 Identifying Hot Loops (Python Profilers)
 ----------------------------------------
@@ -306,47 +306,14 @@ regular Python process unless you are running your driver program in another mac
           276    0.000    0.000    0.002    0.000 <frozen importlib._bootstrap>:147(__enter__)
     ...
 
-Executor Side
-~~~~~~~~~~~~~
-
-To use this on executor side, PySpark provides remote `Python Profilers <https://docs.python.org/3/library/profile.html>`_ for
-executor side, which can be enabled by setting ``spark.python.profile`` configuration to ``true``.
-
-.. code-block:: bash
-
-    pyspark --conf spark.python.profile=true
-
-
-.. code-block:: python
-
-    >>> rdd = sc.parallelize(range(100)).map(str)
-    >>> rdd.count()
-    100
-    >>> sc.show_profiles()
-    ============================================================
-    Profile of RDD<id=1>
-    ============================================================
-             728 function calls (692 primitive calls) in 0.004 seconds
-
-       Ordered by: internal time, cumulative time
-
-       ncalls  tottime  percall  cumtime  percall filename:lineno(function)
-           12    0.001    0.000    0.001    0.000 serializers.py:210(load_stream)
-           12    0.000    0.000    0.000    0.000 {built-in method _pickle.dumps}
-           12    0.000    0.000    0.001    0.000 serializers.py:252(dump_stream)
-           12    0.000    0.000    0.001    0.000 context.py:506(f)
-    ...
-
 Python/Pandas UDF
 ~~~~~~~~~~~~~~~~~
 
-To use this on Python/Pandas UDFs, PySpark provides remote `Python Profilers <https://docs.python.org/3/library/profile.html>`_ for
-Python/Pandas UDFs, which can be enabled by setting ``spark.python.profile`` configuration to ``true``.
+PySpark provides remote `Python Profilers <https://docs.python.org/3/library/profile.html>`_ for
+Python/Pandas UDFs. UDFs with iterators as inputs/outputs are not supported.
 
-.. code-block:: bash
-
-    pyspark --conf spark.python.profile=true
-
+SparkSession-based performance profiler can be enabled by setting the `Runtime SQL configuration <https://spark.apache.org/docs/latest/configuration.html#runtime-sql-configuration>`_
+``spark.sql.pyspark.udf.profiler`` to ``perf``. An example is as shown below.
 
 .. code-block:: python
 
@@ -358,6 +325,7 @@ Python/Pandas UDFs, which can be enabled by setting ``spark.python.profile`` con
     ...
     >>> added = df.select(add1("id"))
 
+    >>> spark.conf.set("spark.sql.pyspark.udf.profiler", "perf")
     >>> added.show()
     +--------+
     |add1(id)|
@@ -365,7 +333,7 @@ Python/Pandas UDFs, which can be enabled by setting ``spark.python.profile`` con
     ...
     +--------+
 
-    >>> sc.show_profiles()
+    >>> spark.profile.show(type="perf")
     ============================================================
     Profile of UDF<id=2>
     ============================================================
@@ -390,8 +358,11 @@ The UDF IDs can be seen in the query plan, for example, ``add1(...)#2L`` in ``Ar
     +- ArrowEvalPython [add1(id#0L)#2L], [pythonUDF0#11L], 200
        +- *(1) Range (0, 10, step=1, splits=16)
 
+We can clear the result performance profile as shown below.
 
-This feature is not supported with registered UDFs.
+.. code-block:: python
+
+    >>> spark.profile.clear(id=2, type="perf")
 
 Common Exceptions / Errors
 --------------------------

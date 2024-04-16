@@ -36,9 +36,9 @@ import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
-import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config
-import org.apache.spark.internal.config.RDD_CACHE_VISIBILITY_TRACKING_ENABLED
+import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKey.{ACCUMULATOR_ID, CLASS_NAME, JOB_ID, PARTITION_ID, STAGE_ID, TASK_ID}
+import org.apache.spark.internal.config.{LEGACY_ABORT_STAGE_AFTER_KILL_TASKS, RDD_CACHE_VISIBILITY_TRACKING_ENABLED}
 import org.apache.spark.internal.config.Tests.TEST_NO_STAGE_RETRY
 import org.apache.spark.network.shuffle.{BlockStoreClient, MergeFinalizerListener}
 import org.apache.spark.network.shuffle.protocol.MergeStatuses
@@ -181,6 +181,9 @@ private[spark] class DAGScheduler(
    * locations where that RDD partition is cached.
    *
    * All accesses to this map should be guarded by synchronizing on it (see SPARK-4454).
+   * If you need to access any RDD while synchronizing on the cache locations,
+   * first synchronize on the RDD, and then synchronize on this map to avoid deadlocks. The RDD
+   * could try to access the cache locations after synchronizing on the RDD.
    */
   private val cacheLocs = new HashMap[Int, IndexedSeq[Seq[TaskLocation]]]
 
@@ -273,7 +276,13 @@ private[spark] class DAGScheduler(
   private val messageScheduler =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("dag-scheduler-message")
 
-  private[spark] val eventProcessLoop = new DAGSchedulerEventProcessLoop(this)
+  private[spark] var eventProcessLoop = new DAGSchedulerEventProcessLoop(this)
+  // Used for test only. Some tests uses the same thread of the event poster to
+  // process the events to ensure the deterministic behavior during the test.
+  private[spark] def setEventProcessLoop(loop: DAGSchedulerEventProcessLoop): Unit = {
+    eventProcessLoop = loop
+  }
+
   taskScheduler.setDAGScheduler(this)
 
   private val pushBasedShuffleEnabled = Utils.isPushBasedShuffleEnabled(sc.getConf, isDriver = true)
@@ -320,6 +329,9 @@ private[spark] class DAGScheduler(
   /** Whether rdd cache visibility tracking is enabled. */
   private val trackingCacheVisibility: Boolean =
     sc.getConf.get(RDD_CACHE_VISIBILITY_TRACKING_ENABLED)
+
+  /** Whether to abort a stage after canceling all of its tasks. */
+  private val legacyAbortStageAfterKillTasks = sc.getConf.get(LEGACY_ABORT_STAGE_AFTER_KILL_TASKS)
 
   /**
    * Called by the TaskSetManager to report task's starting.
@@ -426,22 +438,24 @@ private[spark] class DAGScheduler(
   }
 
   private[scheduler]
-  def getCacheLocs(rdd: RDD[_]): IndexedSeq[Seq[TaskLocation]] = cacheLocs.synchronized {
-    // Note: this doesn't use `getOrElse()` because this method is called O(num tasks) times
-    if (!cacheLocs.contains(rdd.id)) {
-      // Note: if the storage level is NONE, we don't need to get locations from block manager.
-      val locs: IndexedSeq[Seq[TaskLocation]] = if (rdd.getStorageLevel == StorageLevel.NONE) {
-        IndexedSeq.fill(rdd.partitions.length)(Nil)
-      } else {
-        val blockIds =
-          rdd.partitions.indices.map(index => RDDBlockId(rdd.id, index)).toArray[BlockId]
-        blockManagerMaster.getLocations(blockIds).map { bms =>
-          bms.map(bm => TaskLocation(bm.host, bm.executorId))
+  def getCacheLocs(rdd: RDD[_]): IndexedSeq[Seq[TaskLocation]] = rdd.stateLock.synchronized {
+    cacheLocs.synchronized {
+      // Note: this doesn't use `getOrElse()` because this method is called O(num tasks) times
+      if (!cacheLocs.contains(rdd.id)) {
+        // Note: if the storage level is NONE, we don't need to get locations from block manager.
+        val locs: IndexedSeq[Seq[TaskLocation]] = if (rdd.getStorageLevel == StorageLevel.NONE) {
+          IndexedSeq.fill(rdd.partitions.length)(Nil)
+        } else {
+          val blockIds =
+            rdd.partitions.indices.map(index => RDDBlockId(rdd.id, index)).toArray[BlockId]
+          blockManagerMaster.getLocations(blockIds).map { bms =>
+            bms.map(bm => TaskLocation(bm.host, bm.executorId))
+          }
         }
+        cacheLocs(rdd.id) = locs
       }
-      cacheLocs(rdd.id) = locs
+      cacheLocs(rdd.id)
     }
-    cacheLocs(rdd.id)
   }
 
   private def clearCacheLocs(): Unit = cacheLocs.synchronized {
@@ -843,7 +857,7 @@ private[spark] class DAGScheduler(
   private def cleanupStateForJobAndIndependentStages(job: ActiveJob): Unit = {
     val registeredStages = jobIdToStageIds.get(job.jobId)
     if (registeredStages.isEmpty || registeredStages.get.isEmpty) {
-      logError("No stages registered for job " + job.jobId)
+      logError(log"No stages registered for job ${MDC(JOB_ID, job.jobId)}")
     } else {
       stageIdToStage.filter {
         case (stageId, _) => registeredStages.get.contains(stageId)
@@ -851,9 +865,9 @@ private[spark] class DAGScheduler(
         case (stageId, stage) =>
           val jobSet = stage.jobIds
           if (!jobSet.contains(job.jobId)) {
-            logError(
-              "Job %d not registered for stage %d even though that stage was registered for the job"
-              .format(job.jobId, stageId))
+            // scalastyle:off line.size.limit
+            logError(log"Job ${MDC(JOB_ID, job.jobId)} not registered for stage ${MDC(STAGE_ID, stageId)} even though that stage was registered for the job")
+            // scalastyle:on
           } else {
             def removeStage(stageId: Int): Unit = {
               // data structures based on Stage
@@ -1205,6 +1219,9 @@ private[spark] class DAGScheduler(
       Option(activeJob.properties).exists {
         _.getProperty(SparkContext.SPARK_JOB_GROUP_ID) == groupId
       }
+    }
+    if (activeInGroup.isEmpty && !cancelFutureJobs) {
+      logWarning(s"Failed to cancel job group $groupId. Cannot find active jobs for it.")
     }
     val jobIds = activeInGroup.map(_.jobId)
     jobIds.foreach(handleJobCancellation(_,
@@ -1732,8 +1749,8 @@ private[spark] class DAGScheduler(
             case None => "Unknown class"
           }
           logError(
-            s"Failed to update accumulator $id ($accumClassName) for task ${task.partitionId}",
-            e)
+            log"Failed to update accumulator ${MDC(ACCUMULATOR_ID, id)} (${MDC(CLASS_NAME, accumClassName)}) " +
+              log"for task ${MDC(PARTITION_ID, task.partitionId)}", e)
       }
     }
   }
@@ -1746,7 +1763,9 @@ private[spark] class DAGScheduler(
         } catch {
           case NonFatal(e) =>
             val taskId = event.taskInfo.taskId
-            logError(s"Error when attempting to reconstruct metrics for task $taskId", e)
+            logError(
+              log"Error when attempting to reconstruct metrics for task ${MDC(TASK_ID, taskId)}",
+              e)
             null
         }
       } else {
@@ -2817,10 +2836,16 @@ private[spark] class DAGScheduler(
     failedStage.latestInfo.completionTime = Some(clock.getTimeMillis())
     updateStageInfoForPushBasedShuffle(failedStage)
     for (job <- dependentJobs) {
-      failJobAndIndependentStages(
-        job,
+      val finalException = exception.collect {
+        // If the error is user-facing (defines error class and is not internal error), we don't
+        // wrap it with "Job aborted" and expose this error to the end users directly.
+        case st: Exception with SparkThrowable if st.getErrorClass != null &&
+            !SparkThrowableHelper.isInternalError(st.getErrorClass) =>
+          st
+      }.getOrElse {
         new SparkException(s"Job aborted due to stage failure: $reason", cause = exception.orNull)
-      )
+      }
+      failJobAndIndependentStages(job, finalException)
     }
     if (dependentJobs.isEmpty) {
       logInfo("Ignoring failure of " + failedStage + " because all jobs depending on it are done")
@@ -2845,23 +2870,25 @@ private[spark] class DAGScheduler(
     var ableToCancelStages = true
     val stages = jobIdToStageIds(job.jobId)
     if (stages.isEmpty) {
-      logError(s"No stages registered for job ${job.jobId}")
+      logError(log"No stages registered for job ${MDC(JOB_ID, job.jobId)}")
     }
     stages.foreach { stageId =>
       val jobsForStage: Option[HashSet[Int]] = stageIdToStage.get(stageId).map(_.jobIds)
       if (jobsForStage.isEmpty || !jobsForStage.get.contains(job.jobId)) {
-        logError(
-          "Job %d not registered for stage %d even though that stage was registered for the job"
-            .format(job.jobId, stageId))
+        logError(log"Job ${MDC(JOB_ID, job.jobId)} not registered for stage " +
+            log"${MDC(STAGE_ID, stageId)} even though that stage was registered for the job")
       } else if (jobsForStage.get.size == 1) {
         if (!stageIdToStage.contains(stageId)) {
-          logError(s"Missing Stage for stage with id $stageId")
+          logError(log"Missing Stage for stage with id ${MDC(STAGE_ID, stageId)}")
         } else {
           // This stage is only used by the job, so finish the stage if it is running.
           val stage = stageIdToStage(stageId)
           if (runningStages.contains(stage)) {
-            try { // cancelTasks will fail if a SchedulerBackend does not implement killTask
-              taskScheduler.cancelTasks(stageId, shouldInterruptTaskThread(job), reason)
+            try { // killAllTaskAttempts will fail if a SchedulerBackend does not implement killTask
+              taskScheduler.killAllTaskAttempts(stageId, shouldInterruptTaskThread(job), reason)
+              if (legacyAbortStageAfterKillTasks) {
+                stageFailed(stageId, reason)
+              }
               markStageAsFinished(stage, Some(reason))
             } catch {
               case e: UnsupportedOperationException =>
@@ -2878,7 +2905,7 @@ private[spark] class DAGScheduler(
   /** Fails a job and all stages that are only used by that job, and cleans up relevant state. */
   private def failJobAndIndependentStages(
       job: ActiveJob,
-      error: SparkException): Unit = {
+      error: Exception): Unit = {
     if (cancelRunningIndependentStages(job, error.getMessage)) {
       // SPARK-15783 important to cleanup state first, just for tests where we have some asserts
       // against the state.  Otherwise we have a *little* bit of flakiness in the tests.

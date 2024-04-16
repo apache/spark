@@ -28,10 +28,40 @@ The casting behaviours are defined as store assignment rules in the standard.
 
 When `spark.sql.storeAssignmentPolicy` is set to `ANSI`, Spark SQL complies with the ANSI store assignment rules. This is a separate configuration because its default value is `ANSI`, while the configuration `spark.sql.ansi.enabled` is disabled by default.
 
-|Property Name|Default| Meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |Since Version|
-|-------------|-------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------|
-|`spark.sql.ansi.enabled`|false| When true, Spark tries to conform to the ANSI SQL specification: <br/> 1. Spark SQL will throw runtime exceptions on invalid operations, including integer overflow errors, string parsing errors, etc. <br/> 2. Spark will use different type coercion rules for resolving conflicts among data types. The rules are consistently based on data type precedence.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |3.0.0|
-|`spark.sql.storeAssignmentPolicy`|ANSI| When inserting a value into a column with different data type, Spark will perform type conversion.  Currently, we support 3 policies for the type coercion rules: ANSI, legacy and strict.<br/> 1. With ANSI policy, Spark performs the type coercion as per ANSI SQL. In practice, the behavior is mostly the same as PostgreSQL.  It disallows certain unreasonable type conversions such as converting string to int or double to boolean. On inserting a numeric type column, an overflow error will be thrown if the value is out of the target data type's range.<br/>2. With legacy policy, Spark allows the type coercion as long as it is a valid Cast, which is very loose.  e.g. converting string to int or double to boolean is allowed.  It is also the only behavior in Spark 2.x and it is compatible with Hive.<br/>3. With strict policy, Spark doesn't allow any possible precision loss or data truncation in type coercion, e.g. converting double to int or decimal to double is not allowed. |3.0.0|
+<table class="spark-config">
+<thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
+<tr>
+  <td><code>spark.sql.ansi.enabled</code></td>
+  <td>false</td>
+  <td>
+    When true, Spark tries to conform to the ANSI SQL specification: <br/>
+    1. Spark SQL will throw runtime exceptions on invalid operations, including integer overflow
+    errors, string parsing errors, etc. <br/>
+    2. Spark will use different type coercion rules for resolving conflicts among data types.
+    The rules are consistently based on data type precedence.
+  </td>
+  <td>3.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.sql.storeAssignmentPolicy</code></td>
+  <td>ANSI</td>
+  <td>
+    When inserting a value into a column with different data type, Spark will perform type
+    conversion. Currently, we support 3 policies for the type coercion rules: ANSI, legacy and
+    strict.<br/>
+    1. With ANSI policy, Spark performs the type coercion as per ANSI SQL. In practice, the behavior
+    is mostly the same as PostgreSQL. It disallows certain unreasonable type conversions such as
+    converting string to int or double to boolean. On inserting a numeric type column, an overflow
+    error will be thrown if the value is out of the target data type's range.<br/>
+    2. With legacy policy, Spark allows the type coercion as long as it is a valid Cast, which is
+    very loose. e.g. converting string to int or double to boolean is allowed. It is also the only
+    behavior in Spark 2.x and it is compatible with Hive.<br/>
+    3. With strict policy, Spark doesn't allow any possible precision loss or data truncation in
+    type coercion, e.g. converting double to int or decimal to double is not allowed.
+  </td>
+  <td>3.0.0</td>
+</tr>
+</table>
 
 The following subsections present behaviour changes in arithmetic operations, type conversions, and SQL parsing when the ANSI mode enabled. For type conversions in Spark SQL, there are three kinds of them and this article will introduce them one by one: cast, store assignment and type coercion. 
 
@@ -409,6 +439,7 @@ Below is a list of all the keywords in Spark SQL.
 |CLUSTERED|non-reserved|non-reserved|non-reserved|
 |CODEGEN|non-reserved|non-reserved|non-reserved|
 |COLLATE|reserved|non-reserved|reserved|
+|COLLATION|reserved|non-reserved|reserved|
 |COLLECTION|non-reserved|non-reserved|non-reserved|
 |COLUMN|reserved|non-reserved|reserved|
 |COLUMNS|non-reserved|non-reserved|non-reserved|
@@ -464,6 +495,7 @@ Below is a list of all the keywords in Spark SQL.
 |EXCEPT|reserved|strict-non-reserved|reserved|
 |EXCHANGE|non-reserved|non-reserved|non-reserved|
 |EXCLUDE|non-reserved|non-reserved|non-reserved|
+|EXECUTE|reserved|non-reserved|reserved|
 |EXISTS|non-reserved|non-reserved|reserved|
 |EXPLAIN|non-reserved|non-reserved|non-reserved|
 |EXPORT|non-reserved|non-reserved|non-reserved|
@@ -497,6 +529,7 @@ Below is a list of all the keywords in Spark SQL.
 |IDENTIFIER|non-reserved|non-reserved|non-reserved|
 |IF|non-reserved|non-reserved|not a keyword|
 |IGNORE|non-reserved|non-reserved|non-reserved|
+|IMMEDIATE|non-reserved|non-reserved|non-reserved|
 |IMPORT|non-reserved|non-reserved|non-reserved|
 |IN|reserved|non-reserved|reserved|
 |INCLUDE|non-reserved|non-reserved|non-reserved|

@@ -34,9 +34,10 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UPPER_OR_LOWER}
-import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CollationSupport, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.types.{AbstractArrayType, StringTypeAnyCollation}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.array.ByteArrayMethods
@@ -78,11 +79,12 @@ case class ConcatWs(children: Seq[Expression])
 
   /** The 1st child (separator) is str, and rest are either str or array of str. */
   override def inputTypes: Seq[AbstractDataType] = {
-    val arrayOrStr = TypeCollection(ArrayType(StringType), StringType)
-    StringType +: Seq.fill(children.size - 1)(arrayOrStr)
+    val arrayOrStr =
+      TypeCollection(AbstractArrayType(StringTypeAnyCollation), StringTypeAnyCollation)
+    StringTypeAnyCollation +: Seq.fill(children.size - 1)(arrayOrStr)
   }
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = children.head.dataType
 
   override def nullable: Boolean = children.head.nullable
   override def foldable: Boolean = children.forall(_.foldable)
@@ -101,7 +103,8 @@ case class ConcatWs(children: Seq[Expression])
     val flatInputs = children.flatMap { child =>
       child.eval(input) match {
         case s: UTF8String => Iterator(s)
-        case arr: ArrayData => arr.toArray[UTF8String](StringType)
+        case arr: ArrayData =>
+          arr.toArray[UTF8String](child.dataType.asInstanceOf[ArrayType].elementType)
         case null => Iterator(null.asInstanceOf[UTF8String])
       }
     }
@@ -109,7 +112,7 @@ case class ConcatWs(children: Seq[Expression])
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    if (children.forall(_.dataType == StringType)) {
+    if (children.forall(_.dataType.isInstanceOf[StringType])) {
       // All children are strings. In that case we can construct a fixed size array.
       val evals = children.map(_.genCode(ctx))
       val separator = evals.head
@@ -162,7 +165,7 @@ case class ConcatWs(children: Seq[Expression])
            """
 
         val (varCount, varBuild) = child.dataType match {
-          case StringType =>
+          case _: StringType =>
             val reprForValueCast = s"((UTF8String) $reprForValue)"
             ("", // we count all the StringType arguments num at once below.
               if (eval.isNull == TrueLiteral) {
@@ -170,7 +173,7 @@ case class ConcatWs(children: Seq[Expression])
               } else {
                 s"$array[$idxVararg ++] = $reprForIsNull ? (UTF8String) null : $reprForValueCast;"
               })
-          case _: ArrayType =>
+          case arr: ArrayType =>
             val reprForValueCast = s"((ArrayData) $reprForValue)"
             val size = ctx.freshName("n")
             if (eval.isNull == TrueLiteral) {
@@ -186,7 +189,7 @@ case class ConcatWs(children: Seq[Expression])
                 if (!$reprForIsNull) {
                   final int $size = $reprForValueCast.numElements();
                   for (int j = 0; j < $size; j ++) {
-                    $array[$idxVararg ++] = ${CodeGenerator.getValue(reprForValueCast, StringType, "j")};
+                    $array[$idxVararg ++] = ${CodeGenerator.getValue(reprForValueCast, arr.elementType, "j")};
                   }
                 }
                 """)
@@ -234,7 +237,7 @@ case class ConcatWs(children: Seq[Expression])
         boolean[] $isNullArgs = new boolean[${children.length - 1}];
         Object[] $valueArgs = new Object[${children.length - 1}];
         $argBuilds
-        int $varargNum = ${children.count(_.dataType == StringType) - 1};
+        int $varargNum = ${children.count(_.dataType.isInstanceOf[StringType]) - 1};
         int $idxVararg = 0;
         $varargCounts
         UTF8String[] $array = new UTF8String[$varargNum];
@@ -286,7 +289,8 @@ case class Elt(
   /** This expression is always nullable because it returns null if index is out of range. */
   override def nullable: Boolean = true
 
-  override def dataType: DataType = inputExprs.map(_.dataType).headOption.getOrElse(StringType)
+  override def dataType: DataType =
+    inputExprs.map(_.dataType).headOption.getOrElse(SQLConf.get.defaultStringType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.size < 2) {
@@ -299,19 +303,19 @@ case class Elt(
         return DataTypeMismatch(
           errorSubClass = "UNEXPECTED_INPUT_TYPE",
           messageParameters = Map(
-            "paramIndex" -> "1",
+            "paramIndex" -> ordinalNumber(0),
             "requiredType" -> toSQLType(IntegerType),
             "inputSql" -> toSQLExpr(indexExpr),
             "inputType" -> toSQLType(indexType)))
       }
-      if (inputTypes.exists(tpe => !Seq(StringType, BinaryType).contains(tpe))) {
+      if (inputTypes.exists(tpe => !tpe.isInstanceOf[StringType] && tpe != BinaryType)) {
         return DataTypeMismatch(
           errorSubClass = "UNEXPECTED_INPUT_TYPE",
           messageParameters = Map(
-            "paramIndex" -> "2...",
+            "paramIndex" -> (ordinalNumber(1) + "..."),
             "requiredType" -> (toSQLType(StringType) + " or " + toSQLType(BinaryType)),
-            "inputSql" -> inputExprs.map(toSQLExpr(_)).mkString(","),
-            "inputType" -> inputTypes.map(toSQLType(_)).mkString(",")
+            "inputSql" -> inputExprs.map(toSQLExpr).mkString(","),
+            "inputType" -> inputTypes.map(toSQLType).mkString(",")
           )
         )
       }
@@ -427,8 +431,8 @@ trait String2StringExpression extends ImplicitCastInputTypes {
 
   def convert(v: UTF8String): UTF8String
 
-  override def dataType: DataType = StringType
-  override def inputTypes: Seq[DataType] = Seq(StringType)
+  override def dataType: DataType = child.dataType
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
 
   protected override def nullSafeEval(input: Any): Any =
     convert(input.asInstanceOf[UTF8String])
@@ -497,9 +501,12 @@ case class Lower(child: Expression)
 abstract class StringPredicate extends BinaryExpression
   with Predicate with ImplicitCastInputTypes with NullIntolerant {
 
+  final lazy val collationId: Int = left.dataType.asInstanceOf[StringType].collationId
+
   def compare(l: UTF8String, r: UTF8String): Boolean
 
-  override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeAnyCollation, StringTypeAnyCollation)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any =
     compare(input1.asInstanceOf[UTF8String], input2.asInstanceOf[UTF8String])
@@ -586,9 +593,12 @@ object ContainsExpressionBuilder extends StringBinaryPredicateExpressionBuilderB
 }
 
 case class Contains(left: Expression, right: Expression) extends StringPredicate {
-  override def compare(l: UTF8String, r: UTF8String): Boolean = l.contains(r)
+  override def compare(l: UTF8String, r: UTF8String): Boolean = {
+    CollationSupport.Contains.exec(l, r, collationId)
+  }
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (c1, c2) => s"($c1).contains($c2)")
+    defineCodeGen(ctx, ev, (c1, c2) =>
+      CollationSupport.Contains.genCode(c1, c2, collationId))
   }
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): Contains = copy(left = newLeft, right = newRight)
@@ -623,9 +633,13 @@ object StartsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilde
 }
 
 case class StartsWith(left: Expression, right: Expression) extends StringPredicate {
-  override def compare(l: UTF8String, r: UTF8String): Boolean = l.startsWith(r)
+  override def compare(l: UTF8String, r: UTF8String): Boolean = {
+    CollationSupport.StartsWith.exec(l, r, collationId)
+  }
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (c1, c2) => s"($c1).startsWith($c2)")
+    defineCodeGen(ctx, ev, (c1, c2) =>
+      CollationSupport.StartsWith.genCode(c1, c2, collationId))
   }
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): StartsWith = copy(left = newLeft, right = newRight)
@@ -660,9 +674,13 @@ object EndsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilderB
 }
 
 case class EndsWith(left: Expression, right: Expression) extends StringPredicate {
-  override def compare(l: UTF8String, r: UTF8String): Boolean = l.endsWith(r)
+  override def compare(l: UTF8String, r: UTF8String): Boolean = {
+    CollationSupport.EndsWith.exec(l, r, collationId)
+  }
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (c1, c2) => s"($c1).endsWith($c2)")
+    defineCodeGen(ctx, ev, (c1, c2) =>
+      CollationSupport.EndsWith.genCode(c1, c2, collationId))
   }
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): EndsWith = copy(left = newLeft, right = newRight)
@@ -1795,8 +1813,8 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
 case class InitCap(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
-  override def inputTypes: Seq[DataType] = Seq(StringType)
-  override def dataType: DataType = StringType
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
+  override def dataType: DataType = child.dataType
 
   override def nullSafeEval(string: Any): Any = {
     // scalastyle:off caselocale
@@ -1828,8 +1846,8 @@ case class StringRepeat(str: Expression, times: Expression)
 
   override def left: Expression = str
   override def right: Expression = times
-  override def dataType: DataType = StringType
-  override def inputTypes: Seq[DataType] = Seq(StringType, IntegerType)
+  override def dataType: DataType = str.dataType
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation, IntegerType)
 
   override def nullSafeEval(string: Any, n: Any): Any = {
     string.asInstanceOf[UTF8String].repeat(n.asInstanceOf[Integer])
@@ -1922,7 +1940,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
   override def dataType: DataType = str.dataType
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(StringType, BinaryType), IntegerType, IntegerType)
+    Seq(TypeCollection(StringTypeAnyCollation, BinaryType), IntegerType, IntegerType)
 
   override def first: Expression = str
   override def second: Expression = pos
@@ -1930,7 +1948,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
 
   override def nullSafeEval(string: Any, pos: Any, len: Any): Any = {
     str.dataType match {
-      case StringType => string.asInstanceOf[UTF8String]
+      case _: StringType => string.asInstanceOf[UTF8String]
         .substringSQL(pos.asInstanceOf[Int], len.asInstanceOf[Int])
       case BinaryType => ByteArray.subStringSQL(string.asInstanceOf[Array[Byte]],
         pos.asInstanceOf[Int], len.asInstanceOf[Int])
@@ -1941,7 +1959,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
 
     defineCodeGen(ctx, ev, (string, pos, len) => {
       str.dataType match {
-        case StringType => s"$string.substringSQL($pos, $len)"
+        case _: StringType => s"$string.substringSQL($pos, $len)"
         case BinaryType => s"${classOf[ByteArray].getName}.subStringSQL($string, $pos, $len)"
       }
     })
@@ -2334,7 +2352,7 @@ case class Ascii(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def dataType: DataType = IntegerType
-  override def inputTypes: Seq[DataType] = Seq(StringType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
 
   protected override def nullSafeEval(string: Any): Any = {
     // only pick the first character to reduce the `toString` cost
@@ -2380,7 +2398,7 @@ case class Ascii(child: Expression)
 case class Chr(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
   override def inputTypes: Seq[DataType] = Seq(LongType)
 
   protected override def nullSafeEval(lon: Any): Any = {
@@ -2429,7 +2447,7 @@ case class Chr(child: Expression)
 case class Base64(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
 
   protected override def nullSafeEval(bytes: Any): Any = {
@@ -2462,7 +2480,7 @@ case class UnBase64(child: Expression, failOnError: Boolean = false)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def dataType: DataType = BinaryType
-  override def inputTypes: Seq[DataType] = Seq(StringType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
 
   def this(expr: Expression) = this(expr, false)
 
@@ -2654,8 +2672,8 @@ case class StringDecode(bin: Expression, charset: Expression, legacyCharsets: Bo
 
   override def left: Expression = bin
   override def right: Expression = charset
-  override def dataType: DataType = StringType
-  override def inputTypes: Seq[DataType] = Seq(BinaryType, StringType)
+  override def dataType: DataType = SQLConf.get.defaultStringType
+  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, StringTypeAnyCollation)
 
   private val supportedCharsets = Set(
     "US-ASCII", "ISO-8859-1", "UTF-8", "UTF-16BE", "UTF-16LE", "UTF-16")
@@ -2732,7 +2750,8 @@ case class Encode(str: Expression, charset: Expression, legacyCharsets: Boolean)
   override def left: Expression = str
   override def right: Expression = charset
   override def dataType: DataType = BinaryType
-  override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeAnyCollation, StringTypeAnyCollation)
 
   private val supportedCharsets = Set(
     "US-ASCII", "ISO-8859-1", "UTF-8", "UTF-16BE", "UTF-16LE", "UTF-16")
@@ -2829,7 +2848,7 @@ case class ToBinary(
 
   override def children: Seq[Expression] = expr +: format.toSeq
 
-  override def inputTypes: Seq[AbstractDataType] = children.map(_ => StringType)
+  override def inputTypes: Seq[AbstractDataType] = children.map(_ => StringTypeAnyCollation)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     def isValidFormat: Boolean = {
@@ -2837,7 +2856,7 @@ case class ToBinary(
     }
     format match {
       case Some(f) =>
-        if (f.foldable && (f.dataType == StringType || f.dataType == NullType)) {
+        if (f.foldable && (f.dataType.isInstanceOf[StringType] || f.dataType == NullType)) {
           if (isValidFormat || nullOnInvalidFormat) {
             super.checkInputDataTypes()
           } else {
@@ -2845,9 +2864,9 @@ case class ToBinary(
               errorSubClass = "INVALID_ARG_VALUE",
               messageParameters = Map(
                 "inputName" -> "fmt",
-                "requireType" -> s"case-insensitive ${toSQLType(StringType)}",
+                "requireType" -> s"case-insensitive ${toSQLType(StringTypeAnyCollation)}",
                 "validValues" -> "'hex', 'utf-8', 'utf8', or 'base64'",
-                "inputValue" -> toSQLValue(fmt, StringType)
+                "inputValue" -> toSQLValue(fmt, f.dataType)
               )
             )
           }
@@ -2856,7 +2875,7 @@ case class ToBinary(
             errorSubClass = "NON_FOLDABLE_INPUT",
             messageParameters = Map(
               "inputName" -> toSQLId("fmt"),
-              "inputType" -> toSQLType(StringType),
+              "inputType" -> toSQLType(StringTypeAnyCollation),
               "inputExpr" -> toSQLExpr(f)
             )
           )
@@ -2865,7 +2884,7 @@ case class ToBinary(
             errorSubClass = "INVALID_ARG_VALUE",
             messageParameters = Map(
               "inputName" -> "fmt",
-              "requireType" -> s"case-insensitive ${toSQLType(StringType)}",
+              "requireType" -> s"case-insensitive ${toSQLType(StringTypeAnyCollation)}",
               "validValues" -> "'hex', 'utf-8', 'utf8', or 'base64'",
               "inputValue" -> toSQLValue(f.eval(), f.dataType)
             )
@@ -2911,10 +2930,10 @@ case class FormatNumber(x: Expression, d: Expression)
 
   override def left: Expression = x
   override def right: Expression = d
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
   override def nullable: Boolean = true
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(NumericType, TypeCollection(IntegerType, StringType))
+    Seq(NumericType, TypeCollection(IntegerType, StringTypeAnyCollation))
 
   private val defaultFormat = "#,###,###,###,###,###,##0"
 
@@ -2969,7 +2988,7 @@ case class FormatNumber(x: Expression, d: Expression)
 
             numberFormat.applyLocalizedPattern(pattern.toString)
         }
-      case StringType =>
+      case _: StringType =>
         val dValue = dObject.asInstanceOf[UTF8String].toString
         lastDStringValue match {
           case Some(last) if last == dValue =>
@@ -3043,7 +3062,7 @@ case class FormatNumber(x: Expression, d: Expression)
               ${ev.isNull} = true;
             }
            """
-        case StringType =>
+        case _: StringType =>
           val lastDValue = ctx.addMutableState("String", "lastDValue", v => s"""$v = null;""")
           val dValue = ctx.freshName("dValue")
           s"""
@@ -3092,8 +3111,9 @@ case class Sentences(
 
   override def nullable: Boolean = true
   override def dataType: DataType =
-    ArrayType(ArrayType(StringType, containsNull = false), containsNull = false)
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, StringType)
+    ArrayType(ArrayType(str.dataType, containsNull = false), containsNull = false)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeAnyCollation, StringTypeAnyCollation, StringTypeAnyCollation)
   override def first: Expression = str
   override def second: Expression = language
   override def third: Expression = country

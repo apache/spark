@@ -380,7 +380,7 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
 }
 
 class CatalogSupportingInMemoryTableProvider
-  extends FakeV2Provider
+  extends FakeV2ProviderWithCustomSchema
   with SupportsCatalogOptions {
 
   override def extractIdentifier(options: CaseInsensitiveStringMap): Identifier = {

@@ -124,10 +124,12 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     when(podsWithNamespace.withName(driverPodName)).thenReturn(driverPodOperations)
     when(podsWithNamespace.resource(any())).thenReturn(podResource)
     when(podsWithNamespace.withLabel(anyString(), anyString())).thenReturn(labeledPods)
-    when(podsWithNamespace.withLabelIn(anyString(), any())).thenReturn(labeledPods)
+    when(podsWithNamespace.withLabelIn(
+      anyString(), any(classOf[Array[String]]): _*)).thenReturn(labeledPods)
     when(podsWithNamespace.withField(anyString(), anyString())).thenReturn(labeledPods)
     when(labeledPods.withLabel(anyString(), anyString())).thenReturn(labeledPods)
-    when(labeledPods.withLabelIn(anyString(), any())).thenReturn(labeledPods)
+    when(labeledPods.withLabelIn(
+      anyString(), any(classOf[Array[String]]): _*)).thenReturn(labeledPods)
     when(labeledPods.withField(anyString(), anyString())).thenReturn(labeledPods)
     when(driverPodOperations.get).thenReturn(driverPod)
     when(driverPodOperations.waitUntilReady(any(), any())).thenReturn(driverPod)
@@ -212,7 +214,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
       .thenReturn(podOperations)
     when(podOperations
-      .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any()))
+      .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any(classOf[Array[String]]): _*))
       .thenReturn(podOperations)
 
     val startTime = Instant.now.toEpochMilli
@@ -362,7 +364,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
       .thenReturn(labeledPods)
     when(labeledPods
-      .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any()))
+      .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any(classOf[Array[String]]): _*))
       .thenReturn(labeledPods)
 
     val startTime = Instant.now.toEpochMilli
@@ -432,7 +434,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
       .thenReturn(labeledPods)
     when(labeledPods
-      .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any()))
+      .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any(classOf[Array[String]]): _*))
       .thenReturn(labeledPods)
 
     val startTime = Instant.now.toEpochMilli
@@ -477,7 +479,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
       .thenReturn(labeledPods)
     when(labeledPods
-      .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any()))
+      .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any(classOf[Array[String]]): _*))
       .thenReturn(labeledPods)
 
     val startTime = Instant.now.toEpochMilli
@@ -560,7 +562,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
       .thenReturn(labeledPods)
     when(labeledPods
-      .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any()))
+      .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any(classOf[Array[String]]): _*))
       .thenReturn(labeledPods)
 
     val startTime = Instant.now.toEpochMilli
@@ -642,7 +644,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
       .thenReturn(labeledPods)
     when(labeledPods
-      .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any()))
+      .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any(classOf[Array[String]]): _*))
       .thenReturn(labeledPods)
 
     val startTime = Instant.now.toEpochMilli
@@ -794,7 +796,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
       .thenReturn(labeledPods)
     when(labeledPods
-      .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any()))
+      .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any(classOf[Array[String]]): _*))
       .thenReturn(labeledPods)
 
     val startTime = Instant.now.toEpochMilli
@@ -890,7 +892,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
       .thenReturn(labeledPods)
     when(labeledPods
-      .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any()))
+      .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any(classOf[Array[String]]): _*))
       .thenReturn(labeledPods)
 
     val startTime = Instant.now.toEpochMilli

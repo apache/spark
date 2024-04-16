@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.execution.command.CharVarcharDDLTestBase
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
@@ -86,21 +85,8 @@ class HiveCharVarcharTestSuite extends CharVarcharTestSuite with TestHiveSinglet
           sql(s"ALTER TABLE $tableName DROP PARTITION(c=$v)")
           checkAnswer(spark.table(tableName), Nil)
         }
-
-        val e1 = intercept[SparkException](sql(s"INSERT OVERWRITE $tableName VALUES ('1', 100000)"))
-        checkError(
-          exception = e1.getCause.asInstanceOf[SparkException],
-          errorClass = "TASK_WRITE_FAILED",
-          parameters = Map("path" -> s".*$tableName.*"),
-          matchPVals = true
-        )
-
-        val e2 = intercept[SparkRuntimeException](sql("ALTER TABLE t DROP PARTITION(c=100000)"))
-        checkError(
-          exception = e2,
-          errorClass = "EXCEED_LIMIT_LENGTH",
-          parameters = Map("limit" -> "5")
-        )
+        assertLengthCheckFailure(s"INSERT OVERWRITE $tableName VALUES ('1', 100000)")
+        assertLengthCheckFailure("ALTER TABLE t DROP PARTITION(c=100000)")
       }
     }
   }

@@ -24,7 +24,6 @@ from pyspark.sql import Row
 from pyspark.sql.functions import lit
 from pyspark.sql.types import StructType, StructField, IntegerType, StringType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
-from pyspark.errors.exceptions.connect import SparkConnectException
 
 
 class StreamingTestsMixin:
@@ -295,25 +294,11 @@ class StreamingTestsMixin:
         self.assertIsInstance(exception, StreamingQueryException)
         self._assert_exception_tree_contains_msg(exception, "ZeroDivisionError")
 
-    def _assert_exception_tree_contains_msg(self, exception, msg):
-        if isinstance(exception, SparkConnectException):
-            self._assert_exception_tree_contains_msg_connect(exception, msg)
-        else:
-            self._assert_exception_tree_contains_msg_default(exception, msg)
-
-    def _assert_exception_tree_contains_msg_connect(self, exception, msg):
-        self.assertTrue(
-            msg in exception._message,
-            "Exception tree doesn't contain the expected message: %s" % msg,
-        )
-
-    def _assert_exception_tree_contains_msg_default(self, exception, msg):
-        e = exception
-        contains = msg in e._desc
-        while e._cause is not None and not contains:
-            e = e._cause
-            contains = msg in e._desc
-        self.assertTrue(contains, "Exception tree doesn't contain the expected message: %s" % msg)
+    def test_query_manager_no_recreation(self):
+        # SPARK-46873: There should not be a new StreamingQueryManager created every time
+        # spark.streams is called.
+        for i in range(5):
+            self.assertTrue(self.spark.streams == self.spark.streams)
 
     def test_query_manager_get(self):
         df = self.spark.readStream.format("rate").load()
@@ -373,7 +358,7 @@ class StreamingTestsMixin:
             )
 
     def test_streaming_write_to_table(self):
-        with self.table("output_table"), tempfile.TemporaryDirectory() as tmpdir:
+        with self.table("output_table"), tempfile.TemporaryDirectory(prefix="to_table") as tmpdir:
             df = self.spark.readStream.format("rate").option("rowsPerSecond", 10).load()
             q = df.writeStream.toTable("output_table", format="parquet", checkpointLocation=tmpdir)
             self.assertTrue(q.isActive)
@@ -408,7 +393,13 @@ class StreamingTestsMixin:
 
 
 class StreamingTests(StreamingTestsMixin, ReusedSQLTestCase):
-    pass
+    def _assert_exception_tree_contains_msg(self, exception, msg):
+        e = exception
+        contains = msg in e._desc
+        while e._cause is not None and not contains:
+            e = e._cause
+            contains = msg in e._desc
+        self.assertTrue(contains, "Exception tree doesn't contain the expected message: %s" % msg)
 
 
 if __name__ == "__main__":

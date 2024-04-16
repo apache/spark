@@ -18,7 +18,8 @@
 package org.apache.spark.deploy.rest
 
 import java.io.File
-import javax.servlet.http.HttpServletResponse
+
+import jakarta.servlet.http.HttpServletResponse
 
 import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
 import org.apache.spark.deploy.{Command, DeployMessages, DriverDescription}
@@ -70,6 +71,8 @@ private[deploy] class StandaloneRestServer(
     new StandaloneStatusRequestServlet(masterEndpoint, masterConf)
   protected override val clearRequestServlet =
     new StandaloneClearRequestServlet(masterEndpoint, masterConf)
+  protected override val readyzRequestServlet =
+    new StandaloneReadyzRequestServlet(masterEndpoint, masterConf)
 }
 
 /**
@@ -143,6 +146,22 @@ private[rest] class StandaloneClearRequestServlet(masterEndpoint: RpcEndpointRef
     c.message = ""
     c.success = response
     c
+  }
+}
+
+/**
+ * A servlet for handling readyz requests passed to the [[StandaloneRestServer]].
+ */
+private[rest] class StandaloneReadyzRequestServlet(masterEndpoint: RpcEndpointRef, conf: SparkConf)
+  extends ReadyzRequestServlet {
+
+  protected def handleReadyz(): ReadyzResponse = {
+    val success = masterEndpoint.askSync[Boolean](DeployMessages.RequestReadyz)
+    val r = new ReadyzResponse
+    r.serverSparkVersion = sparkVersion
+    r.message = ""
+    r.success = success
+    r
   }
 }
 

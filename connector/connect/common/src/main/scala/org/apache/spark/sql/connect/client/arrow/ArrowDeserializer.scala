@@ -24,14 +24,14 @@ import java.time._
 import java.util
 import java.util.{List => JList, Locale, Map => JMap}
 
+import scala.collection.immutable
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
 import org.apache.arrow.memory.BufferAllocator
-import org.apache.arrow.vector.{FieldVector, VarCharVector, VectorSchemaRoot}
+import org.apache.arrow.vector.{FieldVector, VectorSchemaRoot}
 import org.apache.arrow.vector.complex.{ListVector, MapVector, StructVector}
 import org.apache.arrow.vector.ipc.ArrowReader
-import org.apache.arrow.vector.util.Text
 
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
@@ -46,6 +46,7 @@ import org.apache.spark.sql.types.Decimal
  */
 object ArrowDeserializers {
   import ArrowEncoderUtils._
+  import org.apache.spark.util.ArrayImplicits._
 
   /**
    * Create an Iterator of `T`. This iterator takes an Iterator of Arrow IPC Streams, and
@@ -220,6 +221,13 @@ object ArrowDeserializers {
             def value(i: Int): mutable.ArraySeq[Any] = {
               val array = getArray(vector, i, deserializer)(element.clsTag)
               ScalaCollectionUtils.wrap(array)
+            }
+          }
+        } else if (isSubClass(Classes.IMMUTABLE_ARRAY_SEQ, tag)) {
+          new VectorFieldDeserializer[immutable.ArraySeq[Any], ListVector](v) {
+            def value(i: Int): immutable.ArraySeq[Any] = {
+              val array = getArray(vector, i, deserializer)(element.clsTag)
+              array.asInstanceOf[Array[_]].toImmutableArraySeq
             }
           }
         } else if (isSubClass(Classes.ITERABLE, tag)) {
@@ -458,16 +466,6 @@ object ArrowDeserializers {
   }
 
   private def isTuple(cls: Class[_]): Boolean = cls.getName.startsWith("scala.Tuple")
-
-  private def getString(v: VarCharVector, i: Int): String = {
-    // This is currently a bit heavy on allocations:
-    // - byte array created in VarCharVector.get
-    // - CharBuffer created CharSetEncoder
-    // - char array in String
-    // By using direct buffers and reusing the char buffer
-    // we could get rid of the first two allocations.
-    Text.decode(v.get(i))
-  }
 
   private def loadListIntoBuilder(
       v: ListVector,

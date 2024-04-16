@@ -30,7 +30,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, OptionList, UnresolvedTableSpec}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, CreateTable, OptionList, UnresolvedTableSpec}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
@@ -40,6 +40,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Utils, FileDataSourceV2}
+import org.apache.spark.sql.execution.datasources.v2.python.PythonDataSourceV2
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -273,10 +274,9 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
     this.tableName = tableName
 
     import df.sparkSession.sessionState.analyzer.CatalogAndIdentifier
-
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-    val originalMultipartIdentifier = df.sparkSession.sessionState.sqlParser
-      .parseMultipartIdentifier(tableName)
+    val parser = df.sparkSession.sessionState.sqlParser
+    val originalMultipartIdentifier = parser.parseMultipartIdentifier(tableName)
     val CatalogAndIdentifier(catalog, identifier) = originalMultipartIdentifier
 
     // Currently we don't create a logical streaming writer node in logical plan, so cannot rely
@@ -302,7 +302,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         false)
       val cmd = CreateTable(
         UnresolvedIdentifier(originalMultipartIdentifier),
-        df.schema.asNullable,
+        df.schema.asNullable.map(ColumnDefinition.fromV1Column(_, parser)),
         partitioningColumns.getOrElse(Nil).asTransforms.toImmutableArraySeq,
         tableSpec,
         ignoreIfExists = false)
@@ -395,6 +395,10 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
           Some(df.schema)
         } else {
           None
+        }
+        provider match {
+          case p: PythonDataSourceV2 => p.setShortName(source)
+          case _ =>
         }
         val table = DataSourceV2Utils.getTableFromProvider(
           provider, dsOptions, userSpecifiedSchema = outputSchema)

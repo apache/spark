@@ -20,7 +20,7 @@ export {
   errorMessageCell, errorSummary,
   formatBytes, formatDate, formatDuration, formatLogsCells, formatTimeMillis,
   getBaseURI, getStandAloneAppId, getTimeZone,
-  setDataTableDefaults
+  setDataTableDefaults, stringAbbreviate
 };
 
 /* global $, uiRoot */
@@ -271,4 +271,17 @@ function errorMessageCell(errorMessage) {
   const [summary, isMultiline] = errorSummary(errorMessage);
   const details = detailsUINode(isMultiline, errorMessage);
   return summary + details;
+}
+
+function stringAbbreviate(content, limit) {
+  if (content && content.length > limit) {
+    const summary = content.substring(0, limit) + '...';
+    // TODO: Reused stacktrace-details* style for convenience, but it's not really a stacktrace
+    // Consider creating a new style for this case if stacktrace-details is not appropriate in
+    // the future.
+    const details = detailsUINode(true, content);
+    return summary + details;
+  } else {
+    return content;
+  }
 }

@@ -246,8 +246,8 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
 
     checkKeywordsExist(sql("describe function  `between`"),
       "Function: between",
-      "Usage: expr1 [NOT] BETWEEN expr2 AND expr3 - " +
-        "evaluate if `expr1` is [not] in between `expr2` and `expr3`")
+      "Usage: input [NOT] BETWEEN lower AND upper - " +
+        "evaluate if `input` is [not] in between `lower` and `upper`")
 
     checkKeywordsExist(sql("describe function  `case`"),
       "Function: case",
@@ -2137,41 +2137,6 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
         checkAnswer(spark.table("bar"), Row(0) :: Nil)
         val tableMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier("bar"))
         assert(tableMetadata.provider == Some("hive"), "the expected table is a Hive serde table")
-      }
-    }
-  }
-
-  test("Auto alias construction of get_json_object") {
-    val df = Seq(("1", """{"f1": "value1", "f5": 5.23}""")).toDF("key", "jstring")
-
-    withTable("t") {
-      val e = intercept[AnalysisException] {
-        df.select($"key", functions.get_json_object($"jstring", "$.f1"))
-          .write.format("hive").saveAsTable("t")
-      }
-      checkError(e,
-        errorClass = "INVALID_HIVE_COLUMN_NAME",
-        parameters = Map(
-          "invalidChars" -> "','",
-          "tableName" -> "`spark_catalog`.`default`.`t`",
-          "columnName" -> "`get_json_object(jstring, $`.`f1)`")
-      )
-    }
-
-    withTempView("tempView") {
-      withTable("t") {
-        df.createTempView("tempView")
-        val e = intercept[AnalysisException] {
-          sql("CREATE TABLE t USING hive AS " +
-            "SELECT key, get_json_object(jstring, '$.f1') FROM tempView")
-        }
-        checkError(e,
-          errorClass = "INVALID_HIVE_COLUMN_NAME",
-          parameters = Map(
-            "invalidChars" -> "','",
-            "tableName" -> "`spark_catalog`.`default`.`t`",
-            "columnName" -> "`get_json_object(jstring, $`.`f1)`")
-        )
       }
     }
   }

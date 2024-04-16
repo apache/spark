@@ -154,15 +154,13 @@ def as_spark_type(
     if LooseVersion(np.__version__) >= LooseVersion("1.21"):
         if (
             hasattr(tpe, "__origin__")
-            and tpe.__origin__ is np.ndarray  # type: ignore[union-attr]
+            and tpe.__origin__ is np.ndarray
             and hasattr(tpe, "__args__")
-            and len(tpe.__args__) > 1  # type: ignore[union-attr]
+            and len(tpe.__args__) > 1
         ):
             # numpy.typing.NDArray
             return types.ArrayType(
-                as_spark_type(
-                    tpe.__args__[1].__args__[0], raise_error=raise_error  # type: ignore[union-attr]
-                )
+                as_spark_type(tpe.__args__[1].__args__[0], raise_error=raise_error)
             )
 
     if isinstance(tpe, np.dtype) and tpe == np.dtype("object"):
@@ -170,9 +168,7 @@ def as_spark_type(
     # ArrayType
     elif tpe in (np.ndarray,):
         return types.ArrayType(types.StringType())
-    elif hasattr(tpe, "__origin__") and issubclass(
-        tpe.__origin__, list  # type: ignore[union-attr]
-    ):
+    elif hasattr(tpe, "__origin__") and issubclass(tpe.__origin__, list):
         element_type = as_spark_type(
             tpe.__args__[0], raise_error=raise_error  # type: ignore[union-attr]
         )
@@ -783,7 +779,7 @@ def _new_type_holders(
 ) -> Tuple:
     if isinstance(params, zip):
         #   DataFrame[zip(names, types)]
-        params = tuple(slice(name, tpe) for name, tpe in params)  # type: ignore[misc, has-type]
+        params = tuple(slice(name, tpe) for name, tpe in params)
 
     if isinstance(params, Iterable):
         #   DataFrame[type, type, ...]
@@ -809,8 +805,8 @@ def _new_type_holders(
             not isinstance(param, slice)
             and (
                 not isinstance(param, Iterable)
-                or isinstance(param, typing.GenericAlias)
-                or isinstance(param, typing._GenericAlias)
+                or isinstance(param, typing.GenericAlias)  # type: ignore[attr-defined]
+                or isinstance(param, typing._GenericAlias)  # type: ignore[attr-defined]
             )
             for param in params
         )

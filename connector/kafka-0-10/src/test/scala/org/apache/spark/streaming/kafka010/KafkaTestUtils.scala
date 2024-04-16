@@ -27,12 +27,12 @@ import scala.annotation.tailrec
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
-import kafka.api.Request
 import kafka.server.{KafkaConfig, KafkaServer}
 import kafka.zk.{AdminZkClient, KafkaZkClient}
 import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord}
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.network.ListenerName
+import org.apache.kafka.common.requests.FetchRequest
 import org.apache.kafka.common.serialization.StringSerializer
 import org.apache.kafka.common.utils.{Time => KTime}
 import org.apache.zookeeper.client.ZKClientConfig
@@ -304,7 +304,7 @@ private[kafka010] class KafkaTestUtils extends Logging {
         val leader = partitionState.leader
         val isr = partitionState.isr
         zkClient.getLeaderForPartition(new TopicPartition(topic, partition)).isDefined &&
-          Request.isValidBrokerId(leader) && !isr.isEmpty
+          FetchRequest.isValidBrokerId(leader) && !isr.isEmpty
       case _ =>
         false
     }
@@ -331,9 +331,6 @@ private[kafka010] class KafkaTestUtils extends Logging {
 
     def shutdown(): Unit = {
       factory.shutdown()
-      // The directories are not closed even if the ZooKeeper server is shut down.
-      // Please see ZOOKEEPER-1844, which is fixed in 3.4.6+. It leads to test failures
-      // on Windows if the directory deletion failure throws an exception.
       try {
         Utils.deleteRecursively(snapshotDir)
       } catch {

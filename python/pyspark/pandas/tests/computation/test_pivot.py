@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
@@ -60,149 +60,6 @@ class FramePivotMixin:
         # Todo: self.assert_eq(psdf.pivot_table(index=['e', 'c'],
         #  columns="a", values="b", fill_value=999).dtypes, pdf.pivot_table(index=['e', 'c'],
         #  columns="a", values="b", fill_value=999).dtypes)
-
-    def test_pivot_table(self):
-        pdf = pd.DataFrame(
-            {
-                "a": [4, 2, 3, 4, 8, 6],
-                "b": [1, 2, 2, 4, 2, 4],
-                "e": [10, 20, 20, 40, 20, 40],
-                "c": [1, 2, 9, 4, 7, 4],
-                "d": [-1, -2, -3, -4, -5, -6],
-            },
-            index=np.random.rand(6),
-        )
-        psdf = ps.from_pandas(pdf)
-
-        # Checking if both DataFrames have the same results
-        self.assert_eq(
-            psdf.pivot_table(columns="a", values="b").sort_index(),
-            pdf.pivot_table(columns="a", values="b").sort_index(),
-            almost=True,
-        )
-
-        self.assert_eq(
-            psdf.pivot_table(index=["c"], columns="a", values="b").sort_index(),
-            pdf.pivot_table(index=["c"], columns="a", values="b").sort_index(),
-            almost=True,
-        )
-
-        self.assert_eq(
-            psdf.pivot_table(index=["c"], columns="a", values="b", aggfunc="sum").sort_index(),
-            pdf.pivot_table(index=["c"], columns="a", values="b", aggfunc="sum").sort_index(),
-            almost=True,
-        )
-
-        self.assert_eq(
-            psdf.pivot_table(index=["c"], columns="a", values=["b"], aggfunc="sum").sort_index(),
-            pdf.pivot_table(index=["c"], columns="a", values=["b"], aggfunc="sum").sort_index(),
-            almost=True,
-        )
-
-        self.assert_eq(
-            psdf.pivot_table(
-                index=["c"], columns="a", values=["b", "e"], aggfunc="sum"
-            ).sort_index(),
-            pdf.pivot_table(
-                index=["c"], columns="a", values=["b", "e"], aggfunc="sum"
-            ).sort_index(),
-            almost=True,
-        )
-
-        self.assert_eq(
-            psdf.pivot_table(
-                index=["c"], columns="a", values=["b", "e", "d"], aggfunc="sum"
-            ).sort_index(),
-            pdf.pivot_table(
-                index=["c"], columns="a", values=["b", "e", "d"], aggfunc="sum"
-            ).sort_index(),
-            almost=True,
-        )
-
-        self.assert_eq(
-            psdf.pivot_table(
-                index=["c"], columns="a", values=["b", "e"], aggfunc={"b": "mean", "e": "sum"}
-            ).sort_index(),
-            pdf.pivot_table(
-                index=["c"], columns="a", values=["b", "e"], aggfunc={"b": "mean", "e": "sum"}
-            ).sort_index(),
-            almost=True,
-        )
-
-        self.assert_eq(
-            psdf.pivot_table(index=["e", "c"], columns="a", values="b").sort_index(),
-            pdf.pivot_table(index=["e", "c"], columns="a", values="b").sort_index(),
-            almost=True,
-        )
-
-        self.assert_eq(
-            psdf.pivot_table(
-                index=["e", "c"], columns="a", values="b", fill_value=999
-            ).sort_index(),
-            pdf.pivot_table(index=["e", "c"], columns="a", values="b", fill_value=999).sort_index(),
-            almost=True,
-        )
-
-        # multi-index columns
-        columns = pd.MultiIndex.from_tuples(
-            [("x", "a"), ("x", "b"), ("y", "e"), ("z", "c"), ("w", "d")]
-        )
-        pdf.columns = columns
-        psdf.columns = columns
-
-        self.assert_eq(
-            psdf.pivot_table(columns=("x", "a"), values=("x", "b")).sort_index(),
-            pdf.pivot_table(columns=[("x", "a")], values=[("x", "b")]).sort_index(),
-            almost=True,
-        )
-
-        self.assert_eq(
-            psdf.pivot_table(
-                index=[("z", "c")], columns=("x", "a"), values=[("x", "b")]
-            ).sort_index(),
-            pdf.pivot_table(
-                index=[("z", "c")], columns=[("x", "a")], values=[("x", "b")]
-            ).sort_index(),
-            almost=True,
-        )
-
-        self.assert_eq(
-            psdf.pivot_table(
-                index=[("z", "c")], columns=("x", "a"), values=[("x", "b"), ("y", "e")]
-            ).sort_index(),
-            pdf.pivot_table(
-                index=[("z", "c")], columns=[("x", "a")], values=[("x", "b"), ("y", "e")]
-            ).sort_index(),
-            almost=True,
-        )
-
-        self.assert_eq(
-            psdf.pivot_table(
-                index=[("z", "c")], columns=("x", "a"), values=[("x", "b"), ("y", "e"), ("w", "d")]
-            ).sort_index(),
-            pdf.pivot_table(
-                index=[("z", "c")],
-                columns=[("x", "a")],
-                values=[("x", "b"), ("y", "e"), ("w", "d")],
-            ).sort_index(),
-            almost=True,
-        )
-
-        self.assert_eq(
-            psdf.pivot_table(
-                index=[("z", "c")],
-                columns=("x", "a"),
-                values=[("x", "b"), ("y", "e")],
-                aggfunc={("x", "b"): "mean", ("y", "e"): "sum"},
-            ).sort_index(),
-            pdf.pivot_table(
-                index=[("z", "c")],
-                columns=[("x", "a")],
-                values=[("x", "b"), ("y", "e")],
-                aggfunc={("x", "b"): "mean", ("y", "e"): "sum"},
-            ).sort_index(),
-            almost=True,
-        )
 
     def test_pivot_table_and_index(self):
         # https://github.com/databricks/koalas/issues/805
@@ -332,7 +189,11 @@ class FramePivotMixin:
             psdf.pivot_table(index=["C"], columns="A", values="B", aggfunc={"B": "mean"})
 
 
-class FramePivotTests(FramePivotMixin, ComparisonTestBase, SQLTestUtils):
+class FramePivotTests(
+    FramePivotMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

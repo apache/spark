@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
+import org.apache.spark.SparkBuildInfo;
 import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.unsafe.types.UTF8String;
+import org.apache.spark.util.VersionUtils;
 
 import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
@@ -34,8 +36,7 @@ import java.security.spec.AlgorithmParameterSpec;
  * A utility class for constructing expressions.
  */
 public class ExpressionImplUtils {
-  private static final ThreadLocal<SecureRandom> threadLocalSecureRandom =
-          ThreadLocal.withInitial(SecureRandom::new);
+  private static final SecureRandom secureRandom = new SecureRandom();
 
   private static final int GCM_IV_LEN = 12;
   private static final int GCM_TAG_LEN = 128;
@@ -144,6 +145,17 @@ public class ExpressionImplUtils {
     );
   }
 
+  /**
+   * Function to return the Spark version.
+   * @return
+   *  Space separated version and revision.
+   */
+  public static UTF8String getSparkVersion() {
+    String shortVersion = VersionUtils.shortVersion(SparkBuildInfo.spark_version());
+    String revision = SparkBuildInfo.spark_revision();
+    return UTF8String.fromString(shortVersion + " " + revision);
+  }
+
   private static SecretKeySpec getSecretKeySpec(byte[] key) {
     return switch (key.length) {
       case 16, 24, 32 -> new SecretKeySpec(key, 0, key.length, "AES");
@@ -153,7 +165,7 @@ public class ExpressionImplUtils {
 
   private static byte[] generateIv(CipherMode mode) {
     byte[] iv = new byte[mode.ivLength];
-    threadLocalSecureRandom.get().nextBytes(iv);
+    secureRandom.nextBytes(iv);
     return iv;
   }
 

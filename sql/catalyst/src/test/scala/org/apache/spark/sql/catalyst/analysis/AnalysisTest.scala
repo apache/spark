@@ -25,13 +25,14 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog, TemporaryViewRelation}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.optimizer.InlineCTE
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StringType, StructType}
 
 trait AnalysisTest extends PlanTest {
 
@@ -85,6 +86,10 @@ trait AnalysisTest extends PlanTest {
     createTempView(catalog, "streamingTable", TestRelations.streamingRelation,
       overrideIfExists = true)
     new Analyzer(catalog) {
+      catalogManager.tempVariableManager.create(
+        "testVarA", "1", Literal(1), overrideIfExists = true)
+      catalogManager.tempVariableManager.create(
+        "testVarNull", null, Literal(null, StringType), overrideIfExists = true)
       override val extendedResolutionRules = extendedAnalysisRules
     }
   }

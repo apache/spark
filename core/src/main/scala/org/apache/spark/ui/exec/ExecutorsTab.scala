@@ -17,9 +17,9 @@
 
 package org.apache.spark.ui.exec
 
-import javax.servlet.http.HttpServletRequest
-
 import scala.xml.{Node, Unparsed}
+
+import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.ui.{SparkUI, SparkUITab, UIUtils, WebUIPage}
@@ -52,9 +52,14 @@ private[ui] class ExecutorsPage(
   extends WebUIPage("") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
+    val imported = UIUtils.formatImportJavaScript(
+      request,
+      "/static/executorspage.js",
+      "setThreadDumpEnabled",
+      "setHeapHistogramEnabled")
     val js =
       s"""
-         |import {setThreadDumpEnabled, setHeapHistogramEnabled} from "/static/executorspage.js";
+         |$imported
          |
          |setThreadDumpEnabled($threadDumpEnabled);
          |setHeapHistogramEnabled($heapHistogramEnabled)

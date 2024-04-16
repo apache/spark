@@ -45,6 +45,7 @@ from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import (
     CaseWhen,
+    SortOrder,
     Expression,
     LiteralExpression,
     ColumnReference,
@@ -59,7 +60,14 @@ from pyspark.sql.connect.udf import _create_py_udf
 from pyspark.sql.connect.udtf import AnalyzeArgument, AnalyzeResult  # noqa: F401
 from pyspark.sql.connect.udtf import _create_py_udtf
 from pyspark.sql import functions as pysparkfuncs
-from pyspark.sql.types import _from_numpy_type, DataType, StructType, ArrayType, StringType
+from pyspark.sql.types import (
+    _from_numpy_type,
+    DataType,
+    LongType,
+    StructType,
+    ArrayType,
+    StringType,
+)
 
 # The implementation of pandas_udf is embedded in pyspark.sql.function.pandas_udf
 # for code reuse.
@@ -76,18 +84,20 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.udtf import UserDefinedTableFunction
 
 
-def _to_col_with_plan_id(col: str, plan_id: Optional[int]) -> Column:
-    if col == "*":
-        return Column(UnresolvedStar(unparsed_target=None))
-    elif col.endswith(".*"):
-        return Column(UnresolvedStar(unparsed_target=col))
-    else:
-        return Column(ColumnReference(unparsed_identifier=col, plan_id=plan_id))
-
-
 def _to_col(col: "ColumnOrName") -> Column:
     assert isinstance(col, (Column, str))
     return col if isinstance(col, Column) else column(col)
+
+
+def _sort_col(col: "ColumnOrName") -> Column:
+    assert isinstance(col, (Column, str))
+    if isinstance(col, Column):
+        if isinstance(col._expr, SortOrder):
+            return col
+        else:
+            return col.asc()
+    else:
+        return column(col).asc()
 
 
 def _invoke_function(name: str, *args: Union[Column, Expression]) -> Column:
@@ -224,7 +234,12 @@ def _options_to_col(options: Dict[str, Any]) -> Column:
 
 
 def col(col: str) -> Column:
-    return _to_col_with_plan_id(col=col, plan_id=None)
+    if col == "*":
+        return Column(UnresolvedStar(unparsed_target=None))
+    elif col.endswith(".*"):
+        return Column(UnresolvedStar(unparsed_target=col))
+    else:
+        return Column(ColumnReference(unparsed_identifier=col))
 
 
 col.__doc__ = pysparkfuncs.col.__doc__
@@ -1014,6 +1029,8 @@ corr.__doc__ = pysparkfuncs.corr.__doc__
 
 
 def count(col: "ColumnOrName") -> Column:
+    if isinstance(col, Column) and isinstance(col._expr, UnresolvedStar):
+        col = lit(1)
     return _invoke_function_over_columns("count", col)
 
 
@@ -1928,6 +1945,11 @@ inline_outer.__doc__ = pysparkfuncs.inline_outer.__doc__
 
 
 def json_tuple(col: "ColumnOrName", *fields: str) -> Column:
+    if len(fields) == 0:
+        raise PySparkValueError(
+            error_class="CANNOT_BE_EMPTY",
+            message_parameters={"item": "field"},
+        )
     return _invoke_function("json_tuple", _to_col(col), *[lit(field) for field in fields])
 
 
@@ -2017,6 +2039,13 @@ def str_to_map(
 
 
 str_to_map.__doc__ = pysparkfuncs.str_to_map.__doc__
+
+
+def parse_json(col: "ColumnOrName") -> Column:
+    return _invoke_function("parse_json", _to_col(col))
+
+
+parse_json.__doc__ = pysparkfuncs.parse_json.__doc__
 
 
 def posexplode(col: "ColumnOrName") -> Column:
@@ -2113,7 +2142,11 @@ schema_of_xml.__doc__ = pysparkfuncs.schema_of_xml.__doc__
 
 
 def shuffle(col: "ColumnOrName") -> Column:
-    return _invoke_function("shuffle", _to_col(col), lit(random.randint(0, sys.maxsize)))
+    return _invoke_function(
+        "shuffle",
+        _to_col(col),
+        LiteralExpression(random.randint(0, sys.maxsize), LongType()),
+    )
 
 
 shuffle.__doc__ = pysparkfuncs.shuffle.__doc__
@@ -2839,6 +2872,20 @@ def mask(
 mask.__doc__ = pysparkfuncs.mask.__doc__
 
 
+def collate(col: "ColumnOrName", collation: str) -> Column:
+    return _invoke_function("collate", _to_col(col), lit(collation))
+
+
+collate.__doc__ = pysparkfuncs.collate.__doc__
+
+
+def collation(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("collation", col)
+
+
+collation.__doc__ = pysparkfuncs.collation.__doc__
+
+
 # Date/Timestamp functions
 
 
@@ -2973,6 +3020,20 @@ def weekday(col: "ColumnOrName") -> Column:
 
 
 weekday.__doc__ = pysparkfuncs.weekday.__doc__
+
+
+def monthname(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("monthname", col)
+
+
+monthname.__doc__ = pysparkfuncs.monthname.__doc__
+
+
+def dayname(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("dayname", col)
+
+
+dayname.__doc__ = pysparkfuncs.dayname.__doc__
 
 
 def extract(field: "ColumnOrName", source: "ColumnOrName") -> Column:
@@ -3406,6 +3467,7 @@ to_timestamp_ntz.__doc__ = pysparkfuncs.to_timestamp_ntz.__doc__
 
 
 def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
+    warnings.warn("Deprecated in 4.0.0, use partitioning.bucket instead.", FutureWarning)
     from pyspark.sql.connect.functions import partitioning
 
     return partitioning.bucket(numBuckets, col)
@@ -3415,6 +3477,7 @@ bucket.__doc__ = pysparkfuncs.bucket.__doc__
 
 
 def years(col: "ColumnOrName") -> Column:
+    warnings.warn("Deprecated in 4.0.0, use partitioning.years instead.", FutureWarning)
     from pyspark.sql.connect.functions import partitioning
 
     return partitioning.years(col)
@@ -3424,6 +3487,7 @@ years.__doc__ = pysparkfuncs.years.__doc__
 
 
 def months(col: "ColumnOrName") -> Column:
+    warnings.warn("Deprecated in 4.0.0, use partitioning.months instead.", FutureWarning)
     from pyspark.sql.connect.functions import partitioning
 
     return partitioning.months(col)
@@ -3433,6 +3497,7 @@ months.__doc__ = pysparkfuncs.months.__doc__
 
 
 def days(col: "ColumnOrName") -> Column:
+    warnings.warn("Deprecated in 4.0.0, use partitioning.days instead.", FutureWarning)
     from pyspark.sql.connect.functions import partitioning
 
     return partitioning.days(col)
@@ -3442,6 +3507,7 @@ days.__doc__ = pysparkfuncs.days.__doc__
 
 
 def hours(col: "ColumnOrName") -> Column:
+    warnings.warn("Deprecated in 4.0.0, use partitioning.hours instead.", FutureWarning)
     from pyspark.sql.connect.functions import partitioning
 
     return partitioning.hours(col)
@@ -3684,6 +3750,14 @@ sha1.__doc__ = pysparkfuncs.sha1.__doc__
 
 
 def sha2(col: "ColumnOrName", numBits: int) -> Column:
+    if numBits not in [0, 224, 256, 384, 512]:
+        raise PySparkValueError(
+            error_class="VALUE_NOT_ALLOWED",
+            message_parameters={
+                "arg_name": "numBits",
+                "allowed_values": "[0, 224, 256, 384, 512]",
+            },
+        )
     return _invoke_function("sha2", _to_col(col), lit(numBits))
 
 
@@ -3996,6 +4070,7 @@ call_function.__doc__ = pysparkfuncs.call_function.__doc__
 
 def _test() -> None:
     import sys
+    import os
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
     import pyspark.sql.connect.functions.builtin
@@ -4004,7 +4079,7 @@ def _test() -> None:
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.functions tests")
-        .remote("local[4]")
+        .remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[4]"))
         .getOrCreate()
     )
 

@@ -206,7 +206,11 @@ class FrameCorrMixin:
             self.assert_eq(psdf.corr(), pdf.corr(numeric_only=True), check_exact=False)
 
 
-class FrameCorrTests(FrameCorrMixin, PandasOnSparkTestCase, SQLTestUtils):
+class FrameCorrTests(
+    FrameCorrMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

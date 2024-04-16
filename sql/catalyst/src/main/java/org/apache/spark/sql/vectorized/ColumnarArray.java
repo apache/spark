@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.vectorized;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.expressions.SpecializedGettersReader;
 import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData;
@@ -187,8 +188,12 @@ public final class ColumnarArray extends ArrayData {
   }
 
   @Override
-  public void update(int ordinal, Object value) { throw new UnsupportedOperationException(); }
+  public void update(int ordinal, Object value) {
+    throw SparkUnsupportedOperationException.apply();
+  }
 
   @Override
-  public void setNullAt(int ordinal) { throw new UnsupportedOperationException(); }
+  public void setNullAt(int ordinal) {
+    throw SparkUnsupportedOperationException.apply();
+  }
 }

@@ -25,6 +25,7 @@ import scala.collection.Map
 import com.sun.xml.txw2.output.IndentingXMLStreamWriter
 import org.apache.hadoop.shaded.com.ctc.wstx.api.WstxOutputProperties
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{ArrayData, DateFormatter, DateTimeUtils, MapData, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
@@ -65,6 +66,7 @@ class StaxXmlGenerator(
     val factory = XMLOutputFactory.newInstance()
     // to_xml disables structure validation to allow multiple root tags
     factory.setProperty(WstxOutputProperties.P_OUTPUT_VALIDATE_STRUCTURE, validateStructure)
+    factory.setProperty(WstxOutputProperties.P_OUTPUT_VALIDATE_NAMES, options.validateName)
     val xmlWriter = factory.createXMLStreamWriter(writer)
     if (!indentDisabled) {
       val indentingXmlWriter = new IndentingXMLStreamWriter(xmlWriter)
@@ -218,8 +220,12 @@ class StaxXmlGenerator(
       }
 
     case (_, _) =>
-      throw new IllegalArgumentException(
-        s"Failed to convert value $v (class of ${v.getClass}) in type $dt to XML.")
+      throw new SparkIllegalArgumentException(
+        errorClass = "_LEGACY_ERROR_TEMP_3238",
+        messageParameters = scala.collection.immutable.Map(
+          "v" -> v.toString,
+          "class" -> v.getClass.toString,
+          "dt" -> dt.toString))
   }
 
   def writeMapData(mapType: MapType, map: MapData): Unit = {

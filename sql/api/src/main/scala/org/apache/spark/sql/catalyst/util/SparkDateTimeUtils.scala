@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.util
 
+import java.lang.invoke.{MethodHandles, MethodType}
 import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime, LocalTime, ZonedDateTime, ZoneId, ZoneOffset}
 import java.util.TimeZone
@@ -24,14 +25,13 @@ import java.util.regex.Pattern
 
 import scala.util.control.NonFatal
 
-import sun.util.calendar.ZoneInfo
-
 import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.{rebaseGregorianToJulianDays, rebaseGregorianToJulianMicros, rebaseJulianToGregorianDays, rebaseJulianToGregorianMicros}
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.types.{DateType, TimestampType}
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.SparkClassUtils
 
 trait SparkDateTimeUtils {
 
@@ -197,6 +197,15 @@ trait SparkDateTimeUtils {
     rebaseJulianToGregorianDays(julianDays)
   }
 
+  private val zoneInfoClassName = "sun.util.calendar.ZoneInfo"
+  private val getOffsetsByWallHandle = {
+    val lookup = MethodHandles.lookup()
+    val classType = SparkClassUtils.classForName(zoneInfoClassName)
+    val methodName = "getOffsetsByWall"
+    val methodType = MethodType.methodType(classOf[Int], classOf[Long], classOf[Array[Int]])
+    lookup.findVirtual(classType, methodName, methodType)
+  }
+
   /**
    * Converts days since the epoch 1970-01-01 in Proleptic Gregorian calendar to a local date
    * at the default JVM time zone in the hybrid calendar (Julian + Gregorian). It rebases the given
@@ -215,8 +224,10 @@ trait SparkDateTimeUtils {
     val rebasedDays = rebaseGregorianToJulianDays(days)
     val localMillis = Math.multiplyExact(rebasedDays, MILLIS_PER_DAY)
     val timeZoneOffset = TimeZone.getDefault match {
-      case zoneInfo: ZoneInfo => zoneInfo.getOffsetsByWall(localMillis, null)
-      case timeZone: TimeZone => timeZone.getOffset(localMillis - timeZone.getRawOffset)
+      case zoneInfo: TimeZone if zoneInfo.getClass.getName == zoneInfoClassName =>
+        getOffsetsByWallHandle.invoke(zoneInfo, localMillis, null).asInstanceOf[Int]
+      case timeZone: TimeZone =>
+        timeZone.getOffset(localMillis - timeZone.getRawOffset)
     }
     new Date(localMillis - timeZoneOffset)
   }
@@ -315,18 +326,11 @@ trait SparkDateTimeUtils {
     var currentSegmentValue = 0
     var currentSegmentDigits = 0
     val bytes = s.getBytes
-    var j = 0
-    var strEndTrimmed = bytes.length
+    var j = getTrimmedStart(bytes)
+    val strEndTrimmed = getTrimmedEnd(j, bytes)
 
-    while (j < bytes.length && UTF8String.isWhitespaceOrISOControl(bytes(j))) {
-      j += 1;
-    }
-    if (j == bytes.length) {
-      return None;
-    }
-
-    while (strEndTrimmed > j && UTF8String.isWhitespaceOrISOControl(bytes(strEndTrimmed - 1))) {
-      strEndTrimmed -= 1;
+    if (j == strEndTrimmed) {
+      return None
     }
 
     if (bytes(j) == '-' || bytes(j) == '+') {
@@ -418,7 +422,7 @@ trait SparkDateTimeUtils {
         (segment == 7 && digits <= 2) ||
         (segment != 0 && segment != 6 && segment != 7 && digits > 0 && digits <= 2)
     }
-    if (s == null || s.trimAll().numBytes() == 0) {
+    if (s == null) {
       return (Array.empty, None, false)
     }
     var tz: Option[String] = None
@@ -426,8 +430,14 @@ trait SparkDateTimeUtils {
     var i = 0
     var currentSegmentValue = 0
     var currentSegmentDigits = 0
-    val bytes = s.trimAll().getBytes
-    var j = 0
+    val bytes = s.getBytes
+    var j = getTrimmedStart(bytes)
+    val strEndTrimmed = getTrimmedEnd(j, bytes)
+
+    if (j == strEndTrimmed) {
+      return (Array.empty, None, false)
+    }
+
     var digitsMilli = 0
     var justTime = false
     var yearSign: Option[Int] = None
@@ -435,7 +445,7 @@ trait SparkDateTimeUtils {
       yearSign = if (bytes(j) == '-') Some(-1) else Some(1)
       j += 1
     }
-    while (j < bytes.length) {
+    while (j < strEndTrimmed) {
       val b = bytes(j)
       val parsedValue = b - '0'.toByte
       if (parsedValue < 0 || parsedValue > 9) {
@@ -504,8 +514,8 @@ trait SparkDateTimeUtils {
             currentSegmentValue = 0
             currentSegmentDigits = 0
             i += 1
-            tz = Some(new String(bytes, j, bytes.length - j))
-            j = bytes.length - 1
+            tz = Some(new String(bytes, j, strEndTrimmed - j))
+            j = strEndTrimmed - 1
           }
           if (i == 6  && b != '.') {
             i += 1
@@ -618,6 +628,39 @@ trait SparkDateTimeUtils {
     } catch {
       case NonFatal(_) => None
     }
+  }
+
+  /**
+   * Returns the index of the first non-whitespace and non-ISO control character in the byte array.
+   *
+   * @param bytes The byte array to be processed.
+   * @return The start index after trimming.
+   */
+  @inline private def getTrimmedStart(bytes: Array[Byte]) = {
+    var start = 0
+
+    while (start < bytes.length && UTF8String.isWhitespaceOrISOControl(bytes(start))) {
+      start += 1
+    }
+
+    start
+  }
+
+  /**
+   * Returns the index of the last non-whitespace and non-ISO control character in the byte array.
+   *
+   * @param start The starting index for the search.
+   * @param bytes The byte array to be processed.
+   * @return The end index after trimming.
+   */
+  @inline private def getTrimmedEnd(start: Int, bytes: Array[Byte]) = {
+    var end = bytes.length - 1
+
+    while (end > start && UTF8String.isWhitespaceOrISOControl(bytes(end))) {
+      end -= 1
+    }
+
+    end + 1
   }
 }
 

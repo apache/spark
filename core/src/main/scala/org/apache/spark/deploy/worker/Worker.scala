@@ -18,8 +18,9 @@
 package org.apache.spark.deploy.worker
 
 import java.io.{File, IOException}
-import java.text.SimpleDateFormat
-import java.util.{Date, Locale, UUID}
+import java.time.{Instant, ZoneId}
+import java.time.format.DateTimeFormatter
+import java.util.{Locale, UUID}
 import java.util.concurrent._
 import java.util.concurrent.{Future => JFuture, ScheduledFuture => JScheduledFuture}
 import java.util.function.Supplier
@@ -36,7 +37,8 @@ import org.apache.spark.deploy.ExternalShuffleService
 import org.apache.spark.deploy.StandaloneResourceUtils._
 import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.deploy.worker.ui.WorkerWebUI
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKey._
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.internal.config.Worker._
@@ -90,8 +92,6 @@ private[deploy] class Worker(
   private val cleanupThreadExecutor = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonSingleThreadExecutor("worker-cleanup-thread"))
 
-  // For worker and executor IDs
-  private def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
   // Send a heartbeat every (heartbeat timeout) / 4 milliseconds
   private val HEARTBEAT_MILLIS = conf.get(WORKER_TIMEOUT) * 1000 / 4
 
@@ -499,7 +499,7 @@ private[deploy] class Worker(
 
       case RegisterWorkerFailed(message) =>
         if (!registered) {
-          logError("Worker registration failed: " + message)
+          logError(log"Worker registration failed: ${MDC(ERROR, message)}")
           System.exit(1)
         }
 
@@ -549,7 +549,7 @@ private[deploy] class Worker(
         }(cleanupThreadExecutor)
 
         cleanupFuture.failed.foreach(e =>
-          logError("App dir cleanup failed: " + e.getMessage, e)
+          logError(log"App dir cleanup failed: ${MDC(ERROR, e.getMessage)}", e)
         )(cleanupThreadExecutor)
       } catch {
         case _: RejectedExecutionException if cleanupThreadExecutor.isShutdown =>
@@ -638,7 +638,9 @@ private[deploy] class Worker(
           addResourcesUsed(resources_)
         } catch {
           case e: Exception =>
-            logError(s"Failed to launch executor $appId/$execId for ${appDesc.name}.", e)
+            logError(
+              log"Failed to launch executor ${MDC(APP_ID, appId)}/${MDC(EXECUTOR_ID, execId)} " +
+                log"for ${MDC(APP_DESC, appDesc.name)}.", e)
             if (executors.contains(appId + "/" + execId)) {
               executors(appId + "/" + execId).kill()
               executors -= appId + "/" + execId
@@ -691,7 +693,7 @@ private[deploy] class Worker(
         case Some(runner) =>
           runner.kill()
         case None =>
-          logError(s"Asked to kill unknown driver $driverId")
+          logError(log"Asked to kill unknown driver ${MDC(DRIVER_ID, driverId)}")
       }
 
     case driverStateChanged @ DriverStateChanged(driverId, state, exception) =>
@@ -749,7 +751,7 @@ private[deploy] class Worker(
               Utils.deleteRecursively(new File(dir))
             }
           }(cleanupThreadExecutor).failed.foreach(e =>
-            logError(s"Clean up app dir $dirList failed: ${e.getMessage}", e)
+            logError(log"Clean up app dir ${MDC(PATHS, dirList)} failed", e)
           )(cleanupThreadExecutor)
         }
       } catch {
@@ -794,8 +796,10 @@ private[deploy] class Worker(
           case Failure(t) =>
             val failures = executorStateSyncFailureAttempts.getOrElse(fullId, 0) + 1
             if (failures < executorStateSyncMaxAttempts) {
-              logError(s"Failed to send $newState to Master $masterRef, " +
-                s"will retry ($failures/$executorStateSyncMaxAttempts).", t)
+              logError(log"Failed to send ${MDC(EXECUTOR_STATE, newState)}" +
+                log" to Master ${MDC(MASTER_URL, masterRef)}, will retry " +
+                log"(${MDC(FAILURES, failures)}/" +
+                log"${MDC(MAX_ATTEMPTS, executorStateSyncMaxAttempts)}).", t)
               executorStateSyncFailureAttempts(fullId) = failures
               // If the failure is not caused by TimeoutException, wait for a while before retry in
               // case the connection is temporarily unavailable.
@@ -808,8 +812,9 @@ private[deploy] class Worker(
               }
               self.send(newState)
             } else {
-              logError(s"Failed to send $newState to Master $masterRef for " +
-                s"$executorStateSyncMaxAttempts times. Giving up.")
+              logError(log"Failed to send ${MDC(EXECUTOR_STATE, newState)} " +
+                log"to Master ${MDC(MASTER_URL, masterRef)} for " +
+                log"${MDC(MAX_ATTEMPTS, executorStateSyncMaxAttempts)} times. Giving up.")
               System.exit(1)
             }
         }(executorStateSyncFailureHandler)
@@ -821,7 +826,7 @@ private[deploy] class Worker(
   }
 
   private def generateWorkerId(): String = {
-    workerIdPattern.format(createDateFormat.format(new Date), host, port)
+    workerIdPattern.format(Worker.DATE_TIME_FORMATTER.format(Instant.now()), host, port)
   }
 
   override def onStop(): Unit = {
@@ -936,6 +941,12 @@ private[deploy] object Worker extends Logging {
   val SYSTEM_NAME = "sparkWorker"
   val ENDPOINT_NAME = "Worker"
   private val SSL_NODE_LOCAL_CONFIG_PATTERN = """\-Dspark\.ssl\.useNodeLocalConf\=(.+)""".r
+
+  // For worker and executor IDs
+  private val DATE_TIME_FORMATTER =
+    DateTimeFormatter
+      .ofPattern("yyyyMMddHHmmss", Locale.US)
+      .withZone(ZoneId.systemDefault())
 
   def main(argStrings: Array[String]): Unit = {
     Thread.setDefaultUncaughtExceptionHandler(new SparkUncaughtExceptionHandler(

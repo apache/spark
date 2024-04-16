@@ -17,10 +17,9 @@
 
 package org.apache.spark.deploy.master.ui
 
-import javax.servlet.http.HttpServletRequest
-
 import scala.xml.Node
 
+import jakarta.servlet.http.HttpServletRequest
 import org.json4s.JValue
 
 import org.apache.spark.deploy.DeployMessages.{KillDriverResponse, MasterStateResponse, RequestKillDriver, RequestMasterState}
@@ -41,6 +40,8 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   override def renderJson(request: HttpServletRequest): JValue = {
     jsonFieldPattern.findFirstMatchIn(request.getRequestURI()) match {
       case None => JsonProtocol.writeMasterState(getMasterState)
+      case Some(m) if m.group(1) == "clusterutilization" =>
+        JsonProtocol.writeClusterUtilization(getMasterState)
       case Some(m) => JsonProtocol.writeMasterState(getMasterState, Some(m.group(1)))
     }
   }
@@ -168,7 +169,9 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
                 {state.completedDrivers.count(_.state == DriverState.ERROR)} Error,
                 {state.completedDrivers.count(_.state == DriverState.RELAUNCHING)} Relaunching)
               </li>
-              <li><strong>Status:</strong> {state.status}</li>
+              <li><strong>Status:</strong>
+                <a href={"/logPage/?self&logType=out"}>{state.status}</a>
+              </li>
             </ul>
           </div>
         </div>
@@ -375,7 +378,9 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       <td>{formatResourcesAddresses(driver.resources)}</td>
       <td>{driver.desc.command.arguments(2)}</td>
       {if (showDuration) {
-        <td>{UIUtils.formatDuration(System.currentTimeMillis() - driver.startTime)}</td>
+        <td sorttable_customkey={(-driver.startTime).toString}>
+          {UIUtils.formatDuration(System.currentTimeMillis() - driver.startTime)}
+        </td>
       }}
     </tr>
   }

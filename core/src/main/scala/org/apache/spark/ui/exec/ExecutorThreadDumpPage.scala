@@ -17,15 +17,15 @@
 
 package org.apache.spark.ui.exec
 
-import javax.servlet.http.HttpServletRequest
-
 import scala.xml.{Node, Text, Unparsed}
+
+import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.config.UI.UI_FLAMEGRAPH_ENABLED
 import org.apache.spark.status.api.v1.ThreadStackTrace
 import org.apache.spark.ui.{SparkUITab, UIUtils, WebUIPage}
-import org.apache.spark.ui.UIUtils.prependBaseUri
+import org.apache.spark.ui.UIUtils.{formatImportJavaScript, prependBaseUri}
 import org.apache.spark.ui.flamegraph.FlamegraphNode
 
 private[ui] class ExecutorThreadDumpPage(
@@ -130,14 +130,14 @@ private[ui] class ExecutorThreadDumpPage(
   private def drawExecutorFlamegraph(request: HttpServletRequest, thread: Array[ThreadStackTrace]): Seq[Node] = {
     val js =
       s"""
-         |import {drawFlamegraph} from "/static/flamegraph.js";
+         |${formatImportJavaScript(request, "/static/flamegraph.js", "drawFlamegraph", "toggleFlamegraph")}
          |
          |drawFlamegraph();
+         |toggleFlamegraph();
          |""".stripMargin
     <div>
       <div>
-        <script type="module">{Unparsed("import {toggleFlamegraph} from '/static/flamegraph.js';")}</script>
-        <span style="cursor: pointer;" onclick="toggleFlamegraph();">
+        <span id="executor-flamegraph-header" style="cursor: pointer;">
           <h4>
             <span id="executor-flamegraph-arrow" class="arrow-open"></span>
             <a>Flame Graph</a>
@@ -147,8 +147,8 @@ private[ui] class ExecutorThreadDumpPage(
       <div id="executor-flamegraph-data" class="d-none">{FlamegraphNode(thread).toJsonString}</div>
       <div id="executor-flamegraph-chart">
         <link rel="stylesheet" type="text/css" href={prependBaseUri(request, "/static/d3-flamegraph.css")}></link>
-        <script src={UIUtils.prependBaseUri(request, "/static/d3-flamegraph.min.js")}></script>
         <script src={UIUtils.prependBaseUri(request, "/static/d3.min.js")}></script>
+        <script src={UIUtils.prependBaseUri(request, "/static/d3-flamegraph.min.js")}></script>
         <script type="module" src={UIUtils.prependBaseUri(request, "/static/flamegraph.js")}></script>
         <script type="module">{Unparsed(js)}</script>
       </div>

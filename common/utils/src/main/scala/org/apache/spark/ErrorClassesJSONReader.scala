@@ -32,8 +32,8 @@ import org.apache.spark.annotation.DeveloperApi
 
 /**
  * A reader to load error information from one or more JSON files. Note that, if one error appears
- * in more than one JSON files, the latter wins. Please read core/src/main/resources/error/README.md
- * for more details.
+ * in more than one JSON files, the latter wins.
+ * Please read common/utils/src/main/resources/error/README.md for more details.
  */
 @DeveloperApi
 class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
@@ -153,3 +153,17 @@ private case class ErrorSubInfo(message: Seq[String]) {
   @JsonIgnore
   val messageTemplate: String = message.mkString("\n")
 }
+
+/**
+ * Information associated with an error state / SQLSTATE.
+ *
+ * @param description What the error state means.
+ * @param origin The DBMS where this error state was first defined.
+ * @param standard Whether this error state is part of the SQL standard.
+ * @param usedBy What database systems use this error state.
+ */
+private case class ErrorStateInfo(
+    description: String,
+    origin: String,
+    standard: String,
+    usedBy: List[String])

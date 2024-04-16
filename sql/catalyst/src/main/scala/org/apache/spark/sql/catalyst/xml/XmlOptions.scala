@@ -95,7 +95,7 @@ class XmlOptions(
   val nullValue = parameters.getOrElse(NULL_VALUE, XmlOptions.DEFAULT_NULL_VALUE)
   val columnNameOfCorruptRecord =
     parameters.getOrElse(COLUMN_NAME_OF_CORRUPT_RECORD, defaultColumnNameOfCorruptRecord)
-  val ignoreSurroundingSpaces = getBool(IGNORE_SURROUNDING_SPACES, false)
+  val ignoreSurroundingSpaces = getBool(IGNORE_SURROUNDING_SPACES, true)
   val parseMode = ParseMode.fromString(parameters.getOrElse(MODE, PermissiveMode.name))
   val inferSchema = getBool(INFER_SCHEMA, true)
   val rowValidationXSDPath = parameters.get(ROW_VALIDATION_XSD_PATH).orNull
@@ -107,6 +107,7 @@ class XmlOptions(
   // setting indent to "" disables indentation in the generated XML.
   // Each row will be written in a new line.
   val indent = parameters.getOrElse(INDENT, DEFAULT_INDENT)
+  val validateName = getBool(VALIDATE_NAME, true)
 
   /**
    * Infer columns with all valid date entries as date type (otherwise inferred as string or
@@ -210,6 +211,7 @@ object XmlOptions extends DataSourceOptions {
   val TIME_ZONE = newOption("timeZone")
   val INDENT = newOption("indent")
   val PREFERS_DECIMAL = newOption("prefersDecimal")
+  val VALIDATE_NAME = newOption("validateName")
   // Options with alternative
   val ENCODING = "encoding"
   val CHARSET = "charset"

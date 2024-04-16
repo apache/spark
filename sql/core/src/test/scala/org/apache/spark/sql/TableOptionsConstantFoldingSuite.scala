@@ -44,7 +44,9 @@ class TableOptionsConstantFoldingSuite extends QueryTest with SharedSparkSession
     checkOption("null", null)
     checkOption("cast('11 23:4:0' as interval day to second)",
       "INTERVAL '11 23:04:00' DAY TO SECOND")
-    checkOption("date_diff(current_date(), current_date())", "0")
+    withSQLConf(SQLConf.LEGACY_EVAL_CURRENT_TIME.key -> "true") {
+      checkOption("date_diff(current_date(), current_date())", "0")
+    }
     checkOption("date_sub(date'2022-02-02', 1)", "2022-02-01")
     checkOption("timestampadd(microsecond, 5, timestamp'2022-02-28 00:00:00')",
       "2022-02-28 00:00:00.000005")

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.types.{DataType, Decimal, StructType}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String, VariantVal}
@@ -36,13 +37,9 @@ case class ProjectingInternalRow(schema: StructType, colOrdinals: Seq[Int]) exte
     this.row = row
   }
 
-  override def setNullAt(i: Int): Unit = {
-    throw new UnsupportedOperationException(s"Cannot modify ${getClass.getName}")
-  }
+  override def setNullAt(i: Int): Unit = throw SparkUnsupportedOperationException()
 
-  override def update(i: Int, value: Any): Unit = {
-    throw new UnsupportedOperationException(s"Cannot modify ${getClass.getName}")
-  }
+  override def update(i: Int, value: Any): Unit = throw SparkUnsupportedOperationException()
 
   override def copy(): InternalRow = {
     val newRow = if (row != null) row.copy() else null

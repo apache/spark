@@ -21,6 +21,7 @@ from pyspark.errors import (
     PySparkTypeError,
     PySparkValueError,
     IllegalArgumentException,
+    PySparkAssertionError,
 )
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.dataframe import DataFrame
@@ -50,7 +51,8 @@ class Observation:
     __init__.__doc__ = PySparkObservation.__init__.__doc__
 
     def _on(self, df: DataFrame, *exprs: Column) -> DataFrame:
-        assert self._result is None, "an Observation can be used with a DataFrame only once"
+        if self._result is not None:
+            raise PySparkAssertionError(error_class="REUSE_OBSERVATION", message_parameters={})
 
         if self._name is None:
             self._name = str(uuid.uuid4())
@@ -68,7 +70,9 @@ class Observation:
 
     @property
     def get(self) -> Dict[str, Any]:
-        assert self._result is not None
+        if self._result is None:
+            raise PySparkAssertionError(error_class="NO_OBSERVE_BEFORE_GET", message_parameters={})
+
         return self._result
 
     get.__doc__ = PySparkObservation.get.__doc__
@@ -78,6 +82,7 @@ Observation.__doc__ = PySparkObservation.__doc__
 
 
 def _test() -> None:
+    import os
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
@@ -86,7 +91,7 @@ def _test() -> None:
     globs = pyspark.sql.connect.observation.__dict__.copy()
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.observation tests")
-        .remote("local[4]")
+        .remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[4]"))
         .getOrCreate()
     )
 

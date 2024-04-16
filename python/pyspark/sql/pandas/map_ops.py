@@ -15,12 +15,15 @@
 # limitations under the License.
 #
 import sys
-from typing import Union, TYPE_CHECKING
+from typing import Union, TYPE_CHECKING, Optional
 
-from pyspark.rdd import PythonEvalType
+from pyspark.resource.requests import ExecutorResourceRequests, TaskResourceRequests
+from pyspark.resource import ResourceProfile
+from pyspark.util import PythonEvalType
 from pyspark.sql.types import StructType
 
 if TYPE_CHECKING:
+    from py4j.java_gateway import JavaObject
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.pandas._typing import PandasMapIterFunction, ArrowMapIterFunction
 
@@ -32,7 +35,11 @@ class PandasMapOpsMixin:
     """
 
     def mapInPandas(
-        self, func: "PandasMapIterFunction", schema: Union[StructType, str], barrier: bool = False
+        self,
+        func: "PandasMapIterFunction",
+        schema: Union[StructType, str],
+        barrier: bool = False,
+        profile: Optional[ResourceProfile] = None,
     ) -> "DataFrame":
         """
         Maps an iterator of batches in the current :class:`DataFrame` using a Python native
@@ -64,6 +71,12 @@ class PandasMapOpsMixin:
             Use barrier mode execution.
 
             .. versionadded: 3.5.0
+
+        profile : :class:`pyspark.resource.ResourceProfile`. The optional ResourceProfile
+            to be used for mapInPandas.
+
+            .. versionadded: 4.0.0
+
 
         Examples
         --------
@@ -141,11 +154,17 @@ class PandasMapOpsMixin:
             func, returnType=schema, functionType=PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
         )  # type: ignore[call-overload]
         udf_column = udf(*[self[col] for col in self.columns])
-        jdf = self._jdf.mapInPandas(udf_column._jc.expr(), barrier)
+
+        jrp = self._build_java_profile(profile)
+        jdf = self._jdf.mapInPandas(udf_column._jc.expr(), barrier, jrp)
         return DataFrame(jdf, self.sparkSession)
 
     def mapInArrow(
-        self, func: "ArrowMapIterFunction", schema: Union[StructType, str], barrier: bool = False
+        self,
+        func: "ArrowMapIterFunction",
+        schema: Union[StructType, str],
+        barrier: bool = False,
+        profile: Optional[ResourceProfile] = None,
     ) -> "DataFrame":
         """
         Maps an iterator of batches in the current :class:`DataFrame` using a Python native
@@ -174,6 +193,11 @@ class PandasMapOpsMixin:
             Use barrier mode execution.
 
             .. versionadded: 3.5.0
+
+        profile : :class:`pyspark.resource.ResourceProfile`. The optional ResourceProfile
+            to be used for mapInArrow.
+
+            .. versionadded: 4.0.0
 
         Examples
         --------
@@ -220,8 +244,34 @@ class PandasMapOpsMixin:
             func, returnType=schema, functionType=PythonEvalType.SQL_MAP_ARROW_ITER_UDF
         )  # type: ignore[call-overload]
         udf_column = udf(*[self[col] for col in self.columns])
-        jdf = self._jdf.pythonMapInArrow(udf_column._jc.expr(), barrier)
+
+        jrp = self._build_java_profile(profile)
+        jdf = self._jdf.mapInArrow(udf_column._jc.expr(), barrier, jrp)
         return DataFrame(jdf, self.sparkSession)
+
+    def _build_java_profile(
+        self, profile: Optional[ResourceProfile] = None
+    ) -> Optional["JavaObject"]:
+        """Build the java ResourceProfile based on PySpark ResourceProfile"""
+        from pyspark.sql import DataFrame
+
+        assert isinstance(self, DataFrame)
+
+        jrp = None
+        if profile is not None:
+            if profile._java_resource_profile is not None:
+                jrp = profile._java_resource_profile
+            else:
+                jvm = self.sparkSession.sparkContext._jvm
+                assert jvm is not None
+
+                builder = jvm.org.apache.spark.resource.ResourceProfileBuilder()
+                ereqs = ExecutorResourceRequests(jvm, profile._executor_resource_requests)
+                treqs = TaskResourceRequests(jvm, profile._task_resource_requests)
+                builder.require(ereqs._java_executor_resource_requests)
+                builder.require(treqs._java_task_resource_requests)
+                jrp = builder.build()
+        return jrp
 
 
 def _test() -> None:

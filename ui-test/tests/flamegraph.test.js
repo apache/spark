@@ -16,11 +16,13 @@
  */
 
 
+import '../../core/src/main/resources/org/apache/spark/ui/static/jquery-3.5.1.min.js';
 import '../../core/src/main/resources/org/apache/spark/ui/static/d3.min.js';
 import '../../core/src/main/resources/org/apache/spark/ui/static/d3-flamegraph.min.js';
 import '../../core/src/main/resources/org/apache/spark/ui/static/flamegraph.js';
-import {drawFlamegraph} from '../../core/src/main/resources/org/apache/spark/ui/static/flamegraph.js';
-import $ from 'jquery';
+import {drawFlamegraph, toggleFlamegraph} from '../../core/src/main/resources/org/apache/spark/ui/static/flamegraph.js';
+
+/* global $, d3 */
 
 /**
  * @jest-environment jsdom
@@ -37,4 +39,21 @@ test('drawFlamegraph', function () {
   expect($('#executor-flamegraph-chart').find('svg').length).toBe(1);
   expect($("[name=apache] title").html()).toBe('apache (100.000%, 2 samples)');
   expect($("[name=spark] title").html()).toBe('spark (50.000%, 1 samples)');
+});
+
+test('toggleFlamegraph', function () {
+  document.body.innerHTML = `'<div>' +
+    '<div id="executor-flamegraph-header" class="arrow-open"></div>' +
+    '<div id="executor-flamegraph-arrow" class="arrow-open"></div>' +
+    '<div id="executor-flamegraph-chart" style="display: block"></div></div>'`
+
+  toggleFlamegraph();
+
+  d3.select("#executor-flamegraph-header").dispatch("click");
+  expect($('#executor-flamegraph-arrow').hasClass('arrow-closed')).toBe(true);
+  expect($('#executor-flamegraph-chart').css('display')).toBe('none');
+
+  d3.select("#executor-flamegraph-header").dispatch("click");
+  expect($('#executor-flamegraph-arrow').hasClass('arrow-closed')).toBe(false);
+  expect($('#executor-flamegraph-chart').css('display')).toBe('block');
 });

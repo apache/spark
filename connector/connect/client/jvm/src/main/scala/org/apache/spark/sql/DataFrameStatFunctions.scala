@@ -22,7 +22,6 @@ import java.io.ByteArrayInputStream
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.SparkException
 import org.apache.spark.connect.proto.{Relation, StatSampleBy}
 import org.apache.spark.sql.DataFrameStatFunctions.approxQuantileResultEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, BinaryEncoder, PrimitiveDoubleEncoder}
@@ -599,7 +598,7 @@ final class DataFrameStatFunctions private[sql] (sparkSession: SparkSession, roo
    * @since 3.5.0
    */
   def bloomFilter(colName: String, expectedNumItems: Long, fpp: Double): BloomFilter = {
-    buildBloomFilter(Column(colName), expectedNumItems, -1L, fpp)
+    bloomFilter(Column(colName), expectedNumItems, fpp)
   }
 
   /**
@@ -614,7 +613,8 @@ final class DataFrameStatFunctions private[sql] (sparkSession: SparkSession, roo
    * @since 3.5.0
    */
   def bloomFilter(col: Column, expectedNumItems: Long, fpp: Double): BloomFilter = {
-    buildBloomFilter(col, expectedNumItems, -1L, fpp)
+    val numBits = BloomFilter.optimalNumOfBits(expectedNumItems, fpp)
+    bloomFilter(col, expectedNumItems, numBits)
   }
 
   /**
@@ -629,7 +629,7 @@ final class DataFrameStatFunctions private[sql] (sparkSession: SparkSession, roo
    * @since 3.5.0
    */
   def bloomFilter(colName: String, expectedNumItems: Long, numBits: Long): BloomFilter = {
-    buildBloomFilter(Column(colName), expectedNumItems, numBits, Double.NaN)
+    bloomFilter(Column(colName), expectedNumItems, numBits)
   }
 
   /**
@@ -644,25 +644,7 @@ final class DataFrameStatFunctions private[sql] (sparkSession: SparkSession, roo
    * @since 3.5.0
    */
   def bloomFilter(col: Column, expectedNumItems: Long, numBits: Long): BloomFilter = {
-    buildBloomFilter(col, expectedNumItems, numBits, Double.NaN)
-  }
-
-  private def buildBloomFilter(
-      col: Column,
-      expectedNumItems: Long,
-      numBits: Long,
-      fpp: Double): BloomFilter = {
-    def numBitsValue: Long = if (!fpp.isNaN) {
-      BloomFilter.optimalNumOfBits(expectedNumItems, fpp)
-    } else {
-      numBits
-    }
-
-    if (fpp <= 0d || fpp >= 1d) {
-      throw new SparkException("False positive probability must be within range (0.0, 1.0)")
-    }
-    val agg = Column.fn("bloom_filter_agg", col, lit(expectedNumItems), lit(numBitsValue))
-
+    val agg = Column.fn("bloom_filter_agg", col, lit(expectedNumItems), lit(numBits))
     val ds = sparkSession.newDataset(BinaryEncoder) { builder =>
       builder.getProjectBuilder
         .setInput(root)

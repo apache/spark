@@ -155,7 +155,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"bit count\"",
     "inputType" : "\"STRING\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "(\"INTEGRAL\" or \"BOOLEAN\")",
     "sqlExpr" : "\"bit_count(bit count)\""
   },
@@ -181,7 +181,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"a\"",
     "inputType" : "\"STRING\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "(\"INTEGRAL\" or \"BOOLEAN\")",
     "sqlExpr" : "\"bit_count(a)\""
   },

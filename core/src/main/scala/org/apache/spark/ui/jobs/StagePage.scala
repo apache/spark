@@ -18,16 +18,18 @@
 package org.apache.spark.ui.jobs
 
 import java.util.Date
-import javax.servlet.http.HttpServletRequest
 
 import scala.collection.mutable.HashSet
 import scala.xml.{Node, Unparsed}
+
+import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.scheduler.TaskLocality
 import org.apache.spark.status._
 import org.apache.spark.status.api.v1._
 import org.apache.spark.ui._
+import org.apache.spark.ui.UIUtils.formatImportJavaScript
 import org.apache.spark.util.Utils
 
 /** Page showing statistics and task list for a given stage */
@@ -207,7 +209,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
 
     val js =
       s"""
-         |import { setTaskThreadDumpEnabled } from "/static/stagepage.js";
+         |${formatImportJavaScript(request, "/static/stagepage.js", "setTaskThreadDumpEnabled")}
          |
          |setTaskThreadDumpEnabled(${parent.threadDumpEnabled});
          |""".stripMargin

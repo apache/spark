@@ -496,15 +496,27 @@ class SparkSession private[sql] (
   }
 
   @DeveloperApi
+  @deprecated("Use newDataFrame(Array[Byte]) instead", "4.0.0")
   def newDataFrame(extension: com.google.protobuf.Any): DataFrame = {
-    newDataset(extension, UnboundRowEncoder)
+    newDataFrame(_.setExtension(extension))
   }
 
   @DeveloperApi
+  @deprecated("Use newDataFrame(Array[Byte], AgnosticEncoder[T]) instead", "4.0.0")
   def newDataset[T](
       extension: com.google.protobuf.Any,
       encoder: AgnosticEncoder[T]): Dataset[T] = {
     newDataset(encoder)(_.setExtension(extension))
+  }
+
+  @DeveloperApi
+  def newDataFrame(extension: Array[Byte]): DataFrame = {
+    newDataFrame(_.setExtension(com.google.protobuf.Any.parseFrom(extension)))
+  }
+
+  @DeveloperApi
+  def newDataset[T](extension: Array[Byte], encoder: AgnosticEncoder[T]): Dataset[T] = {
+    newDataset(encoder)(_.setExtension(com.google.protobuf.Any.parseFrom(extension)))
   }
 
   private[sql] def newCommand[T](f: proto.Command.Builder => Unit): proto.Command = {
@@ -555,8 +567,9 @@ class SparkSession private[sql] (
 
   private[sql] def execute(command: proto.Command): Seq[ExecutePlanResponse] = {
     val plan = proto.Plan.newBuilder().setCommand(command).build()
-    // .toSeq forces that the iterator is consumed and closed
-    client.execute(plan).toSeq
+    // .toSeq forces that the iterator is consumed and closed. On top, ignore all
+    // progress messages.
+    client.execute(plan).filter(!_.hasExecutionProgress).toSeq
   }
 
   private[sql] def registerUdf(udf: proto.CommonInlineUserDefinedFunction): Unit = {
@@ -565,8 +578,18 @@ class SparkSession private[sql] (
   }
 
   @DeveloperApi
+  @deprecated("Use execute(Array[Byte]) instead", "4.0.0")
   def execute(extension: com.google.protobuf.Any): Unit = {
     val command = proto.Command.newBuilder().setExtension(extension).build()
+    execute(command)
+  }
+
+  @DeveloperApi
+  def execute(extension: Array[Byte]): Unit = {
+    val command = proto.Command
+      .newBuilder()
+      .setExtension(com.google.protobuf.Any.parseFrom(extension))
+      .build()
     execute(command)
   }
 

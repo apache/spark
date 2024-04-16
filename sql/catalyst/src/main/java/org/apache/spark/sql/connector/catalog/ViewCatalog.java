@@ -19,13 +19,11 @@ package org.apache.spark.sql.connector.catalog;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 
 import org.apache.spark.annotation.DeveloperApi;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchViewException;
 import org.apache.spark.sql.catalyst.analysis.ViewAlreadyExistsException;
-import org.apache.spark.sql.types.StructType;
 
 /**
  * Catalog methods for working with views.
@@ -116,29 +114,12 @@ public interface ViewCatalog extends CatalogPlugin {
   /**
    * Create a view in the catalog.
    *
-   * @param ident a view identifier
-   * @param sql the SQL text that defines the view
-   * @param currentCatalog the current catalog
-   * @param currentNamespace the current namespace
-   * @param schema the view query output schema
-   * @param queryColumnNames the query column names
-   * @param columnAliases the column aliases
-   * @param columnComments the column comments
-   * @param properties the view properties
-   * @return the view created
+   * @param viewInfo the info class holding all view information
+   * @return the created view. This can be null if getting the metadata for the view is expensive
    * @throws ViewAlreadyExistsException If a view or table already exists for the identifier
    * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
    */
-  View createView(
-      Identifier ident,
-      String sql,
-      String currentCatalog,
-      String[] currentNamespace,
-      StructType schema,
-      String[] queryColumnNames,
-      String[] columnAliases,
-      String[] columnComments,
-      Map<String, String> properties) throws ViewAlreadyExistsException, NoSuchNamespaceException;
+  View createView(ViewInfo viewInfo) throws ViewAlreadyExistsException, NoSuchNamespaceException;
 
   /**
    * Replace a view in the catalog.
@@ -146,83 +127,27 @@ public interface ViewCatalog extends CatalogPlugin {
    * The default implementation has a race condition.
    * Catalogs are encouraged to implement this operation atomically.
    *
-   * @param ident a view identifier
-   * @param sql the SQL text that defines the view
-   * @param currentCatalog the current catalog
-   * @param currentNamespace the current namespace
-   * @param schema the view query output schema
-   * @param queryColumnNames the query column names
-   * @param columnAliases the column aliases
-   * @param columnComments the column comments
-   * @param properties the view properties
+   * @param viewInfo the info class holding all view information
+   * @param orCreate create the view if it doesn't exist
+   * @return the created/replaced view. This can be null if getting the metadata
+   *         for the view is expensive
    * @throws NoSuchViewException If the view doesn't exist or is a table
    * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
    */
-  default void replaceView(
-          Identifier ident,
-          String sql,
-          String currentCatalog,
-          String[] currentNamespace,
-          StructType schema,
-          String[] queryColumnNames,
-          String[] columnAliases,
-          String[] columnComments,
-          Map<String, String> properties) throws NoSuchViewException, NoSuchNamespaceException {
-    if (viewExists(ident)) {
-      dropView(ident);
-      try {
-        createView(ident, sql, currentCatalog, currentNamespace, schema,
-                queryColumnNames, columnAliases, columnComments, properties);
-      }
-      catch (ViewAlreadyExistsException e) {
-        throw new RuntimeException("Race condition when dropping and creating view", e);
-      }
-    } else {
-      throw new NoSuchViewException(ident);
+  default View replaceView(
+      ViewInfo viewInfo,
+      boolean orCreate)
+      throws NoSuchViewException, NoSuchNamespaceException {
+    if (viewExists(viewInfo.ident())) {
+      dropView(viewInfo.ident());
+    } else if (!orCreate) {
+      throw new NoSuchViewException(viewInfo.ident());
     }
-  }
 
-  /**
-   * Create or replace a view in the catalog.
-   * <p>
-   * The default implementation has race conditions.
-   * Catalogs are encouraged to implement this operation atomically.
-   *
-   * @param ident a view identifier
-   * @param sql the SQL text that defines the view
-   * @param currentCatalog the current catalog
-   * @param currentNamespace the current namespace
-   * @param schema the view query output schema
-   * @param queryColumnNames the query column names
-   * @param columnAliases the column aliases
-   * @param columnComments the column comments
-   * @param properties the view properties
-   * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
-   */
-  default void createOrReplaceView(
-          Identifier ident,
-          String sql,
-          String currentCatalog,
-          String[] currentNamespace,
-          StructType schema,
-          String[] queryColumnNames,
-          String[] columnAliases,
-          String[] columnComments,
-          Map<String, String> properties) throws NoSuchNamespaceException {
-    if (viewExists(ident)) {
-      try {
-        replaceView(ident, sql, currentCatalog, currentNamespace, schema,
-                queryColumnNames, columnAliases, columnComments, properties);
-      } catch (NoSuchViewException e) {
-        throw new RuntimeException("Race condition when checking and replacing view", e);
-      }
-    } else {
-      try {
-        createView(ident, sql, currentCatalog, currentNamespace, schema,
-                queryColumnNames, columnAliases, columnComments, properties);
-      } catch (ViewAlreadyExistsException e) {
-        throw new RuntimeException("Race condition when checking and creating view", e);
-      }
+    try {
+      return createView(viewInfo);
+    } catch (ViewAlreadyExistsException e) {
+      throw new RuntimeException("Race condition when creating/replacing view", e);
     }
   }
 

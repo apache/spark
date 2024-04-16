@@ -20,7 +20,11 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class StreamingParityTests(StreamingTestsMixin, ReusedConnectTestCase):
-    pass
+    def _assert_exception_tree_contains_msg(self, exception, msg):
+        self.assertTrue(
+            msg in exception._message,
+            "Exception tree doesn't contain the expected message: %s" % msg,
+        )
 
 
 if __name__ == "__main__":

@@ -94,7 +94,7 @@ Data source options of XML can be set via:
   <tr>
       <td><code>inferSchema</code></td>
       <td><code>true</code></td>
-      <td>If true, attempts to infer an appropriate type for each resulting DataFrame column. If false, all resulting columns are of string type. Default is true. XML built-in functions ignore this option.</td>
+      <td>If true, attempts to infer an appropriate type for each resulting DataFrame column. If false, all resulting columns are of string type.</td>
       <td>read</td>
   </tr>
 
@@ -108,7 +108,7 @@ Data source options of XML can be set via:
   <tr>
     <td><code>attributePrefix</code></td>
     <td><code>_</code></td>
-    <td>The prefix for attributes to differentiate attributes from elements. This will be the prefix for field names. Default is _. Can be empty for reading XML, but not for writing.</td>
+    <td>The prefix for attributes to differentiate attributes from elements. This will be the prefix for field names. Can be empty for reading XML, but not for writing.</td>
     <td>read/write</td>
   </tr>
 
@@ -128,7 +128,7 @@ Data source options of XML can be set via:
 
   <tr>
     <td><code>ignoreSurroundingSpaces</code></td>
-    <td><code>false</code></td>
+    <td><code>true</code></td>
     <td>Defines whether surrounding whitespaces from values being read should be skipped.</td>
     <td>read</td>
   </tr>
@@ -233,6 +233,13 @@ Data source options of XML can be set via:
     <td><code>none</code></td>
     <td>Compression codec to use when saving to file. This can be one of the known case-insensitive shortened names (none, bzip2, gzip, lz4, snappy and deflate). XML built-in functions ignore this option.</td>
     <td>write</td>
+  </tr>
+
+  <tr>
+      <td><code>validateName</code></td>
+      <td><code>true</code></td>
+      <td>If true, throws error on XML element name validation failure. For example, SQL field names can have spaces, but XML element names cannot.</td>
+      <td>write</td>
   </tr>
 
 </table>

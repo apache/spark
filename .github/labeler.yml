@@ -18,109 +18,221 @@
 #
 
 INFRA:
-  - ".github/**/*"
-  - "appveyor.yml"
-  - "tools/**/*"
-  - "dev/create-release/**/*"
-  - ".asf.yaml"
-  - ".gitattributes"
-  - ".gitignore"
-  - "dev/merge_spark_pr.py"
-  - "dev/run-tests-jenkins*"
+  - changed-files:
+    - any-glob-to-any-file: [
+     '.github/**/*',
+     'tools/**/*',
+     'dev/create-release/**/*',
+     '.asf.yaml',
+     '.gitattributes',
+     '.gitignore',
+     'dev/merge_spark_pr.py',
+     'dev/run-tests-jenkins*'
+    ]
+
 BUILD:
- - any: ['dev/**/*', '!dev/merge_spark_pr.py', '!dev/run-tests-jenkins*']
- - "build/**/*"
- - "project/**/*"
- - "assembly/**/*"
- - "**/*pom.xml"
- - "bin/docker-image-tool.sh"
- - "bin/find-spark-home*"
- - "scalastyle-config.xml"
+  - changed-files:
+    - all-globs-to-any-file: [
+     'dev/**/*',
+     '!dev/merge_spark_pr.py',
+     '!dev/run-tests-jenkins*'
+    ]
+    - any-glob-to-any-file: [
+     'build/**/*',
+     'project/**/*',
+     'assembly/**/*',
+     '**/*pom.xml',
+     'bin/docker-image-tool.sh',
+     'bin/find-spark-home*',
+     'scalastyle-config.xml'
+    ]
+
 DOCS:
-  - "docs/**/*"
-  - "**/README.md"
-  - "**/CONTRIBUTING.md"
-  - "python/docs/**/*"
+  - changed-files:
+    - any-glob-to-any-file: [
+     'docs/**/*',
+     '**/README.md',
+     '**/CONTRIBUTING.md',
+     'python/docs/**/*'
+    ]
+
 EXAMPLES:
-  - "examples/**/*"
-  - "bin/run-example*"
+  - changed-files:
+    - any-glob-to-any-file: [
+     'examples/**/*',
+     'bin/run-example*'
+    ]
+
 CORE:
-  - any: ["core/**/*", "!**/*UI.scala", "!**/ui/**/*"]
-  - "common/kvstore/**/*"
-  - "common/network-common/**/*"
-  - "common/network-shuffle/**/*"
-  - "python/pyspark/*.py"
-  - "python/pyspark/tests/**/*.py"
+  - changed-files:
+    - all-globs-to-any-file: [
+     'core/**/*',
+     '!**/*UI.scala',
+     '!**/ui/**/*'
+    ]
+    - any-glob-to-any-file: [
+     'common/kvstore/**/*',
+     'common/network-common/**/*',
+     'common/network-shuffle/**/*',
+     'python/pyspark/*.py',
+     'python/pyspark/tests/**/*.py'
+    ]
+
 SPARK SUBMIT:
-  - "bin/spark-submit*"
+  - changed-files:
+    - any-glob-to-any-file: [
+     'bin/spark-submit*'
+    ]
+
 SPARK SHELL:
-  - "repl/**/*"
-  - "bin/spark-shell*"
+  - changed-files:
+    - any-glob-to-any-file: [
+     'repl/**/*',
+     'bin/spark-shell*'
+    ]
+
 SQL:
-  - any: ["**/sql/**/*", "!python/pyspark/sql/avro/**/*", "!python/pyspark/sql/streaming/**/*", "!python/pyspark/sql/tests/streaming/test_streaming*.py"]
-  - "common/unsafe/**/*"
-  - "bin/spark-sql*"
-  - "bin/beeline*"
-  - "sbin/*thriftserver*.sh"
-  - "**/*SQL*.R"
-  - "**/DataFrame.R"
-  - "**/*WindowSpec.R"
-  - "**/*catalog.R"
-  - "**/*column.R"
-  - "**/*functions.R"
-  - "**/*group.R"
-  - "**/*schema.R"
-  - "**/*types.R"
+  - changed-files:
+    - all-globs-to-any-file: [
+     '**/sql/**/*',
+     '!python/pyspark/sql/avro/**/*',
+     '!python/pyspark/sql/streaming/**/*',
+     '!python/pyspark/sql/tests/streaming/test_streaming*.py'
+    ]
+    - any-glob-to-any-file: [
+     'common/unsafe/**/*',
+     'common/sketch/**/*',
+     'common/variant/**/*',
+     'bin/spark-sql*',
+     'bin/beeline*',
+     'sbin/*thriftserver*.sh',
+     '**/*SQL*.R',
+     '**/DataFrame.R',
+     '**/*WindowSpec.R',
+     '**/*catalog.R',
+     '**/*column.R',
+     '**/*functions.R',
+     '**/*group.R',
+     '**/*schema.R',
+     '**/*types.R'
+    ]
+
 AVRO:
-  - "connector/avro/**/*"
-  - "python/pyspark/sql/avro/**/*"
+  - changed-files:
+    - any-glob-to-any-file: [
+     'connector/avro/**/*',
+     'python/pyspark/sql/avro/**/*'
+    ]
+
 DSTREAM:
-  - "streaming/**/*"
-  - "data/streaming/**/*"
-  - "connector/kinesis*"
-  - "connector/kafka*"
-  - "python/pyspark/streaming/**/*"
+  - changed-files:
+    - any-glob-to-any-file: [
+     'streaming/**/*',
+     'data/streaming/**/*',
+     'connector/kinesis-asl/**/*',
+     'connector/kinesis-asl-assembly/**/*',
+     'connector/kafka-0-10/**/*',
+     'connector/kafka-0-10-assembly/**/*',
+     'connector/kafka-0-10-token-provider/**/*',
+     'python/pyspark/streaming/**/*'
+    ]
+
 GRAPHX:
-  - "graphx/**/*"
-  - "data/graphx/**/*"
+  - changed-files:
+    - any-glob-to-any-file: [
+     'graphx/**/*',
+     'data/graphx/**/*'
+    ]
+
 ML:
-  - "**/ml/**/*"
-  - "**/*mllib_*.R"
+  - changed-files:
+    - any-glob-to-any-file: [
+     '**/ml/**/*',
+     '**/*mllib_*.R'
+    ]
+
 MLLIB:
-  - "**/spark/mllib/**/*"
-  - "mllib-local/**/*"
-  - "python/pyspark/mllib/**/*"
+  - changed-files:
+    - any-glob-to-any-file: [
+     '**/spark/mllib/**/*',
+     'mllib-local/**/*',
+     'python/pyspark/mllib/**/*'
+    ]
+
 STRUCTURED STREAMING:
-  - "**/sql/**/streaming/**/*"
-  - "connector/kafka-0-10-sql/**/*"
-  - "python/pyspark/sql/streaming/**/*"
-  - "python/pyspark/sql/tests/streaming/test_streaming*.py"
-  - "**/*streaming.R"
+  - changed-files:
+    - any-glob-to-any-file: [
+     '**/sql/**/streaming/**/*',
+     'connector/kafka-0-10-sql/**/*',
+     'python/pyspark/sql/streaming/**/*',
+     'python/pyspark/sql/tests/streaming/test_streaming*.py',
+     '**/*streaming.R'
+    ]
+
 PYTHON:
-  - "bin/pyspark*"
-  - "**/python/**/*"
+  - changed-files:
+    - any-glob-to-any-file: [
+     'bin/pyspark*',
+     '**/python/**/*'
+    ]
+
 PANDAS API ON SPARK:
-  - "python/pyspark/pandas/**/*"
+  - changed-files:
+    - any-glob-to-any-file: [
+     'python/pyspark/pandas/**/*'
+    ]
+
 R:
-  - "**/r/**/*"
-  - "**/R/**/*"
-  - "bin/sparkR*"
+  - changed-files:
+    - any-glob-to-any-file: [
+     '**/r/**/*',
+     '**/R/**/*',
+     'bin/sparkR*'
+    ]
+
 YARN:
-  - "resource-managers/yarn/**/*"
+  - changed-files:
+    - any-glob-to-any-file: [
+     'resource-managers/yarn/**/*'
+    ]
+
 KUBERNETES:
-  - "resource-managers/kubernetes/**/*"
+  - changed-files:
+    - any-glob-to-any-file: [
+     'resource-managers/kubernetes/**/*'
+    ]
+
 WINDOWS:
-  - "**/*.cmd"
-  - "R/pkg/tests/fulltests/test_Windows.R"
+  - changed-files:
+    - any-glob-to-any-file: [
+     '**/*.cmd',
+     'R/pkg/tests/fulltests/test_Windows.R'
+    ]
+
 WEB UI:
-  - "**/ui/**/*"
-  - "**/*UI.scala"
+  - changed-files:
+    - any-glob-to-any-file: [
+     '**/ui/**/*',
+     '**/*UI.scala'
+    ]
+
 DEPLOY:
-  - "sbin/**/*"
+  - changed-files:
+    - any-glob-to-any-file: [
+     'sbin/**/*'
+    ]
+
 CONNECT:
-  - "connector/connect/**/*"
-  - "python/pyspark/sql/**/connect/**/*"
-  - "python/pyspark/ml/**/connect/**/*"
+  - changed-files:
+    - any-glob-to-any-file: [
+     'connector/connect/**/*',
+     'python/pyspark/sql/**/connect/**/*',
+     'python/pyspark/ml/**/connect/**/*'
+    ]
+
 PROTOBUF:
-  - "connector/protobuf/**/*"
-  - "python/pyspark/sql/protobuf/**/*"
+  - changed-files:
+    - any-glob-to-any-file: [
+     'connector/protobuf/**/*',
+     'python/pyspark/sql/protobuf/**/*'
+    ]

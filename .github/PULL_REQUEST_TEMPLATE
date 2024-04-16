@@ -9,7 +9,7 @@ Thanks for sending a pull request!  Here are some tips for you:
   7. If you want to add a new configuration, please read the guideline first for naming configurations in
      'core/src/main/scala/org/apache/spark/internal/config/ConfigEntry.scala'.
   8. If you want to add or modify an error type or message, please read the guideline first in
-     'core/src/main/resources/error/README.md'.
+     'common/utils/src/main/resources/error/README.md'.
 -->
 
 ### What changes were proposed in this pull request?

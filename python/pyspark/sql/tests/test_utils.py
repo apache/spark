@@ -19,11 +19,12 @@ import unittest
 import difflib
 from itertools import zip_longest
 
-from pyspark.sql.functions import sha2, to_timestamp
+from pyspark.errors import QueryContextType
 from pyspark.errors import (
     AnalysisException,
     ParseException,
     PySparkAssertionError,
+    PySparkValueError,
     IllegalArgumentException,
     SparkUpgradeException,
 )
@@ -44,7 +45,7 @@ from pyspark.sql.types import (
     IntegerType,
     BooleanType,
 )
-from pyspark.testing.sqlutils import have_pandas
+from pyspark.testing.sqlutils import have_pandas, have_pyarrow
 
 
 class UtilsTestsMixin:
@@ -589,8 +590,8 @@ class UtilsTestsMixin:
             data=[("1", "2023-01-01 12:01:01.000")], schema=["id", "timestamp"]
         )
 
-        df1 = df1.withColumn("timestamp", to_timestamp("timestamp"))
-        df2 = df2.withColumn("timestamp", to_timestamp("timestamp"))
+        df1 = df1.withColumn("timestamp", F.to_timestamp("timestamp"))
+        df2 = df2.withColumn("timestamp", F.to_timestamp("timestamp"))
 
         assertDataFrameEqual(df1, df2, checkRowOrder=False)
         assertDataFrameEqual(df1, df2, checkRowOrder=True)
@@ -744,7 +745,10 @@ class UtilsTestsMixin:
             },
         )
 
-    @unittest.skipIf(not have_pandas or not have_numpy, "no pandas or numpy dependency")
+    @unittest.skipIf(
+        not have_pandas or not have_numpy or not have_pyarrow,
+        "no pandas or numpy or pyarrow dependency",
+    )
     def test_assert_equal_exact_pandas_df(self):
         import pandas as pd
         import numpy as np
@@ -759,7 +763,10 @@ class UtilsTestsMixin:
         assertDataFrameEqual(df1, df2, checkRowOrder=False)
         assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
-    @unittest.skipIf(not have_pandas or not have_numpy, "no pandas or numpy dependency")
+    @unittest.skipIf(
+        not have_pandas or not have_numpy or not have_pyarrow,
+        "no pandas or numpy or pyarrow dependency",
+    )
     def test_assert_approx_equal_pandas_df(self):
         import pandas as pd
         import numpy as np
@@ -775,7 +782,10 @@ class UtilsTestsMixin:
         assertDataFrameEqual(df1, df2, checkRowOrder=False)
         assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
-    @unittest.skipIf(not have_pandas or not have_numpy, "no pandas or numpy dependency")
+    @unittest.skipIf(
+        not have_pandas or not have_numpy or not have_pyarrow,
+        "no pandas or numpy or pyarrow dependency",
+    )
     def test_assert_approx_equal_fail_exact_pandas_df(self):
         import pandas as pd
         import numpy as np
@@ -816,7 +826,10 @@ class UtilsTestsMixin:
             },
         )
 
-    @unittest.skipIf(not have_pandas or not have_numpy, "no pandas or numpy dependency")
+    @unittest.skipIf(
+        not have_pandas or not have_numpy or not have_pyarrow,
+        "no pandas or numpy or pyarrow dependency",
+    )
     def test_assert_unequal_pandas_df(self):
         import pandas as pd
         import numpy as np
@@ -856,7 +869,10 @@ class UtilsTestsMixin:
             },
         )
 
-    @unittest.skipIf(not have_pandas or not have_numpy, "no pandas or numpy dependency")
+    @unittest.skipIf(
+        not have_pandas or not have_numpy or not have_pyarrow,
+        "no pandas or numpy or pyarrow dependency",
+    )
     def test_assert_type_error_pandas_df(self):
         import pyspark.pandas as ps
         import pandas as pd
@@ -895,7 +911,7 @@ class UtilsTestsMixin:
             },
         )
 
-    @unittest.skipIf(not have_pandas, "no pandas dependency")
+    @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
     def test_assert_equal_exact_pandas_on_spark_df(self):
         import pyspark.pandas as ps
 
@@ -905,7 +921,7 @@ class UtilsTestsMixin:
         assertDataFrameEqual(df1, df2, checkRowOrder=False)
         assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
-    @unittest.skipIf(not have_pandas, "no pandas dependency")
+    @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
     def test_assert_equal_exact_pandas_on_spark_df(self):
         import pyspark.pandas as ps
 
@@ -914,7 +930,7 @@ class UtilsTestsMixin:
 
         assertDataFrameEqual(df1, df2)
 
-    @unittest.skipIf(not have_pandas, "no pandas dependency")
+    @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
     def test_assert_equal_approx_pandas_on_spark_df(self):
         import pyspark.pandas as ps
 
@@ -924,7 +940,7 @@ class UtilsTestsMixin:
         assertDataFrameEqual(df1, df2, checkRowOrder=False)
         assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
-    @unittest.skipIf(not have_pandas, "no pandas dependency")
+    @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
     def test_assert_error_pandas_pyspark_df(self):
         import pyspark.pandas as ps
         import pandas as pd
@@ -1701,11 +1717,9 @@ class UtilsTestsMixin:
 
         self.assertTrue("apple" in error_message and "banana" not in error_message)
 
-
-class UtilsTests(ReusedSQLTestCase, UtilsTestsMixin):
     def test_capture_analysis_exception(self):
         self.assertRaises(AnalysisException, lambda: self.spark.sql("select abc"))
-        self.assertRaises(AnalysisException, lambda: self.df.selectExpr("a + b"))
+        self.assertRaises(AnalysisException, lambda: self.df.selectExpr("a + b").collect())
 
     def test_capture_user_friendly_exception(self):
         try:
@@ -1730,33 +1744,42 @@ class UtilsTests(ReusedSQLTestCase, UtilsTestsMixin):
             "Setting negative mapred.reduce.tasks",
             lambda: self.spark.sql("SET mapred.reduce.tasks=-1"),
         )
+
+    def test_capture_pyspark_value_exception(self):
         df = self.spark.createDataFrame([(1, 2)], ["a", "b"])
         self.assertRaisesRegex(
-            IllegalArgumentException,
-            "1024 is not in the permitted values",
-            lambda: df.select(sha2(df.a, 1024)).collect(),
+            PySparkValueError,
+            "Value for `numBits` has to be amongst the following values",
+            lambda: df.select(F.sha2(df.a, 1024)).collect(),
         )
-        try:
-            df.select(sha2(df.a, 1024)).collect()
-        except IllegalArgumentException as e:
-            self.assertRegex(e._desc, "1024 is not in the permitted values")
-            self.assertRegex(e._stackTrace, "org.apache.spark.sql.functions")
 
     def test_get_error_class_state(self):
         # SPARK-36953: test CapturedException.getErrorClass and getSqlState (from SparkThrowable)
+        exception = None
         try:
             self.spark.sql("""SELECT a""")
         except AnalysisException as e:
-            self.assertEqual(e.getErrorClass(), "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION")
-            self.assertEqual(e.getSqlState(), "42703")
-            self.assertEqual(e.getMessageParameters(), {"objectName": "`a`"})
-            self.assertEqual(
-                e.getMessage(),
-                (
-                    "[UNRESOLVED_COLUMN.WITHOUT_SUGGESTION] A column, variable, or function "
-                    "parameter with name `a` cannot be resolved.  SQLSTATE: 42703"
-                ),
-            )
+            exception = e
+
+        self.assertIsNotNone(exception)
+        self.assertEqual(exception.getErrorClass(), "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION")
+        self.assertEqual(exception.getSqlState(), "42703")
+        self.assertEqual(exception.getMessageParameters(), {"objectName": "`a`"})
+        self.assertIn(
+            (
+                "[UNRESOLVED_COLUMN.WITHOUT_SUGGESTION] A column, variable, or function "
+                "parameter with name `a` cannot be resolved.  SQLSTATE: 42703"
+            ),
+            exception.getMessage(),
+        )
+        self.assertEqual(len(exception.getQueryContext()), 1)
+        qc = exception.getQueryContext()[0]
+        self.assertEqual(qc.fragment(), "a")
+        self.assertEqual(qc.stopIndex(), 7)
+        self.assertEqual(qc.startIndex(), 7)
+        self.assertEqual(qc.contextType(), QueryContextType.SQL)
+        self.assertEqual(qc.objectName(), "")
+        self.assertEqual(qc.objectType(), "")
 
         try:
             self.spark.sql("""SELECT assert_true(FALSE)""")
@@ -1765,6 +1788,22 @@ class UtilsTests(ReusedSQLTestCase, UtilsTestsMixin):
             self.assertIsNone(e.getSqlState())
             self.assertEqual(e.getMessageParameters(), {})
             self.assertEqual(e.getMessage(), "")
+
+    def test_assert_data_frame_equal_not_support_streaming(self):
+        df1 = self.spark.readStream.format("rate").load()
+        df2 = self.spark.readStream.format("rate").load()
+        exception_thrown = False
+        try:
+            assertDataFrameEqual(df1, df2)
+        except PySparkAssertionError as e:
+            self.assertEqual(e.getErrorClass(), "UNSUPPORTED_OPERATION")
+            exception_thrown = True
+
+        self.assertTrue(exception_thrown)
+
+
+class UtilsTests(ReusedSQLTestCase, UtilsTestsMixin):
+    pass
 
 
 if __name__ == "__main__":

@@ -393,7 +393,7 @@ class NamespaceTestsMixin:
         psdf3 = psdf.copy()
 
         columns = pd.MultiIndex.from_tuples([("X", "A"), ("X", "B"), ("Y", "C")])
-        # TODO: colums.names = ["XYZ", "ABC"]
+        columns.names = ["XYZ", "ABC"]
         pdf3.columns = columns
         psdf3.columns = columns
 
@@ -434,11 +434,7 @@ class NamespaceTestsMixin:
             "MultiIndex columns should have the same levels",
             lambda: ps.concat([psdf, psdf3]),
         )
-        self.assertRaisesRegex(
-            ValueError,
-            "MultiIndex columns should have the same levels",
-            lambda: ps.concat([psdf3[("Y", "C")], psdf3]),
-        )
+        self.assert_eq(ps.concat([psdf3[("Y", "C")], psdf3]), pd.concat([pdf3[("Y", "C")], pdf3]))
 
         pdf4 = pd.DataFrame({"A": [0, 2, 4], "B": [1, 3, 5], "C": [10, 20, 30]})
         psdf4 = ps.from_pandas(pdf4)

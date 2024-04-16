@@ -536,7 +536,7 @@ SELECT * FROM v_window
 -- !query analysis
 Project [id#xL, sum_rows#xL]
 +- SubqueryAlias v_window
-   +- View (`v_window`, [id#xL,sum_rows#xL])
+   +- View (`v_window`, [id#xL, sum_rows#xL])
       +- Project [cast(id#xL as bigint) AS id#xL, cast(sum_rows#xL as bigint) AS sum_rows#xL]
          +- Project [id#xL, sum_rows#xL]
             +- Project [id#xL, sum_rows#xL, sum_rows#xL]

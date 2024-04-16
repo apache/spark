@@ -1,5 +1,6 @@
 -- A test suite for not-in-joins in parent side, subquery, and both predicate subquery
 -- It includes correlated cases.
+--ONLY_IF spark
 
 --CONFIG_DIM1 spark.sql.optimizeNullAwareAntiJoin=true
 --CONFIG_DIM1 spark.sql.optimizeNullAwareAntiJoin=false

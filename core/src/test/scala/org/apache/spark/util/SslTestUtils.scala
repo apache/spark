@@ -15,8 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.util
 
+import org.apache.spark.SparkConf
 import org.apache.spark.network.ssl.SslSampleConfigs
 
 object SslTestUtils {

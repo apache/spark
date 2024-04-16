@@ -26,7 +26,7 @@ import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
 import org.scalatest.matchers.should.Matchers._
 
-import org.apache.spark.{SparkException, SparkThrowable}
+import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.UpdateFieldsBenchmark._
 import org.apache.spark.sql.catalyst.expressions.{InSet, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{outstandingTimezonesIds, outstandingZoneIds}
@@ -1058,7 +1058,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"update_fields(key, WithField(2))\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> "first",
         "inputSql" -> "\"key\"",
         "inputType" -> "\"INT\"",
         "requiredType" -> "\"STRUCT\""),
@@ -1106,7 +1106,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"update_fields(a.b, WithField(2))\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> "first",
         "inputSql" -> "\"a.b\"",
         "inputType" -> "\"INT\"",
         "requiredType" -> "\"STRUCT\""),
@@ -1857,7 +1857,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"update_fields(key, dropfield())\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> "first",
         "inputSql" -> "\"key\"",
         "inputType" -> "\"INT\"",
         "requiredType" -> "\"STRUCT\""),
@@ -1897,7 +1897,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"update_fields(a.b, dropfield())\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> "first",
         "inputSql" -> "\"a.b\"",
         "inputType" -> "\"INT\"",
         "requiredType" -> "\"STRUCT\""),
@@ -2571,10 +2571,10 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       booleanDf.filter("cond = true").select(assert_true($"cond")),
       Row(null) :: Nil
     )
-    val e1 = intercept[SparkException] {
-      booleanDf.select(assert_true($"cond", lit(null.asInstanceOf[String]))).collect()
-    }
-    checkError(e1.getCause.asInstanceOf[SparkThrowable],
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        booleanDf.select(assert_true($"cond", lit(null.asInstanceOf[String]))).collect()
+      },
       errorClass = "USER_RAISED_EXCEPTION",
       parameters = Map("errorMessage" -> "null"))
 
@@ -2583,39 +2583,37 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       nullDf.filter("cond = true").select(assert_true($"cond", $"cond")),
       Row(null) :: Nil
     )
-    val e2 = intercept[SparkException] {
-      nullDf.select(assert_true($"cond", $"n")).collect()
-    }
-    checkError(e2.getCause.asInstanceOf[SparkThrowable],
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        nullDf.select(assert_true($"cond", $"n")).collect()
+      },
       errorClass = "USER_RAISED_EXCEPTION",
       parameters = Map("errorMessage" -> "first row"))
 
     // assert_true(condition)
     val intDf = Seq((0, 1)).toDF("a", "b")
     checkAnswer(intDf.select(assert_true($"a" < $"b")), Row(null) :: Nil)
-    val e3 = intercept[SparkException] {
+    val e3 = intercept[SparkRuntimeException] {
       intDf.select(assert_true($"a" > $"b")).collect()
     }
-
-    assert(e3.getCause.isInstanceOf[RuntimeException])
-    assert(e3.getCause.getMessage.matches(
+    assert(e3.getMessage.matches(
       "\\[USER_RAISED_EXCEPTION\\] '\\(a#\\d+ > b#\\d+\\)' is not true! SQLSTATE: P0001"))
   }
 
   test("raise_error") {
     val strDf = Seq(("hello")).toDF("a")
 
-    val e1 = intercept[SparkException] {
-      strDf.select(raise_error(lit(null.asInstanceOf[String]))).collect()
-    }
-    checkError(e1.getCause.asInstanceOf[SparkThrowable],
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        strDf.select(raise_error(lit(null.asInstanceOf[String]))).collect()
+      },
       errorClass = "USER_RAISED_EXCEPTION",
       parameters = Map("errorMessage" -> "null"))
 
-    val e2 = intercept[SparkException] {
-      strDf.select(raise_error($"a")).collect()
-    }
-    checkError(e2.getCause.asInstanceOf[SparkThrowable],
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        strDf.select(raise_error($"a")).collect()
+      },
       errorClass = "USER_RAISED_EXCEPTION",
       parameters = Map("errorMessage" -> "hello"))
   }
@@ -2653,13 +2651,12 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         }
       }
 
-      val e = intercept[SparkException] {
+      val e = intercept[ArithmeticException] {
         Seq((LocalDate.of(2021, 3, 11), Period.ofMonths(Int.MaxValue)))
           .toDF("date", "interval")
           .select($"date" + $"interval")
           .collect()
-      }.getCause
-      assert(e.isInstanceOf[ArithmeticException])
+      }
       assert(e.getMessage.contains("integer overflow"))
     }
   }
@@ -2683,13 +2680,12 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         }
       }
 
-      val e = intercept[SparkException] {
+      val e = intercept[ArithmeticException] {
         Seq((LocalDate.of(2021, 3, 11), Period.ofMonths(Int.MaxValue)))
           .toDF("date", "interval")
           .select($"date" - $"interval")
           .collect()
-      }.getCause
-      assert(e.isInstanceOf[ArithmeticException])
+      }
       assert(e.getMessage.contains("integer overflow"))
     }
   }
@@ -2917,22 +2913,19 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       Seq((Period.ofMonths(-1), BigDecimal(0.5))).toDF("i", "n").select($"i" / $"n"),
       Row(Period.ofMonths(-2)))
 
-    val e = intercept[SparkException] {
+    val e = intercept[ArithmeticException] {
       Seq((Period.ofYears(9999), 0)).toDF("i", "n").select($"i" / $"n").collect()
-    }.getCause
-    assert(e.isInstanceOf[ArithmeticException])
+    }
     assert(e.getMessage.contains("Division by zero"))
 
-    val e2 = intercept[SparkException] {
+    val e2 = intercept[ArithmeticException] {
       Seq((Period.ofYears(9999), 0d)).toDF("i", "n").select($"i" / $"n").collect()
-    }.getCause
-    assert(e2.isInstanceOf[ArithmeticException])
+    }
     assert(e2.getMessage.contains("Division by zero"))
 
-    val e3 = intercept[SparkException] {
+    val e3 = intercept[ArithmeticException] {
       Seq((Period.ofYears(9999), BigDecimal(0))).toDF("i", "n").select($"i" / $"n").collect()
-    }.getCause
-    assert(e3.isInstanceOf[ArithmeticException])
+    }
     assert(e3.getMessage.contains("Division by zero"))
   }
 
@@ -2964,22 +2957,19 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         .toDF("i", "n").select($"i" / $"n"),
       Row(Duration.of(-1, ChronoUnit.MICROS).multipliedBy(10000).dividedBy(100000001)))
 
-    val e = intercept[SparkException] {
+    val e = intercept[ArithmeticException] {
       Seq((Duration.ofDays(9999), 0)).toDF("i", "n").select($"i" / $"n").collect()
-    }.getCause
-    assert(e.isInstanceOf[ArithmeticException])
+    }
     assert(e.getMessage.contains("Division by zero"))
 
-    val e2 = intercept[SparkException] {
+    val e2 = intercept[ArithmeticException] {
       Seq((Duration.ofDays(9999), 0d)).toDF("i", "n").select($"i" / $"n").collect()
-    }.getCause
-    assert(e2.isInstanceOf[ArithmeticException])
+    }
     assert(e2.getMessage.contains("Division by zero"))
 
-    val e3 = intercept[SparkException] {
+    val e3 = intercept[ArithmeticException] {
       Seq((Duration.ofDays(9999), BigDecimal(0))).toDF("i", "n").select($"i" / $"n").collect()
-    }.getCause
-    assert(e3.isInstanceOf[ArithmeticException])
+    }
     assert(e3.getMessage.contains("Division by zero"))
   }
 

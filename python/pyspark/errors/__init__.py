@@ -48,6 +48,8 @@ from pyspark.errors.exceptions.base import (  # noqa: F401
     PySparkPicklingError,
     RetriesExceeded,
     PySparkKeyError,
+    QueryContext,
+    QueryContextType,
 )
 
 
@@ -81,4 +83,6 @@ __all__ = [
     "PySparkPicklingError",
     "RetriesExceeded",
     "PySparkKeyError",
+    "QueryContext",
+    "QueryContextType",
 ]

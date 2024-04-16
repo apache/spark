@@ -20,7 +20,6 @@ import java.io._
 import java.nio.ByteBuffer
 import java.util.{Iterator => JIterator}
 import java.util.concurrent.{CountDownLatch, RejectedExecutionException, ThreadPoolExecutor, TimeUnit}
-import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent._
@@ -238,14 +237,14 @@ class FileBasedWriteAheadLogSuite
     val executionContext = ExecutionContext.fromExecutorService(fpool)
 
     class GetMaxCounter {
-      private val value = new AtomicInteger()
-      @volatile private var max: Int = 0
+      private var value = 0
+      private var max: Int = 0
       def increment(): Unit = synchronized {
-        val atInstant = value.incrementAndGet()
-        if (atInstant > max) max = atInstant
+        value = value + 1
+        if (value > max) max = value
       }
-      def decrement(): Unit = synchronized { value.decrementAndGet() }
-      def get(): Int = synchronized { value.get() }
+      def decrement(): Unit = synchronized { value = value - 1 }
+      def get(): Int = synchronized { value }
       def getMax(): Int = synchronized { max }
     }
     try {

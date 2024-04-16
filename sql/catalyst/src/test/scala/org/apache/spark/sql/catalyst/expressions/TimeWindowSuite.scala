@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException, SparkThrowable}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.internal.SQLConf
@@ -35,7 +36,8 @@ class TimeWindowSuite extends SparkFunSuite with ExpressionEvalHelper with Priva
     }
   }
 
-  private def checkErrorMessage[E <: Exception : ClassTag](msg: String, value: String): Unit = {
+  private def checkErrorMessage[E <: SparkThrowable : ClassTag](
+      parameters: Map[String, String], value: String): Unit = {
     val validDuration = "10 second"
     val validTime = "5 second"
     val e1 = intercept[E] {
@@ -48,25 +50,25 @@ class TimeWindowSuite extends SparkFunSuite with ExpressionEvalHelper with Priva
       TimeWindow(Literal(10L), validDuration, validDuration, value).startTime
     }
     Seq(e1, e2, e3).foreach { e =>
-      e.getMessage.contains(msg)
+      assert(e.getMessageParameters().asScala == parameters)
     }
   }
 
   test("blank intervals throw exception") {
-    for (blank <- Seq(null, " ", "\n", "\t")) {
+    for ((blank, i) <- Seq((null, "''"), (" ", "' '"), ("\n", "'\n'"), ("\t", "'\t'"))) {
       checkErrorMessage[AnalysisException](
-        "The window duration, slide duration and start time cannot be null or blank.", blank)
+        Map("intervalString" -> i), blank)
     }
   }
 
   test("invalid intervals throw exception") {
     checkErrorMessage[AnalysisException](
-      "did not correspond to a valid interval string.", "2 apples")
+      Map("intervalString" -> "'2 apples'"), "2 apples")
   }
 
   test("intervals greater than a month throws exception") {
-    checkErrorMessage[IllegalArgumentException](
-      "Intervals greater than or equal to a month is not supported (1 month).", "1 month")
+    checkErrorMessage[SparkIllegalArgumentException](
+      Map("interval" -> "1 month"), "1 month")
   }
 
   test("interval strings work with and without 'interval' prefix and return microseconds") {
@@ -186,7 +188,7 @@ class TimeWindowSuite extends SparkFunSuite with ExpressionEvalHelper with Priva
           "interval 1 year 2 month",
           "interval '1' year '2' month",
           "\tinterval '1-2' year to month").foreach { interval =>
-          intercept[IllegalArgumentException] {
+          intercept[SparkIllegalArgumentException] {
             TimeWindow(Literal(10L, TimestampType), interval, interval, interval)
           }
         }

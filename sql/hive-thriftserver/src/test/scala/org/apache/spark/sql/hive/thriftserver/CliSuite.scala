@@ -27,14 +27,12 @@ import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.hive.cli.CliSessionState
-import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.session.SessionState
 
 import org.apache.spark.{ErrorMessageFormat, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.HiveUtils._
 import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.hive.test.HiveTestJars
@@ -118,7 +116,7 @@ class CliSuite extends SparkFunSuite {
       ""
     }
     val warehouseConf =
-      maybeWarehouse.map(dir => s"--hiveconf ${ConfVars.METASTOREWAREHOUSE}=$dir").getOrElse("")
+      maybeWarehouse.map(dir => s"--hiveconf hive.metastore.warehouse.dir=$dir").getOrElse("")
     val command = {
       val cliScript = "../../bin/spark-sql".split("/").mkString(File.separator)
       val jdbcUrl = s"jdbc:derby:;databaseName=$metastore;create=true"
@@ -128,8 +126,8 @@ class CliSuite extends SparkFunSuite {
          |  $extraHive
          |  --conf spark.ui.enabled=false
          |  --conf ${SQLConf.LEGACY_EMPTY_CURRENT_DB_IN_CLI.key}=true
-         |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}=$jdbcUrl
-         |  --hiveconf ${ConfVars.SCRATCHDIR}=$scratchDirPath
+         |  --hiveconf javax.jdo.option.ConnectionURL=$jdbcUrl
+         |  --hiveconf hive.exec.scratchdir=$scratchDirPath
          |  --hiveconf conf1=conftest
          |  --hiveconf conf2=1
          |  $warehouseConf
@@ -160,7 +158,7 @@ class CliSuite extends SparkFunSuite {
         }
       } else {
         errorResponses.foreach { r =>
-          if (line.contains(r)) {
+          if (line.contains(r) && !line.contains("IntentionallyFaultyConnectionProvider")) {
             foundAllExpectedAnswers.tryFailure(
               new RuntimeException(s"Failed with error line '$line'"))
           }
@@ -252,7 +250,7 @@ class CliSuite extends SparkFunSuite {
     try {
       runCliWithin(2.minute,
         extraArgs =
-          Seq("--conf", s"spark.hadoop.${ConfVars.METASTOREWAREHOUSE}=$sparkWareHouseDir"),
+          Seq("--conf", s"spark.hadoop.hive.metastore.warehouse.dir=$sparkWareHouseDir"),
         maybeWarehouse = None,
         useExternalHiveFile = true,
         metastore = metastore)(
@@ -263,7 +261,7 @@ class CliSuite extends SparkFunSuite {
 
       // override conf from --hiveconf too
       runCliWithin(2.minute,
-        extraArgs = Seq("--conf", s"spark.${ConfVars.METASTOREWAREHOUSE}=$sparkWareHouseDir"),
+        extraArgs = Seq("--conf", s"spark.hive.metastore.warehouse.dir=$sparkWareHouseDir"),
         metastore = metastore)(
         "desc database default;" -> sparkWareHouseDir.getAbsolutePath,
         "create database cliTestDb;" -> "",
@@ -282,7 +280,7 @@ class CliSuite extends SparkFunSuite {
       runCliWithin(2.minute,
         extraArgs = Seq(
             "--conf", s"${StaticSQLConf.WAREHOUSE_PATH.key}=${sparkWareHouseDir}1",
-            "--conf", s"spark.hadoop.${ConfVars.METASTOREWAREHOUSE}=${sparkWareHouseDir}2"),
+            "--conf", s"spark.hadoop.hive.metastore.warehouse.dir=${sparkWareHouseDir}2"),
         metastore = metastore)(
         "desc database default;" -> sparkWareHouseDir.getAbsolutePath.concat("1"))
     } finally {
@@ -364,7 +362,7 @@ class CliSuite extends SparkFunSuite {
     val hiveContribJar = HiveTestJars.getHiveHcatalogCoreJar().getCanonicalPath
     runCliWithin(
       3.minute,
-      Seq("--conf", s"spark.hadoop.${ConfVars.HIVEAUXJARS}=$hiveContribJar"))(
+      Seq("--conf", s"spark.hadoop.hive.aux.jars.path=$hiveContribJar"))(
       """CREATE TABLE addJarWithHiveAux(key string, val string)
         |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe';""".stripMargin
         -> "",
@@ -443,7 +441,7 @@ class CliSuite extends SparkFunSuite {
     val hiveContribJar = HiveTestJars.getHiveContribJar().getCanonicalPath
     runCliWithin(
       1.minute,
-      Seq("--conf", s"spark.hadoop.${ConfVars.HIVEAUXJARS}=$hiveContribJar"))(
+      Seq("--conf", s"spark.hadoop.hive.aux.jars.path=$hiveContribJar"))(
       "CREATE TEMPORARY FUNCTION example_format AS " +
         "'org.apache.hadoop.hive.contrib.udf.example.UDFExampleFormat';" -> "",
       "SELECT example_format('%o', 93);" -> "135"
@@ -467,7 +465,7 @@ class CliSuite extends SparkFunSuite {
     runCliWithin(
       2.minutes,
       Seq("--jars", s"$jarFile", "--conf",
-        s"spark.hadoop.${ConfVars.HIVEAUXJARS}=$hiveContribJar"))(
+        s"spark.hadoop.hive.aux.jars.path=$hiveContribJar"))(
       "CREATE TEMPORARY FUNCTION testjar AS" +
         " 'org.apache.spark.sql.hive.execution.UDTFStack';" -> "",
       "SELECT testjar(1,'TEST-SPARK-TEST-jar', 28840);" -> "TEST-SPARK-TEST-jar\t28840",
@@ -651,8 +649,7 @@ class CliSuite extends SparkFunSuite {
     val sparkContext = new SparkContext(sparkConf)
     SparkSQLEnv.sparkContext = sparkContext
     val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
-    val extraConfigs = HiveUtils.formatTimeVarsForHiveClient(hadoopConf)
-    val cliConf = HiveClientImpl.newHiveConf(sparkConf, hadoopConf, extraConfigs)
+    val cliConf = HiveClientImpl.newHiveConf(sparkConf, hadoopConf)
     val sessionState = new CliSessionState(cliConf)
     SessionState.setCurrentSessionState(sessionState)
     val cli = new SparkSQLCLIDriver

@@ -587,14 +587,16 @@ $(document).ready(function () {
             {name: 'executorLogsCol', data: 'executorLogs', render: formatLogsCells},
             {
               name: 'threadDumpCol',
-              data: 'id', render: function (data, type) {
-                return type === 'display' ? ("<a href='threadDump/?executorId=" + data + "'>Thread Dump</a>" ) : data;
+              data: function (row) { return row.isActive ? row.id : '' },
+              render: function (data, type) {
+                return data != '' && type === 'display' ? ("<a href='threadDump/?executorId=" + data + "'>Thread Dump</a>" ) : data;
               }
             },
             {
               name: 'heapHistogramCol',
-              data: 'id', render: function (data, type) {
-                return type === 'display' ? ("<a href='heapHistogram/?executorId=" + data + "'>Heap Histogram</a>") : data;
+              data: function (row) { return row.isActive ? row.id : '' },
+              render: function (data, type) {
+                return data != '' && type === 'display' ? ("<a href='heapHistogram/?executorId=" + data + "'>Heap Histogram</a>") : data;
               }
             },
             {

@@ -1027,7 +1027,7 @@ select * from x
 -- !query analysis
 Project [x1#x, x2#x]
 +- SubqueryAlias x
-   +- View (`x`, [x1#x,x2#x])
+   +- View (`x`, [x1#x, x2#x])
       +- Project [cast(x1#x as int) AS x1#x, cast(x2#x as int) AS x2#x]
          +- Project [x1#x, x2#x]
             +- SubqueryAlias v
@@ -1040,7 +1040,7 @@ select * from y
 -- !query analysis
 Project [y1#x, y2#x]
 +- SubqueryAlias y
-   +- View (`y`, [y1#x,y2#x])
+   +- View (`y`, [y1#x, y2#x])
       +- Project [cast(y1#x as int) AS y1#x, cast(y2#x as int) AS y2#x]
          +- Project [y1#x, y2#x]
             +- SubqueryAlias v
@@ -1054,14 +1054,14 @@ select * from x left join y on (x1 = y1 and x2 is not null)
 Project [x1#x, x2#x, y1#x, y2#x]
 +- Join LeftOuter, ((x1#x = y1#x) AND isnotnull(x2#x))
    :- SubqueryAlias x
-   :  +- View (`x`, [x1#x,x2#x])
+   :  +- View (`x`, [x1#x, x2#x])
    :     +- Project [cast(x1#x as int) AS x1#x, cast(x2#x as int) AS x2#x]
    :        +- Project [x1#x, x2#x]
    :           +- SubqueryAlias v
    :              +- Project [col1#x AS x1#x, col2#x AS x2#x]
    :                 +- LocalRelation [col1#x, col2#x]
    +- SubqueryAlias y
-      +- View (`y`, [y1#x,y2#x])
+      +- View (`y`, [y1#x, y2#x])
          +- Project [cast(y1#x as int) AS y1#x, cast(y2#x as int) AS y2#x]
             +- Project [y1#x, y2#x]
                +- SubqueryAlias v
@@ -1075,14 +1075,14 @@ select * from x left join y on (x1 = y1 and y2 is not null)
 Project [x1#x, x2#x, y1#x, y2#x]
 +- Join LeftOuter, ((x1#x = y1#x) AND isnotnull(y2#x))
    :- SubqueryAlias x
-   :  +- View (`x`, [x1#x,x2#x])
+   :  +- View (`x`, [x1#x, x2#x])
    :     +- Project [cast(x1#x as int) AS x1#x, cast(x2#x as int) AS x2#x]
    :        +- Project [x1#x, x2#x]
    :           +- SubqueryAlias v
    :              +- Project [col1#x AS x1#x, col2#x AS x2#x]
    :                 +- LocalRelation [col1#x, col2#x]
    +- SubqueryAlias y
-      +- View (`y`, [y1#x,y2#x])
+      +- View (`y`, [y1#x, y2#x])
          +- Project [cast(y1#x as int) AS y1#x, cast(y2#x as int) AS y2#x]
             +- Project [y1#x, y2#x]
                +- SubqueryAlias v
@@ -1098,14 +1098,14 @@ Project [x1#x, x2#x, y1#x, y2#x, xx1#x, xx2#x]
 +- Join LeftOuter, (x1#x = xx1#x)
    :- Join LeftOuter, (x1#x = y1#x)
    :  :- SubqueryAlias x
-   :  :  +- View (`x`, [x1#x,x2#x])
+   :  :  +- View (`x`, [x1#x, x2#x])
    :  :     +- Project [cast(x1#x as int) AS x1#x, cast(x2#x as int) AS x2#x]
    :  :        +- Project [x1#x, x2#x]
    :  :           +- SubqueryAlias v
    :  :              +- Project [col1#x AS x1#x, col2#x AS x2#x]
    :  :                 +- LocalRelation [col1#x, col2#x]
    :  +- SubqueryAlias y
-   :     +- View (`y`, [y1#x,y2#x])
+   :     +- View (`y`, [y1#x, y2#x])
    :        +- Project [cast(y1#x as int) AS y1#x, cast(y2#x as int) AS y2#x]
    :           +- Project [y1#x, y2#x]
    :              +- SubqueryAlias v
@@ -1114,7 +1114,7 @@ Project [x1#x, x2#x, y1#x, y2#x, xx1#x, xx2#x]
    +- SubqueryAlias xx
       +- Project [x1#x AS xx1#x, x2#x AS xx2#x]
          +- SubqueryAlias x
-            +- View (`x`, [x1#x,x2#x])
+            +- View (`x`, [x1#x, x2#x])
                +- Project [cast(x1#x as int) AS x1#x, cast(x2#x as int) AS x2#x]
                   +- Project [x1#x, x2#x]
                      +- SubqueryAlias v
@@ -1130,14 +1130,14 @@ Project [x1#x, x2#x, y1#x, y2#x, xx1#x, xx2#x]
 +- Join LeftOuter, ((x1#x = xx1#x) AND isnotnull(x2#x))
    :- Join LeftOuter, (x1#x = y1#x)
    :  :- SubqueryAlias x
-   :  :  +- View (`x`, [x1#x,x2#x])
+   :  :  +- View (`x`, [x1#x, x2#x])
    :  :     +- Project [cast(x1#x as int) AS x1#x, cast(x2#x as int) AS x2#x]
    :  :        +- Project [x1#x, x2#x]
    :  :           +- SubqueryAlias v
    :  :              +- Project [col1#x AS x1#x, col2#x AS x2#x]
    :  :                 +- LocalRelation [col1#x, col2#x]
    :  +- SubqueryAlias y
-   :     +- View (`y`, [y1#x,y2#x])
+   :     +- View (`y`, [y1#x, y2#x])
    :        +- Project [cast(y1#x as int) AS y1#x, cast(y2#x as int) AS y2#x]
    :           +- Project [y1#x, y2#x]
    :              +- SubqueryAlias v
@@ -1146,7 +1146,7 @@ Project [x1#x, x2#x, y1#x, y2#x, xx1#x, xx2#x]
    +- SubqueryAlias xx
       +- Project [x1#x AS xx1#x, x2#x AS xx2#x]
          +- SubqueryAlias x
-            +- View (`x`, [x1#x,x2#x])
+            +- View (`x`, [x1#x, x2#x])
                +- Project [cast(x1#x as int) AS x1#x, cast(x2#x as int) AS x2#x]
                   +- Project [x1#x, x2#x]
                      +- SubqueryAlias v
@@ -1162,14 +1162,14 @@ Project [x1#x, x2#x, y1#x, y2#x, xx1#x, xx2#x]
 +- Join LeftOuter, ((x1#x = xx1#x) AND isnotnull(y2#x))
    :- Join LeftOuter, (x1#x = y1#x)
    :  :- SubqueryAlias x
-   :  :  +- View (`x`, [x1#x,x2#x])
+   :  :  +- View (`x`, [x1#x, x2#x])
    :  :     +- Project [cast(x1#x as int) AS x1#x, cast(x2#x as int) AS x2#x]
    :  :        +- Project [x1#x, x2#x]
    :  :           +- SubqueryAlias v
    :  :              +- Project [col1#x AS x1#x, col2#x AS x2#x]
    :  :                 +- LocalRelation [col1#x, col2#x]
    :  +- SubqueryAlias y
-   :     +- View (`y`, [y1#x,y2#x])
+   :     +- View (`y`, [y1#x, y2#x])
    :        +- Project [cast(y1#x as int) AS y1#x, cast(y2#x as int) AS y2#x]
    :           +- Project [y1#x, y2#x]
    :              +- SubqueryAlias v
@@ -1178,7 +1178,7 @@ Project [x1#x, x2#x, y1#x, y2#x, xx1#x, xx2#x]
    +- SubqueryAlias xx
       +- Project [x1#x AS xx1#x, x2#x AS xx2#x]
          +- SubqueryAlias x
-            +- View (`x`, [x1#x,x2#x])
+            +- View (`x`, [x1#x, x2#x])
                +- Project [cast(x1#x as int) AS x1#x, cast(x2#x as int) AS x2#x]
                   +- Project [x1#x, x2#x]
                      +- SubqueryAlias v
@@ -1194,14 +1194,14 @@ Project [x1#x, x2#x, y1#x, y2#x, xx1#x, xx2#x]
 +- Join LeftOuter, ((x1#x = xx1#x) AND isnotnull(xx2#x))
    :- Join LeftOuter, (x1#x = y1#x)
    :  :- SubqueryAlias x
-   :  :  +- View (`x`, [x1#x,x2#x])
+   :  :  +- View (`x`, [x1#x, x2#x])
    :  :     +- Project [cast(x1#x as int) AS x1#x, cast(x2#x as int) AS x2#x]
    :  :        +- Project [x1#x, x2#x]
    :  :           +- SubqueryAlias v
    :  :              +- Project [col1#x AS x1#x, col2#x AS x2#x]
    :  :                 +- LocalRelation [col1#x, col2#x]
    :  +- SubqueryAlias y
-   :     +- View (`y`, [y1#x,y2#x])
+   :     +- View (`y`, [y1#x, y2#x])
    :        +- Project [cast(y1#x as int) AS y1#x, cast(y2#x as int) AS y2#x]
    :           +- Project [y1#x, y2#x]
    :              +- SubqueryAlias v
@@ -1210,7 +1210,7 @@ Project [x1#x, x2#x, y1#x, y2#x, xx1#x, xx2#x]
    +- SubqueryAlias xx
       +- Project [x1#x AS xx1#x, x2#x AS xx2#x]
          +- SubqueryAlias x
-            +- View (`x`, [x1#x,x2#x])
+            +- View (`x`, [x1#x, x2#x])
                +- Project [cast(x1#x as int) AS x1#x, cast(x2#x as int) AS x2#x]
                   +- Project [x1#x, x2#x]
                      +- SubqueryAlias v
@@ -1227,14 +1227,14 @@ Project [x1#x, x2#x, y1#x, y2#x, xx1#x, xx2#x]
    +- Join LeftOuter, (x1#x = xx1#x)
       :- Join LeftOuter, (x1#x = y1#x)
       :  :- SubqueryAlias x
-      :  :  +- View (`x`, [x1#x,x2#x])
+      :  :  +- View (`x`, [x1#x, x2#x])
       :  :     +- Project [cast(x1#x as int) AS x1#x, cast(x2#x as int) AS x2#x]
       :  :        +- Project [x1#x, x2#x]
       :  :           +- SubqueryAlias v
       :  :              +- Project [col1#x AS x1#x, col2#x AS x2#x]
       :  :                 +- LocalRelation [col1#x, col2#x]
       :  +- SubqueryAlias y
-      :     +- View (`y`, [y1#x,y2#x])
+      :     +- View (`y`, [y1#x, y2#x])
       :        +- Project [cast(y1#x as int) AS y1#x, cast(y2#x as int) AS y2#x]
       :           +- Project [y1#x, y2#x]
       :              +- SubqueryAlias v
@@ -1243,7 +1243,7 @@ Project [x1#x, x2#x, y1#x, y2#x, xx1#x, xx2#x]
       +- SubqueryAlias xx
          +- Project [x1#x AS xx1#x, x2#x AS xx2#x]
             +- SubqueryAlias x
-               +- View (`x`, [x1#x,x2#x])
+               +- View (`x`, [x1#x, x2#x])
                   +- Project [cast(x1#x as int) AS x1#x, cast(x2#x as int) AS x2#x]
                      +- Project [x1#x, x2#x]
                         +- SubqueryAlias v
@@ -1260,14 +1260,14 @@ Project [x1#x, x2#x, y1#x, y2#x, xx1#x, xx2#x]
    +- Join LeftOuter, (x1#x = xx1#x)
       :- Join LeftOuter, (x1#x = y1#x)
       :  :- SubqueryAlias x
-      :  :  +- View (`x`, [x1#x,x2#x])
+      :  :  +- View (`x`, [x1#x, x2#x])
       :  :     +- Project [cast(x1#x as int) AS x1#x, cast(x2#x as int) AS x2#x]
       :  :        +- Project [x1#x, x2#x]
       :  :           +- SubqueryAlias v
       :  :              +- Project [col1#x AS x1#x, col2#x AS x2#x]
       :  :                 +- LocalRelation [col1#x, col2#x]
       :  +- SubqueryAlias y
-      :     +- View (`y`, [y1#x,y2#x])
+      :     +- View (`y`, [y1#x, y2#x])
       :        +- Project [cast(y1#x as int) AS y1#x, cast(y2#x as int) AS y2#x]
       :           +- Project [y1#x, y2#x]
       :              +- SubqueryAlias v
@@ -1276,7 +1276,7 @@ Project [x1#x, x2#x, y1#x, y2#x, xx1#x, xx2#x]
       +- SubqueryAlias xx
          +- Project [x1#x AS xx1#x, x2#x AS xx2#x]
             +- SubqueryAlias x
-               +- View (`x`, [x1#x,x2#x])
+               +- View (`x`, [x1#x, x2#x])
                   +- Project [cast(x1#x as int) AS x1#x, cast(x2#x as int) AS x2#x]
                      +- Project [x1#x, x2#x]
                         +- SubqueryAlias v
@@ -1293,14 +1293,14 @@ Project [x1#x, x2#x, y1#x, y2#x, xx1#x, xx2#x]
    +- Join LeftOuter, (x1#x = xx1#x)
       :- Join LeftOuter, (x1#x = y1#x)
       :  :- SubqueryAlias x
-      :  :  +- View (`x`, [x1#x,x2#x])
+      :  :  +- View (`x`, [x1#x, x2#x])
       :  :     +- Project [cast(x1#x as int) AS x1#x, cast(x2#x as int) AS x2#x]
       :  :        +- Project [x1#x, x2#x]
       :  :           +- SubqueryAlias v
       :  :              +- Project [col1#x AS x1#x, col2#x AS x2#x]
       :  :                 +- LocalRelation [col1#x, col2#x]
       :  +- SubqueryAlias y
-      :     +- View (`y`, [y1#x,y2#x])
+      :     +- View (`y`, [y1#x, y2#x])
       :        +- Project [cast(y1#x as int) AS y1#x, cast(y2#x as int) AS y2#x]
       :           +- Project [y1#x, y2#x]
       :              +- SubqueryAlias v
@@ -1309,7 +1309,7 @@ Project [x1#x, x2#x, y1#x, y2#x, xx1#x, xx2#x]
       +- SubqueryAlias xx
          +- Project [x1#x AS xx1#x, x2#x AS xx2#x]
             +- SubqueryAlias x
-               +- View (`x`, [x1#x,x2#x])
+               +- View (`x`, [x1#x, x2#x])
                   +- Project [cast(x1#x as int) AS x1#x, cast(x2#x as int) AS x2#x]
                      +- Project [x1#x, x2#x]
                         +- SubqueryAlias v
@@ -1451,7 +1451,7 @@ Sort [q1#xL ASC NULLS FIRST, q2#xL ASC NULLS FIRST], true
    +- Join LeftOuter, (q2#xL = q2#xL)
       :- SubqueryAlias i1
       :  +- SubqueryAlias int8_tbl
-      :     +- View (`INT8_TBL`, [q1#xL,q2#xL])
+      :     +- View (`INT8_TBL`, [q1#xL, q2#xL])
       :        +- Project [cast(q1#xL as bigint) AS q1#xL, cast(q2#xL as bigint) AS q2#xL]
       :           +- Project [q1#xL, q2#xL]
       :              +- SubqueryAlias v
@@ -1460,7 +1460,7 @@ Sort [q1#xL ASC NULLS FIRST, q2#xL ASC NULLS FIRST], true
       +- Join Inner, (q1#xL = cast(x#x as bigint))
          :- SubqueryAlias i2
          :  +- SubqueryAlias int8_tbl
-         :     +- View (`INT8_TBL`, [q1#xL,q2#xL])
+         :     +- View (`INT8_TBL`, [q1#xL, q2#xL])
          :        +- Project [cast(q1#xL as bigint) AS q1#xL, cast(q2#xL as bigint) AS q2#xL]
          :           +- Project [q1#xL, q2#xL]
          :              +- SubqueryAlias v
@@ -1652,14 +1652,14 @@ select tt1.*, tt2.* from tt1 left join tt2 on tt1.joincol = tt2.joincol
 Project [tt1_id#x, joincol#x, tt2_id#x, joincol#x]
 +- Join LeftOuter, (joincol#x = joincol#x)
    :- SubqueryAlias tt1
-   :  +- View (`tt1`, [tt1_id#x,joincol#x])
+   :  +- View (`tt1`, [tt1_id#x, joincol#x])
    :     +- Project [cast(tt1_id#x as int) AS tt1_id#x, cast(joincol#x as int) AS joincol#x]
    :        +- Project [tt1_id#x, joincol#x]
    :           +- SubqueryAlias v
    :              +- Project [col1#x AS tt1_id#x, col2#x AS joincol#x]
    :                 +- LocalRelation [col1#x, col2#x]
    +- SubqueryAlias tt2
-      +- View (`tt2`, [tt2_id#x,joincol#x])
+      +- View (`tt2`, [tt2_id#x, joincol#x])
          +- Project [cast(tt2_id#x as int) AS tt2_id#x, cast(joincol#x as int) AS joincol#x]
             +- Project [tt2_id#x, joincol#x]
                +- SubqueryAlias v
@@ -1673,14 +1673,14 @@ select tt1.*, tt2.* from tt2 right join tt1 on tt1.joincol = tt2.joincol
 Project [tt1_id#x, joincol#x, tt2_id#x, joincol#x]
 +- Join RightOuter, (joincol#x = joincol#x)
    :- SubqueryAlias tt2
-   :  +- View (`tt2`, [tt2_id#x,joincol#x])
+   :  +- View (`tt2`, [tt2_id#x, joincol#x])
    :     +- Project [cast(tt2_id#x as int) AS tt2_id#x, cast(joincol#x as int) AS joincol#x]
    :        +- Project [tt2_id#x, joincol#x]
    :           +- SubqueryAlias v
    :              +- Project [col1#x AS tt2_id#x, col2#x AS joincol#x]
    :                 +- LocalRelation [col1#x, col2#x]
    +- SubqueryAlias tt1
-      +- View (`tt1`, [tt1_id#x,joincol#x])
+      +- View (`tt1`, [tt1_id#x, joincol#x])
          +- Project [cast(tt1_id#x as int) AS tt1_id#x, cast(joincol#x as int) AS joincol#x]
             +- Project [tt1_id#x, joincol#x]
                +- SubqueryAlias v
@@ -1760,7 +1760,7 @@ Project [f1#x]
                +- Join LeftOuter, (f1#x = f1#x)
                   :- SubqueryAlias b
                   :  +- SubqueryAlias tt3
-                  :     +- View (`tt3`, [f1#x,f2#x])
+                  :     +- View (`tt3`, [f1#x, f2#x])
                   :        +- Project [cast(f1#x as int) AS f1#x, cast(f2#x as string) AS f2#x]
                   :           +- Project [f1#x, f2#x]
                   :              +- SubqueryAlias v
@@ -1770,7 +1770,7 @@ Project [f1#x]
                   :                          +- Range (1, 10001, step=1, splits=None)
                   +- SubqueryAlias c
                      +- SubqueryAlias tt3
-                        +- View (`tt3`, [f1#x,f2#x])
+                        +- View (`tt3`, [f1#x, f2#x])
                            +- Project [cast(f1#x as int) AS f1#x, cast(f2#x as string) AS f2#x]
                               +- Project [f1#x, f2#x]
                                  +- SubqueryAlias v
@@ -1815,14 +1815,14 @@ Project [f1#x, f2#x, f1#x, f2#x]
 +- Filter ((f1#x = f1#x) AND (f1#x = (f2#x - f2#x)))
    +- Join Inner
       :- SubqueryAlias tt5
-      :  +- View (`tt5`, [f1#x,f2#x])
+      :  +- View (`tt5`, [f1#x, f2#x])
       :     +- Project [cast(f1#x as int) AS f1#x, cast(f2#x as int) AS f2#x]
       :        +- Project [f1#x, f2#x]
       :           +- SubqueryAlias v
       :              +- Project [col1#x AS f1#x, col2#x AS f2#x]
       :                 +- LocalRelation [col1#x, col2#x]
       +- SubqueryAlias tt6
-         +- View (`tt6`, [f1#x,f2#x])
+         +- View (`tt6`, [f1#x, f2#x])
             +- Project [cast(f1#x as int) AS f1#x, cast(f2#x as int) AS f2#x]
                +- Project [f1#x, f2#x]
                   +- SubqueryAlias v
@@ -1871,7 +1871,7 @@ Project [pkyy#x AS yy_pkyy#x, pkxx#x AS yy_pkxx#x, pkyy#x AS yya_pkyy#x, pkxx#x 
    :- Join LeftOuter, (pkxx#x = pkxx#x)
    :  :- Join LeftOuter, (pkyy#x = pkyy#x)
    :  :  :- SubqueryAlias yy
-   :  :  :  +- View (`yy`, [pkyy#x,pkxx#x])
+   :  :  :  +- View (`yy`, [pkyy#x, pkxx#x])
    :  :  :     +- Project [cast(pkyy#x as int) AS pkyy#x, cast(pkxx#x as int) AS pkxx#x]
    :  :  :        +- Project [pkyy#x, pkxx#x]
    :  :  :           +- SubqueryAlias v
@@ -1881,7 +1881,7 @@ Project [pkyy#x AS yy_pkyy#x, pkxx#x AS yy_pkxx#x, pkyy#x AS yya_pkyy#x, pkxx#x 
    :  :     +- Project [pkyy#x, pkxx#x]
    :  :        +- Filter (pkyy#x = 101)
    :  :           +- SubqueryAlias yy
-   :  :              +- View (`yy`, [pkyy#x,pkxx#x])
+   :  :              +- View (`yy`, [pkyy#x, pkxx#x])
    :  :                 +- Project [cast(pkyy#x as int) AS pkyy#x, cast(pkxx#x as int) AS pkxx#x]
    :  :                    +- Project [pkyy#x, pkxx#x]
    :  :                       +- SubqueryAlias v
@@ -2003,7 +2003,7 @@ Project [f2#x, f3#x, f1#x, junk#x]
       :     +- View (`zt3`, [f3#x])
       :        +- Relation [f3#x] parquet
       +- SubqueryAlias zv1
-         +- View (`zv1`, [f1#x,junk#x])
+         +- View (`zv1`, [f1#x, junk#x])
             +- Project [cast(f1#x as int) AS f1#x, cast(junk#x as string) AS junk#x]
                +- Project [f1#x, dummy AS junk#x]
                   +- SubqueryAlias zt1
@@ -2053,7 +2053,7 @@ Project [i#x, x#x, y#x]
    :  +- View (`a`, [i#x])
    :     +- Relation [i#x] parquet
    +- SubqueryAlias b
-      +- View (`b`, [x#x,y#x])
+      +- View (`b`, [x#x, y#x])
          +- Relation [x#x,y#x] parquet
 
 
@@ -2067,7 +2067,7 @@ Sort [q2#xL ASC NULLS FIRST], true
    +- Join LeftOuter, (q2#xL = q1#xL)
       :- SubqueryAlias t1
       :  +- SubqueryAlias int8_tbl
-      :     +- View (`INT8_TBL`, [q1#xL,q2#xL])
+      :     +- View (`INT8_TBL`, [q1#xL, q2#xL])
       :        +- Project [cast(q1#xL as bigint) AS q1#xL, cast(q2#xL as bigint) AS q2#xL]
       :           +- Project [q1#xL, q2#xL]
       :              +- SubqueryAlias v
@@ -2075,7 +2075,7 @@ Sort [q2#xL ASC NULLS FIRST], true
       :                    +- LocalRelation [col1#xL, col2#xL]
       +- SubqueryAlias t2
          +- SubqueryAlias int8_tbl
-            +- View (`INT8_TBL`, [q1#xL,q2#xL])
+            +- View (`INT8_TBL`, [q1#xL, q2#xL])
                +- Project [cast(q1#xL as bigint) AS q1#xL, cast(q2#xL as bigint) AS q2#xL]
                   +- Project [q1#xL, q2#xL]
                      +- SubqueryAlias v
@@ -2093,7 +2093,7 @@ Sort [q2#xL ASC NULLS FIRST], true
    +- Join LeftOuter, (q2#xL = q1#xL)
       :- SubqueryAlias t1
       :  +- SubqueryAlias int8_tbl
-      :     +- View (`INT8_TBL`, [q1#xL,q2#xL])
+      :     +- View (`INT8_TBL`, [q1#xL, q2#xL])
       :        +- Project [cast(q1#xL as bigint) AS q1#xL, cast(q2#xL as bigint) AS q2#xL]
       :           +- Project [q1#xL, q2#xL]
       :              +- SubqueryAlias v
@@ -2102,7 +2102,7 @@ Sort [q2#xL ASC NULLS FIRST], true
       +- SubqueryAlias t2
          +- Project [q1#xL, q2#xL]
             +- SubqueryAlias int8_tbl
-               +- View (`INT8_TBL`, [q1#xL,q2#xL])
+               +- View (`INT8_TBL`, [q1#xL, q2#xL])
                   +- Project [cast(q1#xL as bigint) AS q1#xL, cast(q2#xL as bigint) AS q2#xL]
                      +- Project [q1#xL, q2#xL]
                         +- SubqueryAlias v
@@ -2122,7 +2122,7 @@ Sort [q2#xL ASC NULLS FIRST], true
    +- Join LeftOuter, (q2#xL = q1#xL)
       :- SubqueryAlias t1
       :  +- SubqueryAlias int8_tbl
-      :     +- View (`INT8_TBL`, [q1#xL,q2#xL])
+      :     +- View (`INT8_TBL`, [q1#xL, q2#xL])
       :        +- Project [cast(q1#xL as bigint) AS q1#xL, cast(q2#xL as bigint) AS q2#xL]
       :           +- Project [q1#xL, q2#xL]
       :              +- SubqueryAlias v
@@ -2131,7 +2131,7 @@ Sort [q2#xL ASC NULLS FIRST], true
       +- SubqueryAlias t2
          +- Project [q1#xL, CASE WHEN (q2#xL = cast(1 as bigint)) THEN cast(1 as bigint) ELSE q2#xL END AS q2#xL]
             +- SubqueryAlias int8_tbl
-               +- View (`INT8_TBL`, [q1#xL,q2#xL])
+               +- View (`INT8_TBL`, [q1#xL, q2#xL])
                   +- Project [cast(q1#xL as bigint) AS q1#xL, cast(q2#xL as bigint) AS q2#xL]
                      +- Project [q1#xL, q2#xL]
                         +- SubqueryAlias v
@@ -2196,7 +2196,7 @@ Sort [name#x ASC NULLS FIRST], true
 +- Project [name#x, code#x, b_cnt#xL, const#x]
    +- Join LeftOuter, (a#x = code#x)
       :- SubqueryAlias c
-      :  +- View (`c`, [name#x,a#x])
+      :  +- View (`c`, [name#x, a#x])
       :     +- Project [cast(name#x as string) AS name#x, cast(a#x as string) AS a#x]
       :        +- Project [name#x, a#x]
       :           +- SubqueryAlias v
@@ -2215,7 +2215,7 @@ Sort [name#x ASC NULLS FIRST], true
                +- SubqueryAlias b_grp
                   +- Aggregate [a#x], [count(1) AS cnt#xL, a#x]
                      +- SubqueryAlias b
-                        +- View (`b`, [a#x,num#x])
+                        +- View (`b`, [a#x, num#x])
                            +- Project [cast(a#x as string) AS a#x, cast(num#x as int) AS num#x]
                               +- Project [a#x, num#x]
                                  +- SubqueryAlias v
@@ -2318,7 +2318,7 @@ Project [qq#xL, unique1#x]
    :     :  +- Project [coalesce(q1#xL, cast(0 as bigint)) AS qq#xL]
    :     :     +- SubqueryAlias a
    :     :        +- SubqueryAlias int8_tbl
-   :     :           +- View (`INT8_TBL`, [q1#xL,q2#xL])
+   :     :           +- View (`INT8_TBL`, [q1#xL, q2#xL])
    :     :              +- Project [cast(q1#xL as bigint) AS q1#xL, cast(q2#xL as bigint) AS q2#xL]
    :     :                 +- Project [q1#xL, q2#xL]
    :     :                    +- SubqueryAlias v
@@ -2328,7 +2328,7 @@ Project [qq#xL, unique1#x]
    :        +- Project [coalesce(q2#xL, cast(-1 as bigint)) AS qq#xL]
    :           +- SubqueryAlias b
    :              +- SubqueryAlias int8_tbl
-   :                 +- View (`INT8_TBL`, [q1#xL,q2#xL])
+   :                 +- View (`INT8_TBL`, [q1#xL, q2#xL])
    :                    +- Project [cast(q1#xL as bigint) AS q1#xL, cast(q2#xL as bigint) AS q2#xL]
    :                       +- Project [q1#xL, q2#xL]
    :                          +- SubqueryAlias v
@@ -2399,7 +2399,7 @@ Project [id#x]
    +- Join LeftOuter, (id#x = nt2_id#x)
       :- SubqueryAlias nt3
       :  +- SubqueryAlias nt3
-      :     +- View (`nt3`, [id#x,nt2_id#x,c1#x])
+      :     +- View (`nt3`, [id#x, nt2_id#x, c1#x])
       :        +- Project [cast(id#x as int) AS id#x, cast(nt2_id#x as int) AS nt2_id#x, cast(c1#x as boolean) AS c1#x]
       :           +- Project [id#x, nt2_id#x, c1#x]
       :              +- SubqueryAlias v
@@ -2410,7 +2410,7 @@ Project [id#x]
             +- Join LeftOuter, (id#x = nt1_id#x)
                :- SubqueryAlias nt2
                :  +- SubqueryAlias nt2
-               :     +- View (`nt2`, [id#x,nt1_id#x,b1#x,b2#x])
+               :     +- View (`nt2`, [id#x, nt1_id#x, b1#x, b2#x])
                :        +- Project [cast(id#x as int) AS id#x, cast(nt1_id#x as int) AS nt1_id#x, cast(b1#x as boolean) AS b1#x, cast(b2#x as boolean) AS b2#x]
                :           +- Project [id#x, nt1_id#x, b1#x, b2#x]
                :              +- SubqueryAlias v
@@ -2419,7 +2419,7 @@ Project [id#x]
                +- SubqueryAlias ss1
                   +- Project [id#x, a1#x, a2#x, isnotnull(id#x) AS a3#x]
                      +- SubqueryAlias nt1
-                        +- View (`nt1`, [id#x,a1#x,a2#x])
+                        +- View (`nt1`, [id#x, a1#x, a2#x])
                            +- Project [cast(id#x as int) AS id#x, cast(a1#x as boolean) AS a1#x, cast(a2#x as boolean) AS a2#x]
                               +- Project [id#x, a1#x, a2#x]
                                  +- SubqueryAlias v
@@ -2558,7 +2558,7 @@ Sort [fault#xL ASC NULLS FIRST], true
          +- Project [unique1#x, q1#xL, (cast(coalesce(unique1#x, -1) as bigint) + q1#xL) AS fault#xL]
             +- Join LeftOuter, (q2#xL = cast(unique2#x as bigint))
                :- SubqueryAlias int8_tbl
-               :  +- View (`INT8_TBL`, [q1#xL,q2#xL])
+               :  +- View (`INT8_TBL`, [q1#xL, q2#xL])
                :     +- Project [cast(q1#xL as bigint) AS q1#xL, cast(q2#xL as bigint) AS q2#xL]
                :        +- Project [q1#xL, q2#xL]
                :           +- SubqueryAlias v
@@ -2578,7 +2578,7 @@ Project [q1#xL, unique2#x, thousand#x, hundred#x]
    +- Join LeftOuter, (q1#xL = cast(unique2#x as bigint))
       :- SubqueryAlias a
       :  +- SubqueryAlias int8_tbl
-      :     +- View (`INT8_TBL`, [q1#xL,q2#xL])
+      :     +- View (`INT8_TBL`, [q1#xL, q2#xL])
       :        +- Project [cast(q1#xL as bigint) AS q1#xL, cast(q2#xL as bigint) AS q2#xL]
       :           +- Project [q1#xL, q2#xL]
       :              +- SubqueryAlias v
@@ -2654,7 +2654,7 @@ Project [f1#x, q1#xL, q2#xL, f1#x, f1#x]
    :  :  :                    +- LocalRelation [col1#x]
    :  :  +- SubqueryAlias i8
    :  :     +- SubqueryAlias int8_tbl
-   :  :        +- View (`INT8_TBL`, [q1#xL,q2#xL])
+   :  :        +- View (`INT8_TBL`, [q1#xL, q2#xL])
    :  :           +- Project [cast(q1#xL as bigint) AS q1#xL, cast(q2#xL as bigint) AS q2#xL]
    :  :              +- Project [q1#xL, q2#xL]
    :  :                 +- SubqueryAlias v
@@ -2712,7 +2712,7 @@ Project [f1#x, q1#xL, q2#xL, q1#xL, f1#x]
          :                    +- LocalRelation [col1#x]
          +- SubqueryAlias i8
             +- SubqueryAlias int8_tbl
-               +- View (`INT8_TBL`, [q1#xL,q2#xL])
+               +- View (`INT8_TBL`, [q1#xL, q2#xL])
                   +- Project [cast(q1#xL as bigint) AS q1#xL, cast(q2#xL as bigint) AS q2#xL]
                      +- Project [q1#xL, q2#xL]
                         +- SubqueryAlias v
@@ -2754,7 +2754,7 @@ Project [f1#x, q1#xL, q2#xL, q1#xL, f1#x]
          :                    +- LocalRelation [col1#x]
          +- SubqueryAlias i8
             +- SubqueryAlias int8_tbl
-               +- View (`INT8_TBL`, [q1#xL,q2#xL])
+               +- View (`INT8_TBL`, [q1#xL, q2#xL])
                   +- Project [cast(q1#xL as bigint) AS q1#xL, cast(q2#xL as bigint) AS q2#xL]
                      +- Project [q1#xL, q2#xL]
                         +- SubqueryAlias v
@@ -2810,7 +2810,7 @@ Project [f1#x, q1#xL, q2#xL, q1#xL, f1#x, q1#xL, f1#x]
             :                    +- LocalRelation [col1#x]
             +- SubqueryAlias i8
                +- SubqueryAlias int8_tbl
-                  +- View (`INT8_TBL`, [q1#xL,q2#xL])
+                  +- View (`INT8_TBL`, [q1#xL, q2#xL])
                      +- Project [cast(q1#xL as bigint) AS q1#xL, cast(q2#xL as bigint) AS q2#xL]
                         +- Project [q1#xL, q2#xL]
                            +- SubqueryAlias v
@@ -2866,7 +2866,7 @@ Project [f1#x, q1#xL, q2#xL, q1#xL, f1#x, q1#xL, f1#x]
             :                    +- LocalRelation [col1#x]
             +- SubqueryAlias i8
                +- SubqueryAlias int8_tbl
-                  +- View (`INT8_TBL`, [q1#xL,q2#xL])
+                  +- View (`INT8_TBL`, [q1#xL, q2#xL])
                      +- Project [cast(q1#xL as bigint) AS q1#xL, cast(q2#xL as bigint) AS q2#xL]
                         +- Project [q1#xL, q2#xL]
                            +- SubqueryAlias v
@@ -3027,7 +3027,7 @@ Project [q2#xL, q1#xL]
    +- Join LeftOuter, (q2#xL = coalesce(q1#xL, cast(1 as bigint)))
       :- SubqueryAlias a
       :  +- SubqueryAlias int8_tbl
-      :     +- View (`INT8_TBL`, [q1#xL,q2#xL])
+      :     +- View (`INT8_TBL`, [q1#xL, q2#xL])
       :        +- Project [cast(q1#xL as bigint) AS q1#xL, cast(q2#xL as bigint) AS q2#xL]
       :           +- Project [q1#xL, q2#xL]
       :              +- SubqueryAlias v
@@ -3035,7 +3035,7 @@ Project [q2#xL, q1#xL]
       :                    +- LocalRelation [col1#xL, col2#xL]
       +- SubqueryAlias b
          +- SubqueryAlias int8_tbl
-            +- View (`INT8_TBL`, [q1#xL,q2#xL])
+            +- View (`INT8_TBL`, [q1#xL, q2#xL])
                +- Project [cast(q1#xL as bigint) AS q1#xL, cast(q2#xL as bigint) AS q2#xL]
                   +- Project [q1#xL, q2#xL]
                      +- SubqueryAlias v
@@ -3078,7 +3078,7 @@ Project [k#x, pd#x]
 +- Join LeftOuter, (k#x = k#x)
    :- SubqueryAlias p
    :  +- SubqueryAlias parent
-   :     +- View (`parent`, [k#x,pd#x])
+   :     +- View (`parent`, [k#x, pd#x])
    :        +- Project [cast(k#x as int) AS k#x, cast(pd#x as int) AS pd#x]
    :           +- Project [k#x, pd#x]
    :              +- SubqueryAlias v
@@ -3086,7 +3086,7 @@ Project [k#x, pd#x]
    :                    +- LocalRelation [col1#x, col2#x]
    +- SubqueryAlias c
       +- SubqueryAlias child
-         +- View (`child`, [k#x,cd#x])
+         +- View (`child`, [k#x, cd#x])
             +- Project [cast(k#x as int) AS k#x, cast(cd#x as int) AS cd#x]
                +- Project [k#x, cd#x]
                   +- SubqueryAlias v
@@ -3103,7 +3103,7 @@ Project [k#x, pd#x, linked#x]
 +- Join LeftOuter, (k#x = k#x)
    :- SubqueryAlias p
    :  +- SubqueryAlias parent
-   :     +- View (`parent`, [k#x,pd#x])
+   :     +- View (`parent`, [k#x, pd#x])
    :        +- Project [cast(k#x as int) AS k#x, cast(pd#x as int) AS pd#x]
    :           +- Project [k#x, pd#x]
    :              +- SubqueryAlias v
@@ -3113,7 +3113,7 @@ Project [k#x, pd#x, linked#x]
       +- Project [k#x, cd#x, true AS linked#x]
          +- SubqueryAlias c
             +- SubqueryAlias child
-               +- View (`child`, [k#x,cd#x])
+               +- View (`child`, [k#x, cd#x])
                   +- Project [cast(k#x as int) AS k#x, cast(cd#x as int) AS cd#x]
                      +- Project [k#x, cd#x]
                         +- SubqueryAlias v
@@ -3131,7 +3131,7 @@ Project [k#x, pd#x]
    +- Join LeftOuter, (k#x = k#x)
       :- SubqueryAlias p
       :  +- SubqueryAlias parent
-      :     +- View (`parent`, [k#x,pd#x])
+      :     +- View (`parent`, [k#x, pd#x])
       :        +- Project [cast(k#x as int) AS k#x, cast(pd#x as int) AS pd#x]
       :           +- Project [k#x, pd#x]
       :              +- SubqueryAlias v
@@ -3139,7 +3139,7 @@ Project [k#x, pd#x]
       :                    +- LocalRelation [col1#x, col2#x]
       +- SubqueryAlias c
          +- SubqueryAlias child
-            +- View (`child`, [k#x,cd#x])
+            +- View (`child`, [k#x, cd#x])
                +- Project [cast(k#x as int) AS k#x, cast(cd#x as int) AS cd#x]
                   +- Project [k#x, cd#x]
                      +- SubqueryAlias v
@@ -3158,7 +3158,7 @@ Project [k#x, pd#x]
       :- Join LeftOuter, (k#x = k#x)
       :  :- SubqueryAlias p
       :  :  +- SubqueryAlias parent
-      :  :     +- View (`parent`, [k#x,pd#x])
+      :  :     +- View (`parent`, [k#x, pd#x])
       :  :        +- Project [cast(k#x as int) AS k#x, cast(pd#x as int) AS pd#x]
       :  :           +- Project [k#x, pd#x]
       :  :              +- SubqueryAlias v
@@ -3166,7 +3166,7 @@ Project [k#x, pd#x]
       :  :                    +- LocalRelation [col1#x, col2#x]
       :  +- SubqueryAlias c
       :     +- SubqueryAlias child
-      :        +- View (`child`, [k#x,cd#x])
+      :        +- View (`child`, [k#x, cd#x])
       :           +- Project [cast(k#x as int) AS k#x, cast(cd#x as int) AS cd#x]
       :              +- Project [k#x, cd#x]
       :                 +- SubqueryAlias v
@@ -3174,7 +3174,7 @@ Project [k#x, pd#x]
       :                       +- LocalRelation [col1#x, col2#x]
       +- SubqueryAlias x
          +- SubqueryAlias parent
-            +- View (`parent`, [k#x,pd#x])
+            +- View (`parent`, [k#x, pd#x])
                +- Project [cast(k#x as int) AS k#x, cast(pd#x as int) AS pd#x]
                   +- Project [k#x, pd#x]
                      +- SubqueryAlias v
@@ -3217,7 +3217,7 @@ Project [id#x, a_id#x, id#x]
 +- Filter (isnull(id#x) OR (id#x > 0))
    +- Join LeftOuter, (a_id#x = id#x)
       :- SubqueryAlias b
-      :  +- View (`b`, [id#x,a_id#x])
+      :  +- View (`b`, [id#x, a_id#x])
       :     +- Project [cast(id#x as int) AS id#x, cast(a_id#x as int) AS a_id#x]
       :        +- Project [id#x, a_id#x]
       :           +- SubqueryAlias v
@@ -3239,7 +3239,7 @@ Project [id#x, a_id#x]
 +- Filter (isnull(id#x) OR (id#x > 0))
    +- Join LeftOuter, (a_id#x = id#x)
       :- SubqueryAlias b
-      :  +- View (`b`, [id#x,a_id#x])
+      :  +- View (`b`, [id#x, a_id#x])
       :     +- Project [cast(id#x as int) AS id#x, cast(a_id#x as int) AS a_id#x]
       :        +- Project [id#x, a_id#x]
       :           +- SubqueryAlias v
@@ -3285,14 +3285,14 @@ Project [x#x, q1#xL, q2#xL, y#xL]
       +- Project [q1#xL, q2#xL, coalesce(dat1#xL, q1#xL) AS y#xL]
          +- Join LeftOuter, (q2#xL = id#xL)
             :- SubqueryAlias int8_tbl
-            :  +- View (`INT8_TBL`, [q1#xL,q2#xL])
+            :  +- View (`INT8_TBL`, [q1#xL, q2#xL])
             :     +- Project [cast(q1#xL as bigint) AS q1#xL, cast(q2#xL as bigint) AS q2#xL]
             :        +- Project [q1#xL, q2#xL]
             :           +- SubqueryAlias v
             :              +- Project [col1#xL AS q1#xL, col2#xL AS q2#xL]
             :                 +- LocalRelation [col1#xL, col2#xL]
             +- SubqueryAlias innertab
-               +- View (`innertab`, [id#xL,dat1#xL])
+               +- View (`innertab`, [id#xL, dat1#xL])
                   +- Project [cast(id#xL as bigint) AS id#xL, cast(dat1#xL as bigint) AS dat1#xL]
                      +- Project [id#xL, dat1#xL]
                         +- SubqueryAlias v
@@ -3352,7 +3352,7 @@ Project [q1#xL, q2#xL, f1#x, ff#x]
 +- Join Inner, (q1#xL = cast(f1#x as bigint))
    :- SubqueryAlias x
    :  +- SubqueryAlias int8_tbl
-   :     +- View (`INT8_TBL`, [q1#xL,q2#xL])
+   :     +- View (`INT8_TBL`, [q1#xL, q2#xL])
    :        +- Project [cast(q1#xL as bigint) AS q1#xL, cast(q2#xL as bigint) AS q2#xL]
    :           +- Project [q1#xL, q2#xL]
    :              +- SubqueryAlias v
@@ -3584,7 +3584,7 @@ Project [q1#xL, q2#xL, q1#xL, q2#xL, xq1#xL, yq1#xL, yq2#xL]
    +- Join LeftOuter, (q2#xL = q1#xL)
       :- SubqueryAlias x
       :  +- SubqueryAlias int8_tbl
-      :     +- View (`INT8_TBL`, [q1#xL,q2#xL])
+      :     +- View (`INT8_TBL`, [q1#xL, q2#xL])
       :        +- Project [cast(q1#xL as bigint) AS q1#xL, cast(q2#xL as bigint) AS q2#xL]
       :           +- Project [q1#xL, q2#xL]
       :              +- SubqueryAlias v
@@ -3593,7 +3593,7 @@ Project [q1#xL, q2#xL, q1#xL, q2#xL, xq1#xL, yq1#xL, yq2#xL]
       +- SubqueryAlias y
          +- Project [q1#xL, coalesce(q2#xL, cast(0 as bigint)) AS q2#xL]
             +- SubqueryAlias int8_tbl
-               +- View (`INT8_TBL`, [q1#xL,q2#xL])
+               +- View (`INT8_TBL`, [q1#xL, q2#xL])
                   +- Project [cast(q1#xL as bigint) AS q1#xL, cast(q2#xL as bigint) AS q2#xL]
                      +- Project [q1#xL, q2#xL]
                         +- SubqueryAlias v
@@ -3615,7 +3615,7 @@ Project [q1#xL, q2#xL]
    +- Join LeftOuter, (q2#xL = q1#xL)
       :- SubqueryAlias x
       :  +- SubqueryAlias int8_tbl
-      :     +- View (`INT8_TBL`, [q1#xL,q2#xL])
+      :     +- View (`INT8_TBL`, [q1#xL, q2#xL])
       :        +- Project [cast(q1#xL as bigint) AS q1#xL, cast(q2#xL as bigint) AS q2#xL]
       :           +- Project [q1#xL, q2#xL]
       :              +- SubqueryAlias v
@@ -3624,7 +3624,7 @@ Project [q1#xL, q2#xL]
       +- SubqueryAlias y
          +- Project [q1#xL, coalesce(q2#xL, cast(0 as bigint)) AS q2#xL]
             +- SubqueryAlias int8_tbl
-               +- View (`INT8_TBL`, [q1#xL,q2#xL])
+               +- View (`INT8_TBL`, [q1#xL, q2#xL])
                   +- Project [cast(q1#xL as bigint) AS q1#xL, cast(q2#xL as bigint) AS q2#xL]
                      +- Project [q1#xL, q2#xL]
                         +- SubqueryAlias v
@@ -3643,7 +3643,7 @@ Project [q1#xL, q2#xL, q1#xL, q2#xL, x#xL]
    :     +- Project [q1#xL, q2#xL, outer(q2#xL) AS x#xL]
    :        +- SubqueryAlias b
    :           +- SubqueryAlias int8_tbl
-   :              +- View (`INT8_TBL`, [q1#xL,q2#xL])
+   :              +- View (`INT8_TBL`, [q1#xL, q2#xL])
    :                 +- Project [cast(q1#xL as bigint) AS q1#xL, cast(q2#xL as bigint) AS q2#xL]
    :                    +- Project [q1#xL, q2#xL]
    :                       +- SubqueryAlias v
@@ -3651,7 +3651,7 @@ Project [q1#xL, q2#xL, q1#xL, q2#xL, x#xL]
    :                             +- LocalRelation [col1#xL, col2#xL]
    +- SubqueryAlias a
       +- SubqueryAlias int8_tbl
-         +- View (`INT8_TBL`, [q1#xL,q2#xL])
+         +- View (`INT8_TBL`, [q1#xL, q2#xL])
             +- Project [cast(q1#xL as bigint) AS q1#xL, cast(q2#xL as bigint) AS q2#xL]
                +- Project [q1#xL, q2#xL]
                   +- SubqueryAlias v
@@ -3670,7 +3670,7 @@ Project [q1#xL, q2#xL, q1#xL, q2#xL, x#xL]
    :     +- Project [q1#xL, q2#xL, coalesce(outer(q2#xL), cast(42 as bigint)) AS x#xL]
    :        +- SubqueryAlias b
    :           +- SubqueryAlias int8_tbl
-   :              +- View (`INT8_TBL`, [q1#xL,q2#xL])
+   :              +- View (`INT8_TBL`, [q1#xL, q2#xL])
    :                 +- Project [cast(q1#xL as bigint) AS q1#xL, cast(q2#xL as bigint) AS q2#xL]
    :                    +- Project [q1#xL, q2#xL]
    :                       +- SubqueryAlias v
@@ -3678,7 +3678,7 @@ Project [q1#xL, q2#xL, q1#xL, q2#xL, x#xL]
    :                             +- LocalRelation [col1#xL, col2#xL]
    +- SubqueryAlias a
       +- SubqueryAlias int8_tbl
-         +- View (`INT8_TBL`, [q1#xL,q2#xL])
+         +- View (`INT8_TBL`, [q1#xL, q2#xL])
             +- Project [cast(q1#xL as bigint) AS q1#xL, cast(q2#xL as bigint) AS q2#xL]
                +- Project [q1#xL, q2#xL]
                   +- SubqueryAlias v
@@ -3724,7 +3724,7 @@ Project [q1#xL, q2#xL, bq1#xL, cq1#xL, least(outer(a.q1), q1, q1)#xL]
    :        +- Join Cross
    :           :- SubqueryAlias b
    :           :  +- SubqueryAlias int8_tbl
-   :           :     +- View (`INT8_TBL`, [q1#xL,q2#xL])
+   :           :     +- View (`INT8_TBL`, [q1#xL, q2#xL])
    :           :        +- Project [cast(q1#xL as bigint) AS q1#xL, cast(q2#xL as bigint) AS q2#xL]
    :           :           +- Project [q1#xL, q2#xL]
    :           :              +- SubqueryAlias v
@@ -3732,7 +3732,7 @@ Project [q1#xL, q2#xL, bq1#xL, cq1#xL, least(outer(a.q1), q1, q1)#xL]
    :           :                    +- LocalRelation [col1#xL, col2#xL]
    :           +- SubqueryAlias c
    :              +- SubqueryAlias int8_tbl
-   :                 +- View (`INT8_TBL`, [q1#xL,q2#xL])
+   :                 +- View (`INT8_TBL`, [q1#xL, q2#xL])
    :                    +- Project [cast(q1#xL as bigint) AS q1#xL, cast(q2#xL as bigint) AS q2#xL]
    :                       +- Project [q1#xL, q2#xL]
    :                          +- SubqueryAlias v
@@ -3740,7 +3740,7 @@ Project [q1#xL, q2#xL, bq1#xL, cq1#xL, least(outer(a.q1), q1, q1)#xL]
    :                                +- LocalRelation [col1#xL, col2#xL]
    +- SubqueryAlias a
       +- SubqueryAlias int8_tbl
-         +- View (`INT8_TBL`, [q1#xL,q2#xL])
+         +- View (`INT8_TBL`, [q1#xL, q2#xL])
             +- Project [cast(q1#xL as bigint) AS q1#xL, cast(q2#xL as bigint) AS q2#xL]
                +- Project [q1#xL, q2#xL]
                   +- SubqueryAlias v

@@ -26,21 +26,15 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.{Expression, NullOrdering, SortDirection}
+import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.jdbc.MsSqlServerDialect.{GEOGRAPHY, GEOMETRY}
 import org.apache.spark.sql.types._
 
 
-private object MsSqlServerDialect extends JdbcDialect {
-
-  // Special JDBC types in Microsoft SQL Server.
-  // https://github.com/microsoft/mssql-jdbc/blob/v9.4.1/src/main/java/microsoft/sql/Types.java
-  private object SpecificTypes {
-    val GEOMETRY = -157
-    val GEOGRAPHY = -158
-  }
-
+private case class MsSqlServerDialect() extends JdbcDialect {
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:sqlserver")
 
@@ -86,6 +80,20 @@ private object MsSqlServerDialect extends JdbcDialect {
       case "STDDEV_SAMP" => "STDEV"
       case _ => super.dialectFunctionName(funcName)
     }
+
+    override def build(expr: Expression): String = {
+      // MsSqlServer does not support boolean comparison using standard comparison operators
+      // We shouldn't propagate these queries to MsSqlServer
+      expr match {
+        case e: Predicate => e.name() match {
+          case "=" | "<>" | "<=>" | "<" | "<=" | ">" | ">="
+              if e.children().exists(_.isInstanceOf[Predicate]) =>
+            super.visitUnexpectedExpr(expr)
+          case _ => super.build(expr)
+        }
+        case _ => super.build(expr)
+      }
+    }
   }
 
   override def compileExpression(expr: Expression): Option[String] = {
@@ -113,7 +121,7 @@ private object MsSqlServerDialect extends JdbcDialect {
           // Reference doc: https://learn.microsoft.com/en-us/sql/t-sql/data-types
           case java.sql.Types.SMALLINT | java.sql.Types.TINYINT => Some(ShortType)
           case java.sql.Types.REAL => Some(FloatType)
-          case SpecificTypes.GEOMETRY | SpecificTypes.GEOGRAPHY => Some(BinaryType)
+          case GEOMETRY | GEOGRAPHY => Some(BinaryType)
           case _ => None
         }
       }
@@ -190,14 +198,22 @@ private object MsSqlServerDialect extends JdbcDialect {
     if (limit > 0) s"TOP ($limit)" else ""
   }
 
-  override def classifyException(message: String, e: Throwable): AnalysisException = {
+  override def classifyException(
+      e: Throwable,
+      errorClass: String,
+      messageParameters: Map[String, String],
+      description: String): AnalysisException = {
     e match {
       case sqlException: SQLException =>
         sqlException.getErrorCode match {
-          case 3729 => throw new NonEmptyNamespaceException(message, cause = Some(e))
-          case _ => super.classifyException(message, e)
+          case 3729 =>
+            throw NonEmptyNamespaceException(
+              namespace = messageParameters.get("namespace").toArray,
+              details = sqlException.getMessage,
+              cause = Some(e))
+          case _ => super.classifyException(e, errorClass, messageParameters, description)
         }
-      case _ => super.classifyException(message, e)
+      case _ => super.classifyException(e, errorClass, messageParameters, description)
     }
   }
 
@@ -217,4 +233,11 @@ private object MsSqlServerDialect extends JdbcDialect {
     new MsSqlServerSQLQueryBuilder(this, options)
 
   override def supportsLimit: Boolean = true
+}
+
+private object MsSqlServerDialect {
+  // Special JDBC types in Microsoft SQL Server.
+  // https://github.com/microsoft/mssql-jdbc/blob/v9.4.1/src/main/java/microsoft/sql/Types.java
+  final val GEOMETRY = -157
+  final val GEOGRAPHY = -158
 }
