@@ -23,13 +23,14 @@ import java.util.Locale
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.connector.expressions.Expression
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.jdbc.OracleDialect._
 import org.apache.spark.sql.types._
 
 
-private case class OracleDialect() extends JdbcDialect {
+private case class OracleDialect() extends JdbcDialect with SQLConfHelper {
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:oracle")
 
@@ -120,6 +121,8 @@ private case class OracleDialect() extends JdbcDialect {
     case ByteType => Some(JdbcType("NUMBER(3)", java.sql.Types.SMALLINT))
     case ShortType => Some(JdbcType("NUMBER(5)", java.sql.Types.SMALLINT))
     case StringType => Some(JdbcType("VARCHAR2(255)", java.sql.Types.VARCHAR))
+    case TimestampType if !conf.legacyOracleTimestampMappingEnabled =>
+      Some(JdbcType("TIMESTAMP WITH LOCAL TIME ZONE", TIMESTAMP_LTZ))
     case _ => None
   }
 
