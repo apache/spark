@@ -134,9 +134,9 @@ class MapStateImplWithTTL[K, V](
 
   /** Remove this state. */
   override def clear(): Unit = {
-    keys().foreach { itr =>
-      removeKey(itr)
-    }
+    store.removeColFamilyIfExists(stateName)
+    initialize()
+    clearTTLState()
   }
 
   /**

@@ -98,6 +98,16 @@ abstract class SingleKeyTTLStateImpl(
   store.createColFamilyIfAbsent(ttlColumnFamilyName, TTL_KEY_ROW_SCHEMA, TTL_VALUE_ROW_SCHEMA,
     RangeKeyScanStateEncoderSpec(TTL_KEY_ROW_SCHEMA, Seq(0)), isInternal = true)
 
+  def clearTTLState(): Unit = {
+    val iterator = store.iterator(ttlColumnFamilyName)
+    iterator.takeWhile { kv =>
+      val expirationMs = kv.key.getLong(0)
+      StateTTL.isExpired(expirationMs, ttlExpirationMs)
+    }.foreach { kv =>
+      store.remove(kv.key, ttlColumnFamilyName)
+    }
+  }
+
   def upsertTTLForStateKey(
       expirationMs: Long,
       groupingKey: Array[Byte]): Unit = {
@@ -202,6 +212,16 @@ abstract class CompositeKeyTTLStateImpl(
   store.createColFamilyIfAbsent(ttlColumnFamilyName, TTL_COMPOSITE_KEY_ROW_SCHEMA,
     TTL_VALUE_ROW_SCHEMA, RangeKeyScanStateEncoderSpec(TTL_COMPOSITE_KEY_ROW_SCHEMA,
       Seq(0)), isInternal = true)
+
+  def clearTTLState(): Unit = {
+    val iterator = store.iterator(ttlColumnFamilyName)
+    iterator.takeWhile { kv =>
+      val expirationMs = kv.key.getLong(0)
+      StateTTL.isExpired(expirationMs, ttlExpirationMs)
+    }.foreach { kv =>
+      store.remove(kv.key, ttlColumnFamilyName)
+    }
+  }
 
   def upsertTTLForStateKey(
     expirationMs: Long,
