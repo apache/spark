@@ -137,6 +137,16 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
     }
   }
 
+  /**
+   * Atomically submits a response and marks the stream as completed.
+   */
+  def onNextComplete(r: T): Unit = responseLock.synchronized {
+    if (!tryOnNext(r)) {
+      throw new IllegalStateException("Stream onNext can't be called after stream completed")
+    }
+    onCompleted()
+  }
+
   def onError(t: Throwable): Unit = responseLock.synchronized {
     if (finalProducedIndex.nonEmpty) {
       throw new IllegalStateException("Stream onError can't be called after stream completed")
