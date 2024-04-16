@@ -941,7 +941,14 @@ object FoldablePropagation extends Rule[LogicalPlan] {
         val newFoldableMap = collectFoldables(newProject.projectList)
         (newProject, newFoldableMap)
 
-      case a: Aggregate =>
+      // FoldablePropagation rule can produce incorrect optimized plan for streaming queries.
+      // This is because the optimizer can replace the grouping expressions, or join column
+      // with a literal value if the grouping key is constant for the micro-batch. However,
+      // as Streaming queries also read from the StateStore, this optimization also
+      // overwrites any keys read from State Store. We need to disable this optimization
+      // until we can make optimizer aware of Streaming state store. The State Store nodes
+      // are currently added in the Physical plan.
+      case a: Aggregate if !a.isStreaming =>
         val (newChild, foldableMap) = propagateFoldables(a.child)
         val newAggregate =
           replaceFoldable(a.withNewChildren(Seq(newChild)).asInstanceOf[Aggregate], foldableMap)
@@ -978,7 +985,14 @@ object FoldablePropagation extends Rule[LogicalPlan] {
       // propagating the foldable expressions.
       // TODO(cloud-fan): It seems more reasonable to use new attributes as the output attributes
       // of outer join.
-      case j: Join =>
+      // FoldablePropagation rule can produce incorrect optimized plan for streaming queries.
+      // This is because the optimizer can replace the grouping expressions, or join column
+      // with a literal value if the grouping key is constant for the micro-batch. However,
+      // as Streaming queries also read from the StateStore, this optimization also
+      // overwrites any keys read from State Store. We need to disable this optimization
+      // until we can make optimizer aware of Streaming state store. The State Store nodes
+      // are currently added in the Physical plan.
+      case j: Join if !j.left.isStreaming || !j.right.isStreaming =>
         val (newChildren, foldableMaps) = j.children.map(propagateFoldables).unzip
         val foldableMap = AttributeMap(
           foldableMaps.foldLeft(Iterable.empty[(Attribute, Alias)])(_ ++ _.baseMap.values))
