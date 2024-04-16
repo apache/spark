@@ -98,8 +98,7 @@ class ValueStateTTLProcessor(ttlConfig: TTLConfig)
 
   override def init(
       outputMode: OutputMode,
-      timeoutMode: TimeoutMode,
-      ttlMode: TTLMode): Unit = {
+      timeMode: TimeMode): Unit = {
     _valueState = getHandle
       .getValueState("valueState", Encoders.scalaInt, ttlConfig)
       .asInstanceOf[ValueStateImplWithTTL[Int]]
@@ -135,8 +134,7 @@ case class MultipleValueStatesTTLProcessor(
 
   override def init(
       outputMode: OutputMode,
-      timeoutMode: TimeoutMode,
-      ttlMode: TTLMode): Unit = {
+      timeMode: TimeMode): Unit = {
     _valueStateWithTTL = getHandle
       .getValueState("valueState", Encoders.scalaInt, ttlConfig)
       .asInstanceOf[ValueStateImplWithTTL[Int]]
@@ -191,8 +189,7 @@ class TransformWithValueStateTTLSuite
           .groupByKey(x => x.key)
           .transformWithState(
             new ValueStateTTLProcessor(ttlConfig),
-            TimeoutMode.NoTimeouts(),
-            TTLMode.ProcessingTimeTTL(),
+            TimeMode.ProcessingTime(),
             OutputMode.Append())
 
         val clock = new StreamManualClock
@@ -243,7 +240,17 @@ class TransformWithValueStateTTLSuite
           CheckNewAnswer(),
           AddData(inputStream, InputEvent("k1", "get_values_in_ttl_state", -1)),
           AdvanceManualClock(1 * 1000),
-          CheckNewAnswer()
+          CheckNewAnswer(),
+          Execute { q =>
+            // Filter for idle progress events and then verify the custom metrics
+            // for stateful operator
+            val progData = q.recentProgress.filter(prog => prog.stateOperators.size > 0)
+            assert(progData.filter(prog =>
+              prog.stateOperators(0).customMetrics.get("numValueStateWithTTLVars") > 0).size > 0)
+            assert(progData.filter(prog =>
+              prog.stateOperators(0).customMetrics
+                .get("numValuesRemovedDueToTTLExpiry") > 0).size > 0)
+          }
         )
       }
     }
@@ -258,8 +265,7 @@ class TransformWithValueStateTTLSuite
         .groupByKey(x => x.key)
         .transformWithState(
           new ValueStateTTLProcessor(ttlConfig),
-          TimeoutMode.NoTimeouts(),
-          TTLMode.ProcessingTimeTTL(),
+          TimeMode.ProcessingTime(),
           OutputMode.Append())
 
       val clock = new StreamManualClock
@@ -321,8 +327,7 @@ class TransformWithValueStateTTLSuite
         .groupByKey(x => x.key)
         .transformWithState(
           new ValueStateTTLProcessor(ttlConfig),
-          TimeoutMode.NoTimeouts(),
-          TTLMode.ProcessingTimeTTL(),
+          TimeMode.ProcessingTime(),
           OutputMode.Append())
 
       val clock = new StreamManualClock
@@ -375,8 +380,7 @@ class TransformWithValueStateTTLSuite
         .groupByKey(x => x.key)
         .transformWithState(
           MultipleValueStatesTTLProcessor(ttlKey, noTtlKey, ttlConfig),
-          TimeoutMode.NoTimeouts(),
-          TTLMode.ProcessingTimeTTL(),
+          TimeMode.ProcessingTime(),
           OutputMode.Append())
 
       val clock = new StreamManualClock
@@ -430,8 +434,7 @@ class TransformWithValueStateTTLSuite
         .groupByKey(x => x.key)
         .transformWithState(
           new ValueStateTTLProcessor(ttlConfig),
-          TimeoutMode.NoTimeouts(),
-          TTLMode.ProcessingTimeTTL(),
+          TimeMode.ProcessingTime(),
           OutputMode.Append())
 
       val clock = new StreamManualClock

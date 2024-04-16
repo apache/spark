@@ -120,7 +120,7 @@ trait StateStore extends ReadStateStore {
   /**
    * Remove column family with given name, if present.
    */
-  def removeColFamilyIfExists(colFamilyName: String): Unit
+  def removeColFamilyIfExists(colFamilyName: String): Boolean
 
   /**
    * Create column family with given name, if absent.
