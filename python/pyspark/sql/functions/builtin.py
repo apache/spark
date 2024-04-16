@@ -10988,15 +10988,53 @@ def split(
 
     Examples
     --------
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([('oneAtwoBthreeC',)], ['s',])
-    >>> df.select(split(df.s, '[ABC]', 2).alias('s')).collect()
-    [Row(s=['one', 'twoBthreeC'])]
-    >>> df.select(split(df.s, '[ABC]', -1).alias('s')).collect()
-    [Row(s=['one', 'two', 'three', ''])]
+    >>> df.select(sf.split(df.s, '[ABC]', 2).alias('s')).show()
+    +-----------------+
+    |                s|
+    +-----------------+
+    |[one, twoBthreeC]|
+    +-----------------+
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('oneAtwoBthreeC',)], ['s',])
+    >>> df.select(sf.split(df.s, '[ABC]', -1).alias('s')).show()
+    +-------------------+
+    |                  s|
+    +-------------------+
+    |[one, two, three, ]|
+    +-------------------+
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [('oneAtwoBthreeC', '[ABC]'), ('1A2B3C', '[1-9]+'), ('aa2bb3cc4', '[1-9]+')],
+    ...     ['s', 'pattern']
+    ... )
+    >>> df.select(sf.split(df.s, df.pattern).alias('s')).show()
+    +-------------------+
+    |                  s|
+    +-------------------+
+    |[one, two, three, ]|
+    |        [, A, B, C]|
+    |     [aa, bb, cc, ]|
+    +-------------------+
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [('oneAtwoBthreeC', '[ABC]', 2), ('1A2B3C', '[1-9]+', -1)],
+    ...     ['s', 'pattern', 'expected_parts']
+    ... )
+    >>> df.select(sf.split(df.s, df.pattern, df.expected_parts).alias('s')).show()
+    +-----------------+
+    |                s|
+    +-----------------+
+    |[one, twoBthreeC]|
+    |      [, A, B, C]|
+    +-----------------+
     """
-    pattern = pattern if isinstance(pattern, Column) else lit(pattern)
     limit = lit(limit) if isinstance(limit, int) else limit
-    return _invoke_function_over_columns("split", str, pattern, limit)
+    return _invoke_function_over_columns("split", str, lit(pattern), limit)
 
 
 @_try_remote_functions
