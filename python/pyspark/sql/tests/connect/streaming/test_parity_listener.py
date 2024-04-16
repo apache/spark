@@ -213,9 +213,9 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
 
         try:
             with self.table(
-                    "listener_start_events",
-                    "listener_progress_events",
-                    "listener_terminated_events",
+                "listener_start_events",
+                "listener_progress_events",
+                "listener_terminated_events",
             ):
                 self.spark.streams.addListener(test_listener)
 
@@ -237,11 +237,13 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
                 self.assertTrue(q.isActive)
                 # ensure at least one batch is ran
                 while q.lastProgress is None or q.lastProgress["batchId"] == 0:
-                    time.sleep(0.5)
+                    q.awaitTermination(0.5)
                 q.stop()
                 self.assertFalse(q.isActive)
 
-                time.sleep(60)  # Sleep to make sure listener_terminated_events is written successfully
+                time.sleep(
+                    60
+                )  # Sleep to make sure listener_terminated_events is written successfully
 
                 start_event = pyspark.cloudpickle.loads(
                     self.spark.read.table("listener_start_events").collect()[0][0]
@@ -260,6 +262,8 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
                 self.check_terminated_event(terminated_event)
 
         finally:
+            self.spark.streams.removeListener(test_listener)
+            # Remove again to verify this won't throw any error
             self.spark.streams.removeListener(test_listener)
 
 
