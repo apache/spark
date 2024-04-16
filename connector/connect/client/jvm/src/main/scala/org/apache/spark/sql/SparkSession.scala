@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BoxedLongEncoder
 import org.apache.spark.sql.connect.client.{ClassFinder, SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
+import org.apache.spark.sql.connect.common.ProtoUtils
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.{CatalogImpl, SqlApiConf}
 import org.apache.spark.sql.streaming.DataStreamReader
@@ -586,9 +587,13 @@ class SparkSession private[sql] (
 
   @DeveloperApi
   def execute(extension: Array[Byte]): Unit = {
+    val any = ProtoUtils.parseWithRecursionLimit(
+      extension,
+      com.google.protobuf.Any.parser(),
+      recursionLimit = 4096)
     val command = proto.Command
       .newBuilder()
-      .setExtension(com.google.protobuf.Any.parseFrom(extension))
+      .setExtension(any)
       .build()
     execute(command)
   }
