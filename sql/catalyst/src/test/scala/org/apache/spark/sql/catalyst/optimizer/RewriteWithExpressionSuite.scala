@@ -338,7 +338,7 @@ class RewriteWithExpressionSuite extends PlanTest {
     }
     val plan = testRelation.groupBy(a)(
       (a - 1).as("col1"),
-      expr.as("col2"),
+      expr.as("col2")
     )
     val aggExprName = "_aggregateexpression"
     comparePlans(
