@@ -54,6 +54,8 @@ except ImportError:
 
 from pyspark import SparkConf
 from pyspark.errors import PySparkAssertionError, PySparkException
+from pyspark.errors.exceptions.captured import CapturedException
+from pyspark.errors.exceptions.base import QueryContextType
 from pyspark.find_spark_home import _find_spark_home
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql import Row
@@ -284,7 +286,14 @@ class PySparkErrorTestUtils:
         exception: PySparkException,
         error_class: str,
         message_parameters: Optional[Dict[str, str]] = None,
+        query_context_type: Optional[QueryContextType] = None,
+        pyspark_fragment: Optional[str] = None,
     ):
+        query_context = exception.getQueryContext()
+        assert bool(query_context) == (query_context_type is not None), (
+            "`query_context_type` is required when QueryContext exists. "
+            f"QueryContext: {query_context}."
+        )
         # Test if given error is an instance of PySparkException.
         self.assertIsInstance(
             exception,
@@ -305,6 +314,27 @@ class PySparkErrorTestUtils:
         self.assertEqual(
             expected, actual, f"Expected message parameters was '{expected}', got '{actual}'"
         )
+
+        # Test query context
+        if query_context:
+            expected = query_context_type
+            actual_contexts = exception.getQueryContext()
+            for actual_context in actual_contexts:
+                actual = actual_context.contextType()
+                self.assertEqual(
+                    expected, actual, f"Expected QueryContext was '{expected}', got '{actual}'"
+                )
+                if actual == QueryContextType.DataFrame:
+                    assert (
+                        pyspark_fragment is not None
+                    ), "`pyspark_fragment` is required when QueryContextType is DataFrame."
+                    expected = pyspark_fragment
+                    actual = actual_context.pysparkFragment()
+                    self.assertEqual(
+                        expected,
+                        actual,
+                        f"Expected PySpark fragment was '{expected}', got '{actual}'",
+                    )
 
 
 def assertSchemaEqual(

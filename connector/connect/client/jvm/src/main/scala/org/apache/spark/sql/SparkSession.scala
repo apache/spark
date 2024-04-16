@@ -567,8 +567,9 @@ class SparkSession private[sql] (
 
   private[sql] def execute(command: proto.Command): Seq[ExecutePlanResponse] = {
     val plan = proto.Plan.newBuilder().setCommand(command).build()
-    // .toSeq forces that the iterator is consumed and closed
-    client.execute(plan).toSeq
+    // .toSeq forces that the iterator is consumed and closed. On top, ignore all
+    // progress messages.
+    client.execute(plan).filter(!_.hasExecutionProgress).toSeq
   }
 
   private[sql] def registerUdf(udf: proto.CommonInlineUserDefinedFunction): Unit = {

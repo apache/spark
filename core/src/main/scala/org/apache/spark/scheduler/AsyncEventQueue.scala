@@ -143,10 +143,15 @@ private class AsyncEventQueue(
       eventCount.incrementAndGet()
       eventQueue.put(POISON_PILL)
     }
-    // this thread might be trying to stop itself as part of error handling -- we can't join
+    // This thread might be trying to stop itself as part of error handling -- we can't join
     // in that case.
     if (Thread.currentThread() != dispatchThread) {
-      dispatchThread.join()
+      // If users don't want to wait for the dispatch to end until all events are drained,
+      // they can control the waiting time by themselves.
+      // By default, the `waitingTimeMs` is set to 0,
+      // which means it will wait until all events are drained.
+      val exitTimeoutMs = conf.get(LISTENER_BUS_EXIT_TIMEOUT)
+      dispatchThread.join(exitTimeoutMs)
     }
   }
 

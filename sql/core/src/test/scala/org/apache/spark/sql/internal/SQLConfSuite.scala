@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.internal
 
-import java.util.TimeZone
+import java.util.{Locale, TimeZone}
 
 import org.apache.hadoop.fs.Path
 import org.apache.logging.log4j.Level
@@ -503,6 +503,24 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
          |Non internal legacy SQL configs:
          |${nonInternalLegacyConfigs.map(_._1).mkString("\n")}
          |""".stripMargin)
+  }
+
+  test("SPARK-47765: set collation") {
+    Seq("UNICODE", "UNICODE_CI", "utf8_binary_lcase", "utf8_binary").foreach { collation =>
+      sql(s"set collation $collation")
+      assert(spark.conf.get(SQLConf.DEFAULT_COLLATION) === collation.toUpperCase(Locale.ROOT))
+    }
+
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        sql(s"SET COLLATION unicode_c").collect()
+      },
+      errorClass = "INVALID_CONF_VALUE.DEFAULT_COLLATION",
+      parameters = Map(
+        "confValue" -> "UNICODE_C",
+        "confName" -> "spark.sql.session.collation.default",
+        "proposal" -> "UNICODE_CI"
+      ))
   }
 
   test("SPARK-43028: config not found error") {
