@@ -24,6 +24,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, DataType, IntegerType, StringType}
 
+// scalastyle:off nonascii
 class CollationStringExpressionsSuite
   extends QueryTest
   with SharedSparkSession {
@@ -307,9 +308,90 @@ class CollationStringExpressionsSuite
     })
   }
 
+  test("Overlay string expression with collation") {
+    case class OverlayTestCase(q: String, c: String, r: String)
+    val testCases = Seq(
+      OverlayTestCase("select overlay('hello' collate utf8_binary, ' world', 6, 0)",
+        "UTF8_BINARY", "hello world"),
+      OverlayTestCase("select overlay('nice' collate utf8_binary_lcase, ' day', 5, 0)",
+        "UTF8_BINARY_LCASE", "nice day"),
+      OverlayTestCase("select overlay('A' collate unicode, 'B', 1, 1)", "UNICODE", "B"),
+      OverlayTestCase("select overlay('!' collate unicode_ci, '!!!', 1, 1)",
+        "UNICODE_CI", "!!!")
+    )
+    testCases.foreach(t => {
+      // Result & data type
+      checkAnswer(sql(t.q), Row(t.r))
+      assert(sql(t.q).schema.fields.head.dataType.sameType(StringType(t.c)))
+    })
+  }
+
+  test("FormatString & SoundEx string expressions with collation") {
+    case class FormatStrSoundExTestCase(q: String, c: String, r: String)
+    val testCases = Seq(
+      FormatStrSoundExTestCase("select format_string('%s%s' collate utf8_binary, 'a', 'b')",
+        "UTF8_BINARY", "ab"),
+      FormatStrSoundExTestCase("select format_string('%d' collate utf8_binary_lcase, 123)",
+        "UTF8_BINARY_LCASE", "123"),
+      FormatStrSoundExTestCase("select format_string('%s%d' collate unicode, 'A', 0)",
+        "UNICODE", "A0"),
+      FormatStrSoundExTestCase("select format_string('%s%s' collate unicode_ci, 'Hello', '!!!')",
+        "UNICODE_CI", "Hello!!!"),
+      FormatStrSoundExTestCase("select soundex('A' collate utf8_binary)", "UTF8_BINARY", "A000"),
+      FormatStrSoundExTestCase("select soundex('!' collate utf8_binary_lcase)",
+        "UTF8_BINARY_LCASE", "!"),
+      FormatStrSoundExTestCase("select soundex('$' collate unicode)", "UNICODE", "$"),
+      FormatStrSoundExTestCase("select soundex('X' collate unicode_ci)", "UNICODE_CI", "X000")
+    )
+    testCases.foreach(t => {
+      withSQLConf(SQLConf.DEFAULT_COLLATION.key -> t.c) {
+        // Result & data type
+        checkAnswer(sql(t.q), Row(t.r))
+        assert(sql(t.q).schema.fields.head.dataType.sameType(StringType(t.c)))
+      }
+    })
+  }
+
+  test("Length, BitLength & OctetLength string expressions with collations") {
+    case class LenTestCase(q: String, r: Int)
+    val testCases = Seq(
+      LenTestCase("select length('hello' collate utf8_binary)", 5),
+      LenTestCase("select length('world' collate utf8_binary_lcase)", 5),
+      LenTestCase("select length('ﬀ' collate unicode)", 1),
+      LenTestCase("select bit_length('hello' collate unicode_ci)", 40),
+      LenTestCase("select bit_length('world' collate utf8_binary)", 40),
+      LenTestCase("select bit_length('ﬀ' collate utf8_binary_lcase)", 24),
+      LenTestCase("select octet_length('hello' collate unicode)", 5),
+      LenTestCase("select octet_length('world' collate unicode_ci)", 5),
+      LenTestCase("select octet_length('ﬀ' collate utf8_binary)", 3)
+    )
+    testCases.foreach(t => {
+      // Result & data type
+      checkAnswer(sql(t.q), Row(t.r))
+      assert(sql(t.q).schema.fields.head.dataType.sameType(IntegerType))
+    })
+  }
+
+  test("Luhncheck string expression with collation") {
+    case class LuhncheckTestCase(q: String, c: String, r: Boolean)
+    val testCases = Seq(
+      LuhncheckTestCase("123", "UTF8_BINARY", r = false),
+      LuhncheckTestCase("000", "UTF8_BINARY_LCASE", r = true),
+      LuhncheckTestCase("111", "UNICODE", r = false),
+      LuhncheckTestCase("222", "UNICODE_CI", r = false)
+    )
+    testCases.foreach(t => {
+      val query = s"select luhn_check(${t.q})"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.r))
+      assert(sql(query).schema.fields.head.dataType.sameType(BooleanType))
+    })
+  }
+
   // TODO: Add more tests for other string expressions
 
 }
+// scalastyle:on nonascii
 
 class CollationStringExpressionsANSISuite extends CollationStringExpressionsSuite {
   override protected def sparkConf: SparkConf =
