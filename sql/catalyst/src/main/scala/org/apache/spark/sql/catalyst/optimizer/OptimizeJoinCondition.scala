@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{JOIN, OR}
 object OptimizeJoinCondition extends Rule[LogicalPlan] with PredicateHelper {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(JOIN), ruleId) {
-    case Join(left, right, joinType, condition, hint) if condition.nonEmpty =>
+    case j @ Join(_, _, _, condition, _) if condition.nonEmpty =>
       val newCondition = condition.map(_.transformWithPruning(_.containsPattern(OR), ruleId) {
         case Or(EqualTo(l, r), And(IsNull(c1), IsNull(c2)))
           if (l.semanticEquals(c1) && r.semanticEquals(c2))
@@ -40,6 +40,6 @@ object OptimizeJoinCondition extends Rule[LogicalPlan] with PredicateHelper {
             || (l.semanticEquals(c2) && r.semanticEquals(c1)) =>
           EqualNullSafe(l, r)
       })
-      Join(left, right, joinType, newCondition, hint)
+      j.copy(condition = newCondition)
   }
 }
