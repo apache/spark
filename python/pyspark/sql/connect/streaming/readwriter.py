@@ -19,6 +19,7 @@ from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
 
+import json
 import sys
 from typing import cast, overload, Callable, Dict, List, Optional, TYPE_CHECKING, Union
 
@@ -31,6 +32,7 @@ from pyspark.sql.streaming.readwriter import (
     DataStreamReader as PySparkDataStreamReader,
     DataStreamWriter as PySparkDataStreamWriter,
 )
+from pyspark.sql.streaming.listener import QueryStartedEvent
 from pyspark.sql.connect.utils import get_python_ver
 from pyspark.sql.types import Row, StructType
 from pyspark.errors import PySparkTypeError, PySparkValueError
@@ -535,12 +537,20 @@ class DataStreamWriter:
         start_result = cast(
             pb2.WriteStreamOperationStartResult, properties["write_stream_operation_start_result"]
         )
-        return StreamingQuery(
+        query = StreamingQuery(
             session=self._session,
             queryId=start_result.query_id.id,
             runId=start_result.query_id.run_id,
             name=start_result.name,
         )
+
+        if start_result.HasField("query_started_event_json"):
+            start_event = QueryStartedEvent.fromJson(
+                json.loads(start_result.query_started_event_json)
+            )
+            self._session.streams._sqlb.post_to_all(start_event)
+
+        return query
 
     def start(
         self,

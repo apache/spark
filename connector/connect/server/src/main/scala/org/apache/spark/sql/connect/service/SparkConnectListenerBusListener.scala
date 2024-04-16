@@ -51,7 +51,11 @@ private[sql] class ServerSideListenerHolder(val sessionHolder: SessionHolder) {
   val streamingQueryStartedEventCache
       : ConcurrentMap[String, StreamingQueryListener.QueryStartedEvent] = new ConcurrentHashMap()
 
-  def isServerSideListenerRegistered: Boolean = streamingQueryServerSideListener.isDefined
+  val lock = new Object()
+
+  def isServerSideListenerRegistered: Boolean = lock.synchronized {
+    streamingQueryServerSideListener.isDefined
+  }
 
   /**
    * The initialization of the server side listener and related resources. This method is called
@@ -62,7 +66,7 @@ private[sql] class ServerSideListenerHolder(val sessionHolder: SessionHolder) {
    * @param responseObserver
    *   the responseObserver created from the first long running executeThread.
    */
-  def init(responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
+  def init(responseObserver: StreamObserver[ExecutePlanResponse]): Unit = lock.synchronized {
     val serverListener = new SparkConnectListenerBusListener(this, responseObserver)
     sessionHolder.session.streams.addListener(serverListener)
     streamingQueryServerSideListener = Some(serverListener)
@@ -76,7 +80,7 @@ private[sql] class ServerSideListenerHolder(val sessionHolder: SessionHolder) {
    * the latch, so the long-running thread can proceed to send back the final ResultComplete
    * response.
    */
-  def cleanUp(): Unit = {
+  def cleanUp(): Unit = lock.synchronized {
     streamingQueryServerSideListener.foreach { listener =>
       sessionHolder.session.streams.removeListener(listener)
     }
@@ -106,18 +110,18 @@ private[sql] class SparkConnectListenerBusListener(
   // all related sources are cleaned up, and the long-running thread will proceed to send
   // the final ResultComplete response.
   private def send(eventJson: String, eventType: StreamingQueryEventType): Unit = {
-    val event = StreamingQueryListenerEvent
-      .newBuilder()
-      .setEventJson(eventJson)
-      .setEventType(eventType)
-      .build()
-
-    val respBuilder = StreamingQueryListenerEventsResult.newBuilder()
-    val eventResult = respBuilder
-      .addAllEvents(Array[StreamingQueryListenerEvent](event).toImmutableArraySeq.asJava)
-      .build()
-
     try {
+      val event = StreamingQueryListenerEvent
+        .newBuilder()
+        .setEventJson(eventJson)
+        .setEventType(eventType)
+        .build()
+
+      val respBuilder = StreamingQueryListenerEventsResult.newBuilder()
+      val eventResult = respBuilder
+        .addAllEvents(Array[StreamingQueryListenerEvent](event).toImmutableArraySeq.asJava)
+        .build()
+
       responseObserver.onNext(
         ExecutePlanResponse
           .newBuilder()
@@ -143,14 +147,24 @@ private[sql] class SparkConnectListenerBusListener(
   }
 
   override def onQueryProgress(event: StreamingQueryListener.QueryProgressEvent): Unit = {
+    logDebug(
+      s"[SessionId: ${sessionHolder.sessionId}][UserId: ${sessionHolder.userId}] " +
+        s"Sending QueryProgressEvent to client, id: ${event.progress.id}" +
+        s" runId: ${event.progress.runId}, batch: ${event.progress.batchId}.")
     send(event.json, StreamingQueryEventType.QUERY_PROGRESS_EVENT)
   }
 
   override def onQueryTerminated(event: StreamingQueryListener.QueryTerminatedEvent): Unit = {
+    logDebug(
+      s"[SessionId: ${sessionHolder.sessionId}][UserId: ${sessionHolder.userId}] " +
+        s"Sending QueryTerminatedEvent to client, id: ${event.id} runId: ${event.runId}.")
     send(event.json, StreamingQueryEventType.QUERY_TERMINATED_EVENT)
   }
 
   override def onQueryIdle(event: StreamingQueryListener.QueryIdleEvent): Unit = {
+    logDebug(
+      s"[SessionId: ${sessionHolder.sessionId}][UserId: ${sessionHolder.userId}] " +
+        s"Sending QueryIdleEvent to client, id: ${event.id} runId: ${event.runId}.")
     send(event.json, StreamingQueryEventType.QUERY_IDLE_EVENT)
   }
 }
