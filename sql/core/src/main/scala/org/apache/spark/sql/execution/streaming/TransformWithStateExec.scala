@@ -28,10 +28,10 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.Distribution
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.StateStoreAwareZipPartitionsHelper
+import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema.{KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA}
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.{OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, TimeoutMode}
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.streaming._
 import org.apache.spark.util.{CompletionIterator, SerializableConfiguration, Utils}
 
 /**
@@ -42,7 +42,7 @@ import org.apache.spark.util.{CompletionIterator, SerializableConfiguration, Uti
  * @param groupingAttributes used to group the data
  * @param dataAttributes used to read the data
  * @param statefulProcessor processor methods called on underlying data
- * @param timeoutMode defines the timeout mode
+ * @param timeMode The time mode semantics of the stateful processor for timers and TTL.
  * @param outputMode defines the output mode for the statefulProcessor
  * @param keyEncoder expression encoder for the key type
  * @param outputObjAttr Defines the output object
@@ -58,7 +58,7 @@ case class TransformWithStateExec(
     groupingAttributes: Seq[Attribute],
     dataAttributes: Seq[Attribute],
     statefulProcessor: StatefulProcessor[Any, Any, Any],
-    timeoutMode: TimeoutMode,
+    timeMode: TimeMode,
     outputMode: OutputMode,
     keyEncoder: ExpressionEncoder[Any],
     outputObjAttr: Attribute,
@@ -78,17 +78,15 @@ case class TransformWithStateExec(
   override def shortName: String = "transformWithStateExec"
 
   override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
-    timeoutMode match {
-      // TODO: check if we can return true only if actual timers are registered
+    timeMode match {
       case ProcessingTime =>
+        // TODO: check if we can return true only if actual timers are registered, or there is
+        // expired state
         true
-
       case EventTime =>
         eventTimeWatermarkForEviction.isDefined &&
           newInputWatermark > eventTimeWatermarkForEviction.get
-
-      case _ =>
-        false
+      case _ => false
     }
   }
 
@@ -101,10 +99,6 @@ case class TransformWithStateExec(
     copy(child = newLeft, initialState = newRight)
 
   override def keyExpressions: Seq[Attribute] = groupingAttributes
-
-  protected val schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
-
-  protected val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
 
   /**
    * Distribute by grouping attributes - We need the underlying data and the initial state data
@@ -205,14 +199,16 @@ case class TransformWithStateExec(
   }
 
   private def processTimers(
-      timeoutMode: TimeoutMode,
+      timeMode: TimeMode,
       processorHandle: StatefulProcessorHandleImpl): Iterator[InternalRow] = {
-    timeoutMode match {
+    val numExpiredTimers = longMetric("numExpiredTimers")
+    timeMode match {
       case ProcessingTime =>
         assert(batchTimestampMs.isDefined)
         val batchTimestamp = batchTimestampMs.get
         processorHandle.getExpiredTimers(batchTimestamp)
           .flatMap { case (keyObj, expiryTimestampMs) =>
+            numExpiredTimers += 1
             handleTimerRows(keyObj, expiryTimestampMs, processorHandle)
           }
 
@@ -221,6 +217,7 @@ case class TransformWithStateExec(
         val watermark = eventTimeWatermarkForEviction.get
         processorHandle.getExpiredTimers(watermark)
           .flatMap { case (keyObj, expiryTimestampMs) =>
+            numExpiredTimers += 1
             handleTimerRows(keyObj, expiryTimestampMs, processorHandle)
           }
 
@@ -267,7 +264,7 @@ case class TransformWithStateExec(
       override def next() = itr.next()
       private def getIterator(): Iterator[InternalRow] =
         CompletionIterator[InternalRow, Iterator[InternalRow]](
-          processTimers(timeoutMode, processorHandle), {
+          processTimers(timeMode, processorHandle), {
           // Note: `timeoutLatencyMs` also includes the time the parent operator took for
           // processing output returned through iterator.
           timeoutLatencyMs += NANOSECONDS.toMillis(System.nanoTime - timeoutProcessingStartTimeNs)
@@ -284,6 +281,8 @@ case class TransformWithStateExec(
       allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
       commitTimeMs += timeTakenMs {
         if (isStreaming) {
+          // clean up any expired user state
+          processorHandle.doTtlCleanup()
           store.commit()
         } else {
           store.abort()
@@ -297,22 +296,32 @@ case class TransformWithStateExec(
     })
   }
 
+  // operator specific metrics
+  override def customStatefulOperatorMetrics: Seq[StatefulOperatorCustomMetric] = {
+    Seq(
+      // metrics around state variables
+      StatefulOperatorCustomSumMetric("numValueStateVars", "Number of value state variables"),
+      StatefulOperatorCustomSumMetric("numListStateVars", "Number of list state variables"),
+      StatefulOperatorCustomSumMetric("numMapStateVars", "Number of map state variables"),
+      StatefulOperatorCustomSumMetric("numDeletedStateVars", "Number of deleted state variables"),
+      // metrics around timers
+      StatefulOperatorCustomSumMetric("numRegisteredTimers", "Number of registered timers"),
+      StatefulOperatorCustomSumMetric("numDeletedTimers", "Number of deleted timers"),
+      StatefulOperatorCustomSumMetric("numExpiredTimers", "Number of expired timers"),
+      // metrics around TTL
+      StatefulOperatorCustomSumMetric("numValueStateWithTTLVars",
+        "Number of value state variables with TTL"),
+      StatefulOperatorCustomSumMetric("numListStateWithTTLVars",
+        "Number of list state variables with TTL"),
+      StatefulOperatorCustomSumMetric("numValuesRemovedDueToTTLExpiry",
+        "Number of values removed due to TTL expiry")
+    )
+  }
+
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
 
-    timeoutMode match {
-      case ProcessingTime =>
-        if (batchTimestampMs.isEmpty) {
-          StateStoreErrors.missingTimeoutValues(timeoutMode.toString)
-        }
-
-      case EventTime =>
-        if (eventTimeWatermarkForEviction.isEmpty) {
-          StateStoreErrors.missingTimeoutValues(timeoutMode.toString)
-        }
-
-      case _ =>
-    }
+    validateTimeMode()
 
     if (hasInitialState) {
       val storeConf = new StateStoreConf(session.sqlContext.sessionState.conf)
@@ -332,9 +341,9 @@ case class TransformWithStateExec(
             val storeProviderId = StateStoreProviderId(stateStoreId, stateInfo.get.queryRunId)
             val store = StateStore.get(
               storeProviderId = storeProviderId,
-              keySchema = schemaForKeyRow,
-              valueSchema = schemaForValueRow,
-              NoPrefixKeyStateEncoderSpec(schemaForKeyRow),
+              KEY_ROW_SCHEMA,
+              VALUE_ROW_SCHEMA,
+              NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
               version = stateInfo.get.storeVersion,
               useColumnFamilies = true,
               storeConf = storeConf,
@@ -352,9 +361,9 @@ case class TransformWithStateExec(
       if (isStreaming) {
         child.execute().mapPartitionsWithStateStore[InternalRow](
           getStateInfo,
-          schemaForKeyRow,
-          schemaForValueRow,
-          NoPrefixKeyStateEncoderSpec(schemaForKeyRow),
+          KEY_ROW_SCHEMA,
+          VALUE_ROW_SCHEMA,
+          NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
           session.sqlContext.sessionState,
           Some(session.sqlContext.streams.stateStoreCoordinator),
           useColumnFamilies = true
@@ -402,9 +411,9 @@ case class TransformWithStateExec(
     // Create StateStoreProvider for this partition
     val stateStoreProvider = StateStoreProvider.createAndInit(
       providerId,
-      schemaForKeyRow,
-      schemaForValueRow,
-      NoPrefixKeyStateEncoderSpec(schemaForKeyRow),
+      KEY_ROW_SCHEMA,
+      VALUE_ROW_SCHEMA,
+      NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
       useColumnFamilies = true,
       storeConf = storeConf,
       hadoopConf = hadoopConfBroadcast.value.value,
@@ -427,10 +436,11 @@ case class TransformWithStateExec(
   private def processData(store: StateStore, singleIterator: Iterator[InternalRow]):
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
     val processorHandle = new StatefulProcessorHandleImpl(
-      store, getStateInfo.queryRunId, keyEncoder, timeoutMode, isStreaming)
+      store, getStateInfo.queryRunId, keyEncoder, timeMode,
+      isStreaming, batchTimestampMs, metrics)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
     statefulProcessor.setHandle(processorHandle)
-    statefulProcessor.init(outputMode, timeoutMode)
+    statefulProcessor.init(outputMode, timeMode)
     processorHandle.setHandleState(StatefulProcessorHandleState.INITIALIZED)
     processDataWithPartition(singleIterator, store, processorHandle)
   }
@@ -441,10 +451,10 @@ case class TransformWithStateExec(
       initStateIterator: Iterator[InternalRow]):
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
     val processorHandle = new StatefulProcessorHandleImpl(store, getStateInfo.queryRunId,
-      keyEncoder, timeoutMode, isStreaming)
+      keyEncoder, timeMode, isStreaming, batchTimestampMs, metrics)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
     statefulProcessor.setHandle(processorHandle)
-    statefulProcessor.init(outputMode, timeoutMode)
+    statefulProcessor.init(outputMode, timeMode)
     processorHandle.setHandleState(StatefulProcessorHandleState.INITIALIZED)
 
     // Check if is first batch
@@ -462,9 +472,25 @@ case class TransformWithStateExec(
 
     processDataWithPartition(childDataIterator, store, processorHandle)
   }
+
+  private def validateTimeMode(): Unit = {
+    timeMode match {
+      case ProcessingTime =>
+        if (batchTimestampMs.isEmpty) {
+          StateStoreErrors.missingTimeValues(timeMode.toString)
+        }
+
+      case EventTime =>
+        if (eventTimeWatermarkForEviction.isEmpty) {
+          StateStoreErrors.missingTimeValues(timeMode.toString)
+        }
+
+      case _ =>
+    }
+  }
 }
 
-// scalastyle:off
+// scalastyle:off argcount
 object TransformWithStateExec {
 
   // Plan logical transformWithState for batch queries
@@ -474,7 +500,7 @@ object TransformWithStateExec {
       groupingAttributes: Seq[Attribute],
       dataAttributes: Seq[Attribute],
       statefulProcessor: StatefulProcessor[Any, Any, Any],
-      timeoutMode: TimeoutMode,
+      timeMode: TimeMode,
       outputMode: OutputMode,
       keyEncoder: ExpressionEncoder[Any],
       outputObjAttr: Attribute,
@@ -499,7 +525,7 @@ object TransformWithStateExec {
       groupingAttributes,
       dataAttributes,
       statefulProcessor,
-      timeoutMode,
+      timeMode,
       outputMode,
       keyEncoder,
       outputObjAttr,
@@ -516,4 +542,5 @@ object TransformWithStateExec {
       initialState)
   }
 }
-// scalastyle:on
+// scalastyle:on argcount
+

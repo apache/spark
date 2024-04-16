@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.types.StringTypeAnyCollation
 import org.apache.spark.sql.types._
 
 class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -70,7 +71,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
           "paramIndex" -> ordinalNumber(0),
-          "requiredType" -> "(\"STRING_ANY_COLLATION\" or \"BINARY\" or \"ARRAY\")",
+          "requiredType" -> "(\"STRING\" or \"BINARY\" or \"ARRAY\")",
           "inputSql" -> "\"1\"",
           "inputType" -> "\"INT\""
         )
@@ -1434,7 +1435,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
           "inputName" -> toSQLId("fmt"),
-          "inputType" -> toSQLType(wrongFmt.dataType),
+          "inputType" -> toSQLType(StringTypeAnyCollation),
           "inputExpr" -> toSQLExpr(wrongFmt)
         )
       )

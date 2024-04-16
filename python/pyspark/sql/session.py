@@ -38,6 +38,7 @@ from typing import (
     TYPE_CHECKING,
 )
 
+from pyspark.conf import SparkConf
 from pyspark.util import is_remote_only
 from pyspark.sql.column import _to_java_column
 from pyspark.sql.conf import RuntimeConfig
@@ -67,7 +68,6 @@ from pyspark.errors import PySparkValueError, PySparkTypeError, PySparkRuntimeEr
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
-    from pyspark.core.conf import SparkConf
     from pyspark.core.context import SparkContext
     from pyspark.core.rdd import RDD
     from pyspark.sql._typing import AtomicValue, RowLike, OptionalPrimitiveType
@@ -221,7 +221,7 @@ class SparkSession(SparkConversionMixin):
             self._options: Dict[str, Any] = {}
 
         @overload
-        def config(self, *, conf: "SparkConf") -> "SparkSession.Builder":
+        def config(self, *, conf: SparkConf) -> "SparkSession.Builder":
             ...
 
         @overload
@@ -236,7 +236,7 @@ class SparkSession(SparkConversionMixin):
             self,
             key: Optional[str] = None,
             value: Optional[Any] = None,
-            conf: Optional["SparkConf"] = None,
+            conf: Optional[SparkConf] = None,
             *,
             map: Optional[Dict[str, "OptionalPrimitiveType"]] = None,
         ) -> "SparkSession.Builder":
@@ -273,7 +273,7 @@ class SparkSession(SparkConversionMixin):
             --------
             For an existing :class:`SparkConf`, use `conf` parameter.
 
-            >>> from pyspark.core.conf import SparkConf
+            >>> from pyspark.conf import SparkConf
             >>> conf = SparkConf().setAppName("example").setMaster("local")
             >>> SparkSession.builder.config(conf=conf)
             <pyspark.sql.session.SparkSession.Builder...
@@ -489,7 +489,6 @@ class SparkSession(SparkConversionMixin):
                 return RemoteSparkSession.builder.config(map=opts).getOrCreate()  # type: ignore
 
             from pyspark.core.context import SparkContext
-            from pyspark.core.conf import SparkConf
 
             with self._lock:
                 if (
@@ -862,7 +861,7 @@ class SparkSession(SparkConversionMixin):
         Create a temp view, show the list, and drop it.
 
         >>> spark.range(1).createTempView("test_view")
-        >>> spark.catalog.listTables()
+        >>> spark.catalog.listTables()  # doctest: +SKIP
         [Table(name='test_view', catalog=None, namespace=[], description=None, ...
         >>> _ = spark.catalog.dropTempView("test_view")
         """
@@ -1213,7 +1212,6 @@ class SparkSession(SparkConversionMixin):
         that script, which would expose those to users.
         """
         import py4j
-        from pyspark.core.conf import SparkConf
         from pyspark.core.context import SparkContext
 
         try:
@@ -1632,6 +1630,13 @@ class SparkSession(SparkConversionMixin):
         -------
         :class:`DataFrame`
 
+        Notes
+        -----
+        In Spark Classic, a temporary view referenced in `spark.sql` is resolved immediately,
+        while in Spark Connect it is lazily evaluated.
+        So in Spark Connect if a view is dropped, modified or replaced after `spark.sql`, the
+        execution may fail or generate different results.
+
         Examples
         --------
         Executing a SQL query.
@@ -1697,7 +1702,7 @@ class SparkSession(SparkConversionMixin):
 
         And substitute named parameters with the `:` prefix by SQL literals.
 
-        >>> from pyspark.sql.functions import create_map
+        >>> from pyspark.sql.functions import create_map, lit
         >>> spark.sql(
         ...   "SELECT *, element_at(:m, 'a') AS C FROM {df} WHERE {df[B]} > :minB",
         ...   {"minB" : 5, "m" : create_map(lit('a'), lit(1))}, df=mydf).show()
@@ -1709,7 +1714,7 @@ class SparkSession(SparkConversionMixin):
 
         Or positional parameters marked by `?` in the SQL query by SQL literals.
 
-        >>> from pyspark.sql.functions import array
+        >>> from pyspark.sql.functions import array, lit
         >>> spark.sql(
         ...   "SELECT *, element_at(?, 1) AS C FROM {df} WHERE {df[B]} > ? and ? < {df[A]}",
         ...   args=[array(lit(1), lit(2), lit(3)), 5, 2], df=mydf).show()
@@ -1757,6 +1762,13 @@ class SparkSession(SparkConversionMixin):
         Returns
         -------
         :class:`DataFrame`
+
+        Notes
+        -----
+        In Spark Classic, a temporary view referenced in `spark.table` is resolved immediately,
+        while in Spark Connect it is lazily evaluated.
+        So in Spark Connect if a view is dropped, modified or replaced after `spark.table`, the
+        execution may fail or generate different results.
 
         Examples
         --------

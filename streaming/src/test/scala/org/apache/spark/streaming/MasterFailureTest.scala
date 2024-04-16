@@ -32,7 +32,8 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.scalatest.Assertions._
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.PATH
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.util.Utils
 
@@ -392,7 +393,7 @@ class FileGeneratingThread(input: Seq[String], testDir: Path, interval: Long)
           }
         }
         if (!done) {
-          logError("Could not generate file " + hadoopFile)
+          logError(log"Could not generate file ${MDC(PATH, hadoopFile)}")
         } else {
           logInfo("Generated file " + hadoopFile + " at " + System.currentTimeMillis)
         }

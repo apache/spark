@@ -19,10 +19,13 @@ package org.apache.spark.sql.catalyst.expressions.variant
 
 import java.time.{LocalDateTime, ZoneId, ZoneOffset}
 
+import scala.reflect.runtime.universe.TypeTag
+
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.ResolveTimeZone
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -236,15 +239,14 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     check(expectedResult4, smallObject, smallMetadata)
   }
 
-  private def variantGet(input: String, path: String, dataType: DataType): VariantGet = {
-    val inputVariant = VariantExpressionEvalUtils.parseJson(UTF8String.fromString(input))
-    VariantGet(Literal(inputVariant), Literal(path), dataType, failOnError = true)
-  }
+  private def parseJson(input: String): VariantVal =
+    VariantExpressionEvalUtils.parseJson(UTF8String.fromString(input))
 
-  private def tryVariantGet(input: String, path: String, dataType: DataType): VariantGet = {
-    val inputVariant = VariantExpressionEvalUtils.parseJson(UTF8String.fromString(input))
-    VariantGet(Literal(inputVariant), Literal(path), dataType, failOnError = false)
-  }
+  private def variantGet(input: String, path: String, dataType: DataType): VariantGet =
+    VariantGet(Literal(parseJson(input)), Literal(path), dataType, failOnError = true)
+
+  private def tryVariantGet(input: String, path: String, dataType: DataType): VariantGet =
+    VariantGet(Literal(parseJson(input)), Literal(path), dataType, failOnError = false)
 
   private def testVariantGet(input: String, path: String, dataType: DataType, output: Any): Unit = {
     checkEvaluation(variantGet(input, path, dataType), output)
@@ -641,5 +643,184 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkInvalidPath("$1")
     checkInvalidPath("$[-1]")
     checkInvalidPath("""$['"]""")
+  }
+
+  test("cast from variant") {
+    // We do not test too many type combinations, as the cast implementation is mostly the same as
+    // variant_get.
+
+    def checkCast(input: Any, dataType: DataType, output: Any): Unit = {
+      for (mode <- Seq(EvalMode.LEGACY, EvalMode.ANSI, EvalMode.TRY)) {
+        checkEvaluation(Cast(Literal(input), dataType, evalMode = mode), output)
+      }
+    }
+
+    def checkInvalidCast(input: Any, dataType: DataType, tryOutput: Any): Unit = {
+      // Casting from variant is not affected by the ANSI flag.
+      for (mode <- Seq(EvalMode.LEGACY, EvalMode.ANSI)) {
+        checkExceptionInExpression[SparkRuntimeException](
+          Cast(Literal(input), dataType, evalMode = mode),
+          "INVALID_VARIANT_CAST"
+        )
+      }
+      checkEvaluation(Cast(Literal(input), dataType, evalMode = EvalMode.TRY), tryOutput)
+    }
+
+    checkCast(parseJson("1"), StringType, "1")
+    // Other to-string casts never produce NULL when the input is not NULL, but variant-to-string
+    // cast can produce NULL when the input is a variant null (not NULL).
+    checkCast(parseJson("null"), StringType, null)
+    checkCast(parseJson("\"1\""), IntegerType, 1)
+
+    checkInvalidCast(parseJson("2147483648"), IntegerType, null)
+    checkInvalidCast(parseJson("[2147483648, 1]"), ArrayType(IntegerType), Array(null, 1))
+
+    checkCast(Array(null, parseJson("true")), ArrayType(BooleanType), Array(null, true))
+    checkCast(
+      Array(null, parseJson("false"), parseJson("null")),
+      ArrayType(StringType),
+      Array(null, "false", null)
+    )
+    checkCast(Array(parseJson("[1]")), ArrayType(ArrayType(IntegerType)), Array(Array(1)))
+    checkInvalidCast(
+      Array(parseJson("\"hello\""), null, parseJson("\"1\"")),
+      ArrayType(IntegerType),
+      Array(null, null, 1)
+    )
+  }
+
+  test("atomic types that are not produced by parse_json") {
+    // Dictionary size is `0` for value 0. An empty dictionary contains one offset `0` for the
+    // one-past-the-end position (i.e. the sum of all string lengths).
+    val emptyMetadata = Array[Byte](VERSION, 0, 0)
+
+    def checkToJson(value: Array[Byte], expected: String): Unit = {
+      val input = Literal(new VariantVal(value, emptyMetadata))
+      checkEvaluation(StructsToJson(Map.empty, input), expected)
+    }
+
+    def checkCast(value: Array[Byte], dataType: DataType, expected: Any): Unit = {
+      val input = Literal(new VariantVal(value, emptyMetadata))
+      checkEvaluation(Cast(input, dataType, evalMode = EvalMode.ANSI), expected)
+    }
+
+    checkToJson(Array(primitiveHeader(DATE), 0, 0, 0, 0), "\"1970-01-01\"")
+    checkToJson(Array(primitiveHeader(DATE), -1, -1, -1, 127), "\"+5881580-07-11\"")
+    checkToJson(Array(primitiveHeader(DATE), 0, 0, 0, -128), "\"-5877641-06-23\"")
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      checkCast(Array(primitiveHeader(DATE), 0, 0, 0, 0), TimestampType, 0L)
+      checkCast(Array(primitiveHeader(DATE), 1, 0, 0, 0), TimestampType, MICROS_PER_DAY)
+    }
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+      checkCast(Array(primitiveHeader(DATE), 0, 0, 0, 0), TimestampType, 8 * MICROS_PER_HOUR)
+      checkCast(Array(primitiveHeader(DATE), 1, 0, 0, 0), TimestampType,
+        MICROS_PER_DAY + 8 * MICROS_PER_HOUR)
+    }
+
+    def littleEndianLong(value: Long): Array[Byte] =
+      BigInt(value).toByteArray.reverse.padTo(8, 0.toByte)
+
+    val time1 = littleEndianLong(0)
+    // In America/Los_Angeles timezone, timestamp value `skippedTime` is 2011-03-13 03:00:00.
+    // The next second of 2011-03-13 01:59:59 jumps to 2011-03-13 03:00:00.
+    val skippedTime = 1300010400000000L
+    val time2 = littleEndianLong(skippedTime)
+    val time3 = littleEndianLong(skippedTime - 1)
+    val time4 = littleEndianLong(Long.MinValue)
+    val time5 = littleEndianLong(Long.MaxValue)
+    val time6 = littleEndianLong(-62198755200000000L)
+    val timestampHeader = Array(primitiveHeader(TIMESTAMP))
+    val timestampNtzHeader = Array(primitiveHeader(TIMESTAMP_NTZ))
+
+    for (timeZone <- Seq("UTC", "America/Los_Angeles")) {
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
+        checkToJson(timestampNtzHeader ++ time1, "\"1970-01-01 00:00:00\"")
+        checkToJson(timestampNtzHeader ++ time2, "\"2011-03-13 10:00:00\"")
+        checkToJson(timestampNtzHeader ++ time3, "\"2011-03-13 09:59:59.999999\"")
+        checkToJson(timestampNtzHeader ++ time4, "\"-290308-12-21 19:59:05.224192\"")
+        checkToJson(timestampNtzHeader ++ time5, "\"+294247-01-10 04:00:54.775807\"")
+        checkToJson(timestampNtzHeader ++ time6, "\"-0001-01-01 00:00:00\"")
+
+        checkCast(timestampNtzHeader ++ time1, DateType, 0)
+        checkCast(timestampNtzHeader ++ time2, DateType, 15046)
+        checkCast(timestampNtzHeader ++ time3, DateType, 15046)
+        checkCast(timestampNtzHeader ++ time4, DateType, -106751992)
+        checkCast(timestampNtzHeader ++ time5, DateType, 106751991)
+        checkCast(timestampNtzHeader ++ time6, DateType, -719893)
+      }
+    }
+
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      checkToJson(timestampHeader ++ time1, "\"1970-01-01 00:00:00+00:00\"")
+      checkToJson(timestampHeader ++ time2, "\"2011-03-13 10:00:00+00:00\"")
+      checkToJson(timestampHeader ++ time3, "\"2011-03-13 09:59:59.999999+00:00\"")
+      checkToJson(timestampHeader ++ time4, "\"-290308-12-21 19:59:05.224192+00:00\"")
+      checkToJson(timestampHeader ++ time5, "\"+294247-01-10 04:00:54.775807+00:00\"")
+      checkToJson(timestampHeader ++ time6, "\"-0001-01-01 00:00:00+00:00\"")
+
+      checkCast(timestampHeader ++ time1, DateType, 0)
+      checkCast(timestampHeader ++ time2, DateType, 15046)
+      checkCast(timestampHeader ++ time3, DateType, 15046)
+      checkCast(timestampHeader ++ time4, DateType, -106751992)
+      checkCast(timestampHeader ++ time5, DateType, 106751991)
+      checkCast(timestampHeader ++ time6, DateType, -719893)
+    }
+
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+      checkToJson(timestampHeader ++ time1, "\"1969-12-31 16:00:00-08:00\"")
+      checkToJson(timestampHeader ++ time2, "\"2011-03-13 03:00:00-07:00\"")
+      checkToJson(timestampHeader ++ time3, "\"2011-03-13 01:59:59.999999-08:00\"")
+      checkToJson(timestampHeader ++ time4, "\"-290308-12-21 12:06:07.224192-07:52\"")
+      checkToJson(timestampHeader ++ time5, "\"+294247-01-09 20:00:54.775807-08:00\"")
+      checkToJson(timestampHeader ++ time6, "\"-0002-12-31 16:07:02-07:52\"")
+
+      checkCast(timestampHeader ++ time1, DateType, -1)
+      checkCast(timestampHeader ++ time2, DateType, 15046)
+      checkCast(timestampHeader ++ time3, DateType, 15046)
+      checkCast(timestampHeader ++ time4, DateType, -106751992)
+      checkCast(timestampHeader ++ time5, DateType, 106751990)
+      checkCast(timestampHeader ++ time6, DateType, -719894)
+    }
+
+    checkToJson(Array(primitiveHeader(FLOAT)) ++
+      BigInt(java.lang.Float.floatToIntBits(1.23F)).toByteArray.reverse, "1.23")
+    checkToJson(Array(primitiveHeader(FLOAT)) ++
+      BigInt(java.lang.Float.floatToIntBits(-0.0F)).toByteArray.reverse, "-0.0")
+    // Note: 1.23F.toDouble != 1.23.
+    checkCast(Array(primitiveHeader(FLOAT)) ++
+      BigInt(java.lang.Float.floatToIntBits(1.23F)).toByteArray.reverse, DoubleType, 1.23F.toDouble)
+
+    checkToJson(Array(primitiveHeader(BINARY), 0, 0, 0, 0), "\"\"")
+    checkToJson(Array(primitiveHeader(BINARY), 1, 0, 0, 0, 1), "\"AQ==\"")
+    checkToJson(Array(primitiveHeader(BINARY), 2, 0, 0, 0, 1, 2), "\"AQI=\"")
+    checkToJson(Array(primitiveHeader(BINARY), 3, 0, 0, 0, 1, 2, 3), "\"AQID\"")
+    checkCast(Array(primitiveHeader(BINARY), 3, 0, 0, 0, 1, 2, 3), StringType,
+      "\u0001\u0002\u0003")
+    checkCast(Array(primitiveHeader(BINARY), 5, 0, 0, 0, 72, 101, 108, 108, 111), StringType,
+      "Hello")
+  }
+
+  test("cast to variant") {
+    def check[T : TypeTag](input: T, expectedJson: String): Unit = {
+      val cast = Cast(Literal.create(input), VariantType, evalMode = EvalMode.ANSI)
+      checkEvaluation(StructsToJson(Map.empty, cast), expectedJson)
+    }
+
+    check(null.asInstanceOf[String], null)
+    for (input <- Seq[Any](false, true, 0.toByte, 1.toShort, 2, 3L, 4.0F, 5.0D)) {
+      check(input, input.toString)
+    }
+    check(Array(null, "a", "b", "c"), """[null,"a","b","c"]""")
+    check(Map("z" -> 1, "y" -> 2, "x" -> 3), """{"x":3,"y":2,"z":1}""")
+    check(Array(parseJson("""{"a": 1,"b": [1, 2, 3]}"""),
+      parseJson("""{"c": true,"d": {"e": "str"}}""")),
+      """[{"a":1,"b":[1,2,3]},{"c":true,"d":{"e":"str"}}]""")
+    val struct = Literal.create(
+      Row(
+        Seq("123", "true", "f"),
+        Map("a" -> "123", "b" -> "true", "c" -> "f"),
+        Row(0)),
+      StructType.fromDDL("c ARRAY<STRING>,b MAP<STRING, STRING>,a STRUCT<i: INT>"))
+    check(struct, """{"a":{"i":0},"b":{"a":"123","b":"true","c":"f"},"c":["123","true","f"]}""")
   }
 }

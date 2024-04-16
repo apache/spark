@@ -19,6 +19,7 @@ from io import StringIO
 import unittest
 from typing import Iterable
 
+from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
 from pyspark.testing.connectutils import (
     should_test_connect,
     connect_requirement_message,
@@ -77,17 +78,22 @@ class ProgressBarTest(unittest.TestCase, PySparkErrorTestUtils):
         handler_called = 0
         done_called = False
 
-        def handler(stages: Iterable[StageInfo], inflight_tasks: int, done: bool):
+        def handler(
+            stages: Iterable[StageInfo], inflight_tasks: int, operation_id: str, done: bool
+        ):
             nonlocal handler_called, done_called
             handler_called = 1
             self.assertEqual(100, sum(map(lambda x: x.num_tasks, stages)))
             self.assertEqual(50, sum(map(lambda x: x.num_completed_tasks, stages)))
             self.assertEqual(999, sum(map(lambda x: x.num_bytes_read, stages)))
             self.assertEqual(10, inflight_tasks)
+            self.assertEqual(operation_id, "operation_id")
             done_called = done
 
         buffer = StringIO()
-        p = Progress(char="+", output=buffer, enabled=True, handlers=[handler])
+        p = Progress(
+            char="+", output=buffer, enabled=True, handlers=[handler], operation_id="operation_id"
+        )
         p.update_ticks(stages, 1)
         stages = [StageInfo(0, 100, 50, 999, False)]
         p.update_ticks(stages, 10)
@@ -97,6 +103,40 @@ class ProgressBarTest(unittest.TestCase, PySparkErrorTestUtils):
         p.finish()
         self.assertTrue(buffer.getvalue().endswith("\r"), "Last line should be empty")
         self.assertTrue(done_called, "After finish, done should be True")
+
+
+class SparkConnectProgressHandlerE2E(SparkConnectSQLTestCase):
+    def test_custom_handler_works(self):
+        called = False
+
+        def handler(**kwargs):
+            nonlocal called
+            called = True
+            self.assertIsNotNone(kwargs.get("stages"))
+            self.assertIsNotNone(kwargs.get("operation_id"))
+            self.assertIsNotNone(kwargs.get("inflight_tasks"))
+            self.assertGreater(len(kwargs.get("stages")), 0)
+            self.assertGreater(len(kwargs.get("operation_id")), 0)
+
+        try:
+            self.connect.registerProgressHandler(handler)
+            self.connect.range(100).repartition(20).count()
+            self.assertTrue(called, "Handler must have been called")
+        finally:
+            self.connect.clearProgressHandlers()
+
+    def test_progress_properly_recorded(self):
+        state = {"counter": 0}
+
+        def handler(stages, inflight_tasks, operation_id, done):
+            state["counter"] += 1
+
+        try:
+            self.connect.registerProgressHandler(handler)
+            self.connect.range(10000).repartition(20).count()
+            self.assertGreaterEqual(state["counter"], 1, "Handler should be called at least once.")
+        finally:
+            self.connect.clearProgressHandlers()
 
 
 if __name__ == "__main__":

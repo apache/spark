@@ -21,7 +21,8 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkConf, SparkContext, SparkEnv}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{OP_ID, SESSION_ID}
 import org.apache.spark.internal.config.Status.LIVE_ENTITY_UPDATE_PERIOD
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.connect.config.Connect.{CONNECT_UI_SESSION_LIMIT, CONNECT_UI_STATEMENT_LIMIT}
@@ -183,8 +184,8 @@ private[connect] class SparkConnectServerListener(
         updateLiveStore(sessionData)
       case None =>
         logWarning(
-          s"onOperationStart called with unknown session id: ${e.sessionId}." +
-            s"Regardless, the operation has been registered.")
+          log"onOperationStart called with unknown session id: ${MDC(SESSION_ID, e.sessionId)}." +
+            log"Regardless, the operation has been registered.")
     }
   }
 
@@ -194,7 +195,9 @@ private[connect] class SparkConnectServerListener(
         executionData.state = ExecutionState.COMPILED
         updateLiveStore(executionData)
       case None =>
-        logWarning(s"onOperationAnalyzed called with unknown operation id: ${e.jobTag}")
+        logWarning(
+          log"onOperationAnalyzed called with " +
+            log"unknown operation id: ${MDC(OP_ID, e.jobTag)}")
     }
   }
 
@@ -205,7 +208,9 @@ private[connect] class SparkConnectServerListener(
         executionData.state = ExecutionState.READY
         updateLiveStore(executionData)
       case None =>
-        logWarning(s"onOperationReadyForExecution called with unknown operation id: ${e.jobTag}")
+        logWarning(
+          log"onOperationReadyForExecution called with " +
+            log"unknown operation id: ${MDC(OP_ID, e.jobTag)}")
     }
   }
 
@@ -216,7 +221,9 @@ private[connect] class SparkConnectServerListener(
         executionData.state = ExecutionState.CANCELED
         updateLiveStore(executionData)
       case None =>
-        logWarning(s"onOperationCanceled called with unknown operation id: ${e.jobTag}")
+        logWarning(
+          log"onOperationCanceled called with " +
+            log"unknown operation id: ${MDC(OP_ID, e.jobTag)}")
     }
   }
   private def onOperationFailed(e: SparkListenerConnectOperationFailed) = synchronized {
@@ -227,7 +234,9 @@ private[connect] class SparkConnectServerListener(
         executionData.state = ExecutionState.FAILED
         updateLiveStore(executionData)
       case None =>
-        logWarning(s"onOperationFailed called with unknown operation id: ${e.jobTag}")
+        logWarning(
+          log"onOperationFailed called with " +
+            log"unknown operation id: ${MDC(OP_ID, e.jobTag)}")
     }
   }
   private def onOperationFinished(e: SparkListenerConnectOperationFinished) = synchronized {
@@ -237,7 +246,9 @@ private[connect] class SparkConnectServerListener(
         executionData.state = ExecutionState.FINISHED
         updateLiveStore(executionData)
       case None =>
-        logWarning(s"onOperationFinished called with unknown operation id: ${e.jobTag}")
+        logWarning(
+          log"onOperationFinished called with " +
+            log"unknown operation id: ${MDC(OP_ID, e.jobTag)}")
     }
   }
   private def onOperationClosed(e: SparkListenerConnectOperationClosed) = synchronized {
@@ -248,7 +259,9 @@ private[connect] class SparkConnectServerListener(
         updateStoreWithTriggerEnabled(executionData)
         executionList.remove(e.jobTag)
       case None =>
-        logWarning(s"onOperationClosed called with unknown operation id: ${e.jobTag}")
+        logWarning(
+          log"onOperationClosed called with " +
+            log"unknown operation id: ${MDC(OP_ID, e.jobTag)}")
     }
   }
 
@@ -265,7 +278,10 @@ private[connect] class SparkConnectServerListener(
         updateStoreWithTriggerEnabled(sessionData)
         sessionList.remove(e.sessionId)
 
-      case None => logWarning(s"onSessionClosed called with unknown session id: ${e.sessionId}")
+      case None =>
+        logWarning(
+          log"onSessionClosed called with " +
+            log"unknown session id: ${MDC(SESSION_ID, e.sessionId)}")
     }
   }
 

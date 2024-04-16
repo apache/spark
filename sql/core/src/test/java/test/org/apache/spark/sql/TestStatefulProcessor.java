@@ -36,7 +36,9 @@ public class TestStatefulProcessor extends StatefulProcessor<Integer, String, St
   private transient ListState<String> keysList;
 
   @Override
-  public void init(OutputMode outputMode, TimeoutMode timeoutMode) {
+  public void init(
+      OutputMode outputMode,
+      TimeMode timeMode) {
     countState = this.getHandle().getValueState("countState",
       Encoders.LONG());
 

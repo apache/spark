@@ -25,7 +25,8 @@ import org.apache.hadoop.yarn.exceptions.ResourceNotFoundException
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.yarn.config._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{ERROR, RESOURCE_NAME}
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceID
 import org.apache.spark.resource.ResourceUtils.{AMOUNT, FPGA, GPU}
@@ -166,9 +167,9 @@ private object ResourceRequestHelper extends Logging {
         case e: ResourceNotFoundException =>
           // warn a couple times and then stop so we don't spam the logs
           if (numResourceErrors < 2) {
-            logWarning(s"YARN doesn't know about resource $name, your resource discovery " +
-              s"has to handle properly discovering and isolating the resource! Error: " +
-              s"${e.getMessage}")
+            logWarning(log"YARN doesn't know about resource ${MDC(RESOURCE_NAME, name)}, " +
+              log"your resource discovery has to handle properly discovering and isolating " +
+              log"the resource! Error: ${MDC(ERROR, e.getMessage)}")
             numResourceErrors += 1
           }
       }
