@@ -155,15 +155,16 @@ class FilterPushdownSuite extends PlanTest {
   test("can't push without rewrite") {
     val originalQuery =
       testRelation
-        .select($"a" + $"b" as "e")
+        .select($"a" + $"b" as "e", $"a" - $"b" as "f")
         .where($"e" === 1)
         .analyze
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
-        .where($"a" + $"b" === 1)
-        .select($"a" + $"b" as "e")
+        .select($"a", $"b", $"a" + $"b" as "e")
+        .where($"e" === 1)
+        .select($"e", $"a" - $"b" as "f")
         .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -171,7 +172,7 @@ class FilterPushdownSuite extends PlanTest {
 
   test("SPARK-47672: Avoid double evaluation with projections but push components that can be") {
     val originalQuery = testStringRelation
-      .select($"a", $"e".rlike("magic") as "f", $"e".rlike("notmagic") as "j")
+      .select($"a", $"e".rlike("magic") as "f", $"e".rlike("notmagic") as "j", $"b")
       .where($"a" > 5 && $"f")
       .analyze
 
@@ -179,27 +180,25 @@ class FilterPushdownSuite extends PlanTest {
 
     val correctAnswer = testStringRelation
       .where($"a" > 5)
-      .select($"a", $"e", $"e".rlike("magic") as "f")
+      .select($"a", $"b", $"e", $"e".rlike("magic") as "f")
       .where($"f")
-      .select($"a", $"f", $"e".rlike("notmagic") as "j")
+      .select($"a", $"f", $"b", $"e".rlike("notmagic") as "j")
       .analyze
 
     comparePlans(optimized, correctAnswer)
   }
 
-  test("SPARK-47672: Avoid double evaluation with projections but push components that can be") {
+  test("SPARK-47672: Ensure filter pushdown without alias reference does not move a projection.") {
     val originalQuery = testStringRelation
-      .select($"a", $"e".rlike("magic") as "f", $"e".rlike("notmagic") as "j")
-      .where($"a" > 5 && $"f")
+      .select($"a", $"e".rlike("magic") as "f", $"b" + $"a")
+      .where($"a" > 5)
       .analyze
 
     val optimized = Optimize.execute(originalQuery)
 
     val correctAnswer = testStringRelation
       .where($"a" > 5)
-      .select($"a", $"e", $"e".rlike("magic") as "f")
-      .where($"f")
-      .select($"a", $"f", $"e".rlike("notmagic") as "j")
+      .select($"a", $"e".rlike("magic") as "f", $"b" + $"a")
       .analyze
 
     comparePlans(optimized, correctAnswer)
