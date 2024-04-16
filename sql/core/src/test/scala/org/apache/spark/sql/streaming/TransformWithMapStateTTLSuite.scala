@@ -33,9 +33,8 @@ class MapStateSingleKeyTTLProcessor(ttlConfig: TTLConfig)
   @transient private var _mapState: MapStateImplWithTTL[String, Int] = _
 
   override def init(
-   outputMode: OutputMode,
-   timeMode: TimeMode
-  ): Unit = {
+      outputMode: OutputMode,
+      timeMode: TimeMode): Unit = {
     _mapState = getHandle
       .getMapState("mapState", Encoders.STRING, Encoders.scalaInt, ttlConfig)
       .asInstanceOf[MapStateImplWithTTL[String, Int]]
@@ -58,8 +57,8 @@ class MapStateSingleKeyTTLProcessor(ttlConfig: TTLConfig)
   }
 
   def processRow(
-    row: InputEvent,
-    mapState: MapStateImplWithTTL[String, Int]): Iterator[OutputEvent] = {
+      row: InputEvent,
+      mapState: MapStateImplWithTTL[String, Int]): Iterator[OutputEvent] = {
     var results = List[OutputEvent]()
     val key = row.key
     val userKey = "key"
@@ -94,17 +93,17 @@ class MapStateSingleKeyTTLProcessor(ttlConfig: TTLConfig)
 
 
 case class MapInputEvent(
-  key: String,
-  userKey: String,
-  action: String,
-  value: Int)
+    key: String,
+    userKey: String,
+    action: String,
+    value: Int)
 
 case class MapOutputEvent(
-  key: String,
-  userKey: String,
-  value: Int,
-  isTTLValue: Boolean,
-  ttlValue: Long)
+    key: String,
+    userKey: String,
+    value: Int,
+    isTTLValue: Boolean,
+    ttlValue: Long)
 
 
 class MapStateTTLProcessor(ttlConfig: TTLConfig)
@@ -114,18 +113,18 @@ class MapStateTTLProcessor(ttlConfig: TTLConfig)
   @transient private var _mapState: MapStateImplWithTTL[String, Int] = _
 
   override def init(
-    outputMode: OutputMode,
-    timeMode: TimeMode): Unit = {
+      outputMode: OutputMode,
+      timeMode: TimeMode): Unit = {
     _mapState = getHandle
       .getMapState("mapState", Encoders.STRING, Encoders.scalaInt, ttlConfig)
       .asInstanceOf[MapStateImplWithTTL[String, Int]]
   }
 
   override def handleInputRows(
-    key: String,
-    inputRows: Iterator[MapInputEvent],
-    timerValues: TimerValues,
-    expiredTimerInfo: ExpiredTimerInfo): Iterator[MapOutputEvent] = {
+      key: String,
+      inputRows: Iterator[MapInputEvent],
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[MapOutputEvent] = {
     var results = List[MapOutputEvent]()
 
     for (row <- inputRows) {
@@ -139,8 +138,8 @@ class MapStateTTLProcessor(ttlConfig: TTLConfig)
   }
 
   def processRow(
-    row: MapInputEvent,
-    mapState: MapStateImplWithTTL[String, Int]): Iterator[MapOutputEvent] = {
+      row: MapInputEvent,
+      mapState: MapStateImplWithTTL[String, Int]): Iterator[MapOutputEvent] = {
     var results = List[MapOutputEvent]()
     val key = row.key
     val userKey = row.userKey
@@ -247,13 +246,13 @@ class TransformWithMapStateTTLSuite extends TransformWithStateTTLTest {
           MapInputEvent("k1", "key1", "put", 1),
           MapInputEvent("k1", "key2", "put", 2)
         ),
-        AdvanceManualClock(1 * 1000),
+        AdvanceManualClock(1 * 1000), // batch timestamp: 1000
         CheckNewAnswer(),
         AddData(inputStream,
           MapInputEvent("k1", "key1", "get", -1),
           MapInputEvent("k1", "key2", "get", -1)
         ),
-        AdvanceManualClock(30 * 1000),
+        AdvanceManualClock(30 * 1000), // batch timestamp: 31000
         CheckNewAnswer(
           MapOutputEvent("k1", "key1", 1, isTTLValue = false, -1),
           MapOutputEvent("k1", "key2", 2, isTTLValue = false, -1)
@@ -262,20 +261,20 @@ class TransformWithMapStateTTLSuite extends TransformWithStateTTLTest {
         AddData(inputStream,
           MapInputEvent("k1", "", "get_values_in_ttl_state", -1)
         ),
-        AdvanceManualClock(1 * 1000),
+        AdvanceManualClock(1 * 1000), // batch timestamp: 32000
         CheckNewAnswer(
           MapOutputEvent("k1", "key1", -1, isTTLValue = true, 61000),
           MapOutputEvent("k1", "key2", -1, isTTLValue = true, 61000)
         ),
         // advance clock to expire first two values
-        AdvanceManualClock(30 * 1000),
+        AdvanceManualClock(30 * 1000), // batch timestamp: 62000
         AddData(inputStream,
           MapInputEvent("k1", "key3", "put", 3),
           MapInputEvent("k1", "key4", "put", 4),
           MapInputEvent("k1", "key5", "put", 5),
           MapInputEvent("k1", "", "iterator", -1)
         ),
-        AdvanceManualClock(1 * 1000),
+        AdvanceManualClock(1 * 1000), // batch timestamp: 63000
         CheckNewAnswer(
           MapOutputEvent("k1", "key3", 3, isTTLValue = false, -1),
           MapOutputEvent("k1", "key4", 4, isTTLValue = false, -1),
