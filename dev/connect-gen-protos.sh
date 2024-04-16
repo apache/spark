@@ -100,4 +100,4 @@ for f in `find gen/proto/python -name "*.py*"`; do
 done
 
 # Clean up everything.
-# rm -Rf gen
+rm -Rf gen
