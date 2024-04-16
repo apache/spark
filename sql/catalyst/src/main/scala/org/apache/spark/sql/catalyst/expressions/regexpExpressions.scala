@@ -564,9 +564,11 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
   def this(exp: Expression, regex: Expression) = this(exp, regex, Literal(-1))
 
   override def nullSafeEval(string: Any, regex: Any, limit: Any): Any = {
-    val strings = string.asInstanceOf[UTF8String].split(
-      CollationSupport.collationAwareRegex(regex.asInstanceOf[UTF8String], collationId),
-      limit.asInstanceOf[Int])
+    var pattern = regex.asInstanceOf[UTF8String]
+    if (CollationFactory.fetchCollation(collationId).supportsLowercaseEquality) {
+      pattern = CollationSupport.lowercaseRegex(pattern)
+    }
+    val strings = string.asInstanceOf[UTF8String].split(pattern, limit.asInstanceOf[Int])
     new GenericArrayData(strings.asInstanceOf[Array[Any]])
   }
 
@@ -574,8 +576,7 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
     val arrayClass = classOf[GenericArrayData].getName
     nullSafeCodeGen(ctx, ev, (str, regex, limit) => {
       // Array in java is covariant, so we don't need to cast UTF8String[] to Object[].
-      s"""${ev.value} = new $arrayClass($str.split(CollationSupport.collationAwareRegex($regex,
-         |$collationId),$limit));""".stripMargin
+      s"""${ev.value} = new $arrayClass($str.split($regex,$limit));""".stripMargin
     })
   }
 

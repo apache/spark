@@ -143,7 +143,11 @@ public final class CollationSupport {
    * Collation-aware regexp expressions.
    */
 
-  // TODO: Add more collation-aware regexp expressions.
+  private static final UTF8String lowercaseRegexPrefix = UTF8String.fromString("(?ui)");
+
+  public static UTF8String lowercaseRegex(final UTF8String regex) {
+    return UTF8String.concat(lowercaseRegexPrefix, regex);
+  }
 
   /**
    * Other collation-aware expressions.
@@ -169,20 +173,6 @@ public final class CollationSupport {
         pos, pos + pattern.numChars()), pattern, collationId).last() == 0;
     }
 
-  }
-
-  private static final UTF8String lowercaseRegexPrefix = UTF8String.fromString("(?ui)");
-
-  public static UTF8String collationAwareRegex(final UTF8String regex, final int collationId) {
-    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
-      return regex;
-    } else {
-      return lowercaseRegex(regex);
-    }
-  }
-
-  public static UTF8String lowercaseRegex(final UTF8String regex) {
-    return UTF8String.concat(lowercaseRegexPrefix, regex);
   }
 
 }
