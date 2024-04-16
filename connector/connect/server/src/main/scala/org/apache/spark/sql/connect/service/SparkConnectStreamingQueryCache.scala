@@ -27,7 +27,7 @@ import scala.concurrent.duration.{Duration, DurationInt, FiniteDuration}
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{DURATION, NEW_VALUE, OLD_VALUE, QUERY_CACHE, QUERY_ID, SESSION_ID}
+import org.apache.spark.internal.LogKey.{DURATION, NEW_VALUE, OLD_VALUE, QUERY_CACHE_VALUE, QUERY_ID, SESSION_ID}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils}
@@ -72,7 +72,7 @@ private[connect] class SparkConnectStreamingQueryCache(
         case None =>
           logInfo(
             log"Adding new query to the cache. Query Id ${MDC(QUERY_ID, query.id)}, " +
-              log"value ${MDC(QUERY_CACHE, value)}.")
+              log"value ${MDC(QUERY_CACHE_VALUE, value)}.")
       }
 
       schedulePeriodicChecks() // Starts the scheduler thread if it hasn't started.

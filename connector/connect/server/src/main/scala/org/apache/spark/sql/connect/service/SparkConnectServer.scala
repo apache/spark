@@ -22,7 +22,7 @@ import java.net.InetSocketAddress
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{PORT, RPC_ADDRESS}
+import org.apache.spark.internal.LogKey.{HOST, PORT}
 import org.apache.spark.sql.SparkSession
 
 /**
@@ -40,7 +40,7 @@ object SparkConnectServer extends Logging {
           val isa = sa.asInstanceOf[InetSocketAddress]
           logInfo(
             log"Spark Connect server started at: " +
-              log"${MDC(RPC_ADDRESS, isa.getAddress.getHostAddress)}:${MDC(PORT, isa.getPort)}")
+              log"${MDC(HOST, isa.getAddress.getHostAddress)}:${MDC(PORT, isa.getPort)}")
         }
       } catch {
         case e: Exception =>

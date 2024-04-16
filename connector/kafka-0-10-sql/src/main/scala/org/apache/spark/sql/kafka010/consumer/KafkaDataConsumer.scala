@@ -394,8 +394,8 @@ private[kafka010] class KafkaDataConsumer(
 
     logInfo(log"From Kafka ${MDC(CONSUMER, kafkaMeta)} read " +
       log"${MDC(TOTAL_RECORDS_READ, totalRecordsRead)} records through " +
-      log"${MDC(COUNT_POLL, numPolls)} polls " +
-      log"(polled out ${MDC(COUNT_RECORDS_POLL, numRecordsPolled)} records), " +
+      log"${MDC(KAFKA_PULLS_COUNT, numPolls)} polls " +
+      log"(polled out ${MDC(KAFKA_RECORDS_PULLED_COUNT, numRecordsPolled)} records), " +
       log"taking ${MDC(TOTAL_TIME_READ, totalTimeReadNanos / NANOS_PER_MILLIS.toDouble)} ms, " +
       log"during time span of ${MDC(TIME, walTime / NANOS_PER_MILLIS.toDouble)} ms."
     )

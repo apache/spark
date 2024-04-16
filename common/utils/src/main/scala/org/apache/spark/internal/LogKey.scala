@@ -55,8 +55,6 @@ object LogKey extends Enumeration {
   val CONTAINER = Value
   val CONTAINER_ID = Value
   val COUNT = Value
-  val COUNT_POLL = Value
-  val COUNT_RECORDS_POLL = Value
   val CSV_HEADER_COLUMN_NAME = Value
   val CSV_HEADER_COLUMN_NAMES = Value
   val CSV_HEADER_LENGTH = Value
@@ -75,8 +73,8 @@ object LogKey extends Enumeration {
   val ERROR = Value
   val EVENT_LOOP = Value
   val EVENT_QUEUE = Value
-  val EXECUTE_HOLDER_KEY = Value
   val EXECUTE_INFO = Value
+  val EXECUTE_KEY = Value
   val EXECUTOR_ID = Value
   val EXECUTOR_STATE = Value
   val EXIT_CODE = Value
@@ -94,6 +92,7 @@ object LogKey extends Enumeration {
   val HIVE_OPERATION_STATE = Value
   val HIVE_OPERATION_TYPE = Value
   val HOST = Value
+  val HOST_PORT = Value
   val INDEX = Value
   val INFERENCE_MODE = Value
   val INITIAL_CAPACITY = Value
@@ -101,6 +100,8 @@ object LogKey extends Enumeration {
   val JOB_ID = Value
   val JOIN_CONDITION = Value
   val JOIN_CONDITION_SUB_EXPRESSION = Value
+  val KAFKA_PULLS_COUNT = Value
+  val KAFKA_RECORDS_PULLED_COUNT = Value
   val KEY = Value
   val LAST_ACCESS_TIME = Value
   val LEARNING_RATE = Value
@@ -142,7 +143,7 @@ object LogKey extends Enumeration {
   val POLICY = Value
   val PORT = Value
   val PRODUCER_ID = Value
-  val QUERY_CACHE = Value
+  val QUERY_CACHE_VALUE = Value
   val QUERY_HINT = Value
   val QUERY_ID = Value
   val QUERY_PLAN = Value
@@ -159,7 +160,6 @@ object LogKey extends Enumeration {
   val REMOTE_ADDRESS = Value
   val RETRY_COUNT = Value
   val RETRY_INTERVAL = Value
-  val RPC_ADDRESS = Value
   val RULE_BATCH_NAME = Value
   val RULE_NAME = Value
   val RULE_NUMBER_OF_RUNS = Value
