@@ -290,8 +290,8 @@ private[connect] object ErrorUtils extends Logging {
         if (events.isDefined) {
           // Errors thrown inside execution are user query errors, return then as INFO.
           logInfo(
-            s"Spark Connect error " +
-              s"during: $opType. UserId: $userId. SessionId: $sessionId.",
+            log"Spark Connect error during: ${MDC(OP_TYPE, opType)}. " +
+              log"UserId: ${MDC(USER_ID, userId)}. SessionId: ${MDC(SESSION_ID, sessionId)}.",
             original)
         } else {
           // Other errors are server RPC errors, return them as ERROR.

@@ -27,7 +27,8 @@ import scala.jdk.CollectionConverters._
 import org.apache.kafka.clients.consumer._
 import org.apache.kafka.common.TopicPartition
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{OFFSET, TIME, TOPIC_PARTITION, TOPIC_PARTITION_OFFSET_RANGE}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.dstream._
@@ -177,7 +178,8 @@ private[spark] class DirectKafkaInputDStream[K, V](
         val off = acc.get(tp).map(o => Math.min(o, m.offset)).getOrElse(m.offset)
         acc + (tp -> off)
       }.foreach { case (tp, off) =>
-          logInfo(s"poll(0) returned messages, seeking $tp to $off to compensate")
+          logInfo(log"poll(0) returned messages, seeking ${MDC(TOPIC_PARTITION, tp)} to " +
+            log"${MDC(OFFSET, off)} to compensate")
           c.seek(tp, off)
       }
     }
@@ -325,7 +327,8 @@ private[spark] class DirectKafkaInputDStream[K, V](
 
     override def restore(): Unit = {
       batchForTime.toSeq.sortBy(_._1)(Time.ordering).foreach { case (t, b) =>
-         logInfo(s"Restoring KafkaRDD for time $t ${b.mkString("[", ", ", "]")}")
+         logInfo(log"Restoring KafkaRDD for time ${MDC(TIME, t)} " +
+           log"${MDC(TOPIC_PARTITION_OFFSET_RANGE, b.mkString("[", ", ", "]"))}")
          generatedRDDs += t -> new KafkaRDD[K, V](
            context.sparkContext,
            executorKafkaParams,
