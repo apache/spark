@@ -38,7 +38,7 @@ import org.apache.spark.io.LZ4CompressionCodec
 import org.apache.spark.resource.{ResourceInformation, ResourceProfile, ResourceRequirement}
 import org.apache.spark.resource.ResourceUtils.{FPGA, GPU}
 import org.apache.spark.rpc.{RpcAddress, RpcEndpoint, RpcEndpointRef, RpcEnv}
-import org.apache.spark.serializer.KryoSerializer
+import org.apache.spark.serializer.JavaSerializer
 
 class RecoverySuite extends MasterSuiteBase {
   test("can use a custom recovery mode factory") {
@@ -522,7 +522,7 @@ class RecoverySuite extends MasterSuiteBase {
     try {
       master = makeAliveMaster(conf)
       val e = master.invokePrivate(_persistenceEngine()).asInstanceOf[RocksDBPersistenceEngine]
-      assert(e.serializer.isInstanceOf[KryoSerializer])
+      assert(e.serializer.isInstanceOf[JavaSerializer])
     } finally {
       if (master != null) {
         master.rpcEnv.shutdown()
