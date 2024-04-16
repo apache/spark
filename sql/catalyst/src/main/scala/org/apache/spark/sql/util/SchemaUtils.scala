@@ -310,7 +310,11 @@ private[spark] object SchemaUtils {
    */
   def replaceCollatedStringWithStringInSchema(schema: StructType): StructType = {
     StructType(schema.map { field =>
-      field.copy(dataType = replaceCollatedStringWithString(field.dataType))
+      if (hasNonBinarySortableCollatedString(field.dataType)) {
+        field.copy(dataType = replaceCollatedStringWithString(field.dataType))
+      } else {
+        field
+      }
     })
   }
 

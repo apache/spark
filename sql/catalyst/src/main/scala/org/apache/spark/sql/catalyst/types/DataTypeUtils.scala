@@ -47,6 +47,14 @@ object DataTypeUtils {
     DataType.equalsIgnoreCaseAndNullability(from, to)
   }
 
+  /**
+   * Compares two types, ignoring nullability of ArrayType, MapType, StructType, ignoring case
+   * sensitivity of field names in StructType as well as differences in collation for String types.
+   */
+  def equalsIgnoreCaseNullabilityAndStringTypes(from: DataType, to: DataType): Boolean = {
+    DataType.equalsIgnoreCaseNullabilityAndStringTypes(from, to)
+  }
+
   private val SparkGeneratedName = """col\d+""".r
   private def isSparkGeneratedName(name: String): Boolean = name match {
     case SparkGeneratedName(_*) => true
