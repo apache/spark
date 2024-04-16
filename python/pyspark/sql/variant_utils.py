@@ -304,7 +304,7 @@ class VariantUtils:
         variant_type = cls._get_type(value, pos)
         if variant_type == dict:
 
-            def handle_object(key_value_pos_list: list[Tuple[str, int]]) -> str:
+            def handle_object(key_value_pos_list: List[Tuple[str, int]]) -> str:
                 key_value_list = [
                     json.dumps(key) + ":" + cls._to_json(value, metadata, value_pos)
                     for (key, value_pos) in key_value_pos_list
@@ -314,7 +314,7 @@ class VariantUtils:
             return cls._handle_object(value, metadata, pos, handle_object)
         elif variant_type == array:
 
-            def handle_array(value_pos_list: list[int]) -> str:
+            def handle_array(value_pos_list: List[int]) -> str:
                 value_list = [
                     cls._to_json(value, metadata, value_pos) for value_pos in value_pos_list
                 ]
@@ -336,7 +336,7 @@ class VariantUtils:
         variant_type = cls._get_type(value, pos)
         if variant_type == dict:
 
-            def handle_object(key_value_pos_list: list[Tuple[str, int]]) -> Dict[str, Any]:
+            def handle_object(key_value_pos_list: List[Tuple[str, int]]) -> Dict[str, Any]:
                 key_value_list = [
                     (key, cls._to_python(value, metadata, value_pos))
                     for (key, value_pos) in key_value_pos_list
@@ -346,7 +346,7 @@ class VariantUtils:
             return cls._handle_object(value, metadata, pos, handle_object)
         elif variant_type == array:
 
-            def handle_array(value_pos_list: list[int]) -> List[Any]:
+            def handle_array(value_pos_list: List[int]) -> List[Any]:
                 value_list = [
                     cls._to_python(value, metadata, value_pos) for value_pos in value_pos_list
                 ]
@@ -375,7 +375,7 @@ class VariantUtils:
 
     @classmethod
     def _handle_object(
-        cls, value: bytes, metadata: bytes, pos: int, func: Callable[[list[Tuple[str, int]]], Any]
+        cls, value: bytes, metadata: bytes, pos: int, func: Callable[[List[Tuple[str, int]]], Any]
     ) -> Any:
         """
         Parses the variant object at position `pos`.
@@ -405,7 +405,7 @@ class VariantUtils:
         return func(key_value_pos_list)
 
     @classmethod
-    def _handle_array(cls, value: bytes, pos: int, func: Callable[[list[int]], Any]) -> Any:
+    def _handle_array(cls, value: bytes, pos: int, func: Callable[[List[int]], Any]) -> Any:
         """
         Parses the variant array at position `pos`.
         Calls `func` with a list of element positions of the array.

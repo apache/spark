@@ -24,7 +24,8 @@ import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{CONFIG, CONFIG2, CONFIG3, CONFIG4, CONFIG5}
 import org.apache.spark.internal.config.{PYSPARK_DRIVER_PYTHON, PYSPARK_PYTHON}
 import org.apache.spark.launcher.SparkLauncher
 
@@ -78,10 +79,11 @@ private[spark] class DriverCommandFeatureStep(conf: KubernetesDriverConf)
   private def configureForPython(pod: SparkPod, res: String): SparkPod = {
     if (conf.get(PYSPARK_MAJOR_PYTHON_VERSION).isDefined) {
       logWarning(
-          s"${PYSPARK_MAJOR_PYTHON_VERSION.key} was deprecated in Spark 3.1. " +
-          s"Please set '${PYSPARK_PYTHON.key}' and '${PYSPARK_DRIVER_PYTHON.key}' " +
-          s"configurations or $ENV_PYSPARK_PYTHON and $ENV_PYSPARK_DRIVER_PYTHON environment " +
-          "variables instead.")
+          log"${MDC(CONFIG, PYSPARK_MAJOR_PYTHON_VERSION.key)} was deprecated in Spark 3.1. " +
+            log"Please set '${MDC(CONFIG2, PYSPARK_PYTHON.key)}' and " +
+            log"'${MDC(CONFIG3, PYSPARK_DRIVER_PYTHON.key)}' " +
+            log"configurations or ${MDC(CONFIG4, ENV_PYSPARK_PYTHON)} and " +
+            log"${MDC(CONFIG5, ENV_PYSPARK_DRIVER_PYTHON)} environment variables instead.")
     }
 
     val pythonEnvs = {

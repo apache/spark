@@ -41,6 +41,9 @@ class PatternLoggingSuite extends LoggingSuiteBase with BeforeAndAfterAll {
   override def expectedPatternForMsgWithMDC(level: Level): String =
     s""".*$level $className: Lost executor 1.\n"""
 
+  override def expectedPatternForMsgWithMDCValueIsNull(level: Level): String =
+    s""".*$level $className: Lost executor null.\n"""
+
   override def expectedPatternForMsgWithMDCAndException(level: Level): String =
     s""".*$level $className: Error in executor 1.\njava.lang.RuntimeException: OOM\n[\\s\\S]*"""
 
