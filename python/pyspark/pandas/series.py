@@ -5910,7 +5910,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                     # then return monotonically_increasing_id. This will let max by
                     # to return last index value, which is the behaviour of pandas
                     else spark_column.isNotNull(),
-                    monotonically_increasing_id_column,
+                    F.col(monotonically_increasing_id_column),
                 ),
             )
             for index in where

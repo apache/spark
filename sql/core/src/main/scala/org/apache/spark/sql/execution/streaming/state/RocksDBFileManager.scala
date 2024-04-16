@@ -532,6 +532,7 @@ class RocksDBFileManager(
     // Delete unnecessary local immutable files
     localImmutableFiles
       .foreach { existingFile =>
+        val existingFileSize = existingFile.length()
         val requiredFile = requiredFileNameToFileDetails.get(existingFile.getName)
         val prevDfsFile = localFilesToDfsFiles.asScala.get(existingFile.getName)
         val isSameFile = if (requiredFile.isDefined && prevDfsFile.isDefined) {
@@ -544,7 +545,7 @@ class RocksDBFileManager(
         if (!isSameFile) {
           existingFile.delete()
           localFilesToDfsFiles.remove(existingFile.getName)
-          logInfo(s"Deleted local file $existingFile with size ${existingFile.length()} mapped" +
+          logInfo(s"Deleted local file $existingFile with size $existingFileSize mapped" +
             s" to previous dfsFile ${prevDfsFile.getOrElse("null")}")
         } else {
           logInfo(s"reusing $prevDfsFile present at $existingFile for $requiredFile")

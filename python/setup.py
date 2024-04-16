@@ -249,6 +249,7 @@ try:
             "pyspark.sql.connect.avro",
             "pyspark.sql.connect.client",
             "pyspark.sql.connect.proto",
+            "pyspark.sql.connect.protobuf",
             "pyspark.sql.connect.streaming",
             "pyspark.sql.pandas",
             "pyspark.sql.protobuf",
