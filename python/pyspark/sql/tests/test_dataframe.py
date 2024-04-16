@@ -1012,19 +1012,19 @@ class DataFrameTestsMixin:
             )
 
             # DataFrameQueryContext with pysparkLoggingInfo - and
-            # with self.assertRaises(AnalysisException) as pe:
-            #     df.withColumn("and_invalid_type", df.id & "string").collect()
-            # self.check_error(
-            #     exception=pe.exception,
-            #     error_class="DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
-            #     message_parameters={
-            #         "inputType": '"BOOLEAN"',
-            #         "actualDataType": '"BIGINT"',
-            #         "sqlExpr": '"(id AND string)"',
-            #     },
-            #     query_context_type=QueryContextType.DataFrame,
-            #     pyspark_fragment="and",
-            # )
+            with self.assertRaises(AnalysisException) as pe:
+                df.withColumn("and_invalid_type", df.id & "string").collect()
+            self.check_error(
+                exception=pe.exception,
+                error_class="DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+                message_parameters={
+                    "inputType": '"BOOLEAN"',
+                    "actualDataType": '"BIGINT"',
+                    "sqlExpr": '"(id AND string)"',
+                },
+                query_context_type=QueryContextType.DataFrame,
+                pyspark_fragment="and",
+            )
 
             # DataFrameQueryContext with pysparkLoggingInfo - or
             # with self.assertRaises(AnalysisException) as pe:

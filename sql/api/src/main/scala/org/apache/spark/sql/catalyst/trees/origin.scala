@@ -76,12 +76,6 @@ object CurrentOrigin {
       value.get.copy(line = Some(line), startPosition = Some(start)))
   }
 
-  def setPySparkErrorContext(pysparkFragment: String, pysparkCallSite: String): Unit = {
-    val tupleInfo = (pysparkFragment, pysparkCallSite)
-    value.set(
-      value.get.copy(pysparkErrorContext = Some(tupleInfo)))
-  }
-
   def withOrigin[A](o: Origin)(f: => A): A = {
     // remember the previous one so it can be reset to this
     // this way withOrigin can be recursive
@@ -90,4 +84,21 @@ object CurrentOrigin {
     val ret = try f finally { set(previous) }
     ret
   }
+}
+
+/**
+ * Provides detailed error context information on PySpark.
+ */
+object PySparkCurrentOrigin {
+  private val pysparkErrorContext = new ThreadLocal[Option[(String, String)]]() {
+    override def initialValue(): Option[(String, String)] = None
+  }
+
+  def set(fragment: String, callSite: String): Unit = {
+    pysparkErrorContext.set(Some((fragment, callSite)))
+  }
+
+  def get(): Option[(String, String)] = pysparkErrorContext.get()
+
+  def clear(): Unit = pysparkErrorContext.remove()
 }

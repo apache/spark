@@ -152,8 +152,8 @@ def _capture_call_site(fragment: str) -> None:
         lineno = frame_info.lineno
         call_site = f"{filename}:{lineno}"
 
-        pyspark_origin = spark._jvm.org.apache.spark.sql.catalyst.trees.CurrentOrigin
-        pyspark_origin.setPySparkErrorContext(fragment, call_site)
+        pyspark_origin = spark._jvm.org.apache.spark.sql.catalyst.trees.PySparkCurrentOrigin
+        pyspark_origin.set(fragment, call_site)
 
 
 def _with_origin(func: Callable[..., Any]) -> Callable[..., Any]:

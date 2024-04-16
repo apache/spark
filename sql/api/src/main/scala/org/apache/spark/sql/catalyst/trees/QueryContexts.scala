@@ -160,6 +160,8 @@ case class DataFrameQueryContext(
   val pysparkFragment: String = pysparkErrorContext.map(_._1).getOrElse("")
   val pysparkCallSite: String = pysparkErrorContext.map(_._2).getOrElse("")
 
+  PySparkCurrentOrigin.clear()
+
   val (displayedFragment, displayedCallsite) = if (pysparkErrorContext.nonEmpty) {
     (pysparkFragment, pysparkCallSite)
   } else {
