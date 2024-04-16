@@ -591,7 +591,7 @@ class SparkSession private[sql] (
     val any = ProtoUtils.parseWithRecursionLimit(
       extension,
       com.google.protobuf.Any.parser(),
-      recursionLimit = ConnectCommon.CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT)
+      recursionLimit = client.configuration.grpcMaxRecursionLimit)
     val command = proto.Command
       .newBuilder()
       .setExtension(any)
