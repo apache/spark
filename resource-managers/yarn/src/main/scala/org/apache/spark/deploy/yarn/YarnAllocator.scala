@@ -41,7 +41,7 @@ import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{CONTAINER_ID, EXECUTOR_ID}
+import org.apache.spark.internal.LogKey.{APP_STATE, CONFIG, CONFIG2, CONFIG3, CONTAINER_ID, ERROR, EXECUTOR_ID, HOST, REASON}
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
@@ -194,8 +194,8 @@ private[yarn] class YarnAllocator(
       sparkConf.get(SHUFFLE_SERVICE_ENABLED)) match {
       case (true, false) => true
       case (true, true) =>
-        logWarning(s"Yarn Executor Decommissioning is supported only " +
-          s"when ${SHUFFLE_SERVICE_ENABLED.key} is set to false. See: SPARK-39018.")
+        logWarning(log"Yarn Executor Decommissioning is supported only " +
+          log"when ${MDC(CONFIG, SHUFFLE_SERVICE_ENABLED.key)} is set to false. See: SPARK-39018.")
         false
       case (false, _) => false
     }
@@ -421,7 +421,7 @@ private[yarn] class YarnAllocator(
         val (_, rpId) = containerIdToExecutorIdAndResourceProfileId(container.getId)
         internalReleaseContainer(container)
         getOrUpdateRunningExecutorForRPId(rpId).remove(executorId)
-      case _ => logWarning(s"Attempted to kill unknown executor $executorId!")
+      case _ => logWarning(log"Attempted to kill unknown executor ${MDC(EXECUTOR_ID, executorId)}!")
     }
   }
 
@@ -848,7 +848,8 @@ private[yarn] class YarnAllocator(
         containerIdToExecutorIdAndResourceProfileId.get(containerId) match {
           case Some((executorId, _)) =>
             getOrUpdateRunningExecutorForRPId(rpId).remove(executorId)
-          case None => logWarning(s"Cannot find executorId for container: ${containerId.toString}")
+          case None => logWarning(log"Cannot find executorId for container: " +
+            log"${MDC(CONTAINER_ID, containerId)}")
         }
 
         logInfo("Completed container %s%s (state: %s, exit status: %s)".format(
@@ -859,31 +860,36 @@ private[yarn] class YarnAllocator(
         val exitStatus = completedContainer.getExitStatus
         val (exitCausedByApp, containerExitReason) = exitStatus match {
           case _ if shutdown =>
-            (false, s"Executor for container $containerId exited after Application shutdown.")
+            (false, log"Executor for container ${MDC(CONTAINER_ID, containerId)} exited after " +
+              log"Application shutdown.")
           case ContainerExitStatus.SUCCESS =>
-            (false, s"Executor for container $containerId exited because of a YARN event (e.g., " +
-              "preemption) and not because of an error in the running job.")
+            (false, log"Executor for container ${MDC(CONTAINER_ID, containerId)} exited because " +
+              log"of a YARN event (e.g., preemption) and not because of an error in the running " +
+              log"job.")
           case ContainerExitStatus.PREEMPTED =>
             // Preemption is not the fault of the running tasks, since YARN preempts containers
             // merely to do resource sharing, and tasks that fail due to preempted executors could
             // just as easily finish on any other executor. See SPARK-8167.
-            (false, s"Container ${containerId}${onHostStr} was preempted.")
+            (false, log"Container ${MDC(CONTAINER_ID, containerId)}${MDC(HOST, onHostStr)} " +
+              log"was preempted.")
           // Should probably still count memory exceeded exit codes towards task failures
           case ContainerExitStatus.KILLED_EXCEEDED_VMEM =>
             val vmemExceededPattern = raw"$MEM_REGEX of $MEM_REGEX virtual memory used".r
             val diag = vmemExceededPattern.findFirstIn(completedContainer.getDiagnostics)
               .map(_.concat(".")).getOrElse("")
-            val message = "Container killed by YARN for exceeding virtual memory limits. " +
-              s"$diag Consider boosting ${EXECUTOR_MEMORY_OVERHEAD.key} or boosting " +
-              s"${YarnConfiguration.NM_VMEM_PMEM_RATIO} or disabling " +
-              s"${YarnConfiguration.NM_VMEM_CHECK_ENABLED} because of YARN-4714."
+            val message = log"Container killed by YARN for exceeding virtual memory limits. " +
+              log"${MDC(ERROR, diag)} Consider boosting " +
+              log"${MDC(CONFIG, EXECUTOR_MEMORY_OVERHEAD.key)} or boosting " +
+              log"${MDC(CONFIG2, YarnConfiguration.NM_VMEM_PMEM_RATIO)} or disabling " +
+              log"${MDC(CONFIG3, YarnConfiguration.NM_VMEM_CHECK_ENABLED)} because of YARN-4714."
             (true, message)
           case ContainerExitStatus.KILLED_EXCEEDED_PMEM =>
             val pmemExceededPattern = raw"$MEM_REGEX of $MEM_REGEX physical memory used".r
             val diag = pmemExceededPattern.findFirstIn(completedContainer.getDiagnostics)
               .map(_.concat(".")).getOrElse("")
-            val message = "Container killed by YARN for exceeding physical memory limits. " +
-              s"$diag Consider boosting ${EXECUTOR_MEMORY_OVERHEAD.key}."
+            val message = log"Container killed by YARN for exceeding physical memory limits. " +
+              log"${MDC(ERROR, diag)} Consider boosting " +
+              log"${MDC(CONFIG, EXECUTOR_MEMORY_OVERHEAD.key)}."
             (true, message)
           case other_exit_status =>
             val exitStatus = completedContainer.getExitStatus
@@ -894,17 +900,17 @@ private[yarn] class YarnAllocator(
             // SPARK-26269: follow YARN's behaviour, see details in
             // org.apache.hadoop.yarn.util.Apps#shouldCountTowardsNodeBlacklisting
             if (NOT_APP_AND_SYSTEM_FAULT_EXIT_STATUS.contains(other_exit_status)) {
-              (false, s"Container marked as failed: $containerId$onHostStr. " +
-                s"Exit status: $exitStatus. " +
-                s"Possible causes: $sparkExitCodeReason " +
-                s"Diagnostics: ${completedContainer.getDiagnostics}.")
+              (false, log"Container marked as failed: ${MDC(CONTAINER_ID, containerId)}" +
+                log"${MDC(HOST, onHostStr)}. Exit status: ${MDC(APP_STATE, exitStatus)}. " +
+                log"Possible causes: ${MDC(REASON, sparkExitCodeReason)} " +
+                log"Diagnostics: ${MDC(ERROR, completedContainer.getDiagnostics)}.")
             } else {
               // completed container from a bad node
               allocatorNodeHealthTracker.handleResourceAllocationFailure(hostOpt)
-              (true, s"Container from a bad node: $containerId$onHostStr. " +
-                s"Exit status: $exitStatus. " +
-                s"Possible causes: $sparkExitCodeReason " +
-                s"Diagnostics: ${completedContainer.getDiagnostics}.")
+              (true, log"Container from a bad node: ${MDC(CONTAINER_ID, containerId)}" +
+                log"${MDC(HOST, onHostStr)}. Exit status: ${MDC(APP_STATE, exitStatus)}. " +
+                log"Possible causes: ${MDC(REASON, sparkExitCodeReason)} " +
+                log"Diagnostics: ${MDC(ERROR, completedContainer.getDiagnostics)}.")
             }
         }
         if (exitCausedByApp) {
@@ -912,7 +918,7 @@ private[yarn] class YarnAllocator(
         } else {
           logInfo(containerExitReason)
         }
-        ExecutorExited(exitStatus, exitCausedByApp, containerExitReason)
+        ExecutorExited(exitStatus, exitCausedByApp, containerExitReason.message)
       } else {
         // If we have already released this container, then it must mean
         // that the driver has explicitly requested it to be killed
@@ -974,7 +980,8 @@ private[yarn] class YarnAllocator(
       // the pre-stored lost reason
       context.reply(releasedExecutorLossReasons.remove(eid).get)
     } else {
-      logWarning(s"Tried to get the loss reason for non-existent executor $eid")
+      logWarning(log"Tried to get the loss reason for non-existent executor " +
+        log"${MDC(EXECUTOR_ID, eid)}")
       context.sendFailure(
         new SparkException(s"Fail to find loss reason for non-existent executor $eid"))
     }
