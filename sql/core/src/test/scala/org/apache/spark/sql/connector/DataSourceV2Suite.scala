@@ -971,15 +971,9 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     withTempView("t1") {
       spark.read.format(classOf[AdvancedDataSourceV2WithV2Filter].getName).load()
         .createTempView("t1")
-      val df1 = sql(
-        s"""
-           |select * from
-           |(select if(i = 1, i, 0) as c from t1) t
-           |where t.c > 0
-           |""".stripMargin
-      )
-      val result1 = df1.collect()
-      assert(result1.length == 1)
+      val df = sql("SELECT * FROM  t1 WHERE if(i = 1, i, 0) > 0")
+      val result = df.collect()
+      assert(result.length == 1)
     }
   }
 }
