@@ -28,9 +28,10 @@ import org.apache.arrow.vector.types.pojo
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ExecutePlanResponse.ObservedMetrics
-import org.apache.spark.sql.ObservationBase
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, UnboundRowEncoder}
+import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.connect.client.arrow.{AbstractMessageIterator, ArrowDeserializingIterator, ConcatenatingArrowStreamReader, MessageIterator}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, LiteralValueProtoConverter}
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -41,7 +42,7 @@ private[sql] class SparkResult[T](
     allocator: BufferAllocator,
     encoder: AgnosticEncoder[T],
     timeZoneId: String,
-    observationsOpt: Option[Map[Long, ObservationBase]] = None)
+    setObservationMetricsOpt: Option[(Long, Option[Map[String, Any]]) => Unit] = None)
     extends AutoCloseable { self =>
 
   case class StageInfo(
@@ -82,7 +83,7 @@ private[sql] class SparkResult[T](
   private[this] var arrowSchema: pojo.Schema = _
   private[this] var nextResultIndex: Int = 0
   private val resultMap = mutable.Map.empty[Int, (Long, Seq[ArrowMessage])]
-  private val observedMetrics = mutable.Map.empty[String, Map[String, Any]]
+  private val observedMetrics = mutable.Map.empty[String, Row]
   private val cleanable =
     SparkResult.cleaner.register(this, new SparkResultCloseable(resultMap, responses))
 
@@ -206,23 +207,26 @@ private[sql] class SparkResult[T](
   }
 
   private def processObservedMetrics(
-      metrics: java.util.List[ObservedMetrics]): Iterable[(String, Map[String, Any])] = {
-    val processed = mutable.ListBuffer.empty[(String, Map[String, Any])]
-    metrics.forEach { metric =>
+      metrics: java.util.List[ObservedMetrics]): Iterable[(String, Row)] = {
+    metrics.asScala.map { metric =>
       assert(metric.getKeysCount == metric.getValuesCount)
-      val kv = (0 until metric.getKeysCount).map { i =>
+      var schema = new StructType()
+      val keys = mutable.ListBuffer.empty[String]
+      val values = mutable.ListBuffer.empty[Any]
+      (0 until metric.getKeysCount).map { i =>
         val key = metric.getKeys(i)
         val value = LiteralValueProtoConverter.toCatalystValue(metric.getValues(i))
-        key -> value
-      }.toMap
-      processed += metric.getName -> kv
+        schema = schema.add(key, LiteralValueProtoConverter.toDataType(value.getClass))
+        keys += key
+        values += value
+      }
       // If the metrics is registered by an Observation object, attach them and unblock any
       // blocked thread.
-      observationsOpt.map { observations =>
-        observations.get(metric.getPlanId).map(_.setMetricsAndNotify(Some(kv)))
+      setObservationMetricsOpt.foreach { setObservationMetrics =>
+        setObservationMetrics(metric.getPlanId, Some(keys.zip(values).toMap))
       }
+      metric.getName -> new GenericRowWithSchema(values.toArray, schema)
     }
-    processed
   }
 
   /**
@@ -278,7 +282,7 @@ private[sql] class SparkResult[T](
   /**
    * Returns all observed metrics in the result.
    */
-  def getObservedMetrics: Map[String, Map[String, Any]] = {
+  def getObservedMetrics: Map[String, Row] = {
     // We need to process all responses to get all metrics.
     processResponses()
     observedMetrics.toMap

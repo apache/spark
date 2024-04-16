@@ -555,7 +555,7 @@ class SparkSession private[sql] (
 
   private[sql] def execute[T](plan: proto.Plan, encoder: AgnosticEncoder[T]): SparkResult[T] = {
     val value = client.execute(plan)
-    new SparkResult(value, allocator, encoder, timeZoneId, Some(this.observationRegistry.toMap))
+    new SparkResult(value, allocator, encoder, timeZoneId, Some(setMetricsAndUnregisterObservation))
   }
 
   private[sql] def execute(f: proto.Relation.Builder => Unit): Unit = {
@@ -818,6 +818,28 @@ class SparkSession private[sql] (
    * Set to false to prevent client.releaseSession on close() (testing only)
    */
   private[sql] var releaseSessionOnClose = true
+
+  private[sql] def registerObservation(planId: Long, observation: Observation): Unit = {
+    // makes this class thread-safe:
+    // only the first thread entering this block can set sparkSession
+    // all other threads will see the exception, as it is only allowed to do this once
+    observation.synchronized {
+      if (observationRegistry.contains(planId)) {
+        throw new IllegalArgumentException("An Observation can be used with a Dataset only once")
+      }
+      observationRegistry.put(planId, observation)
+    }
+  }
+
+  private[sql] def setMetricsAndUnregisterObservation(
+      planId: Long,
+      metrics: Option[Map[String, Any]]): Unit = {
+    observationRegistry.get(planId).map { observation =>
+      if (observation.setMetricsAndNotify(metrics)) {
+        observationRegistry.remove(planId)
+      }
+    }
+  }
 }
 
 // The minimal builder needed to create a spark session.

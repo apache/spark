@@ -1521,12 +1521,20 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     val observedDf = df.observe(ob1, min("id"), avg("id"), max("id"))
     val observedObservedDf = observedDf.observe("ob2", min("extra"), avg("extra"), max("extra"))
 
-    val ob1Metrics = Map("ob1" -> Map("min(id)" -> 0, "avg(id)" -> 49, "max(id)" -> 98))
-    val ob2Metrics = Map("ob2" -> Map("min(extra)" -> -1, "avg(extra)" -> 48, "max(extra)" -> 97))
+    val ob1Schema = new StructType()
+      .add("min(id)", LongType)
+      .add("avg(id)", DoubleType)
+      .add("max(id)", LongType)
+    val ob2Schema = new StructType()
+      .add("min(extra)", LongType)
+      .add("avg(extra)", DoubleType)
+      .add("max(extra)", LongType)
+    val ob1Metrics = Map("ob1" -> new GenericRowWithSchema(Array(0, 49, 98), ob1Schema))
+    val ob2Metrics = Map("ob2" -> new GenericRowWithSchema(Array(-1, 48, 97), ob2Schema))
 
-    assert(df.collectObservations() === Map.empty)
-    assert(observedDf.collectObservations() === ob1Metrics)
-    assert(observedObservedDf.collectObservations() === ob1Metrics ++ ob2Metrics)
+    assert(df.collectResult().getObservedMetrics === Map.empty)
+    assert(observedDf.collectResult().getObservedMetrics === ob1Metrics)
+    assert(observedObservedDf.collectResult().getObservedMetrics === ob1Metrics ++ ob2Metrics)
   }
 
   test("Observation.get is blocked until the query is finished") {

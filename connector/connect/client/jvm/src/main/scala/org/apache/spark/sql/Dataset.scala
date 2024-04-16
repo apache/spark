@@ -3354,13 +3354,13 @@ class Dataset[T] private[sql] (
    * function.
    *
    * A user can retrieve the metrics by calling
-   * `org.apache.spark.sql.Dataset.collectObservations()`.
+   * `org.apache.spark.sql.Dataset.collectResult().getObservedMetrics`.
    *
    * {{{
    *   // Observe row count (rows) and highest id (maxid) in the Dataset while writing it
    *   val observed_ds = ds.observe("my_metrics", count(lit(1)).as("rows"), max($"id").as("maxid"))
    *   observed_ds.write.parquet("ds.parquet")
-   *   val metrics = observed_ds.collectObservations()
+   *   val metrics = observed_ds.collectResult().getObservedMetrics
    * }}}
    *
    * @group typedrel
@@ -3401,7 +3401,7 @@ class Dataset[T] private[sql] (
   @scala.annotation.varargs
   def observe(observation: Observation, expr: Column, exprs: Column*): Dataset[T] = {
     val df = observe(observation.name, expr, exprs: _*)
-    observation.register(sparkSession, df.getPlanId.get)
+    sparkSession.registerObservation(df.getPlanId.get, observation)
     df
   }
 
@@ -3462,9 +3462,6 @@ class Dataset[T] private[sql] (
   }
 
   def collectResult(): SparkResult[T] = sparkSession.execute(plan, agnosticEncoder)
-
-  def collectObservations(): Map[String, Map[String, Any]] =
-    collectResult().getObservedMetrics
 
   private[sql] def withResult[E](f: SparkResult[T] => E): E = {
     val result = collectResult()
