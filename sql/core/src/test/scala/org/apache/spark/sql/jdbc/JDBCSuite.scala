@@ -1335,7 +1335,10 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     assert(getJdbcType(oracleDialect, StringType) == "VARCHAR2(255)")
     assert(getJdbcType(oracleDialect, BinaryType) == "BLOB")
     assert(getJdbcType(oracleDialect, DateType) == "DATE")
-    assert(getJdbcType(oracleDialect, TimestampType) == "TIMESTAMP")
+    assert(getJdbcType(oracleDialect, TimestampType) == "TIMESTAMP WITH LOCAL TIME ZONE")
+    withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_MAPPING_ENABLED.key -> "true") {
+      assert(getJdbcType(oracleDialect, TimestampType) == "TIMESTAMP")
+    }
     assert(getJdbcType(oracleDialect, TimestampNTZType) == "TIMESTAMP")
   }
 
@@ -2012,6 +2015,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     when(mockRsmd.isSigned(anyInt())).thenReturn(false)
     when(mockRsmd.isNullable(anyInt())).thenReturn(java.sql.ResultSetMetaData.columnNoNulls)
 
+    val mockConn = mock(classOf[java.sql.Connection])
     val mockRs = mock(classOf[java.sql.ResultSet])
     when(mockRs.getMetaData).thenReturn(mockRsmd)
 
@@ -2019,7 +2023,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     when(mockDialect.getCatalystType(anyInt(), anyString(), anyInt(), any[MetadataBuilder]))
       .thenReturn(None)
 
-    val schema = JdbcUtils.getSchema(mockRs, mockDialect)
+    val schema = JdbcUtils.getSchema(mockConn, mockRs, mockDialect)
     val fields = schema.fields
     assert(fields.length === 1)
     assert(fields(0).dataType === StringType)

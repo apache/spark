@@ -21,13 +21,15 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{LogEntry, Logging, MDC}
+import org.apache.spark.internal.LogKey._
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, AttributeSet, Expression, NamedExpression, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, IgnoreCachedData, LeafNode, LogicalPlan, Project, ResolvedHint, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
+import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.CommandUtils
@@ -40,7 +42,15 @@ import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
 
 /** Holds a cached logical plan and its data */
 case class CachedData(plan: LogicalPlan,
-                      cachedRepresentation: Either[LogicalPlan, InMemoryRelation])
+                      cachedRepresentation: Either[LogicalPlan, InMemoryRelation]) {
+  override def toString: String =
+    s"""
+       |CachedData(
+       |logicalPlan=$plan
+       |InMemoryRelation=$cachedRepresentation)
+       |""".stripMargin
+}
+
 
 /**
  * Provides support in a SQLContext for caching query results and automatically using these cached
@@ -65,6 +75,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     cachedData.foreach(_.cachedRepresentation.fold(CacheManager.inMemoryRelationExtractor, identity)
       .cacheBuilder.clearCache())
     cachedData = IndexedSeq[CachedData]()
+    CacheManager.logCacheOperation(log"Cleared all Dataframe cache entries")
   }
 
   /** Checks if the cache is empty. */
@@ -122,7 +133,10 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
         if (lookupCachedData(planToCache).exists(_.cachedRepresentation.isRight)) {
           logWarning("Data has already been cached.")
         } else {
-          cachedData = CachedData(planToCache, Right(inMemoryRelation)) +: cachedData
+          val cd = CachedData(planToCache, Right(inMemoryRelation))
+          cachedData = cd +: cachedData
+          CacheManager.logCacheOperation(log"Added Dataframe cache entry:" +
+            log"${MDC(DATAFRAME_CACHE_ENTRY, cd)}")
         }
       }
     }
@@ -221,6 +235,10 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     plansToUncache.foreach { _.cachedRepresentation.
       fold(CacheManager.inMemoryRelationExtractor, identity).cacheBuilder.clearCache(blocking) }
 
+    CacheManager.logCacheOperation(log"Removed ${MDC(SIZE, plansToUncache.size)} Dataframe " +
+      log"cache entries, with logical plans being " +
+      log"\n[${MDC(QUERY_PLAN, plansToUncache.map(_.plan).mkString(",\n"))}]")
+
     // Re-compile dependent cached queries after removing the cached query.
     if (!cascade) {
       recacheByCondition(spark, cd => {
@@ -289,6 +307,8 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
           logWarning("While recaching, data was already added to cache.")
         } else {
           cachedData = recomputedPlan +: cachedData
+          CacheManager.logCacheOperation(log"Re-cached Dataframe cache entry:" +
+            log"${MDC(DATAFRAME_CACHE_ENTRY, recomputedPlan)}")
         }
       }
     }
@@ -314,11 +334,17 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   /** Optionally returns cached data for the given [[LogicalPlan]]. */
   def lookupCachedData(plan: LogicalPlan): Option[CachedData] = {
     val fullMatch = cachedData.find(cd => plan.sameResult(cd.plan))
-    fullMatch.map(Option(_)).getOrElse(
+    val result = fullMatch.map(Option(_)).getOrElse(
       plan match {
         case p: Project => lookUpPartiallyMatchedCachedPlan(p, cachedData)
         case _ => None
       })
+    if (result.isDefined) {
+      CacheManager.logCacheOperation(log"Dataframe cache hit for input plan:" +
+        log"\n${MDC(QUERY_PLAN, plan)} matched with cache entry:" +
+        log"${MDC(DATAFRAME_CACHE_ENTRY, result.get)}")
+    }
+    result
   }
 
   private def lookUpPartiallyMatchedCachedPlan(
@@ -570,9 +596,21 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
         }.getOrElse(currentFragment)
     }
 
-    newPlan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
+    val result = newPlan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
       case s: SubqueryExpression => s.withNewPlan(useCachedData(s.plan))
     }
+
+    if (result.fastEquals(plan)) {
+      CacheManager.logCacheOperation(
+        log"Dataframe cache miss for input plan:\n${MDC(QUERY_PLAN, plan)}")
+      CacheManager.logCacheOperation(log"Last 20 Dataframe cache entry logical plans:\n" +
+        log"[${MDC(DATAFRAME_CACHE_ENTRY, cachedData.take(20).map(_.plan).mkString(",\n"))}]")
+    } else {
+      CacheManager.logCacheOperation(log"Dataframe cache hit plan change summary:\n" +
+        log"${MDC(
+          QUERY_PLAN_COMPARISON, sideBySide(plan.treeString, result.treeString).mkString("\n"))}")
+    }
+    result
   }
 
   /**
@@ -679,6 +717,17 @@ object CacheManager {
 
   val inMemoryRelationExtractor: LogicalPlan => InMemoryRelation =
     plan => plan.collectLeaves().head.asInstanceOf[InMemoryRelation]
+
+  def logCacheOperation(f: => LogEntry): Unit = {
+    SQLConf.get.dataframeCacheLogLevel match {
+      case "TRACE" => logTrace(f)
+      case "DEBUG" => logDebug(f)
+      case "INFO" => logInfo(f)
+      case "WARN" => logWarning(f)
+      case "ERROR" => logError(f)
+      case _ => logTrace(f)
+    }
+  }
 }
 
 object CompatibilityChecker {

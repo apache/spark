@@ -22,10 +22,6 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 class CogroupedApplyInPandasTests(CogroupedApplyInPandasTestsMixin, ReusedConnectTestCase):
     @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_different_group_key_cardinality(self):
-        self.check_different_group_key_cardinality()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_wrong_args(self):
         self.check_wrong_args()
 

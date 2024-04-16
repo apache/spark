@@ -32,6 +32,7 @@ try:
 except ImportError:
     has_resource_module = False
 
+from pyspark.accumulators import _accumulatorRegistry
 from pyspark.util import is_remote_only
 from pyspark.errors import PySparkRuntimeError
 from pyspark.util import local_connect_and_auth
@@ -183,11 +184,6 @@ def send_accumulator_updates(outfile: IO) -> None:
     """
     Send the accumulator updates back to JVM.
     """
-    if not is_remote_only():
-        from pyspark.accumulators import _accumulatorRegistry
-
-        write_int(len(_accumulatorRegistry), outfile)
-        for aid, accum in _accumulatorRegistry.items():
-            pickleSer._write_with_length((aid, accum._value), outfile)
-    else:
-        write_int(0, outfile)
+    write_int(len(_accumulatorRegistry), outfile)
+    for aid, accum in _accumulatorRegistry.items():
+        pickleSer._write_with_length((aid, accum._value), outfile)

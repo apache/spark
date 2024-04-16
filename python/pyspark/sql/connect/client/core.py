@@ -115,11 +115,12 @@ class ChannelBuilder:
     PARAM_USER_ID = "user_id"
     PARAM_USER_AGENT = "user_agent"
     PARAM_SESSION_ID = "session_id"
-    MAX_MESSAGE_LENGTH = 128 * 1024 * 1024
+
+    GRPC_MAX_MESSAGE_LENGTH_DEFAULT = 128 * 1024 * 1024
 
     GRPC_DEFAULT_OPTIONS = [
-        ("grpc.max_send_message_length", MAX_MESSAGE_LENGTH),
-        ("grpc.max_receive_message_length", MAX_MESSAGE_LENGTH),
+        ("grpc.max_send_message_length", GRPC_MAX_MESSAGE_LENGTH_DEFAULT),
+        ("grpc.max_receive_message_length", GRPC_MAX_MESSAGE_LENGTH_DEFAULT),
     ]
 
     def __init__(
@@ -129,10 +130,11 @@ class ChannelBuilder:
     ):
         self._interceptors: List[grpc.UnaryStreamClientInterceptor] = []
         self._params: Dict[str, str] = params or dict()
-        self._channel_options: List[Tuple[str, Any]] = ChannelBuilder.GRPC_DEFAULT_OPTIONS
+        self._channel_options: List[Tuple[str, Any]] = ChannelBuilder.GRPC_DEFAULT_OPTIONS.copy()
 
         if channelOptions is not None:
-            self._channel_options = self._channel_options + channelOptions
+            for key, value in channelOptions:
+                self.setChannelOption(key, value)
 
     def get(self, key: str) -> Any:
         """
@@ -151,6 +153,14 @@ class ChannelBuilder:
 
     def set(self, key: str, value: Any) -> None:
         self._params[key] = value
+
+    def setChannelOption(self, key: str, value: Any) -> None:
+        # overwrite option if it exists already else append it
+        for i, option in enumerate(self._channel_options):
+            if option[0] == key:
+                self._channel_options[i] = (key, value)
+                return
+        self._channel_options.append((key, value))
 
     def add_interceptor(self, interceptor: grpc.UnaryStreamClientInterceptor) -> None:
         self._interceptors.append(interceptor)
@@ -897,11 +907,12 @@ class SparkConnectClient(object):
         logger.info(f"Executing plan {self._proto_to_string(plan)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
-        for response in self._execute_and_fetch_as_iterator(req, observations):
-            if isinstance(response, StructType):
-                yield response
-            elif isinstance(response, pa.RecordBatch):
-                yield pa.Table.from_batches([response])
+        with Progress(handlers=self._progress_handlers, operation_id=req.operation_id) as progress:
+            for response in self._execute_and_fetch_as_iterator(req, observations, progress):
+                if isinstance(response, StructType):
+                    yield response
+                elif isinstance(response, pa.RecordBatch):
+                    yield pa.Table.from_batches([response])
 
     def to_table(
         self, plan: pb2.Plan, observations: Dict[str, Observation]
@@ -1055,6 +1066,28 @@ class SparkConnectClient(object):
             return (data.to_pandas(), properties)
         else:
             return (None, properties)
+
+    def execute_command_as_iterator(
+        self, command: pb2.Command, observations: Optional[Dict[str, Observation]] = None
+    ) -> Iterator[Dict[str, Any]]:
+        """
+        Execute given command. Similar to execute_command, but the value is returned using yield.
+        """
+        logger.info(f"Execute command as iterator for command {self._proto_to_string(command)}")
+        req = self._execute_plan_request_with_metadata()
+        if self._user_id:
+            req.user_context.user_id = self._user_id
+        req.plan.command.CopyFrom(command)
+        for response in self._execute_and_fetch_as_iterator(req, observations or {}):
+            if isinstance(response, dict):
+                yield response
+            else:
+                raise PySparkValueError(
+                    error_class="UNKNOWN_RESPONSE",
+                    message_parameters={
+                        "response": str(response),
+                    },
+                )
 
     def same_semantics(self, plan: pb2.Plan, other: pb2.Plan) -> bool:
         """
@@ -1319,6 +1352,9 @@ class SparkConnectClient(object):
             if b.HasField("streaming_query_manager_command_result"):
                 cmd_result = b.streaming_query_manager_command_result
                 yield {"streaming_query_manager_command_result": cmd_result}
+            if b.HasField("streaming_query_listener_events_result"):
+                event_result = b.streaming_query_listener_events_result
+                yield {"streaming_query_listener_events_result": event_result}
             if b.HasField("get_resources_command_result"):
                 resources = {}
                 for key, resource in b.get_resources_command_result.resources.items():
@@ -1331,7 +1367,7 @@ class SparkConnectClient(object):
             if b.HasField("execution_progress"):
                 if progress:
                     p = from_proto(b.execution_progress)
-                    progress.update_ticks(*p)
+                    progress.update_ticks(*p, operation_id=b.operation_id)
             if b.HasField("arrow_batch"):
                 logger.debug(
                     f"Received arrow batch rows={b.arrow_batch.row_count} "
@@ -1378,16 +1414,12 @@ class SparkConnectClient(object):
                     with attempt:
                         for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
                             yield from handle_response(b)
-        except KeyboardInterrupt:
+        except KeyboardInterrupt as kb:
             logger.debug(f"Interrupt request received for operation={req.operation_id}")
-            try:
-                self.interrupt_operation(req.operation_id)
-            except Exception as e:
-                # Swallow all errors if aborted.
-                logger.debug(f"Caught an error during interrupt handling, silenced: {e}")
-                pass
             if progress is not None:
                 progress.finish()
+            self.interrupt_operation(req.operation_id)
+            raise kb
         except Exception as error:
             self._handle_error(error)
 
@@ -1411,26 +1443,27 @@ class SparkConnectClient(object):
         schema: Optional[StructType] = None
         properties: Dict[str, Any] = {}
 
-        progress = Progress(handlers=self._progress_handlers)
-        for response in self._execute_and_fetch_as_iterator(req, observations, progress=progress):
-            if isinstance(response, StructType):
-                schema = response
-            elif isinstance(response, pa.RecordBatch):
-                batches.append(response)
-            elif isinstance(response, PlanMetrics):
-                metrics.append(response)
-            elif isinstance(response, PlanObservedMetrics):
-                observed_metrics.append(response)
-            elif isinstance(response, dict):
-                properties.update(**response)
-            else:
-                raise PySparkValueError(
-                    error_class="UNKNOWN_RESPONSE",
-                    message_parameters={
-                        "response": response,
-                    },
-                )
-        progress.finish()
+        with Progress(handlers=self._progress_handlers, operation_id=req.operation_id) as progress:
+            for response in self._execute_and_fetch_as_iterator(
+                req, observations, progress=progress
+            ):
+                if isinstance(response, StructType):
+                    schema = response
+                elif isinstance(response, pa.RecordBatch):
+                    batches.append(response)
+                elif isinstance(response, PlanMetrics):
+                    metrics.append(response)
+                elif isinstance(response, PlanObservedMetrics):
+                    observed_metrics.append(response)
+                elif isinstance(response, dict):
+                    properties.update(**response)
+                else:
+                    raise PySparkValueError(
+                        error_class="UNKNOWN_RESPONSE",
+                        message_parameters={
+                            "response": response,
+                        },
+                    )
 
         if len(batches) > 0:
             if self_destruct:

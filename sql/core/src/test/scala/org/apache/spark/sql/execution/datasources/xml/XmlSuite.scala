@@ -2604,14 +2604,27 @@ class XmlSuite
     checkAnswer(df, Seq(Row(Row(Array(1, 2, 3), Array(1, 2)))))
   }
 
-  test("ignore commented row tags") {
+  test("ignore commented and CDATA row tags") {
     val results = spark.read.format("xml")
       .option("rowTag", "ROW")
-      .option("multiLine", "true")
-      .load(getTestResourcePath(resDir + "commented-row.xml"))
+      .load(getTestResourcePath(resDir + "ignored-rows.xml"))
 
-    val expectedResults = Seq.range(1, 11).map(Row(_))
+    val expectedResults = Seq.range(1, 18).map(Row(_))
     checkAnswer(results, expectedResults)
+
+    val results2 = spark.read.format("xml")
+      .option("rowTag", "ROW")
+      .load(getTestResourcePath(resDir + "cdata-ending-eof.xml"))
+
+    val expectedResults2 = Seq.range(1, 18).map(Row(_))
+    checkAnswer(results2, expectedResults2)
+
+    val results3 = spark.read.format("xml")
+      .option("rowTag", "ROW")
+      .load(getTestResourcePath(resDir + "cdata-no-close.xml"))
+
+    val expectedResults3 = Seq.range(1, 18).map(Row(_))
+    checkAnswer(results3, expectedResults3)
   }
 
   test("capture values interspersed between elements - nested struct") {
