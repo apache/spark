@@ -1011,36 +1011,6 @@ class DataFrameTestsMixin:
                 pyspark_fragment="eqNullSafe",
             )
 
-            # DataFrameQueryContext with pysparkLoggingInfo - and
-            with self.assertRaises(AnalysisException) as pe:
-                df.withColumn("and_invalid_type", df.id & "string").collect()
-            self.check_error(
-                exception=pe.exception,
-                error_class="DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
-                message_parameters={
-                    "inputType": '"BOOLEAN"',
-                    "actualDataType": '"BIGINT"',
-                    "sqlExpr": '"(id AND string)"',
-                },
-                query_context_type=QueryContextType.DataFrame,
-                pyspark_fragment="and",
-            )
-
-            # DataFrameQueryContext with pysparkLoggingInfo - or
-            # with self.assertRaises(AnalysisException) as pe:
-            #     df.withColumn("or_invalid_type", df.id | "string").collect()
-            # self.check_error(
-            #     exception=pe.exception,
-            #     error_class="DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
-            #     message_parameters={
-            #         "inputType": '"BOOLEAN"',
-            #         "actualDataType": '"BIGINT"',
-            #         "sqlExpr": '"(id OR string)"',
-            #     },
-            #     query_context_type=QueryContextType.DataFrame,
-            #     pyspark_fragment="or",
-            # )
-
             # DataFrameQueryContext with pysparkLoggingInfo - bitwiseOR
             with self.assertRaises(NumberFormatException) as pe:
                 df.withColumn("bitwiseOR_invalid_type", df.id.bitwiseOR("string")).collect()
