@@ -161,10 +161,12 @@ public final class CollationSupport {
         return String.format(expr + "ICU(%s, %s, %d, %d)", string, substring, start, collationId);
       }
     }
-    public static int execBinary(final UTF8String string, final UTF8String substring, final int start) {
+    public static int execBinary(final UTF8String string, final UTF8String substring,
+        final int start) {
       return string.indexOf(substring, start);
     }
-    public static int execLowercase(final UTF8String string, final UTF8String substring, final int start) {
+    public static int execLowercase(final UTF8String string, final UTF8String substring,
+        final int start) {
       return string.toLowerCase().indexOf(substring.toLowerCase(), start);
     }
     public static int execICU(final UTF8String string, final UTF8String substring, final int start,
