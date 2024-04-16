@@ -94,6 +94,7 @@ object LogKey extends Enumeration {
   val FUNCTION_PARAMETER = Value
   val GROUP_ID = Value
   val HADOOP_VERSION = Value
+  val HISTORY_DIR = Value
   val HIVE_CLIENT_VERSION = Value
   val HIVE_METASTORE_VERSION = Value
   val HIVE_OPERATION_STATE = Value
