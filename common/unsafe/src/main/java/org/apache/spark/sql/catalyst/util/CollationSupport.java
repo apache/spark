@@ -174,7 +174,7 @@ public final class CollationSupport {
     }
     public static UTF8String execICU(final UTF8String string, final UTF8String delimiter,
         final int count, final int collationId) {
-      return CollationAwareUTF8String.collationAwareSubStringIndex(string, delimiter, count,
+      return CollationAwareUTF8String.subStringIndex(string, delimiter, count,
               collationId);
     }
   }
@@ -211,7 +211,7 @@ public final class CollationSupport {
         pos, pos + pattern.numChars()), pattern, collationId).last() == 0;
     }
 
-    private static int collationAwareFind(UTF8String target, UTF8String pattern, int start,
+    private static int find(UTF8String target, UTF8String pattern, int start,
         int collationId) {
       assert (pattern.numBytes() > 0);
 
@@ -223,7 +223,7 @@ public final class CollationSupport {
       return target.charPosToByte(stringSearch.next());
     }
 
-    private static int collationAwareRFind(UTF8String target, UTF8String pattern, int start,
+    private static int rfind(UTF8String target, UTF8String pattern, int start,
         int collationId) {
       assert (pattern.numBytes() > 0);
 
@@ -248,15 +248,15 @@ public final class CollationSupport {
       return target.charPosToByte(prevStart);
     }
 
-    private static UTF8String collationAwareSubStringIndex(final UTF8String string,
-        final UTF8String delimiter, int count, final int collationId) {
+    private static UTF8String subStringIndex(final UTF8String string, final UTF8String delimiter,
+        int count, final int collationId) {
       if (delimiter.numBytes() == 0 || count == 0) {
         return UTF8String.EMPTY_UTF8;
       }
       if (count > 0) {
         int idx = -1;
         while (count > 0) {
-          idx = collationAwareFind(string, delimiter, idx + 1, collationId);
+          idx = find(string, delimiter, idx + 1, collationId);
           if (idx >= 0) {
             count --;
           } else {
@@ -275,7 +275,7 @@ public final class CollationSupport {
         int idx = string.numBytes() - delimiter.numBytes() + 1;
         count = -count;
         while (count > 0) {
-          idx = collationAwareRFind(string, delimiter, idx - 1, collationId);
+          idx = rfind(string, delimiter, idx - 1, collationId);
           if (idx >= 0) {
             count --;
           } else {
