@@ -46,14 +46,29 @@ class FilterPushdownSuite extends PlanTest {
         PushDownPredicates) :: Nil
   }
 
+  object PushExtraPredicateThroughJoinOptimize extends RuleExecutor[LogicalPlan] {
+
+    val batches =
+      Batch("Push extra predicate through join", FixedPoint(10),
+        PushExtraPredicateThroughJoin,
+        PushDownPredicates,
+        ConstantFolding,
+        BooleanSimplification,
+        PruneFilters) :: Nil
+  }
+
   val attrA = $"a".int
   val attrB = $"b".int
   val attrC = $"c".int
   val attrD = $"d".int
+  val attrE = $"e".int
+  val attrF = $"f".int
 
   val testRelation = LocalRelation(attrA, attrB, attrC)
 
   val testRelation1 = LocalRelation(attrD)
+
+  val testRelation2 = LocalRelation(attrE, attrF)
 
   val simpleDisjunctivePredicate =
     ("x.a".attr > 3) && ("y.a".attr > 13) || ("x.a".attr > 1) && ("y.a".attr > 11)
@@ -1520,4 +1535,22 @@ class FilterPushdownSuite extends PlanTest {
       .analyze
     comparePlans(optimizedQueryWithoutStep, correctAnswer)
   }
+
+  test("SPARK-47870: optimize predicate after push extra predicate through join") {
+    val left = testRelation.select($"a", $"b")
+      .union(testRelation1.select($"d".as("a"), Literal(1).as("b")))
+      .subquery("x")
+    val right = testRelation2.subquery("y")
+    val originalQuery = left.join(right, Inner, Option("x.a".attr === "y.e".attr))
+      .where($"a" > 1 || ($"b" === 1 && $"f" === 1))
+    val optimized = PushExtraPredicateThroughJoinOptimize.execute(originalQuery.analyze)
+    val correctAnswer = testRelation.where($"a" > 1 || $"b" === 1).select($"a", $"b")
+      .union(testRelation1.select($"d".as("a"), Literal(1).as("b")))
+      .subquery("x")
+      .join(right.subquery("y"), Inner,
+        Option("x.a".attr === "y.e".attr && ($"a" > 1 || ($"b" === 1 && $"f" === 1))))
+      .analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
 }
