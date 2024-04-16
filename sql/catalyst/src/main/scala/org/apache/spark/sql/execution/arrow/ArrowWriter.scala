@@ -385,15 +385,6 @@ private[arrow] class StructWriter(
     valueVector.setNull(count)
   }
 
-    var i = 0
-    while (i < children.length) {
-      children(i).setNull()
-      children(i).count += 1
-      i += 1
-    }
-    valueVector.setNull(count)
-  }
-
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
     if (isVariant) {
       valueVector.setIndexDefined(count)
