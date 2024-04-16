@@ -152,15 +152,15 @@ public final class CollationSupport {
         return execICU(source, dict, collationId);
       }
     }
-    public static String genCode(final String l, final String r, final int collationId) {
+    public static String genCode(final String source, final String dict, final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
       String expr = "CollationSupport.EndsWith.exec";
       if (collation.supportsBinaryEquality) {
-        return String.format(expr + "Binary(%s, %s)", l, r);
+        return String.format(expr + "Binary(%s, %s)", source, dict);
       } else if (collation.supportsLowercaseEquality) {
-        return String.format(expr + "Lowercase(%s, %s)", l, r);
+        return String.format(expr + "Lowercase(%s, %s)", source, dict);
       } else {
-        return String.format(expr + "ICU(%s, %s, %d)", l, r, collationId);
+        return String.format(expr + "ICU(%s, %s, %d)", source, dict, collationId);
       }
     }
     public static UTF8String execBinary(final UTF8String source, Map<String, String> dict) {
@@ -184,7 +184,7 @@ public final class CollationSupport {
       return UTF8String.fromString(sb.toString());
     }
     public static UTF8String execICU(final UTF8String source, Map<String, String> dict,
-                                  final int collationId) {
+        final int collationId) {
       return source.translate(CollationAwareUTF8String.getCollationAwareDict(
         source, dict, collationId));
     }
@@ -229,7 +229,7 @@ public final class CollationSupport {
       Map<String, String> collationAwareDict = new HashMap<>();
       for (String key : dict.keySet()) {
         StringSearch stringSearch =
-                CollationFactory.getStringSearch(string, UTF8String.fromString(key), collationId);
+          CollationFactory.getStringSearch(string, UTF8String.fromString(key), collationId);
 
         int pos = 0;
         while ((pos = stringSearch.next()) != StringSearch.DONE) {
