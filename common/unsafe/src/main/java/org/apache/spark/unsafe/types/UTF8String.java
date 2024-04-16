@@ -342,6 +342,61 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
+   * Returns whether `this` contains `substring` in a lowercase unicode-aware manner
+   *
+   * This function is written in a way which avoids excessive allocations in case if we work with
+   * bare ASCII-character strings.
+   */
+  public boolean containsInLowerCase(final UTF8String substring) {
+    if (substring.numBytes == 0) {
+      return true;
+    }
+
+    // Both `this` and the `substring` are checked for non-ASCII characters prior to matching to
+    // avoid allocations in `startsWithLowerCase(...)`, which is used in a loop (e.g. in case of
+    // `containsInLowerCase("1大1大1大...", "11")`).
+    if (!substring.isFullASCII()) {
+      return toLowerCase().contains(substring.toLowerCaseSlow());
+    }
+    if (!isFullASCII()) {
+      return toLowerCaseSlow().contains(substring.toLowerCaseASCII());
+    }
+
+    if (numBytes < substring.numBytes) {
+      return false;
+    }
+
+    int firstLower = Character.toLowerCase(substring.getByte(0));
+    for (int i = 0; i <= (numBytes - substring.numBytes); i++) {
+      if (Character.toLowerCase(getByte(i)) == firstLower) {
+        final UTF8String rest = UTF8String.fromAddress(base, offset + i, numBytes - i);
+        if (rest.startsWithInLowerCaseASCII(substring)) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  private boolean startsWithInLowerCaseASCII(final UTF8String prefix) {
+    if (prefix.numBytes == 0) {
+      return true;
+    }
+    if (numBytes < prefix.numBytes) {
+      return false;
+    }
+
+    for (int i = 0; i < prefix.numBytes; i++) {
+      if (Character.toLowerCase(getByte(i)) != Character.toLowerCase(prefix.getByte(i))) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  /**
    * Returns the byte at position `i`.
    */
   private byte getByte(int i) {
@@ -359,8 +414,95 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return matchAt(prefix, 0);
   }
 
+  /**
+   * Checks whether `prefix` is a prefix of `this` in a lowercase unicode-aware manner
+   *
+   * This function is written in a way which avoids excessive allocations in case if we work with
+   * bare ASCII-character strings.
+   */
+  public boolean startsWithInLowerCase(final UTF8String prefix) {
+    // No way to match sizes of strings for early return, since single grapheme can be expanded
+    // into several independent ones in lowercase
+    if (prefix.numBytes == 0) {
+      return true;
+    }
+    if (numBytes == 0) {
+      return false;
+    }
+
+    for (int i = 0; i < prefix.numBytes; i++) {
+      byte lhsByte = getByte(i);
+      byte rhsByte = prefix.getByte(i);
+      if (lhsByte < 0 || rhsByte < 0) {
+        final UTF8String lhsRest = UTF8String.fromAddress(base, offset + i, numBytes - i);
+        final UTF8String rhsRest = UTF8String
+          .fromAddress(prefix.base, prefix.offset + i, prefix.numBytes - i);
+
+        final UTF8String lhsRestLowerCase = lhsByte < 0 ?
+          lhsRest.toLowerCaseSlow() : lhsRest.toLowerCase();
+        final UTF8String rhsRestLowerCase = rhsByte < 0 ?
+          rhsRest.toLowerCaseSlow() : rhsRest.toLowerCase();
+
+        return UTF8String
+          .fromAddress(lhsRestLowerCase.base, lhsRestLowerCase.offset, rhsRestLowerCase.numBytes)
+          .binaryCompare(rhsRestLowerCase) == 0;
+      }
+
+      if (Character.toLowerCase(lhsByte) != Character.toLowerCase(rhsByte)) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
   public boolean endsWith(final UTF8String suffix) {
     return matchAt(suffix, numBytes - suffix.numBytes);
+  }
+
+  /**
+   * Checks whether `suffix` is a suffix of `this` in a lowercase unicode-aware manner
+   *
+   * This function is written in a way which avoids excessive allocations in case if we work with
+   * bare ASCII-character strings.
+   */
+  public boolean endsWithInLowerCase(final UTF8String suffix) {
+    // No way to match sizes of strings for early return, since single grapheme can be expanded
+    // into several independent ones in lowercase
+    if (suffix.numBytes == 0) {
+      return true;
+    }
+    if (numBytes == 0) {
+      return false;
+    }
+
+    for (int i = 0; i < suffix.numBytes; i++) {
+      byte lhsByte = getByte(numBytes - i - 1);
+      byte rhsByte = suffix.getByte(suffix.numBytes - i - 1);
+      if (lhsByte < 0 || rhsByte < 0) {
+        final UTF8String lhsRest = UTF8String.fromAddress(base, offset, numBytes - i);
+        final UTF8String rhsRest = UTF8String
+          .fromAddress(suffix.base, suffix.offset, suffix.numBytes - i);
+
+        final UTF8String lhsRestLowerCase = lhsByte < 0 ?
+          lhsRest.toLowerCaseSlow() : lhsRest.toLowerCase();
+        final UTF8String rhsRestLowerCase = rhsByte < 0 ?
+          rhsRest.toLowerCaseSlow() : rhsRest.toLowerCase();
+
+        return UTF8String
+          .fromAddress(
+            lhsRestLowerCase.base,
+            lhsRestLowerCase.offset + lhsRestLowerCase.numBytes - rhsRestLowerCase.numBytes,
+            rhsRestLowerCase.numBytes)
+          .binaryCompare(rhsRestLowerCase) == 0;
+      }
+
+      if (Character.toLowerCase(lhsByte) != Character.toLowerCase(rhsByte)) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   /**
@@ -423,22 +565,33 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (numBytes == 0) {
       return EMPTY_UTF8;
     }
-    // Optimization - do char level lowercase conversion in case of chars in ASCII range
+
+    if (!isFullASCII()) {
+      return toLowerCaseSlow();
+    }
+
+    return toLowerCaseASCII();
+  }
+
+  private boolean isFullASCII() {
     for (int i = 0; i < numBytes; i++) {
       if (getByte(i) < 0) {
-        // non-ASCII
-        return toLowerCaseSlow();
+        return false;
       }
     }
+    return true;
+  }
+
+  private UTF8String toLowerCaseSlow() {
+    return fromString(toString().toLowerCase());
+  }
+
+  private UTF8String toLowerCaseASCII() {
     byte[] bytes = new byte[numBytes];
     for (int i = 0; i < numBytes; i++) {
       bytes[i] = (byte) Character.toLowerCase(getByte(i));
     }
     return fromBytes(bytes);
-  }
-
-  private UTF8String toLowerCaseSlow() {
-    return fromString(toString().toLowerCase());
   }
 
   /**

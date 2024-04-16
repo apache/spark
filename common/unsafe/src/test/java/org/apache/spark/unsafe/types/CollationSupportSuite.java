@@ -101,6 +101,19 @@ public class CollationSupportSuite {
     assertContains("ab世De", "AB世dE", "UNICODE_CI", true);
     assertContains("äbćδe", "ÄbćδE", "UNICODE_CI", true);
     assertContains("äbćδe", "ÄBcΔÉ", "UNICODE_CI", false);
+    // Characters with the same binary lowercase representation
+    assertContains("The Kelvin.", "Kelvin", "UTF8_BINARY_LCASE", true);
+    assertContains("The Kelvin.", "Kelvin", "UTF8_BINARY_LCASE", true);
+    assertContains("The KKelvin.", "KKelvin", "UTF8_BINARY_LCASE", true);
+    assertContains("2 Kelvin.", "2 Kelvin", "UTF8_BINARY_LCASE", true);
+    assertContains("2 Kelvin.", "2 Kelvin", "UTF8_BINARY_LCASE", true);
+    assertContains("The KKelvin.", "KKelvin,", "UTF8_BINARY_LCASE", false);
+    // Characters with longer binary lowercase representation
+    assertContains("the İodine", "the i̇odine", "UTF8_BINARY_LCASE", true);
+    assertContains("the i̇odine", "the İodine", "UTF8_BINARY_LCASE", true);
+    assertContains("The İodiNe", " i̇oDin", "UTF8_BINARY_LCASE", true);
+    assertContains("İodiNe", "i̇oDine", "UTF8_BINARY_LCASE", true);
+    assertContains("İodiNe", " i̇oDin", "UTF8_BINARY_LCASE", false);
   }
 
   private void assertStartsWith(
@@ -175,6 +188,18 @@ public class CollationSupportSuite {
     assertStartsWith("ab世De", "AB世dE", "UNICODE_CI", true);
     assertStartsWith("äbćδe", "ÄbćδE", "UNICODE_CI", true);
     assertStartsWith("äbćδe", "ÄBcΔÉ", "UNICODE_CI", false);
+    // Characters with the same binary lowercase representation
+    assertStartsWith("Kelvin.", "Kelvin", "UTF8_BINARY_LCASE", true);
+    assertStartsWith("Kelvin.", "Kelvin", "UTF8_BINARY_LCASE", true);
+    assertStartsWith("KKelvin.", "KKelvin", "UTF8_BINARY_LCASE", true);
+    assertStartsWith("2 Kelvin.", "2 Kelvin", "UTF8_BINARY_LCASE", true);
+    assertStartsWith("2 Kelvin.", "2 Kelvin", "UTF8_BINARY_LCASE", true);
+    assertStartsWith("KKelvin.", "KKelvin,", "UTF8_BINARY_LCASE", false);
+    // Characters with longer binary lowercase representation
+    assertStartsWith("the İodine", "the i̇odine", "UTF8_BINARY_LCASE", true);
+    assertStartsWith("the i̇odine", "the İodine", "UTF8_BINARY_LCASE", true);
+    assertStartsWith("İodiNe", "i̇oDin", "UTF8_BINARY_LCASE", true);
+    assertStartsWith("The İodiNe", "i̇oDin", "UTF8_BINARY_LCASE", false);
   }
 
   private void assertEndsWith(String pattern, String suffix, String collationName, boolean expected)
@@ -248,6 +273,18 @@ public class CollationSupportSuite {
     assertEndsWith("ab世De", "AB世dE", "UNICODE_CI", true);
     assertEndsWith("äbćδe", "ÄbćδE", "UNICODE_CI", true);
     assertEndsWith("äbćδe", "ÄBcΔÉ", "UNICODE_CI", false);
+    // Characters with the same binary lowercase representation
+    assertEndsWith("The Kelvin", "Kelvin", "UTF8_BINARY_LCASE", true);
+    assertEndsWith("The Kelvin", "Kelvin", "UTF8_BINARY_LCASE", true);
+    assertEndsWith("The KKelvin", "KKelvin", "UTF8_BINARY_LCASE", true);
+    assertEndsWith("The 2 Kelvin", "2 Kelvin", "UTF8_BINARY_LCASE", true);
+    assertEndsWith("The 2 Kelvin", "2 Kelvin", "UTF8_BINARY_LCASE", true);
+    assertEndsWith("The KKelvin", "KKelvin,", "UTF8_BINARY_LCASE", false);
+    // Characters with longer binary lowercase representation
+    assertEndsWith("the İodine", "the i̇odine", "UTF8_BINARY_LCASE", true);
+    assertEndsWith("the i̇odine", "the İodine", "UTF8_BINARY_LCASE", true);
+    assertEndsWith("The İodiNe", "i̇oDine", "UTF8_BINARY_LCASE", true);
+    assertEndsWith("The İodiNe", "i̇oDin", "UTF8_BINARY_LCASE", false);
   }
 
   // TODO: Test more collation-aware string expressions.
