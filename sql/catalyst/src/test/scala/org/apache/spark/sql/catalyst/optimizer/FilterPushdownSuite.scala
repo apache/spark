@@ -58,7 +58,7 @@ class FilterPushdownSuite extends PlanTest {
 
   val testRelation1 = LocalRelation(attrD)
 
-  val testStringRelation = LocalRelation(attrA, attrE)
+  val testStringRelation = LocalRelation(attrA, attrB, attrE)
 
   val simpleDisjunctivePredicate =
     ("x.a".attr > 3) && ("y.a".attr > 13) || ("x.a".attr > 1) && ("y.a".attr > 11)
@@ -171,7 +171,7 @@ class FilterPushdownSuite extends PlanTest {
 
   test("SPARK-47672: Avoid double evaluation with projections but push components that can be") {
     val originalQuery = testStringRelation
-      .select($"a", $"e".rlike("magic") as "f")
+      .select($"a", $"e".rlike("magic") as "f", $"e".rlike("notmagic") as "j")
       .where($"a" > 5 && $"f")
       .analyze
 
@@ -179,14 +179,33 @@ class FilterPushdownSuite extends PlanTest {
 
     val correctAnswer = testStringRelation
       .where($"a" > 5)
-      .select($"a", $"e".rlike("magic") as "f")
+      .select($"a", $"e", $"e".rlike("magic") as "f")
       .where($"f")
+      .select($"a", $"f", $"e".rlike("notmagic") as "j")
       .analyze
 
     comparePlans(optimized, correctAnswer)
   }
 
-  test("SPARK-47672: Avoid double evaluation with projections") {
+  test("SPARK-47672: Avoid double evaluation with projections but push components that can be") {
+    val originalQuery = testStringRelation
+      .select($"a", $"e".rlike("magic") as "f", $"e".rlike("notmagic") as "j")
+      .where($"a" > 5 && $"f")
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    val correctAnswer = testStringRelation
+      .where($"a" > 5)
+      .select($"a", $"e", $"e".rlike("magic") as "f")
+      .where($"f")
+      .select($"a", $"f", $"e".rlike("notmagic") as "j")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-47672: Avoid double evaluation with projections can't push past certain items") {
     val originalQuery = testStringRelation
       .select($"a", $"e".rlike("magic") as "f")
       .where($"a" > 5 || $"f")
