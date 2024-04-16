@@ -49,6 +49,7 @@ import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * A persistent implementation of the system catalog using Hive.
@@ -239,6 +240,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         ignoreIfExists)
     } else {
       val tableWithDataSourceProps = tableDefinition.copy(
+        schema = getHiveCompatibleSchema(tableDefinition.schema),
         // We can't leave `locationUri` empty and count on Hive metastore to set a default table
         // location, because Hive metastore uses hive.metastore.warehouse.dir to generate default
         // table location for tables in default database, while we expect to use the location of
@@ -320,6 +322,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       }
 
       table.copy(
+        schema = getHiveCompatibleSchema(table.schema),
         storage = table.storage.copy(
           locationUri = location,
           inputFormat = serde.inputFormat,
@@ -667,6 +670,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val schemaProps =
       tableMetaToTableProps(oldTable, StructType(newDataSchema ++ oldTable.partitionSchema)).toMap
 
+    val hiveSchema = getHiveCompatibleSchema(newDataSchema)
+
     if (isDatasourceTable(oldTable)) {
       // For data source tables, first try to write it with the schema set; if that does not work,
       // try again with updated properties and the partition schema. This is a simplified version of
@@ -674,7 +679,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       // (for example, the schema does not match the data source schema, or does not match the
       // storage descriptor).
       try {
-        client.alterTableDataSchema(db, table, newDataSchema, schemaProps)
+        client.alterTableDataSchema(db, table, hiveSchema, schemaProps)
       } catch {
         case NonFatal(e) =>
           val warningMessage = log"Could not alter schema of table " +
@@ -684,8 +689,19 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           client.alterTableDataSchema(db, table, EMPTY_DATA_SCHEMA, schemaProps)
       }
     } else {
-      client.alterTableDataSchema(db, table, newDataSchema, schemaProps)
+      client.alterTableDataSchema(db, table, hiveSchema, schemaProps)
     }
+  }
+
+  /**
+   * Returns the schema where the column data types are Hive-compatible, i.e. the types are
+   * converted to the types that Hive supports.
+   */
+  private def getHiveCompatibleSchema(schema: StructType): StructType = {
+    // Since collated strings do not exist in Hive as a type we need to replace them with
+    // the the regular string type. However, as we save the original schema in the table
+    // properties we will be able to restore the original schema when reading back the table.
+    SchemaUtils.replaceCollatedStringWithStringInSchema(schema)
   }
 
   /** Alter the statistics of a table. If `stats` is None, then remove all existing statistics. */
