@@ -30,7 +30,7 @@ import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
 import org.apache.spark.SparkContext
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.{config, Logging, MDC}
-import org.apache.spark.internal.LogKey.{EXECUTOR_ID, HOST_NAME, REASON}
+import org.apache.spark.internal.LogKey.{EXECUTOR_ID, HOST_PORT, REASON}
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc._
@@ -307,7 +307,7 @@ private[spark] abstract class YarnSchedulerBackend(
               case NonFatal(e) =>
                 logWarning(log"Attempted to get executor loss reason for executor id " +
                   log"${MDC(EXECUTOR_ID, executorId)} at RPC address " +
-                  log"${MDC(HOST_NAME, executorRpcAddress)}, but got no response. " +
+                  log"${MDC(HOST_PORT, executorRpcAddress)}, but got no response. " +
                   log"Marking as agent lost.", e)
                 RemoveExecutor(executorId, ExecutorProcessLost())
             }(ThreadUtils.sameThread)
@@ -395,7 +395,7 @@ private[spark] abstract class YarnSchedulerBackend(
 
     override def onDisconnected(remoteAddress: RpcAddress): Unit = {
       if (amEndpoint.exists(_.address == remoteAddress)) {
-        logWarning(log"ApplicationMaster has disassociated: ${MDC(HOST_NAME, remoteAddress)}")
+        logWarning(log"ApplicationMaster has disassociated: ${MDC(HOST_PORT, remoteAddress)}")
         amEndpoint = None
       }
     }
