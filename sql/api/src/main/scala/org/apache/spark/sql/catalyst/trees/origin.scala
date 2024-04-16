@@ -98,13 +98,6 @@ object PySparkCurrentOrigin {
     pysparkErrorContext.set(Some((fragment, callSite)))
   }
 
-  def getAndClear(): Option[(String, String)] = {
-    val context = pysparkErrorContext.get()
-    // Clear the context after retrieving it
-    pysparkErrorContext.remove()
-    context
-  }
-
   def get(): Option[(String, String)] = pysparkErrorContext.get()
 
   def clear(): Unit = pysparkErrorContext.remove()
