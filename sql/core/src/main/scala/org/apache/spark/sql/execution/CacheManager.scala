@@ -704,7 +704,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   }
 }
 
-object CacheManager {
+object CacheManager extends Logging {
 
   val expressionRemapper: (Expression, AttributeMap[(NamedExpression, Expression)]) => Expression =
     (expr, mappings) => {
