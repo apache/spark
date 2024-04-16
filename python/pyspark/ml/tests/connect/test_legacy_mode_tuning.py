@@ -22,6 +22,7 @@ import sys
 
 import numpy as np
 
+from pyspark.util import is_remote_only
 from pyspark.ml.param import Param, Params
 from pyspark.ml.tuning import ParamGridBuilder
 from pyspark.sql import SparkSession
@@ -29,10 +30,13 @@ from pyspark.sql.functions import rand
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 
 have_sklearn = True
+sklearn_requirement_message = None
 try:
     from sklearn.datasets import load_breast_cancer  # noqa: F401
 except ImportError:
     have_sklearn = False
+    sklearn_requirement_message = "No sklearn found"
+
 
 if should_test_connect:
     import pandas as pd
@@ -279,7 +283,10 @@ class CrossValidatorTestsMixin:
 
 
 @unittest.skipIf(
-    not should_test_connect or not have_sklearn, connect_requirement_message or "No sklearn found"
+    not should_test_connect or not have_sklearn or is_remote_only(),
+    connect_requirement_message
+    or sklearn_requirement_message
+    or "pyspark-connect cannot test classic Spark",
 )
 class CrossValidatorTests(CrossValidatorTestsMixin, unittest.TestCase):
     def setUp(self) -> None:

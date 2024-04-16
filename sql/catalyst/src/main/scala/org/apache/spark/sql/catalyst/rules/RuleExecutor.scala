@@ -23,7 +23,7 @@ import org.apache.spark.internal.LogKey._
 import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.trees.TreeNode
-import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -88,15 +88,15 @@ class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
   }
 
   def logMetrics(metrics: QueryExecutionMetrics): Unit = {
-    val totalTime = metrics.time / NANOS_PER_SECOND.toDouble
-    val totalTimeEffective = metrics.timeEffective / NANOS_PER_SECOND.toDouble
+    val totalTime = metrics.time / NANOS_PER_MILLIS.toDouble
+    val totalTimeEffective = metrics.timeEffective / NANOS_PER_MILLIS.toDouble
     val message: MessageWithContext =
       log"""
          |=== Metrics of Executed Rules ===
          |Total number of runs: ${MDC(RULE_NUMBER_OF_RUNS, metrics.numRuns)}
-         |Total time: ${MDC(TIME_UNITS, totalTime)} seconds
+         |Total time: ${MDC(TOTAL_TIME, totalTime)} ms
          |Total number of effective runs: ${MDC(RULE_NUMBER_OF_RUNS, metrics.numEffectiveRuns)}
-         |Total time of effective runs: ${MDC(TIME_UNITS, totalTimeEffective)} seconds
+         |Total time of effective runs: ${MDC(TOTAL_EFFECTIVE_TIME, totalTimeEffective)} ms
       """.stripMargin
 
     logBasedOnLevel(message)
@@ -257,16 +257,18 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
           // Only log if this is a rule that is supposed to run more than once.
           if (iteration != 2) {
             val endingMsg = if (batch.strategy.maxIterationsSetting == null) {
-              "."
+              log"."
             } else {
-              s", please set '${batch.strategy.maxIterationsSetting}' to a larger value."
+              log", please set '${MDC(NUM_ITERATIONS, batch.strategy.maxIterationsSetting)}' " +
+                log"to a larger value."
             }
-            val message = s"Max iterations (${iteration - 1}) reached for batch ${batch.name}" +
-              s"$endingMsg"
+            val log = log"Max iterations (${MDC(NUM_ITERATIONS, iteration - 1)}) " +
+              log"reached for batch ${MDC(RULE_BATCH_NAME, batch.name)}" +
+              endingMsg
             if (Utils.isTesting || batch.strategy.errorOnExceed) {
-              throw new RuntimeException(message)
+              throw new RuntimeException(log.message)
             } else {
-              logWarning(message)
+              logWarning(log)
             }
           }
           // Check idempotence for Once batches.

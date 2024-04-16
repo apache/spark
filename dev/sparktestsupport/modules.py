@@ -430,9 +430,9 @@ pyspark_core = Module(
     source_file_regexes=["python/(?!pyspark/(ml|mllib|sql|streaming))"],
     python_test_goals=[
         # doctests
+        "pyspark.conf",
         "pyspark.core.rdd",
         "pyspark.core.context",
-        "pyspark.core.conf",
         "pyspark.core.broadcast",
         "pyspark.accumulators",
         "pyspark.core.files",
@@ -1047,6 +1047,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_parity_arrow_grouped_map",
         "pyspark.sql.tests.connect.test_parity_arrow_cogrouped_map",
         "pyspark.sql.tests.connect.test_parity_python_datasource",
+        "pyspark.sql.tests.connect.test_parity_python_streaming_datasource",
         "pyspark.sql.tests.connect.test_utils",
         "pyspark.sql.tests.connect.client.test_artifact",
         "pyspark.sql.tests.connect.client.test_client",

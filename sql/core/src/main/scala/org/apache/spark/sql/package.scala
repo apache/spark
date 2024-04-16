@@ -79,6 +79,31 @@ package object sql {
   private[sql] val SPARK_LEGACY_INT96_METADATA_KEY = "org.apache.spark.legacyINT96"
 
   /**
+   * Captures the current Java stack trace up to a specified depth defined by the
+   * `spark.sql.stackTracesInDataFrameContext` configuration. This method helps in identifying
+   * the call sites in Spark code by filtering out the stack frames until it reaches the
+   * user code calling into Spark. This method is intended to be used for enhancing debuggability
+   * by providing detailed context about where in the Spark source code a particular operation
+   * was called from.
+   *
+   * This functionality is crucial for both debugging purposes and for providing more insightful
+   * logging and error messages. By capturing the stack trace up to a certain depth, it enables
+   * a more precise pinpointing of the execution flow, especially useful when troubleshooting
+   * complex interactions within Spark.
+   *
+   * @return An array of `StackTraceElement` representing the filtered stack trace.
+   */
+  private def captureStackTrace(): Array[StackTraceElement] = {
+    val st = Thread.currentThread().getStackTrace
+    var i = 0
+    // Find the beginning of Spark code traces
+    while (i < st.length && !sparkCode(st(i))) i += 1
+    // Stop at the end of the first Spark code traces
+    while (i < st.length && sparkCode(st(i))) i += 1
+    st.slice(from = i - 1, until = i + SQLConf.get.stackTracesInDataFrameContext)
+  }
+
+  /**
    * This helper function captures the Spark API and its call site in the user code from the current
    * stacktrace.
    *
@@ -98,15 +123,45 @@ package object sql {
     if (CurrentOrigin.get.stackTrace.isDefined) {
       f
     } else {
-      val st = Thread.currentThread().getStackTrace
-      var i = 0
-      // Find the beginning of Spark code traces
-      while (i < st.length && !sparkCode(st(i))) i += 1
-      // Stop at the end of the first Spark code traces
-      while (i < st.length && sparkCode(st(i))) i += 1
-      val origin = Origin(stackTrace = Some(st.slice(
-        from = i - 1,
-        until = i + SQLConf.get.stackTracesInDataFrameContext)))
+      val origin = Origin(stackTrace = Some(captureStackTrace()))
+      CurrentOrigin.withOrigin(origin)(f)
+    }
+  }
+
+  /**
+   * This overloaded helper function captures the call site information specifically for PySpark,
+   * using provided PySpark logging information instead of capturing the current Java stack trace.
+   *
+   * This method is designed to enhance the debuggability of PySpark by including PySpark-specific
+   * logging information (e.g., method names and call sites within PySpark scripts) in debug logs,
+   * without the overhead of capturing and processing Java stack traces that are less relevant
+   * to PySpark developers.
+   *
+   * The `pysparkErrorContext` parameter allows for passing PySpark call site information, which
+   * is then included in the Origin context. This facilitates more precise and useful logging for
+   * troubleshooting PySpark applications.
+   *
+   * This method should be used in places where PySpark API calls are made, and PySpark logging
+   * information is available and beneficial for debugging purposes.
+   *
+   * @param pysparkErrorContext Optional PySpark logging information including the call site,
+   *                            represented as a (String, String).
+   *                            This may contain keys like "fragment" and "callSite" to provide
+   *                            detailed context about the PySpark call site.
+   * @param f                   The function that can utilize the modified Origin context with
+   *                            PySpark logging information.
+   * @return The result of executing `f` within the context of the provided PySpark logging
+   *         information.
+   */
+  private[sql] def withOrigin[T](
+      pysparkErrorContext: Option[(String, String)] = None)(f: => T): T = {
+    if (CurrentOrigin.get.stackTrace.isDefined) {
+      f
+    } else {
+      val origin = Origin(
+        stackTrace = Some(captureStackTrace()),
+        pysparkErrorContext = pysparkErrorContext
+      )
       CurrentOrigin.withOrigin(origin)(f)
     }
   }

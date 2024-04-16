@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.encoders.HashableWeakReference
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, MapData, SQLOrderingUtil, UnsafeRowUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, CollationSupport, MapData, SQLOrderingUtil, UnsafeRowUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -1531,6 +1531,7 @@ object CodeGenerator extends Logging {
       classOf[TaskKilledException].getName,
       classOf[InputMetrics].getName,
       classOf[CollationFactory].getName,
+      classOf[CollationSupport].getName,
       QueryExecutionErrors.getClass.getName.stripSuffix("$")
     )
     evaluator.setExtendedClass(classOf[GeneratedClass])
@@ -1641,7 +1642,7 @@ object CodeGenerator extends Logging {
         val timeMs: Double = duration.toDouble / NANOS_PER_MILLIS
         CodegenMetrics.METRIC_SOURCE_CODE_SIZE.update(code.body.length)
         CodegenMetrics.METRIC_COMPILATION_TIME.update(timeMs.toLong)
-        logInfo(log"Code generated in ${MDC(TIME_UNITS, timeMs)} ms")
+        logInfo(log"Code generated in ${MDC(TOTAL_TIME, timeMs)} ms")
         _compileTime.add(duration)
         result
     }

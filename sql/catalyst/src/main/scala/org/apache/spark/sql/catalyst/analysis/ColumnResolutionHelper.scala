@@ -581,7 +581,6 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
   private def resolveDataFrameColumn(
       u: UnresolvedAttribute,
       q: Seq[LogicalPlan]): Option[NamedExpression] = {
-
     val origAttrOpt = u.getTagValue(LogicalPlan.UNRESOLVED_ATTRIBUTE_MD_TAG)
     val resolvedOptWithDatasetId = if (origAttrOpt.isDefined) {
       val md = origAttrOpt.get.metadata
@@ -620,10 +619,15 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       if (planIdOpt.isEmpty) {
         None
       } else {
+        val planIdOpt = u.getTagValue(LogicalPlan.PLAN_ID_TAG)
+        if (planIdOpt.isEmpty) return None
         val planId = planIdOpt.get
         logDebug(s"Extract plan_id $planId from $u")
+
         val isMetadataAccess = u.getTagValue(LogicalPlan.IS_METADATA_COL).nonEmpty
-        val (resolved, matched) = resolveDataFrameColumnByPlanId(u, planId, isMetadataAccess, q)
+
+        val (resolved, matched) = resolveDataFrameColumnByPlanId(
+          u, planId, isMetadataAccess, q, 0)
         if (!matched) {
           // Can not find the target plan node with plan id, e.g.
           //  df1 = spark.createDataFrame([Row(a = 1, b = 2, c = 3)]])
@@ -631,7 +635,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
           //  df1.select(df2.a)   <-   illegal reference df2.a
           throw QueryCompilationErrors.cannotResolveDataFrameColumn(u)
         }
-        resolved
+        resolved.map(_._1)
       }
     }
     resolvedOpt
@@ -641,22 +645,28 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       u: UnresolvedAttribute,
       id: Long,
       isMetadataAccess: Boolean,
-      q: Seq[LogicalPlan]): (Option[NamedExpression], Boolean) = {
-    q.iterator.map(resolveDataFrameColumnRecursively(u, id, isMetadataAccess, _))
-      .foldLeft((Option.empty[NamedExpression], false)) {
-        case ((r1, m1), (r2, m2)) =>
-          if (r1.nonEmpty && r2.nonEmpty) {
-            throw QueryCompilationErrors.ambiguousColumnReferences(u)
-          }
-          (if (r1.nonEmpty) r1 else r2, m1 | m2)
+      q: Seq[LogicalPlan],
+      currentDepth: Int): (Option[(NamedExpression, Int)], Boolean) = {
+    val resolved = q.map(resolveDataFrameColumnRecursively(
+      u, id, isMetadataAccess, _, currentDepth))
+    val merged = resolved
+      .flatMap(_._1)
+      .sortBy(_._2) // sort by depth
+      .foldLeft(Option.empty[(NamedExpression, Int)]) {
+        case (None, (r2, d2)) => Some((r2, d2))
+        case (Some((r1, 0)), (r2, d2)) if d2 != 0 => Some((r1, 0))
+        case _ => throw QueryCompilationErrors.ambiguousColumnReferences(u)
       }
+    val matched = resolved.exists(_._2)
+    (merged, matched)
   }
 
   private def resolveDataFrameColumnRecursively(
       u: UnresolvedAttribute,
       id: Long,
       isMetadataAccess: Boolean,
-      p: LogicalPlan): (Option[NamedExpression], Boolean) = {
+      p: LogicalPlan,
+      currentDepth: Int): (Option[(NamedExpression, Int)], Boolean) = {
     val (resolved, matched) = if (p.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(id)) {
       val resolved = try {
         if (!isMetadataAccess) {
@@ -671,9 +681,9 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
           logDebug(s"Fail to resolve $u with $p due to $e")
           None
       }
-      (resolved, true)
+      (resolved.map(r => (r, currentDepth)), true)
     } else {
-      resolveDataFrameColumnByPlanId(u, id, isMetadataAccess, p.children)
+      resolveDataFrameColumnByPlanId(u, id, isMetadataAccess, p.children, currentDepth + 1)
     }
 
     // In self join case like:
@@ -703,9 +713,9 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     // will try to resolve it without plan id later.
     val filtered = resolved.filter { r =>
       if (isMetadataAccess) {
-        r.references.subsetOf(AttributeSet(p.output ++ p.metadataOutput))
+        r._1.references.subsetOf(AttributeSet(p.output ++ p.metadataOutput))
       } else {
-        r.references.subsetOf(p.outputSet)
+        r._1.references.subsetOf(p.outputSet)
       }
     }
     (filtered, matched)

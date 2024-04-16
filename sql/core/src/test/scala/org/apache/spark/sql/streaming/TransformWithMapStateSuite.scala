@@ -32,7 +32,7 @@ class TestMapStateProcessor
 
   override def init(
       outputMode: OutputMode,
-      timeoutMode: TimeoutMode): Unit = {
+      timeMode: TimeMode): Unit = {
     _mapState = getHandle.getMapState("sessionState", Encoders.STRING, Encoders.STRING)
   }
 
@@ -94,7 +94,7 @@ class TransformWithMapStateSuite extends StreamTest
       val result = inputData.toDS()
         .groupByKey(x => x.key)
         .transformWithState(new TestMapStateProcessor(),
-          TimeoutMode.NoTimeouts(),
+          TimeMode.None(),
           OutputMode.Update())
 
 
@@ -120,7 +120,7 @@ class TransformWithMapStateSuite extends StreamTest
       val result = inputData.toDS()
         .groupByKey(x => x.key)
         .transformWithState(new TestMapStateProcessor(),
-          TimeoutMode.NoTimeouts(),
+          TimeMode.None(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
@@ -144,7 +144,7 @@ class TransformWithMapStateSuite extends StreamTest
       val result = inputData.toDS()
         .groupByKey(x => x.key)
         .transformWithState(new TestMapStateProcessor(),
-          TimeoutMode.NoTimeouts(),
+          TimeMode.None(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
@@ -167,7 +167,7 @@ class TransformWithMapStateSuite extends StreamTest
       val result = inputData.toDS()
         .groupByKey(x => x.key)
         .transformWithState(new TestMapStateProcessor(),
-          TimeoutMode.NoTimeouts(),
+          TimeMode.None(),
           OutputMode.Append())
       testStream(result, OutputMode.Append())(
         // Test exists()
@@ -209,7 +209,10 @@ class TransformWithMapStateSuite extends StreamTest
         AddData(inputData, InputMapRow("k2", "iterator", ("", ""))),
         CheckNewAnswer(),
         AddData(inputData, InputMapRow("k2", "exists", ("", ""))),
-        CheckNewAnswer(("k2", "exists", "false"))
+        CheckNewAnswer(("k2", "exists", "false")),
+        Execute { q =>
+          assert(q.lastProgress.stateOperators(0).customMetrics.get("numMapStateVars") > 0)
+        }
       )
     }
   }
@@ -221,7 +224,7 @@ class TransformWithMapStateSuite extends StreamTest
     val result = inputData.toDS()
       .groupByKey(x => x.key)
       .transformWithState(new TestMapStateProcessor(),
-        TimeoutMode.NoTimeouts(),
+        TimeMode.None(),
         OutputMode.Append())
 
     val df = result.toDF()

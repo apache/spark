@@ -20,6 +20,7 @@ import unittest
 import shutil
 import tempfile
 
+from pyspark.util import is_remote_only
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql import SparkSession as PySparkSession, Row
 from pyspark.sql.types import (
@@ -52,6 +53,7 @@ if should_test_connect:
     from pyspark.sql.connect import functions as CF
 
 
+@unittest.skipIf(is_remote_only(), "Requires JVM access")
 class SparkConnectSQLTestCase(ReusedConnectTestCase, SQLTestUtils, PandasOnSparkTestUtils):
     """Parent test fixture class for all Spark Connect related
     test cases."""
@@ -130,6 +132,14 @@ class SparkConnectSQLTestCase(ReusedConnectTestCase, SQLTestUtils, PandasOnSpark
 
 
 class SparkConnectBasicTests(SparkConnectSQLTestCase):
+    def test_serialization(self):
+        from pyspark.cloudpickle import dumps, loads
+
+        cdf = self.connect.range(10)
+        data = dumps(cdf)
+        cdf2 = loads(data)
+        self.assertEqual(cdf.collect(), cdf2.collect())
+
     def test_df_getattr_behavior(self):
         cdf = self.connect.range(10)
         sdf = self.spark.range(10)
@@ -1154,6 +1164,15 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             set(connect_df.select("id").crossJoin(other=connect_df.select("name")).toPandas()),
             set(spark_df.select("id").crossJoin(other=spark_df.select("name")).toPandas()),
         )
+
+    def test_self_join(self):
+        # SPARK-47713: this query fails in classic spark
+        df1 = self.connect.createDataFrame([(1, "a")], schema=["i", "j"])
+        df1_filter = df1.filter(df1.i > 0)
+        df2 = df1.join(df1_filter, df1.i == 1)
+        self.assertEqual(df2.count(), 1)
+        self.assertEqual(df2.columns, ["i", "j", "i", "j"])
+        self.assertEqual(list(df2.first()), [1, "a", 1, "a"])
 
     def test_with_metadata(self):
         cdf = self.connect.createDataFrame(data=[(2, "Alice"), (5, "Bob")], schema=["age", "name"])
