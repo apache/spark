@@ -143,7 +143,7 @@ public final class CollationSupport {
    * Collation-aware regexp expressions.
    */
 
-  private static final UTF8String lowercaseRegexPrefix = UTF8String.fromString("(?ui)");
+  private static final UTF8String lowercaseRegexPrefix = UTF8String.fromString("(?i)");
 
   public static UTF8String lowercaseRegex(final UTF8String regex) {
     return UTF8String.concat(lowercaseRegexPrefix, regex);
