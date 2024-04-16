@@ -88,17 +88,6 @@ object With {
     val commonExprRefs = commonExprDefs.map(new CommonExpressionRef(_))
     With(replaced(commonExprRefs), commonExprDefs)
   }
-
-  /**
-   * Used for testing to specify the exact common expression ID for each common expression.
-   */
-  def create(commonExprs: (Expression, Long)*)(replaced: Seq[Expression] => Expression): With = {
-    val commonExprDefs = commonExprs.map { case (expr, exprId) =>
-      CommonExpressionDef(expr, CommonExpressionId(exprId))
-    }
-    val commonExprRefs = commonExprDefs.map(new CommonExpressionRef(_))
-    With(replaced(commonExprRefs), commonExprDefs)
-  }
 }
 
 case class CommonExpressionId(id: Long = CommonExpressionId.newId, canonicalized: Boolean = false) {
