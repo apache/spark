@@ -1191,3 +1191,147 @@ The Spark Catalyst data types below are not supported with suitable PostgreSQL t
 - NullType
 - ObjectType
 - VariantType
+
+### Mapping Spark SQL Data Types from Oracle
+
+The below table describes the data type conversions from Oracle data types to Spark SQL Data Types,
+when reading data from an Oracle table using the built-in jdbc data source with the Oracle JDBC
+as the activated JDBC Driver.
+
+
+<table>
+  <thead>
+    <tr>
+      <th><b>Oracle Data Type</b></th>
+      <th><b>Spark SQL Data Type</b></th>
+      <th><b>Remarks</b></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>BOOLEAN</td>
+      <td>BooleanType</td>
+      <td>Introduced since Oracle Release 23c</td>
+    </tr>
+    <tr>
+      <td>NUMBER[(p[,s])]</td>
+      <td>DecimalType(p,s)</td>
+      <td>'s' can be negative in Oracle. If 's<0' it'll be adjusted to DecimalType(min(p-s, 38), 0); Otherwise, DecimalType(p, s), and if 'p>38', the fraction part will be truncated if exceeded. And if any value of this column have an actual precision greater 38 will fail with NUMERIC_VALUE_OUT_OF_RANGE.WITHOUT_SUGGESTION error</td>
+    </tr>
+    <tr>
+      <td>FLOAT[(p)]</td>
+      <td>DecimalType(38, 10)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>BINARY_FLOAT</td>
+      <td>FloatType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>BINARY_DOUBLE</td>
+      <td>DoubleType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>LONG</td>
+      <td>BinaryType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>RAW(size)</td>
+      <td>BinaryType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>LONG RAW</td>
+      <td>BinaryType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>DATE</td>
+      <td>TimestampType</td>
+      <td>When oracle.jdbc.mapDateToTimestamp=true, it follows TIMESTAMP's behavior below</td>
+    </tr>
+    <tr>
+      <td>DATE</td>
+      <td>DateType</td>
+      <td>When oracle.jdbc.mapDateToTimestamp=false, it maps to DateType</td>
+    </tr>
+    <tr>
+      <td>TIMESTAMP</td>
+      <td>TimestampType</td>
+      <td>(Default)preferTimestampNTZ=false or spark.sql.timestampType=TIMESTAMP_LTZ</td>
+    </tr>
+    <tr>
+      <td>TIMESTAMP</td>
+      <td>TimestampNTZType</td>
+      <td>preferTimestampNTZ=true or spark.sql.timestampType=TIMESTAMP_NTZ</td>
+    </tr>
+    <tr>
+      <td>TIMESTAMP WITH TIME ZONE</td>
+      <td>TimestampType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>TIMESTAMP WITH LOCAL TIME ZONE</td>
+      <td>TimestampType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>INTERVAL YEAR TO MONTH</td>
+      <td>YearMonthIntervalType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>INTERVAL DAY TO SECOND</td>
+      <td>DayTimeIntervalType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>CHAR[(size [BYTE | CHAR])]</td>
+      <td>CharType(size)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>NCHAR[(size)]</td>
+      <td>StringType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>VARCHAR2(size [BYTE | CHAR])</td>
+      <td>VarcharType(size)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>NVARCHAR2</td>
+      <td>StringType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>ROWID/UROWID</td>
+      <td>StringType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>CLOB</td>
+      <td>StringType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>NCLOB</td>
+      <td>StringType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>BLOB</td>
+      <td>BinaryType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>BFILE</td>
+      <td></td>
+      <td>UNRECOGNIZED_SQL_TYPE error raised</td>
+    </tr>
+  </tbody>
+</table>

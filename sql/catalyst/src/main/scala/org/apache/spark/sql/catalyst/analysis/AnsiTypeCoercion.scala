@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.internal.types.AbstractStringType
+import org.apache.spark.sql.internal.types.{AbstractArrayType, AbstractStringType}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.UpCastRule.numericPrecedence
 
@@ -196,6 +196,9 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       // we make the system to allow implicitly converting String type as other primitive types.
       case (_: StringType, a @ (_: AtomicType | NumericType | DecimalType | AnyTimestampType)) =>
         Some(a.defaultConcreteType)
+
+      case (ArrayType(fromType, _), AbstractArrayType(toType)) =>
+        Some(implicitCast(fromType, toType).map(ArrayType(_, true)).orNull)
 
       // When the target type is `TypeCollection`, there is another branch to find the
       // "closet convertible data type" below.

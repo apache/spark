@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import scala.collection.immutable.Seq
+
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.expressions.ExpressionEvalHelper
 import org.apache.spark.sql.catalyst.util.CollationFactory
@@ -26,8 +28,7 @@ import org.apache.spark.sql.types.{BooleanType, StringType}
 
 class CollationStringExpressionsSuite
   extends QueryTest
-  with SharedSparkSession
-  with ExpressionEvalHelper {
+  with SharedSparkSession {
 
   test("Support ConcatWs string expression with collation") {
     // Supported collations
@@ -189,6 +190,57 @@ class CollationStringExpressionsSuite
     )
     testCases.foreach(t => {
       val query = s"SELECT repeat(collate('${t.s}', '${t.c}'), ${t.n})"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
+    })
+  }
+
+  test("SPARK-47357: Support Upper string expression with collation") {
+    // Supported collations
+    case class UpperTestCase[R](s: String, c: String, result: R)
+    val testCases = Seq(
+      UpperTestCase("aBc", "UTF8_BINARY", "ABC"),
+      UpperTestCase("aBc", "UTF8_BINARY_LCASE", "ABC"),
+      UpperTestCase("aBc", "UNICODE", "ABC"),
+      UpperTestCase("aBc", "UNICODE_CI", "ABC")
+    )
+    testCases.foreach(t => {
+      val query = s"SELECT upper(collate('${t.s}', '${t.c}'))"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
+    })
+  }
+
+  test("SPARK-47357: Support Lower string expression with collation") {
+    // Supported collations
+    case class LowerTestCase[R](s: String, c: String, result: R)
+    val testCases = Seq(
+      LowerTestCase("aBc", "UTF8_BINARY", "abc"),
+      LowerTestCase("aBc", "UTF8_BINARY_LCASE", "abc"),
+      LowerTestCase("aBc", "UNICODE", "abc"),
+      LowerTestCase("aBc", "UNICODE_CI", "abc")
+    )
+    testCases.foreach(t => {
+      val query = s"SELECT lower(collate('${t.s}', '${t.c}'))"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
+    })
+  }
+
+  test("SPARK-47357: Support InitCap string expression with collation") {
+    // Supported collations
+    case class InitCapTestCase[R](s: String, c: String, result: R)
+    val testCases = Seq(
+      InitCapTestCase("aBc ABc", "UTF8_BINARY", "Abc Abc"),
+      InitCapTestCase("aBc ABc", "UTF8_BINARY_LCASE", "Abc Abc"),
+      InitCapTestCase("aBc ABc", "UNICODE", "Abc Abc"),
+      InitCapTestCase("aBc ABc", "UNICODE_CI", "Abc Abc")
+    )
+    testCases.foreach(t => {
+      val query = s"SELECT initcap(collate('${t.s}', '${t.c}'))"
       // Result & data type
       checkAnswer(sql(query), Row(t.result))
       assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
