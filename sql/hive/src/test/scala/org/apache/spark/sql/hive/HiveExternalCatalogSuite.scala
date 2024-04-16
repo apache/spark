@@ -22,6 +22,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
@@ -223,10 +224,10 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
     catalog.createTable(tableDDL, ignoreIfExists = false)
 
     val rawTable = externalCatalog.getRawTable("db1", tableName)
-    assert(rawTable.schema === noCollationsSchema)
+    assert(DataTypeUtils.sameType(rawTable.schema, noCollationsSchema))
 
     val readBackTable = externalCatalog.getTable("db1", tableName)
-    assert(readBackTable.schema === collationsSchema)
+    assert(DataTypeUtils.sameType(readBackTable.schema, collationsSchema))
 
     // perform alter table
     val newSchema = StructType(Seq(
@@ -235,8 +236,9 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
     catalog.alterTableDataSchema("db1", tableName, newSchema)
 
     val alteredRawTable = externalCatalog.getRawTable("db1", tableName)
-    assert(alteredRawTable.schema === noCollationsSchema)
+    assert(DataTypeUtils.sameType(alteredRawTable.schema, noCollationsSchema))
+
     val alteredTable = externalCatalog.getTable("db1", tableName)
-    assert(alteredTable.schema === newSchema)
+    assert(DataTypeUtils.sameType(alteredTable.schema, newSchema))
   }
 }

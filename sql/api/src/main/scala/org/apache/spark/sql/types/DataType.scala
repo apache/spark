@@ -462,17 +462,17 @@ object DataType {
   def equalsIgnoreCaseNullabilityAndStringTypes(from: DataType, to: DataType): Boolean = {
     (from, to) match {
       case (ArrayType(fromElement, _), ArrayType(toElement, _)) =>
-        equalsIgnoreCaseAndNullability(fromElement, toElement)
+        equalsIgnoreCaseNullabilityAndStringTypes(fromElement, toElement)
 
       case (MapType(fromKey, fromValue, _), MapType(toKey, toValue, _)) =>
-        equalsIgnoreCaseAndNullability(fromKey, toKey) &&
-          equalsIgnoreCaseAndNullability(fromValue, toValue)
+        equalsIgnoreCaseNullabilityAndStringTypes(fromKey, toKey) &&
+          equalsIgnoreCaseNullabilityAndStringTypes(fromValue, toValue)
 
       case (StructType(fromFields), StructType(toFields)) =>
         fromFields.length == toFields.length &&
           fromFields.zip(toFields).forall { case (l, r) =>
             l.name.equalsIgnoreCase(r.name) &&
-              equalsIgnoreCaseAndNullability(l.dataType, r.dataType)
+              equalsIgnoreCaseNullabilityAndStringTypes(l.dataType, r.dataType)
           }
 
       case (_: StringType, _: StringType) => true
