@@ -20,15 +20,15 @@ package org.apache.spark.sql.hive.client
 import java.io.{File, PrintStream}
 import java.lang.reflect.InvocationTargetException
 import java.net.{URL, URLClassLoader}
-
 import java.util
+
 import scala.util.Try
 
 import org.apache.commons.io.{FileUtils, IOUtils}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.shims.ShimLoader
-import org.apache.spark.SparkConf
 
+import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkSubmit
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKey.{FALLBACK_VERSION, HADOOP_VERSION, PATH}
