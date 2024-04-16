@@ -24,7 +24,7 @@ import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, MapStateImplWithTTL, StatefulProcessorHandleImpl}
-import org.apache.spark.sql.streaming.{ListState, MapState, TTLConfig, TimeMode, ValueState}
+import org.apache.spark.sql.streaming.{ListState, MapState, TimeMode, TTLConfig, ValueState}
 import org.apache.spark.sql.types.{BinaryType, StructType}
 
 /**
