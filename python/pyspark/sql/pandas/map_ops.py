@@ -189,7 +189,8 @@ class PandasMapOpsMixin:
             the return type of the `func` in PySpark. The value can be either a
             :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
         barrier : bool, optional, default False
-            Use barrier mode execution.
+            Use barrier mode execution, ensuring that all Python workers in the stage will be
+            launched concurrently.
 
             .. versionadded: 3.5.0
 
