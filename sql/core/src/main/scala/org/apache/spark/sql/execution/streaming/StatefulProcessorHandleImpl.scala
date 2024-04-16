@@ -245,6 +245,38 @@ class StatefulProcessorHandleImpl(
     resultState
   }
 
+  /**
+   * Function to create new or return existing list state variable of given type
+   * with ttl. State values will not be returned past ttlDuration, and will be eventually removed
+   * from the state store. Any values in listState which have expired after ttlDuration will not
+   * returned on get() and will be eventually removed from the state.
+   *
+   * The user must ensure to call this function only within the `init()` method of the
+   * StatefulProcessor.
+   *
+   * @param stateName  - name of the state variable
+   * @param valEncoder - SQL encoder for state variable
+   * @param ttlConfig  - the ttl configuration (time to live duration etc.)
+   * @tparam T - type of state variable
+   * @return - instance of ListState of type T that can be used to store state persistently
+   */
+  override def getListState[T](
+      stateName: String,
+      valEncoder: Encoder[T],
+      ttlConfig: TTLConfig): ListState[T] = {
+
+    verifyStateVarOperations("get_list_state")
+    validateTTLConfig(ttlConfig, stateName)
+
+    assert(batchTimestampMs.isDefined)
+    val listStateWithTTL = new ListStateImplWithTTL[T](store, stateName,
+      keyEncoder, valEncoder, ttlConfig, batchTimestampMs.get)
+    incrementMetric("numListStateWithTTLVars")
+    ttlStates.add(listStateWithTTL)
+
+    listStateWithTTL
+  }
+
   override def getMapState[K, V](
       stateName: String,
       userKeyEnc: Encoder[K],

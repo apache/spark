@@ -211,7 +211,6 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
     var sentResponsesSize: Long = 0
 
     while (!finished) {
-      enqueueProgressMessage()
       var response: Option[CachedStreamResponse[T]] = None
 
       // Conditions for exiting the inner loop (and helpers to compute them):
@@ -294,7 +293,6 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
           assert(deadlineLimitReached || interrupted)
         }
       } else if (streamFinished) {
-        enqueueProgressMessage()
         // Stream is finished and all responses have been sent
         logInfo(
           s"Stream finished for opId=${executeHolder.operationId}, " +

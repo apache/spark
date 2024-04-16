@@ -34,6 +34,7 @@ import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesConf
 import org.apache.spark.deploy.k8s.KubernetesUtils.addOwnerReference
 import org.apache.spark.internal.{Logging, LogKey, MDC}
+import org.apache.spark.internal.LogKey.{COUNT, EXECUTOR_IDS, TIMEOUT}
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.cluster.SchedulerBackendUtils.DEFAULT_NUMBER_EXECUTORS
@@ -210,10 +211,10 @@ class ExecutorPodsAllocator(
     }
 
     if (timedOut.nonEmpty) {
-      logWarning(s"Executors with ids ${timedOut.mkString(",")} were not detected in the" +
-        s" Kubernetes cluster after $podCreationTimeout ms despite the fact that a previous" +
-        " allocation attempt tried to create them. The executors may have been deleted but the" +
-        " application missed the deletion event.")
+      logWarning(log"Executors with ids ${MDC(EXECUTOR_IDS, timedOut.mkString(","))}} were not " +
+        log"detected in the Kubernetes cluster after ${MDC(TIMEOUT, podCreationTimeout)} ms " +
+        log"despite the fact that a previous allocation attempt tried to create them. " +
+        log"The executors may have been deleted but the application missed the deletion event.")
 
       newlyCreatedExecutors --= timedOut
       if (shouldDeleteExecutors) {
@@ -282,7 +283,7 @@ class ExecutorPodsAllocator(
 
       val newFailedExecutorIds = currentFailedExecutorIds.diff(failedExecutorIds)
       if (newFailedExecutorIds.nonEmpty) {
-        logWarning(s"${newFailedExecutorIds.size} new failed executors.")
+        logWarning(log"${MDC(COUNT, newFailedExecutorIds.size)} new failed executors.")
         newFailedExecutorIds.foreach { _ => failureTracker.registerExecutorFailure() }
       }
       failedExecutorIds = failedExecutorIds ++ currentFailedExecutorIds
