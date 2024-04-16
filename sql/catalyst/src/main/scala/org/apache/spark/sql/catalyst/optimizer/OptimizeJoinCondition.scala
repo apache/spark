@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.expressions.{And, EqualNullSafe, EqualTo, IsNull, Or, PredicateHelper}
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.JOIN
+import org.apache.spark.sql.catalyst.trees.TreePattern.{JOIN, OR}
 
 /**
  * Replaces `t1.id is null and t2.id is null or t1.id = t2.id` to `t1.id <=> t2.id`
@@ -29,27 +29,17 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.JOIN
 object OptimizeJoinCondition extends Rule[LogicalPlan] with PredicateHelper {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(JOIN), ruleId) {
-    case join @ Join(left, right, joinType, condition, hint) if condition.nonEmpty =>
-      val predicates = condition.map(splitConjunctivePredicates).get
-      var replace = false
-      val newPredicates = predicates.map {
+    case Join(left, right, joinType, condition, hint) if condition.nonEmpty =>
+      val newCondition = condition.map(_.transformWithPruning(_.containsPattern(OR), ruleId) {
         case Or(EqualTo(l, r), And(IsNull(c1), IsNull(c2)))
           if (l.semanticEquals(c1) && r.semanticEquals(c2))
             || (l.semanticEquals(c2) && r.semanticEquals(c1)) =>
-          replace = true
           EqualNullSafe(l, r)
         case Or(And(IsNull(c1), IsNull(c2)), EqualTo(l, r))
           if (l.semanticEquals(c1) && r.semanticEquals(c2))
             || (l.semanticEquals(c2) && r.semanticEquals(c1)) =>
-          replace = true
           EqualNullSafe(l, r)
-        case e => e
-      }
-      if (replace) {
-        val newCondition = Option(newPredicates.reduce(And))
-        Join(left, right, joinType, newCondition, hint)
-      } else {
-        join
-      }
+      })
+      Join(left, right, joinType, newCondition, hint)
   }
 }
