@@ -113,6 +113,7 @@ class HiveSessionStateBuilder(
         PreReadCheck +:
         TableCapabilityCheck +:
         CommandCheck +:
+        CollationCheck +:
         customCheckRules
   }
 

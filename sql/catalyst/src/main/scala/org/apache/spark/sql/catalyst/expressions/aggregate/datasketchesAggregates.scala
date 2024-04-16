@@ -196,7 +196,7 @@ object HllSketchAgg {
   def checkLgK(lgConfigK: Int): Unit = {
     if (lgConfigK < minLgConfigK || lgConfigK > maxLgConfigK) {
       throw QueryExecutionErrors.hllInvalidLgK(function = "hll_sketch_agg",
-        min = minLgConfigK, max = maxLgConfigK, value = lgConfigK.toString)
+        min = minLgConfigK, max = maxLgConfigK, value = lgConfigK)
     }
   }
 }

@@ -23,6 +23,7 @@ import os
 import pickle
 import sys
 import unittest
+from dataclasses import dataclass, asdict
 
 from pyspark.sql import Row
 from pyspark.sql import functions as F
@@ -56,6 +57,8 @@ from pyspark.sql.types import (
     BinaryType,
     BooleanType,
     NullType,
+    VariantType,
+    VariantVal,
 )
 from pyspark.sql.types import (
     _array_signed_int_typecode_ctype_mappings,
@@ -410,6 +413,17 @@ class TypesTestsMixin:
     def test_create_dataframe_from_dict_respects_schema(self):
         df = self.spark.createDataFrame([{"a": 1}], ["b"])
         self.assertEqual(df.columns, ["b"])
+
+    def test_create_dataframe_from_dataclasses(self):
+        @dataclass
+        class User:
+            name: str
+            age: int
+            is_active: bool
+
+        user = User(name="John", age=30, is_active=True)
+        r = self.spark.createDataFrame([user]).first()
+        self.assertEqual(asdict(user), r.asDict())
 
     def test_negative_decimal(self):
         try:
@@ -849,6 +863,28 @@ class TypesTestsMixin:
             if k != "varchar" and k != "char":
                 self.assertEqual(t(), _parse_datatype_string(k))
         self.assertEqual(IntegerType(), _parse_datatype_string("int"))
+        self.assertEqual(StringType(), _parse_datatype_string("string"))
+        self.assertEqual(StringType(), _parse_datatype_string("string collate UTF8_BINARY"))
+        self.assertEqual(StringType(), _parse_datatype_string("string COLLATE UTF8_BINARY"))
+        self.assertEqual(
+            StringType.fromCollationId(0), _parse_datatype_string("string COLLATE   UTF8_BINARY")
+        )
+        self.assertEqual(
+            StringType.fromCollationId(1),
+            _parse_datatype_string("string COLLATE UTF8_BINARY_LCASE"),
+        )
+        self.assertEqual(
+            StringType.fromCollationId(2), _parse_datatype_string("string COLLATE UNICODE")
+        )
+        self.assertEqual(
+            StringType.fromCollationId(2), _parse_datatype_string("string COLLATE `UNICODE`")
+        )
+        self.assertEqual(
+            StringType.fromCollationId(3), _parse_datatype_string("string COLLATE UNICODE_CI")
+        )
+        self.assertEqual(
+            StringType.fromCollationId(3), _parse_datatype_string("string COLLATE `UNICODE_CI`")
+        )
         self.assertEqual(CharType(1), _parse_datatype_string("char(1)"))
         self.assertEqual(CharType(10), _parse_datatype_string("char( 10   )"))
         self.assertEqual(CharType(11), _parse_datatype_string("char( 11)"))
@@ -874,6 +910,7 @@ class TypesTestsMixin:
             StructType([StructField("a", IntegerType()), StructField("c", DoubleType())]),
             _parse_datatype_string("a INT, c DOUBLE"),
         )
+        self.assertEqual(VariantType(), _parse_datatype_string("variant"))
 
     def test_metadata_null(self):
         schema = StructType(
@@ -1192,6 +1229,10 @@ class TypesTestsMixin:
         instances = [
             NullType(),
             StringType(),
+            StringType("UTF8_BINARY"),
+            StringType("UTF8_BINARY_LCASE"),
+            StringType("UNICODE"),
+            StringType("UNICODE_CI"),
             CharType(10),
             VarcharType(10),
             BinaryType(),
@@ -1210,6 +1251,7 @@ class TypesTestsMixin:
             MapType(StringType(), IntegerType()),
             StructField("f1", StringType(), True),
             StructType([StructField("f1", StringType(), True)]),
+            VariantType(),
         ]
         for instance in instances:
             self.assertEqual(eval(repr(instance)), instance)
@@ -1365,6 +1407,69 @@ class TypesTestsMixin:
         schema1 = self.spark.range(1).select(F.make_interval(F.lit(1))).schema
         self.assertEqual(schema1.fields[0].dataType, CalendarIntervalType())
 
+    def test_variant_type(self):
+        from decimal import Decimal
+
+        self.assertEqual(VariantType().simpleString(), "variant")
+
+        # Holds a tuple of (key, json string value, python value)
+        expected_values = [
+            ("str", '"%s"' % ("0123456789" * 10), "0123456789" * 10),
+            ("short_str", '"abc"', "abc"),
+            ("null", "null", None),
+            ("true", "true", True),
+            ("false", "false", False),
+            ("int1", "1", 1),
+            ("-int1", "-5", -5),
+            ("int2", "257", 257),
+            ("-int2", "-124", -124),
+            ("int4", "65793", 65793),
+            ("-int4", "-69633", -69633),
+            ("int8", "4295033089", 4295033089),
+            ("-int8", "-4294967297", -4294967297),
+            ("float4", "1.23456789e-30", 1.23456789e-30),
+            ("-float4", "-4.56789e+29", -4.56789e29),
+            ("dec4", "123.456", Decimal("123.456")),
+            ("-dec4", "-321.654", Decimal("-321.654")),
+            ("dec8", "429.4967297", Decimal("429.4967297")),
+            ("-dec8", "-5.678373902", Decimal("-5.678373902")),
+            ("dec16", "467440737095.51617", Decimal("467440737095.51617")),
+            ("-dec16", "-67.849438003827263", Decimal("-67.849438003827263")),
+            ("arr", '[1.1,"2",[3],{"4":5}]', [Decimal("1.1"), "2", [3], {"4": 5}]),
+            ("obj", '{"a":["123",{"b":2}],"c":3}', {"a": ["123", {"b": 2}], "c": 3}),
+        ]
+        json_str = "{%s}" % ",".join(['"%s": %s' % (t[0], t[1]) for t in expected_values])
+
+        df = self.spark.createDataFrame([({"json": json_str})])
+        row = df.select(
+            F.parse_json(df.json).alias("v"),
+            F.array([F.parse_json(F.lit('{"a": 1}'))]).alias("a"),
+            F.struct([F.parse_json(F.lit('{"b": "2"}'))]).alias("s"),
+            F.create_map([F.lit("k"), F.parse_json(F.lit('{"c": true}'))]).alias("m"),
+        ).collect()[0]
+        variants = [row["v"], row["a"][0], row["s"]["col1"], row["m"]["k"]]
+        for v in variants:
+            self.assertEqual(type(v), VariantVal)
+
+        # check str
+        as_string = str(variants[0])
+        for key, expected, _ in expected_values:
+            self.assertTrue('"%s":%s' % (key, expected) in as_string)
+        self.assertEqual(str(variants[1]), '{"a":1}')
+        self.assertEqual(str(variants[2]), '{"b":"2"}')
+        self.assertEqual(str(variants[3]), '{"c":true}')
+
+        # check toPython
+        as_python = variants[0].toPython()
+        for key, _, obj in expected_values:
+            self.assertEqual(as_python[key], obj)
+        self.assertEqual(variants[1].toPython(), {"a": 1})
+        self.assertEqual(variants[2].toPython(), {"b": "2"})
+        self.assertEqual(variants[3].toPython(), {"c": True})
+
+        # check repr
+        self.assertEqual(str(variants[0]), str(eval(repr(variants[0]))))
+
     def test_from_ddl(self):
         self.assertEqual(DataType.fromDDL("long"), LongType())
         self.assertEqual(
@@ -1375,6 +1480,26 @@ class TypesTestsMixin:
             DataType.fromDDL("a int, b string"),
             StructType([StructField("a", IntegerType()), StructField("b", StringType())]),
         )
+        self.assertEqual(
+            DataType.fromDDL("a int, v variant"),
+            StructType([StructField("a", IntegerType()), StructField("v", VariantType())]),
+        )
+
+    def test_collated_string(self):
+        dfs = [
+            self.spark.sql("SELECT 'abc' collate UTF8_BINARY_LCASE"),
+            self.spark.createDataFrame(
+                [], StructType([StructField("id", StringType("UTF8_BINARY_LCASE"))])
+            ),
+        ]
+        for df in dfs:
+            # performs both datatype -> proto & proto -> datatype conversions
+            self.assertEqual(
+                df.to(StructType([StructField("new", StringType("UTF8_BINARY_LCASE"))]))
+                .schema[0]
+                .dataType,
+                StringType("UTF8_BINARY_LCASE"),
+            )
 
 
 class DataTypeTests(unittest.TestCase):
@@ -1458,9 +1583,9 @@ class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
 
         self.check_error(
             exception=pe.exception,
-            error_class="CANNOT_BE_NONE",
+            error_class="FIELD_NOT_NULLABLE_WITH_NAME",
             message_parameters={
-                "arg_name": "obj",
+                "field_name": "test_name",
             },
         )
 
@@ -1470,11 +1595,12 @@ class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
 
         self.check_error(
             exception=pe.exception,
-            error_class="CANNOT_ACCEPT_OBJECT_IN_TYPE",
+            error_class="FIELD_DATA_TYPE_UNACCEPTABLE_WITH_NAME",
             message_parameters={
                 "data_type": "IntegerType()",
-                "obj_name": "data",
-                "obj_type": "str",
+                "field_name": "field b in field a",
+                "obj": "'data'",
+                "obj_type": "<class 'str'>",
             },
         )
 
@@ -1512,6 +1638,7 @@ class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
             (1.0, StringType()),
             ([], StringType()),
             ({}, StringType()),
+            ("", StringType("UTF8_BINARY_LCASE")),
             # Char
             ("", CharType(10)),
             (1, CharType(10)),
@@ -1580,6 +1707,7 @@ class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
         failure_spec = [
             # String (match anything but None)
             (None, StringType(), ValueError),
+            (None, StringType("UTF8_BINARY_LCASE"), ValueError),
             # CharType (match anything but None)
             (None, CharType(10), ValueError),
             # VarcharType (match anything but None)

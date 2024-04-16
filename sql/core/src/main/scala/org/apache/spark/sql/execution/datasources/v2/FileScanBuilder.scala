@@ -70,9 +70,10 @@ abstract class FileScanBuilder(
   }
 
   override def pushFilters(filters: Seq[Expression]): Seq[Expression] = {
-    val (deterministicFilters, nonDeterminsticFilters) = filters.partition(_.deterministic)
+    val (filtersToPush, filtersToRemain) = filters.partition(
+      f => DataSourceUtils.shouldPushFilter(f, supportsCollationPushDown))
     val (partitionFilters, dataFilters) =
-      DataSourceUtils.getPartitionFiltersAndDataFilters(partitionSchema, deterministicFilters)
+      DataSourceUtils.getPartitionFiltersAndDataFilters(partitionSchema, filtersToPush)
     this.partitionFilters = partitionFilters
     this.dataFilters = dataFilters
     val translatedFilters = mutable.ArrayBuffer.empty[sources.Filter]
@@ -83,7 +84,7 @@ abstract class FileScanBuilder(
       }
     }
     pushedDataFilters = pushDataFilters(translatedFilters.toArray)
-    dataFilters ++ nonDeterminsticFilters
+    dataFilters ++ filtersToRemain
   }
 
   override def pushedFilters: Array[Predicate] = pushedDataFilters.map(_.toV2)
@@ -94,6 +95,12 @@ abstract class FileScanBuilder(
    * File source needs to implement this method to push down data filters.
    */
   protected def pushDataFilters(dataFilters: Array[Filter]): Array[Filter] = Array.empty[Filter]
+
+  /**
+   * Returns whether the file scan builder supports filter pushdown
+   * for non utf8 binary collated columns.
+   */
+  protected def supportsCollationPushDown: Boolean = false
 
   private def createRequiredNameSet(): Set[String] =
     requiredSchema.fields.map(PartitioningUtils.getColName(_, isCaseSensitive)).toSet

@@ -8,9 +8,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -55,6 +55,26 @@ client through gRPC as Apache Arrow-encoded row batches.
 <p style="text-align: center;">
   <img src="img/spark-connect-communication.png" title="Spark Connect communication" alt="Spark Connect communication" />
 </p>
+
+## How Spark Connect client applications differ from classic Spark applications
+
+One of the main design goals of Spark Connect is to enable a full separation and
+isolation of the client from the server. As a consequence, there are some changes
+that developers need to be aware of when using Spark Connect:
+
+1. The client does not run in the same process as the Spark driver. This means that
+   the client cannot directly access and interact with the driver JVM to manipulate
+   the execution environment. In particular, in PySpark, the client does not use Py4J
+   and thus the accessing the private fields holding the JVM implementation of `DataFrame`,
+   `Column`, `SparkSession`, etc. is not possible (e.g. `df._jdf`).
+2. By design, the Spark Connect protocol uses Sparks logical
+   plans as the abstraction to be able to declaratively describe the operations to be executed
+   on the server. Consequently, the Spark Connect protocol does not support all the
+   execution APIs of Spark, most importantly RDDs.
+3. Spark Connect provides a session-based client for its consumers. This means that the
+   client does not have access to properties of the cluster that manipulate the
+   environment for all connected clients. Most importantly, the client does not have access
+   to the static Spark configuration or the SparkContext.
 
 # Operational benefits of Spark Connect
 
@@ -204,7 +224,7 @@ For the Scala shell, we use an Ammonite-based REPL that is currently not include
 To set up the new Scala shell, first download and install [Coursier CLI](https://get-coursier.io/docs/cli-installation).
 Then, install the REPL using the following command in a terminal window:
 {% highlight bash %}
-cs install –-contrib spark-connect-repl
+cs install --contrib spark-connect-repl
 {% endhighlight %}
 
 And now you can start the Ammonite-based Scala REPL/shell to connect to your Spark server like this:
@@ -259,7 +279,7 @@ The customizations may also be passed in through CLI arguments as shown below:
 spark-connect-repl --host myhost.com --port 443 --token ABCDEFG
 {% endhighlight %}
 
-The supported list of CLI arguments may be found [here](https://github.com/apache/spark/blob/master/connector/connect/client/jvm/src/main/scala/org/apache/spark/sql/connect/client/SparkConnectClientParser.scala#L48).
+The supported list of CLI arguments may be found [here](https://github.com/apache/spark/blob/master/connector/connect/common/src/main/scala/org/apache/spark/sql/connect/client/SparkConnectClientParser.scala#L48).
 
 #### Configure programmatically with a connection string
 
@@ -328,7 +348,7 @@ Lines with a: 72, lines with b: 39
 
 <div data-lang="scala"  markdown="1">
 To use Spark Connect as part of a Scala application/project, we first need to include the right dependencies.
-Using the `sbt` build system as an example, we add the following dependencies to the `build.sbt` file: 
+Using the `sbt` build system as an example, we add the following dependencies to the `build.sbt` file:
 {% highlight sbt %}
 libraryDependencies += "org.apache.spark" %% "spark-sql-api" % "3.5.0"
 libraryDependencies += "org.apache.spark" %% "spark-connect-client-jvm" % "3.5.0"

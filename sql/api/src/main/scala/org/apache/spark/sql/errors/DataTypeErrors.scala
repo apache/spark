@@ -207,7 +207,7 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
       decimalScale: Int,
       context: QueryContext): ArithmeticException = {
     new SparkArithmeticException(
-      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE",
+      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
       messageParameters = Map(
         "value" -> value.toPlainString,
         "precision" -> decimalPrecision.toString,
@@ -261,8 +261,14 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
       messageParameters = Map("raw" -> s"'$raw'"))
   }
 
-  def fieldIndexOnRowWithoutSchemaError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_2231")
+  def fieldIndexOnRowWithoutSchemaError(fieldName: String): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_CALL.FIELD_INDEX",
+      messageParameters = Map(
+        "methodName" -> "fieldIndex",
+        "className" -> "Row",
+        "fieldName" -> toSQLId(fieldName))
+    )
   }
 
   def valueIsNullError(index: Int): Throwable = {

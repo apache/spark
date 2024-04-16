@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.streaming.state
 import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.types.StructType
 
 class MemoryStateStore extends StateStore() {
   import scala.jdk.CollectionConverters._
@@ -29,8 +30,18 @@ class MemoryStateStore extends StateStore() {
     map.entrySet.iterator.asScala.map { case e => new UnsafeRowPair(e.getKey, e.getValue) }
   }
 
-  override def createColFamilyIfAbsent(colFamilyName: String): Unit = {
-    throw new UnsupportedOperationException("Creating multiple column families is not supported")
+  override def createColFamilyIfAbsent(
+      colFamilyName: String,
+      keySchema: StructType,
+      valueSchema: StructType,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
+      useMultipleValuesPerKey: Boolean = false,
+      isInternal: Boolean = false): Unit = {
+    throw StateStoreErrors.multipleColumnFamiliesNotSupported("MemoryStateStoreProvider")
+  }
+
+  override def removeColFamilyIfExists(colFamilyName: String): Boolean = {
+    throw StateStoreErrors.removingColumnFamiliesNotSupported("MemoryStateStoreProvider")
   }
 
   override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = map.get(key)
@@ -54,5 +65,13 @@ class MemoryStateStore extends StateStore() {
 
   override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String): Iterator[UnsafeRowPair] = {
     throw new UnsupportedOperationException("Doesn't support prefix scan!")
+  }
+
+  override def merge(key: UnsafeRow, value: UnsafeRow, colFamilyName: String): Unit = {
+    throw new UnsupportedOperationException("Doesn't support multiple values per key")
+  }
+
+  override def valuesIterator(key: UnsafeRow, colFamilyName: String): Iterator[UnsafeRow] = {
+    throw new UnsupportedOperationException("Doesn't support multiple values per key")
   }
 }

@@ -478,6 +478,8 @@ def main():
     rm_r(os.path.join(SPARK_HOME, "work"))
     rm_r(os.path.join(USER_HOME, ".ivy2", "local", "org.apache.spark"))
     rm_r(os.path.join(USER_HOME, ".ivy2", "cache", "org.apache.spark"))
+    rm_r(os.path.join(USER_HOME, ".ivy2.5.2", "local", "org.apache.spark"))
+    rm_r(os.path.join(USER_HOME, ".ivy2.5.2", "cache", "org.apache.spark"))
 
     os.environ["CURRENT_BLOCK"] = str(ERROR_CODES["BLOCK_GENERAL"])
 

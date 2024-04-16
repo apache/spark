@@ -31,6 +31,8 @@ import org.apache.arrow.vector.{BigIntVector, Float8Vector}
 import org.apache.arrow.vector.ipc.ArrowStreamReader
 import org.mockito.Mockito.when
 import org.scalatest.Tag
+import org.scalatest.concurrent.Eventually
+import org.scalatest.time.SpanSugar.convertIntToGrainOfTime
 import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.{SparkContext, SparkEnv}
@@ -197,15 +199,16 @@ class SparkConnectServiceSuite
       // The current implementation is expected to be blocking. This is here to make sure it is.
       assert(done)
 
-      // 4 Partitions + Metrics
-      assert(responses.size == 6)
+      // 4 Partitions + Metrics + optional progress messages
+      val filteredResponses = responses.filter(!_.hasExecutionProgress)
+      assert(filteredResponses.size == 6)
 
       // Make sure the first response is schema only
-      val head = responses.head
+      val head = filteredResponses.head
       assert(head.hasSchema && !head.hasArrowBatch && !head.hasMetrics)
 
       // Make sure the last response is metrics only
-      val last = responses.last
+      val last = filteredResponses.last
       assert(last.hasMetrics && !last.hasSchema && !last.hasArrowBatch)
 
       val allocator = new RootAllocator()
@@ -213,7 +216,7 @@ class SparkConnectServiceSuite
       // Check the 'data' batches
       var expectedId = 0L
       var previousEId = 0.0d
-      responses.tail.dropRight(1).foreach { response =>
+      filteredResponses.tail.dropRight(1).foreach { response =>
         assert(response.hasArrowBatch)
         val batch = response.getArrowBatch
         assert(batch.getData != null)
@@ -298,14 +301,15 @@ class SparkConnectServiceSuite
       assert(done)
 
       // 1 Partitions + Metrics
-      assert(responses.size == 3)
+      val filteredResponses = responses.filter(!_.hasExecutionProgress)
+      assert(filteredResponses.size == 3)
 
       // Make sure the first response is schema only
-      val head = responses.head
+      val head = filteredResponses.head
       assert(head.hasSchema && !head.hasArrowBatch && !head.hasMetrics)
 
       // Make sure the last response is metrics only
-      val last = responses.last
+      val last = filteredResponses.last
       assert(last.hasMetrics && !last.hasSchema && !last.hasArrowBatch)
     }
   }
@@ -353,12 +357,13 @@ class SparkConnectServiceSuite
       assert(done)
 
       // 1 schema + 1 metric + at least 2 data batches
-      assert(responses.size > 3)
+      val filteredResponses = responses.filter(!_.hasExecutionProgress)
+      assert(filteredResponses.size > 3)
 
       val allocator = new RootAllocator()
 
       // Check the 'data' batches
-      responses.tail.dropRight(1).foreach { response =>
+      filteredResponses.tail.dropRight(1).foreach { response =>
         assert(response.hasArrowBatch)
         val batch = response.getArrowBatch
         assert(batch.getData != null)
@@ -533,15 +538,16 @@ class SparkConnectServiceSuite
       assert(done)
 
       // Result + Metrics
-      if (responses.size > 1) {
-        assert(responses.size == 2)
+      val filteredResponses = responses.filter(!_.hasExecutionProgress)
+      if (filteredResponses.size > 1) {
+        assert(filteredResponses.size == 2)
 
         // Make sure the first response result only
-        val head = responses.head
+        val head = filteredResponses.head
         assert(head.hasSqlCommandResult && !head.hasMetrics)
 
         // Make sure the last response is metrics only
-        val last = responses.last
+        val last = filteredResponses.last
         assert(last.hasMetrics && !last.hasSqlCommandResult)
       }
     }
@@ -553,7 +559,7 @@ class SparkConnectServiceSuite
       val instance = new SparkConnectService(false)
 
       // Add an always crashing UDF
-      val session = SparkConnectService.getOrCreateIsolatedSession("c1", sessionId).session
+      val session = SparkConnectService.getOrCreateIsolatedSession("c1", sessionId, None).session
       val sleep: Long => Long = { time =>
         Thread.sleep(time)
         time
@@ -624,7 +630,7 @@ class SparkConnectServiceSuite
       val instance = new SparkConnectService(false)
 
       // Add an always crashing UDF
-      val session = SparkConnectService.getOrCreateIsolatedSession("c1", sessionId).session
+      val session = SparkConnectService.getOrCreateIsolatedSession("c1", sessionId, None).session
       val instaKill: Long => Long = { _ =>
         throw new Exception("Kaboom")
       }
@@ -650,7 +656,7 @@ class SparkConnectServiceSuite
       // the SparkConnectService. If we throw an exception inside it, it will be caught by
       // the ErrorUtils.handleError wrapping instance.executePlan and turned into an onError
       // call with StatusRuntimeException, which will be eaten here.
-      var failures: mutable.ArrayBuffer[String] = new mutable.ArrayBuffer[String]()
+      val failures: mutable.ArrayBuffer[String] = new mutable.ArrayBuffer[String]()
       instance.executePlan(
         request,
         new StreamObserver[proto.ExecutePlanResponse] {
@@ -786,14 +792,15 @@ class SparkConnectServiceSuite
       // The current implementation is expected to be blocking. This is here to make sure it is.
       assert(done)
 
-      assert(responses.size == 7)
+      val filteredResponses = responses.filter(!_.hasExecutionProgress)
+      assert(filteredResponses.size == 7)
 
       // Make sure the first response is schema only
-      val head = responses.head
+      val head = filteredResponses.head
       assert(head.hasSchema && !head.hasArrowBatch && !head.hasMetrics)
 
       // Make sure the last response is observed metrics only
-      val last = responses.last
+      val last = filteredResponses.last
       assert(last.getObservedMetricsCount == 1 && !last.hasSchema && !last.hasArrowBatch)
 
       val observedMetricsList = last.getObservedMetricsList.asScala
@@ -818,7 +825,7 @@ class SparkConnectServiceSuite
             when(restartedQuery.id).thenReturn(DEFAULT_UUID)
             when(restartedQuery.runId).thenReturn(DEFAULT_UUID)
             SparkConnectService.streamingSessionManager.registerNewStreamingQuery(
-              SparkConnectService.getOrCreateIsolatedSession("c1", sessionId),
+              SparkConnectService.getOrCreateIsolatedSession("c1", sessionId, None),
               restartedQuery)
             f(verifyEvents)
           }
@@ -879,8 +886,11 @@ class SparkConnectServiceSuite
       assert(executeHolder.eventsManager.hasError.isDefined)
     }
     def onCompleted(producedRowCount: Option[Long] = None): Unit = {
-      assert(executeHolder.eventsManager.status == ExecuteStatus.Closed)
       assert(executeHolder.eventsManager.getProducedRowCount == producedRowCount)
+      // The eventsManager is closed asynchronously
+      Eventually.eventually(timeout(1.seconds)) {
+        assert(executeHolder.eventsManager.status == ExecuteStatus.Closed)
+      }
     }
     def onCanceled(): Unit = {
       assert(executeHolder.eventsManager.hasCanceled.contains(true))
@@ -904,7 +914,7 @@ class SparkConnectServiceSuite
         case e: SparkListenerConnectOperationStarted =>
           semaphoreStarted.release()
           val sessionHolder =
-            SparkConnectService.getOrCreateIsolatedSession(e.userId, e.sessionId)
+            SparkConnectService.getOrCreateIsolatedSession(e.userId, e.sessionId, None)
           executeHolder = sessionHolder.executeHolder(e.operationId)
         case _ =>
       }

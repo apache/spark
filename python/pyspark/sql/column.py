@@ -18,6 +18,7 @@
 import sys
 import json
 import warnings
+import inspect
 from typing import (
     cast,
     overload,
@@ -31,15 +32,13 @@ from typing import (
     Union,
 )
 
-from py4j.java_gateway import JavaObject, JVMView
-
-from pyspark import copy_func
-from pyspark.context import SparkContext
 from pyspark.errors import PySparkAttributeError, PySparkTypeError, PySparkValueError
 from pyspark.sql.types import DataType
 from pyspark.sql.utils import get_active_spark_context
 
 if TYPE_CHECKING:
+    from py4j.java_gateway import JavaObject
+    from pyspark.core.context import SparkContext
     from pyspark.sql._typing import ColumnOrName, LiteralType, DecimalLiteral, DateTimeLiteral
     from pyspark.sql.window import WindowSpec
 
@@ -47,16 +46,20 @@ __all__ = ["Column"]
 
 
 def _create_column_from_literal(literal: Union["LiteralType", "DecimalLiteral"]) -> "Column":
+    from py4j.java_gateway import JVMView
+
     sc = get_active_spark_context()
     return cast(JVMView, sc._jvm).functions.lit(literal)
 
 
 def _create_column_from_name(name: str) -> "Column":
+    from py4j.java_gateway import JVMView
+
     sc = get_active_spark_context()
     return cast(JVMView, sc._jvm).functions.col(name)
 
 
-def _to_java_column(col: "ColumnOrName") -> JavaObject:
+def _to_java_column(col: "ColumnOrName") -> "JavaObject":
     if isinstance(col, Column):
         jcol = col._jc
     elif isinstance(col, str):
@@ -69,29 +72,29 @@ def _to_java_column(col: "ColumnOrName") -> JavaObject:
     return jcol
 
 
-def _to_java_expr(col: "ColumnOrName") -> JavaObject:
+def _to_java_expr(col: "ColumnOrName") -> "JavaObject":
     return _to_java_column(col).expr()
 
 
 @overload
-def _to_seq(sc: SparkContext, cols: Iterable[JavaObject]) -> JavaObject:
+def _to_seq(sc: "SparkContext", cols: Iterable["JavaObject"]) -> "JavaObject":
     ...
 
 
 @overload
 def _to_seq(
-    sc: SparkContext,
+    sc: "SparkContext",
     cols: Iterable["ColumnOrName"],
-    converter: Optional[Callable[["ColumnOrName"], JavaObject]],
-) -> JavaObject:
+    converter: Optional[Callable[["ColumnOrName"], "JavaObject"]],
+) -> "JavaObject":
     ...
 
 
 def _to_seq(
-    sc: SparkContext,
-    cols: Union[Iterable["ColumnOrName"], Iterable[JavaObject]],
-    converter: Optional[Callable[["ColumnOrName"], JavaObject]] = None,
-) -> JavaObject:
+    sc: "SparkContext",
+    cols: Union[Iterable["ColumnOrName"], Iterable["JavaObject"]],
+    converter: Optional[Callable[["ColumnOrName"], "JavaObject"]] = None,
+) -> "JavaObject":
     """
     Convert a list of Columns (or names) into a JVM Seq of Column.
 
@@ -105,10 +108,10 @@ def _to_seq(
 
 
 def _to_list(
-    sc: SparkContext,
+    sc: "SparkContext",
     cols: List["ColumnOrName"],
-    converter: Optional[Callable[["ColumnOrName"], JavaObject]] = None,
-) -> JavaObject:
+    converter: Optional[Callable[["ColumnOrName"], "JavaObject"]] = None,
+) -> "JavaObject":
     """
     Convert a list of Columns (or names) into a JVM (Scala) List of Columns.
 
@@ -137,6 +140,8 @@ def _unary_op(
 
 def _func_op(name: str, doc: str = "") -> Callable[["Column"], "Column"]:
     def _(self: "Column") -> "Column":
+        from py4j.java_gateway import JVMView
+
         sc = get_active_spark_context()
         jc = getattr(cast(JVMView, sc._jvm).functions, name)(self._jc)
         return Column(jc)
@@ -151,6 +156,8 @@ def _bin_func_op(
     doc: str = "binary function",
 ) -> Callable[["Column", Union["Column", "LiteralType", "DecimalLiteral"]], "Column"]:
     def _(self: "Column", other: Union["Column", "LiteralType", "DecimalLiteral"]) -> "Column":
+        from py4j.java_gateway import JVMView
+
         sc = get_active_spark_context()
         fn = getattr(cast(JVMView, sc._jvm).functions, name)
         jc = other._jc if isinstance(other, Column) else _create_column_from_literal(other)
@@ -168,16 +175,50 @@ def _bin_op(
     ["Column", Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"]], "Column"
 ]:
     """Create a method for given binary operator"""
+    binary_operator_map = {
+        "plus": "+",
+        "minus": "-",
+        "divide": "/",
+        "multiply": "*",
+        "mod": "%",
+        "equalTo": "=",
+        "lt": "<",
+        "leq": "<=",
+        "geq": ">=",
+        "gt": ">",
+        "eqNullSafe": "<=>",
+        "bitwiseOR": "|",
+        "bitwiseAND": "&",
+        "bitwiseXOR": "^",
+        # Just following JVM rule even if the names of source and target are the same.
+        "and": "and",
+        "or": "or",
+    }
 
     def _(
         self: "Column",
         other: Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"],
     ) -> "Column":
         jc = other._jc if isinstance(other, Column) else other
-        njc = getattr(self._jc, name)(jc)
+        if name in binary_operator_map:
+            from pyspark.sql import SparkSession
+
+            spark = SparkSession._getActiveSessionOrCreate()
+            stack = list(reversed(inspect.stack()))
+            depth = int(
+                spark.conf.get("spark.sql.stackTracesInDataFrameContext")  # type: ignore[arg-type]
+            )
+            selected_frames = stack[:depth]
+            call_sites = [f"{frame.filename}:{frame.lineno}" for frame in selected_frames]
+            call_site_str = "\n".join(call_sites)
+
+            njc = getattr(self._jc, "fn")(binary_operator_map[name], jc, name, call_site_str)
+        else:
+            njc = getattr(self._jc, name)(jc)
         return Column(njc)
 
     _.__doc__ = doc
+    _.__name__ = name
     return _
 
 
@@ -227,7 +268,7 @@ class Column:
     Column<...>
     """
 
-    def __init__(self, jc: JavaObject) -> None:
+    def __init__(self, jc: "JavaObject") -> None:
         self._jc = jc
 
     # arithmetic operators
@@ -1230,7 +1271,13 @@ class Column:
                 )
             return Column(getattr(self._jc, "as")(_to_seq(sc, list(alias))))
 
-    name = copy_func(alias, sinceversion=2.0, doc=":func:`name` is an alias for :func:`alias`.")
+    def name(self, *alias: str, **kwargs: Any) -> "Column":
+        """
+        :func:`name` is an alias for :func:`alias`.
+
+        .. versionadded:: 2.0.0
+        """
+        return self.alias(*alias, **kwargs)
 
     def cast(self, dataType: Union[DataType, str]) -> "Column":
         """
@@ -1277,7 +1324,75 @@ class Column:
             )
         return Column(jc)
 
-    astype = copy_func(cast, sinceversion=1.4, doc=":func:`astype` is an alias for :func:`cast`.")
+    def try_cast(self, dataType: Union[DataType, str]) -> "Column":
+        """
+        This is a special version of `cast` that performs the same operation, but returns a NULL
+        value instead of raising an error if the invoke method throws exception.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        dataType : :class:`DataType` or str
+            a DataType or Python string literal with a DDL-formatted string
+            to use when parsing the column to the same type.
+
+        Returns
+        -------
+        :class:`Column`
+            Column representing whether each element of Column is cast into new type.
+
+        Examples
+        --------
+        Example 1: Cast with a Datatype
+
+        >>> from pyspark.sql.types import LongType
+        >>> df = spark.createDataFrame(
+        ...      [(2, "123"), (5, "Bob"), (3, None)], ["age", "name"])
+        >>> df.select(df.name.try_cast(LongType())).show()
+        +----+
+        |name|
+        +----+
+        | 123|
+        |NULL|
+        |NULL|
+        +----+
+
+        Example 2: Cast with a DDL string
+
+        >>> df = spark.createDataFrame(
+        ...      [(2, "123"), (5, "Bob"), (3, None)], ["age", "name"])
+        >>> df.select(df.name.try_cast("double")).show()
+        +-----+
+        | name|
+        +-----+
+        |123.0|
+        | NULL|
+        | NULL|
+        +-----+
+        """
+        if isinstance(dataType, str):
+            jc = self._jc.try_cast(dataType)
+        elif isinstance(dataType, DataType):
+            from pyspark.sql import SparkSession
+
+            spark = SparkSession._getActiveSessionOrCreate()
+            jdt = spark._jsparkSession.parseDataType(dataType.json())
+            jc = self._jc.try_cast(jdt)
+        else:
+            raise PySparkTypeError(
+                error_class="NOT_DATATYPE_OR_STR",
+                message_parameters={"arg_name": "dataType", "arg_type": type(dataType).__name__},
+            )
+        return Column(jc)
+
+    def astype(self, dataType: Union[DataType, str]) -> "Column":
+        """
+        :func:`astype` is an alias for :func:`cast`.
+
+        .. versionadded:: 1.4.0
+        """
+        return self.cast(dataType)
 
     def between(
         self,

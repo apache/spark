@@ -41,7 +41,7 @@ select_statement [ { UNION | INTERSECT | EXCEPT } [ ALL | DISTINCT ] select_stat
 
 While `select_statement` is defined as
 ```sql
-SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_names ] [ , ... ] | TRANSFORM (...) ] }
+SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_names | star ] [ , ... ] | TRANSFORM (...) ] }
     FROM { from_item [ , ... ] }
     [ PIVOT clause ]
     [ UNPIVOT clause ]
@@ -78,13 +78,17 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_
 
     **Syntax:** `expression [[AS] alias]`
 
+* **star**
+
+    The `*` (star) clause is used to select all or most columns from one or all relations in a FROM clause.
+
 * **from_item**
 
      Specifies a source of input for the query. It can be one of the following:
      * Table relation
      * [Join relation](sql-ref-syntax-qry-select-join.html)
-     * [Pivot relation](sql-ref-syntax-qry-select-pivot.md)
-     * [Unpivot relation](sql-ref-syntax-qry-select-unpivot.md)
+     * [Pivot relation](sql-ref-syntax-qry-select-pivot.html)
+     * [Unpivot relation](sql-ref-syntax-qry-select-unpivot.html)
      * [Table-value function](sql-ref-syntax-qry-select-tvf.html)
      * [Inline table](sql-ref-syntax-qry-select-inline-table.html)
      * [ [LATERAL](sql-ref-syntax-qry-select-lateral-subquery.html) ] ( Subquery )
@@ -202,3 +206,4 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_
 * [LATERAL VIEW Clause](sql-ref-syntax-qry-select-lateral-view.html)
 * [TRANSFORM Clause](sql-ref-syntax-qry-select-transform.html)
 * [LATERAL Subquery](sql-ref-syntax-qry-select-lateral-subquery.html)
+* [star (*) Clause](sql-ref-syntax-qry-star.html)

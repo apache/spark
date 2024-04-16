@@ -31,14 +31,12 @@ class AbbreviateSuite extends SparkFunSuite {
 
     Seq(1, 16, 256, 512, 1024, 2048).foreach { threshold =>
       val truncated = ProtoUtils.abbreviate(message, threshold)
-      assert(truncated.isInstanceOf[proto.SQL])
-      val truncatedSQL = truncated.asInstanceOf[proto.SQL]
 
       if (threshold < 1024) {
-        assert(truncatedSQL.getQuery.indexOf("[truncated") === threshold)
+        assert(truncated.getQuery.indexOf("[truncated") === threshold)
       } else {
-        assert(truncatedSQL.getQuery.indexOf("[truncated") === -1)
-        assert(truncatedSQL.getQuery.length === 1024)
+        assert(truncated.getQuery.indexOf("[truncated") === -1)
+        assert(truncated.getQuery.length === 1024)
       }
     }
   }
@@ -73,9 +71,8 @@ class AbbreviateSuite extends SparkFunSuite {
 
     Seq(1, 16, 256, 512, 1024, 2048).foreach { threshold =>
       val truncated = ProtoUtils.abbreviate(limit, threshold)
-      assert(truncated.isInstanceOf[proto.Relation])
 
-      val truncatedLimit = truncated.asInstanceOf[proto.Relation].getLimit
+      val truncatedLimit = truncated.getLimit
       assert(truncatedLimit.getLimit === 100)
 
       val truncatedDrop = truncatedLimit.getInput.getDrop
@@ -92,6 +89,75 @@ class AbbreviateSuite extends SparkFunSuite {
     }
   }
 
+  test("truncate repeated strings") {
+    val sql = proto.Relation
+      .newBuilder()
+      .setSql(proto.SQL.newBuilder().setQuery("SELECT * FROM T"))
+      .build()
+    val names = Seq.range(0, 10).map(i => i.toString * 1024)
+    val drop = proto.Drop.newBuilder().setInput(sql).addAllColumnNames(names.asJava).build()
+
+    Seq(1, 16, 256, 512, 1024, 2048).foreach { threshold =>
+      val truncated = ProtoUtils.abbreviate(drop, threshold)
+
+      val truncatedNames = truncated.getColumnNamesList.asScala.toSeq
+      assert(truncatedNames.length === 10)
+
+      if (threshold < 1024) {
+        truncatedNames.foreach { truncatedName =>
+          assert(truncatedName.indexOf("[truncated") === threshold)
+        }
+      } else {
+        truncatedNames.foreach { truncatedName =>
+          assert(truncatedName.indexOf("[truncated") === -1)
+          assert(truncatedName.length === 1024)
+        }
+      }
+
+    }
+  }
+
+  test("truncate repeated messages") {
+    val sql = proto.Relation
+      .newBuilder()
+      .setSql(proto.SQL.newBuilder().setQuery("SELECT * FROM T"))
+      .build()
+
+    val cols = Seq.range(0, 10).map { i =>
+      proto.Expression
+        .newBuilder()
+        .setUnresolvedAttribute(
+          proto.Expression.UnresolvedAttribute
+            .newBuilder()
+            .setUnparsedIdentifier(i.toString * 1024)
+            .build())
+        .build()
+    }
+    val drop = proto.Drop.newBuilder().setInput(sql).addAllColumns(cols.asJava).build()
+
+    Seq(1, 16, 256, 512, 1024, 2048).foreach { threshold =>
+      val truncated = ProtoUtils.abbreviate(drop, threshold)
+
+      val truncatedCols = truncated.getColumnsList.asScala.toSeq
+      assert(truncatedCols.length === 10)
+
+      if (threshold < 1024) {
+        truncatedCols.foreach { truncatedCol =>
+          assert(truncatedCol.isInstanceOf[proto.Expression])
+          val truncatedName = truncatedCol.getUnresolvedAttribute.getUnparsedIdentifier
+          assert(truncatedName.indexOf("[truncated") === threshold)
+        }
+      } else {
+        truncatedCols.foreach { truncatedCol =>
+          assert(truncatedCol.isInstanceOf[proto.Expression])
+          val truncatedName = truncatedCol.getUnresolvedAttribute.getUnparsedIdentifier
+          assert(truncatedName.indexOf("[truncated") === -1)
+          assert(truncatedName.length === 1024)
+        }
+      }
+    }
+  }
+
   test("truncate bytes: simple python udf") {
     Seq(1, 8, 16, 64, 256).foreach { numBytes =>
       val bytes = Array.ofDim[Byte](numBytes)
@@ -104,17 +170,15 @@ class AbbreviateSuite extends SparkFunSuite {
         .build()
 
       val truncated = ProtoUtils.abbreviate(message)
-      assert(truncated.isInstanceOf[proto.PythonUDF])
 
-      val truncatedUDF = truncated.asInstanceOf[proto.PythonUDF]
-      assert(truncatedUDF.getEvalType === 1)
-      assert(truncatedUDF.getOutputType === ProtoDataTypes.BinaryType)
-      assert(truncatedUDF.getPythonVer === "3.12")
+      assert(truncated.getEvalType === 1)
+      assert(truncated.getOutputType === ProtoDataTypes.BinaryType)
+      assert(truncated.getPythonVer === "3.12")
 
       if (numBytes <= 8) {
-        assert(truncatedUDF.getCommand.size() === numBytes)
+        assert(truncated.getCommand.size() === numBytes)
       } else {
-        assert(truncatedUDF.getCommand.size() != numBytes)
+        assert(truncated.getCommand.size() != numBytes)
       }
     }
   }
@@ -131,21 +195,67 @@ class AbbreviateSuite extends SparkFunSuite {
 
     Seq(1, 16, 256, 512, 1024, 2048).foreach { threshold =>
       val truncated = ProtoUtils.abbreviate(message, Map("BYTES" -> threshold))
-      assert(truncated.isInstanceOf[proto.PythonUDF])
 
-      val truncatedUDF = truncated.asInstanceOf[proto.PythonUDF]
-      assert(truncatedUDF.getEvalType === 1)
-      assert(truncatedUDF.getOutputType === ProtoDataTypes.BinaryType)
-      assert(truncatedUDF.getPythonVer === "3.12")
+      assert(truncated.getEvalType === 1)
+      assert(truncated.getOutputType === ProtoDataTypes.BinaryType)
+      assert(truncated.getPythonVer === "3.12")
 
       if (threshold < 1024) {
         // with suffix: [truncated(size=...)]
         assert(
-          threshold < truncatedUDF.getCommand.size() &&
-            truncatedUDF.getCommand.size() < threshold + 64)
+          threshold < truncated.getCommand.size() &&
+            truncated.getCommand.size() < threshold + 64)
       } else {
-        assert(truncatedUDF.getCommand.size() === 1024)
+        assert(truncated.getCommand.size() === 1024)
       }
+    }
+  }
+
+  test("truncate map<string, string>") {
+    val read = proto.Read.NamedTable
+      .newBuilder()
+      .putAllOptions(Map("k1" * 4096 -> "v1" * 4096, "k2" * 4096 -> "v2" * 4096).asJava)
+      .build()
+
+    val threshold = 1024
+    val truncated = ProtoUtils.abbreviate(read, threshold)
+    assert(truncated.getOptionsMap.size() === 2)
+
+    truncated.getOptionsMap.asScala.foreach { case (k, v) =>
+      assert(k.indexOf("[truncated") === threshold)
+      assert(v.indexOf("[truncated") === threshold)
+    }
+  }
+
+  test("truncate map<string, message>") {
+    val sql = proto.SQL
+      .newBuilder()
+      .setQuery("SELECT * FROM T")
+      .putAllNamedArguments(Map(
+        "k1" -> proto.Expression
+          .newBuilder()
+          .setUnresolvedAttribute(proto.Expression.UnresolvedAttribute
+            .newBuilder()
+            .setUnparsedIdentifier("v1" * 4096)
+            .build())
+          .build(),
+        "k2" -> proto.Expression
+          .newBuilder()
+          .setUnresolvedAttribute(proto.Expression.UnresolvedAttribute
+            .newBuilder()
+            .setUnparsedIdentifier("v2" * 4096)
+            .build())
+          .build()).asJava)
+      .build()
+
+    val threshold = 1024
+    val truncated = ProtoUtils.abbreviate(sql, threshold)
+    assert(truncated.getQuery === "SELECT * FROM T")
+    assert(truncated.getNamedArgumentsMap.size() === 2)
+
+    truncated.getNamedArgumentsMap.asScala.foreach { case (k, v) =>
+      assert(k.indexOf("[truncated") === -1)
+      assert(v.getUnresolvedAttribute.getUnparsedIdentifier.indexOf("[truncated") === threshold)
     }
   }
 }

@@ -31,9 +31,9 @@ import org.apache.spark.sql.execution.datasources.jdbc.connection.{DB2Connection
 import org.apache.spark.tags.DockerTest
 
 /**
- * To run this test suite for a specific version (e.g., ibmcom/db2:11.5.6.0a):
+ * To run this test suite for a specific version (e.g., ibmcom/db2:11.5.8.0):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 DB2_DOCKER_IMAGE_NAME=ibmcom/db2:11.5.6.0a
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 DB2_DOCKER_IMAGE_NAME=ibmcom/db2:11.5.8.0
  *     ./build/sbt -Pdocker-integration-tests
  *     "docker-integration-tests/testOnly *DB2KrbIntegrationSuite"
  * }}}
@@ -43,19 +43,8 @@ class DB2KrbIntegrationSuite extends DockerKrbJDBCIntegrationSuite {
   override protected val userName = s"db2/$dockerIp"
   override protected val keytabFileName = "db2.keytab"
 
-  override val db = new DatabaseOnDocker {
-    override val imageName = sys.env.getOrElse("DB2_DOCKER_IMAGE_NAME", "ibmcom/db2:11.5.6.0a")
-    override val env = Map(
-      "DB2INST1_PASSWORD" -> "rootpass",
-      "LICENSE" -> "accept",
-      "DBNAME" -> "db2",
-      "ARCHIVE_LOGS" -> "false",
-      "AUTOCONFIG" -> "false"
-    )
-    override val usesIpc = false
-    override val jdbcPort = 50000
-    override val privileged = true
-    override def getJdbcUrl(ip: String, port: Int): String = s"jdbc:db2://$ip:$port/db2"
+  override val db = new DB2DatabaseOnDocker {
+    override def getJdbcUrl(ip: String, port: Int): String = s"jdbc:db2://$ip:$port/foo"
     override def getJdbcProperties() = {
       val options = new JDBCOptions(Map[String, String](
         JDBCOptions.JDBC_URL -> getJdbcUrl(dockerIp, externalPort),

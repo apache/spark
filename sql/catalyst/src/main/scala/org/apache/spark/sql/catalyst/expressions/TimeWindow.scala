@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
@@ -199,8 +200,9 @@ object TimeWindow {
   def getIntervalInMicroSeconds(interval: String): Long = {
     val cal = IntervalUtils.fromIntervalString(interval)
     if (cal.months != 0) {
-      throw new IllegalArgumentException(
-        s"Intervals greater than a month is not supported ($interval).")
+      throw new SparkIllegalArgumentException(
+        errorClass = "_LEGACY_ERROR_TEMP_3231",
+        messageParameters = Map("interval" -> interval))
     }
     Math.addExact(Math.multiplyExact(cal.days, MICROS_PER_DAY), cal.microseconds)
   }

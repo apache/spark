@@ -425,17 +425,9 @@ select from_json(
   'd date',
   map('dateFormat', 'MM-dd'))
 -- !query schema
-struct<>
+struct<from_json({"d": "02-29"}):struct<d:date>>
 -- !query output
-org.apache.spark.SparkUpgradeException
-{
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
-  "sqlState" : "42K0B",
-  "messageParameters" : {
-    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
-    "datetime" : "'02-29'"
-  }
-}
+{"d":null}
 
 
 -- !query
@@ -444,17 +436,9 @@ select from_json(
   't timestamp',
   map('timestampFormat', 'MM-dd'))
 -- !query schema
-struct<>
+struct<from_json({"t": "02-29"}):struct<t:timestamp>>
 -- !query output
-org.apache.spark.SparkUpgradeException
-{
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
-  "sqlState" : "42K0B",
-  "messageParameters" : {
-    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
-    "datetime" : "'02-29'"
-  }
-}
+{"t":null}
 
 
 -- !query
@@ -565,7 +549,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"2\"",
     "inputType" : "\"INT\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"STRING\"",
     "sqlExpr" : "\"json_array_length(2)\""
   },
@@ -713,7 +697,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"200\"",
     "inputType" : "\"INT\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"STRING\"",
     "sqlExpr" : "\"json_object_keys(200)\""
   },

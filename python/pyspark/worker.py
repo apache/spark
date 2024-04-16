@@ -32,10 +32,9 @@ from pyspark.accumulators import (
     _accumulatorRegistry,
     _deserialize_accumulator,
 )
-from pyspark.java_gateway import local_connect_and_auth
 from pyspark.taskcontext import BarrierTaskContext, TaskContext
 from pyspark.resource import ResourceInformation
-from pyspark.rdd import PythonEvalType
+from pyspark.util import PythonEvalType, local_connect_and_auth
 from pyspark.serializers import (
     write_int,
     read_long,
@@ -84,7 +83,7 @@ from pyspark.worker_util import (
 )
 
 try:
-    import memory_profiler  # type: ignore # noqa: F401
+    import memory_profiler  # noqa: F401
 
     has_memory_profiler = True
 except Exception:

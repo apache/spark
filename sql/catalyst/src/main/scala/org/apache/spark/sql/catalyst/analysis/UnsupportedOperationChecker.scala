@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{ANALYSIS_ERROR, QUERY_PLAN}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, CurrentDate, CurrentTimestampLike, Expression, GroupingSets, LocalTimestamp, MonotonicallyIncreasingID, SessionWindow, WindowExpression}
@@ -42,9 +43,6 @@ object UnsupportedOperationChecker extends Logging {
       case d: DeduplicateWithinWatermark =>
         throwError("dropDuplicatesWithinWatermark is not supported with batch " +
           "DataFrames/DataSets")(d)
-
-      case t: TransformWithState =>
-        throwError("transformWithState is not supported with batch DataFrames/Datasets")(t)
 
       case _ =>
     }
@@ -136,7 +134,8 @@ object UnsupportedOperationChecker extends Logging {
         }
       }
     } catch {
-      case e: AnalysisException if !failWhenDetected => logWarning(s"${e.message};\n$plan")
+      case e: AnalysisException if !failWhenDetected =>
+        logWarning(log"${MDC(ANALYSIS_ERROR, e.message)};\n${MDC(QUERY_PLAN, plan)}", e)
     }
   }
 

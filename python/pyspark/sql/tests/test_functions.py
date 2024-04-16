@@ -24,9 +24,7 @@ import math
 import re
 import unittest
 
-from py4j.protocol import Py4JJavaError
-
-from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.errors import PySparkTypeError, PySparkValueError, SparkRuntimeException
 from pyspark.sql import Row, Window, functions as F, types
 from pyspark.sql.column import Column
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
@@ -376,6 +374,11 @@ class FunctionsTestsMixin:
                 df.select(getattr(F, name)("name")).first()[0],
                 df.select(getattr(F, name)(F.col("name"))).first()[0],
             )
+
+    def test_collation(self):
+        df = self.spark.createDataFrame([("a",), ("b",)], ["name"])
+        actual = df.select(F.collation(F.collate("name", "UNICODE"))).distinct().collect()
+        self.assertEqual([Row("UNICODE")], actual)
 
     def test_octet_length_function(self):
         # SPARK-36751: add octet length api for python
@@ -1073,7 +1076,7 @@ class FunctionsTestsMixin:
         self.assertEqual(datetime.date(2017, 1, 22), parse_result["to_date(dateCol)"])
 
     def test_assert_true(self):
-        self.check_assert_true(Py4JJavaError)
+        self.check_assert_true(SparkRuntimeException)
 
     def check_assert_true(self, tpe):
         df = self.spark.range(3)
@@ -1099,7 +1102,7 @@ class FunctionsTestsMixin:
         )
 
     def test_raise_error(self):
-        self.check_raise_error(Py4JJavaError)
+        self.check_raise_error(SparkRuntimeException)
 
     def check_raise_error(self, tpe):
         df = self.spark.createDataFrame([Row(id="foobar")])
@@ -1301,6 +1304,16 @@ class FunctionsTestsMixin:
         self.assertEqual(expected, dict(actual["items"]))
         self.assertEqual({**expected, **expected2}, dict(actual["merged"]))
         self.assertEqual(expected, actual["from_items"])
+
+    def test_parse_json(self):
+        df = self.spark.createDataFrame([{"json": """{ "a" : 1 }"""}])
+        actual = df.select(
+            F.to_json(F.parse_json(df.json)).alias("var"),
+            F.to_json(F.parse_json(F.lit("""{"b": [{"c": "str2"}]}"""))).alias("var_lit"),
+        ).first()
+
+        self.assertEqual("""{"a":1}""", actual["var"])
+        self.assertEqual("""{"b":[{"c":"str2"}]}""", actual["var_lit"])
 
     def test_schema_of_json(self):
         with self.assertRaises(PySparkTypeError) as pe:

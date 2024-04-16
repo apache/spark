@@ -31,7 +31,8 @@ import org.apache.hadoop.fs.FileStatus
 import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{CONFIG, PATH}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.avro.AvroCompressionCodec._
 import org.apache.spark.sql.avro.AvroOptions.IGNORE_EXTENSION
@@ -51,8 +52,8 @@ private[sql] object AvroUtils extends Logging {
     val parsedOptions = new AvroOptions(options, conf)
 
     if (parsedOptions.parameters.contains(IGNORE_EXTENSION)) {
-      logWarning(s"Option $IGNORE_EXTENSION is deprecated. Please use the " +
-        "general data source option pathGlobFilter for filtering file names.")
+      logWarning(log"Option ${MDC(CONFIG, IGNORE_EXTENSION)} is deprecated. Please use the " +
+        log"general data source option pathGlobFilter for filtering file names.")
     }
     // User can specify an optional avro json schema.
     val avroSchema = parsedOptions.schema
@@ -160,7 +161,7 @@ private[sql] object AvroUtils extends Logging {
           } catch {
             case e: IOException =>
               if (ignoreCorruptFiles) {
-                logWarning(s"Skipped the footer in the corrupted file: $path", e)
+                logWarning(log"Skipped the footer in the corrupted file: ${MDC(PATH, path)}", e)
                 None
               } else {
                 throw new SparkException(s"Could not read file: $path", e)
@@ -197,19 +198,21 @@ private[sql] object AvroUtils extends Logging {
 
     def hasNextRow: Boolean = {
       while (!completed && currentRow.isEmpty) {
-        if (fileReader.pastSync(stopPosition)) {
+        // In the case of empty blocks in an Avro file, `blockRemaining` could still read as 0 so
+        // `fileReader.hasNext()` returns false but advances the cursor to the next block, so we
+        // need to call `fileReader.hasNext()` again to correctly report if the next record
+        // exists.
+        val moreData =
+          (fileReader.hasNext || fileReader.hasNext) && !fileReader.pastSync(stopPosition)
+        if (!moreData) {
           fileReader.close()
           completed = true
           currentRow = None
-        } else if (fileReader.hasNext()) {
+        } else {
           val record = fileReader.next()
           // the row must be deserialized in hasNextRow, because AvroDeserializer#deserialize
           // potentially filters rows
           currentRow = deserializer.deserialize(record).asInstanceOf[Option[InternalRow]]
-        } else {
-          // In this case, `fileReader.hasNext()` returns false but we are not past sync point yet.
-          // This means empty blocks, we need to continue reading the file in case there are non
-          // empty blocks or we are past sync point.
         }
       }
       currentRow.isDefined

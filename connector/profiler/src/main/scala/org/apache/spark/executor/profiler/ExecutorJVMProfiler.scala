@@ -51,7 +51,7 @@ private[spark] class ExecutorJVMProfiler(conf: SparkConf, executorId: String) ex
   private var inputStream: InputStream = _
   private val dataBuffer = new Array[Byte](UPLOAD_SIZE)
   private var threadpool: ScheduledExecutorService = _
-  private var writing: Boolean = false
+  @volatile private var writing: Boolean = false
 
   val profiler: Option[AsyncProfiler] = {
     Option(

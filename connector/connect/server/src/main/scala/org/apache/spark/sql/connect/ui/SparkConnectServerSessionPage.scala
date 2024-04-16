@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.connect.ui
 
-import javax.servlet.http.HttpServletRequest
-
 import scala.xml.Node
+
+import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.ui._

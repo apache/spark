@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-import _string  # type: ignore[import]
+import _string  # type: ignore[import-not-found]
 from typing import Any, Dict, Optional, Union, List
 import inspect
 

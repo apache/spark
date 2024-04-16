@@ -17,7 +17,7 @@
 
 package org.apache.spark.status.api.v1.sql
 
-import javax.ws.rs.{Path, PathParam}
+import jakarta.ws.rs.{Path, PathParam}
 
 import org.apache.spark.status.api.v1.ApiRequestContext
 

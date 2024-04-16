@@ -353,19 +353,24 @@ SELECT double('inf') = double('infinity') AS col;
 +----+
 
 CREATE TABLE test (c1 int, c2 double);
-INSERT INTO test VALUES (1, double('infinity'));
-INSERT INTO test VALUES (2, double('infinity'));
-INSERT INTO test VALUES (3, double('inf'));
-INSERT INTO test VALUES (4, double('-inf'));
-INSERT INTO test VALUES (5, double('NaN'));
-INSERT INTO test VALUES (6, double('NaN'));
-INSERT INTO test VALUES (7, double('-infinity'));
-SELECT COUNT(*), c2 FROM test GROUP BY c2;
+INSERT INTO test VALUES
+  (1, double('infinity')),
+  (2, double('infinity')),
+  (3, double('inf')),
+  (4, double('-inf')),
+  (5, double('NaN')),
+  (6, double('NaN')),
+  (7, double('-infinity'))
+;
+SELECT COUNT(*), c2
+FROM test
+GROUP BY c2
+ORDER BY c2;
 +---------+---------+
 | count(1)|       c2|
 +---------+---------+
-|        2|      NaN|
 |        2|-Infinity|
 |        3| Infinity|
+|        2|      NaN|
 +---------+---------+
 ```

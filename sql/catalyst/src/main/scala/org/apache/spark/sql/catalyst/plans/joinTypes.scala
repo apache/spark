@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.plans
 
 import java.util.Locale
 
-import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.{SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 
 object JoinType {
@@ -41,8 +41,11 @@ object JoinType {
         "leftanti", "left_anti", "anti",
         "cross")
 
-      throw new IllegalArgumentException(s"Unsupported join type '$typ'. " +
-        "Supported join types include: " + supported.mkString("'", "', '", "'") + ".")
+      throw new SparkIllegalArgumentException(
+        errorClass = "_LEGACY_ERROR_TEMP_3216",
+        messageParameters = Map(
+          "typ" -> typ,
+          "supported" -> supported.mkString("'", "', '", "'")))
   }
 }
 
@@ -133,8 +136,11 @@ object AsOfJoinDirection {
       case "nearest" => Nearest
       case _ =>
         val supported = Seq("forward", "backward", "nearest")
-        throw new IllegalArgumentException(s"Unsupported as-of join direction '$direction'. " +
-          "Supported as-of join direction include: " + supported.mkString("'", "', '", "'") + ".")
+        throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3217",
+          messageParameters = Map(
+            "direction" -> direction,
+            "supported" -> supported.mkString("'", "', '", "'")))
     }
   }
 }

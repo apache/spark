@@ -324,6 +324,14 @@ private[spark] object MavenUtils extends Logging {
     val ivySettings: IvySettings = new IvySettings
     try {
       ivySettings.load(file)
+      if (ivySettings.getDefaultIvyUserDir == null && ivySettings.getDefaultCache == null) {
+        // To protect old Ivy-based systems like old Spark from Apache Ivy 2.5.2's incompatibility.
+        // `processIvyPathArg` can overwrite these later.
+        val alternateIvyDir = System.getProperty("ivy.home",
+          System.getProperty("user.home") + File.separator + ".ivy2.5.2")
+        ivySettings.setDefaultIvyUserDir(new File(alternateIvyDir))
+        ivySettings.setDefaultCache(new File(alternateIvyDir, "cache"))
+      }
     } catch {
       case e @ (_: IOException | _: ParseException) =>
         throw new SparkException(s"Failed when loading Ivy settings from $settingsFile", e)
@@ -335,10 +343,13 @@ private[spark] object MavenUtils extends Logging {
 
   /* Set ivy settings for location of cache, if option is supplied */
   private def processIvyPathArg(ivySettings: IvySettings, ivyPath: Option[String]): Unit = {
-    ivyPath.filterNot(_.trim.isEmpty).foreach { alternateIvyDir =>
-      ivySettings.setDefaultIvyUserDir(new File(alternateIvyDir))
-      ivySettings.setDefaultCache(new File(alternateIvyDir, "cache"))
+    val alternateIvyDir = ivyPath.filterNot(_.trim.isEmpty).getOrElse {
+      // To protect old Ivy-based systems like old Spark from Apache Ivy 2.5.2's incompatibility.
+      System.getProperty("ivy.home",
+        System.getProperty("user.home") + File.separator + ".ivy2.5.2")
     }
+    ivySettings.setDefaultIvyUserDir(new File(alternateIvyDir))
+    ivySettings.setDefaultCache(new File(alternateIvyDir, "cache"))
   }
 
   /* Add any optional additional remote repositories */

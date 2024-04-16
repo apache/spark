@@ -18,23 +18,19 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.{Date, Timestamp, Types}
-import java.util.{Locale, TimeZone}
+import java.util.Locale
 
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkUnsupportedOperationException
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.connector.expressions.Expression
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.jdbc.OracleDialect._
 import org.apache.spark.sql.types._
 
 
-private case object OracleDialect extends JdbcDialect {
-  private[jdbc] val BINARY_FLOAT = 100
-  private[jdbc] val BINARY_DOUBLE = 101
-  private[jdbc] val TIMESTAMPTZ = -101
-
+private case class OracleDialect() extends JdbcDialect with SQLConfHelper {
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:oracle")
 
@@ -77,13 +73,6 @@ private case object OracleDialect extends JdbcDialect {
     }
   }
 
-  private def supportTimeZoneTypes: Boolean = {
-    val timeZone = DateTimeUtils.getTimeZone(SQLConf.get.sessionLocalTimeZone)
-    // TODO: support timezone types when users are not using the JVM timezone, which
-    // is the default value of SESSION_LOCAL_TIMEZONE
-    timeZone == TimeZone.getDefault
-  }
-
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
     sqlType match {
@@ -104,10 +93,19 @@ private case object OracleDialect extends JdbcDialect {
           case _ if scale == -127L => Option(DecimalType(DecimalType.MAX_PRECISION, 10))
           case _ => None
         }
-      case TIMESTAMPTZ if supportTimeZoneTypes
-        => Some(TimestampType) // Value for Timestamp with Time Zone in Oracle
+      case TIMESTAMP_TZ | TIMESTAMP_LTZ =>
+        // TIMESTAMP WITH TIME ZONE and TIMESTAMP WITH LOCAL TIME ZONE types can be represented
+        // as standard java.sql.Timestamp type.
+        // The byte representation of TIMESTAMP WITH TIME ZONE and TIMESTAMP WITH LOCAL TIME ZONE
+        // types to java.sql.Timestamp is straight forward.
+        // This is because the internal format of TIMESTAMP WITH TIME ZONE and TIMESTAMP WITH LOCAL
+        // TIME ZONE data types is GMT, and java.sql.Timestamp type objects internally use a
+        // milliseconds time value that is the number of milliseconds since EPOCH.
+        Some(TimestampType)
       case BINARY_FLOAT => Some(FloatType) // Value for OracleTypes.BINARY_FLOAT
       case BINARY_DOUBLE => Some(DoubleType) // Value for OracleTypes.BINARY_DOUBLE
+      case INTERVAL_YM => Some(YearMonthIntervalType())
+      case INTERVAL_DS => Some(DayTimeIntervalType())
       case _ => None
     }
   }
@@ -123,6 +121,8 @@ private case object OracleDialect extends JdbcDialect {
     case ByteType => Some(JdbcType("NUMBER(3)", java.sql.Types.SMALLINT))
     case ShortType => Some(JdbcType("NUMBER(5)", java.sql.Types.SMALLINT))
     case StringType => Some(JdbcType("VARCHAR2(255)", java.sql.Types.VARCHAR))
+    case TimestampType if !conf.legacyOracleTimestampMappingEnabled =>
+      Some(JdbcType("TIMESTAMP WITH LOCAL TIME ZONE", TIMESTAMP_LTZ))
     case _ => None
   }
 
@@ -228,4 +228,24 @@ private case object OracleDialect extends JdbcDialect {
   override def supportsLimit: Boolean = true
 
   override def supportsOffset: Boolean = true
+}
+
+private[jdbc] object OracleDialect {
+  final val BINARY_FLOAT = 100
+  final val BINARY_DOUBLE = 101
+  final val TIMESTAMP_TZ = -101
+  // oracle.jdbc.OracleType.TIMESTAMP_WITH_LOCAL_TIME_ZONE
+  final val TIMESTAMP_LTZ = -102
+  // INTERVAL YEAR [(year_precision)] TO MONTH
+  // Stores a period of time in years and months, where year_precision is the number of digits in
+  // the YEAR datetime field. Accepted values are 0 to 9. The default is 2.
+  // The size is fixed at 5 bytes.
+  final val INTERVAL_YM = -103
+  // INTERVAL DAY [(day_precision)] TO SECOND [(fractional_seconds_precision)]
+  // Stores a period of time in days, hours, minutes, and seconds, where
+  // - day_precision is the maximum number of digits in the DAY datetime field.
+  //   Accepted values are 0 to 9. The default is 2.
+  // - fractional_seconds_precision is the number of digits in the fractional part
+  //   of the SECOND field. Accepted values are 0 to 9. The default is 6.
+  final val INTERVAL_DS = -104
 }

@@ -480,13 +480,14 @@ class SymmetricHashJoinStateManager(
         stateInfo.get, partitionId, getStateStoreName(joinSide, stateStoreType))
       val store = if (useStateStoreCoordinator) {
         StateStore.get(
-          storeProviderId, keySchema, valueSchema, numColsPrefixKey = 0,
+          storeProviderId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
           stateInfo.get.storeVersion, useColumnFamilies = false, storeConf, hadoopConf)
       } else {
         // This class will manage the state store provider by itself.
         stateStoreProvider = StateStoreProvider.createAndInit(
-          storeProviderId, keySchema, valueSchema, numColsPrefixKey = 0,
-          useColumnFamilies = false, storeConf, hadoopConf)
+          storeProviderId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
+          useColumnFamilies = false, storeConf, hadoopConf,
+          useMultipleValuesPerKey = false)
         stateStoreProvider.getStore(stateInfo.get.storeVersion)
       }
       logInfo(s"Loaded store ${store.id}")

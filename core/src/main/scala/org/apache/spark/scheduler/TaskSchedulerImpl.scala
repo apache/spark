@@ -18,7 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.nio.ByteBuffer
-import java.util.{Timer, TimerTask}
+import java.util.TimerTask
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.concurrent.atomic.AtomicLong
 
@@ -33,7 +33,8 @@ import org.apache.spark.InternalAccumulator.{input, shuffleRead}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.ExecutorMetrics
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{config, Logging, LogKey, MDC}
+import org.apache.spark.internal.LogKey.{REASON, TASK_SET_NAME, TASK_STATE, TID}
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.RpcEndpoint
@@ -135,7 +136,8 @@ private[spark] class TaskSchedulerImpl(
 
   @volatile private var hasReceivedTask = false
   @volatile private var hasLaunchedTask = false
-  private val starvationTimer = new Timer("task-starvation-timer", true)
+  private val starvationTimer = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
+    "task-starvation-timer")
 
   // Incrementing task IDs
   val nextTaskId = new AtomicLong(0)
@@ -166,7 +168,7 @@ private[spark] class TaskSchedulerImpl(
 
   protected val executorIdToHost = new HashMap[String, String]
 
-  private val abortTimer = new Timer("task-abort-timer", true)
+  private val abortTimer = ThreadUtils.newDaemonSingleThreadScheduledExecutor("task-abort-timer")
   // Exposed for testing
   val unschedulableTaskSetToExpiryTime = new HashMap[TaskSetManager, Long]
 
@@ -282,7 +284,7 @@ private[spark] class TaskSchedulerImpl(
               this.cancel()
             }
           }
-        }, STARVATION_TIMEOUT_MS, STARVATION_TIMEOUT_MS)
+        }, STARVATION_TIMEOUT_MS, STARVATION_TIMEOUT_MS, TimeUnit.MILLISECONDS)
       }
       hasReceivedTask = true
     }
@@ -425,7 +427,9 @@ private[spark] class TaskSchedulerImpl(
             }
           } catch {
             case e: TaskNotSerializableException =>
-              logError(s"Resource offer failed, task set ${taskSet.name} was not serializable")
+              // scalastyle:off line.size.limit
+              logError(log"Resource offer failed, task set ${MDC(TASK_SET_NAME, taskSet.name)} was not serializable")
+              // scalastyle:on
               // Do not offer resources for this task, but don't throw an error to allow other
               // task sets to be submitted.
               return (noDelayScheduleRejects, minLaunchedLocality)
@@ -737,7 +741,7 @@ private[spark] class TaskSchedulerImpl(
     logInfo(s"Waiting for $timeout ms for completely " +
       s"excluded task to be schedulable again before aborting stage ${taskSet.stageId}.")
     abortTimer.schedule(
-      createUnschedulableTaskSetAbortTimer(taskSet, taskIndex), timeout)
+      createUnschedulableTaskSetAbortTimer(taskSet, taskIndex), timeout, TimeUnit.MILLISECONDS)
   }
 
   private def createUnschedulableTaskSetAbortTimer(
@@ -804,10 +808,8 @@ private[spark] class TaskSchedulerImpl(
             }
           case None =>
             logError(
-              ("Ignoring update with state %s for TID %s because its task set is gone (this is " +
-                "likely the result of receiving duplicate task finished status updates) or its " +
-                "executor has been marked as failed.")
-                .format(state, tid))
+              log"Ignoring update with state ${MDC(TASK_STATE, state)} for TID ${MDC(TID, tid)} because its task set is gone (this is " +
+                log"likely the result of receiving duplicate task finished status updates) or its executor has been marked as failed.")
         }
       } catch {
         case e: Exception => logError("Exception in statusUpdate", e)
@@ -963,8 +965,8 @@ private[spark] class TaskSchedulerImpl(
         barrierCoordinator.stop()
       }
     }
-    starvationTimer.cancel()
-    abortTimer.cancel()
+    ThreadUtils.shutdown(starvationTimer)
+    ThreadUtils.shutdown(abortTimer)
   }
 
   override def defaultParallelism(): Int = backend.defaultParallelism()
@@ -1022,7 +1024,7 @@ private[spark] class TaskSchedulerImpl(
             // one may be triggered by a dropped connection from the worker while another may be a
             // report of executor termination. We produce log messages for both so we
             // eventually report the termination reason.
-            logError(s"Lost an executor $executorId (already removed): $reason")
+            logError(log"Lost an executor ${MDC(LogKey.EXECUTOR_ID, executorId)} (already removed): ${MDC(REASON, reason)}")
         }
       }
     }
@@ -1050,7 +1052,7 @@ private[spark] class TaskSchedulerImpl(
       logInfo(s"Executor $executorId on $hostPort is decommissioned" +
         s"${getDecommissionDuration(executorId)}.")
     case _ =>
-      logError(s"Lost executor $executorId on $hostPort: $reason")
+      logError(log"Lost executor ${MDC(LogKey.EXECUTOR_ID, executorId)} on ${MDC(LogKey.HOST, hostPort)}: ${MDC(REASON, reason)}")
   }
 
   // return decommission duration in string or "" if decommission startTime not exists
@@ -1256,7 +1258,11 @@ private[spark] object TaskSchedulerImpl {
           numTasksPerExecCores
         } else {
           val availAddrs = resources.getOrElse(limitingResource, 0)
-          val resourceLimit = (availAddrs / taskLimit).toInt
+          val resourceLimit = if (taskLimit >= 1.0) {
+            availAddrs / taskLimit.ceil.toInt
+          } else {
+            availAddrs * Math.floor(1.0 / taskLimit).toInt
+          }
           // when executor cores config isn't set, we can't calculate the real limiting resource
           // and number of tasks per executor ahead of time, so calculate it now based on what
           // is available.

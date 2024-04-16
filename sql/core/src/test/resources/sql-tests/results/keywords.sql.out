@@ -44,6 +44,7 @@ CLUSTER	false
 CLUSTERED	false
 CODEGEN	false
 COLLATE	false
+COLLATION	false
 COLLECTION	false
 COLUMN	false
 COLUMNS	false
@@ -190,6 +191,7 @@ NANOSECOND	false
 NANOSECONDS	false
 NATURAL	false
 NO	false
+NOT	false
 NULL	false
 NULLS	false
 NUMERIC	false

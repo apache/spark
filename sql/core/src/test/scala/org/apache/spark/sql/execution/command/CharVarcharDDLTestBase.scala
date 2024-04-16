@@ -47,11 +47,11 @@ trait CharVarcharDDLTestBase extends QueryTest with SQLTestUtils {
   test("not allow to change column for char(x) to char(y), x != y") {
     withTable("t") {
       sql(s"CREATE TABLE t(i STRING, c CHAR(4)) USING $format")
-      val sql1 = "ALTER TABLE t CHANGE COLUMN c TYPE CHAR(5)"
+      val alterSQL = "ALTER TABLE t CHANGE COLUMN c TYPE CHAR(5)"
       val table = getTableName("t")
       checkError(
           exception = intercept[AnalysisException] {
-            sql(sql1)
+            sql(alterSQL)
           },
           errorClass = "NOT_SUPPORTED_CHANGE_COLUMN",
           parameters = Map(
@@ -60,10 +60,7 @@ trait CharVarcharDDLTestBase extends QueryTest with SQLTestUtils {
             "newName" -> "`c`",
             "originName" -> "`c`",
             "table" -> table),
-          queryContext = table match {
-            case "`spark_catalog`.`default`.`t`" => Array.empty
-            case _ => Array(ExpectedContext(fragment = sql1, start = 0, stop = 41))
-          }
+          queryContext = Array(ExpectedContext(fragment = alterSQL, start = 0, stop = 41))
       )
     }
   }
@@ -84,10 +81,7 @@ trait CharVarcharDDLTestBase extends QueryTest with SQLTestUtils {
             "newName" -> "`c`",
             "originName" -> "`c`",
             "table" -> table),
-          queryContext = table match {
-            case "`spark_catalog`.`default`.`t`" => Array.empty
-            case _ => Array(ExpectedContext(fragment = sql1, start = 0, stop = 41))
-          }
+          queryContext = Array(ExpectedContext(fragment = sql1, start = 0, stop = 41))
       )
     }
   }
@@ -108,10 +102,7 @@ trait CharVarcharDDLTestBase extends QueryTest with SQLTestUtils {
             "newName" -> "`i`",
             "originName" -> "`i`",
             "table" -> table),
-          queryContext = table match {
-            case "`spark_catalog`.`default`.`t`" => Array.empty
-            case _ => Array(ExpectedContext(fragment = sql1, start = 0, stop = 41))
-          }
+          queryContext = Array(ExpectedContext(fragment = sql1, start = 0, stop = 41))
       )
     }
   }
@@ -140,10 +131,7 @@ trait CharVarcharDDLTestBase extends QueryTest with SQLTestUtils {
             "newName" -> "`c`",
             "originName" -> "`c`",
             "table" -> table),
-          queryContext = table match {
-            case "`spark_catalog`.`default`.`t`" => Array.empty
-            case _ => Array(ExpectedContext(fragment = sql1, start = 0, stop = 44))
-          }
+          queryContext = Array(ExpectedContext(fragment = sql1, start = 0, stop = 44))
       )
     }
   }

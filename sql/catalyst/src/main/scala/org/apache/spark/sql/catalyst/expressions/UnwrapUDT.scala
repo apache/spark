@@ -37,7 +37,7 @@ case class UnwrapUDT(child: Expression) extends UnaryExpression with NonSQLExpre
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "1",
+          "paramIndex" -> ordinalNumber(0),
           "requiredType" -> toSQLType("UserDefinedType"),
           "inputSql" -> toSQLExpr(child),
           "inputType" -> toSQLType(child.dataType)))

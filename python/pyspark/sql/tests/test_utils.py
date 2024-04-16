@@ -1789,6 +1789,18 @@ class UtilsTestsMixin:
             self.assertEqual(e.getMessageParameters(), {})
             self.assertEqual(e.getMessage(), "")
 
+    def test_assert_data_frame_equal_not_support_streaming(self):
+        df1 = self.spark.readStream.format("rate").load()
+        df2 = self.spark.readStream.format("rate").load()
+        exception_thrown = False
+        try:
+            assertDataFrameEqual(df1, df2)
+        except PySparkAssertionError as e:
+            self.assertEqual(e.getErrorClass(), "UNSUPPORTED_OPERATION")
+            exception_thrown = True
+
+        self.assertTrue(exception_thrown)
+
 
 class UtilsTests(ReusedSQLTestCase, UtilsTestsMixin):
     pass
