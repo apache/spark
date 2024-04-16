@@ -223,33 +223,39 @@ object StreamingSymmetricHashJoinHelper extends Logging {
           condition,
           eventTimeWatermarkForEviction)
 
-        // For example, if the condition is of the form:
-        //    left_time > right_time + INTERVAL 30 MINUTES
-        // Then this extracts left_time and right_time.
-        val attributesInCondition = AttributeSet(
-          condition.get.collect { case a: AttributeReference => a }
-        )
-
-        // Construct an AttributeSet so that we can perform equality between attributes,
-        // which we do in the filter below.
-        val oneSideInputAttributeSet = AttributeSet(oneSideInputAttributes)
-
-        // oneSideInputAttributes could be [left_value, left_time], and we just
-        // want the attribute _in_ the time-interval condition.
-        val oneSideStateWatermarkAttributes = attributesInCondition.filter { a =>
-            oneSideInputAttributeSet.contains(a)
-        }
-
-        // There should be a single attribute per side in the time-interval condition, so,
-        // filtering for oneSideInputAttributes as done above should lead us with 1 attribute.
-        if (oneSideStateWatermarkAttributes.size == 1) {
-          val expr = watermarkExpression(
-            Some(oneSideStateWatermarkAttributes.head), stateValueWatermark)
-          expr.map(JoinStateValueWatermarkPredicate.apply _)
-        } else {
-          // But, if there are more state watermark attributes, we can't solve the contraints,
-          // and we don't issue a removal predicate.
+        // If the condition itself is empty (for example, left_time < left_time + INTERVAL ...),
+        // then we will not have generated a stateValueWatermark.
+        if (stateValueWatermark.isEmpty) {
           None
+        } else {
+          // For example, if the condition is of the form:
+          //    left_time > right_time + INTERVAL 30 MINUTES
+          // Then this extracts left_time and right_time.
+          val attributesInCondition = AttributeSet(
+            condition.get.collect { case a: AttributeReference => a }
+          )
+
+          // Construct an AttributeSet so that we can perform equality between attributes,
+          // which we do in the filter below.
+          val oneSideInputAttributeSet = AttributeSet(oneSideInputAttributes)
+
+          // oneSideInputAttributes could be [left_value, left_time], and we just
+          // want the attribute _in_ the time-interval condition.
+          val oneSideStateWatermarkAttributes = attributesInCondition.filter { a =>
+            oneSideInputAttributeSet.contains(a)
+          }
+
+          // There should be a single attribute per side in the time-interval condition, so,
+          // filtering for oneSideInputAttributes as done above should lead us with 1 attribute.
+          if (oneSideStateWatermarkAttributes.size == 1) {
+            val expr =
+              watermarkExpression(Some(oneSideStateWatermarkAttributes.head), stateValueWatermark)
+            expr.map(JoinStateValueWatermarkPredicate.apply _)
+          } else {
+            // This should never happen, since the grammar will ensure that we have one attribute
+            // from either side in the condition.
+            None
+          }
         }
       } else {
         None
