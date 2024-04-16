@@ -51,6 +51,8 @@ object LogKey extends Enumeration {
   val CONFIG = Value
   val CONFIG2 = Value
   val CONFIG3 = Value
+  val CONFIG4 = Value
+  val CONFIG5 = Value
   val CONSUMER = Value
   val CONTAINER = Value
   val CONTAINER_ID = Value
@@ -75,7 +77,9 @@ object LogKey extends Enumeration {
   val EVENT_QUEUE = Value
   val EXECUTE_INFO = Value
   val EXECUTE_KEY = Value
+  val EXECUTOR_ENV_REGEX = Value
   val EXECUTOR_ID = Value
+  val EXECUTOR_IDS = Value
   val EXECUTOR_STATE = Value
   val EXIT_CODE = Value
   val EXPRESSION_TERMS = Value
@@ -140,6 +144,9 @@ object LogKey extends Enumeration {
   val PATH = Value
   val PATHS = Value
   val POD_ID = Value
+  val POD_NAME = Value
+  val POD_NAMESPACE = Value
+  val POD_PHASE = Value
   val POLICY = Value
   val PORT = Value
   val PRODUCER_ID = Value
@@ -157,7 +164,7 @@ object LogKey extends Enumeration {
   val REDUCE_ID = Value
   val RELATION_NAME = Value
   val REMAINING_PARTITIONS = Value
-  val REMOTE_ADDRESS = Value
+  val RESOURCE_NAME = Value
   val RETRY_COUNT = Value
   val RETRY_INTERVAL = Value
   val RULE_BATCH_NAME = Value

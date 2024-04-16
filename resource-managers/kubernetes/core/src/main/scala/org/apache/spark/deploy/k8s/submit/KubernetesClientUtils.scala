@@ -31,7 +31,8 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.{Config, Constants, KubernetesUtils}
 import org.apache.spark.deploy.k8s.Config.{KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH, KUBERNETES_NAMESPACE}
 import org.apache.spark.deploy.k8s.Constants.ENV_SPARK_CONF_DIR
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{CONFIG, PATH, PATHS}
 import org.apache.spark.util.ArrayImplicits._
 
 private[spark] object KubernetesClientUtils extends Logging {
@@ -133,8 +134,8 @@ private[spark] object KubernetesClientUtils extends Logging {
           }
         } catch {
           case e: MalformedInputException =>
-            logWarning(
-              s"Unable to read a non UTF-8 encoded file ${file.getAbsolutePath}. Skipping...", e)
+            logWarning(log"Unable to read a non UTF-8 encoded file " +
+              log"${MDC(PATH, file.getAbsolutePath)}. Skipping...", e)
         } finally {
           source.close()
         }
@@ -144,8 +145,9 @@ private[spark] object KubernetesClientUtils extends Logging {
           s" ${truncatedMap.keys.mkString(",")}")
       }
       if (skippedFiles.nonEmpty) {
-        logWarning(s"Skipped conf file(s) ${skippedFiles.mkString(",")}, due to size constraint." +
-          s" Please see, config: `${Config.CONFIG_MAP_MAXSIZE.key}` for more details.")
+        logWarning(log"Skipped conf file(s) ${MDC(PATHS, skippedFiles.mkString(","))}, due to " +
+          log"size constraint. Please see, config: " +
+          log"`${MDC(CONFIG, Config.CONFIG_MAP_MAXSIZE.key)}` for more details.")
       }
       truncatedMap.toMap
     } else {
