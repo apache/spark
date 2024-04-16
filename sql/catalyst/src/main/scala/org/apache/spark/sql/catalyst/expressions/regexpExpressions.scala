@@ -64,7 +64,7 @@ abstract class StringRegexExpression extends BinaryExpression
     try {
       var patternFlags: Int = 0
       if (CollationFactory.fetchCollation(collationId).supportsLowercaseEquality) {
-        patternFlags = Pattern.CASE_INSENSITIVE
+        patternFlags = Pattern.UNICODE_CASE | Pattern.CASE_INSENSITIVE
       }
       Pattern.compile(escape(str), patternFlags)
     } catch {

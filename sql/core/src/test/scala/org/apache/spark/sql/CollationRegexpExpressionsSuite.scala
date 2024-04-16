@@ -35,7 +35,7 @@ class CollationRegexpExpressionsSuite
     case class LikeTestCase[R](l: String, r: String, c: String, result: R)
     val testCases = Seq(
       LikeTestCase("ABC", "%B%", "UTF8_BINARY", true),
-      LikeTestCase("ABC", "%b%", "UTF8_BINARY_LCASE", true),
+      LikeTestCase("AḂC", "%ḃ%", "UTF8_BINARY_LCASE", true),
       LikeTestCase("ABC", "%b%", "UNICODE", false)
     )
     testCases.foreach(t => {
@@ -61,7 +61,7 @@ class CollationRegexpExpressionsSuite
     case class ILikeTestCase[R](l: String, r: String, c: String, result: R)
     val testCases = Seq(
       ILikeTestCase("ABC", "%b%", "UTF8_BINARY", true),
-      ILikeTestCase("ABC", "%b%", "UTF8_BINARY_LCASE", true),
+      ILikeTestCase("AḂC", "%ḃ%", "UTF8_BINARY_LCASE", true),
       ILikeTestCase("ABC", "%b%", "UNICODE", true)
     )
     testCases.foreach(t => {
@@ -87,7 +87,7 @@ class CollationRegexpExpressionsSuite
     case class RLikeTestCase[R](l: String, r: String, c: String, result: R)
     val testCases = Seq(
       RLikeTestCase("ABC", ".B.", "UTF8_BINARY", true),
-      RLikeTestCase("ABC", ".b.", "UTF8_BINARY_LCASE", true),
+      RLikeTestCase("AḂC", ".ḃ.", "UTF8_BINARY_LCASE", true),
       RLikeTestCase("ABC", ".b.", "UNICODE", false)
     )
     testCases.foreach(t => {
@@ -113,7 +113,7 @@ class CollationRegexpExpressionsSuite
     case class StringSplitTestCase[R](l: String, r: String, c: String, result: R)
     val testCases = Seq(
       StringSplitTestCase("ABC", "[B]", "UTF8_BINARY", Seq("A", "C")),
-      StringSplitTestCase("ABC", "[b]", "UTF8_BINARY_LCASE", Seq("A", "C")),
+      StringSplitTestCase("AḂC", "[ḃ]", "UTF8_BINARY_LCASE", Seq("A", "C")),
       StringSplitTestCase("ABC", "[B]", "UNICODE", Seq("A", "C"))
     )
     testCases.foreach(t => {
@@ -139,7 +139,7 @@ class CollationRegexpExpressionsSuite
     case class RegExpReplaceTestCase[R](l: String, r: String, c: String, result: R)
     val testCases = Seq(
       RegExpReplaceTestCase("ABCDE", ".C.", "UTF8_BINARY", "AFFFE"),
-      RegExpReplaceTestCase("ABCDE", ".c.", "UTF8_BINARY_LCASE", "AFFFE"),
+      RegExpReplaceTestCase("ABĆDE", ".ć.", "UTF8_BINARY_LCASE", "AFFFE"),
       RegExpReplaceTestCase("ABCDE", ".c.", "UNICODE", "ABCDE")
     )
     testCases.foreach(t => {
@@ -167,7 +167,7 @@ class CollationRegexpExpressionsSuite
     case class RegExpExtractTestCase[R](l: String, r: String, c: String, result: R)
     val testCases = Seq(
       RegExpExtractTestCase("ABCDE", ".C.", "UTF8_BINARY", "BCD"),
-      RegExpExtractTestCase("ABCDE", ".c.", "UTF8_BINARY_LCASE", "BCD"),
+      RegExpExtractTestCase("ABĆDE", ".ć.", "UTF8_BINARY_LCASE", "BĆD"),
       RegExpExtractTestCase("ABCDE", ".c.", "UNICODE", "")
     )
     testCases.foreach(t => {
@@ -195,7 +195,7 @@ class CollationRegexpExpressionsSuite
     case class RegExpExtractAllTestCase[R](l: String, r: String, c: String, result: R)
     val testCases = Seq(
       RegExpExtractAllTestCase("ABCDE", ".C.", "UTF8_BINARY", Seq("BCD")),
-      RegExpExtractAllTestCase("ABCDE", ".c.", "UTF8_BINARY_LCASE", Seq("BCD")),
+      RegExpExtractAllTestCase("ABĆDE", ".ć.", "UTF8_BINARY_LCASE", Seq("BĆD")),
       RegExpExtractAllTestCase("ABCDE", ".c.", "UNICODE", Seq())
     )
     testCases.foreach(t => {
@@ -223,7 +223,7 @@ class CollationRegexpExpressionsSuite
     case class RegExpCountTestCase[R](l: String, r: String, c: String, result: R)
     val testCases = Seq(
       RegExpCountTestCase("ABCDE", ".C.", "UTF8_BINARY", 1),
-      RegExpCountTestCase("ABCDE", ".c.", "UTF8_BINARY_LCASE", 1),
+      RegExpCountTestCase("ABĆDE", ".ć.", "UTF8_BINARY_LCASE", 1),
       RegExpCountTestCase("ABCDE", ".c.", "UNICODE", 0)
     )
     testCases.foreach(t => {
@@ -249,7 +249,7 @@ class CollationRegexpExpressionsSuite
     case class RegExpSubStrTestCase[R](l: String, r: String, c: String, result: R)
     val testCases = Seq(
       RegExpSubStrTestCase("ABCDE", ".C.", "UTF8_BINARY", "BCD"),
-      RegExpSubStrTestCase("ABCDE", ".c.", "UTF8_BINARY_LCASE", "BCD"),
+      RegExpSubStrTestCase("ABĆDE", ".ć.", "UTF8_BINARY_LCASE", "BĆD"),
       RegExpSubStrTestCase("ABCDE", ".c.", "UNICODE", null)
     )
     testCases.foreach(t => {
@@ -275,7 +275,7 @@ class CollationRegexpExpressionsSuite
     case class RegExpInStrTestCase[R](l: String, r: String, c: String, result: R)
     val testCases = Seq(
       RegExpInStrTestCase("ABCDE", ".C.", "UTF8_BINARY", 2),
-      RegExpInStrTestCase("ABCDE", ".c.", "UTF8_BINARY_LCASE", 2),
+      RegExpInStrTestCase("ABĆDE", ".ć.", "UTF8_BINARY_LCASE", 2),
       RegExpInStrTestCase("ABCDE", ".c.", "UNICODE", 0)
     )
     testCases.foreach(t => {
