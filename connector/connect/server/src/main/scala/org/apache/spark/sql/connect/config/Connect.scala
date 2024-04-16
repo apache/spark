@@ -73,7 +73,7 @@ object Connect {
           |""".stripMargin)
       .version("3.5.0")
       .intConf
-      .createWithDefault(1024)
+      .createWithDefault(ConnectCommon.CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT)
 
   val CONNECT_SESSION_MANAGER_DEFAULT_SESSION_TIMEOUT =
     buildStaticConf("spark.connect.session.manager.defaultSessionTimeout")

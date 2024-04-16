@@ -40,6 +40,7 @@ import org.apache.spark.sql.connect.client.{ClassFinder, SparkConnectClient, Spa
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.connect.common.ProtoUtils
+import org.apache.spark.sql.connect.common.config.ConnectCommon
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.{CatalogImpl, SqlApiConf}
 import org.apache.spark.sql.streaming.DataStreamReader
@@ -590,7 +591,7 @@ class SparkSession private[sql] (
     val any = ProtoUtils.parseWithRecursionLimit(
       extension,
       com.google.protobuf.Any.parser(),
-      recursionLimit = 4096)
+      recursionLimit = ConnectCommon.CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT)
     val command = proto.Command
       .newBuilder()
       .setExtension(any)
