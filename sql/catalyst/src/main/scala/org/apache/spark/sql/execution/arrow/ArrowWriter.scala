@@ -375,7 +375,7 @@ private[arrow] class StructWriter(
 
   lazy val isVariant = valueVector.getField.getMetadata.get("variant") == "true"
 
-  override def setNull(): Unit = {rride def setNull(): Unit = {
+  override def setNull(): Unit = {
     var i = 0
     while (i < children.length) {
       children(i).setNull()

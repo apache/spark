@@ -16,7 +16,6 @@
 #
 
 import decimal
-import datetime
 import json
 import struct
 from array import array
@@ -87,21 +86,6 @@ class VariantUtils:
     DECIMAL8 = 9
     # 16-byte decimal. Content is 1-byte scale + 16-byte little-endian signed integer.
     DECIMAL16 = 10
-    # Date value. Content is 4-byte little-endian signed integer that represents the number of days
-    # from the Unix epoch.
-    DATE = 11
-    # Timestamp value. Content is 8-byte little-endian signed integer that represents the number of
-    # microseconds elapsed since the Unix epoch, 1970-01-01 00:00:00 UTC. It is displayed to users in
-    # their local time zones and may be displayed differently depending on the execution environment.
-    TIMESTAMP = 12
-    # Timestamp_ntz value. It has the same content as `TIMESTAMP` but should always be interpreted
-    # as if the local time zone is UTC.
-    TIMESTAMP_NTZ = 13
-    # 4-byte IEEE float.
-    FLOAT = 14
-    # Binary value. The content is (4-byte little-endian unsigned integer representing the binary
-    # size) + (size bytes of binary content).
-    BINARY = 15
     # Long string value. The content is (4-byte little-endian unsigned integer representing the
     # string size) + (size bytes of string content).
     LONG_STR = 16
@@ -184,11 +168,9 @@ class VariantUtils:
             return cls._read_long(value, pos + 1, 1, signed=True)
         elif type_info == VariantUtils.INT2:
             return cls._read_long(value, pos + 1, 2, signed=True)
-        elif type_info == VariantUtils.INT4 or type_info == VariantUtils.DATE:
+        elif type_info == VariantUtils.INT4:
             return cls._read_long(value, pos + 1, 4, signed=True)
-        elif type_info == VariantUtils.INT8 or type_info == VariantUtils.TIMESTAMP or (
-            type_info == VariantUtils.TIMESTAMP_NTZ
-        ):
+        elif type_info == VariantUtils.INT8:
             return cls._read_long(value, pos + 1, 8, signed=True)
         raise PySparkValueError(error_class="MALFORMED_VARIANT")
 
@@ -217,7 +199,7 @@ class VariantUtils:
         basic_type, type_info = cls._get_type_info(value, pos)
         if basic_type != VariantUtils.PRIMITIVE or type_info != VariantUtils.DOUBLE:
             raise PySparkValueError(error_class="MALFORMED_VARIANT")
-        return struct.unpack("<d", value[pos + 1 : pos + 9])[0]
+        return struct.unpack("d", value[pos + 1 : pos + 9])[0]
 
     @classmethod
     def _get_decimal(cls, value: bytes, pos: int) -> decimal.Decimal:
@@ -237,25 +219,6 @@ class VariantUtils:
         else:
             raise PySparkValueError(error_class="MALFORMED_VARIANT")
         return decimal.Decimal(unscaled) * (decimal.Decimal(10) ** (-scale))
-
-    @classmethod
-    def _get_float(cls, value: bytes, pos: int) -> float:
-        cls._check_index(pos, len(value))
-        basic_type, type_info = cls._get_type_info(value, pos)
-        if basic_type != VariantUtils.PRIMITIVE or type_info != VariantUtils.FLOAT:
-            raise PySparkValueError(error_class="MALFORMED_VARIANT")
-        return struct.unpack("<f", value[pos + 1 : pos + 5])[0]
-
-    @classmethod
-    def _get_binary(cls, value: bytes, pos: int) -> bytes:
-        cls._check_index(pos, len(value))
-        basic_type, type_info = cls._get_type_info(value, pos)
-        if basic_type != VariantUtils.PRIMITIVE or type_info != VariantUtils.BINARY:
-            raise PySparkValueError(error_class="MALFORMED_VARIANT")
-        start = pos + 1 + VariantUtils.U32_SIZE
-        length = cls._read_long(value, pos + 1, VariantUtils.U32_SIZE, signed=False)
-        cls._check_index(start + length - 1, len(value))
-        return value[start : start + length]
 
     @classmethod
     def _get_type(cls, value: bytes, pos: int) -> Any:
@@ -281,7 +244,7 @@ class VariantUtils:
             or type_info == VariantUtils.INT8
         ):
             return int
-        elif type_info == VariantUtils.DOUBLE or type_info == VariantUtils.FLOAT:
+        elif type_info == VariantUtils.DOUBLE:
             return float
         elif (
             type_info == VariantUtils.DECIMAL4
@@ -289,12 +252,6 @@ class VariantUtils:
             or type_info == VariantUtils.DECIMAL16
         ):
             return decimal.Decimal
-        elif type_info == VariantUtils.BINARY:
-            return bytes
-        elif type_info == VariantUtils.DATE:
-            return datetime.date
-        elif type_info == VariantUtils.TIMESTAMP or type_info == VariantUtils.TIMESTAMP_NTZ:
-            return datetime.datetime
         elif type_info == VariantUtils.LONG_STR:
             return str
         raise PySparkValueError(error_class="MALFORMED_VARIANT")
