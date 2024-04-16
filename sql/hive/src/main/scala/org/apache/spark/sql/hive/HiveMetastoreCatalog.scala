@@ -372,7 +372,8 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
   }
 
   private def updateDataSchema(identifier: TableIdentifier, newDataSchema: StructType): Unit = try {
-    logInfo(s"Saving case-sensitive schema for table ${identifier.unquotedString}")
+    logInfo(
+      log"Saving case-sensitive schema for table ${MDC(TABLE_NAME, identifier.unquotedString)}")
     sparkSession.sessionState.catalog.alterTableDataSchema(identifier, newDataSchema)
   } catch {
     case NonFatal(ex) =>
