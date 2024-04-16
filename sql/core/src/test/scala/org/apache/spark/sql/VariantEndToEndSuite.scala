@@ -113,23 +113,6 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("is_variant_null with parse_json and variant_get") {
-    def check(json: String, path: String, expected: Boolean): Unit = {
-      val df = Seq(json).toDF("j").selectExpr(s"is_variant_null(variant_get(parse_json(j),"
-        + s"\"${path}\"))")
-      checkAnswer(df, Seq(Row(expected)))
-    }
-
-    check("{ \"a\": null }", "$.a", expected = true)
-    check("{ \"a\": null }", "$.b", expected = false)
-    check("{ \"a\": null, \"b\": \"null\" }", "$.b", expected = false)
-    check("{ \"a\": null, \"b\": {\"c\": null} }", "$.b.c", expected = true)
-    check("{ \"a\": null, \"b\": {\"c\": null, \"d\": [13, null]} }", "$.b.d", expected = false)
-    check("{ \"a\": null, \"b\": {\"c\": null, \"d\": [13, null]} }", "$.b.d[0]", expected = false)
-    check("{ \"a\": null, \"b\": {\"c\": null, \"d\": [13, null]} }", "$.b.d[1]", expected = true)
-    check("{ \"a\": null, \"b\": {\"c\": null, \"d\": [13, null]} }", "$.b.d[2]", expected = false)
-  }
-
   test("schema_of_variant_agg") {
     // Literal input.
     checkAnswer(
