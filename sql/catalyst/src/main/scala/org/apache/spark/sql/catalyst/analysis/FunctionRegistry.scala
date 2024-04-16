@@ -822,7 +822,6 @@ object FunctionRegistry {
 
     // Variant
     expression[ParseJson]("parse_json"),
-    expression[IsVariantNull]("is_variant_null"),
     expressionBuilder("variant_get", VariantGetExpressionBuilder),
     expressionBuilder("try_variant_get", TryVariantGetExpressionBuilder),
     expression[SchemaOfVariant]("schema_of_variant"),
