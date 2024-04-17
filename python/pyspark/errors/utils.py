@@ -18,6 +18,7 @@
 import re
 import functools
 import inspect
+import os
 from typing import Any, Callable, Dict, Match, TypeVar, Type, TYPE_CHECKING
 from pyspark.errors.error_classes import ERROR_CLASSES_MAP
 
@@ -194,7 +195,8 @@ def with_origin_to_class(cls: Type[T]) -> Type[T]:
     """
     Decorate all methods of a class with `_with_origin` to capture call site information.
     """
-    for name, method in cls.__dict__.items():
-        if callable(method) and name != "__init__":
-            setattr(cls, name, _with_origin(method))
+    if os.environ.get("PYSPARK_PIN_THREAD", "true").lower() == "true":
+        for name, method in cls.__dict__.items():
+            if callable(method) and name != "__init__":
+                setattr(cls, name, _with_origin(method))
     return cls
