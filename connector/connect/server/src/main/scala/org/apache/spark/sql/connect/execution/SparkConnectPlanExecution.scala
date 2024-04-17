@@ -61,7 +61,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
     val dataframe =
       Dataset.ofRows(
         sessionHolder.session,
-        planner.transformRelation(request.getPlan.getRoot),
+        planner.transformRelation(request.getPlan.getRoot, cachePlan = true),
         tracker)
     responseObserver.onNext(createSchemaResponse(request.getSessionId, dataframe.schema))
     processAsArrowBatches(dataframe, responseObserver, executeHolder)
