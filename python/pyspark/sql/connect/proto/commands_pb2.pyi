@@ -313,6 +313,7 @@ class SqlCommand(google.protobuf.message.Message):
     POS_ARGS_FIELD_NUMBER: builtins.int
     NAMED_ARGUMENTS_FIELD_NUMBER: builtins.int
     POS_ARGUMENTS_FIELD_NUMBER: builtins.int
+    INPUT_FIELD_NUMBER: builtins.int
     sql: builtins.str
     """(Required) SQL Query."""
     @property
@@ -347,6 +348,9 @@ class SqlCommand(google.protobuf.message.Message):
         """(Optional) A sequence of expressions for positional parameters in the SQL query text.
         It cannot coexist with `named_arguments`.
         """
+    @property
+    def input(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
+        """(Optional) The relation that this SQL command will be built on."""
     def __init__(
         self,
         *,
@@ -367,12 +371,18 @@ class SqlCommand(google.protobuf.message.Message):
             pyspark.sql.connect.proto.expressions_pb2.Expression
         ]
         | None = ...,
+        input: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
     ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
             "args",
             b"args",
+            "input",
+            b"input",
             "named_arguments",
             b"named_arguments",
             "pos_args",

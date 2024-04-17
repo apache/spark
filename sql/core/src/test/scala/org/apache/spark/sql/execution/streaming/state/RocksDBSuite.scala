@@ -1483,6 +1483,8 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       assert(metrics.nativeOpsMetrics("totalBytesWrittenByCompaction") >=0)
 
       assert(metrics.nativeOpsMetrics("totalBytesWrittenByFlush") >= 0)
+      assert(metrics.numExternalColFamilies > 0)
+      assert(metrics.numInternalColFamilies >= 0)
     }
 
     withTempDir { dir =>
