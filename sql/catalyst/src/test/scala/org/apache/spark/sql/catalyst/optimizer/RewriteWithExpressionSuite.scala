@@ -355,13 +355,15 @@ class RewriteWithExpressionSuite extends PlanTest {
 
   test("aggregate functions in child of WITH expression is not supported") {
     val a = testRelation.output.head
-    val expr = With(a - 1) { case Seq(ref) =>
-      sum(ref * ref)
+    intercept[java.lang.AssertionError] {
+      val expr = With(a - 1) { case Seq(ref) =>
+        sum(ref * ref)
+      }
+      val plan = testRelation.groupBy(a)(
+        (a - 1).as("col1"),
+        expr.as("col2")
+      )
+      Optimizer.execute(plan)
     }
-    val plan = testRelation.groupBy(a)(
-      (a - 1).as("col1"),
-      expr.as("col2")
-    )
-    intercept[java.lang.AssertionError](Optimizer.execute(plan))
   }
 }

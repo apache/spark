@@ -46,10 +46,6 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
       case p @ PhysicalAggregation(
           groupingExpressions, aggregateExpressions, resultExpressions, child)
           if p.expressions.exists(_.containsPattern(WITH_EXPRESSION)) =>
-        // There should not be dangling common expression references in the aggregate expressions.
-        // This can happen if a With is created with an aggregate function in its child.
-        assert(!aggregateExpressions.exists(ae =>
-          !ae.containsPattern(WITH_EXPRESSION) && ae.containsPattern(COMMON_EXPR_REF)))
         // PhysicalAggregation returns aggregateExpressions as attribute references, which we change
         // to aliases so that they can be referred to by resultExpressions.
         val aggExprs = aggregateExpressions.map(
