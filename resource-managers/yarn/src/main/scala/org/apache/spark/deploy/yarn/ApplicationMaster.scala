@@ -44,7 +44,7 @@ import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{EXIT_CODE, REMOTE_ADDRESS}
+import org.apache.spark.internal.LogKey.{EXIT_CODE, FAILURES, HOST_PORT}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
@@ -597,7 +597,8 @@ private[spark] class ApplicationMaster(
               ApplicationMaster.EXIT_REPORTER_FAILURE, "Exception was thrown " +
                 s"$failureCount time(s) from Reporter thread.")
           } else {
-            logWarning(s"Reporter thread fails $failureCount time(s) in a row.", e)
+            logWarning(
+              log"Reporter thread fails ${MDC(FAILURES, failureCount)} time(s) in a row.", e)
           }
       }
       try {
@@ -857,7 +858,7 @@ private[spark] class ApplicationMaster(
             finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
           } else {
             logError(log"Driver terminated with exit code ${MDC(EXIT_CODE, exitCode)}! " +
-              log"Shutting down. ${MDC(REMOTE_ADDRESS, remoteAddress)}")
+              log"Shutting down. ${MDC(HOST_PORT, remoteAddress)}")
             finish(FinalApplicationStatus.FAILED, exitCode)
           }
         } else {

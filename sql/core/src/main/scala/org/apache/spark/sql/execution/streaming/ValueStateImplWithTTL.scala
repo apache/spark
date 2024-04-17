@@ -18,7 +18,6 @@ package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema.{KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA_WITH_TTL}
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore}
 import org.apache.spark.sql.streaming.{TTLConfig, ValueState}
@@ -75,7 +74,7 @@ class ValueStateImplWithTTL[S](
     if (retRow != null) {
       val resState = stateTypesEncoder.decodeValue(retRow)
 
-      if (!isExpired(retRow)) {
+      if (!stateTypesEncoder.isExpired(retRow, batchTimestampMs)) {
         resState
       } else {
         null.asInstanceOf[S]
@@ -99,20 +98,18 @@ class ValueStateImplWithTTL[S](
     store.remove(stateTypesEncoder.encodeGroupingKey(), stateName)
   }
 
-  def clearIfExpired(groupingKey: Array[Byte]): Unit = {
+  def clearIfExpired(groupingKey: Array[Byte]): Long = {
     val encodedGroupingKey = stateTypesEncoder.encodeSerializedGroupingKey(groupingKey)
     val retRow = store.get(encodedGroupingKey, stateName)
 
+    var result = 0L
     if (retRow != null) {
-      if (isExpired(retRow)) {
+      if (stateTypesEncoder.isExpired(retRow, batchTimestampMs)) {
         store.remove(encodedGroupingKey, stateName)
+        result = 1L
       }
     }
-  }
-
-  private def isExpired(valueRow: UnsafeRow): Boolean = {
-    val expirationMs = stateTypesEncoder.decodeTtlExpirationMs(valueRow)
-    expirationMs.exists(StateTTL.isExpired(_, batchTimestampMs))
+    result
   }
 
   /*
@@ -141,12 +138,15 @@ class ValueStateImplWithTTL[S](
   /**
    * Read the ttl value associated with the grouping key.
    */
-  private[sql] def getTTLValue(): Option[Long] = {
+  private[sql] def getTTLValue(): Option[(S, Long)] = {
     val encodedGroupingKey = stateTypesEncoder.encodeGroupingKey()
     val retRow = store.get(encodedGroupingKey, stateName)
 
+    // if the returned row is not null, we want to return the value associated with the
+    // ttlExpiration
     if (retRow != null) {
-      stateTypesEncoder.decodeTtlExpirationMs(retRow)
+      val ttlExpiration = stateTypesEncoder.decodeTtlExpirationMs(retRow)
+      ttlExpiration.map(expiration => (stateTypesEncoder.decodeValue(retRow), expiration))
     } else {
       None
     }
@@ -157,28 +157,7 @@ class ValueStateImplWithTTL[S](
    * grouping key.
    */
   private[sql] def getValuesInTTLState(): Iterator[Long] = {
-    val ttlIterator = ttlIndexIterator()
-    val implicitGroupingKey = stateTypesEncoder.serializeGroupingKey()
-    var nextValue: Option[Long] = None
-
-    new Iterator[Long] {
-      override def hasNext: Boolean = {
-        while (nextValue.isEmpty && ttlIterator.hasNext) {
-          val nextTtlValue = ttlIterator.next()
-          val groupingKey = nextTtlValue.groupingKey
-          if (groupingKey sameElements implicitGroupingKey) {
-            nextValue = Some(nextTtlValue.expirationMs)
-          }
-        }
-        nextValue.isDefined
-      }
-
-      override def next(): Long = {
-        val result = nextValue.get
-        nextValue = None
-        result
-      }
-    }
+    getValuesInTTLState(stateTypesEncoder.serializeGroupingKey())
   }
 }
 

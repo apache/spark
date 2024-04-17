@@ -20,7 +20,8 @@ package org.apache.spark.sql.kafka010
 import java.{util => ju}
 
 import org.apache.spark.TaskContext
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.connector.metric.CustomTaskMetric
@@ -47,10 +48,13 @@ private[kafka010] object KafkaBatchReaderFactory extends PartitionReaderFactory 
     val taskCtx = TaskContext.get()
     val queryId = taskCtx.getLocalProperty(StreamExecution.QUERY_ID_KEY)
     val batchId = taskCtx.getLocalProperty(MicroBatchExecution.BATCH_ID_KEY)
-    logInfo(s"Creating Kafka reader topicPartition=${p.offsetRange.topicPartition} " +
-      s"fromOffset=${p.offsetRange.fromOffset} untilOffset=${p.offsetRange.untilOffset}, " +
-      s"for query queryId=$queryId batchId=$batchId taskId=${TaskContext.get().taskAttemptId()} " +
-      s"partitionId=${TaskContext.get().partitionId()}")
+    logInfo(log"Creating Kafka reader " +
+      log"topicPartition=${MDC(TOPIC_PARTITION, p.offsetRange.topicPartition)} " +
+      log"fromOffset=${MDC(FROM_OFFSET, p.offsetRange.fromOffset)}} " +
+      log"untilOffset=${MDC(UNTIL_OFFSET, p.offsetRange.untilOffset)}, " +
+      log"for query queryId=${MDC(QUERY_ID, queryId)} batchId=${MDC(BATCH_ID, batchId)} " +
+      log"taskId=${MDC(TASK_ATTEMPT_ID, TaskContext.get().taskAttemptId())} " +
+      log"partitionId=${MDC(PARTITION_ID, TaskContext.get().partitionId())}")
 
     KafkaBatchPartitionReader(p.offsetRange, p.executorKafkaParams, p.pollTimeoutMs,
       p.failOnDataLoss, p.includeHeaders)

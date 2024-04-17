@@ -166,15 +166,19 @@ private[spark] class ExecutorPodsLifecycleManager(
   private def removeExecutorFromK8s(execId: Long, updatedPod: Pod): Unit = {
     Utils.tryLogNonFatalError {
       if (shouldDeleteExecutors) {
+        // Get pod before deleting it, we can skip deleting if pod is already deleted so that
+        // we do not send too many requests to api server.
         // If deletion failed on a previous try, we can try again if resync informs us the pod
         // is still around.
         // Delete as best attempt - duplicate deletes will throw an exception but the end state
         // of getting rid of the pod is what matters.
-        kubernetesClient
+        val podToDelete = kubernetesClient
           .pods()
           .inNamespace(namespace)
           .withName(updatedPod.getMetadata.getName)
-          .delete()
+        if (podToDelete.get() != null) {
+          podToDelete.delete()
+        }
       } else if (!inactivatedPods.contains(execId) && !isPodInactive(updatedPod)) {
         // If the config is set to keep the executor  around, mark the pod as "inactive" so it
         // can be ignored in future updates from the API server.
