@@ -210,6 +210,7 @@ statement
     | (MSCK)? REPAIR TABLE identifierReference
         (option=(ADD|DROP|SYNC) PARTITIONS)?                           #repairTable
     | op=(ADD | LIST) identifier .*?                                   #manageResource
+    | SET COLLATION collationName=identifier                           #setCollation
     | SET ROLE .*?                                                     #failNativeCommand
     | SET TIME ZONE interval                                           #setTimeZone
     | SET TIME ZONE timezone                                           #setTimeZone
@@ -1662,6 +1663,7 @@ nonReserved
     | CLUSTERED
     | CODEGEN
     | COLLATE
+    | COLLATION
     | COLLECTION
     | COLUMN
     | COLUMNS

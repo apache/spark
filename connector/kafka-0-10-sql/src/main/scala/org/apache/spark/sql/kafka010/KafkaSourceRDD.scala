@@ -22,6 +22,8 @@ import java.{util => ju}
 import org.apache.kafka.clients.consumer.ConsumerRecord
 
 import org.apache.spark.{Partition, SparkContext, TaskContext}
+import org.apache.spark.internal.LogKey.{FROM_OFFSET, PARTITION_ID, TOPIC}
+import org.apache.spark.internal.MDC
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.kafka010.consumer.KafkaDataConsumer
 import org.apache.spark.storage.StorageLevel
@@ -79,8 +81,8 @@ private[kafka010] class KafkaSourceRDD(
         s"for topic ${range.topic} partition ${range.partition}. " +
         "You either provided an invalid fromOffset, or the Kafka topic has been damaged")
     if (range.fromOffset == range.untilOffset) {
-      logInfo(s"Beginning offset ${range.fromOffset} is the same as ending offset " +
-        s"skipping ${range.topic} ${range.partition}")
+      logInfo(log"Beginning offset ${MDC(FROM_OFFSET, range.fromOffset)} is the same as ending " +
+        log"offset skipping ${MDC(TOPIC, range.topic)} ${MDC(PARTITION_ID, range.partition)}")
       consumer.release()
       Iterator.empty
     } else {

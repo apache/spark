@@ -132,6 +132,14 @@ class SparkConnectSQLTestCase(ReusedConnectTestCase, SQLTestUtils, PandasOnSpark
 
 
 class SparkConnectBasicTests(SparkConnectSQLTestCase):
+    def test_serialization(self):
+        from pyspark.cloudpickle import dumps, loads
+
+        cdf = self.connect.range(10)
+        data = dumps(cdf)
+        cdf2 = loads(data)
+        self.assertEqual(cdf.collect(), cdf2.collect())
+
     def test_df_getattr_behavior(self):
         cdf = self.connect.range(10)
         sdf = self.spark.range(10)

@@ -510,6 +510,7 @@ object SparkConnectClient {
       val PARAM_TOKEN = "token"
       val PARAM_USER_AGENT = "user_agent"
       val PARAM_SESSION_ID = "session_id"
+      val PARAM_GRPC_MAX_MESSAGE_SIZE = "grpc_max_message_size"
     }
 
     private def verifyURI(uri: URI): Unit = {
@@ -558,6 +559,20 @@ object SparkConnectClient {
 
     def userAgent: String = _configuration.userAgent
 
+    def grpcMaxMessageSize(messageSize: Int): Builder = {
+      _configuration = _configuration.copy(grpcMaxMessageSize = messageSize)
+      this
+    }
+
+    def grpcMaxMessageSize: Int = _configuration.grpcMaxMessageSize
+
+    def grpcMaxRecursionLimit(recursionLimit: Int): Builder = {
+      _configuration = _configuration.copy(grpcMaxRecursionLimit = recursionLimit)
+      this
+    }
+
+    def grpcMaxRecursionLimit: Int = _configuration.grpcMaxRecursionLimit
+
     def option(key: String, value: String): Builder = {
       _configuration = _configuration.copy(metadata = _configuration.metadata + ((key, value)))
       this
@@ -584,6 +599,7 @@ object SparkConnectClient {
           case URIParams.PARAM_USE_SSL =>
             if (java.lang.Boolean.valueOf(value)) enableSsl() else disableSsl()
           case URIParams.PARAM_SESSION_ID => sessionId(value)
+          case URIParams.PARAM_GRPC_MAX_MESSAGE_SIZE => grpcMaxMessageSize(value.toInt)
           case _ => option(key, value)
         }
       }
@@ -693,7 +709,9 @@ object SparkConnectClient {
       retryPolicies: Seq[RetryPolicy] = RetryPolicy.defaultPolicies(),
       useReattachableExecute: Boolean = true,
       interceptors: List[ClientInterceptor] = List.empty,
-      sessionId: Option[String] = None) {
+      sessionId: Option[String] = None,
+      grpcMaxMessageSize: Int = ConnectCommon.CONNECT_GRPC_MAX_MESSAGE_SIZE,
+      grpcMaxRecursionLimit: Int = ConnectCommon.CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT) {
 
     def userContext: proto.UserContext = {
       val builder = proto.UserContext.newBuilder()
@@ -731,7 +749,7 @@ object SparkConnectClient {
 
       interceptors.foreach(channelBuilder.intercept(_))
 
-      channelBuilder.maxInboundMessageSize(ConnectCommon.CONNECT_GRPC_MAX_MESSAGE_SIZE)
+      channelBuilder.maxInboundMessageSize(grpcMaxMessageSize)
       channelBuilder.build()
     }
 
