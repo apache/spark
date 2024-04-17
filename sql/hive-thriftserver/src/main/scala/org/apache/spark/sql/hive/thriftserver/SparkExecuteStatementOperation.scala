@@ -256,7 +256,9 @@ private[hive] class SparkExecuteStatementOperation(
         val currentState = getStatus().getState()
         if (currentState.isTerminal) {
           // This may happen if the execution was cancelled, and then closed from another thread.
-          logWarning(s"Ignore exception in terminal state with $statementId: $e")
+          logWarning(
+            log"Ignore exception in terminal state with ${MDC(STATEMENT_ID, statementId)}", e
+          )
         } else {
           logError(log"Error executing query with ${MDC(STATEMENT_ID, statementId)}, " +
             log"currentState ${MDC(HIVE_OPERATION_STATE, currentState)}, ", e)

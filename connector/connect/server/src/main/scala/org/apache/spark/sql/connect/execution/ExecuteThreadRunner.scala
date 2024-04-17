@@ -238,9 +238,10 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
         if (executeHolder.reattachable) {
           // Reattachable execution sends a ResultComplete at the end of the stream
           // to signal that there isn't more coming.
-          executeHolder.responseObserver.onNext(createResultComplete())
+          executeHolder.responseObserver.onNextComplete(createResultComplete())
+        } else {
+          executeHolder.responseObserver.onCompleted()
         }
-        executeHolder.responseObserver.onCompleted()
       }
     }
   }

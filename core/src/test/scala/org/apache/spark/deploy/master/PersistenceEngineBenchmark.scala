@@ -29,7 +29,7 @@ import org.apache.spark.deploy.{DeployTestUtils, DriverDescription}
 import org.apache.spark.internal.config.Deploy.ZOOKEEPER_URL
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.resource.ResourceUtils.{FPGA, GPU}
-import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
+import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.util.Utils
 
 
@@ -49,7 +49,7 @@ import org.apache.spark.util.Utils
 object PersistenceEngineBenchmark extends BenchmarkBase {
 
   val conf = new SparkConf()
-  val serializers = Seq(new JavaSerializer(conf), new KryoSerializer(conf))
+  val serializers = Seq(new JavaSerializer(conf))
   val zkTestServer = new TestingServer(findFreePort(conf))
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {

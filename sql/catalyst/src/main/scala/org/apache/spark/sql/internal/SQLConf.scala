@@ -3371,7 +3371,7 @@ object SQLConf {
       "standard directly, but their behaviors align with ANSI SQL's style")
     .version("3.0.0")
     .booleanConf
-    .createWithDefault(sys.env.get("SPARK_ANSI_SQL_MODE").contains("true"))
+    .createWithDefault(!sys.env.get("SPARK_ANSI_SQL_MODE").contains("false"))
 
   val ENFORCE_RESERVED_KEYWORDS = buildConf("spark.sql.ansi.enforceReservedKeywords")
     .doc(s"When true and '${ANSI_ENABLED.key}' is true, the Spark SQL parser enforces the ANSI " +
@@ -4131,6 +4131,15 @@ object SQLConf {
     buildConf("spark.sql.legacy.mysql.bitArrayMapping.enabled")
       .internal()
       .doc("When true, use LongType to represent MySQL BIT(n>1); otherwise, use BinaryType.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_ORACLE_TIMESTAMP_MAPPING_ENABLED =
+    buildConf("spark.sql.legacy.oracle.timestampMapping.enabled")
+      .internal()
+      .doc("When true, TimestampType maps to TIMESTAMP in Oracle; otherwise, " +
+        "TIMESTAMP WITH LOCAL TIME ZONE.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
@@ -5234,6 +5243,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyMySqlBitArrayMappingEnabled: Boolean =
     getConf(LEGACY_MYSQL_BIT_ARRAY_MAPPING_ENABLED)
+
+  def legacyOracleTimestampMappingEnabled: Boolean =
+    getConf(LEGACY_ORACLE_TIMESTAMP_MAPPING_ENABLED)
 
   override def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = {
     LegacyBehaviorPolicy.withName(getConf(SQLConf.LEGACY_TIME_PARSER_POLICY))
