@@ -1333,6 +1333,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     assert(getJdbcType(oracleDialect, ByteType) == "NUMBER(3)")
     assert(getJdbcType(oracleDialect, ShortType) == "NUMBER(5)")
     assert(getJdbcType(oracleDialect, StringType) == "VARCHAR2(255)")
+    assert(getJdbcType(oracleDialect, VarcharType(100)) == "VARCHAR2(100)")
     assert(getJdbcType(oracleDialect, BinaryType) == "BLOB")
     assert(getJdbcType(oracleDialect, DateType) == "DATE")
     assert(getJdbcType(oracleDialect, TimestampType) == "TIMESTAMP WITH LOCAL TIME ZONE")
