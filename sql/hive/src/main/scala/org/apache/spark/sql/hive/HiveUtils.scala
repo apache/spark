@@ -37,7 +37,7 @@ import org.apache.hive.common.util.HiveVersionInfo
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.PATH
+import org.apache.spark.internal.LogKey
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.execution.command.DDLUtils
@@ -287,7 +287,8 @@ private[spark] object HiveUtils extends Logging {
   protected[hive] def newClientForExecution(
       conf: SparkConf,
       hadoopConf: Configuration): HiveClientImpl = {
-    logInfo(s"Initializing execution hive, version $builtinHiveVersion")
+    logInfo(log"Initializing execution hive, version " +
+      log"${MDC(LogKey.HIVE_METASTORE_VERSION, builtinHiveVersion)}")
     val loader = new IsolatedClientLoader(
       version = IsolatedClientLoader.hiveVersion(builtinHiveVersion),
       sparkConf = conf,
@@ -321,7 +322,7 @@ private[spark] object HiveUtils extends Logging {
       if (file.getName == "*") {
         val files = file.getParentFile.listFiles()
         if (files == null) {
-          logWarning(log"Hive jar path '${MDC(PATH, file.getPath)}' does not exist.")
+          logWarning(log"Hive jar path '${MDC(LogKey.PATH, file.getPath)}' does not exist.")
           Nil
         } else {
           files.filter(_.getName.toLowerCase(Locale.ROOT).endsWith(".jar")).map(_.toURI.toURL)
@@ -330,6 +331,12 @@ private[spark] object HiveUtils extends Logging {
       } else {
         file.toURI.toURL :: Nil
       }
+    }
+
+    def logInitWithPath(jars: Seq[URL]): Unit = {
+      logInfo(log"Initializing HiveMetastoreConnection version " +
+        log"${MDC(LogKey.HIVE_METASTORE_VERSION, hiveMetastoreVersion)} using paths: " +
+        log"${MDC(LogKey.PATH, jars.mkString(", "))}")
     }
 
     val isolatedLoader = if (hiveMetastoreJars == "builtin") {
@@ -342,7 +349,8 @@ private[spark] object HiveUtils extends Logging {
       }
 
       logInfo(
-        s"Initializing HiveMetastoreConnection version $hiveMetastoreVersion using Spark classes.")
+        log"Initializing HiveMetastoreConnection version " +
+          log"${MDC(LogKey.HIVE_METASTORE_VERSION, hiveMetastoreVersion)} using Spark classes.")
       new IsolatedClientLoader(
         version = metaVersion,
         sparkConf = conf,
@@ -355,7 +363,8 @@ private[spark] object HiveUtils extends Logging {
     } else if (hiveMetastoreJars == "maven") {
       // TODO: Support for loading the jars from an already downloaded location.
       logInfo(
-        s"Initializing HiveMetastoreConnection version $hiveMetastoreVersion using maven.")
+        log"Initializing HiveMetastoreConnection version " +
+          log"${MDC(LogKey.HIVE_METASTORE_VERSION, hiveMetastoreVersion)} using maven.")
       IsolatedClientLoader.forVersion(
         hiveMetastoreVersion = hiveMetastoreVersion,
         hadoopVersion = VersionInfo.getVersion,
@@ -381,9 +390,7 @@ private[spark] object HiveUtils extends Logging {
               ).map(_.toUri.toURL)
           }
 
-      logInfo(
-        s"Initializing HiveMetastoreConnection version $hiveMetastoreVersion " +
-          s"using path: ${jars.mkString(";")}")
+      logInitWithPath(jars)
       new IsolatedClientLoader(
         version = metaVersion,
         sparkConf = conf,
@@ -402,9 +409,7 @@ private[spark] object HiveUtils extends Logging {
             addLocalHiveJars(new File(path))
           }
 
-      logInfo(
-        s"Initializing HiveMetastoreConnection version $hiveMetastoreVersion " +
-          s"using ${jars.mkString(":")}")
+      logInitWithPath(jars.toSeq)
       new IsolatedClientLoader(
         version = metaVersion,
         sparkConf = conf,

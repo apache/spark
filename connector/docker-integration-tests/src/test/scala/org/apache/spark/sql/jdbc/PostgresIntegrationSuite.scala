@@ -18,12 +18,13 @@
 package org.apache.spark.sql.jdbc
 
 import java.math.{BigDecimal => JBigDecimal}
-import java.sql.{Connection, Date, Timestamp}
+import java.sql.{Connection, Date, SQLException, Timestamp}
 import java.text.SimpleDateFormat
 import java.time.LocalDateTime
 import java.util.Properties
 
-import org.apache.spark.sql.{Column, Row}
+import org.apache.spark.SparkException
+import org.apache.spark.sql.{Column, DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
@@ -553,5 +554,30 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
       .option("url", jdbcUrl)
       .option("query", "SELECT 1::oid, 'bar'::regclass, 'integer'::regtype").load()
     checkAnswer(df, Row(1, "bar", "integer"))
+  }
+
+  test("SPARK-47886: special number values") {
+    def toDF(qry: String): DataFrame = {
+      spark.read.format("jdbc")
+        .option("url", jdbcUrl)
+        .option("query", qry)
+        .load()
+    }
+    checkAnswer(
+      toDF("SELECT 'NaN'::float8 c1, 'infinity'::float8 c2, '-infinity'::float8 c3"),
+      Row(Double.NaN, Double.PositiveInfinity, Double.NegativeInfinity))
+    checkAnswer(
+      toDF("SELECT 'NaN'::float4 c1, 'infinity'::float4 c2, '-infinity'::float4 c3"),
+      Row(Float.NaN, Float.PositiveInfinity, Float.NegativeInfinity)
+    )
+
+    Seq("NaN", "infinity", "-infinity").foreach { v =>
+      val df = toDF(s"SELECT '$v'::numeric c1")
+      val e = intercept[SparkException](df.collect())
+      checkError(e, null)
+      val cause = e.getCause.asInstanceOf[SQLException]
+      assert(cause.getMessage.contains("Bad value for type BigDecimal"))
+      assert(cause.getSQLState === "22003")
+    }
   }
 }
