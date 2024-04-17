@@ -1142,21 +1142,39 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     checkAnswer(dfGroupBy, Seq(Row(Seq("AA"), 2), Row(Seq("BB"), 1)))
   }
 
-  test("Hash aggregation works on string type") {
+  test("DISTINCT works on string type") {
     val table = "table_agg"
     withTable(table) {
       sql(s"create table $table (a string collate utf8_binary_lcase) using parquet")
       sql(s"insert into $table values ('aaa'), ('AAA')")
-      checkAnswer(sql(s"select distinct a from $table"), Seq(Row("aaa")))
+      checkAnswer(sql(s"select distinct a from $table"), Seq(Row("axa")))
     }
   }
 
-  test("Hash aggregation works on array type") {
+  test("DISTINCT works on array type") {
     val table = "table_agg"
     withTable(table) {
       sql(s"create table $table (a array<string collate utf8_binary_lcase>) using parquet")
       sql(s"insert into $table values (array('aaa')), (array('AAA'))")
-      checkAnswer(sql(s"select distinct a from $table"), Seq(Row(Seq("aaa"))))
+      checkAnswer(sql(s"select distinct a from $table"), Seq(Row(Seq("axa"))))
+    }
+  }
+
+  test("GROUP BY works on string type") {
+    val table = "table_agg"
+    withTable(table) {
+      sql(s"create table $table (a string collate utf8_binary_lcase) using parquet")
+      sql(s"insert into $table values ('aaa'), ('AAA')")
+      checkAnswer(sql(s"select a, count(*) from $table group by a"), Seq(Row("axa", 2)))
+    }
+  }
+
+  test("GROUP BY works on array type") {
+    val table = "table_agg"
+    withTable(table) {
+      sql(s"create table $table (a array<string collate utf8_binary_lcase>) using parquet")
+      sql(s"insert into $table values (array('aaa')), (array('AAA'))")
+      checkAnswer(sql(s"select a, count(*) from $table group by a"), Seq(Row(Seq("axa"), 2)))
     }
   }
 
