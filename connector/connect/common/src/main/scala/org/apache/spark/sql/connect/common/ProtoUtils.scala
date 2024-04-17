@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.connect.common
 
-import com.google.protobuf.Message
+import com.google.protobuf.{CodedInputStream, InvalidProtocolBufferException, Message, Parser}
 
-private[connect] object ProtoUtils {
+private[sql] object ProtoUtils {
   def abbreviate[T <: Message](message: T, maxStringSize: Int = 1024): T = {
     abbreviate[T](message, Map("STRING" -> maxStringSize))
   }
@@ -49,6 +49,27 @@ private[connect] object ProtoUtils {
     }
     if (tag.isEmpty) {
       throw new IllegalArgumentException("Spark Connect tag cannot be an empty string.")
+    }
+  }
+
+  def parseWithRecursionLimit[T <: Message](
+      bytes: Array[Byte],
+      parser: Parser[T],
+      recursionLimit: Int): T = {
+    val cis = CodedInputStream.newInstance(bytes)
+    cis.setSizeLimit(Integer.MAX_VALUE)
+    cis.setRecursionLimit(recursionLimit)
+    val message = parser.parseFrom(cis)
+    try {
+      // If the last tag is 0, it means the message is correctly parsed.
+      // If the last tag is not 0, it means the message is not correctly
+      // parsed, and we should throw an exception.
+      cis.checkLastTagWas(0)
+      message
+    } catch {
+      case e: InvalidProtocolBufferException =>
+        e.setUnfinishedMessage(message)
+        throw e
     }
   }
 }
