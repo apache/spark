@@ -29,7 +29,8 @@ import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
 
 import org.apache.spark.SparkContext
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKey.{EXECUTOR_ID, HOST_PORT, REASON}
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc._
@@ -304,9 +305,10 @@ private[spark] abstract class YarnSchedulerBackend(
             .map { reason => RemoveExecutor(executorId, reason) }(ThreadUtils.sameThread)
             .recover {
               case NonFatal(e) =>
-                logWarning(s"Attempted to get executor loss reason" +
-                  s" for executor id ${executorId} at RPC address ${executorRpcAddress}," +
-                  s" but got no response. Marking as agent lost.", e)
+                logWarning(log"Attempted to get executor loss reason for executor id " +
+                  log"${MDC(EXECUTOR_ID, executorId)} at RPC address " +
+                  log"${MDC(HOST_PORT, executorRpcAddress)}, but got no response. " +
+                  log"Marking as agent lost.", e)
                 RemoveExecutor(executorId, ExecutorProcessLost())
             }(ThreadUtils.sameThread)
         case None =>
@@ -343,7 +345,8 @@ private[spark] abstract class YarnSchedulerBackend(
 
       case r @ RemoveExecutor(executorId, reason) =>
         if (!stopped.get) {
-          logWarning(s"Requesting driver to remove executor $executorId for reason $reason")
+          logWarning(log"Requesting driver to remove executor " +
+            log"${MDC(EXECUTOR_ID, executorId)} for reason ${MDC(REASON, reason)}")
           driverEndpoint.send(r)
         }
 
@@ -392,7 +395,7 @@ private[spark] abstract class YarnSchedulerBackend(
 
     override def onDisconnected(remoteAddress: RpcAddress): Unit = {
       if (amEndpoint.exists(_.address == remoteAddress)) {
-        logWarning(s"ApplicationMaster has disassociated: $remoteAddress")
+        logWarning(log"ApplicationMaster has disassociated: ${MDC(HOST_PORT, remoteAddress)}")
         amEndpoint = None
       }
     }

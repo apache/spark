@@ -125,6 +125,19 @@ class SparkConnectProgressHandlerE2E(SparkConnectSQLTestCase):
         finally:
             self.connect.clearProgressHandlers()
 
+    def test_progress_properly_recorded(self):
+        state = {"counter": 0}
+
+        def handler(stages, inflight_tasks, operation_id, done):
+            state["counter"] += 1
+
+        try:
+            self.connect.registerProgressHandler(handler)
+            self.connect.range(10000).repartition(20).count()
+            self.assertGreaterEqual(state["counter"], 1, "Handler should be called at least once.")
+        finally:
+            self.connect.clearProgressHandlers()
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.shell.test_progress import *  # noqa: F401

@@ -25,7 +25,8 @@ import scala.jdk.CollectionConverters._
 import org.apache.hive.service.server.HiveServer2
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey._
 import org.apache.spark.internal.config.Status.LIVE_ENTITY_UPDATE_PERIOD
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2.ExecutionState
@@ -140,7 +141,9 @@ private[thriftserver] class HiveThriftServer2Listener(
         sessionData.finishTimestamp = e.finishTime
         updateStoreWithTriggerEnabled(sessionData)
         sessionList.remove(e.sessionId)
-      case None => logWarning(s"onSessionClosed called with unknown session id: ${e.sessionId}")
+      case None => logWarning(
+        log"onSessionClosed called with unknown session id: ${MDC(SESSION_ID, e.sessionId)}"
+      )
     }
 
   private def onOperationStart(e: SparkListenerThriftServerOperationStart): Unit = {
@@ -160,8 +163,9 @@ private[thriftserver] class HiveThriftServer2Listener(
       case Some(sessionData) =>
         sessionData.totalExecution += 1
         updateLiveStore(sessionData)
-      case None => logWarning(s"onOperationStart called with unknown session id: ${e.sessionId}." +
-        s"Regardless, the operation has been registered.")
+      case None => logWarning(
+        log"onOperationStart called with unknown session id: ${MDC(SESSION_ID, e.sessionId)}." +
+        log"Regardless, the operation has been registered.")
     }
   }
 
@@ -171,7 +175,9 @@ private[thriftserver] class HiveThriftServer2Listener(
         executionData.executePlan = e.executionPlan
         executionData.state = ExecutionState.COMPILED
         updateLiveStore(executionData)
-      case None => logWarning(s"onOperationParsed called with unknown operation id: ${e.id}")
+      case None => logWarning(
+        log"onOperationParsed called with unknown operation id: ${MDC(STATEMENT_ID, e.id)}"
+      )
     }
 
   private def onOperationCanceled(e: SparkListenerThriftServerOperationCanceled): Unit =
@@ -180,7 +186,9 @@ private[thriftserver] class HiveThriftServer2Listener(
         executionData.finishTimestamp = e.finishTime
         executionData.state = ExecutionState.CANCELED
         updateLiveStore(executionData)
-      case None => logWarning(s"onOperationCanceled called with unknown operation id: ${e.id}")
+      case None => logWarning(
+        log"onOperationCanceled called with unknown operation id: ${MDC(STATEMENT_ID, e.id)}"
+      )
     }
 
   private def onOperationTimeout(e: SparkListenerThriftServerOperationTimeout): Unit =
@@ -189,7 +197,9 @@ private[thriftserver] class HiveThriftServer2Listener(
         executionData.finishTimestamp = e.finishTime
         executionData.state = ExecutionState.TIMEDOUT
         updateLiveStore(executionData)
-      case None => logWarning(s"onOperationCanceled called with unknown operation id: ${e.id}")
+      case None => logWarning(
+        log"onOperationCanceled called with unknown operation id: ${MDC(STATEMENT_ID, e.id)}"
+      )
     }
 
   private def onOperationError(e: SparkListenerThriftServerOperationError): Unit =
@@ -199,7 +209,9 @@ private[thriftserver] class HiveThriftServer2Listener(
         executionData.detail = e.errorMsg
         executionData.state = ExecutionState.FAILED
         updateLiveStore(executionData)
-      case None => logWarning(s"onOperationError called with unknown operation id: ${e.id}")
+      case None => logWarning(
+        log"onOperationError called with unknown operation id: ${MDC(STATEMENT_ID, e.id)}"
+      )
     }
 
   private def onOperationFinished(e: SparkListenerThriftServerOperationFinish): Unit =
@@ -208,7 +220,9 @@ private[thriftserver] class HiveThriftServer2Listener(
         executionData.finishTimestamp = e.finishTime
         executionData.state = ExecutionState.FINISHED
         updateLiveStore(executionData)
-      case None => logWarning(s"onOperationFinished called with unknown operation id: ${e.id}")
+      case None => logWarning(
+        log"onOperationFinished called with unknown operation id: ${MDC(STATEMENT_ID, e.id)}"
+      )
     }
 
   private def onOperationClosed(e: SparkListenerThriftServerOperationClosed): Unit =
@@ -218,7 +232,9 @@ private[thriftserver] class HiveThriftServer2Listener(
         executionData.state = ExecutionState.CLOSED
         updateStoreWithTriggerEnabled(executionData)
         executionList.remove(e.id)
-      case None => logWarning(s"onOperationClosed called with unknown operation id: ${e.id}")
+      case None => logWarning(
+        log"onOperationClosed called with unknown operation id: ${MDC(STATEMENT_ID, e.id)}"
+      )
     }
 
   // Update both live and history stores. Trigger is enabled by default, hence

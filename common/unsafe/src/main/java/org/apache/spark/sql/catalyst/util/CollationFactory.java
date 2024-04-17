@@ -214,6 +214,23 @@ public final class CollationFactory {
   }
 
   /**
+   * Returns if the given collationName is valid one.
+   */
+  public static boolean isValidCollation(String collationName) {
+    return collationNameToIdMap.containsKey(collationName.toUpperCase());
+  }
+
+  /**
+   * Returns closest valid name to collationName
+   */
+  public static String getClosestCollation(String collationName) {
+    Collation suggestion = Collections.min(List.of(collationTable), Comparator.comparingInt(
+            c -> UTF8String.fromString(c.collationName).levenshteinDistance(
+                    UTF8String.fromString(collationName.toUpperCase()))));
+    return suggestion.collationName;
+  }
+
+  /**
    * Returns a collation-unaware StringSearch object for the given pattern and target strings.
    * While this object does not respect collation, it can be used to find occurrences of the pattern
    * in the target string for UTF8_BINARY or UTF8_BINARY_LCASE (if arguments are lowercased).

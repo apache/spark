@@ -32,7 +32,7 @@ import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{CONFIG, PATH}
+import org.apache.spark.internal.LogKey.{CODEC_LEVEL, CODEC_NAME, CONFIG, PATH}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.avro.AvroCompressionCodec._
 import org.apache.spark.sql.avro.AvroOptions.IGNORE_EXTENSION
@@ -118,7 +118,8 @@ private[sql] object AvroUtils extends Logging {
             if (compressed.getSupportCompressionLevel) {
               val level = sqlConf.getConfString(s"spark.sql.avro.$codecName.level",
                 compressed.getDefaultCompressionLevel.toString)
-              logInfo(s"Compressing Avro output using the $codecName codec at level $level")
+              logInfo(log"Compressing Avro output using the ${MDC(CODEC_NAME, codecName)} codec " +
+                log"at level ${MDC(CODEC_LEVEL, level)}")
               val s = if (compressed == ZSTANDARD) {
                 val bufferPoolEnabled = sqlConf.getConf(SQLConf.AVRO_ZSTANDARD_BUFFER_POOL_ENABLED)
                 jobConf.setBoolean(AvroOutputFormat.ZSTD_BUFFERPOOL_KEY, bufferPoolEnabled)
@@ -128,7 +129,7 @@ private[sql] object AvroUtils extends Logging {
               }
               jobConf.setInt(s"avro.mapred.$s.level", level.toInt)
             } else {
-              logInfo(s"Compressing Avro output using the $codecName codec")
+              logInfo(log"Compressing Avro output using the ${MDC(CODEC_NAME, codecName)} codec")
             }
         }
       case unknown =>

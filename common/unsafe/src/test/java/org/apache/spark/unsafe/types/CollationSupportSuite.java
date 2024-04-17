@@ -30,12 +30,12 @@ public class CollationSupportSuite {
    * Collation-aware string expressions.
    */
 
-  private void assertContains(String pattern, String target, String collationName, boolean value)
+  private void assertContains(String pattern, String target, String collationName, boolean expected)
           throws SparkException {
     UTF8String l = UTF8String.fromString(pattern);
     UTF8String r = UTF8String.fromString(target);
     int collationId = CollationFactory.collationNameToId(collationName);
-    assertEquals(CollationSupport.Contains.exec(l, r, collationId), value);
+    assertEquals(expected, CollationSupport.Contains.exec(l, r, collationId));
   }
 
   @Test
@@ -101,14 +101,18 @@ public class CollationSupportSuite {
     assertContains("ab世De", "AB世dE", "UNICODE_CI", true);
     assertContains("äbćδe", "ÄbćδE", "UNICODE_CI", true);
     assertContains("äbćδe", "ÄBcΔÉ", "UNICODE_CI", false);
+    // Case-variable character length
+    assertContains("abİo12", "i̇o", "UNICODE_CI", true);
+    assertContains("abi̇o12", "İo", "UNICODE_CI", true);
   }
 
-  private void assertStartsWith(String pattern, String prefix, String collationName, boolean value)
+  private void assertStartsWith(
+          String pattern, String prefix, String collationName, boolean expected)
           throws SparkException {
     UTF8String l = UTF8String.fromString(pattern);
     UTF8String r = UTF8String.fromString(prefix);
     int collationId = CollationFactory.collationNameToId(collationName);
-    assertEquals(CollationSupport.StartsWith.exec(l, r, collationId), value);
+    assertEquals(expected, CollationSupport.StartsWith.exec(l, r, collationId));
   }
 
   @Test
@@ -138,6 +142,7 @@ public class CollationSupportSuite {
     assertStartsWith("abcde", "X", "UTF8_BINARY_LCASE", false);
     assertStartsWith("abcde", "a", "UNICODE_CI", true);
     assertStartsWith("abcde", "aBC", "UNICODE_CI", true);
+    assertStartsWith("abcde", "bcd", "UNICODE_CI", false);
     assertStartsWith("abcde", "123", "UNICODE_CI", false);
     // Case variation
     assertStartsWith("aBcDe", "abc", "UTF8_BINARY", false);
@@ -174,14 +179,17 @@ public class CollationSupportSuite {
     assertStartsWith("ab世De", "AB世dE", "UNICODE_CI", true);
     assertStartsWith("äbćδe", "ÄbćδE", "UNICODE_CI", true);
     assertStartsWith("äbćδe", "ÄBcΔÉ", "UNICODE_CI", false);
+    // Case-variable character length
+    assertStartsWith("İonic", "i̇o", "UNICODE_CI", true);
+    assertStartsWith("i̇onic", "İo", "UNICODE_CI", true);
   }
 
-  private void assertEndsWith(String pattern, String suffix, String collationName, boolean value)
+  private void assertEndsWith(String pattern, String suffix, String collationName, boolean expected)
           throws SparkException {
     UTF8String l = UTF8String.fromString(pattern);
     UTF8String r = UTF8String.fromString(suffix);
     int collationId = CollationFactory.collationNameToId(collationName);
-    assertEquals(CollationSupport.EndsWith.exec(l, r, collationId), value);
+    assertEquals(expected, CollationSupport.EndsWith.exec(l, r, collationId));
   }
 
   @Test
@@ -211,6 +219,7 @@ public class CollationSupportSuite {
     assertEndsWith("abcde", "X", "UTF8_BINARY_LCASE", false);
     assertEndsWith("abcde", "e", "UNICODE_CI", true);
     assertEndsWith("abcde", "CDe", "UNICODE_CI", true);
+    assertEndsWith("abcde", "bcd", "UNICODE_CI", false);
     assertEndsWith("abcde", "123", "UNICODE_CI", false);
     // Case variation
     assertEndsWith("aBcDe", "cde", "UTF8_BINARY", false);
@@ -247,6 +256,9 @@ public class CollationSupportSuite {
     assertEndsWith("ab世De", "AB世dE", "UNICODE_CI", true);
     assertEndsWith("äbćδe", "ÄbćδE", "UNICODE_CI", true);
     assertEndsWith("äbćδe", "ÄBcΔÉ", "UNICODE_CI", false);
+    // Case-variable character length
+    assertEndsWith("The İo", "i̇o", "UNICODE_CI", true);
+    assertEndsWith("The i̇o", "İo", "UNICODE_CI", true);
   }
 
   private void assertStringInstr(String string, String substring, String collationName,
