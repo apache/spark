@@ -459,20 +459,20 @@ object DataType {
    * Compares two types, ignoring nullability of ArrayType, MapType, StructType, ignoring case
    * sensitivity of field names in StructType as well as differences in collation for String types.
    */
-  def equalsIgnoreCaseNullabilityAndStringTypes(from: DataType, to: DataType): Boolean = {
+  def equalsIgnoreCaseNullabilityAndCollation(from: DataType, to: DataType): Boolean = {
     (from, to) match {
       case (ArrayType(fromElement, _), ArrayType(toElement, _)) =>
-        equalsIgnoreCaseNullabilityAndStringTypes(fromElement, toElement)
+        equalsIgnoreCaseNullabilityAndCollation(fromElement, toElement)
 
       case (MapType(fromKey, fromValue, _), MapType(toKey, toValue, _)) =>
-        equalsIgnoreCaseNullabilityAndStringTypes(fromKey, toKey) &&
-          equalsIgnoreCaseNullabilityAndStringTypes(fromValue, toValue)
+        equalsIgnoreCaseNullabilityAndCollation(fromKey, toKey) &&
+          equalsIgnoreCaseNullabilityAndCollation(fromValue, toValue)
 
       case (StructType(fromFields), StructType(toFields)) =>
         fromFields.length == toFields.length &&
           fromFields.zip(toFields).forall { case (l, r) =>
             l.name.equalsIgnoreCase(r.name) &&
-              equalsIgnoreCaseNullabilityAndStringTypes(l.dataType, r.dataType)
+              equalsIgnoreCaseNullabilityAndCollation(l.dataType, r.dataType)
           }
 
       case (_: StringType, _: StringType) => true
