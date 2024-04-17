@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.{ColumnarRule, CommandExecutionMode, QueryExecution, ShuffleCleanupMode, SparkOptimizer, SparkPlanner, SparkSqlParser}
+import org.apache.spark.sql.execution.{ColumnarRule, CommandExecutionMode, QueryExecution, SparkOptimizer, SparkPlanner, SparkSqlParser}
 import org.apache.spark.sql.execution.adaptive.AdaptiveRulesHolder
 import org.apache.spark.sql.execution.aggregate.{ResolveEncodersInScalaAgg, ScalaUDAF}
 import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
@@ -346,8 +346,7 @@ abstract class BaseSessionStateBuilder(
    */
   protected def createQueryExecution:
     (LogicalPlan, CommandExecutionMode.Value) => QueryExecution =
-      (plan, mode) =>
-        new QueryExecution(session, plan, mode = mode)
+      (plan, mode) => new QueryExecution(session, plan, mode = mode)
 
   /**
    * Interface to start and stop streaming queries.

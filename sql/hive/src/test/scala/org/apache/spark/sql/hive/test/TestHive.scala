@@ -658,7 +658,7 @@ private[sql] class TestHiveSessionStateBuilder(
   override def overrideConfs: Map[String, String] = TestHiveContext.overrideConfs
 
   override def createQueryExecution:
-  (LogicalPlan, CommandExecutionMode.Value) => QueryExecution =
+    (LogicalPlan, CommandExecutionMode.Value) => QueryExecution =
       (plan, mode) =>
         new TestHiveQueryExecution(session.asInstanceOf[TestHiveSparkSession], plan, mode)
 
