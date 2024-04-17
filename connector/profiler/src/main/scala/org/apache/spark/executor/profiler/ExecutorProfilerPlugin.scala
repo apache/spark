@@ -23,7 +23,8 @@ import scala.util.Random
 
 import org.apache.spark.SparkConf
 import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext, SparkPlugin}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKey.EXECUTOR_ID
+import org.apache.spark.internal.{Logging, MDC}
 
 
 /**
@@ -52,7 +53,8 @@ class JVMProfilerExecutorPlugin extends ExecutorPlugin with Logging {
     if (codeProfilingEnabled) {
       codeProfilingFraction = sparkConf.get(EXECUTOR_PROFILING_FRACTION)
       if (rand.nextInt(100) * 0.01 < codeProfilingFraction) {
-        logInfo(s"Executor id ${pluginCtx.executorID()} selected for JVM code profiling")
+        logInfo(log"Executor id ${MDC(EXECUTOR_ID, pluginCtx.executorID())} " +
+          log"selected for JVM code profiling")
         profiler = new ExecutorJVMProfiler(sparkConf, pluginCtx.executorID())
         profiler.start()
       }
