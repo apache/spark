@@ -43,6 +43,23 @@ private[spark] object Utils extends SparkCollectionUtils {
   }
 
   /**
+   * Returns the last K elements from the input.
+   */
+  def takeLast[T](input: Iterator[T], num: Int): Iterator[T] = {
+    assert(num >= 0)
+    if (input.isEmpty || num == 0) {
+      Iterator.empty[T]
+    } else {
+      var last = Seq.empty[T]
+      val grouped = input.grouped(num)
+      while (grouped.hasNext) {
+        last = grouped.next()
+      }
+      last.iterator
+    }
+  }
+
+  /**
    * Returns an iterator over the merged contents of all given input iterators,
    * traversing every element of the input iterators.
    * Equivalent entries will not be de-duplicated.
