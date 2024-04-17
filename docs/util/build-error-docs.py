@@ -43,8 +43,8 @@ def load_error_conditions(path):
 
 def anchor_name(condition_name: str, sub_condition_name: str = None):
     """
-    URLs can, in practice, be up to 2,000 characters long without causing any issues. So we
-    preserve the condition name most as-is for use in the anchor, even when that name is very long.
+    URLs can, in practice, be up to 2,000 characters long without causing any issues. So we preserve
+    the condition name mostly as-is for use in the anchor, even when that name is very long.
     See: https://stackoverflow.com/a/417184
     """
     parts = [
