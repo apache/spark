@@ -51,8 +51,8 @@ private[hive] class SparkGetSchemasOperation(
     val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName"
     val logMsg = s"Listing databases '$cmdStr'"
 
-  val catalogNameStr = if (catalogName == null) "null" else catalogName
-  val schemaNameStr = if (schemaName == null) "null" else schemaName
+    val catalogNameStr = if (catalogName == null) "null" else catalogName
+    val schemaNameStr = if (schemaName == null) "null" else schemaName
     logInfo(log"Listing databases 'catalog : ${MDC(CATALOG_NAME, catalogNameStr)}, " +
       log"schemaPattern : ${MDC(DATABASE_NAME, schemaNameStr)}' " +
       log"with ${MDC(STATEMENT_ID, statementId)}")
