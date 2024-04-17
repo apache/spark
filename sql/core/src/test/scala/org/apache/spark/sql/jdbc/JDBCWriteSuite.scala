@@ -416,9 +416,9 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
         colTypes.map { case (col, dataType) => s""""$col" $dataType """ }.mkString(", ")
 
       assert(JdbcUtils.schemaString(
+        JdbcDialects.get(url1),
         schema,
         spark.sessionState.conf.caseSensitiveAnalysis,
-        url1,
         Option(createTableColTypes)) == expectedSchemaStr)
     }
 
