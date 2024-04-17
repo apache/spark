@@ -140,7 +140,7 @@ def _capture_call_site(
     Parameters
     ----------
     spark_session : SparkSession
-        Current active Spark session
+        Current active Spark session.
     pyspark_origin : py4j.JavaClass
         PySparkCurrentOrigin from current active Spark session.
     fragment : str
