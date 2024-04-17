@@ -20,7 +20,8 @@ package org.apache.spark.sql
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{LEFT_EXPR, RIGHT_EXPR}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions._
@@ -310,8 +311,9 @@ class Column(val expr: Expression) extends Logging {
     val right = lit(other).expr
     if (this.expr == right) {
       logWarning(
-        s"Constructing trivially true equals predicate, '${this.expr} = $right'. " +
-            "Perhaps you need to use aliases.")
+        log"Constructing trivially true equals predicate, " +
+          log"'${MDC(LEFT_EXPR, this.expr)} = ${MDC(RIGHT_EXPR, right)}'. " +
+          log"Perhaps you need to use aliases.")
     }
     fn("=", other)
   }
@@ -516,8 +518,9 @@ class Column(val expr: Expression) extends Logging {
     val right = lit(other).expr
     if (this.expr == right) {
       logWarning(
-        s"Constructing trivially true equals predicate, '${this.expr} <=> $right'. " +
-          "Perhaps you need to use aliases.")
+        log"Constructing trivially true equals predicate, " +
+          log"'${MDC(LEFT_EXPR, this.expr)} <=> ${MDC(RIGHT_EXPR, right)}'. " +
+          log"Perhaps you need to use aliases.")
     }
     fn("<=>", other)
   }

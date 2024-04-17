@@ -29,7 +29,8 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FsUrlStreamHandlerFactory, Path}
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{CONFIG, CONFIG2}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.CacheManager
@@ -258,8 +259,9 @@ object SharedState extends Logging {
     val sparkWarehouseOption =
       initialConfigs.get(WAREHOUSE_PATH.key).orElse(sparkConf.getOption(WAREHOUSE_PATH.key))
     if (initialConfigs.contains(HIVE_WAREHOUSE_CONF_NAME)) {
-      logWarning(s"Not allowing to set $HIVE_WAREHOUSE_CONF_NAME in SparkSession's " +
-        s"options, please use ${WAREHOUSE_PATH.key} to set statically for cross-session usages")
+      logWarning(log"Not allowing to set ${MDC(CONFIG, HIVE_WAREHOUSE_CONF_NAME)} in " +
+        log"SparkSession's options, please use ${MDC(CONFIG2, WAREHOUSE_PATH.key)} to " +
+        log"set statically for cross-session usages")
     }
     // hive.metastore.warehouse.dir only stay in hadoopConf
     sparkConf.remove(HIVE_WAREHOUSE_CONF_NAME)

@@ -23,7 +23,8 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{ERROR, PATH}
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.expressions._
@@ -60,8 +61,8 @@ object FileStreamSink extends Logging {
         } catch {
           case e: SparkException => throw e
           case NonFatal(e) =>
-            logWarning(s"Assume no metadata directory. Error while looking for " +
-              s"metadata directory in the path: $singlePath.", e)
+            logWarning(log"Assume no metadata directory. Error while looking for " +
+              log"metadata directory in the path: ${MDC(PATH, singlePath)}.", e)
             false
         }
       case _ => false
@@ -84,7 +85,7 @@ object FileStreamSink extends Logging {
         } catch {
           case NonFatal(e) =>
             // We may not have access to this directory. Don't fail the query if that happens.
-            logWarning(e.getMessage, e)
+            logWarning(log"${MDC(ERROR, e.getMessage)}", e)
             false
         }
       if (legacyMetadataPathExists) {
