@@ -48,9 +48,13 @@ object CollationTypeCasts extends TypeCoercionRule {
     case eltExpr: Elt =>
       eltExpr.withNewChildren(eltExpr.children.head +: collateToSingleType(eltExpr.children.tail))
 
+    case overlay: Overlay =>
+      overlay.withNewChildren(collateToSingleType(Seq(overlay.input, overlay.replace))
+        ++ Seq(overlay.pos, overlay.len))
+
     case otherExpr @ (
       _: In | _: InSubquery | _: CreateArray | _: ArrayJoin | _: Concat | _: Greatest | _: Least |
-      _: Coalesce | _: BinaryExpression | _: ConcatWs | _: Overlay) =>
+      _: Coalesce | _: BinaryExpression | _: ConcatWs) =>
       val newChildren = collateToSingleType(otherExpr.children)
       otherExpr.withNewChildren(newChildren)
   }

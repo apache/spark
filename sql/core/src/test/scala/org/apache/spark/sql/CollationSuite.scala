@@ -564,31 +564,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
       checkAnswer(sql("SELECT array_join(array('a', 'b' collate UNICODE), 'c' collate UNICODE_CI)"),
         Seq(Row("acb")))
-
-      // overlay
-      checkAnswer(sql(
-        s"""
-           |SELECT typeof(overlay('hello' collate UTF8_BINARY_LCASE PLACING ' world' FROM 5))
-           |""".stripMargin), Seq(Row("string collate UTF8_BINARY_LCASE")))
-      checkAnswer(sql(
-        s"""
-           |SELECT typeof(overlay('hello' PLACING ' world' collate UNICODE FROM 5))
-           |""".stripMargin), Seq(Row("string collate UNICODE")))
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql("SELECT overlay('a' collate UNICODE PLACING 'b' collate UNICODE_CI FROM 1)")
-        },
-        errorClass = "COLLATION_MISMATCH.EXPLICIT",
-        parameters = Map(
-          "explicitTypes" -> "`string collate UNICODE`.`string collate UNICODE_CI`"
-        )
-      )
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(s"SELECT overlay(c1 PLACING c2 FROM 1) FROM $tableName ")
-        },
-        errorClass = "COLLATION_MISMATCH.IMPLICIT"
-      )
     }
   }
 

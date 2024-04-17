@@ -1699,7 +1699,7 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
 
   override def foldable: Boolean = children.forall(_.foldable)
   override def nullable: Boolean = children(0).nullable
-  override def dataType: DataType = SQLConf.get.defaultStringType
+  override def dataType: DataType = children(0).dataType
 
   override def inputTypes: Seq[AbstractDataType] =
     StringTypeAnyCollation :: List.fill(children.size - 1)(AnyDataType)
