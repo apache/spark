@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 import unittest
+import os
 
 from pyspark.resource import ResourceProfileBuilder, TaskResourceRequests, ExecutorResourceRequests
 from pyspark.sql import SparkSession
@@ -35,20 +36,20 @@ class ResourceProfileTests(unittest.TestCase):
         # check taskResources, similar to executorResources.
         self.assertEqual(rp.taskResources["cpus"].amount, 2.0)
 
-        # SparkContext is not initialized and is not remote.
-        with self.assertRaisesRegex(
-            RuntimeError, "SparkContext must be created to get the profile id."
-        ):
+        # SparkContext or SparkSesssion is not initialized.
+        with self.assertRaises(RuntimeError):
             rp.id
 
         # Remote mode.
-        spark = SparkSession.builder.remote("local-cluster[1, 2, 1024]").getOrCreate()
+        spark = SparkSession.builder.remote(
+            os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local-cluster[1, 2, 1024]")
+        ).getOrCreate()
         # Still can access taskResources, similar to executorResources.
         self.assertEqual(rp.taskResources["cpus"].amount, 2.0)
         rp.id
         df = spark.range(10)
-        df.mapInPandas(lambda x: x, df.schema, False, rp).collect()
-        df.mapInArrow(lambda x: x, df.schema, False, rp).collect()
+        df.mapInPandas(lambda x: x, df.schema, False, rp).show(n=10)
+        df.mapInArrow(lambda x: x, df.schema, False, rp).show(n=10)
 
         def assert_request_contents(exec_reqs, task_reqs):
             self.assertEqual(len(exec_reqs), 6)

@@ -28,7 +28,8 @@ import io.grpc.ServerCall
 import io.grpc.ServerCallHandler
 import io.grpc.ServerInterceptor
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{DESCRIPTION, MESSAGE}
 
 /**
  * A gRPC interceptor to log RPC requests and responses. It logs the protobufs as JSON. Useful for
@@ -42,9 +43,11 @@ class LoggingInterceptor extends ServerInterceptor with Logging {
   private def logProto[T](description: String, message: T): Unit = {
     message match {
       case m: Message =>
-        logInfo(s"$description:\n${jsonPrinter.print(m)}")
+        logInfo(log"${MDC(DESCRIPTION, description)}:\n${MDC(MESSAGE, jsonPrinter.print(m))}")
       case other =>
-        logInfo(s"$description: (Unknown message type) $other")
+        logInfo(
+          log"${MDC(DESCRIPTION, description)}: " +
+            log"(Unknown message type) ${MDC(MESSAGE, other)}")
     }
   }
 

@@ -168,16 +168,14 @@ class PandasMapOpsMixin:
     ) -> "DataFrame":
         """
         Maps an iterator of batches in the current :class:`DataFrame` using a Python native
-        function that takes and outputs a PyArrow's `RecordBatch`, and returns the result as a
-        :class:`DataFrame`.
+        function that is performed on `pyarrow.RecordBatch`\\s both as input and output,
+        and returns the result as a :class:`DataFrame`.
 
-        The function should take an iterator of `pyarrow.RecordBatch`\\s and return
-        another iterator of `pyarrow.RecordBatch`\\s. All columns are passed
-        together as an iterator of `pyarrow.RecordBatch`\\s to the function and the
-        returned iterator of `pyarrow.RecordBatch`\\s are combined as a :class:`DataFrame`.
-        Each `pyarrow.RecordBatch` size can be controlled by
-        `spark.sql.execution.arrow.maxRecordsPerBatch`. The size of the function's input and
-        output can be different.
+        This method applies the specified Python function to an iterator of
+        `pyarrow.RecordBatch`\\s, each representing a batch of rows from the original DataFrame.
+        The returned iterator of `pyarrow.RecordBatch`\\s are combined as a :class:`DataFrame`.
+        The size of the function's input and output can be different. Each `pyarrow.RecordBatch`
+        size can be controlled by `spark.sql.execution.arrow.maxRecordsPerBatch`.
 
         .. versionadded:: 3.3.0
 
@@ -190,7 +188,8 @@ class PandasMapOpsMixin:
             the return type of the `func` in PySpark. The value can be either a
             :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
         barrier : bool, optional, default False
-            Use barrier mode execution.
+            Use barrier mode execution, ensuring that all Python workers in the stage will be
+            launched concurrently.
 
             .. versionadded: 3.5.0
 
