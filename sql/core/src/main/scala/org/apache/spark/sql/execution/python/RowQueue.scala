@@ -21,7 +21,7 @@ import java.io._
 
 import com.google.common.io.Closeables
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.io.NioBufferedFileInputStream
 import org.apache.spark.memory.{MemoryConsumer, SparkOutOfMemoryError, TaskMemoryManager}
 import org.apache.spark.serializer.SerializerManager
@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.memory.MemoryBlock
+import org.apache.spark.util.Utils
 
 /**
  * A RowQueue is an FIFO queue for UnsafeRow.
@@ -179,6 +180,7 @@ private[python] case class HybridRowQueue(
 
   // Each buffer should have at least one row
   private var queues = new java.util.LinkedList[RowQueue]()
+  private var numRows = 0L
 
   private var writing: RowQueue = _
   private var reading: RowQueue = _
@@ -253,6 +255,7 @@ private[python] case class HybridRowQueue(
         throw QueryExecutionErrors.failedToPushRowIntoRowQueueError(writing.toString)
       }
     }
+    numRows += 1L
     true
   }
 
@@ -272,8 +275,14 @@ private[python] case class HybridRowQueue(
       row = reading.remove()
       assert(row != null, s"$reading should have at least one row")
     }
+    numRows -= 1L
     row
   }
+
+  def size(): Long = numRows
+
+  def destructiveIterator(): Iterator[UnsafeRow] =
+    new HybridRowQueueDestructiveIterator(this)
 
   def close(): Unit = {
     if (reading != null) {
@@ -288,8 +297,28 @@ private[python] case class HybridRowQueue(
   }
 }
 
-private[python] object HybridRowQueue {
+private class HybridRowQueueDestructiveIterator(queue: HybridRowQueue)
+  extends Iterator[UnsafeRow] {
+  override def hasNext: Boolean = queue.size() > 0
+
+  override def next(): UnsafeRow = {
+    val row = queue.remove()
+    if (queue.size() == 0) {
+      queue.close()
+    }
+    row
+  }
+}
+
+private[sql] object HybridRowQueue {
   def apply(taskMemoryMgr: TaskMemoryManager, file: File, fields: Int): HybridRowQueue = {
     HybridRowQueue(taskMemoryMgr, file, fields, SparkEnv.get.serializerManager)
+  }
+
+  def apply(fields: Int): HybridRowQueue = {
+    apply(
+      TaskContext.get().taskMemoryManager(),
+      new File(Utils.getLocalDir(SparkEnv.get.conf)),
+      fields)
   }
 }
