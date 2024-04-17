@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import base64
 import decimal
 import datetime
 import json
@@ -108,6 +109,9 @@ class VariantUtils:
 
     U32_SIZE = 4
 
+    EPOCH = datetime.datetime(year = 1970, month = 1, day = 1, hour = 0, minute = 0, second = 0,
+        tzinfo = datetime.timezone.utc)
+
     @classmethod
     def to_json(cls, value: bytes, metadata: bytes) -> str:
         """
@@ -186,11 +190,34 @@ class VariantUtils:
             return cls._read_long(value, pos + 1, 2, signed=True)
         elif type_info == VariantUtils.INT4 or type_info == VariantUtils.DATE:
             return cls._read_long(value, pos + 1, 4, signed=True)
-        elif type_info == VariantUtils.INT8 or type_info == VariantUtils.TIMESTAMP or (
-            type_info == VariantUtils.TIMESTAMP_NTZ
-        ):
+        elif type_info == VariantUtils.INT8:
             return cls._read_long(value, pos + 1, 8, signed=True)
         raise PySparkValueError(error_class="MALFORMED_VARIANT")
+
+    @classmethod
+    def _get_date(cls, value: bytes, pos: int) -> datetime.date:
+        cls._check_index(pos, len(value))
+        basic_type, type_info = cls._get_type_info(value, pos)
+        if basic_type != VariantUtils.PRIMITIVE:
+            raise PySparkValueError(error_class="MALFORMED_VARIANT")
+        if type_info == VariantUtils.DATE:
+            days_since_epoch = cls._read_long(value, pos + 1, 4, signed=True)
+            return datetime.date.fromordinal(VariantUtils.EPOCH.toordinal() +
+                days_since_epoch
+            )
+        raise PySparkValueError(error_class="MALFORMED_VARIANT")
+
+    @classmethod
+    def _get_timestamp(cls, value: bytes, pos: int) -> datetime.datetime:
+        cls._check_index(pos, len(value))
+        basic_type, type_info = cls._get_type_info(value, pos)
+        if basic_type != VariantUtils.PRIMITIVE:
+            raise PySparkValueError(error_class="MALFORMED_VARIANT")
+        if type_info == VariantUtils.TIMESTAMP or type_info == VariantUtils.TIMESTAMP_NTZ:
+            microseconds_since_epoch = cls._read_long(value, pos + 1, 4, signed=True)
+            return datetime.datetime.fromtimestamp(
+                microseconds_since_epoch // microseconds_since_epoch
+            )
 
     @classmethod
     def _get_string(cls, value: bytes, pos: int) -> str:
@@ -215,9 +242,14 @@ class VariantUtils:
     def _get_double(cls, value: bytes, pos: int) -> float:
         cls._check_index(pos, len(value))
         basic_type, type_info = cls._get_type_info(value, pos)
-        if basic_type != VariantUtils.PRIMITIVE or type_info != VariantUtils.DOUBLE:
+        if basic_type != VariantUtils.PRIMITIVE:
             raise PySparkValueError(error_class="MALFORMED_VARIANT")
-        return struct.unpack("<d", value[pos + 1 : pos + 9])[0]
+        if type_info == VariantUtils.FLOAT:
+            cls._check_index(pos + 4, len(value))
+            return struct.unpack("<f", value[pos + 1 : pos + 5])[0]
+        elif type_info == VariantUtils.DOUBLE:
+            cls._check_index(pos + 8, len(value))
+            return struct.unpack("<d", value[pos + 1 : pos + 9])[0]
 
     @classmethod
     def _get_decimal(cls, value: bytes, pos: int) -> decimal.Decimal:
@@ -237,14 +269,6 @@ class VariantUtils:
         else:
             raise PySparkValueError(error_class="MALFORMED_VARIANT")
         return decimal.Decimal(unscaled) * (decimal.Decimal(10) ** (-scale))
-
-    @classmethod
-    def _get_float(cls, value: bytes, pos: int) -> float:
-        cls._check_index(pos, len(value))
-        basic_type, type_info = cls._get_type_info(value, pos)
-        if basic_type != VariantUtils.PRIMITIVE or type_info != VariantUtils.FLOAT:
-            raise PySparkValueError(error_class="MALFORMED_VARIANT")
-        return struct.unpack("<f", value[pos + 1 : pos + 5])[0]
 
     @classmethod
     def _get_binary(cls, value: bytes, pos: int) -> bytes:
@@ -329,6 +353,10 @@ class VariantUtils:
                 return "true" if value else "false"
             if type(value) == str:
                 return json.dumps(value)
+            if type(value) == bytes:
+                return base64.b64encode(value)
+            if type(value) == datetime.date:
+                return str(value)
             return str(value)
 
     @classmethod
@@ -370,6 +398,12 @@ class VariantUtils:
             return cls._get_double(value, pos)
         elif variant_type == decimal.Decimal:
             return cls._get_decimal(value, pos)
+        elif variant_type == bytes:
+            return cls._get_binary(value, pos)
+        elif variant_type == datetime.date:
+            return cls._get_date(value, pos)
+        elif variant_type == datetime.datetime:
+            return cls._get_timestamp(value, pos)
         else:
             raise PySparkValueError(error_class="MALFORMED_VARIANT")
 

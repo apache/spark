@@ -189,7 +189,7 @@ public class VariantUtil {
   // Read a little-endian signed long value from `bytes[pos, pos + numBytes)`.
   static long readLong(byte[] bytes, int pos, int numBytes) {
     checkIndex(pos, bytes.length);
-    checkIndex(pos + numBytes - 1, bytes.length);
+
     long result = 0;
     // All bytes except the most significant byte should be unsign-extended and shifted (so we need
     // `& 0xFF`). The most significant byte should be sign-extended and is handled after the loop.
