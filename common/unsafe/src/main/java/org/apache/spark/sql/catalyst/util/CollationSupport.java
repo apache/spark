@@ -100,7 +100,10 @@ public final class CollationSupport {
     }
     public static boolean execICU(final UTF8String l, final UTF8String r,
         final int collationId) {
-      return CollationAwareUTF8String.matchAt(l, r, 0, collationId);
+      if (r.numBytes() == 0) return true;
+      if (l.numBytes() == 0) return false;
+      StringSearch stringSearch = CollationFactory.getStringSearch(l, r, collationId);
+      return stringSearch.first() == 0;
     }
   }
 
@@ -134,7 +137,11 @@ public final class CollationSupport {
     }
     public static boolean execICU(final UTF8String l, final UTF8String r,
         final int collationId) {
-      return CollationAwareUTF8String.matchAt(l, r, l.numBytes() - r.numBytes(), collationId);
+      if (r.numBytes() == 0) return true;
+      if (l.numBytes() == 0) return false;
+      StringSearch stringSearch = CollationFactory.getStringSearch(l, r, collationId);
+      int endIndex = stringSearch.getTarget().getEndIndex();
+      return stringSearch.last() == endIndex - stringSearch.getMatchLength();
     }
   }
 
