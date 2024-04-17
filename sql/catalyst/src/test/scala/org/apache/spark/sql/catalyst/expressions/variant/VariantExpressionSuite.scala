@@ -24,7 +24,9 @@ import scala.reflect.runtime.universe.TypeTag
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.ResolveTimeZone
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.Cast.toSQLType
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.internal.SQLConf
@@ -822,5 +824,17 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         Row(0)),
       StructType.fromDDL("c ARRAY<STRING>,b MAP<STRING, STRING>,a STRUCT<i: INT>"))
     check(struct, """{"a":{"i":0},"b":{"a":"123","b":"true","c":"f"},"c":["123","true","f"]}""")
+  }
+
+  test("from_json with nested variant") {
+    assert(JsonToStructs(MapType(StringType, VariantType), Map.empty,
+      Literal.create(null, VariantType)).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "INVALID_NESTED_VARIANT_SCHEMA",
+        messageParameters = Map(
+          "schema" -> toSQLType(MapType(StringType, VariantType))
+        )
+      )
+    )
   }
 }

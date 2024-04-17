@@ -761,6 +761,11 @@
           "The key of map cannot be/contain <keyType>."
         ]
       },
+      "INVALID_NESTED_VARIANT_SCHEMA" : {
+        "message" : [
+          "Input schema <schema> cannot currently contain a nested variant type."
+        ]
+      },
       "INVALID_ORDERING_TYPE" : {
         "message" : [
           "The <functionName> does not support ordering on type <dataType>."

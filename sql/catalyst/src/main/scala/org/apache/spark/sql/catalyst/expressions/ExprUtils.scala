@@ -117,6 +117,11 @@ object ExprUtils extends QueryErrorsBase {
       DataTypeMismatch(
         errorSubClass = "INVALID_JSON_MAP_KEY_TYPE",
         messageParameters = Map("schema" -> toSQLType(schema)))
+    } else if (schema != VariantType && schema.existsRecursively(_.isInstanceOf[VariantType])) {
+      DataTypeMismatch(
+        errorSubClass = "INVALID_NESTED_VARIANT_SCHEMA",
+        messageParameters = Map("schema" -> toSQLType(schema))
+      )
     } else {
       TypeCheckSuccess
     }
