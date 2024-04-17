@@ -31,4 +31,4 @@ Also note that this is a Jekyll comment and not an HTML comment so that this com
 up in the generated HTML to end users. :-)
 {% endcomment %}
 
-{% include_api_gen _generated/error-classes.html %}
+{% include_api_gen _generated/error-conditions.html %}

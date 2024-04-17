@@ -992,7 +992,7 @@ table.spark-config td:nth-child(4) {
 table#error-conditions {
   table-layout: fixed;
 
-  span.error-name {
+  span.error-condition-name {
     /* Any error names that wrap will have the wrapped lines indented
        relative to the first line thanks to these three rules.
      */
@@ -1007,7 +1007,7 @@ table#error-conditions {
     width: 105px;
   }
 
-  td.error-sub-class {
+  td.error-sub-condition {
     padding-left: 2.5em;
   }
 }
