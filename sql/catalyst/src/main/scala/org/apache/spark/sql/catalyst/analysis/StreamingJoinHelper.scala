@@ -168,7 +168,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
     if (constraintTerms.size > 1) {
       logWarning(
         log"Failed to extract state constraint terms: multiple time terms in condition\n\t" +
-          log"${MDC(EXPRESSION_TERMS, terms.mkString("\n\t"))}")
+          log"${MDC(EXPR_TERMS, terms.mkString("\n\t"))}")
       return None
     }
     if (constraintTerms.isEmpty) {
@@ -289,7 +289,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
           logWarning(
             log"Failed to extract state value watermark from condition " +
               log"${MDC(JOIN_CONDITION, exprToCollectFrom)} due to " +
-              log"${MDC(JOIN_CONDITION_SUB_EXPRESSION, a)}")
+              log"${MDC(JOIN_CONDITION_SUB_EXPR, a)}")
           invalid = true
           Seq.empty
       }

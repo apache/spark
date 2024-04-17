@@ -324,7 +324,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
       val ttlExpirationMs = timestampMs + 60000
       var ttlValue = testState.getTTLValue()
       assert(ttlValue.isDefined)
-      assert(ttlValue.get === ttlExpirationMs)
+      assert(ttlValue.get._2 === ttlExpirationMs)
       var ttlStateValueIterator = testState.getValuesInTTLState()
       assert(ttlStateValueIterator.hasNext)
 
@@ -346,7 +346,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
       // ttl value should still exist in state
       ttlValue = nextBatchTestState.getTTLValue()
       assert(ttlValue.isDefined)
-      assert(ttlValue.get === ttlExpirationMs)
+      assert(ttlValue.get._2 === ttlExpirationMs)
       ttlStateValueIterator = nextBatchTestState.getValuesInTTLState()
       assert(ttlStateValueIterator.hasNext)
       assert(ttlStateValueIterator.next() === ttlExpirationMs)

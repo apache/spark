@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import java.io.{FileNotFoundException, IOException}
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.PATH
+import org.apache.spark.internal.LogKey.PARTITIONED_FILE_READER
 import org.apache.spark.rdd.InputFileBlockHolder
 import org.apache.spark.sql.catalyst.FileSourceOptions
 import org.apache.spark.sql.connector.read.PartitionReader
@@ -66,7 +66,7 @@ class FilePartitionReader[T](
     } catch {
       case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
         logWarning(log"Skipped the rest of the content in the corrupted file: " +
-          log"${MDC(PATH, currentReader)}", e)
+          log"${MDC(PARTITIONED_FILE_READER, currentReader)}", e)
         false
       case e: Throwable =>
         throw FileDataSourceV2.attachFilePath(currentReader.file.urlEncodedPath, e)

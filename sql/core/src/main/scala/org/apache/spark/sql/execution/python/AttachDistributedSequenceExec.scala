@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.python
 
-import org.apache.spark.internal.LogKey.{CACHED_RDD_ID, SPARK_PLAN_ID}
+import org.apache.spark.internal.LogKey.{RDD_ID, SPARK_PLAN_ID}
 import org.apache.spark.internal.MDC
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -110,7 +110,7 @@ case class AttachDistributedSequenceExec(
   override protected[sql] def cleanupResources(): Unit = {
     try {
       if (cached != null && cached.getStorageLevel != StorageLevel.NONE) {
-        logWarning(log"clean up cached RDD(${MDC(CACHED_RDD_ID, cached.id)}) in " +
+        logWarning(log"clean up cached RDD(${MDC(RDD_ID, cached.id)}) in " +
           log"AttachDistributedSequenceExec(${MDC(SPARK_PLAN_ID, id)})")
         cached.unpersist(blocking = false)
       }

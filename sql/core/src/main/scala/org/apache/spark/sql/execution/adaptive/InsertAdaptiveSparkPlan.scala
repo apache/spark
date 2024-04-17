@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.adaptive
 
 import scala.collection.mutable
 
-import org.apache.spark.internal.LogKey.{CONFIG, LOGICAL_PLAN}
+import org.apache.spark.internal.LogKey.{CONFIG, SUB_QUERY}
 import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{DynamicPruningSubquery, ListQuery, SubqueryExpression}
@@ -70,7 +70,7 @@ case class InsertAdaptiveSparkPlan(
         } catch {
           case SubqueryAdaptiveNotSupportedException(subquery) =>
             logWarning(log"${MDC(CONFIG, SQLConf.ADAPTIVE_EXECUTION_ENABLED.key)} is enabled " +
-              log"but is not supported for sub-query: ${MDC(LOGICAL_PLAN, subquery)}.")
+              log"but is not supported for sub-query: ${MDC(SUB_QUERY, subquery)}.")
             plan
         }
       } else {

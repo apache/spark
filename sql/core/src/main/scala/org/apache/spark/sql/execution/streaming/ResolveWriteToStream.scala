@@ -23,7 +23,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.internal.LogKey.{CONFIG, TEMP_PATH}
+import org.apache.spark.internal.LogKey.{CONFIG, PATH}
 import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
@@ -80,7 +80,7 @@ object ResolveWriteToStream extends Rule[LogicalPlan] with SQLConfHelper {
         deleteCheckpointOnStop = true
         val tempDir = Utils.createTempDir(namePrefix = "temporary").getCanonicalPath
         logWarning(log"Temporary checkpoint location created which is deleted normally when" +
-          log" the query didn't fail: ${MDC(TEMP_PATH, tempDir)}. If it's required to delete " +
+          log" the query didn't fail: ${MDC(PATH, tempDir)}. If it's required to delete " +
           log"it under any circumstances, please set " +
           log"${MDC(CONFIG, SQLConf.FORCE_DELETE_TEMP_CHECKPOINT_LOCATION.key)} to" +
           log" true. Important to know deleting temp checkpoint folder is best effort.")
