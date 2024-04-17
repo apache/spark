@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.util;
 
+import com.ibm.icu.lang.UCharacter;
 import com.ibm.icu.text.StringSearch;
 import com.ibm.icu.text.Transliterator;
 import com.ibm.icu.util.ULocale;
@@ -172,6 +173,72 @@ public final class CollationSupport {
     }
   }
 
+  public static class Lower {
+    public static UTF8String exec(final UTF8String v, final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      if (collation.supportsBinaryEquality) {
+        return execBinary(v);
+      } else if (collation.supportsLowercaseEquality) {
+        return execLowercase(v);
+      } else {
+        return execICU(v, collationId);
+      }
+    }
+    public static String genCode(final String v, final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      String expr = "CollationSupport.Upper.exec";
+      if (collation.supportsBinaryEquality) {
+        return String.format(expr + "Binary(%s)", v);
+      } else if (collation.supportsLowercaseEquality) {
+        return String.format(expr + "Lowercase(%s)", v);
+      } else {
+        return String.format(expr + "ICU(%s, %d)", v, collationId);
+      }
+    }
+    public static UTF8String execBinary(final UTF8String v) {
+      return v.toLowerCase();
+    }
+    public static UTF8String execLowercase(final UTF8String v) {
+      return v.toLowerCase();
+    }
+    public static UTF8String execICU(final UTF8String v, final int collationId) {
+      return CollationAwareUTF8String.toLowerCase(v, collationId);
+    }
+  }
+
+  public static class InitCap {
+    public static UTF8String exec(final UTF8String v, final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      if (collation.supportsBinaryEquality) {
+        return execBinary(v);
+      } else if (collation.supportsLowercaseEquality) {
+        return execLowercase(v);
+      } else {
+        return execICU(v, collationId);
+      }
+    }
+    public static String genCode(final String v, final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      String expr = "CollationSupport.Upper.exec";
+      if (collation.supportsBinaryEquality) {
+        return String.format(expr + "Binary(%s)", v);
+      } else if (collation.supportsLowercaseEquality) {
+        return String.format(expr + "Lowercase(%s)", v);
+      } else {
+        return String.format(expr + "ICU(%s, %d)", v, collationId);
+      }
+    }
+    public static UTF8String execBinary(final UTF8String v) {
+      return v.toLowerCase().toTitleCase();
+    }
+    public static UTF8String execLowercase(final UTF8String v) {
+      return v.toLowerCase().toTitleCase();
+    }
+    public static UTF8String execICU(final UTF8String v, final int collationId) {
+      return CollationAwareUTF8String.toTitleCase(CollationAwareUTF8String.toLowerCase(v, collationId), collationId);
+    }
+  }
+
   // TODO: Add more collation-aware string expressions.
 
   /**
@@ -206,7 +273,17 @@ public final class CollationSupport {
 
     private static UTF8String toUpperCase(final UTF8String target, final int collationId) {
       ULocale locale = CollationFactory.fetchCollation(collationId).collator.getLocale(ULocale.ACTUAL_LOCALE);
-      return UTF8String.fromString(Transliterator.getInstance("Any-Upper").transliterate(target.toString()));
+      return UTF8String.fromString(UCharacter.toUpperCase(locale, target.toString()));
+    }
+
+    private static UTF8String toLowerCase(final UTF8String target, final int collationId) {
+      ULocale locale = CollationFactory.fetchCollation(collationId).collator.getLocale(ULocale.ACTUAL_LOCALE);
+      return UTF8String.fromString(UCharacter.toLowerCase(locale, target.toString()));
+    }
+
+    private static UTF8String toTitleCase(final UTF8String target, final int collationId) {
+      ULocale locale = CollationFactory.fetchCollation(collationId).collator.getLocale(ULocale.ACTUAL_LOCALE);
+      return UTF8String.fromString(UCharacter.toTitleCase(locale, target.toString(), null));
     }
   }
 
