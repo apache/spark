@@ -19,8 +19,8 @@ import re
 import functools
 import inspect
 from typing import Any, Callable, Dict, Match, TypeVar, Type
-
 from pyspark.errors.error_classes import ERROR_CLASSES_MAP
+from py4j.java_gateway import JavaClass
 
 
 T = TypeVar("T")
@@ -126,7 +126,7 @@ class ErrorClassesReader:
         return message_template
 
 
-def _capture_call_site(fragment: str) -> None:
+def _capture_call_site(pyspark_origin: JavaClass, fragment: str) -> None:
     """
     Capture the call site information including file name, line number, and function name.
     This function updates the thread-local storage from JVM side (PySparkCurrentOrigin)
@@ -134,6 +134,8 @@ def _capture_call_site(fragment: str) -> None:
 
     Parameters
     ----------
+    pyspark_origin : JavaClass
+        PySparkCurrentOrigin from current active Spark session.
     fragment : str
         The name of the PySpark API function being captured.
 
@@ -142,20 +144,13 @@ def _capture_call_site(fragment: str) -> None:
     The call site information is used to enhance error messages with the exact location
     in the user code that led to the error.
     """
-    from pyspark.sql.session import SparkSession
+    stack = inspect.stack()
+    frame_info = stack[-1]
+    filename = frame_info.filename
+    lineno = frame_info.lineno
+    call_site = f"{filename}:{lineno}"
 
-    spark = SparkSession.getActiveSession()
-    if spark is not None:
-        assert spark._jvm is not None
-
-        stack = inspect.stack()
-        frame_info = stack[-1]
-        filename = frame_info.filename
-        lineno = frame_info.lineno
-        call_site = f"{filename}:{lineno}"
-
-        pyspark_origin = spark._jvm.org.apache.spark.sql.catalyst.trees.PySparkCurrentOrigin
-        pyspark_origin.set(fragment, call_site)
+    pyspark_origin.set(fragment, call_site)
 
 
 def _with_origin(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -166,10 +161,22 @@ def _with_origin(func: Callable[..., Any]) -> Callable[..., Any]:
 
     @functools.wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
-        # Update call site when the function is called
-        _capture_call_site(func.__name__)
+        from pyspark.sql import SparkSession
 
-        return func(*args, **kwargs)
+        spark = SparkSession.getActiveSession()
+        if spark is not None:
+            assert spark._jvm is not None
+            pyspark_origin = spark._jvm.org.apache.spark.sql.catalyst.trees.PySparkCurrentOrigin
+
+            # Update call site when the function is called
+            _capture_call_site(pyspark_origin, func.__name__)
+
+            try:
+                return func(*args, **kwargs)
+            finally:
+                pyspark_origin.clear()
+        else:
+            return func(*args, **kwargs)
 
     return wrapper
 
