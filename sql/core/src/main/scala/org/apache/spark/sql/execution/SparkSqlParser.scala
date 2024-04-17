@@ -151,7 +151,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitSetCollation(ctx: SetCollationContext): LogicalPlan = withOrigin(ctx) {
     if (!SQLConf.get.collationEnabled) {
-      QueryCompilationErrors.collationNotEnabledError()
+      throw QueryCompilationErrors.collationNotEnabledError()
     }
     val key = SQLConf.DEFAULT_COLLATION.key
     SetCommand(Some(key -> Some(ctx.identifier.getText.toUpperCase(Locale.ROOT))))
