@@ -2864,9 +2864,8 @@ object SQLConf {
 
   val SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED =
     buildConf("spark.sql.shuffleDependency.fileCleanup.enabled")
-      .doc("When enabled, shuffle dependency files will be cleaned up at the end of SQL " +
-        "executions. Note that this overrides the previous config, " +
-        "spark.sql.shuffleDependency.cleanup.enabled.")
+      .doc("When enabled, shuffle files will be cleaned up at the end of Spark Connect " +
+        "SQL executions.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(Utils.isTesting)

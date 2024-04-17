@@ -345,9 +345,9 @@ abstract class BaseSessionStateBuilder(
    * Create a query execution object.
    */
   protected def createQueryExecution:
-    (LogicalPlan, CommandExecutionMode.Value, ShuffleCleanupMode) => QueryExecution =
-      (plan, mode, shuffleCleanupMode) =>
-        new QueryExecution(session, plan, mode = mode, shuffleCleanupMode = shuffleCleanupMode)
+    (LogicalPlan, CommandExecutionMode.Value) => QueryExecution =
+      (plan, mode) =>
+        new QueryExecution(session, plan, mode = mode)
 
   /**
    * Interface to start and stop streaming queries.

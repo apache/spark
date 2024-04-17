@@ -91,6 +91,10 @@ private[spark] class IndexShuffleBlockResolver(
     shuffleIdsToSkip.add(shuffleId)
   }
 
+  def removeShuffleToSkip(shuffleId: ShuffleId): Unit = {
+    shuffleIdsToSkip.remove(shuffleId)
+  }
+
   private def getShuffleBytesStored(): Long = {
     val shuffleFiles: Seq[File] = getStoredShuffles().map {
       si => getDataFile(si.shuffleId, si.mapId)

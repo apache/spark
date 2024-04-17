@@ -108,8 +108,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     } else {
       val sessionWithConfigsOff = getOrCloneSessionWithConfigsOff(spark)
       val inMemoryRelation = sessionWithConfigsOff.withActive {
-        val qe = sessionWithConfigsOff.sessionState.executePlan(
-          planToCache, shuffleCleanupMode = DoNotCleanup)
+        val qe = sessionWithConfigsOff.sessionState.executePlan(planToCache)
         InMemoryRelation(
           storageLevel,
           qe,
@@ -260,8 +259,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       cd.cachedRepresentation.cacheBuilder.clearCache()
       val sessionWithConfigsOff = getOrCloneSessionWithConfigsOff(spark)
       val newCache = sessionWithConfigsOff.withActive {
-        val qe = sessionWithConfigsOff.sessionState.executePlan(
-          cd.plan, shuffleCleanupMode = DoNotCleanup)
+        val qe = sessionWithConfigsOff.sessionState.executePlan(cd.plan)
         InMemoryRelation(cd.cachedRepresentation.cacheBuilder, qe)
       }
       val recomputedPlan = cd.copy(cachedRepresentation = newCache)

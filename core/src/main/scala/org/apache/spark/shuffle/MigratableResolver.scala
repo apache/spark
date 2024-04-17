@@ -38,7 +38,7 @@ trait MigratableResolver {
   /**
    * Mark a shuffle that should not be migrated.
    */
-  def addShuffleToSkip(shuffleId: Int): Unit
+  def addShuffleToSkip(shuffleId: Int): Unit = {}
 
   /**
    * Write a provided shuffle block as a stream. Used for block migrations.

@@ -100,8 +100,8 @@ private[sql] object Dataset {
       logicalPlan: LogicalPlan,
       shuffleCleanupMode: ShuffleCleanupMode): DataFrame =
     sparkSession.withActive {
-      val qe = sparkSession.sessionState.executePlan(
-        logicalPlan, shuffleCleanupMode = shuffleCleanupMode)
+      val qe = new QueryExecution(
+        sparkSession, logicalPlan, shuffleCleanupMode = shuffleCleanupMode)
       qe.assertAnalyzed()
       new Dataset[Row](qe, ExpressionEncoder(qe.analyzed.schema))
     }
