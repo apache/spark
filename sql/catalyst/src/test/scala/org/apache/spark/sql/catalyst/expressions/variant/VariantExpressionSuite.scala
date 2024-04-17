@@ -827,14 +827,21 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("from_json with nested variant") {
-    assert(JsonToStructs(MapType(StringType, VariantType), Map.empty,
-      Literal.create(null, VariantType)).checkInputDataTypes() ==
-      DataTypeMismatch(
-        errorSubClass = "INVALID_NESTED_VARIANT_SCHEMA",
-        messageParameters = Map(
-          "schema" -> toSQLType(MapType(StringType, VariantType))
+    def check(schema: DataType): Unit = {
+      assert(JsonToStructs(schema, Map.empty,
+        Literal.create(null, VariantType)).checkInputDataTypes() ==
+        DataTypeMismatch(
+          errorSubClass = "INVALID_NESTED_VARIANT_SCHEMA",
+          messageParameters = Map(
+            "schema" -> toSQLType(schema)
+          )
         )
       )
-    )
+    }
+
+    check(MapType(StringType, VariantType))
+    check(StructType(Seq(StructField("a", VariantType))))
+    check(MapType(StringType, StructType(Seq(StructField("a", IntegerType),
+      StructField("b", VariantType)))))
   }
 }
