@@ -2053,6 +2053,19 @@ object PushDownPredicates extends Rule[LogicalPlan] {
 object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform applyLocally
 
+  // Match the column ordering. It's not something we guarantee but seems like it
+  // could be useful especially for folks writing out to "raw" files.
+  private def matchColumnOrdering(original: Seq[NamedExpression], updated: Seq[NamedExpression]):
+      Seq[NamedExpression] = {
+    val nameToIndex = original.map(_.name).zipWithIndex.toMap
+    val response = updated.toArray
+    updated.foreach { e =>
+      val idx = nameToIndex(e.name)
+      response(idx) = e
+    }
+    response.toSeq
+  }
+
   val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
     // SPARK-13473: We can't push the predicate down when the underlying projection output non-
     // deterministic field(s).  Non-deterministic expressions are essentially stateful. This
@@ -2063,31 +2076,35 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     case f @ Filter(condition, project @ Project(fields, grandChild))
       if fields.forall(_.deterministic) && canPushThroughCondition(grandChild, condition) =>
       val aliasMap = getAliasMap(project)
-      // Elements that we are using in a filter
+      // Projection aliases that the filter references
       var filterAliases = AttributeMap.empty[Alias]
-      // Projection components we don't need to push
+      // Projection aliases that are not used in the filter, so we don't need to push
       var leftBehindAliases: AttributeMap[Alias] = aliasMap
       val (replaced, usedAliases) = replaceAliasWhileTracking(condition, aliasMap)
-      // If nothing changes there's no double eval to be avoided & we don't need to
-      // move any project elements around.
+      // If nothing changes there's no projection elements used and there for also no
+      // double eval to be avoided & we don't need to move any project elements around.
       if (condition != replaced) {
         filterAliases ++= usedAliases
         usedAliases.iterator.foreach {
           e: (Attribute, Alias) =>
           if (leftBehindAliases.contains(e._1)) {
+            // AttributeMap.remove returns a Map rather than an Attribute map so re-wrap.
             leftBehindAliases = AttributeMap(
               leftBehindAliases.removed(e._1))
           }
         }
       }
 
-      // If we need everything in this projection for the push we try and split the filter.
-      // This can also occur if there are no aliases introduced the projection.
       if (leftBehindAliases.isEmpty) {
+        // If there are no left behind aliases then we've either used all of the aliases or
+        // there were no aliases to begin with. In either case we try and split up the filter
+        // on the &&s and see if we can push individual components that do not use any of the
+        // aliases.
         val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
-          val (replaced, usedAliases) = replaceAliasWhileTracking(cond, aliasMap)
+          val replaced = replaceAlias(cond, aliasMap)
           if (cond == replaced) {
-            // If nothing changes there's no double eval to be avoided.
+            // If nothing changes this element can safely be pushed past the projection since
+            // it does not depend on any alias introduced by the projection.
             true
           } else {
             false
@@ -2123,7 +2140,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         val pushedAliasNames = project.output.filter(a => !leftBehindAliases.contains(a)).toSeq
         val remainingAliasesToEval = leftBehindAliases.iterator.map(_._2).toSeq
         val topLevelProjection = project.copy(
-          projectList = (pushedAliasNames ++ remainingAliasesToEval),
+          projectList = matchColumnOrdering(fields, pushedAliasNames ++ remainingAliasesToEval),
           child = f.copy(child = filterChild)
         )
         topLevelProjection

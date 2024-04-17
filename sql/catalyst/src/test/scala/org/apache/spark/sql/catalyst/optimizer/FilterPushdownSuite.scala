@@ -182,7 +182,7 @@ class FilterPushdownSuite extends PlanTest {
       .where($"a" > 5)
       .select($"a", $"b", $"e", $"e".rlike("magic") as "f")
       .where($"f")
-      .select($"a", $"f", $"b", $"e".rlike("notmagic") as "j")
+      .select($"a", $"f", $"e".rlike("notmagic") as "j", $"b")
       .analyze
 
     comparePlans(optimized, correctAnswer)
