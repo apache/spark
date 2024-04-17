@@ -17,6 +17,8 @@
 package org.apache.spark.sql.catalyst.util;
 
 import com.ibm.icu.text.StringSearch;
+import com.ibm.icu.text.Transliterator;
+import com.ibm.icu.util.ULocale;
 
 import org.apache.spark.unsafe.types.UTF8String;
 
@@ -137,6 +139,39 @@ public final class CollationSupport {
     }
   }
 
+  public static class Upper {
+    public static UTF8String exec(final UTF8String v, final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      if (collation.supportsBinaryEquality) {
+        return execBinary(v);
+      } else if (collation.supportsLowercaseEquality) {
+        return execLowercase(v);
+      } else {
+        return execICU(v, collationId);
+      }
+    }
+    public static String genCode(final String v, final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      String expr = "CollationSupport.Upper.exec";
+      if (collation.supportsBinaryEquality) {
+        return String.format(expr + "Binary(%s)", v);
+      } else if (collation.supportsLowercaseEquality) {
+        return String.format(expr + "Lowercase(%s)", v);
+      } else {
+        return String.format(expr + "ICU(%s, %d)", v, collationId);
+      }
+    }
+    public static UTF8String execBinary(final UTF8String v) {
+      return v.toUpperCase();
+    }
+    public static UTF8String execLowercase(final UTF8String v) {
+      return v.toUpperCase();
+    }
+    public static UTF8String execICU(final UTF8String v, final int collationId) {
+      return CollationAwareUTF8String.toUpperCase(v, collationId);
+    }
+  }
+
   // TODO: Add more collation-aware string expressions.
 
   /**
@@ -169,6 +204,10 @@ public final class CollationSupport {
         pos, pos + pattern.numChars()), pattern, collationId).last() == 0;
     }
 
+    private static UTF8String toUpperCase(final UTF8String target, final int collationId) {
+      ULocale locale = CollationFactory.fetchCollation(collationId).collator.getLocale(ULocale.ACTUAL_LOCALE);
+      return UTF8String.fromString(Transliterator.getInstance("Any-Upper").transliterate(target.toString()));
+    }
   }
 
 }
