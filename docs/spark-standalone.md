@@ -793,18 +793,10 @@ In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spa
     <td><code>spark.deploy.recoveryDirectory</code></td>
     <td>""</td>
     <td>The directory in which Spark will store recovery state, accessible from the Master's perspective.
-      Note that the directory should be clearly manualy if <code>spark.deploy.recoveryMode</code>,
-      <code>spark.deploy.recoverySerializer</code>, or <code>spark.deploy.recoveryCompressionCodec</code> is changed.
+      Note that the directory should be clearly manualy if <code>spark.deploy.recoveryMode</code>
+      or <code>spark.deploy.recoveryCompressionCodec</code> is changed.
     </td>
     <td>0.8.1</td>
-  </tr>
-  <tr>
-    <td><code>spark.deploy.recoverySerializer</code></td>
-    <td>JAVA</td>
-    <td>A serializer for writing/reading objects to/from persistence engines; JAVA (default) or KRYO.
-      Java serializer has been the default mode since Spark 0.8.1.
-      Kryo serializer is a new fast and compact mode from Spark 4.0.0.</td>
-    <td>4.0.0</td>
   </tr>
   <tr>
     <td><code>spark.deploy.recoveryCompressionCodec</code></td>

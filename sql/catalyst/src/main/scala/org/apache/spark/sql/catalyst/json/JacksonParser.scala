@@ -36,7 +36,8 @@ import org.apache.spark.sql.errors.{ExecutionErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.types.variant._
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String, VariantVal}
 import org.apache.spark.util.Utils
 
 /**
@@ -105,9 +106,22 @@ class JacksonParser(
    */
   private def makeRootConverter(dt: DataType): JsonParser => Iterable[InternalRow] = {
     dt match {
+      case _: StructType if options.singleVariantColumn.isDefined => (parser: JsonParser) => {
+        Some(InternalRow(parseVariant(parser)))
+      }
       case st: StructType => makeStructRootConverter(st)
       case mt: MapType => makeMapRootConverter(mt)
       case at: ArrayType => makeArrayRootConverter(at)
+    }
+  }
+
+  protected final def parseVariant(parser: JsonParser): VariantVal = {
+    try {
+      val v = VariantBuilder.parseJson(parser)
+      new VariantVal(v.getValue, v.getMetadata)
+    } catch {
+      case _: VariantSizeLimitException =>
+        throw QueryExecutionErrors.variantSizeLimitError(VariantUtil.SIZE_LIMIT, "JacksonParser")
     }
   }
 
@@ -379,6 +393,8 @@ class JacksonParser(
       (parser: JsonParser) => parseJsonToken[java.lang.Long](parser, dataType) {
         case _ => null
       }
+
+    case _: VariantType => parseVariant
 
     // We don't actually hit this exception though, we keep it for understandability
     case _ => throw ExecutionErrors.unsupportedDataTypeError(dataType)

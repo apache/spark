@@ -547,23 +547,28 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
   }
 
   test("SPARK-42627: Support ORACLE TIMESTAMP WITH LOCAL TIME ZONE") {
-    val reader = spark.read.format("jdbc")
-      .option("url", jdbcUrl)
-      .option("dbtable", "test_ltz")
-    val df = reader.load()
-    val row1 = df.collect().head.getTimestamp(0)
-    assert(df.count() === 1)
-    assert(row1 === Timestamp.valueOf("2018-11-17 13:33:33"))
+    Seq("true", "false").foreach { flag =>
+      withSQLConf((SQLConf.LEGACY_ORACLE_TIMESTAMP_MAPPING_ENABLED.key, flag)) {
+        val df = spark.read.format("jdbc")
+          .option("url", jdbcUrl)
+          .option("dbtable", "test_ltz")
+          .load()
+        val row1 = df.collect().head.getTimestamp(0)
+        assert(df.count() === 1)
+        assert(row1 === Timestamp.valueOf("2018-11-17 13:33:33"))
 
-    df.write.format("jdbc")
-      .option("url", jdbcUrl)
-      .option("dbtable", "test_ltz")
-      .mode("append")
-      .save()
+        df.write.format("jdbc")
+          .option("url", jdbcUrl)
+          .option("dbtable", "test_ltz" + flag)
+          .save()
 
-    val df2 = reader.load()
-    assert(df.count() === 2)
-    assert(df2.collect().forall(_.getTimestamp(0) === row1))
+        val df2 = spark.read.format("jdbc")
+          .option("url", jdbcUrl)
+          .option("dbtable", "test_ltz" + flag)
+          .load()
+        checkAnswer(df2, Row(row1))
+      }
+    }
   }
 
   test("SPARK-47761: Reading ANSI INTERVAL Types") {

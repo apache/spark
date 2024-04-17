@@ -1067,6 +1067,28 @@ class SparkConnectClient(object):
         else:
             return (None, properties)
 
+    def execute_command_as_iterator(
+        self, command: pb2.Command, observations: Optional[Dict[str, Observation]] = None
+    ) -> Iterator[Dict[str, Any]]:
+        """
+        Execute given command. Similar to execute_command, but the value is returned using yield.
+        """
+        logger.info(f"Execute command as iterator for command {self._proto_to_string(command)}")
+        req = self._execute_plan_request_with_metadata()
+        if self._user_id:
+            req.user_context.user_id = self._user_id
+        req.plan.command.CopyFrom(command)
+        for response in self._execute_and_fetch_as_iterator(req, observations or {}):
+            if isinstance(response, dict):
+                yield response
+            else:
+                raise PySparkValueError(
+                    error_class="UNKNOWN_RESPONSE",
+                    message_parameters={
+                        "response": str(response),
+                    },
+                )
+
     def same_semantics(self, plan: pb2.Plan, other: pb2.Plan) -> bool:
         """
         return if two plans have the same semantics.
@@ -1330,6 +1352,9 @@ class SparkConnectClient(object):
             if b.HasField("streaming_query_manager_command_result"):
                 cmd_result = b.streaming_query_manager_command_result
                 yield {"streaming_query_manager_command_result": cmd_result}
+            if b.HasField("streaming_query_listener_events_result"):
+                event_result = b.streaming_query_listener_events_result
+                yield {"streaming_query_listener_events_result": event_result}
             if b.HasField("get_resources_command_result"):
                 resources = {}
                 for key, resource in b.get_resources_command_result.resources.items():
@@ -1389,16 +1414,12 @@ class SparkConnectClient(object):
                     with attempt:
                         for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
                             yield from handle_response(b)
-        except KeyboardInterrupt:
+        except KeyboardInterrupt as kb:
             logger.debug(f"Interrupt request received for operation={req.operation_id}")
-            try:
-                self.interrupt_operation(req.operation_id)
-            except Exception as e:
-                # Swallow all errors if aborted.
-                logger.debug(f"Caught an error during interrupt handling, silenced: {e}")
-                pass
             if progress is not None:
                 progress.finish()
+            self.interrupt_operation(req.operation_id)
+            raise kb
         except Exception as error:
             self._handle_error(error)
 
