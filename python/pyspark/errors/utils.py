@@ -18,10 +18,12 @@
 import re
 import functools
 import inspect
-from typing import Any, Callable, Dict, Match, TypeVar, Type
+from typing import Any, Callable, Dict, Match, TypeVar, Type, TYPE_CHECKING
 from pyspark.errors.error_classes import ERROR_CLASSES_MAP
-from py4j.java_gateway import JavaClass
 
+
+if TYPE_CHECKING:
+    from py4j.java_gateway import JavaClass
 
 T = TypeVar("T")
 
@@ -126,7 +128,7 @@ class ErrorClassesReader:
         return message_template
 
 
-def _capture_call_site(pyspark_origin: JavaClass, fragment: str) -> None:
+def _capture_call_site(pyspark_origin: "JavaClass", fragment: str) -> None:
     """
     Capture the call site information including file name, line number, and function name.
     This function updates the thread-local storage from JVM side (PySparkCurrentOrigin)
@@ -134,7 +136,7 @@ def _capture_call_site(pyspark_origin: JavaClass, fragment: str) -> None:
 
     Parameters
     ----------
-    pyspark_origin : JavaClass
+    pyspark_origin : py4j.JavaClass
         PySparkCurrentOrigin from current active Spark session.
     fragment : str
         The name of the PySpark API function being captured.
