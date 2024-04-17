@@ -322,7 +322,7 @@ private[spark] object HiveUtils extends Logging {
       if (file.getName == "*") {
         val files = file.getParentFile.listFiles()
         if (files == null) {
-          logWarning(log"Hive jar path '${MDC(PATH, file.getPath)}' does not exist.")
+          logWarning(log"Hive jar path '${MDC(LogKey.PATH, file.getPath)}' does not exist.")
           Nil
         } else {
           files.filter(_.getName.toLowerCase(Locale.ROOT).endsWith(".jar")).map(_.toURI.toURL)
@@ -336,7 +336,7 @@ private[spark] object HiveUtils extends Logging {
     def logInitWithPath(jars: Seq[URL]): Unit = {
       logInfo(log"Initializing HiveMetastoreConnection version " +
         log"${MDC(LogKey.HIVE_METASTORE_VERSION, hiveMetastoreVersion)} using paths: " +
-        jars.map(jar => MDC(LogKey.PATH, jar.getPath)).mkString(", "))
+        log"${MDC(LogKey.PATH, jars.mkString(", "))}")
     }
 
     val isolatedLoader = if (hiveMetastoreJars == "builtin") {
@@ -409,7 +409,7 @@ private[spark] object HiveUtils extends Logging {
             addLocalHiveJars(new File(path))
           }
 
-      logInitWithPath(jars)
+      logInitWithPath(jars.toSeq)
       new IsolatedClientLoader(
         version = metaVersion,
         sparkConf = conf,

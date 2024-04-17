@@ -347,7 +347,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         val message =
           log"Hive incompatible types found: ${MDC(INCOMPATIBLE_TYPES, incompatibleTypesStr)}. " +
             log"Persisting data source table ${MDC(TABLE_NAME, qualifiedTableName)} into Hive " +
-            log"metastore in  Spark SQL specific format, which is NOT compatible with Hive."
+            log"metastore in Spark SQL specific format, which is NOT compatible with Hive."
         (None, message)
       // our bucketing is un-compatible with hive(different hash function)
       case Some(serde) if table.bucketSpec.nonEmpty =>
