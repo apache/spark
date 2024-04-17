@@ -261,6 +261,156 @@ public class CollationSupportSuite {
     assertEndsWith("The i̇o", "İo", "UNICODE_CI", true);
   }
 
+  private void assertUpper(String target, String collationName, String expected)
+          throws SparkException {
+    UTF8String target_utf8 = UTF8String.fromString(target);
+    UTF8String expected_utf8 = UTF8String.fromString(expected);
+    int collationId = CollationFactory.collationNameToId(collationName);
+    assertEquals(expected_utf8, CollationSupport.Upper.exec(target_utf8, collationId));
+  }
+
+  @Test
+  public void testUpper() throws SparkException {
+    // Edge cases
+    assertUpper("", "UTF8_BINARY", "");
+    assertUpper("", "UTF8_BINARY_LCASE", "");
+    assertUpper("", "UNICODE", "");
+    assertUpper("", "UNICODE_CI", "");
+    // Basic tests
+    assertUpper("abcde", "UTF8_BINARY", "ABCDE");
+    assertUpper("abcde", "UTF8_BINARY_LCASE", "ABCDE");
+    assertUpper("abcde", "UNICODE", "ABCDE");
+    assertUpper("abcde", "UNICODE_CI", "ABCDE");
+    // Uppercase present
+    assertUpper("AbCdE", "UTF8_BINARY", "ABCDE");
+    assertUpper("aBcDe", "UTF8_BINARY", "ABCDE");
+    assertUpper("AbCdE", "UTF8_BINARY_LCASE", "ABCDE");
+    assertUpper("aBcDe", "UTF8_BINARY_LCASE", "ABCDE");
+    assertUpper("AbCdE", "UNICODE", "ABCDE");
+    assertUpper("aBcDe", "UNICODE", "ABCDE");
+    assertUpper("AbCdE", "UNICODE_CI", "ABCDE");
+    assertUpper("aBcDe", "UNICODE_CI", "ABCDE");
+    // Accent letters
+    assertUpper("aBćDe","UTF8_BINARY", "ABĆDE");
+    assertUpper("aBćDe","UTF8_BINARY_LCASE", "ABĆDE");
+    assertUpper("aBćDe","UNICODE", "ABĆDE");
+    assertUpper("aBćDe","UNICODE_CI", "ABĆDE");
+    // Variable byte length characters
+    assertUpper("ab世De", "UTF8_BINARY", "AB世DE");
+    assertUpper("äbćδe", "UTF8_BINARY", "ÄBĆΔE");
+    assertUpper("ab世De", "UTF8_BINARY_LCASE", "AB世DE");
+    assertUpper("äbćδe", "UTF8_BINARY_LCASE", "ÄBĆΔE");
+    assertUpper("ab世De", "UNICODE", "AB世DE");
+    assertUpper("äbćδe", "UNICODE", "ÄBĆΔE");
+    assertUpper("ab世De", "UNICODE_CI", "AB世DE");
+    assertUpper("äbćδe", "UNICODE_CI", "ÄBĆΔE");
+    // Case-variable character length
+    assertUpper("i̇o", "UTF8_BINARY","İO");
+    assertUpper("i̇o", "UTF8_BINARY_LCASE","İO");
+    assertUpper("i̇o", "UNICODE","İO");
+    assertUpper("i̇o", "UNICODE_CI","İO");
+  }
+
+  private void assertLower(String target, String collationName, String expected)
+          throws SparkException {
+    UTF8String target_utf8 = UTF8String.fromString(target);
+    UTF8String expected_utf8 = UTF8String.fromString(expected);
+    int collationId = CollationFactory.collationNameToId(collationName);
+    assertEquals(expected_utf8, CollationSupport.Lower.exec(target_utf8, collationId));
+  }
+
+  @Test
+  public void testLower() throws SparkException {
+    // Edge cases
+    assertLower("", "UTF8_BINARY", "");
+    assertLower("", "UTF8_BINARY_LCASE", "");
+    assertLower("", "UNICODE", "");
+    assertLower("", "UNICODE_CI", "");
+    // Basic tests
+    assertLower("ABCDE", "UTF8_BINARY", "abcde");
+    assertLower("ABCDE", "UTF8_BINARY_LCASE", "abcde");
+    assertLower("ABCDE", "UNICODE", "abcde");
+    assertLower("ABCDE", "UNICODE_CI", "abcde");
+    // Uppercase present
+    assertLower("AbCdE", "UTF8_BINARY", "abcde");
+    assertLower("aBcDe", "UTF8_BINARY", "abcde");
+    assertLower("AbCdE", "UTF8_BINARY_LCASE", "abcde");
+    assertLower("aBcDe", "UTF8_BINARY_LCASE", "abcde");
+    assertLower("AbCdE", "UNICODE", "abcde");
+    assertLower("aBcDe", "UNICODE", "abcde");
+    assertLower("AbCdE", "UNICODE_CI", "abcde");
+    assertLower("aBcDe", "UNICODE_CI", "abcde");
+    // Accent letters
+    assertLower("AbĆdE","UTF8_BINARY", "abćde");
+    assertLower("AbĆdE","UTF8_BINARY_LCASE", "abćde");
+    assertLower("AbĆdE","UNICODE", "abćde");
+    assertLower("AbĆdE","UNICODE_CI", "abćde");
+    // Variable byte length characters
+    assertLower("aB世De", "UTF8_BINARY", "ab世de");
+    assertLower("ÄBĆΔE", "UTF8_BINARY", "äbćδe");
+    assertLower("aB世De", "UTF8_BINARY_LCASE", "ab世de");
+    assertLower("ÄBĆΔE", "UTF8_BINARY_LCASE", "äbćδe");
+    assertLower("aB世De", "UNICODE", "ab世de");
+    assertLower("ÄBĆΔE", "UNICODE", "äbćδe");
+    assertLower("aB世De", "UNICODE_CI", "ab世de");
+    assertLower("ÄBĆΔE", "UNICODE_CI", "äbćδe");
+    // Case-variable character length
+    assertLower("İo", "UTF8_BINARY","i̇o");
+    assertLower("İo", "UTF8_BINARY_LCASE","i̇o");
+    assertLower("İo", "UNICODE","i̇o");
+    assertLower("İo", "UNICODE_CI","i̇o");
+  }
+
+  private void assertInitCap(String target, String collationName, String expected)
+          throws SparkException {
+    UTF8String target_utf8 = UTF8String.fromString(target);
+    UTF8String expected_utf8 = UTF8String.fromString(expected);
+    int collationId = CollationFactory.collationNameToId(collationName);
+    assertEquals(expected_utf8, CollationSupport.InitCap.exec(target_utf8, collationId));
+  }
+
+  @Test
+  public void testInitCap() throws SparkException {
+    // Edge cases
+    assertInitCap("", "UTF8_BINARY", "");
+    assertInitCap("", "UTF8_BINARY_LCASE", "");
+    assertInitCap("", "UNICODE", "");
+    assertInitCap("", "UNICODE_CI", "");
+    // Basic tests
+    assertInitCap("ABCDE", "UTF8_BINARY", "Abcde");
+    assertInitCap("ABCDE", "UTF8_BINARY_LCASE", "Abcde");
+    assertInitCap("ABCDE", "UNICODE", "Abcde");
+    assertInitCap("ABCDE", "UNICODE_CI", "Abcde");
+    // Uppercase present
+    assertInitCap("AbCdE", "UTF8_BINARY", "Abcde");
+    assertInitCap("aBcDe", "UTF8_BINARY", "Abcde");
+    assertInitCap("AbCdE", "UTF8_BINARY_LCASE", "Abcde");
+    assertInitCap("aBcDe", "UTF8_BINARY_LCASE", "Abcde");
+    assertInitCap("AbCdE", "UNICODE", "Abcde");
+    assertInitCap("aBcDe", "UNICODE", "Abcde");
+    assertInitCap("AbCdE", "UNICODE_CI", "Abcde");
+    assertInitCap("aBcDe", "UNICODE_CI", "Abcde");
+    // Accent letters
+    assertInitCap("AbĆdE","UTF8_BINARY", "Abćde");
+    assertInitCap("AbĆdE","UTF8_BINARY_LCASE", "Abćde");
+    assertInitCap("AbĆdE","UNICODE", "Abćde");
+    assertInitCap("AbĆdE","UNICODE_CI", "Abćde");
+    // Variable byte length characters
+    assertInitCap("aB世De", "UTF8_BINARY", "Ab世de");
+    assertInitCap("ÄBĆΔE", "UTF8_BINARY", "Äbćδe");
+    assertInitCap("aB世De", "UTF8_BINARY_LCASE", "Ab世de");
+    assertInitCap("ÄBĆΔE", "UTF8_BINARY_LCASE", "Äbćδe");
+    assertInitCap("aB世De", "UNICODE", "Ab世de");
+    assertInitCap("ÄBĆΔE", "UNICODE", "Äbćδe");
+    assertInitCap("aB世De", "UNICODE_CI", "Ab世De");
+    assertInitCap("ÄBĆΔE", "UNICODE_CI", "Äbćδe");
+    // Case-variable character length
+    assertInitCap("İo", "UTF8_BINARY","İo");
+    assertInitCap("İo", "UTF8_BINARY_LCASE","İo");
+    assertInitCap("İo", "UNICODE","İo");
+    assertInitCap("İo", "UNICODE_CI","İo");
+  }
+
   // TODO: Test more collation-aware string expressions.
 
   /**
