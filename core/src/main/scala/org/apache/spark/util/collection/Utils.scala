@@ -51,7 +51,7 @@ private[spark] object Utils extends SparkCollectionUtils {
       Iterator.empty[T]
     } else {
       var last = Seq.empty[T]
-      val grouped = input.grouped(num)
+      val grouped = input.sliding(num)
       while (grouped.hasNext) {
         last = grouped.next()
       }
