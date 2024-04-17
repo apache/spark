@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.TaskContext
 import org.apache.spark.rdd.{ParallelCollectionRDD, RDD}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.sql.catalyst.InternalRow
@@ -130,7 +131,7 @@ case class CollectTailExec(limit: Int, child: SparkPlan) extends LimitExec {
     SQLShuffleReadMetricsReporter.createShuffleReadMetrics(sparkContext)
   override lazy val metrics = readMetrics ++ writeMetrics
   protected override def doExecute(): RDD[InternalRow] = {
-    val childRDD = child.execute().map(_.copy())
+    val childRDD = child.execute()
     if (childRDD.getNumPartitions == 0 || limit == 0) {
       new ParallelCollectionRDD(sparkContext, Seq.empty[InternalRow], 1, Map.empty)
     } else {
@@ -155,14 +156,19 @@ case class CollectTailExec(limit: Int, child: SparkPlan) extends LimitExec {
     if (iter.isEmpty) {
       Iterator.empty[InternalRow]
     } else {
-      val queue = HybridRowQueue.apply(output.size)
+      val context = TaskContext.get()
+      val queue = HybridRowQueue.apply(context.taskMemoryManager(), output.size)
+      context.addTaskCompletionListener[Unit](ctx => queue.close())
+      var count = 0
       while (iter.hasNext) {
-        queue.add(iter.next().asInstanceOf[UnsafeRow])
-        while (queue.size() > limit) {
+        queue.add(iter.next().copy().asInstanceOf[UnsafeRow])
+        if (count < limit) {
+          count += 1
+        } else {
           queue.remove()
         }
       }
-      queue.destructiveIterator()
+      Iterator.range(0, count).map(i => queue.remove())
     }
   }
 
