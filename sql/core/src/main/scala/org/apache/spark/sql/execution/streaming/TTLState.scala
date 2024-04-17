@@ -195,9 +195,9 @@ abstract class SingleKeyTTLStateImpl(
  * Manages the ttl information for user state keyed with a single key (grouping key).
  */
 abstract class CompositeKeyTTLStateImpl(
-  stateName: String,
-  store: StateStore,
-  ttlExpirationMs: Long)
+    stateName: String,
+    store: StateStore,
+    ttlExpirationMs: Long)
   extends TTLState {
 
   import org.apache.spark.sql.execution.streaming.StateTTLSchema._
