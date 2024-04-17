@@ -1437,6 +1437,12 @@ For more details see [INVALID_SCHEMA](sql-error-conditions-invalid-schema-error-
 
 Expected format is 'SET', 'SET key', or 'SET key=value'. If you want to include special characters in key, or include semicolon in value, please use backquotes, e.g., SET `key`=`value`.
 
+### INVALID_SINGLE_VARIANT_COLUMN
+
+[SQLSTATE: 42613](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The `singleVariantColumn` option cannot be used if there is also a user specified schema.
+
 ### INVALID_SQL_ARG
 
 [SQLSTATE: 42K08](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -2185,29 +2191,29 @@ The SQL config `<sqlConf>` cannot be found. Please verify that the config exists
 
 Star (*) is not allowed in a select list when GROUP BY an ordinal position is used.
 
-### STATEFUL_PROCESSOR_CANNOT_ASSIGN_TTL_IN_NO_TTL_MODE
-
-[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
-
-Cannot use TTL for state=`<stateName>` in NoTTL() mode.
-
 ### STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_HANDLE_STATE
 
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Failed to perform stateful processor operation=`<operationType>` with invalid handle state=`<handleState>`.
 
-### STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_TIMEOUT_MODE
+### STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_TIME_MODE
 
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Failed to perform stateful processor operation=`<operationType>` with invalid timeoutMode=`<timeoutMode>`
+Failed to perform stateful processor operation=`<operationType>` with invalid timeMode=`<timeMode>`
 
 ### STATEFUL_PROCESSOR_CANNOT_REINITIALIZE_STATE_ON_KEY
 
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Cannot re-initialize state on the same grouping key during initial state handling for stateful processor. Invalid grouping key=`<groupingKey>`.
+
+### STATEFUL_PROCESSOR_INCORRECT_TIME_MODE_TO_ASSIGN_TTL
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot use TTL for state=`<stateName>` in timeMode=`<timeMode>`, use TimeMode.ProcessingTime() instead.
 
 ### STATEFUL_PROCESSOR_TTL_DURATION_MUST_BE_POSITIVE
 
@@ -2822,6 +2828,12 @@ To tolerate the error on drop use DROP VARIABLE IF EXISTS.
 [SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
 Cannot construct a Variant larger than 16 MiB. The maximum allowed size of a Variant value is 16 MiB.
+
+### VARIANT_DUPLICATE_KEY
+
+[SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Failed to build variant because of a duplicate object key ``<key>``.
 
 ### VARIANT_SIZE_LIMIT
 

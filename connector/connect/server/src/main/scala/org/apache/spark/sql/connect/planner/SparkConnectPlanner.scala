@@ -38,7 +38,8 @@ import org.apache.spark.connect.proto.ExecutePlanResponse.SqlCommandResult
 import org.apache.spark.connect.proto.Parse.ParseFormat
 import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.StreamingQueryInstance
 import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.SESSION_ID
 import org.apache.spark.ml.{functions => MLFunctions}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
 import org.apache.spark.sql.{Column, Dataset, Encoders, ForeachWriter, Observation, RelationalGroupedDataset, SparkSession}
@@ -56,8 +57,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, CoGroup, Coll
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
-import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket}
-import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, InvalidPlanInput, LiteralValueProtoConverter, ProtoUtils, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket}
+import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_ARROW_MAX_BATCH_SIZE, CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT}
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.{ExecuteHolder, SessionHolder, SparkConnectService}
 import org.apache.spark.sql.connect.utils.MetricGenerator
@@ -115,100 +116,126 @@ class SparkConnectPlanner(
   private lazy val pythonExec =
     sys.env.getOrElse("PYSPARK_PYTHON", sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python3"))
 
-  // The root of the query plan is a relation and we apply the transformations to it.
-  def transformRelation(rel: proto.Relation): LogicalPlan = {
-    val plan = rel.getRelTypeCase match {
-      // DataFrame API
-      case proto.Relation.RelTypeCase.SHOW_STRING => transformShowString(rel.getShowString)
-      case proto.Relation.RelTypeCase.HTML_STRING => transformHtmlString(rel.getHtmlString)
-      case proto.Relation.RelTypeCase.READ => transformReadRel(rel.getRead)
-      case proto.Relation.RelTypeCase.PROJECT => transformProject(rel.getProject)
-      case proto.Relation.RelTypeCase.FILTER => transformFilter(rel.getFilter)
-      case proto.Relation.RelTypeCase.LIMIT => transformLimit(rel.getLimit)
-      case proto.Relation.RelTypeCase.OFFSET => transformOffset(rel.getOffset)
-      case proto.Relation.RelTypeCase.TAIL => transformTail(rel.getTail)
-      case proto.Relation.RelTypeCase.JOIN => transformJoinOrJoinWith(rel.getJoin)
-      case proto.Relation.RelTypeCase.AS_OF_JOIN => transformAsOfJoin(rel.getAsOfJoin)
-      case proto.Relation.RelTypeCase.DEDUPLICATE => transformDeduplicate(rel.getDeduplicate)
-      case proto.Relation.RelTypeCase.SET_OP => transformSetOperation(rel.getSetOp)
-      case proto.Relation.RelTypeCase.SORT => transformSort(rel.getSort)
-      case proto.Relation.RelTypeCase.DROP => transformDrop(rel.getDrop)
-      case proto.Relation.RelTypeCase.AGGREGATE => transformAggregate(rel.getAggregate)
-      case proto.Relation.RelTypeCase.SQL => transformSql(rel.getSql)
-      case proto.Relation.RelTypeCase.WITH_RELATIONS
-          if isValidSQLWithRefs(rel.getWithRelations) =>
-        transformSqlWithRefs(rel.getWithRelations)
-      case proto.Relation.RelTypeCase.LOCAL_RELATION =>
-        transformLocalRelation(rel.getLocalRelation)
-      case proto.Relation.RelTypeCase.SAMPLE => transformSample(rel.getSample)
-      case proto.Relation.RelTypeCase.RANGE => transformRange(rel.getRange)
-      case proto.Relation.RelTypeCase.SUBQUERY_ALIAS =>
-        transformSubqueryAlias(rel.getSubqueryAlias)
-      case proto.Relation.RelTypeCase.REPARTITION => transformRepartition(rel.getRepartition)
-      case proto.Relation.RelTypeCase.FILL_NA => transformNAFill(rel.getFillNa)
-      case proto.Relation.RelTypeCase.DROP_NA => transformNADrop(rel.getDropNa)
-      case proto.Relation.RelTypeCase.REPLACE => transformReplace(rel.getReplace)
-      case proto.Relation.RelTypeCase.SUMMARY => transformStatSummary(rel.getSummary)
-      case proto.Relation.RelTypeCase.DESCRIBE => transformStatDescribe(rel.getDescribe)
-      case proto.Relation.RelTypeCase.COV => transformStatCov(rel.getCov)
-      case proto.Relation.RelTypeCase.CORR => transformStatCorr(rel.getCorr)
-      case proto.Relation.RelTypeCase.APPROX_QUANTILE =>
-        transformStatApproxQuantile(rel.getApproxQuantile)
-      case proto.Relation.RelTypeCase.CROSSTAB =>
-        transformStatCrosstab(rel.getCrosstab)
-      case proto.Relation.RelTypeCase.FREQ_ITEMS => transformStatFreqItems(rel.getFreqItems)
-      case proto.Relation.RelTypeCase.SAMPLE_BY =>
-        transformStatSampleBy(rel.getSampleBy)
-      case proto.Relation.RelTypeCase.TO_SCHEMA => transformToSchema(rel.getToSchema)
-      case proto.Relation.RelTypeCase.TO_DF =>
-        transformToDF(rel.getToDf)
-      case proto.Relation.RelTypeCase.WITH_COLUMNS_RENAMED =>
-        transformWithColumnsRenamed(rel.getWithColumnsRenamed)
-      case proto.Relation.RelTypeCase.WITH_COLUMNS => transformWithColumns(rel.getWithColumns)
-      case proto.Relation.RelTypeCase.WITH_WATERMARK =>
-        transformWithWatermark(rel.getWithWatermark)
-      case proto.Relation.RelTypeCase.CACHED_LOCAL_RELATION =>
-        transformCachedLocalRelation(rel.getCachedLocalRelation)
-      case proto.Relation.RelTypeCase.HINT => transformHint(rel.getHint)
-      case proto.Relation.RelTypeCase.UNPIVOT => transformUnpivot(rel.getUnpivot)
-      case proto.Relation.RelTypeCase.REPARTITION_BY_EXPRESSION =>
-        transformRepartitionByExpression(rel.getRepartitionByExpression)
-      case proto.Relation.RelTypeCase.MAP_PARTITIONS =>
-        transformMapPartitions(rel.getMapPartitions)
-      case proto.Relation.RelTypeCase.GROUP_MAP =>
-        transformGroupMap(rel.getGroupMap)
-      case proto.Relation.RelTypeCase.CO_GROUP_MAP =>
-        transformCoGroupMap(rel.getCoGroupMap)
-      case proto.Relation.RelTypeCase.APPLY_IN_PANDAS_WITH_STATE =>
-        transformApplyInPandasWithState(rel.getApplyInPandasWithState)
-      case proto.Relation.RelTypeCase.COMMON_INLINE_USER_DEFINED_TABLE_FUNCTION =>
-        transformCommonInlineUserDefinedTableFunction(rel.getCommonInlineUserDefinedTableFunction)
-      case proto.Relation.RelTypeCase.CACHED_REMOTE_RELATION =>
-        transformCachedRemoteRelation(rel.getCachedRemoteRelation)
-      case proto.Relation.RelTypeCase.COLLECT_METRICS =>
-        transformCollectMetrics(rel.getCollectMetrics, rel.getCommon.getPlanId)
-      case proto.Relation.RelTypeCase.PARSE => transformParse(rel.getParse)
-      case proto.Relation.RelTypeCase.RELTYPE_NOT_SET =>
-        throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
+  /**
+   * The root of the query plan is a relation and we apply the transformations to it. The resolved
+   * logical plan will not get cached. If the result needs to be cached, use
+   * `transformRelation(rel, cachePlan = true)` instead.
+   * @param rel
+   *   The relation to transform.
+   * @return
+   *   The resolved logical plan.
+   */
+  def transformRelation(rel: proto.Relation): LogicalPlan =
+    transformRelation(rel, cachePlan = false)
 
-      // Catalog API (internal-only)
-      case proto.Relation.RelTypeCase.CATALOG => transformCatalog(rel.getCatalog)
+  /**
+   * The root of the query plan is a relation and we apply the transformations to it.
+   * @param rel
+   *   The relation to transform.
+   * @param cachePlan
+   *   Set to true for a performance optimization, if the plan is likely to be reused, e.g. built
+   *   upon by further dataset transformation. The default is false.
+   * @return
+   *   The resolved logical plan.
+   */
+  def transformRelation(rel: proto.Relation, cachePlan: Boolean): LogicalPlan = {
+    sessionHolder.usePlanCache(rel, cachePlan) { rel =>
+      val plan = rel.getRelTypeCase match {
+        // DataFrame API
+        case proto.Relation.RelTypeCase.SHOW_STRING => transformShowString(rel.getShowString)
+        case proto.Relation.RelTypeCase.HTML_STRING => transformHtmlString(rel.getHtmlString)
+        case proto.Relation.RelTypeCase.READ => transformReadRel(rel.getRead)
+        case proto.Relation.RelTypeCase.PROJECT => transformProject(rel.getProject)
+        case proto.Relation.RelTypeCase.FILTER => transformFilter(rel.getFilter)
+        case proto.Relation.RelTypeCase.LIMIT => transformLimit(rel.getLimit)
+        case proto.Relation.RelTypeCase.OFFSET => transformOffset(rel.getOffset)
+        case proto.Relation.RelTypeCase.TAIL => transformTail(rel.getTail)
+        case proto.Relation.RelTypeCase.JOIN => transformJoinOrJoinWith(rel.getJoin)
+        case proto.Relation.RelTypeCase.AS_OF_JOIN => transformAsOfJoin(rel.getAsOfJoin)
+        case proto.Relation.RelTypeCase.DEDUPLICATE => transformDeduplicate(rel.getDeduplicate)
+        case proto.Relation.RelTypeCase.SET_OP => transformSetOperation(rel.getSetOp)
+        case proto.Relation.RelTypeCase.SORT => transformSort(rel.getSort)
+        case proto.Relation.RelTypeCase.DROP => transformDrop(rel.getDrop)
+        case proto.Relation.RelTypeCase.AGGREGATE => transformAggregate(rel.getAggregate)
+        case proto.Relation.RelTypeCase.SQL => transformSql(rel.getSql)
+        case proto.Relation.RelTypeCase.WITH_RELATIONS
+            if isValidSQLWithRefs(rel.getWithRelations) =>
+          transformSqlWithRefs(rel.getWithRelations)
+        case proto.Relation.RelTypeCase.LOCAL_RELATION =>
+          transformLocalRelation(rel.getLocalRelation)
+        case proto.Relation.RelTypeCase.SAMPLE => transformSample(rel.getSample)
+        case proto.Relation.RelTypeCase.RANGE => transformRange(rel.getRange)
+        case proto.Relation.RelTypeCase.SUBQUERY_ALIAS =>
+          transformSubqueryAlias(rel.getSubqueryAlias)
+        case proto.Relation.RelTypeCase.REPARTITION => transformRepartition(rel.getRepartition)
+        case proto.Relation.RelTypeCase.FILL_NA => transformNAFill(rel.getFillNa)
+        case proto.Relation.RelTypeCase.DROP_NA => transformNADrop(rel.getDropNa)
+        case proto.Relation.RelTypeCase.REPLACE => transformReplace(rel.getReplace)
+        case proto.Relation.RelTypeCase.SUMMARY => transformStatSummary(rel.getSummary)
+        case proto.Relation.RelTypeCase.DESCRIBE => transformStatDescribe(rel.getDescribe)
+        case proto.Relation.RelTypeCase.COV => transformStatCov(rel.getCov)
+        case proto.Relation.RelTypeCase.CORR => transformStatCorr(rel.getCorr)
+        case proto.Relation.RelTypeCase.APPROX_QUANTILE =>
+          transformStatApproxQuantile(rel.getApproxQuantile)
+        case proto.Relation.RelTypeCase.CROSSTAB =>
+          transformStatCrosstab(rel.getCrosstab)
+        case proto.Relation.RelTypeCase.FREQ_ITEMS => transformStatFreqItems(rel.getFreqItems)
+        case proto.Relation.RelTypeCase.SAMPLE_BY =>
+          transformStatSampleBy(rel.getSampleBy)
+        case proto.Relation.RelTypeCase.TO_SCHEMA => transformToSchema(rel.getToSchema)
+        case proto.Relation.RelTypeCase.TO_DF =>
+          transformToDF(rel.getToDf)
+        case proto.Relation.RelTypeCase.WITH_COLUMNS_RENAMED =>
+          transformWithColumnsRenamed(rel.getWithColumnsRenamed)
+        case proto.Relation.RelTypeCase.WITH_COLUMNS => transformWithColumns(rel.getWithColumns)
+        case proto.Relation.RelTypeCase.WITH_WATERMARK =>
+          transformWithWatermark(rel.getWithWatermark)
+        case proto.Relation.RelTypeCase.CACHED_LOCAL_RELATION =>
+          transformCachedLocalRelation(rel.getCachedLocalRelation)
+        case proto.Relation.RelTypeCase.HINT => transformHint(rel.getHint)
+        case proto.Relation.RelTypeCase.UNPIVOT => transformUnpivot(rel.getUnpivot)
+        case proto.Relation.RelTypeCase.REPARTITION_BY_EXPRESSION =>
+          transformRepartitionByExpression(rel.getRepartitionByExpression)
+        case proto.Relation.RelTypeCase.MAP_PARTITIONS =>
+          transformMapPartitions(rel.getMapPartitions)
+        case proto.Relation.RelTypeCase.GROUP_MAP =>
+          transformGroupMap(rel.getGroupMap)
+        case proto.Relation.RelTypeCase.CO_GROUP_MAP =>
+          transformCoGroupMap(rel.getCoGroupMap)
+        case proto.Relation.RelTypeCase.APPLY_IN_PANDAS_WITH_STATE =>
+          transformApplyInPandasWithState(rel.getApplyInPandasWithState)
+        case proto.Relation.RelTypeCase.COMMON_INLINE_USER_DEFINED_TABLE_FUNCTION =>
+          transformCommonInlineUserDefinedTableFunction(
+            rel.getCommonInlineUserDefinedTableFunction)
+        case proto.Relation.RelTypeCase.CACHED_REMOTE_RELATION =>
+          transformCachedRemoteRelation(rel.getCachedRemoteRelation)
+        case proto.Relation.RelTypeCase.COLLECT_METRICS =>
+          transformCollectMetrics(rel.getCollectMetrics, rel.getCommon.getPlanId)
+        case proto.Relation.RelTypeCase.PARSE => transformParse(rel.getParse)
+        case proto.Relation.RelTypeCase.RELTYPE_NOT_SET =>
+          throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
 
-      // Handle plugins for Spark Connect Relation types.
-      case proto.Relation.RelTypeCase.EXTENSION =>
-        transformRelationPlugin(rel.getExtension)
-      case _ => throw InvalidPlanInput(s"${rel.getUnknown} not supported.")
+        // Catalog API (internal-only)
+        case proto.Relation.RelTypeCase.CATALOG => transformCatalog(rel.getCatalog)
+
+        // Handle plugins for Spark Connect Relation types.
+        case proto.Relation.RelTypeCase.EXTENSION =>
+          transformRelationPlugin(rel.getExtension)
+        case _ => throw InvalidPlanInput(s"${rel.getUnknown} not supported.")
+      }
+      if (rel.hasCommon && rel.getCommon.hasPlanId) {
+        plan.setTagValue(LogicalPlan.PLAN_ID_TAG, rel.getCommon.getPlanId)
+      }
+      plan
     }
-
-    if (rel.hasCommon && rel.getCommon.hasPlanId) {
-      plan.setTagValue(LogicalPlan.PLAN_ID_TAG, rel.getCommon.getPlanId)
-    }
-    plan
   }
 
   @DeveloperApi
   def transformRelation(bytes: Array[Byte]): LogicalPlan = {
-    transformRelation(proto.Relation.parseFrom(bytes))
+    val recursionLimit = session.conf.get(CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT)
+    val relation =
+      ProtoUtils.parseWithRecursionLimit(bytes, proto.Relation.parser(), recursionLimit)
+    transformRelation(relation)
   }
 
   private def transformRelationPlugin(extension: ProtoAny): LogicalPlan = {
@@ -1488,7 +1515,10 @@ class SparkConnectPlanner(
 
   @DeveloperApi
   def transformExpression(bytes: Array[Byte]): Expression = {
-    transformExpression(proto.Expression.parseFrom(bytes))
+    val recursionLimit = session.conf.get(CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT)
+    val expression =
+      ProtoUtils.parseWithRecursionLimit(bytes, proto.Expression.parser(), recursionLimit)
+    transformExpression(expression)
   }
 
   private def toNamedExpression(expr: Expression): NamedExpression = expr match {
@@ -2551,6 +2581,11 @@ class SparkConnectPlanner(
         handleStreamingQueryManagerCommand(
           command.getStreamingQueryManagerCommand,
           responseObserver)
+      case proto.Command.CommandTypeCase.STREAMING_QUERY_LISTENER_BUS_COMMAND =>
+        val handler = new SparkConnectStreamingQueryListenerHandler(executeHolder)
+        handler.handleListenerCommand(
+          command.getStreamingQueryListenerBusCommand,
+          responseObserver)
       case proto.Command.CommandTypeCase.GET_RESOURCES_COMMAND =>
         handleGetResourcesCommand(responseObserver)
       case proto.Command.CommandTypeCase.CREATE_RESOURCE_PROFILE_COMMAND =>
@@ -3103,7 +3138,9 @@ class SparkConnectPlanner(
         }
       } catch {
         case NonFatal(ex) => // Failed to start the query, clean up foreach runner if any.
-          logInfo(s"Removing foreachBatch worker, query failed to start for session $sessionId.")
+          logInfo(
+            log"Removing foreachBatch worker, query failed to start " +
+              log"for session ${MDC(SESSION_ID, sessionId)}.")
           foreachBatchRunnerCleaner.foreach(_.close())
           throw ex
       }
@@ -3118,7 +3155,7 @@ class SparkConnectPlanner(
     }
     executeHolder.eventsManager.postFinished()
 
-    val result = WriteStreamOperationStartResult
+    val resultBuilder = WriteStreamOperationStartResult
       .newBuilder()
       .setQueryId(
         StreamingQueryInstanceId
@@ -3127,14 +3164,37 @@ class SparkConnectPlanner(
           .setRunId(query.runId.toString)
           .build())
       .setName(Option(query.name).getOrElse(""))
-      .build()
+
+    // The query started event for this query is sent to the client, and is handled by
+    // the client side listeners before client's DataStreamWriter.start() returns.
+    // This is to ensure that the onQueryStarted call back is called before the start() call, which
+    // is defined in the onQueryStarted API.
+    // So the flow is:
+    // 1. On the server side, the query is started above.
+    // 2. Per the contract of the onQueryStarted API, the queryStartedEvent is added to the
+    //    streamingServersideListenerHolder.streamingQueryStartedEventCache, by the onQueryStarted
+    //    call back of streamingServersideListenerHolder.streamingQueryServerSideListener.
+    // 3. The queryStartedEvent is sent to the client.
+    // 4. The client side listener handles the queryStartedEvent and calls the onQueryStarted API,
+    //    before the client side DataStreamWriter.start().
+    // This way we ensure that the onQueryStarted API is called before the start() call in Connect.
+    val queryStartedEvent = Option(
+      sessionHolder.streamingServersideListenerHolder.streamingQueryStartedEventCache.remove(
+        query.runId.toString))
+    queryStartedEvent.foreach {
+      logDebug(
+        s"[SessionId: $sessionId][UserId: $userId][operationId: " +
+          s"${executeHolder.operationId}][query id: ${query.id}][query runId: ${query.runId}] " +
+          s"Adding QueryStartedEvent to response")
+      e => resultBuilder.setQueryStartedEventJson(e.json)
+    }
 
     responseObserver.onNext(
       ExecutePlanResponse
         .newBuilder()
         .setSessionId(sessionId)
         .setServerSideSessionId(sessionHolder.serverSessionId)
-        .setWriteStreamOperationStartResult(result)
+        .setWriteStreamOperationStartResult(resultBuilder.build())
         .build())
   }
 

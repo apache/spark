@@ -30,12 +30,12 @@ public class CollationSupportSuite {
    * Collation-aware string expressions.
    */
 
-  private void assertContains(String pattern, String target, String collationName, boolean value)
+  private void assertContains(String pattern, String target, String collationName, boolean expected)
           throws SparkException {
     UTF8String l = UTF8String.fromString(pattern);
     UTF8String r = UTF8String.fromString(target);
     int collationId = CollationFactory.collationNameToId(collationName);
-    assertEquals(CollationSupport.Contains.exec(l, r, collationId), value);
+    assertEquals(expected, CollationSupport.Contains.exec(l, r, collationId));
   }
 
   @Test
@@ -103,12 +103,13 @@ public class CollationSupportSuite {
     assertContains("äbćδe", "ÄBcΔÉ", "UNICODE_CI", false);
   }
 
-  private void assertStartsWith(String pattern, String prefix, String collationName, boolean value)
+  private void assertStartsWith(
+          String pattern, String prefix, String collationName, boolean expected)
           throws SparkException {
     UTF8String l = UTF8String.fromString(pattern);
     UTF8String r = UTF8String.fromString(prefix);
     int collationId = CollationFactory.collationNameToId(collationName);
-    assertEquals(CollationSupport.StartsWith.exec(l, r, collationId), value);
+    assertEquals(expected, CollationSupport.StartsWith.exec(l, r, collationId));
   }
 
   @Test
@@ -176,12 +177,12 @@ public class CollationSupportSuite {
     assertStartsWith("äbćδe", "ÄBcΔÉ", "UNICODE_CI", false);
   }
 
-  private void assertEndsWith(String pattern, String suffix, String collationName, boolean value)
+  private void assertEndsWith(String pattern, String suffix, String collationName, boolean expected)
           throws SparkException {
     UTF8String l = UTF8String.fromString(pattern);
     UTF8String r = UTF8String.fromString(suffix);
     int collationId = CollationFactory.collationNameToId(collationName);
-    assertEquals(CollationSupport.EndsWith.exec(l, r, collationId), value);
+    assertEquals(expected, CollationSupport.EndsWith.exec(l, r, collationId));
   }
 
   @Test
