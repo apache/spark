@@ -53,6 +53,9 @@ If you want to install extra dependencies for a specific component, you can inst
     # Spark Connect
     pip install pyspark[connect]
 
+
+See :ref:`optional-dependencies` for more detail about extra dependencies.
+
 For PySpark with/without a specific Hadoop version, you can install it by using ``PYSPARK_HADOOP_VERSION`` environment variables as below:
 
 .. code-block:: bash
@@ -165,16 +168,92 @@ To install PySpark from source, refer to |building_spark|_.
 
 Dependencies
 ------------
-========================== ========================= ======================================================================================
-Package                    Supported version Note
-========================== ========================= ======================================================================================
-`py4j`                     >=0.10.9.7                Required
-`pandas`                   >=1.4.4                   Required for pandas API on Spark and Spark Connect; Optional for Spark SQL
-`pyarrow`                  >=10.0.0                  Required for pandas API on Spark and Spark Connect; Optional for Spark SQL
-`numpy`                    >=1.21                    Required for pandas API on Spark and MLLib DataFrame-based API; Optional for Spark SQL
-`grpcio`                   >=1.62.0                  Required for Spark Connect
-`grpcio-status`            >=1.62.0                  Required for Spark Connect
-`googleapis-common-protos` >=1.56.4                  Required for Spark Connect
-========================== ========================= ======================================================================================
+
+Required dependencies
+~~~~~~~~~~~~~~~~~~~~~
+
+PySpark requires the following dependencies.
+
+========================== ========================= ============================================
+Package                    Supported version         Note
+========================== ========================= ============================================
+`py4j`                     >=0.10.9.7                Essential for Python to interface with the
+                                                     Java objects in Spark; ensures seamless
+                                                     interaction between Python and JVM.
+========================== ========================= ============================================
 
 Note that PySpark requires Java 17 or later with ``JAVA_HOME`` properly set and refer to |downloading|_.
+
+
+.. _optional-dependencies:
+
+Optional dependencies
+~~~~~~~~~~~~~~~~~~~~~
+
+PySpark has several optional dependencies that enhance its functionality for specific modules. These dependencies are only required for certain features and are not necessary for the basic functionality of PySpark. If these optional dependencies are not installed, PySpark will function correctly for basic operations but will raise an ``ImportError`` when you try to use features that require these dependencies.
+
+Spark SQL
+^^^^^^^^^
+
+Installable with ``pip install "pyspark[sql]"``.
+
+========================== ========================= ======================================================
+Package                    Supported version         Note
+========================== ========================= ======================================================
+`pandas`                   >=1.4.4                   Enables seamless DataFrame operations between Spark and Pandas.
+`pyarrow`                  >=10.0.0                  Optimizes data conversion and transfer between PySpark and Pandas.
+`numpy`                    >=1.21                    Essential for numerical data manipulation within PySpark.
+========================== ========================= ======================================================
+
+Pandas API on Spark
+^^^^^^^^^^^^^^^^^^^
+
+Installable with ``pip install "pyspark[pandas_on_spark]"``.
+
+========================== ========================= ======================================================
+Package                    Supported version         Note
+========================== ========================= ======================================================
+`pandas`                   >=1.4.4                   Required for utilizing the Pandas API features in Spark.
+`pyarrow`                  >=10.0.0                  Ensures efficient data handling and performance in Pandas operations.
+`numpy`                    >=1.21                    Facilitates complex numerical operations within Spark.
+========================== ========================= ======================================================
+
+Note: Run ``pip install "pyspark[pandas_on_spark] plotly"`` if you want to use visualization features.
+
+ML
+^^
+
+Installable with ``pip install "pyspark[ml]"``.
+
+========================== ========================= ======================================================================================
+Package                    Supported version         Note
+========================== ========================= ======================================================================================
+`numpy`                    >=1.21                    Supports advanced data manipulation and algorithm implementation in ML.
+========================== ========================= ======================================================================================
+
+MLlib
+^^^^^
+
+Installable with ``pip install "pyspark[mllib]"``.
+
+========================== ========================= ======================================================================================
+Package                    Supported version         Note
+========================== ========================= ======================================================================================
+`numpy`                    >=1.21                    Essential for mathematical operations within MLlib, improves performance and accuracy of algorithms.
+========================== ========================= ======================================================================================
+
+Spark Connect
+^^^^^^^^^^^^^
+
+Installable with ``pip install "pyspark[connect]"``.
+
+========================== ========================= ======================================================
+Package                    Supported version         Note
+========================== ========================= ======================================================
+`pandas`                   >=1.4.4                   Facilitates DataFrame handling and manipulation.
+`pyarrow`                  >=10.0.0                  Crucial for data serialization and network communication efficiency.
+`numpy`                    >=1.21                    Enhances data processing capabilities.
+`grpcio`                   >=1.62.0                  Necessary for implementing RPC functionalities in Spark Connect.
+`grpcio-status`            >=1.62.0                  Supports detailed status handling in network communications.
+`googleapis-common-protos` >=1.56.4                  Provides essential Google API protocols for network interactions.
+========================== ========================= ======================================================
