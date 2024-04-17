@@ -102,7 +102,7 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
     benchmark.run()
   }
 
-  def benchmarkUTFStringContains(
+  def benchmarkContains(
       collationTypes: Seq[String],
       utf8Strings: Seq[UTF8String]): Unit = {
     val sublistStrings = utf8Strings
@@ -130,7 +130,7 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
     benchmark.run()
   }
 
-  def benchmarkUTFStringStartsWith(
+  def benchmarkStartsWith(
       collationTypes: Seq[String],
       utf8Strings: Seq[UTF8String]): Unit = {
     val sublistStrings = utf8Strings
@@ -158,7 +158,7 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
     benchmark.run()
   }
 
-  def benchmarkUTFStringEndsWith(
+  def benchmarkEndsWith(
       collationTypes: Seq[String],
       utf8Strings: Seq[UTF8String]): Unit = {
     val sublistStrings = utf8Strings
@@ -215,9 +215,9 @@ object CollationBenchmark extends CollationBenchmarkBase {
     benchmarkUTFStringEquals(collationTypes, generateSeqInput(10000L))
     benchmarkUTFStringCompare(collationTypes, generateSeqInput(10000L))
     benchmarkUTFStringHashFunction(collationTypes, generateSeqInput(10000L))
-    benchmarkUTFStringContains(collationTypes, generateSeqInput(10000L))
-    benchmarkUTFStringStartsWith(collationTypes, generateSeqInput(10000L))
-    benchmarkUTFStringEndsWith(collationTypes, generateSeqInput(10000L))
+    benchmarkContains(collationTypes, generateSeqInput(10000L))
+    benchmarkStartsWith(collationTypes, generateSeqInput(10000L))
+    benchmarkEndsWith(collationTypes, generateSeqInput(10000L))
   }
 }
 
@@ -243,8 +243,8 @@ object CollationNonASCIIBenchmark extends CollationBenchmarkBase {
     benchmarkUTFStringEquals(collationTypes, generateSeqInput(4000L))
     benchmarkUTFStringCompare(collationTypes, generateSeqInput(4000L))
     benchmarkUTFStringHashFunction(collationTypes, generateSeqInput(4000L))
-    benchmarkUTFStringContains(collationTypes, generateSeqInput(4000L))
-    benchmarkUTFStringStartsWith(collationTypes, generateSeqInput(4000L))
-    benchmarkUTFStringEndsWith(collationTypes, generateSeqInput(4000L))
+    benchmarkContains(collationTypes, generateSeqInput(4000L))
+    benchmarkStartsWith(collationTypes, generateSeqInput(4000L))
+    benchmarkEndsWith(collationTypes, generateSeqInput(4000L))
   }
 }
