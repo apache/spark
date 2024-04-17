@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalAggregation
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, PlanHelper, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMON_EXPR_REF, WITH_EXPRESSION}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Rewrites the `With` expressions by adding a `Project` to pre-evaluate the common expressions, or
@@ -98,7 +99,7 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
         val refToExpr = mutable.HashMap.empty[CommonExpressionId, Expression]
         val childProjections = Array.fill(inputPlans.length)(mutable.ArrayBuffer.empty[Alias])
 
-        defs.foreach { case CommonExpressionDef(child, id) =>
+        defs.zipWithIndex.foreach { case (CommonExpressionDef(child, id), index) =>
           if (child.containsPattern(COMMON_EXPR_REF)) {
             throw SparkException.internalError(
               "Common expression definition cannot reference other Common expression definitions")
@@ -125,7 +126,12 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
               //       if it's ref count is 1.
               refToExpr(id) = child
             } else {
-              val alias = Alias(child, s"_common_expr_${id.id}")()
+              val aliasName = if (SQLConf.get.getConf(SQLConf.USE_COMMON_EXPR_ID_FOR_ALIAS)) {
+                s"_common_expr_${id.id}"
+              } else {
+                s"_common_expr_$index"
+              }
+              val alias = Alias(child, aliasName)()
               val fakeProj = Project(Seq(alias), inputPlans(childProjectionIndex))
               if (PlanHelper.specialExpressionsInUnsupportedOperator(fakeProj).nonEmpty) {
                 // We have to inline the common expression if it cannot be put in a Project.
