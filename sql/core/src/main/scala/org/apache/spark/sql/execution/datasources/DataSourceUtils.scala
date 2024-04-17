@@ -288,11 +288,13 @@ object DataSourceUtils extends PredicateHelper {
     )
     val optimizedPartitionFilters = partitionFilters.map {
       case op @ BinaryComparison(Cast(childExp, _, tz, evalMode),
-            literalValue @ Literal(_, dataType)) if Cast.canCast(dataType, childExp.dataType) =>
+            literalValue @ Literal(_, dataType))
+            if Cast.canCast(dataType, childExp.dataType) && canCast(dataType, literalValue) =>
         swap(op, childExp, Literal.create(
           Cast(literalValue, childExp.dataType, tz, evalMode).eval(), childExp.dataType))
       case op @ BinaryComparison(literalValue @ Literal(_, dataType),
-            Cast(childExp, _, tz, evalMode)) if Cast.canCast(dataType, childExp.dataType) =>
+            Cast(childExp, _, tz, evalMode))
+            if Cast.canCast(dataType, childExp.dataType) && canCast(dataType, literalValue) =>
         swap(op, Literal.create(
           Cast(literalValue, childExp.dataType, tz, evalMode).eval(), childExp.dataType), childExp)
       case e => e
@@ -300,5 +302,11 @@ object DataSourceUtils extends PredicateHelper {
     val extraPartitionFilter =
       dataFilters.flatMap(extractPredicatesWithinOutputSet(_, partitionSet))
     (ExpressionSet(optimizedPartitionFilters ++ extraPartitionFilter).toSeq, dataFilters)
+  }
+
+  private def canCast(dataType: DataType, literalValue: Literal): Boolean = {
+    literalValue.text != null && literalValue.text.equals(
+      Cast.apply(literalValue, dataType, ansiEnabled = true).eval().toString
+    )
   }
 }

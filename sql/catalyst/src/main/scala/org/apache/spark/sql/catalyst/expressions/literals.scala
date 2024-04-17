@@ -352,6 +352,13 @@ object LiteralTreeBits {
  */
 case class Literal (value: Any, dataType: DataType) extends LeafExpression {
 
+  var text: String = ""
+
+  def setText(text: String): Literal = {
+    this.text = text
+    this
+  }
+
   Literal.validateLiteralValue(value, dataType)
 
   override def foldable: Boolean = true

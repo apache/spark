@@ -2636,10 +2636,10 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   override def visitIntegerLiteral(ctx: IntegerLiteralContext): Literal = withOrigin(ctx) {
     BigDecimal(ctx.getText) match {
       case v if v.isValidInt =>
-        Literal(v.intValue)
+        Literal(v.intValue).setText(ctx.getText)
       case v if v.isValidLong =>
-        Literal(v.longValue)
-      case v => Literal(v.underlying())
+        Literal(v.longValue).setText(ctx.getText)
+      case v => Literal(v.underlying()).setText(ctx.getText)
     }
   }
 
