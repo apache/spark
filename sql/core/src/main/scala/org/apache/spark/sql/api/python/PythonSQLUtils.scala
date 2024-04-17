@@ -26,7 +26,8 @@ import net.razorvine.pickle.{Pickler, Unpickler}
 
 import org.apache.spark.SparkException
 import org.apache.spark.api.python.DechunkedInputStream
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.CLASS_LOADER
 import org.apache.spark.security.SocketAuthServer
 import org.apache.spark.sql.{Column, DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
@@ -136,8 +137,8 @@ private[sql] object PythonSQLUtils extends Logging {
   def addJarToCurrentClassLoader(path: String): Unit = {
     Utils.getContextOrSparkClassLoader match {
       case cl: MutableURLClassLoader => cl.addURL(Utils.resolveURI(path).toURL)
-      case cl => logWarning(
-        s"Unsupported class loader $cl will not update jars in the thread class loader.")
+      case cl => logWarning(log"Unsupported class loader ${MDC(CLASS_LOADER, cl)} will not " +
+        log"update jars in the thread class loader.")
     }
   }
 

@@ -26,7 +26,8 @@ import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.local.{LocalFs, RawLocalFs}
 import org.apache.hadoop.fs.permission.FsPermission
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{PATH, TEMP_PATH}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.RenameHelperMethods
 import org.apache.spark.sql.internal.SQLConf
@@ -154,8 +155,8 @@ object CheckpointFileManager extends Logging {
           fm.renameTempFile(tempPath, finalPath, overwriteIfPossible)
         } catch {
           case fe: FileAlreadyExistsException =>
-            logWarning(
-              s"Failed to rename temp file $tempPath to $finalPath because file exists", fe)
+            logWarning(log"Failed to rename temp file ${MDC(TEMP_PATH, tempPath)} to " +
+              log"${MDC(PATH, finalPath)} because file exists", fe)
             if (!overwriteIfPossible) throw fe
         }
 
@@ -178,13 +179,13 @@ object CheckpointFileManager extends Logging {
           underlyingStream.close()
         } catch {
           case NonFatal(e) =>
-            logWarning(s"Error cancelling write to $finalPath, " +
-              s"continuing to delete temp path $tempPath", e)
+            logWarning(log"Error cancelling write to ${MDC(PATH, finalPath)}, continuing to " +
+              log"delete temp path ${MDC(TEMP_PATH, tempPath)}", e)
         }
         fm.delete(tempPath)
       } catch {
         case NonFatal(e) =>
-          logWarning(s"Error deleting temp file $tempPath", e)
+          logWarning(log"Error deleting temp file ${MDC(TEMP_PATH, tempPath)}", e)
       } finally {
         terminated = true
       }
@@ -210,10 +211,10 @@ object CheckpointFileManager extends Logging {
     } catch {
       case e: UnsupportedFileSystemException =>
         logWarning(
-          "Could not use FileContext API for managing Structured Streaming checkpoint files at " +
-            s"$path. Using FileSystem API instead for managing log files. If the implementation " +
-            s"of FileSystem.rename() is not atomic, then the correctness and fault-tolerance of" +
-            s"your Structured Streaming is not guaranteed.")
+          log"Could not use FileContext API for managing Structured Streaming checkpoint files " +
+            log"at ${MDC(PATH, path)}. Using FileSystem API instead for managing log files. If " +
+            log"the implementation of FileSystem.rename() is not atomic, then the correctness " +
+            log"and fault-tolerance of your Structured Streaming is not guaranteed.")
         new FileSystemBasedCheckpointFileManager(path, hadoopConf)
     }
   }
@@ -274,7 +275,8 @@ class FileSystemBasedCheckpointFileManager(path: Path, hadoopConf: Configuration
         throw QueryExecutionErrors.renameSrcPathNotFoundError(srcPath)
       } else {
         val e = QueryExecutionErrors.failedRenameTempFileError(srcPath, dstPath)
-        logWarning(e.getMessage)
+        logWarning(log"Failed to rename temp file ${MDC(TEMP_PATH, srcPath)} to " +
+          log"${MDC(PATH, dstPath)} as FileSystem.rename returned false.")
         throw e
       }
     }

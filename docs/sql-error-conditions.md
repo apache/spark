@@ -1437,6 +1437,12 @@ For more details see [INVALID_SCHEMA](sql-error-conditions-invalid-schema-error-
 
 Expected format is 'SET', 'SET key', or 'SET key=value'. If you want to include special characters in key, or include semicolon in value, please use backquotes, e.g., SET `key`=`value`.
 
+### INVALID_SINGLE_VARIANT_COLUMN
+
+[SQLSTATE: 42613](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The `singleVariantColumn` option cannot be used if there is also a user specified schema.
+
 ### INVALID_SQL_ARG
 
 [SQLSTATE: 42K08](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
