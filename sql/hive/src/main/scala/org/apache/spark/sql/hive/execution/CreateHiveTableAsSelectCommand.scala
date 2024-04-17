@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, CTERelationDe
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.{DataWritingCommand, LeafRunnableCommand}
+import org.apache.spark.sql.hive.execution.InsertIntoHiveTable.BY_CTAS
 
 /**
  * Create table and insert the query result into it.
@@ -105,7 +106,7 @@ case class CreateHiveTableAsSelectCommand(
       overwrite = false,
       ifPartitionNotExists = false,
       outputColumnNames = outputColumnNames)
-    insertHive.setTagValue(insertHive.BY_CTAS, ())
+    insertHive.setTagValue(BY_CTAS, ())
     insertHive
   }
 

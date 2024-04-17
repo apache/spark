@@ -81,11 +81,6 @@ case class InsertIntoHiveTable(
     @transient hiveTmpPath: HiveTempPath
   ) extends SaveAsHiveFile with V1WriteCommand with V1WritesHiveUtils {
 
-  /**
-   * A tag to identify if this command is created by a CTAS.
-   */
-  val BY_CTAS = TreeNodeTag[Unit]("by_ctas")
-
   override def staticPartitions: TablePartitionSpec = {
     partition.filter(_._2.nonEmpty).map { case (k, v) => k -> v.get }
   }
@@ -241,6 +236,12 @@ case class InsertIntoHiveTable(
 }
 
 object InsertIntoHiveTable extends V1WritesHiveUtils {
+
+  /**
+   * A tag to identify if this command is created by a CTAS.
+   */
+  val BY_CTAS = TreeNodeTag[Unit]("by_ctas")
+
   def apply(
       table: CatalogTable,
       partition: Map[String, Option[String]],
