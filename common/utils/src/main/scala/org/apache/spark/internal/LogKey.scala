@@ -95,10 +95,13 @@ object LogKey extends Enumeration {
   val GROUP_ID = Value
   val HADOOP_VERSION = Value
   val HISTORY_DIR = Value
+  val HIVE_CLIENT_VERSION = Value
+  val HIVE_METASTORE_VERSION = Value
   val HIVE_OPERATION_STATE = Value
   val HIVE_OPERATION_TYPE = Value
   val HOST = Value
   val HOST_PORT = Value
+  val INCOMPATIBLE_TYPES = Value
   val INDEX = Value
   val INFERENCE_MODE = Value
   val INITIAL_CAPACITY = Value
@@ -152,6 +155,7 @@ object LogKey extends Enumeration {
   val POLICY = Value
   val PORT = Value
   val PRODUCER_ID = Value
+  val PROVIDER = Value
   val QUERY_CACHE_VALUE = Value
   val QUERY_HINT = Value
   val QUERY_ID = Value
