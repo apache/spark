@@ -21,7 +21,8 @@ import java.io.EOFException
 
 import org.apache.spark.SparkException
 import org.apache.spark.api.python.{PythonException, PythonWorkerUtils, SimplePythonFunction, SpecialLengths, StreamingPythonRunner}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.FUNCTION_NAME
 import org.apache.spark.sql.connect.service.{SessionHolder, SparkConnectService}
 import org.apache.spark.sql.streaming.StreamingQueryListener
 
@@ -82,7 +83,9 @@ class PythonStreamingQueryListener(listener: SimplePythonFunction, sessionHolder
     try {
       dataIn.readInt() match {
         case 0 =>
-          logInfo(s"Streaming query listener function $functionName completed (ret: 0)")
+          logInfo(
+            log"Streaming query listener function ${MDC(FUNCTION_NAME, functionName)} " +
+              log"completed (ret: 0)")
         case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
           val msg = PythonWorkerUtils.readUTF(dataIn)
           throw new PythonException(
