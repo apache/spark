@@ -207,8 +207,8 @@ class CompositeKeyStateEncoder[GK, K, V](
    * Grouping key will be encoded in `RocksDBStateEncoder` as the prefix column.
    */
   def encodeCompositeKey(
-    groupingKeyByteArr: Array[Byte],
-    userKeyByteArr: Array[Byte]): UnsafeRow = {
+      groupingKeyByteArr: Array[Byte],
+      userKeyByteArr: Array[Byte]): UnsafeRow = {
     val compositeKeyRow = compositeKeyProjection(InternalRow(groupingKeyByteArr, userKeyByteArr))
     compositeKeyRow
   }

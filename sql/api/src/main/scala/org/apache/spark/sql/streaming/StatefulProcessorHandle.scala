@@ -118,6 +118,7 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
    * StatefulProcessor.
    *
    * @param stateName  - name of the state variable
+   * @param userKeyEnc  - spark sql encoder for the map key
    * @param valEncoder - SQL encoder for state variable
    * @param ttlConfig  - the ttl configuration (time to live duration etc.)
    * @tparam K - type of key for map state variable

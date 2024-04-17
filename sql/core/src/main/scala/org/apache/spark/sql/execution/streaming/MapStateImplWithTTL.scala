@@ -24,15 +24,27 @@ import org.apache.spark.sql.execution.streaming.state.{PrefixKeyScanStateEncoder
 import org.apache.spark.sql.streaming.{MapState, TTLConfig}
 import org.apache.spark.util.NextIterator
 
-
+/**
+ * Class that provides a concrete implementation for map state associated with state
+ * variables (with ttl expiration support) used in the streaming transformWithState operator.
+ * @param store - reference to the StateStore instance to be used for storing state
+ * @param stateName  - name of the state variable
+ * @param keyExprEnc - Spark SQL encoder for key
+ * @param userKeyEnc  - Spark SQL encoder for the map key
+ * @param valEncoder - SQL encoder for state variable
+ * @param ttlConfig  - the ttl configuration (time to live duration etc.)
+ * @tparam K - type of key for map state variable
+ * @tparam V - type of value for map state variable
+ * @return - instance of MapState of type [K,V] that can be used to store state persistently
+ */
 class MapStateImplWithTTL[K, V](
-  store: StateStore,
-  stateName: String,
-  keyExprEnc: ExpressionEncoder[Any],
-  userKeyEnc: Encoder[K],
-  valEncoder: Encoder[V],
-  ttlConfig: TTLConfig,
-  batchTimestampMs: Long) extends CompositeKeyTTLStateImpl(stateName, store, batchTimestampMs)
+    store: StateStore,
+    stateName: String,
+    keyExprEnc: ExpressionEncoder[Any],
+    userKeyEnc: Encoder[K],
+    valEncoder: Encoder[V],
+    ttlConfig: TTLConfig,
+    batchTimestampMs: Long) extends CompositeKeyTTLStateImpl(stateName, store, batchTimestampMs)
   with MapState[K, V] with Logging {
 
   private val keySerializer = keyExprEnc.createSerializer()

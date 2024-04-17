@@ -91,7 +91,6 @@ class MapStateSingleKeyTTLProcessor(ttlConfig: TTLConfig)
   }
 }
 
-
 case class MapInputEvent(
     key: String,
     userKey: String,
@@ -104,7 +103,6 @@ case class MapOutputEvent(
     value: Int,
     isTTLValue: Boolean,
     ttlValue: Long)
-
 
 class MapStateTTLProcessor(ttlConfig: TTLConfig)
   extends StatefulProcessor[String, MapInputEvent, MapOutputEvent]
