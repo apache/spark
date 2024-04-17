@@ -39,23 +39,21 @@ You need to have [Ruby 3][ruby] and [Python 3][python] installed. Make sure the 
 $ gem install bundler
 ```
 
-After this all the required ruby dependencies can be installed from the `docs/` directory via the Bundler:
+After this all the required Ruby dependencies can be installed from the `docs/` directory via Bundler:
 
 ```sh
-$ cd docs
+$ cd "$SPARK_HOME"/docs
 $ bundle install
 ```
 
-To generate the Python or R docs, you'll need to [install Pandoc](https://pandoc.org/installing.html).
+And the required Python dependencies can be installed using pip:
 
-### SQL and Python API Documentation (Optional)
-
-To generate SQL and Python API docs, you'll need to install these libraries:
-
-Run the following command from $SPARK_HOME:
 ```sh
+$ cd "$SPARK_HOME"
 $ pip install --upgrade -r dev/requirements.txt
 ```
+
+To generate the Python or R API docs, you'll also need to [install Pandoc](https://pandoc.org/installing.html).
 
 ### R API Documentation (Optional)
 
