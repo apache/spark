@@ -811,12 +811,8 @@ case class Overlay(input: Expression, replace: Expression, pos: Expression, len:
   override def checkInputDataTypes(): TypeCheckResult = {
     val inputTypeCheck = super.checkInputDataTypes()
     if (inputTypeCheck.isSuccess) {
-      if ((input.dataType.isInstanceOf[StringType] && replace.dataType.isInstanceOf[StringType]) ||
-        (input.dataType.isInstanceOf[BinaryType] && replace.dataType.isInstanceOf[BinaryType])) {
-        inputTypeCheck
-      } else {
-        TypeUtils.checkForSameTypeInputExpr(input.dataType :: replace.dataType :: Nil, prettyName)
-      }
+      TypeUtils.checkForSameTypeInputExpr(
+        input.dataType :: replace.dataType :: Nil, prettyName)
     } else {
       inputTypeCheck
     }
