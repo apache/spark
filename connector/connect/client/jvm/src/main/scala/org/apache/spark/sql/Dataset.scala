@@ -3339,14 +3339,11 @@ class Dataset[T] private[sql] (
 
   /**
    * Define (named) metrics to observe on the Dataset. This method returns an 'observed' Dataset
-   * that returns the same result as the input, with the following guarantees:
-   * <ul>
-   *   <li>It will compute the defined aggregates (metrics) on all the data that is flowing through
-   *   the Dataset at that point.</li>
-   *   <li>It will report the value of the defined aggregate columns as soon as we reach a
-   *   completion point. A completion point is currently defined as the end of a query.</li>
-   * </ul>
-   * Please note that continuous execution is currently not supported.
+   * that returns the same result as the input, with the following guarantees: <ul> <li>It will
+   * compute the defined aggregates (metrics) on all the data that is flowing through the Dataset
+   * at that point.</li> <li>It will report the value of the defined aggregate columns as soon as
+   * we reach a completion point. A completion point is currently defined as the end of a
+   * query.</li> </ul> Please note that continuous execution is currently not supported.
    *
    * The metrics columns must either contain a literal (e.g. lit(42)), or should contain one or
    * more aggregate functions (e.g. sum(a) or sum(a + b) + avg(c) - lit(1)). Expressions that
@@ -3377,11 +3374,10 @@ class Dataset[T] private[sql] (
   }
 
   /**
-   * Observe (named) metrics through an `org.apache.spark.sql.Observation` instance.
-   * This is equivalent to calling `observe(String, Column, Column*)` but does not require to
-   * collect all results before returning the metrics - the metrics are filled during iterating
-   * the results, as soon as they are available.
-   * This method does not support streaming datasets.
+   * Observe (named) metrics through an `org.apache.spark.sql.Observation` instance. This is
+   * equivalent to calling `observe(String, Column, Column*)` but does not require to collect all
+   * results before returning the metrics - the metrics are filled during iterating the results,
+   * as soon as they are available. This method does not support streaming datasets.
    *
    * A user can retrieve the metrics by accessing `org.apache.spark.sql.Observation.get`.
    *
@@ -3393,7 +3389,8 @@ class Dataset[T] private[sql] (
    *   val metrics = observation.get
    * }}}
    *
-   * @throws IllegalArgumentException If this is a streaming Dataset (this.isStreaming == true)
+   * @throws IllegalArgumentException
+   *   If this is a streaming Dataset (this.isStreaming == true)
    *
    * @group typedrel
    * @since 4.0.0
