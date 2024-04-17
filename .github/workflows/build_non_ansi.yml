@@ -17,7 +17,7 @@
 # under the License.
 #
 
-name: "Build / ANSI (master, Hadoop 3, JDK 17, Scala 2.13)"
+name: "Build / NON-ANSI (master, Hadoop 3, JDK 17, Scala 2.13)"
 
 on:
   schedule:
@@ -36,7 +36,7 @@ jobs:
       hadoop: hadoop3
       envs: >-
         {
-          "SPARK_ANSI_SQL_MODE": "true",
+          "SPARK_ANSI_SQL_MODE": "false",
         }
       jobs: >-
         {
