@@ -43,7 +43,7 @@ class PandasMapOpsMixin:
     ) -> "DataFrame":
         """
         Maps an iterator of batches in the current :class:`DataFrame` using a Python native
-        function that is performed on pandas DataFrames both as input and output, 
+        function that is performed on pandas DataFrames both as input and output,
         and returns the result as a :class:`DataFrame`.
 
         This method applies the specified Python function to an iterator of
