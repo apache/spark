@@ -100,6 +100,10 @@ Filter expression `<filter>` of type `<type>` is not a boolean.
 
 Input to the function `<functionName>` cannot contain elements of the "MAP" type. In Spark, same maps may have different hashcode, thus hash expressions are prohibited on "MAP" elements. To restore previous behavior set "spark.sql.legacy.allowHashOnMapType" to "true".
 
+## HASH_VARIANT_TYPE
+
+Input to the function `<functionName>` cannot contain elements of the "VARIANT" type yet.
+
 ## INPUT_SIZE_NOT_ONE
 
 Length of `<exprName>` should be 1.
