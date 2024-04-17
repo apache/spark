@@ -119,6 +119,10 @@ The jekyll plugin also generates the PySpark docs using [Sphinx](http://sphinx-d
 using [roxygen2](https://cran.r-project.org/web/packages/roxygen2/index.html) and SQL docs
 using [MkDocs](https://www.mkdocs.org/).
 
-NOTE: To skip the step of building and copying over the Scala, Java, Python, R and SQL API docs, run `SKIP_API=1
-bundle exec jekyll build`. In addition, `SKIP_SCALADOC=1`, `SKIP_PYTHONDOC=1`, `SKIP_RDOC=1` and `SKIP_SQLDOC=1` can be used
-to skip a single step of the corresponding language. `SKIP_SCALADOC` indicates skipping both the Scala and Java docs.
+To control what API docs get built, you can set any combination of the following shell variables before you run `bundle exec jekyll build`:
+* `SKIP_API=1`: Skip building all the API docs.
+* `SKIP_SCALADOC=1`: Skip the Scala and Java API docs.
+* `SKIP_PYTHONDOC=1`: Skip the Python API docs.
+* `SKIP_RDOC=1`: Skip the R API docs.
+* `SKIP_SQLDOC=1`: Skip the SQL API docs.
+
