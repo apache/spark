@@ -197,26 +197,26 @@ Spark SQL
 
 Installable with ``pip install "pyspark[sql]"``.
 
-========================== ========================= ======================================================================================
+========================== ========================= ======================================================
 Package                    Supported version         Note
-========================== ========================= ======================================================================================
-`pandas`                   >=1.4.4                   Provides integration with the Pandas library, enabling conversion between DataFrame formats and leveraging Pandas instances.
-`pyarrow`                  >=10.0.0                  Facilitates high-performance data transfers and conversion between PySpark and Pandas data structures.
-`numpy`                    >=1.21                    Enhances numerical operations in Spark, necessary for statistical functions and data manipulation within PySpark.
-========================== ========================= ======================================================================================
+========================== ========================= ======================================================
+`pandas`                   >=1.4.4                   Enables seamless DataFrame operations between Spark and Pandas.
+`pyarrow`                  >=10.0.0                  Optimizes data conversion and transfer between PySpark and Pandas.
+`numpy`                    >=1.21                    Essential for numerical data manipulation within PySpark.
+========================== ========================= ======================================================
 
 Pandas API on Spark
 ^^^^^^^^^^^^^^^^^^^
 
 Installable with ``pip install "pyspark[pandas_on_spark]"``.
 
-========================== ========================= ======================================================================================
+========================== ========================= ======================================================
 Package                    Supported version         Note
-========================== ========================= ======================================================================================
-`pandas`                   >=1.4.4                   Enables direct operations on Pandas DataFrames, essential for PySpark’s Pandas API.
-`pyarrow`                  >=10.0.0                  Required to ensure compatibility and performance improvements in DataFrame conversions.
-`numpy`                    >=1.21                    Supports numerical data operations, crucial for handling Pandas objects and MLlib functionalities.
-========================== ========================= ======================================================================================
+========================== ========================= ======================================================
+`pandas`                   >=1.4.4                   Required for utilizing the Pandas API features in Spark.
+`pyarrow`                  >=10.0.0                  Ensures efficient data handling and performance in Pandas operations.
+`numpy`                    >=1.21                    Facilitates complex numerical operations within Spark.
+========================== ========================= ======================================================
 
 Note: Run ``pip install "pyspark[pandas_on_spark] plotly"`` if you want to use visualization features.
 
@@ -228,7 +228,7 @@ Installable with ``pip install "pyspark[ml]"``.
 ========================== ========================= ======================================================================================
 Package                    Supported version         Note
 ========================== ========================= ======================================================================================
-`numpy`                    >=1.21                    Necessary for MLlib's advanced linear algebra operations, enhances machine learning algorithms.
+`numpy`                    >=1.21                    Supports advanced data manipulation and algorithm implementation in ML.
 ========================== ========================= ======================================================================================
 
 MLlib
@@ -247,14 +247,13 @@ Spark Connect
 
 Installable with ``pip install "pyspark[connect]"``.
 
-========================== ========================= ======================================================================================
+========================== ========================= ======================================================
 Package                    Supported version         Note
-========================== ========================= ======================================================================================
-`pandas`                   >=1.4.4                   Necessary for utilizing the Pandas API within Spark Connect, facilitates smooth data handling.
-`pyarrow`                  >=10.0.0                  Enhances serialization and conversion processes, important for efficient network communication.
-`numpy`                    >=1.21                    Integral for data manipulation in Spark Connect, improves computation capabilities.
-`grpcio`                   >=1.62.0                  Provides the RPC framework necessary for Spark Connect's distributed computing functionalities.
-`grpcio-status`            >=1.62.0                  Adds support for handling RPC statuses and messages within Spark Connect.
-`googleapis-common-protos` >=1.56.4                  Includes essential protocol buffers from Google APIs, crucial for communication protocols in Spark Connect.
-========================== ========================= ======================================================================================
-
+========================== ========================= ======================================================
+`pandas`                   >=1.4.4                   Facilitates DataFrame handling and manipulation.
+`pyarrow`                  >=10.0.0                  Crucial for data serialization and network communication efficiency.
+`numpy`                    >=1.21                    Enhances data processing capabilities.
+`grpcio`                   >=1.62.0                  Necessary for implementing RPC functionalities in Spark Connect.
+`grpcio-status`            >=1.62.0                  Supports detailed status handling in network communications.
+`googleapis-common-protos` >=1.56.4                  Provides essential Google API protocols for network interactions.
+========================== ========================= ======================================================
