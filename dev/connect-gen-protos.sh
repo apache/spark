@@ -72,6 +72,9 @@ for f in `find gen/proto/python -name "*.py*"`; do
   if [[ $f == *_pb2.py || $f == *_pb2_grpc.py ]]; then
     sed -e 's/from spark.connect import/from pyspark.sql.connect.proto import/g' $f > $f.tmp
     mv $f.tmp $f
+    # Now fix the module name in the serialized descriptor.
+    sed -e "s/DESCRIPTOR, 'spark.connect/DESCRIPTOR, 'pyspark.sql.connect.proto/g" $f > $f.tmp
+    mv $f.tmp $f
   elif [[ $f == *.pyi ]]; then
     sed -e 's/import spark.connect./import pyspark.sql.connect.proto./g' -e 's/spark.connect./pyspark.sql.connect.proto./g' $f > $f.tmp
     mv $f.tmp $f

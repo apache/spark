@@ -25,7 +25,7 @@ import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{ERROR, TIP}
+import org.apache.spark.internal.LogKey.{ERROR, OFFSETS, TIP}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.connector.read.InputPartition
@@ -76,7 +76,7 @@ class KafkaContinuousStream(
       case GlobalTimestampRangeLimit(ts, strategy) =>
         offsetReader.fetchGlobalTimestampBasedOffsets(ts, isStartingOffsets = true, strategy)
     }
-    logInfo(s"Initial offsets: $offsets")
+    logInfo(log"Initial offsets: ${MDC(OFFSETS, offsets)}")
     offsets
   }
 

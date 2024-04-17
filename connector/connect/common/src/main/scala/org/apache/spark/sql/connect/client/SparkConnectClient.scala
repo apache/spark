@@ -566,6 +566,13 @@ object SparkConnectClient {
 
     def grpcMaxMessageSize: Int = _configuration.grpcMaxMessageSize
 
+    def grpcMaxRecursionLimit(recursionLimit: Int): Builder = {
+      _configuration = _configuration.copy(grpcMaxRecursionLimit = recursionLimit)
+      this
+    }
+
+    def grpcMaxRecursionLimit: Int = _configuration.grpcMaxRecursionLimit
+
     def option(key: String, value: String): Builder = {
       _configuration = _configuration.copy(metadata = _configuration.metadata + ((key, value)))
       this
@@ -703,7 +710,8 @@ object SparkConnectClient {
       useReattachableExecute: Boolean = true,
       interceptors: List[ClientInterceptor] = List.empty,
       sessionId: Option[String] = None,
-      grpcMaxMessageSize: Int = ConnectCommon.CONNECT_GRPC_MAX_MESSAGE_SIZE) {
+      grpcMaxMessageSize: Int = ConnectCommon.CONNECT_GRPC_MAX_MESSAGE_SIZE,
+      grpcMaxRecursionLimit: Int = ConnectCommon.CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT) {
 
     def userContext: proto.UserContext = {
       val builder = proto.UserContext.newBuilder()
