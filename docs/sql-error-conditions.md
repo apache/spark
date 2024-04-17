@@ -21,8 +21,9 @@ license: |
 
 {% comment %}
 Don't discuss error classes (e.g. `42`) or sub-classes (e.g. `K01`) with users. It's not helpful.
-Keep this documentation focused on error states and conditions, which is what users see and what
-they will typically be searching for when they encounter an error.
+Keep this documentation focused on error states (e.g. `58002`) and conditions (e.g.
+`AMBIGUOUS_COLUMN_REFERENCE`), which is what users see and what they will typically be searching
+for when they encounter an error.
 
 To update this information, edit `error-conditions.json`. The table below will be automatically
 derived from that file via `docs/util/build-error-docs.py`.
@@ -30,5 +31,7 @@ derived from that file via `docs/util/build-error-docs.py`.
 Also note that this is a Jekyll comment and not an HTML comment so that this comment does not show
 up in the generated HTML to end users. :-)
 {% endcomment %}
+
+This is a list of error states and conditions that may be returned by Spark SQL.
 
 {% include_api_gen _generated/error-conditions.html %}
