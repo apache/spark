@@ -85,3 +85,20 @@ object CurrentOrigin {
     ret
   }
 }
+
+/**
+ * Provides detailed error context information on PySpark.
+ */
+object PySparkCurrentOrigin {
+  private val pysparkErrorContext = new ThreadLocal[Option[(String, String)]]() {
+    override def initialValue(): Option[(String, String)] = None
+  }
+
+  def set(fragment: String, callSite: String): Unit = {
+    pysparkErrorContext.set(Some((fragment, callSite)))
+  }
+
+  def get(): Option[(String, String)] = pysparkErrorContext.get()
+
+  def clear(): Unit = pysparkErrorContext.remove()
+}

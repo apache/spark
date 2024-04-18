@@ -30,7 +30,8 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkContext, SparkEnv, SparkUnsupportedOperationException}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{LOAD_TIME, QUERY_RUN_ID, STATE_STORE_PROVIDER, STORE_ID}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -702,9 +703,9 @@ object StateStore extends Logging {
       }
 
       if (loadTimeMs > 2000L) {
-        logWarning(s"Loaded state store provider in loadTimeMs=$loadTimeMs " +
-          s"for storeId=${storeProviderId.storeId.toString} and " +
-          s"queryRunId=${storeProviderId.queryRunId}")
+        logWarning(log"Loaded state store provider in loadTimeMs=${MDC(LOAD_TIME, loadTimeMs)} " +
+          log"for storeId=${MDC(STORE_ID, storeProviderId.storeId.toString)} and " +
+          log"queryRunId=${MDC(QUERY_RUN_ID, storeProviderId.queryRunId)}")
       }
 
       val otherProviderIds = loadedProviders.keys.filter(_ != storeProviderId).toSeq
@@ -824,7 +825,8 @@ object StateStore extends Logging {
             }
           } catch {
             case NonFatal(e) =>
-              logWarning(s"Error managing $provider, stopping management thread", e)
+              logWarning(log"Error managing ${MDC(STATE_STORE_PROVIDER, provider)}, " +
+                log"stopping management thread", e)
               threadPoolException.set(e)
           } finally {
             val duration = System.currentTimeMillis() - startTime
