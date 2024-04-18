@@ -766,6 +766,8 @@ jobs:
       run: ./dev/lint-r
     - name: Run documentation build
       run: |
+        # This alias is required because parts of the doc build call `python`.
+        alias python=python3.9
         # Build docs first with SKIP_API to ensure they are buildable without requiring any
         # language docs to be built beforehand.
         cd docs; SKIP_API=1 bundle exec jekyll build; cd ..
