@@ -295,6 +295,8 @@ public class CollationSupportSuite {
     assertReplace("replace", "", "123", "UNICODE_CI", "replace");
     assertReplace("aBc世abc", "b", "12", "UNICODE_CI", "a12c世a12c");
     assertReplace("a世Bcdabcd", "bC", "", "UNICODE_CI", "a世dad");
+    assertReplace("abİo12", "i̇o", "xx", "UNICODE_CI", "abxx12"); // FAILING
+    assertReplace("abi̇o12", "İo", "yy", "UNICODE_CI", "abyy12"); // FAILING
   }
 
   // TODO: Test more collation-aware string expressions.
