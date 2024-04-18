@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{ELAPSED_TIME, TRIGGER_INTERVAL}
 import org.apache.spark.util.{Clock, SystemClock}
 
 trait TriggerExecutor {
@@ -98,8 +99,9 @@ case class ProcessingTimeExecutor(
 
   /** Called when a batch falls behind */
   def notifyBatchFallingBehind(realElapsedTimeMs: Long): Unit = {
-    logWarning("Current batch is falling behind. The trigger interval is " +
-      s"${intervalMs} milliseconds, but spent ${realElapsedTimeMs} milliseconds")
+    logWarning(log"Current batch is falling behind. The trigger interval is " +
+      log"${MDC(TRIGGER_INTERVAL, intervalMs)}} milliseconds, but spent " +
+      log"${MDC(ELAPSED_TIME, realElapsedTimeMs)} milliseconds")
   }
 
   /**

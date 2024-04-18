@@ -24,6 +24,8 @@ import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import org.apache.spark.{broadcast, SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.internal.LogKey.{CODEGEN_STAGE_ID, ERROR, TREE_NODE}
+import org.apache.spark.internal.MDC
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -406,7 +408,7 @@ trait CodegenSupport extends SparkPlan {
       if (Utils.isTesting) {
         throw SparkException.internalError(errMsg)
       } else {
-        logWarning(s"[BUG] $errMsg Please open a JIRA ticket to report it.")
+        logWarning(log"[BUG] ${MDC(ERROR, errMsg)} Please open a JIRA ticket to report it.")
       }
     }
     if (parent.limitNotReachedChecks.isEmpty) {
@@ -729,7 +731,9 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
     } catch {
       case NonFatal(_) if !Utils.isTesting && conf.codegenFallback =>
         // We should already saw the error message
-        logWarning(s"Whole-stage codegen disabled for plan (id=$codegenStageId):\n $treeString")
+        logWarning(log"Whole-stage codegen disabled for plan " +
+          log"(id=${MDC(CODEGEN_STAGE_ID, codegenStageId)}):\n " +
+          log"${MDC(TREE_NODE, treeString)}")
         return child.execute()
     }
 

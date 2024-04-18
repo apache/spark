@@ -70,6 +70,7 @@ if "SPARK_TESTING" in os.environ:
     test_packages = [
         "pyspark.tests",  # for Memory profiler parity tests
         "pyspark.testing",
+        "pyspark.resource.tests",
         "pyspark.sql.tests",
         "pyspark.sql.tests.connect",
         "pyspark.sql.tests.connect.streaming",
@@ -145,6 +146,7 @@ try:
         "pyspark.sql.connect.functions",
         "pyspark.sql.connect.proto",
         "pyspark.sql.connect.protobuf",
+        "pyspark.sql.connect.resource",
         "pyspark.sql.connect.shell",
         "pyspark.sql.connect.streaming",
         "pyspark.sql.connect.streaming.worker",

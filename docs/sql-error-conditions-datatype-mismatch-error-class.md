@@ -100,6 +100,10 @@ Filter expression `<filter>` of type `<type>` is not a boolean.
 
 Input to the function `<functionName>` cannot contain elements of the "MAP" type. In Spark, same maps may have different hashcode, thus hash expressions are prohibited on "MAP" elements. To restore previous behavior set "spark.sql.legacy.allowHashOnMapType" to "true".
 
+## HASH_VARIANT_TYPE
+
+Input to the function `<functionName>` cannot contain elements of the "VARIANT" type yet.
+
 ## INPUT_SIZE_NOT_ONE
 
 Length of `<exprName>` should be 1.
@@ -114,7 +118,7 @@ Input schema `<schema>` can only contain STRING as a key type for a MAP.
 
 ## INVALID_JSON_SCHEMA
 
-Input schema `<schema>` must be a struct, an array or a map.
+Input schema `<schema>` must be a struct, an array, a map or a variant.
 
 ## INVALID_MAP_KEY_TYPE
 

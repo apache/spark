@@ -360,6 +360,7 @@ object ViewHelper extends SQLConfHelper with Logging {
     "spark.sql.hive.convertMetastoreParquet",
     "spark.sql.hive.convertMetastoreOrc",
     "spark.sql.hive.convertInsertingPartitionedTable",
+    "spark.sql.hive.convertInsertingUnpartitionedTable",
     "spark.sql.hive.convertMetastoreCtas",
     SQLConf.ADDITIONAL_REMOTE_REPOSITORIES.key)
 

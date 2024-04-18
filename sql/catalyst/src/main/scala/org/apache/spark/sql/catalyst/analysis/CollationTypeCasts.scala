@@ -22,7 +22,7 @@ import javax.annotation.Nullable
 import scala.annotation.tailrec
 
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.{hasStringType, haveSameType}
-import org.apache.spark.sql.catalyst.expressions.{ArrayJoin, BinaryExpression, CaseWhen, Cast, Coalesce, Collate, Concat, ConcatWs, CreateArray, Expression, Greatest, If, In, InSubquery, Least, RegExpReplace}
+import org.apache.spark.sql.catalyst.expressions.{ArrayJoin, BinaryExpression, CaseWhen, Cast, Coalesce, Collate, Concat, ConcatWs, CreateArray, Elt, Expression, Greatest, If, In, InSubquery, Least, Overlay, RegExpReplace}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
@@ -44,6 +44,13 @@ object CollationTypeCasts extends TypeCoercionRule {
         val newElseValue =
           caseWhenExpr.elseValue.map(e => castStringType(e, outputStringType).getOrElse(e))
         CaseWhen(newBranches, newElseValue)
+
+    case eltExpr: Elt =>
+      eltExpr.withNewChildren(eltExpr.children.head +: collateToSingleType(eltExpr.children.tail))
+
+    case overlay: Overlay =>
+      overlay.withNewChildren(collateToSingleType(Seq(overlay.input, overlay.replace))
+        ++ Seq(overlay.pos, overlay.len))
 
     case regExpReplace: RegExpReplace =>
       val singleType = collateToSingleType(Seq(regExpReplace.subject, regExpReplace.rep))

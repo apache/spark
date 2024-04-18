@@ -21,6 +21,8 @@ import java.util
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.internal.LogKey.{INDEX_NAME, TABLE_NAME}
+import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.IndexAlreadyExistsException
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -55,7 +57,8 @@ case class CreateIndexExec(
         indexName, columns.map(_._1).toArray, colProperties, propertiesWithIndexType.asJava)
     } catch {
       case _: IndexAlreadyExistsException if ignoreIfExists =>
-        logWarning(s"Index $indexName already exists in table ${table.name}. Ignoring.")
+        logWarning(log"Index ${MDC(INDEX_NAME, indexName)} already exists in " +
+          log"table ${MDC(TABLE_NAME, table.name)}. Ignoring.")
     }
     Seq.empty
   }

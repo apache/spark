@@ -59,8 +59,8 @@ private[hive] object OrcFileOperator extends Logging {
       reader.getObjectInspector match {
         case oi: StructObjectInspector if oi.getAllStructFieldRefs.size() == 0 =>
           logInfo(
-            s"ORC file $path has empty schema, it probably contains no rows. " +
-              "Trying to read another ORC file to figure out the schema.")
+            log"ORC file ${MDC(PATH, path)} has empty schema, it probably contains no rows. " +
+              log"Trying to read another ORC file to figure out the schema.")
           false
         case _ => true
       }
