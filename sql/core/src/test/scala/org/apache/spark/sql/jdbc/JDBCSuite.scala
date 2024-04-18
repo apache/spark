@@ -1371,7 +1371,6 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-16387: Reserved SQL words are not escaped by JDBC writer") {
     val df = spark.createDataset(Seq("a", "b", "c")).toDF("order")
-
     val schema = JdbcUtils.schemaString(
       JdbcDialects.get("jdbc:mysql://localhost:3306/temp"),
       df.schema,
@@ -2184,12 +2183,11 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     assert(dialect === NoopDialect)
   }
 
-  test("createTableColumnTypes") {
+  test("SPARK-47882: createTableColumnTypes need to be mapped to database types") {
     val dialect = JdbcDialects.get("jdbc:oracle:dummy_host:dummy_port/dummy_db")
     val schema = new StructType().add("b", "boolean")
     val schemaStr =
       JdbcUtils.schemaString(dialect, schema, caseSensitive = false, Some("b boolean"))
-    assert(schemaStr === """"b" NUMBER(1)""")
-
+    assert(schemaStr === """"b" NUMBER(1) """)
   }
 }

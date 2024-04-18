@@ -414,7 +414,7 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
         colTypes.map { case (col, dataType) => s"$col $dataType" }.mkString(", ")
 
       val expectedSchemaStr = schema.map { f =>
-          s""""${f.name}" ${JdbcUtils.getJdbcType(f.dataType, dialect).databaseTypeDefinition}"""
+          s""""${f.name}" ${JdbcUtils.getJdbcType(f.dataType, dialect).databaseTypeDefinition} """
         }.mkString(", ")
 
       assert(JdbcUtils.schemaString(

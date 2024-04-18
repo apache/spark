@@ -887,8 +887,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       val name = dialect.quoteIdentifier(field.name)
       val typ = userSpecifiedColTypesMap
         .getOrElse(field.name, getJdbcType(field.dataType, dialect).databaseTypeDefinition)
-      val nullable = if (field.nullable) "" else " NOT NULL"
-      sb.append(s", $name $typ$nullable")
+      val nullable = if (field.nullable) "" else "NOT NULL"
+      sb.append(s", $name $typ $nullable")
     }
     if (sb.length < 2) "" else sb.substring(2)
   }
