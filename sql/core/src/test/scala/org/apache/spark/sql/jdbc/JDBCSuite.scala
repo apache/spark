@@ -1372,9 +1372,9 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
   test("SPARK-16387: Reserved SQL words are not escaped by JDBC writer") {
     val df = spark.createDataset(Seq("a", "b", "c")).toDF("order")
     val schema = JdbcUtils.schemaString(
+      JdbcDialects.get("jdbc:mysql://localhost:3306/temp"),
       df.schema,
-      df.sparkSession.sessionState.conf.caseSensitiveAnalysis,
-      "jdbc:mysql://localhost:3306/temp")
+      df.sparkSession.sessionState.conf.caseSensitiveAnalysis)
     assert(schema.contains("`order` LONGTEXT"))
   }
 
@@ -2181,5 +2181,13 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     JdbcDialects.unregisterDialect(dialect)
     dialect = JdbcDialects.get("jdbc:dummy:dummy_host:dummy_port/dummy_db")
     assert(dialect === NoopDialect)
+  }
+
+  test("SPARK-47882: createTableColumnTypes need to be mapped to database types") {
+    val dialect = JdbcDialects.get("jdbc:oracle:dummy_host:dummy_port/dummy_db")
+    val schema = new StructType().add("b", "boolean")
+    val schemaStr =
+      JdbcUtils.schemaString(dialect, schema, caseSensitive = false, Some("b boolean"))
+    assert(schemaStr === """"b" NUMBER(1) """)
   }
 }

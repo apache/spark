@@ -304,6 +304,7 @@ object CheckConnectJvmClientCompatibility {
 
       // MergeIntoWriter
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.MergeIntoWriter"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.MergeIntoWriter$"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.WhenMatched"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.WhenMatched$"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.WhenNotMatched"),

@@ -17,23 +17,19 @@
 
 import unittest
 
-from pyspark.sql.tests.test_dataframe import DataFrameTestsMixin
+from pyspark.sql.tests.test_dataframe_query_context import DataFrameQueryContextTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
-    def test_help_command(self):
-        df = self.spark.createDataFrame(data=[{"foo": "bar"}, {"foo": "baz"}])
-        super().check_help_command(df)
-
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_toDF_with_schema_string(self):
-        super().test_toDF_with_schema_string()
+class DataFrameParityTests(DataFrameQueryContextTestsMixin, ReusedConnectTestCase):
+    @unittest.skip("Spark Connect does not support DataFrameQueryContext currently.")
+    def test_dataframe_query_context(self):
+        super().test_dataframe_query_context()
 
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.sql.tests.connect.test_parity_dataframe import *  # noqa: F401
+    from pyspark.sql.tests.connect.test_parity_dataframe_query_context import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]

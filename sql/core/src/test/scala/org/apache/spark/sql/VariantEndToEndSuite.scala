@@ -14,13 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.expressions.{CreateArray, CreateNamedStruct, Literal, StructsToJson}
+import org.apache.spark.sql.catalyst.expressions.{CreateArray, CreateNamedStruct, JsonToStructs, Literal, StructsToJson}
 import org.apache.spark.sql.catalyst.expressions.variant.ParseJson
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.VariantType
 import org.apache.spark.types.variant.VariantBuilder
 import org.apache.spark.unsafe.types.VariantVal
 
@@ -31,6 +31,37 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     def check(input: String, output: String = null): Unit = {
       val df = Seq(input).toDF("v")
       val variantDF = df.select(Column(StructsToJson(Map.empty, ParseJson(Column("v").expr))))
+      val expected = if (output != null) output else input
+      checkAnswer(variantDF, Seq(Row(expected)))
+    }
+
+    check("null")
+    check("true")
+    check("false")
+    check("-1")
+    check("1.0E10")
+    check("\"\"")
+    check("\"" + ("a" * 63) + "\"")
+    check("\"" + ("b" * 64) + "\"")
+    // scalastyle:off nonascii
+    check("\"" + ("你好，世界" * 20) + "\"")
+    // scalastyle:on nonascii
+    check("[]")
+    check("{}")
+    // scalastyle:off nonascii
+    check(
+      "[null, true,   false,-1, 1e10, \"\\uD83D\\uDE05\", [ ], { } ]",
+      "[null,true,false,-1,1.0E10,\"😅\",[],{}]"
+    )
+    // scalastyle:on nonascii
+    check("[0.0, 1.00, 1.10, 1.23]", "[0,1,1.1,1.23]")
+  }
+
+  test("from_json/to_json round-trip") {
+    def check(input: String, output: String = null): Unit = {
+      val df = Seq(input).toDF("v")
+      val variantDF = df.select(Column(StructsToJson(Map.empty,
+        JsonToStructs(VariantType, Map.empty, Column("v").expr))))
       val expected = if (output != null) output else input
       checkAnswer(variantDF, Seq(Row(expected)))
     }
@@ -111,6 +142,18 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
       """[{"a": 1, "b": null}, {"b": true, "a": 1E0}]""",
       "ARRAY<STRUCT<a: DOUBLE, b: BOOLEAN>>"
     )
+  }
+
+  test("from_json variant data type parsing") {
+    def check(variantTypeString: String): Unit = {
+      val df = Seq("{\"a\": 1, \"b\": [2, 3.1]}").toDF("j").selectExpr("variant_get(from_json(j,\""
+        + variantTypeString + "\"),\"$.b[0]\")::int")
+      checkAnswer(df, Seq(Row(2)))
+    }
+
+    check("variant")
+    check("     \t variant ")
+    check("  \n  VaRiaNt  ")
   }
 
   test("is_variant_null with parse_json and variant_get") {

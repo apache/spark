@@ -31,7 +31,7 @@ import org.apache.hive.service.cli.session.HiveSession
 import org.apache.hive.service.rpc.thrift.{TCLIServiceConstants, TColumnDesc, TPrimitiveTypeEntry, TRowSet, TTableSchema, TTypeDesc, TTypeEntry, TTypeId, TTypeQualifiers, TTypeQualifierValue}
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{HIVE_OPERATION_STATE, STATEMENT_ID, TIMEOUT, USER_NAME}
+import org.apache.spark.internal.LogKey._
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_SECOND
@@ -126,7 +126,9 @@ private[hive] class SparkExecuteStatementOperation(
 
   override def runInternal(): Unit = {
     setState(OperationState.PENDING)
-    logInfo(s"Submitting query '$redactedStatement' with $statementId")
+    logInfo(
+      log"Submitting query '${MDC(REDACTED_STATEMENT, redactedStatement)}' with " +
+        log"${MDC(STATEMENT_ID, statementId)}")
     HiveThriftServer2.eventManager.onStatementStart(
       statementId,
       parentSession.getSessionHandle.getSessionId.toString,
@@ -213,10 +215,12 @@ private[hive] class SparkExecuteStatementOperation(
     try {
       synchronized {
         if (getStatus.getState.isTerminal) {
-          logInfo(s"Query with $statementId in terminal state before it started running")
+          logInfo(
+            log"Query with ${MDC(STATEMENT_ID, statementId)} in terminal state " +
+              log"before it started running")
           return
         } else {
-          logInfo(s"Running query with $statementId")
+          logInfo(log"Running query with ${MDC(STATEMENT_ID, statementId)}")
           setState(OperationState.RUNNING)
         }
       }
@@ -285,7 +289,9 @@ private[hive] class SparkExecuteStatementOperation(
   def timeoutCancel(): Unit = {
     synchronized {
       if (!getStatus.getState.isTerminal) {
-        logInfo(s"Query with $statementId timed out after $timeout seconds")
+        logInfo(
+          log"Query with ${MDC(STATEMENT_ID, statementId)} timed out after " +
+            log"${MDC(TIMEOUT, timeout)} seconds")
         setState(OperationState.TIMEDOUT)
         cleanup()
         HiveThriftServer2.eventManager.onStatementTimeout(statementId)
@@ -296,7 +302,7 @@ private[hive] class SparkExecuteStatementOperation(
   override def cancel(): Unit = {
     synchronized {
       if (!getStatus.getState.isTerminal) {
-        logInfo(s"Cancel query with $statementId")
+        logInfo(log"Cancel query with ${MDC(STATEMENT_ID, statementId)}")
         setState(OperationState.CANCELED)
         cleanup()
         HiveThriftServer2.eventManager.onStatementCanceled(statementId)
