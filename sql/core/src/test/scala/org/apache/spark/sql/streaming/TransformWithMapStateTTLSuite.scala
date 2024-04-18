@@ -184,7 +184,7 @@ class TransformWithMapStateTTLSuite extends TransformWithStateTTLTest {
     new MapStateSingleKeyTTLProcessor(ttlConfig)
   }
 
-  def getStateTTLMetricName: String = "numMapStateWithTTLVars"
+  override def getStateTTLMetricName: String = "numMapStateWithTTLVars"
 
   test("validate state is evicted with multiple user keys") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
