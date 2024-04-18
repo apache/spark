@@ -753,7 +753,7 @@
       },
       "INVALID_JSON_SCHEMA" : {
         "message" : [
-          "Input schema <schema> must be a struct, an array, a map or a variant."
+          "Input schema <schema> must be a struct, an array or a map."
         ]
       },
       "INVALID_MAP_KEY_TYPE" : {
