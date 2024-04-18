@@ -20,6 +20,8 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.SparkException
+import org.apache.spark.internal.LogKey.CONFIG
+import org.apache.spark.internal.MDC
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils, ClusterBySpec}
@@ -524,9 +526,10 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       if (!createHiveTableByDefault || (ctas && conf.convertCTAS)) {
         (nonHiveStorageFormat, conf.defaultDataSourceName)
       } else {
-        logWarning("A Hive serde table will be created as there is no table provider " +
-          s"specified. You can set ${SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT.key} to false " +
-          "so that native data source table will be created instead.")
+        logWarning(log"A Hive serde table will be created as there is no table provider " +
+          log"specified. You can set " +
+          log"${MDC(CONFIG, SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT.key)} to false so that " +
+          log"native data source table will be created instead.")
         (defaultHiveStorage, DDLUtils.HIVE_PROVIDER)
       }
     }

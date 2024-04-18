@@ -27,7 +27,8 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, GlobFilter, Path}
 
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{CURRENT_PATH, ELAPSED_TIME, NEW_PATH, NUM_FILES}
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
@@ -380,7 +381,8 @@ class FileStreamSource(
     val listingTimeMs = NANOSECONDS.toMillis(endTime - startTime)
     if (listingTimeMs > 2000) {
       // Output a warning when listing files uses more than 2 seconds.
-      logWarning(s"Listed ${files.size} file(s) in $listingTimeMs ms")
+      logWarning(log"Listed ${MDC(NUM_FILES, files.size)} file(s) in " +
+        log"${MDC(ELAPSED_TIME, listingTimeMs)} ms")
     } else {
       logTrace(s"Listed ${files.size} file(s) in $listingTimeMs ms")
     }
@@ -628,11 +630,13 @@ object FileStreamSource {
 
         logDebug(s"Archiving completed file $curPath to $newPath")
         if (!fileSystem.rename(curPath, newPath)) {
-          logWarning(s"Fail to move $curPath to $newPath / skip moving file.")
+          logWarning(log"Fail to move ${MDC(CURRENT_PATH, curPath)} to " +
+            log"${MDC(NEW_PATH, newPath)} / skip moving file.")
         }
       } catch {
         case NonFatal(e) =>
-          logWarning(s"Fail to move $curPath to $newPath / skip moving file.", e)
+          logWarning(log"Fail to move ${MDC(CURRENT_PATH, curPath)} to " +
+            log"${MDC(NEW_PATH, newPath)} / skip moving file.", e)
       }
     }
   }
@@ -646,12 +650,12 @@ object FileStreamSource {
         logDebug(s"Removing completed file $curPath")
 
         if (!fileSystem.delete(curPath, false)) {
-          logWarning(s"Failed to remove $curPath / skip removing file.")
+          logWarning(log"Failed to remove ${MDC(CURRENT_PATH, curPath)} / skip removing file.")
         }
       } catch {
         case NonFatal(e) =>
           // Log to error but swallow exception to avoid process being stopped
-          logWarning(s"Fail to remove $curPath / skip removing file.", e)
+          logWarning(log"Fail to remove ${MDC(CURRENT_PATH, curPath)} / skip removing file.", e)
       }
     }
   }

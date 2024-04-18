@@ -26,7 +26,8 @@ import io.grpc.stub.StreamObserver
 
 import org.apache.spark.{SparkEnv, SparkSQLException}
 import org.apache.spark.connect.proto
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey
 import org.apache.spark.sql.connect.config.Connect.CONNECT_EXECUTE_REATTACHABLE_OBSERVER_RETRY_BUFFER_SIZE
 import org.apache.spark.sql.connect.service.ExecuteHolder
 
@@ -136,6 +137,16 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
     }
   }
 
+  /**
+   * Atomically submits a response and marks the stream as completed.
+   */
+  def onNextComplete(r: T): Unit = responseLock.synchronized {
+    if (!tryOnNext(r)) {
+      throw new IllegalStateException("Stream onNext can't be called after stream completed")
+    }
+    onCompleted()
+  }
+
   def onError(t: Throwable): Unit = responseLock.synchronized {
     if (finalProducedIndex.nonEmpty) {
       throw new IllegalStateException("Stream onError can't be called after stream completed")
@@ -232,14 +243,16 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
   /** Remove all cached responses */
   def removeAll(): Unit = responseLock.synchronized {
     removeResponsesUntilIndex(lastProducedIndex)
+    // scalastyle:off line.size.limit
     logInfo(
-      s"Release all for opId=${executeHolder.operationId}. Execution stats: " +
-        s"total=${totalSize} " +
-        s"autoRemoved=${autoRemovedSize} " +
-        s"cachedUntilConsumed=$cachedSizeUntilHighestConsumed " +
-        s"cachedUntilProduced=$cachedSizeUntilLastProduced " +
-        s"maxCachedUntilConsumed=${cachedSizeUntilHighestConsumed.max} " +
-        s"maxCachedUntilProduced=${cachedSizeUntilLastProduced.max}")
+      log"Release all for opId=${MDC(LogKey.OP_ID, executeHolder.operationId)}. Execution stats: " +
+        log"total=${MDC(LogKey.TOTAL_SIZE, totalSize)} " +
+        log"autoRemoved=${MDC(LogKey.CACHE_AUTO_REMOVED_SIZE, autoRemovedSize)} " +
+        log"cachedUntilConsumed=${MDC(LogKey.CACHE_UNTIL_HIGHEST_CONSUMED_SIZE, cachedSizeUntilHighestConsumed)} " +
+        log"cachedUntilProduced=${MDC(LogKey.CACHE_UNTIL_LAST_PRODUCED_SIZE, cachedSizeUntilLastProduced)} " +
+        log"maxCachedUntilConsumed=${MDC(LogKey.MAX_CACHE_UNTIL_HIGHEST_CONSUMED_SIZE, cachedSizeUntilHighestConsumed.max)} " +
+        log"maxCachedUntilProduced=${MDC(LogKey.MAX_CACHE_UNTIL_LAST_PRODUCED_SIZE, cachedSizeUntilLastProduced.max)}")
+    // scalastyle:on line.size.limit
   }
 
   /** Returns if the stream is finished. */

@@ -31,8 +31,9 @@ import org.apache.kafka.common.TopicPartition
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
-import org.apache.spark.internal.LogKey.{ERROR, GROUP_ID, OFFSET, RANGE, TIP, TOPIC_PARTITION, UNTIL_OFFSET}
+import org.apache.spark.internal.LogKey._
 import org.apache.spark.kafka010.{KafkaConfigUpdater, KafkaTokenUtil}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.kafka010.KafkaExceptions
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.sql.kafka010.consumer.KafkaDataConsumer.{AvailableOffsetRange, UNKNOWN_OFFSET}
@@ -391,10 +392,12 @@ private[kafka010] class KafkaDataConsumer(
       .getOrElse("")
     val walTime = System.nanoTime() - startTimestampNano
 
-    logInfo(
-      s"From Kafka $kafkaMeta read $totalRecordsRead records through $numPolls polls (polled " +
-      s" out $numRecordsPolled records), taking $totalTimeReadNanos nanos, during time span of " +
-      s"$walTime nanos."
+    logInfo(log"From Kafka ${MDC(CONSUMER, kafkaMeta)} read " +
+      log"${MDC(TOTAL_RECORDS_READ, totalRecordsRead)} records through " +
+      log"${MDC(KAFKA_PULLS_COUNT, numPolls)} polls " +
+      log"(polled out ${MDC(KAFKA_RECORDS_PULLED_COUNT, numRecordsPolled)} records), " +
+      log"taking ${MDC(TOTAL_TIME_READ, totalTimeReadNanos / NANOS_PER_MILLIS.toDouble)} ms, " +
+      log"during time span of ${MDC(TIME, walTime / NANOS_PER_MILLIS.toDouble)} ms."
     )
 
     releaseConsumer()

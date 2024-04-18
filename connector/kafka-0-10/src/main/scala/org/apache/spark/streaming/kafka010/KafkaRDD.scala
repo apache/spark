@@ -23,7 +23,8 @@ import org.apache.kafka.clients.consumer.{ ConsumerConfig, ConsumerRecord }
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.{Partition, SparkContext, TaskContext}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{FROM_OFFSET, PARTITION_ID, TOPIC, UNTIL_OFFSET}
 import org.apache.spark.internal.config.Network._
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.rdd.RDD
@@ -186,12 +187,13 @@ private[spark] class KafkaRDD[K, V](
     val part = thePart.asInstanceOf[KafkaRDDPartition]
     require(part.fromOffset <= part.untilOffset, errBeginAfterEnd(part))
     if (part.fromOffset == part.untilOffset) {
-      logInfo(s"Beginning offset ${part.fromOffset} is the same as ending offset " +
-        s"skipping ${part.topic} ${part.partition}")
+      logInfo(log"Beginning offset ${MDC(FROM_OFFSET, part.fromOffset)} is the same as ending " +
+        log"offset skipping ${MDC(TOPIC, part.topic)} ${MDC(PARTITION_ID, part.partition)}")
       Iterator.empty
     } else {
-      logInfo(s"Computing topic ${part.topic}, partition ${part.partition} " +
-        s"offsets ${part.fromOffset} -> ${part.untilOffset}")
+      logInfo(log"Computing topic ${MDC(TOPIC, part.topic)}, partition " +
+        log"${MDC(PARTITION_ID, part.partition)} offsets ${MDC(FROM_OFFSET, part.fromOffset)} " +
+        log"-> ${MDC(UNTIL_OFFSET, part.untilOffset)}")
       if (compacted) {
         new CompactedKafkaRDDIterator[K, V](
           part,

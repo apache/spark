@@ -22,7 +22,8 @@ import scala.collection.mutable
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.EXPR
 import org.apache.spark.sql.{SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
@@ -650,7 +651,7 @@ private[sql] object DataSourceV2Strategy extends Logging {
       Some(new Predicate("IN", FieldReference(name) +: literals))
 
     case other =>
-      logWarning(s"Can't translate $other to source filter, unsupported expression")
+      logWarning(log"Can't translate ${MDC(EXPR, other)} to source filter, unsupported expression")
       None
   }
 }
