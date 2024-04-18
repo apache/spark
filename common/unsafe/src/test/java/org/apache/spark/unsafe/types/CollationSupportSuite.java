@@ -330,6 +330,8 @@ public class CollationSupportSuite {
     assertSubstringIndex("test大千世界X大千世界", "X", 1, "UNICODE_CI", "test大千世界");
     assertSubstringIndex("test大千世界大千世界", "千", 2, "UNICODE_CI", "test大千世界大");
     assertSubstringIndex("www||APACHE||org", "||", 2, "UNICODE_CI", "www||APACHE");
+    assertSubstringIndex("abİo12", "i̇o", 1, "UNICODE_CI", "ab");
+    assertSubstringIndex("abi̇o12", "İo", -1, "UNICODE_CI", "12"); // FAILING
   }
 
   // TODO: Test more collation-aware string expressions.
