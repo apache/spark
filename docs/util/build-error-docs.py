@@ -15,7 +15,9 @@ from mkdocs.structure.pages import markdown
 THIS_DIR = Path(__file__).parent
 SPARK_PROJECT_ROOT = THIS_DIR.parents[1]
 DOCS_ROOT = SPARK_PROJECT_ROOT / "docs"
-ERROR_CONDITIONS_PATH = SPARK_PROJECT_ROOT / "common/utils/src/main/resources/error/error-conditions.json"
+ERROR_CONDITIONS_PATH = (
+    SPARK_PROJECT_ROOT / "common/utils/src/main/resources/error/error-conditions.json"
+)
 
 
 def assemble_message(message_parts):
