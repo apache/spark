@@ -273,18 +273,21 @@ public final class CollationSupport {
   private static class CollationAwareUTF8String {
 
     private static String toUpperCase(final String target, final int collationId) {
-      ULocale locale = CollationFactory.fetchCollation(collationId).collator.getLocale(ULocale.ACTUAL_LOCALE);
+      ULocale locale = CollationFactory.fetchCollation(collationId)
+              .collator.getLocale(ULocale.ACTUAL_LOCALE);
       return UCharacter.toUpperCase(locale, target);
     }
 
     private static String toLowerCase(final String target, final int collationId) {
-      ULocale locale = CollationFactory.fetchCollation(collationId).collator.getLocale(ULocale.ACTUAL_LOCALE);
+      ULocale locale = CollationFactory.fetchCollation(collationId)
+              .collator.getLocale(ULocale.ACTUAL_LOCALE);
       return UCharacter.toLowerCase(locale, target);
     }
 
     private static String toTitleCase(final String target, final int collationId) {
-      ULocale locale = CollationFactory.fetchCollation(collationId).collator.getLocale(ULocale.ACTUAL_LOCALE);
-      return UCharacter.toTitleCase(locale, target, BreakIterator.getWordInstance(locale));
+      ULocale locale = CollationFactory.fetchCollation(collationId)
+              .collator.getLocale(ULocale.ACTUAL_LOCALE);
+      return UCharacter.toTitleCase(locale, target, null);
     }
   }
 
