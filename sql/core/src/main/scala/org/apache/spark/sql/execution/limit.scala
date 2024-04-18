@@ -158,7 +158,7 @@ case class CollectTailExec(limit: Int, child: SparkPlan) extends LimitExec {
     } else {
       val context = TaskContext.get()
       val queue = HybridRowQueue.apply(context.taskMemoryManager(), output.size)
-      context.addTaskCompletionListener[Unit](ctx => queue.close())
+      context.addTaskCompletionListener[Unit](_ => queue.close())
       var count = 0
       while (iter.hasNext) {
         queue.add(iter.next().copy().asInstanceOf[UnsafeRow])
@@ -168,7 +168,7 @@ case class CollectTailExec(limit: Int, child: SparkPlan) extends LimitExec {
           queue.remove()
         }
       }
-      Iterator.range(0, count).map(i => queue.remove())
+      Iterator.range(0, count).map(_ => queue.remove())
     }
   }
 
