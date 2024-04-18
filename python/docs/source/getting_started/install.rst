@@ -174,11 +174,11 @@ Required dependencies
 
 PySpark requires the following dependencies.
 
-========================== ========================= =======================
+========================== ========================= =============================
 Package                    Supported version         Note
-========================== ========================= =======================
-`py4j`                     >=0.10.9.7                Used to interact to JVM
-========================== ========================= =======================
+========================== ========================= =============================
+`py4j`                     >=0.10.9.7                Required to interact with JVM
+========================== ========================= =============================
 
 Additional libraries that enhance functionality but are not included in the installation packages:
 
@@ -202,27 +202,27 @@ Spark Connect
 
 Installable with ``pip install "pyspark[connect]"``.
 
-========================== ================= ====================================================================
+========================== ================= ==========================
 Package                    Supported version Note
-========================== ================= ====================================================================
-`pandas`                   >=1.4.4           Required for Spark Connect.
-`pyarrow`                  >=10.0.0          Crucial for data serialization and network communication efficiency.
-`grpcio`                   >=1.62.0          Necessary for implementing RPC functionalities in Spark Connect.
-`grpcio-status`            >=1.62.0          Supports detailed status handling in network communications.
-`googleapis-common-protos` >=1.56.4          Provides essential Google API protocols for network interactions.
-========================== ================= ====================================================================
+========================== ================= ==========================
+`pandas`                   >=1.4.4           Required for Spark Connect
+`pyarrow`                  >=10.0.0          Required for Spark Connect
+`grpcio`                   >=1.62.0          Required for Spark Connect
+`grpcio-status`            >=1.62.0          Required for Spark Connect
+`googleapis-common-protos` >=1.56.4          Required for Spark Connect
+========================== ================= ==========================
 
 Spark SQL
 ^^^^^^^^^
 
 Installable with ``pip install "pyspark[sql]"``.
 
-========= ================= ===============================================================
+========= ================= ======================
 Package   Supported version Note
-========= ================= ===============================================================
-`pandas`  >=1.4.4           Used for pandas UDFs and ``DataFrame.toPandas``.
-`pyarrow` >=10.0.0          For faster data conversion/transfer between PySpark and Pandas.
-========= ================= ===============================================================
+========= ================= ======================
+`pandas`  >=1.4.4           Required for Spark SQL
+`pyarrow` >=10.0.0          Required for Spark SQL
+========= ================= ======================
 
 
 Pandas API on Spark
@@ -230,18 +230,18 @@ Pandas API on Spark
 
 Installable with ``pip install "pyspark[pandas_on_spark]"``.
 
-========= ================= ===============================================================
+========= ================= ================================
 Package   Supported version Note
-========= ================= ===============================================================
-`pandas`  >=1.4.4           Required for Pandas API on Spark.
-`pyarrow` >=10.0.0          For faster data conversion/transfer between PySpark and pandas.
-========= ================= ===============================================================
+========= ================= ================================
+`pandas`  >=1.4.4           Required for Pandas API on Spark
+`pyarrow` >=10.0.0          Required for Pandas API on Spark
+========= ================= ================================
 
 Additional libraries that enhance functionality but are not included in the installation packages:
 
-- **mlflow**: Enhances machine learning lifecycle management. Used for ``pyspark.pandas.mlflow``.
-- **plotly**: Provide advanced plotting capabilities for visualization.
-- **matplotlib**: Provide plotting, but **plotly** is recommended. The default is **plotly**.
+- **mlflow**: Required for ``pyspark.pandas.mlflow``.
+- **plotly**: Provide plotting for visualization. It is recommended using **plotly** over **matplotlib**.
+- **matplotlib**: Provide plotting for visualization. The default is **plotly**.
 
 
 MLLib DataFrame-based API
@@ -249,28 +249,28 @@ MLLib DataFrame-based API
 
 Installable with ``pip install "pyspark[ml]"``.
 
-======= ================= =======================================
+======= ================= ======================================
 Package Supported version Note
-======= ================= =======================================
-`numpy` >=1.21            Required for MLLib DataFrame-based API.
-======= ================= =======================================
+======= ================= ======================================
+`numpy` >=1.21            Required for MLLib DataFrame-based API
+======= ================= ======================================
 
 Additional libraries that enhance functionality but are not included in the installation packages:
 
-- **scipy**: Essential for scientific computing and statistical functions in ML.
+- **scipy**: Required for SciPy integration.
 - **scikit-learn**: Required for implementing machine learning algorithms.
-- **torch**: Utilized for machine learning model training on PySpark.
-- **torchvision**: Supports image and video processing within PySpark models.
-- **torcheval**: Facilitates model evaluation metrics in PySpark.
-- **deepspeed**: Provides high-performance model training optimizations. Installable on non-Darwin systems.
+- **torch**: Required for machine learning model training.
+- **torchvision**: Required for supporting image and video processing.
+- **torcheval**: Required for facilitating model evaluation metrics.
+- **deepspeed**: Required for providing high-performance model training optimizations. Installable on non-Darwin systems.
 
 MLlib
 ^^^^^
 
 Installable with ``pip install "pyspark[mllib]"``.
 
-======= ================= ===================
+======= ================= ==================
 Package Supported version Note
-======= ================= ===================
-`numpy` >=1.21            Required for MLLib.
-======= ================= ===================
+======= ================= ==================
+`numpy` >=1.21            Required for MLLib
+======= ================= ==================
