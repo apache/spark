@@ -437,6 +437,21 @@ class ConstantFoldingSuite extends PlanTest {
       Optimize.execute(oneRowScalarSubquery),
       oneRowScalarSubquery)
   }
+
+  test("Current time functions are constant folded") {
+    object OptimizeWithCurrentTimeEval extends RuleExecutor[LogicalPlan] {
+      val batches = Batch("FinishAnalysis", Once, ComputeCurrentTime) ::
+        Batch("ConstantFolding", FixedPoint(50), ConstantFolding) :: Nil
+    }
+
+    val originalQuery = testRelation.select(
+      Rand(Cast(
+        Literal(1) / UnixTimestamp(CurrentDate(), Literal("yyyy-MM-dd HH:mm:ss")),
+        IntegerType)) as "c1")
+    val optimized = OptimizeWithCurrentTimeEval.execute(originalQuery.analyze)
+    val correctAnswer = testRelation.select(Rand(Literal(0)) as "c1").analyze
+    comparePlans(optimized, correctAnswer)
+  }
 }
 
 case class SerializableBoxedInt(intVal: Int) {
