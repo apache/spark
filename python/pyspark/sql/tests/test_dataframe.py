@@ -37,9 +37,6 @@ from pyspark.errors import (
     AnalysisException,
     IllegalArgumentException,
     PySparkTypeError,
-    ArithmeticException,
-    QueryContextType,
-    NumberFormatException,
 )
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
