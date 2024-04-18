@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
-import org.apache.spark.sql.catalyst.expressions.variant.VariantExpressionEvalUtils
 import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{JSON_TO_STRUCT, TreePattern}
 import org.apache.spark.sql.catalyst.util._
@@ -665,7 +664,7 @@ case class JsonToStructs(
       timeZoneId = None)
 
   override def checkInputDataTypes(): TypeCheckResult = nullableSchema match {
-    case _: StructType | _: ArrayType | _: MapType | _: VariantType =>
+    case _: StructType | _: ArrayType | _: MapType =>
       val checkResult = ExprUtils.checkJsonSchema(nullableSchema)
       if (checkResult.isFailure) checkResult else super.checkInputDataTypes()
     case _ =>
@@ -715,11 +714,8 @@ case class JsonToStructs(
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
-  override def nullSafeEval(json: Any): Any = nullableSchema match {
-    case _: VariantType =>
-      VariantExpressionEvalUtils.parseJson(json.asInstanceOf[UTF8String])
-    case _ =>
-      converter(parser.parse(json.asInstanceOf[UTF8String]))
+  override def nullSafeEval(json: Any): Any = {
+    converter(parser.parse(json.asInstanceOf[UTF8String]))
   }
 
   override def inputTypes: Seq[AbstractDataType] = StringType :: Nil
