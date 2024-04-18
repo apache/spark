@@ -296,6 +296,8 @@ public class CollationSupportSuite {
     assertStringInstr("aaads", "dS", "UNICODE_CI", 4);
     assertStringInstr("test大千世界X大千世界", "界y", "UNICODE_CI", 0);
     assertStringInstr("test大千世界X大千世界", "界x", "UNICODE_CI", 8);
+    assertStringInstr("abİo12", "i̇o", "UNICODE_CI", 3);
+    assertStringInstr("abi̇o12", "İo", "UNICODE_CI", 3);
   }
 
   private void assertFindInSet(String word, String set, String collationName,
@@ -337,6 +339,8 @@ public class CollationSupportSuite {
     assertFindInSet("界x", "test,大千,世,界X,大,千,世界", "UNICODE_CI", 4);
     assertFindInSet("界x", "test,大千,界Xx,世,界X,大,千,世界", "UNICODE_CI", 5);
     assertFindInSet("大", "test,大千,世,界X,大,千,世界", "UNICODE_CI", 5);
+    assertFindInSet("i̇o", "ab,İo,12", "UNICODE_CI", 2);
+    assertFindInSet("İo", "ab,i̇o,12", "UNICODE_CI", 2);
   }
 
   // TODO: Test more collation-aware string expressions.

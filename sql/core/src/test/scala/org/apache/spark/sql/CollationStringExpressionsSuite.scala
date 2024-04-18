@@ -122,7 +122,8 @@ class CollationStringExpressionsSuite
       StringInStrTestCase("test大千世界X大千世界", "界x", "UTF8_BINARY_LCASE", 8),
       StringInStrTestCase("test大千世界X大千世界", "界x", "UNICODE", 0),
       StringInStrTestCase("test大千世界X大千世界", "界y", "UNICODE_CI", 0),
-      StringInStrTestCase("test大千世界X大千世界", "界x", "UNICODE_CI", 8)
+      StringInStrTestCase("test大千世界X大千世界", "界x", "UNICODE_CI", 8),
+      StringInStrTestCase("abİo12", "i̇o", "UNICODE_CI", 3)
       // scalastyle:on
     )
     testCases.foreach(t => {
@@ -150,7 +151,10 @@ class CollationStringExpressionsSuite
       FindInSetTestCase("AB", "abc,b,ab,c,def", "UTF8_BINARY", 0),
       FindInSetTestCase("C", "abc,b,ab,c,def", "UTF8_BINARY_LCASE", 4),
       FindInSetTestCase("d,ef", "abc,b,ab,c,def", "UNICODE", 0),
-      FindInSetTestCase("DeF", "abc,b,ab,c,dEf", "UNICODE_CI", 5)
+      // scalastyle:off
+      FindInSetTestCase("i̇o", "ab,İo,12", "UNICODE_CI", 2),
+      FindInSetTestCase("İo", "ab,i̇o,12", "UNICODE_CI", 2)
+      // scalastyle:on
     )
     testCases.foreach(t => {
       val query = s"SELECT find_in_set(collate('${t.word}', '${t.c}')," +
