@@ -66,6 +66,26 @@ class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedCo
             q = df.writeStream.foreachBatch(func).start()
             q.processAllAvailable()
 
+    def test_pickling_deserialization_error(self):
+        class NoUnpickle:
+            def __reduce__(self):
+                if isinstance(self, type(None)):
+                    raise TypeError("Cannot unpickle instance of NoUnpickle")
+                return type(self), ()
+
+            def __repr__(self):
+                return "NoUnpickle()"
+
+        no_unpickle = NoUnpickle()
+        def func(df, _):
+            print(no_unpickle)
+            df.count()
+
+        with self.assertRaises(Exception, "Cannot unpickle instance of NoUnpickle"):
+            df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
+            q = df.writeStream.foreachBatch(func).start()
+            q.processAllAvailable()
+
     def test_accessing_spark_session(self):
         spark = self.spark
 
