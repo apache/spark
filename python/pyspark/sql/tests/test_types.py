@@ -1444,7 +1444,6 @@ class TypesTestsMixin:
         json_str = "{%s}" % ",".join(['"%s": %s' % (t[0], t[1]) for t in expected_values])
 
         df = self.spark.createDataFrame([({"json": json_str})])
-
         row = df.select(
             F.parse_json(df.json).alias("v"),
             F.array([F.parse_json(F.lit('{"a": 1}'))]).alias("a"),
@@ -1471,10 +1470,10 @@ class TypesTestsMixin:
             " as timestamp) as variant) as t2").collect()[0]
 
         variants = [row["v"], row["a"][0], row["s"]["col1"], row["m"]["k"], date_column["d0"],
-                    date_column["d1"], float_column["f0"], float_column["f1"], binary_column["b"],
-                    timetamp_ntz_column["tntz0"], timetamp_ntz_column["tntz1"],
-                    timetamp_ntz_column["tntz2"], timetamp_column["t0"], timetamp_column["t1"],
-                    timetamp_column["t2"]]
+            date_column["d1"], float_column["f0"], float_column["f1"], binary_column["b"],
+            timetamp_ntz_column["tntz0"], timetamp_ntz_column["tntz1"],
+            timetamp_ntz_column["tntz2"], timetamp_column["t0"], timetamp_column["t1"],
+            timetamp_column["t2"]]
 
         for v in variants:
             self.assertEqual(type(v), VariantVal)
@@ -1499,7 +1498,8 @@ class TypesTestsMixin:
         self.assertEqual(str(variants[14]), '0001-12-30 17:01:01+00:00') 
 
         # Check to_json on timestamps with custom timezones
-        self.assertEqual(VariantUtils.to_json(variants[12].value, variants[12].metadata, "America/Los_Angeles"), '1939-12-31 21:05:13.123000-08:00')
+        self.assertEqual(variants[12].toJson("America/Los_Angeles"),
+            '1939-12-31 21:05:13.123000-08:00')
 
         # check toPython
         as_python = variants[0].toPython()
