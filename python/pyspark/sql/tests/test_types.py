@@ -1471,10 +1471,10 @@ class TypesTestsMixin:
             " as timestamp) as variant) as t2").collect()[0]
 
         variants = [row["v"], row["a"][0], row["s"]["col1"], row["m"]["k"], date_column["d0"],
-                    date_column["d1"], float_column["f0"], float_column["f1"], binary_column["b"],
-                    timetamp_ntz_column["tntz0"], timetamp_ntz_column["tntz1"],
-                    timetamp_ntz_column["tntz2"], timetamp_column["t0"], timetamp_column["t1"],
-                    timetamp_column["t2"]]
+            date_column["d1"], float_column["f0"], float_column["f1"], binary_column["b"],
+            timetamp_ntz_column["tntz0"], timetamp_ntz_column["tntz1"],
+            timetamp_ntz_column["tntz2"], timetamp_column["t0"], timetamp_column["t1"],
+            timetamp_column["t2"]]
 
         for v in variants:
             self.assertEqual(type(v), VariantVal)
