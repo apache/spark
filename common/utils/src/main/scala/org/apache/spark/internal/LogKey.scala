@@ -39,6 +39,7 @@ object LogKey extends Enumeration {
   val CACHE_UNTIL_HIGHEST_CONSUMED_SIZE = Value
   val CACHE_UNTIL_LAST_PRODUCED_SIZE = Value
   val CALL_SITE_LONG_FORM = Value
+  val CATALOG_NAME = Value
   val CATEGORICAL_FEATURES = Value
   val CLASS_LOADER = Value
   val CLASS_NAME = Value
@@ -215,6 +216,7 @@ object LogKey extends Enumeration {
   val REASON = Value
   val REATTACHABLE = Value
   val RECEIVED_BLOCK_INFO = Value
+  val REDACTED_STATEMENT = Value
   val REDUCE_ID = Value
   val RELATION_NAME = Value
   val REMAINING_PARTITIONS = Value
@@ -253,6 +255,7 @@ object LogKey extends Enumeration {
   val SUBSAMPLING_RATE = Value
   val SUB_QUERY = Value
   val TABLE_NAME = Value
+  val TABLE_TYPES = Value
   val TASK_ATTEMPT_ID = Value
   val TASK_ID = Value
   val TASK_NAME = Value
