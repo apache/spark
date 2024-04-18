@@ -256,11 +256,21 @@ class CollationRegexpExpressionsSuite
     )
     testCases.foreach(t => {
       val query =
-        s"SELECT regexp_replace(collate('${t.l}', '${t.c}'), '${t.r}', 'FFF')"
+        s"SELECT regexp_replace(collate('${t.l}', '${t.c}'), '${t.r}', collate('FFF', '${t.c}'))"
       // Result & data type
       checkAnswer(sql(query), Row(t.result))
       assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
+      // Implicit casting
+      checkAnswer(sql(s"SELECT regexp_replace(collate('${t.l}', '${t.c}'), '${t.r}', 'FFF')"),
+        Row(t.result))
+      checkAnswer(sql(s"SELECT regexp_replace('${t.l}', '${t.r}', collate('FFF', '${t.c}'))"),
+        Row(t.result))
     })
+    // Collation mismatch
+    val collationMismatch = intercept[AnalysisException] {
+      sql("SELECT regexp_replace(collate('ABCDE','UTF8_BINARY'), '.c.', collate('FFF','UNICODE'))")
+    }
+    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
     // Unsupported collations
     case class RegExpReplaceTestFail(l: String, r: String, c: String)
     val failCases = Seq(
