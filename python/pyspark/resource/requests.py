@@ -164,14 +164,17 @@ class ExecutorResourceRequests:
         _jvm: Optional["JVMView"] = None,
         _requests: Optional[Dict[str, ExecutorResourceRequest]] = None,
     ):
-        from pyspark import SparkContext
         from pyspark.sql import is_remote
 
-        _jvm = _jvm or SparkContext._jvm
+        jvm = None
+        if not is_remote():
+            from pyspark.core.context import SparkContext
 
-        if _jvm is not None and not is_remote():
+            jvm = _jvm or SparkContext._jvm
+
+        if jvm is not None:
             self._java_executor_resource_requests = (
-                _jvm.org.apache.spark.resource.ExecutorResourceRequests()
+                jvm.org.apache.spark.resource.ExecutorResourceRequests()
             )
             if _requests is not None:
                 for k, v in _requests.items():
@@ -462,15 +465,18 @@ class TaskResourceRequests:
         _jvm: Optional["JVMView"] = None,
         _requests: Optional[Dict[str, TaskResourceRequest]] = None,
     ):
-        from pyspark import SparkContext
         from pyspark.sql import is_remote
 
-        _jvm = _jvm or SparkContext._jvm
+        jvm = None
+        if not is_remote():
+            from pyspark.core.context import SparkContext
 
-        if _jvm is not None and not is_remote():
+            jvm = _jvm or SparkContext._jvm
+
+        if jvm is not None:
             self._java_task_resource_requests: Optional[
                 "JavaObject"
-            ] = _jvm.org.apache.spark.resource.TaskResourceRequests()
+            ] = jvm.org.apache.spark.resource.TaskResourceRequests()
             if _requests is not None:
                 for k, v in _requests.items():
                     if k == self._CPUS:

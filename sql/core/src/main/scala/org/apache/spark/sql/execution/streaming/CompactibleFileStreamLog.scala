@@ -27,6 +27,8 @@ import org.apache.hadoop.fs.Path
 import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
+import org.apache.spark.internal.LogKey.{BATCH_ID, ELAPSED_TIME}
+import org.apache.spark.internal.MDC
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.util.Utils
@@ -240,7 +242,8 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
     }
 
     if (elapsedMs >= COMPACT_LATENCY_WARN_THRESHOLD_MS) {
-      logWarning(s"Compacting took $elapsedMs ms for compact batch $batchId")
+      logWarning(log"Compacting took ${MDC(ELAPSED_TIME, elapsedMs)} ms for compact batch " +
+        log"${MDC(BATCH_ID, batchId)}")
     } else {
       logDebug(s"Compacting took $elapsedMs ms for compact batch $batchId")
     }
