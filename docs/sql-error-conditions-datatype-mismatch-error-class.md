@@ -118,7 +118,7 @@ Input schema `<schema>` can only contain STRING as a key type for a MAP.
 
 ## INVALID_JSON_SCHEMA
 
-Input schema `<schema>` must be a struct, an array or a map.
+Input schema `<schema>` must be a struct, an array, a map or a variant.
 
 ## INVALID_MAP_KEY_TYPE
 

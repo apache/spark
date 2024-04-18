@@ -32,11 +32,17 @@ import org.apache.spark.sql.functions.expr
  * @param table the name of the target table for the merge operation.
  * @param ds the source Dataset to merge into the target table.
  * @param on the merge condition.
+ * @param schemaEvolutionEnabled whether to enable automatic schema evolution for this merge
+ *                               operation. Default is `false`.
  *
  * @since 4.0.0
  */
 @Experimental
-class MergeIntoWriter[T] private[sql] (table: String, ds: Dataset[T], on: Column) {
+class MergeIntoWriter[T] private[sql] (
+    table: String,
+    ds: Dataset[T],
+    on: Column,
+    schemaEvolutionEnabled: Boolean = false) {
 
   private val df: DataFrame = ds.toDF()
 
@@ -161,6 +167,14 @@ class MergeIntoWriter[T] private[sql] (table: String, ds: Dataset[T], on: Column
   }
 
   /**
+   * Enable automatic schema evolution for this merge operation.
+   * @return A `MergeIntoWriter` instance with schema evolution enabled.
+   */
+  def withSchemaEvolution(): MergeIntoWriter[T] = {
+    new MergeIntoWriter[T](this.table, this.ds, this.on, schemaEvolutionEnabled = true)
+  }
+
+  /**
    * Executes the merge operation.
    */
   def merge(): Unit = {
@@ -176,7 +190,8 @@ class MergeIntoWriter[T] private[sql] (table: String, ds: Dataset[T], on: Column
       on.expr,
       matchedActions,
       notMatchedActions,
-      notMatchedBySourceActions)
+      notMatchedBySourceActions,
+      schemaEvolutionEnabled)
     val qe = sparkSession.sessionState.executePlan(merge)
     qe.assertCommandExecuted()
   }

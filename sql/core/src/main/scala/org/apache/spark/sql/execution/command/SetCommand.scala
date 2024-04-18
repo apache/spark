@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{CONFIG, CONFIG2, KEY, VALUE}
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -51,8 +52,9 @@ case class SetCommand(kv: Option[(String, Option[String])])
     case Some((SQLConf.Deprecated.MAPRED_REDUCE_TASKS, Some(value))) =>
       val runFunc = (sparkSession: SparkSession) => {
         logWarning(
-          s"Property ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} is deprecated, " +
-            s"automatically converted to ${SQLConf.SHUFFLE_PARTITIONS.key} instead.")
+          log"Property ${MDC(CONFIG, SQLConf.Deprecated.MAPRED_REDUCE_TASKS)} is deprecated, " +
+            log"automatically converted to ${MDC(CONFIG2, SQLConf.SHUFFLE_PARTITIONS.key)} " +
+            log"instead.")
         if (value.toInt < 1) {
           val msg =
             s"Setting negative ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} for automatically " +
@@ -68,8 +70,9 @@ case class SetCommand(kv: Option[(String, Option[String])])
     case Some((SQLConf.Replaced.MAPREDUCE_JOB_REDUCES, Some(value))) =>
       val runFunc = (sparkSession: SparkSession) => {
         logWarning(
-          s"Property ${SQLConf.Replaced.MAPREDUCE_JOB_REDUCES} is Hadoop's property, " +
-            s"automatically converted to ${SQLConf.SHUFFLE_PARTITIONS.key} instead.")
+          log"Property ${MDC(CONFIG, SQLConf.Replaced.MAPREDUCE_JOB_REDUCES)} is Hadoop's " +
+            log"property, automatically converted to " +
+            log"${MDC(CONFIG2, SQLConf.SHUFFLE_PARTITIONS.key)} instead.")
         if (value.toInt < 1) {
           val msg =
             s"Setting negative ${SQLConf.Replaced.MAPREDUCE_JOB_REDUCES} for automatically " +
@@ -111,11 +114,12 @@ case class SetCommand(kv: Option[(String, Option[String])])
         }
         if (sparkSession.conf.get(CATALOG_IMPLEMENTATION.key).equals("hive") &&
             key.startsWith("hive.")) {
-          logWarning(s"'SET $key=$value' might not work, since Spark doesn't support changing " +
-            "the Hive config dynamically. Please pass the Hive-specific config by adding the " +
-            s"prefix spark.hadoop (e.g. spark.hadoop.$key) when starting a Spark application. " +
-            "For details, see the link: https://spark.apache.org/docs/latest/configuration.html#" +
-            "dynamically-loading-spark-properties.")
+          logWarning(log"'SET ${MDC(KEY, key)}=${MDC(VALUE, value)}' might not work, since Spark " +
+            log"doesn't support changing the Hive config dynamically. Please pass the " +
+            log"Hive-specific config by adding the prefix spark.hadoop " +
+            log"(e.g. spark.hadoop.${MDC(KEY, key)}) when starting a Spark application. For " +
+            log"details, see the link: https://spark.apache.org/docs/latest/configuration.html#" +
+            log"dynamically-loading-spark-properties.")
         }
         sparkSession.conf.set(key, value)
         Seq(Row(key, value))
@@ -155,8 +159,8 @@ case class SetCommand(kv: Option[(String, Option[String])])
     case Some((SQLConf.Deprecated.MAPRED_REDUCE_TASKS, None)) =>
       val runFunc = (sparkSession: SparkSession) => {
         logWarning(
-          s"Property ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} is deprecated, " +
-            s"showing ${SQLConf.SHUFFLE_PARTITIONS.key} instead.")
+          log"Property ${MDC(CONFIG, SQLConf.Deprecated.MAPRED_REDUCE_TASKS)} is deprecated, " +
+            log"showing ${MDC(CONFIG2, SQLConf.SHUFFLE_PARTITIONS.key)} instead.")
         Seq(Row(
           SQLConf.SHUFFLE_PARTITIONS.key,
           sparkSession.sessionState.conf.defaultNumShufflePartitions.toString))

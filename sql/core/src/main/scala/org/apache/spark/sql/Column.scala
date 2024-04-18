@@ -20,7 +20,8 @@ package org.apache.spark.sql
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{LEFT_EXPR, RIGHT_EXPR}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions._
@@ -171,29 +172,6 @@ class Column(val expr: Expression) extends Logging {
     Column.fn(name, this, lit(other))
   }
 
-  /**
-   * A version of the `fn` method specifically designed for binary operations in PySpark
-   * that require logging information.
-   * This method is used when the operation involves another Column.
-   *
-   * @param name                The name of the operation to be performed.
-   * @param other               The value to be used in the operation, which will be converted to a
-   *                            Column if not already one.
-   * @param pysparkFragment     A string representing the 'fragment' of the PySpark error context,
-   *                            typically indicates the name of PySpark function.
-   * @param pysparkCallSite     A string representing the 'callSite' of the PySpark error context,
-   *                            providing the exact location within the PySpark code where the
-   *                            operation originated.
-   * @return A Column resulting from the operation.
-   */
-  private def fn(
-      name: String, other: Any, pysparkFragment: String, pysparkCallSite: String): Column = {
-    val tupleInfo = (pysparkFragment, pysparkCallSite)
-    withOrigin(Some(tupleInfo)) {
-      Column.fn(name, this, lit(other))
-    }
-  }
-
   override def toString: String = toPrettySQL(expr)
 
   override def equals(that: Any): Boolean = that match {
@@ -310,8 +288,9 @@ class Column(val expr: Expression) extends Logging {
     val right = lit(other).expr
     if (this.expr == right) {
       logWarning(
-        s"Constructing trivially true equals predicate, '${this.expr} = $right'. " +
-            "Perhaps you need to use aliases.")
+        log"Constructing trivially true equals predicate, " +
+          log"'${MDC(LEFT_EXPR, this.expr)} = ${MDC(RIGHT_EXPR, right)}'. " +
+          log"Perhaps you need to use aliases.")
     }
     fn("=", other)
   }
@@ -516,8 +495,9 @@ class Column(val expr: Expression) extends Logging {
     val right = lit(other).expr
     if (this.expr == right) {
       logWarning(
-        s"Constructing trivially true equals predicate, '${this.expr} <=> $right'. " +
-          "Perhaps you need to use aliases.")
+        log"Constructing trivially true equals predicate, " +
+          log"'${MDC(LEFT_EXPR, this.expr)} <=> ${MDC(RIGHT_EXPR, right)}'. " +
+          log"Perhaps you need to use aliases.")
     }
     fn("<=>", other)
   }
