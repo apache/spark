@@ -1444,7 +1444,6 @@ class TypesTestsMixin:
         json_str = "{%s}" % ",".join(['"%s": %s' % (t[0], t[1]) for t in expected_values])
 
         df = self.spark.createDataFrame([({"json": json_str})])
-
         row = df.select(
             F.parse_json(df.json).alias("v"),
             F.array([F.parse_json(F.lit('{"a": 1}'))]).alias("a"),
