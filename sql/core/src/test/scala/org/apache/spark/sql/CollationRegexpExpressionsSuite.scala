@@ -82,6 +82,118 @@ class CollationRegexpExpressionsSuite
     })
   }
 
+  test("Support LikeAll string expression with collation") {
+    // Supported collations
+    case class LikeAllTestCase[R](s: String, p: Seq[String], c: String, result: R)
+    val testCases = Seq(
+      LikeAllTestCase("foo", Seq("%foo%", "%oo"), "UTF8_BINARY", true),
+      LikeAllTestCase("Foo", Seq("%foo%", "%oo"), "UTF8_BINARY_LCASE", true),
+      LikeAllTestCase("foo", Seq("%foo%", "%bar%"), "UNICODE", false)
+    )
+    testCases.foreach(t => {
+      val query = s"SELECT collate('${t.s}', '${t.c}') LIKE ALL ('${t.p.mkString("','")}')"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(BooleanType))
+    })
+    // Unsupported collations
+    case class LikeAllTestFail(s: String, p: Seq[String], c: String)
+    val failCases = Seq(
+      LikeAllTestFail("Foo", Seq("%foo%", "%oo"), "UNICODE_CI")
+    )
+    failCases.foreach(t => {
+      val query = s"SELECT collate('${t.s}', '${t.c}') LIKE ALL ('${t.p.mkString("','")}')"
+      val unsupportedCollation = intercept[AnalysisException] {
+        sql(query)
+      }
+      assert(unsupportedCollation.getErrorClass === "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
+    })
+  }
+
+  test("Support NotLikeAll string expression with collation") {
+    // Supported collations
+    case class NotLikeAllTestCase[R](s: String, p: Seq[String], c: String, result: R)
+    val testCases = Seq(
+      NotLikeAllTestCase("foo", Seq("%foo%", "%oo"), "UTF8_BINARY", false),
+      NotLikeAllTestCase("Foo", Seq("%foo%", "%oo"), "UTF8_BINARY_LCASE", false),
+      NotLikeAllTestCase("foo", Seq("%goo%", "%bar%"), "UNICODE", true)
+    )
+    testCases.foreach(t => {
+      val query = s"SELECT collate('${t.s}', '${t.c}') NOT LIKE ALL ('${t.p.mkString("','")}')"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(BooleanType))
+    })
+    // Unsupported collations
+    case class NotLikeAllTestFail(s: String, p: Seq[String], c: String)
+    val failCases = Seq(
+      NotLikeAllTestFail("Foo", Seq("%foo%", "%oo"), "UNICODE_CI")
+    )
+    failCases.foreach(t => {
+      val query = s"SELECT collate('${t.s}', '${t.c}') NOT LIKE ALL ('${t.p.mkString("','")}')"
+      val unsupportedCollation = intercept[AnalysisException] {
+        sql(query)
+      }
+      assert(unsupportedCollation.getErrorClass === "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
+    })
+  }
+
+  test("Support LikeAny string expression with collation") {
+    // Supported collations
+    case class LikeAnyTestCase[R](s: String, p: Seq[String], c: String, result: R)
+    val testCases = Seq(
+      LikeAnyTestCase("foo", Seq("%foo%", "%bar"), "UTF8_BINARY", true),
+      LikeAnyTestCase("Foo", Seq("%foo%", "%bar"), "UTF8_BINARY_LCASE", true),
+      LikeAnyTestCase("foo", Seq("%goo%", "%hoo%"), "UNICODE", false)
+    )
+    testCases.foreach(t => {
+      val query = s"SELECT collate('${t.s}', '${t.c}') LIKE ANY ('${t.p.mkString("','")}')"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(BooleanType))
+    })
+    // Unsupported collations
+    case class LikeAnyTestFail(s: String, p: Seq[String], c: String)
+    val failCases = Seq(
+      LikeAnyTestFail("Foo", Seq("%foo%", "%oo"), "UNICODE_CI")
+    )
+    failCases.foreach(t => {
+      val query = s"SELECT collate('${t.s}', '${t.c}') LIKE ANY ('${t.p.mkString("','")}')"
+      val unsupportedCollation = intercept[AnalysisException] {
+        sql(query)
+      }
+      assert(unsupportedCollation.getErrorClass === "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
+    })
+  }
+
+  test("Support NotLikeAny string expression with collation") {
+    // Supported collations
+    case class NotLikeAnyTestCase[R](s: String, p: Seq[String], c: String, result: R)
+    val testCases = Seq(
+      NotLikeAnyTestCase("foo", Seq("%foo%", "%hoo"), "UTF8_BINARY", true),
+      NotLikeAnyTestCase("Foo", Seq("%foo%", "%hoo"), "UTF8_BINARY_LCASE", true),
+      NotLikeAnyTestCase("foo", Seq("%foo%", "%oo%"), "UNICODE", false)
+    )
+    testCases.foreach(t => {
+      val query = s"SELECT collate('${t.s}', '${t.c}') NOT LIKE ANY ('${t.p.mkString("','")}')"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(BooleanType))
+    })
+    // Unsupported collations
+    case class NotLikeAnyTestFail(s: String, p: Seq[String], c: String)
+    val failCases = Seq(
+      NotLikeAnyTestFail("Foo", Seq("%foo%", "%oo"), "UNICODE_CI")
+    )
+    failCases.foreach(t => {
+      val query = s"SELECT collate('${t.s}', '${t.c}') NOT LIKE ANY ('${t.p.mkString("','")}')"
+      val unsupportedCollation = intercept[AnalysisException] {
+        sql(query)
+      }
+      assert(unsupportedCollation.getErrorClass === "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
+    })
+  }
+
   test("Support RLike string expression with collation") {
     // Supported collations
     case class RLikeTestCase[R](l: String, r: String, c: String, result: R)
