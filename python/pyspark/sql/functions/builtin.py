@@ -15453,6 +15453,135 @@ def parse_json(
 
 
 @_try_remote_functions
+def is_variant_null(v: "ColumnOrName") -> Column:
+    """
+    Check if a variant value is a variant null. Returns true if and only if the input is a variant
+    null and false otherwise (including in the case of SQL NULL).
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    v : :class:`~pyspark.sql.Column` or str
+        a variant column or column name
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
+    >>> df.select(is_variant_null(parse_json(df.json)).alias("r")).collect()
+    [Row(r=False)]
+    """
+
+    return _invoke_function("is_variant_null", _to_java_column(v))
+
+
+@_try_remote_functions
+def variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
+    """
+    Extracts a sub-variant from `v` according to `path`, and then cast the sub-variant to
+    `targetType`. Returns null if the path does not exist. Throws an exception if the cast fails.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    v : :class:`~pyspark.sql.Column` or str
+        a variant column or column name
+    path : str
+        the extraction path. A valid path should start with `$` and is followed by zero or more
+        segments like `[123]`, `.name`, `['name']`, or `["name"]`.
+    targetType : str
+        the target data type to cast into, in a DDL-formatted string
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
+    >>> df.select(variant_get(parse_json(df.json), "$.a", "int").alias("r")).collect()
+    [Row(r=1)]
+    >>> df.select(variant_get(parse_json(df.json), "$.b", "int").alias("r")).collect()
+    [Row(r=None)]
+    """
+
+    return _invoke_function("variant_get", _to_java_column(v), path, targetType)
+
+
+@_try_remote_functions
+def try_variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
+    """
+    Extracts a sub-variant from `v` according to `path`, and then cast the sub-variant to
+    `targetType`. Returns null if the path does not exist or the cast fails.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    v : :class:`~pyspark.sql.Column` or str
+        a variant column or column name
+    path : str
+        the extraction path. A valid path should start with `$` and is followed by zero or more
+        segments like `[123]`, `.name`, `['name']`, or `["name"]`.
+    targetType : str
+        the target data type to cast into, in a DDL-formatted string
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
+    >>> df.select(try_variant_get(parse_json(df.json), "$.a", "int").alias("r")).collect()
+    [Row(r=1)]
+    >>> df.select(try_variant_get(parse_json(df.json), "$.b", "int").alias("r")).collect()
+    [Row(r=None)]
+    >>> df.select(try_variant_get(parse_json(df.json), "$.a", "binary").alias("r")).collect()
+    [Row(r=None)]
+    """
+
+    return _invoke_function("try_variant_get", _to_java_column(v), path, targetType)
+
+
+@_try_remote_functions
+def schema_of_variant(v: "ColumnOrName") -> Column:
+    """
+    Returns schema in the SQL format of a variant.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    v : :class:`~pyspark.sql.Column` or str
+        a variant column or column name
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
+    >>> df.select(schema_of_variant(parse_json(df.json)).alias("r")).collect()
+    [Row(r='STRUCT<a: BIGINT>')]
+    """
+
+    return _invoke_function("schema_of_variant", _to_java_column(v))
+
+
+@_try_remote_functions
+def schema_of_variant_agg(v: "ColumnOrName") -> Column:
+    """
+    Returns the merged schema in the SQL format of a variant column.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    v : :class:`~pyspark.sql.Column` or str
+        a variant column or column name
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
+    >>> df.select(schema_of_variant_agg(parse_json(df.json)).alias("r")).collect()
+    [Row(r='STRUCT<a: BIGINT>')]
+    """
+
+    return _invoke_function("schema_of_variant_agg", _to_java_column(v))
+
+
+@_try_remote_functions
 def to_json(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
     """
     Converts a column containing a :class:`StructType`, :class:`ArrayType` or a :class:`MapType`

@@ -533,6 +533,11 @@ JSON Functions
     json_object_keys
     json_tuple
     parse_json
+    is_variant_null
+    variant_get
+    try_variant_get
+    schema_of_variant
+    schema_of_variant_agg
     schema_of_json
     to_json
 
