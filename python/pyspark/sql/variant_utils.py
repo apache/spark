@@ -19,11 +19,11 @@ import base64
 import decimal
 import datetime
 import json
+import pytz
 import struct
 from array import array
 from typing import Any, Callable, Dict, List, Tuple
 from pyspark.errors import PySparkValueError
-
 
 class VariantUtils:
     """
@@ -111,14 +111,15 @@ class VariantUtils:
 
     EPOCH = datetime.datetime(year = 1970, month = 1, day = 1, hour = 0, minute = 0, second = 0,
         tzinfo = datetime.timezone.utc)
+    EPOCH_NTZ = datetime.datetime(year = 1970, month = 1, day = 1, hour = 0, minute = 0, second = 0)
 
     @classmethod
-    def to_json(cls, value: bytes, metadata: bytes) -> str:
+    def to_json(cls, value: bytes, metadata: bytes, zone_id: str = "UTC") -> str:
         """
         Convert the VariantVal to a JSON string.
         :return: JSON string
         """
-        return cls._to_json(value, metadata, 0)
+        return cls._to_json(value, metadata, 0, zone_id)
 
     @classmethod
     def to_python(cls, value: bytes, metadata: bytes) -> str:
@@ -208,16 +209,20 @@ class VariantUtils:
         raise PySparkValueError(error_class="MALFORMED_VARIANT")
 
     @classmethod
-    def _get_timestamp(cls, value: bytes, pos: int) -> datetime.datetime:
+    def _get_timestamp(cls, value: bytes, pos: int, zone_id: str) -> datetime.datetime:
         cls._check_index(pos, len(value))
         basic_type, type_info = cls._get_type_info(value, pos)
         if basic_type != VariantUtils.PRIMITIVE:
             raise PySparkValueError(error_class="MALFORMED_VARIANT")
-        if type_info == VariantUtils.TIMESTAMP or type_info == VariantUtils.TIMESTAMP_NTZ:
-            microseconds_since_epoch = cls._read_long(value, pos + 1, 4, signed=True)
-            return datetime.datetime.fromtimestamp(
-                microseconds_since_epoch // microseconds_since_epoch
-            )
+        if type_info == VariantUtils.TIMESTAMP_NTZ:
+            microseconds_since_epoch = cls._read_long(value, pos + 1, 8, signed=True)
+            return (VariantUtils.EPOCH_NTZ + datetime.timedelta(
+                microseconds = microseconds_since_epoch))
+        if type_info == VariantUtils.TIMESTAMP:
+            microseconds_since_epoch = cls._read_long(value, pos + 1, 8, signed=True)
+            return (VariantUtils.EPOCH + datetime.timedelta(
+                microseconds = microseconds_since_epoch)).astimezone(pytz.timezone(zone_id))
+        raise PySparkValueError(error_class="MALFORMED_VARIANT")
 
     @classmethod
     def _get_string(cls, value: bytes, pos: int) -> str:
@@ -279,7 +284,7 @@ class VariantUtils:
         start = pos + 1 + VariantUtils.U32_SIZE
         length = cls._read_long(value, pos + 1, VariantUtils.U32_SIZE, signed=False)
         cls._check_index(start + length - 1, len(value))
-        return value[start : start + length]
+        return bytes(value[start : start + length])
 
     @classmethod
     def _get_type(cls, value: bytes, pos: int) -> Any:
@@ -324,13 +329,13 @@ class VariantUtils:
         raise PySparkValueError(error_class="MALFORMED_VARIANT")
 
     @classmethod
-    def _to_json(cls, value: bytes, metadata: bytes, pos: int) -> Any:
+    def _to_json(cls, value: bytes, metadata: bytes, pos: int, zone_id: str) -> Any:
         variant_type = cls._get_type(value, pos)
         if variant_type == dict:
 
             def handle_object(key_value_pos_list: List[Tuple[str, int]]) -> str:
                 key_value_list = [
-                    json.dumps(key) + ":" + cls._to_json(value, metadata, value_pos)
+                    json.dumps(key) + ":" + cls._to_json(value, metadata, value_pos, zone_id)
                     for (key, value_pos) in key_value_pos_list
                 ]
                 return "{" + ",".join(key_value_list) + "}"
@@ -340,13 +345,14 @@ class VariantUtils:
 
             def handle_array(value_pos_list: List[int]) -> str:
                 value_list = [
-                    cls._to_json(value, metadata, value_pos) for value_pos in value_pos_list
+                    cls._to_json(value, metadata, value_pos, zone_id)
+                        for value_pos in value_pos_list
                 ]
                 return "[" + ",".join(value_list) + "]"
 
             return cls._handle_array(value, pos, handle_array)
         else:
-            value = cls._get_scalar(variant_type, value, metadata, pos)
+            value = cls._get_scalar(variant_type, value, metadata, pos, zone_id)
             if value is None:
                 return "null"
             if type(value) == bool:
@@ -354,19 +360,20 @@ class VariantUtils:
             if type(value) == str:
                 return json.dumps(value)
             if type(value) == bytes:
-                return base64.b64encode(value)
+                # decoding simply converts byte array to string
+                return '"' + base64.b64encode(value).decode('utf-8') + '"'
             if type(value) == datetime.date:
                 return str(value)
             return str(value)
 
     @classmethod
-    def _to_python(cls, value: bytes, metadata: bytes, pos: int) -> Any:
+    def _to_python(cls, value: bytes, metadata: bytes, pos: int, zone_id: str = "UTC") -> Any:
         variant_type = cls._get_type(value, pos)
         if variant_type == dict:
 
             def handle_object(key_value_pos_list: List[Tuple[str, int]]) -> Dict[str, Any]:
                 key_value_list = [
-                    (key, cls._to_python(value, metadata, value_pos))
+                    (key, cls._to_python(value, metadata, value_pos, zone_id))
                     for (key, value_pos) in key_value_pos_list
                 ]
                 return dict(key_value_list)
@@ -376,16 +383,18 @@ class VariantUtils:
 
             def handle_array(value_pos_list: List[int]) -> List[Any]:
                 value_list = [
-                    cls._to_python(value, metadata, value_pos) for value_pos in value_pos_list
+                    cls._to_python(value, metadata, value_pos, zone_id)
+                    for value_pos in value_pos_list
                 ]
                 return value_list
 
             return cls._handle_array(value, pos, handle_array)
         else:
-            return cls._get_scalar(variant_type, value, metadata, pos)
+            return cls._get_scalar(variant_type, value, metadata, pos, zone_id)
 
     @classmethod
-    def _get_scalar(cls, variant_type: Any, value: bytes, metadata: bytes, pos: int) -> Any:
+    def _get_scalar(cls, variant_type: Any, value: bytes, metadata: bytes, pos: int,
+                    zone_id: str) -> Any:
         if isinstance(None, variant_type):
             return None
         elif variant_type == bool:
@@ -403,7 +412,7 @@ class VariantUtils:
         elif variant_type == datetime.date:
             return cls._get_date(value, pos)
         elif variant_type == datetime.datetime:
-            return cls._get_timestamp(value, pos)
+            return cls._get_timestamp(value, pos, zone_id)
         else:
             raise PySparkValueError(error_class="MALFORMED_VARIANT")
 
