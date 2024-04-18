@@ -385,8 +385,7 @@ class VariantUtils:
 
             def handle_array(value_pos_list: List[int]) -> List[Any]:
                 value_list = [
-                    cls._to_python(value, metadata, value_pos)
-                    for value_pos in value_pos_list
+                    cls._to_python(value, metadata, value_pos) for value_pos in value_pos_list
                 ]
                 return value_list
 
