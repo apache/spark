@@ -32,7 +32,8 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.executor.InputMetrics
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{DEFAULT_ISOLATION_LEVEL, ISOLATION_LEVEL}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.{DecimalPrecision, Resolver}
@@ -771,11 +772,13 @@ object JdbcUtils extends Logging with SQLConfHelper {
             // Finally update to actually requested level if possible
             finalIsolationLevel = isolationLevel
           } else {
-            logWarning(s"Requested isolation level $isolationLevel is not supported; " +
-                s"falling back to default isolation level $defaultIsolation")
+            logWarning(log"Requested isolation level ${MDC(ISOLATION_LEVEL, isolationLevel)} " +
+              log"is not supported; falling back to default isolation level " +
+              log"${MDC(DEFAULT_ISOLATION_LEVEL, defaultIsolation)}")
           }
         } else {
-          logWarning(s"Requested isolation level $isolationLevel, but transactions are unsupported")
+          logWarning(log"Requested isolation level ${MDC(ISOLATION_LEVEL, isolationLevel)}, " +
+            log"but transactions are unsupported")
         }
       } catch {
         case NonFatal(e) => logWarning("Exception while detecting transaction support", e)
@@ -875,16 +878,15 @@ object JdbcUtils extends Logging with SQLConfHelper {
    * Compute the schema string for this RDD.
    */
   def schemaString(
+      dialect: JdbcDialect,
       schema: StructType,
       caseSensitive: Boolean,
-      url: String,
       createTableColumnTypes: Option[String] = None): String = {
     val sb = new StringBuilder()
-    val dialect = JdbcDialects.get(url)
     val userSpecifiedColTypesMap = createTableColumnTypes
-      .map(parseUserSpecifiedCreateTableColumnTypes(schema, caseSensitive, _))
+      .map(parseUserSpecifiedCreateTableColumnTypes(dialect, schema, caseSensitive, _))
       .getOrElse(Map.empty[String, String])
-    schema.fields.foreach { field =>
+    schema.foreach { field =>
       val name = dialect.quoteIdentifier(field.name)
       val typ = userSpecifiedColTypesMap
         .getOrElse(field.name, getJdbcType(field.dataType, dialect).databaseTypeDefinition)
@@ -900,6 +902,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
    * use in-place of the default data type.
    */
   private def parseUserSpecifiedCreateTableColumnTypes(
+      dialect: JdbcDialect,
       schema: StructType,
       caseSensitive: Boolean,
       createTableColumnTypes: String): Map[String, String] = {
@@ -916,7 +919,9 @@ object JdbcUtils extends Logging with SQLConfHelper {
       }
     }
 
-    val userSchemaMap = userSchema.fields.map(f => f.name -> f.dataType.catalogString).toMap
+    val userSchemaMap = userSchema
+      .map(f => f.name -> getJdbcType(f.dataType, dialect).databaseTypeDefinition)
+      .toMap
     if (caseSensitive) userSchemaMap else CaseInsensitiveMap(userSchemaMap)
   }
 
@@ -985,7 +990,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     val statement = conn.createStatement
     val dialect = JdbcDialects.get(options.url)
     val strSchema = schemaString(
-      schema, caseSensitive, options.url, options.createTableColumnTypes)
+      dialect, schema, caseSensitive, options.createTableColumnTypes)
     try {
       statement.setQueryTimeout(options.queryTimeout)
       dialect.createTable(statement, tableName, strSchema, options)

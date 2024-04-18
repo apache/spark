@@ -3371,7 +3371,7 @@ object SQLConf {
       "standard directly, but their behaviors align with ANSI SQL's style")
     .version("3.0.0")
     .booleanConf
-    .createWithDefault(sys.env.get("SPARK_ANSI_SQL_MODE").contains("true"))
+    .createWithDefault(!sys.env.get("SPARK_ANSI_SQL_MODE").contains("false"))
 
   val ENFORCE_RESERVED_KEYWORDS = buildConf("spark.sql.ansi.enforceReservedKeywords")
     .doc(s"When true and '${ANSI_ENABLED.key}' is true, the Spark SQL parser enforces the ANSI " +
@@ -3442,6 +3442,17 @@ object SQLConf {
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
+
+  val USE_COMMON_EXPR_ID_FOR_ALIAS =
+    buildConf("spark.sql.useCommonExprIdForAlias")
+      .internal()
+      .doc("When true, use the common expression ID for the alias when rewriting With " +
+        "expressions. Otherwise, use the index of the common expression definition. When true " +
+        "this avoids duplicate alias names, but is helpful to set to false for testing to ensure" +
+        "that alias names are consistent.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
 
   val USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES =
     buildConf("spark.sql.defaultColumn.useNullsForMissingDefaultValues")
@@ -4131,6 +4142,15 @@ object SQLConf {
     buildConf("spark.sql.legacy.mysql.bitArrayMapping.enabled")
       .internal()
       .doc("When true, use LongType to represent MySQL BIT(n>1); otherwise, use BinaryType.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_ORACLE_TIMESTAMP_MAPPING_ENABLED =
+    buildConf("spark.sql.legacy.oracle.timestampMapping.enabled")
+      .internal()
+      .doc("When true, TimestampType maps to TIMESTAMP in Oracle; otherwise, " +
+        "TIMESTAMP WITH LOCAL TIME ZONE.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
@@ -5234,6 +5254,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyMySqlBitArrayMappingEnabled: Boolean =
     getConf(LEGACY_MYSQL_BIT_ARRAY_MAPPING_ENABLED)
+
+  def legacyOracleTimestampMappingEnabled: Boolean =
+    getConf(LEGACY_ORACLE_TIMESTAMP_MAPPING_ENABLED)
 
   override def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = {
     LegacyBehaviorPolicy.withName(getConf(SQLConf.LEGACY_TIME_PARSER_POLICY))
