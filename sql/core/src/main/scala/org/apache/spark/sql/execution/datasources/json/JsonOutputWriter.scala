@@ -21,7 +21,8 @@ import java.nio.charset.{Charset, StandardCharsets}
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.TaskAttemptContext
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{ENCODING, PATH}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JSONOptions, JSONOptionsInRead}
 import org.apache.spark.sql.execution.datasources.{CodecStreams, OutputWriter}
@@ -40,8 +41,9 @@ class JsonOutputWriter(
   }
 
   if (JSONOptionsInRead.denyList.contains(encoding)) {
-    logWarning(s"The JSON file ($path) was written in the encoding ${encoding.displayName()}" +
-      " which can be read back by Spark only if multiLine is enabled.")
+    logWarning(log"The JSON file (${MDC(PATH, path)}) was written in the encoding " +
+      log"${MDC(ENCODING, encoding.displayName())} which can be read back by Spark only " +
+      log"if multiLine is enabled.")
   }
 
   private val writer = CodecStreams.createOutputStreamWriter(context, new Path(path), encoding)

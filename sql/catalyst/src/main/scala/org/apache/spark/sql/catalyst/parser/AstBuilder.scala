@@ -455,6 +455,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     }
 
   override def visitMergeIntoTable(ctx: MergeIntoTableContext): LogicalPlan = withOrigin(ctx) {
+    val withSchemaEvolution = ctx.EVOLUTION() != null
     val targetTable = createUnresolvedRelation(ctx.target)
     val targetTableAlias = getTableAliasWithoutColumnAlias(ctx.targetAlias, "MERGE")
     val aliasedTarget = targetTableAlias.map(SubqueryAlias(_, targetTable)).getOrElse(targetTable)
@@ -549,7 +550,8 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       mergeCondition,
       matchedActions.toSeq,
       notMatchedActions.toSeq,
-      notMatchedBySourceActions.toSeq)
+      notMatchedBySourceActions.toSeq,
+      withSchemaEvolution)
   }
 
   /**

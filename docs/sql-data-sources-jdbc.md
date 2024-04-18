@@ -845,7 +845,7 @@ as the activated JDBC Driver. Note that, different JDBC drivers, or different ve
     <tr>
       <td>numeric, decimal</td>
       <td>DecimalType</td>
-      <td>Since PostgreSQL 15, 's' can be negative. If 's<0' it'll be adjusted to DecimalType(min(p-s, 38), 0); Otherwise, DecimalType(p, s), and if 'p>38', the fraction part will be truncated if exceeded. And if any value of this column have an actual precision greater 38 will fail with NUMERIC_VALUE_OUT_OF_RANGE.WITHOUT_SUGGESTION error</td>
+      <td><ul><li>Since PostgreSQL 15, 's' can be negative. If 's<0' it'll be adjusted to DecimalType(min(p-s, 38), 0); Otherwise, DecimalType(p, s)</li><li>If 'p>38', the fraction part will be truncated if exceeded. And if any value of this column have an actual precision greater 38 will fail with NUMERIC_VALUE_OUT_OF_RANGE.WITHOUT_SUGGESTION error.</li><li>Special numeric values, 'NaN', 'infinity' and '-infinity' is not supported</li></ul></td>
     </tr>
     <tr>
       <td>character varying(n), varchar(n)</td>
