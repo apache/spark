@@ -115,6 +115,8 @@ class VariantUtils:
 
     # The valid zone ids can be found here:
     # https://gist.github.com/heyalexej/8bf688fd67d7199be4a1682b3eec7568
+    # The default zone id is UTC, meaning that when the timestamps are converted to string, they
+    # are interpreted to have the UTC timezone and offset (+00:00)
     @classmethod
     def to_json(cls, value: bytes, metadata: bytes, zone_id: str = "UTC") -> str:
         """
