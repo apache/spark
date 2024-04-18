@@ -180,7 +180,7 @@ class TransformWithMapStateTTLSuite extends TransformWithStateTTLTest {
 
   import testImplicits._
   override def getProcessor(ttlConfig: TTLConfig):
-  StatefulProcessor[String, InputEvent, OutputEvent] = {
+      StatefulProcessor[String, InputEvent, OutputEvent] = {
     new MapStateSingleKeyTTLProcessor(ttlConfig)
   }
 

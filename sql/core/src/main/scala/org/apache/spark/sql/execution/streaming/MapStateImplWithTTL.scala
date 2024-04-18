@@ -33,6 +33,7 @@ import org.apache.spark.util.NextIterator
  * @param userKeyEnc  - Spark SQL encoder for the map key
  * @param valEncoder - SQL encoder for state variable
  * @param ttlConfig  - the ttl configuration (time to live duration etc.)
+ * @param batchTimestampMs - current batch processing timestamp.
  * @tparam K - type of key for map state variable
  * @tparam V - type of value for map state variable
  * @return - instance of MapState of type [K,V] that can be used to store state persistently
@@ -54,9 +55,9 @@ class MapStateImplWithTTL[K, V](
   private val ttlExpirationMs =
     StateTTL.calculateExpirationTimeForDuration(ttlConfig.ttlDuration, batchTimestampMs)
 
-  initialize()
+  createColumnFamily()
 
-  private def initialize(): Unit = {
+  private def createColumnFamily(): Unit = {
     store.createColFamilyIfAbsent(stateName, COMPOSITE_KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA_WITH_TTL,
       PrefixKeyScanStateEncoderSpec(COMPOSITE_KEY_ROW_SCHEMA, 1))
   }
@@ -95,9 +96,11 @@ class MapStateImplWithTTL[K, V](
   override def updateValue(key: K, value: V): Unit = {
     StateStoreErrors.requireNonNullStateValue(key, stateName)
     StateStoreErrors.requireNonNullStateValue(value, stateName)
+
     val encodedValue = stateTypesEncoder.encodeValue(value, ttlExpirationMs)
     val encodedCompositeKey = stateTypesEncoder.encodeCompositeKey(key)
     store.put(encodedCompositeKey, encodedValue, stateName)
+
     val serializedGroupingKey = stateTypesEncoder.serializeGroupingKey()
     val serializedUserKey = stateTypesEncoder.serializeUserKey(key)
     upsertTTLForStateKey(ttlExpirationMs, serializedGroupingKey, serializedUserKey)
@@ -147,7 +150,7 @@ class MapStateImplWithTTL[K, V](
   /** Remove this state. */
   override def clear(): Unit = {
     store.removeColFamilyIfExists(stateName)
-    initialize()
+    createColumnFamily()
     clearTTLState()
   }
 

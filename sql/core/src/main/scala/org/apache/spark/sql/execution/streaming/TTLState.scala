@@ -98,6 +98,11 @@ abstract class SingleKeyTTLStateImpl(
   store.createColFamilyIfAbsent(ttlColumnFamilyName, TTL_KEY_ROW_SCHEMA, TTL_VALUE_ROW_SCHEMA,
     RangeKeyScanStateEncoderSpec(TTL_KEY_ROW_SCHEMA, Seq(0)), isInternal = true)
 
+  /**
+   * This function will be called when clear() on State Variables
+   * with ttl enabled is called. This function should clear any
+   * associated ttlState, since we are clearing the user state.
+   */
   def clearTTLState(): Unit = {
     val iterator = store.iterator(ttlColumnFamilyName)
     iterator.takeWhile { kv =>
