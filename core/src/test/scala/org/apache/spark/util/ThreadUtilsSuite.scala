@@ -119,16 +119,17 @@ class ThreadUtilsSuite extends SparkFunSuite {
       runInNewThread("thread-name") { throw new IllegalArgumentException(uniqueExceptionMessage) }
     }
     assert(exception.getMessage === uniqueExceptionMessage)
-    assert(exception.getStackTrace.mkString("\n").contains(
+    val stacktrace = exception.getStackTrace.mkString("\n")
+    assert(stacktrace.contains(
       "... run in separate thread using org.apache.spark.util.ThreadUtils ..."),
       "stack trace does not contain expected place holder"
     )
-    assert(exception.getStackTrace.mkString("\n").contains("ThreadUtils.scala") === false,
+    assert(!stacktrace.contains("ThreadUtils.scala"),
       "stack trace contains unexpected references to ThreadUtils"
     )
   }
 
-  test("wrapCallerStacktrace") {
+  test("SPARK-47833: wrapCallerStacktrace") {
     var runnerThreadName: String = null
     var exception: Throwable = null
     val t = new Thread() {
@@ -147,19 +148,17 @@ class ThreadUtilsSuite extends SparkFunSuite {
 
     ThreadUtils.wrapCallerStacktrace(exception, s"run in separate thread: $runnerThreadName")
 
-    assert(exception.getStackTrace.mkString("\n").contains(
-      "internalMethod"),
+    val stacktrace = exception.getStackTrace.mkString("\n")
+    assert(stacktrace.contains("internalMethod"),
       "stack trace does not contain real exception stack trace"
     )
-    assert(exception.getStackTrace.mkString("\n").contains(
-      s"... run in separate thread: $runnerThreadName ..."),
+    assert(stacktrace.contains(s"... run in separate thread: $runnerThreadName ..."),
       "stack trace does not contain expected place holder"
     )
-    assert(exception.getStackTrace.mkString("\n").contains(
-      "org.scalatest.Suite.run"),
+    assert(stacktrace.contains("org.scalatest.Suite.run"),
       "stack trace does not contain caller stack trace"
     )
-    assert(exception.getStackTrace.mkString("\n").contains("ThreadUtils.scala") === false,
+    assert(!stacktrace.contains("ThreadUtils.scala"),
       "stack trace contains unexpected references to ThreadUtils"
     )
   }
