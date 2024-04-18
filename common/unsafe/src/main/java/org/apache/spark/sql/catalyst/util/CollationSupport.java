@@ -287,7 +287,7 @@ public final class CollationSupport {
     private static String toTitleCase(final String target, final int collationId) {
       ULocale locale = CollationFactory.fetchCollation(collationId)
               .collator.getLocale(ULocale.ACTUAL_LOCALE);
-      return UCharacter.toTitleCase(locale, target, null);
+      return UCharacter.toTitleCase(locale, target, BreakIterator.getWordInstance(locale));
     }
   }
 
