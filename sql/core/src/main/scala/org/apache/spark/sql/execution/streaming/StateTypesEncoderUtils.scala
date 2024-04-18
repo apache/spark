@@ -139,6 +139,11 @@ class StateTypesEncoder[GK, V](
       Some(expirationMs)
     }
   }
+
+  def isExpired(row: UnsafeRow, batchTimestampMs: Long): Boolean = {
+    val expirationMs = decodeTtlExpirationMs(row)
+    expirationMs.exists(StateTTL.isExpired(_, batchTimestampMs))
+  }
 }
 
 object StateTypesEncoder {

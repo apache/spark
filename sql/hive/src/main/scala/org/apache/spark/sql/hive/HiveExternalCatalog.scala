@@ -34,7 +34,7 @@ import org.apache.thrift.TException
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{DATABASE_NAME, SCHEMA, SCHEMA2, TABLE_NAME}
+import org.apache.spark.internal.LogKey.{DATABASE_NAME, INCOMPATIBLE_TYPES, PROVIDER, SCHEMA, SCHEMA2, TABLE_NAME}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
@@ -338,35 +338,37 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val (hiveCompatibleTable, logMessage) = maybeSerde match {
       case _ if options.skipHiveMetadata =>
         val message =
-          s"Persisting data source table $qualifiedTableName into Hive metastore in" +
-            "Spark SQL specific format, which is NOT compatible with Hive."
+          log"Persisting data source table ${MDC(TABLE_NAME, qualifiedTableName)} into Hive " +
+            log"metastore in Spark SQL specific format, which is NOT compatible with Hive."
         (None, message)
 
       case _ if incompatibleTypes.nonEmpty =>
+        val incompatibleTypesStr = incompatibleTypes.mkString(", ")
         val message =
-          s"Hive incompatible types found: ${incompatibleTypes.mkString(", ")}. " +
-            s"Persisting data source table $qualifiedTableName into Hive metastore in " +
-            "Spark SQL specific format, which is NOT compatible with Hive."
+          log"Hive incompatible types found: ${MDC(INCOMPATIBLE_TYPES, incompatibleTypesStr)}. " +
+            log"Persisting data source table ${MDC(TABLE_NAME, qualifiedTableName)} into Hive " +
+            log"metastore in Spark SQL specific format, which is NOT compatible with Hive."
         (None, message)
       // our bucketing is un-compatible with hive(different hash function)
       case Some(serde) if table.bucketSpec.nonEmpty =>
         val message =
-          s"Persisting bucketed data source table $qualifiedTableName into " +
-            "Hive metastore in Spark SQL specific format, which is NOT compatible with " +
-            "Hive bucketed table. But Hive can read this table as a non-bucketed table."
+          log"Persisting bucketed data source table ${MDC(TABLE_NAME, qualifiedTableName)} into " +
+            log"Hive metastore in Spark SQL specific format, which is NOT compatible with " +
+            log"Hive bucketed table. But Hive can read this table as a non-bucketed table."
         (Some(newHiveCompatibleMetastoreTable(serde)), message)
 
       case Some(serde) =>
         val message =
-          s"Persisting file based data source table $qualifiedTableName into " +
-            s"Hive metastore in Hive compatible format."
+          log"Persisting file based data source table ${MDC(TABLE_NAME, qualifiedTableName)} " +
+            log"into Hive metastore in Hive compatible format."
         (Some(newHiveCompatibleMetastoreTable(serde)), message)
 
       case _ =>
         val message =
-          s"Couldn't find corresponding Hive SerDe for data source provider $provider. " +
-            s"Persisting data source table $qualifiedTableName into Hive metastore in " +
-            s"Spark SQL specific format, which is NOT compatible with Hive."
+          log"Couldn't find corresponding Hive SerDe for data source provider " +
+            log"${MDC(PROVIDER, provider)}. Persisting data source table " +
+            log"${MDC(TABLE_NAME, qualifiedTableName)} into Hive metastore in " +
+            log"Spark SQL specific format, which is NOT compatible with Hive."
         (None, message)
     }
 

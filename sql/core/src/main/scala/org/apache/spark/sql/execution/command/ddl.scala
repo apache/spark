@@ -28,7 +28,8 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{ACTUAL_PARTITION_COLUMN, EXPECTED_PARTITION_COLUMN, PATH}
 import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -783,11 +784,12 @@ case class RepairTableCommand(
             partitionNames.drop(1), threshold, resolver, evalTaskSupport)
         } else {
           logWarning(
-            s"expected partition column ${partitionNames.head}, but got ${ps(0)}, ignoring it")
+            log"expected partition column ${MDC(EXPECTED_PARTITION_COLUMN, partitionNames.head)}," +
+              log" but got ${MDC(ACTUAL_PARTITION_COLUMN, ps(0))}, ignoring it")
           Seq.empty
         }
       } else {
-        logWarning(s"ignore ${new Path(path, name)}")
+        logWarning(log"ignore ${MDC(PATH, new Path(path, name))}")
         Seq.empty
       }
     }

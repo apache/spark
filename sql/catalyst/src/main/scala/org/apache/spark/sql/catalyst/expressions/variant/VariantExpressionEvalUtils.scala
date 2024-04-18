@@ -44,6 +44,17 @@ object VariantExpressionEvalUtils {
     }
   }
 
+  def isVariantNull(input: VariantVal): Boolean = {
+    if (input == null) {
+      // This is a SQL NULL, not a Variant NULL
+      false
+    } else {
+      val variantValue = input.getValue
+      // Variant NULL is denoted by basic_type == 0 and val_header == 0
+      variantValue(0) == 0
+     }
+  }
+
   /** Cast a Spark value from `dataType` into the variant type. */
   def castToVariant(input: Any, dataType: DataType): VariantVal = {
     val builder = new VariantBuilder
@@ -65,7 +76,8 @@ object VariantExpressionEvalUtils {
       case LongType => builder.appendLong(input.asInstanceOf[Long])
       case FloatType => builder.appendFloat(input.asInstanceOf[Float])
       case DoubleType => builder.appendDouble(input.asInstanceOf[Double])
-      case StringType => builder.appendString(input.asInstanceOf[UTF8String].toString)
+      case _: DecimalType => builder.appendDecimal(input.asInstanceOf[Decimal].toJavaBigDecimal)
+      case _: StringType => builder.appendString(input.asInstanceOf[UTF8String].toString)
       case BinaryType => builder.appendBinary(input.asInstanceOf[Array[Byte]])
       case DateType => builder.appendDate(input.asInstanceOf[Int])
       case TimestampType => builder.appendTimestamp(input.asInstanceOf[Long])

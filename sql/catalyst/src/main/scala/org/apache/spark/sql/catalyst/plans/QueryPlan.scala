@@ -518,6 +518,30 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   }
 
   /**
+   * Same as `transformUpWithSubqueries` except allows for pruning opportunities.
+   */
+  def transformUpWithSubqueriesAndPruning(
+    cond: TreePatternBits => Boolean,
+    ruleId: RuleId = UnknownRuleId)
+    (f: PartialFunction[PlanType, PlanType]): PlanType = {
+    val g: PartialFunction[PlanType, PlanType] = new PartialFunction[PlanType, PlanType] {
+      override def isDefinedAt(x: PlanType): Boolean = true
+
+      override def apply(plan: PlanType): PlanType = {
+        val transformed = plan.transformExpressionsUpWithPruning(t =>
+          t.containsPattern(PLAN_EXPRESSION) && cond(t)) {
+          case planExpression: PlanExpression[PlanType@unchecked] =>
+            val newPlan = planExpression.plan.transformUpWithSubqueriesAndPruning(cond, ruleId)(f)
+            planExpression.withNewPlan(newPlan)
+        }
+        f.applyOrElse[PlanType, PlanType](transformed, identity)
+      }
+    }
+
+    transformUpWithPruning(cond, ruleId)(g)
+  }
+
+  /**
    * This method is the top-down (pre-order) counterpart of transformUpWithSubqueries.
    * Returns a copy of this node where the given partial function has been recursively applied
    * first to this node, then this node's subqueries and finally this node's children.
