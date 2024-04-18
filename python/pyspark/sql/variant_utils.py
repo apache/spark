@@ -113,6 +113,8 @@ class VariantUtils:
         tzinfo = datetime.timezone.utc)
     EPOCH_NTZ = datetime.datetime(year = 1970, month = 1, day = 1, hour = 0, minute = 0, second = 0)
 
+    # The valid zone ids can be found here:
+    # https://gist.github.com/heyalexej/8bf688fd67d7199be4a1682b3eec7568
     @classmethod
     def to_json(cls, value: bytes, metadata: bytes, zone_id: str = "UTC") -> str:
         """
@@ -367,13 +369,13 @@ class VariantUtils:
             return str(value)
 
     @classmethod
-    def _to_python(cls, value: bytes, metadata: bytes, pos: int, zone_id: str = "UTC") -> Any:
+    def _to_python(cls, value: bytes, metadata: bytes, pos: int) -> Any:
         variant_type = cls._get_type(value, pos)
         if variant_type == dict:
 
             def handle_object(key_value_pos_list: List[Tuple[str, int]]) -> Dict[str, Any]:
                 key_value_list = [
-                    (key, cls._to_python(value, metadata, value_pos, zone_id))
+                    (key, cls._to_python(value, metadata, value_pos))
                     for (key, value_pos) in key_value_pos_list
                 ]
                 return dict(key_value_list)
@@ -383,14 +385,14 @@ class VariantUtils:
 
             def handle_array(value_pos_list: List[int]) -> List[Any]:
                 value_list = [
-                    cls._to_python(value, metadata, value_pos, zone_id)
+                    cls._to_python(value, metadata, value_pos)
                     for value_pos in value_pos_list
                 ]
                 return value_list
 
             return cls._handle_array(value, pos, handle_array)
         else:
-            return cls._get_scalar(variant_type, value, metadata, pos, zone_id)
+            return cls._get_scalar(variant_type, value, metadata, pos, zone_id = "UTC")
 
     @classmethod
     def _get_scalar(cls, variant_type: Any, value: bytes, metadata: bytes, pos: int,
