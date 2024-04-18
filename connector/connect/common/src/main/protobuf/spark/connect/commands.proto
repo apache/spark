@@ -43,6 +43,8 @@ message Command {
     StreamingQueryManagerCommand streaming_query_manager_command = 9;
     CommonInlineUserDefinedTableFunction register_table_function = 10;
     StreamingQueryListenerBusCommand streaming_query_listener_bus_command = 11;
+    CommonInlineUserDefinedDataSource register_data_source = 12;
+    CreateResourceProfileCommand create_resource_profile_command = 13;
 
     // This field is used to mark extensions to the protocol. When plugins generate arbitrary
     // Commands they can add them here. During the planning the correct resolution is done.
@@ -59,7 +61,7 @@ message Command {
 // almost oblivious to the server-side behavior.
 message SqlCommand {
   // (Required) SQL Query.
-  string sql = 1;
+  string sql = 1 [deprecated=true];
 
   // (Optional) A map of parameter names to literal expressions.
   map<string, Expression.Literal> args = 2 [deprecated=true];
@@ -69,11 +71,14 @@ message SqlCommand {
 
   // (Optional) A map of parameter names to expressions.
   // It cannot coexist with `pos_arguments`.
-  map<string, Expression> named_arguments = 4;
+  map<string, Expression> named_arguments = 4 [deprecated=true];
 
   // (Optional) A sequence of expressions for positional parameters in the SQL query text.
   // It cannot coexist with `named_arguments`.
-  repeated Expression pos_arguments = 5;
+  repeated Expression pos_arguments = 5 [deprecated=true];
+
+  // (Optional) The relation that this SQL command will be built on.
+  Relation input = 6;
 }
 
 // A command that can create DataFrame global temp view or local temp view.
@@ -466,4 +471,16 @@ message GetResourcesCommand { }
 // Response for command 'GetResourcesCommand'.
 message GetResourcesCommandResult {
   map<string, ResourceInformation> resources = 1;
+}
+
+// Command to create ResourceProfile
+message CreateResourceProfileCommand {
+  // (Required) The ResourceProfile to be built on the server-side.
+  ResourceProfile profile = 1;
+}
+
+// Response for command 'CreateResourceProfileCommand'.
+message CreateResourceProfileCommandResult {
+  // (Required) Server-side generated resource profile id.
+  int32 profile_id = 1;
 }

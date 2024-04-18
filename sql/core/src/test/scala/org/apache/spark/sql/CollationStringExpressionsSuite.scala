@@ -20,61 +20,420 @@ package org.apache.spark.sql
 import scala.collection.immutable.Seq
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, DataType, IntegerType, StringType}
 
-class CollationStringExpressionsSuite extends QueryTest with SharedSparkSession {
+// scalastyle:off nonascii
+class CollationStringExpressionsSuite
+  extends QueryTest
+  with SharedSparkSession {
 
-  case class CollationTestCase[R](s1: String, s2: String, collation: String, expectedResult: R)
-  case class CollationTestFail[R](s1: String, s2: String, collation: String)
-
-  test("Support ConcatWs string expression with Collation") {
+  test("Support ConcatWs string expression with collation") {
     // Supported collations
-    val checks = Seq(
-      CollationTestCase("Spark", "SQL", "UTF8_BINARY", "Spark SQL")
+    case class ConcatWsTestCase[R](s: String, a: Array[String], c: String, result: R)
+    val testCases = Seq(
+      ConcatWsTestCase(" ", Array("Spark", "SQL"), "UTF8_BINARY", "Spark SQL"),
+      ConcatWsTestCase(" ", Array("Spark", "SQL"), "UTF8_BINARY_LCASE", "Spark SQL"),
+      ConcatWsTestCase(" ", Array("Spark", "SQL"), "UNICODE", "Spark SQL"),
+      ConcatWsTestCase(" ", Array("Spark", "SQL"), "UNICODE_CI", "Spark SQL")
     )
-    checks.foreach(ct => {
-      checkAnswer(sql(s"SELECT concat_ws(collate(' ', '${ct.collation}'), " +
-        s"collate('${ct.s1}', '${ct.collation}'), collate('${ct.s2}', '${ct.collation}'))"),
-        Row(ct.expectedResult))
+    testCases.foreach(t => {
+      val arrCollated = t.a.map(s => s"collate('$s', '${t.c}')").mkString(", ")
+      var query = s"SELECT concat_ws(collate('${t.s}', '${t.c}'), $arrCollated)"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
+      // Implicit casting
+      val arr = t.a.map(s => s"'$s'").mkString(", ")
+      query = s"SELECT concat_ws(collate('${t.s}', '${t.c}'), $arr)"
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
+      query = s"SELECT concat_ws('${t.s}', $arrCollated)"
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
     })
-    // Unsupported collations
-    val fails = Seq(
-      CollationTestCase("ABC", "%b%", "UTF8_BINARY_LCASE", false),
-      CollationTestCase("ABC", "%B%", "UNICODE", true),
-      CollationTestCase("ABC", "%b%", "UNICODE_CI", false)
+    // Collation mismatch
+    val collationMismatch = intercept[AnalysisException] {
+      sql("SELECT concat_ws(' ',collate('Spark', 'UTF8_BINARY_LCASE'),collate('SQL', 'UNICODE'))")
+    }
+    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+  }
+
+  test("Support Elt string expression with collation") {
+    // Supported collations
+    case class EltTestCase[R](index: Int, inputs: Array[String], c: String, result: R)
+    val testCases = Seq(
+      EltTestCase(1, Array("Spark", "SQL"), "UTF8_BINARY", "Spark"),
+      EltTestCase(1, Array("Spark", "SQL"), "UTF8_BINARY_LCASE", "Spark"),
+      EltTestCase(2, Array("Spark", "SQL"), "UNICODE", "SQL"),
+      EltTestCase(2, Array("Spark", "SQL"), "UNICODE_CI", "SQL")
     )
-    fails.foreach(ct => {
-      val expr = s"concat_ws(collate(' ', '${ct.collation}'), " +
-        s"collate('${ct.s1}', '${ct.collation}'), collate('${ct.s2}', '${ct.collation}'))"
-      checkError(
-        exception = intercept[ExtendedAnalysisException] {
-          sql(s"SELECT $expr")
-        },
-        errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-        sqlState = "42K09",
-        parameters = Map(
-          "sqlExpr" -> s"\"concat_ws(collate( ), collate(${ct.s1}), collate(${ct.s2}))\"",
-          "paramIndex" -> "first",
-          "inputSql" -> s"\"collate( )\"",
-          "inputType" -> s"\"STRING COLLATE ${ct.collation}\"",
-          "requiredType" -> "\"STRING\""
-        ),
-        context = ExpectedContext(
-          fragment = s"$expr",
-          start = 7,
-          stop = 73 + 3 * ct.collation.length
-        )
-      )
+    testCases.foreach(t => {
+      var query = s"SELECT elt(${t.index}, collate('${t.inputs(0)}', '${t.c}')," +
+        s" collate('${t.inputs(1)}', '${t.c}'))"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
+      // Implicit casting
+      query = s"SELECT elt(${t.index}, collate('${t.inputs(0)}', '${t.c}'), '${t.inputs(1)}')"
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
+      query = s"SELECT elt(${t.index}, '${t.inputs(0)}', collate('${t.inputs(1)}', '${t.c}'))"
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
+    })
+    // Collation mismatch
+    val collationMismatch = intercept[AnalysisException] {
+      sql("SELECT elt(0 ,collate('Spark', 'UTF8_BINARY_LCASE'), collate('SQL', 'UNICODE'))")
+    }
+    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+  }
+
+  test("Support Contains string expression with collation") {
+    // Supported collations
+    case class ContainsTestCase[R](l: String, r: String, c: String, result: R)
+    val testCases = Seq(
+      ContainsTestCase("", "", "UTF8_BINARY", true),
+      ContainsTestCase("abcde", "C", "UNICODE", false),
+      ContainsTestCase("abcde", "FGH", "UTF8_BINARY_LCASE", false),
+      ContainsTestCase("abcde", "BCD", "UNICODE_CI", true)
+    )
+    testCases.foreach(t => {
+      val query = s"SELECT contains(collate('${t.l}','${t.c}'),collate('${t.r}','${t.c}'))"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(BooleanType))
+      // Implicit casting
+      checkAnswer(sql(s"SELECT contains(collate('${t.l}','${t.c}'),'${t.r}')"), Row(t.result))
+      checkAnswer(sql(s"SELECT contains('${t.l}',collate('${t.r}','${t.c}'))"), Row(t.result))
+    })
+    // Collation mismatch
+    val collationMismatch = intercept[AnalysisException] {
+      sql("SELECT contains(collate('abcde','UTF8_BINARY_LCASE'),collate('C','UNICODE_CI'))")
+    }
+    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+  }
+
+  test("Support StartsWith string expression with collation") {
+    // Supported collations
+    case class StartsWithTestCase[R](l: String, r: String, c: String, result: R)
+    val testCases = Seq(
+      StartsWithTestCase("", "", "UTF8_BINARY", true),
+      StartsWithTestCase("abcde", "A", "UNICODE", false),
+      StartsWithTestCase("abcde", "FGH", "UTF8_BINARY_LCASE", false),
+      StartsWithTestCase("abcde", "ABC", "UNICODE_CI", true)
+    )
+    testCases.foreach(t => {
+      val query = s"SELECT startswith(collate('${t.l}','${t.c}'),collate('${t.r}','${t.c}'))"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(BooleanType))
+      // Implicit casting
+      checkAnswer(sql(s"SELECT startswith(collate('${t.l}', '${t.c}'),'${t.r}')"), Row(t.result))
+      checkAnswer(sql(s"SELECT startswith('${t.l}', collate('${t.r}', '${t.c}'))"), Row(t.result))
+    })
+    // Collation mismatch
+    val collationMismatch = intercept[AnalysisException] {
+      sql("SELECT startswith(collate('abcde', 'UTF8_BINARY_LCASE'),collate('C', 'UNICODE_CI'))")
+    }
+    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+  }
+
+  test("Support EndsWith string expression with collation") {
+    // Supported collations
+    case class EndsWithTestCase[R](l: String, r: String, c: String, result: R)
+    val testCases = Seq(
+      EndsWithTestCase("", "", "UTF8_BINARY", true),
+      EndsWithTestCase("abcde", "E", "UNICODE", false),
+      EndsWithTestCase("abcde", "FGH", "UTF8_BINARY_LCASE", false),
+      EndsWithTestCase("abcde", "CDE", "UNICODE_CI", true)
+    )
+    testCases.foreach(t => {
+      val query = s"SELECT endswith(collate('${t.l}', '${t.c}'), collate('${t.r}', '${t.c}'))"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(BooleanType))
+      // Implicit casting
+      checkAnswer(sql(s"SELECT endswith(collate('${t.l}', '${t.c}'),'${t.r}')"), Row(t.result))
+      checkAnswer(sql(s"SELECT endswith('${t.l}', collate('${t.r}', '${t.c}'))"), Row(t.result))
+    })
+    // Collation mismatch
+    val collationMismatch = intercept[AnalysisException] {
+      sql("SELECT endswith(collate('abcde', 'UTF8_BINARY_LCASE'),collate('C', 'UNICODE_CI'))")
+    }
+    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+  }
+
+  test("Support StringRepeat string expression with collation") {
+    // Supported collations
+    case class StringRepeatTestCase[R](s: String, n: Int, c: String, result: R)
+    val testCases = Seq(
+      StringRepeatTestCase("", 1, "UTF8_BINARY", ""),
+      StringRepeatTestCase("a", 0, "UNICODE", ""),
+      StringRepeatTestCase("XY", 3, "UTF8_BINARY_LCASE", "XYXYXY"),
+      StringRepeatTestCase("123", 2, "UNICODE_CI", "123123")
+    )
+    testCases.foreach(t => {
+      val query = s"SELECT repeat(collate('${t.s}', '${t.c}'), ${t.n})"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
+    })
+  }
+
+  test("Ascii & UnBase64 string expressions with collation") {
+    case class AsciiUnBase64TestCase[R](q: String, dt: DataType, r: R)
+    val testCases = Seq(
+      AsciiUnBase64TestCase("select ascii('a' collate utf8_binary)", IntegerType, 97),
+      AsciiUnBase64TestCase("select ascii('B' collate utf8_binary_lcase)", IntegerType, 66),
+      AsciiUnBase64TestCase("select ascii('#' collate unicode)", IntegerType, 35),
+      AsciiUnBase64TestCase("select ascii('!' collate unicode_ci)", IntegerType, 33),
+      AsciiUnBase64TestCase("select unbase64('QUJD' collate utf8_binary)", BinaryType,
+        Seq(65, 66, 67)),
+      AsciiUnBase64TestCase("select unbase64('eHl6' collate utf8_binary_lcase)", BinaryType,
+        Seq(120, 121, 122)),
+      AsciiUnBase64TestCase("select unbase64('IyMj' collate utf8_binary)", BinaryType,
+        Seq(35, 35, 35)),
+      AsciiUnBase64TestCase("select unbase64('IQ==' collate utf8_binary_lcase)", BinaryType,
+        Seq(33))
+    )
+    testCases.foreach(t => {
+      // Result & data type
+      checkAnswer(sql(t.q), Row(t.r))
+      assert(sql(t.q).schema.fields.head.dataType.sameType(t.dt))
+    })
+  }
+
+  test("Chr, Base64, Decode & FormatNumber string expressions with collation") {
+    case class DefaultCollationTestCase[R](q: String, c: String, r: R)
+    val testCases = Seq(
+      DefaultCollationTestCase("select chr(97)", "UTF8_BINARY", "a"),
+      DefaultCollationTestCase("select chr(66)", "UTF8_BINARY_LCASE", "B"),
+      DefaultCollationTestCase("select base64('xyz')", "UNICODE", "eHl6"),
+      DefaultCollationTestCase("select base64('!')", "UNICODE_CI", "IQ=="),
+      DefaultCollationTestCase("select decode(encode('$', 'utf-8'), 'utf-8')", "UTF8_BINARY", "$"),
+      DefaultCollationTestCase("select decode(encode('X', 'utf-8'), 'utf-8')", "UTF8_BINARY_LCASE",
+        "X"),
+      DefaultCollationTestCase("select format_number(123.123, '###.###')", "UNICODE", "123.123"),
+      DefaultCollationTestCase("select format_number(99.99, '##.##')", "UNICODE_CI", "99.99")
+    )
+    testCases.foreach(t => {
+      withSQLConf(SQLConf.DEFAULT_COLLATION.key -> t.c) {
+        // Result & data type
+        checkAnswer(sql(t.q), Row(t.r))
+        assert(sql(t.q).schema.fields.head.dataType.sameType(StringType(t.c)))
+      }
+    })
+  }
+
+  test("Encode, ToBinary & Sentences string expressions with collation") {
+    case class EncodeToBinarySentencesTestCase[R](q: String, dt: DataType, r: R)
+    val testCases = Seq(
+      EncodeToBinarySentencesTestCase("select encode('a' collate utf8_binary, 'utf-8')",
+        BinaryType, Seq(97)),
+      EncodeToBinarySentencesTestCase("select encode('$' collate utf8_binary_lcase, 'utf-8')",
+        BinaryType, Seq(36)),
+      EncodeToBinarySentencesTestCase("select to_binary('B' collate unicode, 'utf-8')",
+        BinaryType, Seq(66)),
+      EncodeToBinarySentencesTestCase("select to_binary('#' collate unicode_ci, 'utf-8')",
+        BinaryType, Seq(35)),
+      EncodeToBinarySentencesTestCase(
+        """
+          |select sentences('Hello, world! Nice day.' collate utf8_binary)
+          |""".stripMargin,
+        ArrayType(ArrayType(StringType)), Seq(Seq("Hello", "world"), Seq("Nice", "day"))),
+      EncodeToBinarySentencesTestCase(
+        """
+          |select sentences('Something else. Nothing here.' collate utf8_binary_lcase)
+          |""".stripMargin,
+        ArrayType(ArrayType(StringType("UTF8_BINARY_LCASE"))),
+        Seq(Seq("Something", "else"), Seq("Nothing", "here")))
+    )
+    testCases.foreach(t => {
+      // Result & data type
+      checkAnswer(sql(t.q), Row(t.r))
+      assert(sql(t.q).schema.fields.head.dataType.sameType(t.dt))
+    })
+  }
+
+  test("SPARK-47357: Support Upper string expression with collation") {
+    // Supported collations
+    case class UpperTestCase[R](s: String, c: String, result: R)
+    val testCases = Seq(
+      UpperTestCase("aBc", "UTF8_BINARY", "ABC"),
+      UpperTestCase("aBc", "UTF8_BINARY_LCASE", "ABC"),
+      UpperTestCase("aBc", "UNICODE", "ABC"),
+      UpperTestCase("aBc", "UNICODE_CI", "ABC")
+    )
+    testCases.foreach(t => {
+      val query = s"SELECT upper(collate('${t.s}', '${t.c}'))"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
+    })
+  }
+
+  test("SPARK-47357: Support Lower string expression with collation") {
+    // Supported collations
+    case class LowerTestCase[R](s: String, c: String, result: R)
+    val testCases = Seq(
+      LowerTestCase("aBc", "UTF8_BINARY", "abc"),
+      LowerTestCase("aBc", "UTF8_BINARY_LCASE", "abc"),
+      LowerTestCase("aBc", "UNICODE", "abc"),
+      LowerTestCase("aBc", "UNICODE_CI", "abc")
+    )
+    testCases.foreach(t => {
+      val query = s"SELECT lower(collate('${t.s}', '${t.c}'))"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
+    })
+  }
+
+  test("SPARK-47357: Support InitCap string expression with collation") {
+    // Supported collations
+    case class InitCapTestCase[R](s: String, c: String, result: R)
+    val testCases = Seq(
+      InitCapTestCase("aBc ABc", "UTF8_BINARY", "Abc Abc"),
+      InitCapTestCase("aBc ABc", "UTF8_BINARY_LCASE", "Abc Abc"),
+      InitCapTestCase("aBc ABc", "UNICODE", "Abc Abc"),
+      InitCapTestCase("aBc ABc", "UNICODE_CI", "Abc Abc")
+    )
+    testCases.foreach(t => {
+      val query = s"SELECT initcap(collate('${t.s}', '${t.c}'))"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
+    })
+  }
+
+  test("Overlay string expression with collation") {
+    // Supported collations
+    case class OverlayTestCase(l: String, r: String, pos: Int, c: String, result: String)
+    val testCases = Seq(
+      OverlayTestCase("hello", " world", 6, "UTF8_BINARY", "hello world"),
+      OverlayTestCase("nice", " day", 5, "UTF8_BINARY_LCASE", "nice day"),
+      OverlayTestCase("A", "B", 1, "UNICODE", "B"),
+      OverlayTestCase("!", "!!!", 1, "UNICODE_CI", "!!!")
+    )
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |select overlay(collate('${t.l}', '${t.c}') placing
+           |collate('${t.r}', '${t.c}') from ${t.pos})
+           |""".stripMargin
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
+      // Implicit casting
+      checkAnswer(sql(
+        s"""
+           |select overlay(collate('${t.l}', '${t.c}') placing '${t.r}' from ${t.pos})
+           |""".stripMargin), Row(t.result))
+      checkAnswer(sql(
+        s"""
+           |select overlay('${t.l}' placing collate('${t.r}', '${t.c}') from ${t.pos})
+           |""".stripMargin), Row(t.result))
+      checkAnswer(sql(
+        s"""
+           |select overlay(collate('${t.l}', '${t.c}')
+           |placing '${t.r}' from collate('${t.pos}', '${t.c}'))
+           |""".stripMargin), Row(t.result))
+    })
+    // Collation mismatch
+    assert(
+      intercept[AnalysisException] {
+        sql("SELECT overlay('a' collate UNICODE PLACING 'b' collate UNICODE_CI FROM 1)")
+      }.getErrorClass == "COLLATION_MISMATCH.EXPLICIT"
+    )
+  }
+
+  test("FormatString string expression with collation") {
+    // Supported collations
+    case class FormatStringTestCase(f: String, a: Seq[Any], c: String, r: String)
+    val testCases = Seq(
+      FormatStringTestCase("%s%s", Seq("'a'", "'b'"), "UTF8_BINARY", "ab"),
+      FormatStringTestCase("%d", Seq(123), "UTF8_BINARY_LCASE", "123"),
+      FormatStringTestCase("%s%d", Seq("'A'", 0), "UNICODE", "A0"),
+      FormatStringTestCase("%s%s", Seq("'Hello'", "'!!!'"), "UNICODE_CI", "Hello!!!")
+    )
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |select format_string(collate('${t.f}', '${t.c}'), ${t.a.mkString(", ")})
+           |""".stripMargin
+      // Result & data type
+      checkAnswer(sql(query), Row(t.r))
+      assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
+    })
+  }
+
+  test("SoundEx string expression with collation") {
+    // Supported collations
+    case class SoundExTestCase(q: String, c: String, r: String)
+    val testCases = Seq(
+      SoundExTestCase("select soundex('A' collate utf8_binary)", "UTF8_BINARY", "A000"),
+      SoundExTestCase("select soundex('!' collate utf8_binary_lcase)", "UTF8_BINARY_LCASE", "!"),
+      SoundExTestCase("select soundex('$' collate unicode)", "UNICODE", "$"),
+      SoundExTestCase("select soundex('X' collate unicode_ci)", "UNICODE_CI", "X000")
+    )
+    testCases.foreach(t => {
+      withSQLConf(SQLConf.DEFAULT_COLLATION.key -> t.c) {
+        // Result & data type
+        checkAnswer(sql(t.q), Row(t.r))
+        assert(sql(t.q).schema.fields.head.dataType.sameType(StringType(t.c)))
+      }
+    })
+  }
+
+  test("Length, BitLength & OctetLength string expressions with collations") {
+    // Supported collations
+    case class LenTestCase(q: String, r: Int)
+    val testCases = Seq(
+      LenTestCase("select length('hello' collate utf8_binary)", 5),
+      LenTestCase("select length('world' collate utf8_binary_lcase)", 5),
+      LenTestCase("select length('ﬀ' collate unicode)", 1),
+      LenTestCase("select bit_length('hello' collate unicode_ci)", 40),
+      LenTestCase("select bit_length('world' collate utf8_binary)", 40),
+      LenTestCase("select bit_length('ﬀ' collate utf8_binary_lcase)", 24),
+      LenTestCase("select octet_length('hello' collate unicode)", 5),
+      LenTestCase("select octet_length('world' collate unicode_ci)", 5),
+      LenTestCase("select octet_length('ﬀ' collate utf8_binary)", 3)
+    )
+    testCases.foreach(t => {
+      // Result & data type
+      checkAnswer(sql(t.q), Row(t.r))
+      assert(sql(t.q).schema.fields.head.dataType.sameType(IntegerType))
+    })
+  }
+
+  test("Luhncheck string expression with collation") {
+    // Supported collations
+    case class LuhncheckTestCase(q: String, c: String, r: Boolean)
+    val testCases = Seq(
+      LuhncheckTestCase("123", "UTF8_BINARY", r = false),
+      LuhncheckTestCase("000", "UTF8_BINARY_LCASE", r = true),
+      LuhncheckTestCase("111", "UNICODE", r = false),
+      LuhncheckTestCase("222", "UNICODE_CI", r = false)
+    )
+    testCases.foreach(t => {
+      val query = s"select luhn_check(${t.q})"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.r))
+      assert(sql(query).schema.fields.head.dataType.sameType(BooleanType))
     })
   }
 
   // TODO: Add more tests for other string expressions
 
 }
+// scalastyle:on nonascii
 
-class CollationStringExpressionsANSISuite extends CollationRegexpExpressionsSuite {
+class CollationStringExpressionsANSISuite extends CollationStringExpressionsSuite {
   override protected def sparkConf: SparkConf =
     super.sparkConf.set(SQLConf.ANSI_ENABLED, true)
+
+  // TODO: If needed, add more tests for other string expressions (with ANSI mode enabled)
+
 }

@@ -32,9 +32,9 @@ object StateStoreErrors {
     )
   }
 
-  def missingTimeoutValues(timeoutMode: String): SparkException = {
+  def missingTimeValues(timeMode: String): SparkException = {
     SparkException.internalError(
-      msg = s"Failed to find timeout values for timeoutMode=$timeoutMode",
+      msg = s"Failed to find time values for timeMode=$timeMode",
       category = "TWS"
     )
   }
@@ -76,21 +76,56 @@ object StateStoreErrors {
       messageParameters = Map("stateName" -> stateName))
   }
 
-  def cannotCreateColumnFamilyWithReservedChars(colFamilyName: String):
-    StateStoreCannotCreateColumnFamilyWithReservedChars = {
-      new StateStoreCannotCreateColumnFamilyWithReservedChars(colFamilyName)
+  def incorrectNumOrderingColsForPrefixScan(numPrefixCols: String):
+    StateStoreIncorrectNumOrderingColsForPrefixScan = {
+    new StateStoreIncorrectNumOrderingColsForPrefixScan(numPrefixCols)
   }
 
-  def cannotPerformOperationWithInvalidTimeoutMode(
+  def incorrectNumOrderingColsForRangeScan(numOrderingCols: String):
+    StateStoreIncorrectNumOrderingColsForRangeScan = {
+    new StateStoreIncorrectNumOrderingColsForRangeScan(numOrderingCols)
+  }
+
+  def nullTypeOrderingColsNotSupported(fieldName: String, index: String):
+    StateStoreNullTypeOrderingColsNotSupported = {
+    new StateStoreNullTypeOrderingColsNotSupported(fieldName, index)
+  }
+
+  def variableSizeOrderingColsNotSupported(fieldName: String, index: String):
+    StateStoreVariableSizeOrderingColsNotSupported = {
+    new StateStoreVariableSizeOrderingColsNotSupported(fieldName, index)
+  }
+
+  def cannotCreateColumnFamilyWithReservedChars(colFamilyName: String):
+    StateStoreCannotCreateColumnFamilyWithReservedChars = {
+    new StateStoreCannotCreateColumnFamilyWithReservedChars(colFamilyName)
+  }
+
+  def cannotPerformOperationWithInvalidTimeMode(
       operationType: String,
-      timeoutMode: String): StatefulProcessorCannotPerformOperationWithInvalidTimeoutMode = {
-    new StatefulProcessorCannotPerformOperationWithInvalidTimeoutMode(operationType, timeoutMode)
+      timeMode: String): StatefulProcessorCannotPerformOperationWithInvalidTimeMode = {
+    new StatefulProcessorCannotPerformOperationWithInvalidTimeMode(operationType, timeMode)
   }
 
   def cannotPerformOperationWithInvalidHandleState(
       operationType: String,
       handleState: String): StatefulProcessorCannotPerformOperationWithInvalidHandleState = {
     new StatefulProcessorCannotPerformOperationWithInvalidHandleState(operationType, handleState)
+  }
+
+  def cannotReInitializeStateOnKey(groupingKey: String):
+    StatefulProcessorCannotReInitializeState = {
+    new StatefulProcessorCannotReInitializeState(groupingKey)
+  }
+
+  def cannotProvideTTLConfigForTimeMode(stateName: String, timeMode: String):
+    StatefulProcessorCannotAssignTTLInTimeMode = {
+    new StatefulProcessorCannotAssignTTLInTimeMode(stateName, timeMode)
+  }
+
+  def ttlMustBePositive(operationType: String,
+      stateName: String): StatefulProcessorTTLMustBePositive = {
+    new StatefulProcessorTTLMustBePositive(operationType, stateName)
   }
 }
 
@@ -121,12 +156,12 @@ class StateStoreUnsupportedOperationException(operationType: String, entity: Str
     messageParameters = Map("operationType" -> operationType, "entity" -> entity)
   )
 
-class StatefulProcessorCannotPerformOperationWithInvalidTimeoutMode(
+class StatefulProcessorCannotPerformOperationWithInvalidTimeMode(
     operationType: String,
-    timeoutMode: String)
+    timeMode: String)
   extends SparkUnsupportedOperationException(
-    errorClass = "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_TIMEOUT_MODE",
-    messageParameters = Map("operationType" -> operationType, "timeoutMode" -> timeoutMode)
+    errorClass = "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_TIME_MODE",
+    messageParameters = Map("operationType" -> operationType, "timeMode" -> timeMode)
   )
 
 class StatefulProcessorCannotPerformOperationWithInvalidHandleState(
@@ -137,8 +172,45 @@ class StatefulProcessorCannotPerformOperationWithInvalidHandleState(
     messageParameters = Map("operationType" -> operationType, "handleState" -> handleState)
   )
 
+class StatefulProcessorCannotReInitializeState(groupingKey: String)
+  extends SparkUnsupportedOperationException(
+  errorClass = "STATEFUL_PROCESSOR_CANNOT_REINITIALIZE_STATE_ON_KEY",
+  messageParameters = Map("groupingKey" -> groupingKey))
+
 class StateStoreUnsupportedOperationOnMissingColumnFamily(
     operationType: String,
     colFamilyName: String) extends SparkUnsupportedOperationException(
   errorClass = "STATE_STORE_UNSUPPORTED_OPERATION_ON_MISSING_COLUMN_FAMILY",
   messageParameters = Map("operationType" -> operationType, "colFamilyName" -> colFamilyName))
+
+class StateStoreIncorrectNumOrderingColsForPrefixScan(numPrefixCols: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_INCORRECT_NUM_PREFIX_COLS_FOR_PREFIX_SCAN",
+    messageParameters = Map("numPrefixCols" -> numPrefixCols))
+
+class StateStoreIncorrectNumOrderingColsForRangeScan(numOrderingCols: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_INCORRECT_NUM_ORDERING_COLS_FOR_RANGE_SCAN",
+    messageParameters = Map("numOrderingCols" -> numOrderingCols))
+
+class StateStoreVariableSizeOrderingColsNotSupported(fieldName: String, index: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_VARIABLE_SIZE_ORDERING_COLS_NOT_SUPPORTED",
+    messageParameters = Map("fieldName" -> fieldName, "index" -> index))
+
+class StateStoreNullTypeOrderingColsNotSupported(fieldName: String, index: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_NULL_TYPE_ORDERING_COLS_NOT_SUPPORTED",
+    messageParameters = Map("fieldName" -> fieldName, "index" -> index))
+
+class StatefulProcessorCannotAssignTTLInTimeMode(stateName: String, timeMode: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATEFUL_PROCESSOR_INCORRECT_TIME_MODE_TO_ASSIGN_TTL",
+    messageParameters = Map("stateName" -> stateName, "timeMode" -> timeMode))
+
+class StatefulProcessorTTLMustBePositive(
+    operationType: String,
+    stateName: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATEFUL_PROCESSOR_TTL_DURATION_MUST_BE_POSITIVE",
+    messageParameters = Map("operationType" -> operationType, "stateName" -> stateName))

@@ -620,6 +620,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("prettyName" -> toSQLId(prettyName), "syntax" -> toSQLStmt(syntax)))
   }
 
+  def subqueryExpressionInLambdaOrHigherOrderFunctionNotAllowedError(): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.HIGHER_ORDER_FUNCTION",
+      messageParameters = Map.empty)
+  }
+
   def nonDeterministicFilterInAggregateError(filterExpr: Expression): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_AGGREGATE_FILTER.NON_DETERMINISTIC",
@@ -3221,6 +3227,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
+  def invalidSingleVariantColumn(): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_SINGLE_VARIANT_COLUMN",
+      messageParameters = Map.empty)
+  }
+
   def writeWithSaveModeUnsupportedBySourceError(source: String, createMode: String): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_DATA_SOURCE_SAVE_MODE",
@@ -3622,6 +3634,29 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "expression" -> toSQLExpr(expression),
         "expressionAnyValue" -> toSQLExpr(new AnyValue(expression)))
+    )
+  }
+
+  def implicitCollationMismatchError(): Throwable = {
+    new AnalysisException(
+      errorClass = "COLLATION_MISMATCH.IMPLICIT",
+      messageParameters = Map.empty
+    )
+  }
+
+  def explicitCollationMismatchError(explicitTypes: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "COLLATION_MISMATCH.EXPLICIT",
+      messageParameters = Map(
+        "explicitTypes" -> toSQLId(explicitTypes)
+      )
+    )
+  }
+
+  def indeterminateCollationError(): Throwable = {
+    new AnalysisException(
+      errorClass = "INDETERMINATE_COLLATION",
+      messageParameters = Map.empty
     )
   }
 

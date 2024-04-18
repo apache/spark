@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.io.File
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.{mutable, Map}
@@ -35,7 +36,8 @@ import org.rocksdb.CompressionType._
 import org.rocksdb.TickerType._
 
 import org.apache.spark.TaskContext
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{ERROR, PATH}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.util.{NextIterator, Utils}
@@ -49,6 +51,7 @@ case object RollbackStore extends RocksDBOpType("rollback_store")
 case object CloseStore extends RocksDBOpType("close_store")
 case object ReportStoreMetrics extends RocksDBOpType("report_store_metrics")
 case object StoreTaskCompletionListener extends RocksDBOpType("store_task_completion_listener")
+case object StoreMaintenance extends RocksDBOpType("store_maintenance")
 
 /**
  * Class representing a RocksDB instance that checkpoints version of data to DFS.
@@ -184,19 +187,23 @@ class RocksDB(
         loadedVersion = latestSnapshotVersion
 
         // reset last snapshot version
-        lastSnapshotVersion = 0L
+        if (lastSnapshotVersion > latestSnapshotVersion) {
+          // discard any newer snapshots
+          lastSnapshotVersion = 0L
+          latestSnapshot = None
+        }
         openDB()
 
         numKeysOnWritingVersion = if (!conf.trackTotalNumberOfRows) {
-          // we don't track the total number of rows - discard the number being track
-          -1L
-        } else if (metadata.numKeys < 0) {
-          // we track the total number of rows, but the snapshot doesn't have tracking number
-          // need to count keys now
-          countKeys()
-        } else {
-          metadata.numKeys
-        }
+            // we don't track the total number of rows - discard the number being track
+            -1L
+          } else if (metadata.numKeys < 0) {
+            // we track the total number of rows, but the snapshot doesn't have tracking number
+            // need to count keys now
+            countKeys()
+          } else {
+            metadata.numKeys
+          }
         if (loadedVersion != version) replayChangelog(version)
         // After changelog replay the numKeysOnWritingVersion will be updated to
         // the correct number of keys in the loaded version.
@@ -345,13 +352,16 @@ class RocksDB(
   /**
    * Remove RocksDB column family, if exists
    */
-  def removeColFamilyIfExists(colFamilyName: String): Unit = {
+  def removeColFamilyIfExists(colFamilyName: String): Boolean = {
     verifyColFamilyCreationOrDeletion("remove_col_family", colFamilyName)
     if (checkColFamilyExists(colFamilyName)) {
       assert(db != null)
       val handle = colFamilyNameToHandleMap(colFamilyName)
       db.dropColumnFamily(handle)
       colFamilyNameToHandleMap.remove(colFamilyName)
+      true
+    } else {
+      false
     }
   }
 
@@ -571,16 +581,14 @@ class RocksDB(
           // background operations.
           val cp = Checkpoint.create(db)
           cp.createCheckpoint(checkpointDir.toString)
-          synchronized {
-            // if changelog checkpointing is disabled, the snapshot is uploaded synchronously
-            // inside the uploadSnapshot() called below.
-            // If changelog checkpointing is enabled, snapshot will be uploaded asynchronously
-            // during state store maintenance.
-            latestSnapshot.foreach(_.close())
-            latestSnapshot = Some(
-              RocksDBSnapshot(checkpointDir, newVersion, numKeysOnWritingVersion))
-            lastSnapshotVersion = newVersion
-          }
+          // if changelog checkpointing is disabled, the snapshot is uploaded synchronously
+          // inside the uploadSnapshot() called below.
+          // If changelog checkpointing is enabled, snapshot will be uploaded asynchronously
+          // during state store maintenance.
+          latestSnapshot.foreach(_.close())
+          latestSnapshot = Some(
+            RocksDBSnapshot(checkpointDir, newVersion, numKeysOnWritingVersion))
+          lastSnapshotVersion = newVersion
         }
       }
 
@@ -668,7 +676,20 @@ class RocksDB(
 
   def doMaintenance(): Unit = {
     if (enableChangelogCheckpointing) {
-      uploadSnapshot()
+      // There is race to update latestSnapshot between load(), commit()
+      // and uploadSnapshot().
+      // The load method will reset latestSnapshot to discard any snapshots taken
+      // from newer versions (when a old version is reloaded).
+      // commit() method deletes the existing snapshot while creating a new snapshot.
+      // In order to ensure that the snapshot being uploaded would not be modified
+      // concurrently, we need to synchronize the snapshot access between task thread
+      // and maintenance thread.
+      acquire(StoreMaintenance)
+      try {
+        uploadSnapshot()
+      } finally {
+        release(StoreMaintenance)
+      }
     }
     val cleanupTime = timeTakenMs {
       fileManager.deleteOldVersions(conf.minVersionsToRetain)
@@ -746,6 +767,11 @@ class RocksDB(
       nativeStats.getTickerCount(typ)
     }
 
+    // Used for metrics reporting around internal/external column families
+    val numInternalColFamilies = colFamilyNameToHandleMap
+      .keys.filter(checkInternalColumnFamilies(_)).size
+    val numExternalColFamilies = colFamilyNameToHandleMap.keys.size - numInternalColFamilies
+
     RocksDBMetrics(
       numKeysOnLoadedVersion,
       numKeysOnWritingVersion,
@@ -758,6 +784,8 @@ class RocksDB(
       filesCopied = fileManagerMetrics.filesCopied,
       filesReused = fileManagerMetrics.filesReused,
       zipFileBytesUncompressed = fileManagerMetrics.zipFileBytesUncompressed,
+      numExternalColFamilies = numExternalColFamilies,
+      numInternalColFamilies = numInternalColFamilies,
       nativeOpsMetrics = nativeOpsMetrics)
   }
 
@@ -788,8 +816,11 @@ class RocksDB(
    */
   private def acquire(opType: RocksDBOpType): Unit = acquireLock.synchronized {
     val newAcquiredThreadInfo = AcquiredThreadInfo()
-    val waitStartTime = System.currentTimeMillis
-    def timeWaitedMs = System.currentTimeMillis - waitStartTime
+    val waitStartTime = System.nanoTime()
+    def timeWaitedMs = {
+      val elapsedNanos = System.nanoTime() - waitStartTime
+      TimeUnit.MILLISECONDS.convert(elapsedNanos, TimeUnit.NANOSECONDS)
+    }
     def isAcquiredByDifferentThread = acquiredThreadInfo != null &&
       acquiredThreadInfo.threadRef.get.isDefined &&
       newAcquiredThreadInfo.threadRef.get.get.getId != acquiredThreadInfo.threadRef.get.get.getId
@@ -866,6 +897,8 @@ class RocksDB(
       colFamilyNameToHandleMap.values.map(handle => handle.close)
       colFamilyNameToHandleMap.clear()
 
+      // Cancel and wait until all background work finishes
+      db.cancelAllBackgroundWork(true)
       // Close the DB instance
       db.close()
       db = null
@@ -913,7 +946,8 @@ class RocksDB(
       Utils.deleteRecursively(file)
     } catch {
       case e: Exception =>
-        logWarning(s"Error recursively deleting local dir $file while $msg", e)
+        logWarning(
+          log"Error recursively deleting local dir ${MDC(PATH, file)} while ${MDC(ERROR, msg)}", e)
     }
   }
 
@@ -1159,6 +1193,8 @@ case class RocksDBMetrics(
     bytesCopied: Long,
     filesReused: Long,
     zipFileBytesUncompressed: Option[Long],
+    numExternalColFamilies: Long,
+    numInternalColFamilies: Long,
     nativeOpsMetrics: Map[String, Long]) {
   def json: String = Serialization.write(this)(RocksDBMetrics.format)
 }

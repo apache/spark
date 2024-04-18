@@ -126,6 +126,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.EliminateSerialization" ::
       "org.apache.spark.sql.catalyst.optimizer.EliminateWindowPartitions" ::
       "org.apache.spark.sql.catalyst.optimizer.InferWindowGroupLimit" ::
+      "org.apache.spark.sql.catalyst.optimizer.InsertMapSortInGroupingExpressions" ::
       "org.apache.spark.sql.catalyst.optimizer.LikeSimplification" ::
       "org.apache.spark.sql.catalyst.optimizer.LimitPushDown" ::
       "org.apache.spark.sql.catalyst.optimizer.LimitPushDownThroughWindow" ::
@@ -134,6 +135,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.ObjectSerializerPruning" ::
       "org.apache.spark.sql.catalyst.optimizer.OptimizeCsvJsonExprs" ::
       "org.apache.spark.sql.catalyst.optimizer.OptimizeIn" ::
+      "org.apache.spark.sql.catalyst.optimizer.OptimizeJoinCondition" ::
       "org.apache.spark.sql.catalyst.optimizer.OptimizeRand" ::
       "org.apache.spark.sql.catalyst.optimizer.OptimizeOneRowPlan" ::
       "org.apache.spark.sql.catalyst.optimizer.Optimizer$OptimizeSubqueries" ::

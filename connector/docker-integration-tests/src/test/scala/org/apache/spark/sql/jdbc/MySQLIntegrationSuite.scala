@@ -26,6 +26,8 @@ import scala.util.Using
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.ShortType
 import org.apache.spark.tags.DockerTest
 
 /**
@@ -59,14 +61,17 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     conn.prepareStatement("INSERT INTO numbers VALUES (b'0', b'1000100101', "
       + "17, 77777, 123456789, 123456789012345, 123456789012345.123456789012345, "
       + "42.75, 1.0000000000000002, -128)").executeUpdate()
+    conn.prepareStatement("INSERT INTO numbers VALUES (null, null, null, null, null," +
+      "null, null, null, null, null)").executeUpdate()
 
     conn.prepareStatement("CREATE TABLE unsigned_numbers (" +
       "tiny TINYINT UNSIGNED, small SMALLINT UNSIGNED, med MEDIUMINT UNSIGNED," +
       "nor INT UNSIGNED, big BIGINT UNSIGNED, deci DECIMAL(40,20) UNSIGNED," +
-      "dbl DOUBLE UNSIGNED)").executeUpdate()
+      "dbl DOUBLE UNSIGNED, tiny1u TINYINT(1) UNSIGNED)").executeUpdate()
 
     conn.prepareStatement("INSERT INTO unsigned_numbers VALUES (255, 65535, 16777215, 4294967295," +
-      "9223372036854775808, 123456789012345.123456789012345, 1.0000000000000002)").executeUpdate()
+      "9223372036854775808, 123456789012345.123456789012345, 1.0000000000000002, 0)")
+      .executeUpdate()
 
     conn.prepareStatement("CREATE TABLE dates (d DATE, t TIME, dt DATETIME, ts TIMESTAMP, "
       + "yr YEAR)").executeUpdate()
@@ -83,6 +88,14 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     conn.prepareStatement("CREATE TABLE floats (f1 FLOAT, f2 FLOAT(10), f3 FLOAT(53), " +
       "f4 FLOAT UNSIGNED, f5 FLOAT(10) UNSIGNED, f6 FLOAT(53) UNSIGNED)").executeUpdate()
     conn.prepareStatement("INSERT INTO floats VALUES (1.23, 4.56, 7.89, 1.23, 4.56, 7.89)")
+      .executeUpdate()
+
+    conn.prepareStatement("CREATE TABLE collections (" +
+        "a SET('cap', 'hat', 'helmet'), b ENUM('S', 'M', 'L', 'XL'))").executeUpdate()
+    conn.prepareStatement("INSERT INTO collections VALUES ('cap,hat', 'M')").executeUpdate()
+
+    conn.prepareStatement("CREATE TABLE TBL_GEOMETRY (col0 GEOMETRY)").executeUpdate()
+    conn.prepareStatement("INSERT INTO TBL_GEOMETRY VALUES (ST_GeomFromText('POINT(0 0)'))")
       .executeUpdate()
   }
 
@@ -107,32 +120,35 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
   }
 
   test("Numeric types") {
-    val df = sqlContext.read.jdbc(jdbcUrl, "numbers", new Properties)
-    val rows = df.collect()
-    assert(rows.length == 1)
-    val types = rows(0).toSeq.map(x => x.getClass.toString)
-    assert(types.length == 10)
-    assert(types(0).equals("class java.lang.Boolean"))
-    assert(types(1).equals("class java.lang.Long"))
-    assert(types(2).equals("class java.lang.Short"))
-    assert(types(3).equals("class java.lang.Integer"))
-    assert(types(4).equals("class java.lang.Integer"))
-    assert(types(5).equals("class java.lang.Long"))
-    assert(types(6).equals("class java.math.BigDecimal"))
-    assert(types(7).equals("class java.lang.Float"))
-    assert(types(8).equals("class java.lang.Double"))
-    assert(types(9).equals("class java.lang.Byte"))
-    assert(rows(0).getBoolean(0) == false)
-    assert(rows(0).getLong(1) == 0x225)
-    assert(rows(0).getShort(2) == 17)
-    assert(rows(0).getInt(3) == 77777)
-    assert(rows(0).getInt(4) == 123456789)
-    assert(rows(0).getLong(5) == 123456789012345L)
-    val bd = new BigDecimal("123456789012345.12345678901234500000")
-    assert(rows(0).getAs[BigDecimal](6).equals(bd))
-    assert(rows(0).getFloat(7) == 42.75)
-    assert(rows(0).getDouble(8) == 1.0000000000000002)
-    assert(rows(0).getByte(9) == 0x80.toByte)
+    val row = sqlContext.read.jdbc(jdbcUrl, "numbers", new Properties).head()
+    assert(row.length === 10)
+    assert(row(0).isInstanceOf[Boolean])
+    assert(row(1).isInstanceOf[Array[Byte]])
+    assert(row(2).isInstanceOf[Short])
+    assert(row(3).isInstanceOf[Int])
+    assert(row(4).isInstanceOf[Int])
+    assert(row(5).isInstanceOf[Long])
+    assert(row(6).isInstanceOf[BigDecimal])
+    assert(row(7).isInstanceOf[Float])
+    assert(row(8).isInstanceOf[Double])
+    assert(row(9).isInstanceOf[Byte])
+    assert(!row.getBoolean(0))
+    assert(java.util.Arrays.equals(row.getAs[Array[Byte]](1),
+      Array[Byte](49, 48, 49, 48, 48, 49, 48, 49)))
+    assert(row.getShort(2) == 17)
+    assert(row.getInt(3) == 77777)
+    assert(row.getInt(4) == 123456789)
+    assert(row.getLong(5) == 123456789012345L)
+    val bd = new BigDecimal("123456789012345.123456789012345000")
+    assert(row.getAs[BigDecimal](6).equals(bd))
+    assert(row.getFloat(7) == 42.75)
+    assert(row.getDouble(8) == 1.0000000000000002)
+    assert(row.getByte(9) == 0x80.toByte)
+    withSQLConf(SQLConf.LEGACY_MYSQL_BIT_ARRAY_MAPPING_ENABLED.key -> "true") {
+      val row = sqlContext.read.jdbc(jdbcUrl, "numbers", new Properties).head()
+      assert(row(1).isInstanceOf[Long])
+      assert(row.getLong(1) == 0x225)
+    }
   }
 
   test("SPARK-47462: Unsigned numeric types") {
@@ -145,13 +161,25 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(rows.get(4).isInstanceOf[BigDecimal])
     assert(rows.get(5).isInstanceOf[BigDecimal])
     assert(rows.get(6).isInstanceOf[Double])
+    // Unlike MySQL, MariaDB seems not to distinguish signed and unsigned tinyint(1).
+    val isMaria = jdbcUrl.indexOf("disableMariaDbDriver") == -1
+    if (isMaria) {
+      assert(rows.get(7).isInstanceOf[Boolean])
+    } else {
+      assert(rows.get(7).isInstanceOf[Short])
+    }
     assert(rows.getShort(0) === 255)
     assert(rows.getInt(1) === 65535)
     assert(rows.getInt(2) === 16777215)
     assert(rows.getLong(3) === 4294967295L)
     assert(rows.getAs[BigDecimal](4).equals(new BigDecimal("9223372036854775808")))
-    assert(rows.getAs[BigDecimal](5).equals(new BigDecimal("123456789012345.12345678901234500000")))
+    assert(rows.getAs[BigDecimal](5).equals(new BigDecimal("123456789012345.123456789012345000")))
     assert(rows.getDouble(6) === 1.0000000000000002)
+    if (isMaria) {
+      assert(rows.getBoolean(7) === false)
+    } else {
+      assert(rows.getShort(7) === 0)
+    }
   }
 
   test("Date types") {
@@ -173,6 +201,12 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
       assert(rows(0).getAs[Timestamp](3).equals(Timestamp.valueOf("2009-02-13 23:31:30")))
       assert(rows(0).getAs[Date](4).equals(Date.valueOf("2001-01-01")))
     }
+    val df = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("query", "select yr from dates")
+      .option("yearIsDateType", false)
+      .load()
+    checkAnswer(df, Row(2001))
   }
 
   test("SPARK-47406: MySQL datetime types with preferTimestampNTZ") {
@@ -255,6 +289,21 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
   test("SPARK-47478: all boolean synonyms read-write roundtrip") {
     val df = sqlContext.read.jdbc(jdbcUrl, "bools", new Properties)
     checkAnswer(df, Row(true, true, true))
+
+    val properties0 = new Properties()
+    properties0.setProperty("transformedBitIsBoolean", "false")
+    properties0.setProperty("tinyInt1isBit", "true")
+
+    checkAnswer(spark.read.jdbc(jdbcUrl, "bools", properties0), Row(true, true, true))
+    val properties1 = new Properties()
+    properties1.setProperty("transformedBitIsBoolean", "true")
+    properties1.setProperty("tinyInt1isBit", "true")
+    checkAnswer(spark.read.jdbc(jdbcUrl, "bools", properties1), Row(true, true, true))
+
+    val properties2 = new Properties()
+    properties2.setProperty("tinyInt1isBit", "false")
+    checkAnswer(sqlContext.read.jdbc(jdbcUrl, "bools", properties2), Row(1, true, 1))
+
     df.write.mode("append").jdbc(jdbcUrl, "bools", new Properties)
     checkAnswer(df, Seq(Row(true, true, true), Row(true, true, true)))
   }
@@ -274,6 +323,40 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
   test("SPARK-47522: Read MySQL FLOAT as FloatType to keep consistent with the write side") {
     val df = spark.read.jdbc(jdbcUrl, "floats", new Properties)
     checkAnswer(df, Row(1.23f, 4.56f, 7.89d, 1.23d, 4.56d, 7.89d))
+  }
+
+  test("SPARK-47557: MySQL ENUM/SET types contains only java.sq.Types.CHAR information") {
+    val df = spark.read.jdbc(jdbcUrl, "collections", new Properties)
+    checkAnswer(df, Row("cap,hat       ", "M "))
+    df.write.mode("append").jdbc(jdbcUrl, "collections", new Properties)
+    withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+      checkAnswer(spark.read.jdbc(jdbcUrl, "collections", new Properties),
+        Row("cap,hat", "M") :: Row("cap,hat", "M") :: Nil)
+    }
+  }
+
+  test("SPARK-47616: Read GEOMETRY from MySQL") {
+    val df = spark.read.jdbc(jdbcUrl, "TBL_GEOMETRY", new Properties)
+    checkAnswer(df,
+      Row(Array[Byte](0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)))
+  }
+
+  test("SPARK-47666: Check nulls for result set getters") {
+    Seq("true", "false").foreach { flag =>
+      withSQLConf(SQLConf.LEGACY_MYSQL_BIT_ARRAY_MAPPING_ENABLED.key -> flag) {
+        val nulls = spark.read.jdbc(jdbcUrl, "numbers", new Properties).tail(1).head
+        assert(nulls === Row(null, null, null, null, null, null, null, null, null, null))
+      }
+    }
+  }
+
+  test("SPARK-47665: Read/write round-trip for ShortType") {
+    spark.range(3)
+      .selectExpr("CAST(id AS SMALLINT) AS id")
+      .write
+      .jdbc(jdbcUrl, "smallint_round_trip", new Properties)
+    val df = spark.read.jdbc(jdbcUrl, "smallint_round_trip", new Properties)
+    assert(df.schema.fields.head.dataType === ShortType)
   }
 }
 

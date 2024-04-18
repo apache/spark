@@ -28,7 +28,8 @@ import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 
 import org.apache.spark.TaskContext
 import org.apache.spark.input.{PortableDataStream, StreamInputFormat}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.PATH
 import org.apache.spark.rdd.{BinaryFileRDD, RDD}
 import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -202,12 +203,12 @@ object MultiLineCSVDataSource extends CSVDataSource with Logging {
           encoding = parsedOptions.charset)
       } catch {
         case e: FileNotFoundException if ignoreMissingFiles =>
-          logWarning(s"Skipped missing file: ${lines.getPath()}", e)
+          logWarning(log"Skipped missing file: ${MDC(PATH, lines.getPath())}", e)
           Array.empty[Array[String]]
         case e: FileNotFoundException if !ignoreMissingFiles => throw e
         case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
-          logWarning(
-            s"Skipped the rest of the content in the corrupted file: ${lines.getPath()}", e)
+          logWarning(log"Skipped the rest of the content in the corrupted file: " +
+            log"${MDC(PATH, lines.getPath())}", e)
           Array.empty[Array[String]]
       }
     }.take(1).headOption match {

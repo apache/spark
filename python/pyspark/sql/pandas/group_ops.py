@@ -19,7 +19,7 @@ from typing import List, Union, TYPE_CHECKING, cast
 import warnings
 
 from pyspark.errors import PySparkValueError
-from pyspark.rdd import PythonEvalType
+from pyspark.util import PythonEvalType
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.streaming.state import GroupStateTimeout

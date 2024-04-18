@@ -82,10 +82,9 @@ def _test() -> None:
     import pyspark.sql.connect.avro.functions
 
     globs = pyspark.sql.connect.avro.functions.__dict__.copy()
-
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.avro.functions tests")
-        .remote("local[4]")
+        .remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[4]"))
         .getOrCreate()
     )
 

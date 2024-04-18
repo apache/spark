@@ -29,8 +29,9 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkContext, SparkEnv}
-import org.apache.spark.internal.Logging
+import org.apache.spark.{SparkContext, SparkEnv, SparkUnsupportedOperationException}
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{LOAD_TIME, QUERY_RUN_ID, STATE_STORE_PROVIDER, STORE_ID}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -120,7 +121,7 @@ trait StateStore extends ReadStateStore {
   /**
    * Remove column family with given name, if present.
    */
-  def removeColFamilyIfExists(colFamilyName: String): Unit
+  def removeColFamilyIfExists(colFamilyName: String): Boolean
 
   /**
    * Create column family with given name, if absent.
@@ -128,8 +129,8 @@ trait StateStore extends ReadStateStore {
   def createColFamilyIfAbsent(
       colFamilyName: String,
       keySchema: StructType,
-      numColsPrefixKey: Int,
       valueSchema: StructType,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
       useMultipleValuesPerKey: Boolean = false,
       isInternal: Boolean = false): Unit
 
@@ -289,6 +290,27 @@ class InvalidUnsafeRowException(error: String)
     "among restart. For the first case, you can try to restart the application without " +
     s"checkpoint or use the legacy Spark version to process the streaming state.\n$error", null)
 
+sealed trait KeyStateEncoderSpec
+
+case class NoPrefixKeyStateEncoderSpec(keySchema: StructType) extends KeyStateEncoderSpec
+
+case class PrefixKeyScanStateEncoderSpec(
+    keySchema: StructType,
+    numColsPrefixKey: Int) extends KeyStateEncoderSpec {
+  if (numColsPrefixKey == 0 || numColsPrefixKey >= keySchema.length) {
+    throw StateStoreErrors.incorrectNumOrderingColsForPrefixScan(numColsPrefixKey.toString)
+  }
+}
+
+/** Encodes rows so that they can be range-scanned based on orderingOrdinals */
+case class RangeKeyScanStateEncoderSpec(
+    keySchema: StructType,
+    orderingOrdinals: Seq[Int]) extends KeyStateEncoderSpec {
+  if (orderingOrdinals.isEmpty || orderingOrdinals.length > keySchema.length) {
+    throw StateStoreErrors.incorrectNumOrderingColsForRangeScan(orderingOrdinals.length.toString)
+  }
+}
+
 /**
  * Trait representing a provider that provide [[StateStore]] instances representing
  * versions of state data.
@@ -330,7 +352,7 @@ trait StateStoreProvider {
       stateStoreId: StateStoreId,
       keySchema: StructType,
       valueSchema: StructType,
-      numColsPrefixKey: Int,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
       useColumnFamilies: Boolean,
       storeConfs: StateStoreConf,
       hadoopConf: Configuration,
@@ -385,13 +407,13 @@ object StateStoreProvider {
       providerId: StateStoreProviderId,
       keySchema: StructType,
       valueSchema: StructType,
-      numColsPrefixKey: Int,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean): StateStoreProvider = {
     val provider = create(storeConf.providerClass)
-    provider.init(providerId.storeId, keySchema, valueSchema, numColsPrefixKey,
+    provider.init(providerId.storeId, keySchema, valueSchema, keyStateEncoderSpec,
       useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey)
     provider
   }
@@ -581,7 +603,7 @@ object StateStore extends Logging {
       storeProviderId: StateStoreProviderId,
       keySchema: StructType,
       valueSchema: StructType,
-      numColsPrefixKey: Int,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
       version: Long,
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
@@ -591,7 +613,7 @@ object StateStore extends Logging {
       throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
     }
     val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
-      numColsPrefixKey, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey)
+      keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey)
     storeProvider.getReadStore(version)
   }
 
@@ -600,7 +622,7 @@ object StateStore extends Logging {
       storeProviderId: StateStoreProviderId,
       keySchema: StructType,
       valueSchema: StructType,
-      numColsPrefixKey: Int,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
       version: Long,
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
@@ -610,15 +632,24 @@ object StateStore extends Logging {
       throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
     }
     val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
-      numColsPrefixKey, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey)
+      keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey)
     storeProvider.getStore(version)
+  }
+
+  private def disallowBinaryInequalityColumn(schema: StructType): Unit = {
+    if (!UnsafeRowUtils.isBinaryStable(schema)) {
+      throw new SparkUnsupportedOperationException(
+        errorClass = "STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY",
+        messageParameters = Map("schema" -> schema.json)
+      )
+    }
   }
 
   private def getStateStoreProvider(
       storeProviderId: StateStoreProviderId,
       keySchema: StructType,
       valueSchema: StructType,
-      numColsPrefixKey: Int,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
@@ -628,6 +659,17 @@ object StateStore extends Logging {
 
       if (storeProviderId.storeId.partitionId == PARTITION_ID_TO_CHECK_SCHEMA) {
         val result = schemaValidated.getOrElseUpdate(storeProviderId, {
+          // SPARK-47776: collation introduces the concept of binary (in)equality, which means
+          // in some collation we no longer be able to just compare the binary format of two
+          // UnsafeRows to determine equality. For example, 'aaa' and 'AAA' can be "semantically"
+          // same in case insensitive collation.
+          // State store is basically key-value storage, and the most provider implementations
+          // rely on the fact that all the columns in the key schema support binary equality.
+          // We need to disallow using binary inequality column in the key schema, before we
+          // could support this in majority of state store providers (or high-level of state
+          // store.)
+          disallowBinaryInequalityColumn(keySchema)
+
           val checker = new StateSchemaCompatibilityChecker(storeProviderId, hadoopConf)
           // regardless of configuration, we check compatibility to at least write schema file
           // if necessary
@@ -655,15 +697,15 @@ object StateStore extends Logging {
         loadedProviders.getOrElseUpdate(
           storeProviderId,
           StateStoreProvider.createAndInit(
-            storeProviderId, keySchema, valueSchema, numColsPrefixKey,
+            storeProviderId, keySchema, valueSchema, keyStateEncoderSpec,
             useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey)
         )
       }
 
       if (loadTimeMs > 2000L) {
-        logWarning(s"Loaded state store provider in loadTimeMs=$loadTimeMs " +
-          s"for storeId=${storeProviderId.storeId.toString} and " +
-          s"queryRunId=${storeProviderId.queryRunId}")
+        logWarning(log"Loaded state store provider in loadTimeMs=${MDC(LOAD_TIME, loadTimeMs)} " +
+          log"for storeId=${MDC(STORE_ID, storeProviderId.storeId.toString)} and " +
+          log"queryRunId=${MDC(QUERY_RUN_ID, storeProviderId.queryRunId)}")
       }
 
       val otherProviderIds = loadedProviders.keys.filter(_ != storeProviderId).toSeq
@@ -783,7 +825,8 @@ object StateStore extends Logging {
             }
           } catch {
             case NonFatal(e) =>
-              logWarning(s"Error managing $provider, stopping management thread", e)
+              logWarning(log"Error managing ${MDC(STATE_STORE_PROVIDER, provider)}, " +
+                log"stopping management thread", e)
               threadPoolException.set(e)
           } finally {
             val duration = System.currentTimeMillis() - startTime

@@ -20,7 +20,7 @@ package org.apache.spark.sql.types
 import scala.math.Numeric._
 
 import org.apache.spark.sql.catalyst.util.{MathUtils, SQLOrderingUtil}
-import org.apache.spark.sql.errors.{ExecutionErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.Decimal.DecimalIsConflicted
 
 private[sql] object ByteExactNumeric extends ByteIsIntegral with Ordering.ByteOrdering {
@@ -49,10 +49,7 @@ private[sql] object ByteExactNumeric extends ByteIsIntegral with Ordering.ByteOr
   }
 
   override def negate(x: Byte): Byte = {
-    if (x == Byte.MinValue) { // if and only if x is Byte.MinValue, overflow can happen
-      throw ExecutionErrors.arithmeticOverflowError("byte overflow")
-    }
-    (-x).toByte
+    MathUtils.negateExact(x)
   }
 }
 
@@ -83,10 +80,7 @@ private[sql] object ShortExactNumeric extends ShortIsIntegral with Ordering.Shor
   }
 
   override def negate(x: Short): Short = {
-    if (x == Short.MinValue) { // if and only if x is Byte.MinValue, overflow can happen
-      throw ExecutionErrors.arithmeticOverflowError("short overflow")
-    }
-    (-x).toShort
+    MathUtils.negateExact(x)
   }
 }
 

@@ -99,6 +99,8 @@ class Command(google.protobuf.message.Message):
     STREAMING_QUERY_MANAGER_COMMAND_FIELD_NUMBER: builtins.int
     REGISTER_TABLE_FUNCTION_FIELD_NUMBER: builtins.int
     STREAMING_QUERY_LISTENER_BUS_COMMAND_FIELD_NUMBER: builtins.int
+    REGISTER_DATA_SOURCE_FIELD_NUMBER: builtins.int
+    CREATE_RESOURCE_PROFILE_COMMAND_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     @property
     def register_function(
@@ -127,6 +129,12 @@ class Command(google.protobuf.message.Message):
     @property
     def streaming_query_listener_bus_command(self) -> global___StreamingQueryListenerBusCommand: ...
     @property
+    def register_data_source(
+        self,
+    ) -> pyspark.sql.connect.proto.relations_pb2.CommonInlineUserDefinedDataSource: ...
+    @property
+    def create_resource_profile_command(self) -> global___CreateResourceProfileCommand: ...
+    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """This field is used to mark extensions to the protocol. When plugins generate arbitrary
         Commands they can add them here. During the planning the correct resolution is done.
@@ -148,6 +156,9 @@ class Command(google.protobuf.message.Message):
         | None = ...,
         streaming_query_listener_bus_command: global___StreamingQueryListenerBusCommand
         | None = ...,
+        register_data_source: pyspark.sql.connect.proto.relations_pb2.CommonInlineUserDefinedDataSource
+        | None = ...,
+        create_resource_profile_command: global___CreateResourceProfileCommand | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
     def HasField(
@@ -157,10 +168,14 @@ class Command(google.protobuf.message.Message):
             b"command_type",
             "create_dataframe_view",
             b"create_dataframe_view",
+            "create_resource_profile_command",
+            b"create_resource_profile_command",
             "extension",
             b"extension",
             "get_resources_command",
             b"get_resources_command",
+            "register_data_source",
+            b"register_data_source",
             "register_function",
             b"register_function",
             "register_table_function",
@@ -188,10 +203,14 @@ class Command(google.protobuf.message.Message):
             b"command_type",
             "create_dataframe_view",
             b"create_dataframe_view",
+            "create_resource_profile_command",
+            b"create_resource_profile_command",
             "extension",
             b"extension",
             "get_resources_command",
             b"get_resources_command",
+            "register_data_source",
+            b"register_data_source",
             "register_function",
             b"register_function",
             "register_table_function",
@@ -227,6 +246,8 @@ class Command(google.protobuf.message.Message):
             "streaming_query_manager_command",
             "register_table_function",
             "streaming_query_listener_bus_command",
+            "register_data_source",
+            "create_resource_profile_command",
             "extension",
         ]
         | None
@@ -292,6 +313,7 @@ class SqlCommand(google.protobuf.message.Message):
     POS_ARGS_FIELD_NUMBER: builtins.int
     NAMED_ARGUMENTS_FIELD_NUMBER: builtins.int
     POS_ARGUMENTS_FIELD_NUMBER: builtins.int
+    INPUT_FIELD_NUMBER: builtins.int
     sql: builtins.str
     """(Required) SQL Query."""
     @property
@@ -326,6 +348,9 @@ class SqlCommand(google.protobuf.message.Message):
         """(Optional) A sequence of expressions for positional parameters in the SQL query text.
         It cannot coexist with `named_arguments`.
         """
+    @property
+    def input(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
+        """(Optional) The relation that this SQL command will be built on."""
     def __init__(
         self,
         *,
@@ -346,12 +371,18 @@ class SqlCommand(google.protobuf.message.Message):
             pyspark.sql.connect.proto.expressions_pb2.Expression
         ]
         | None = ...,
+        input: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
     ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
             "args",
             b"args",
+            "input",
+            b"input",
             "named_arguments",
             b"named_arguments",
             "pos_args",
@@ -2048,3 +2079,43 @@ class GetResourcesCommandResult(google.protobuf.message.Message):
     ) -> None: ...
 
 global___GetResourcesCommandResult = GetResourcesCommandResult
+
+class CreateResourceProfileCommand(google.protobuf.message.Message):
+    """Command to create ResourceProfile"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    PROFILE_FIELD_NUMBER: builtins.int
+    @property
+    def profile(self) -> pyspark.sql.connect.proto.common_pb2.ResourceProfile:
+        """(Required) The ResourceProfile to be built on the server-side."""
+    def __init__(
+        self,
+        *,
+        profile: pyspark.sql.connect.proto.common_pb2.ResourceProfile | None = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["profile", b"profile"]
+    ) -> builtins.bool: ...
+    def ClearField(self, field_name: typing_extensions.Literal["profile", b"profile"]) -> None: ...
+
+global___CreateResourceProfileCommand = CreateResourceProfileCommand
+
+class CreateResourceProfileCommandResult(google.protobuf.message.Message):
+    """Response for command 'CreateResourceProfileCommand'."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    PROFILE_ID_FIELD_NUMBER: builtins.int
+    profile_id: builtins.int
+    """(Required) Server-side generated resource profile id."""
+    def __init__(
+        self,
+        *,
+        profile_id: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["profile_id", b"profile_id"]
+    ) -> None: ...
+
+global___CreateResourceProfileCommandResult = CreateResourceProfileCommandResult

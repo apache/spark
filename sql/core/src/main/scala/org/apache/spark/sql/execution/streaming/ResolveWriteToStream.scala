@@ -23,6 +23,8 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.internal.LogKey.{CONFIG, PATH}
+import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -42,8 +44,8 @@ object ResolveWriteToStream extends Rule[LogicalPlan] with SQLConfHelper {
       val (resolvedCheckpointLocation, deleteCheckpointOnStop) = resolveCheckpointLocation(s)
 
       if (conf.adaptiveExecutionEnabled) {
-        logWarning(s"${SQLConf.ADAPTIVE_EXECUTION_ENABLED.key} " +
-          "is not supported in streaming DataFrames/Datasets and will be disabled.")
+        logWarning(log"${MDC(CONFIG, SQLConf.ADAPTIVE_EXECUTION_ENABLED.key)} " +
+          log"is not supported in streaming DataFrames/Datasets and will be disabled.")
       }
 
       if (conf.isUnsupportedOperationCheckEnabled) {
@@ -77,10 +79,11 @@ object ResolveWriteToStream extends Rule[LogicalPlan] with SQLConfHelper {
       if (s.useTempCheckpointLocation) {
         deleteCheckpointOnStop = true
         val tempDir = Utils.createTempDir(namePrefix = "temporary").getCanonicalPath
-        logWarning("Temporary checkpoint location created which is deleted normally when" +
-          s" the query didn't fail: $tempDir. If it's required to delete it under any" +
-          s" circumstances, please set ${SQLConf.FORCE_DELETE_TEMP_CHECKPOINT_LOCATION.key} to" +
-          s" true. Important to know deleting temp checkpoint folder is best effort.")
+        logWarning(log"Temporary checkpoint location created which is deleted normally when" +
+          log" the query didn't fail: ${MDC(PATH, tempDir)}. If it's required to delete " +
+          log"it under any circumstances, please set " +
+          log"${MDC(CONFIG, SQLConf.FORCE_DELETE_TEMP_CHECKPOINT_LOCATION.key)} to" +
+          log" true. Important to know deleting temp checkpoint folder is best effort.")
         // SPARK-42676 - Write temp checkpoints for streaming queries to local filesystem
         // even if default FS is set differently.
         // This is a band-aid fix. Ideally we should convert `tempDir` to URIs, but there

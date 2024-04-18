@@ -25,7 +25,8 @@ import scala.concurrent._
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{ERROR, STREAM_ID}
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -175,7 +176,8 @@ private[streaming] abstract class ReceiverSupervisor(
       }
     } catch {
       case NonFatal(t) =>
-        logError(s"Error stopping receiver $streamId ${Utils.exceptionString(t)}")
+        logError(log"Error stopping receiver ${MDC(STREAM_ID, streamId)} " +
+          log"${MDC(ERROR, Utils.exceptionString(t))}")
     }
   }
 
@@ -218,7 +220,7 @@ private[streaming] abstract class ReceiverSupervisor(
     logInfo("Waiting for receiver to be stopped")
     stopLatch.await()
     if (stoppingError != null) {
-      logError("Stopped receiver with error: " + stoppingError)
+      logError(log"Stopped receiver with error: ${MDC(ERROR, stoppingError)}")
       throw stoppingError
     } else {
       logInfo("Stopped receiver without error")

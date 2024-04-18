@@ -175,6 +175,8 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SparkSessionExtensions"),
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.SparkSessionExtensionsProvider"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.ExtendedExplainGenerator"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.UDTFRegistration"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.UDFRegistration$"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.DataSourceRegistration"),
@@ -302,6 +304,7 @@ object CheckConnectJvmClientCompatibility {
 
       // MergeIntoWriter
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.MergeIntoWriter"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.MergeIntoWriter$"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.WhenMatched"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.WhenMatched$"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.WhenNotMatched"),

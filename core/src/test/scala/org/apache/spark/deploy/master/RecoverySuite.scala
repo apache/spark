@@ -38,7 +38,7 @@ import org.apache.spark.io.LZ4CompressionCodec
 import org.apache.spark.resource.{ResourceInformation, ResourceProfile, ResourceRequirement}
 import org.apache.spark.resource.ResourceUtils.{FPGA, GPU}
 import org.apache.spark.rpc.{RpcAddress, RpcEndpoint, RpcEndpointRef, RpcEnv}
-import org.apache.spark.serializer.KryoSerializer
+import org.apache.spark.serializer.JavaSerializer
 
 class RecoverySuite extends MasterSuiteBase {
   test("can use a custom recovery mode factory") {
@@ -474,26 +474,6 @@ class RecoverySuite extends MasterSuiteBase {
     }
   }
 
-  test("SPARK-46205: Recovery with Kryo Serializer") {
-    val conf = new SparkConf(loadDefaults = false)
-    conf.set(RECOVERY_MODE, "FILESYSTEM")
-    conf.set(RECOVERY_SERIALIZER, "Kryo")
-    conf.set(RECOVERY_DIRECTORY, System.getProperty("java.io.tmpdir"))
-
-    var master: Master = null
-    try {
-      master = makeAliveMaster(conf)
-      val e = master.invokePrivate(_persistenceEngine()).asInstanceOf[FileSystemPersistenceEngine]
-      assert(e.serializer.isInstanceOf[KryoSerializer])
-    } finally {
-      if (master != null) {
-        master.rpcEnv.shutdown()
-        master.rpcEnv.awaitTermination()
-        master = null
-      }
-    }
-  }
-
   test("SPARK-46216: Recovery without compression") {
     val conf = new SparkConf(loadDefaults = false)
     conf.set(RECOVERY_MODE, "FILESYSTEM")
@@ -536,14 +516,13 @@ class RecoverySuite extends MasterSuiteBase {
   test("SPARK-46258: Recovery with RocksDB") {
     val conf = new SparkConf(loadDefaults = false)
     conf.set(RECOVERY_MODE, "ROCKSDB")
-    conf.set(RECOVERY_SERIALIZER, "Kryo")
     conf.set(RECOVERY_DIRECTORY, System.getProperty("java.io.tmpdir"))
 
     var master: Master = null
     try {
       master = makeAliveMaster(conf)
       val e = master.invokePrivate(_persistenceEngine()).asInstanceOf[RocksDBPersistenceEngine]
-      assert(e.serializer.isInstanceOf[KryoSerializer])
+      assert(e.serializer.isInstanceOf[JavaSerializer])
     } finally {
       if (master != null) {
         master.rpcEnv.shutdown()

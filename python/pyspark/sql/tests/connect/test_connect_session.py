@@ -15,11 +15,12 @@
 # limitations under the License.
 #
 
+import os
 import unittest
 import uuid
 from collections import defaultdict
 
-
+from pyspark.util import is_remote_only
 from pyspark.errors import (
     PySparkException,
     PySparkValueError,
@@ -46,6 +47,7 @@ if should_test_connect:
     from pyspark.sql.connect.client.core import Retrying, SparkConnectClient
 
 
+@unittest.skipIf(is_remote_only(), "Session creation different from local mode")
 class SparkConnectSessionTests(ReusedConnectTestCase):
     def setUp(self) -> None:
         self.spark = (
@@ -57,6 +59,27 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
 
     def tearDown(self):
         self.spark.stop()
+
+    def test_progress_handler(self):
+        handler_called = []
+
+        def handler(**kwargs):
+            nonlocal handler_called
+            handler_called.append(kwargs)
+
+        self.spark.registerProgressHandler(handler)
+        self.spark.sql("select 1").collect()
+        self.assertGreaterEqual(len(handler_called), 1)
+
+        handler_called = []
+        self.spark.removeProgressHandler(handler)
+        self.spark.sql("select 1").collect()
+        self.assertEqual(len(handler_called), 0)
+
+        self.spark.registerProgressHandler(handler)
+        self.spark.clearProgressHandlers()
+        self.spark.sql("select 1").collect()
+        self.assertGreaterEqual(len(handler_called), 0)
 
     def _check_no_active_session_error(self, e: PySparkException):
         self.check_error(exception=e, error_class="NO_ACTIVE_SESSION", message_parameters=dict())
@@ -109,6 +132,7 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
             {
                 "spark.sql.connect.enrichError.enabled": True,
                 "spark.sql.pyspark.jvmStacktrace.enabled": False,
+                "spark.sql.legacy.timeParserPolicy": "EXCEPTION",
             }
         ):
             with self.sql_conf({"spark.sql.connect.serverStacktrace.enabled": False}):
@@ -226,7 +250,7 @@ class SparkConnectSessionWithOptionsTest(unittest.TestCase):
             .config("integer", 1)
             .config("boolean", False)
             .appName(self.__class__.__name__)
-            .remote("local[4]")
+            .remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[4]"))
             .getOrCreate()
         )
 
@@ -473,6 +497,26 @@ class ChannelBuilderTests(unittest.TestCase):
 
         chan = DefaultChannelBuilder("sc://host/")
         self.assertIsNone(chan.session_id)
+
+    def test_channel_options(self):
+        # SPARK-47694
+        chan = DefaultChannelBuilder(
+            "sc://host", [("grpc.max_send_message_length", 1860), ("test", "robert")]
+        )
+        options = chan._channel_options
+        self.assertEqual(
+            [k for k, _ in options].count("grpc.max_send_message_length"),
+            1,
+            "only one occurrence for defaults",
+        )
+        self.assertEqual(
+            next(v for k, v in options if k == "grpc.max_send_message_length"),
+            1860,
+            "overwrites defaults",
+        )
+        self.assertEqual(
+            next(v for k, v in options if k == "test"), "robert", "new values are picked up"
+        )
 
 
 if __name__ == "__main__":

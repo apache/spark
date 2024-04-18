@@ -226,7 +226,7 @@ trait FlatMapGroupsWithStateExecBase
             storeProviderId,
             groupingAttributes.toStructType,
             stateManager.stateSchema,
-            numColsPrefixKey = 0,
+            NoPrefixKeyStateEncoderSpec(groupingAttributes.toStructType),
             stateInfo.get.storeVersion,
             useColumnFamilies = false,
             storeConf, hadoopConfBroadcast.value.value)
@@ -238,7 +238,7 @@ trait FlatMapGroupsWithStateExecBase
         getStateInfo,
         groupingAttributes.toStructType,
         stateManager.stateSchema,
-        numColsPrefixKey = 0,
+        NoPrefixKeyStateEncoderSpec(groupingAttributes.toStructType),
         session.sqlContext.sessionState,
         Some(session.sqlContext.streams.stateStoreCoordinator)
       ) { case (store: StateStore, singleIterator: Iterator[InternalRow]) =>

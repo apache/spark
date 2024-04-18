@@ -579,7 +579,7 @@ object PartitioningUtils extends SQLConfHelper {
   def canPartitionOn(dateType: DataType): Boolean = dateType match {
     // non default collated strings should not be used as partition columns
     // as we cannot implement string collation semantic with directory names
-    case st: StringType => st.isDefaultCollation
+    case st: StringType => st.supportsBinaryOrdering
     case a: AtomicType => !a.isInstanceOf[VariantType]
     case _ => false
   }

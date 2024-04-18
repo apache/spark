@@ -18,11 +18,13 @@
 package org.apache.spark.sql.execution.datasources.jdbc
 
 import java.math.{BigDecimal => JBigDecimal}
+import java.nio.charset.StandardCharsets
 import java.sql.{Connection, Date, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException, Timestamp}
 import java.time.{Instant, LocalDate}
 import java.util
 import java.util.concurrent.TimeUnit
 
+import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.util.Try
@@ -30,10 +32,11 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.executor.InputMetrics
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{DEFAULT_ISOLATION_LEVEL, ISOLATION_LEVEL}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
-import org.apache.spark.sql.catalyst.analysis.Resolver
+import org.apache.spark.sql.catalyst.analysis.{DecimalPrecision, Resolver}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -194,9 +197,12 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case java.sql.Types.CHAR => CharType(precision)
     case java.sql.Types.CLOB => StringType
     case java.sql.Types.DATE => DateType
-    case java.sql.Types.DECIMAL if precision != 0 || scale != 0 =>
-      DecimalType.bounded(precision, scale)
-    case java.sql.Types.DECIMAL => DecimalType.SYSTEM_DEFAULT
+    case java.sql.Types.DECIMAL | java.sql.Types.NUMERIC if precision == 0 && scale == 0 =>
+      DecimalType.SYSTEM_DEFAULT
+    case java.sql.Types.DECIMAL | java.sql.Types.NUMERIC if scale < 0 =>
+      DecimalType.bounded(precision - scale, 0)
+    case java.sql.Types.DECIMAL | java.sql.Types.NUMERIC =>
+      DecimalPrecision.bounded(precision, scale)
     case java.sql.Types.DOUBLE => DoubleType
     case java.sql.Types.FLOAT => FloatType
     case java.sql.Types.INTEGER => if (signed) IntegerType else LongType
@@ -205,9 +211,6 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case java.sql.Types.LONGVARCHAR => StringType
     case java.sql.Types.NCHAR => StringType
     case java.sql.Types.NCLOB => StringType
-    case java.sql.Types.NUMERIC if precision != 0 || scale != 0 =>
-      DecimalType.bounded(precision, scale)
-    case java.sql.Types.NUMERIC => DecimalType.SYSTEM_DEFAULT
     case java.sql.Types.NVARCHAR => StringType
     case java.sql.Types.REAL => DoubleType
     case java.sql.Types.REF => StringType
@@ -244,7 +247,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
         conn.prepareStatement(options.prepareQuery + dialect.getSchemaQuery(options.tableOrQuery))
       try {
         statement.setQueryTimeout(options.queryTimeout)
-        Some(getSchema(statement.executeQuery(), dialect,
+        Some(getSchema(conn, statement.executeQuery(), dialect,
           isTimestampNTZ = options.preferTimestampNTZ))
       } catch {
         case _: SQLException => None
@@ -265,6 +268,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
    * @throws SQLException if the schema contains an unsupported type.
    */
   def getSchema(
+      conn: Connection,
       resultSet: ResultSet,
       dialect: JdbcDialect,
       alwaysNullable: Boolean = false,
@@ -309,6 +313,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       metadata.putBoolean("isSigned", isSigned)
       metadata.putBoolean("isTimestampNTZ", isTimestampNTZ)
       metadata.putLong("scale", fieldScale)
+      dialect.updateExtraColumnMeta(conn, rsmd, i + 1, metadata)
+
       val columnType =
         dialect.getCatalystType(dataType, typeName, fieldSize, metadata).getOrElse(
           getCatalystType(dataType, typeName, fieldSize, fieldScale, isSigned, isTimestampNTZ))
@@ -437,14 +443,16 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
     case LongType if metadata.contains("binarylong") =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
-        val bytes = rs.getBytes(pos + 1)
-        var ans = 0L
-        var j = 0
-        while (j < bytes.length) {
-          ans = 256 * ans + (255 & bytes(j))
-          j = j + 1
-        }
-        row.setLong(pos, ans)
+        val l = nullSafeConvert[Array[Byte]](rs.getBytes(pos + 1), bytes => {
+          var ans = 0L
+          var j = 0
+          while (j < bytes.length) {
+            ans = 256 * ans + (255 & bytes(j))
+            j = j + 1
+          }
+          ans
+        })
+        row.update(pos, l)
 
     case LongType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
@@ -508,12 +516,47 @@ object JdbcUtils extends Logging with SQLConfHelper {
           row.update(pos, null)
         }
 
+    case BinaryType if metadata.contains("binarylong") =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
+        val bytes = rs.getBytes(pos + 1)
+        if (bytes != null) {
+          val binary = bytes.flatMap(Integer.toBinaryString(_).getBytes(StandardCharsets.US_ASCII))
+          row.update(pos, binary)
+        } else {
+          row.update(pos, null)
+        }
+
     case BinaryType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         row.update(pos, rs.getBytes(pos + 1))
 
+    case _: YearMonthIntervalType =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
+        row.update(pos,
+          nullSafeConvert(rs.getString(pos + 1), dialect.getYearMonthIntervalAsMonths))
+
+    case _: DayTimeIntervalType =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
+        row.update(pos,
+          nullSafeConvert(rs.getString(pos + 1), dialect.getDayTimeIntervalAsMicros))
+
+    case _: ArrayType if metadata.contains("pg_bit_array_type") =>
+      // SPARK-47628: Handle PostgreSQL bit(n>1) array type ahead. As in the pgjdbc driver,
+      // bit(n>1)[] is not distinguishable from bit(1)[], and they are all recognized as boolen[].
+      // This is wrong for bit(n>1)[], so we need to handle it first as byte array.
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
+        val fieldString = rs.getString(pos + 1)
+        if (fieldString != null) {
+          val strArray = fieldString.substring(1, fieldString.length - 1).split(",")
+          // Charset is picked from the pgjdbc driver for consistency.
+          val bytesArray = strArray.map(_.getBytes(StandardCharsets.US_ASCII))
+          row.update(pos, new GenericArrayData(bytesArray))
+        } else {
+          row.update(pos, null)
+        }
+
     case ArrayType(et, _) =>
-      val elementConversion = et match {
+      def elementConversion(et: DataType): AnyRef => Any = et match {
         case TimestampType => arrayConverter[Timestamp] {
           (t: Timestamp) => fromJavaTimestamp(dialect.convertJavaTimestampToTimestamp(t))
         }
@@ -536,8 +579,10 @@ object JdbcUtils extends Logging with SQLConfHelper {
         case LongType if metadata.contains("binarylong") =>
           throw QueryExecutionErrors.unsupportedArrayElementTypeBasedOnBinaryError(dt)
 
-        case ArrayType(_, _) =>
-          throw QueryExecutionErrors.nestedArraysUnsupportedError()
+        case ArrayType(et0, _) =>
+          arrayConverter[Array[Any]] {
+            arr => new GenericArrayData(elementConversion(et0)(arr))
+          }
 
         case _ => (array: Object) => array.asInstanceOf[Array[Any]]
       }
@@ -545,7 +590,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         val array = nullSafeConvert[java.sql.Array](
           input = rs.getArray(pos + 1),
-          array => new GenericArrayData(elementConversion(array.getArray)))
+          array => new GenericArrayData(elementConversion(et)(array.getArray)))
         row.update(pos, array)
 
     case NullType =>
@@ -640,20 +685,32 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
     case ArrayType(et, _) =>
       // remove type length parameters from end of type name
-      val typeName = getJdbcType(et, dialect).databaseTypeDefinition.split("\\(")(0)
       (stmt: PreparedStatement, row: Row, pos: Int) =>
         et match {
           case TimestampNTZType =>
             val array = row.getSeq[java.time.LocalDateTime](pos)
             val arrayType = conn.createArrayOf(
-              typeName,
+              getJdbcType(et, dialect).databaseTypeDefinition.split("\\(")(0),
               array.map(dialect.convertTimestampNTZToJavaTimestamp).toArray)
             stmt.setArray(pos + 1, arrayType)
           case _ =>
-            val array = row.getSeq[AnyRef](pos)
+            @tailrec
+            def getElementTypeName(dt: DataType): String = dt match {
+              case ArrayType(et0, _) => getElementTypeName(et0)
+              case a: AtomicType => getJdbcType(a, dialect).databaseTypeDefinition.split("\\(")(0)
+              case _ => throw QueryExecutionErrors.nestedArraysUnsupportedError()
+            }
+
+            def toArray(seq: scala.collection.Seq[Any], dt: DataType): Array[Any] = dt match {
+              case ArrayType(et0, _) =>
+                seq.map(i => toArray(i.asInstanceOf[scala.collection.Seq[Any]], et0)).toArray
+              case _ => seq.toArray
+            }
+
+            val seq = row.getSeq[AnyRef](pos)
             val arrayType = conn.createArrayOf(
-              typeName,
-              array.toArray)
+              getElementTypeName(et),
+              toArray(seq, et).asInstanceOf[Array[AnyRef]])
             stmt.setArray(pos + 1, arrayType)
         }
 
@@ -715,11 +772,13 @@ object JdbcUtils extends Logging with SQLConfHelper {
             // Finally update to actually requested level if possible
             finalIsolationLevel = isolationLevel
           } else {
-            logWarning(s"Requested isolation level $isolationLevel is not supported; " +
-                s"falling back to default isolation level $defaultIsolation")
+            logWarning(log"Requested isolation level ${MDC(ISOLATION_LEVEL, isolationLevel)} " +
+              log"is not supported; falling back to default isolation level " +
+              log"${MDC(DEFAULT_ISOLATION_LEVEL, defaultIsolation)}")
           }
         } else {
-          logWarning(s"Requested isolation level $isolationLevel, but transactions are unsupported")
+          logWarning(log"Requested isolation level ${MDC(ISOLATION_LEVEL, isolationLevel)}, " +
+            log"but transactions are unsupported")
         }
       } catch {
         case NonFatal(e) => logWarning("Exception while detecting transaction support", e)
@@ -819,16 +878,15 @@ object JdbcUtils extends Logging with SQLConfHelper {
    * Compute the schema string for this RDD.
    */
   def schemaString(
+      dialect: JdbcDialect,
       schema: StructType,
       caseSensitive: Boolean,
-      url: String,
       createTableColumnTypes: Option[String] = None): String = {
     val sb = new StringBuilder()
-    val dialect = JdbcDialects.get(url)
     val userSpecifiedColTypesMap = createTableColumnTypes
-      .map(parseUserSpecifiedCreateTableColumnTypes(schema, caseSensitive, _))
+      .map(parseUserSpecifiedCreateTableColumnTypes(dialect, schema, caseSensitive, _))
       .getOrElse(Map.empty[String, String])
-    schema.fields.foreach { field =>
+    schema.foreach { field =>
       val name = dialect.quoteIdentifier(field.name)
       val typ = userSpecifiedColTypesMap
         .getOrElse(field.name, getJdbcType(field.dataType, dialect).databaseTypeDefinition)
@@ -844,6 +902,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
    * use in-place of the default data type.
    */
   private def parseUserSpecifiedCreateTableColumnTypes(
+      dialect: JdbcDialect,
       schema: StructType,
       caseSensitive: Boolean,
       createTableColumnTypes: String): Map[String, String] = {
@@ -860,7 +919,9 @@ object JdbcUtils extends Logging with SQLConfHelper {
       }
     }
 
-    val userSchemaMap = userSchema.fields.map(f => f.name -> f.dataType.catalogString).toMap
+    val userSchemaMap = userSchema
+      .map(f => f.name -> getJdbcType(f.dataType, dialect).databaseTypeDefinition)
+      .toMap
     if (caseSensitive) userSchemaMap else CaseInsensitiveMap(userSchemaMap)
   }
 
@@ -929,7 +990,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     val statement = conn.createStatement
     val dialect = JdbcDialects.get(options.url)
     val strSchema = schemaString(
-      schema, caseSensitive, options.url, options.createTableColumnTypes)
+      dialect, schema, caseSensitive, options.createTableColumnTypes)
     try {
       statement.setQueryTimeout(options.queryTimeout)
       dialect.createTable(statement, tableName, strSchema, options)

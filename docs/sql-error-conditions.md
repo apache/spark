@@ -267,14 +267,6 @@ Error parsing descriptor bytes into Protobuf FileDescriptorSet.
 
 `<message>`. If necessary set `<ansiConfig>` to "false" to bypass this error.
 
-### CANNOT_READ_FILE_FOOTER
-
-SQLSTATE: KD001
-
-Could not read footer for file: `<file>`. Please ensure that the file is in either ORC or Parquet format.
-If not, please convert it to a valid format. If the file is in the valid format, please check if it is corrupt.
-If it is, you can choose to either ignore it or fix the corruption.
-
 ### CANNOT_RECOGNIZE_HIVE_TYPE
 
 [SQLSTATE: 429BB](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -397,6 +389,14 @@ Cannot find a short name for the codec `<codecName>`.
 [SQLSTATE: 42704](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 The value `<collationName>` does not represent a correct collation name. Suggested valid collation name: [`<proposal>`].
+
+### [COLLATION_MISMATCH](sql-error-conditions-collation-mismatch-error-class.html)
+
+[SQLSTATE: 42P21](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Could not determine which collation to use for string functions and operators.
+
+For more details see [COLLATION_MISMATCH](sql-error-conditions-collation-mismatch-error-class.html)
 
 ### [COLLECTION_SIZE_LIMIT_EXCEEDED](sql-error-conditions-collection-size-limit-exceeded-error-class.html)
 
@@ -732,11 +732,13 @@ For more details see [FAILED_JDBC](sql-error-conditions-failed-jdbc-error-class.
 
 Failed parsing struct: `<raw>`.
 
-### FAILED_READ_FILE
+### [FAILED_READ_FILE](sql-error-conditions-failed-read-file-error-class.html)
 
 SQLSTATE: KD001
 
 Encountered error while reading file `<path>`.
+
+For more details see [FAILED_READ_FILE](sql-error-conditions-failed-read-file-error-class.html)
 
 ### FAILED_REGISTER_CLASS_WITH_KRYO
 
@@ -950,6 +952,12 @@ For more details see [INCONSISTENT_BEHAVIOR_CROSS_VERSION](sql-error-conditions-
 [SQLSTATE: 22003](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
 Max offset with `<rowsPerSecond>` rowsPerSecond is `<maxSeconds>`, but 'rampUpTimeSeconds' is `<rampUpTimeSeconds>`.
+
+### INDETERMINATE_COLLATION
+
+[SQLSTATE: 42P22](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Function called requires knowledge of the collation it should apply, but indeterminate collation was found. Use COLLATE function to set the collation explicitly.
 
 ### INDEX_ALREADY_EXISTS
 
@@ -1429,6 +1437,12 @@ For more details see [INVALID_SCHEMA](sql-error-conditions-invalid-schema-error-
 
 Expected format is 'SET', 'SET key', or 'SET key=value'. If you want to include special characters in key, or include semicolon in value, please use backquotes, e.g., SET `key`=`value`.
 
+### INVALID_SINGLE_VARIANT_COLUMN
+
+[SQLSTATE: 42613](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The `singleVariantColumn` option cannot be used if there is also a user specified schema.
+
 ### INVALID_SQL_ARG
 
 [SQLSTATE: 42K08](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1512,6 +1526,19 @@ Invalid usage of `<elem>` in `<prettyName>`.
 [SQLSTATE: 42K09](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Variable type must be string type but got `<varType>`.
+
+### INVALID_VARIANT_CAST
+
+[SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+The variant value ``<value>`` cannot be cast into ``<dataType>``. Please use `try_variant_get` instead.
+
+### INVALID_VARIANT_GET_PATH
+
+[SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+The path ``<path>`` is not a valid variant extraction path in ``<functionName>``.
+A valid path should start with `$` and is followed by zero or more segments like `[123]`, `.name`, `['name']`, or `["name"]`.
 
 ### INVALID_VIEW_TEXT
 
@@ -1852,11 +1879,13 @@ Execute immediate requires a non-null variable as the query string, but the prov
 
 The value `<value>` cannot be interpreted as a numeric since it has more than 38 digits.
 
-### NUMERIC_VALUE_OUT_OF_RANGE
+### [NUMERIC_VALUE_OUT_OF_RANGE](sql-error-conditions-numeric-value-out-of-range-error-class.html)
 
 [SQLSTATE: 22003](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
-`<value>` cannot be represented as Decimal(`<precision>`, `<scale>`). If necessary set `<config>` to "false" to bypass this error, and return NULL instead.
+
+
+For more details see [NUMERIC_VALUE_OUT_OF_RANGE](sql-error-conditions-numeric-value-out-of-range-error-class.html)
 
 ### NUM_COLUMNS_MISMATCH
 
@@ -2168,11 +2197,29 @@ Star (*) is not allowed in a select list when GROUP BY an ordinal position is us
 
 Failed to perform stateful processor operation=`<operationType>` with invalid handle state=`<handleState>`.
 
-### STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_TIMEOUT_MODE
+### STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_TIME_MODE
 
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Failed to perform stateful processor operation=`<operationType>` with invalid timeoutMode=`<timeoutMode>`
+Failed to perform stateful processor operation=`<operationType>` with invalid timeMode=`<timeMode>`
+
+### STATEFUL_PROCESSOR_CANNOT_REINITIALIZE_STATE_ON_KEY
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot re-initialize state on the same grouping key during initial state handling for stateful processor. Invalid grouping key=`<groupingKey>`.
+
+### STATEFUL_PROCESSOR_INCORRECT_TIME_MODE_TO_ASSIGN_TTL
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot use TTL for state=`<stateName>` in timeMode=`<timeMode>`, use TimeMode.ProcessingTime() instead.
+
+### STATEFUL_PROCESSOR_TTL_DURATION_MUST_BE_POSITIVE
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+TTL duration must be greater than zero for State store operation=`<operationType>` on state=`<stateName>`.
 
 ### STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS
 
@@ -2193,17 +2240,47 @@ Failed to perform column family operation=`<operationName>` with invalid name=`<
 The handle has not been initialized for this StatefulProcessor.
 Please only use the StatefulProcessor within the transformWithState operator.
 
+### STATE_STORE_INCORRECT_NUM_ORDERING_COLS_FOR_RANGE_SCAN
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Incorrect number of ordering ordinals=`<numOrderingCols>` for range scan encoder. The number of ordering ordinals cannot be zero or greater than number of schema columns.
+
+### STATE_STORE_INCORRECT_NUM_PREFIX_COLS_FOR_PREFIX_SCAN
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Incorrect number of prefix columns=`<numPrefixCols>` for prefix scan encoder. Prefix columns cannot be zero or greater than or equal to num of schema columns.
+
+### STATE_STORE_NULL_TYPE_ORDERING_COLS_NOT_SUPPORTED
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Null type ordering column with name=`<fieldName>` at index=`<index>` is not supported for range scan encoder.
+
 ### STATE_STORE_UNSUPPORTED_OPERATION
 
 [SQLSTATE: XXKST](sql-error-conditions-sqlstates.html#class-XX-internal-error)
 
 `<operationType>` operation not supported with `<entity>`
 
+### STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY
+
+[SQLSTATE: XXKST](sql-error-conditions-sqlstates.html#class-XX-internal-error)
+
+Binary inequality column is not supported with state store. Provided schema: `<schema>`.
+
 ### STATE_STORE_UNSUPPORTED_OPERATION_ON_MISSING_COLUMN_FAMILY
 
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 State store operation=`<operationType>` not supported on missing column family=`<colFamilyName>`.
+
+### STATE_STORE_VARIABLE_SIZE_ORDERING_COLS_NOT_SUPPORTED
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Variable size ordering column with name=`<fieldName>` at index=`<index>` is not supported for range scan encoder.
 
 ### STATIC_PARTITION_COLUMN_IN_INSERT_COLUMN_LIST
 
@@ -2757,6 +2834,12 @@ To tolerate the error on drop use DROP VARIABLE IF EXISTS.
 [SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
 Cannot construct a Variant larger than 16 MiB. The maximum allowed size of a Variant value is 16 MiB.
+
+### VARIANT_DUPLICATE_KEY
+
+[SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Failed to build variant because of a duplicate object key ``<key>``.
 
 ### VARIANT_SIZE_LIMIT
 

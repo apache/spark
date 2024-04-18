@@ -29,7 +29,7 @@ import com.google.common.cache.CacheBuilder
 
 import org.apache.spark.{SparkEnv, SparkSQLException}
 import org.apache.spark.connect.proto
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKey, MDC}
 import org.apache.spark.sql.connect.config.Connect.{CONNECT_EXECUTE_MANAGER_ABANDONED_TOMBSTONES_SIZE, CONNECT_EXECUTE_MANAGER_DETACHED_TIMEOUT, CONNECT_EXECUTE_MANAGER_MAINTENANCE_INTERVAL}
 import org.apache.spark.util.ThreadUtils
 
@@ -95,7 +95,7 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
       sessionHolder.addExecuteHolder(executeHolder)
       executions.put(executeHolder.key, executeHolder)
       lastExecutionTimeMs = None
-      logInfo(s"ExecuteHolder ${executeHolder.key} is created.")
+      logInfo(log"ExecuteHolder ${MDC(LogKey.EXECUTE_KEY, executeHolder.key)} is created.")
     }
 
     schedulePeriodicChecks() // Starts the maintenance thread if it hasn't started.
@@ -122,7 +122,7 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
       if (executions.isEmpty) {
         lastExecutionTimeMs = Some(System.currentTimeMillis())
       }
-      logInfo(s"ExecuteHolder $key is removed.")
+      logInfo(log"ExecuteHolder ${MDC(LogKey.EXECUTE_KEY, key)} is removed.")
     }
     // close the execution outside the lock
     executeHolder.foreach { e =>
@@ -146,7 +146,8 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
     }
     sessionExecutionHolders.foreach { case (_, executeHolder) =>
       val info = executeHolder.getExecuteInfo
-      logInfo(s"Execution $info removed in removeSessionExecutions.")
+      logInfo(
+        log"Execution ${MDC(LogKey.EXECUTE_INFO, info)} removed in removeSessionExecutions.")
       removeExecuteHolder(executeHolder.key, abandoned = true)
     }
   }
@@ -199,7 +200,9 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
       case Some(_) => // Already running.
       case None =>
         val interval = SparkEnv.get.conf.get(CONNECT_EXECUTE_MANAGER_MAINTENANCE_INTERVAL)
-        logInfo(s"Starting thread for cleanup of abandoned executions every $interval ms")
+        logInfo(
+          log"Starting thread for cleanup of abandoned executions every " +
+            log"${MDC(LogKey.INTERVAL, interval)} ms")
         scheduledExecutor = Some(Executors.newSingleThreadScheduledExecutor())
         scheduledExecutor.get.scheduleAtFixedRate(
           () => {
@@ -238,7 +241,9 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
     // .. and remove them.
     toRemove.foreach { executeHolder =>
       val info = executeHolder.getExecuteInfo
-      logInfo(s"Found execution $info that was abandoned and expired and will be removed.")
+      logInfo(
+        log"Found execution ${MDC(LogKey.EXECUTE_INFO, info)} that was abandoned " +
+          log"and expired and will be removed.")
       removeExecuteHolder(executeHolder.key, abandoned = true)
     }
     logInfo("Finished periodic run of SparkConnectExecutionManager maintenance.")

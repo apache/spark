@@ -76,10 +76,6 @@ If you have to cast `<srcType>` to `<targetType>`, you can set `<config>` as `<c
 cannot cast `<srcType>` to `<targetType>`.
 To convert values from `<srcType>` to `<targetType>`, you can use the functions `<functionNames>` instead.
 
-## COLLATION_MISMATCH
-
-Collations `<collationNameLeft>` and `<collationNameRight>` are not compatible. Please use the same collation for both strings.
-
 ## CREATE_MAP_KEY_DIFF_TYPES
 
 The given keys of function `<functionName>` should all be the same type, but they are `<dataType>`.
@@ -104,6 +100,10 @@ Filter expression `<filter>` of type `<type>` is not a boolean.
 
 Input to the function `<functionName>` cannot contain elements of the "MAP" type. In Spark, same maps may have different hashcode, thus hash expressions are prohibited on "MAP" elements. To restore previous behavior set "spark.sql.legacy.allowHashOnMapType" to "true".
 
+## HASH_VARIANT_TYPE
+
+Input to the function `<functionName>` cannot contain elements of the "VARIANT" type yet.
+
 ## INPUT_SIZE_NOT_ONE
 
 Length of `<exprName>` should be 1.
@@ -118,7 +118,7 @@ Input schema `<schema>` can only contain STRING as a key type for a MAP.
 
 ## INVALID_JSON_SCHEMA
 
-Input schema `<schema>` must be a struct, an array or a map.
+Input schema `<schema>` must be a struct, an array, a map or a variant.
 
 ## INVALID_MAP_KEY_TYPE
 
