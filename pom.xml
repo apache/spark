@@ -217,7 +217,7 @@
     <bouncycastle.version>1.78</bouncycastle.version>
     <tink.version>1.13.0</tink.version>
     <datasketches.version>5.0.1</datasketches.version>
-    <netty.version>4.1.108.Final</netty.version>
+    <netty.version>4.1.109.Final</netty.version>
     <netty-tcnative.version>2.0.65.Final</netty-tcnative.version>
     <icu4j.version>72.1</icu4j.version>
     <!--

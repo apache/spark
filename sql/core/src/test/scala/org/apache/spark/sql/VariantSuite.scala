@@ -338,6 +338,24 @@ class VariantSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("json scan with map schema") {
+    withTempDir { dir =>
+      val file = new File(dir, "file.json")
+      val content = Seq(
+        "true",
+        """{"v": null}""",
+        """{"v": {"a": 1, "b": null}}"""
+      ).mkString("\n").getBytes(StandardCharsets.UTF_8)
+      Files.write(file.toPath, content)
+      checkAnswer(
+        spark.read.format("json").schema("v map<string, variant>")
+          .load(file.getAbsolutePath)
+          .selectExpr("to_json(v)"),
+        Seq(Row(null), Row(null), Row("""{"a":1,"b":null}"""))
+      )
+    }
+  }
+
   test("group/order/join variant are disabled") {
     var ex = intercept[AnalysisException] {
       spark.sql("select parse_json('') group by 1")
