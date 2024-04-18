@@ -79,6 +79,21 @@
         <artifactId>spark-avro_${scala.binary.version}</artifactId>
         <version>${project.version}</version>
     </dependency>
+    <dependency>
+      <groupId>io.delta</groupId>
+      <artifactId>delta-core_${scala.binary.version}</artifactId>
+      <version>${deltalake.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hudi</groupId>
+      <artifactId>hudi-spark3.3-bundle_${scala.binary.version}</artifactId>
+      <version>${hudi.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.iceberg</groupId>
+      <artifactId>iceberg-spark-runtime-3.3_${scala.binary.version}</artifactId>
+      <version>${iceberg.version}</version>
+    </dependency>
 
     <!--
       Because we don't shade dependencies anymore, we need to restore Guava to compile scope so

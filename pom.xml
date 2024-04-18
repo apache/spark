@@ -152,6 +152,9 @@
     <chill.version>0.10.0</chill.version>
     <ivy.version>2.5.1</ivy.version>
     <oro.version>2.0.8</oro.version>
+    <deltalake.version>2.3.0</deltalake.version>
+    <hudi.version>0.14.2</hudi.version>
+    <iceberg.version>1.5.0</iceberg.version>
     <!--
     If you changes codahale.metrics.version, you also need to change
     the link to metrics.dropwizard.io in docs/monitoring.md.
