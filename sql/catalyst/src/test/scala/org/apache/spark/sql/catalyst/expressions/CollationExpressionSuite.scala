@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.types._
 
@@ -161,4 +162,40 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(ArrayExcept(left, right), out)
     }
   }
+
+  test("MultiLikeBase regexp expressions with collated strings") {
+    // Supported collations (StringTypeBinaryLcase)
+    val binaryCollation = StringType(CollationFactory.collationNameToId("UTF8_BINARY"))
+    val lowercaseCollation = StringType(CollationFactory.collationNameToId("UTF8_BINARY_LCASE"))
+    val unicodeCollation = StringType(CollationFactory.collationNameToId("UNICODE"))
+    // LikeAll
+    checkEvaluation(Literal.create("foo", binaryCollation).likeAll("%foo%", "%oo"), true)
+    checkEvaluation(Literal.create("foo", binaryCollation).likeAll("%foo%", "%bar%"), false)
+    checkEvaluation(Literal.create("Foo", lowercaseCollation).likeAll("%foo%", "%oo"), true)
+    checkEvaluation(Literal.create("Foo", lowercaseCollation).likeAll("%foo%", "%bar%"), false)
+    checkEvaluation(Literal.create("foo", unicodeCollation).likeAll("%foo%", "%oo"), true)
+    checkEvaluation(Literal.create("foo", unicodeCollation).likeAll("%foo%", "%bar%"), false)
+    // NotLikeAll
+    checkEvaluation(Literal.create("foo", binaryCollation).notLikeAll("%foo%", "%oo"), false)
+    checkEvaluation(Literal.create("foo", binaryCollation).notLikeAll("%goo%", "%bar%"), true)
+    checkEvaluation(Literal.create("Foo", lowercaseCollation).notLikeAll("%foo%", "%oo"), false)
+    checkEvaluation(Literal.create("Foo", lowercaseCollation).notLikeAll("%goo%", "%bar%"), true)
+    checkEvaluation(Literal.create("foo", unicodeCollation).notLikeAll("%foo%", "%oo"), false)
+    checkEvaluation(Literal.create("foo", unicodeCollation).notLikeAll("%goo%", "%bar%"), true)
+    // LikeAny
+    checkEvaluation(Literal.create("foo", binaryCollation).likeAny("%goo%", "%hoo"), false)
+    checkEvaluation(Literal.create("foo", binaryCollation).likeAny("%foo%", "%bar%"), true)
+    checkEvaluation(Literal.create("Foo", lowercaseCollation).likeAny("%goo%", "%hoo"), false)
+    checkEvaluation(Literal.create("Foo", lowercaseCollation).likeAny("%foo%", "%bar%"), true)
+    checkEvaluation(Literal.create("foo", unicodeCollation).likeAny("%goo%", "%hoo"), false)
+    checkEvaluation(Literal.create("foo", unicodeCollation).likeAny("%foo%", "%bar%"), true)
+    // NotLikeAny
+    checkEvaluation(Literal.create("foo", binaryCollation).notLikeAny("%foo%", "%hoo"), true)
+    checkEvaluation(Literal.create("foo", binaryCollation).notLikeAny("%foo%", "%oo%"), false)
+    checkEvaluation(Literal.create("Foo", lowercaseCollation).notLikeAny("%Foo%", "%hoo"), true)
+    checkEvaluation(Literal.create("Foo", lowercaseCollation).notLikeAny("%foo%", "%oo%"), false)
+    checkEvaluation(Literal.create("foo", unicodeCollation).notLikeAny("%Foo%", "%hoo"), true)
+    checkEvaluation(Literal.create("foo", unicodeCollation).notLikeAny("%foo%", "%oo%"), false)
+  }
+
 }

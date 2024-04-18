@@ -281,7 +281,8 @@ sealed abstract class MultiLikeBase
 
   protected def isNotSpecified: Boolean
 
-  override def inputTypes: Seq[DataType] = StringType :: Nil
+  override def inputTypes: Seq[AbstractDataType] = StringTypeBinaryLcase :: Nil
+  final lazy val collationId: Int = child.dataType.asInstanceOf[StringType].collationId
 
   override def nullable: Boolean = true
 
@@ -290,7 +291,8 @@ sealed abstract class MultiLikeBase
   protected lazy val hasNull: Boolean = patterns.contains(null)
 
   protected lazy val cache = patterns.filterNot(_ == null)
-    .map(s => Pattern.compile(StringUtils.escapeLikeRegex(s.toString, '\\')))
+    .map(s => Pattern.compile(StringUtils.escapeLikeRegex(s.toString, '\\'),
+      CollationSupport.collationAwareRegexFlags(collationId)))
 
   protected lazy val matchFunc = if (isNotSpecified) {
     (p: Pattern, inputValue: String) => !p.matcher(inputValue).matches()
