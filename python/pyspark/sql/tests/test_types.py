@@ -26,7 +26,6 @@ import unittest
 from dataclasses import dataclass, asdict
 
 from pyspark.sql import Row
-from pyspark.sql.variant_utils import VariantUtils
 from pyspark.sql import functions as F
 from pyspark.errors import (
     AnalysisException,
