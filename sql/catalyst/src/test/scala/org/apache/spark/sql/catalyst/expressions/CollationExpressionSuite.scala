@@ -161,5 +161,4 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(ArrayExcept(left, right), out)
     }
   }
-
 }
