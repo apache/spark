@@ -74,16 +74,18 @@ class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedCo
             def __reduce__(self):
                 # Serialize only the data attribute
                 return (self.__class__, (self.data,))
+
             def __reduce_ex__(self, proto):
                 # Raise an error upon unpickling
-                raise ValueError("NoUnpickle objects cannot be unpickled")
+                raise ValueError("Cannot unpickle instance of NoUnpickle")
 
-        no_unpickle = NoUnpickle()
+        no_unpickle = NoUnpickle("object-1")
+
         def func(df, _):
             print(no_unpickle)
             df.count()
 
-        with self.assertRaises(Exception, "Cannot unpickle instance of NoUnpickle"):
+        with self.assertRaises(Exception, msg="Cannot unpickle instance of NoUnpickle"):
             df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
             q = df.writeStream.foreachBatch(func).start()
             q.processAllAvailable()
