@@ -802,19 +802,6 @@ class XmlTokenizer(
         commentIdx = 0
       }
 
-      if (c == cdataStart(cdataIdx)) {
-        if (cdataIdx >= cdataStart.length - 1) {
-          //  If a CDATA beigns we must ignore everything until its end
-          buffer.setLength(buffer.length - cdataStart.length)
-          cdataIdx = 0
-          readUntilMatch(cdataEnd)
-        } else {
-          cdataIdx += 1
-        }
-      } else {
-        cdataIdx = 0
-      }
-
       if (c == '>' && prevC != '/') {
         canSelfClose = false
       }
