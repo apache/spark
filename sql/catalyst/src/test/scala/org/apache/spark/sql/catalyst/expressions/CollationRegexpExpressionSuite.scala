@@ -26,7 +26,7 @@ class CollationRegexpExpressionSuite extends SparkFunSuite with ExpressionEvalHe
 
   test("Like/ILike/RLike expressions with collated strings") {
     case class LikeTestCase[R](l: String, regexLike: String, regexRLike: String, collation: String,
-                               expectedLike: R, expectedILike: R, expectedRLike: R)
+      expectedLike: R, expectedILike: R, expectedRLike: R)
     val testCases = Seq(
       LikeTestCase("AbC", "%AbC%", ".b.", "UTF8_BINARY", true, true, true),
       LikeTestCase("AbC", "%ABC%", ".B.", "UTF8_BINARY", false, true, false),
@@ -80,7 +80,7 @@ class CollationRegexpExpressionSuite extends SparkFunSuite with ExpressionEvalHe
 
   test("Regexp expressions with collated strings") {
     case class RegexpTestCase[R](l: String, r: String, collation: String,
-                                 expectedExtract: R, expectedExtractAll: R, expectedCount: R)
+      expectedExtract: R, expectedExtractAll: R, expectedCount: R)
     val testCases = Seq(
       RegexpTestCase("AbC-aBc", ".b.", "UTF8_BINARY", "AbC", Seq("AbC"), 1),
       RegexpTestCase("AbC-abc", ".b.", "UTF8_BINARY", "AbC", Seq("AbC", "abc"), 2),
