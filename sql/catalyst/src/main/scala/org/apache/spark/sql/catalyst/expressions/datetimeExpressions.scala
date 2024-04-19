@@ -104,7 +104,7 @@ trait TimestampFormatterHelper extends TimeZoneAwareExpression {
   since = "3.1.0")
 case class CurrentTimeZone() extends LeafExpression with Unevaluable {
   override def nullable: Boolean = false
-  override def dataType: DataType = SQLConf.get.defaultStringType
+  override def dataType: DataType = StringType
   override def prettyName: String = "current_timezone"
   final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
 }

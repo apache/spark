@@ -1110,7 +1110,7 @@ case class Hex(child: Expression)
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(LongType, BinaryType, StringType))
 
-    override def dataType: DataType = StringType
+  override def dataType: DataType = StringType
 
   protected override def nullSafeEval(num: Any): Any = child.dataType match {
     case LongType => Hex.hex(num.asInstanceOf[Long])

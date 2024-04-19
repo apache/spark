@@ -148,7 +148,7 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
         }
         val args = argNames.zip(argValues).toMap
         checkArgs(args)
-        bind(child) { case NamedParameter(name) if args.contains(name) => args(name)}
+        bind(child) { case NamedParameter(name) if args.contains(name) => args(name) }
 
       case PosParameterizedQuery(child, args)
         if !child.containsPattern(UNRESOLVED_WITH) && args.forall(_.resolved) =>
