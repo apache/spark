@@ -18,10 +18,10 @@ package org.apache.spark.sql
 
 import java.io.Closeable
 import java.net.URI
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
 
-import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
 
@@ -81,7 +81,7 @@ class SparkSession private[sql] (
     client.analyze(proto.AnalyzePlanRequest.AnalyzeCase.SPARK_VERSION).getSparkVersion.getVersion
   }
 
-  private[sql] val observationRegistry = mutable.Map.empty[Long, Observation]
+  private[sql] val observationRegistry = new ConcurrentHashMap[Long, Observation]()
 
   /**
    * Runtime configuration interface for Spark.
@@ -825,24 +825,19 @@ class SparkSession private[sql] (
   private[sql] var releaseSessionOnClose = true
 
   private[sql] def registerObservation(planId: Long, observation: Observation): Unit = {
-    // makes this class thread-safe:
-    // only the first thread entering this block can set sparkSession
-    // all other threads will see the exception, as it is only allowed to do this once
-    observation.synchronized {
-      if (observationRegistry.contains(planId)) {
-        throw new IllegalArgumentException("An Observation can be used with a Dataset only once")
-      }
-      observationRegistry.put(planId, observation)
+    if (observationRegistry.containsKey(planId)) {
+      throw new IllegalArgumentException("An Observation can be used with a Dataset only once")
     }
+    observationRegistry.put(planId, observation)
   }
 
   private[sql] def setMetricsAndUnregisterObservation(
       planId: Long,
-      metrics: Option[Map[String, Any]]): Unit = {
-    observationRegistry.get(planId).map { observation =>
-      if (observation.setMetricsAndNotify(metrics)) {
-        observationRegistry.remove(planId)
-      }
+      metrics: Map[String, Any]): Unit = {
+    if (observationRegistry.containsKey(planId)) {
+      val observation = observationRegistry.get(planId)
+      observation.setMetricsAndNotify(Some(metrics))
+      observationRegistry.remove(planId)
     }
   }
 }

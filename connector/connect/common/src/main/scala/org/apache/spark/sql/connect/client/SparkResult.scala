@@ -42,7 +42,7 @@ private[sql] class SparkResult[T](
     allocator: BufferAllocator,
     encoder: AgnosticEncoder[T],
     timeZoneId: String,
-    setObservationMetricsOpt: Option[(Long, Option[Map[String, Any]]) => Unit] = None)
+    setObservationMetricsOpt: Option[(Long, Map[String, Any]) => Unit] = None)
     extends AutoCloseable { self =>
 
   case class StageInfo(
@@ -223,7 +223,7 @@ private[sql] class SparkResult[T](
       // If the metrics is registered by an Observation object, attach them and unblock any
       // blocked thread.
       setObservationMetricsOpt.foreach { setObservationMetrics =>
-        setObservationMetrics(metric.getPlanId, Some(keys.zip(values).toMap))
+        setObservationMetrics(metric.getPlanId, keys.zip(values).toMap)
       }
       metric.getName -> new GenericRowWithSchema(values.toArray, schema)
     }
