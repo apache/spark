@@ -3805,8 +3805,8 @@
     "subClass" : {
       "BANG_EQUALS_NOT" : {
         "message" : [
-          "The '!' keyword is supported as a prefix operator in a logical operation only. ",
-          "Use the 'NOT' keyword instead for clauses such as `NOT LIKE`, `NOT IN`, `NOT BETWEEN`, etc. ",
+          "The '!' keyword is supported as a prefix operator in a logical operation only.",
+          "Use the 'NOT' keyword instead for clauses such as `NOT LIKE`, `NOT IN`, `NOT BETWEEN`, etc.",
           "To re-enable the '!' keyword, set \"spark.sql.legacy.bangEqualsNot\" to \"true\"."
         ]
       }

@@ -367,9 +367,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     val cols = Option(ctx.identifierList()).map(visitIdentifierList).getOrElse(Nil)
     val partitionKeys = Option(ctx.partitionSpec).map(visitPartitionSpec).getOrElse(Map.empty)
 
-    if (ctx.errorCapturingNot() != null) {
-      visitErrorCapturingNot(ctx.errorCapturingNot())
-    }
+    blockBang(ctx.errorCapturingNot())
 
     if (ctx.EXISTS != null) {
       invalidStatement("INSERT INTO ... IF NOT EXISTS", ctx)
@@ -387,9 +385,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     val cols = Option(ctx.identifierList()).map(visitIdentifierList).getOrElse(Nil)
     val partitionKeys = Option(ctx.partitionSpec).map(visitPartitionSpec).getOrElse(Map.empty)
 
-    if (ctx.errorCapturingNot() != null) {
-      visitErrorCapturingNot(ctx.errorCapturingNot())
-    }
+    blockBang(ctx.errorCapturingNot())
 
     val dynamicPartitionKeys: Map[String, Option[String]] = partitionKeys.filter(_._2.isEmpty)
     if (ctx.EXISTS != null && dynamicPartitionKeys.nonEmpty) {
@@ -1882,15 +1878,17 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    * '!' should only be a synonym for 'NOT' when used as a prefix in a logical operation.
    * We do that now explicitly.
    */
-  override def visitErrorCapturingNot(ctx: ErrorCapturingNotContext): Token = withOrigin(ctx) {
+  def blockBang(ctx: ErrorCapturingNotContext): ErrorCapturingNotContext = {
     val tolerateBang = conf.getConf(LEGACY_BANG_EQUALS_NOT)
-    if (ctx.BANG() != null && !tolerateBang) {
-      throw new ParseException(
-        errorClass = "SYNTAX_DISCONTINUED.BANG_EQUALS_NOT",
-        messageParameters = Map("clause" -> toSQLStmt("!")),
-        ctx)
+    if (ctx != null && ctx.BANG() != null && !tolerateBang) {
+      withOrigin(ctx) {
+        throw new ParseException(
+          errorClass = "SYNTAX_DISCONTINUED.BANG_EQUALS_NOT",
+          messageParameters = Map("clause" -> toSQLStmt("!")),
+          ctx)
+      }
     }
-    ctx.NOT().getSymbol
+    ctx
   }
 
   /**
@@ -2033,9 +2031,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   private def withPredicate(e: Expression, ctx: PredicateContext): Expression = withOrigin(ctx) {
     // Invert a predicate if it has a valid NOT clause.
     def invertIfNotDefined(e: Expression): Expression = {
-      val withNot = if (ctx.errorCapturingNot != null) {
-        visitErrorCapturingNot(ctx.errorCapturingNot)
-      }
+      val withNot = blockBang(ctx.errorCapturingNot)
       withNot match {
         case null => e
         case _ => Not(e)
@@ -2061,9 +2057,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       case _ => new Like(expr, pattern)
     }
 
-    val withNot = if (ctx.errorCapturingNot != null) {
-      visitErrorCapturingNot(ctx.errorCapturingNot)
-    }
+    val withNot = blockBang(ctx.errorCapturingNot)
 
     // Create the predicate.
     ctx.kind.getType match {
@@ -3209,6 +3203,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     var commentSpec: Option[CommentSpecContext] = None
     ctx.colDefinitionOption().asScala.foreach { option =>
       if (option.NULL != null) {
+        blockBang(option.errorCapturingNot)
         if (!nullable) {
           throw QueryParsingErrors.duplicateTableColumnDescriptor(
             option, name, "NOT NULL")
@@ -3462,9 +3457,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    */
   override def visitCreateTableHeader(
       ctx: CreateTableHeaderContext): TableHeader = withOrigin(ctx) {
-    if (ctx.errorCapturingNot != null) {
-      visitErrorCapturingNot(ctx.errorCapturingNot)
-    }
+    blockBang(ctx.errorCapturingNot)
     val temporary = ctx.TEMPORARY != null
     val ifNotExists = ctx.EXISTS != null
     if (temporary && ifNotExists) {
@@ -3641,9 +3634,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       properties += PROP_LOCATION -> _
     }
 
-    if (ctx.errorCapturingNot() != null) {
-      visitErrorCapturingNot(ctx.errorCapturingNot())
-    }
+    blockBang(ctx.errorCapturingNot)
 
     CreateNamespace(
       withIdentClause(ctx.identifierReference, UnresolvedNamespace(_)),
@@ -4252,10 +4243,10 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     var colPosition: Option[ColPositionContext] = None
     val columnName = name.last
     ctx.colDefinitionDescriptorWithPosition.asScala.foreach { option =>
-      if (option.errorCapturingNot() != null) {
-        visitErrorCapturingNot(option.errorCapturingNot())
-      }
+      blockBang(option.errorCapturingNot)
+
       if (option.NULL != null) {
+        blockBang(option.errorCapturingNot)
         if (!nullable) {
           throw QueryParsingErrors.duplicateTableColumnDescriptor(
             option, columnName, "NOT NULL", isCreate = false)
@@ -4459,9 +4450,8 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
         }
         var commentSpec: Option[CommentSpecContext] = None
         colType.colDefinitionDescriptorWithPosition.asScala.foreach { opt =>
-          if (opt.errorCapturingNot() != null) {
-            visitErrorCapturingNot(opt.errorCapturingNot())
-          }
+          blockBang(opt.errorCapturingNot)
+
           if (opt.NULL != null) {
             throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError(
               "NOT NULL", "REPLACE COLUMNS", ctx)
@@ -4913,9 +4903,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       val location = Option(splCtx.locationSpec).map(visitLocationSpec)
       UnresolvedPartitionSpec(spec, location)
     }
-    if (ctx.errorCapturingNot() != null) {
-      visitErrorCapturingNot(ctx.errorCapturingNot())
-    }
+    blockBang(ctx.errorCapturingNot)
     AddPartitions(
       createUnresolvedTable(
         ctx.identifierReference,
@@ -5160,9 +5148,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       .map(x => (Option(x.options).map(visitPropertyKeyValues).getOrElse(Map.empty))).toSeq
     val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
 
-    if (ctx.errorCapturingNot() != null) {
-      visitErrorCapturingNot(ctx.errorCapturingNot())
-    }
+    blockBang(ctx.errorCapturingNot)
 
     CreateIndex(
       createUnresolvedTable(ctx.identifierReference, "CREATE INDEX"),

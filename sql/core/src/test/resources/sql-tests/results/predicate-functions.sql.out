@@ -517,3 +517,22 @@ select rand(123) not between 0.1 AND 0.2
 struct<(NOT between(rand(123), 0.1, 0.2)):boolean>
 -- !query output
 false
+
+
+-- !query
+set spark.sql.legacy.bangEqualsNot=true
+select 1 ! between 0 and 2
+-- !query schema
+struct<>
+-- !query output
+java.lang.IllegalArgumentException
+spark.sql.legacy.bangEqualsNot should be boolean, but was true
+select 1 ! between 0 and 2
+
+
+-- !query
+set spark.sql.legacy.bangEqualsNot=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.bangEqualsNot	false

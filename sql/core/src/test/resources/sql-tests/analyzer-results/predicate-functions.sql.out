@@ -450,3 +450,18 @@ Project [NOT between(to_timestamp(2022-12-26 00:00:01, None, TimestampType, Some
 select rand(123) not between 0.1 AND 0.2
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+set spark.sql.legacy.bangEqualsNot=true
+select 1 ! between 0 and 2
+-- !query analysis
+java.lang.IllegalArgumentException
+spark.sql.legacy.bangEqualsNot should be boolean, but was true
+select 1 ! between 0 and 2
+
+
+-- !query
+set spark.sql.legacy.bangEqualsNot=false
+-- !query analysis
+SetCommand (spark.sql.legacy.bangEqualsNot,Some(false))
