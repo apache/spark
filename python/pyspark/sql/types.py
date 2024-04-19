@@ -1530,7 +1530,7 @@ class VariantVal:
         Returns
         -------
         Any
-            A Python object that represents the Variant.
+            A JSON string that represents the Variant.
         """
         return VariantUtils.to_json(self.value, self.metadata, zone_id)
 
