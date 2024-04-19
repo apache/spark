@@ -800,4 +800,10 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
         "This should have been converted during analysis."))
     )
   }
+
+  test("check that current time is foldable") {
+    val rnd =
+      Rand(Cast(UnixTimestamp(CurrentDate(), Literal("yyyy-MM-dd HH:mm:ss")), IntegerType))
+    assert(rnd.checkInputDataTypes().isSuccess)
+  }
 }
