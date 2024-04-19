@@ -15465,6 +15465,11 @@ def is_variant_null(v: "ColumnOrName") -> Column:
     v : :class:`~pyspark.sql.Column` or str
         a variant column or column name
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a boolean column indicating whether the variant value is a variant null
+
     Examples
     --------
     >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
@@ -15492,6 +15497,11 @@ def variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
         segments like `[123]`, `.name`, `['name']`, or `["name"]`.
     targetType : str
         the target data type to cast into, in a DDL-formatted string
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a column of `targetType` representing the extracted result
 
     Examples
     --------
@@ -15523,6 +15533,11 @@ def try_variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
     targetType : str
         the target data type to cast into, in a DDL-formatted string
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a column of `targetType` representing the extracted result
+
     Examples
     --------
     >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
@@ -15549,6 +15564,11 @@ def schema_of_variant(v: "ColumnOrName") -> Column:
     v : :class:`~pyspark.sql.Column` or str
         a variant column or column name
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a string column representing the variant schema
+
     Examples
     --------
     >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
@@ -15570,6 +15590,11 @@ def schema_of_variant_agg(v: "ColumnOrName") -> Column:
     ----------
     v : :class:`~pyspark.sql.Column` or str
         a variant column or column name
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a string column representing the variant schema
 
     Examples
     --------
