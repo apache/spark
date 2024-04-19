@@ -1525,8 +1525,8 @@ class VariantVal:
         """
         Convert the VariantVal to a JSON string. The zone ID represents the time zone that the
         timestamp should be printed in. It is defaulted to UTC. The list of valid zone IDs can be
-        found here:
-        https://gist.github.com/heyalexej/8bf688fd67d7199be4a1682b3eec7568
+        found `here < https://gist.github.com/heyalexej/8bf688fd67d7199be4a1682b3eec7568 >`_
+        
         Returns
         -------
         Any
