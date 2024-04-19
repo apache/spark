@@ -19,11 +19,11 @@ import base64
 import decimal
 import datetime
 import json
-import pytz
 import struct
 from array import array
 from typing import Any, Callable, Dict, List, Tuple
 from pyspark.errors import PySparkValueError
+from zoneinfo import ZoneInfo
 
 
 class VariantUtils:
@@ -115,10 +115,9 @@ class VariantUtils:
     )
     EPOCH_NTZ = datetime.datetime(year=1970, month=1, day=1, hour=0, minute=0, second=0)
 
-    # The valid zone ids can be found here:
-    # https://gist.github.com/heyalexej/8bf688fd67d7199be4a1682b3eec7568
-    # The default zone id is UTC, meaning that when the timestamps are converted to string, they
-    # are interpreted to have the UTC timezone and offset (+00:00)
+    # The valid zone ids can be found by importing the `zoneinfo` library and running
+    # `zoneinfo.available_timezones()`. The default zone id is UTC, meaning that when the timestamps
+    # are converted to string, they are interpreted to have the UTC timezone and offset (+00:00)
     @classmethod
     def to_json(cls, value: bytes, metadata: bytes, zone_id: str = "UTC") -> str:
         """
@@ -227,7 +226,7 @@ class VariantUtils:
             microseconds_since_epoch = cls._read_long(value, pos + 1, 8, signed=True)
             return (
                 VariantUtils.EPOCH + datetime.timedelta(microseconds=microseconds_since_epoch)
-            ).astimezone(pytz.timezone(zone_id))
+            ).astimezone(ZoneInfo(zone_id))
         raise PySparkValueError(error_class="MALFORMED_VARIANT")
 
     @classmethod
