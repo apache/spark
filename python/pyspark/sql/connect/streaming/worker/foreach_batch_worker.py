@@ -68,6 +68,7 @@ def main(infile: IO, outfile: IO) -> None:
     except Exception as e:
         handle_worker_exception(e, outfile)
         outfile.flush()
+        return
 
     write_int(0, outfile)  # Indicate successful initialization
 
