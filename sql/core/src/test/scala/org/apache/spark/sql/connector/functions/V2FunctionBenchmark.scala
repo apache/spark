@@ -17,9 +17,6 @@
 
 package org.apache.spark.sql.connector.functions
 
-import test.org.apache.spark.sql.connector.catalog.functions.JavaLongAdd
-import test.org.apache.spark.sql.connector.catalog.functions.JavaLongAdd.{JavaLongAddDefault, JavaLongAddMagic, JavaLongAddStaticMagic}
-
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.InternalRow
@@ -28,7 +25,8 @@ import org.apache.spark.sql.catalyst.expressions.{BinaryArithmetic, EvalMode, Ex
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryCatalog}
-import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, ScalarFunction, UnboundFunction}
+import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, JavaLongAdd, ScalarFunction, UnboundFunction}
+import org.apache.spark.sql.connector.catalog.functions.JavaLongAdd.{JavaLongAddDefault, JavaLongAddMagic, JavaLongAddStaticMagic}
 import org.apache.spark.sql.execution.benchmark.SqlBasedBenchmark
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{AbstractDataType, DataType, LongType, NumericType, StructType}

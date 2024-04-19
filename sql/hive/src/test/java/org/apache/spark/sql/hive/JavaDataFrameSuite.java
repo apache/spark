@@ -26,11 +26,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import org.apache.spark.sql.*;
+import org.apache.spark.sql.MyDoubleSum;
 import org.apache.spark.sql.expressions.Window;
 import org.apache.spark.sql.expressions.UserDefinedAggregateFunction;
 import static org.apache.spark.sql.functions.*;
 import org.apache.spark.sql.hive.test.TestHive$;
-import test.org.apache.spark.sql.MyDoubleSum;
 
 public class JavaDataFrameSuite {
   private transient SQLContext hc;

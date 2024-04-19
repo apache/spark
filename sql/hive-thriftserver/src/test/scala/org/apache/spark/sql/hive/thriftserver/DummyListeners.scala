@@ -21,7 +21,7 @@
  * spark package, and the test should fail if Spark initializes these listeners with
  * IsolatedClientLoader.
  */
-package org.apache.spark.sql.hive.thriftserver
+package test.custom.listener
 
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.streaming.StreamingQueryListener

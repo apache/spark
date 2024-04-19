@@ -17,11 +17,10 @@
 
 package org.apache.spark.sql.execution.command.v2
 
-import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen
-import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen.JavaStrLenNoImpl
-
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
+import org.apache.spark.sql.connector.catalog.functions.JavaStrLen
+import org.apache.spark.sql.connector.catalog.functions.JavaStrLen.JavaStrLenNoImpl
 import org.apache.spark.sql.execution.command
 import org.apache.spark.util.ArrayImplicits._
 

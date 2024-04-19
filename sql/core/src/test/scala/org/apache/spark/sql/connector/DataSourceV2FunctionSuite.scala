@@ -19,17 +19,15 @@ package org.apache.spark.sql.connector
 
 import java.util.Collections
 
-import test.org.apache.spark.sql.connector.catalog.functions._
-import test.org.apache.spark.sql.connector.catalog.functions.JavaLongAdd._
-import test.org.apache.spark.sql.connector.catalog.functions.JavaRandomAdd._
-import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen._
-
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode.{FALLBACK, NO_CODEGEN}
 import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, Identifier, InMemoryCatalog, SupportsNamespaces}
-import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction, _}
+import org.apache.spark.sql.connector.catalog.functions._
+import org.apache.spark.sql.connector.catalog.functions.JavaLongAdd._
+import org.apache.spark.sql.connector.catalog.functions.JavaRandomAdd._
+import org.apache.spark.sql.connector.catalog.functions.JavaStrLen._
 import org.apache.spark.sql.execution.ProjectExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._

@@ -26,10 +26,9 @@ import org.apache.hadoop.hive.ql.util.JavaDataModel
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectInspectorFactory}
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo
-import test.org.apache.spark.sql.MyDoubleAvg
 
 import org.apache.spark.SPARK_DOC_ROOT
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, MyDoubleAvg, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.ObjectHashAggregateExec

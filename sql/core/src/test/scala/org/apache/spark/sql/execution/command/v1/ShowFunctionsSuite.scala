@@ -19,8 +19,7 @@ package org.apache.spark.sql.execution.command.v1
 
 import java.util.Locale
 
-import test.org.apache.spark.sql.MyDoubleSum
-
+import org.apache.spark.sql.MyDoubleSum
 import org.apache.spark.sql.execution.command
 
 /**

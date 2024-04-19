@@ -21,8 +21,6 @@ import java.io.File
 import java.util
 import java.util.OptionalLong
 
-import test.org.apache.spark.sql.connector._
-
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow

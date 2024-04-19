@@ -22,8 +22,6 @@ import java.util.Properties
 
 import scala.util.control.NonFatal
 
-import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen.JavaStrLenStaticMagic
-
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -32,6 +30,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLim
 import org.apache.spark.sql.connector.{IntegralAverage, StrLen}
 import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.functions.{ScalarFunction, UnboundFunction}
+import org.apache.spark.sql.connector.catalog.functions.JavaStrLen.JavaStrLenStaticMagic
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.Expression
 import org.apache.spark.sql.execution.FormattedMode
