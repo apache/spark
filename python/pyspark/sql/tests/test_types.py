@@ -1491,7 +1491,7 @@ class TypesTestsMixin:
             timetamp_ntz_columns["tntz2"],
             timetamp_columns["t0"],
             timetamp_columns["t1"],
-            timetamp_columns["t2"]
+            timetamp_columns["t2"],
         ]
 
         for v in variants:
