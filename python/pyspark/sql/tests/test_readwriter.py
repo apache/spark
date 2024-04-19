@@ -20,7 +20,7 @@ import shutil
 import tempfile
 
 from pyspark.errors import AnalysisException
-from pyspark.sql.functions import col
+from pyspark.sql.functions import col, lit
 from pyspark.sql.readwriter import DataFrameWriterV2
 from pyspark.sql.types import StructType, StructField, StringType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
@@ -228,6 +228,11 @@ class ReadwriterV2TestsMixin:
         df = self.df
         with self.assertRaisesRegex(AnalysisException, "Hive support is required"):
             df.writeTo("test_table").create()
+
+    def test_table_overwrite(self):
+        df = self.df
+        with self.assertRaisesRegex(AnalysisException, "TABLE_OR_VIEW_NOT_FOUND"):
+            df.writeTo("test_table").overwrite(lit(True))
 
 
 class ReadwriterTests(ReadwriterTestsMixin, ReusedSQLTestCase):
