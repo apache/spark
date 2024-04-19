@@ -2075,31 +2075,37 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     // This also applies to Aggregate.
     case f @ Filter(condition, project @ Project(fields, grandChild))
       if fields.forall(_.deterministic) && canPushThroughCondition(grandChild, condition) =>
+      println(s"Attempting push down of $condition through $project")
       val aliasMap = getAliasMap(project)
       // Projection aliases that the filter references
-      var filterAliases = AttributeMap.empty[Alias]
+      val filterAliasesBuf = mutable.ArrayBuffer.empty[Alias]
       // Projection aliases that are not used in the filter, so we don't need to push
-      var leftBehindAliases: AttributeMap[Alias] = aliasMap
+      var leftBehindAliases: Map[ExprId, Alias] = aliasMap.baseMap.values.map {
+        kv => (kv._2.exprId, kv._2)
+      }.toMap
       val (replaced, usedAliases) = replaceAliasWhileTracking(condition, aliasMap)
       // If nothing changes there's no projection elements used and there for also no
       // double eval to be avoided & we don't need to move any project elements around.
+      println(s"Replaced $condition with $replaced using $usedAliases")
       if (condition != replaced) {
-        filterAliases ++= usedAliases
         usedAliases.iterator.foreach {
           e: (Attribute, Alias) =>
-          if (leftBehindAliases.contains(e._1)) {
-            // AttributeMap.remove returns a Map rather than an Attribute map so re-wrap.
-            leftBehindAliases = AttributeMap(
-              leftBehindAliases.removed(e._1))
+          if (leftBehindAliases.contains(e._2.exprId)) {
+            leftBehindAliases = leftBehindAliases.removed(e._2.exprId)
+            filterAliasesBuf += e._2
           }
         }
       }
+      val filterAliases = filterAliasesBuf.toArray.toSeq
 
-      if (leftBehindAliases.isEmpty) {
-        // If there are no left behind aliases then we've either used all of the aliases or
-        // there were no aliases to begin with. In either case we try and split up the filter
-        // on the &&s and see if we can push individual components that do not use any of the
-        // aliases.
+      println(s"Pushing $condition left behind $leftBehindAliases and used $filterAliases")
+      // If there are no filter aliases then we just push the filter through as-is
+      if (filterAliases.isEmpty) {
+        project.copy(child = f.copy(child = grandChild))
+      } else if (leftBehindAliases.isEmpty) {
+        // If there are no left behind aliases then we've used all of the aliases in our filter.
+        // We can try and split on the &&s and see if we can push individual components
+        // that do not use any of the aliases.
         val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
           val replaced = replaceAlias(cond, aliasMap)
           if (cond == replaced) {
@@ -2125,19 +2131,15 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         // introduce a new projection which projects the elements used in the filter.
         // Base level projection is going to be all refs from our current projection +
         // the alias map that we used in the filtering.
-        val filterChild = if (!filterAliases.isEmpty) {
-          project.copy(
-            projectList = (project.references.toSeq ++ filterAliases.iterator.map(_._2)))
-        } else {
-          // If our filter being pushed does not reference any alias in the project we don't
-          // need a new projection.
-          grandChild
-        }
+        val projectionReferences = project.references.toSeq
+        val filterChild = project.copy(
+          projectList = (projectionReferences ++ filterAliases))
 
-        // Our top level projection is going to be the existing projection minus the filterAliases
+        // Our top level projection is going to be the existing projection minus the
         // which is leftBehindAliases + all of the output fields which we've effectively
         // pushed down.
-        val pushedAliasNames = project.output.filter(a => !leftBehindAliases.contains(a)).toSeq
+        val pushedAliasNames = project.output.filter(
+          a => !leftBehindAliases.contains(a.exprId)).toSeq
         val remainingAliasesToEval = leftBehindAliases.iterator.map(_._2).toSeq
         val topLevelProjection = project.copy(
           projectList = matchColumnOrdering(fields, pushedAliasNames ++ remainingAliasesToEval),
