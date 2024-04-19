@@ -2367,6 +2367,14 @@ Query [id = `<id>`, runId = `<runId>`] terminated with exception: `<message>`
 
 The sum of the LIMIT clause and the OFFSET clause must not be greater than the maximum 32-bit integer value (2,147,483,647) but found limit = `<limit>`, offset = `<offset>`.
 
+### [SYNTAX_DISCONTINUED](sql-error-conditions-syntax-discontinued-error-class.html)
+
+[SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Support of the clause or keyword: `<clause>` has been discontinued in this context.
+
+For more details see [SYNTAX_DISCONTINUED](sql-error-conditions-syntax-discontinued-error-class.html)
+
 ### TABLE_OR_VIEW_ALREADY_EXISTS
 
 [SQLSTATE: 42P07](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
