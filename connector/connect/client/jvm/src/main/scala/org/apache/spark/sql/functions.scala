@@ -6969,8 +6969,7 @@ object functions {
    *
    * @param json
    *   a string column that contains JSON data.
-   *
-   * @group json_funcs
+   * @group variant_funcs
    * @since 4.0.0
    */
   def parse_json(json: Column): Column = Column.fn("parse_json", json)
