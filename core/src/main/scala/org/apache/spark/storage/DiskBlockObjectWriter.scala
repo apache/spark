@@ -17,7 +17,7 @@
 
 package org.apache.spark.storage
 
-import java.io.{BufferedOutputStream, File, FileOutputStream, IOException, OutputStream}
+import java.io.{BufferedOutputStream, Closeable, File, FileOutputStream, IOException, OutputStream}
 import java.nio.channels.{ClosedByInterruptException, FileChannel}
 import java.nio.file.Files
 import java.util.zip.Checksum
@@ -174,21 +174,40 @@ private[spark] class DiskBlockObjectWriter(
    * Should call after committing or reverting partial writes.
    */
   private def closeResources(): Unit = {
-    if (initialized) {
-      Utils.tryWithSafeFinally {
-        mcs.manualClose()
-      } {
-        channel = null
-        mcs = null
-        bs = null
-        fos = null
-        ts = null
-        objOut = null
-        initialized = false
-        streamOpen = false
-        hasBeenClosed = true
+    Utils.tryWithSafeFinally {
+      if (streamOpen) {
+        Utils.tryWithSafeFinally {
+          objOut = closeIfNonNull(objOut)
+          bs = null
+        } {
+          bs = closeIfNonNull(bs)
+        }
+      }
+    } {
+      if (initialized) {
+        Utils.tryWithSafeFinally {
+          mcs.manualClose()
+        } {
+          channel = null
+          mcs = null
+          bs = null
+          fos = null
+          ts = null
+          objOut = null
+          initialized = false
+          streamOpen = false
+          hasBeenClosed = true
+        }
       }
     }
+  }
+
+
+  private def closeIfNonNull[T <: Closeable](closeable: T): T = {
+    if (closeable != null) {
+      closeable.close()
+    }
+    null.asInstanceOf[T]
   }
 
   /**
