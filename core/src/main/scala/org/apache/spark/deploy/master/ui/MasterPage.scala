@@ -169,8 +169,9 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
                 {state.completedDrivers.count(_.state == DriverState.ERROR)} Error,
                 {state.completedDrivers.count(_.state == DriverState.RELAUNCHING)} Relaunching)
               </li>
-              <li><strong>Status:</strong>
-                <a href={"/logPage/?self&logType=out"}>{state.status}</a>
+              <li><strong>Status:</strong> {state.status}
+                (<a href={"/environment"}>Environment</a>,
+                <a href={"/logPage/?self&logType=out"}>Log</a>)
               </li>
             </ul>
           </div>

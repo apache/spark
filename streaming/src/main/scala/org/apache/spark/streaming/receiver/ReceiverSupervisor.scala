@@ -26,7 +26,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{ERROR, STREAM_ID}
+import org.apache.spark.internal.LogKey.{DELAY, ERROR, MESSAGE, STREAM_ID}
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -191,8 +191,8 @@ private[streaming] abstract class ReceiverSupervisor(
     Future {
       // This is a blocking action so we should use "futureExecutionContext" which is a cached
       // thread pool.
-      logWarning("Restarting receiver with delay " + delay + " ms: " + message,
-        error.orNull)
+      logWarning(log"Restarting receiver with delay ${MDC(DELAY, delay)} ms: " +
+        log"${MDC(MESSAGE, message)}", error.orNull)
       stopReceiver("Restarting receiver with delay " + delay + "ms: " + message, error)
       logDebug("Sleeping for " + delay)
       Thread.sleep(delay)
