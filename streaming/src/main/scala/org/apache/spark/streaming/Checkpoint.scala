@@ -28,7 +28,8 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{BACKUP_FILE, CHECKPOINT_FILE, CHECKPOINT_TIME, PATH, RETRY_COUNT, TEMP_FILE}
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.streaming.scheduler.JobGenerator
@@ -141,12 +142,12 @@ object Checkpoint extends Logging {
         val filtered = paths.filter(p => REGEX.findFirstIn(p.getName).nonEmpty)
         filtered.sortWith(sortFunc).toImmutableArraySeq
       } else {
-        logWarning(s"Listing $path returned null")
+        logWarning(log"Listing ${MDC(PATH, path)} returned null")
         Seq.empty
       }
     } catch {
       case _: FileNotFoundException =>
-        logWarning(s"Checkpoint directory $path does not exist")
+        logWarning(log"Checkpoint directory ${MDC(PATH, path)} does not exist")
         Seq.empty
     }
   }
@@ -259,13 +260,15 @@ class CheckpointWriter(
           if (fs.exists(checkpointFile)) {
             fs.delete(backupFile, true) // just in case it exists
             if (!fs.rename(checkpointFile, backupFile)) {
-              logWarning(s"Could not rename $checkpointFile to $backupFile")
+              logWarning(log"Could not rename ${MDC(CHECKPOINT_FILE, checkpointFile)} to " +
+                log"${MDC(BACKUP_FILE, backupFile)}")
             }
           }
 
           // Rename temp file to the final checkpoint file
           if (!fs.rename(tempFile, checkpointFile)) {
-            logWarning(s"Could not rename $tempFile to $checkpointFile")
+            logWarning(log"Could not rename ${MDC(TEMP_FILE, tempFile)} to " +
+              log"${MDC(CHECKPOINT_FILE, checkpointFile)}")
           }
 
           // Delete old checkpoint files
@@ -285,12 +288,14 @@ class CheckpointWriter(
           return
         } catch {
           case ioe: IOException =>
-            val msg = s"Error in attempt $attempts of writing checkpoint to '$checkpointFile'"
+            val msg = log"Error in attempt ${MDC(RETRY_COUNT, attempts)} of writing checkpoint " +
+              log"to '${MDC(CHECKPOINT_FILE, checkpointFile)}'"
             logWarning(msg, ioe)
             fs = null
         }
       }
-      logWarning(s"Could not write checkpoint for time $checkpointTime to file '$checkpointFile'")
+      logWarning(log"Could not write checkpoint for time ${MDC(CHECKPOINT_TIME, checkpointTime)} " +
+        log"to file '${MDC(CHECKPOINT_FILE, checkpointFile)}'")
     }
   }
 
@@ -365,7 +370,7 @@ object CheckpointReader extends Logging {
       } catch {
         case e: Exception =>
           readError = e
-          logWarning(s"Error reading checkpoint from file $file", e)
+          logWarning(log"Error reading checkpoint from file ${MDC(PATH, file)}", e)
       }
     }
 
