@@ -26,7 +26,8 @@ import com.amazonaws.services.kinesis.clientlibrary.interfaces.{IRecordProcessor
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.ShutdownReason
 import com.amazonaws.services.kinesis.model.Record
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{REASON, RETRY_INTERVAL, SHARD_ID, WORKER_URL}
 
 /**
  * Kinesis-specific implementation of the Kinesis Client Library (KCL) IRecordProcessor.
@@ -53,7 +54,8 @@ private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], w
    */
   override def initialize(shardId: String): Unit = {
     this.shardId = shardId
-    logInfo(s"Initialized workerId $workerId with shardId $shardId")
+    logInfo(log"Initialized workerId ${MDC(WORKER_URL, workerId)} " +
+      log"with shardId ${MDC(SHARD_ID, shardId)}")
   }
 
   /**
@@ -89,16 +91,17 @@ private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], w
            *  This will potentially cause records since the last checkpoint to be processed
            *     more than once.
            */
-          logError(s"Exception:  WorkerId $workerId encountered and exception while storing " +
-              s" or checkpointing a batch for workerId $workerId and shardId $shardId.", e)
+          logError(log"Exception: WorkerId ${MDC(WORKER_URL, workerId)} encountered and " +
+            log"exception while storing or checkpointing a batch for workerId " +
+            log"${MDC(WORKER_URL, workerId)} and shardId ${MDC(SHARD_ID, shardId)}.", e)
 
           /* Rethrow the exception to the Kinesis Worker that is managing this RecordProcessor. */
           throw e
       }
     } else {
       /* RecordProcessor has been stopped. */
-      logInfo(s"Stopped:  KinesisReceiver has stopped for workerId $workerId" +
-          s" and shardId $shardId.  No more records will be processed.")
+      logInfo(log"Stopped: KinesisReceiver has stopped for workerId ${MDC(WORKER_URL, workerId)}" +
+          log" and shardId ${MDC(SHARD_ID, shardId)}. No more records will be processed.")
     }
   }
 
@@ -115,10 +118,11 @@ private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], w
   override def shutdown(
       checkpointer: IRecordProcessorCheckpointer,
       reason: ShutdownReason): Unit = {
-    logInfo(s"Shutdown:  Shutting down workerId $workerId with reason $reason")
+    logInfo(log"Shutdown: Shutting down workerId ${MDC(WORKER_URL, workerId)} " +
+      log"with reason ${MDC(REASON, reason)}")
     // null if not initialized before shutdown:
     if (shardId == null) {
-      logWarning(s"No shardId for workerId $workerId?")
+      logWarning(log"No shardId for workerId ${MDC(WORKER_URL, workerId)}?")
     } else {
       reason match {
         /*
@@ -166,15 +170,16 @@ private[kinesis] object KinesisRecordProcessor extends Logging {
             if numRetriesLeft > 1 =>
           val backOffMillis = Random.nextInt(maxBackOffMillis)
           Thread.sleep(backOffMillis)
-          logError(s"Retryable Exception:  Random backOffMillis=${backOffMillis}", e)
+          logError(log"Retryable Exception: Random " +
+            log"backOffMillis=${MDC(RETRY_INTERVAL, backOffMillis)}", e)
           retryRandom(expression, numRetriesLeft - 1, maxBackOffMillis)
         /* Throw:  Shutdown has been requested by the Kinesis Client Library. */
         case _: ShutdownException =>
-          logError(s"ShutdownException:  Caught shutdown exception, skipping checkpoint.", e)
+          logError(s"ShutdownException: Caught shutdown exception, skipping checkpoint.", e)
           throw e
         /* Throw:  Non-retryable exception has occurred with the Kinesis Client Library */
         case _: InvalidStateException =>
-          logError(s"InvalidStateException:  Cannot save checkpoint to the DynamoDB table used" +
+          logError(s"InvalidStateException: Cannot save checkpoint to the DynamoDB table used" +
               s" by the Amazon Kinesis Client Library.  Table likely doesn't exist.", e)
           throw e
         /* Throw:  Unexpected exception has occurred */

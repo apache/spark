@@ -76,7 +76,7 @@ statement
     | ctes? dmlStatementNoWith                                         #dmlStatement
     | USE identifierReference                                          #use
     | USE namespace identifierReference                                #useNamespace
-    | SET CATALOG (identifier | stringLit)                             #setCatalog
+    | SET CATALOG (errorCapturingIdentifier | stringLit)                  #setCatalog
     | CREATE namespace (IF NOT EXISTS)? identifierReference
         (commentSpec |
          locationSpec |
@@ -210,6 +210,7 @@ statement
     | (MSCK)? REPAIR TABLE identifierReference
         (option=(ADD|DROP|SYNC) PARTITIONS)?                           #repairTable
     | op=(ADD | LIST) identifier .*?                                   #manageResource
+    | SET COLLATION collationName=identifier                           #setCollation
     | SET ROLE .*?                                                     #failNativeCommand
     | SET TIME ZONE interval                                           #setTimeZone
     | SET TIME ZONE timezone                                           #setTimeZone
@@ -388,10 +389,11 @@ describeFuncName
     | comparisonOperator
     | arithmeticOperator
     | predicateOperator
+    | BANG
     ;
 
 describeColName
-    : nameParts+=identifier (DOT nameParts+=identifier)*
+    : nameParts+=errorCapturingIdentifier (DOT nameParts+=errorCapturingIdentifier)*
     ;
 
 ctes
@@ -428,7 +430,7 @@ property
     ;
 
 propertyKey
-    : identifier (DOT identifier)*
+    : errorCapturingIdentifier (DOT errorCapturingIdentifier)*
     | stringLit
     ;
 
@@ -478,7 +480,7 @@ dmlStatementNoWith
     | fromClause multiInsertQueryBody+                                             #multiInsertQuery
     | DELETE FROM identifierReference tableAlias whereClause?                      #deleteFromTable
     | UPDATE identifierReference tableAlias setClause whereClause?                 #updateTable
-    | MERGE INTO target=identifierReference targetAlias=tableAlias
+    | MERGE (WITH SCHEMA EVOLUTION)? INTO target=identifierReference targetAlias=tableAlias
         USING (source=identifierReference |
           LEFT_PAREN sourceQuery=query RIGHT_PAREN) sourceAlias=tableAlias
         ON mergeCondition=booleanExpression
@@ -682,18 +684,18 @@ pivotClause
     ;
 
 pivotColumn
-    : identifiers+=identifier
-    | LEFT_PAREN identifiers+=identifier (COMMA identifiers+=identifier)* RIGHT_PAREN
+    : identifiers+=errorCapturingIdentifier
+    | LEFT_PAREN identifiers+=errorCapturingIdentifier (COMMA identifiers+=errorCapturingIdentifier)* RIGHT_PAREN
     ;
 
 pivotValue
-    : expression (AS? identifier)?
+    : expression (AS? errorCapturingIdentifier)?
     ;
 
 unpivotClause
     : UNPIVOT nullOperator=unpivotNullClause? LEFT_PAREN
         operator=unpivotOperator
-      RIGHT_PAREN (AS? identifier)?
+      RIGHT_PAREN (AS? errorCapturingIdentifier)?
     ;
 
 unpivotNullClause
@@ -735,7 +737,7 @@ unpivotColumn
     ;
 
 unpivotAlias
-    : AS? identifier
+    : AS? errorCapturingIdentifier
     ;
 
 lateralView
@@ -946,7 +948,7 @@ expressionSeq
     ;
 
 booleanExpression
-    : NOT booleanExpression                                        #logicalNot
+    : (NOT | BANG) booleanExpression                               #logicalNot
     | EXISTS LEFT_PAREN query RIGHT_PAREN                          #exists
     | valueExpression predicate?                                   #predicated
     | left=booleanExpression operator=AND right=booleanExpression  #logicalBinary
@@ -1187,7 +1189,7 @@ complexColTypeList
     ;
 
 complexColType
-    : identifier COLON? dataType (NOT NULL)? commentSpec?
+    : errorCapturingIdentifier COLON? dataType (NOT NULL)? commentSpec?
     ;
 
 whenClause
@@ -1397,6 +1399,7 @@ ansiNonReserved
     | DOUBLE
     | DROP
     | ESCAPED
+    | EVOLUTION
     | EXCHANGE
     | EXCLUDE
     | EXISTS
@@ -1661,6 +1664,7 @@ nonReserved
     | CLUSTERED
     | CODEGEN
     | COLLATE
+    | COLLATION
     | COLLECTION
     | COLUMN
     | COLUMNS
@@ -1712,6 +1716,7 @@ nonReserved
     | END
     | ESCAPE
     | ESCAPED
+    | EVOLUTION
     | EXCHANGE
     | EXCLUDE
     | EXECUTE

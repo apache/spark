@@ -54,7 +54,7 @@ object BucketingUtils {
   }
 
   def canBucketOn(dataType: DataType): Boolean = dataType match {
-    case st: StringType => st.isDefaultCollation
+    case st: StringType => st.supportsBinaryOrdering
     case other => true
   }
 

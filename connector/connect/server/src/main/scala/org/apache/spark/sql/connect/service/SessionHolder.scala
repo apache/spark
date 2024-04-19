@@ -27,14 +27,18 @@ import scala.jdk.CollectionConverters._
 import scala.util.Try
 
 import com.google.common.base.Ticker
-import com.google.common.cache.CacheBuilder
+import com.google.common.cache.{Cache, CacheBuilder}
 
-import org.apache.spark.{SparkException, SparkSQLException}
+import org.apache.spark.{SparkEnv, SparkException, SparkSQLException}
 import org.apache.spark.api.python.PythonFunction.PythonAccumulator
-import org.apache.spark.internal.Logging
+import org.apache.spark.connect.proto
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey._
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connect.common.InvalidPlanInput
+import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.planner.PythonStreamingQueryListener
 import org.apache.spark.sql.connect.planner.StreamingForeachBatchHelper
 import org.apache.spark.sql.connect.service.SessionHolder.{ERROR_CACHE_SIZE, ERROR_CACHE_TIMEOUT_SEC}
@@ -49,6 +53,27 @@ case class SessionKey(userId: String, sessionId: String)
  */
 case class SessionHolder(userId: String, sessionId: String, session: SparkSession)
     extends Logging {
+
+  // Cache which stores recently resolved logical plans to improve the performance of plan analysis.
+  // Only plans that explicitly specify "cachePlan = true" in transformRelation will be cached.
+  // Analyzing a large plan may be expensive, and it is not uncommon to build the plan step-by-step
+  // with several analysis during the process. This cache aids the recursive analysis process by
+  // memorizing `LogicalPlan`s which may be a sub-tree in a subsequent plan.
+  private lazy val planCache: Option[Cache[proto.Relation, LogicalPlan]] = {
+    if (SparkEnv.get.conf.get(Connect.CONNECT_SESSION_PLAN_CACHE_SIZE) <= 0) {
+      logWarning(
+        s"Session plan cache is disabled due to non-positive cache size." +
+          s" Current value of '${Connect.CONNECT_SESSION_PLAN_CACHE_SIZE.key}' is" +
+          s" ${SparkEnv.get.conf.get(Connect.CONNECT_SESSION_PLAN_CACHE_SIZE)}.")
+      None
+    } else {
+      Some(
+        CacheBuilder
+          .newBuilder()
+          .maximumSize(SparkEnv.get.conf.get(Connect.CONNECT_SESSION_PLAN_CACHE_SIZE))
+          .build[proto.Relation, LogicalPlan]())
+    }
+  }
 
   // Time when the session was started.
   private val startTimeMs: Long = System.currentTimeMillis()
@@ -91,6 +116,8 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   // Handles Python process clean up for streaming queries. Initialized on first use in a query.
   private[connect] lazy val streamingForeachBatchRunnerCleanerCache =
     new StreamingForeachBatchHelper.CleanerCache(this)
+
+  private[connect] lazy val streamingServersideListenerHolder = new ServerSideListenerHolder(this)
 
   def key: SessionKey = SessionKey(userId, sessionId)
 
@@ -213,12 +240,16 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
 
   private[connect] def updateAccessTime(): Unit = {
     lastAccessTimeMs = System.currentTimeMillis()
-    logInfo(s"Session $key accessed, time $lastAccessTimeMs.")
+    logInfo(
+      log"Session ${MDC(SESSION_KEY, key)} accessed, " +
+        log"time ${MDC(LAST_ACCESS_TIME, lastAccessTimeMs)} ms.")
   }
 
   private[connect] def setCustomInactiveTimeoutMs(newInactiveTimeoutMs: Option[Long]): Unit = {
     customInactiveTimeoutMs = newInactiveTimeoutMs
-    logInfo(s"Session $key inactive timout set to $customInactiveTimeoutMs ms.")
+    logInfo(
+      log"Session ${MDC(SESSION_KEY, key)} " +
+        log"inactive timeout set to ${MDC(TIMEOUT, customInactiveTimeoutMs)} ms.")
   }
 
   /**
@@ -243,7 +274,9 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     if (closedTimeMs.isDefined) {
       throw new IllegalStateException(s"Session $key is already closed.")
     }
-    logInfo(s"Closing session with userId: $userId and sessionId: $sessionId")
+    logInfo(
+      log"Closing session with userId: ${MDC(USER_ID, userId)} and " +
+        log"sessionId: ${MDC(SESSION_ID, sessionId)}")
     closedTimeMs = Some(System.currentTimeMillis())
 
     if (Utils.isTesting && eventManager.status == SessionStatus.Pending) {
@@ -266,6 +299,11 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     SparkConnectService.streamingSessionManager.cleanupRunningQueries(this)
     streamingForeachBatchRunnerCleanerCache.cleanUpAll() // Clean up any streaming workers.
     removeAllListeners() // removes all listener and stop python listener processes if necessary.
+
+    // if there is a server side listener, clean up related resources
+    if (streamingServersideListenerHolder.isServerSideListenerRegistered) {
+      streamingServersideListenerHolder.cleanUp()
+    }
 
     // Clean up all executions.
     // After closedTimeMs is defined, SessionHolder.addExecuteHolder() will not allow new executions
@@ -381,6 +419,57 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    */
   private[connect] val pythonAccumulator: Option[PythonAccumulator] =
     Try(session.sparkContext.collectionAccumulator[Array[Byte]]).toOption
+
+  /**
+   * Transform a relation into a logical plan, using the plan cache if enabled. The plan cache is
+   * enable only if `spark.connect.session.planCache.maxSize` is greater than zero AND
+   * `spark.connect.session.planCache.enabled` is true.
+   * @param rel
+   *   The relation to transform.
+   * @param cachePlan
+   *   Whether to cache the result logical plan.
+   * @param transform
+   *   Function to transform the relation into a logical plan.
+   * @return
+   *   The logical plan.
+   */
+  private[connect] def usePlanCache(rel: proto.Relation, cachePlan: Boolean)(
+      transform: proto.Relation => LogicalPlan): LogicalPlan = {
+    val planCacheEnabled =
+      Option(session).forall(_.conf.get(Connect.CONNECT_SESSION_PLAN_CACHE_ENABLED, true))
+    // We only cache plans that have a plan ID.
+    val hasPlanId = rel.hasCommon && rel.getCommon.hasPlanId
+
+    def getPlanCache(rel: proto.Relation): Option[LogicalPlan] =
+      planCache match {
+        case Some(cache) if planCacheEnabled && hasPlanId =>
+          Option(cache.getIfPresent(rel)) match {
+            case Some(plan) =>
+              logDebug(s"Using cached plan for relation '$rel': $plan")
+              Some(plan)
+            case None => None
+          }
+        case _ => None
+      }
+    def putPlanCache(rel: proto.Relation, plan: LogicalPlan): Unit =
+      planCache match {
+        case Some(cache) if planCacheEnabled && hasPlanId =>
+          cache.put(rel, plan)
+        case _ =>
+      }
+
+    getPlanCache(rel)
+      .getOrElse({
+        val plan = transform(rel)
+        if (cachePlan) {
+          putPlanCache(rel, plan)
+        }
+        plan
+      })
+  }
+
+  // For testing. Expose the plan cache for testing purposes.
+  private[service] def getPlanCache: Option[Cache[proto.Relation, LogicalPlan]] = planCache
 }
 
 object SessionHolder {

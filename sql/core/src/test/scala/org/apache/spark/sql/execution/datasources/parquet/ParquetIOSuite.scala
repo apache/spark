@@ -1064,9 +1064,18 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     val readSchema = StructType(Seq(StructField("_1", DataTypes.TimestampType)))
 
     withParquetFile(data) { path =>
-      val errMsg = intercept[Exception](spark.read.schema(readSchema).parquet(path).collect())
-          .getMessage
-      assert(errMsg.contains("Parquet column cannot be converted in file"))
+      checkErrorMatchPVals(
+        exception = intercept[SparkException] {
+          spark.read.schema(readSchema).parquet(path).collect()
+        },
+        errorClass = "FAILED_READ_FILE.PARQUET_COLUMN_DATA_TYPE_MISMATCH",
+        parameters = Map(
+          "path" -> ".*",
+          "column" -> "\\[_1\\]",
+          "expectedType" -> "timestamp",
+          "actualType" -> "BINARY"
+        )
+      )
     }
   }
 

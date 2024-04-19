@@ -45,11 +45,10 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from py4j.protocol import register_input_converter
-from py4j.java_gateway import GatewayClient, JavaClass, JavaGateway, JavaObject, JVMView
-
+from pyspark.util import is_remote_only
 from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.utils import has_numpy, get_active_spark_context
+from pyspark.sql.variant_utils import VariantUtils
 from pyspark.errors import (
     PySparkNotImplementedError,
     PySparkTypeError,
@@ -62,6 +61,10 @@ from pyspark.errors import (
 
 if has_numpy:
     import numpy as np
+
+if TYPE_CHECKING:
+    import numpy as np
+    from py4j.java_gateway import GatewayClient, JavaGateway, JavaClass
 
 T = TypeVar("T")
 U = TypeVar("U")
@@ -93,11 +96,8 @@ __all__ = [
     "StructField",
     "StructType",
     "VariantType",
+    "VariantVal",
 ]
-
-
-if TYPE_CHECKING:
-    import numpy as np
 
 
 class DataType:
@@ -250,21 +250,24 @@ class StringType(AtomicType):
 
     Parameters
     ----------
-    collationId : int
-        the collation id number.
+    collation : str
+        name of the collation, default is UTF8_BINARY.
     """
 
     collationNames = ["UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI"]
 
-    def __init__(self, collationId: int = 0):
-        self.collationId = collationId
+    def __init__(self, collation: Optional[str] = None):
+        self.collationId = 0 if collation is None else self.collationNameToId(collation)
+
+    @classmethod
+    def fromCollationId(self, collationId: int) -> "StringType":
+        return StringType(StringType.collationNames[collationId])
 
     def collationIdToName(self) -> str:
-        return (
-            " COLLATE %s" % StringType.collationNames[self.collationId]
-            if self.collationId != 0
-            else ""
-        )
+        if self.collationId == 0:
+            return ""
+        else:
+            return " collate %s" % StringType.collationNames[self.collationId]
 
     @classmethod
     def collationNameToId(cls, collationName: str) -> int:
@@ -277,7 +280,11 @@ class StringType(AtomicType):
         return "string" + self.collationIdToName()
 
     def __repr__(self) -> str:
-        return "StringType(%d)" % (self.collationId) if self.collationId != 0 else "StringType()"
+        return (
+            "StringType('%s')" % StringType.collationNames[self.collationId]
+            if self.collationId != 0
+            else "StringType()"
+        )
 
 
 class CharType(AtomicType):
@@ -1336,7 +1343,13 @@ class VariantType(AtomicType):
     .. versionadded:: 4.0.0
     """
 
-    pass
+    def needConversion(self) -> bool:
+        return True
+
+    def fromInternal(self, obj: Dict) -> Optional["VariantVal"]:
+        if obj is None or not all(key in obj for key in ["value", "metadata"]):
+            return None
+        return VariantVal(obj["value"], obj["metadata"])
 
 
 class UserDefinedType(DataType):
@@ -1460,6 +1473,55 @@ class UserDefinedType(DataType):
         return type(self) == type(other)
 
 
+class VariantVal:
+    """
+    A class to represent a Variant value in Python.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    value : bytes
+        The bytes representing the value component of the Variant.
+    metadata : bytes
+        The bytes representing the metadata component of the Variant.
+
+    Methods
+    -------
+    toPython()
+        Convert the VariantVal to a Python data structure.
+
+    Examples
+    --------
+    >>> from pyspark.sql.functions import *
+    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
+    >>> v = df.select(parse_json(df.json).alias("var")).collect()[0].var
+    >>> v.toPython()
+    {'a': 1}
+    """
+
+    def __init__(self, value: bytes, metadata: bytes):
+        self.value = value
+        self.metadata = metadata
+
+    def __str__(self) -> str:
+        return VariantUtils.to_json(self.value, self.metadata)
+
+    def __repr__(self) -> str:
+        return "VariantVal(%r, %r)" % (self.value, self.metadata)
+
+    def toPython(self) -> Any:
+        """
+        Convert the VariantVal to a Python data structure.
+
+        Returns
+        -------
+        Any
+            A Python object that represents the Variant.
+        """
+        return VariantUtils.to_python(self.value, self.metadata)
+
+
 _atomic_types: List[Type[DataType]] = [
     StringType,
     CharType,
@@ -1486,7 +1548,7 @@ _all_complex_types: Dict[str, Type[Union[ArrayType, MapType, StructType]]] = dic
     (v.typeName(), v) for v in _complex_types
 )
 
-_COLLATED_STRING = re.compile(r"string\s+COLLATE\s+([\w_]+|`[\w_]`)")
+_COLLATED_STRING = re.compile(r"string\s+collate\s+([\w_]+|`[\w_]`)")
 _LENGTH_CHAR = re.compile(r"char\(\s*(\d+)\s*\)")
 _LENGTH_VARCHAR = re.compile(r"varchar\(\s*(\d+)\s*\)")
 _FIXED_DECIMAL = re.compile(r"decimal\(\s*(\d+)\s*,\s*(-?\d+)\s*\)")
@@ -1538,6 +1600,8 @@ def _parse_datatype_string(s: str) -> DataType:
         ...
     ParseException:...
     """
+    from py4j.java_gateway import JVMView
+
     sc = get_active_spark_context()
 
     def from_ddl_schema(type_str: str) -> DataType:
@@ -1654,7 +1718,7 @@ def _parse_datatype_json_value(json_value: Union[dict, str]) -> DataType:
             return CalendarIntervalType()
         elif _COLLATED_STRING.match(json_value):
             m = _COLLATED_STRING.match(json_value)
-            return StringType(StringType.collationNameToId(m.group(1)))  # type: ignore[union-attr]
+            return StringType(m.group(1))  # type: ignore[union-attr]
         elif _LENGTH_CHAR.match(json_value):
             m = _LENGTH_CHAR.match(json_value)
             return CharType(int(m.group(1)))  # type: ignore[union-attr]
@@ -2750,7 +2814,9 @@ class DateConverter:
     def can_convert(self, obj: Any) -> bool:
         return isinstance(obj, datetime.date)
 
-    def convert(self, obj: datetime.date, gateway_client: GatewayClient) -> JavaObject:
+    def convert(self, obj: datetime.date, gateway_client: "GatewayClient") -> "JavaGateway":
+        from py4j.java_gateway import JavaClass
+
         Date = JavaClass("java.sql.Date", gateway_client)
         return Date.valueOf(obj.strftime("%Y-%m-%d"))
 
@@ -2759,7 +2825,9 @@ class DatetimeConverter:
     def can_convert(self, obj: Any) -> bool:
         return isinstance(obj, datetime.datetime)
 
-    def convert(self, obj: datetime.datetime, gateway_client: GatewayClient) -> JavaObject:
+    def convert(self, obj: datetime.datetime, gateway_client: "GatewayClient") -> "JavaGateway":
+        from py4j.java_gateway import JavaClass
+
         Timestamp = JavaClass("java.sql.Timestamp", gateway_client)
         seconds = (
             calendar.timegm(obj.utctimetuple()) if obj.tzinfo else time.mktime(obj.timetuple())
@@ -2779,7 +2847,9 @@ class DatetimeNTZConverter:
             and is_timestamp_ntz_preferred()
         )
 
-    def convert(self, obj: datetime.datetime, gateway_client: GatewayClient) -> JavaObject:
+    def convert(self, obj: datetime.datetime, gateway_client: "GatewayClient") -> "JavaGateway":
+        from py4j.java_gateway import JavaClass
+
         seconds = calendar.timegm(obj.utctimetuple())
         DateTimeUtils = JavaClass(
             "org.apache.spark.sql.catalyst.util.DateTimeUtils",
@@ -2792,7 +2862,9 @@ class DayTimeIntervalTypeConverter:
     def can_convert(self, obj: Any) -> bool:
         return isinstance(obj, datetime.timedelta)
 
-    def convert(self, obj: datetime.timedelta, gateway_client: GatewayClient) -> JavaObject:
+    def convert(self, obj: datetime.timedelta, gateway_client: "GatewayClient") -> "JavaGateway":
+        from py4j.java_gateway import JavaClass
+
         IntervalUtils = JavaClass(
             "org.apache.spark.sql.catalyst.util.IntervalUtils",
             gateway_client,
@@ -2806,14 +2878,14 @@ class NumpyScalarConverter:
     def can_convert(self, obj: Any) -> bool:
         return has_numpy and isinstance(obj, np.generic)
 
-    def convert(self, obj: "np.generic", gateway_client: GatewayClient) -> Any:
+    def convert(self, obj: "np.generic", gateway_client: "GatewayClient") -> Any:
         return obj.item()
 
 
 class NumpyArrayConverter:
     def _from_numpy_type_to_java_type(
-        self, nt: "np.dtype", gateway: JavaGateway
-    ) -> Optional[JavaClass]:
+        self, nt: "np.dtype", gateway: "JavaGateway"
+    ) -> Optional["JavaClass"]:
         """Convert NumPy type to Py4J Java type."""
         if nt in [np.dtype("int8"), np.dtype("int16")]:
             # Mapping int8 to gateway.jvm.byte causes
@@ -2835,7 +2907,7 @@ class NumpyArrayConverter:
     def can_convert(self, obj: Any) -> bool:
         return has_numpy and isinstance(obj, np.ndarray) and obj.ndim == 1
 
-    def convert(self, obj: "np.ndarray", gateway_client: GatewayClient) -> JavaObject:
+    def convert(self, obj: "np.ndarray", gateway_client: "GatewayClient") -> "JavaGateway":
         from pyspark import SparkContext
 
         gateway = SparkContext._gateway
@@ -2857,15 +2929,18 @@ class NumpyArrayConverter:
         return jarr
 
 
-# datetime is a subclass of date, we should register DatetimeConverter first
-register_input_converter(DatetimeNTZConverter())
-register_input_converter(DatetimeConverter())
-register_input_converter(DateConverter())
-register_input_converter(DayTimeIntervalTypeConverter())
-register_input_converter(NumpyScalarConverter())
-# NumPy array satisfies py4j.java_collections.ListConverter,
-# so prepend NumpyArrayConverter
-register_input_converter(NumpyArrayConverter(), prepend=True)
+if not is_remote_only():
+    from py4j.protocol import register_input_converter
+
+    # datetime is a subclass of date, we should register DatetimeConverter first
+    register_input_converter(DatetimeNTZConverter())
+    register_input_converter(DatetimeConverter())
+    register_input_converter(DateConverter())
+    register_input_converter(DayTimeIntervalTypeConverter())
+    register_input_converter(NumpyScalarConverter())
+    # NumPy array satisfies py4j.java_collections.ListConverter,
+    # so prepend NumpyArrayConverter
+    register_input_converter(NumpyArrayConverter(), prepend=True)
 
 
 def _test() -> None:

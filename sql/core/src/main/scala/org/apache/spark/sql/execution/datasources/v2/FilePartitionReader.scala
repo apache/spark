@@ -18,11 +18,11 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.io.{FileNotFoundException, IOException}
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.PARTITIONED_FILE_READER
 import org.apache.spark.rdd.InputFileBlockHolder
 import org.apache.spark.sql.catalyst.FileSourceOptions
 import org.apache.spark.sql.connector.read.PartitionReader
-import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.PartitionedFile
 
 class FilePartitionReader[T](
@@ -48,9 +48,6 @@ class FilePartitionReader[T](
           case e: FileNotFoundException if ignoreMissingFiles =>
             logWarning(s"Skipped missing file.", e)
             currentReader = null
-          // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
-          case e: FileNotFoundException if !ignoreMissingFiles =>
-            throw QueryExecutionErrors.fileNotFoundError(e)
           case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
             logWarning(
               s"Skipped the rest of the content in the corrupted file.", e)
@@ -68,8 +65,8 @@ class FilePartitionReader[T](
       currentReader != null && currentReader.next()
     } catch {
       case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
-        logWarning(
-          s"Skipped the rest of the content in the corrupted file: $currentReader", e)
+        logWarning(log"Skipped the rest of the content in the corrupted file: " +
+          log"${MDC(PARTITIONED_FILE_READER, currentReader)}", e)
         false
       case e: Throwable =>
         throw FileDataSourceV2.attachFilePath(currentReader.file.urlEncodedPath, e)

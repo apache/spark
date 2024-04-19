@@ -60,7 +60,6 @@ from pyspark.testing.sqlutils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.testing.utils import QuietTest
 
 if have_pandas:
     import pandas as pd
@@ -209,7 +208,7 @@ class GroupedApplyInPandasTestsMixin:
         assert_frame_equal(expected, result)
 
     def test_register_grouped_map_udf(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_register_grouped_map_udf()
 
     def check_register_grouped_map_udf(self):
@@ -279,7 +278,7 @@ class GroupedApplyInPandasTestsMixin:
         assert_frame_equal(expected, result)
 
     def test_apply_in_pandas_not_returning_pandas_dataframe(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_apply_in_pandas_not_returning_pandas_dataframe()
 
     def check_apply_in_pandas_not_returning_pandas_dataframe(self):
@@ -315,7 +314,7 @@ class GroupedApplyInPandasTestsMixin:
         self._test_apply_in_pandas(stats)
 
     def test_apply_in_pandas_returning_wrong_column_names(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_apply_in_pandas_returning_wrong_column_names()
 
     def check_apply_in_pandas_returning_wrong_column_names(self):
@@ -331,7 +330,7 @@ class GroupedApplyInPandasTestsMixin:
             )
 
     def test_apply_in_pandas_returning_no_column_names_and_wrong_amount(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_apply_in_pandas_returning_no_column_names_and_wrong_amount()
 
     def check_apply_in_pandas_returning_no_column_names_and_wrong_amount(self):
@@ -348,7 +347,7 @@ class GroupedApplyInPandasTestsMixin:
         self._test_apply_in_pandas_returning_empty_dataframe(pd.DataFrame())
 
     def test_apply_in_pandas_returning_incompatible_type(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_apply_in_pandas_returning_incompatible_type()
 
     def check_apply_in_pandas_returning_incompatible_type(self):
@@ -401,7 +400,7 @@ class GroupedApplyInPandasTestsMixin:
         assert_frame_equal(expected, result)
 
     def test_wrong_return_type(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_wrong_return_type()
 
     def check_wrong_return_type(self):
@@ -416,7 +415,7 @@ class GroupedApplyInPandasTestsMixin:
             )
 
     def test_wrong_args(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_wrong_args()
 
     def check_wrong_args(self):
@@ -440,7 +439,7 @@ class GroupedApplyInPandasTestsMixin:
             df.groupby("id").apply(pandas_udf(lambda x, y: x, DoubleType(), PandasUDFType.SCALAR))
 
     def test_unsupported_types(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_unsupported_types()
 
     def check_unsupported_types(self):
@@ -552,7 +551,7 @@ class GroupedApplyInPandasTestsMixin:
         assert_frame_equal(expected4, result4)
 
     def test_column_order(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_column_order()
 
     def check_column_order(self):
@@ -844,7 +843,7 @@ class GroupedApplyInPandasTestsMixin:
             self.assertEqual(24.5, row[1])
 
     def _test_apply_in_pandas_returning_empty_dataframe_error(self, empty_df, error):
-        with QuietTest(self.sc):
+        with self.quiet():
             with self.assertRaisesRegex(PythonException, error):
                 self._test_apply_in_pandas_returning_empty_dataframe(empty_df)
 

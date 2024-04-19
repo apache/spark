@@ -24,7 +24,8 @@ import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.GetTableTypesOperation
 import org.apache.hive.service.cli.session.HiveSession
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey._
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 
@@ -44,7 +45,7 @@ private[hive] class SparkGetTableTypesOperation(
   override def runInternal(): Unit = {
     statementId = UUID.randomUUID().toString
     val logMsg = "Listing table types"
-    logInfo(s"$logMsg with $statementId")
+    logInfo(log"Listing table types with ${MDC(STATEMENT_ID, statementId)}")
     setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
     val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader

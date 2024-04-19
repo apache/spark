@@ -4845,6 +4845,22 @@ object functions {
       otherChar: Column): Column =
     Column.fn("mask", input, upperChar, lowerChar, digitChar, otherChar)
 
+  /**
+   * Marks a given column with specified collation.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def collate(e: Column, collation: String): Column = Column.fn("collate", e, lit(collation))
+
+  /**
+   * Returns the collation name of a given column.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def collation(e: Column): Column = Column.fn("collation", e)
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // DateTime functions
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -6947,6 +6963,17 @@ object functions {
       options: Iterator[(String, String)]): Column = {
     fnWithOptions("from_json", options, e, schema)
   }
+
+  /**
+   * Parses a JSON string and constructs a Variant value.
+   *
+   * @param json
+   *   a string column that contains JSON data.
+   *
+   * @group json_funcs
+   * @since 4.0.0
+   */
+  def parse_json(json: Column): Column = Column.fn("parse_json", json)
 
   /**
    * Parses a JSON string and infers its schema in DDL format.

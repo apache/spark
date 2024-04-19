@@ -138,7 +138,7 @@ jobs:
           - >-
             core, unsafe, kvstore, avro, utils,
             network-common, network-shuffle, repl, launcher,
-            examples, sketch
+            examples, sketch, variant
           - >-
             api, catalyst, hive-thriftserver
           - >-
@@ -766,6 +766,8 @@ jobs:
       run: ./dev/lint-r
     - name: Run documentation build
       run: |
+        # We need this link because the jekyll build calls `python`.
+        ln -s "$(which python3.9)" "/usr/local/bin/python"
         # Build docs first with SKIP_API to ensure they are buildable without requiring any
         # language docs to be built beforehand.
         cd docs; SKIP_API=1 bundle exec jekyll build; cd ..
@@ -937,6 +939,9 @@ jobs:
         SPARK_TPCDS_JOIN_CONF: |
           spark.sql.autoBroadcastJoinThreshold=-1
           spark.sql.join.forceApplyShuffledHashJoin=true
+    - name: Run TPC-DS queries on collated data
+      run: |
+        SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "sql/testOnly org.apache.spark.sql.TPCDSCollationQueryTestSuite"
     - name: Upload test results to report
       if: always()
       uses: actions/upload-artifact@v4

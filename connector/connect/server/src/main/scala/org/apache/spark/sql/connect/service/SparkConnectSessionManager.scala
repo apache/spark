@@ -29,7 +29,8 @@ import scala.util.control.NonFatal
 import com.google.common.cache.CacheBuilder
 
 import org.apache.spark.{SparkEnv, SparkSQLException}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{INTERVAL, SESSION_HOLD_INFO}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.config.Connect.{CONNECT_SESSION_MANAGER_CLOSED_SESSIONS_TOMBSTONES_SIZE, CONNECT_SESSION_MANAGER_DEFAULT_SESSION_TIMEOUT, CONNECT_SESSION_MANAGER_MAINTENANCE_INTERVAL}
 import org.apache.spark.util.ThreadUtils
@@ -53,11 +54,24 @@ class SparkConnectSessionManager extends Logging {
   /** Executor for the periodic maintenance */
   private var scheduledExecutor: Option[ScheduledExecutorService] = None
 
+  private def validateSessionId(
+      key: SessionKey,
+      sessionUUID: String,
+      previouslyObservedSessionId: String) = {
+    if (sessionUUID != previouslyObservedSessionId) {
+      throw new SparkSQLException(
+        errorClass = "INVALID_HANDLE.SESSION_CHANGED",
+        messageParameters = Map("handle" -> key.sessionId))
+    }
+  }
+
   /**
    * Based on the userId and sessionId, find or create a new SparkSession.
    */
-  private[connect] def getOrCreateIsolatedSession(key: SessionKey): SessionHolder = {
-    getSession(
+  private[connect] def getOrCreateIsolatedSession(
+      key: SessionKey,
+      previouslyObservedSesssionId: Option[String]): SessionHolder = {
+    val holder = getSession(
       key,
       Some(() => {
         // Executed under sessionsState lock in getSession,  to guard against concurrent removal
@@ -67,13 +81,18 @@ class SparkConnectSessionManager extends Logging {
         holder.initializeSession()
         holder
       }))
+    previouslyObservedSesssionId.foreach(sessionId =>
+      validateSessionId(key, holder.session.sessionUUID, sessionId))
+    holder
   }
 
   /**
    * Based on the userId and sessionId, find an existing SparkSession or throw error.
    */
-  private[connect] def getIsolatedSession(key: SessionKey): SessionHolder = {
-    getSession(
+  private[connect] def getIsolatedSession(
+      key: SessionKey,
+      previouslyObservedSesssionId: Option[String]): SessionHolder = {
+    val holder = getSession(
       key,
       Some(() => {
         logDebug(s"Session not found: $key")
@@ -87,6 +106,9 @@ class SparkConnectSessionManager extends Logging {
             messageParameters = Map("handle" -> key.sessionId))
         }
       }))
+    previouslyObservedSesssionId.foreach(sessionId =>
+      validateSessionId(key, holder.session.sessionUUID, sessionId))
+    holder
   }
 
   /**
@@ -182,7 +204,9 @@ class SparkConnectSessionManager extends Logging {
       case Some(_) => // Already running.
       case None =>
         val interval = SparkEnv.get.conf.get(CONNECT_SESSION_MANAGER_MAINTENANCE_INTERVAL)
-        logInfo(s"Starting thread for cleanup of expired sessions every $interval ms")
+        logInfo(
+          log"Starting thread for cleanup of expired sessions every " +
+            log"${MDC(INTERVAL, interval)} ms")
         scheduledExecutor = Some(Executors.newSingleThreadScheduledExecutor())
         scheduledExecutor.get.scheduleAtFixedRate(
           () => {
@@ -237,7 +261,9 @@ class SparkConnectSessionManager extends Logging {
         // Last chance - check expiration time and remove under lock if expired.
         val info = sessionHolder.getSessionHolderInfo
         if (shouldExpire(info, System.currentTimeMillis())) {
-          logInfo(s"Found session $info that expired and will be closed.")
+          logInfo(
+            log"Found session ${MDC(SESSION_HOLD_INFO, info)} that expired " +
+              log"and will be closed.")
           removeSessionHolder(info.key)
         } else {
           None

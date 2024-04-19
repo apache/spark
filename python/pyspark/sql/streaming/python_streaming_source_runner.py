@@ -22,7 +22,6 @@ from typing import IO
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.errors import IllegalArgumentException, PySparkAssertionError, PySparkRuntimeError
-from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import (
     read_int,
     write_int,
@@ -34,7 +33,7 @@ from pyspark.sql.types import (
     _parse_datatype_json_string,
     StructType,
 )
-from pyspark.util import handle_worker_exception
+from pyspark.util import handle_worker_exception, local_connect_and_auth
 from pyspark.worker_util import (
     check_python_version,
     read_command,
@@ -141,7 +140,7 @@ def main(infile: IO, outfile: IO) -> None:
             error_msg = "data source {} throw exception: {}".format(data_source.name, e)
             raise PySparkRuntimeError(
                 error_class="PYTHON_STREAMING_DATA_SOURCE_RUNTIME_ERROR",
-                message_parameters={"error": error_msg},
+                message_parameters={"msg": error_msg},
             )
         finally:
             reader.stop()

@@ -19,7 +19,8 @@ package org.apache.spark.sql.execution.window
 
 import org.apache.spark.{PartitionEvaluator, PartitionEvaluatorFactory}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, JoinedRow, NamedExpression, SortOrder, SpecificInternalRow, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, InterpretedOrdering, JoinedRow, NamedExpression, SortOrder, SpecificInternalRow, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.execution.ExternalAppendOnlyUnsafeRowArray
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
@@ -54,6 +55,14 @@ class WindowEvaluatorFactory(
         // Get all relevant projections.
         val result = createResultProjection(expressions)
         val grouping = UnsafeProjection.create(partitionSpec, childOutput)
+        val groupEqualityCheck =
+          if (partitionSpec.forall(e => UnsafeRowUtils.isBinaryStable(e.dataType))) {
+            (key1: UnsafeRow, key2: UnsafeRow) => key1.equals(key2)
+          } else {
+            val types = partitionSpec.map(_.dataType)
+            val ordering = InterpretedOrdering.forSchema(types)
+            (key1: UnsafeRow, key2: UnsafeRow) => ordering.compare(key1, key2) == 0
+        }
 
         // Manage the stream and the grouping.
         var nextRow: UnsafeRow = null
@@ -88,7 +97,7 @@ class WindowEvaluatorFactory(
           // clear last partition
           buffer.clear()
 
-          while (nextRowAvailable && nextGroup == currentGroup) {
+          while (nextRowAvailable && groupEqualityCheck(nextGroup, currentGroup)) {
             buffer.add(nextRow)
             fetchNextRow()
           }

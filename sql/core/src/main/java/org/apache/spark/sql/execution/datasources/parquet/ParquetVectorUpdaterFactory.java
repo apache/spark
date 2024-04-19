@@ -148,12 +148,10 @@ public class ParquetVectorUpdaterFactory {
           }
         } else if (sparkType == DataTypes.TimestampNTZType &&
           isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit.MICROS)) {
-          validateTimestampNTZType();
           // TIMESTAMP_NTZ is a new data type and has no legacy files that need to do rebase.
           return new LongUpdater();
         } else if (sparkType == DataTypes.TimestampNTZType &&
           isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit.MILLIS)) {
-          validateTimestampNTZType();
           // TIMESTAMP_NTZ is a new data type and has no legacy files that need to do rebase.
           return new LongAsMicrosUpdater();
         } else if (sparkType instanceof DayTimeIntervalType) {
@@ -176,7 +174,8 @@ public class ParquetVectorUpdaterFactory {
       }
       case INT96 -> {
         if (sparkType == DataTypes.TimestampNTZType) {
-          convertErrorForTimestampNTZ(typeName.name());
+          // TimestampNTZ type does not require rebasing due to its lack of time zone context.
+          return new BinaryToSQLTimestampUpdater();
         } else if (sparkType == DataTypes.TimestampType) {
           final boolean failIfRebase = "EXCEPTION".equals(int96RebaseMode);
           if (!shouldConvertTimestamps()) {
@@ -230,20 +229,6 @@ public class ParquetVectorUpdaterFactory {
   boolean isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit unit) {
     return logicalTypeAnnotation instanceof TimestampLogicalTypeAnnotation annotation &&
       annotation.getUnit() == unit;
-  }
-
-  private void validateTimestampNTZType() {
-    assert(logicalTypeAnnotation instanceof TimestampLogicalTypeAnnotation);
-    // Throw an exception if the Parquet type is TimestampLTZ as the Catalyst type is TimestampNTZ.
-    // This is to avoid mistakes in reading the timestamp values.
-    if (((TimestampLogicalTypeAnnotation) logicalTypeAnnotation).isAdjustedToUTC()) {
-      convertErrorForTimestampNTZ("int64 time(" + logicalTypeAnnotation + ")");
-    }
-  }
-
-  void convertErrorForTimestampNTZ(String parquetType) {
-    throw new RuntimeException("Unable to create Parquet converter for data type " +
-      DataTypes.TimestampNTZType.json() + " whose Parquet type is " + parquetType);
   }
 
   boolean isUnsignedIntTypeMatched(int bitWidth) {

@@ -30,14 +30,17 @@ class TestListStateProcessor
 
   @transient var _listState: ListState[String] = _
 
-  override def init(outputMode: OutputMode): Unit = {
+  override def init(
+      outputMode: OutputMode,
+      timeMode: TimeMode): Unit = {
     _listState = getHandle.getListState("testListState", Encoders.STRING)
   }
 
   override def handleInputRows(
       key: String,
       rows: Iterator[InputRow],
-      timerValues: TimerValues): Iterator[(String, String)] = {
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
 
     var output = List[(String, String)]()
 
@@ -76,8 +79,6 @@ class TestListStateProcessor
 
     output.iterator
   }
-
-  override def close(): Unit = {}
 }
 
 class ToggleSaveAndEmitProcessor
@@ -86,7 +87,9 @@ class ToggleSaveAndEmitProcessor
   @transient var _listState: ListState[String] = _
   @transient var _valueState: ValueState[Boolean] = _
 
-  override def init(outputMode: OutputMode): Unit = {
+  override def init(
+      outputMode: OutputMode,
+      timeMode: TimeMode): Unit = {
     _listState = getHandle.getListState("testListState", Encoders.STRING)
     _valueState = getHandle.getValueState("testValueState", Encoders.scalaBoolean)
   }
@@ -94,7 +97,8 @@ class ToggleSaveAndEmitProcessor
   override def handleInputRows(
       key: String,
       rows: Iterator[String],
-      timerValues: TimerValues): Iterator[String] = {
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[String] = {
     val valueStateOption = _valueState.getOption()
 
     if (valueStateOption.isEmpty || !valueStateOption.get) {
@@ -121,8 +125,6 @@ class ToggleSaveAndEmitProcessor
       }
     }
   }
-
-  override def close(): Unit = {}
 }
 
 class TransformWithListStateSuite extends StreamTest
@@ -137,7 +139,7 @@ class TransformWithListStateSuite extends StreamTest
       val result = inputData.toDS()
         .groupByKey(x => x.key)
         .transformWithState(new TestListStateProcessor(),
-          TimeoutMode.NoTimeouts(),
+          TimeMode.None(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update()) (
@@ -157,7 +159,7 @@ class TransformWithListStateSuite extends StreamTest
       val result = inputData.toDS()
         .groupByKey(x => x.key)
         .transformWithState(new TestListStateProcessor(),
-          TimeoutMode.NoTimeouts(),
+          TimeMode.None(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
@@ -177,7 +179,7 @@ class TransformWithListStateSuite extends StreamTest
       val result = inputData.toDS()
         .groupByKey(x => x.key)
         .transformWithState(new TestListStateProcessor(),
-          TimeoutMode.NoTimeouts(),
+          TimeMode.None(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
@@ -197,7 +199,7 @@ class TransformWithListStateSuite extends StreamTest
       val result = inputData.toDS()
         .groupByKey(x => x.key)
         .transformWithState(new TestListStateProcessor(),
-          TimeoutMode.NoTimeouts(),
+          TimeMode.None(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
@@ -217,7 +219,7 @@ class TransformWithListStateSuite extends StreamTest
       val result = inputData.toDS()
         .groupByKey(x => x.key)
         .transformWithState(new TestListStateProcessor(),
-          TimeoutMode.NoTimeouts(),
+          TimeMode.None(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
@@ -237,7 +239,7 @@ class TransformWithListStateSuite extends StreamTest
       val result = inputData.toDS()
         .groupByKey(x => x.key)
         .transformWithState(new TestListStateProcessor(),
-          TimeoutMode.NoTimeouts(),
+          TimeMode.None(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
@@ -257,7 +259,7 @@ class TransformWithListStateSuite extends StreamTest
       val result = inputData.toDS()
         .groupByKey(x => x.key)
         .transformWithState(new TestListStateProcessor(),
-          TimeoutMode.NoTimeouts(),
+          TimeMode.None(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update()) (
@@ -296,7 +298,10 @@ class TransformWithListStateSuite extends StreamTest
         AddData(inputData, InputRow("k5", "append", "v4")),
         AddData(inputData, InputRow("k5", "put", "v5,v6")),
         AddData(inputData, InputRow("k5", "emitAllInState", "")),
-        CheckNewAnswer(("k5", "v5"), ("k5", "v6"))
+        CheckNewAnswer(("k5", "v5"), ("k5", "v6")),
+        Execute { q =>
+          assert(q.lastProgress.stateOperators(0).customMetrics.get("numListStateVars") > 0)
+        }
       )
     }
   }
@@ -309,7 +314,7 @@ class TransformWithListStateSuite extends StreamTest
       val result = inputData.toDS()
         .groupByKey(x => x)
         .transformWithState(new ToggleSaveAndEmitProcessor(),
-          TimeoutMode.NoTimeouts(),
+          TimeMode.None(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(

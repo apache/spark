@@ -9,7 +9,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`t1`, false
 insert into t1 values('aaa', 'aaa')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t1, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t1], Append, `spark_catalog`.`default`.`t1`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t1), [utf8_binary, utf8_binary_lcase]
-+- Project [cast(col1#x as string) AS utf8_binary#x, cast(col2#x as string COLLATE UTF8_BINARY_LCASE) AS utf8_binary_lcase#x]
++- Project [cast(col1#x as string) AS utf8_binary#x, cast(col2#x as string collate UTF8_BINARY_LCASE) AS utf8_binary_lcase#x]
    +- LocalRelation [col1#x, col2#x]
 
 
@@ -17,7 +17,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 insert into t1 values('AAA', 'AAA')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t1, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t1], Append, `spark_catalog`.`default`.`t1`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t1), [utf8_binary, utf8_binary_lcase]
-+- Project [cast(col1#x as string) AS utf8_binary#x, cast(col2#x as string COLLATE UTF8_BINARY_LCASE) AS utf8_binary_lcase#x]
++- Project [cast(col1#x as string) AS utf8_binary#x, cast(col2#x as string collate UTF8_BINARY_LCASE) AS utf8_binary_lcase#x]
    +- LocalRelation [col1#x, col2#x]
 
 
@@ -25,7 +25,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 insert into t1 values('bbb', 'bbb')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t1, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t1], Append, `spark_catalog`.`default`.`t1`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t1), [utf8_binary, utf8_binary_lcase]
-+- Project [cast(col1#x as string) AS utf8_binary#x, cast(col2#x as string COLLATE UTF8_BINARY_LCASE) AS utf8_binary_lcase#x]
++- Project [cast(col1#x as string) AS utf8_binary#x, cast(col2#x as string collate UTF8_BINARY_LCASE) AS utf8_binary_lcase#x]
    +- LocalRelation [col1#x, col2#x]
 
 
@@ -33,8 +33,14 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 insert into t1 values('BBB', 'BBB')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t1, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t1], Append, `spark_catalog`.`default`.`t1`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t1), [utf8_binary, utf8_binary_lcase]
-+- Project [cast(col1#x as string) AS utf8_binary#x, cast(col2#x as string COLLATE UTF8_BINARY_LCASE) AS utf8_binary_lcase#x]
++- Project [cast(col1#x as string) AS utf8_binary#x, cast(col2#x as string collate UTF8_BINARY_LCASE) AS utf8_binary_lcase#x]
    +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+describe table t1
+-- !query analysis
+DescribeTableCommand `spark_catalog`.`default`.`t1`, false, [col_name#x, data_type#x, comment#x]
 
 
 -- !query
@@ -112,7 +118,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`t2`, false
 insert into t2 values('aaa', 'aaa')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t2, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t2], Append, `spark_catalog`.`default`.`t2`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t2), [utf8_binary, utf8_binary_lcase]
-+- Project [cast(col1#x as string) AS utf8_binary#x, cast(col2#x as string COLLATE UTF8_BINARY_LCASE) AS utf8_binary_lcase#x]
++- Project [cast(col1#x as string) AS utf8_binary#x, cast(col2#x as string collate UTF8_BINARY_LCASE) AS utf8_binary_lcase#x]
    +- LocalRelation [col1#x, col2#x]
 
 
@@ -120,7 +126,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 insert into t2 values('bbb', 'bbb')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t2, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t2], Append, `spark_catalog`.`default`.`t2`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t2), [utf8_binary, utf8_binary_lcase]
-+- Project [cast(col1#x as string) AS utf8_binary#x, cast(col2#x as string COLLATE UTF8_BINARY_LCASE) AS utf8_binary_lcase#x]
++- Project [cast(col1#x as string) AS utf8_binary#x, cast(col2#x as string collate UTF8_BINARY_LCASE) AS utf8_binary_lcase#x]
    +- LocalRelation [col1#x, col2#x]
 
 
@@ -150,24 +156,75 @@ DropTable false, false
 
 
 -- !query
+select col1 collate utf8_binary_lcase from values ('aaa'), ('AAA'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') except select col1 collate utf8_binary_lcase from values ('aaa'), ('bbb')
+-- !query analysis
+Except false
+:- Project [collate(col1#x, utf8_binary_lcase) AS collate(col1)#x]
+:  +- LocalRelation [col1#x]
++- Project [collate(col1#x, utf8_binary_lcase) AS collate(col1)#x]
+   +- LocalRelation [col1#x]
+
+
+-- !query
+select col1 collate utf8_binary_lcase from values ('aaa'), ('AAA'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') except all select col1 collate utf8_binary_lcase from values ('aaa'), ('bbb')
+-- !query analysis
+Except All true
+:- Project [collate(col1#x, utf8_binary_lcase) AS collate(col1)#x]
+:  +- LocalRelation [col1#x]
++- Project [collate(col1#x, utf8_binary_lcase) AS collate(col1)#x]
+   +- LocalRelation [col1#x]
+
+
+-- !query
+select col1 collate utf8_binary_lcase from values ('aaa'), ('AAA'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') union select col1 collate utf8_binary_lcase from values ('aaa'), ('bbb')
+-- !query analysis
+Distinct
++- Union false, false
+   :- Project [collate(col1#x, utf8_binary_lcase) AS collate(col1)#x]
+   :  +- LocalRelation [col1#x]
+   +- Project [collate(col1#x, utf8_binary_lcase) AS collate(col1)#x]
+      +- LocalRelation [col1#x]
+
+
+-- !query
+select col1 collate utf8_binary_lcase from values ('aaa'), ('AAA'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') union all select col1 collate utf8_binary_lcase from values ('aaa'), ('bbb')
+-- !query analysis
+Union false, false
+:- Project [collate(col1#x, utf8_binary_lcase) AS collate(col1)#x]
+:  +- LocalRelation [col1#x]
++- Project [collate(col1#x, utf8_binary_lcase) AS collate(col1)#x]
+   +- LocalRelation [col1#x]
+
+
+-- !query
+select col1 collate utf8_binary_lcase from values ('aaa'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') intersect select col1 collate utf8_binary_lcase from values ('aaa'), ('bbb')
+-- !query analysis
+Intersect false
+:- Project [collate(col1#x, utf8_binary_lcase) AS collate(col1)#x]
+:  +- LocalRelation [col1#x]
++- Project [collate(col1#x, utf8_binary_lcase) AS collate(col1)#x]
+   +- LocalRelation [col1#x]
+
+
+-- !query
 create table t1 (c1 struct<utf8_binary: string collate utf8_binary, utf8_binary_lcase: string collate utf8_binary_lcase>) USING PARQUET
 -- !query analysis
 CreateDataSourceTableCommand `spark_catalog`.`default`.`t1`, false
 
 
 -- !query
-INSERT INTO t1 VALUES (named_struct('utf8_binary', 'aaa', 'utf8_binary_lcase', 'aaa'))
+insert into t1 values (named_struct('utf8_binary', 'aaa', 'utf8_binary_lcase', 'aaa'))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t1, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t1], Append, `spark_catalog`.`default`.`t1`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t1), [c1]
-+- Project [named_struct(utf8_binary, col1#x.utf8_binary, utf8_binary_lcase, cast(col1#x.utf8_binary_lcase as string COLLATE UTF8_BINARY_LCASE)) AS c1#x]
++- Project [named_struct(utf8_binary, col1#x.utf8_binary, utf8_binary_lcase, cast(col1#x.utf8_binary_lcase as string collate UTF8_BINARY_LCASE)) AS c1#x]
    +- LocalRelation [col1#x]
 
 
 -- !query
-INSERT INTO t1 VALUES (named_struct('utf8_binary', 'AAA', 'utf8_binary_lcase', 'AAA'))
+insert into t1 values (named_struct('utf8_binary', 'AAA', 'utf8_binary_lcase', 'AAA'))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t1, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t1], Append, `spark_catalog`.`default`.`t1`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t1), [c1]
-+- Project [named_struct(utf8_binary, col1#x.utf8_binary, utf8_binary_lcase, cast(col1#x.utf8_binary_lcase as string COLLATE UTF8_BINARY_LCASE)) AS c1#x]
++- Project [named_struct(utf8_binary, col1#x.utf8_binary, utf8_binary_lcase, cast(col1#x.utf8_binary_lcase as string collate UTF8_BINARY_LCASE)) AS c1#x]
    +- LocalRelation [col1#x]
 
 
@@ -192,3 +249,66 @@ drop table t1
 -- !query analysis
 DropTable false, false
 +- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t1
+
+
+-- !query
+select array_contains(ARRAY('aaa' collate utf8_binary_lcase),'AAA' collate utf8_binary_lcase)
+-- !query analysis
+Project [array_contains(array(collate(aaa, utf8_binary_lcase)), collate(AAA, utf8_binary_lcase)) AS array_contains(array(collate(aaa)), collate(AAA))#x]
++- OneRowRelation
+
+
+-- !query
+select array_position(ARRAY('aaa' collate utf8_binary_lcase, 'bbb' collate utf8_binary_lcase),'BBB' collate utf8_binary_lcase)
+-- !query analysis
+Project [array_position(array(collate(aaa, utf8_binary_lcase), collate(bbb, utf8_binary_lcase)), collate(BBB, utf8_binary_lcase)) AS array_position(array(collate(aaa), collate(bbb)), collate(BBB))#xL]
++- OneRowRelation
+
+
+-- !query
+select nullif('aaa' COLLATE utf8_binary_lcase, 'AAA' COLLATE utf8_binary_lcase)
+-- !query analysis
+Project [nullif(collate(aaa, utf8_binary_lcase), collate(AAA, utf8_binary_lcase)) AS nullif(collate(aaa), collate(AAA))#x]
++- OneRowRelation
+
+
+-- !query
+select least('aaa' COLLATE utf8_binary_lcase, 'AAA' collate utf8_binary_lcase, 'a' collate utf8_binary_lcase)
+-- !query analysis
+Project [least(collate(aaa, utf8_binary_lcase), collate(AAA, utf8_binary_lcase), collate(a, utf8_binary_lcase)) AS least(collate(aaa), collate(AAA), collate(a))#x]
++- OneRowRelation
+
+
+-- !query
+select arrays_overlap(array('aaa' collate utf8_binary_lcase), array('AAA' collate utf8_binary_lcase))
+-- !query analysis
+Project [arrays_overlap(array(collate(aaa, utf8_binary_lcase)), array(collate(AAA, utf8_binary_lcase))) AS arrays_overlap(array(collate(aaa)), array(collate(AAA)))#x]
++- OneRowRelation
+
+
+-- !query
+select array_distinct(array('aaa' collate utf8_binary_lcase, 'AAA' collate utf8_binary_lcase))
+-- !query analysis
+Project [array_distinct(array(collate(aaa, utf8_binary_lcase), collate(AAA, utf8_binary_lcase))) AS array_distinct(array(collate(aaa), collate(AAA)))#x]
++- OneRowRelation
+
+
+-- !query
+select array_union(array('aaa' collate utf8_binary_lcase), array('AAA' collate utf8_binary_lcase))
+-- !query analysis
+Project [array_union(array(collate(aaa, utf8_binary_lcase)), array(collate(AAA, utf8_binary_lcase))) AS array_union(array(collate(aaa)), array(collate(AAA)))#x]
++- OneRowRelation
+
+
+-- !query
+select array_intersect(array('aaa' collate utf8_binary_lcase), array('AAA' collate utf8_binary_lcase))
+-- !query analysis
+Project [array_intersect(array(collate(aaa, utf8_binary_lcase)), array(collate(AAA, utf8_binary_lcase))) AS array_intersect(array(collate(aaa)), array(collate(AAA)))#x]
++- OneRowRelation
+
+
+-- !query
+select array_except(array('aaa' collate utf8_binary_lcase), array('AAA' collate utf8_binary_lcase))
+-- !query analysis
+Project [array_except(array(collate(aaa, utf8_binary_lcase)), array(collate(AAA, utf8_binary_lcase))) AS array_except(array(collate(aaa)), array(collate(AAA)))#x]
++- OneRowRelation

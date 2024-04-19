@@ -21,7 +21,8 @@ import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.spark.api.python.PythonUtils
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.DATA_SOURCE
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.python.UserDefinedPythonDataSource
 import org.apache.spark.util.Utils
@@ -53,7 +54,8 @@ class DataSourceManager extends Logging {
     }
     val previousValue = runtimeDataSourceBuilders.put(normalizedName, source)
     if (previousValue != null) {
-      logWarning(f"The data source $name replaced a previously registered data source.")
+      logWarning(log"The data source ${MDC(DATA_SOURCE, name)} replaced a previously " +
+        log"registered data source.")
     }
   }
 

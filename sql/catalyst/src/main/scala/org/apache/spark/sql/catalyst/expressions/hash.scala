@@ -271,6 +271,10 @@ abstract class HashExpression[E] extends Expression {
     dt.existsRecursively(_.isInstanceOf[MapType])
   }
 
+  private def hasVariantType(dt: DataType): Boolean = {
+    dt.existsRecursively(_.isInstanceOf[VariantType])
+  }
+
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length < 1) {
       throw QueryCompilationErrors.wrongNumArgsError(
@@ -280,6 +284,10 @@ abstract class HashExpression[E] extends Expression {
         !SQLConf.get.getConf(SQLConf.LEGACY_ALLOW_HASH_ON_MAPTYPE)) {
       DataTypeMismatch(
         errorSubClass = "HASH_MAP_TYPE",
+        messageParameters = Map("functionName" -> toSQLId(prettyName)))
+    } else if (children.exists(child => hasVariantType(child.dataType))) {
+      DataTypeMismatch(
+        errorSubClass = "HASH_VARIANT_TYPE",
         messageParameters = Map("functionName" -> toSQLId(prettyName)))
     } else {
       TypeCheckResult.TypeCheckSuccess
@@ -407,7 +415,7 @@ abstract class HashExpression[E] extends Expression {
 
   protected def genHashString(
       ctx: CodegenContext, stringType: StringType, input: String, result: String): String = {
-    if (stringType.isBinaryCollation) {
+    if (stringType.supportsBinaryEquality) {
       val baseObject = s"$input.getBaseObject()"
       val baseOffset = s"$input.getBaseOffset()"
       val numBytes = s"$input.numBytes()"
@@ -801,7 +809,7 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
 
   override protected def genHashString(
       ctx: CodegenContext, stringType: StringType, input: String, result: String): String = {
-    if (stringType.isBinaryCollation) {
+    if (stringType.supportsBinaryEquality) {
       val baseObject = s"$input.getBaseObject()"
       val baseOffset = s"$input.getBaseOffset()"
       val numBytes = s"$input.numBytes()"

@@ -25,7 +25,8 @@ import org.apache.spark.{SPARK_VERSION, SparkConf}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{CONFIG, EXECUTOR_ENV_REGEX}
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 import org.apache.spark.util.Utils
@@ -214,10 +215,10 @@ private[spark] class KubernetesExecutorConf(
     if (executorEnvRegex.pattern.matcher(key).matches()) {
       true
     } else {
-      logWarning(s"Invalid key: $key: " +
-        "a valid environment variable name must consist of alphabetic characters, " +
-        "digits, '_', '-', or '.', and must not start with a digit." +
-        s"Regex used for validation is '$executorEnvRegex')")
+      logWarning(log"Invalid key: ${MDC(CONFIG, key)}, " +
+        log"a valid environment variable name must consist of alphabetic characters, " +
+        log"digits, '_', '-', or '.', and must not start with a digit. " +
+        log"Regex used for validation is '${MDC(EXECUTOR_ENV_REGEX, executorEnvRegex)}'")
       false
     }
   }

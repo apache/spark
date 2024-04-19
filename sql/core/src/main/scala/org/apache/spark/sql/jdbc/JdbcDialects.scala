@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Connection, Date, Driver, Statement, Timestamp}
+import java.sql.{Connection, Date, Driver, ResultSetMetaData, Statement, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime}
 import java.util
+import java.util.ServiceLoader
+import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.ArrayBuilder
 import scala.util.control.NonFatal
@@ -33,6 +35,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{localDateTimeToMicros, toJavaTimestampNoRebase}
+import org.apache.spark.sql.catalyst.util.IntervalUtils.{fromDayTimeString, fromYearMonthString, getDuration}
 import org.apache.spark.sql.connector.catalog.{Identifier, TableChange}
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
@@ -46,6 +49,7 @@ import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProv
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 /**
  * :: DeveloperApi ::
@@ -89,12 +93,49 @@ abstract class JdbcDialect extends Serializable with Logging {
 
   /**
    * Get the custom datatype mapping for the given jdbc meta information.
-   * @param sqlType The sql type (see java.sql.Types)
-   * @param typeName The sql type name (e.g. "BIGINT UNSIGNED")
-   * @param size The size of the type.
-   * @param md Result metadata associated with this type.
-   * @return The actual DataType (subclasses of [[org.apache.spark.sql.types.DataType]])
-   *         or null if the default type mapping should be used.
+   *
+   * Guidelines for mapping database defined timestamps to Spark SQL timestamps:
+   * <ul>
+   *   <li>
+   *     TIMESTAMP WITHOUT TIME ZONE if preferTimestampNTZ ->
+   *     [[org.apache.spark.sql.types.TimestampNTZType]]
+   *   </li>
+   *   <li>
+   *     TIMESTAMP WITHOUT TIME ZONE if !preferTimestampNTZ ->
+   *     [[org.apache.spark.sql.types.TimestampType]](LTZ)
+   *   </li>
+   *   <li>TIMESTAMP WITH TIME ZONE -> [[org.apache.spark.sql.types.TimestampType]](LTZ)</li>
+   *   <li>TIMESTAMP WITH LOCAL TIME ZONE -> [[org.apache.spark.sql.types.TimestampType]](LTZ)</li>
+   *   <li>
+   *     If the TIMESTAMP cannot be distinguished by `sqlType` and `typeName`, preferTimestampNTZ
+   *     is respected for now, but we may need to add another option in the future if necessary.
+   *   </li>
+   * </ul>
+   *
+   * @param sqlType Refers to [[java.sql.Types]] constants, or other constants defined by the
+   *                target database, e.g. `-101` is Oracle's TIMESTAMP WITH TIME ZONE type.
+   *                This value is returned by [[java.sql.ResultSetMetaData#getColumnType]].
+   * @param typeName The column type name used by the database (e.g. "BIGINT UNSIGNED"). This is
+   *                 sometimes used to determine the target data type when `sqlType` is not
+   *                 sufficient if multiple database types are conflated into a single id.
+   *                 This value is returned by [[java.sql.ResultSetMetaData#getColumnTypeName]].
+   * @param size The size of the type, e.g. the maximum precision for numeric types, length for
+   *             character string, etc.
+   *             This value is returned by [[java.sql.ResultSetMetaData#getPrecision]].
+   * @param md Result metadata associated with this type. This contains additional information
+   *           from [[java.sql.ResultSetMetaData]] or user specified options.
+   *           <ul>
+   *             <li>
+   *               `isTimestampNTZ`: Whether read a TIMESTAMP WITHOUT TIME ZONE value as
+   *               [[org.apache.spark.sql.types.TimestampNTZType]] or not. This is configured by
+   *               `JDBCOptions.preferTimestampNTZ`.
+   *             </li>
+   *             <li>
+   *               `scale`: The length of fractional part [[java.sql.ResultSetMetaData#getScale]]
+   *             </li>
+   *            </ul>
+   * @return An option the actual DataType (subclasses of [[org.apache.spark.sql.types.DataType]])
+   *         or None if the default type mapping should be used.
    */
   def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = None
@@ -116,6 +157,38 @@ abstract class JdbcDialect extends Serializable with Logging {
    */
   @Since("3.5.0")
   def convertJavaTimestampToTimestamp(t: Timestamp): Timestamp = t
+
+  /**
+   * Converts an instance of `java.sql.Date` to a custom `java.sql.Date` value.
+   * @param d the date value returned from JDBC ResultSet getDate method.
+   * @return the date value after conversion
+   */
+  @Since("4.0.0")
+  def convertJavaDateToDate(d: Date): Date = d
+
+  /**
+   * Converts an year-month interval string to an int value `months`.
+   *
+   * @param yearmonthStr the year-month interval string
+   * @return the number of total months in the interval
+   * @throws IllegalArgumentException if the input string is invalid
+   */
+  @Since("4.0.0")
+  def getYearMonthIntervalAsMonths(yearmonthStr: String): Int = {
+    fromYearMonthString(yearmonthStr).months
+  }
+
+  /**
+   * Converts a day-time interval string to a long value `micros`.
+   *
+   * @param daytimeStr the day-time interval string
+   * @return the number of total microseconds in the interval
+   * @throws IllegalArgumentException if the input string is invalid
+   */
+  @Since("4.0.0")
+  def getDayTimeIntervalAsMicros(daytimeStr: String): Long = {
+    getDuration(fromDayTimeString(daytimeStr), TimeUnit.MICROSECONDS)
+  }
 
   /**
    * Convert java.sql.Timestamp to a LocalDateTime representing the same wall-clock time as the
@@ -751,6 +824,21 @@ abstract class JdbcDialect extends Serializable with Logging {
   protected final def getTimestampType(md: Metadata): DataType = {
     JdbcUtils.getTimestampType(md.getBoolean("isTimestampNTZ"))
   }
+
+  /**
+   * Get extra column metadata for the given column.
+   *
+   * @param conn The connection currently connection being used.
+   * @param rsmd The metadata of the current result set.
+   * @param columnIdx The index of the column.
+   * @param metadata The metadata builder to store the extra column information.
+   */
+  @Since("4.0.0")
+  def updateExtraColumnMeta(
+      conn: Connection,
+      rsmd: ResultSetMetaData,
+      columnIdx: Int,
+      metadata: MetadataBuilder): Unit = {}
 }
 
 /**
@@ -788,16 +876,14 @@ object JdbcDialects {
 
   private[this] var dialects = List[JdbcDialect]()
 
-  registerDialect(MySQLDialect)
-  registerDialect(PostgresDialect)
-  registerDialect(DB2Dialect)
-  registerDialect(MsSqlServerDialect)
-  registerDialect(DerbyDialect)
-  registerDialect(OracleDialect)
-  registerDialect(TeradataDialect)
-  registerDialect(H2Dialect)
-  registerDialect(SnowflakeDialect)
-  registerDialect(DatabricksDialect)
+  private def registerDialects(): Unit = {
+    val loader = ServiceLoader.load(classOf[JdbcDialect], Utils.getContextOrSparkClassLoader)
+    val iter = loader.iterator()
+    while (iter.hasNext) {
+      registerDialect(iter.next())
+    }
+  }
+  registerDialects()
 
   /**
    * Fetch the JdbcDialect class corresponding to a given database url.
