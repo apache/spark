@@ -416,6 +416,7 @@ Below is a list of all the keywords in Spark SQL.
 |BETWEEN|non-reserved|non-reserved|reserved|
 |BIGINT|non-reserved|non-reserved|reserved|
 |BINARY|non-reserved|non-reserved|reserved|
+|BINDING|non-reserved|non-reserved|non-reserved|
 |BOOLEAN|non-reserved|non-reserved|reserved|
 |BOTH|reserved|non-reserved|reserved|
 |BUCKET|non-reserved|non-reserved|non-reserved|
@@ -445,6 +446,7 @@ Below is a list of all the keywords in Spark SQL.
 |COMMIT|non-reserved|non-reserved|reserved|
 |COMPACT|non-reserved|non-reserved|non-reserved|
 |COMPACTIONS|non-reserved|non-reserved|non-reserved|
+|COMPENSATION|non-reserved|non-reserved|non-reserved|
 |COMPUTE|non-reserved|non-reserved|non-reserved|
 |CONCATENATE|non-reserved|non-reserved|non-reserved|
 |CONSTRAINT|reserved|non-reserved|reserved|

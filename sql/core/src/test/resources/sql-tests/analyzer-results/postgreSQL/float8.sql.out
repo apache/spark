@@ -403,7 +403,7 @@ FROM FLOAT8_TBL
 -- !query analysis
 CreateViewCommand `UPDATED_FLOAT8_TBL`, SELECT
   CASE WHEN FLOAT8_TBL.f1 > '0.0' THEN FLOAT8_TBL.f1 * '-1' ELSE FLOAT8_TBL.f1 END AS f1
-FROM FLOAT8_TBL, false, false, LocalTempView, true
+FROM FLOAT8_TBL, false, false, LocalTempView, UNSUPPORTED, true
    +- Project [CASE WHEN (f1#x > cast(0.0 as double)) THEN (f1#x * cast(-1 as double)) ELSE f1#x END AS f1#x]
       +- SubqueryAlias spark_catalog.default.float8_tbl
          +- Relation spark_catalog.default.float8_tbl[f1#x] parquet
