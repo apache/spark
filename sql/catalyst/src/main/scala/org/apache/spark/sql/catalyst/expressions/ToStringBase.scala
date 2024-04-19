@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.expressions
 import java.time.ZoneOffset
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.ToStringBase.BinaryFormatter
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayData, DateFormatter, IntervalStringStyles, IntervalUtils, MapData, SparkStringUtils, TimestampFormatter}
@@ -47,7 +46,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
 
   protected def useDecimalPlainString: Boolean
 
-  protected def binaryFormatter: BinaryFormatter
+  protected val binaryFormatter: BinaryFormatter = UTF8String.fromBytes
 
   // Makes the function accept Any type input by doing `asInstanceOf[T]`.
   @inline private def acceptAny[T](func: T => UTF8String): Any => UTF8String =
@@ -57,7 +56,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
   protected final def castToString(from: DataType): Any => UTF8String = from match {
     case CalendarIntervalType =>
       acceptAny[CalendarInterval](i => UTF8String.fromString(i.toString))
-    case BinaryType => acceptAny[Array[Byte]](binaryFormatter)
+    case BinaryType => acceptAny[Array[Byte]](binaryFormatter.apply)
     case DateType =>
       acceptAny[Int](d => UTF8String.fromString(dateFormatter.format(d)))
     case TimestampType =>
@@ -415,22 +414,23 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
 }
 
 object ToStringBase {
-  type BinaryFormatter = Array[Byte] => UTF8String
-
   def getBinaryFormatter: BinaryFormatter = {
     val style = SQLConf.get.getConf(SQLConf.BINARY_OUTPUT_STYLE)
     BinaryOutputStyle.withName(style) match {
       case BinaryOutputStyle.UTF8 =>
-        array => UTF8String.fromBytes(array)
-      case BinaryOutputStyle.BASIC => array =>
-        UTF8String.fromString(array.mkString("[", ", ", "]"))
-      case BinaryOutputStyle.BASE64 => array =>
-        UTF8String.fromString(java.util.Base64.getEncoder.withoutPadding().encodeToString(array))
+        (array: Array[Byte]) => UTF8String.fromBytes(array)
+      case BinaryOutputStyle.BASIC =>
+        (array: Array[Byte]) => UTF8String.fromString(array.mkString("[", ", ", "]"))
+      case BinaryOutputStyle.BASE64 =>
+        (array: Array[Byte]) =>
+          UTF8String.fromString(java.util.Base64.getEncoder.withoutPadding().encodeToString(array))
       case BinaryOutputStyle.HEX =>
-        array => Hex.hex(array)
+        (array: Array[Byte]) => Hex.hex(array)
       case BinaryOutputStyle.HEX_DISCRETE =>
-        array => UTF8String.fromString(SparkStringUtils.getHexString(array))
+        (array: Array[Byte]) => UTF8String.fromString(SparkStringUtils.getHexString(array))
     }
   }
 }
+
+trait BinaryFormatter extends (Array[Byte] => UTF8String) with Serializable
 
