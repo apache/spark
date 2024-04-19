@@ -33,7 +33,7 @@ To create a custom Python data source, you'll need to subclass the :class:`DataS
 
 This example demonstrates creating a simple data source to generate synthetic data using the `faker` library. Ensure the `faker` library is installed and accessible in your Python environment.
 
-**Step 1: Define the Data Source**
+** Define the Data Source**
 
 Start by creating a new subclass of :class:`DataSource`. Define the source name, schema, and reader logic as follows:
 
@@ -59,8 +59,11 @@ Start by creating a new subclass of :class:`DataSource`. Define the source name,
         def reader(self, schema: StructType):
             return FakeDataSourceReader(schema, self.options)
 
+        def streamReader(self, schema: StructType):
+            return FakeStreamReader(schema, self.options)
 
-**Step 2: Implement the Reader**
+
+** Implement the Reader**
 
 Define the reader logic to generate synthetic data. Use the `faker` library to populate each field in the schema.
 
@@ -83,6 +86,44 @@ Define the reader logic to generate synthetic data. Use the `faker` library to p
                     value = getattr(fake, field.name)()
                     row.append(value)
                 yield tuple(row)
+
+** Implement the Stream Reader**
+
+.. code-block:: python
+
+    class RangePartition(InputPartition):
+        def __init__(self, start, end):
+            self.start = start
+            self.end = end
+
+    class FakeStreamReader(DataSourceStreamReader):
+        current = 0
+
+        def initialOffset(self):
+            return {"offset": 0}
+
+        def latestOffset(self):
+            self.current += 2
+            return {"offset": self.current}
+
+        def partitions(self, start, end):
+            return [RangePartition(start["offset"], end["offset"])]
+
+        def commit(self, end):
+            pass
+
+        def read(self, partition):
+            start, end = partition.start, partition.end
+            for i in range(start, end):
+                yield (i, str(i))
+
+This is a dummy streaming data reader that generate 2 rows in every microbatch. The streamReader instance
+has a integer offset that increase by 2 in every microbatch.
+initialOffset() should return the initial start offset of the reader.
+latestOffset() return the current latest offset that the next microbatch will read to.
+partitions() plans the partitioning of the current microbatch defined by start and end offset, it needs to return a
+sequence of Partition object.
+read() takes a partition as an input and read an iterator of tuples from the data source.
 
 
 Using a Python Data Source
