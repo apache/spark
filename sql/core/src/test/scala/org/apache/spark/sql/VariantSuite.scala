@@ -18,6 +18,8 @@
 package org.apache.spark.sql
 
 import java.io.File
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -32,6 +34,8 @@ import org.apache.spark.unsafe.types.VariantVal
 import org.apache.spark.util.ArrayImplicits._
 
 class VariantSuite extends QueryTest with SharedSparkSession {
+  import testImplicits._
+
   test("basic tests") {
     def verifyResult(df: DataFrame): Unit = {
       val result = df.collect()
@@ -270,6 +274,88 @@ class VariantSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("json option constraints") {
+    withTempDir { dir =>
+      val file = new File(dir, "file.json")
+      Files.write(file.toPath, "0".getBytes(StandardCharsets.UTF_8))
+
+      // Ensure that we get an error when setting the singleVariantColumn JSON option while also
+      // specifying a schema.
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.read.format("json").option("singleVariantColumn", "var").schema("var variant")
+        },
+        errorClass = "INVALID_SINGLE_VARIANT_COLUMN",
+        parameters = Map.empty
+      )
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.read.format("json").option("singleVariantColumn", "another_name")
+            .schema("var variant").json(file.getAbsolutePath).collect()
+        },
+        errorClass = "INVALID_SINGLE_VARIANT_COLUMN",
+        parameters = Map.empty
+      )
+    }
+  }
+
+  test("json scan") {
+    val content = Seq(
+      "true",
+      """{"a": [], "b": null}""",
+      """{"a": 1}""",
+      "[1, 2, 3]"
+    ).mkString("\n").getBytes(StandardCharsets.UTF_8)
+
+    withTempDir { dir =>
+      val file = new File(dir, "file.json")
+      Files.write(file.toPath, content)
+
+      checkAnswer(
+        spark.read.format("json").option("singleVariantColumn", "var")
+          .load(file.getAbsolutePath)
+          .selectExpr("to_json(var)"),
+        Seq(Row("true"), Row("""{"a":[],"b":null}"""), Row("""{"a":1}"""), Row("[1,2,3]"))
+      )
+
+      checkAnswer(
+        spark.read.format("json").schema("a variant, b variant")
+          .load(file.getAbsolutePath).selectExpr("to_json(a)", "to_json(b)"),
+        Seq(Row(null, null), Row("[]", "null"), Row("1", null), Row(null, null))
+      )
+    }
+
+    // Test scan with partitions.
+    withTempDir { dir =>
+      new File(dir, "a=1/b=2/").mkdirs()
+      Files.write(new File(dir, "a=1/b=2/file.json").toPath, content)
+      checkAnswer(
+        spark.read.format("json").option("singleVariantColumn", "var")
+          .load(dir.getAbsolutePath).selectExpr("a", "b", "to_json(var)"),
+        Seq(Row(1, 2, "true"), Row(1, 2, """{"a":[],"b":null}"""), Row(1, 2, """{"a":1}"""),
+          Row(1, 2, "[1,2,3]"))
+      )
+    }
+  }
+
+  test("json scan with map schema") {
+    withTempDir { dir =>
+      val file = new File(dir, "file.json")
+      val content = Seq(
+        "true",
+        """{"v": null}""",
+        """{"v": {"a": 1, "b": null}}"""
+      ).mkString("\n").getBytes(StandardCharsets.UTF_8)
+      Files.write(file.toPath, content)
+      checkAnswer(
+        spark.read.format("json").schema("v map<string, variant>")
+          .load(file.getAbsolutePath)
+          .selectExpr("to_json(v)"),
+        Seq(Row(null), Row(null), Row("""{"a":1,"b":null}"""))
+      )
+    }
+  }
+
   test("group/order/join variant are disabled") {
     var ex = intercept[AnalysisException] {
       spark.sql("select parse_json('') group by 1")
@@ -297,5 +383,29 @@ class VariantSuite extends QueryTest with SharedSparkSession {
         "select t1.v from t as t1 join t as t2 on t1.v = t2.v")
     }
     assert(ex.getErrorClass == "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE")
+  }
+
+  test("variant_explode") {
+    def check(input: String, expected: Seq[Row]): Unit = {
+      withView("v") {
+        Seq(input).toDF("json").createOrReplaceTempView("v")
+        checkAnswer(sql("select pos, key, to_json(value) from v, " +
+          "lateral variant_explode(parse_json(json))"), expected)
+        val expectedOuter = if (expected.isEmpty) Seq(Row(null, null, null)) else expected
+        checkAnswer(sql("select pos, key, to_json(value) from v, " +
+          "lateral variant_explode_outer(parse_json(json))"), expectedOuter)
+      }
+    }
+
+    Seq("true", "false").foreach { codegenEnabled =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled) {
+        check(null, Nil)
+        check("1", Nil)
+        check("null", Nil)
+        check("""{"a": [1, 2, 3], "b": true}""", Seq(Row(0, "a", "[1,2,3]"), Row(1, "b", "true")))
+        check("""[null, "hello", {}]""",
+          Seq(Row(0, null, "null"), Row(1, null, "\"hello\""), Row(2, null, "{}")))
+      }
+    }
   }
 }

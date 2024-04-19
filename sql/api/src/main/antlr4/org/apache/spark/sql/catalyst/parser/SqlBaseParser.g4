@@ -210,6 +210,7 @@ statement
     | (MSCK)? REPAIR TABLE identifierReference
         (option=(ADD|DROP|SYNC) PARTITIONS)?                           #repairTable
     | op=(ADD | LIST) identifier .*?                                   #manageResource
+    | SET COLLATION collationName=identifier                           #setCollation
     | SET ROLE .*?                                                     #failNativeCommand
     | SET TIME ZONE interval                                           #setTimeZone
     | SET TIME ZONE timezone                                           #setTimeZone
@@ -479,7 +480,7 @@ dmlStatementNoWith
     | fromClause multiInsertQueryBody+                                             #multiInsertQuery
     | DELETE FROM identifierReference tableAlias whereClause?                      #deleteFromTable
     | UPDATE identifierReference tableAlias setClause whereClause?                 #updateTable
-    | MERGE INTO target=identifierReference targetAlias=tableAlias
+    | MERGE (WITH SCHEMA EVOLUTION)? INTO target=identifierReference targetAlias=tableAlias
         USING (source=identifierReference |
           LEFT_PAREN sourceQuery=query RIGHT_PAREN) sourceAlias=tableAlias
         ON mergeCondition=booleanExpression
@@ -1398,6 +1399,7 @@ ansiNonReserved
     | DOUBLE
     | DROP
     | ESCAPED
+    | EVOLUTION
     | EXCHANGE
     | EXCLUDE
     | EXISTS
@@ -1662,6 +1664,7 @@ nonReserved
     | CLUSTERED
     | CODEGEN
     | COLLATE
+    | COLLATION
     | COLLECTION
     | COLUMN
     | COLUMNS
@@ -1713,6 +1716,7 @@ nonReserved
     | END
     | ESCAPE
     | ESCAPED
+    | EVOLUTION
     | EXCHANGE
     | EXCLUDE
     | EXECUTE

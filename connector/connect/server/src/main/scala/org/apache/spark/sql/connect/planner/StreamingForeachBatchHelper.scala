@@ -26,7 +26,8 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
 import org.apache.spark.api.python.{PythonException, PythonWorkerUtils, SimplePythonFunction, SpecialLengths, StreamingPythonRunner}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{DATAFRAME_ID, QUERY_ID, RUN_ID, SESSION_ID}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.connect.service.SparkConnectService
@@ -63,7 +64,8 @@ object StreamingForeachBatchHelper extends Logging {
       sessionHolder: SessionHolder): ForeachBatchFnType = { (df: DataFrame, batchId: Long) =>
     {
       val dfId = UUID.randomUUID().toString
-      logInfo(s"Caching DataFrame with id $dfId") // TODO: Add query id to the log.
+      // TODO: Add query id to the log.
+      logInfo(log"Caching DataFrame with id ${MDC(DATAFRAME_ID, dfId)}")
 
       // TODO(SPARK-44462): Sanity check there is no other active DataFrame for this query.
       //  The query id needs to be saved in the cache for this check.
@@ -72,7 +74,7 @@ object StreamingForeachBatchHelper extends Logging {
       try {
         fn(FnArgsWithId(dfId, df, batchId))
       } finally {
-        logInfo(s"Removing DataFrame with id $dfId from the cache")
+        logInfo(log"Removing DataFrame with id ${MDC(DATAFRAME_ID, dfId)} from the cache")
         sessionHolder.removeCachedDataFrame(dfId)
       }
     }
@@ -133,7 +135,9 @@ object StreamingForeachBatchHelper extends Logging {
       try {
         dataIn.readInt() match {
           case 0 =>
-            logInfo(s"Python foreach batch for dfId ${args.dfId} completed (ret: 0)")
+            logInfo(
+              log"Python foreach batch for dfId ${MDC(DATAFRAME_ID, args.dfId)} " +
+                log"completed (ret: 0)")
           case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
             val msg = PythonWorkerUtils.readUTF(dataIn)
             throw new PythonException(
@@ -169,7 +173,9 @@ object StreamingForeachBatchHelper extends Logging {
     private lazy val streamingListener = { // Initialized on first registered query
       val listener = new StreamingRunnerCleanerListener
       sessionHolder.session.streams.addListener(listener)
-      logInfo(s"Registered runner clean up listener for session ${sessionHolder.sessionId}")
+      logInfo(
+        log"Registered runner clean up listener for " +
+          log"session ${MDC(SESSION_ID, sessionHolder.sessionId)}")
       listener
     }
 
@@ -195,7 +201,9 @@ object StreamingForeachBatchHelper extends Logging {
 
     private def cleanupStreamingRunner(key: CacheKey): Unit = {
       Option(cleanerCache.remove(key)).foreach { cleaner =>
-        logInfo(s"Cleaning up runner for queryId ${key.queryId} runId ${key.runId}.")
+        logInfo(
+          log"Cleaning up runner for queryId ${MDC(QUERY_ID, key.queryId)} " +
+            log"runId ${MDC(RUN_ID, key.runId)}.")
         cleaner.close()
       }
     }

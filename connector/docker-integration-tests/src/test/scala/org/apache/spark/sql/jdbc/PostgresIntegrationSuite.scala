@@ -18,13 +18,13 @@
 package org.apache.spark.sql.jdbc
 
 import java.math.{BigDecimal => JBigDecimal}
-import java.sql.{Connection, Date, Timestamp}
+import java.sql.{Connection, Date, SQLException, Timestamp}
 import java.text.SimpleDateFormat
 import java.time.LocalDateTime
 import java.util.Properties
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{Column, Row}
+import org.apache.spark.sql.{Column, DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
@@ -514,19 +514,17 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
 
     sql("select array(array(1, 2), array(3, 4)) as col0").write
       .jdbc(jdbcUrl, "double_dim_array", new Properties)
+
+    checkAnswer(
+      spark.read.jdbc(jdbcUrl, "double_dim_array", new Properties),
+      Row(Seq(Seq(1, 2), Seq(3, 4))))
+
     sql("select array(array(array(1, 2), array(3, 4)), array(array(5, 6), array(7, 8))) as col0")
       .write.jdbc(jdbcUrl, "triple_dim_array", new Properties)
-    // Reading multi-dimensional array is not supported yet.
-    checkError(
-      exception = intercept[SparkException] {
-        spark.read.jdbc(jdbcUrl, "double_dim_array", new Properties).collect()
-      },
-      errorClass = null)
-    checkError(
-      exception = intercept[SparkException] {
-        spark.read.jdbc(jdbcUrl, "triple_dim_array", new Properties).collect()
-      },
-      errorClass = null)
+
+    checkAnswer(
+      spark.read.jdbc(jdbcUrl, "triple_dim_array", new Properties),
+      Row(Seq(Seq(Seq(1, 2), Seq(3, 4)), Seq(Seq(5, 6), Seq(7, 8)))))
   }
 
   test("SPARK-47701: Reading complex type") {
@@ -556,5 +554,30 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
       .option("url", jdbcUrl)
       .option("query", "SELECT 1::oid, 'bar'::regclass, 'integer'::regtype").load()
     checkAnswer(df, Row(1, "bar", "integer"))
+  }
+
+  test("SPARK-47886: special number values") {
+    def toDF(qry: String): DataFrame = {
+      spark.read.format("jdbc")
+        .option("url", jdbcUrl)
+        .option("query", qry)
+        .load()
+    }
+    checkAnswer(
+      toDF("SELECT 'NaN'::float8 c1, 'infinity'::float8 c2, '-infinity'::float8 c3"),
+      Row(Double.NaN, Double.PositiveInfinity, Double.NegativeInfinity))
+    checkAnswer(
+      toDF("SELECT 'NaN'::float4 c1, 'infinity'::float4 c2, '-infinity'::float4 c3"),
+      Row(Float.NaN, Float.PositiveInfinity, Float.NegativeInfinity)
+    )
+
+    Seq("NaN", "infinity", "-infinity").foreach { v =>
+      val df = toDF(s"SELECT '$v'::numeric c1")
+      val e = intercept[SparkException](df.collect())
+      checkError(e, null)
+      val cause = e.getCause.asInstanceOf[SQLException]
+      assert(cause.getMessage.contains("Bad value for type BigDecimal"))
+      assert(cause.getSQLState === "22003")
+    }
   }
 }

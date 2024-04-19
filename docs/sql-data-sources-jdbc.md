@@ -544,7 +544,7 @@ are also available to connect MySQL, may have different mapping rules.
     <tr>
       <td>DECIMAL(p,s) [UNSIGNED]</td>
       <td>DecimalType(min(38, p),(min(18,s)))</td>
-      <td>The column type is bounded to DecimalType(38, 18), thus if any value of this column have a actual presion greater 38 will fail with DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION </td>
+      <td>The column type is bounded to DecimalType(38, 18), if 'p>38', the fraction part will be truncated if exceeded. And if any value of this column have an actual precision greater 38 will fail with NUMERIC_VALUE_OUT_OF_RANGE.WITHOUT_SUGGESTION error</td>
     </tr>
     <tr>
       <td>DATE</td>
@@ -845,7 +845,7 @@ as the activated JDBC Driver. Note that, different JDBC drivers, or different ve
     <tr>
       <td>numeric, decimal</td>
       <td>DecimalType</td>
-      <td></td>
+      <td><ul><li>Since PostgreSQL 15, 's' can be negative. If 's<0' it'll be adjusted to DecimalType(min(p-s, 38), 0); Otherwise, DecimalType(p, s)</li><li>If 'p>38', the fraction part will be truncated if exceeded. And if any value of this column have an actual precision greater 38 will fail with NUMERIC_VALUE_OUT_OF_RANGE.WITHOUT_SUGGESTION error.</li><li>Special numeric values, 'NaN', 'infinity' and '-infinity' is not supported</li></ul></td>
     </tr>
     <tr>
       <td>character varying(n), varchar(n)</td>
@@ -1185,6 +1185,256 @@ The Spark Catalyst data types below are not supported with suitable PostgreSQL t
 - YearMonthIntervalType
 - CalendarIntervalType
 - ArrayType - if the element type is not listed above
+- MapType
+- StructType
+- UserDefinedType
+- NullType
+- ObjectType
+- VariantType
+
+### Mapping Spark SQL Data Types from Oracle
+
+The below table describes the data type conversions from Oracle data types to Spark SQL Data Types,
+when reading data from an Oracle table using the built-in jdbc data source with the Oracle JDBC
+as the activated JDBC Driver.
+
+
+<table>
+  <thead>
+    <tr>
+      <th><b>Oracle Data Type</b></th>
+      <th><b>Spark SQL Data Type</b></th>
+      <th><b>Remarks</b></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>BOOLEAN</td>
+      <td>BooleanType</td>
+      <td>Introduced since Oracle Release 23c</td>
+    </tr>
+    <tr>
+      <td>NUMBER[(p[,s])]</td>
+      <td>DecimalType(p,s)</td>
+      <td>'s' can be negative in Oracle. If 's<0' it'll be adjusted to DecimalType(min(p-s, 38), 0); Otherwise, DecimalType(p, s), and if 'p>38', the fraction part will be truncated if exceeded. And if any value of this column have an actual precision greater 38 will fail with NUMERIC_VALUE_OUT_OF_RANGE.WITHOUT_SUGGESTION error</td>
+    </tr>
+    <tr>
+      <td>FLOAT[(p)]</td>
+      <td>DecimalType(38, 10)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>BINARY_FLOAT</td>
+      <td>FloatType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>BINARY_DOUBLE</td>
+      <td>DoubleType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>LONG</td>
+      <td>BinaryType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>RAW(size)</td>
+      <td>BinaryType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>LONG RAW</td>
+      <td>BinaryType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>DATE</td>
+      <td>TimestampType</td>
+      <td>When oracle.jdbc.mapDateToTimestamp=true, it follows TIMESTAMP's behavior below</td>
+    </tr>
+    <tr>
+      <td>DATE</td>
+      <td>DateType</td>
+      <td>When oracle.jdbc.mapDateToTimestamp=false, it maps to DateType</td>
+    </tr>
+    <tr>
+      <td>TIMESTAMP</td>
+      <td>TimestampType</td>
+      <td>(Default)preferTimestampNTZ=false or spark.sql.timestampType=TIMESTAMP_LTZ</td>
+    </tr>
+    <tr>
+      <td>TIMESTAMP</td>
+      <td>TimestampNTZType</td>
+      <td>preferTimestampNTZ=true or spark.sql.timestampType=TIMESTAMP_NTZ</td>
+    </tr>
+    <tr>
+      <td>TIMESTAMP WITH TIME ZONE</td>
+      <td>TimestampType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>TIMESTAMP WITH LOCAL TIME ZONE</td>
+      <td>TimestampType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>INTERVAL YEAR TO MONTH</td>
+      <td>YearMonthIntervalType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>INTERVAL DAY TO SECOND</td>
+      <td>DayTimeIntervalType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>CHAR[(size [BYTE | CHAR])]</td>
+      <td>CharType(size)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>NCHAR[(size)]</td>
+      <td>StringType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>VARCHAR2(size [BYTE | CHAR])</td>
+      <td>VarcharType(size)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>NVARCHAR2</td>
+      <td>StringType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>ROWID/UROWID</td>
+      <td>StringType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>CLOB</td>
+      <td>StringType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>NCLOB</td>
+      <td>StringType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>BLOB</td>
+      <td>BinaryType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>BFILE</td>
+      <td></td>
+      <td>UNRECOGNIZED_SQL_TYPE error raised</td>
+    </tr>
+  </tbody>
+</table>
+
+### Mapping Spark SQL Data Types to Oracle
+
+The below table describes the data type conversions from Spark SQL Data Types to Oracle data types,
+when creating, altering, or writing data to an Oracle table using the built-in jdbc data source with
+the Oracle JDBC as the activated JDBC Driver.
+
+<table>
+  <thead>
+    <tr>
+      <th><b>Spark SQL Data Type</b></th>
+      <th><b>Oracle Data Type</b></th>
+      <th><b>Remarks</b></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>BooleanType</td>
+      <td>NUMBER(1, 0)</td>
+      <td>BooleanType maps to NUMBER(1, 0) as BOOLEAN is introduced since Oracle Release 23c</td>
+    </tr>
+    <tr>
+      <td>ByteType</td>
+      <td>NUMBER(3)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>ShortType</td>
+      <td>NUMBER(5)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>IntegerType</td>
+      <td>NUMBER(10)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>LongType</td>
+      <td>NUMBER(19)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>FloatType</td>
+      <td>NUMBER(19, 4)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>DoubleType</td>
+      <td>NUMBER(19, 4)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>DecimalType(p, s)</td>
+      <td>NUMBER(p,s)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>DateType</td>
+      <td>DATE</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>TimestampType</td>
+      <td>TIMESTAMP WITH LOCAL TIME ZONE</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>TimestampNTZType</td>
+      <td>TIMESTAMP</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>StringType</td>
+      <td>VARCHAR2(255)</td>
+      <td>For historical reason, a string value has maximum 255 characters</td>
+    </tr>
+    <tr>
+      <td>BinaryType</td>
+      <td>BLOB</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>CharType(n)</td>
+      <td>CHAR(n)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>VarcharType(n)</td>
+      <td>VARCHAR2(n)</td>
+      <td></td>
+    </tr>
+  </tbody>
+</table>
+
+The Spark Catalyst data types below are not supported with suitable Oracle types.
+
+- DayTimeIntervalType
+- YearMonthIntervalType
+- CalendarIntervalType
+- ArrayType
 - MapType
 - StructType
 - UserDefinedType

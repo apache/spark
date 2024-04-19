@@ -38,8 +38,7 @@ public class TestStatefulProcessor extends StatefulProcessor<Integer, String, St
   @Override
   public void init(
       OutputMode outputMode,
-      TimeoutMode timeoutMode,
-      TTLMode ttlMode) {
+      TimeMode timeMode) {
     countState = this.getHandle().getValueState("countState",
       Encoders.LONG());
 

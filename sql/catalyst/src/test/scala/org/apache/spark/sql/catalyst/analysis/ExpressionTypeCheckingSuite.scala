@@ -747,6 +747,17 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
     )
   }
 
+  test("hash expressions are prohibited on VariantType elements") {
+    val argument = Literal.create(null, VariantType)
+    val murmur3Hash = new Murmur3Hash(Seq(argument))
+    assert(murmur3Hash.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "HASH_VARIANT_TYPE",
+        messageParameters = Map("functionName" -> toSQLId(murmur3Hash.prettyName))
+      )
+    )
+  }
+
   test("check types for Lag") {
     val lag = Lag(Literal(1), NonFoldableLiteral(10), Literal(null), true)
     assert(lag.checkInputDataTypes() ==

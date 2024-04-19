@@ -861,7 +861,7 @@ class SparkSession(SparkConversionMixin):
         Create a temp view, show the list, and drop it.
 
         >>> spark.range(1).createTempView("test_view")
-        >>> spark.catalog.listTables()
+        >>> spark.catalog.listTables()  # doctest: +SKIP
         [Table(name='test_view', catalog=None, namespace=[], description=None, ...
         >>> _ = spark.catalog.dropTempView("test_view")
         """
@@ -1630,6 +1630,13 @@ class SparkSession(SparkConversionMixin):
         -------
         :class:`DataFrame`
 
+        Notes
+        -----
+        In Spark Classic, a temporary view referenced in `spark.sql` is resolved immediately,
+        while in Spark Connect it is lazily analyzed.
+        So in Spark Connect if a view is dropped, modified or replaced after `spark.sql`, the
+        execution may fail or generate different results.
+
         Examples
         --------
         Executing a SQL query.
@@ -1695,7 +1702,7 @@ class SparkSession(SparkConversionMixin):
 
         And substitute named parameters with the `:` prefix by SQL literals.
 
-        >>> from pyspark.sql.functions import create_map
+        >>> from pyspark.sql.functions import create_map, lit
         >>> spark.sql(
         ...   "SELECT *, element_at(:m, 'a') AS C FROM {df} WHERE {df[B]} > :minB",
         ...   {"minB" : 5, "m" : create_map(lit('a'), lit(1))}, df=mydf).show()
@@ -1707,7 +1714,7 @@ class SparkSession(SparkConversionMixin):
 
         Or positional parameters marked by `?` in the SQL query by SQL literals.
 
-        >>> from pyspark.sql.functions import array
+        >>> from pyspark.sql.functions import array, lit
         >>> spark.sql(
         ...   "SELECT *, element_at(?, 1) AS C FROM {df} WHERE {df[B]} > ? and ? < {df[A]}",
         ...   args=[array(lit(1), lit(2), lit(3)), 5, 2], df=mydf).show()
@@ -1755,6 +1762,13 @@ class SparkSession(SparkConversionMixin):
         Returns
         -------
         :class:`DataFrame`
+
+        Notes
+        -----
+        In Spark Classic, a temporary view referenced in `spark.table` is resolved immediately,
+        while in Spark Connect it is lazily analyzed.
+        So in Spark Connect if a view is dropped, modified or replaced after `spark.table`, the
+        execution may fail or generate different results.
 
         Examples
         --------

@@ -28,7 +28,8 @@ import com.google.common.base.Throwables
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.{SparkEnv, SparkException}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{ERROR, MESSAGE}
 import org.apache.spark.rpc.{RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.Time
@@ -169,7 +170,7 @@ private[streaming] class ReceiverSupervisorImpl(
   def reportError(message: String, error: Throwable): Unit = {
     val errorString = Option(error).map(Throwables.getStackTraceAsString).getOrElse("")
     trackerEndpoint.send(ReportError(streamId, message, errorString))
-    logWarning("Reported error " + message + " - " + error)
+    logWarning(log"Reported error ${MDC(MESSAGE, message)} - ${MDC(ERROR, error)}")
   }
 
   override protected def onStart(): Unit = {
