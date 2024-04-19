@@ -115,13 +115,12 @@ class VariantUtils:
     )
     EPOCH_NTZ = datetime.datetime(year=1970, month=1, day=1, hour=0, minute=0, second=0)
 
-    # The valid zone ids can be found by importing the `zoneinfo` library and running
-    # `zoneinfo.available_timezones()`. The default zone id is UTC, meaning that when the timestamps
-    # are converted to string, they are interpreted to have the UTC timezone and offset (+00:00)
     @classmethod
     def to_json(cls, value: bytes, metadata: bytes, zone_id: str = "UTC") -> str:
         """
-        Convert the VariantVal to a JSON string.
+        Convert the VariantVal to a JSON string. The `zone_id` parameter denotes the time zone that
+        timestamp fields should be parsed in. It defaults to "UTC". The list of valid zone IDs can
+        found by importing the `zoneinfo` module and running `zoneinfo.available_timezones()`.
         :return: JSON string
         """
         return cls._to_json(value, metadata, 0, zone_id)

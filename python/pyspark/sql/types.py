@@ -1525,8 +1525,7 @@ class VariantVal:
         """
         Convert the VariantVal to a JSON string. The zone ID represents the time zone that the
         timestamp should be printed in. It is defaulted to UTC. The list of valid zone IDs can be
-        found by importing the `zoneinfo` library and running
-        :code:`zoneinfo.available_timezones()`.
+        found by importing the `zoneinfo` module and running :code:`zoneinfo.available_timezones()`.
 
         Returns
         -------
