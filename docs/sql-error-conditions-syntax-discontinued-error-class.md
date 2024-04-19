@@ -1,7 +1,7 @@
 ---
 layout: global
-title: UNSUPPORTED_MERGE_CONDITION error class
-displayTitle: UNSUPPORTED_MERGE_CONDITION error class
+title: SYNTAX_DISCONTINUED error class
+displayTitle: SYNTAX_DISCONTINUED error class
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -24,22 +24,16 @@ license: |
   It was generated automatically by `org.apache.spark.SparkThrowableSuite`.
 -->
 
-[SQLSTATE: 42K0E](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+[SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-MERGE operation contains unsupported `<condName>` condition.
+Support of the clause or keyword: `<clause>` has been discontinued in this context.
 
 This error class has the following derived error classes:
 
-## AGGREGATE
+## BANG_EQUALS_NOT
 
-Aggregates are not allowed: `<cond>`.
-
-## NON_DETERMINISTIC
-
-Non-deterministic expressions are not allowed: `<cond>`.
-
-## SUBQUERY
-
-Subqueries are not allowed: `<cond>`.
+The '!' keyword is supported as a prefix operator in a logical operation only.
+Use the 'NOT' keyword instead for clauses such as `NOT LIKE`, `NOT IN`, `NOT BETWEEN`, etc.
+To re-enable the '!' keyword, set "spark.sql.legacy.bangEqualsNot" to "true".
 
 

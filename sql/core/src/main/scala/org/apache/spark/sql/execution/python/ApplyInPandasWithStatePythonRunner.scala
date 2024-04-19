@@ -27,6 +27,8 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.api.python._
+import org.apache.spark.internal.LogKey.CONFIG
+import org.apache.spark.internal.MDC
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.api.python.PythonSQLUtils
 import org.apache.spark.sql.catalyst.InternalRow
@@ -88,9 +90,9 @@ class ApplyInPandasWithStatePythonRunner(
   override val bufferSize: Int = {
     val configuredSize = sqlConf.pandasUDFBufferSize
     if (configuredSize < 4) {
-      logWarning("Pandas execution requires more than 4 bytes. Please configure bigger value " +
-        s"for the configuration '${SQLConf.PANDAS_UDF_BUFFER_SIZE.key}'. " +
-        "Force using the value '4'.")
+      logWarning(log"Pandas execution requires more than 4 bytes. Please configure bigger value " +
+        log"for the configuration '${MDC(CONFIG, SQLConf.PANDAS_UDF_BUFFER_SIZE.key)}'. " +
+        log"Force using the value '4'.")
       4
     } else {
       configuredSize

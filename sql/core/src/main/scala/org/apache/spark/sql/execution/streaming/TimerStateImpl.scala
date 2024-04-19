@@ -16,7 +16,8 @@
  */
 package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{EXPIRY_TIMESTAMP, KEY}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
@@ -130,8 +131,8 @@ class TimerStateImpl(
   def registerTimer(expiryTimestampMs: Long): Unit = {
     val groupingKey = getGroupingKey(keyToTsCFName)
     if (exists(groupingKey, expiryTimestampMs)) {
-      logWarning(s"Failed to register timer for key=$groupingKey and " +
-        s"timestamp=$expiryTimestampMs since it already exists")
+      logWarning(log"Failed to register timer for key=${MDC(KEY, groupingKey)} and " +
+        log"timestamp=${MDC(EXPIRY_TIMESTAMP, expiryTimestampMs)} ms since it already exists")
     } else {
       store.put(encodeKey(groupingKey, expiryTimestampMs), EMPTY_ROW, keyToTsCFName)
       store.put(encodeSecIndexKey(groupingKey, expiryTimestampMs), EMPTY_ROW, tsToKeyCFName)
@@ -147,8 +148,8 @@ class TimerStateImpl(
     val groupingKey = getGroupingKey(keyToTsCFName)
 
     if (!exists(groupingKey, expiryTimestampMs)) {
-      logWarning(s"Failed to delete timer for key=$groupingKey and " +
-        s"timestamp=$expiryTimestampMs since it does not exist")
+      logWarning(log"Failed to delete timer for key=${MDC(KEY, groupingKey)} and " +
+        log"timestamp=${MDC(EXPIRY_TIMESTAMP, expiryTimestampMs)} ms since it does not exist")
     } else {
       store.remove(encodeKey(groupingKey, expiryTimestampMs), keyToTsCFName)
       store.remove(encodeSecIndexKey(groupingKey, expiryTimestampMs), tsToKeyCFName)

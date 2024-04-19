@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{DELEGATE, READ_LIMIT}
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, ReadLimit, SparkDataStream, SupportsAdmissionControl, SupportsTriggerAvailableNow}
 import org.apache.spark.sql.connector.read.streaming
 
@@ -29,10 +30,10 @@ class AvailableNowDataStreamWrapper(val delegate: SparkDataStream)
   extends SparkDataStream with SupportsTriggerAvailableNow with Logging {
 
   // See SPARK-45178 for more details.
-  logWarning("Activating the wrapper implementation of Trigger.AvailableNow for source " +
-    s"[$delegate]. Note that this might introduce possibility of deduplication, dataloss, " +
-    "correctness issue. Enable the config with extreme care. We strongly recommend to contact " +
-    "the data source developer to support Trigger.AvailableNow.")
+  logWarning(log"Activating the wrapper implementation of Trigger.AvailableNow for source " +
+    log"[${MDC(DELEGATE, delegate)}]. Note that this might introduce possibility of " +
+    log"deduplication, dataloss, correctness issue. Enable the config with extreme care. We " +
+    log"strongly recommend to contact the data source developer to support Trigger.AvailableNow.")
 
   private var fetchedOffset: streaming.Offset = _
 
@@ -71,8 +72,8 @@ class AvailableNowDataStreamWrapper(val delegate: SparkDataStream)
     case s: SupportsAdmissionControl =>
       val limit = s.getDefaultReadLimit
       if (limit != ReadLimit.allAvailable()) {
-        logWarning(s"The read limit $limit is ignored because source $delegate does not " +
-          "support running Trigger.AvailableNow queries.")
+        logWarning(log"The read limit ${MDC(READ_LIMIT, limit)} is ignored because source " +
+          log"${MDC(DELEGATE, delegate)} does not support running Trigger.AvailableNow queries.")
       }
       ReadLimit.allAvailable()
 
