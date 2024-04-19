@@ -17,16 +17,13 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import scala.annotation.tailrec
-
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, CreateArray, CreateMap, CreateNamedStruct, Expression, LeafExpression, Literal, MapFromArrays, MapFromEntries, SubqueryExpression, Unevaluable, VariableReference}
+import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, CreateMap, CreateNamedStruct, Expression, LeafExpression, Literal, MapFromArrays, MapFromEntries, SubqueryExpression, Unevaluable, VariableReference}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{PARAMETER, PARAMETERIZED_QUERY, TreePattern, UNRESOLVED_WITH}
 import org.apache.spark.sql.errors.QueryErrorsBase
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, DataType, StringType, StringTypePriority}
+import org.apache.spark.sql.types.DataType
 
 sealed trait Parameter extends LeafExpression with Unevaluable {
   override lazy val resolved: Boolean = false
@@ -133,25 +130,6 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
     })
   }
 
-  @tailrec
-  private def hasStringRelatedParameterWithFaultyPriority(dt: DataType): Boolean = {
-    dt match {
-      case st: StringType if st.priority != StringTypePriority.DefaultST => true
-      case ArrayType(elementType, _) => hasStringRelatedParameterWithFaultyPriority(elementType)
-      case _ => false
-    }
-  }
-
-  private def getStringParameterWithRightPriority(dt: DataType): Option[DataType] = {
-    val ret = dt match {
-      case _: StringType => SQLConf.get.defaultStringType
-      case ArrayType(et, nullable) =>
-        getStringParameterWithRightPriority(et).map(ArrayType(_, nullable)).orNull
-      case other => other
-    }
-    Option(ret)
-  }
-
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (plan.containsPattern(PARAMETERIZED_QUERY)) {
       // One unresolved plan can have at most one ParameterizedQuery.
@@ -170,16 +148,7 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
         }
         val args = argNames.zip(argValues).toMap
         checkArgs(args)
-        bind(child) { case NamedParameter(name) if args.contains(name) =>
-          val bindValue = args(name)
-          bindValue.dataType match {
-            case dt if hasStringRelatedParameterWithFaultyPriority(dt) =>
-              Cast(bindValue,
-                getStringParameterWithRightPriority(
-                  bindValue.dataType).getOrElse(bindValue.dataType))
-            case _ =>
-              bindValue
-          }
+        bind(child) { case NamedParameter(name) if args.contains(name) => args(name)
         }
 
       case PosParameterizedQuery(child, args)
@@ -193,15 +162,7 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
 
         bind(child) {
           case PosParameter(pos) if posToIndex.contains(pos) && args.size > posToIndex(pos) =>
-            val bindValue = args(posToIndex(pos))
-            bindValue.dataType match {
-              case dt if hasStringRelatedParameterWithFaultyPriority(dt) =>
-                Cast(bindValue,
-                  getStringParameterWithRightPriority(
-                    bindValue.dataType).getOrElse(bindValue.dataType))
-              case _ =>
-                bindValue
-            }
+            args(posToIndex(pos))
         }
 
       case _ => plan
