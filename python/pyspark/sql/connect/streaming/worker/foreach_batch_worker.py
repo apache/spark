@@ -63,12 +63,6 @@ def main(infile: IO, outfile: IO) -> None:
     spark = spark_connect_session
 
     # TODO(SPARK-44461): Enable Process Isolation
-    try:
-        func = worker.read_command(pickle_ser, infile)
-    except Exception as e:
-        handle_worker_exception(e, outfile)
-        outfile.flush()
-        return
 
     write_int(0, outfile)  # Indicate successful initialization
 
@@ -83,16 +77,18 @@ def main(infile: IO, outfile: IO) -> None:
         func(batch_df, batch_id)
         print(f"{log_name} Completed batch {batch_id} with DF id {df_id}")
 
-    while True:
-        df_ref_id = utf8_deserializer.loads(infile)
-        batch_id = read_long(infile)
-        # Handle errors inside Python worker. Write 0 to outfile if no errors and write -2 with
-        # traceback string if error occurs.
-        try:
+    try:
+        func = worker.read_command(pickle_ser, infile)
+        while True:
+            df_ref_id = utf8_deserializer.loads(infile)
+            batch_id = read_long(infile)
+            # Handle errors inside Python worker. Write 0 to outfile if no errors and write -2 with
+            # traceback string if error occurs.
             process(df_ref_id, int(batch_id))
             write_int(0, outfile)
-        except BaseException as e:
-            handle_worker_exception(e, outfile)
+            outfile.flush()
+    except BaseException as e:
+        handle_worker_exception(e, outfile)
         outfile.flush()
 
 

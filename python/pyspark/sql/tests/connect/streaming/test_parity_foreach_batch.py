@@ -68,18 +68,15 @@ class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedCo
 
     def test_pickling_deserialization_error(self):
         class NoUnpickle:
-            def __init__(self, data):
-                self.data = data
 
             def __reduce__(self):
                 # Serialize only the data attribute
-                return (self.__class__, (self.data,))
+                return self.throw_exception(), ()
 
-            def __reduce_ex__(self, proto):
-                # Raise an error upon unpickling
-                raise ValueError("Cannot unpickle instance of NoUnpickle")
+            def throw_exception(self):
+                raise RuntimeError("Cannot unpickle instance of NoUnpickle")
 
-        no_unpickle = NoUnpickle("object-1")
+        no_unpickle = NoUnpickle()
 
         def func(df, _):
             print(no_unpickle)
