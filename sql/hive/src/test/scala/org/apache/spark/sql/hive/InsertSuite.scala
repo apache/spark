@@ -927,4 +927,26 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       testDefaultColumn
     }
   }
+
+  test("insert overwrite to dir with file format") {
+    withTempDir { dir =>
+      withTempView("test_insert_table") {
+        withSQLConf("hive.default.fileformat" -> "parquet") {
+          // set default fileformat to parquet;
+          spark.range(10).selectExpr("id", "id AS str").createOrReplaceTempView("test_insert_table")
+          // insert overwrite to dir with orc file format
+          val tablePath = dir.toURI.getPath
+          sql(
+            s"""INSERT OVERWRITE DIRECTORY '$tablePath'
+               |STORED AS
+               |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.orc.OrcInputFormat'
+               |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat'
+               |SELECT * FROM test_insert_table""".stripMargin)
+          checkAnswer(
+            spark.read.orc(dir.getCanonicalPath),
+            sql("SELECT * FROM test_insert_table"))
+        }
+      }
+    }
+  }
 }
