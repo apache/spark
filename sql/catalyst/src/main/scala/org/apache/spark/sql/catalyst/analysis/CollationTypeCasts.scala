@@ -53,8 +53,8 @@ object CollationTypeCasts extends TypeCoercionRule {
         ++ Seq(overlay.pos, overlay.len))
 
     case regExpReplace: RegExpReplace =>
-      val singleType = collateToSingleType(Seq(regExpReplace.subject, regExpReplace.rep))
-      val newChildren = Seq(singleType.head, regExpReplace.regexp, singleType(1), regExpReplace.pos)
+      val Seq(subject, rep) = collateToSingleType(Seq(regExpReplace.subject, regExpReplace.rep))
+      val newChildren = Seq(subject, regExpReplace.regexp, rep, regExpReplace.pos)
       regExpReplace.withNewChildren(newChildren)
 
     case otherExpr @ (
