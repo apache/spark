@@ -117,11 +117,15 @@ Define the reader logic to generate synthetic data. Use the `faker` library to p
             for i in range(start, end):
                 yield (i, str(i))
 
-| This is a dummy streaming data reader that generate 2 rows in every microbatch. The streamReader instance has a integer offset that increase by 2 in every microbatch.
- | initialOffset() should return the initial start offset of the reader.
- | latestOffset() return the current latest offset that the next microbatch will read to.
- | partitions() plans the partitioning of the current microbatch defined by start and end offset, it needs to return a sequence of Partition object.
- | read() takes a partition as an input and read an iterator of tuples from the data source.
+This is a dummy streaming data reader that generate 2 rows in every microbatch. The streamReader instance has a integer offset that increase by 2 in every microbatch.
+
+initialOffset() should return the initial start offset of the reader.
+
+latestOffset() return the current latest offset that the next microbatch will read to.
+
+partitions() plans the partitioning of the current microbatch defined by start and end offset, it needs to return a sequence of Partition object.
+
+read() takes a partition as an input and read an iterator of tuples from the data source.
 
 
 Using a Python Data Source
@@ -176,3 +180,9 @@ Use the fake datasource with a different number of rows:
     # |  Caitlin Reed|1983-06-22|  89813|Pennsylvania|
     # | Douglas James|2007-01-18|  46226|     Alabama|
     # +--------------+----------+-------+------------+
+
+Start a streaming query with the fake data stream.
+
+.. code-block:: python
+
+    spark.readStream.format("fake").load().writeStream().format("console").start()
