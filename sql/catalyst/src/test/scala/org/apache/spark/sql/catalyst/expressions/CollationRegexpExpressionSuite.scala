@@ -55,6 +55,29 @@ class CollationRegexpExpressionSuite extends SparkFunSuite with ExpressionEvalHe
     })
   }
 
+  test("StringSplit expression with collated strings") {
+    case class StringSplitTestCase[R](s: String, r: String, collation: String, expected: R)
+    val testCases = Seq(
+      StringSplitTestCase("1A2B3C", "[ABC]", "UTF8_BINARY", Seq("1", "2", "3", "")),
+      StringSplitTestCase("1A2B3C", "[abc]", "UTF8_BINARY", Seq("1A2B3C")),
+      StringSplitTestCase("1A2B3C", "[ABC]", "UTF8_BINARY_LCASE", Seq("1", "2", "3", "")),
+      StringSplitTestCase("1A2B3C", "[abc]", "UTF8_BINARY_LCASE", Seq("1", "2", "3", "")),
+      StringSplitTestCase("1A2B3C", "[1-9]+", "UNICODE", Seq("", "A", "B", "C")),
+      StringSplitTestCase("", "", "UNICODE", Seq("")),
+      StringSplitTestCase("1A2B3C", "", "UNICODE", Seq("1", "A", "2", "B", "3", "C")),
+      StringSplitTestCase("", "[1-9]+", "UNICODE", Seq("")),
+      StringSplitTestCase(null, "[1-9]+", "UNICODE", null),
+      StringSplitTestCase("1A2B3C", null, "UNICODE", null),
+      StringSplitTestCase(null, null, "UNICODE", null)
+    )
+    testCases.foreach(t => {
+      // StringSplit
+      checkEvaluation(StringSplit(
+        Literal.create(t.s, StringType(CollationFactory.collationNameToId(t.collation))),
+        Literal.create(t.r, StringType), -1), t.expected)
+    })
+  }
+
   test("Regexp expressions with collated strings") {
     case class RegexpTestCase[R](l: String, r: String, collation: String,
                                  expectedExtract: R, expectedExtractAll: R, expectedCount: R)
