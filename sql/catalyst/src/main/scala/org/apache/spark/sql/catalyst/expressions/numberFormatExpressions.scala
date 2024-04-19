@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGe
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.util.ToNumberParser
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, DatetimeType, Decimal, DecimalType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -280,7 +279,7 @@ case class ToCharacter(left: Expression, right: Expression)
     }
   }
 
-  override def dataType: DataType = SQLConf.get.defaultStringType
+  override def dataType: DataType = StringType
   override def inputTypes: Seq[AbstractDataType] = Seq(DecimalType, StringType)
   override def checkInputDataTypes(): TypeCheckResult = {
     val inputTypeCheck = super.checkInputDataTypes()

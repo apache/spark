@@ -35,7 +35,6 @@ import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LIKE_FAMLIY, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, TreePattern}
 import org.apache.spark.sql.catalyst.util.{GenericArrayData, StringUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -684,7 +683,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
     }
   }
 
-  override def dataType: DataType = SQLConf.get.defaultStringType
+  override def dataType: DataType = StringType
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringType, StringType, StringType, IntegerType)
   override def prettyName: String = "regexp_replace"
@@ -849,7 +848,7 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
     }
   }
 
-  override def dataType: DataType = SQLConf.get.defaultStringType
+  override def dataType: DataType = StringType
   override def prettyName: String = "regexp_extract"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {

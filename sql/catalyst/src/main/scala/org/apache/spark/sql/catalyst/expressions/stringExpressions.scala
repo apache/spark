@@ -725,7 +725,7 @@ case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExp
     })
   }
 
-  override def dataType: DataType = SQLConf.get.defaultStringType
+  override def dataType: DataType = StringType
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType, StringType)
   override def first: Expression = srcExpr
   override def second: Expression = searchExpr
@@ -944,7 +944,7 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
     })
   }
 
-  override def dataType: DataType = SQLConf.get.defaultStringType
+  override def dataType: DataType = StringType
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType, StringType)
   override def first: Expression = srcExpr
   override def second: Expression = matchingExpr
@@ -1004,7 +1004,7 @@ trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
   protected def direction: String
 
   override def children: Seq[Expression] = srcStr +: trimStr.toSeq
-  override def dataType: DataType = SQLConf.get.defaultStringType
+  override def dataType: DataType = StringType
   override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(StringType)
 
   override def nullable: Boolean = children.exists(_.nullable)
@@ -1396,7 +1396,7 @@ case class StringInstr(str: Expression, substr: Expression)
 case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr: Expression)
  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
-  override def dataType: DataType = SQLConf.get.defaultStringType
+  override def dataType: DataType = StringType
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType, IntegerType)
   override def first: Expression = strExpr
   override def second: Expression = delimExpr
@@ -1879,7 +1879,7 @@ case class StringRepeat(str: Expression, times: Expression)
 case class StringSpace(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
-  override def dataType: DataType = SQLConf.get.defaultStringType
+  override def dataType: DataType = StringType
   override def inputTypes: Seq[DataType] = Seq(IntegerType)
 
   override def nullSafeEval(s: Any): Any = {

@@ -23,7 +23,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.util.GenericArrayData
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -222,7 +221,7 @@ case class XPathDouble(xml: Expression, path: Expression) extends XPathExtract {
 // scalastyle:on line.size.limit
 case class XPathString(xml: Expression, path: Expression) extends XPathExtract {
   override def prettyName: String = "xpath_string"
-  override def dataType: DataType = SQLConf.get.defaultStringType
+  override def dataType: DataType = StringType
 
   override def nullSafeEval(xml: Any, path: Any): Any = {
     val ret = xpathUtil.evalString(xml.asInstanceOf[UTF8String].toString, pathString)

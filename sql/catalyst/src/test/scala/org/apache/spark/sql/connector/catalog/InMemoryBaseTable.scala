@@ -37,7 +37,6 @@ import org.apache.spark.sql.connector.read.colstats.{ColumnStatistics, Histogram
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SupportsStreamingUpdateAsAppend
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -63,7 +62,7 @@ abstract class InMemoryBaseTable(
 
   protected object PartitionKeyColumn extends MetadataColumn {
     override def name: String = "_partition"
-    override def dataType: DataType = SQLConf.get.defaultStringType
+    override def dataType: DataType = StringType
     override def comment: String = "Partition key used to store the row"
   }
 
