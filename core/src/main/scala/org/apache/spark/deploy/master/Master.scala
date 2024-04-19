@@ -42,7 +42,7 @@ import org.apache.spark.internal.config.Worker._
 import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
 import org.apache.spark.resource.{ResourceInformation, ResourceProfile, ResourceRequirement, ResourceUtils}
 import org.apache.spark.rpc._
-import org.apache.spark.serializer.{JavaSerializer, KryoSerializer, Serializer}
+import org.apache.spark.serializer.{JavaSerializer, Serializer}
 import org.apache.spark.util.{SparkUncaughtExceptionHandler, ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -179,10 +179,7 @@ private[deploy] class Master(
     masterMetricsSystem.getServletHandlers.foreach(webUi.attachHandler)
     applicationMetricsSystem.getServletHandlers.foreach(webUi.attachHandler)
 
-    val serializer = RecoverySerializer.withName(conf.get(RECOVERY_SERIALIZER)) match {
-      case RecoverySerializer.JAVA => new JavaSerializer(conf)
-      case RecoverySerializer.KRYO => new KryoSerializer(conf)
-    }
+    val serializer = new JavaSerializer(conf)
     val (persistenceEngine_, leaderElectionAgent_) = recoveryMode match {
       case "ZOOKEEPER" =>
         logInfo("Persisting recovery state to ZooKeeper")

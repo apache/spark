@@ -73,6 +73,26 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
   def getListState[T](stateName: String, valEncoder: Encoder[T]): ListState[T]
 
   /**
+   * Function to create new or return existing list state variable of given type
+   * with ttl. State values will not be returned past ttlDuration, and will be eventually removed
+   * from the state store. Any values in listState which have expired after ttlDuration will not
+   * be returned on get() and will be eventually removed from the state.
+   *
+   * The user must ensure to call this function only within the `init()` method of the
+   * StatefulProcessor.
+   *
+   * @param stateName  - name of the state variable
+   * @param valEncoder - SQL encoder for state variable
+   * @param ttlConfig  - the ttl configuration (time to live duration etc.)
+   * @tparam T - type of state variable
+   * @return - instance of ListState of type T that can be used to store state persistently
+   */
+  def getListState[T](
+      stateName: String,
+      valEncoder: Encoder[T],
+      ttlConfig: TTLConfig): ListState[T]
+
+  /**
    * Creates new or returns existing map state associated with stateName.
    * The MapState persists Key-Value pairs of type [K, V].
    *

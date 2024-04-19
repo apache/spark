@@ -3227,6 +3227,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
+  def invalidSingleVariantColumn(): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_SINGLE_VARIANT_COLUMN",
+      messageParameters = Map.empty)
+  }
+
   def writeWithSaveModeUnsupportedBySourceError(source: String, createMode: String): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_DATA_SOURCE_SAVE_MODE",

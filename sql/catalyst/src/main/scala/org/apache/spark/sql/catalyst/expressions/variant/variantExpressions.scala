@@ -27,11 +27,13 @@ import org.apache.spark.sql.catalyst.analysis.ExpressionBuilder
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.{ImperativeAggregate, TypedImperativeAggregate}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.json.JsonInferSchema
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, VARIANT_GET}
+import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
@@ -70,6 +72,47 @@ case class ParseJson(child: Expression)
   override def prettyName: String = "parse_json"
 
   override protected def withNewChildInternal(newChild: Expression): ParseJson =
+    copy(child = newChild)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Check if a variant value is a variant null. Returns true if and only if the input is a variant null and false otherwise (including in the case of SQL NULL).",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(parse_json('null'));
+       true
+      > SELECT _FUNC_(parse_json('"null"'));
+       false
+      > SELECT _FUNC_(parse_json('13'));
+       false
+      > SELECT _FUNC_(parse_json(null));
+       false
+      > SELECT _FUNC_(variant_get(parse_json('{"a":null, "b":"spark"}'), "$.c"));
+       false
+      > SELECT _FUNC_(variant_get(parse_json('{"a":null, "b":"spark"}'), "$.a"));
+       true
+  """,
+  since = "4.0.0",
+  group = "variant_funcs")
+// scalastyle:on line.size.limit
+case class IsVariantNull(child: Expression) extends UnaryExpression
+  with Predicate with ExpectsInputTypes with RuntimeReplaceable {
+
+  override lazy val replacement: Expression = StaticInvoke(
+    VariantExpressionEvalUtils.getClass,
+    BooleanType,
+    "isVariantNull",
+    Seq(child),
+    inputTypes,
+    propagateNull = false,
+    returnNullable = false)
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(VariantType)
+
+  override def prettyName: String = "is_variant_null"
+
+  override protected def withNewChildInternal(newChild: Expression): IsVariantNull =
     copy(child = newChild)
 }
 
@@ -614,4 +657,68 @@ object SchemaOfVariant {
    */
   def mergeSchema(t1: DataType, t2: DataType): DataType =
     JsonInferSchema.compatibleType(t1, t2, VariantType)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(v) - Returns the merged schema in the SQL format of a variant column.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(parse_json(j)) FROM VALUES ('1'), ('2'), ('3') AS tab(j);
+       BIGINT
+      > SELECT _FUNC_(parse_json(j)) FROM VALUES ('{"a": 1}'), ('{"b": true}'), ('{"c": 1.23}') AS tab(j);
+       STRUCT<a: BIGINT, b: BOOLEAN, c: DECIMAL(3,2)>
+  """,
+  since = "4.0.0",
+  group = "variant_funcs")
+// scalastyle:on line.size.limit
+case class SchemaOfVariantAgg(
+    child: Expression,
+    override val mutableAggBufferOffset: Int,
+    override val inputAggBufferOffset: Int)
+    extends TypedImperativeAggregate[DataType]
+    with ExpectsInputTypes
+    with QueryErrorsBase
+    with UnaryLike[Expression] {
+  def this(child: Expression) = this(child, 0, 0)
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(VariantType)
+
+  override def dataType: DataType = StringType
+
+  override def nullable: Boolean = false
+
+  override def createAggregationBuffer(): DataType = NullType
+
+  override def update(buffer: DataType, input: InternalRow): DataType = {
+    val inputVariant = child.eval(input).asInstanceOf[VariantVal]
+    if (inputVariant != null) {
+      val v = new Variant(inputVariant.getValue, inputVariant.getMetadata)
+      SchemaOfVariant.mergeSchema(buffer, SchemaOfVariant.schemaOf(v))
+    } else {
+      buffer
+    }
+  }
+
+  override def merge(buffer: DataType, input: DataType): DataType =
+    SchemaOfVariant.mergeSchema(buffer, input)
+
+  override def eval(buffer: DataType): Any = UTF8String.fromString(buffer.sql)
+
+  override def serialize(buffer: DataType): Array[Byte] = buffer.json.getBytes("UTF-8")
+
+  override def deserialize(storageFormat: Array[Byte]): DataType =
+    DataType.fromJson(new String(storageFormat, "UTF-8"))
+
+  override def prettyName: String = "schema_of_variant_agg"
+
+  override def withNewMutableAggBufferOffset(
+      newMutableAggBufferOffset: Int): ImperativeAggregate =
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(child = newChild)
 }

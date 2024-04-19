@@ -80,15 +80,8 @@ def _test() -> None:
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
     import pyspark.sql.connect.avro.functions
-    from pyspark.util import is_remote_only
 
     globs = pyspark.sql.connect.avro.functions.__dict__.copy()
-
-    # TODO(SPARK-47760): Reeanble Avro function doctests
-    if is_remote_only():
-        del pyspark.sql.connect.avro.functions.from_avro
-        del pyspark.sql.connect.avro.functions.to_avro
-
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.avro.functions tests")
         .remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[4]"))

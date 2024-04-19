@@ -24,7 +24,8 @@ import scala.annotation.tailrec
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.TaskContext
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{END_INDEX, START_INDEX}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, JoinedRow, Literal, SafeProjection, SpecificInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
@@ -366,9 +367,9 @@ class SymmetricHashJoinStateManager(
 
             // If nulls were found at the end, log a warning for the range of null indices.
             if (nonNullIndex != numValues - 1) {
-              logWarning(s"`keyWithIndexToValue` returns a null value for indices " +
-                s"with range from startIndex=${nonNullIndex + 1} " +
-                s"and endIndex=${numValues - 1}.")
+              logWarning(log"`keyWithIndexToValue` returns a null value for indices " +
+                log"with range from startIndex=${MDC(START_INDEX, nonNullIndex + 1)} " +
+                log"and endIndex=${MDC(END_INDEX, numValues - 1)}.")
             }
 
             // Remove all null values from nonNullIndex + 1 onwards

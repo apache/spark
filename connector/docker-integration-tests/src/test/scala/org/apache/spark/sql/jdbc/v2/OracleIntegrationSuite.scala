@@ -23,7 +23,7 @@ import java.util.Locale
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkConf, SparkRuntimeException}
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.OracleDatabaseOnDocker
@@ -140,6 +140,15 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
         errorClass = "EXCEED_LIMIT_LENGTH",
         parameters = Map("limit" -> "255")
       )
+    }
+  }
+
+  test("SPARK-47879: Use VARCHAR2 instead of VARCHAR") {
+    val tableName = catalogName + ".t1"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName(c1 varchar(10), c2 char(3))")
+      sql(s"INSERT INTO $tableName SELECT 'Eason' as c1, 'Y' as c2")
+      checkAnswer(sql(s"SELECT * FROM $tableName"), Seq(Row("Eason", "Y  ")))
     }
   }
 }

@@ -29,7 +29,8 @@ import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.RECORDS
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -178,7 +179,7 @@ private[util] class BatchedWriteAheadLog(val wrappedLog: WriteAheadLog, conf: Sp
         logWarning("BatchedWriteAheadLog Writer queue interrupted.", e)
         buffer.foreach(_.promise.failure(e))
       case NonFatal(e) =>
-        logWarning(s"BatchedWriteAheadLog Writer failed to write $buffer", e)
+        logWarning(log"BatchedWriteAheadLog Writer failed to write ${MDC(RECORDS, buffer)}", e)
         buffer.foreach(_.promise.failure(e))
     } finally {
       buffer.clear()
