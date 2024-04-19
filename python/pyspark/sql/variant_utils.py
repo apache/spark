@@ -368,8 +368,8 @@ class VariantUtils:
             if type(value) == bytes:
                 # decoding simply converts byte array to string
                 return '"' + base64.b64encode(value).decode("utf-8") + '"'
-            if type(value) == datetime.date:
-                return str(value)
+            if type(value) == datetime.date or type(value) == datetime.datetime:
+                return '"' + str(value) + '"'
             return str(value)
 
     @classmethod

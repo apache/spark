@@ -1504,21 +1504,21 @@ class TypesTestsMixin:
         self.assertEqual(str(variants[1]), '{"a":1}')
         self.assertEqual(str(variants[2]), '{"b":"2"}')
         self.assertEqual(str(variants[3]), '{"c":true}')
-        self.assertEqual(str(variants[4]), "2021-01-01")
-        self.assertEqual(str(variants[5]), "1800-12-31")
+        self.assertEqual(str(variants[4]), '"2021-01-01"')
+        self.assertEqual(str(variants[5]), '"1800-12-31"')
         self.assertEqual(str(variants[6]), "5.5")
         self.assertEqual(str(variants[7]), "-5.5")
         self.assertEqual(str(variants[8]), '"Mk+mng=="')
-        self.assertEqual(str(variants[9]), "1940-01-01 12:33:01.123000")
-        self.assertEqual(str(variants[10]), "2522-12-31 05:57:13")
-        self.assertEqual(str(variants[11]), "0001-07-15 17:43:26")
-        self.assertEqual(str(variants[12]), "1940-01-01 05:05:13.123000+00:00")
-        self.assertEqual(str(variants[13]), "2522-12-31 05:23:00+00:00")
-        self.assertEqual(str(variants[14]), "0001-12-30 17:01:01+00:00")
+        self.assertEqual(str(variants[9]), '"1940-01-01 12:33:01.123000"')
+        self.assertEqual(str(variants[10]), '"2522-12-31 05:57:13"')
+        self.assertEqual(str(variants[11]), '"0001-07-15 17:43:26"')
+        self.assertEqual(str(variants[12]), '"1940-01-01 05:05:13.123000+00:00"')
+        self.assertEqual(str(variants[13]), '"2522-12-31 05:23:00+00:00"')
+        self.assertEqual(str(variants[14]), '"0001-12-30 17:01:01+00:00"')
 
         # Check to_json on timestamps with custom timezones
         self.assertEqual(
-            variants[12].toJson("America/Los_Angeles"), "1939-12-31 21:05:13.123000-08:00"
+            variants[12].toJson("America/Los_Angeles"), '"1939-12-31 21:05:13.123000-08:00"'
         )
 
         # check toPython
