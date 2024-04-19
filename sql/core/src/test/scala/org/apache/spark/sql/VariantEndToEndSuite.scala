@@ -88,6 +88,46 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     check("[0.0, 1.00, 1.10, 1.23]", "[0,1,1.1,1.23]")
   }
 
+  test("try_parse_json/to_json round-trip") {
+    def check(input: String, output: String = "INPUT IS OUTPUT"): Unit = {
+      val df = Seq(input).toDF("v")
+      val variantDF = df.selectExpr("to_json(try_parse_json(v)) as v").select(Column("v"))
+      val expected = if (output != "INPUT IS OUTPUT") output else input
+      checkAnswer(variantDF, Seq(Row(expected)))
+    }
+
+    check("null")
+    check("true")
+    check("false")
+    check("-1")
+    check("1.0E10")
+    check("\"\"")
+    check("\"" + ("a" * 63) + "\"")
+    check("\"" + ("b" * 64) + "\"")
+    // scalastyle:off nonascii
+    check("\"" + ("你好，世界" * 20) + "\"")
+    // scalastyle:on nonascii
+    check("[]")
+    check("{}")
+    // scalastyle:off nonascii
+    check(
+      "[null, true,   false,-1, 1e10, \"\\uD83D\\uDE05\", [ ], { } ]",
+      "[null,true,false,-1,1.0E10,\"😅\",[],{}]"
+    )
+    // scalastyle:on nonascii
+    check("[0.0, 1.00, 1.10, 1.23]", "[0,1,1.1,1.23]")
+    // Places where parse_json should fail and therefore, try_parse_json should return null
+    check("{1:2}", null)
+    check("{\"a\":1", null)
+    check("{\"a\":[a,b,c]}", null)
+  }
+
+  test("try_parse_json with invalid input type") {
+    // This test is required because the type checking logic in try_parse_json is custom.
+    val exception = intercept[Exception](spark.sql("select try_parse_json(1)"))
+    assert(exception != null)
+  }
+
   test("to_json with nested variant") {
     val df = Seq(1).toDF("v")
     val variantDF1 = df.select(
@@ -154,23 +194,6 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     check("variant")
     check("     \t variant ")
     check("  \n  VaRiaNt  ")
-  }
-
-  test("is_variant_null with parse_json and variant_get") {
-    def check(json: String, path: String, expected: Boolean): Unit = {
-      val df = Seq(json).toDF("j").selectExpr(s"is_variant_null(variant_get(parse_json(j),"
-        + s"\"${path}\"))")
-      checkAnswer(df, Seq(Row(expected)))
-    }
-
-    check("{ \"a\": null }", "$.a", expected = true)
-    check("{ \"a\": null }", "$.b", expected = false)
-    check("{ \"a\": null, \"b\": \"null\" }", "$.b", expected = false)
-    check("{ \"a\": null, \"b\": {\"c\": null} }", "$.b.c", expected = true)
-    check("{ \"a\": null, \"b\": {\"c\": null, \"d\": [13, null]} }", "$.b.d", expected = false)
-    check("{ \"a\": null, \"b\": {\"c\": null, \"d\": [13, null]} }", "$.b.d[0]", expected = false)
-    check("{ \"a\": null, \"b\": {\"c\": null, \"d\": [13, null]} }", "$.b.d[1]", expected = true)
-    check("{ \"a\": null, \"b\": {\"c\": null, \"d\": [13, null]} }", "$.b.d[2]", expected = false)
   }
 
   test("is_variant_null with parse_json and variant_get") {
