@@ -813,8 +813,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
   }
 
   test("check that current time is foldable") {
-    val rnd =
-      Rand(Cast(UnixTimestamp(CurrentDate(), Literal("yyyy-MM-dd HH:mm:ss")), IntegerType))
+    val rnd = Rand(Month(CurrentDate()))
     assert(rnd.checkInputDataTypes().isSuccess)
   }
 }
