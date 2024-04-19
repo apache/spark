@@ -1452,24 +1452,24 @@ class TypesTestsMixin:
 
         # These data types are not supported by parse_json yet so they are being handled
         # separately - Date, Timestamp, TimestampNTZ, Binary, Float (Single Precision)
-        date_column = self.spark.sql(
+        date_columns = self.spark.sql(
             "select cast(Date('2021-01-01')"
             + " as variant) as d0, cast(Date('1800-12-31')"
             + " as variant) as d1"
         ).collect()[0]
-        float_column = self.spark.sql(
+        float_columns = self.spark.sql(
             "select cast(Float(5.5)" + " as variant) as f0, cast(Float(-5.5) as variant) as f1"
         ).collect()[0]
-        binary_column = self.spark.sql(
+        binary_columns = self.spark.sql(
             "select cast(binary(x'324FA69E')" + " as variant) as b"
         ).collect()[0]
-        timetamp_ntz_column = self.spark.sql(
+        timetamp_ntz_columns = self.spark.sql(
             "select cast(cast('1940-01-01 12:33:01.123'"
             + " as timestamp_ntz) as variant) as tntz0, cast(cast('2522-12-31 05:57:13'"
             + " as timestamp_ntz) as variant) as tntz1, cast(cast('0001-07-15 17:43:26+08:00'"
             + " as timestamp_ntz) as variant) as tntz2"
         ).collect()[0]
-        timetamp_column = self.spark.sql(
+        timetamp_columns = self.spark.sql(
             "select cast(cast('1940-01-01 12:35:13.123+7:30'"
             + " as timestamp) as variant) as t0, cast(cast('2522-12-31 00:00:00-5:23'"
             + " as timestamp) as variant) as t1, cast(cast('0001-12-31 01:01:01+08:00'"
@@ -1481,17 +1481,17 @@ class TypesTestsMixin:
             row["a"][0],
             row["s"]["col1"],
             row["m"]["k"],
-            date_column["d0"],
-            date_column["d1"],
-            float_column["f0"],
-            float_column["f1"],
-            binary_column["b"],
-            timetamp_ntz_column["tntz0"],
-            timetamp_ntz_column["tntz1"],
-            timetamp_ntz_column["tntz2"],
-            timetamp_column["t0"],
-            timetamp_column["t1"],
-            timetamp_column["t2"],
+            date_columns["d0"],
+            date_columns["d1"],
+            float_columns["f0"],
+            float_columns["f1"],
+            binary_columns["b"],
+            timetamp_ntz_columns["tntz0"],
+            timetamp_ntz_columns["tntz1"],
+            timetamp_ntz_columns["tntz2"],
+            timetamp_columns["t0"],
+            timetamp_columns["t1"],
+            timetamp_columns["t2"]
         ]
 
         for v in variants:
