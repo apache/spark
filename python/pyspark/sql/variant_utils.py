@@ -260,6 +260,7 @@ class VariantUtils:
         elif type_info == VariantUtils.DOUBLE:
             cls._check_index(pos + 8, len(value))
             return struct.unpack("<d", value[pos + 1 : pos + 9])[0]
+        raise PySparkValueError(error_class="MALFORMED_VARIANT")
 
     @classmethod
     def _get_decimal(cls, value: bytes, pos: int) -> decimal.Decimal:
