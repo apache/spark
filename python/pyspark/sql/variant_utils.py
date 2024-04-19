@@ -93,8 +93,8 @@ class VariantUtils:
     # from the Unix epoch.
     DATE = 11
     # Timestamp value. Content is 8-byte little-endian signed integer that represents the number of
-    # microseconds elapsed since the Unix epoch, 1970-01-01 00:00:00 UTC. It is displayed to users in
-    # their local time zones and may be displayed differently depending on the execution environment.
+    # microseconds elapsed since the Unix epoch, 1970-01-01 00:00:00 UTC. This is a timezone-aware
+    # field and when reading into a Python datetime object defaults to the UTC timezone.
     TIMESTAMP = 12
     # Timestamp_ntz value. It has the same content as `TIMESTAMP` but should always be interpreted
     # as if the local time zone is UTC.
