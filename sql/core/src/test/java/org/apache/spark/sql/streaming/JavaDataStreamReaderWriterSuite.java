@@ -28,7 +28,6 @@ import org.apache.spark.api.java.function.VoidFunction2;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.ForeachWriter;
 import org.apache.spark.sql.SparkSession;
-import org.apache.spark.sql.streaming.StreamingQuery;
 import org.apache.spark.sql.test.TestSparkSession;
 import org.apache.spark.util.Utils;
 

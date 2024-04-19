@@ -24,10 +24,6 @@ import scala.Tuple2;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import org.apache.spark.sql.Dataset;
-import org.apache.spark.sql.Encoder;
-import org.apache.spark.sql.Encoders;
-import org.apache.spark.sql.KeyValueGroupedDataset;
 import org.apache.spark.sql.expressions.Aggregator;
 
 /**

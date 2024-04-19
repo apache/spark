@@ -31,8 +31,6 @@ import org.apache.hadoop.fs.*;
 import org.apache.spark.deploy.SparkHadoopUtil;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
-import org.apache.spark.sql.connector.SimpleCounter;
-import org.apache.spark.sql.connector.TestingV2Source;
 import org.apache.spark.sql.connector.catalog.SupportsWrite;
 import org.apache.spark.sql.connector.catalog.Table;
 import org.apache.spark.sql.connector.catalog.TableCapability;

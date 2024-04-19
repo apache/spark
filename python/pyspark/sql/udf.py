@@ -715,19 +715,19 @@ class UDFRegistration:
         --------
         >>> from pyspark.sql.types import IntegerType
         >>> spark.udf.registerJavaFunction(
-        ...     "javaStringLength", "test.org.apache.spark.sql.JavaStringLength", IntegerType())
+        ...     "javaStringLength", "org.apache.spark.sql.JavaStringLength", IntegerType())
         ... # doctest: +SKIP
         >>> spark.sql("SELECT javaStringLength('test')").collect()  # doctest: +SKIP
         [Row(javaStringLength(test)=4)]
 
         >>> spark.udf.registerJavaFunction(
-        ...     "javaStringLength2", "test.org.apache.spark.sql.JavaStringLength")
+        ...     "javaStringLength2", "org.apache.spark.sql.JavaStringLength")
         ... # doctest: +SKIP
         >>> spark.sql("SELECT javaStringLength2('test')").collect()  # doctest: +SKIP
         [Row(javaStringLength2(test)=4)]
 
         >>> spark.udf.registerJavaFunction(
-        ...     "javaStringLength3", "test.org.apache.spark.sql.JavaStringLength", "integer")
+        ...     "javaStringLength3", "org.apache.spark.sql.JavaStringLength", "integer")
         ... # doctest: +SKIP
         >>> spark.sql("SELECT javaStringLength3('test')").collect()  # doctest: +SKIP
         [Row(javaStringLength3(test)=4)]
@@ -755,7 +755,7 @@ class UDFRegistration:
 
         Examples
         --------
-        >>> spark.udf.registerJavaUDAF("javaUDAF", "test.org.apache.spark.sql.MyDoubleAvg")
+        >>> spark.udf.registerJavaUDAF("javaUDAF", "org.apache.spark.sql.MyDoubleAvg")
         ... # doctest: +SKIP
         >>> df = spark.createDataFrame([(1, "a"),(2, "b"), (3, "a")],["id", "name"])
         >>> df.createOrReplaceTempView("df")

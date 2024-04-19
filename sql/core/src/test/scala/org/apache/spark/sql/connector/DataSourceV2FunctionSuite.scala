@@ -262,7 +262,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
   }
 
   test("temp function override with default v2 function catalog") {
-    val className = "test.org.apache.spark.sql.JavaStringLength"
+    val className = "org.apache.spark.sql.JavaStringLength"
     sql(s"CREATE FUNCTION length AS '$className'")
 
     withSQLConf(SQLConf.DEFAULT_CATALOG.key -> "testcat") {

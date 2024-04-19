@@ -522,9 +522,9 @@ CreateNamespace false
 
 
 -- !query
-CREATE FUNCTION IDENTIFIER('ident.' || 'myDoubleAvg') AS 'test.org.apache.spark.sql.MyDoubleAvg'
+CREATE FUNCTION IDENTIFIER('ident.' || 'myDoubleAvg') AS 'org.apache.spark.sql.MyDoubleAvg'
 -- !query analysis
-CreateFunctionCommand spark_catalog.ident.myDoubleAvg, test.org.apache.spark.sql.MyDoubleAvg, false, false, false
+CreateFunctionCommand spark_catalog.ident.myDoubleAvg, org.apache.spark.sql.MyDoubleAvg, false, false, false
 
 
 -- !query
@@ -553,9 +553,9 @@ DropNamespace false, false
 
 
 -- !query
-CREATE TEMPORARY FUNCTION IDENTIFIER('my' || 'DoubleAvg') AS 'test.org.apache.spark.sql.MyDoubleAvg'
+CREATE TEMPORARY FUNCTION IDENTIFIER('my' || 'DoubleAvg') AS 'org.apache.spark.sql.MyDoubleAvg'
 -- !query analysis
-CreateFunctionCommand myDoubleAvg, test.org.apache.spark.sql.MyDoubleAvg, true, false, false
+CreateFunctionCommand myDoubleAvg, org.apache.spark.sql.MyDoubleAvg, true, false, false
 
 
 -- !query
@@ -866,7 +866,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-CREATE TEMPORARY FUNCTION IDENTIFIER('default.my' || 'DoubleAvg') AS 'test.org.apache.spark.sql.MyDoubleAvg'
+CREATE TEMPORARY FUNCTION IDENTIFIER('default.my' || 'DoubleAvg') AS 'org.apache.spark.sql.MyDoubleAvg'
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
@@ -879,8 +879,8 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 1,
-    "stopIndex" : 108,
-    "fragment" : "CREATE TEMPORARY FUNCTION IDENTIFIER('default.my' || 'DoubleAvg') AS 'test.org.apache.spark.sql.MyDoubleAvg'"
+    "stopIndex" : 103,
+    "fragment" : "CREATE TEMPORARY FUNCTION IDENTIFIER('default.my' || 'DoubleAvg') AS 'org.apache.spark.sql.MyDoubleAvg'"
   } ]
 }
 

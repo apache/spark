@@ -572,7 +572,7 @@ class Catalog:
         Examples
         --------
         >>> _ = spark.sql(
-        ...     "CREATE FUNCTION my_func1 AS 'test.org.apache.spark.sql.MyDoubleAvg'")
+        ...     "CREATE FUNCTION my_func1 AS 'org.apache.spark.sql.MyDoubleAvg'")
         >>> spark.catalog.getFunction("my_func1")
         Function(name='my_func1', catalog='spark_catalog', namespace=['default'], ...
 

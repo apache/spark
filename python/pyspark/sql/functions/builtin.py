@@ -19263,7 +19263,7 @@ def call_function(funcName: str, *cols: "ColumnOrName") -> Column:
     +-------+
     |    2.0|
     +-------+
-    >>> _ = spark.sql("CREATE FUNCTION custom_avg AS 'test.org.apache.spark.sql.MyDoubleAvg'")
+    >>> _ = spark.sql("CREATE FUNCTION custom_avg AS 'org.apache.spark.sql.MyDoubleAvg'")
     ... # doctest: +SKIP
     >>> df.select(call_function("custom_avg", col("id"))).show()
     ... # doctest: +SKIP

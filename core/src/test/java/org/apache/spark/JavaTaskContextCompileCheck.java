@@ -19,7 +19,6 @@ package org.apache.spark;
 
 import java.util.Map;
 
-import org.apache.spark.TaskContext;
 import org.apache.spark.resource.ResourceInformation;
 import org.apache.spark.util.TaskCompletionListener;
 import org.apache.spark.util.TaskFailureListener;

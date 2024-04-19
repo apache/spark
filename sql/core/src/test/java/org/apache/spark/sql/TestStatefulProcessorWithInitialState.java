@@ -21,7 +21,6 @@ import java.util.*;
 
 import scala.jdk.javaapi.CollectionConverters;
 
-import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.streaming.*;
 
 /**

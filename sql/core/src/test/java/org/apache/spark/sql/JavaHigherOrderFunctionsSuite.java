@@ -29,9 +29,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import org.apache.spark.sql.Dataset;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.RowFactory;
 import static org.apache.spark.sql.functions.*;
 import org.apache.spark.sql.test.TestSparkSession;
 import org.apache.spark.sql.types.*;

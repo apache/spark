@@ -602,7 +602,7 @@ struct<>
 
 
 -- !query
-CREATE FUNCTION IDENTIFIER('ident.' || 'myDoubleAvg') AS 'test.org.apache.spark.sql.MyDoubleAvg'
+CREATE FUNCTION IDENTIFIER('ident.' || 'myDoubleAvg') AS 'org.apache.spark.sql.MyDoubleAvg'
 -- !query schema
 struct<>
 -- !query output
@@ -614,7 +614,7 @@ DESCRIBE FUNCTION IDENTIFIER('ident.' || 'myDoubleAvg')
 -- !query schema
 struct<function_desc:string>
 -- !query output
-Class: test.org.apache.spark.sql.MyDoubleAvg
+Class: org.apache.spark.sql.MyDoubleAvg
 Function: spark_catalog.ident.mydoubleavg
 Usage: N/A.
 
@@ -644,7 +644,7 @@ struct<>
 
 
 -- !query
-CREATE TEMPORARY FUNCTION IDENTIFIER('my' || 'DoubleAvg') AS 'test.org.apache.spark.sql.MyDoubleAvg'
+CREATE TEMPORARY FUNCTION IDENTIFIER('my' || 'DoubleAvg') AS 'org.apache.spark.sql.MyDoubleAvg'
 -- !query schema
 struct<>
 -- !query output
@@ -993,7 +993,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-CREATE TEMPORARY FUNCTION IDENTIFIER('default.my' || 'DoubleAvg') AS 'test.org.apache.spark.sql.MyDoubleAvg'
+CREATE TEMPORARY FUNCTION IDENTIFIER('default.my' || 'DoubleAvg') AS 'org.apache.spark.sql.MyDoubleAvg'
 -- !query schema
 struct<>
 -- !query output
@@ -1008,8 +1008,8 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 1,
-    "stopIndex" : 108,
-    "fragment" : "CREATE TEMPORARY FUNCTION IDENTIFIER('default.my' || 'DoubleAvg') AS 'test.org.apache.spark.sql.MyDoubleAvg'"
+    "stopIndex" : 103,
+    "fragment" : "CREATE TEMPORARY FUNCTION IDENTIFIER('default.my' || 'DoubleAvg') AS 'org.apache.spark.sql.MyDoubleAvg'"
   } ]
 }
 

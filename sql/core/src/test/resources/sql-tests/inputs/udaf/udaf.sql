@@ -7,7 +7,7 @@ CREATE OR REPLACE TEMPORARY VIEW t1 AS SELECT * FROM VALUES
 (1), (2), (3), (4)
 as t1(int_col1);
 
-CREATE FUNCTION myDoubleAvg AS 'test.org.apache.spark.sql.MyDoubleAvg';
+CREATE FUNCTION myDoubleAvg AS 'org.apache.spark.sql.MyDoubleAvg';
 
 SELECT default.myDoubleAvg(int_col1) as my_avg from t1;
 

@@ -413,26 +413,26 @@ class BaseUDFTestsMixin(object):
     @unittest.skipIf(not test_compiled, test_not_compiled_message)  # type: ignore
     def test_register_java_function(self):
         self.spark.udf.registerJavaFunction(
-            "javaStringLength", "test.org.apache.spark.sql.JavaStringLength", IntegerType()
+            "javaStringLength", "org.apache.spark.sql.JavaStringLength", IntegerType()
         )
         [value] = self.spark.sql("SELECT javaStringLength('test')").first()
         self.assertEqual(value, 4)
 
         self.spark.udf.registerJavaFunction(
-            "javaStringLength2", "test.org.apache.spark.sql.JavaStringLength"
+            "javaStringLength2", "org.apache.spark.sql.JavaStringLength"
         )
         [value] = self.spark.sql("SELECT javaStringLength2('test')").first()
         self.assertEqual(value, 4)
 
         self.spark.udf.registerJavaFunction(
-            "javaStringLength3", "test.org.apache.spark.sql.JavaStringLength", "integer"
+            "javaStringLength3", "org.apache.spark.sql.JavaStringLength", "integer"
         )
         [value] = self.spark.sql("SELECT javaStringLength3('test')").first()
         self.assertEqual(value, 4)
 
     @unittest.skipIf(not test_compiled, test_not_compiled_message)  # type: ignore
     def test_register_java_udaf(self):
-        self.spark.udf.registerJavaUDAF("javaUDAF", "test.org.apache.spark.sql.MyDoubleAvg")
+        self.spark.udf.registerJavaUDAF("javaUDAF", "org.apache.spark.sql.MyDoubleAvg")
         df = self.spark.createDataFrame([(1, "a"), (2, "b"), (3, "a")], ["id", "name"])
         df.createOrReplaceTempView("df")
         row = self.spark.sql(

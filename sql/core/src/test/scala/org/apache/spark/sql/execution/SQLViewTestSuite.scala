@@ -267,8 +267,8 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
   }
 
   test("SPARK-33692: view should use captured catalog and namespace to lookup function") {
-    val avgFuncClass = "test.org.apache.spark.sql.MyDoubleAvg"
-    val sumFuncClass = "test.org.apache.spark.sql.MyDoubleSum"
+    val avgFuncClass = "org.apache.spark.sql.MyDoubleAvg"
+    val sumFuncClass = "org.apache.spark.sql.MyDoubleSum"
     val functionName = "test_udf"
     withTempDatabase { dbName =>
       withUserDefinedFunction(
@@ -672,7 +672,7 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
               "tempObj" -> "VIEW",
               "tempObjName" -> "`v2`"))
           val tempFunctionName = "temp_udf"
-          val functionClass = "test.org.apache.spark.sql.MyDoubleAvg"
+          val functionClass = "org.apache.spark.sql.MyDoubleAvg"
           withUserDefinedFunction(tempFunctionName -> true) {
             sql(s"CREATE TEMPORARY FUNCTION $tempFunctionName AS '$functionClass'")
             checkError(

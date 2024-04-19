@@ -42,7 +42,6 @@ import org.junit.jupiter.api.Test;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.*;
-import org.apache.spark.sql.*;
 import static org.apache.spark.sql.RowFactory.create;
 import org.apache.spark.sql.catalyst.encoders.OuterScopes;
 import org.apache.spark.sql.catalyst.expressions.GenericRow;

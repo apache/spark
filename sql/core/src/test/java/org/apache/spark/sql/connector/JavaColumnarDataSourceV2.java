@@ -20,7 +20,6 @@ package org.apache.spark.sql.connector;
 import java.io.IOException;
 
 import org.apache.spark.sql.catalyst.InternalRow;
-import org.apache.spark.sql.connector.TestingV2Source;
 import org.apache.spark.sql.connector.catalog.Table;
 import org.apache.spark.sql.connector.read.InputPartition;
 import org.apache.spark.sql.connector.read.PartitionReader;
@@ -31,7 +30,6 @@ import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 import org.apache.spark.sql.vectorized.ColumnVector;
 import org.apache.spark.sql.vectorized.ColumnarBatch;
-
 
 public class JavaColumnarDataSourceV2 implements TestingV2Source {
 

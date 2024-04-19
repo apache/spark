@@ -23,9 +23,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import scala.Tuple2;
 
-import org.apache.spark.sql.Dataset;
-import org.apache.spark.sql.KeyValueGroupedDataset;
-
 /**
  * Suite that replicates tests in JavaDatasetAggregatorSuite using lambda syntax.
  */

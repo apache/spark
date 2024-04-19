@@ -10,7 +10,7 @@ struct<>
 
 
 -- !query
-CREATE FUNCTION myDoubleAvg AS 'test.org.apache.spark.sql.MyDoubleAvg'
+CREATE FUNCTION myDoubleAvg AS 'org.apache.spark.sql.MyDoubleAvg'
 -- !query schema
 struct<>
 -- !query output

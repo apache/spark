@@ -30,9 +30,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.RowFactory;
-
 public class JavaRowSuite {
   private byte byteValue;
   private short shortValue;

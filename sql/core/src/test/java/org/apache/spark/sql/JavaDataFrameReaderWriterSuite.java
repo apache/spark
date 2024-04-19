@@ -20,8 +20,6 @@ package org.apache.spark.sql;
 import java.io.File;
 import java.util.HashMap;
 
-import org.apache.spark.sql.SaveMode;
-import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.test.TestSparkSession;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.util.Utils;

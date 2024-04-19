@@ -2317,7 +2317,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         stop = 27))
 
     withUserDefinedFunction("func1" -> true) {
-      sql("CREATE TEMPORARY FUNCTION func1 AS 'test.org.apache.spark.sql.MyDoubleAvg'")
+      sql("CREATE TEMPORARY FUNCTION func1 AS 'org.apache.spark.sql.MyDoubleAvg'")
       checkError(
         exception = intercept[AnalysisException] {
           sql("REFRESH FUNCTION func1")
@@ -2346,7 +2346,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       )
       assert(!spark.sessionState.catalog.isRegisteredFunction(func))
 
-      sql("CREATE FUNCTION func1 AS 'test.org.apache.spark.sql.MyDoubleAvg'")
+      sql("CREATE FUNCTION func1 AS 'org.apache.spark.sql.MyDoubleAvg'")
       assert(!spark.sessionState.catalog.isRegisteredFunction(func))
       sql("REFRESH FUNCTION func1")
       assert(spark.sessionState.catalog.isRegisteredFunction(func))
@@ -2396,7 +2396,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
   test("REFRESH FUNCTION persistent function with the same name as the built-in function") {
     withUserDefinedFunction("default.rand" -> false) {
       val rand = FunctionIdentifier("rand", Some("default"))
-      sql("CREATE FUNCTION rand AS 'test.org.apache.spark.sql.MyDoubleAvg'")
+      sql("CREATE FUNCTION rand AS 'org.apache.spark.sql.MyDoubleAvg'")
       assert(!spark.sessionState.catalog.isRegisteredFunction(rand))
       checkError(
         exception = intercept[AnalysisException] {

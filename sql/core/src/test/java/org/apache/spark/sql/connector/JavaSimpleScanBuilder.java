@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.connector;
 
-import org.apache.spark.sql.connector.TestingV2Source;
 import org.apache.spark.sql.connector.read.Batch;
 import org.apache.spark.sql.connector.read.PartitionReaderFactory;
 import org.apache.spark.sql.connector.read.Scan;

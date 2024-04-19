@@ -35,10 +35,6 @@ import java.util.concurrent.*;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-import org.apache.spark.Partitioner;
-import org.apache.spark.SparkConf;
-import org.apache.spark.TaskContext;
-import org.apache.spark.TaskContext$;
 import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;

@@ -20,7 +20,6 @@ package org.apache.spark.sql.connector;
 import java.util.EnumSet;
 import java.util.Set;
 
-import org.apache.spark.sql.connector.TestingV2Source;
 import org.apache.spark.sql.connector.catalog.SupportsRead;
 import org.apache.spark.sql.connector.catalog.Table;
 import org.apache.spark.sql.connector.catalog.TableCapability;

@@ -93,12 +93,12 @@ DROP SCHEMA IDENTIFIER('id' || 'ent');
 
 -- Function
 CREATE SCHEMA ident;
-CREATE FUNCTION IDENTIFIER('ident.' || 'myDoubleAvg') AS 'test.org.apache.spark.sql.MyDoubleAvg';
+CREATE FUNCTION IDENTIFIER('ident.' || 'myDoubleAvg') AS 'org.apache.spark.sql.MyDoubleAvg';
 DESCRIBE FUNCTION IDENTIFIER('ident.' || 'myDoubleAvg');
 REFRESH FUNCTION IDENTIFIER('ident.' || 'myDoubleAvg');
 DROP FUNCTION IDENTIFIER('ident.' || 'myDoubleAvg');
 DROP SCHEMA ident;
-CREATE TEMPORARY FUNCTION IDENTIFIER('my' || 'DoubleAvg') AS 'test.org.apache.spark.sql.MyDoubleAvg';
+CREATE TEMPORARY FUNCTION IDENTIFIER('my' || 'DoubleAvg') AS 'org.apache.spark.sql.MyDoubleAvg';
 DROP TEMPORARY FUNCTION IDENTIFIER('my' || 'DoubleAvg');
 
 -- IDENTIFIER + variable
@@ -128,7 +128,7 @@ COMMENT ON TABLE IDENTIFIER('a.b.c.d') IS 'hello';
 VALUES(IDENTIFIER(1)());
 VALUES(IDENTIFIER('a.b.c.d')());
 
-CREATE TEMPORARY FUNCTION IDENTIFIER('default.my' || 'DoubleAvg') AS 'test.org.apache.spark.sql.MyDoubleAvg';
+CREATE TEMPORARY FUNCTION IDENTIFIER('default.my' || 'DoubleAvg') AS 'org.apache.spark.sql.MyDoubleAvg';
 DROP TEMPORARY FUNCTION IDENTIFIER('default.my' || 'DoubleAvg');
 CREATE TEMPORARY VIEW IDENTIFIER('default.v')(c1) AS VALUES(1);
 

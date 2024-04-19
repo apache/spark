@@ -13,15 +13,15 @@ as t1(int_col1), false, true, LocalTempView, true
 
 
 -- !query
-CREATE FUNCTION myDoubleAvg AS 'test.org.apache.spark.sql.MyDoubleAvg'
+CREATE FUNCTION myDoubleAvg AS 'org.apache.spark.sql.MyDoubleAvg'
 -- !query analysis
-CreateFunctionCommand spark_catalog.default.myDoubleAvg, test.org.apache.spark.sql.MyDoubleAvg, false, false, false
+CreateFunctionCommand spark_catalog.default.myDoubleAvg, org.apache.spark.sql.MyDoubleAvg, false, false, false
 
 
 -- !query
 SELECT default.myDoubleAvg(udf(int_col1)) as my_avg, udf(default.myDoubleAvg(udf(int_col1))) as my_avg2, udf(default.myDoubleAvg(int_col1)) as my_avg3 from t1
 -- !query analysis
-Aggregate [spark_catalog.default.mydoubleavg(cast(cast(udf(cast(int_col1#x as string)) as int) as double), test.org.apache.spark.sql.MyDoubleAvg@xxxxxxxx, 0, 0, Some(spark_catalog.default.mydoubleavg)) AS my_avg#x, cast(udf(cast(spark_catalog.default.mydoubleavg(cast(cast(udf(cast(int_col1#x as string)) as int) as double), test.org.apache.spark.sql.MyDoubleAvg@xxxxxxxx, 0, 0, Some(spark_catalog.default.mydoubleavg)) as string)) as double) AS my_avg2#x, cast(udf(cast(spark_catalog.default.mydoubleavg(cast(int_col1#x as double), test.org.apache.spark.sql.MyDoubleAvg@xxxxxxxx, 0, 0, Some(spark_catalog.default.mydoubleavg)) as string)) as double) AS my_avg3#x]
+Aggregate [spark_catalog.default.mydoubleavg(cast(cast(udf(cast(int_col1#x as string)) as int) as double), org.apache.spark.sql.MyDoubleAvg@xxxxxxxx, 0, 0, Some(spark_catalog.default.mydoubleavg)) AS my_avg#x, cast(udf(cast(spark_catalog.default.mydoubleavg(cast(cast(udf(cast(int_col1#x as string)) as int) as double), org.apache.spark.sql.MyDoubleAvg@xxxxxxxx, 0, 0, Some(spark_catalog.default.mydoubleavg)) as string)) as double) AS my_avg2#x, cast(udf(cast(spark_catalog.default.mydoubleavg(cast(int_col1#x as double), org.apache.spark.sql.MyDoubleAvg@xxxxxxxx, 0, 0, Some(spark_catalog.default.mydoubleavg)) as string)) as double) AS my_avg3#x]
 +- SubqueryAlias t1
    +- View (`t1`, [int_col1#x])
       +- Project [cast(int_col1#x as int) AS int_col1#x]

@@ -22,13 +22,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import org.apache.spark.streaming.Duration;
-import org.apache.spark.streaming.JavaCheckpointTestUtils;
-import org.apache.spark.streaming.JavaTestUtils;
-import org.apache.spark.streaming.LocalJavaStreamingContext;
-import org.apache.spark.streaming.Seconds;
-import org.apache.spark.streaming.StreamingContextState;
-import org.apache.spark.streaming.StreamingContextSuite;
 import scala.Tuple2;
 
 import org.apache.hadoop.conf.Configuration;

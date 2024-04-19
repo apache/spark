@@ -30,7 +30,6 @@ import org.junit.jupiter.api.*;
 
 import org.apache.spark.api.java.function.MapFunction;
 import org.apache.spark.api.java.function.ReduceFunction;
-import org.apache.spark.sql.*;
 import org.apache.spark.sql.catalyst.expressions.GenericRow;
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.catalyst.util.TimestampFormatter;

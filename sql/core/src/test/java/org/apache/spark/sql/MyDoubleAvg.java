@@ -20,7 +20,6 @@ package org.apache.spark.sql;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.spark.sql.Row;
 import org.apache.spark.sql.expressions.MutableAggregationBuffer;
 import org.apache.spark.sql.expressions.UserDefinedAggregateFunction;
 import org.apache.spark.sql.types.DataType;

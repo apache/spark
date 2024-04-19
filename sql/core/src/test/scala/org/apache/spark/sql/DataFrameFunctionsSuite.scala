@@ -6032,7 +6032,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         testData2.select(call_function("`default.custom_func`", $"a")),
         Seq(Row(3), Row(3), Row(4), Row(4), Row(5), Row(5)))
 
-      sql("CREATE FUNCTION custom_sum AS 'test.org.apache.spark.sql.MyDoubleSum'")
+      sql("CREATE FUNCTION custom_sum AS 'org.apache.spark.sql.MyDoubleSum'")
       checkAnswer(
         testData2.select(
           call_function("custom_sum", $"a"),
