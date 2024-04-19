@@ -335,7 +335,7 @@ class VariantUtils:
         raise PySparkValueError(error_class="MALFORMED_VARIANT")
 
     @classmethod
-    def _to_json(cls, value: bytes, metadata: bytes, pos: int, zone_id: str) -> Any:
+    def _to_json(cls, value: bytes, metadata: bytes, pos: int, zone_id: str) -> str:
         variant_type = cls._get_type(value, pos)
         if variant_type == dict:
 
