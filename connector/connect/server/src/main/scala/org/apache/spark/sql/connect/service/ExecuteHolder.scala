@@ -58,7 +58,7 @@ private[connect] class ExecuteHolder(
    * Tag that is set for this execution on SparkContext, via SparkContext.addJobTag. Used
    * (internally) for cancellation of the Spark Jobs ran by this execution.
    */
-  val jobTag = ExecuteJobTag(sessionHolder.userId, sessionHolder.sessionId, operationId)
+  val jobTag = ExecuteJobTag(sessionHolder.sessionId, sessionHolder.userId, operationId)
 
   /**
    * Tags set by Spark Connect client users via SparkSession.addTag. Used to identify and group
