@@ -100,14 +100,10 @@ object HiveSerDe {
    * Get serde class from format classes
    */
   def getSerDeFromFormatClasses(inputFormat: String, outputFormat: String): Option[String] = {
-    if (inputFormat.isEmpty || outputFormat.isEmpty) {
-      None
-    } else {
-      serdeMap.find {
-        case (_, serDe) => serDe.inputFormat.get.equalsIgnoreCase(inputFormat) &&
-          serDe.outputFormat.get.equalsIgnoreCase(outputFormat)
-      }.flatMap(_._2.serde).orElse(Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
-    }
+    serdeMap.find {
+      case (_, serDe) => serDe.inputFormat.get.equalsIgnoreCase(inputFormat) &&
+        serDe.outputFormat.get.equalsIgnoreCase(outputFormat)
+    }.flatMap(_._2.serde).orElse(Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
   }
 
   /**
