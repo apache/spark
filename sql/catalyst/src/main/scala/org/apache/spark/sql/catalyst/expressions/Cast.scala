@@ -25,6 +25,7 @@ import org.apache.spark.{QueryContext, SparkArithmeticException, SparkIllegalArg
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.ToStringBase.BinaryFormatter
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
@@ -575,7 +576,7 @@ case class Cast(
   // notation if an exponent is needed.
   override protected def useDecimalPlainString: Boolean = ansiEnabled
 
-  override protected def useHexFormatForBinary: Boolean = false
+  override protected val binaryFormatter: BinaryFormatter = UTF8String.fromBytes
 
   // The class name of `DateTimeUtils`
   protected def dateTimeUtilsCls: String = DateTimeUtils.getClass.getName.stripSuffix("$")

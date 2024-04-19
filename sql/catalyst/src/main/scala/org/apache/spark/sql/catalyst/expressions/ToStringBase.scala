@@ -20,10 +20,13 @@ package org.apache.spark.sql.catalyst.expressions
 import java.time.ZoneOffset
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.ToStringBase.BinaryFormatter
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.{ArrayData, DateFormatter, IntervalStringStyles, IntervalUtils, MapData, SparkStringUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{ArrayData, DateFormatter, IntervalStringStyles, IntervalUtils, MapData, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.BinaryOutputStyle
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -44,7 +47,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
 
   protected def useDecimalPlainString: Boolean
 
-  protected def useHexFormatForBinary: Boolean
+  protected def binaryFormatter: BinaryFormatter
 
   // Makes the function accept Any type input by doing `asInstanceOf[T]`.
   @inline private def acceptAny[T](func: T => UTF8String): Any => UTF8String =
@@ -54,10 +57,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
   protected final def castToString(from: DataType): Any => UTF8String = from match {
     case CalendarIntervalType =>
       acceptAny[CalendarInterval](i => UTF8String.fromString(i.toString))
-    case BinaryType if useHexFormatForBinary =>
-      acceptAny[Array[Byte]](binary => UTF8String.fromString(SparkStringUtils.getHexString(binary)))
-    case BinaryType =>
-      acceptAny[Array[Byte]](UTF8String.fromBytes)
+    case BinaryType => acceptAny[Array[Byte]](binaryFormatter)
     case DateType =>
       acceptAny[Int](d => UTF8String.fromString(dateFormatter.format(d)))
     case TimestampType =>
@@ -172,12 +172,11 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
   protected final def castToStringCode(
       from: DataType, ctx: CodegenContext): (ExprValue, ExprValue) => Block = {
     from match {
-      case BinaryType if useHexFormatForBinary =>
-        (c, evPrim) =>
-          val utilCls = SparkStringUtils.getClass.getName.stripSuffix("$")
-          code"$evPrim = UTF8String.fromString($utilCls.getHexString($c));"
       case BinaryType =>
-        (c, evPrim) => code"$evPrim = UTF8String.fromBytes($c);"
+        val bf = JavaCode.global(
+          ctx.addReferenceObj("binaryFormatter", binaryFormatter),
+          classOf[BinaryFormatter])
+        (c, evPrim) => code"$evPrim = $bf.apply($c);"
       case DateType =>
         val df = JavaCode.global(
           ctx.addReferenceObj("dateFormatter", dateFormatter),
@@ -414,3 +413,22 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
      """.stripMargin
   }
 }
+
+object ToStringBase {
+  type BinaryFormatter = Array[Byte] => UTF8String
+
+  def getBinaryFormatter: BinaryFormatter = {
+    val style = SQLConf.get.getConf(SQLConf.BINARY_OUTPUT_STYLE)
+    BinaryOutputStyle.withName(style) match {
+      case BinaryOutputStyle.UTF8 =>
+        array => UTF8String.fromBytes(array)
+      case BinaryOutputStyle.BASIC => array =>
+        UTF8String.fromString(array.mkString("[", ", ", "]"))
+      case BinaryOutputStyle.BASE64 => array =>
+        UTF8String.fromString(java.util.Base64.getEncoder.withoutPadding().encodeToString(array))
+      case BinaryOutputStyle.HEX =>
+        array => Hex.hex(array)
+    }
+  }
+}
+

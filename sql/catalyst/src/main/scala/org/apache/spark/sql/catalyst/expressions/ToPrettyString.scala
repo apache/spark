@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.ToStringBase.BinaryFormatter
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, FalseLiteral}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types.{DataType, StringType}
@@ -49,7 +50,7 @@ case class ToPrettyString(child: Expression, timeZoneId: Option[String] = None)
 
   override protected def useDecimalPlainString: Boolean = true
 
-  override protected def useHexFormatForBinary: Boolean = true
+  override protected val binaryFormatter: BinaryFormatter = ToStringBase.getBinaryFormatter
 
   private[this] lazy val castFunc: Any => UTF8String = castToString(child.dataType)
 

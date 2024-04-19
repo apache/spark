@@ -1495,6 +1495,43 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  /**
+   * Output style for binary data.
+   */
+  object BinaryOutputStyle extends Enumeration {
+    type BinaryOutputStyle = Value
+    val
+    /**
+     * Output as UTF-8 string.
+     * [83, 112, 97, 114, 107] -> "Spark"
+     */
+    UTF8,
+    /**
+     * Output as comma separated byte array string.
+     * [83, 112, 97, 114, 107] -> [83, 112, 97, 114, 107]
+     */
+    BASIC,
+    /**
+     * Output as base64 encoded string.
+     * [83, 112, 97, 114, 107] -> U3Bhcmsg
+     */
+    BASE64,
+    /**
+     * Output as hex string.
+     * [83, 112, 97, 114, 107] -> 537061726b
+     */
+    HEX = Value
+  }
+
+  val BINARY_OUTPUT_STYLE = buildConf("spark.sql.binaryOutputStyle")
+    .doc("The output style used display binary data. Valid values are 'basic', " +
+      "'base64', 'hex', and 'utf8'.")
+    .version("4.0.0")
+    .stringConf
+    .transform(_.toUpperCase(Locale.ROOT))
+    .checkValues(BinaryOutputStyle.values.map(_.toString))
+    .createWithDefault(BinaryOutputStyle.UTF8.toString)
+
   val PARTITION_COLUMN_TYPE_INFERENCE =
     buildConf("spark.sql.sources.partitionColumnTypeInference.enabled")
       .doc("When true, automatically infer the data types for partitioned columns.")
