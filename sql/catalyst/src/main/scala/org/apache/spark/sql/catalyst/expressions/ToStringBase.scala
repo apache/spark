@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.ToStringBase.BinaryFormatter
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.{ArrayData, DateFormatter, IntervalStringStyles, IntervalUtils, MapData, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{ArrayData, DateFormatter, IntervalStringStyles, IntervalUtils, MapData, SparkStringUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.BinaryOutputStyle
@@ -428,6 +428,8 @@ object ToStringBase {
         UTF8String.fromString(java.util.Base64.getEncoder.withoutPadding().encodeToString(array))
       case BinaryOutputStyle.HEX =>
         array => Hex.hex(array)
+      case BinaryOutputStyle.HEX_DISCRETE =>
+        array => UTF8String.fromString(SparkStringUtils.getHexString(array))
     }
   }
 }

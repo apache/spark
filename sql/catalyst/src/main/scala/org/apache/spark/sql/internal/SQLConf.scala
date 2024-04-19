@@ -1520,12 +1520,17 @@ object SQLConf {
      * Output as hex string.
      * [83, 112, 97, 114, 107] -> 537061726b
      */
-    HEX = Value
+    HEX,
+    /**
+     * Output as discrete hex string.
+     * [83, 112, 97, 114, 107] -> [53 70 61 72 6b]
+     */
+    HEX_DISCRETE = Value
   }
 
   val BINARY_OUTPUT_STYLE = buildConf("spark.sql.binaryOutputStyle")
-    .doc("The output style used display binary data. Valid values are 'basic', " +
-      "'base64', 'hex', and 'utf8'.")
+    .doc("The output style used display binary data. Valid values are 'UTF8', " +
+      "'BASIC', 'BASE64', 'HEX', and 'HEX_DISCRETE'.")
     .version("4.0.0")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
