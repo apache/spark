@@ -64,10 +64,6 @@ def main(infile: IO, outfile: IO) -> None:
 
     # TODO(SPARK-44461): Enable Process Isolation
 
-    write_int(0, outfile)  # Indicate successful initialization
-
-    outfile.flush()
-
     log_name = "Streaming ForeachBatch worker"
 
     def process(df_id, batch_id):  # type: ignore[no-untyped-def]
@@ -79,6 +75,8 @@ def main(infile: IO, outfile: IO) -> None:
 
     try:
         func = worker.read_command(pickle_ser, infile)
+        write_int(0, outfile)
+        outfile.flush()
         while True:
             df_ref_id = utf8_deserializer.loads(infile)
             batch_id = read_long(infile)
