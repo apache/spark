@@ -25,6 +25,7 @@ from array import array
 from typing import Any, Callable, Dict, List, Tuple
 from pyspark.errors import PySparkValueError
 
+
 class VariantUtils:
     """
     A utility class for VariantVal.
@@ -109,9 +110,10 @@ class VariantUtils:
 
     U32_SIZE = 4
 
-    EPOCH = datetime.datetime(year = 1970, month = 1, day = 1, hour = 0, minute = 0, second = 0,
-        tzinfo = datetime.timezone.utc)
-    EPOCH_NTZ = datetime.datetime(year = 1970, month = 1, day = 1, hour = 0, minute = 0, second = 0)
+    EPOCH = datetime.datetime(
+        year=1970, month=1, day=1, hour=0, minute=0, second=0, tzinfo=datetime.timezone.utc
+    )
+    EPOCH_NTZ = datetime.datetime(year=1970, month=1, day=1, hour=0, minute=0, second=0)
 
     # The valid zone ids can be found here:
     # https://gist.github.com/heyalexej/8bf688fd67d7199be4a1682b3eec7568
@@ -207,9 +209,7 @@ class VariantUtils:
             raise PySparkValueError(error_class="MALFORMED_VARIANT")
         if type_info == VariantUtils.DATE:
             days_since_epoch = cls._read_long(value, pos + 1, 4, signed=True)
-            return datetime.date.fromordinal(VariantUtils.EPOCH.toordinal() +
-                days_since_epoch
-            )
+            return datetime.date.fromordinal(VariantUtils.EPOCH.toordinal() + days_since_epoch)
         raise PySparkValueError(error_class="MALFORMED_VARIANT")
 
     @classmethod
@@ -220,12 +220,14 @@ class VariantUtils:
             raise PySparkValueError(error_class="MALFORMED_VARIANT")
         if type_info == VariantUtils.TIMESTAMP_NTZ:
             microseconds_since_epoch = cls._read_long(value, pos + 1, 8, signed=True)
-            return (VariantUtils.EPOCH_NTZ + datetime.timedelta(
-                microseconds = microseconds_since_epoch))
+            return VariantUtils.EPOCH_NTZ + datetime.timedelta(
+                microseconds=microseconds_since_epoch
+            )
         if type_info == VariantUtils.TIMESTAMP:
             microseconds_since_epoch = cls._read_long(value, pos + 1, 8, signed=True)
-            return (VariantUtils.EPOCH + datetime.timedelta(
-                microseconds = microseconds_since_epoch)).astimezone(pytz.timezone(zone_id))
+            return (
+                VariantUtils.EPOCH + datetime.timedelta(microseconds=microseconds_since_epoch)
+            ).astimezone(pytz.timezone(zone_id))
         raise PySparkValueError(error_class="MALFORMED_VARIANT")
 
     @classmethod
@@ -350,7 +352,7 @@ class VariantUtils:
             def handle_array(value_pos_list: List[int]) -> str:
                 value_list = [
                     cls._to_json(value, metadata, value_pos, zone_id)
-                        for value_pos in value_pos_list
+                    for value_pos in value_pos_list
                 ]
                 return "[" + ",".join(value_list) + "]"
 
@@ -365,7 +367,7 @@ class VariantUtils:
                 return json.dumps(value)
             if type(value) == bytes:
                 # decoding simply converts byte array to string
-                return '"' + base64.b64encode(value).decode('utf-8') + '"'
+                return '"' + base64.b64encode(value).decode("utf-8") + '"'
             if type(value) == datetime.date:
                 return str(value)
             return str(value)
@@ -393,11 +395,12 @@ class VariantUtils:
 
             return cls._handle_array(value, pos, handle_array)
         else:
-            return cls._get_scalar(variant_type, value, metadata, pos, zone_id = "UTC")
+            return cls._get_scalar(variant_type, value, metadata, pos, zone_id="UTC")
 
     @classmethod
-    def _get_scalar(cls, variant_type: Any, value: bytes, metadata: bytes, pos: int,
-                    zone_id: str) -> Any:
+    def _get_scalar(
+        cls, variant_type: Any, value: bytes, metadata: bytes, pos: int, zone_id: str
+    ) -> Any:
         if isinstance(None, variant_type):
             return None
         elif variant_type == bool:

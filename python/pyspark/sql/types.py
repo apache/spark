@@ -1534,6 +1534,7 @@ class VariantVal:
         """
         return VariantUtils.to_json(self.value, self.metadata, zone_id)
 
+
 _atomic_types: List[Type[DataType]] = [
     StringType,
     CharType,
