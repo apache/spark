@@ -523,6 +523,12 @@ class SimpleDataSourceStreamReader(ABC):
     require planning data partition. Also, the read api of :class:`SimpleDataSourceStreamReader`
     allows reading data and planning the latest offset at the same time.
 
+    Because  :class:`SimpleDataSourceStreamReader` read records in Spark driver node to determine
+    end offset of each batch without partitioning, it is only supposed to be used in
+    lightweight use cases where input rate and batch size is small.
+    Use :class:`DataSourceStreamReader` when read throughput is high and can't be handled
+    by a single process.
+
     .. versionadded: 4.0.0
     """
 
