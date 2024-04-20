@@ -2075,7 +2075,6 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     // This also applies to Aggregate.
     case f @ Filter(condition, project @ Project(fields, grandChild))
       if fields.forall(_.deterministic) && canPushThroughCondition(grandChild, condition) =>
-      println(s"Attempting push down of $condition through $project")
       val aliasMap = getAliasMap(project)
       // Projection aliases that the filter references
       val filterAliasesBuf = mutable.ArrayBuffer.empty[Alias]
@@ -2086,7 +2085,6 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       val (replaced, usedAliases) = replaceAliasWhileTracking(condition, aliasMap)
       // If nothing changes there's no projection elements used and there for also no
       // double eval to be avoided & we don't need to move any project elements around.
-      println(s"Replaced $condition with $replaced using $usedAliases")
       if (condition != replaced) {
         usedAliases.iterator.foreach {
           e: (Attribute, Alias) =>
@@ -2098,7 +2096,6 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       }
       val filterAliases = filterAliasesBuf.toArray.toSeq
 
-      println(s"Pushing $condition left behind $leftBehindAliases and used $filterAliases")
       // If there are no filter aliases then we just push the filter through as-is
       if (filterAliases.isEmpty) {
         project.copy(child = f.copy(child = grandChild))
@@ -2109,8 +2106,12 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
           val replaced = replaceAlias(cond, aliasMap)
           if (cond == replaced) {
-            // If nothing changes this element can safely be pushed past the projection since
-            // it does not depend on any alias introduced by the projection.
+            // If nothing changes or the filter we can push it
+            true
+          } else if (replaced.expectedCost < 100) {
+            // If it's cheap we can push it because it might eliminate more data quickly and
+            // it may also be something which could be evaluated at the storage layer.
+            // We may wish to improve this heuristic in the future.
             true
           } else {
             false
