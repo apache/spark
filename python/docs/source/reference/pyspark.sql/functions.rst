@@ -538,7 +538,7 @@ JSON Functions
 
 
 VARIANT Functions
---------------
+-----------------
 .. autosummary::
     :toctree: api/
 
