@@ -57,7 +57,9 @@ public final class CollationSupport {
       return l.contains(r);
     }
     public static boolean execLowercase(final UTF8String l, final UTF8String r) {
+      // checkstyle.off: RegexpSinglelineJava
       return l.toLowerCase().contains(r.toLowerCase());
+      // checkstyle.on: RegexpSinglelineJava
     }
     public static boolean execICU(final UTF8String l, final UTF8String r,
         final int collationId) {
@@ -95,7 +97,9 @@ public final class CollationSupport {
       return l.startsWith(r);
     }
     public static boolean execLowercase(final UTF8String l, final UTF8String r) {
+      // checkstyle.off: RegexpSinglelineJava
       return l.toLowerCase().startsWith(r.toLowerCase());
+      // checkstyle.on: RegexpSinglelineJava
     }
     public static boolean execICU(final UTF8String l, final UTF8String r,
         final int collationId) {
@@ -132,7 +136,9 @@ public final class CollationSupport {
       return l.endsWith(r);
     }
     public static boolean execLowercase(final UTF8String l, final UTF8String r) {
+      // checkstyle.off: RegexpSinglelineJava
       return l.toLowerCase().endsWith(r.toLowerCase());
+      // checkstyle.on: RegexpSinglelineJava
     }
     public static boolean execICU(final UTF8String l, final UTF8String r,
         final int collationId) {

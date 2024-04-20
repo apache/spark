@@ -23,6 +23,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
@@ -171,7 +172,7 @@ public class GetColumnsOperation extends MetadataOperation {
           List<SQLPrimaryKey> primaryKeys = metastoreClient.getPrimaryKeys(new PrimaryKeysRequest(dbName, table.getTableName()));
           Set<String> pkColNames = new HashSet<>();
           for(SQLPrimaryKey key : primaryKeys) {
-            pkColNames.add(key.getColumn_name().toLowerCase());
+            pkColNames.add(key.getColumn_name().toLowerCase(Locale.ROOT));
           }
           for (ColumnDescriptor column : schema.getColumnDescriptors()) {
             if (columnPattern != null && !columnPattern.matcher(column.getName()).matches()) {
@@ -188,15 +189,16 @@ public class GetColumnsOperation extends MetadataOperation {
                 null, // BUFFER_LENGTH, unused
                 column.getTypeDescriptor().getDecimalDigits(), // DECIMAL_DIGITS
                 column.getType().getNumPrecRadix(), // NUM_PREC_RADIX
-                pkColNames.contains(column.getName().toLowerCase()) ? DatabaseMetaData.columnNoNulls
-                    : DatabaseMetaData.columnNullable, // NULLABLE
+                pkColNames.contains(column.getName().toLowerCase(Locale.ROOT)) ?
+                  DatabaseMetaData.columnNoNulls : DatabaseMetaData.columnNullable, // NULLABLE
                 column.getComment(), // REMARKS
                 null, // COLUMN_DEF
                 null, // SQL_DATA_TYPE
                 null, // SQL_DATETIME_SUB
                 null, // CHAR_OCTET_LENGTH
                 column.getOrdinalPosition(), // ORDINAL_POSITION
-                pkColNames.contains(column.getName().toLowerCase()) ? "NO" : "YES", // IS_NULLABLE
+                pkColNames.contains(column.getName().toLowerCase(Locale.ROOT)) ?
+                  "NO" : "YES", // IS_NULLABLE
                 null, // SCOPE_CATALOG
                 null, // SCOPE_SCHEMA
                 null, // SCOPE_TABLE

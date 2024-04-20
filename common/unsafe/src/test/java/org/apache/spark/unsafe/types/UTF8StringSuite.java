@@ -133,10 +133,12 @@ public class UTF8StringSuite {
   protected static void testUpperandLower(String upper, String lower) {
     UTF8String us = fromString(upper);
     UTF8String ls = fromString(lower);
+    // checkstyle.off: RegexpSinglelineJava
     assertEquals(ls, us.toLowerCase());
     assertEquals(us, ls.toUpperCase());
     assertEquals(us, us.toUpperCase());
     assertEquals(ls, ls.toLowerCase());
+    // checkstyle.on: RegexpSinglelineJava
   }
 
   @Test

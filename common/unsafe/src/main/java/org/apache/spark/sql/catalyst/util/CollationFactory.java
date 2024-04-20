@@ -165,7 +165,9 @@ public final class CollationFactory {
       null,
       UTF8String::compareLowerCase,
       "1.0",
+      // checkstyle.off: RegexpSinglelineJava
       (s) -> (long)s.toLowerCase().hashCode(),
+      // checkstyle.on: RegexpSinglelineJava
       false,
       false,
       true);
@@ -206,7 +208,7 @@ public final class CollationFactory {
    * Returns if the given collationName is valid one.
    */
   public static boolean isValidCollation(String collationName) {
-    return collationNameToIdMap.containsKey(collationName.toUpperCase());
+    return collationNameToIdMap.containsKey(collationName.toUpperCase(Locale.ROOT));
   }
 
   /**
@@ -215,7 +217,7 @@ public final class CollationFactory {
   public static String getClosestCollation(String collationName) {
     Collation suggestion = Collections.min(List.of(collationTable), Comparator.comparingInt(
             c -> UTF8String.fromString(c.collationName).levenshteinDistance(
-                    UTF8String.fromString(collationName.toUpperCase()))));
+                    UTF8String.fromString(collationName.toUpperCase(Locale.ROOT)))));
     return suggestion.collationName;
   }
 
@@ -234,7 +236,7 @@ public final class CollationFactory {
    * Returns the collation id for the given collation name.
    */
   public static int collationNameToId(String collationName) throws SparkException {
-    String normalizedName = collationName.toUpperCase();
+    String normalizedName = collationName.toUpperCase(Locale.ROOT);
     if (collationNameToIdMap.containsKey(normalizedName)) {
       return collationNameToIdMap.get(normalizedName);
     } else {

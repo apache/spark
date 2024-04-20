@@ -21,6 +21,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -67,7 +68,8 @@ public class ClassicTableTypeMapping implements TableTypeMapping {
 
   @Override
   public String[] mapToHiveType(String clientTypeName) {
-    Collection<String> hiveTableType = clientToHiveMap.get(clientTypeName.toUpperCase());
+    Collection<String> hiveTableType =
+      clientToHiveMap.get(clientTypeName.toUpperCase(Locale.ROOT));
     if (hiveTableType == null) {
       LOG.warn("Not supported client table type " + clientTypeName);
       return new String[] {clientTypeName};
