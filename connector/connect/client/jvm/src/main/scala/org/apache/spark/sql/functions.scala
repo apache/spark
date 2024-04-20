@@ -6968,7 +6968,8 @@ object functions {
    * Parses a JSON string and constructs a Variant value. Returns null if the input string is not
    * a valid JSON value.
    *
-   * @param json a string column that contains JSON data.
+   * @param json
+   *   a string column that contains JSON data.
    *
    * @group variant_funcs
    * @since 4.0.0
