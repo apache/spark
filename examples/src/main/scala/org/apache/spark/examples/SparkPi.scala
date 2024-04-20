@@ -18,8 +18,9 @@
 // scalastyle:off println
 package org.apache.spark.examples
 
+import scala.math.random
+
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.functions.{lit, random, sum, when}
 
 /** Computes an approximation to pi */
 object SparkPi {
@@ -41,15 +42,14 @@ object SparkPi {
       .builder()
       .appName("Spark Pi")
       .getOrCreate()
-    import spark.implicits._
-
     val N = rowsPerPartition * partitions
-    val count = spark.range(0, N, 1, partitions)
-      .select((random() * 2 - 1).as("x"), (random() * 2 - 1).as("y"))
-      .select(sum(when($"x" * $"x" + $"y" * $"y" <= 1, lit(1))))
-      .as[Long]
-      .head()
-    println(s"Pi is roughly ${4.0 * count / N}")
+    val n = math.min(N, Int.MaxValue).toInt // avoid overflow
+    val count = spark.sparkContext.parallelize(0 until n, partitions).map { i =>
+      val x = random() * 2 - 1
+      val y = random() * 2 - 1
+      if (x*x + y*y <= 1) 1 else 0
+    }.reduce(_ + _)
+    println(s"Pi is roughly ${4.0 * count / n}")
     spark.stop()
   }
 }
