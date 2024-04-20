@@ -2481,6 +2481,10 @@ class PlanGenerationTestSuite
       Collections.singletonMap("allowNumericLeadingZeros", "true"))
   }
 
+  functionTest("try_parse_json") {
+    fn.try_parse_json(fn.col("g"))
+  }
+
   functionTest("to_json") {
     fn.to_json(fn.col("d"), Map(("timestampFormat", "dd/MM/yyyy")))
   }

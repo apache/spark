@@ -15424,11 +15424,42 @@ def from_json(
 
 
 @_try_remote_functions
+def try_parse_json(
+    col: "ColumnOrName",
+) -> Column:
+    """
+    Parses a column containing a JSON string into a :class:`VariantType`. Returns None if a string
+    contains an invalid JSON value.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        a column or column name JSON formatted strings
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a new column of VariantType.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''}, {'json': '''{a : 1}'''} ])
+    >>> df.select(to_json(try_parse_json(df.json))).collect()
+    [Row(to_json(try_parse_json(json))='{"a":1}'), Row(to_json(try_parse_json(json))=None)]
+    """
+
+    return _invoke_function("try_parse_json", _to_java_column(col))
+
+
+@_try_remote_functions
 def parse_json(
     col: "ColumnOrName",
 ) -> Column:
     """
-    Parses a column containing a JSON string into a :class:`VariantType`.
+    Parses a column containing a JSON string into a :class:`VariantType`. Throws exception if a
+    string represents an invalid JSON value.
 
     .. versionadded:: 4.0.0
 

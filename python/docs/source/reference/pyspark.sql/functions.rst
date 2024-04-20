@@ -537,6 +537,14 @@ JSON Functions
     to_json
 
 
+VARIANT Functions
+--------------
+.. autosummary::
+    :toctree: api/
+
+    try_parse_json
+
+
 XML Functions
 --------------
 .. autosummary::
