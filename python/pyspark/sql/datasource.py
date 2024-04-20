@@ -197,7 +197,9 @@ class DataSource(ABC):
         Returns a :class:`SimpleDataSourceStreamReader` instance for reading data.
 
         One of simpleStreamReader() and streamReader() must be implemented for readable streaming
-        data source.
+        data source. Spark will check whether streamReader() is implemented, if yes, create a
+        DataSourceStreamReader to read data. simpleStreamReader() will only be invoked when
+        streamReader() is not implemented.
 
         Parameters
         ----------
@@ -508,10 +510,10 @@ class SimpleInputPartition(InputPartition):
 
 
 class PrefetchedCacheEntry(InputPartition):
-    def __init__(self, start: dict, end: dict, it: Iterator[Tuple]):
+    def __init__(self, start: dict, end: dict, iterator: Iterator[Tuple]):
         self.start = start
         self.end = end
-        self.it = it
+        self.iterator = iterator
 
 
 class SimpleDataSourceStreamReader(ABC):
@@ -589,7 +591,7 @@ class SimpleDataSourceStreamReader(ABC):
         """
         raise PySparkNotImplementedError(
             error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "read2"},
+            message_parameters={"feature": "readBetweenOffsets"},
         )
 
     def commit(self, end: dict) -> None:
@@ -685,14 +687,12 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
             return None  # type: ignore[return-value]
         # Chain all the data iterator between start offset and end offset
         # need to copy here to avoid exhausting the original data iterator.
-        entries = [copy.copy(entry.it) for entry in self.cache[start_idx : end_idx + 1]]
+        entries = [copy.copy(entry.iterator) for entry in self.cache[start_idx : end_idx + 1]]
         it = chain(*entries)
         return it
 
-    def read(self, input_partition: InputPartition) -> Iterator[Tuple]:
-        return self.simple_reader.readBetweenOffsets(
-            input_partition.start, input_partition.end  # type: ignore[attr-defined]
-        )
+    def read(self, input_partition: SimpleInputPartition) -> Iterator[Tuple]:
+        return self.simple_reader.readBetweenOffsets(input_partition.start, input_partition.end)
 
 
 class DataSourceWriter(ABC):

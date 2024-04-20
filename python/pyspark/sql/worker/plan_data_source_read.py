@@ -58,6 +58,13 @@ def records_to_arrow_batches(
     return_type: StructType,
     data_source: DataSource,
 ) -> Iterable[pa.RecordBatch]:
+    """
+    Convert an iterator of Python tuples to an iterator of pyarrow record batches.
+
+    For each python tuple, check the types of each field and append it to the records batch.
+
+    """
+
     def batched(iterator: Iterator, n: int) -> Iterator:
         return iter(functools.partial(lambda it: list(islice(it, n)), iterator), [])
 
