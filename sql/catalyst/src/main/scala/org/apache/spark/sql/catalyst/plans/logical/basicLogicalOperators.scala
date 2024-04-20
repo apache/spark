@@ -783,6 +783,7 @@ object View {
         "spark.sql.hive.convertMetastoreParquet",
         "spark.sql.hive.convertMetastoreOrc",
         "spark.sql.hive.convertInsertingPartitionedTable",
+        "spark.sql.hive.convertInsertingUnpartitionedTable",
         "spark.sql.hive.convertMetastoreCtas"
       ).contains(key) || key.startsWith("spark.sql.catalog.")
     }

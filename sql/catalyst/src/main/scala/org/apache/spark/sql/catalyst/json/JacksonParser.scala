@@ -116,6 +116,12 @@ class JacksonParser(
   }
 
   protected final def parseVariant(parser: JsonParser): VariantVal = {
+    // Skips `FIELD_NAME` at the beginning. This check is adapted from `parseJsonToken`, but we
+    // cannot directly use the function here because it also handles the `VALUE_NULL` token and
+    // returns null (representing a SQL NULL). Instead, we want to return a variant null.
+    if (parser.getCurrentToken == FIELD_NAME) {
+      parser.nextToken()
+    }
     try {
       val v = VariantBuilder.parseJson(parser)
       new VariantVal(v.getValue, v.getMetadata)

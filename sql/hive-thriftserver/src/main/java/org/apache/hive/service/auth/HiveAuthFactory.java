@@ -27,9 +27,7 @@ import javax.security.sasl.Sasl;
 
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
-import org.apache.hadoop.hive.metastore.HiveMetaStore;
-import org.apache.hadoop.hive.metastore.HiveMetaStore.HMSHandler;
-import org.apache.hadoop.hive.metastore.api.MetaException;
+import org.apache.hadoop.hive.ql.metadata.Hive;
 import org.apache.hadoop.hive.shims.HadoopShims.KerberosNameShim;
 import org.apache.hadoop.hive.shims.ShimLoader;
 import org.apache.hadoop.hive.thrift.DBTokenStore;
@@ -132,16 +130,15 @@ public class HiveAuthFactory {
               HiveConf.ConfVars.METASTORE_CLUSTER_DELEGATION_TOKEN_STORE_CLS);
 
           if (tokenStoreClass.equals(DBTokenStore.class.getName())) {
-            HMSHandler baseHandler = new HiveMetaStore.HMSHandler(
-                "new db based metaserver", conf, true);
-            rawStore = baseHandler.getMS();
+            // Follows https://issues.apache.org/jira/browse/HIVE-12270
+            rawStore = Hive.class;
           }
 
           delegationTokenManager.startDelegationTokenSecretManager(
               conf, rawStore, ServerMode.HIVESERVER2);
           saslServer.setSecretManager(delegationTokenManager.getSecretManager());
         }
-        catch (MetaException|IOException e) {
+        catch (IOException e) {
           throw new TTransportException("Failed to start token manager", e);
         }
       }

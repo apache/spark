@@ -25,7 +25,8 @@ import java.util.{Optional, UUID}
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{EXECUTION_PLAN_LEAVES, FINISH_TRIGGER_DURATION, LOGICAL_PLAN_LEAVES, PROCESSING_TIME}
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.optimizer.InlineCTE
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan, WithCTE}
@@ -382,9 +383,10 @@ abstract class ProgressContext(
     val finishTriggerDurationMillis = triggerClock.getTimeMillis() - triggerEndTimestamp
     val thresholdForLoggingMillis = 60 * 1000
     if (finishTriggerDurationMillis > math.max(thresholdForLoggingMillis, processingTimeMills)) {
-      logWarning("Query progress update takes longer than batch processing time. Progress " +
-        s"update takes $finishTriggerDurationMillis milliseconds. Batch processing takes " +
-        s"$processingTimeMills milliseconds")
+      logWarning(log"Query progress update takes longer than batch processing time. Progress " +
+        log"update takes ${MDC(FINISH_TRIGGER_DURATION, finishTriggerDurationMillis)} " +
+        log"milliseconds. Batch processing takes ${MDC(PROCESSING_TIME, processingTimeMills)} " +
+        log"milliseconds")
     }
   }
 
@@ -485,11 +487,10 @@ abstract class ProgressContext(
         if (!metricWarningLogged) {
           def toString[T](seq: Seq[T]): String = s"(size = ${seq.size}), ${seq.mkString(", ")}"
 
-          logWarning(
-            "Could not report metrics as number leaves in trigger logical plan did not match that" +
-              s" of the execution plan:\n" +
-              s"logical plan leaves: ${toString(allLogicalPlanLeaves)}\n" +
-              s"execution plan leaves: ${toString(allExecPlanLeaves)}\n")
+          logWarning(log"Could not report metrics as number leaves in trigger logical plan did " +
+            log"not match that of the execution plan:\nlogical plan leaves: " +
+            log"${MDC(LOGICAL_PLAN_LEAVES, toString(allLogicalPlanLeaves))}\nexecution plan " +
+            log"leaves: ${MDC(EXECUTION_PLAN_LEAVES, toString(allExecPlanLeaves))}\n")
           metricWarningLogged = true
         }
         Map.empty

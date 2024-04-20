@@ -19508,7 +19508,8 @@ def hll_sketch_agg(col: "ColumnOrName", lgConfigK: Optional[Union[int, Column]] 
 
 @_try_remote_functions
 def hll_union_agg(
-    col: "ColumnOrName", allowDifferentLgConfigK: Optional[Union[bool, Column]] = None
+    col: "ColumnOrName",
+    allowDifferentLgConfigK: Optional[Union[bool, Column]] = None,
 ) -> Column:
     """
     Aggregate function: returns the updatable binary representation of the Datasketches
@@ -19520,8 +19521,8 @@ def hll_union_agg(
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str or bool
-    allowDifferentLgConfigK : bool, optional
+    col : :class:`~pyspark.sql.Column` or str
+    allowDifferentLgConfigK : :class:`~pyspark.sql.Column` or bool, optional
         Allow sketches with different lgConfigK values to be merged (defaults to false).
 
     Returns
@@ -19566,12 +19567,7 @@ def hll_union_agg(
     if allowDifferentLgConfigK is None:
         return _invoke_function_over_columns("hll_union_agg", col)
     else:
-        _allowDifferentLgConfigK = (
-            lit(allowDifferentLgConfigK)
-            if isinstance(allowDifferentLgConfigK, bool)
-            else allowDifferentLgConfigK
-        )
-        return _invoke_function_over_columns("hll_union_agg", col, _allowDifferentLgConfigK)
+        return _invoke_function_over_columns("hll_union_agg", col, lit(allowDifferentLgConfigK))
 
 
 @_try_remote_functions
