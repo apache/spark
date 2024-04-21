@@ -21,7 +21,8 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{COST, NUM_ITERATIONS, TIME_UNITS}
 import org.apache.spark.ml.util.Instrumentation
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS.axpy
@@ -358,15 +359,17 @@ class KMeans private (
     }
 
     val iterationTimeInSeconds = (System.nanoTime() - iterationStartTime) / 1e9
-    logInfo(f"Iterations took $iterationTimeInSeconds%.3f seconds.")
+    logInfo(log"Iterations took ${MDC(TIME_UNITS, iterationTimeInSeconds%.3f)} seconds.")
 
     if (iteration == maxIterations) {
-      logInfo(s"KMeans reached the max number of iterations: $maxIterations.")
+      logInfo(log"KMeans reached the max number of" +
+        log" iterations: ${MDC(NUM_ITERATIONS, maxIterations)}.")
     } else {
-      logInfo(s"KMeans converged in $iteration iterations.")
+      logInfo(log"KMeans converged in " +
+        log"${MDC(NUM_ITERATIONS, iteration)} iterations.")
     }
 
-    logInfo(s"The cost is $cost.")
+    logInfo(log"The cost is ${MDC(COST, cost)}.")
 
     new KMeansModel(centers.map(_.vector), distanceMeasure, cost, iteration)
   }

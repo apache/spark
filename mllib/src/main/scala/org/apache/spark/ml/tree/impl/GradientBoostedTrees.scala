@@ -477,7 +477,7 @@ private[spark] object GradientBoostedTrees extends Logging {
     timer.stop("total")
 
     logInfo("Internal timing for DecisionTree:")
-    logInfo(s"$timer")
+    logInfo(timer.toLogEntry)
 
     bcSplits.destroy()
     treePoints.unpersist()

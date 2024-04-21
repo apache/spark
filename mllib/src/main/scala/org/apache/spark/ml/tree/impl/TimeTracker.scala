@@ -19,6 +19,10 @@ package org.apache.spark.ml.tree.impl
 
 import scala.collection.mutable.{HashMap => MutableHashMap}
 
+import org.apache.spark.internal.{LogEntry, MDC}
+import org.apache.spark.internal.LogKey.{TIME_UNITS, TIMER_LABEL}
+import org.apache.spark.util.MavenUtils.LogStringContext
+
 /**
  * Time tracker implementation which holds labeled timers.
  */
@@ -66,5 +70,11 @@ private[spark] class TimeTracker extends Serializable {
     totals.map { case (label, elapsed) =>
         s"  $label: ${elapsed / 1e9}"
       }.mkString("\n")
+  }
+
+  def toLogEntry: LogEntry = {
+    log"${totals.map { case (label, elapsed) =>
+      log"  ${MDC(TIMER_LABEL, label)}: ${MDC(TIME_UNITS, elapsed / 1e9)}"
+    }.mkString("\n")}"
   }
 }

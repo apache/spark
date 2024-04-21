@@ -25,7 +25,8 @@ import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.graphx._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{DELTA, DIFF_DELTA, NORM}
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.{Loader, MLUtils, Saveable}
 import org.apache.spark.rdd.RDD
@@ -378,15 +379,16 @@ object PowerIterationClustering extends Logging {
                           /* useEdge */ true)).cache()
       // normalize v
       val norm = v.values.map(math.abs).sum()
-      logInfo(s"$msgPrefix: norm(v) = $norm.")
+      logInfo(log"$msgPrefix: norm(v) = ${MDC(NORM, norm)}.")
       val v1 = v.mapValues(x => x / norm)
       // compare difference
       val delta = curG.joinVertices(v1) { case (_, x, y) =>
         math.abs(x - y)
       }.vertices.values.sum()
-      logInfo(s"$msgPrefix: delta = $delta.")
+      logInfo(log"$msgPrefix: delta = ${MDC(DELTA, delta)}.")
       diffDelta = math.abs(delta - prevDelta)
-      logInfo(s"$msgPrefix: diff(delta) = $diffDelta.")
+      logInfo(log"$msgPrefix: diff(delta) =" +
+        log" ${MDC(DIFF_DELTA, diffDelta)}.")
 
       if (math.abs(diffDelta) < tol) {
         /**
@@ -404,8 +406,8 @@ object PowerIterationClustering extends Logging {
         val rayleigh = xTAx / xTx
 
         if (math.abs(norm - math.abs(rayleigh)) > tol) {
-          logWarning(s"Power Iteration fail to converge. delta = ${delta}," +
-            s" difference delta = ${diffDelta} and norm = ${norm}")
+          logWarning(log"Power Iteration fail to converge. delta = ${MDC(DELTA, delta)}," +
+            log" difference delta = ${MDC(DIFF_DELTA, diffDelta)} and norm = ${MDC(NORM, norm)}")
         }
       }
       curG.vertices.unpersist()

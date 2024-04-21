@@ -18,10 +18,10 @@
 package org.apache.spark.ml.clustering
 
 import scala.collection.mutable
-
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.annotation.Since
+import org.apache.spark.internal.LogKey.{COST, INIT_MODE, NUM_ITERATIONS, TIME_UNITS}
+import org.apache.spark.internal.MDC
 import org.apache.spark.ml.{Estimator, Model, PipelineStage}
 import org.apache.spark.ml.feature.{Instance, InstanceBlock}
 import org.apache.spark.ml.linalg._
@@ -456,7 +456,8 @@ class KMeans @Since("1.5.0") (
     val initStartTime = System.nanoTime
     val centers = initialize(dataset)
     val initTimeInSeconds = (System.nanoTime - initStartTime) / 1e9
-    instr.logInfo(f"Initialization with ${$(initMode)} took $initTimeInSeconds%.3f seconds.")
+    instr.logInfo(log"Initialization with ${MDC(INIT_MODE, $(initMode))} took " +
+      log"${MDC(TIME_UNITS, initTimeInSeconds%.3f)} seconds.")
 
     val numFeatures = centers.head.size
     instr.logNumFeatures(numFeatures)
@@ -550,14 +551,15 @@ class KMeans @Since("1.5.0") (
     blocks.unpersist()
 
     val iterationTimeInSeconds = (System.nanoTime() - iterationStartTime) / 1e9
-    instr.logInfo(f"Iterations took $iterationTimeInSeconds%.3f seconds.")
+    instr.logInfo(log"Iterations took ${MDC(TIME_UNITS, iterationTimeInSeconds%.3f)} seconds.")
 
     if (iteration == $(maxIter)) {
-      instr.logInfo(s"KMeans reached the max number of iterations: ${$(maxIter)}.")
+      instr.logInfo(log"KMeans reached the max number of iterations: " +
+        log"${MDC(NUM_ITERATIONS, $(maxIter))}.")
     } else {
-      instr.logInfo(s"KMeans converged in $iteration iterations.")
+      instr.logInfo(log"KMeans converged in ${MDC(NUM_ITERATIONS, iteration)} iterations.")
     }
-    instr.logInfo(s"The cost is $cost.")
+    instr.logInfo(log"The cost is ${MDC(COST, cost)}.")
     new MLlibKMeansModel(centers.map(OldVectors.fromML), $(distanceMeasure), cost, iteration)
   }
 
