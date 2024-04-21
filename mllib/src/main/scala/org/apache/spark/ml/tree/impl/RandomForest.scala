@@ -22,7 +22,7 @@ import scala.util.Random
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{NUM_CLASSES, NUM_EXAMPLES, NUM_FEATURES, WEIGHTED_NUM}
+import org.apache.spark.internal.LogKey.{NUM_CLASSES, NUM_EXAMPLES, NUM_FEATURES, TIMER, WEIGHTED_NUM}
 import org.apache.spark.ml.classification.DecisionTreeClassificationModel
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.impl.Utils
@@ -219,7 +219,7 @@ private[spark] object RandomForest extends Logging with Serializable {
     timer.stop("total")
 
     logInfo("Internal timing for DecisionTree:")
-    logInfo(timer.toLogEntry)
+    logInfo(log"${MDC(TIMER, timer)}")
 
     if (strategy.useNodeIdCache) {
       // Delete any remaining checkpoints used for node Id cache.

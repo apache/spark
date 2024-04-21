@@ -107,6 +107,7 @@ object LogKey extends Enumeration {
   val END_POINT = Value
   val ENGINE = Value
   val ERROR = Value
+  val ESTIMATOR_PARAMETER_MAP = Value
   val EVENT_LOOP = Value
   val EVENT_QUEUE = Value
   val EXECUTE_INFO = Value
@@ -320,6 +321,7 @@ object LogKey extends Enumeration {
   val TID = Value
   val TIME = Value
   val TIMEOUT = Value
+  val TIMER = Value
   val TIMER_LABEL = Value
   val TIME_UNITS = Value
   val TIP = Value
