@@ -21,7 +21,8 @@ import java.util.concurrent.TimeUnit
 
 import scala.util.{Failure, Success, Try}
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.TIMEOUT
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{Checkpoint, CheckpointWriter, StreamingConf, Time}
 import org.apache.spark.streaming.api.python.PythonDStream
@@ -123,7 +124,8 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
         val diff = TimeUnit.NANOSECONDS.toMillis((System.nanoTime() - timeWhenStopStarted))
         val timedOut = diff > stopTimeoutMs
         if (timedOut) {
-          logWarning("Timed out while stopping the job generator (timeout = " + stopTimeoutMs + ")")
+          logWarning(log"Timed out while stopping the job generator " +
+            log"(timeout = ${MDC(TIMEOUT, stopTimeoutMs)})")
         }
         timedOut
       }

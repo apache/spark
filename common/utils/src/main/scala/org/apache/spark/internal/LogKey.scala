@@ -28,6 +28,7 @@ object LogKey extends Enumeration {
   val APP_DESC = Value
   val APP_ID = Value
   val APP_STATE = Value
+  val BACKUP_FILE = Value
   val BATCH_ID = Value
   val BLOCK_ID = Value
   val BLOCK_MANAGER_ID = Value
@@ -41,6 +42,8 @@ object LogKey extends Enumeration {
   val CALL_SITE_LONG_FORM = Value
   val CATALOG_NAME = Value
   val CATEGORICAL_FEATURES = Value
+  val CHECKPOINT_FILE = Value
+  val CHECKPOINT_TIME = Value
   val CLASS_LOADER = Value
   val CLASS_NAME = Value
   val CLUSTER_ID = Value
@@ -79,12 +82,14 @@ object LogKey extends Enumeration {
   val DATA_SOURCE_PROVIDER = Value
   val DEFAULT_ISOLATION_LEVEL = Value
   val DEFAULT_VALUE = Value
+  val DELAY = Value
   val DELEGATE = Value
   val DESCRIPTION = Value
   val DESIRED_PARTITIONS_SIZE = Value
   val DRIVER_ID = Value
   val DROPPED_PARTITIONS = Value
   val DURATION = Value
+  val EFFECTIVE_STORAGE_LEVEL = Value
   val ELAPSED_TIME = Value
   val ENCODING = Value
   val END_INDEX = Value
@@ -115,6 +120,7 @@ object LogKey extends Enumeration {
   val FILE_VERSION = Value
   val FINISH_TRIGGER_DURATION = Value
   val FROM_OFFSET = Value
+  val FROM_TIME = Value
   val FUNCTION_NAME = Value
   val FUNCTION_PARAMETER = Value
   val GROUP_ID = Value
@@ -141,6 +147,7 @@ object LogKey extends Enumeration {
   val KAFKA_RECORDS_PULLED_COUNT = Value
   val KEY = Value
   val LAST_ACCESS_TIME = Value
+  val LAST_VALID_TIME = Value
   val LATEST_BATCH_ID = Value
   val LATEST_COMMITTED_BATCH_ID = Value
   val LEARNING_RATE = Value
@@ -216,6 +223,10 @@ object LogKey extends Enumeration {
   val REASON = Value
   val REATTACHABLE = Value
   val RECEIVED_BLOCK_INFO = Value
+  val RECEIVED_BLOCK_TRACKER_LOG_EVENT = Value
+  val RECEIVER_ID = Value
+  val RECEIVER_IDS = Value
+  val RECORDS = Value
   val REDACTED_STATEMENT = Value
   val REDUCE_ID = Value
   val RELATION_NAME = Value
@@ -240,6 +251,7 @@ object LogKey extends Enumeration {
   val SHUFFLE_MERGE_ID = Value
   val SIZE = Value
   val SLEEP_TIME = Value
+  val SLIDE_DURATION = Value
   val SPARK_DATA_STREAM = Value
   val SPARK_PLAN_ID = Value
   val SQL_TEXT = Value
@@ -248,6 +260,9 @@ object LogKey extends Enumeration {
   val STATEMENT_ID = Value
   val STATE_STORE_PROVIDER = Value
   val STATUS = Value
+  val STORAGE_LEVEL = Value
+  val STORAGE_LEVEL_DESERIALIZED = Value
+  val STORAGE_LEVEL_REPLICATION = Value
   val STORE_ID = Value
   val STREAM_ID = Value
   val STREAM_NAME = Value
@@ -261,6 +276,7 @@ object LogKey extends Enumeration {
   val TASK_NAME = Value
   val TASK_SET_NAME = Value
   val TASK_STATE = Value
+  val TEMP_FILE = Value
   val TEMP_PATH = Value
   val THREAD = Value
   val THREAD_NAME = Value
@@ -279,6 +295,7 @@ object LogKey extends Enumeration {
   val TOTAL_SIZE = Value
   val TOTAL_TIME = Value
   val TOTAL_TIME_READ = Value
+  val TO_TIME = Value
   val TREE_NODE = Value
   val TRIGGER_INTERVAL = Value
   val UNSUPPORTED_EXPR = Value
@@ -294,6 +311,7 @@ object LogKey extends Enumeration {
   val WAIT_TIME = Value
   val WATERMARK_CONSTRAINT = Value
   val WORKER_URL = Value
+  val WRITE_AHEAD_LOG_INFO = Value
   val XSD_PATH = Value
 
   type LogKey = Value
