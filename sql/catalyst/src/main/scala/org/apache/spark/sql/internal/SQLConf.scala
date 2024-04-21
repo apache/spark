@@ -4156,7 +4156,7 @@ object SQLConf {
       .createWithDefault(
         sys.env.getOrElse("DEFAULT_ARTIFACT_REPOSITORY",
           // scalastyle:off line.size.limit
-          "https://raw.github.com/pan3793/mvn-repo/release-2.3.103/," +
+          "https://repository.apache.org/content/repositories/orgapachehive-1128/," +
           // scalastyle:on line.size.limit
           "https://maven-central.storage-download.googleapis.com/maven2/"))
 
