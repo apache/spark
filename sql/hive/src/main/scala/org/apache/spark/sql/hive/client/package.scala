@@ -64,7 +64,7 @@ package object client {
         "org.apache.calcite:calcite-druid",
         "org.apache.calcite.avatica:avatica",
         "org.apache.curator:*",
-        "org.pentaho:pentaho-aggdesigner-algorithm",
+        "net.hydromatic:aggdesigner-algorithm",
         "org.apache.hive:hive-vector-code-gen"))
 
     // Since Hive 3.0, HookUtils uses org.apache.logging.log4j.util.Strings
