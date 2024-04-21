@@ -102,6 +102,7 @@ private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
     sparkAppConf
       .set("spark.kubernetes.driver.label.label1", "label1-value")
       .set("spark.kubernetes.driver.label.label2", "label2-value")
+      .set("spark.kubernetes.driver.label.yunikorn.apache.org/app-id", "{{APP_ID}}")
       .set("spark.kubernetes.driver.annotation.annotation1", "annotation1-value")
       .set("spark.kubernetes.driver.annotation.annotation2", "annotation2-value")
       .set("spark.kubernetes.driver.annotation.yunikorn.apache.org/app-id", "{{APP_ID}}")
@@ -109,6 +110,7 @@ private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
       .set("spark.kubernetes.driverEnv.ENV2", "VALUE2")
       .set("spark.kubernetes.executor.label.label1", "label1-value")
       .set("spark.kubernetes.executor.label.label2", "label2-value")
+      .set("spark.kubernetes.executor.label.yunikorn.apache.org/app-id", "{{APP_ID}}")
       .set("spark.kubernetes.executor.annotation.annotation1", "annotation1-value")
       .set("spark.kubernetes.executor.annotation.annotation2", "annotation2-value")
       .set("spark.kubernetes.executor.annotation.yunikorn.apache.org/app-id", "{{APP_ID}}")
