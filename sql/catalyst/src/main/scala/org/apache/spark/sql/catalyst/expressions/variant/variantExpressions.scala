@@ -44,9 +44,9 @@ import org.apache.spark.unsafe.types._
 
 
 /**
- * The implementation for `parse_json` and `try_parse_json` expressions. Parse a JSON string as an
+ * The implementation for `parse_json` and `try_parse_json` expressions. Parse a JSON string as a
  * Variant value.
- * @param child The string value to extract parse to as a variant.
+ * @param child The string value to parse as a variant.
  * @param failOnError Controls whether the expression should throw an exception or return null if
  *                    the string does not represent a valid JSON value.
  */
@@ -434,7 +434,7 @@ abstract class ParseJsonExpressionBuilderBase(failOnError: Boolean) extends Expr
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(jsonStr) - Parse a JSON string as an Variant value. Throw an exception when the string is not valid JSON value.",
+  usage = "_FUNC_(jsonStr) - Parse a JSON string as a Variant value. Throw an exception when the string is not valid JSON value.",
   examples = """
     Examples:
       > SELECT _FUNC_('{"a":1,"b":0.8}');
@@ -448,7 +448,7 @@ object ParseJsonExpressionBuilder extends ParseJsonExpressionBuilderBase(true)
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(jsonStr) - Parse a JSON string as an Variant value. Return NULL when the string is not valid JSON value.",
+  usage = "_FUNC_(jsonStr) - Parse a JSON string as a Variant value. Return NULL when the string is not valid JSON value.",
   examples = """
     Examples:
       > SELECT _FUNC_('{"a":1,"b":0.8}');
