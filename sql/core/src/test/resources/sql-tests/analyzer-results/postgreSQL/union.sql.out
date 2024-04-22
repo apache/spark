@@ -1059,9 +1059,9 @@ select * from range(1,5) union select * from range(1,3)
 Distinct
 +- Union false, false
    :- Project [id#xL]
-   :  +- Range (1, 5, step=1, splits=None)
+   :  +- Range (1, 5, step=1)
    +- Project [id#xL]
-      +- Range (1, 3, step=1, splits=None)
+      +- Range (1, 3, step=1)
 
 
 -- !query
@@ -1069,9 +1069,9 @@ select * from range(1,6) union all select * from range(1,4)
 -- !query analysis
 Union false, false
 :- Project [id#xL]
-:  +- Range (1, 6, step=1, splits=None)
+:  +- Range (1, 6, step=1)
 +- Project [id#xL]
-   +- Range (1, 4, step=1, splits=None)
+   +- Range (1, 4, step=1)
 
 
 -- !query
@@ -1079,9 +1079,9 @@ select * from range(1,6) intersect select * from range(1,4)
 -- !query analysis
 Intersect false
 :- Project [id#xL]
-:  +- Range (1, 6, step=1, splits=None)
+:  +- Range (1, 6, step=1)
 +- Project [id#xL]
-   +- Range (1, 4, step=1, splits=None)
+   +- Range (1, 4, step=1)
 
 
 -- !query
@@ -1089,9 +1089,9 @@ select * from range(1,6) intersect all select * from range(1,4)
 -- !query analysis
 Intersect All true
 :- Project [id#xL]
-:  +- Range (1, 6, step=1, splits=None)
+:  +- Range (1, 6, step=1)
 +- Project [id#xL]
-   +- Range (1, 4, step=1, splits=None)
+   +- Range (1, 4, step=1)
 
 
 -- !query
@@ -1099,9 +1099,9 @@ select * from range(1,6) except select * from range(1,4)
 -- !query analysis
 Except false
 :- Project [id#xL]
-:  +- Range (1, 6, step=1, splits=None)
+:  +- Range (1, 6, step=1)
 +- Project [id#xL]
-   +- Range (1, 4, step=1, splits=None)
+   +- Range (1, 4, step=1)
 
 
 -- !query
@@ -1109,9 +1109,9 @@ select * from range(1,6) except all select * from range(1,4)
 -- !query analysis
 Except All true
 :- Project [id#xL]
-:  +- Range (1, 6, step=1, splits=None)
+:  +- Range (1, 6, step=1)
 +- Project [id#xL]
-   +- Range (1, 4, step=1, splits=None)
+   +- Range (1, 4, step=1)
 
 
 -- !query
@@ -1120,9 +1120,9 @@ select * from range(1,6) union select * from range(1,4)
 Distinct
 +- Union false, false
    :- Project [id#xL]
-   :  +- Range (1, 6, step=1, splits=None)
+   :  +- Range (1, 6, step=1)
    +- Project [id#xL]
-      +- Range (1, 4, step=1, splits=None)
+      +- Range (1, 4, step=1)
 
 
 -- !query
@@ -1130,9 +1130,9 @@ select * from range(1,6) union all select * from range(1,4)
 -- !query analysis
 Union false, false
 :- Project [id#xL]
-:  +- Range (1, 6, step=1, splits=None)
+:  +- Range (1, 6, step=1)
 +- Project [id#xL]
-   +- Range (1, 4, step=1, splits=None)
+   +- Range (1, 4, step=1)
 
 
 -- !query
@@ -1140,9 +1140,9 @@ select * from range(1,6) intersect select * from range(1,4)
 -- !query analysis
 Intersect false
 :- Project [id#xL]
-:  +- Range (1, 6, step=1, splits=None)
+:  +- Range (1, 6, step=1)
 +- Project [id#xL]
-   +- Range (1, 4, step=1, splits=None)
+   +- Range (1, 4, step=1)
 
 
 -- !query
@@ -1150,9 +1150,9 @@ select * from range(1,6) intersect all select * from range(1,4)
 -- !query analysis
 Intersect All true
 :- Project [id#xL]
-:  +- Range (1, 6, step=1, splits=None)
+:  +- Range (1, 6, step=1)
 +- Project [id#xL]
-   +- Range (1, 4, step=1, splits=None)
+   +- Range (1, 4, step=1)
 
 
 -- !query
@@ -1160,9 +1160,9 @@ select * from range(1,6) except select * from range(1,4)
 -- !query analysis
 Except false
 :- Project [id#xL]
-:  +- Range (1, 6, step=1, splits=None)
+:  +- Range (1, 6, step=1)
 +- Project [id#xL]
-   +- Range (1, 4, step=1, splits=None)
+   +- Range (1, 4, step=1)
 
 
 -- !query
@@ -1170,9 +1170,9 @@ select * from range(1,6) except all select * from range(1,4)
 -- !query analysis
 Except All true
 :- Project [id#xL]
-:  +- Range (1, 6, step=1, splits=None)
+:  +- Range (1, 6, step=1)
 +- Project [id#xL]
-   +- Range (1, 4, step=1, splits=None)
+   +- Range (1, 4, step=1)
 
 
 -- !query
@@ -1223,7 +1223,7 @@ Sort [x#xL ASC NULLS FIRST], true
          +- Distinct
             +- Union false, false
                :- Project [1 AS t#x, id#xL AS x#xL]
-               :  +- Range (1, 11, step=1, splits=None)
+               :  +- Range (1, 11, step=1)
                +- Project [t#x, cast(x#x as bigint) AS x#xL]
                   +- Project [2 AS t#x, 4 AS x#x]
                      +- OneRowRelation

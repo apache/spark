@@ -122,4 +122,4 @@ Aggregate [nvl(st#x.col1, value)], [nvl(st#x.col1, value) AS nvl(st.col1, value)
 SELECT nullif(SUM(id), 0) from range(5)
 -- !query analysis
 Aggregate [nullif(sum(id#xL), 0) AS nullif(sum(id), 0)#xL]
-+- Range (0, 5, step=1, splits=None)
++- Range (0, 5, step=1)
