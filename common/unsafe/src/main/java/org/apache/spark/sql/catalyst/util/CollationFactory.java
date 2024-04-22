@@ -22,6 +22,7 @@ import java.util.*;
 import java.util.function.BiFunction;
 import java.util.function.ToLongFunction;
 
+import com.ibm.icu.lang.UCharacter;
 import com.ibm.icu.text.RuleBasedCollator;
 import com.ibm.icu.text.StringSearch;
 import com.ibm.icu.util.ULocale;
@@ -116,102 +117,385 @@ public final class CollationFactory {
       }
     }
 
-    /**
-     * Constructor with comparators that are inherited from the given collator.
+    /*
+      collation id (32-bit integer) layout:
+
+      bit 31:    0 = predefined collation, 1 = user-defined collation
+      bit 30:    0 = utf8-binary, 1 = ICU
+      bit 29:    0 = case-sensitive, 1 = case-insensitive
+      bit 28:    0 = accent-sensitive, 1 = accent-insensitive
+      bit 27-26: 00 = unspecified, 01 = punctuation-sensitive, 10 = punctuation-insensitive
+      bit 25-24: 00 = unspecified, 01 = first-lower, 10 = first-upper
+      bit 23-22: 00 = unspecified, 01 = to-lower, 10 = to-upper
+      bit 21-20: 00 = unspecified, 01 = trim-left, 10 = trim-right, 11 = trim-both
+      bit 19-18: zeroes, reserved for version
+      bit 17-16: zeroes
+      bit 15-0:  locale id for ICU collations / zeroes for utf8-binary
      */
-    public Collation(
-        String collationName,
-        Collator collator,
-        String version,
-        boolean supportsBinaryEquality,
-        boolean supportsBinaryOrdering,
-        boolean supportsLowercaseEquality) {
-      this(
-        collationName,
-        collator,
-        (s1, s2) -> collator.compare(s1.toString(), s2.toString()),
-        version,
-        s -> (long)collator.getCollationKey(s.toString()).hashCode(),
-        supportsBinaryEquality,
-        supportsBinaryOrdering,
-        supportsLowercaseEquality);
+    private static class CollationSpec {
+      private enum ImplementationProvider {
+        UTF8_BINARY, ICU
+      }
+
+      private enum CaseSensitivity {
+        CS, CI
+      }
+
+      private enum AccentSensitivity {
+        AS, AI
+      }
+
+      private enum PunctuationSensitivity {
+        UNSPECIFIED, PS, PI
+      }
+
+      private enum FirstLetterPreference {
+        UNSPECIFIED, FU, FL
+      }
+
+      private enum CaseConversion {
+        UNSPECIFIED, LCASE, UCASE
+      }
+
+      private enum SpaceTrimming {
+        UNSPECIFIED, LTRIM, RTRIM, TRIM
+      }
+
+      private static final int implementationProviderOffset = 30;
+      private static final int implementationProviderLen = 1;
+      private static final int caseSensitivityOffset = 29;
+      private static final int caseSensitivityLen = 1;
+      private static final int accentSensitivityOffset = 28;
+      private static final int accentSensitivityLen = 1;
+      private static final int punctuationSensitivityOffset = 26;
+      private static final int punctuationSensitivityLen = 2;
+      private static final int firstLetterPreferenceOffset = 24;
+      private static final int firstLetterPreferenceLen = 2;
+      private static final int caseConversionOffset = 22;
+      private static final int caseConversionLen = 2;
+      private static final int spaceTrimmingOffset = 20;
+      private static final int spaceTrimmingLen = 2;
+      private static final int localeOffset = 0;
+      private static final int localeLen = 16;
+
+      public final static int UTF8_BINARY_COLLATION_ID =
+              new CollationSpec(
+                      ImplementationProvider.UTF8_BINARY,
+                      null,
+                      CaseSensitivity.CS,
+                      AccentSensitivity.AS,
+                      PunctuationSensitivity.UNSPECIFIED,
+                      FirstLetterPreference.UNSPECIFIED,
+                      CaseConversion.UNSPECIFIED,
+                      SpaceTrimming.UNSPECIFIED
+              ).getCollationId();
+      public final static int UTF8_BINARY_LCASE_COLLATION_ID =
+              new CollationSpec(
+                      ImplementationProvider.UTF8_BINARY,
+                      null,
+                      CaseSensitivity.CS,
+                      AccentSensitivity.AS,
+                      PunctuationSensitivity.UNSPECIFIED,
+                      FirstLetterPreference.UNSPECIFIED,
+                      CaseConversion.LCASE,
+                      SpaceTrimming.UNSPECIFIED
+              ).getCollationId();
+      public final static int UNICODE_COLLATION_ID =
+              new CollationSpec(
+                      ImplementationProvider.ICU,
+                      "UNICODE",
+                      CaseSensitivity.CS,
+                      AccentSensitivity.AS,
+                      PunctuationSensitivity.UNSPECIFIED,
+                      FirstLetterPreference.UNSPECIFIED,
+                      CaseConversion.UNSPECIFIED,
+                      SpaceTrimming.UNSPECIFIED
+              ).getCollationId();
+
+      private final ImplementationProvider implementationProvider;
+      private final CaseSensitivity caseSensitivity;
+      private final AccentSensitivity accentSensitivity;
+      private final PunctuationSensitivity punctuationSensitivity;
+      private final FirstLetterPreference firstLetterPreference;
+      private final CaseConversion caseConversion;
+      private final SpaceTrimming spaceTrimming;
+      private final String locale;
+      private final int collationId;
+
+      private CollationSpec(
+              ImplementationProvider implementationProvider,
+              String locale,
+              CaseSensitivity caseSensitivity,
+              AccentSensitivity accentSensitivity,
+              PunctuationSensitivity punctuationSensitivity,
+              FirstLetterPreference firstLetterPreference,
+              CaseConversion caseConversion,
+              SpaceTrimming spaceTrimming) {
+        this.implementationProvider = implementationProvider;
+        this.locale = locale;
+        this.caseSensitivity = caseSensitivity;
+        this.accentSensitivity = accentSensitivity;
+        this.punctuationSensitivity = punctuationSensitivity;
+        this.firstLetterPreference = firstLetterPreference;
+        this.caseConversion = caseConversion;
+        this.spaceTrimming = spaceTrimming;
+        this.collationId = getCollationId();
+      }
+
+      private static final String[] ICULocaleNames;
+      private static final Map<String, ULocale> ICULocaleMap = new HashMap<>();
+      private static final Map<String, Integer> ICULocaleToId = new HashMap<>();
+
+      static {
+        ICULocaleMap.put("UNICODE", ULocale.ROOT);
+        ULocale[] locales = Collator.getAvailableULocales();
+        for (ULocale locale : locales) {
+          String language = locale.getLanguage();
+          assert (!language.isEmpty());
+          StringBuilder builder = new StringBuilder(language);
+          String script = locale.getScript();
+          if (!script.isEmpty()) {
+            builder.append('_');
+            builder.append(script);
+          }
+          String country = locale.getISO3Country();
+          if (!country.isEmpty()) {
+            builder.append('_');
+            builder.append(country);
+          }
+          String localeName = builder.toString();
+          assert (!ICULocaleMap.containsKey(localeName));
+          ICULocaleMap.put(localeName, locale);
+        }
+        ICULocaleNames = ICULocaleMap.keySet().toArray(new String[0]);
+        Arrays.sort(ICULocaleNames);
+        assert (ICULocaleNames.length <= (1 << 16));
+        for (int i = 0; i < ICULocaleNames.length; i++) {
+          ICULocaleToId.put(ICULocaleNames[i], i);
+        }
+      }
+
+      public int getCollationId() {
+        int collationId = 0;
+        collationId |= implementationProvider.ordinal() << implementationProviderOffset;
+        collationId |= caseSensitivity.ordinal() << caseSensitivityOffset;
+        collationId |= accentSensitivity.ordinal() << accentSensitivityOffset;
+        collationId |= punctuationSensitivity.ordinal() << punctuationSensitivityOffset;
+        collationId |= firstLetterPreference.ordinal() << firstLetterPreferenceOffset;
+        collationId |= caseConversion.ordinal() << caseConversionOffset;
+        collationId |= spaceTrimming.ordinal() << spaceTrimmingOffset;
+        if (implementationProvider == ImplementationProvider.ICU) {
+          collationId |= ICULocaleToId.get(locale);
+        }
+        return collationId;
+      }
+
+      public static CollationSpec fromCollationId(int collationId) {
+        ImplementationProvider implementationProvider = ImplementationProvider.values()[
+                (collationId >> implementationProviderOffset) & ((1 << implementationProviderLen) - 1)];
+        CaseSensitivity caseSensitivity = CaseSensitivity.values()[
+                (collationId >> caseSensitivityOffset) & ((1 << caseSensitivityLen) - 1)];
+        AccentSensitivity accentSensitivity = AccentSensitivity.values()[
+                (collationId >> accentSensitivityOffset) & ((1 << accentSensitivityLen) - 1)];
+        PunctuationSensitivity punctuationSensitivity = PunctuationSensitivity.values()[
+                (collationId >> punctuationSensitivityOffset) & ((1 << punctuationSensitivityLen) - 1)];
+        FirstLetterPreference firstLetterPreference = FirstLetterPreference.values()[
+                (collationId >> firstLetterPreferenceOffset) & ((1 << firstLetterPreferenceLen) - 1)];
+        CaseConversion caseConversion = CaseConversion.values()[
+                (collationId >> caseConversionOffset) & ((1 << caseConversionLen) - 1)];
+        SpaceTrimming spaceTrimming = SpaceTrimming.values()[
+                (collationId >> spaceTrimmingOffset) & ((1 << spaceTrimmingLen) - 1)];
+        String locale;
+        if (implementationProvider == ImplementationProvider.UTF8_BINARY) {
+          locale = "UTF8_BINARY";
+        } else {
+          locale = ICULocaleNames[(collationId >> localeOffset) & ((1 << localeLen) - 1)];
+        }
+        return new CollationSpec(
+                implementationProvider,
+                locale,
+                caseSensitivity,
+                accentSensitivity,
+                punctuationSensitivity,
+                firstLetterPreference,
+                caseConversion,
+                spaceTrimming
+        );
+      }
+
+      public static int collationNameToId(String collationName) throws SparkException {
+        if (collationName.startsWith("UTF8_BINARY")) {
+          return collationUTF8BinaryNameToId(collationName);
+        } else {
+          return collationICUNameToId(collationName);
+        }
+      }
+
+      private static int collationUTF8BinaryNameToId(String collationName)
+              throws SparkException {
+        int collationId = 0;
+        collationId |= ImplementationProvider.UTF8_BINARY.ordinal() << implementationProviderOffset;
+        collationId |= parseSpecifiers(collationName.substring("UTF8_BINARY".length()));
+        return collationId;
+      }
+
+      private static int collationICUNameToId(String collationName)
+              throws SparkException {
+        int lastPos = -1;
+        for (int i = 1; i <= collationName.length(); i++) {
+          String localeName = collationName.substring(0, i);
+          if (ICULocaleMap.containsKey(localeName)) {
+            lastPos = i;
+          }
+        }
+        if (lastPos == -1) {
+          throw new SparkException("Invalid locale specification in collation name " + collationName);
+        } else {
+          int collationId = 0;
+          collationId |= ImplementationProvider.ICU.ordinal() << implementationProviderOffset;
+          collationId |= parseSpecifiers(collationName.substring(lastPos));
+          String localeName = collationName.substring(0, lastPos);
+          collationId |= ICULocaleToId.get(localeName) << localeOffset;
+          return collationId;
+        }
+      }
+
+      private static int parseSpecifiers(String specString) throws SparkException {
+        int specifiers = 0;
+        String[] parts = specString.split("_");
+        for (String part : parts) {
+          if (!part.isEmpty()) {
+            if (part.equals("UNSPECIFIED")) {
+              throw new SparkException("Forbidden collation specifier 'UNSPECIFIED'");
+            } else if (Arrays.stream(CaseSensitivity.values()).anyMatch((s) -> s.toString().equals(part))) {
+              specifiers |= CaseSensitivity.valueOf(part).ordinal() << caseSensitivityOffset;
+            } else if (Arrays.stream(AccentSensitivity.values()).anyMatch((s) -> part.equals(s.toString()))) {
+              specifiers |= AccentSensitivity.valueOf(part).ordinal() << accentSensitivityOffset;
+            } else if (Arrays.stream(PunctuationSensitivity.values()).anyMatch((s) -> part.equals(s.toString()))) {
+              specifiers |= PunctuationSensitivity.valueOf(part).ordinal() << punctuationSensitivityOffset;
+            } else if (Arrays.stream(FirstLetterPreference.values()).anyMatch((s) -> part.equals(s.toString()))) {
+              specifiers |= FirstLetterPreference.valueOf(part).ordinal() << firstLetterPreferenceOffset;
+            } else if (Arrays.stream(CaseConversion.values()).anyMatch((s) -> part.equals(s.toString()))) {
+              specifiers |= CaseConversion.valueOf(part).ordinal() << caseConversionOffset;
+            } else if (Arrays.stream(SpaceTrimming.values()).anyMatch((s) -> part.equals(s.toString()))) {
+              specifiers |= SpaceTrimming.valueOf(part).ordinal() << spaceTrimmingOffset;
+            } else {
+              throw new SparkException("Unknown collation specifier " + part);
+            }
+          }
+        }
+        return specifiers;
+      }
+
+      public Collation buildCollation() {
+        ULocale.Builder builder = new ULocale.Builder();
+        builder.setLocale(ICULocaleMap.get(locale));
+        if (caseSensitivity == CaseSensitivity.CS && accentSensitivity == AccentSensitivity.AS) {
+          builder.setUnicodeLocaleKeyword("ks", "level3");
+        } else if (caseSensitivity == CaseSensitivity.CS && accentSensitivity == AccentSensitivity.AI) {
+          builder
+                  .setUnicodeLocaleKeyword("ks", "level1")
+                  .setUnicodeLocaleKeyword("kc", "true");
+        } else if (caseSensitivity == CaseSensitivity.CI && accentSensitivity == AccentSensitivity.AS) {
+          builder.setUnicodeLocaleKeyword("ks", "level2");
+        } else if (caseSensitivity == CaseSensitivity.CI && accentSensitivity == AccentSensitivity.AI) {
+          builder.setUnicodeLocaleKeyword("ks", "level1");
+        }
+        if (punctuationSensitivity == PunctuationSensitivity.PS) {
+          builder.setUnicodeLocaleKeyword("ka", "noignore");
+        } else if (punctuationSensitivity == PunctuationSensitivity.PI) {
+          builder.setUnicodeLocaleKeyword("ka", "shifted");
+        }
+        if (firstLetterPreference == FirstLetterPreference.FL) {
+          builder.setUnicodeLocaleKeyword("kf", "lower");
+        } else if (firstLetterPreference == FirstLetterPreference.FU) {
+          builder.setUnicodeLocaleKeyword("kf", "upper");
+        }
+        ULocale resultLocale = builder.build();
+        Collator collator = Collator.getInstance(resultLocale);
+        Comparator<UTF8String> comparator = (s1, s2) -> collator.compare(
+                caseAndTrimmingConversion(resultLocale, caseConversion, spaceTrimming, s1),
+                caseAndTrimmingConversion(resultLocale, caseConversion, spaceTrimming, s2));
+        return new Collation(
+                collationName(),
+                collator,
+                comparator,
+                "153.120.0.0",
+                s -> (long) collator.getCollationKey(s.toString()).hashCode(),
+                implementationProvider == ImplementationProvider.UTF8_BINARY || collationId == UNICODE_COLLATION_ID,
+                collationId == UTF8_BINARY_COLLATION_ID,
+                collationId == UTF8_BINARY_LCASE_COLLATION_ID);
+      }
+
+      private static String caseAndTrimmingConversion(
+          ULocale locale,
+          CaseConversion caseConversion,
+          SpaceTrimming spaceTrimming,
+          UTF8String s) {
+        String temp;
+        if (spaceTrimming == SpaceTrimming.LTRIM) {
+          temp = s.trimLeft().toString();
+        } else if (spaceTrimming == SpaceTrimming.RTRIM) {
+          temp = s.trimRight().toString();
+        } else if (spaceTrimming == SpaceTrimming.TRIM) {
+          temp = s.trim().toString();
+        } else {
+          temp = s.toString();
+        }
+        if (caseConversion == CaseConversion.LCASE) {
+          return UCharacter.toLowerCase(locale, temp);
+        } else if (caseConversion == CaseConversion.UCASE) {
+          return UCharacter.toUpperCase(locale, temp);
+        } else {
+          return temp;
+        }
+      }
+
+      private String collationName() {
+        StringBuilder builder = new StringBuilder();
+        ULocale uLocale = ICULocaleMap.get(locale);
+        builder.append(uLocale.getLanguage());
+        String script = uLocale.getScript();
+        if (!script.isEmpty()) {
+          builder.append('_');
+          builder.append(script);
+        }
+        String country = uLocale.getISO3Country();
+        if (!country.isEmpty()) {
+          builder.append('_');
+          builder.append(country);
+        }
+        if (caseSensitivity != CaseSensitivity.CS) {
+          builder.append('_');
+          builder.append(caseSensitivity.toString());
+        }
+        if (accentSensitivity != AccentSensitivity.AI) {
+          builder.append('_');
+          builder.append(accentSensitivity.toString());
+        }
+        if (punctuationSensitivity != PunctuationSensitivity.UNSPECIFIED) {
+          builder.append('_');
+          builder.append(punctuationSensitivity.toString());
+        }
+        if (firstLetterPreference != FirstLetterPreference.UNSPECIFIED) {
+          builder.append('_');
+          builder.append(firstLetterPreference.toString());
+        }
+        if (caseConversion != CaseConversion.UNSPECIFIED) {
+          builder.append('_');
+          builder.append(caseConversion.toString());
+        }
+        if (spaceTrimming != SpaceTrimming.UNSPECIFIED) {
+          builder.append('_');
+          builder.append(spaceTrimming.toString());
+        }
+        return builder.toString();
+      }
     }
   }
 
-  private static final Collation[] collationTable;
-  private static final HashMap<String, Integer> collationNameToIdMap = new HashMap<>();
-
-  public static final int UTF8_BINARY_COLLATION_ID = 0;
-  public static final int UTF8_BINARY_LCASE_COLLATION_ID = 1;
-
-  static {
-    List<Collation> collationPrepareTable = new LinkedList<>();
-    Collation currCollation;
-
-    // Binary comparison. This is the default collation.
-    // No custom comparators will be used for this collation.
-    // Instead, we rely on byte for byte comparison.
-    collationPrepareTable.add(new Collation(
-      "UTF8_BINARY",
-      null,
-      UTF8String::binaryCompare,
-      "1.0",
-      s -> (long)s.hashCode(),
-      true,
-      true,
-      false));
-
-    // Case-insensitive UTF8 binary collation.
-    // TODO: Do in place comparisons instead of creating new strings.
-    collationPrepareTable.add(new Collation(
-      "UTF8_BINARY_LCASE",
-      null,
-      UTF8String::compareLowerCase,
-      "1.0",
-      (s) -> (long)s.toLowerCase().hashCode(),
-      false,
-      false,
-      true));
-
-    // UNICODE case sensitive comparison (ROOT locale, in ICU).
-    currCollation = new Collation(
-      "UNICODE", Collator.getInstance(ULocale.ROOT), "153.120.0.0", true, false, false);
-    currCollation.collator.setStrength(Collator.TERTIARY);
-    currCollation.collator.freeze();
-    collationPrepareTable.add(currCollation);
-
-    // UNICODE case-insensitive comparison (ROOT locale, in ICU + Secondary strength).
-    currCollation = new Collation(
-      "UNICODE_CI", Collator.getInstance(ULocale.ROOT), "153.120.0.0", false, false, false);
-    currCollation.collator.setStrength(Collator.SECONDARY);
-    currCollation.collator.freeze();
-    collationPrepareTable.add(currCollation);
-
-    for (ULocale ulocale : ULocale.getAvailableLocales()) {
-      currCollation = new Collation(
-        ulocale.getName(), Collator.getInstance(ulocale), "153.120.0.0", true, false, false);
-      currCollation.collator.setStrength(Collator.TERTIARY);
-      currCollation.collator.freeze();
-      collationPrepareTable.add(currCollation);
-
-      currCollation = new Collation(
-        ulocale.getName() + "_CI", Collator.getInstance(ulocale), "153.120.0.0", false, false, false);
-      currCollation.collator.setStrength(Collator.SECONDARY);
-      currCollation.collator.freeze();
-      collationPrepareTable.add(currCollation);
-
-      currCollation = new Collation(
-              ulocale.getName() + "_CI_AI", Collator.getInstance(ulocale), "153.120.0.0", false, false, false);
-      currCollation.collator.setStrength(Collator.PRIMARY);
-      currCollation.collator.freeze();
-      collationPrepareTable.add(currCollation);
-    }
-
-    collationTable = collationPrepareTable.toArray(new Collation[0]);
-    for (int i = 0; i < collationTable.length; i++) {
-      collationNameToIdMap.put(collationTable[i].collationName, i);
-    }
-  }
+  public static final int UTF8_BINARY_COLLATION_ID = Collation.CollationSpec.UTF8_BINARY_COLLATION_ID;
+  public static final int UTF8_BINARY_LCASE_COLLATION_ID = Collation.CollationSpec.UTF8_BINARY_LCASE_COLLATION_ID;
 
   /**
    * Returns a StringSearch object for the given pattern and target strings, under collation
@@ -243,17 +527,12 @@ public final class CollationFactory {
    * Returns if the given collationName is valid one.
    */
   public static boolean isValidCollation(String collationName) {
-    return collationNameToIdMap.containsKey(collationName.toUpperCase());
-  }
-
-  /**
-   * Returns closest valid name to collationName
-   */
-  public static String getClosestCollation(String collationName) {
-    Collation suggestion = Collections.min(List.of(collationTable), Comparator.comparingInt(
-            c -> UTF8String.fromString(c.collationName).levenshteinDistance(
-                    UTF8String.fromString(collationName.toUpperCase()))));
-    return suggestion.collationName;
+    try {
+      fetchCollation(collationName);
+      return true;
+    } catch (SparkException e) {
+      return false;
+    }
   }
 
   /**
@@ -271,29 +550,14 @@ public final class CollationFactory {
    * Returns the collation id for the given collation name.
    */
   public static int collationNameToId(String collationName) throws SparkException {
-    String normalizedName = collationName.toUpperCase();
-    if (collationNameToIdMap.containsKey(normalizedName)) {
-      return collationNameToIdMap.get(normalizedName);
-    } else {
-      Collation suggestion = Collections.min(List.of(collationTable), Comparator.comparingInt(
-        c -> UTF8String.fromString(c.collationName).levenshteinDistance(
-          UTF8String.fromString(normalizedName))));
-
-      Map<String, String> params = new HashMap<>();
-      params.put("collationName", collationName);
-      params.put("proposal", suggestion.collationName);
-
-      throw new SparkException(
-        "COLLATION_INVALID_NAME", SparkException.constructMessageParams(params), null);
-    }
+    return Collation.CollationSpec.collationNameToId(collationName);
   }
 
   public static Collation fetchCollation(int collationId) {
-    return collationTable[collationId];
+    return Collation.CollationSpec.fromCollationId(collationId).buildCollation();
   }
 
   public static Collation fetchCollation(String collationName) throws SparkException {
-    int collationId = collationNameToId(collationName);
-    return collationTable[collationId];
+    return fetchCollation(collationNameToId(collationName));
   }
 }
