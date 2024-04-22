@@ -30,7 +30,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec}
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.{MapType, StringType, StructField, StructType}
 
@@ -715,19 +715,22 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       case _: BroadcastHashJoinExec => ()
     }.nonEmpty)
 
-    // Even with hint broadcast, hash join is not used for non-binary collated strings.
+    val res1 = df1.hint("broadcast").join(
+      df1, df1("col_binary") === df1("col_binary")).collect()
+
+    // Join is also used for non-binary collated strings.
     assert(collectFirst(
       df1.hint("broadcast").join(df1, df1("col_non_binary") === df1("col_non_binary"))
         .queryExecution.executedPlan) {
       case _: BroadcastHashJoinExec => ()
-    }.isEmpty)
-
-    // Instead they will default to sort merge join.
-    assert(collectFirst(
-      df1.hint("broadcast").join(df1, df1("col_non_binary") === df1("col_non_binary"))
-        .queryExecution.executedPlan) {
-      case _: SortMergeJoinExec => ()
     }.nonEmpty)
+
+    val res2 = df1.hint("broadcast").join(
+      df1, df1("col_non_binary") === df1("col_non_binary")).collect()
+
+    // Verify that join works for binary and non-binary collation
+    assert(res1.length == 52)
+    assert(res2.length == 104)
   }
 
   test("Generated column expressions using collations - errors out") {
