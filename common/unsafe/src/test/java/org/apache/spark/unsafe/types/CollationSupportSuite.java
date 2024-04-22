@@ -396,13 +396,13 @@ public class CollationSupportSuite {
     assertInitCap("AbĆdE","UNICODE", "Abćde");
     assertInitCap("AbĆdE","UNICODE_CI", "Abćde");
     // Variable byte length characters
-    assertInitCap("aB世De", "UTF8_BINARY", "Ab世de");
+    assertInitCap("aB 世 De", "UTF8_BINARY", "Ab 世 De");
     assertInitCap("ÄBĆΔE", "UTF8_BINARY", "Äbćδe");
-    assertInitCap("aB世De", "UTF8_BINARY_LCASE", "Ab世de");
+    assertInitCap("aB 世 De", "UTF8_BINARY_LCASE", "Ab 世 De");
     assertInitCap("ÄBĆΔE", "UTF8_BINARY_LCASE", "Äbćδe");
-    assertInitCap("aB世De", "UNICODE", "Ab世de");
+    assertInitCap("aB 世 De", "UNICODE", "Ab 世 De");
     assertInitCap("ÄBĆΔE", "UNICODE", "Äbćδe");
-    assertInitCap("aB世de", "UNICODE_CI", "Ab世De");
+    assertInitCap("aB 世 de", "UNICODE_CI", "Ab 世 De");
     assertInitCap("ÄBĆΔE", "UNICODE_CI", "Äbćδe");
     // Case-variable character length
     assertInitCap("İo", "UTF8_BINARY","İo");
