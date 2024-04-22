@@ -89,12 +89,12 @@ class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedCo
 
         obj = SerializableButNotDeserializable()
 
-        def fcn(batch, id):
+        def fcn(df, _):
             print(obj)
 
         # Assert that an exception occurs during the initialization
         with self.assertRaises(SparkConnectGrpcException) as error:
-            q = df.select("value").writeStream.foreachBatch(fcn).start()
+            df.select("value").writeStream.foreachBatch(fcn).start()
 
         # Assert that the error message contains the expected string
         self.assertIn(
