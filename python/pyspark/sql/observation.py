@@ -127,7 +127,7 @@ class Observation:
         observed_df = self._jo.on(
             df._jdf,
             exprs[0]._jc,
-            _to_seq(df._sc, [c._jc for c in exprs[1:]]),  # type: ignore[attr-defined]
+            _to_seq(df._sc, [c._jc for c in exprs[1:]]),
         )
         return DataFrame(observed_df, df.sparkSession)
 
