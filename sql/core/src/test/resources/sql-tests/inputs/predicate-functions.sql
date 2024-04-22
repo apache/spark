@@ -1,3 +1,30 @@
+-- NOT
+select not true;
+select ! true;
+select not null::boolean;
+
+-- AND
+select true and true;
+select true and false;
+select false and true;
+select false and false;
+select true and null::boolean;
+select false and null::boolean;
+select null::boolean and true;
+select null::boolean and false;
+select null::boolean and null::boolean;
+
+-- OR
+select true or true;
+select true or false;
+select false or true;
+select false or false;
+select true or null::boolean;
+select false or null::boolean;
+select null::boolean or true;
+select null::boolean or false;
+select null::boolean or null::boolean;
+
 -- EqualTo
 select 1 = 1;
 select 1 = '1';
@@ -86,4 +113,8 @@ select rand(123) not between 0.1 AND 0.2;
 -- Sanity test for legacy flag equating ! with NOT
 set spark.sql.legacy.bangEqualsNot=true;
 select 1 ! between 0 and 2;
+select 1 ! in (3, 4);
+select 'hello' ! like 'world';
+select 1 is ! null;
+select false is ! true;
 set spark.sql.legacy.bangEqualsNot=false;
