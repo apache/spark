@@ -80,11 +80,12 @@ class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedCo
         # Create an instance of the class
         obj = SerializableButNotDeserializable()
 
-        df = (self.spark.readStream
-              .format("rate")
-              .option("rowsPerSecond", "10")
-              .option("numPartitions", "1")
-              .load())
+        df = (
+            self.spark.readStream.format("rate")
+            .option("rowsPerSecond", "10")
+            .option("numPartitions", "1")
+            .load()
+        )
 
         obj = SerializableButNotDeserializable()
 
@@ -93,15 +94,13 @@ class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedCo
 
         # Assert that an exception occurs during the initialization
         with self.assertRaises(SparkConnectGrpcException) as error:
-            q = (df.select("value")
-                 .writeStream
-                 .foreachBatch(fcn)
-                 .start())
+            q = df.select("value").writeStream.foreachBatch(fcn).start()
 
         # Assert that the error message contains the expected string
         self.assertIn(
             "(java.lang.PythonException) Streaming Runner initialization failed",
-            str(error.exception))
+            str(error.exception),
+        )
 
     def test_accessing_spark_session(self):
         spark = self.spark
