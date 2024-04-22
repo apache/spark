@@ -248,6 +248,13 @@ class ColumnTestsMixin:
             message_parameters={"arg_name": "window", "arg_type": "int"},
         )
 
+    def test_union_classmethod_usage(self):
+        df = self.spark.range(1)
+        self.assertEqual(df.select(Column.eqNullSafe(df.id, df.id)).first()[0], True)
+
+    def test_isinstance_dataframe(self):
+        self.assertIsInstance(self.spark.range(1).id, Column)
+
 
 class ColumnTests(ColumnTestsMixin, ReusedSQLTestCase):
     pass

@@ -124,7 +124,9 @@ class Observation:
         cls = self._jvm.org.apache.spark.sql.Observation
         self._jo = cls(self._name) if self._name is not None else cls()
         observed_df = self._jo.on(
-            df._jdf, exprs[0]._jc, column._to_seq(df._sc, [c._jc for c in exprs[1:]])
+            df._jdf,
+            exprs[0]._jc,
+            column._to_seq(df._sc, [c._jc for c in exprs[1:]]),  # type: ignore[attr-defined]
         )
         return DataFrame(observed_df, df.sparkSession)
 

@@ -54,7 +54,8 @@ from pyspark.util import (
 from pyspark.serializers import BatchedSerializer, CPickleSerializer, UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
-from pyspark.sql.column import Column, _to_seq, _to_list, _to_java_column
+from pyspark.sql.column import Column
+from pyspark.sql.classic.column import _to_seq, _to_list, _to_java_column
 from pyspark.sql.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.streaming import DataStreamWriter
 from pyspark.sql.types import (
