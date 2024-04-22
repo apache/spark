@@ -296,7 +296,6 @@ public final class CollationSupport {
     public static int execICU(final UTF8String string, final UTF8String substring,
         final int collationId) {
       return CollationAwareUTF8String.indexOf(string, substring, 0, collationId);
-
     }
   }
 
@@ -379,6 +378,7 @@ public final class CollationSupport {
 
       return stringSearch.next();
     }
+    
   }
 
 }
