@@ -75,6 +75,7 @@ import org.apache.spark.util.SparkClassUtils
  * @groupname struct_funcs Struct functions
  * @groupname csv_funcs CSV functions
  * @groupname json_funcs JSON functions
+ * @groupname variant_funcs VARIANT functions
  * @groupname xml_funcs XML functions
  * @groupname url_funcs URL functions
  * @groupname partition_transforms Partition transform functions
