@@ -24,7 +24,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.KubernetesDriverConf
 import org.apache.spark.deploy.k8s.KubernetesUtils._
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{APP_ID, APP_NAME, POD_PHASE, STATUS, SUBMISSION_ID}
+import org.apache.spark.internal.LogKey.{APP_ID, APP_NAME, POD_PHASE, POD_STATE, STATUS, SUBMISSION_ID}
 
 private[k8s] trait LoggingPodStatusWatcher extends Watcher[Pod] {
   def watchOrStop(submissionId: String): Boolean
@@ -85,7 +85,7 @@ private[k8s] class LoggingPodStatusWatcherImpl(conf: KubernetesDriverConf)
 
   private def logLongStatus(): Unit = {
     logInfo(log"State changed, new state: " +
-      log"${MDC(STATUS, pod.map(formatPodState).getOrElse("unknown"))}")
+      log"${MDC(POD_STATE, pod.map(formatPodState).getOrElse("unknown"))}")
   }
 
   private def hasCompleted(): Boolean = {

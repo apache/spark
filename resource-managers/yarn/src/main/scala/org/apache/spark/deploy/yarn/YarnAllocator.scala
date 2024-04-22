@@ -867,7 +867,7 @@ private[yarn] class YarnAllocator(
         logInfo(log"Completed container ${MDC(LogKey.CONTAINER_ID, containerId)}" +
           log"${MDC(LogKey.HOST, onHostStr)} " +
           log"(state: ${MDC(LogKey.CONTAINER_STATE, completedContainer.getState)}, " +
-          log"exit status: ${MDC(LogKey.STATUS, completedContainer.getExitStatus)}")
+          log"exit status: ${MDC(LogKey.EXIT_CODE, completedContainer.getExitStatus)}")
         val exitStatus = completedContainer.getExitStatus
         val (exitCausedByApp, containerExitReason) = exitStatus match {
           case _ if shutdown =>
@@ -914,7 +914,7 @@ private[yarn] class YarnAllocator(
             if (NOT_APP_AND_SYSTEM_FAULT_EXIT_STATUS.contains(other_exit_status)) {
               (false, log"Container marked as failed: ${MDC(LogKey.CONTAINER_ID, containerId)}" +
                 log"${MDC(LogKey.HOST, onHostStr)}. " +
-                log"Exit status: ${MDC(LogKey.APP_STATE, exitStatus)}. " +
+                log"Exit status: ${MDC(LogKey.EXIT_CODE, exitStatus)}. " +
                 log"Possible causes: ${MDC(LogKey.REASON, sparkExitCodeReason)} " +
                 log"Diagnostics: ${MDC(LogKey.ERROR, completedContainer.getDiagnostics)}.")
             } else {
@@ -922,7 +922,7 @@ private[yarn] class YarnAllocator(
               allocatorNodeHealthTracker.handleResourceAllocationFailure(hostOpt)
               (true, log"Container from a bad node: ${MDC(LogKey.CONTAINER_ID, containerId)}" +
                 log"${MDC(LogKey.HOST, onHostStr)}. " +
-                log"Exit status: ${MDC(LogKey.APP_STATE, exitStatus)}. " +
+                log"Exit status: ${MDC(LogKey.EXIT_CODE, exitStatus)}. " +
                 log"Possible causes: ${MDC(LogKey.REASON, sparkExitCodeReason)} " +
                 log"Diagnostics: ${MDC(LogKey.ERROR, completedContainer.getDiagnostics)}.")
             }

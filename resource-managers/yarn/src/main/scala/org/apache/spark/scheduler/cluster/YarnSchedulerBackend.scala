@@ -221,9 +221,9 @@ private[spark] abstract class YarnSchedulerBackend(
     if (hasFilter) {
       // SPARK-26255: Append user provided filters(spark.ui.filters) with yarn filter.
       val allFilters = Seq(filterName) ++ conf.get(UI_FILTERS)
-      logInfo(log"Add WebUI Filter. ${MDC(LogKey.WEB_UI_FILTER_NAME, filterName)}, " +
-        log"${MDC(LogKey.WEB_UI_FILTER_PARAMS, filterParams)}, " +
-        log"${MDC(LogKey.WEB_UI_FILTER_PROXY_BASE, proxyBase)}")
+      logInfo(log"Add WebUI Filter. ${MDC(LogKey.UI_FILTER, filterName)}, " +
+        log"${MDC(LogKey.UI_FILTER_PARAMS, filterParams)}, " +
+        log"${MDC(LogKey.UI_PROXY_BASE, proxyBase)}")
 
       // For already installed handlers, prepend the filter.
       scheduler.sc.ui.foreach { ui =>

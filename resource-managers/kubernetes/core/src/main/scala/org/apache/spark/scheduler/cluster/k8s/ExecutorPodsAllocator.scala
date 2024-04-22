@@ -486,7 +486,7 @@ class ExecutorPodsAllocator(
             }
             val pvc = resource.asInstanceOf[PersistentVolumeClaim]
             logInfo(log"Trying to create PersistentVolumeClaim " +
-              log"${MDC(LogKey.PVC_METADATA, pvc.getMetadata.getName)} with " +
+              log"${MDC(LogKey.PVC_METADATA_NAME, pvc.getMetadata.getName)} with " +
               log"StorageClass ${MDC(LogKey.CLASS_NAME, pvc.getSpec.getStorageClassName)}")
             kubernetesClient.persistentVolumeClaims().inNamespace(namespace).resource(pvc).create()
             PVC_COUNTER.incrementAndGet()
@@ -526,7 +526,7 @@ class ExecutorPodsAllocator(
             val matchedPVC = reusablePVCs.remove(index)
             replacedResources.add(pvc)
             logInfo(log"Reuse PersistentVolumeClaim " +
-              log"${MDC(LogKey.PVC_METADATA, matchedPVC.getMetadata.getName)}")
+              log"${MDC(LogKey.PVC_METADATA_NAME, matchedPVC.getMetadata.getName)}")
             volume.get.getPersistentVolumeClaim.setClaimName(matchedPVC.getMetadata.getName)
           }
         }

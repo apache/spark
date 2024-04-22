@@ -92,7 +92,6 @@ object LogKey extends Enumeration {
   val DELEGATE = Value
   val DESCRIPTION = Value
   val DESIRED_PARTITIONS_SIZE = Value
-  val DIR = Value
   val DRIVER_ID = Value
   val DROPPED_PARTITIONS = Value
   val DURATION = Value
@@ -125,7 +124,6 @@ object LogKey extends Enumeration {
   val FAILURES = Value
   val FALLBACK_VERSION = Value
   val FIELD_NAME = Value
-  val FILES = Value
   val FILE_ABSOLUTE_PATH = Value
   val FILE_FORMAT = Value
   val FILE_FORMAT2 = Value
@@ -230,6 +228,7 @@ object LogKey extends Enumeration {
   val POD_NAMESPACE = Value
   val POD_PHASE = Value
   val POD_SHARED_SLOT_COUNT = Value
+  val POD_STATE = Value
   val POD_TARGET_COUNT = Value
   val POLICY = Value
   val PORT = Value
@@ -237,7 +236,7 @@ object LogKey extends Enumeration {
   val PROCESSING_TIME = Value
   val PRODUCER_ID = Value
   val PROVIDER = Value
-  val PVC_METADATA = Value
+  val PVC_METADATA_NAME = Value
   val QUERY_CACHE_VALUE = Value
   val QUERY_HINT = Value
   val QUERY_ID = Value
@@ -336,6 +335,9 @@ object LogKey extends Enumeration {
   val TO_TIME = Value
   val TREE_NODE = Value
   val TRIGGER_INTERVAL = Value
+  val UI_FILTER = Value
+  val UI_FILTER_PARAMS = Value
+  val UI_PROXY_BASE = Value
   val UNSUPPORTED_EXPR = Value
   val UNSUPPORTED_HINT_REASON = Value
   val UNTIL_OFFSET = Value
@@ -349,9 +351,6 @@ object LogKey extends Enumeration {
   val WAIT_SEND_TIME = Value
   val WAIT_TIME = Value
   val WATERMARK_CONSTRAINT = Value
-  val WEB_UI_FILTER_NAME = Value
-  val WEB_UI_FILTER_PARAMS = Value
-  val WEB_UI_FILTER_PROXY_BASE = Value
   val WORKER_URL = Value
   val WRITE_AHEAD_LOG_INFO = Value
   val XSD_PATH = Value
