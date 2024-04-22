@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.internal.LogKey.{COST, INIT_MODE, NUM_ITERATIONS, TIME_UNITS}
+import org.apache.spark.internal.LogKey.{COST, INIT_MODE, NUM_ITERATIONS, TOTAL_TIME}
 import org.apache.spark.internal.MDC
 import org.apache.spark.ml.{Estimator, Model, PipelineStage}
 import org.apache.spark.ml.feature.{Instance, InstanceBlock}
@@ -455,11 +455,11 @@ class KMeans @Since("1.5.0") (
         s"then cached during training. Be careful of double caching!")
     }
 
-    val initStartTime = System.nanoTime
+    val initStartTime = System.currentTimeMillis
     val centers = initialize(dataset)
-    val initTimeInSeconds = (System.nanoTime - initStartTime) / 1e9
+    val initTimeMs = System.currentTimeMillis - initStartTime
     instr.logInfo(log"Initialization with ${MDC(INIT_MODE, $(initMode))} took " +
-      log"${MDC(TIME_UNITS, initTimeInSeconds%.3f)} seconds.")
+      log"${MDC(TOTAL_TIME, initTimeMs)} ms.")
 
     val numFeatures = centers.head.size
     instr.logNumFeatures(numFeatures)
@@ -495,7 +495,7 @@ class KMeans @Since("1.5.0") (
 
     val distanceFunction = getDistanceFunction
     val sc = dataset.sparkSession.sparkContext
-    val iterationStartTime = System.nanoTime
+    val iterationStartTime = System.currentTimeMillis
     var converged = false
     var cost = 0.0
     var iteration = 0
@@ -552,8 +552,8 @@ class KMeans @Since("1.5.0") (
     }
     blocks.unpersist()
 
-    val iterationTimeInSeconds = (System.nanoTime() - iterationStartTime) / 1e9
-    instr.logInfo(log"Iterations took ${MDC(TIME_UNITS, iterationTimeInSeconds%.3f)} seconds.")
+    val iterationTimeMs = System.currentTimeMillis - iterationStartTime
+    instr.logInfo(log"Iterations took ${MDC(TOTAL_TIME, iterationTimeMs)} ms.")
 
     if (iteration == $(maxIter)) {
       instr.logInfo(log"KMeans reached the max number of iterations: " +
