@@ -425,6 +425,55 @@ class CollationStringExpressionsSuite
     })
   }
 
+  test("Support Left/Right/Substr with collation") {
+    case class SubstringTestCase(
+        method: String,
+        str: String,
+        len: String,
+        pad: Option[String],
+        collation: String,
+        result: Row) {
+      val strString = if (str == "null") "null" else s"'$str'"
+      val query =
+        s"SELECT $method(collate($strString, '$collation')," +
+          s" $len${pad.map(p => s", '$p'").getOrElse("")})"
+    }
+
+    val checks = Seq(
+      SubstringTestCase("substr", "example", "1", Some("100"), "utf8_binary_lcase", Row("example")),
+      SubstringTestCase("substr", "example", "2", Some("2"), "utf8_binary", Row("xa")),
+      SubstringTestCase("right", "", "1", None, "utf8_binary_lcase", Row("")),
+      SubstringTestCase("substr", "example", "0", Some("0"), "unicode", Row("")),
+      SubstringTestCase("substr", "example", "-3", Some("2"), "unicode_ci", Row("pl")),
+      SubstringTestCase("substr", " a世a ", "2", Some("3"), "utf8_binary_lcase", Row("a世a")),
+      SubstringTestCase("left", " a世a ", "3", None, "utf8_binary", Row(" a世")),
+      SubstringTestCase("right", " a世a ", "3", None, "unicode", Row("世a ")),
+      SubstringTestCase("left", "ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ", "3", None, "unicode_ci", Row("ÀÃÂ")),
+      SubstringTestCase("right", "ÀÃÂĀĂȦÄäâãȻȻȻȻȻǢǼÆ", "3", None, "utf8_binary_lcase", Row("ǢǼÆ")),
+      SubstringTestCase("substr", "", "1", Some("1"), "utf8_binary_lcase", Row("")),
+      SubstringTestCase("substr", "", "1", Some("1"), "unicode", Row("")),
+      SubstringTestCase("left", "", "1", None, "utf8_binary", Row("")),
+      SubstringTestCase("left", "null", "1", None, "utf8_binary_lcase", Row(null)),
+      SubstringTestCase("right", "null", "1", None, "unicode", Row(null)),
+      SubstringTestCase("substr", "null", "1", None, "utf8_binary", Row(null)),
+      SubstringTestCase("substr", "null", "1", Some("1"), "unicode_ci", Row(null)),
+      SubstringTestCase("left", "null", "null", None, "utf8_binary_lcase", Row(null)),
+      SubstringTestCase("right", "null", "null", None, "unicode", Row(null)),
+      SubstringTestCase("substr", "null", "null", Some("null"), "utf8_binary", Row(null)),
+      SubstringTestCase("substr", "null", "null", None, "unicode_ci", Row(null)),
+      SubstringTestCase("left", "ÀÃÂȦÄäåäáâãȻȻȻǢǼÆ", "null", None, "utf8_binary_lcase", Row(null)),
+      SubstringTestCase("right", "ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ", "null", None, "unicode", Row(null)),
+      SubstringTestCase("substr", "ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ", "null", None, "utf8_binary", Row(null)),
+      SubstringTestCase("substr", "", "null", None, "unicode_ci", Row(null))
+    )
+
+    checks.foreach { check =>
+      // Result & data type
+      checkAnswer(sql(check.query), check.result)
+      assert(sql(check.query).schema.fields.head.dataType.sameType(StringType(check.collation)))
+    }
+  }
+
   // TODO: Add more tests for other string expressions
 
 }

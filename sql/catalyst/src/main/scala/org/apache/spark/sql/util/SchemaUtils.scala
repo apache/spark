@@ -295,11 +295,11 @@ private[spark] object SchemaUtils {
   def escapeMetaCharacters(str: String): String = SparkSchemaUtils.escapeMetaCharacters(str)
 
   /**
-   * Checks if a given data type has a non-default collation string type.
+   * Checks if a given data type has a non utf8 binary (implicit) collation type.
    */
-  def hasNonBinarySortableCollatedString(dt: DataType): Boolean = {
+  def hasNonUTF8BinaryCollation(dt: DataType): Boolean = {
     dt.existsRecursively {
-      case st: StringType => !st.supportsBinaryOrdering
+      case st: StringType => !st.isUTF8BinaryCollation
       case _ => false
     }
   }
