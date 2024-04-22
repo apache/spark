@@ -15648,6 +15648,7 @@ def is_variant_null(v: "ColumnOrName") -> Column:
     >>> df.select(is_variant_null(parse_json(df.json)).alias("r")).collect()
     [Row(r=False)]
     """
+    from pyspark.sql.classic.column import _to_java_column
 
     return _invoke_function("is_variant_null", _to_java_column(v))
 
@@ -15683,6 +15684,7 @@ def variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
     >>> df.select(variant_get(parse_json(df.json), "$.b", "int").alias("r")).collect()
     [Row(r=None)]
     """
+    from pyspark.sql.classic.column import _to_java_column
 
     return _invoke_function("variant_get", _to_java_column(v), path, targetType)
 
@@ -15720,6 +15722,7 @@ def try_variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
     >>> df.select(try_variant_get(parse_json(df.json), "$.a", "binary").alias("r")).collect()
     [Row(r=None)]
     """
+    from pyspark.sql.classic.column import _to_java_column
 
     return _invoke_function("try_variant_get", _to_java_column(v), path, targetType)
 
