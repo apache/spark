@@ -46,7 +46,7 @@ import org.apache.spark.unsafe.types._
 /**
  * The implementation for `parse_json` and `try_parse_json` expressions. Parse a JSON string as a
  * Variant value.
- * @param child The string value to extract parse to as a variant.
+ * @param child The string value to parse as a variant.
  * @param failOnError Controls whether the expression should throw an exception or return null if
  *                    the string does not represent a valid JSON value.
  */
