@@ -1340,13 +1340,6 @@
         <groupId>org.apache.curator</groupId>
         <artifactId>curator-test</artifactId>
         <version>${curator.version}</version>
-        <!-- TODO(SPARK-44170): Remove this `exclusion` after Spark starts supporting JUnit5. -->
-        <exclusions>
-          <exclusion>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter-api</artifactId>
-          </exclusion>
-        </exclusions>
         <scope>test</scope>
       </dependency>
       <!-- Hadoop 3.x dependencies -->
