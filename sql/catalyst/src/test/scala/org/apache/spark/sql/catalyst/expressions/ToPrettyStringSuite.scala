@@ -31,7 +31,7 @@ class ToPrettyStringSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Binary as pretty strings") {
-    checkEvaluation(ToPrettyString(Cast(Literal("abcdef"), BinaryType)), "abcdef")
+    checkEvaluation(ToPrettyString(Cast(Literal("abcdef"), BinaryType)), "[61 62 63 64 65 66]")
   }
 
   test("Date as pretty strings") {
