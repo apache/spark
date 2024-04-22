@@ -306,20 +306,6 @@ private[spark] object SchemaUtils {
 
   /**
    * Replaces any collated string type with non collated StringType
-   * recursively in the given schema.
-   */
-  def replaceCollatedStringWithStringInSchema(schema: StructType): StructType = {
-    StructType(schema.map { field =>
-      if (hasNonUTF8BinaryCollation(field.dataType)) {
-        field.copy(dataType = replaceCollatedStringWithString(field.dataType))
-      } else {
-        field
-      }
-    })
-  }
-
-  /**
-   * Replaces any collated string type with non collated StringType
    * recursively in the given data type.
    */
   def replaceCollatedStringWithString(dt: DataType): DataType = dt match {

@@ -703,7 +703,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     // Since collated strings do not exist in Hive as a type we need to replace them with
     // the the regular string type. However, as we save the original schema in the table
     // properties we will be able to restore the original schema when reading back the table.
-    SchemaUtils.replaceCollatedStringWithStringInSchema(schema)
+    SchemaUtils.replaceCollatedStringWithString(schema).asInstanceOf[StructType]
   }
 
   /** Alter the statistics of a table. If `stats` is None, then remove all existing statistics. */
