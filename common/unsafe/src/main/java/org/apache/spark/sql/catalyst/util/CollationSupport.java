@@ -208,6 +208,7 @@ public final class CollationSupport {
         return execICU(v, collationId);
       }
     }
+
     public static String genCode(final String v, final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
       String expr = "CollationSupport.InitCap.exec";
@@ -217,9 +218,11 @@ public final class CollationSupport {
         return String.format(expr + "ICU(%s, %d)", v, collationId);
       }
     }
+
     public static UTF8String execUTF8(final UTF8String v) {
       return v.toLowerCase().toTitleCase();
     }
+
     public static UTF8String execICU(final UTF8String v, final int collationId) {
       return UTF8String.fromString(
               CollationAwareUTF8String.toTitleCase(
@@ -228,6 +231,8 @@ public final class CollationSupport {
                               collationId
                       ),
                       collationId));
+    }
+  }
 
   public static class FindInSet {
     public static int exec(final UTF8String word, final UTF8String set, final int collationId) {

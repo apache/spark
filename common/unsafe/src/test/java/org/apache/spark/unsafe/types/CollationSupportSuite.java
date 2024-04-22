@@ -392,10 +392,10 @@ public class CollationSupportSuite {
     assertInitCap("AbCdE", "UNICODE_CI", "Abcde");
     assertInitCap("aBcDe", "UNICODE_CI", "Abcde");
     // Accent letters
-    assertInitCap("AbĆdE","UTF8_BINARY", "Abćde");
-    assertInitCap("AbĆdE","UTF8_BINARY_LCASE", "Abćde");
-    assertInitCap("AbĆdE","UNICODE", "Abćde");
-    assertInitCap("AbĆdE","UNICODE_CI", "Abćde");
+    assertInitCap("AbĆdE", "UTF8_BINARY", "Abćde");
+    assertInitCap("AbĆdE", "UTF8_BINARY_LCASE", "Abćde");
+    assertInitCap("AbĆdE", "UNICODE", "Abćde");
+    assertInitCap("AbĆdE", "UNICODE_CI", "Abćde");
     // Variable byte length characters
     assertInitCap("aB 世 De", "UTF8_BINARY", "Ab 世 De");
     assertInitCap("ÄBĆΔE", "UTF8_BINARY", "Äbćδe");
@@ -406,11 +406,12 @@ public class CollationSupportSuite {
     assertInitCap("aB 世 de", "UNICODE_CI", "Ab 世 De");
     assertInitCap("ÄBĆΔE", "UNICODE_CI", "Äbćδe");
     // Case-variable character length
-    assertInitCap("İo", "UTF8_BINARY","İo");
-    assertInitCap("İo", "UTF8_BINARY_LCASE","İo");
-    assertInitCap("İo", "UNICODE","İo");
-    assertInitCap("İo", "UNICODE_CI","İo");
-    
+    assertInitCap("İo", "UTF8_BINARY", "İo");
+    assertInitCap("İo", "UTF8_BINARY_LCASE", "İo");
+    assertInitCap("İo", "UNICODE", "İo");
+    assertInitCap("İo", "UNICODE_CI", "İo");
+  }
+
   private void assertStringInstr(String string, String substring, String collationName,
           Integer expected) throws SparkException {
     UTF8String str = UTF8String.fromString(string);
