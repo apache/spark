@@ -759,9 +759,10 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         testRelation,
         testRelation,
         cond,
-        UpdateAction(Some(cond), Assignment($"a", $"a") :: Nil) :: Nil,
-        Nil,
-        Nil
+        matchedActions = UpdateAction(Some(cond), Assignment($"a", $"a") :: Nil) :: Nil,
+        notMatchedActions = Nil,
+        notMatchedBySourceActions = Nil,
+        withSchemaEvolution = false
       ),
       "AMBIGUOUS_REFERENCE",
       Map("name" -> "`a`", "referenceNames" -> "[`a`, `a`]"))

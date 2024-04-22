@@ -75,6 +75,47 @@ case class ParseJson(child: Expression)
     copy(child = newChild)
 }
 
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Check if a variant value is a variant null. Returns true if and only if the input is a variant null and false otherwise (including in the case of SQL NULL).",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(parse_json('null'));
+       true
+      > SELECT _FUNC_(parse_json('"null"'));
+       false
+      > SELECT _FUNC_(parse_json('13'));
+       false
+      > SELECT _FUNC_(parse_json(null));
+       false
+      > SELECT _FUNC_(variant_get(parse_json('{"a":null, "b":"spark"}'), "$.c"));
+       false
+      > SELECT _FUNC_(variant_get(parse_json('{"a":null, "b":"spark"}'), "$.a"));
+       true
+  """,
+  since = "4.0.0",
+  group = "variant_funcs")
+// scalastyle:on line.size.limit
+case class IsVariantNull(child: Expression) extends UnaryExpression
+  with Predicate with ExpectsInputTypes with RuntimeReplaceable {
+
+  override lazy val replacement: Expression = StaticInvoke(
+    VariantExpressionEvalUtils.getClass,
+    BooleanType,
+    "isVariantNull",
+    Seq(child),
+    inputTypes,
+    propagateNull = false,
+    returnNullable = false)
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(VariantType)
+
+  override def prettyName: String = "is_variant_null"
+
+  override protected def withNewChildInternal(newChild: Expression): IsVariantNull =
+    copy(child = newChild)
+}
+
 object VariantPathParser extends RegexParsers {
   // A path segment in the `VariantGet` expression represents either an object key access or an
   // array index access.

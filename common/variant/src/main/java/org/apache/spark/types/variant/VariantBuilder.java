@@ -223,7 +223,7 @@ public class VariantBuilder {
 
   public void appendBinary(byte[] binary) {
     checkCapacity(1 + U32_SIZE + binary.length);
-    writeBuffer[writePos++] = primitiveHeader(LONG_STR);
+    writeBuffer[writePos++] = primitiveHeader(BINARY);
     writeLong(writeBuffer, writePos, binary.length, U32_SIZE);
     writePos += U32_SIZE;
     System.arraycopy(binary, 0, writeBuffer, writePos, binary.length);

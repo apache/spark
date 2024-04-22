@@ -70,8 +70,6 @@ def main(infile: IO, outfile: IO) -> None:
     assert spark_connect_session.session_id == session_id
     spark = spark_connect_session
 
-    # TODO(SPARK-44461): Enable Process Isolation
-
     listener = worker.read_command(pickle_ser, infile)
     write_int(0, outfile)  # Indicate successful initialization
 
