@@ -234,7 +234,7 @@ class Column(ParentColumn):
     def __rsub__(
         self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
     ) -> ParentColumn:
-        return _bin_op("minus", self, other)
+        return _reverse_op("minus", self, other)
 
     def __rmul__(
         self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
