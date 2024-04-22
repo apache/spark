@@ -416,17 +416,17 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
 object ToStringBase {
   def getBinaryFormatter: BinaryFormatter = {
     val style = SQLConf.get.getConf(SQLConf.BINARY_OUTPUT_STYLE)
-    BinaryOutputStyle.withName(style) match {
-      case BinaryOutputStyle.UTF8 =>
+    style.map(BinaryOutputStyle.withName) match {
+      case Some(BinaryOutputStyle.UTF8) =>
         (array: Array[Byte]) => UTF8String.fromBytes(array)
-      case BinaryOutputStyle.BASIC =>
+      case Some(BinaryOutputStyle.BASIC) =>
         (array: Array[Byte]) => UTF8String.fromString(array.mkString("[", ", ", "]"))
-      case BinaryOutputStyle.BASE64 =>
+      case Some(BinaryOutputStyle.BASE64) =>
         (array: Array[Byte]) =>
           UTF8String.fromString(java.util.Base64.getEncoder.withoutPadding().encodeToString(array))
-      case BinaryOutputStyle.HEX =>
+      case Some(BinaryOutputStyle.HEX) =>
         (array: Array[Byte]) => Hex.hex(array)
-      case BinaryOutputStyle.HEX_DISCRETE =>
+      case _ =>
         (array: Array[Byte]) => UTF8String.fromString(SparkStringUtils.getHexString(array))
     }
   }

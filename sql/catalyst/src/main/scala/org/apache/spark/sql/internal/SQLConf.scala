@@ -1535,7 +1535,7 @@ object SQLConf {
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValues(BinaryOutputStyle.values.map(_.toString))
-    .createWithDefault(BinaryOutputStyle.UTF8.toString)
+    .createOptional
 
   val PARTITION_COLUMN_TYPE_INFERENCE =
     buildConf("spark.sql.sources.partitionColumnTypeInference.enabled")

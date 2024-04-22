@@ -21,6 +21,7 @@ import java.sql.{Date, Timestamp}
 import java.time._
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.ToStringBase
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.HIVE_STYLE
@@ -35,7 +36,7 @@ import org.apache.spark.util.ArrayImplicits._
 /**
  * Runs a query returning the result in Hive compatible form.
  */
-object HiveResult {
+object HiveResult extends SQLConfHelper {
   case class TimeFormatters(date: DateFormatter, timestamp: TimestampFormatter)
 
   def getTimeFormatters: TimeFormatters = {
@@ -47,7 +48,13 @@ object HiveResult {
 
   type BinaryFormatter = Array[Byte] => String
 
-  def getBinaryFormatter: BinaryFormatter = ToStringBase.getBinaryFormatter(_).toString
+  def getBinaryFormatter: BinaryFormatter = {
+    if (conf.getConf(SQLConf.BINARY_OUTPUT_STYLE).isEmpty) {
+      // Keep the legacy behavior for compatibility.
+      conf.setConf(SQLConf.BINARY_OUTPUT_STYLE, Some("UTF8"))
+    }
+    ToStringBase.getBinaryFormatter(_).toString
+  }
 
   private def stripRootCommandResult(executedPlan: SparkPlan): SparkPlan = executedPlan match {
     case CommandResultExec(_, plan, _) => plan
