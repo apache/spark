@@ -90,6 +90,33 @@ class CollationStringExpressionsSuite
     assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
   }
 
+  test("Support SplitPart string expression with collation") {
+    // Supported collations
+    case class SplitPartTestCase[R](s: String, d: String, p: Int, c: String, result: R)
+    val testCases = Seq(
+      SplitPartTestCase("1a2", "a", 2, "UTF8_BINARY", "2"),
+      SplitPartTestCase("1a2", "a", 2, "UNICODE", "2"),
+      SplitPartTestCase("1a2", "a", 2, "UTF8_BINARY_LCASE", "2"),
+      SplitPartTestCase("1a2", "a", 2, "UNICODE_CI", "2")
+    )
+    testCases.foreach(t => {
+      val query = s"SELECT split_part(collate('${t.s}','${t.c}'),collate('${t.d}','${t.c}'),${t.p})"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
+      // Implicit casting
+      checkAnswer(sql(s"SELECT split_part(collate('${t.s}','${t.c}'),'${t.d}',${t.p})"),
+        Row(t.result))
+      checkAnswer(sql(s"SELECT split_part('${t.s}',collate('${t.d}','${t.c}'),${t.p})"),
+        Row(t.result))
+    })
+    // Collation mismatch
+    val collationMismatch = intercept[AnalysisException] {
+      sql("SELECT contains(collate('abcde','UTF8_BINARY_LCASE'),collate('C','UNICODE_CI'))")
+    }
+    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+  }
+
   test("Support Contains string expression with collation") {
     // Supported collations
     case class ContainsTestCase[R](l: String, r: String, c: String, result: R)

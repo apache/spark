@@ -31,6 +31,41 @@ public final class CollationSupport {
    * Collation-aware string expressions.
    */
 
+  public static class StringSplitSQL {
+    public static UTF8String[] exec(final UTF8String s, final UTF8String d, final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      if (collation.supportsBinaryEquality) {
+        return execBinary(s, d);
+      } else if (collation.supportsLowercaseEquality) {
+        return execLowercase(s, d);
+      } else {
+        return execICU(s, d, collationId);
+      }
+    }
+    public static String genCode(final String s, final String d, final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      String expr = "CollationSupport.StringSplitSQL.exec";
+      if (collation.supportsBinaryEquality) {
+        return String.format(expr + "Binary(%s, %s)", s, d);
+      } else if (collation.supportsLowercaseEquality) {
+        return String.format(expr + "Lowercase(%s, %s)", s, d);
+      } else {
+        return String.format(expr + "ICU(%s, %s, %d)", s, d, collationId);
+      }
+    }
+    public static UTF8String[] execBinary(final UTF8String string, final UTF8String delimiter) {
+      return string.splitSQL(delimiter, -1);
+    }
+    public static UTF8String[] execLowercase(final UTF8String string, final UTF8String delimiter) {
+      return string.toLowerCase().splitSQL(delimiter.toLowerCase(), -1);
+    }
+    public static UTF8String[] execICU(final UTF8String string, final UTF8String delimiter,
+                                  final int collationId) {
+      // TODO: Implement ICU-based split
+      return string.splitSQL(delimiter, -1);
+    }
+  }
+
   public static class Contains {
     public static boolean exec(final UTF8String l, final UTF8String r, final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
