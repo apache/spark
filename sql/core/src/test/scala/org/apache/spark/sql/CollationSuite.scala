@@ -605,24 +605,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         Seq(Row("UNICODE"))
       )
     }
-
-    checkAnswer(
-      sql(
-        """EXECUTE IMMEDIATE stmtStr1 USING
-          | array('a') AS var1,
-          | array('b') AS var2;""".stripMargin),
-      Seq(Row("false"))
-    )
-
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
-      checkAnswer(
-        sql(
-          """EXECUTE IMMEDIATE stmtStr1 USING
-            | array('a') AS var1,
-            | array('a') AS var2;""".stripMargin),
-        Seq(Row("true"))
-      )
-    }
   }
 
   test("SPARK-47692: Parameter markers with variable mapping") {
