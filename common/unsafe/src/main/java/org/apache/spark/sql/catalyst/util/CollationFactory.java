@@ -178,6 +178,39 @@ public final class CollationFactory {
       private static final int localeOffset = 0;
       private static final int localeLen = 16;
 
+      private static final String[] ICULocaleNames;
+      private static final Map<String, ULocale> ICULocaleMap = new HashMap<>();
+      private static final Map<String, Integer> ICULocaleToId = new HashMap<>();
+
+      static {
+        ICULocaleMap.put("UNICODE", ULocale.ROOT);
+        ULocale[] locales = Collator.getAvailableULocales();
+        for (ULocale locale : locales) {
+          String language = locale.getLanguage();
+          assert (!language.isEmpty());
+          StringBuilder builder = new StringBuilder(language);
+          String script = locale.getScript();
+          if (!script.isEmpty()) {
+            builder.append('_');
+            builder.append(script);
+          }
+          String country = locale.getISO3Country();
+          if (!country.isEmpty()) {
+            builder.append('_');
+            builder.append(country);
+          }
+          String localeName = builder.toString();
+          assert (!ICULocaleMap.containsKey(localeName));
+          ICULocaleMap.put(localeName, locale);
+        }
+        ICULocaleNames = ICULocaleMap.keySet().toArray(new String[0]);
+        Arrays.sort(ICULocaleNames);
+        assert (ICULocaleNames.length <= (1 << 16));
+        for (int i = 0; i < ICULocaleNames.length; i++) {
+          ICULocaleToId.put(ICULocaleNames[i], i);
+        }
+      }
+
       public final static int UTF8_BINARY_COLLATION_ID =
               new CollationSpec(
                       ImplementationProvider.UTF8_BINARY,
@@ -240,39 +273,6 @@ public final class CollationFactory {
         this.caseConversion = caseConversion;
         this.spaceTrimming = spaceTrimming;
         this.collationId = getCollationId();
-      }
-
-      private static final String[] ICULocaleNames;
-      private static final Map<String, ULocale> ICULocaleMap = new HashMap<>();
-      private static final Map<String, Integer> ICULocaleToId = new HashMap<>();
-
-      static {
-        ICULocaleMap.put("UNICODE", ULocale.ROOT);
-        ULocale[] locales = Collator.getAvailableULocales();
-        for (ULocale locale : locales) {
-          String language = locale.getLanguage();
-          assert (!language.isEmpty());
-          StringBuilder builder = new StringBuilder(language);
-          String script = locale.getScript();
-          if (!script.isEmpty()) {
-            builder.append('_');
-            builder.append(script);
-          }
-          String country = locale.getISO3Country();
-          if (!country.isEmpty()) {
-            builder.append('_');
-            builder.append(country);
-          }
-          String localeName = builder.toString();
-          assert (!ICULocaleMap.containsKey(localeName));
-          ICULocaleMap.put(localeName, locale);
-        }
-        ICULocaleNames = ICULocaleMap.keySet().toArray(new String[0]);
-        Arrays.sort(ICULocaleNames);
-        assert (ICULocaleNames.length <= (1 << 16));
-        for (int i = 0; i < ICULocaleNames.length; i++) {
-          ICULocaleToId.put(ICULocaleNames[i], i);
-        }
       }
 
       public int getCollationId() {
@@ -388,6 +388,57 @@ public final class CollationFactory {
       }
 
       public Collation buildCollation() {
+        if (implementationProvider == ImplementationProvider.UTF8_BINARY) {
+          return buildUTF8BinaryCollation();
+        } else {
+          return buildICUCollation();
+        }
+      }
+
+      public Collation buildUTF8BinaryCollation() {
+        Comparator<UTF8String> comparator;
+        if (collationId == UTF8_BINARY_COLLATION_ID) {
+          comparator = UTF8String::binaryCompare;
+        } else {
+          comparator = (s1, s2) -> {
+            UTF8String convertedS1 = caseAndTrimmingConversionUTF8Binary(s1);
+            UTF8String convertedS2 = caseAndTrimmingConversionUTF8Binary(s2);
+            return convertedS1.binaryCompare(convertedS2);
+          };
+        }
+        return new Collation(
+                collationName(),
+                null,
+                comparator,
+                "1.0",
+                s -> (long) caseAndTrimmingConversionUTF8Binary(s).hashCode(),
+                collationId == UTF8_BINARY_COLLATION_ID,
+                collationId == UTF8_BINARY_COLLATION_ID,
+                collationId == UTF8_BINARY_LCASE_COLLATION_ID
+        );
+      }
+
+      private UTF8String caseAndTrimmingConversionUTF8Binary(UTF8String s) {
+        UTF8String temp;
+        if (spaceTrimming == SpaceTrimming.LTRIM) {
+          temp = s.trimLeft();
+        } else if (spaceTrimming == SpaceTrimming.RTRIM) {
+          temp = s.trimRight();
+        } else if (spaceTrimming == SpaceTrimming.TRIM) {
+          temp = s.trim();
+        } else {
+          temp = s;
+        }
+        if (caseConversion == CaseConversion.LCASE) {
+          return temp.toLowerCase();
+        } else if (caseConversion == CaseConversion.UCASE) {
+          return temp.toUpperCase();
+        } else {
+          return temp;
+        }
+      }
+
+      public Collation buildICUCollation() {
         ULocale.Builder builder = new ULocale.Builder();
         builder.setLocale(ICULocaleMap.get(locale));
         if (caseSensitivity == CaseSensitivity.CS && accentSensitivity == AccentSensitivity.AS) {
@@ -414,24 +465,21 @@ public final class CollationFactory {
         ULocale resultLocale = builder.build();
         Collator collator = Collator.getInstance(resultLocale);
         Comparator<UTF8String> comparator = (s1, s2) -> collator.compare(
-                caseAndTrimmingConversion(resultLocale, caseConversion, spaceTrimming, s1),
-                caseAndTrimmingConversion(resultLocale, caseConversion, spaceTrimming, s2));
+                caseAndTrimmingConversionICU(resultLocale, s1),
+                caseAndTrimmingConversionICU(resultLocale, s2));
         return new Collation(
                 collationName(),
                 collator,
                 comparator,
                 "153.120.0.0",
                 s -> (long) collator.getCollationKey(s.toString()).hashCode(),
-                implementationProvider == ImplementationProvider.UTF8_BINARY || collationId == UNICODE_COLLATION_ID,
-                collationId == UTF8_BINARY_COLLATION_ID,
-                collationId == UTF8_BINARY_LCASE_COLLATION_ID);
+                collationId == UNICODE_COLLATION_ID,
+                false,
+                false);
       }
 
-      private static String caseAndTrimmingConversion(
-          ULocale locale,
-          CaseConversion caseConversion,
-          SpaceTrimming spaceTrimming,
-          UTF8String s) {
+      private String caseAndTrimmingConversionICU(
+          ULocale locale, UTF8String s) {
         String temp;
         if (spaceTrimming == SpaceTrimming.LTRIM) {
           temp = s.trimLeft().toString();
@@ -453,33 +501,41 @@ public final class CollationFactory {
 
       private String collationName() {
         StringBuilder builder = new StringBuilder();
-        ULocale uLocale = ICULocaleMap.get(locale);
-        builder.append(uLocale.getLanguage());
-        String script = uLocale.getScript();
-        if (!script.isEmpty()) {
-          builder.append('_');
-          builder.append(script);
-        }
-        String country = uLocale.getISO3Country();
-        if (!country.isEmpty()) {
-          builder.append('_');
-          builder.append(country);
-        }
-        if (caseSensitivity != CaseSensitivity.CS) {
-          builder.append('_');
-          builder.append(caseSensitivity.toString());
-        }
-        if (accentSensitivity != AccentSensitivity.AI) {
-          builder.append('_');
-          builder.append(accentSensitivity.toString());
-        }
-        if (punctuationSensitivity != PunctuationSensitivity.UNSPECIFIED) {
-          builder.append('_');
-          builder.append(punctuationSensitivity.toString());
-        }
-        if (firstLetterPreference != FirstLetterPreference.UNSPECIFIED) {
-          builder.append('_');
-          builder.append(firstLetterPreference.toString());
+        if (implementationProvider == ImplementationProvider.UTF8_BINARY) {
+          builder.append("UTF8_BINARY");
+        } else {
+          if (locale.equals("UNICODE")) {
+            builder.append("UNICODE");
+          } else {
+            ULocale uLocale = ICULocaleMap.get(locale);
+            builder.append(uLocale.getLanguage());
+            String script = uLocale.getScript();
+            if (!script.isEmpty()) {
+              builder.append('_');
+              builder.append(script);
+            }
+            String country = uLocale.getISO3Country();
+            if (!country.isEmpty()) {
+              builder.append('_');
+              builder.append(country);
+            }
+          }
+          if (caseSensitivity != CaseSensitivity.CS) {
+            builder.append('_');
+            builder.append(caseSensitivity.toString());
+          }
+          if (accentSensitivity != AccentSensitivity.AS) {
+            builder.append('_');
+            builder.append(accentSensitivity.toString());
+          }
+          if (punctuationSensitivity != PunctuationSensitivity.UNSPECIFIED) {
+            builder.append('_');
+            builder.append(punctuationSensitivity.toString());
+          }
+          if (firstLetterPreference != FirstLetterPreference.UNSPECIFIED) {
+            builder.append('_');
+            builder.append(firstLetterPreference.toString());
+          }
         }
         if (caseConversion != CaseConversion.UNSPECIFIED) {
           builder.append('_');
