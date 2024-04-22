@@ -98,7 +98,7 @@ class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedCo
 
         # Assert that the error message contains the expected string
         self.assertIn(
-            "(java.lang.PythonException) Streaming Runner initialization failed",
+            "Streaming Runner initialization failed",
             str(error.exception),
         )
 
