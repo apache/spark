@@ -191,7 +191,7 @@ class MapStateSuite extends StateVariableSuiteBase {
       var ttlValue = testState.getTTLValue("k1")
       assert(ttlValue.isDefined)
       assert(ttlValue.get._2 === ttlExpirationMs)
-      var ttlStateValueIterator = testState.getValuesInTTLState()
+      var ttlStateValueIterator = testState.getKeyValuesInTTLState().map(_._2)
       assert(ttlStateValueIterator.hasNext)
 
       // increment batchProcessingTime, or watermark and ensure expired value is not returned
@@ -214,7 +214,7 @@ class MapStateSuite extends StateVariableSuiteBase {
       ttlValue = nextBatchTestState.getTTLValue("k1")
       assert(ttlValue.isDefined)
       assert(ttlValue.get._2 === ttlExpirationMs)
-      ttlStateValueIterator = nextBatchTestState.getValuesInTTLState()
+      ttlStateValueIterator = nextBatchTestState.getKeyValuesInTTLState().map(_._2)
       assert(ttlStateValueIterator.hasNext)
       assert(ttlStateValueIterator.next() === ttlExpirationMs)
       assert(ttlStateValueIterator.isEmpty)

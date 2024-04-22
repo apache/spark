@@ -81,9 +81,9 @@ class MapStateSingleKeyTTLProcessor(ttlConfig: TTLConfig)
     } else if (row.action == "put") {
       mapState.updateValue(userKey, row.value)
     } else if (row.action == "get_values_in_ttl_state") {
-      val ttlValues = mapState.getValuesInTTLState()
+      val ttlValues = mapState.getKeyValuesInTTLState()
       ttlValues.foreach { v =>
-        results = OutputEvent(key, -1, isTTLValue = true, ttlValue = v) :: results
+        results = OutputEvent(key, -1, isTTLValue = true, ttlValue = v._2) :: results
       }
     }
 

@@ -55,9 +55,9 @@ class MapStateImplWithTTL[K, V](
   private val ttlExpirationMs =
     StateTTL.calculateExpirationTimeForDuration(ttlConfig.ttlDuration, batchTimestampMs)
 
-  createColumnFamily()
+  initialize()
 
-  private def createColumnFamily(): Unit = {
+  private def initialize(): Unit = {
     store.createColFamilyIfAbsent(stateName, COMPOSITE_KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA_WITH_TTL,
       PrefixKeyScanStateEncoderSpec(COMPOSITE_KEY_ROW_SCHEMA, 1))
   }
@@ -74,10 +74,8 @@ class MapStateImplWithTTL[K, V](
     val retRow = store.get(encodedCompositeKey, stateName)
 
     if (retRow != null) {
-      val resState = stateTypesEncoder.decodeValue(retRow)
-
       if (!stateTypesEncoder.isExpired(retRow, batchTimestampMs)) {
-        resState
+        stateTypesEncoder.decodeValue(retRow)
       } else {
         null.asInstanceOf[V]
       }
@@ -97,12 +95,14 @@ class MapStateImplWithTTL[K, V](
     StateStoreErrors.requireNonNullStateValue(key, stateName)
     StateStoreErrors.requireNonNullStateValue(value, stateName)
 
-    val encodedValue = stateTypesEncoder.encodeValue(value, ttlExpirationMs)
-    val encodedCompositeKey = stateTypesEncoder.encodeCompositeKey(key)
-    store.put(encodedCompositeKey, encodedValue, stateName)
-
     val serializedGroupingKey = stateTypesEncoder.serializeGroupingKey()
     val serializedUserKey = stateTypesEncoder.serializeUserKey(key)
+
+    val encodedValue = stateTypesEncoder.encodeValue(value, ttlExpirationMs)
+    val encodedCompositeKey = stateTypesEncoder.encodeCompositeKey(
+      serializedGroupingKey, serializedUserKey)
+    store.put(encodedCompositeKey, encodedValue, stateName)
+
     upsertTTLForStateKey(ttlExpirationMs, serializedGroupingKey, serializedUserKey)
   }
 
@@ -149,8 +149,9 @@ class MapStateImplWithTTL[K, V](
 
   /** Remove this state. */
   override def clear(): Unit = {
-    store.removeColFamilyIfExists(stateName)
-    createColumnFamily()
+    keys().foreach { itr =>
+      removeKey(itr)
+    }
     clearTTLState()
   }
 
@@ -216,35 +217,6 @@ class MapStateImplWithTTL[K, V](
     Option(retRow).flatMap { row =>
       val ttlExpiration = stateTypesEncoder.decodeTtlExpirationMs(row)
       ttlExpiration.map(expiration => (stateTypesEncoder.decodeValue(row), expiration))
-    }
-  }
-
-  /**
-   * Get all ttl values stored in ttl state for current implicit
-   * grouping key.
-   */
-  private[sql] def getValuesInTTLState(): Iterator[Long] = {
-    val ttlIterator = ttlIndexIterator()
-    val implicitGroupingKey = stateTypesEncoder.serializeGroupingKey()
-    var nextValue: Option[Long] = None
-
-    new Iterator[Long] {
-      override def hasNext: Boolean = {
-        while (nextValue.isEmpty && ttlIterator.hasNext) {
-          val nextTtlValue = ttlIterator.next()
-          val groupingKey = nextTtlValue.groupingKey
-          if (groupingKey sameElements implicitGroupingKey) {
-            nextValue = Some(nextTtlValue.expirationMs)
-          }
-        }
-        nextValue.isDefined
-      }
-
-      override def next(): Long = {
-        val result = nextValue.get
-        nextValue = None
-        result
-      }
     }
   }
 

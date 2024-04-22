@@ -105,10 +105,7 @@ abstract class SingleKeyTTLStateImpl(
    */
   def clearTTLState(): Unit = {
     val iterator = store.iterator(ttlColumnFamilyName)
-    iterator.takeWhile { kv =>
-      val expirationMs = kv.key.getLong(0)
-      StateTTL.isExpired(expirationMs, ttlExpirationMs)
-    }.foreach { kv =>
+    iterator.foreach { kv =>
       store.remove(kv.key, ttlColumnFamilyName)
     }
   }
@@ -220,18 +217,15 @@ abstract class CompositeKeyTTLStateImpl(
 
   def clearTTLState(): Unit = {
     val iterator = store.iterator(ttlColumnFamilyName)
-    iterator.takeWhile { kv =>
-      val expirationMs = kv.key.getLong(0)
-      StateTTL.isExpired(expirationMs, ttlExpirationMs)
-    }.foreach { kv =>
+    iterator.foreach { kv =>
       store.remove(kv.key, ttlColumnFamilyName)
     }
   }
 
   def upsertTTLForStateKey(
-    expirationMs: Long,
-    groupingKey: Array[Byte],
-    userKey: Array[Byte]): Unit = {
+      expirationMs: Long,
+      groupingKey: Array[Byte],
+      userKey: Array[Byte]): Unit = {
     val encodedTtlKey = ttlKeyEncoder(InternalRow(expirationMs, groupingKey, userKey))
     store.put(encodedTtlKey, EMPTY_ROW, ttlColumnFamilyName)
   }
