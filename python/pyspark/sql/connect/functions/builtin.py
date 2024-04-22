@@ -2476,8 +2476,13 @@ def repeat(col: "ColumnOrName", n: Union["ColumnOrName", int]) -> Column:
 repeat.__doc__ = pysparkfuncs.repeat.__doc__
 
 
-def split(str: "ColumnOrName", pattern: str, limit: int = -1) -> Column:
-    return _invoke_function("split", _to_col(str), lit(pattern), lit(limit))
+def split(
+    str: "ColumnOrName",
+    pattern: Union[Column, str],
+    limit: Union["ColumnOrName", int] = -1,
+) -> Column:
+    limit = lit(limit) if isinstance(limit, int) else _to_col(limit)
+    return _invoke_function("split", _to_col(str), lit(pattern), limit)
 
 
 split.__doc__ = pysparkfuncs.split.__doc__

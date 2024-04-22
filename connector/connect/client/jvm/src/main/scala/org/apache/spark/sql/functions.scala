@@ -4203,6 +4203,20 @@ object functions {
    * @param str
    *   a string expression to split
    * @param pattern
+   *   a column of string representing a regular expression. The regex string should be a Java
+   *   regular expression.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def split(str: Column, pattern: Column): Column = Column.fn("split", str, pattern)
+
+  /**
+   * Splits str around matches of the given pattern.
+   *
+   * @param str
+   *   a string expression to split
+   * @param pattern
    *   a string representing a regular expression. The regex string should be a Java regular
    *   expression.
    * @param limit
@@ -4217,6 +4231,27 @@ object functions {
    */
   def split(str: Column, pattern: String, limit: Int): Column =
     Column.fn("split", str, lit(pattern), lit(limit))
+
+  /**
+   * Splits str around matches of the given pattern.
+   *
+   * @param str
+   *   a string expression to split
+   * @param pattern
+   *   a column of string representing a regular expression. The regex string should be a Java
+   *   regular expression.
+   * @param limit
+   *   a column of integer expression which controls the number of times the regex is applied.
+   *   <ul> <li>limit greater than 0: The resulting array's length will not be more than limit,
+   *   and the resulting array's last entry will contain all input beyond the last matched
+   *   regex.</li> <li>limit less than or equal to 0: `regex` will be applied as many times as
+   *   possible, and the resulting array can be of any size.</li> </ul>
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def split(str: Column, pattern: Column, limit: Column): Column =
+    Column.fn("split", str, pattern, limit)
 
   /**
    * Substring starts at `pos` and is of length `len` when str is String type or returns the slice
