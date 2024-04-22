@@ -29,7 +29,8 @@ from pyspark.serializers import (
     write_with_length,
     SpecialLengths,
 )
-from pyspark.sql.datasource import DataSource, DataSourceStreamReader, _SimpleStreamReaderWrapper
+from pyspark.sql.datasource import DataSource, DataSourceStreamReader
+from pyspark.sql.datasource_internal import _SimpleStreamReaderWrapper, _streamReader
 from pyspark.sql.pandas.serializers import ArrowStreamSerializer
 from pyspark.sql.types import (
     _parse_datatype_json_string,
@@ -157,7 +158,7 @@ def main(infile: IO, outfile: IO) -> None:
 
         # Instantiate data source reader.
         try:
-            reader = data_source._streamReader(schema=schema)
+            reader = _streamReader(data_source, schema)
             # Initialization succeed.
             write_int(0, outfile)
             outfile.flush()

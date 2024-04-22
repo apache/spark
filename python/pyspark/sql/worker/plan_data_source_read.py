@@ -33,6 +33,7 @@ from pyspark.serializers import (
 from pyspark.sql import Row
 from pyspark.sql.connect.conversion import ArrowTableToRowsConversion, LocalDataToArrowConversion
 from pyspark.sql.datasource import DataSource, InputPartition
+from pyspark.sql.datasource_internal import _streamReader
 from pyspark.sql.pandas.types import to_arrow_schema
 from pyspark.sql.types import (
     _parse_datatype_json_string,
@@ -204,7 +205,7 @@ def main(infile: IO, outfile: IO) -> None:
 
         # Instantiate data source reader.
         reader = (
-            data_source._streamReader(schema=schema)
+            _streamReader(data_source, schema)
             if is_streaming
             else data_source.reader(schema=schema)
         )

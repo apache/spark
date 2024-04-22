@@ -14,11 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import json
-import copy
 from abc import ABC, abstractmethod
 from collections import UserDict
-from itertools import chain
 from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple, Type, Union, TYPE_CHECKING
 
 from pyspark.sql import Row
@@ -185,12 +182,6 @@ class DataSource(ABC):
             error_class="NOT_IMPLEMENTED",
             message_parameters={"feature": "streamWriter"},
         )
-
-    def _streamReader(self, schema: StructType) -> "DataSourceStreamReader":
-        try:
-            return self.streamReader(schema=schema)
-        except PySparkNotImplementedError:
-            return _SimpleStreamReaderWrapper(self.simpleStreamReader(schema=schema))
 
     def simpleStreamReader(self, schema: StructType) -> "SimpleDataSourceStreamReader":
         """
@@ -503,19 +494,6 @@ class DataSourceStreamReader(ABC):
         ...
 
 
-class SimpleInputPartition(InputPartition):
-    def __init__(self, start: dict, end: dict):
-        self.start = start
-        self.end = end
-
-
-class PrefetchedCacheEntry(InputPartition):
-    def __init__(self, start: dict, end: dict, iterator: Iterator[Tuple]):
-        self.start = start
-        self.end = end
-        self.iterator = iterator
-
-
 class SimpleDataSourceStreamReader(ABC):
     """
     A base class for simplified streaming data source readers.
@@ -611,94 +589,6 @@ class SimpleDataSourceStreamReader(ABC):
             The latest offset that the streaming query has processed for this source.
         """
         ...
-
-
-class _SimpleStreamReaderWrapper(DataSourceStreamReader):
-    """
-    A private class that wrap :class:`SimpleDataSourceStreamReader` in prefetch and cache pattern,
-    so that :class:`SimpleDataSourceStreamReader` can integrate with streaming engine like an
-    ordinary :class:`DataSourceStreamReader`.
-
-    current_offset tracks the latest progress of the record prefetching, it is initialized to be
-    initialOffset() when query start for the first time or initialized to be the end offset of
-    the last committed batch when query restarts.
-
-    When streaming engine calls latestOffset(), the wrapper calls read() that starts from
-    current_offset, prefetches and cache the data, then updates the current_offset to be
-    the end offset of the new data.
-
-    When streaming engine call planInputPartitions(start, end), the wrapper get the prefetched data
-    from cache and send it to JVM along with the input partitions.
-
-    When query restart, batches in write ahead offset log that has not been committed will be
-    replayed by reading data between start and end offset through read2(start, end).
-    """
-
-    def __init__(self, simple_reader: SimpleDataSourceStreamReader):
-        self.simple_reader = simple_reader
-        self.initial_offset: Optional[dict] = None
-        self.current_offset: Optional[dict] = None
-        self.cache: List[PrefetchedCacheEntry] = []
-
-    def initialOffset(self) -> dict:
-        if self.initial_offset is None:
-            self.initial_offset = self.simple_reader.initialOffset()
-        return self.initial_offset
-
-    def latestOffset(self) -> dict:
-        # when query start for the first time, use initial offset as the start offset.
-        if self.current_offset is None:
-            self.current_offset = self.initialOffset()
-        (iter, end) = self.simple_reader.read(self.current_offset)
-        self.cache.append(PrefetchedCacheEntry(self.current_offset, end, iter))
-        self.current_offset = end
-        return end
-
-    def commit(self, end: dict) -> None:
-        if self.current_offset is None:
-            self.current_offset = end
-
-        end_idx = -1
-        for idx, entry in enumerate(self.cache):
-            if json.dumps(entry.end) == json.dumps(end):
-                end_idx = idx
-                break
-        if end_idx > 0:
-            # Drop prefetched data for batch that has been committed.
-            self.cache = self.cache[end_idx:]
-        self.simple_reader.commit(end)
-
-    def partitions(self, start: dict, end: dict) -> Sequence["InputPartition"]:
-        # when query restart from checkpoint, use the last committed offset as the start offset.
-        # This depends on the current behavior that streaming engine call getBatch on the last
-        # microbatch when query restart.
-        if self.current_offset is None:
-            self.current_offset = end
-        if len(self.cache) > 0:
-            assert self.cache[-1].end == end
-        return [SimpleInputPartition(start, end)]
-
-    def getCache(self, start: dict, end: dict) -> Iterator[Tuple]:
-        start_idx = -1
-        end_idx = -1
-        for idx, entry in enumerate(self.cache):
-            # There is no convenient way to compare 2 offsets.
-            # Serialize into json string before comparison.
-            if json.dumps(entry.start) == json.dumps(start):
-                start_idx = idx
-            if json.dumps(entry.end) == json.dumps(end):
-                end_idx = idx
-                break
-        if start_idx == -1 or end_idx == -1:
-            return None  # type: ignore[return-value]
-        # Chain all the data iterator between start offset and end offset
-        # need to copy here to avoid exhausting the original data iterator.
-        entries = [copy.copy(entry.iterator) for entry in self.cache[start_idx : end_idx + 1]]
-        it = chain(*entries)
-        return it
-
-    def read(self, input_partition: SimpleInputPartition) -> Iterator[Tuple]:
-        return self.simple_reader.readBetweenOffsets(input_partition.start, input_partition.end)
 
 
 class DataSourceWriter(ABC):
