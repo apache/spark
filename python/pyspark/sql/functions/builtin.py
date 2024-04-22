@@ -10944,7 +10944,11 @@ def repeat(col: "ColumnOrName", n: Union["ColumnOrName", int]) -> Column:
 
 
 @_try_remote_functions
-def split(str: "ColumnOrName", pattern: str, limit: int = -1) -> Column:
+def split(
+    str: "ColumnOrName",
+    pattern: Union[Column, str],
+    limit: Union["ColumnOrName", int] = -1,
+) -> Column:
     """
     Splits str around matches of the given pattern.
 
@@ -10957,10 +10961,10 @@ def split(str: "ColumnOrName", pattern: str, limit: int = -1) -> Column:
     ----------
     str : :class:`~pyspark.sql.Column` or str
         a string expression to split
-    pattern : str
+    pattern : :class:`~pyspark.sql.Column` or str
         a string representing a regular expression. The regex string should be
         a Java regular expression.
-    limit : int, optional
+    limit : :class:`~pyspark.sql.Column` or str or int
         an integer which controls the number of times `pattern` is applied.
 
         * ``limit > 0``: The resulting array's length will not be more than `limit`, and the
@@ -10972,6 +10976,11 @@ def split(str: "ColumnOrName", pattern: str, limit: int = -1) -> Column:
         .. versionchanged:: 3.0
            `split` now takes an optional `limit` field. If not provided, default limit value is -1.
 
+        .. versionchanged:: 4.0.0
+             `pattern` now accepts column. Does not accept column name since string type remain
+             accepted as a regular expression representation, for backwards compatibility.
+             In addition to int, `limit` now accepts column and column name.
+
     Returns
     -------
     :class:`~pyspark.sql.Column`
@@ -10979,13 +10988,53 @@ def split(str: "ColumnOrName", pattern: str, limit: int = -1) -> Column:
 
     Examples
     --------
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([('oneAtwoBthreeC',)], ['s',])
-    >>> df.select(split(df.s, '[ABC]', 2).alias('s')).collect()
-    [Row(s=['one', 'twoBthreeC'])]
-    >>> df.select(split(df.s, '[ABC]', -1).alias('s')).collect()
-    [Row(s=['one', 'two', 'three', ''])]
+    >>> df.select(sf.split(df.s, '[ABC]', 2).alias('s')).show()
+    +-----------------+
+    |                s|
+    +-----------------+
+    |[one, twoBthreeC]|
+    +-----------------+
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('oneAtwoBthreeC',)], ['s',])
+    >>> df.select(sf.split(df.s, '[ABC]', -1).alias('s')).show()
+    +-------------------+
+    |                  s|
+    +-------------------+
+    |[one, two, three, ]|
+    +-------------------+
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [('oneAtwoBthreeC', '[ABC]'), ('1A2B3C', '[1-9]+'), ('aa2bb3cc4', '[1-9]+')],
+    ...     ['s', 'pattern']
+    ... )
+    >>> df.select(sf.split(df.s, df.pattern).alias('s')).show()
+    +-------------------+
+    |                  s|
+    +-------------------+
+    |[one, two, three, ]|
+    |        [, A, B, C]|
+    |     [aa, bb, cc, ]|
+    +-------------------+
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [('oneAtwoBthreeC', '[ABC]', 2), ('1A2B3C', '[1-9]+', -1)],
+    ...     ['s', 'pattern', 'expected_parts']
+    ... )
+    >>> df.select(sf.split(df.s, df.pattern, df.expected_parts).alias('s')).show()
+    +-----------------+
+    |                s|
+    +-----------------+
+    |[one, twoBthreeC]|
+    |      [, A, B, C]|
+    +-----------------+
     """
-    return _invoke_function("split", _to_java_column(str), pattern, limit)
+    limit = lit(limit) if isinstance(limit, int) else limit
+    return _invoke_function_over_columns("split", str, lit(pattern), limit)
 
 
 @_try_remote_functions

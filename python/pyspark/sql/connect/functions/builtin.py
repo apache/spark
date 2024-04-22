@@ -42,6 +42,7 @@ import sys
 import numpy as np
 
 from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.sql.dataframe import DataFrame as ParentDataFrame
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import (
     CaseWhen,
@@ -80,7 +81,6 @@ if TYPE_CHECKING:
         DataTypeOrString,
         UserDefinedFunctionLike,
     )
-    from pyspark.sql.connect.dataframe import DataFrame
     from pyspark.sql.connect.udtf import UserDefinedTableFunction
 
 
@@ -314,7 +314,7 @@ def getbit(col: "ColumnOrName", pos: "ColumnOrName") -> Column:
 getbit.__doc__ = pysparkfuncs.getbit.__doc__
 
 
-def broadcast(df: "DataFrame") -> "DataFrame":
+def broadcast(df: "ParentDataFrame") -> "ParentDataFrame":
     from pyspark.sql.connect.dataframe import DataFrame
 
     if not isinstance(df, DataFrame):
@@ -2476,8 +2476,13 @@ def repeat(col: "ColumnOrName", n: Union["ColumnOrName", int]) -> Column:
 repeat.__doc__ = pysparkfuncs.repeat.__doc__
 
 
-def split(str: "ColumnOrName", pattern: str, limit: int = -1) -> Column:
-    return _invoke_function("split", _to_col(str), lit(pattern), lit(limit))
+def split(
+    str: "ColumnOrName",
+    pattern: Union[Column, str],
+    limit: Union["ColumnOrName", int] = -1,
+) -> Column:
+    limit = lit(limit) if isinstance(limit, int) else _to_col(limit)
+    return _invoke_function("split", _to_col(str), lit(pattern), limit)
 
 
 split.__doc__ = pysparkfuncs.split.__doc__

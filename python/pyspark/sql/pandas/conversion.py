@@ -61,30 +61,6 @@ class PandasConversionMixin:
     """
 
     def toPandas(self) -> "PandasDataFrameLike":
-        """
-        Returns the contents of this :class:`DataFrame` as Pandas ``pandas.DataFrame``.
-
-        This is only available if Pandas is installed and available.
-
-        .. versionadded:: 1.3.0
-
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
-
-        Notes
-        -----
-        This method should only be used if the resulting Pandas ``pandas.DataFrame`` is
-        expected to be small, as all the data is loaded into the driver's memory.
-
-        Usage with ``spark.sql.execution.arrow.pyspark.enabled=True`` is experimental.
-
-        Examples
-        --------
-        >>> df.toPandas()  # doctest: +SKIP
-           age   name
-        0    2  Alice
-        1    5    Bob
-        """
         from pyspark.sql.dataframe import DataFrame
 
         assert isinstance(self, DataFrame)
