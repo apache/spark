@@ -28,7 +28,7 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.internal.{LogEntry, Logging, MDC}
-import org.apache.spark.internal.LogKey.{CLASS_NAME, NUM_PARTITION, STAGE_ID, STORAGE_LEVEL}
+import org.apache.spark.internal.LogKey.{CLASS_NAME, NUM_PARTITION, PIPELINE_STAGE_UID, STORAGE_LEVEL}
 import org.apache.spark.ml.{MLEvents, PipelineStage}
 import org.apache.spark.ml.param.{Param, Params}
 import org.apache.spark.rdd.RDD
@@ -55,7 +55,7 @@ private[spark] class Instrumentation private () extends Logging with MLEvents {
     // call safer `Utils.getSimpleName` instead
     val className = Utils.getSimpleName(stage.getClass)
     logInfo(log"Stage class: ${MDC(CLASS_NAME, className)}")
-    logInfo(log"Stage uid: ${MDC(STAGE_ID, stage.uid)}")
+    logInfo(log"Stage uid: ${MDC(PIPELINE_STAGE_UID, stage.uid)}")
   }
 
   /**
