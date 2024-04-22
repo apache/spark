@@ -270,6 +270,7 @@ try:
             "pyspark.ml.deepspeed",
             "pyspark.sql",
             "pyspark.sql.avro",
+            "pyspark.sql.classic",
             "pyspark.sql.connect",
             "pyspark.sql.connect.avro",
             "pyspark.sql.connect.client",

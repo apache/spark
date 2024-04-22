@@ -302,6 +302,33 @@ def try_remote_session_classmethod(f: FuncT) -> FuncT:
     return cast(FuncT, wrapped)
 
 
+def dispatch_df_method(f: FuncT) -> FuncT:
+    """
+    For the usecases of direct DataFrame.union(df, ...), it checks if self
+    is a Connect DataFrame or Classic DataFrame, and dispatches.
+    """
+
+    @functools.wraps(f)
+    def wrapped(*args: Any, **kwargs: Any) -> Any:
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
+            from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
+
+            if isinstance(args[0], ConnectDataFrame):
+                return getattr(ConnectDataFrame, f.__name__)(*args, **kwargs)
+        else:
+            from pyspark.sql.classic.dataframe import DataFrame as ClassicDataFrame
+
+            if isinstance(args[0], ClassicDataFrame):
+                return getattr(ClassicDataFrame, f.__name__)(*args, **kwargs)
+
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": f"DataFrame.{f.__name__}"},
+        )
+
+    return cast(FuncT, wrapped)
+
+
 def pyspark_column_op(
     func_name: str, left: "IndexOpsLike", right: Any, fillna: Any = None
 ) -> Union["SeriesOrIndex", None]:
@@ -343,7 +370,7 @@ def get_dataframe_class() -> Type["DataFrame"]:
     if is_remote():
         from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
 
-        return ConnectDataFrame  # type: ignore[return-value]
+        return ConnectDataFrame
     else:
         return PySparkDataFrame
 
