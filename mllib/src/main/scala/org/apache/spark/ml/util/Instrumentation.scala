@@ -17,7 +17,6 @@
 
 package org.apache.spark.ml.util
 
-
 import java.io.{PrintWriter, StringWriter}
 import java.util.UUID
 

@@ -18,7 +18,9 @@
 package org.apache.spark.ml.clustering
 
 import scala.collection.mutable
+
 import org.apache.hadoop.fs.Path
+
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.LogKey.{COST, INIT_MODE, NUM_ITERATIONS, TIME_UNITS}
 import org.apache.spark.internal.MDC

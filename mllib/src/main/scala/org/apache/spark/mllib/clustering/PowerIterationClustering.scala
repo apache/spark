@@ -20,13 +20,12 @@ package org.apache.spark.mllib.clustering
 import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
-
 import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.graphx._
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{DELTA, DIFF_DELTA, NORM}
+import org.apache.spark.internal.LogKey.{DELTA, DIFF_DELTA, NORM, NUM_ITERATIONS}
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.{Loader, MLUtils, Saveable}
 import org.apache.spark.rdd.RDD
@@ -369,7 +368,7 @@ object PowerIterationClustering extends Logging {
     var diffDelta = Double.MaxValue
     var curG = g
     for (iter <- 0 until maxIterations if math.abs(diffDelta) > tol) {
-      val msgPrefix = s"Iteration $iter"
+      val msgPrefix = log"Iteration ${MDC(NUM_ITERATIONS, iter)}"
       // multiply W by vt
       val v = curG.aggregateMessages[Double](
         sendMsg = ctx => ctx.sendToSrc(ctx.attr * ctx.dstAttr),
