@@ -261,6 +261,7 @@ public class CollationSupportSuite {
     assertEndsWith("The i̇o", "İo", "UNICODE_CI", true);
   }
 
+
   private void assertUpper(String target, String collationName, String expected)
           throws SparkException {
     UTF8String target_utf8 = UTF8String.fromString(target);
@@ -409,6 +410,87 @@ public class CollationSupportSuite {
     assertInitCap("İo", "UTF8_BINARY_LCASE","İo");
     assertInitCap("İo", "UNICODE","İo");
     assertInitCap("İo", "UNICODE_CI","İo");
+    
+  private void assertStringInstr(String string, String substring, String collationName,
+          Integer expected) throws SparkException {
+    UTF8String str = UTF8String.fromString(string);
+    UTF8String substr = UTF8String.fromString(substring);
+    int collationId = CollationFactory.collationNameToId(collationName);
+    assertEquals(expected, CollationSupport.StringInstr.exec(str, substr, collationId) + 1);
+  }
+
+  @Test
+  public void testStringInstr() throws SparkException {
+    assertStringInstr("aaads", "Aa", "UTF8_BINARY", 0);
+    assertStringInstr("aaaDs", "de", "UTF8_BINARY", 0);
+    assertStringInstr("aaads", "ds", "UTF8_BINARY", 4);
+    assertStringInstr("xxxx", "", "UTF8_BINARY", 1);
+    assertStringInstr("", "xxxx", "UTF8_BINARY", 0);
+    assertStringInstr("test大千世界X大千世界", "大千", "UTF8_BINARY", 5);
+    assertStringInstr("test大千世界X大千世界", "界X", "UTF8_BINARY", 8);
+    assertStringInstr("aaads", "Aa", "UTF8_BINARY_LCASE", 1);
+    assertStringInstr("aaaDs", "de", "UTF8_BINARY_LCASE", 0);
+    assertStringInstr("aaaDs", "ds", "UTF8_BINARY_LCASE", 4);
+    assertStringInstr("xxxx", "", "UTF8_BINARY_LCASE", 1);
+    assertStringInstr("", "xxxx", "UTF8_BINARY_LCASE", 0);
+    assertStringInstr("test大千世界X大千世界", "大千", "UTF8_BINARY_LCASE", 5);
+    assertStringInstr("test大千世界X大千世界", "界x", "UTF8_BINARY_LCASE", 8);
+    assertStringInstr("aaads", "Aa", "UNICODE", 0);
+    assertStringInstr("aaads", "aa", "UNICODE", 1);
+    assertStringInstr("aaads", "de", "UNICODE", 0);
+    assertStringInstr("xxxx", "", "UNICODE", 1);
+    assertStringInstr("", "xxxx", "UNICODE", 0);
+    assertStringInstr("test大千世界X大千世界", "界x", "UNICODE", 0);
+    assertStringInstr("test大千世界X大千世界", "界X", "UNICODE", 8);
+    assertStringInstr("aaads", "AD", "UNICODE_CI", 3);
+    assertStringInstr("aaads", "dS", "UNICODE_CI", 4);
+    assertStringInstr("test大千世界X大千世界", "界y", "UNICODE_CI", 0);
+    assertStringInstr("test大千世界X大千世界", "界x", "UNICODE_CI", 8);
+    assertStringInstr("abİo12", "i̇o", "UNICODE_CI", 3);
+    assertStringInstr("abi̇o12", "İo", "UNICODE_CI", 3);
+  }
+
+  private void assertFindInSet(String word, String set, String collationName,
+        Integer expected) throws SparkException {
+    UTF8String w = UTF8String.fromString(word);
+    UTF8String s = UTF8String.fromString(set);
+    int collationId = CollationFactory.collationNameToId(collationName);
+    assertEquals(expected, CollationSupport.FindInSet.exec(w, s, collationId));
+  }
+
+  @Test
+  public void testFindInSet() throws SparkException {
+    assertFindInSet("AB", "abc,b,ab,c,def", "UTF8_BINARY", 0);
+    assertFindInSet("abc", "abc,b,ab,c,def", "UTF8_BINARY", 1);
+    assertFindInSet("def", "abc,b,ab,c,def", "UTF8_BINARY", 5);
+    assertFindInSet("d,ef", "abc,b,ab,c,def", "UTF8_BINARY", 0);
+    assertFindInSet("", "abc,b,ab,c,def", "UTF8_BINARY", 0);
+    assertFindInSet("a", "abc,b,ab,c,def", "UTF8_BINARY_LCASE", 0);
+    assertFindInSet("c", "abc,b,ab,c,def", "UTF8_BINARY_LCASE", 4);
+    assertFindInSet("AB", "abc,b,ab,c,def", "UTF8_BINARY_LCASE", 3);
+    assertFindInSet("AbC", "abc,b,ab,c,def", "UTF8_BINARY_LCASE", 1);
+    assertFindInSet("abcd", "abc,b,ab,c,def", "UTF8_BINARY_LCASE", 0);
+    assertFindInSet("d,ef", "abc,b,ab,c,def", "UTF8_BINARY_LCASE", 0);
+    assertFindInSet("XX", "xx", "UTF8_BINARY_LCASE", 1);
+    assertFindInSet("", "abc,b,ab,c,def", "UTF8_BINARY_LCASE", 0);
+    assertFindInSet("界x", "test,大千,世,界X,大,千,世界", "UTF8_BINARY_LCASE", 4);
+    assertFindInSet("a", "abc,b,ab,c,def", "UNICODE", 0);
+    assertFindInSet("ab", "abc,b,ab,c,def", "UNICODE", 3);
+    assertFindInSet("Ab", "abc,b,ab,c,def", "UNICODE", 0);
+    assertFindInSet("d,ef", "abc,b,ab,c,def", "UNICODE", 0);
+    assertFindInSet("xx", "xx", "UNICODE", 1);
+    assertFindInSet("界x", "test,大千,世,界X,大,千,世界", "UNICODE", 0);
+    assertFindInSet("大", "test,大千,世,界X,大,千,世界", "UNICODE", 5);
+    assertFindInSet("a", "abc,b,ab,c,def", "UNICODE_CI", 0);
+    assertFindInSet("C", "abc,b,ab,c,def", "UNICODE_CI", 4);
+    assertFindInSet("DeF", "abc,b,ab,c,dEf", "UNICODE_CI", 5);
+    assertFindInSet("DEFG", "abc,b,ab,c,def", "UNICODE_CI", 0);
+    assertFindInSet("XX", "xx", "UNICODE_CI", 1);
+    assertFindInSet("界x", "test,大千,世,界X,大,千,世界", "UNICODE_CI", 4);
+    assertFindInSet("界x", "test,大千,界Xx,世,界X,大,千,世界", "UNICODE_CI", 5);
+    assertFindInSet("大", "test,大千,世,界X,大,千,世界", "UNICODE_CI", 5);
+    assertFindInSet("i̇o", "ab,İo,12", "UNICODE_CI", 2);
+    assertFindInSet("İo", "ab,i̇o,12", "UNICODE_CI", 2);
   }
 
   // TODO: Test more collation-aware string expressions.

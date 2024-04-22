@@ -978,15 +978,19 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
 case class FindInSet(left: Expression, right: Expression) extends BinaryExpression
     with ImplicitCastInputTypes with NullIntolerant {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
+  final lazy val collationId: Int = left.dataType.asInstanceOf[StringType].collationId
 
-  override protected def nullSafeEval(word: Any, set: Any): Any =
-    set.asInstanceOf[UTF8String].findInSet(word.asInstanceOf[UTF8String])
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeAnyCollation, StringTypeAnyCollation)
+
+  override protected def nullSafeEval(word: Any, set: Any): Any = {
+    CollationSupport.FindInSet.
+      exec(word.asInstanceOf[UTF8String], set.asInstanceOf[UTF8String], collationId)
+  }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (word, set) =>
-      s"${ev.value} = $set.findInSet($word);"
-    )
+    defineCodeGen(ctx, ev, (word, set) => CollationSupport.FindInSet.
+      genCode(word, set, collationId))
   }
 
   override def dataType: DataType = IntegerType
@@ -1350,20 +1354,24 @@ case class StringTrimRight(srcStr: Expression, trimStr: Option[Expression] = Non
 case class StringInstr(str: Expression, substr: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
+  final lazy val collationId: Int = left.dataType.asInstanceOf[StringType].collationId
+
   override def left: Expression = str
   override def right: Expression = substr
   override def dataType: DataType = IntegerType
-  override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeAnyCollation, StringTypeAnyCollation)
 
   override def nullSafeEval(string: Any, sub: Any): Any = {
-    string.asInstanceOf[UTF8String].indexOf(sub.asInstanceOf[UTF8String], 0) + 1
+    CollationSupport.StringInstr.
+      exec(string.asInstanceOf[UTF8String], sub.asInstanceOf[UTF8String], collationId) + 1
   }
 
   override def prettyName: String = "instr"
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (l, r) =>
-      s"($l).indexOf($r, 0) + 1")
+      defineCodeGen(ctx, ev, (string, substring) =>
+        CollationSupport.StringInstr.genCode(string, substring, collationId) + " + 1")
   }
 
   override protected def withNewChildrenInternal(
