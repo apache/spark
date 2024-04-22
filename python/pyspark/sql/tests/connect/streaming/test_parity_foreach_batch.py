@@ -20,6 +20,7 @@ import unittest
 from pyspark.sql.tests.streaming.test_streaming_foreach_batch import StreamingTestsForeachBatchMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.errors import PySparkPicklingError
+from pyspark.errors.exceptions.connect import SparkConnectGrpcException
 
 
 class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedConnectTestCase):
@@ -66,26 +67,41 @@ class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedCo
             q = df.writeStream.foreachBatch(func).start()
             q.processAllAvailable()
 
-    def test_pickling_deserialization_error(self):
-        class NoUnpickle:
+    def test_worker_initialization_error(self):
+        class SerializableButNotDeserializable:
+            @staticmethod
+            def _reduce_function():
+                raise ValueError("Cannot unpickle this object")
 
             def __reduce__(self):
-                # Serialize only the data attribute
-                return self.throw_exception(), ()
+                # Return a static method that cannot be called during unpickling
+                return self._reduce_function, ()
 
-            def throw_exception(self):
-                raise RuntimeError("Cannot unpickle instance of NoUnpickle")
+        # Create an instance of the class
+        obj = SerializableButNotDeserializable()
 
-        no_unpickle = NoUnpickle()
+        df = (self.spark.readStream
+              .format("rate")
+              .option("rowsPerSecond", "10")
+              .option("numPartitions", "1")
+              .load())
 
-        def func(df, _):
-            print(no_unpickle)
-            df.count()
+        obj = SerializableButNotDeserializable()
 
-        with self.assertRaises(Exception, msg="Cannot unpickle instance of NoUnpickle"):
-            df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
-            q = df.writeStream.foreachBatch(func).start()
-            q.processAllAvailable()
+        def fcn(batch, id):
+            print(obj)
+
+        # Assert that an exception occurs during the initialization
+        with self.assertRaises(SparkConnectGrpcException) as error:
+            q = (df.select("value")
+                 .writeStream
+                 .foreachBatch(fcn)
+                 .start())
+
+        # Assert that the error message contains the expected string
+        self.assertIn(
+            "(java.lang.RuntimeException) Runner initialization failed",
+            str(error.exception))
 
     def test_accessing_spark_session(self):
         spark = self.spark
