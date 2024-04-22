@@ -1079,15 +1079,6 @@
         <groupId>org.glassfish.jersey.test-framework.providers</groupId>
         <artifactId>jersey-test-framework-provider-simple</artifactId>
         <version>${jersey.version}</version>
-        <!--
-          TODO(SPARK-44170): Remove the exclusion of jupiter after Spark migrates to Junit5.
-        -->
-        <exclusions>
-          <exclusion>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>*</artifactId>
-          </exclusion>
-        </exclusions>
         <scope>test</scope>
       </dependency>
       <dependency>
