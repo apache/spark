@@ -115,6 +115,68 @@ class CollationStringExpressionsSuite
     assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
   }
 
+  test("Support StringInStr string expression with collation") {
+    case class StringInStrTestCase[R](string: String, substring: String, c: String, result: R)
+    val testCases = Seq(
+      // scalastyle:off
+      StringInStrTestCase("test大千世界X大千世界", "大千", "UTF8_BINARY", 5),
+      StringInStrTestCase("test大千世界X大千世界", "界x", "UTF8_BINARY_LCASE", 8),
+      StringInStrTestCase("test大千世界X大千世界", "界x", "UNICODE", 0),
+      StringInStrTestCase("test大千世界X大千世界", "界y", "UNICODE_CI", 0),
+      StringInStrTestCase("test大千世界X大千世界", "界x", "UNICODE_CI", 8),
+      StringInStrTestCase("abİo12", "i̇o", "UNICODE_CI", 3)
+      // scalastyle:on
+    )
+    testCases.foreach(t => {
+      val query = s"SELECT instr(collate('${t.string}','${t.c}')," +
+        s"collate('${t.substring}','${t.c}'))"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(IntegerType))
+      // Implicit casting
+      checkAnswer(sql(s"SELECT instr(collate('${t.string}','${t.c}')," +
+        s"'${t.substring}')"), Row(t.result))
+      checkAnswer(sql(s"SELECT instr('${t.string}'," +
+        s"collate('${t.substring}','${t.c}'))"), Row(t.result))
+    })
+    // Collation mismatch
+    val collationMismatch = intercept[AnalysisException] {
+      sql(s"SELECT instr(collate('aaads','UTF8_BINARY'), collate('Aa','UTF8_BINARY_LCASE'))")
+    }
+    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+  }
+
+  test("Support FindInSet string expression with collation") {
+    case class FindInSetTestCase[R](word: String, set: String, c: String, result: R)
+    val testCases = Seq(
+      FindInSetTestCase("AB", "abc,b,ab,c,def", "UTF8_BINARY", 0),
+      FindInSetTestCase("C", "abc,b,ab,c,def", "UTF8_BINARY_LCASE", 4),
+      FindInSetTestCase("d,ef", "abc,b,ab,c,def", "UNICODE", 0),
+      // scalastyle:off
+      FindInSetTestCase("i̇o", "ab,İo,12", "UNICODE_CI", 2),
+      FindInSetTestCase("İo", "ab,i̇o,12", "UNICODE_CI", 2)
+      // scalastyle:on
+    )
+    testCases.foreach(t => {
+      val query = s"SELECT find_in_set(collate('${t.word}', '${t.c}')," +
+        s"collate('${t.set}', '${t.c}'))"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(IntegerType))
+      // Implicit casting
+      checkAnswer(sql(s"SELECT find_in_set(collate('${t.word}', '${t.c}')," +
+        s"'${t.set}')"), Row(t.result))
+      checkAnswer(sql(s"SELECT find_in_set('${t.word}'," +
+        s"collate('${t.set}', '${t.c}'))"), Row(t.result))
+    })
+    // Collation mismatch
+    val collationMismatch = intercept[AnalysisException] {
+      sql(s"SELECT find_in_set(collate('AB','UTF8_BINARY')," +
+        s"collate('ab,xyz,fgh','UTF8_BINARY_LCASE'))")
+    }
+    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+  }
+
   test("Support StartsWith string expression with collation") {
     // Supported collations
     case class StartsWithTestCase[R](l: String, r: String, c: String, result: R)
