@@ -20,6 +20,7 @@ package org.apache.spark.mllib.clustering
 import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
+
 import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
@@ -368,7 +369,7 @@ object PowerIterationClustering extends Logging {
     var diffDelta = Double.MaxValue
     var curG = g
     for (iter <- 0 until maxIterations if math.abs(diffDelta) > tol) {
-      val msgPrefix = log"Iteration ${MDC(NUM_ITERATIONS, iter)}"
+      val msgPrefix = log"Iteration ${MDC(NUM_ITERATIONS, iter)}:"
       // multiply W by vt
       val v = curG.aggregateMessages[Double](
         sendMsg = ctx => ctx.sendToSrc(ctx.attr * ctx.dstAttr),
@@ -378,16 +379,15 @@ object PowerIterationClustering extends Logging {
                           /* useEdge */ true)).cache()
       // normalize v
       val norm = v.values.map(math.abs).sum()
-      logInfo(log"$msgPrefix: norm(v) = ${MDC(NORM, norm)}.")
+      logInfo(msgPrefix + log" norm(v) = ${MDC(NORM, norm)}.")
       val v1 = v.mapValues(x => x / norm)
       // compare difference
       val delta = curG.joinVertices(v1) { case (_, x, y) =>
         math.abs(x - y)
       }.vertices.values.sum()
-      logInfo(log"$msgPrefix: delta = ${MDC(DELTA, delta)}.")
+      logInfo(msgPrefix + log" delta = ${MDC(DELTA, delta)}.")
       diffDelta = math.abs(delta - prevDelta)
-      logInfo(log"$msgPrefix: diff(delta) =" +
-        log" ${MDC(DIFF_DELTA, diffDelta)}.")
+      logInfo(msgPrefix + log" diff(delta) = ${MDC(DIFF_DELTA, diffDelta)}.")
 
       if (math.abs(diffDelta) < tol) {
         /**
