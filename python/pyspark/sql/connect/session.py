@@ -48,10 +48,11 @@ from pandas.api.types import (  # type: ignore[attr-defined]
 )
 import urllib
 
+from pyspark.sql.connect.dataframe import DataFrame
+from pyspark.sql.dataframe import DataFrame as ParentDataFrame
 from pyspark.loose_version import LooseVersion
 from pyspark.sql.connect.client import SparkConnectClient, DefaultChannelBuilder
 from pyspark.sql.connect.conf import RuntimeConf
-from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.connect.plan import (
     SQL,
     Range,
@@ -106,7 +107,6 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.udtf import UDTFRegistration
     from pyspark.sql.connect.shell.progress import ProgressHandler
     from pyspark.sql.connect.datasource import DataSourceRegistration
-
 
 try:
     import memory_profiler  # noqa: F401
@@ -325,7 +325,7 @@ class SparkSession:
 
     active.__doc__ = PySparkSession.active.__doc__
 
-    def table(self, tableName: str) -> DataFrame:
+    def table(self, tableName: str) -> ParentDataFrame:
         if not isinstance(tableName, str):
             raise PySparkTypeError(
                 error_class="NOT_STR",
@@ -402,7 +402,7 @@ class SparkSession:
         self,
         data: Union["pd.DataFrame", "np.ndarray", Iterable[Any]],
         schema: Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]] = None,
-    ) -> "DataFrame":
+    ) -> "ParentDataFrame":
         assert data is not None
         if isinstance(data, DataFrame):
             raise PySparkTypeError(
@@ -636,7 +636,7 @@ class SparkSession:
 
         df = DataFrame(plan, self)
         if _cols is not None and len(_cols) > 0:
-            df = df.toDF(*_cols)
+            df = df.toDF(*_cols)  # type: ignore[assignment]
         return df
 
     createDataFrame.__doc__ = PySparkSession.createDataFrame.__doc__
@@ -646,7 +646,7 @@ class SparkSession:
         sqlQuery: str,
         args: Optional[Union[Dict[str, Any], List]] = None,
         **kwargs: Any,
-    ) -> "DataFrame":
+    ) -> "ParentDataFrame":
         _args = []
         _named_args = {}
         if args is not None:
@@ -687,7 +687,7 @@ class SparkSession:
         end: Optional[int] = None,
         step: int = 1,
         numPartitions: Optional[int] = None,
-    ) -> DataFrame:
+    ) -> ParentDataFrame:
         if end is None:
             actual_end = start
             start = 0
@@ -896,7 +896,7 @@ class SparkSession:
 
     copyFromLocalToFs.__doc__ = PySparkSession.copyFromLocalToFs.__doc__
 
-    def _create_remote_dataframe(self, remote_id: str) -> "DataFrame":
+    def _create_remote_dataframe(self, remote_id: str) -> "ParentDataFrame":
         """
         In internal API to reference a runtime DataFrame on the server side.
         This is used in ForeachBatch() runner, where the remote DataFrame refers to the

@@ -19,7 +19,7 @@ import unittest
 
 from pyspark.util import is_remote_only
 from pyspark.sql import SparkSession as PySparkSession
-from pyspark.sql.dataframe import DataFrame as SDF
+from pyspark.sql.classic.dataframe import DataFrame as SDF
 from pyspark.ml import functions as SF
 from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.testing.connectutils import (

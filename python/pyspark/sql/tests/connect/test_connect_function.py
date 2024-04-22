@@ -32,7 +32,7 @@ if should_test_connect:
     from pyspark.sql.connect.column import Column
     from pyspark.sql import functions as SF
     from pyspark.sql.window import Window as SW
-    from pyspark.sql.dataframe import DataFrame as SDF
+    from pyspark.sql.classic.dataframe import DataFrame as SDF
     from pyspark.sql.connect import functions as CF
     from pyspark.sql.connect.window import Window as CW
     from pyspark.sql.connect.dataframe import DataFrame as CDF
