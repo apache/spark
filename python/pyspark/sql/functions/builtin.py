@@ -10223,13 +10223,13 @@ def unbase64(col: "ColumnOrName") -> Column:
     ...                             "UHlTcGFyaw==",
     ...                             "UGFuZGFzIEFQSQ=="], "STRING")
     >>> df.select(unbase64("value")).show()
-    +--------------------+
-    |     unbase64(value)|
-    +--------------------+
-    |    [53 70 61 72 6B]|
-    |[50 79 53 70 61 7...|
-    |[50 61 6E 64 61 7...|
-    +--------------------+
+    +---------------+
+    |unbase64(value)|
+    +---------------+
+    |          Spark|
+    |        PySpark|
+    |     Pandas API|
+    +---------------+
     """
     return _invoke_function_over_columns("unbase64", col)
 
@@ -10438,7 +10438,7 @@ def encode(col: "ColumnOrName", charset: str) -> Column:
     +----------------+
     |encode(c, UTF-8)|
     +----------------+
-    |   [61 62 63 64]|
+    |            abcd|
     +----------------+
     """
     return _invoke_function("encode", _to_java_column(col), charset)
@@ -13593,11 +13593,11 @@ def concat(*cols: "ColumnOrName") -> Column:
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(bytearray(b'abc'), bytearray(b'def'))], ['a', 'b'])
     >>> df.select(sf.concat(df.a, df.b)).show()
-    +-------------------+
-    |       concat(a, b)|
-    +-------------------+
-    |[61 62 63 64 65 66]|
-    +-------------------+
+    +------------+
+    |concat(a, b)|
+    +------------+
+    |      abcdef|
+    +------------+
 
     Example 5: Concatenating mixed types of columns
 
