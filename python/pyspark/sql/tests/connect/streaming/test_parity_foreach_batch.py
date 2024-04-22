@@ -100,7 +100,7 @@ class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedCo
 
         # Assert that the error message contains the expected string
         self.assertIn(
-            "(java.lang.RuntimeException) Runner initialization failed",
+            "(java.lang.PythonException) Streaming Runner initialization failed",
             str(error.exception))
 
     def test_accessing_spark_session(self):

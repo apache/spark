@@ -93,8 +93,9 @@ private[spark] class StreamingPythonRunner(
     val resFromPython = dataIn.readInt()
     if (resFromPython != 0) {
       val errMessage = PythonWorkerUtils.readUTF(dataIn)
-      throw new RuntimeException(s"Runner initialization failed (returned $resFromPython). " +
-        s"Error message: $errMessage")
+      throw new PythonException(s"Streaming Runner initialization failed" +
+        s" (returned $resFromPython). " +
+        s"Error message: $errMessage", null)
     }
     logInfo(s"Runner initialization succeeded (returned $resFromPython).")
 

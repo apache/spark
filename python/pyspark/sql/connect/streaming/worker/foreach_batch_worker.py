@@ -77,6 +77,7 @@ def main(infile: IO, outfile: IO) -> None:
         func = worker.read_command(pickle_ser, infile)
         write_int(0, outfile)
         outfile.flush()
+
         while True:
             df_ref_id = utf8_deserializer.loads(infile)
             batch_id = read_long(infile)
