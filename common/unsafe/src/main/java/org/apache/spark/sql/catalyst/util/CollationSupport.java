@@ -378,7 +378,7 @@ public final class CollationSupport {
 
       return stringSearch.next();
     }
-    
+
   }
 
 }
