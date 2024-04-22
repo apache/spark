@@ -24,7 +24,9 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter}
 import org.apache.spark.sql.errors.QueryErrorsBase
-import org.apache.spark.sql.types.{AbstractDataType, DataType, StringType}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.types.StringTypeAnyCollation
+import org.apache.spark.sql.types.{AbstractDataType, DataType}
 import org.apache.spark.unsafe.types.UTF8String
 
 // scalastyle:off line.size.limit
@@ -84,7 +86,7 @@ object MaskExpressionBuilder extends ExpressionBuilder {
     val digitCharArg = InputParameter("digitChar", Some(Literal(Mask.MASKED_DIGIT)))
     val otherCharArg = InputParameter(
       "otherChar",
-      Some(Literal(Mask.MASKED_IGNORE, StringType)))
+      Some(Literal(Mask.MASKED_IGNORE, SQLConf.get.defaultStringType)))
     val functionSignature: FunctionSignature = FunctionSignature(Seq(
       strArg, upperCharArg, lowerCharArg, digitCharArg, otherCharArg))
     Some(functionSignature)
@@ -112,7 +114,7 @@ case class Mask(
       Literal(Mask.MASKED_UPPERCASE),
       Literal(Mask.MASKED_LOWERCASE),
       Literal(Mask.MASKED_DIGIT),
-      Literal(Mask.MASKED_IGNORE, StringType))
+      Literal(Mask.MASKED_IGNORE, input.dataType))
 
   def this(input: Expression, upperChar: Expression) =
     this(
@@ -120,7 +122,7 @@ case class Mask(
       upperChar,
       Literal(Mask.MASKED_LOWERCASE),
       Literal(Mask.MASKED_DIGIT),
-      Literal(Mask.MASKED_IGNORE, StringType))
+      Literal(Mask.MASKED_IGNORE, input.dataType))
 
   def this(input: Expression, upperChar: Expression, lowerChar: Expression) =
     this(
@@ -128,14 +130,15 @@ case class Mask(
       upperChar,
       lowerChar,
       Literal(Mask.MASKED_DIGIT),
-      Literal(Mask.MASKED_IGNORE, StringType))
+      Literal(Mask.MASKED_IGNORE, input.dataType))
 
   def this(
       input: Expression,
       upperChar: Expression,
       lowerChar: Expression,
       digitChar: Expression) =
-    this(input, upperChar, lowerChar, digitChar, Literal(Mask.MASKED_IGNORE, StringType))
+    this(input, upperChar, lowerChar, digitChar,
+      Literal(Mask.MASKED_IGNORE, input.dataType))
 
   override def checkInputDataTypes(): TypeCheckResult = {
 
@@ -187,7 +190,8 @@ case class Mask(
    *      NumericType, IntegralType, FractionalType.
    */
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringType, StringType, StringType, StringType, StringType)
+    Seq(StringTypeAnyCollation, StringTypeAnyCollation, StringTypeAnyCollation,
+      StringTypeAnyCollation, StringTypeAnyCollation)
 
   override def nullable: Boolean = true
 
@@ -276,7 +280,7 @@ case class Mask(
    * Returns the [[DataType]] of the result of evaluating this expression. It is invalid to query
    * the dataType of an unresolved expression (i.e., when `resolved` == false).
    */
-  override def dataType: DataType = StringType
+  override def dataType: DataType = input.dataType
 
   /**
    * Returns a Seq of the children of this node. Children should not change. Immutability required
