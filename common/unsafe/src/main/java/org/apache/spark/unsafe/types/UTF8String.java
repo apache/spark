@@ -22,7 +22,6 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
-import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -386,7 +385,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   private UTF8String toUpperCaseSlow() {
-    return fromString(toString().toUpperCase(Locale.ROOT));
+    // checkstyle.off: RegexpSinglelineJava
+    return fromString(toString().toUpperCase());
+    // checkstyle.on: RegexpSinglelineJava
   }
 
   // checkstyle.off: RegexpSinglelineJava
@@ -441,7 +442,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   private UTF8String toLowerCaseSlow() {
-    return fromString(toString().toLowerCase(Locale.ROOT));
+    // checkstyle.off: RegexpSinglelineJava
+    return fromString(toString().toLowerCase());
+    // checkstyle.on: RegexpSinglelineJava
   }
 
   /**

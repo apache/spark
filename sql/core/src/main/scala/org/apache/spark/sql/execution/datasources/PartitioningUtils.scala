@@ -169,7 +169,9 @@ object PartitioningUtils extends SQLConfHelper {
       //   "hdfs://host:9000/invalidPath"
       //   "hdfs://host:9000/path"
       // TODO: Selective case sensitivity.
+      // scalastyle:off caselocale
       val discoveredBasePaths = optDiscoveredBasePaths.flatten.map(_.toString.toLowerCase())
+      // scalastyle:on caselocale
       assert(
         discoveredBasePaths.distinct.size == 1,
         "Conflicting directory structures detected. Suspicious paths:\b" +
@@ -382,7 +384,9 @@ object PartitioningUtils extends SQLConfHelper {
       val partColNames = if (caseSensitive) {
         pathsWithPartitionValues.map(_._2.columnNames)
       } else {
+        // scalastyle:off caselocale
         pathsWithPartitionValues.map(_._2.columnNames.map(_.toLowerCase()))
+        // scalastyle:on caselocale
       }
       assert(
         partColNames.distinct.size == 1,

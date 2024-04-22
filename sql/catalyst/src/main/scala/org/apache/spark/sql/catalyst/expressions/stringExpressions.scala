@@ -460,7 +460,9 @@ case class Upper(child: Expression)
   final override val nodePatterns: Seq[TreePattern] = Seq(UPPER_OR_LOWER)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    // scalastyle:off caselocale
     defineCodeGen(ctx, ev, c => s"($c).toUpperCase()")
+    // scalastyle:on caselocale
   }
 
   override protected def withNewChildInternal(newChild: Expression): Upper = copy(child = newChild)
@@ -488,7 +490,9 @@ case class Lower(child: Expression)
   final override val nodePatterns: Seq[TreePattern] = Seq(UPPER_OR_LOWER)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    // scalastyle:off caselocale
     defineCodeGen(ctx, ev, c => s"($c).toLowerCase()")
+    // scalastyle:on caselocale
   }
 
   override def prettyName: String =
@@ -1823,7 +1827,9 @@ case class InitCap(child: Expression)
     // scalastyle:on caselocale
   }
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    // scalastyle:off caselocale
     defineCodeGen(ctx, ev, str => s"$str.toLowerCase().toTitleCase()")
+    // scalastyle:on caselocale
   }
 
   override protected def withNewChildInternal(newChild: Expression): InitCap =

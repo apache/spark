@@ -18,6 +18,7 @@
 package org.apache.spark.deploy.history
 
 import java.net.URL
+import java.util.Locale
 
 import jakarta.servlet.http.HttpServletResponse
 import org.json4s.DefaultFormats
@@ -66,9 +67,9 @@ class HistoryServerPageSuite extends SparkFunSuite with BeforeAndAfter {
 
   private def callApplicationsAPI(requestedIncomplete: Boolean): Seq[JObject] = {
     val param = if (requestedIncomplete) {
-      ApplicationStatus.RUNNING.toString.toLowerCase()
+      ApplicationStatus.RUNNING.toString.toLowerCase(Locale.ROOT)
     } else {
-      ApplicationStatus.COMPLETED.toString.toLowerCase()
+      ApplicationStatus.COMPLETED.toString.toLowerCase(Locale.ROOT)
     }
     val (code, jsonOpt, errOpt) = HistoryServerSuite.getContentAndCode(
       new URL(s"http://$localhost:$port/api/v1/applications?status=$param")

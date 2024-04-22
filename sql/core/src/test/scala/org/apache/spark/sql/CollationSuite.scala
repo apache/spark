@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.util.Locale
+
 import scala.collection.immutable.Seq
 import scala.jdk.CollectionConverters.MapHasAsJava
 
@@ -62,7 +64,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   test("collation expression returns name of collation") {
     Seq("utf8_binary", "utf8_binary_lcase", "unicode", "unicode_ci").foreach { collationName =>
       checkAnswer(
-        sql(s"select collation('aaa' collate $collationName)"), Row(collationName.toUpperCase()))
+        sql(s"select collation('aaa' collate $collationName)"),
+        Row(collationName.toUpperCase(Locale.ROOT)))
     }
   }
 
@@ -693,8 +696,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         val partitionData = rowIterator.map(r => r.getString(0)).toArray
         partitionData.foreach(s => {
           // assert that both lower and upper case of the string are present in the same partition.
-          assert(partitionData.contains(s.toLowerCase()))
-          assert(partitionData.contains(s.toUpperCase()))
+          assert(partitionData.contains(s.toLowerCase(Locale.ROOT)))
+          assert(partitionData.contains(s.toUpperCase(Locale.ROOT)))
         })
     })
   }

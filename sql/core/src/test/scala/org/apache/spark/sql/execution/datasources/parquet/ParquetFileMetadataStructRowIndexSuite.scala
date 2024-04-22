@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.util.Locale
+
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest}
 import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.functions.{col, lit}
@@ -146,7 +148,7 @@ class ParquetFileMetadataStructRowIndexSuite extends QueryTest with SharedSparkS
           SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> useVectorizedReader.toString) {
         withReadDataFrame("parquet") { df =>
           val mixedCaseRowIndex = "RoW_InDeX"
-          assert(mixedCaseRowIndex.toLowerCase() == ROW_INDEX)
+          assert(mixedCaseRowIndex.toLowerCase(Locale.ROOT) == ROW_INDEX)
 
           assert(df.select("*", s"${FileFormat.METADATA_NAME}.$mixedCaseRowIndex")
             .where(s"$EXPECTED_ROW_ID_COL != $mixedCaseRowIndex")

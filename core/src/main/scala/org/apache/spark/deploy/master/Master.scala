@@ -1114,7 +1114,7 @@ private[deploy] class Master(
     val now = System.currentTimeMillis()
     val date = new Date(now)
     val appId = if (useAppNameAsAppId) {
-      desc.name.toLowerCase().replaceAll("\\s+", "")
+      desc.name.toLowerCase(Locale.ROOT).replaceAll("\\s+", "")
     } else {
       newApplicationId(date)
     }

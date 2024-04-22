@@ -172,7 +172,9 @@ class ResolveColumnDefaultInCommandInputQuery(val catalogManager: CatalogManager
     if (SQLConf.get.caseSensitiveAnalysis) {
       str
     } else {
+      // scalastyle:off caselocale
       str.toLowerCase()
+      // scalastyle:on caselocale
     }
   }
 }

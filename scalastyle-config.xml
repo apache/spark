@@ -245,7 +245,7 @@ This file is divided into 3 sections:
   </check>
 
   <check customId="caselocale" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
-    <parameters><parameter name="regex">(\.toUpperCase|\.toLowerCase)(?!(\(|\(Locale.ROOT\)))</parameter></parameters>
+    <parameters><parameter name="regex">(\.toUpperCase|\.toLowerCase)((\(\))|(?!(\w|\(|\(Locale.ROOT\))))</parameter></parameters>
     <customMessage><![CDATA[
       Are you sure that you want to use toUpperCase or toLowerCase without the root locale? In most cases, you
       should use toUpperCase(Locale.ROOT) or toLowerCase(Locale.ROOT) instead.

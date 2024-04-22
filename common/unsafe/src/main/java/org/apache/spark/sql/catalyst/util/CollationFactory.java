@@ -78,12 +78,14 @@ public final class CollationFactory {
      */
     public final boolean supportsBinaryOrdering;
 
+    // checkstyle.off: RegexpSinglelineJava
     /**
      * Support for Lowercase Equality implies that it is possible to check equality on
      * byte by byte level, but only after calling "UTF8String.toLowerCase" on both arguments.
      * This allows custom collation support for UTF8_BINARY_LCASE collation in various Spark
      * expressions, as this particular collation is not supported by the external ICU library.
      */
+    // checkstyle.on: RegexpSinglelineJava
     public final boolean supportsLowercaseEquality;
 
     public Collation(
