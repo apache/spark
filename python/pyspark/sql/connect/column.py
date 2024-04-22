@@ -96,6 +96,14 @@ def _unary_op(name: str, self: ParentColumn) -> ParentColumn:
 
 
 class Column(ParentColumn):
+    def __new__(
+        cls,
+        expr: "Expression",
+    ) -> "Column":
+        self = object.__new__(cls)
+        self.__init__(expr)  # type: ignore[misc]
+        return self
+
     def __init__(self, expr: "Expression") -> None:
         if not isinstance(expr, Expression):
             raise PySparkTypeError(
