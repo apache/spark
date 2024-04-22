@@ -234,6 +234,7 @@ object LogKey extends Enumeration {
   val PARTITION_SPECS = Value
   val PATH = Value
   val PATHS = Value
+  val PIPELINE_STAGE_UID = Value
   val POD_ID = Value
   val POD_NAME = Value
   val POD_NAMESPACE = Value

@@ -22,7 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{COST, NUM_ITERATIONS, TIME_UNITS}
+import org.apache.spark.internal.LogKey.{COST, INIT_MODE, NUM_ITERATIONS, TOTAL_TIME}
 import org.apache.spark.ml.util.Instrumentation
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS.axpy
@@ -260,7 +260,7 @@ class KMeans private (
 
     val sc = data.sparkContext
 
-    val initStartTime = System.nanoTime()
+    val initStartTime = System.currentTimeMillis()
 
     val distanceMeasureInstance = DistanceMeasure.decodeFromString(this.distanceMeasure)
 
@@ -275,14 +275,15 @@ class KMeans private (
         }
     }
     val numFeatures = centers.head.vector.size
-    val initTimeInSeconds = (System.nanoTime() - initStartTime) / 1e9
-    logInfo(f"Initialization with $initializationMode took $initTimeInSeconds%.3f seconds.")
+    val initTimeMs = System.currentTimeMillis() - initStartTime
+    logInfo(log"Initialization with ${MDC(INIT_MODE, initializationMode)}" +
+      log" took ${MDC(TOTAL_TIME, initTimeMs)} ms.")
 
     var converged = false
     var cost = 0.0
     var iteration = 0
 
-    val iterationStartTime = System.nanoTime()
+    val iterationStartTime = System.currentTimeMillis()
 
     instr.foreach(_.logNumFeatures(numFeatures))
 
@@ -358,15 +359,14 @@ class KMeans private (
       iteration += 1
     }
 
-    val iterationTimeInSeconds = (System.nanoTime() - iterationStartTime) / 1e9
-    logInfo(log"Iterations took ${MDC(TIME_UNITS, iterationTimeInSeconds%.3f)} seconds.")
+    val iterationTimeMs = System.currentTimeMillis() - iterationStartTime
+    logInfo(log"Iterations took ${MDC(TOTAL_TIME, iterationTimeMs)} ms")
 
     if (iteration == maxIterations) {
       logInfo(log"KMeans reached the max number of" +
         log" iterations: ${MDC(NUM_ITERATIONS, maxIterations)}.")
     } else {
-      logInfo(log"KMeans converged in " +
-        log"${MDC(NUM_ITERATIONS, iteration)} iterations.")
+      logInfo(log"KMeans converged in ${MDC(NUM_ITERATIONS, iteration)} iterations.")
     }
 
     logInfo(log"The cost is ${MDC(COST, cost)}.")
