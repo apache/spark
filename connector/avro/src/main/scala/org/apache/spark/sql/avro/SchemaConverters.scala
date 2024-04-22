@@ -183,14 +183,14 @@ object SchemaConverters {
                   // Avro's field name may be case sensitive, so field names for two named type
                   // could be "a" and "A" and we need to distinguish them. In this case, we throw
                   // an exception.
-                  val temp_name = s"member_${s.getName.toLowerCase(Locale.ROOT)}"
-                  if (fieldNameSet.contains(temp_name)) {
+                  // Stable id prefix can be empty so the name of the field can be just the type.
+                  val tempFieldName = s"member_${s.getName}"
+                  if (!fieldNameSet.add(tempFieldName.toLowerCase(Locale.ROOT))) {
                     throw new IncompatibleSchemaException(
-                      "Cannot generate stable indentifier for Avro union type due to name " +
+                      "Cannot generate stable identifier for Avro union type due to name " +
                       s"conflict of type name ${s.getName}")
                   }
-                  fieldNameSet.add(temp_name)
-                  temp_name
+                  tempFieldName
                 } else {
                   s"member$i"
                 }
