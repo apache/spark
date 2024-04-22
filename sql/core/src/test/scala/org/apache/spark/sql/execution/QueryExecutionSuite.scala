@@ -314,6 +314,36 @@ class QueryExecutionSuite extends SharedSparkSession {
     mockCallback.assertExecutedPlanPrepared()
   }
 
+  test("SPARK-47764: Cleanup shuffle dependencies - DoNotCleanup mode") {
+    val plan = spark.range(100).repartition(10).logicalPlan
+    val df = Dataset.ofRows(spark, plan, DoNotCleanup)
+    df.collect()
+
+    val blockManager = spark.sparkContext.env.blockManager
+    assert(blockManager.migratableResolver.getStoredShuffles().nonEmpty)
+    assert(blockManager.diskBlockManager.getAllBlocks().nonEmpty)
+  }
+
+  test("SPARK-47764: Cleanup shuffle dependencies - SkipMigration mode") {
+    val plan = spark.range(100).repartition(10).logicalPlan
+    val df = Dataset.ofRows(spark, plan, SkipMigration)
+    df.collect()
+
+    val blockManager = spark.sparkContext.env.blockManager
+    assert(blockManager.migratableResolver.getStoredShuffles().isEmpty)
+    assert(blockManager.diskBlockManager.getAllBlocks().nonEmpty)
+  }
+
+  test("SPARK-47764: Cleanup shuffle dependencies - RemoveShuffleFiles mode") {
+    val plan = spark.range(100).repartition(10).logicalPlan
+    val df = Dataset.ofRows(spark, plan, RemoveShuffleFiles)
+    df.collect()
+
+    val blockManager = spark.sparkContext.env.blockManager
+    assert(blockManager.migratableResolver.getStoredShuffles().isEmpty)
+    assert(blockManager.diskBlockManager.getAllBlocks().isEmpty)
+  }
+
   test("SPARK-35378: Return UnsafeRow in CommandResultExecCheck execute methods") {
     val plan = spark.sql("SHOW FUNCTIONS").queryExecution.executedPlan
     assert(plan.isInstanceOf[CommandResultExec])
