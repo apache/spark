@@ -50,7 +50,7 @@ private[hive] trait SparkOperation extends Operation with Logging {
   abstract override def close(): Unit = {
     super.close()
     cleanup()
-    logInfo(s"Close statement with $statementId")
+    logInfo(log"Close statement with ${MDC(STATEMENT_ID, statementId)}")
     HiveThriftServer2.eventManager.onOperationClosed(statementId)
   }
 

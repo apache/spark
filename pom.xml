@@ -118,7 +118,7 @@
     <maven.version>3.9.6</maven.version>
     <exec-maven-plugin.version>3.2.0</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
-    <asm.version>9.6</asm.version>
+    <asm.version>9.7</asm.version>
     <slf4j.version>2.0.13</slf4j.version>
     <log4j.version>2.22.1</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
@@ -217,7 +217,7 @@
     <bouncycastle.version>1.78</bouncycastle.version>
     <tink.version>1.13.0</tink.version>
     <datasketches.version>5.0.1</datasketches.version>
-    <netty.version>4.1.108.Final</netty.version>
+    <netty.version>4.1.109.Final</netty.version>
     <netty-tcnative.version>2.0.65.Final</netty-tcnative.version>
     <icu4j.version>72.1</icu4j.version>
     <!--
@@ -230,7 +230,7 @@
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>6.12.0</kubernetes-client.version>
+    <kubernetes-client.version>6.12.1</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -481,7 +481,7 @@
       <dependency>
         <groupId>org.apache.xbean</groupId>
         <artifactId>xbean-asm9-shaded</artifactId>
-        <version>4.24</version>
+        <version>4.25</version>
       </dependency>
 
       <!-- Shaded deps marked as provided. These are promoted to compile scope
@@ -606,7 +606,7 @@
       <dependency>
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-text</artifactId>
-        <version>1.11.0</version>
+        <version>1.12.0</version>
       </dependency>
       <dependency>
         <groupId>commons-lang</groupId>
@@ -826,7 +826,7 @@
       <dependency>
         <groupId>org.roaringbitmap</groupId>
         <artifactId>RoaringBitmap</artifactId>
-        <version>1.0.5</version>
+        <version>1.0.6</version>
       </dependency>
 
       <!-- Netty Begin -->

@@ -29,7 +29,8 @@ import scala.util.control.NonFatal
 import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext, SparkException, TaskContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{CALL_SITE_LONG_FORM, CLASS_NAME}
 import org.apache.spark.internal.config.{ConfigEntry, EXECUTOR_ALLOW_SPARK_CONTEXT}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
@@ -1358,13 +1359,13 @@ object SparkSession extends Logging {
     val session = getActiveSession.orElse(getDefaultSession)
     if (session.isDefined) {
       logWarning(
-        s"""An existing Spark session exists as the active or default session.
-           |This probably means another suite leaked it. Attempting to stop it before continuing.
-           |This existing Spark session was created at:
-           |
-           |${session.get.creationSite.longForm}
-           |
-         """.stripMargin)
+        log"""An existing Spark session exists as the active or default session.
+             |This probably means another suite leaked it. Attempting to stop it before continuing.
+             |This existing Spark session was created at:
+             |
+             |${MDC(CALL_SITE_LONG_FORM, session.get.creationSite.longForm)}
+             |
+           """.stripMargin)
       session.get.stop()
       SparkSession.clearActiveSession()
       SparkSession.clearDefaultSession()
@@ -1391,7 +1392,8 @@ object SparkSession extends Logging {
         case e@(_: ClassCastException |
                 _: ClassNotFoundException |
                 _: NoClassDefFoundError) =>
-          logWarning(s"Cannot use $extensionConfClassName to configure session extensions.", e)
+          logWarning(log"Cannot use ${MDC(CLASS_NAME, extensionConfClassName)} to configure " +
+            log"session extensions.", e)
       }
     }
     extensions

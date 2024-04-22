@@ -766,6 +766,8 @@ jobs:
       run: ./dev/lint-r
     - name: Run documentation build
       run: |
+        # We need this link because the jekyll build calls `python`.
+        ln -s "$(which python3.9)" "/usr/local/bin/python"
         # Build docs first with SKIP_API to ensure they are buildable without requiring any
         # language docs to be built beforehand.
         cd docs; SKIP_API=1 bundle exec jekyll build; cd ..
