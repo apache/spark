@@ -209,10 +209,9 @@ object SchemaConverters {
                   // an exception.
                   // Stable id prefix can be empty so the name of the field can be just the type.
                   val tempFieldName = s"${stableIdPrefixForUnionType}${s.getName}"
-
                   if (!fieldNameSet.add(tempFieldName.toLowerCase(Locale.ROOT))) {
                     throw new IncompatibleSchemaException(
-                      "Cannot generate stable indentifier for Avro union type due to name " +
+                      "Cannot generate stable identifier for Avro union type due to name " +
                       s"conflict of type name ${s.getName}")
                   }
                   tempFieldName
