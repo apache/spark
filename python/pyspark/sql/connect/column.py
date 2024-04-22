@@ -195,12 +195,12 @@ class Column(ParentColumn):
     def __ge__(
         self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
     ) -> ParentColumn:
-        return _bin_op(">=", self, other, reverse=True)
+        return _bin_op(">=", self, other)
 
     def __le__(
         self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
     ) -> ParentColumn:
-        return _bin_op("<=", self, other, reverse=True)
+        return _bin_op("<=", self, other)
 
     def eqNullSafe(
         self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]

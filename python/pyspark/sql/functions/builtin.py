@@ -15747,6 +15747,7 @@ def schema_of_variant(v: "ColumnOrName") -> Column:
     >>> df.select(schema_of_variant(parse_json(df.json)).alias("r")).collect()
     [Row(r='STRUCT<a: BIGINT>')]
     """
+    from pyspark.sql.classic.column import _to_java_column
 
     return _invoke_function("schema_of_variant", _to_java_column(v))
 
@@ -15774,6 +15775,7 @@ def schema_of_variant_agg(v: "ColumnOrName") -> Column:
     >>> df.select(schema_of_variant_agg(parse_json(df.json)).alias("r")).collect()
     [Row(r='STRUCT<a: BIGINT>')]
     """
+    from pyspark.sql.classic.column import _to_java_column
 
     return _invoke_function("schema_of_variant_agg", _to_java_column(v))
 
