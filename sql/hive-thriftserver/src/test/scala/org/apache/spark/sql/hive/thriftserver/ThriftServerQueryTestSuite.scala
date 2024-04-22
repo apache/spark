@@ -106,7 +106,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     "collations.sql",
     "binary_hex.sql",
     "binary_basic.sql",
-    "binary_base64.sql",
+    "binary_base64.sql"
   )
 
   override def runQueries(
