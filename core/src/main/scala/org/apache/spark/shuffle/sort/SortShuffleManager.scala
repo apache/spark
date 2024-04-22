@@ -187,7 +187,6 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
         shuffleBlockResolver.removeDataByMap(shuffleId, mapTaskId)
       }
     }
-    shuffleBlockResolver.removeShuffleToSkip(shuffleId)
     true
   }
 
