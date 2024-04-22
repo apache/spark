@@ -521,13 +521,18 @@ false
 
 -- !query
 set spark.sql.legacy.bangEqualsNot=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.bangEqualsNot	true
+
+
+-- !query
 select 1 ! between 0 and 2
 -- !query schema
-struct<>
+struct<(NOT between(1, 0, 2)):boolean>
 -- !query output
-java.lang.IllegalArgumentException
-spark.sql.legacy.bangEqualsNot should be boolean, but was true
-select 1 ! between 0 and 2
+false
 
 
 -- !query

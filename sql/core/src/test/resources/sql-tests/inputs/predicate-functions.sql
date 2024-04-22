@@ -84,6 +84,6 @@ select to_timestamp('2022-12-26 00:00:01') not between to_date('2022-03-01') and
 select rand(123) not between 0.1 AND 0.2;
 
 -- Sanity test for legacy flag equating ! with NOT
-set spark.sql.legacy.bangEqualsNot=true
+set spark.sql.legacy.bangEqualsNot=true;
 select 1 ! between 0 and 2;
-set spark.sql.legacy.bangEqualsNot=false
+set spark.sql.legacy.bangEqualsNot=false;

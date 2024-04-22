@@ -454,11 +454,15 @@ select rand(123) not between 0.1 AND 0.2
 
 -- !query
 set spark.sql.legacy.bangEqualsNot=true
+-- !query analysis
+SetCommand (spark.sql.legacy.bangEqualsNot,Some(true))
+
+
+-- !query
 select 1 ! between 0 and 2
 -- !query analysis
-java.lang.IllegalArgumentException
-spark.sql.legacy.bangEqualsNot should be boolean, but was true
-select 1 ! between 0 and 2
+Project [NOT between(1, 0, 2) AS (NOT between(1, 0, 2))#x]
++- OneRowRelation
 
 
 -- !query
