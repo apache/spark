@@ -174,7 +174,7 @@ private[spark] class DiskBlockObjectWriter(
    * Should call after committing or reverting partial writes.
    */
   private def closeResources(): Unit = {
-    Utils.tryWithSafeFinally {
+    try {
       if (streamOpen) {
         Utils.tryWithSafeFinally {
           objOut = closeIfNonNull(objOut)
@@ -183,7 +183,11 @@ private[spark] class DiskBlockObjectWriter(
           bs = closeIfNonNull(bs)
         }
       }
-    } {
+    } catch {
+      case e: IOException =>
+        logError(log"Exception occurred while closing the output stream" +
+          log"${MDC(ERROR, e.getMessage)}")
+    } finally {
       if (initialized) {
         Utils.tryWithSafeFinally {
           mcs.manualClose()
