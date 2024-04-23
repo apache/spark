@@ -532,9 +532,21 @@ JSON Functions
     json_array_length
     json_object_keys
     json_tuple
-    parse_json
     schema_of_json
     to_json
+
+
+VARIANT Functions
+-----------------
+.. autosummary::
+    :toctree: api/
+
+    is_variant_null
+    parse_json
+    schema_of_variant
+    schema_of_variant_agg
+    try_variant_get
+    variant_get
 
 
 XML Functions

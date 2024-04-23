@@ -220,6 +220,9 @@
     <netty.version>4.1.109.Final</netty.version>
     <netty-tcnative.version>2.0.65.Final</netty-tcnative.version>
     <icu4j.version>72.1</icu4j.version>
+    <junit-jupiter.version>5.9.3</junit-jupiter.version>
+    <junit-platform.version>1.9.3</junit-platform.version>
+    <sbt-jupiter-interface.version>0.11.1</sbt-jupiter-interface.version>
     <!--
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, ./python/packaging/classic/setup.py
@@ -826,7 +829,7 @@
       <dependency>
         <groupId>org.roaringbitmap</groupId>
         <artifactId>RoaringBitmap</artifactId>
-        <version>1.0.5</version>
+        <version>1.0.6</version>
       </dependency>
 
       <!-- Netty Begin -->
@@ -1079,15 +1082,6 @@
         <groupId>org.glassfish.jersey.test-framework.providers</groupId>
         <artifactId>jersey-test-framework-provider-simple</artifactId>
         <version>${jersey.version}</version>
-        <!--
-          TODO(SPARK-44170): Remove the exclusion of jupiter after Spark migrates to Junit5.
-        -->
-        <exclusions>
-          <exclusion>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>*</artifactId>
-          </exclusion>
-        </exclusions>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1215,16 +1209,6 @@
         <groupId>org.jmock</groupId>
         <artifactId>jmock-junit5</artifactId>
         <scope>test</scope>
-        <exclusions>
-          <exclusion>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>*</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.junit.platform</groupId>
-            <artifactId>*</artifactId>
-          </exclusion>
-        </exclusions>
         <version>2.13.1</version>
       </dependency>
       <dependency>
@@ -1236,13 +1220,49 @@
       <dependency>
         <groupId>org.junit.jupiter</groupId>
         <artifactId>junit-jupiter</artifactId>
-        <version>5.9.3</version>
+        <version>${junit-jupiter.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.junit.jupiter</groupId>
+        <artifactId>junit-jupiter-api</artifactId>
+        <version>${junit-jupiter.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.junit.jupiter</groupId>
+        <artifactId>junit-jupiter-engine</artifactId>
+        <version>${junit-jupiter.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.junit.jupiter</groupId>
+        <artifactId>junit-jupiter-params</artifactId>
+        <version>${junit-jupiter.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.junit.platform</groupId>
+        <artifactId>junit-platform-commons</artifactId>
+        <version>${junit-platform.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.junit.platform</groupId>
+        <artifactId>junit-platform-engine</artifactId>
+        <version>${junit-platform.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.junit.platform</groupId>
+        <artifactId>junit-platform-launcher</artifactId>
+        <version>${junit-platform.version}</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>net.aichler</groupId>
         <artifactId>jupiter-interface</artifactId>
-        <version>0.11.1</version>
+        <version>${sbt-jupiter-interface.version}</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1349,13 +1369,6 @@
         <groupId>org.apache.curator</groupId>
         <artifactId>curator-test</artifactId>
         <version>${curator.version}</version>
-        <!-- TODO(SPARK-44170): Remove this `exclusion` after Spark starts supporting JUnit5. -->
-        <exclusions>
-          <exclusion>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter-api</artifactId>
-          </exclusion>
-        </exclusions>
         <scope>test</scope>
       </dependency>
       <!-- Hadoop 3.x dependencies -->

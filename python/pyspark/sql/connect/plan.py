@@ -14,6 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
+# mypy: disable-error-code="operator"
+
 from pyspark.resource import ResourceProfile
 from pyspark.sql.connect.utils import check_dependencies
 
@@ -45,8 +48,8 @@ from pyspark.storagelevel import StorageLevel
 from pyspark.sql.types import DataType
 
 import pyspark.sql.connect.proto as proto
+from pyspark.sql.column import Column
 from pyspark.sql.connect.conversion import storage_level_to_proto
-from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import Expression
 from pyspark.sql.connect.types import pyspark_types_to_proto_types, UnparsedDataType
 from pyspark.errors import (
