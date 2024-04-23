@@ -3779,6 +3779,12 @@
     ],
     "sqlState" : "42601"
   },
+  "STREAMING_PYTHON_RUNNER_DID_NOT_INITIALIZE" : {
+    "message" : [
+      "Streaming Runner initialization failed, returned <resFromPython>. Cause: <msg>"
+    ],
+    "sqlState" : "XXKST"
+  },
   "STREAMING_STATEFUL_OPERATOR_NOT_MATCH_IN_STATE_METADATA" : {
     "message" : [
       "Streaming stateful operator name does not match with the operator in state metadata. This likely to happen when user adds/removes/changes stateful operator of existing streaming query.",

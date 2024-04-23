@@ -62,8 +62,6 @@ def main(infile: IO, outfile: IO) -> None:
     assert spark_connect_session.session_id == session_id
     spark = spark_connect_session
 
-    # TODO(SPARK-44461): Enable Process Isolation
-
     log_name = "Streaming ForeachBatch worker"
 
     def process(df_id, batch_id):  # type: ignore[no-untyped-def]
@@ -86,7 +84,7 @@ def main(infile: IO, outfile: IO) -> None:
             process(df_ref_id, int(batch_id))
             write_int(0, outfile)
             outfile.flush()
-    except BaseException as e:
+    except Exception as e:
         handle_worker_exception(e, outfile)
         outfile.flush()
 
