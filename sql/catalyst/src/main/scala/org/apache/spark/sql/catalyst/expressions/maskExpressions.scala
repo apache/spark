@@ -81,11 +81,13 @@ import org.apache.spark.unsafe.types.UTF8String
 object MaskExpressionBuilder extends ExpressionBuilder {
   override def functionSignature: Option[FunctionSignature] = {
     val strArg = InputParameter("str")
-    val upperCharArg = InputParameter("upperChar", Some(Literal(Mask.MASKED_UPPERCASE)))
-    val lowerCharArg = InputParameter("lowerChar", Some(Literal(Mask.MASKED_LOWERCASE)))
-    val digitCharArg = InputParameter("digitChar", Some(Literal(Mask.MASKED_DIGIT)))
-    val otherCharArg = InputParameter(
-      "otherChar",
+    val upperCharArg = InputParameter("upperChar",
+      Some(Literal(Mask.MASKED_UPPERCASE, SQLConf.get.defaultStringType)))
+    val lowerCharArg = InputParameter("lowerChar",
+      Some(Literal(Mask.MASKED_LOWERCASE, SQLConf.get.defaultStringType)))
+    val digitCharArg = InputParameter("digitChar",
+      Some(Literal(Mask.MASKED_DIGIT, SQLConf.get.defaultStringType)))
+    val otherCharArg = InputParameter("otherChar",
       Some(Literal(Mask.MASKED_IGNORE, SQLConf.get.defaultStringType)))
     val functionSignature: FunctionSignature = FunctionSignature(Seq(
       strArg, upperCharArg, lowerCharArg, digitCharArg, otherCharArg))
@@ -111,17 +113,17 @@ case class Mask(
   def this(input: Expression) =
     this(
       input,
-      Literal(Mask.MASKED_UPPERCASE),
-      Literal(Mask.MASKED_LOWERCASE),
-      Literal(Mask.MASKED_DIGIT),
+      Literal(Mask.MASKED_UPPERCASE, SQLConf.get.defaultStringType),
+      Literal(Mask.MASKED_LOWERCASE, SQLConf.get.defaultStringType),
+      Literal(Mask.MASKED_DIGIT, SQLConf.get.defaultStringType),
       Literal(Mask.MASKED_IGNORE, input.dataType))
 
   def this(input: Expression, upperChar: Expression) =
     this(
       input,
       upperChar,
-      Literal(Mask.MASKED_LOWERCASE),
-      Literal(Mask.MASKED_DIGIT),
+      Literal(Mask.MASKED_LOWERCASE, SQLConf.get.defaultStringType),
+      Literal(Mask.MASKED_DIGIT, SQLConf.get.defaultStringType),
       Literal(Mask.MASKED_IGNORE, input.dataType))
 
   def this(input: Expression, upperChar: Expression, lowerChar: Expression) =
@@ -129,7 +131,7 @@ case class Mask(
       input,
       upperChar,
       lowerChar,
-      Literal(Mask.MASKED_DIGIT),
+      Literal(Mask.MASKED_DIGIT, SQLConf.get.defaultStringType),
       Literal(Mask.MASKED_IGNORE, input.dataType))
 
   def this(
@@ -302,13 +304,13 @@ case class MaskArgument(maskChar: Char, ignore: Boolean)
 
 object Mask {
   // Default character to replace upper-case characters
-  val MASKED_UPPERCASE = 'X'
+  val MASKED_UPPERCASE: UTF8String = UTF8String.fromString("X")
   // Default character to replace lower-case characters
-  val MASKED_LOWERCASE = 'x'
+  val MASKED_LOWERCASE: UTF8String = UTF8String.fromString("x")
   // Default character to replace digits
-  val MASKED_DIGIT = 'n'
+  val MASKED_DIGIT: UTF8String = UTF8String.fromString("n")
   // This value helps to retain original value in the input by ignoring the replacement rules
-  val MASKED_IGNORE = null
+  val MASKED_IGNORE: Null = null
 
   def transformInput(
       input: Any,
