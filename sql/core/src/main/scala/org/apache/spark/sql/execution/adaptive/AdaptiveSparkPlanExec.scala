@@ -19,11 +19,13 @@ package org.apache.spark.sql.execution.adaptive
 
 import java.util
 import java.util.concurrent.LinkedBlockingQueue
+
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
+
 import org.apache.spark.SparkException
 import org.apache.spark.broadcast
 import org.apache.spark.internal.{LogEntry, MDC, MessageWithContext}
@@ -43,7 +45,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec._
 import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanLike
 import org.apache.spark.sql.execution.exchange._
-import org.apache.spark.sql.execution.ui.{SQLPlanMetric, SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLAdaptiveSQLMetricUpdates}
+import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLAdaptiveSQLMetricUpdates, SQLPlanMetric}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.{SparkFatalException, ThreadUtils}
@@ -743,7 +745,8 @@ case class AdaptiveSparkPlanExec(
       Some((finalPlan, optimized))
     } catch {
       case e: InvalidAQEPlanException[_] =>
-        logOnLevel(log"Re-optimize - ${MDC(EXCEPTION, e.getMessage())}:\n${e.plan}")
+        logOnLevel(log"Re-optimize - ${MDC(EXCEPTION, e.getMessage())}:\n" +
+          log"${MDC(QUERY_PLAN, e.plan)}")
         None
     }
   }
