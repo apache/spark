@@ -19,16 +19,14 @@ package org.apache.spark.sql.execution.adaptive
 
 import java.util
 import java.util.concurrent.LinkedBlockingQueue
-
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
-
 import org.apache.spark.SparkException
 import org.apache.spark.broadcast
-import org.apache.spark.internal.{LogEntry, MDC}
+import org.apache.spark.internal.{LogEntry, MDC, MessageWithContext}
 import org.apache.spark.internal.LogKey._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
@@ -45,7 +43,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec._
 import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanLike
 import org.apache.spark.sql.execution.exchange._
-import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLAdaptiveSQLMetricUpdates, SQLPlanMetric}
+import org.apache.spark.sql.execution.ui.{SQLPlanMetric, SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLAdaptiveSQLMetricUpdates}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.{SparkFatalException, ThreadUtils}
@@ -76,17 +74,18 @@ case class AdaptiveSparkPlanExec(
 
   @transient private val lock = new Object()
 
-  @transient private val logOnLevel: ( => LogEntry) => Unit = conf.adaptiveExecutionLogLevel match {
-    case "TRACE" =>
-      def fn(log: => LogEntry): Unit = logTrace(log.message)
-      fn(_)
-    case "INFO" => logInfo(_)
-    case "WARN" => logWarning(_)
-    case "ERROR" => logError(_)
-    case _ =>
-      def fn(log: => LogEntry): Unit = logDebug(log.message)
-      fn(_)
-  }
+  @transient private val logOnLevel: ( => MessageWithContext) => Unit =
+    conf.adaptiveExecutionLogLevel match {
+      case "TRACE" =>
+        def fn(log: => LogEntry): Unit = logTrace(log.message)
+        fn(_)
+      case "INFO" => logInfo(_)
+      case "WARN" => logWarning(_)
+      case "ERROR" => logError(_)
+      case _ =>
+        def fn(log: => LogEntry): Unit = logDebug(log.message)
+        fn(_)
+    }
 
   @transient private val planChangeLogger = new PlanChangeLogger[SparkPlan]()
 
