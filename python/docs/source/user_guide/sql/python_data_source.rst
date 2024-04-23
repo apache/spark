@@ -126,7 +126,7 @@ This is a dummy streaming data reader that generate 2 rows in every microbatch. 
 
 :meth:`pyspark.sql.datasource.DataSourceStreamReader.latestOffset` return the current latest offset that the next microbatch will read to.
 
-:meth:`pyspark.sql.datasource.DataSourceStreamReader.partitions` plans the partitioning of the current microbatch defined by start and end offset, it needs to return a sequence of Partition object.
+:meth:`pyspark.sql.datasource.DataSourceStreamReader.partitions` plans the partitioning of the current microbatch defined by start and end offset, it needs to return a sequence of :class:`InputPartition` object.
 
 :meth:`pyspark.sql.datasource.DataSourceStreamReader.read` takes a partition as an input and read an iterator of tuples from the data source.
 
@@ -174,11 +174,11 @@ This is a streaming data writer that write the metadata information of each micr
 
 :meth:`pyspark.sql.datasource.DataSourceStreamWriter.write` should return the commit message of that partition after writing the data.
 
-:meth:`pyspark.sql.datasource.DataSourceStreamWriter.commit` receive commit messages from all partitions when all write tasks succeed and decide what to do with it.
+:meth:`pyspark.sql.datasource.DataSourceStreamWriter.commit` receives a sequence of :class:`WriterCommitMessage` when all write tasks succeed and decides what to do with it.
 In this FakeStreamWriter, we write the metadata of the microbatch(number of rows and partitions) into a json file inside commit().
 
-:meth:`pyspark.sql.datasource.DataSourceStreamWriter.abort` receive commit messages from successful tasks when some tasks fail and decide what to do with it.
-In this FakeStreamWriter, we write a failure message into a txt file inside abort.
+:meth:`pyspark.sql.datasource.DataSourceStreamWriter.abort` receives a sequence of :class:`WriterCommitMessage` from successful tasks when some tasks fail and decides what to do with it.
+In this FakeStreamWriter, we write a failure message into a txt file inside abort().
 
 Using a Python Data Source
 --------------------------
