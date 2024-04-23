@@ -18,9 +18,10 @@
 package org.apache.spark.api.python
 
 import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream}
+
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.{SparkEnv, SparkPythonException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkEnv, SparkPythonException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.internal.config.Python.PYTHON_AUTH_SOCKET_TIMEOUT
