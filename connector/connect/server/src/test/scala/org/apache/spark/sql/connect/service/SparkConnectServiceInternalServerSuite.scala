@@ -30,7 +30,7 @@ import org.apache.spark.sql.connect.SparkConnectPlugin
 import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_BINDING_PORT, CONNECT_GRPC_PORT_MAX_RETRIES}
 import org.apache.spark.util.Utils
 
-class SparkConnectServiceSuite extends SparkFunSuite with LocalSparkContext {
+class SparkConnectServiceInternalServerSuite extends SparkFunSuite with LocalSparkContext {
 
   override def afterEach(): Unit = {
     super.afterEach()
