@@ -23,6 +23,9 @@ import com.ibm.icu.util.ULocale;
 
 import org.apache.spark.unsafe.types.UTF8String;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * Static entry point for collation-aware expressions (StringExpressions, RegexpExpressions, and
  * other expressions that require custom collation support), as well as private utility methods for
@@ -63,9 +66,21 @@ public final class CollationSupport {
       return string.toLowerCase().splitSQL(delimiter.toLowerCase(), -1);
     }
     public static UTF8String[] execICU(final UTF8String string, final UTF8String delimiter,
-                                  final int collationId) {
-      // TODO: Implement ICU-based split
-      return string.splitSQL(delimiter, -1);
+        final int collationId) {
+      if (delimiter.numBytes() == 0) return new UTF8String[] { string };
+      if (string.numBytes() == 0) return new UTF8String[] { UTF8String.EMPTY_UTF8 };
+      List<UTF8String> strings = new ArrayList<>();
+      String target = string.toString(), pattern = delimiter.toString();
+      StringSearch stringSearch = CollationFactory.getStringSearch(target, pattern, collationId);
+      int start = 0, end;
+      while ((end = stringSearch.next()) != StringSearch.DONE) {
+        strings.add(UTF8String.fromString(target.substring(start, end)));
+        start = end + stringSearch.getMatchLength();
+      }
+      if (start <= target.length()) {
+        strings.add(UTF8String.fromString(target.substring(start)));
+      }
+      return strings.toArray(new UTF8String[0]);
     }
   }
 

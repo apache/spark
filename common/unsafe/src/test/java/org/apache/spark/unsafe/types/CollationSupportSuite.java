@@ -273,56 +273,56 @@ public class CollationSupportSuite {
   public void testStringSplitSQL() throws SparkException {
     // Edge cases
     assertStringSplitSQL("", "", "UTF8_BINARY",
-            new UTF8String[] { UTF8String.fromString("") });
+      new UTF8String[] { UTF8String.fromString("") });
     assertStringSplitSQL("c", "", "UTF8_BINARY",
-            new UTF8String[] { UTF8String.fromString("c") });
+      new UTF8String[] { UTF8String.fromString("c") });
     assertStringSplitSQL("", "c", "UTF8_BINARY",
-            new UTF8String[] { UTF8String.fromString("") });
+      new UTF8String[] { UTF8String.fromString("") });
     assertStringSplitSQL("", "", "UNICODE",
-            new UTF8String[] { UTF8String.fromString("") });
+      new UTF8String[] { UTF8String.fromString("") });
     assertStringSplitSQL("c", "", "UNICODE",
-            new UTF8String[] { UTF8String.fromString("c") });
+      new UTF8String[] { UTF8String.fromString("c") });
     assertStringSplitSQL("", "c", "UNICODE",
-            new UTF8String[] { UTF8String.fromString("") });
+      new UTF8String[] { UTF8String.fromString("") });
     assertStringSplitSQL("", "", "UTF8_BINARY_LCASE",
-            new UTF8String[] { UTF8String.fromString("") });
+      new UTF8String[] { UTF8String.fromString("") });
     assertStringSplitSQL("c", "", "UTF8_BINARY_LCASE",
-            new UTF8String[] { UTF8String.fromString("c") });
+      new UTF8String[] { UTF8String.fromString("c") });
     assertStringSplitSQL("", "c", "UTF8_BINARY_LCASE",
-            new UTF8String[] { UTF8String.fromString("") });
+      new UTF8String[] { UTF8String.fromString("") });
     assertStringSplitSQL("", "", "UNICODE_CI",
-            new UTF8String[] { UTF8String.fromString("") });
+      new UTF8String[] { UTF8String.fromString("") });
     assertStringSplitSQL("c", "", "UNICODE_CI",
-            new UTF8String[] { UTF8String.fromString("c") });
+      new UTF8String[] { UTF8String.fromString("c") });
     assertStringSplitSQL("", "c", "UNICODE_CI",
-            new UTF8String[] { UTF8String.fromString("") });
+      new UTF8String[] { UTF8String.fromString("") });
     // Basic tests
     assertStringSplitSQL("1a2", "a", "UTF8_BINARY",
-            new UTF8String[] { UTF8String.fromString("1"), UTF8String.fromString("2") });
+      new UTF8String[] { UTF8String.fromString("1"), UTF8String.fromString("2") });
     assertStringSplitSQL("1a2", "A", "UTF8_BINARY",
-            new UTF8String[] { UTF8String.fromString("1a2") });
+      new UTF8String[] { UTF8String.fromString("1a2") });
     assertStringSplitSQL("1a2", "b", "UTF8_BINARY",
-            new UTF8String[] { UTF8String.fromString("1a2") });
+      new UTF8String[] { UTF8String.fromString("1a2") });
     assertStringSplitSQL("1a2", "1a2", "UNICODE",
-            new UTF8String[] { UTF8String.fromString(""), UTF8String.fromString("") });
+      new UTF8String[] { UTF8String.fromString(""), UTF8String.fromString("") });
     assertStringSplitSQL("1a2", "1A2", "UNICODE",
-            new UTF8String[] { UTF8String.fromString("1a2") });
+      new UTF8String[] { UTF8String.fromString("1a2") });
     assertStringSplitSQL("1a2", "3b4", "UNICODE",
-            new UTF8String[] { UTF8String.fromString("1a2") });
+      new UTF8String[] { UTF8String.fromString("1a2") });
     assertStringSplitSQL("1a2", "A", "UTF8_BINARY_LCASE",
-            new UTF8String[] { UTF8String.fromString("1"), UTF8String.fromString("2") });
+      new UTF8String[] { UTF8String.fromString("1"), UTF8String.fromString("2") });
     assertStringSplitSQL("1a2", "1A2", "UTF8_BINARY_LCASE",
-            new UTF8String[] { UTF8String.fromString(""), UTF8String.fromString("") });
+      new UTF8String[] { UTF8String.fromString(""), UTF8String.fromString("") });
     assertStringSplitSQL("1a2", "X", "UTF8_BINARY_LCASE",
-            new UTF8String[] { UTF8String.fromString("1a2") });
+      new UTF8String[] { UTF8String.fromString("1a2") });
     assertStringSplitSQL("1a2", "a", "UNICODE_CI",
-            new UTF8String[] { UTF8String.fromString("1"), UTF8String.fromString("2") });
-//    assertStringSplitSQL("1a2", "A", "UNICODE_CI",
-//            new UTF8String[] { UTF8String.fromString("1"), UTF8String.fromString("2") });
-//    assertStringSplitSQL("1a2", "1A2", "UNICODE_CI",
-//            new UTF8String[] { UTF8String.fromString(""), UTF8String.fromString("") });
+      new UTF8String[] { UTF8String.fromString("1"), UTF8String.fromString("2") });
+    assertStringSplitSQL("1a2", "A", "UNICODE_CI",
+      new UTF8String[] { UTF8String.fromString("1"), UTF8String.fromString("2") });
+    assertStringSplitSQL("1a2", "1A2", "UNICODE_CI",
+      new UTF8String[] { UTF8String.fromString(""), UTF8String.fromString("") });
     assertStringSplitSQL("1a2", "123", "UNICODE_CI",
-            new UTF8String[] { UTF8String.fromString("1a2") });
+      new UTF8String[] { UTF8String.fromString("1a2") });
   }
 
   private void assertUpper(String target, String collationName, String expected)
