@@ -25,6 +25,7 @@ import org.apache.spark.unsafe.types.UTF8String;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Pattern;
 
 /**
  * Static entry point for collation-aware expressions (StringExpressions, RegexpExpressions, and
@@ -63,7 +64,16 @@ public final class CollationSupport {
       return string.splitSQL(delimiter, -1);
     }
     public static UTF8String[] execLowercase(final UTF8String string, final UTF8String delimiter) {
-      return string.toLowerCase().splitSQL(delimiter.toLowerCase(), -1);
+      if (delimiter.numBytes() == 0) return new UTF8String[] { string };
+      if (string.numBytes() == 0) return new UTF8String[] { UTF8String.EMPTY_UTF8 };
+      Pattern pattern = Pattern.compile(Pattern.quote(delimiter.toString()),
+        CollationSupport.lowercaseRegexFlags);
+      String[] splits = pattern.split(string.toString(), -1);
+      UTF8String[] res = new UTF8String[splits.length];
+      for (int i = 0; i < res.length; i++) {
+        res[i] = UTF8String.fromString(splits[i]);
+      }
+      return res;
     }
     public static UTF8String[] execICU(final UTF8String string, final UTF8String delimiter,
         final int collationId) {
@@ -360,7 +370,7 @@ public final class CollationSupport {
    * Collation-aware regexp expressions.
    */
 
-  // TODO: Add more collation-aware regexp expressions.
+  private static final int lowercaseRegexFlags = Pattern.UNICODE_CASE | Pattern.CASE_INSENSITIVE;
 
   /**
    * Other collation-aware expressions.

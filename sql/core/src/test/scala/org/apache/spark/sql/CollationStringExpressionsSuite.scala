@@ -95,7 +95,7 @@ class CollationStringExpressionsSuite
       SplitPartTestCase("1a2", "a", 2, "UTF8_BINARY", "2"),
       SplitPartTestCase("1a2", "a", 2, "UNICODE", "2"),
       SplitPartTestCase("1a2", "A", 2, "UTF8_BINARY_LCASE", "2"),
-      SplitPartTestCase("1a2", "a", 2, "UNICODE_CI", "2")
+      SplitPartTestCase("1a2", "A", 2, "UNICODE_CI", "2")
     )
     testCases.foreach(t => {
       val query = s"SELECT split_part(collate('${t.s}','${t.c}'),collate('${t.d}','${t.c}'),${t.p})"
