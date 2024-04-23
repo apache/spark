@@ -62,6 +62,9 @@ Start by creating a new subclass of :class:`DataSource`. Define the source name,
         def streamReader(self, schema: StructType):
             return FakeStreamReader(schema, self.options)
 
+        def streamWriter(self, schema: StructType, overwrite: bool):
+            return FakeStreamWriter(self.options)
+
 
 ** Implement the Reader**
 
@@ -119,14 +122,63 @@ Define the reader logic to generate synthetic data. Use the `faker` library to p
 
 This is a dummy streaming data reader that generate 2 rows in every microbatch. The streamReader instance has a integer offset that increase by 2 in every microbatch.
 
-initialOffset() should return the initial start offset of the reader.
+:meth:`pyspark.sql.datasource.DataSourceStreamReader.initialOffset` should return the initial start offset of the reader.
 
-latestOffset() return the current latest offset that the next microbatch will read to.
+:meth:`pyspark.sql.datasource.DataSourceStreamReader.latestOffset` return the current latest offset that the next microbatch will read to.
 
-partitions() plans the partitioning of the current microbatch defined by start and end offset, it needs to return a sequence of Partition object.
+:meth:`pyspark.sql.datasource.DataSourceStreamReader.partitions` plans the partitioning of the current microbatch defined by start and end offset, it needs to return a sequence of Partition object.
 
-read() takes a partition as an input and read an iterator of tuples from the data source.
+:meth:`pyspark.sql.datasource.DataSourceStreamReader.read` takes a partition as an input and read an iterator of tuples from the data source.
 
+:meth:`pyspark.sql.datasource.DataSourceStreamReader.commit` is invoked when the query has finished processing data before end offset, this can be used to clean up resource.
+
+** Implement the Stream Writer**
+
+.. code-block:: python
+
+    class SimpleCommitMessage(WriterCommitMessage):
+       partition_id: int
+       count: int
+
+
+    class FakeStreamWriter(DataSourceStreamWriter):
+       def __init__(self, options):
+           self.options = options
+           self.path = self.options.get("path")
+           assert self.path is not None
+
+
+       def write(self, iterator):
+           from pyspark import TaskContext
+           context = TaskContext.get()
+           partition_id = context.partitionId()
+           cnt = 0
+           for row in iterator:
+               cnt += 1
+           return SimpleCommitMessage(partition_id=partition_id, count=cnt)
+
+
+       def commit(self, messages, batchId) -> None:
+           status = dict(num_partitions=len(messages), rows=sum(m.count for m in messages))
+
+
+           with open(os.path.join(self.path, f"{batchId}.json"), "a") as file:
+               file.write(json.dumps(status) + "\n")
+
+
+       def abort(self, messages, batchId) -> None:
+           with open(os.path.join(self.path, f"{batchId}.txt"), "w") as file:
+               file.write(f"failed in batch {batchId}")
+
+This is a streaming data writer that write the metadata information of each microbatch to a local path.
+
+:meth:`pyspark.sql.datasource.DataSourceStreamWriter.write` should return the commit message of that partition after writing the data.
+
+:meth:`pyspark.sql.datasource.DataSourceStreamWriter.commit` receive commit messages from all partitions when all write tasks succeed and decide what to do with it.
+In this FakeStreamWriter, we write the metadata of the microbatch(number of rows and partitions) into a json file inside commit().
+
+:meth:`pyspark.sql.datasource.DataSourceStreamWriter.abort` receive commit messages from successful tasks when some tasks fail and decide what to do with it.
+In this FakeStreamWriter, we write a failure message into a txt file inside abort.
 
 Using a Python Data Source
 --------------------------
@@ -181,8 +233,8 @@ Use the fake datasource with a different number of rows:
     # | Douglas James|2007-01-18|  46226|     Alabama|
     # +--------------+----------+-------+------------+
 
-Start a streaming query with the fake data stream.
+Start a streaming query with the fake data stream. Once we register the python data source, we can use it as source of readStream() or sink of writeStream() by passing short name or full name to format().
 
 .. code-block:: python
 
-    spark.readStream.format("fake").load().writeStream().format("console").start()
+    query = spark.readStream.format("fake").load().writeStream().format("fake").start()
