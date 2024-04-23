@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.types._
 
-class CollationRegexpExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
+class CollationRegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("Like/ILike/RLike expressions with collated strings") {
     case class LikeTestCase[R](l: String, regexLike: String, regexRLike: String, collation: String,

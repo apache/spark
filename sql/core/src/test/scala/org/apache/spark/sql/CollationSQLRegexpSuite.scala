@@ -17,14 +17,12 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, BooleanType, IntegerType, StringType}
 
 // scalastyle:off nonascii
-class CollationRegexpExpressionsSuite
+class CollationSQLRegexpSuite
   extends QueryTest
   with SharedSparkSession
   with ExpressionEvalHelper {
@@ -439,11 +437,3 @@ class CollationRegexpExpressionsSuite
 
 }
 // scalastyle:on nonascii
-
-class CollationRegexpExpressionsANSISuite extends CollationRegexpExpressionsSuite {
-  override protected def sparkConf: SparkConf =
-    super.sparkConf.set(SQLConf.ANSI_ENABLED, true)
-
-  // TODO: If needed, add more tests for other regexp expressions (with ANSI mode enabled)
-
-}
