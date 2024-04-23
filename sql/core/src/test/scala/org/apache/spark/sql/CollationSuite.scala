@@ -696,8 +696,10 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         val partitionData = rowIterator.map(r => r.getString(0)).toArray
         partitionData.foreach(s => {
           // assert that both lower and upper case of the string are present in the same partition.
-          assert(partitionData.contains(s.toLowerCase(Locale.ROOT)))
-          assert(partitionData.contains(s.toUpperCase(Locale.ROOT)))
+          // scalastyle:off caselocale
+          assert(partitionData.contains(s.toLowerCase()))
+          assert(partitionData.contains(s.toUpperCase()))
+          // scalastyle:on caselocale
         })
     })
   }

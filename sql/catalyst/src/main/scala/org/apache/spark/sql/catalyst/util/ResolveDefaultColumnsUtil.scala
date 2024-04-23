@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.util.Locale
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
@@ -118,16 +120,12 @@ object ResolveDefaultColumns extends QueryErrorsBase
       addNewColumnToExistingTable: Boolean): Unit = {
     if (SQLConf.get.enableDefaultColumns &&
       schema.exists(_.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY))) {
-      // scalastyle:off caselocale
       val keywords: Array[String] = SQLConf.get.getConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS)
-        .toLowerCase().split(",").map(_.trim)
-      // scalastyle:on caselocale
+        .toLowerCase(Locale.ROOT).split(",").map(_.trim)
       val allowedTableProviders: Array[String] = keywords.map(_.stripSuffix("*"))
       val addColumnExistingTableBannedProviders: Array[String] =
         keywords.filter(_.endsWith("*")).map(_.stripSuffix("*"))
-      // scalastyle:off caselocale
-      val givenTableProvider: String = tableProvider.getOrElse("").toLowerCase()
-      // scalastyle:on caselocale
+      val givenTableProvider: String = tableProvider.getOrElse("").toLowerCase(Locale.ROOT)
       // Make sure that the target table has a provider that supports default column values.
       if (!allowedTableProviders.contains(givenTableProvider)) {
         throw QueryCompilationErrors.defaultReferencesNotAllowedInDataSource(
