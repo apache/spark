@@ -70,6 +70,7 @@ if "SPARK_TESTING" in os.environ:
     test_packages = [
         "pyspark.tests",  # for Memory profiler parity tests
         "pyspark.testing",
+        "pyspark.resource.tests",
         "pyspark.sql.tests",
         "pyspark.sql.tests.connect",
         "pyspark.sql.tests.connect.streaming",
@@ -77,6 +78,33 @@ if "SPARK_TESTING" in os.environ:
         "pyspark.sql.tests.connect.shell",
         "pyspark.sql.tests.pandas",
         "pyspark.sql.tests.streaming",
+        "pyspark.ml.tests.connect",
+        "pyspark.pandas.tests",
+        "pyspark.pandas.tests.computation",
+        "pyspark.pandas.tests.data_type_ops",
+        "pyspark.pandas.tests.diff_frames_ops",
+        "pyspark.pandas.tests.frame",
+        "pyspark.pandas.tests.groupby",
+        "pyspark.pandas.tests.indexes",
+        "pyspark.pandas.tests.io",
+        "pyspark.pandas.tests.plot",
+        "pyspark.pandas.tests.resample",
+        "pyspark.pandas.tests.reshape",
+        "pyspark.pandas.tests.series",
+        "pyspark.pandas.tests.window",
+        "pyspark.pandas.tests.connect",
+        "pyspark.pandas.tests.connect.computation",
+        "pyspark.pandas.tests.connect.data_type_ops",
+        "pyspark.pandas.tests.connect.diff_frames_ops",
+        "pyspark.pandas.tests.connect.frame",
+        "pyspark.pandas.tests.connect.groupby",
+        "pyspark.pandas.tests.connect.indexes",
+        "pyspark.pandas.tests.connect.io",
+        "pyspark.pandas.tests.connect.plot",
+        "pyspark.pandas.tests.connect.resample",
+        "pyspark.pandas.tests.connect.reshape",
+        "pyspark.pandas.tests.connect.series",
+        "pyspark.pandas.tests.connect.window",
     ]
 
 try:
@@ -89,7 +117,7 @@ try:
     # binary format protocol with the Java version, see ARROW_HOME/format/* for specifications.
     # Also don't forget to update python/docs/source/getting_started/install.rst, and
     # python/packaging/classic/setup.py
-    _minimum_pandas_version = "1.4.4"
+    _minimum_pandas_version = "2.0.0"
     _minimum_numpy_version = "1.21"
     _minimum_pyarrow_version = "10.0.0"
     _minimum_grpc_version = "1.59.3"
@@ -118,6 +146,7 @@ try:
         "pyspark.sql.connect.functions",
         "pyspark.sql.connect.proto",
         "pyspark.sql.connect.protobuf",
+        "pyspark.sql.connect.resource",
         "pyspark.sql.connect.shell",
         "pyspark.sql.connect.streaming",
         "pyspark.sql.connect.streaming.worker",

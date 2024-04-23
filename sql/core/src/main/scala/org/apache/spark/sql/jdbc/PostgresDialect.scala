@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Connection, Date, SQLException, Timestamp, Types}
+import java.sql.{Connection, Date, ResultSetMetaData, SQLException, Timestamp, Types}
 import java.time.{LocalDateTime, ZoneOffset}
 import java.util
 import java.util.Locale
 
 import scala.util.Using
 
+import org.apache.spark.internal.LogKey.COLUMN_NAME
+import org.apache.spark.internal.MDC
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NonEmptyNamespaceException, NoSuchIndexException}
@@ -343,26 +345,35 @@ private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
     }
   }
 
-  override def getArrayDimension(
+  override def updateExtraColumnMeta(
       conn: Connection,
-      tableName: String,
-      columnName: String): Option[Int] = {
-    val query =
-      s"""
-         |SELECT pg_attribute.attndims
-         |FROM pg_attribute
-         |  JOIN pg_class ON pg_attribute.attrelid = pg_class.oid
-         |  JOIN pg_namespace ON pg_class.relnamespace = pg_namespace.oid
-         |WHERE pg_class.relname = '$tableName' and pg_attribute.attname = '$columnName'
-         |""".stripMargin
-    try {
-      Using.resource(conn.createStatement()) { stmt =>
-        Using.resource(stmt.executeQuery(query)) { rs =>
-          if (rs.next()) Some(rs.getInt(1)) else None
+      rsmd: ResultSetMetaData,
+      columnIdx: Int,
+      metadata: MetadataBuilder): Unit = {
+    rsmd.getColumnType(columnIdx) match {
+      case Types.ARRAY =>
+        val tableName = rsmd.getTableName(columnIdx)
+        val columnName = rsmd.getColumnName(columnIdx)
+        val query =
+          s"""
+             |SELECT pg_attribute.attndims
+             |FROM pg_attribute
+             |  JOIN pg_class ON pg_attribute.attrelid = pg_class.oid
+             |  JOIN pg_namespace ON pg_class.relnamespace = pg_namespace.oid
+             |WHERE pg_class.relname = '$tableName' and pg_attribute.attname = '$columnName'
+             |""".stripMargin
+        try {
+          Using.resource(conn.createStatement()) { stmt =>
+            Using.resource(stmt.executeQuery(query)) { rs =>
+              if (rs.next()) metadata.putLong("arrayDimension", rs.getLong(1))
+            }
+          }
+        } catch {
+          case e: SQLException =>
+            logWarning(
+              log"Failed to get array dimension for column ${MDC(COLUMN_NAME, columnName)}", e)
         }
-      }
-    } catch {
-      case _: SQLException => None
+      case _ =>
     }
   }
 }

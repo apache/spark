@@ -16,14 +16,13 @@
  */
 package org.apache.spark.sql.execution.streaming
 
-import java.io.Serializable
-
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{EXPIRY_TIMESTAMP, KEY}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.streaming.state._
-import org.apache.spark.sql.streaming.TimeoutMode
+import org.apache.spark.sql.streaming.TimeMode
 import org.apache.spark.sql.types._
 import org.apache.spark.util.NextIterator
 
@@ -31,10 +30,6 @@ import org.apache.spark.util.NextIterator
  * Singleton utils class used primarily while interacting with TimerState
  */
 object TimerStateUtils {
-  case class TimestampWithKey(
-      key: Any,
-      expiryTimestampMs: Long) extends Serializable
-
   val PROC_TIMERS_STATE_NAME = "_procTimers"
   val EVENT_TIMERS_STATE_NAME = "_eventTimers"
   val KEY_TO_TIMESTAMP_CF = "_keyToTimestamp"
@@ -45,12 +40,12 @@ object TimerStateUtils {
  * Class that provides the implementation for storing timers
  * used within the `transformWithState` operator.
  * @param store - state store to be used for storing timer data
- * @param timeoutMode - mode of timeout (event time or processing time)
+ * @param timeMode - mode of timeout (event time or processing time)
  * @param keyExprEnc - encoder for key expression
  */
 class TimerStateImpl(
     store: StateStore,
-    timeoutMode: TimeoutMode,
+    timeMode: TimeMode,
     keyExprEnc: ExpressionEncoder[Any]) extends Logging {
 
   private val EMPTY_ROW =
@@ -78,7 +73,7 @@ class TimerStateImpl(
 
   private val secIndexKeyEncoder = UnsafeProjection.create(keySchemaForSecIndex)
 
-  private val timerCFName = if (timeoutMode == TimeoutMode.ProcessingTime) {
+  private val timerCFName = if (timeMode == TimeMode.ProcessingTime) {
     TimerStateUtils.PROC_TIMERS_STATE_NAME
   } else {
     TimerStateUtils.EVENT_TIMERS_STATE_NAME
@@ -136,8 +131,8 @@ class TimerStateImpl(
   def registerTimer(expiryTimestampMs: Long): Unit = {
     val groupingKey = getGroupingKey(keyToTsCFName)
     if (exists(groupingKey, expiryTimestampMs)) {
-      logWarning(s"Failed to register timer for key=$groupingKey and " +
-        s"timestamp=$expiryTimestampMs since it already exists")
+      logWarning(log"Failed to register timer for key=${MDC(KEY, groupingKey)} and " +
+        log"timestamp=${MDC(EXPIRY_TIMESTAMP, expiryTimestampMs)} ms since it already exists")
     } else {
       store.put(encodeKey(groupingKey, expiryTimestampMs), EMPTY_ROW, keyToTsCFName)
       store.put(encodeSecIndexKey(groupingKey, expiryTimestampMs), EMPTY_ROW, tsToKeyCFName)
@@ -153,8 +148,8 @@ class TimerStateImpl(
     val groupingKey = getGroupingKey(keyToTsCFName)
 
     if (!exists(groupingKey, expiryTimestampMs)) {
-      logWarning(s"Failed to delete timer for key=$groupingKey and " +
-        s"timestamp=$expiryTimestampMs since it does not exist")
+      logWarning(log"Failed to delete timer for key=${MDC(KEY, groupingKey)} and " +
+        log"timestamp=${MDC(EXPIRY_TIMESTAMP, expiryTimestampMs)} ms since it does not exist")
     } else {
       store.remove(encodeKey(groupingKey, expiryTimestampMs), keyToTsCFName)
       store.remove(encodeSecIndexKey(groupingKey, expiryTimestampMs), tsToKeyCFName)

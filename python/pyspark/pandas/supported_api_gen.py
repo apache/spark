@@ -38,7 +38,7 @@ from pyspark.pandas.exceptions import PandasNotImplementedError
 MAX_MISSING_PARAMS_SIZE = 5
 COMMON_PARAMETER_SET = {"kwargs", "args", "cls"}
 MODULE_GROUP_MATCH = [(pd, ps), (pdw, psw), (pdg, psg)]
-PANDAS_LATEST_VERSION = "2.2.1"
+PANDAS_LATEST_VERSION = "2.2.2"
 
 RST_HEADER = """
 =====================

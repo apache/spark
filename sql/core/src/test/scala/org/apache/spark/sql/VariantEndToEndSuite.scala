@@ -14,13 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.expressions.{CreateArray, CreateNamedStruct, Literal, StructsToJson}
+import org.apache.spark.sql.catalyst.expressions.{CreateArray, CreateNamedStruct, JsonToStructs, Literal, StructsToJson}
 import org.apache.spark.sql.catalyst.expressions.variant.ParseJson
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.VariantType
 import org.apache.spark.types.variant.VariantBuilder
 import org.apache.spark.unsafe.types.VariantVal
 
@@ -55,6 +55,77 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     )
     // scalastyle:on nonascii
     check("[0.0, 1.00, 1.10, 1.23]", "[0,1,1.1,1.23]")
+  }
+
+  test("from_json/to_json round-trip") {
+    def check(input: String, output: String = null): Unit = {
+      val df = Seq(input).toDF("v")
+      val variantDF = df.select(Column(StructsToJson(Map.empty,
+        JsonToStructs(VariantType, Map.empty, Column("v").expr))))
+      val expected = if (output != null) output else input
+      checkAnswer(variantDF, Seq(Row(expected)))
+    }
+
+    check("null")
+    check("true")
+    check("false")
+    check("-1")
+    check("1.0E10")
+    check("\"\"")
+    check("\"" + ("a" * 63) + "\"")
+    check("\"" + ("b" * 64) + "\"")
+    // scalastyle:off nonascii
+    check("\"" + ("你好，世界" * 20) + "\"")
+    // scalastyle:on nonascii
+    check("[]")
+    check("{}")
+    // scalastyle:off nonascii
+    check(
+      "[null, true,   false,-1, 1e10, \"\\uD83D\\uDE05\", [ ], { } ]",
+      "[null,true,false,-1,1.0E10,\"😅\",[],{}]"
+    )
+    // scalastyle:on nonascii
+    check("[0.0, 1.00, 1.10, 1.23]", "[0,1,1.1,1.23]")
+  }
+
+  test("try_parse_json/to_json round-trip") {
+    def check(input: String, output: String = "INPUT IS OUTPUT"): Unit = {
+      val df = Seq(input).toDF("v")
+      val variantDF = df.selectExpr("to_json(try_parse_json(v)) as v").select(Column("v"))
+      val expected = if (output != "INPUT IS OUTPUT") output else input
+      checkAnswer(variantDF, Seq(Row(expected)))
+    }
+
+    check("null")
+    check("true")
+    check("false")
+    check("-1")
+    check("1.0E10")
+    check("\"\"")
+    check("\"" + ("a" * 63) + "\"")
+    check("\"" + ("b" * 64) + "\"")
+    // scalastyle:off nonascii
+    check("\"" + ("你好，世界" * 20) + "\"")
+    // scalastyle:on nonascii
+    check("[]")
+    check("{}")
+    // scalastyle:off nonascii
+    check(
+      "[null, true,   false,-1, 1e10, \"\\uD83D\\uDE05\", [ ], { } ]",
+      "[null,true,false,-1,1.0E10,\"😅\",[],{}]"
+    )
+    // scalastyle:on nonascii
+    check("[0.0, 1.00, 1.10, 1.23]", "[0,1,1.1,1.23]")
+    // Places where parse_json should fail and therefore, try_parse_json should return null
+    check("{1:2}", null)
+    check("{\"a\":1", null)
+    check("{\"a\":[a,b,c]}", null)
+  }
+
+  test("try_parse_json with invalid input type") {
+    // This test is required because the type checking logic in try_parse_json is custom.
+    val exception = intercept[Exception](spark.sql("select try_parse_json(1)"))
+    assert(exception != null)
   }
 
   test("to_json with nested variant") {
@@ -111,5 +182,76 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
       """[{"a": 1, "b": null}, {"b": true, "a": 1E0}]""",
       "ARRAY<STRUCT<a: DOUBLE, b: BOOLEAN>>"
     )
+  }
+
+  test("from_json variant data type parsing") {
+    def check(variantTypeString: String): Unit = {
+      val df = Seq("{\"a\": 1, \"b\": [2, 3.1]}").toDF("j").selectExpr("variant_get(from_json(j,\""
+        + variantTypeString + "\"),\"$.b[0]\")::int")
+      checkAnswer(df, Seq(Row(2)))
+    }
+
+    check("variant")
+    check("     \t variant ")
+    check("  \n  VaRiaNt  ")
+  }
+
+  test("is_variant_null with parse_json and variant_get") {
+    def check(json: String, path: String, expected: Boolean): Unit = {
+      val df = Seq(json).toDF("j").selectExpr(s"is_variant_null(variant_get(parse_json(j),"
+        + s"\"${path}\"))")
+      checkAnswer(df, Seq(Row(expected)))
+    }
+
+    check("{ \"a\": null }", "$.a", expected = true)
+    check("{ \"a\": null }", "$.b", expected = false)
+    check("{ \"a\": null, \"b\": \"null\" }", "$.b", expected = false)
+    check("{ \"a\": null, \"b\": {\"c\": null} }", "$.b.c", expected = true)
+    check("{ \"a\": null, \"b\": {\"c\": null, \"d\": [13, null]} }", "$.b.d", expected = false)
+    check("{ \"a\": null, \"b\": {\"c\": null, \"d\": [13, null]} }", "$.b.d[0]", expected = false)
+    check("{ \"a\": null, \"b\": {\"c\": null, \"d\": [13, null]} }", "$.b.d[1]", expected = true)
+    check("{ \"a\": null, \"b\": {\"c\": null, \"d\": [13, null]} }", "$.b.d[2]", expected = false)
+  }
+
+  test("schema_of_variant_agg") {
+    // Literal input.
+    checkAnswer(
+      sql("""SELECT schema_of_variant_agg(parse_json('{"a": [1, 2, 3]}'))"""),
+      Seq(Row("STRUCT<a: ARRAY<BIGINT>>")))
+
+    // Non-grouping aggregation.
+    def checkNonGrouping(input: Seq[String], expected: String): Unit = {
+      checkAnswer(input.toDF("json").selectExpr("schema_of_variant_agg(parse_json(json))"),
+        Seq(Row(expected)))
+    }
+
+    checkNonGrouping(Seq("""{"a": [1, 2, 3]}"""), "STRUCT<a: ARRAY<BIGINT>>")
+    checkNonGrouping((0 to 100).map(i => s"""{"a": [$i]}"""), "STRUCT<a: ARRAY<BIGINT>>")
+    checkNonGrouping(Seq("""[{"a": 1}, {"b": 2}]"""), "ARRAY<STRUCT<a: BIGINT, b: BIGINT>>")
+    checkNonGrouping(Seq("""{"a": [1, 2, 3]}""", """{"a": "banana"}"""), "STRUCT<a: VARIANT>")
+    checkNonGrouping(Seq("""{"a": "banana"}""", """{"b": "apple"}"""),
+      "STRUCT<a: STRING, b: STRING>")
+    checkNonGrouping(Seq("""{"a": "data"}""", null), "STRUCT<a: STRING>")
+    checkNonGrouping(Seq(null, null), "VOID")
+    checkNonGrouping(Seq("""{"a": null}""", """{"a": null}"""), "STRUCT<a: VOID>")
+    checkNonGrouping(Seq(
+      """{"hi":[]}""",
+      """{"hi":[{},{}]}""",
+      """{"hi":[{"it's":[{"me":[{"a": 1}]}]}]}"""),
+      "STRUCT<hi: ARRAY<STRUCT<`it's`: ARRAY<STRUCT<me: ARRAY<STRUCT<a: BIGINT>>>>>>>")
+
+    // Grouping aggregation.
+    withView("v") {
+      (0 to 100).map { id =>
+        val json = if (id % 4 == 0) s"""{"a": [$id]}""" else s"""{"a": ["$id"]}"""
+        (id, json)
+      }.toDF("id", "json").createTempView("v")
+      checkAnswer(sql("select schema_of_variant_agg(parse_json(json)) from v group by id % 2"),
+        Seq(Row("STRUCT<a: ARRAY<STRING>>"), Row("STRUCT<a: ARRAY<VARIANT>>")))
+      checkAnswer(sql("select schema_of_variant_agg(parse_json(json)) from v group by id % 3"),
+        Seq.fill(3)(Row("STRUCT<a: ARRAY<VARIANT>>")))
+      checkAnswer(sql("select schema_of_variant_agg(parse_json(json)) from v group by id % 4"),
+        Seq.fill(3)(Row("STRUCT<a: ARRAY<STRING>>")) ++ Seq(Row("STRUCT<a: ARRAY<BIGINT>>")))
+    }
   }
 }

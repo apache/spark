@@ -44,6 +44,7 @@ CLUSTER	false
 CLUSTERED	false
 CODEGEN	false
 COLLATE	false
+COLLATION	false
 COLLECTION	false
 COLUMN	false
 COLUMNS	false
@@ -96,6 +97,7 @@ ELSE	false
 END	false
 ESCAPE	false
 ESCAPED	false
+EVOLUTION	false
 EXCEPT	false
 EXCHANGE	false
 EXCLUDE	false

@@ -161,8 +161,9 @@ private[hive] class HiveClientImpl(
 
   // Log the default warehouse location.
   logInfo(
-    s"Warehouse location for Hive client (version ${version.fullVersion}) is " +
-    s"${conf.getVar(HiveConf.getConfVars("hive.metastore.warehouse.dir"))}")
+    log"Warehouse location for Hive client (version " +
+      log"${MDC(HIVE_CLIENT_VERSION, version.fullVersion)}) is " +
+    log"${MDC(PATH, conf.getVar(HiveConf.getConfVars("hive.metastore.warehouse.dir")))}")
 
   private def newState(): SessionState = {
     val hiveConf = newHiveConf(sparkConf, hadoopConf, extraConfig, Some(initClassLoader))
@@ -230,8 +231,8 @@ private[hive] class HiveClientImpl(
         case e: Exception if causedByThrift(e) =>
           caughtException = e
           logWarning(
-            "HiveClient got thrift exception, destroying client and retrying " +
-              s"(${retryLimit - numTries} tries remaining)", e)
+            log"HiveClient got thrift exception, destroying client and retrying " +
+              log"${MDC(RETRY_COUNT, numTries)} times", e)
           clientLoader.cachedHive = null
           Thread.sleep(retryDelayMillis)
       }
@@ -1335,8 +1336,8 @@ private[hive] object HiveClientImpl extends Logging {
     // initialize spark or tez stuff, which is useless for spark.
     val engine = hiveConf.get("hive.execution.engine")
     if (engine != "mr") {
-      logWarning(s"Detected HiveConf hive.execution.engine is '$engine' and will be reset to 'mr'" +
-        " to disable useless hive logic")
+      logWarning(log"Detected HiveConf hive.execution.engine is '${MDC(ENGINE, engine)}' and " +
+        log"will be reset to 'mr' to disable useless hive logic")
       hiveConf.set("hive.execution.engine", "mr", SOURCE_SPARK)
     }
     hiveConf

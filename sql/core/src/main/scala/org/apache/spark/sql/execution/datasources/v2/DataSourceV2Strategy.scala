@@ -22,9 +22,9 @@ import scala.collection.mutable
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.EXPR
 import org.apache.spark.sql.{SparkSession, Strategy}
-import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions
@@ -118,12 +118,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val rdd = v1Relation.buildScan()
       val unsafeRowRDD = DataSourceStrategy.toCatalystRDD(v1Relation, output, rdd)
 
-      val tableIdentifier = v2Relation.identifier.map(_.asMultipartIdentifier) match {
-        case Some(Seq(schema, tableName)) =>
-          Some(new TableIdentifier(tableName, Some(schema), v2Relation.catalog.map(_.name())))
-        case _ =>
-          None
-      }
+      val catalogName = v2Relation.catalog.map(_.name())
+      val tableIdentifier = v2Relation.identifier.flatMap(_.asTableIdentifierOpt(catalogName))
 
       val dsScan = RowDataSourceScanExec(
         output,
@@ -655,7 +651,7 @@ private[sql] object DataSourceV2Strategy extends Logging {
       Some(new Predicate("IN", FieldReference(name) +: literals))
 
     case other =>
-      logWarning(s"Can't translate $other to source filter, unsupported expression")
+      logWarning(log"Can't translate ${MDC(EXPR, other)} to source filter, unsupported expression")
       None
   }
 }

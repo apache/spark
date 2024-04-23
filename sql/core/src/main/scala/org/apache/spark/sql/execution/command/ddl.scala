@@ -784,11 +784,12 @@ case class RepairTableCommand(
             partitionNames.drop(1), threshold, resolver, evalTaskSupport)
         } else {
           logWarning(
-            s"expected partition column ${partitionNames.head}, but got ${ps(0)}, ignoring it")
+            log"expected partition column ${MDC(EXPECTED_PARTITION_COLUMN, partitionNames.head)}," +
+              log" but got ${MDC(ACTUAL_PARTITION_COLUMN, ps(0))}, ignoring it")
           Seq.empty
         }
       } else {
-        logWarning(s"ignore ${new Path(path, name)}")
+        logWarning(log"ignore ${MDC(PATH, new Path(path, name))}")
         Seq.empty
       }
     }
