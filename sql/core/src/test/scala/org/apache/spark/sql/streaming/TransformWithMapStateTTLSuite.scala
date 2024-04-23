@@ -19,7 +19,6 @@ package org.apache.spark.sql.streaming
 
 import java.time.Duration
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.execution.streaming.{MapStateImplWithTTL, MemoryStream}
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
@@ -27,8 +26,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
 
 class MapStateSingleKeyTTLProcessor(ttlConfig: TTLConfig)
-  extends StatefulProcessor[String, InputEvent, OutputEvent]
-    with Logging {
+  extends StatefulProcessor[String, InputEvent, OutputEvent] {
 
   @transient private var _mapState: MapStateImplWithTTL[String, Int] = _
 
@@ -39,11 +37,12 @@ class MapStateSingleKeyTTLProcessor(ttlConfig: TTLConfig)
       .getMapState("mapState", Encoders.STRING, Encoders.scalaInt, ttlConfig)
       .asInstanceOf[MapStateImplWithTTL[String, Int]]
   }
+
   override def handleInputRows(
-    key: String,
-    inputRows: Iterator[InputEvent],
-    timerValues: TimerValues,
-    expiredTimerInfo: ExpiredTimerInfo): Iterator[OutputEvent] = {
+      key: String,
+      inputRows: Iterator[InputEvent],
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[OutputEvent] = {
     var results = List[OutputEvent]()
 
     for (row <- inputRows) {
@@ -105,8 +104,7 @@ case class MapOutputEvent(
     ttlValue: Long)
 
 class MapStateTTLProcessor(ttlConfig: TTLConfig)
-  extends StatefulProcessor[String, MapInputEvent, MapOutputEvent]
-    with Logging {
+  extends StatefulProcessor[String, MapInputEvent, MapOutputEvent] {
 
   @transient private var _mapState: MapStateImplWithTTL[String, Int] = _
 
@@ -300,6 +298,22 @@ class TransformWithMapStateTTLSuite extends TransformWithStateTTLTest {
           MapOutputEvent("k1", "key3", 3, isTTLValue = false, -1),
           MapOutputEvent("k1", "key4", 4, isTTLValue = false, -1),
           MapOutputEvent("k1", "key5", 5, isTTLValue = false, -1)
+        ),
+        // check that updating a key updates its TTL
+        AddData(inputStream, MapInputEvent("k1", "key3", "put", 3)),
+        AdvanceManualClock(1 * 1000),
+        AddData(inputStream, MapInputEvent("k1", "", "get_values_in_ttl_state", -1)),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(
+          MapOutputEvent("k1", "key3", -1, isTTLValue = true, 123000),
+          MapOutputEvent("k1", "key3", -1, isTTLValue = true, 126000),
+          MapOutputEvent("k1", "key4", -1, isTTLValue = true, 123000),
+          MapOutputEvent("k1", "key5", -1, isTTLValue = true, 123000)
+        ),
+        AddData(inputStream, MapInputEvent("k1", "key3", "get_ttl_value_from_state", -1)),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(
+          MapOutputEvent("k1", "key3", 3, isTTLValue = true, 126000)
         ),
         StopStream
       )
