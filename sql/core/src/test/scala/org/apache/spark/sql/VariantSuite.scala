@@ -25,11 +25,12 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.Random
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{StringType, StructField, StructType, VariantType}
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.VariantVal
 import org.apache.spark.util.ArrayImplicits._
 
@@ -66,6 +67,33 @@ class VariantSuite extends QueryTest with SharedSparkSession {
 
     assert(actual.getString(0) == """{"a":1}""")
     assert(actual.getString(1) == """{"b":[{"c":"str2"}]}""")
+  }
+
+  test("expression alias") {
+    val df = Seq("""{ "a" : 1 }""", """{ "b" : 2 }""").toDF("json")
+    val v = parse_json(col("json"))
+
+    def rows(results: Any*): Seq[Row] = results.map(Row(_))
+
+    checkAnswer(df.select(is_variant_null(v)), rows(false, false))
+    checkAnswer(df.select(schema_of_variant(v)), rows("STRUCT<a: BIGINT>", "STRUCT<b: BIGINT>"))
+    checkAnswer(df.select(schema_of_variant_agg(v)), rows("STRUCT<a: BIGINT, b: BIGINT>"))
+
+    checkAnswer(df.select(variant_get(v, "$.a", "int")), rows(1, null))
+    checkAnswer(df.select(variant_get(v, "$.b", "int")), rows(null, 2))
+    checkAnswer(df.select(variant_get(v, "$.a", "double")), rows(1.0, null))
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        df.select(variant_get(v, "$.a", "binary")).collect()
+      },
+      errorClass = "INVALID_VARIANT_CAST",
+      parameters = Map("value" -> "1", "dataType" -> "\"BINARY\"")
+    )
+
+    checkAnswer(df.select(try_variant_get(v, "$.a", "int")), rows(1, null))
+    checkAnswer(df.select(try_variant_get(v, "$.b", "int")), rows(null, 2))
+    checkAnswer(df.select(try_variant_get(v, "$.a", "double")), rows(1.0, null))
+    checkAnswer(df.select(try_variant_get(v, "$.a", "binary")), rows(null, null))
   }
 
   test("round trip tests") {
@@ -334,6 +362,24 @@ class VariantSuite extends QueryTest with SharedSparkSession {
           .load(dir.getAbsolutePath).selectExpr("a", "b", "to_json(var)"),
         Seq(Row(1, 2, "true"), Row(1, 2, """{"a":[],"b":null}"""), Row(1, 2, """{"a":1}"""),
           Row(1, 2, "[1,2,3]"))
+      )
+    }
+  }
+
+  test("json scan with map schema") {
+    withTempDir { dir =>
+      val file = new File(dir, "file.json")
+      val content = Seq(
+        "true",
+        """{"v": null}""",
+        """{"v": {"a": 1, "b": null}}"""
+      ).mkString("\n").getBytes(StandardCharsets.UTF_8)
+      Files.write(file.toPath, content)
+      checkAnswer(
+        spark.read.format("json").schema("v map<string, variant>")
+          .load(file.getAbsolutePath)
+          .selectExpr("to_json(v)"),
+        Seq(Row(null), Row(null), Row("""{"a":1,"b":null}"""))
       )
     }
   }

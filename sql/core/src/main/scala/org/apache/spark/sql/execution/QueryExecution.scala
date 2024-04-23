@@ -26,7 +26,8 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.EXTENDED_EXPLAIN_GENERATOR
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, ExtendedExplainGenerator, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
@@ -385,7 +386,8 @@ class QueryExecution(
           append(s"\n== Extended Information (${extension.title}) ==\n")
           append(extension.generateExtendedInfo(plan))
         } catch {
-          case NonFatal(e) => logWarning(s"Cannot use $extension to get extended information.", e)
+          case NonFatal(e) => logWarning(log"Cannot use " +
+            log"${MDC(EXTENDED_EXPLAIN_GENERATOR, extension)} to get extended information.", e)
         })
     }
   }

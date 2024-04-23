@@ -758,7 +758,7 @@
       },
       "INVALID_JSON_SCHEMA" : {
         "message" : [
-          "Input schema <schema> must be a struct, an array or a map."
+          "Input schema <schema> must be a struct, an array, a map or a variant."
         ]
       },
       "INVALID_MAP_KEY_TYPE" : {
@@ -3797,6 +3797,21 @@
       "The sum of the LIMIT clause and the OFFSET clause must not be greater than the maximum 32-bit integer value (2,147,483,647) but found limit = <limit>, offset = <offset>."
     ],
     "sqlState" : "22003"
+  },
+  "SYNTAX_DISCONTINUED" : {
+    "message" : [
+      "Support of the clause or keyword: <clause> has been discontinued in this context."
+    ],
+    "subClass" : {
+      "BANG_EQUALS_NOT" : {
+        "message" : [
+          "The '!' keyword is only supported as an alias for the prefix operator 'NOT'.",
+          "Use the 'NOT' keyword instead for infix clauses such as `NOT LIKE`, `NOT IN`, `NOT BETWEEN`, etc.",
+          "To re-enable the '!' keyword, set \"spark.sql.legacy.bangEqualsNot\" to \"true\"."
+        ]
+      }
+    },
+    "sqlState" : "42601"
   },
   "TABLE_OR_VIEW_ALREADY_EXISTS" : {
     "message" : [
