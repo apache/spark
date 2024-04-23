@@ -313,6 +313,8 @@ case class TransformWithStateExec(
         "Number of value state variables with TTL"),
       StatefulOperatorCustomSumMetric("numListStateWithTTLVars",
         "Number of list state variables with TTL"),
+      StatefulOperatorCustomSumMetric("numMapStateWithTTLVars",
+        "Number of map state variables with TTL"),
       StatefulOperatorCustomSumMetric("numValuesRemovedDueToTTLExpiry",
         "Number of values removed due to TTL expiry")
     )

@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import scala.collection.immutable.Seq
-
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -138,6 +136,68 @@ class CollationStringExpressionsSuite
     // Collation mismatch
     val collationMismatch = intercept[AnalysisException] {
       sql("SELECT contains(collate('abcde','UTF8_BINARY_LCASE'),collate('C','UNICODE_CI'))")
+    }
+    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+  }
+
+  test("Support StringInStr string expression with collation") {
+    case class StringInStrTestCase[R](string: String, substring: String, c: String, result: R)
+    val testCases = Seq(
+      // scalastyle:off
+      StringInStrTestCase("test大千世界X大千世界", "大千", "UTF8_BINARY", 5),
+      StringInStrTestCase("test大千世界X大千世界", "界x", "UTF8_BINARY_LCASE", 8),
+      StringInStrTestCase("test大千世界X大千世界", "界x", "UNICODE", 0),
+      StringInStrTestCase("test大千世界X大千世界", "界y", "UNICODE_CI", 0),
+      StringInStrTestCase("test大千世界X大千世界", "界x", "UNICODE_CI", 8),
+      StringInStrTestCase("abİo12", "i̇o", "UNICODE_CI", 3)
+      // scalastyle:on
+    )
+    testCases.foreach(t => {
+      val query = s"SELECT instr(collate('${t.string}','${t.c}')," +
+        s"collate('${t.substring}','${t.c}'))"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(IntegerType))
+      // Implicit casting
+      checkAnswer(sql(s"SELECT instr(collate('${t.string}','${t.c}')," +
+        s"'${t.substring}')"), Row(t.result))
+      checkAnswer(sql(s"SELECT instr('${t.string}'," +
+        s"collate('${t.substring}','${t.c}'))"), Row(t.result))
+    })
+    // Collation mismatch
+    val collationMismatch = intercept[AnalysisException] {
+      sql(s"SELECT instr(collate('aaads','UTF8_BINARY'), collate('Aa','UTF8_BINARY_LCASE'))")
+    }
+    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+  }
+
+  test("Support FindInSet string expression with collation") {
+    case class FindInSetTestCase[R](word: String, set: String, c: String, result: R)
+    val testCases = Seq(
+      FindInSetTestCase("AB", "abc,b,ab,c,def", "UTF8_BINARY", 0),
+      FindInSetTestCase("C", "abc,b,ab,c,def", "UTF8_BINARY_LCASE", 4),
+      FindInSetTestCase("d,ef", "abc,b,ab,c,def", "UNICODE", 0),
+      // scalastyle:off
+      FindInSetTestCase("i̇o", "ab,İo,12", "UNICODE_CI", 2),
+      FindInSetTestCase("İo", "ab,i̇o,12", "UNICODE_CI", 2)
+      // scalastyle:on
+    )
+    testCases.foreach(t => {
+      val query = s"SELECT find_in_set(collate('${t.word}', '${t.c}')," +
+        s"collate('${t.set}', '${t.c}'))"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(IntegerType))
+      // Implicit casting
+      checkAnswer(sql(s"SELECT find_in_set(collate('${t.word}', '${t.c}')," +
+        s"'${t.set}')"), Row(t.result))
+      checkAnswer(sql(s"SELECT find_in_set('${t.word}'," +
+        s"collate('${t.set}', '${t.c}'))"), Row(t.result))
+    })
+    // Collation mismatch
+    val collationMismatch = intercept[AnalysisException] {
+      sql(s"SELECT find_in_set(collate('AB','UTF8_BINARY')," +
+        s"collate('ab,xyz,fgh','UTF8_BINARY_LCASE'))")
     }
     assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
   }
@@ -450,6 +510,129 @@ class CollationStringExpressionsSuite
       checkAnswer(sql(query), Row(t.r))
       assert(sql(query).schema.fields.head.dataType.sameType(BooleanType))
     })
+  }
+
+  test("Support Left/Right/Substr with collation") {
+    case class SubstringTestCase(
+        method: String,
+        str: String,
+        len: String,
+        pad: Option[String],
+        collation: String,
+        result: Row) {
+      val strString = if (str == "null") "null" else s"'$str'"
+      val query =
+        s"SELECT $method(collate($strString, '$collation')," +
+          s" $len${pad.map(p => s", '$p'").getOrElse("")})"
+    }
+
+    val checks = Seq(
+      SubstringTestCase("substr", "example", "1", Some("100"), "utf8_binary_lcase", Row("example")),
+      SubstringTestCase("substr", "example", "2", Some("2"), "utf8_binary", Row("xa")),
+      SubstringTestCase("right", "", "1", None, "utf8_binary_lcase", Row("")),
+      SubstringTestCase("substr", "example", "0", Some("0"), "unicode", Row("")),
+      SubstringTestCase("substr", "example", "-3", Some("2"), "unicode_ci", Row("pl")),
+      SubstringTestCase("substr", " a世a ", "2", Some("3"), "utf8_binary_lcase", Row("a世a")),
+      SubstringTestCase("left", " a世a ", "3", None, "utf8_binary", Row(" a世")),
+      SubstringTestCase("right", " a世a ", "3", None, "unicode", Row("世a ")),
+      SubstringTestCase("left", "ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ", "3", None, "unicode_ci", Row("ÀÃÂ")),
+      SubstringTestCase("right", "ÀÃÂĀĂȦÄäâãȻȻȻȻȻǢǼÆ", "3", None, "utf8_binary_lcase", Row("ǢǼÆ")),
+      SubstringTestCase("substr", "", "1", Some("1"), "utf8_binary_lcase", Row("")),
+      SubstringTestCase("substr", "", "1", Some("1"), "unicode", Row("")),
+      SubstringTestCase("left", "", "1", None, "utf8_binary", Row("")),
+      SubstringTestCase("left", "null", "1", None, "utf8_binary_lcase", Row(null)),
+      SubstringTestCase("right", "null", "1", None, "unicode", Row(null)),
+      SubstringTestCase("substr", "null", "1", None, "utf8_binary", Row(null)),
+      SubstringTestCase("substr", "null", "1", Some("1"), "unicode_ci", Row(null)),
+      SubstringTestCase("left", "null", "null", None, "utf8_binary_lcase", Row(null)),
+      SubstringTestCase("right", "null", "null", None, "unicode", Row(null)),
+      SubstringTestCase("substr", "null", "null", Some("null"), "utf8_binary", Row(null)),
+      SubstringTestCase("substr", "null", "null", None, "unicode_ci", Row(null)),
+      SubstringTestCase("left", "ÀÃÂȦÄäåäáâãȻȻȻǢǼÆ", "null", None, "utf8_binary_lcase", Row(null)),
+      SubstringTestCase("right", "ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ", "null", None, "unicode", Row(null)),
+      SubstringTestCase("substr", "ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ", "null", None, "utf8_binary", Row(null)),
+      SubstringTestCase("substr", "", "null", None, "unicode_ci", Row(null))
+    )
+
+    checks.foreach { check =>
+      // Result & data type
+      checkAnswer(sql(check.query), check.result)
+      assert(sql(check.query).schema.fields.head.dataType.sameType(StringType(check.collation)))
+    }
+  }
+
+  test("Support StringRPad string expressions with collation") {
+    // Supported collations
+    case class StringRPadTestCase[R](s: String, len: Int, pad: String, c: String, result: R)
+    val testCases = Seq(
+      StringRPadTestCase("", 5, " ", "UTF8_BINARY", "     "),
+      StringRPadTestCase("abc", 5, " ", "UNICODE", "abc  "),
+      StringRPadTestCase("Hello", 7, "Wörld", "UTF8_BINARY_LCASE", "HelloWö"),
+      StringRPadTestCase("1234567890", 5, "aaaAAa", "UNICODE_CI", "12345"),
+      StringRPadTestCase("aaAA", 2, " ", "UTF8_BINARY", "aa"),
+      StringRPadTestCase("ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ℀℃", 2, "1", "UTF8_BINARY_LCASE", "ÀÃ"),
+      StringRPadTestCase("ĂȦÄäåäá", 20, "ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ", "UNICODE", "ĂȦÄäåäáÀÃÂĀĂȦÄäåäáâã"),
+      StringRPadTestCase("aȦÄä", 8, "a1", "UNICODE_CI", "aȦÄäa1a1")
+    )
+    testCases.foreach(t => {
+      val query = s"SELECT rpad(collate('${t.s}', '${t.c}')," +
+        s" ${t.len}, collate('${t.pad}', '${t.c}'))"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
+      // Implicit casting
+      checkAnswer(
+        sql(s"SELECT rpad(collate('${t.s}', '${t.c}'), ${t.len}, '${t.pad}')"),
+        Row(t.result))
+      checkAnswer(
+        sql(s"SELECT rpad('${t.s}', ${t.len}, collate('${t.pad}', '${t.c}'))"),
+        Row(t.result))
+    })
+    // Collation mismatch
+    val collationMismatch = intercept[AnalysisException] {
+      sql("SELECT rpad(collate('abcde', 'UNICODE_CI'),1,collate('C', 'UTF8_BINARY_LCASE'))")
+    }
+    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+  }
+
+  test("Support StringLPad string expressions with collation") {
+    // Supported collations
+    case class StringLPadTestCase[R](s: String, len: Int, pad: String, c: String, result: R)
+    val testCases = Seq(
+      StringLPadTestCase("", 5, " ", "UTF8_BINARY", "     "),
+      StringLPadTestCase("abc", 5, " ", "UNICODE", "  abc"),
+      StringLPadTestCase("Hello", 7, "Wörld", "UTF8_BINARY_LCASE", "WöHello"),
+      StringLPadTestCase("1234567890", 5, "aaaAAa", "UNICODE_CI", "12345"),
+      StringLPadTestCase("aaAA", 2, " ", "UTF8_BINARY", "aa"),
+      StringLPadTestCase("ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ℀℃", 2, "1", "UTF8_BINARY_LCASE", "ÀÃ"),
+      StringLPadTestCase("ĂȦÄäåäá", 20, "ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ", "UNICODE", "ÀÃÂĀĂȦÄäåäáâãĂȦÄäåäá"),
+      StringLPadTestCase("aȦÄä", 8, "a1", "UNICODE_CI", "a1a1aȦÄä")
+    )
+    testCases.foreach(t => {
+      val query = s"SELECT lpad(collate('${t.s}', '${t.c}')," +
+        s" ${t.len}, collate('${t.pad}', '${t.c}'))"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
+      // Implicit casting
+      checkAnswer(
+        sql(s"SELECT lpad(collate('${t.s}', '${t.c}'), ${t.len}, '${t.pad}')"),
+        Row(t.result))
+      checkAnswer(
+        sql(s"SELECT lpad('${t.s}', ${t.len}, collate('${t.pad}', '${t.c}'))"),
+        Row(t.result))
+    })
+    // Collation mismatch
+    val collationMismatch = intercept[AnalysisException] {
+      sql("SELECT lpad(collate('abcde', 'UNICODE_CI'),1,collate('C', 'UTF8_BINARY_LCASE'))")
+    }
+    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+  }
+
+  test("Support StringLPad string expressions with explicit collation on second parameter") {
+    val query = "SELECT lpad('abc', collate('5', 'unicode_ci'), ' ')"
+    checkAnswer(sql(query), Row("  abc"))
+    assert(sql(query).schema.fields.head.dataType.sameType(StringType(0)))
   }
 
   // TODO: Add more tests for other string expressions
