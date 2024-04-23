@@ -33,6 +33,7 @@ import org.apache.spark.sql.execution.datasources.v2.ShowTablesExec
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.storage.ShuffleIndexBlockId
 import org.apache.spark.util.Utils
 
 case class QueryExecutionTestRecord(
@@ -314,6 +315,15 @@ class QueryExecutionSuite extends SharedSparkSession {
     mockCallback.assertExecutedPlanPrepared()
   }
 
+  private def cleanupShuffles(): Unit = {
+    val blockManager = spark.sparkContext.env.blockManager
+    blockManager.diskBlockManager.getAllBlocks().foreach {
+      case ShuffleIndexBlockId(shuffleId, _, _) =>
+        spark.sparkContext.env.shuffleManager.unregisterShuffle(shuffleId)
+      case _ =>
+    }
+  }
+
   test("SPARK-47764: Cleanup shuffle dependencies - DoNotCleanup mode") {
     val plan = spark.range(100).repartition(10).logicalPlan
     val df = Dataset.ofRows(spark, plan, DoNotCleanup)
@@ -322,6 +332,7 @@ class QueryExecutionSuite extends SharedSparkSession {
     val blockManager = spark.sparkContext.env.blockManager
     assert(blockManager.migratableResolver.getStoredShuffles().nonEmpty)
     assert(blockManager.diskBlockManager.getAllBlocks().nonEmpty)
+    cleanupShuffles()
   }
 
   test("SPARK-47764: Cleanup shuffle dependencies - SkipMigration mode") {
@@ -332,6 +343,7 @@ class QueryExecutionSuite extends SharedSparkSession {
     val blockManager = spark.sparkContext.env.blockManager
     assert(blockManager.migratableResolver.getStoredShuffles().isEmpty)
     assert(blockManager.diskBlockManager.getAllBlocks().nonEmpty)
+    cleanupShuffles()
   }
 
   test("SPARK-47764: Cleanup shuffle dependencies - RemoveShuffleFiles mode") {
@@ -342,6 +354,7 @@ class QueryExecutionSuite extends SharedSparkSession {
     val blockManager = spark.sparkContext.env.blockManager
     assert(blockManager.migratableResolver.getStoredShuffles().isEmpty)
     assert(blockManager.diskBlockManager.getAllBlocks().isEmpty)
+    cleanupShuffles()
   }
 
   test("SPARK-35378: Return UnsafeRow in CommandResultExecCheck execute methods") {
