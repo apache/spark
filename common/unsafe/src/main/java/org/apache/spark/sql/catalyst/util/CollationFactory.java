@@ -287,6 +287,8 @@ public final class CollationFactory {
         Comparator<UTF8String> comparator;
         if (collationId == UTF8_BINARY_COLLATION_ID) {
           comparator = UTF8String::binaryCompare;
+        } else if (collationId == UTF8_BINARY_LCASE_COLLATION_ID) {
+          comparator = UTF8String::compareLowerCase;
         } else {
           comparator = (s1, s2) -> {
             UTF8String convertedS1 = caseConversion(s1);
