@@ -4651,6 +4651,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         When ``observation`` is a string, streaming queries also work as below.
 
         >>> from pyspark.sql.streaming import StreamingQueryListener
+        >>> import time
         >>> class MyErrorListener(StreamingQueryListener):
         ...    def onQueryStarted(self, event):
         ...        pass
