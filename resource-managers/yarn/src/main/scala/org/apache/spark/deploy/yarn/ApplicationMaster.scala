@@ -465,7 +465,7 @@ private[spark] class ApplicationMaster(
       val dummyRunner = new ExecutorRunnable(None, yarnConf, _sparkConf, driverUrl, "<executorId>",
         "<hostname>", executorMemory, executorCores, appId, securityMgr, localResources,
         ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
-      log"${MDC(LogKey.LAUNCH_CONTEXT_DEBUG_INFO, dummyRunner.launchContextDebugInfo())}"
+      dummyRunner.launchContextDebugInfo()
     }
 
     allocator = client.createAllocator(

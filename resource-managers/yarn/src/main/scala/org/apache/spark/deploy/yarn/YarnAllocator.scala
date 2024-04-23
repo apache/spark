@@ -707,7 +707,7 @@ private[yarn] class YarnAllocator(
     runAllocatedContainers(containersToUse)
 
     logInfo(log"Received ${MDC(LogKey.COUNT, allocatedContainers.size)} containers from YARN, " +
-      log"launching executors on ${MDC(LogKey.EXECUTOR_LAUNCHING_COUNT, containersToUse.size)} " +
+      log"launching executors on ${MDC(LogKey.EXECUTOR_LAUNCH_COUNT, containersToUse.size)} " +
       log"of them.")
   }
 

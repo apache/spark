@@ -108,10 +108,13 @@ object LogKey extends Enumeration {
   val EXECUTE_KEY = Value
   val EXECUTION_PLAN_LEAVES = Value
   val EXECUTOR_DESIRED_COUNT = Value
+  val EXECUTOR_ENVS = Value
   val EXECUTOR_ENV_REGEX = Value
   val EXECUTOR_ID = Value
   val EXECUTOR_IDS = Value
-  val EXECUTOR_LAUNCHING_COUNT = Value
+  val EXECUTOR_LAUNCH_COMMANDS = Value
+  val EXECUTOR_LAUNCH_COUNT = Value
+  val EXECUTOR_RESOURCES = Value
   val EXECUTOR_STATE = Value
   val EXECUTOR_TARGET_COUNT = Value
   val EXIT_CODE = Value
@@ -166,7 +169,6 @@ object LogKey extends Enumeration {
   val LAST_VALID_TIME = Value
   val LATEST_BATCH_ID = Value
   val LATEST_COMMITTED_BATCH_ID = Value
-  val LAUNCH_CONTEXT_DEBUG_INFO = Value
   val LEARNING_RATE = Value
   val LEFT_EXPR = Value
   val LINE = Value
