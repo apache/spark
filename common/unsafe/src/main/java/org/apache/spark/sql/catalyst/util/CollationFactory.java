@@ -160,7 +160,6 @@ public final class CollationFactory {
       protected static final int localeOffset = 0;
       protected static final int localeLen = 16;
 
-      protected final ImplementationProvider implementationProvider;
       protected final CaseSensitivity caseSensitivity;
       protected final AccentSensitivity accentSensitivity;
       protected final CaseConversion caseConversion;
@@ -168,12 +167,10 @@ public final class CollationFactory {
       protected final int collationId;
 
       protected CollationSpec(
-          ImplementationProvider implementationProvider,
           String locale,
           CaseSensitivity caseSensitivity,
           AccentSensitivity accentSensitivity,
           CaseConversion caseConversion) {
-        this.implementationProvider = implementationProvider;
         this.locale = locale;
         this.caseSensitivity = caseSensitivity;
         this.accentSensitivity = accentSensitivity;
@@ -244,9 +241,8 @@ public final class CollationFactory {
         return specifiers;
       }
 
-      public abstract int getCollationId();
-      public abstract Collation buildCollation();
-      protected abstract String collationName();
+      protected abstract int getCollationId();
+      protected abstract Collation buildCollation();
     }
 
     public static class CollationSpecUTF8Binary extends CollationSpec {
@@ -257,8 +253,7 @@ public final class CollationFactory {
         new CollationSpecUTF8Binary(CaseConversion.LCASE).getCollationId();
 
       private CollationSpecUTF8Binary(CaseConversion caseConversion) {
-        super(ImplementationProvider.UTF8_BINARY, null,
-          CaseSensitivity.CS, AccentSensitivity.AS, caseConversion);
+        super(null, CaseSensitivity.CS, AccentSensitivity.AS, caseConversion);
       }
 
       public static int collationNameToId(String collationName) throws SparkException {
@@ -270,9 +265,8 @@ public final class CollationFactory {
       }
 
       @Override
-      public int getCollationId() {
+      protected int getCollationId() {
         int collationId = 0;
-        collationId |= implementationProvider.ordinal() << implementationProviderOffset;
         collationId |= caseConversion.ordinal() << caseConversionOffset;
         return collationId;
       }
@@ -283,7 +277,8 @@ public final class CollationFactory {
         return new CollationSpecUTF8Binary(caseConversion);
       }
 
-      public Collation buildCollation() {
+      @Override
+      protected Collation buildCollation() {
         Comparator<UTF8String> comparator;
         if (collationId == UTF8_BINARY_COLLATION_ID) {
           comparator = UTF8String::binaryCompare;
@@ -318,8 +313,7 @@ public final class CollationFactory {
         }
       }
 
-      @Override
-      protected String collationName() {
+      private String collationName() {
         StringBuilder builder = new StringBuilder();
         builder.append("UTF8_BINARY");
         if (caseConversion != CaseConversion.UNSPECIFIED) {
@@ -382,8 +376,7 @@ public final class CollationFactory {
 
       private CollationSpecICU(String locale, CaseSensitivity caseSensitivity,
           AccentSensitivity accentSensitivity, CaseConversion caseConversion) {
-        super(ImplementationProvider.ICU, locale, caseSensitivity,
-          accentSensitivity, caseConversion);
+        super(locale, caseSensitivity, accentSensitivity, caseConversion);
       }
 
       public static int collationNameToId(String collationName) throws SparkException {
@@ -419,9 +412,9 @@ public final class CollationFactory {
       }
 
       @Override
-      public int getCollationId() {
+      protected int getCollationId() {
         int collationId = 0;
-        collationId |= implementationProvider.ordinal() << implementationProviderOffset;
+        collationId |= ImplementationProvider.ICU.ordinal() << implementationProviderOffset;
         collationId |= caseSensitivity.ordinal() << caseSensitivityOffset;
         collationId |= accentSensitivity.ordinal() << accentSensitivityOffset;
         collationId |= caseConversion.ordinal() << caseConversionOffset;
@@ -429,7 +422,8 @@ public final class CollationFactory {
         return collationId;
       }
 
-      public Collation buildCollation() {
+      @Override
+      protected Collation buildCollation() {
         ULocale.Builder builder = new ULocale.Builder();
         builder.setLocale(ICULocaleMap.get(locale));
         if (caseSensitivity == CaseSensitivity.CS &&
@@ -473,8 +467,7 @@ public final class CollationFactory {
         }
       }
 
-      @Override
-      protected String collationName() {
+      private String collationName() {
         StringBuilder builder = new StringBuilder();
         if (locale.equals("UNICODE")) {
           builder.append("UNICODE");
