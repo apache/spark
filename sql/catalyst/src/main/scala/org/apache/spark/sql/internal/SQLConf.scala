@@ -4821,6 +4821,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val LEGACY_BANG_EQUALS_NOT = buildConf("spark.sql.legacy.bangEqualsNot")
+    .internal()
+    .doc("When set to true, '!' is a lexical equivalent for 'NOT'. That is '!' can be used " +
+      "outside of the documented prefix usage in a logical expression." +
+      "Examples are: `expr ! IN (1, 2)` and `expr ! BETWEEN 1 AND 2`, but also `IF ! EXISTS`."
+    )
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *

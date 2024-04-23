@@ -25,3 +25,4 @@ VariantVal
     :toctree: api/
 
     VariantVal.toPython
+    VariantVal.toJson

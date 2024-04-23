@@ -1521,6 +1521,19 @@ class VariantVal:
         """
         return VariantUtils.to_python(self.value, self.metadata)
 
+    def toJson(self, zone_id: str = "UTC") -> str:
+        """
+        Convert the VariantVal to a JSON string. The zone ID represents the time zone that the
+        timestamp should be printed in. It is defaulted to UTC. The list of valid zone IDs can be
+        found by importing the `zoneinfo` module and running :code:`zoneinfo.available_timezones()`.
+
+        Returns
+        -------
+        str
+            A JSON string that represents the Variant.
+        """
+        return VariantUtils.to_json(self.value, self.metadata, zone_id)
+
 
 _atomic_types: List[Type[DataType]] = [
     StringType,
