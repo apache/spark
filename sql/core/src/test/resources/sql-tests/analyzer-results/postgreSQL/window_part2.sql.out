@@ -177,7 +177,7 @@ Project [id#xL, y#xL, first(y) OVER (ORDER BY id DESC NULLS LAST RANGE BETWEEN (
                :- Union false, false
                :  :- Project [id#xL, id#xL AS y#xL]
                :  :  +- SubqueryAlias x
-               :  :     +- Range (1, 6, step=1, )
+               :  :     +- Range (1, 6, step=1)
                :  +- Project [cast(NULL#x as bigint) AS NULL#xL, cast(42#x as bigint) AS 42#xL]
                :     +- Project [null AS NULL#x, 42 AS 42#x]
                :        +- OneRowRelation
