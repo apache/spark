@@ -94,7 +94,7 @@ class CollationStringExpressionsSuite
     val testCases = Seq(
       SplitPartTestCase("1a2", "a", 2, "UTF8_BINARY", "2"),
       SplitPartTestCase("1a2", "a", 2, "UNICODE", "2"),
-      SplitPartTestCase("1a2", "a", 2, "UTF8_BINARY_LCASE", "2"),
+      SplitPartTestCase("1a2", "A", 2, "UTF8_BINARY_LCASE", "2"),
       SplitPartTestCase("1a2", "a", 2, "UNICODE_CI", "2")
     )
     testCases.foreach(t => {
