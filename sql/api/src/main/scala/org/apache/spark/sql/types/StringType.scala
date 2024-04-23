@@ -36,6 +36,10 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
    */
   def supportsBinaryEquality: Boolean =
     CollationFactory.fetchCollation(collationId).supportsBinaryEquality
+
+  def isUTF8BinaryCollation: Boolean =
+    collationId == CollationFactory.UTF8_BINARY_COLLATION_ID
+
   def isUTF8BinaryLcaseCollation: Boolean =
     collationId == CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID
 
@@ -54,7 +58,7 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
    * If this is an UTF8_BINARY collation output is `string` due to backwards compatibility.
    */
   override def typeName: String =
-    if (collationId == 0) "string"
+    if (isUTF8BinaryCollation) "string"
     else s"string collate ${CollationFactory.fetchCollation(collationId).collationName}"
 
   override def equals(obj: Any): Boolean =
