@@ -29,7 +29,6 @@ import org.apache.logging.log4j.core.filter.AbstractFilter
 import org.slf4j.{Logger, LoggerFactory}
 
 import org.apache.spark.internal.Logging.SparkShellLoggingFilter
-import org.apache.spark.internal.LogKey.LogKey
 import org.apache.spark.util.SparkClassUtils
 
 /**
@@ -37,7 +36,7 @@ import org.apache.spark.util.SparkClassUtils
  * The values of the MDC will be inline in the log message, while the key-value pairs will be
  * part of the ThreadContext.
  */
-case class MDC(key: LogKey, value: Any) {
+case class MDC(key: Enumeration#Value, value: Any) {
   require(!value.isInstanceOf[MessageWithContext],
     "the class of value cannot be MessageWithContext")
 }
