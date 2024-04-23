@@ -811,4 +811,9 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
         "This should have been converted during analysis."))
     )
   }
+
+  test("check that current time is foldable") {
+    val rnd = Rand(Month(CurrentDate()))
+    assert(rnd.checkInputDataTypes().isSuccess)
+  }
 }

@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql
 
-import scala.collection.immutable.Seq
 import scala.jdk.CollectionConverters.MapHasAsJava
 
 import org.apache.spark.SparkException
@@ -747,7 +746,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         "fieldName" -> "c2",
         "expressionStr" -> "SUBSTRING(c1, 0, 1)",
         "reason" ->
-          "generation expression cannot contain non-binary orderable collated string type"))
+          "generation expression cannot contain non utf8 binary collated string type"))
 
     checkError(
       exception = intercept[AnalysisException] {
@@ -765,7 +764,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         "fieldName" -> "c2",
         "expressionStr" -> "LOWER(c1)",
         "reason" ->
-          "generation expression cannot contain non-binary orderable collated string type"))
+          "generation expression cannot contain non utf8 binary collated string type"))
 
     checkError(
       exception = intercept[AnalysisException] {
@@ -783,7 +782,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         "fieldName" -> "c2",
         "expressionStr" -> "UCASE(struct1.a)",
         "reason" ->
-          "generation expression cannot contain non-binary orderable collated string type"))
+          "generation expression cannot contain non utf8 binary collated string type"))
   }
 
   test("SPARK-47431: Default collation set to UNICODE, literal test") {

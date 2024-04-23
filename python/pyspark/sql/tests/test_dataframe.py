@@ -23,7 +23,7 @@ from typing import cast
 import io
 from contextlib import redirect_stdout
 
-from pyspark.sql import Row, functions
+from pyspark.sql import Row, functions, DataFrame
 from pyspark.sql.functions import col, lit, count, struct
 from pyspark.sql.types import (
     StringType,
@@ -37,9 +37,6 @@ from pyspark.errors import (
     AnalysisException,
     IllegalArgumentException,
     PySparkTypeError,
-    ArithmeticException,
-    QueryContextType,
-    NumberFormatException,
 )
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
@@ -834,6 +831,13 @@ class DataFrameTestsMixin:
 
         self.assertEqual(df.schema, schema)
         self.assertEqual(df.collect(), data)
+
+    def test_union_classmethod_usage(self):
+        df = self.spark.range(1)
+        self.assertEqual(DataFrame.union(df, df).collect(), [Row(id=0), Row(id=0)])
+
+    def test_isinstance_dataframe(self):
+        self.assertIsInstance(self.spark.range(1), DataFrame)
 
 
 class DataFrameTests(DataFrameTestsMixin, ReusedSQLTestCase):

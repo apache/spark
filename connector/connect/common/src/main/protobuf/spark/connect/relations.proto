@@ -23,7 +23,6 @@ import "google/protobuf/any.proto";
 import "spark/connect/expressions.proto";
 import "spark/connect/types.proto";
 import "spark/connect/catalog.proto";
-import "spark/connect/common.proto";
 
 option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
