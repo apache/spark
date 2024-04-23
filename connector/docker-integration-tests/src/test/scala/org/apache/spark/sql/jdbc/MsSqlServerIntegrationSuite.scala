@@ -38,19 +38,7 @@ import org.apache.spark.tags.DockerTest
  */
 @DockerTest
 class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
-  override val db = new DatabaseOnDocker {
-    override val imageName = sys.env.getOrElse("MSSQLSERVER_DOCKER_IMAGE_NAME",
-      "mcr.microsoft.com/mssql/server:2019-CU13-ubuntu-20.04")
-    override val env = Map(
-      "SA_PASSWORD" -> "Sapass123",
-      "ACCEPT_EULA" -> "Y"
-    )
-    override val usesIpc = false
-    override val jdbcPort: Int = 1433
-
-    override def getJdbcUrl(ip: String, port: Int): String =
-      s"jdbc:sqlserver://$ip:$port;user=sa;password=Sapass123;"
-  }
+  override val db = new MsSQLServerDatabaseOnDocker
 
   override def dataPreparation(conn: Connection): Unit = {
     conn.prepareStatement("CREATE TABLE tbl (x INT, y VARCHAR (50))").executeUpdate()
