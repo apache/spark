@@ -28,7 +28,7 @@ except ImportError:
     pass  # Let it throw a better error message later when the API is invoked.
 
 from pyspark.sql.functions import pandas_udf
-from pyspark.sql.column import Column, _to_java_column
+from pyspark.sql.classic.column import Column, _to_java_column
 from pyspark.sql.types import (
     ArrayType,
     ByteType,

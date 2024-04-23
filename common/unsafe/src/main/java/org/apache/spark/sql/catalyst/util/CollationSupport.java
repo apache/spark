@@ -16,7 +16,10 @@
  */
 package org.apache.spark.sql.catalyst.util;
 
+import com.ibm.icu.lang.UCharacter;
+import com.ibm.icu.text.BreakIterator;
 import com.ibm.icu.text.StringSearch;
+import com.ibm.icu.util.ULocale;
 
 import org.apache.spark.unsafe.types.UTF8String;
 
@@ -150,6 +153,99 @@ public final class CollationSupport {
     }
   }
 
+  public static class Upper {
+    public static UTF8String exec(final UTF8String v, final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      if (collation.supportsBinaryEquality || collation.supportsLowercaseEquality) {
+        return execUTF8(v);
+      } else {
+        return execICU(v, collationId);
+      }
+    }
+    public static String genCode(final String v, final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      String expr = "CollationSupport.Upper.exec";
+      if (collation.supportsBinaryEquality || collation.supportsLowercaseEquality) {
+        return String.format(expr + "UTF8(%s)", v);
+      } else {
+        return String.format(expr + "ICU(%s, %d)", v, collationId);
+      }
+    }
+    public static UTF8String execUTF8(final UTF8String v) {
+      // checkstyle.off: RegexpSinglelineJava
+      return v.toUpperCase();
+      // checkstyle.on: RegexpSinglelineJava
+    }
+    public static UTF8String execICU(final UTF8String v, final int collationId) {
+      return UTF8String.fromString(CollationAwareUTF8String.toUpperCase(v.toString(), collationId));
+    }
+  }
+
+  public static class Lower {
+    public static UTF8String exec(final UTF8String v, final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      if (collation.supportsBinaryEquality || collation.supportsLowercaseEquality) {
+        return execUTF8(v);
+      } else {
+        return execICU(v, collationId);
+      }
+    }
+    public static String genCode(final String v, final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+        String expr = "CollationSupport.Lower.exec";
+      if (collation.supportsBinaryEquality || collation.supportsLowercaseEquality) {
+        return String.format(expr + "UTF8(%s)", v);
+      } else {
+        return String.format(expr + "ICU(%s, %d)", v, collationId);
+      }
+    }
+    public static UTF8String execUTF8(final UTF8String v) {
+      // checkstyle.off: RegexpSinglelineJava
+      return v.toLowerCase();
+      // checkstyle.on: RegexpSinglelineJava
+    }
+    public static UTF8String execICU(final UTF8String v, final int collationId) {
+      return UTF8String.fromString(CollationAwareUTF8String.toLowerCase(v.toString(), collationId));
+    }
+  }
+
+  public static class InitCap {
+    public static UTF8String exec(final UTF8String v, final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      if (collation.supportsBinaryEquality || collation.supportsLowercaseEquality) {
+        return execUTF8(v);
+      } else {
+        return execICU(v, collationId);
+      }
+    }
+
+    public static String genCode(final String v, final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      String expr = "CollationSupport.InitCap.exec";
+      if (collation.supportsBinaryEquality || collation.supportsLowercaseEquality) {
+        return String.format(expr + "UTF8(%s)", v);
+      } else {
+        return String.format(expr + "ICU(%s, %d)", v, collationId);
+      }
+    }
+
+    public static UTF8String execUTF8(final UTF8String v) {
+      // checkstyle.off: RegexpSinglelineJava
+      return v.toLowerCase().toTitleCase();
+      // checkstyle.on: RegexpSinglelineJava
+    }
+
+    public static UTF8String execICU(final UTF8String v, final int collationId) {
+      return UTF8String.fromString(
+              CollationAwareUTF8String.toTitleCase(
+                      CollationAwareUTF8String.toLowerCase(
+                              v.toString(),
+                              collationId
+                      ),
+                      collationId));
+    }
+  }
+
   public static class FindInSet {
     public static int exec(final UTF8String word, final UTF8String set, final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
@@ -243,6 +339,24 @@ public final class CollationSupport {
    */
 
   private static class CollationAwareUTF8String {
+
+    private static String toUpperCase(final String target, final int collationId) {
+      ULocale locale = CollationFactory.fetchCollation(collationId)
+              .collator.getLocale(ULocale.ACTUAL_LOCALE);
+      return UCharacter.toUpperCase(locale, target);
+    }
+
+    private static String toLowerCase(final String target, final int collationId) {
+      ULocale locale = CollationFactory.fetchCollation(collationId)
+              .collator.getLocale(ULocale.ACTUAL_LOCALE);
+      return UCharacter.toLowerCase(locale, target);
+    }
+
+    private static String toTitleCase(final String target, final int collationId) {
+      ULocale locale = CollationFactory.fetchCollation(collationId)
+              .collator.getLocale(ULocale.ACTUAL_LOCALE);
+      return UCharacter.toTitleCase(locale, target, BreakIterator.getWordInstance(locale));
+    }
 
     private static int findInSet(final UTF8String match, final UTF8String set, int collationId) {
       if (match.contains(UTF8String.fromString(","))) {

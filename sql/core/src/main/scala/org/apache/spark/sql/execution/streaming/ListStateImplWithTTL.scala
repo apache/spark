@@ -137,6 +137,7 @@ class ListStateImplWithTTL[S](
   /** Remove this state. */
   override def clear(): Unit = {
     store.remove(stateTypesEncoder.encodeGroupingKey(), stateName)
+    clearTTLState()
   }
 
   private def validateNewState(newState: Array[S]): Unit = {

@@ -453,16 +453,14 @@ trait String2StringExpression extends ImplicitCastInputTypes {
 case class Upper(child: Expression)
   extends UnaryExpression with String2StringExpression with NullIntolerant {
 
-  // scalastyle:off caselocale
-  override def convert(v: UTF8String): UTF8String = v.toUpperCase
-  // scalastyle:on caselocale
+  final lazy val collationId: Int = child.dataType.asInstanceOf[StringType].collationId
+
+  override def convert(v: UTF8String): UTF8String = CollationSupport.Upper.exec(v, collationId)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(UPPER_OR_LOWER)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    // scalastyle:off caselocale
-    defineCodeGen(ctx, ev, c => s"($c).toUpperCase()")
-    // scalastyle:on caselocale
+    defineCodeGen(ctx, ev, c => CollationSupport.Upper.genCode(c, collationId))
   }
 
   override protected def withNewChildInternal(newChild: Expression): Upper = copy(child = newChild)
@@ -483,16 +481,14 @@ case class Upper(child: Expression)
 case class Lower(child: Expression)
   extends UnaryExpression with String2StringExpression with NullIntolerant {
 
-  // scalastyle:off caselocale
-  override def convert(v: UTF8String): UTF8String = v.toLowerCase
-  // scalastyle:on caselocale
+  final lazy val collationId: Int = child.dataType.asInstanceOf[StringType].collationId
+
+  override def convert(v: UTF8String): UTF8String = CollationSupport.Lower.exec(v, collationId)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(UPPER_OR_LOWER)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    // scalastyle:off caselocale
-    defineCodeGen(ctx, ev, c => s"($c).toLowerCase()")
-    // scalastyle:on caselocale
+    defineCodeGen(ctx, ev, c => CollationSupport.Lower.genCode(c, collationId))
   }
 
   override def prettyName: String =
@@ -1590,7 +1586,8 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression)
   override def third: Expression = pad
 
   override def dataType: DataType = str.dataType
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, IntegerType, StringType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeAnyCollation, IntegerType, StringTypeAnyCollation)
 
   override def nullSafeEval(string: Any, len: Any, pad: Any): Any = {
     string.asInstanceOf[UTF8String].lpad(len.asInstanceOf[Int], pad.asInstanceOf[UTF8String])
@@ -1669,7 +1666,8 @@ case class StringRPad(str: Expression, len: Expression, pad: Expression = Litera
   override def third: Expression = pad
 
   override def dataType: DataType = str.dataType
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, IntegerType, StringType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeAnyCollation, IntegerType, StringTypeAnyCollation)
 
   override def nullSafeEval(string: Any, len: Any, pad: Any): Any = {
     string.asInstanceOf[UTF8String].rpad(len.asInstanceOf[Int], pad.asInstanceOf[UTF8String])
@@ -1826,18 +1824,16 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
 case class InitCap(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
+  final lazy val collationId: Int = child.dataType.asInstanceOf[StringType].collationId
+
   override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
   override def dataType: DataType = child.dataType
 
   override def nullSafeEval(string: Any): Any = {
-    // scalastyle:off caselocale
-    string.asInstanceOf[UTF8String].toLowerCase.toTitleCase
-    // scalastyle:on caselocale
+    CollationSupport.InitCap.exec(string.asInstanceOf[UTF8String], collationId)
   }
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    // scalastyle:off caselocale
-    defineCodeGen(ctx, ev, str => s"$str.toLowerCase().toTitleCase()")
-    // scalastyle:on caselocale
+    defineCodeGen(ctx, ev, str => CollationSupport.InitCap.genCode(str, collationId))
   }
 
   override protected def withNewChildInternal(newChild: Expression): InitCap =
