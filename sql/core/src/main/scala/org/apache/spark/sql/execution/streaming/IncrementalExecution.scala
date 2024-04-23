@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.{LocalLimitExec, QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
+import org.apache.spark.sql.execution.{LocalLimitExec, QueryExecution, SerializeFromObjectExec, SparkPlan, SparkPlanner, UnaryExecNode}
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, MergingSessionsExec, ObjectHashAggregateExec, SortAggregateExec, UpdatingSessionsExec}
 import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
@@ -346,6 +346,27 @@ class IncrementalExecution(
           eventTimeWatermarkForLateEvents = inputWatermarkForLateEvents(m.stateInfo.get),
           eventTimeWatermarkForEviction = inputWatermarkForEviction(m.stateInfo.get)
         )
+
+      case UpdateEventTimeColumnExec(eventTime, delay, _,
+        SerializeFromObjectExec(serializer,
+        TransformWithStateExec(keyDeserializer, valueDeserializer, groupingAttributes,
+        dataAttributes, statefulProcessor, timeMode, outputMode,
+        keyEncoder, outputAttr, stateInfo, batchTimestampMs, _,
+        _, child, isStreaming, hasInitialState,
+        initialStateGroupingAttrs, initialStateDataAttrs,
+        initialStateDeserializer, initialState))) if stateInfo.isDefined =>
+
+        val eventTimeWatermarkForLateEvents = inputWatermarkForLateEvents(stateInfo.get)
+        val eventTimeWatermarkForEviction = inputWatermarkForLateEvents(stateInfo.get)
+
+        UpdateEventTimeColumnExec(eventTime, delay, eventTimeWatermarkForEviction,
+          SerializeFromObjectExec(serializer, TransformWithStateExec(keyDeserializer,
+            valueDeserializer, groupingAttributes, dataAttributes, statefulProcessor,
+            timeMode, outputMode, keyEncoder, outputAttr, stateInfo, batchTimestampMs,
+            eventTimeWatermarkForLateEvents, eventTimeWatermarkForEviction, child,
+            isStreaming, hasInitialState, initialStateGroupingAttrs, initialStateDataAttrs,
+            initialStateDeserializer, initialState)))
+
 
       case t: TransformWithStateExec if t.stateInfo.isDefined =>
         t.copy(

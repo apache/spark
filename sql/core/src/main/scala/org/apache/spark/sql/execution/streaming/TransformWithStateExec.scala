@@ -78,15 +78,15 @@ case class TransformWithStateExec(
   override def shortName: String = "transformWithStateExec"
 
   override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
-    timeMode match {
-      case ProcessingTime =>
-        // TODO: check if we can return true only if actual timers are registered, or there is
-        // expired state
-        true
-      case EventTime =>
-        eventTimeWatermarkForEviction.isDefined &&
-          newInputWatermark > eventTimeWatermarkForEviction.get
-      case _ => false
+    if (timeMode == ProcessingTime) {
+      // TODO: check if we can return true only if actual timers are registered, or there is
+      // expired state
+      true
+    } else if (outputMode == OutputMode.Append || outputMode == OutputMode.Update) {
+      eventTimeWatermarkForEviction.isDefined &&
+      newInputWatermark > eventTimeWatermarkForEviction.get
+    } else {
+      false
     }
   }
 
