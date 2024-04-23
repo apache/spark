@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.util.Locale
-
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest}
 import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.functions.{col, lit}
