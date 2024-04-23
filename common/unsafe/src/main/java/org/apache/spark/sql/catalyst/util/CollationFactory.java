@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.util;
 import java.text.CharacterIterator;
 import java.text.StringCharacterIterator;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiFunction;
 import java.util.function.ToLongFunction;
 
@@ -132,19 +133,19 @@ public final class CollationFactory {
      * bit 15-0:  zeroes for utf8-binary / locale id for ICU
      */
     private abstract static class CollationSpec {
-      private enum ImplementationProvider {
+      protected enum ImplementationProvider {
         UTF8_BINARY, ICU
       }
 
-      private enum CaseSensitivity {
+      protected enum CaseSensitivity {
         CS, CI
       }
 
-      private enum AccentSensitivity {
+      protected enum AccentSensitivity {
         AS, AI
       }
 
-      private enum CaseConversion {
+      protected enum CaseConversion {
         UNSPECIFIED, LCASE, UCASE
       }
 
@@ -180,13 +181,23 @@ public final class CollationFactory {
         this.collationId = getCollationId();
       }
 
-      public static CollationSpec fromCollationId(int collationId) {
-        ImplementationProvider implementationProvider = ImplementationProvider.values()[
-          (collationId >> implementationProviderOffset) & ((1 << implementationProviderLen) - 1)];
-        if (implementationProvider == ImplementationProvider.UTF8_BINARY) {
-          return CollationSpecUTF8Binary.fromCollationId(collationId);
+      private static final Map<Integer, Collation> collationMap = new ConcurrentHashMap<>();
+
+      public static Collation fetchCollation(int collationId) {
+        if (collationMap.containsKey(collationId)) {
+          return collationMap.get(collationId);
         } else {
-          return CollationSpecICU.fromCollationId(collationId);
+          CollationSpec spec;
+          ImplementationProvider implementationProvider = ImplementationProvider.values()[
+            (collationId >> implementationProviderOffset) & ((1 << implementationProviderLen) - 1)];
+          if (implementationProvider == ImplementationProvider.UTF8_BINARY) {
+            spec = CollationSpecUTF8Binary.fromCollationId(collationId);
+          } else {
+            spec = CollationSpecICU.fromCollationId(collationId);
+          }
+          Collation collation = spec.buildCollation();
+          collationMap.put(collationId, collation);
+          return collation;
         }
       }
 
@@ -206,7 +217,7 @@ public final class CollationFactory {
         }
       }
 
-      private static int parseSpecifiers(String specString) throws SparkException {
+      protected static int parseSpecifiers(String specString) throws SparkException {
         int specifiers = 0;
         String[] parts = specString.split("_");
         for (String part : parts) {
@@ -438,6 +449,7 @@ public final class CollationFactory {
         Collator collator = Collator.getInstance(resultLocale);
         Comparator<UTF8String> comparator = (s1, s2) -> collator.compare(
           caseConversion(resultLocale, s1), caseConversion(resultLocale, s2));
+        collator.freeze();
         return new Collation(
           collationName(),
           collator,
@@ -561,7 +573,7 @@ public final class CollationFactory {
   }
 
   public static Collation fetchCollation(int collationId) {
-    return Collation.CollationSpec.fromCollationId(collationId).buildCollation();
+    return Collation.CollationSpec.fetchCollation(collationId);
   }
 
   public static Collation fetchCollation(String collationName) throws SparkException {
