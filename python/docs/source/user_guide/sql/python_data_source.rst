@@ -33,7 +33,7 @@ To create a custom Python data source, you'll need to subclass the :class:`DataS
 
 This example demonstrates creating a simple data source to generate synthetic data using the `faker` library. Ensure the `faker` library is installed and accessible in your Python environment.
 
-** Define the Data Source**
+**Define the Data Source**
 
 Start by creating a new subclass of :class:`DataSource`. Define the source name, schema, and reader logic as follows:
 
@@ -66,7 +66,7 @@ Start by creating a new subclass of :class:`DataSource`. Define the source name,
             return FakeStreamWriter(self.options)
 
 
-** Implement the Reader**
+**Implement the Reader**
 
 Define the reader logic to generate synthetic data. Use the `faker` library to populate each field in the schema.
 
@@ -90,7 +90,7 @@ Define the reader logic to generate synthetic data. Use the `faker` library to p
                     row.append(value)
                 yield tuple(row)
 
-** Implement the Stream Reader**
+**Implement the Stream Reader**
 
 .. code-block:: python
 
@@ -132,7 +132,7 @@ This is a dummy streaming data reader that generate 2 rows in every microbatch. 
 
 :meth:`pyspark.sql.datasource.DataSourceStreamReader.commit` is invoked when the query has finished processing data before end offset, this can be used to clean up resource.
 
-** Implement the Stream Writer**
+**Implement the Stream Writer**
 
 .. code-block:: python
 
