@@ -102,17 +102,7 @@ class CollationStringExpressionsSuite
       // Result & data type
       checkAnswer(sql(query), Row(t.result))
       assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
-      // Implicit casting
-      checkAnswer(sql(s"SELECT split_part(collate('${t.s}','${t.c}'),'${t.d}',${t.p})"),
-        Row(t.result))
-      checkAnswer(sql(s"SELECT split_part('${t.s}',collate('${t.d}','${t.c}'),${t.p})"),
-        Row(t.result))
     })
-    // Collation mismatch
-    val collationMismatch = intercept[AnalysisException] {
-      sql("SELECT contains(collate('abcde','UTF8_BINARY_LCASE'),collate('C','UNICODE_CI'))")
-    }
-    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
   }
 
   test("Support Contains string expression with collation") {

@@ -22,7 +22,7 @@ import javax.annotation.Nullable
 import scala.annotation.tailrec
 
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.{hasStringType, haveSameType}
-import org.apache.spark.sql.catalyst.expressions.{ArrayJoin, BinaryExpression, CaseWhen, Cast, Coalesce, Collate, Concat, ConcatWs, CreateArray, Elt, Expression, Greatest, If, In, InSubquery, Least, Overlay, SplitPart, StringLPad, StringRPad}
+import org.apache.spark.sql.catalyst.expressions.{ArrayJoin, BinaryExpression, CaseWhen, Cast, Coalesce, Collate, Concat, ConcatWs, CreateArray, Elt, Expression, Greatest, If, In, InSubquery, Least, Overlay, StringLPad, StringRPad}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
@@ -51,10 +51,6 @@ object CollationTypeCasts extends TypeCoercionRule {
     case overlay: Overlay =>
       overlay.withNewChildren(collateToSingleType(Seq(overlay.input, overlay.replace))
         ++ Seq(overlay.pos, overlay.len))
-
-    case splitPart: SplitPart =>
-      val Seq(str, delimiter) = collateToSingleType(Seq(splitPart.str, splitPart.delimiter))
-      splitPart.withNewChildren(Seq(str, delimiter, splitPart.partNum))
 
     case stringPadExpr @ (_: StringRPad | _: StringLPad) =>
       val Seq(str, len, pad) = stringPadExpr.children
