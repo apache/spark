@@ -2048,6 +2048,41 @@ def parse_json(col: "ColumnOrName") -> Column:
 parse_json.__doc__ = pysparkfuncs.parse_json.__doc__
 
 
+def is_variant_null(v: "ColumnOrName") -> Column:
+    return _invoke_function("is_variant_null", _to_col(v))
+
+
+is_variant_null.__doc__ = pysparkfuncs.is_variant_null.__doc__
+
+
+def variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
+    return _invoke_function("variant_get", _to_col(v), lit(path), lit(targetType))
+
+
+variant_get.__doc__ = pysparkfuncs.variant_get.__doc__
+
+
+def try_variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
+    return _invoke_function("try_variant_get", _to_col(v), lit(path), lit(targetType))
+
+
+try_variant_get.__doc__ = pysparkfuncs.try_variant_get.__doc__
+
+
+def schema_of_variant(v: "ColumnOrName") -> Column:
+    return _invoke_function("schema_of_variant", _to_col(v))
+
+
+schema_of_variant.__doc__ = pysparkfuncs.schema_of_variant.__doc__
+
+
+def schema_of_variant_agg(v: "ColumnOrName") -> Column:
+    return _invoke_function("schema_of_variant_agg", _to_col(v))
+
+
+schema_of_variant_agg.__doc__ = pysparkfuncs.schema_of_variant_agg.__doc__
+
+
 def posexplode(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("posexplode", col)
 
