@@ -1762,8 +1762,16 @@ class PlanGenerationTestSuite
     fn.split(fn.col("g"), ";")
   }
 
+  functionTest("split using columns") {
+    fn.split(fn.col("g"), fn.col("g"))
+  }
+
   functionTest("split with limit") {
     fn.split(fn.col("g"), ";", 10)
+  }
+
+  functionTest("split with limit using columns") {
+    fn.split(fn.col("g"), lit(";"), fn.col("a"))
   }
 
   functionTest("substring") {
@@ -2483,6 +2491,30 @@ class PlanGenerationTestSuite
 
   functionTest("to_json") {
     fn.to_json(fn.col("d"), Map(("timestampFormat", "dd/MM/yyyy")))
+  }
+
+  functionTest("parse_json") {
+    fn.parse_json(fn.col("g"))
+  }
+
+  functionTest("is_variant_null") {
+    fn.is_variant_null(fn.parse_json(fn.col("g")))
+  }
+
+  functionTest("variant_get") {
+    fn.variant_get(fn.parse_json(fn.col("g")), "$", "int")
+  }
+
+  functionTest("try_variant_get") {
+    fn.try_variant_get(fn.parse_json(fn.col("g")), "$", "int")
+  }
+
+  functionTest("schema_of_variant") {
+    fn.schema_of_variant(fn.parse_json(fn.col("g")))
+  }
+
+  functionTest("schema_of_variant_agg") {
+    fn.schema_of_variant_agg(fn.parse_json(fn.col("g")))
   }
 
   functionTest("size") {

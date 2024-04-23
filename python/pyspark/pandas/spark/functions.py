@@ -25,9 +25,9 @@ def product(col: Column, dropna: bool) -> Column:
     if is_remote():
         from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns, lit
 
-        return _invoke_function_over_columns(  # type: ignore[return-value]
+        return _invoke_function_over_columns(
             "pandas_product",
-            col,  # type: ignore[arg-type]
+            col,
             lit(dropna),
         )
 
@@ -42,9 +42,9 @@ def stddev(col: Column, ddof: int) -> Column:
     if is_remote():
         from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns, lit
 
-        return _invoke_function_over_columns(  # type: ignore[return-value]
+        return _invoke_function_over_columns(
             "pandas_stddev",
-            col,  # type: ignore[arg-type]
+            col,
             lit(ddof),
         )
 
@@ -59,9 +59,9 @@ def var(col: Column, ddof: int) -> Column:
     if is_remote():
         from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns, lit
 
-        return _invoke_function_over_columns(  # type: ignore[return-value]
+        return _invoke_function_over_columns(
             "pandas_var",
-            col,  # type: ignore[arg-type]
+            col,
             lit(ddof),
         )
 
@@ -76,9 +76,9 @@ def skew(col: Column) -> Column:
     if is_remote():
         from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns
 
-        return _invoke_function_over_columns(  # type: ignore[return-value]
+        return _invoke_function_over_columns(
             "pandas_skew",
-            col,  # type: ignore[arg-type]
+            col,
         )
 
     else:
@@ -92,9 +92,9 @@ def kurt(col: Column) -> Column:
     if is_remote():
         from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns
 
-        return _invoke_function_over_columns(  # type: ignore[return-value]
+        return _invoke_function_over_columns(
             "pandas_kurt",
-            col,  # type: ignore[arg-type]
+            col,
         )
 
     else:
@@ -108,9 +108,9 @@ def mode(col: Column, dropna: bool) -> Column:
     if is_remote():
         from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns, lit
 
-        return _invoke_function_over_columns(  # type: ignore[return-value]
+        return _invoke_function_over_columns(
             "pandas_mode",
-            col,  # type: ignore[arg-type]
+            col,
             lit(dropna),
         )
 
@@ -125,10 +125,10 @@ def covar(col1: Column, col2: Column, ddof: int) -> Column:
     if is_remote():
         from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns, lit
 
-        return _invoke_function_over_columns(  # type: ignore[return-value]
+        return _invoke_function_over_columns(
             "pandas_covar",
-            col1,  # type: ignore[arg-type]
-            col2,  # type: ignore[arg-type]
+            col1,
+            col2,
             lit(ddof),
         )
 
@@ -143,9 +143,9 @@ def ewm(col: Column, alpha: float, ignore_na: bool) -> Column:
     if is_remote():
         from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns, lit
 
-        return _invoke_function_over_columns(  # type: ignore[return-value]
+        return _invoke_function_over_columns(
             "ewm",
-            col,  # type: ignore[arg-type]
+            col,
             lit(alpha),
             lit(ignore_na),
         )
@@ -161,9 +161,9 @@ def null_index(col: Column) -> Column:
     if is_remote():
         from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns
 
-        return _invoke_function_over_columns(  # type: ignore[return-value]
+        return _invoke_function_over_columns(
             "null_index",
-            col,  # type: ignore[arg-type]
+            col,
         )
 
     else:
@@ -177,11 +177,11 @@ def timestampdiff(unit: str, start: Column, end: Column) -> Column:
     if is_remote():
         from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns, lit
 
-        return _invoke_function_over_columns(  # type: ignore[return-value]
+        return _invoke_function_over_columns(
             "timestampdiff",
             lit(unit),
-            start,  # type: ignore[arg-type]
-            end,  # type: ignore[arg-type]
+            start,
+            end,
         )
 
     else:
