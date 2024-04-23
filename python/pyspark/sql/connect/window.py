@@ -21,7 +21,7 @@ check_dependencies(__name__)
 import sys
 from typing import TYPE_CHECKING, Union, Sequence, List, Optional
 
-from pyspark.sql.connect.column import Column
+from pyspark.sql.column import Column
 from pyspark.sql.connect.expressions import (
     ColumnReference,
     Expression,
@@ -107,7 +107,7 @@ class WindowSpec:
         newPartitionSpec: List[Expression] = []
         for c in _cols:
             if isinstance(c, Column):
-                newPartitionSpec.append(c._expr)
+                newPartitionSpec.append(c._expr)  # type: ignore[arg-type]
             else:
                 newPartitionSpec.append(ColumnReference(c))
 
@@ -143,7 +143,7 @@ class WindowSpec:
                 if isinstance(c._expr, SortOrder):
                     newOrderSpec.append(c._expr)
                 else:
-                    newOrderSpec.append(SortOrder(c._expr))
+                    newOrderSpec.append(SortOrder(c._expr))  # type: ignore[arg-type]
             else:
                 newOrderSpec.append(SortOrder(ColumnReference(c)))
 

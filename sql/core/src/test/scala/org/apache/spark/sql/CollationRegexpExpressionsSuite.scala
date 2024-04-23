@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import scala.collection.immutable.Seq
-
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.internal.SQLConf
