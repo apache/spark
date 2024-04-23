@@ -27,7 +27,7 @@ from typing import Callable, Any, TYPE_CHECKING, Optional, cast, Union
 
 
 from pyspark.util import PythonEvalType
-from pyspark.sql.column import Column, _to_java_expr, _to_seq
+from pyspark.sql.column import Column
 from pyspark.sql.types import (
     DataType,
     StringType,
@@ -395,6 +395,8 @@ class UserDefinedFunction:
         return judf
 
     def __call__(self, *args: "ColumnOrName", **kwargs: "ColumnOrName") -> Column:
+        from pyspark.sql.classic.column import _to_java_expr, _to_seq
+
         sc = get_active_spark_context()
 
         assert sc._jvm is not None
