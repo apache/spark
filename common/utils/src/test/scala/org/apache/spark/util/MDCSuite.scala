@@ -69,9 +69,20 @@ class MDCSuite
     assert(log.context === Map("range" -> "12 - 34", "offset" -> "666").asJava)
   }
 
+  test("check custom log key") {
+    val log = log"This is a log, exitcode ${MDC(CustomLogKey.CUSTOM_KEY, 10086)}"
+    assert(log.message === "This is a log, exitcode 10086")
+    assert(log.context === Map("custom_key" -> "10086").asJava)
+  }
+
   case class CustomObjectValue(key: String, value: Int) {
     override def toString: String = {
       "CustomObjectValue: " + key + ", " + value
     }
+  }
+
+  object CustomLogKey extends Enumeration {
+    val CUSTOM_KEY = Value
+    type CustomLogKey = Value
   }
 }
