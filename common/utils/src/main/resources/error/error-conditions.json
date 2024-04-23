@@ -3929,6 +3929,12 @@
     ],
     "sqlState" : "42601"
   },
+  "UNEXPECTED_DATA_TYPE" : {
+    "message" : [
+      "Unexpected data type <dataType>."
+    ],
+    "sqlState" : "42K09"
+  },
   "UNEXPECTED_INPUT_TYPE" : {
     "message" : [
       "Parameter <paramIndex> of function <functionName> requires the <requiredType> type, however <inputSql> has the type <inputType>."
@@ -6121,11 +6127,6 @@
   "_LEGACY_ERROR_TEMP_2005" : {
     "message" : [
       "Type <dataType> does not support ordered operations."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2011" : {
-    "message" : [
-      "Unexpected data type <dataType>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2013" : {
