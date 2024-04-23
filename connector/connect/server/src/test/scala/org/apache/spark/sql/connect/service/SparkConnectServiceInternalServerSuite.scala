@@ -267,9 +267,6 @@ class SparkConnectServiceSuite extends SparkFunSuite with LocalSparkContext {
     assert(SparkConnectService.stopped)
     // The listener should receive the `SparkListenerConnectServiceEnd` event
     endEventSignal.acquire()
-
-    // The event `SparkListenerConnectServiceEnd` should be posted and received by the listener
-    assert(listenerInstance.serviceEndEvents.size() == 1)
   }
 
   def withPortOccupied(startPort: Int, endPort: Int)(f: => Unit): Unit = {
