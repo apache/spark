@@ -26,7 +26,7 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{EXECUTION_PLAN_LEAVES, FINISH_TRIGGER_DURATION, LOGICAL_PLAN_LEAVES, PROCESSING_TIME}
+import org.apache.spark.internal.LogKey._
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.optimizer.InlineCTE
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan, WithCTE}
@@ -82,7 +82,8 @@ class ProgressReporter(
 
     addNewProgress(newProgress)
     postEvent(new QueryProgressEvent(newProgress))
-    logInfo(s"Streaming query made progress: $newProgress")
+    logInfo(log"Streaming query made progress: " +
+      log"${MDC(STREAMING_QUERY_PROGRESS, newProgress)}")
   }
 
   private def addNewProgress(newProgress: StreamingQueryProgress): Unit = {
@@ -104,8 +105,8 @@ class ProgressReporter(
       addNewProgress(newProgress)
       if (lastNoExecutionProgressEventTime > Long.MinValue) {
         postEvent(new QueryIdleEvent(id, runId, formatTimestamp(currentTriggerStartTimestamp)))
-        logInfo(s"Streaming query has been idle and waiting for new data more than " +
-          s"${noDataProgressEventInterval} ms.")
+        logInfo(log"Streaming query has been idle and waiting for new data more than " +
+          log"${MDC(STREAMING_QUERY_PROGRESS, noDataProgressEventInterval)} ms.")
       }
 
       lastNoExecutionProgressEventTime = now
