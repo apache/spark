@@ -50,6 +50,7 @@ dev/create-release/*final
 dev/create-release/*txt
 dev/pr-deps/
 dist/
+docs/_generated/
 docs/_site/
 docs/api
 docs/.local_ruby_bundle
