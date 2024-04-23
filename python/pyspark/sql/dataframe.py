@@ -4672,12 +4672,13 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ...        pass
         ...
         >>> spark.streams.addListener(MyErrorListener())
+        >>> sdf = spark.readStream.format("rate").load()
         >>> # Observe row count (rc) and error row count (erc) in the streaming Dataset
-        ... observed_ds = df.observe(
+        ... observed_ds = sdf.observe(
         ...     "my_event",
         ...     count(lit(1)).alias("rc"),
         ...     count(col("error")).alias("erc"))  # doctest: +SKIP
-        >>> observed_ds.writeStream.format("console").start()  # doctest: +SKIP
+        >>> observed_ds.writeStream.format("console").start()
         """
         from pyspark.sql import Observation
 
