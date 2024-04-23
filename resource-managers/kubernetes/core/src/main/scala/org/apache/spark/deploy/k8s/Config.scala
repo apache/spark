@@ -749,6 +749,28 @@ private[spark] object Config extends Logging {
       .checkValue(value => value > 0, "Gracefully shutdown period must be a positive time value")
       .createWithDefaultString("20s")
 
+  val KUBERNETES_INGRESS_ENABLED =
+    ConfigBuilder("spark.kubernetes.driver.ingress.enabled")
+      .doc("Whether to create ingress entry of the driver service for external UI access " +
+        "in cluster mode. This only takes effect when `spark.ui.enabled` is true.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val KUBERNETES_INGRESS_HOST_PATTERN =
+    ConfigBuilder("spark.kubernetes.driver.ingress.host")
+      .doc("Host for driver UI ingress, {{APP_ID}} will be replaced by application ID.")
+      .version("4.0.0")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_INGRESS_CLASS_NAME =
+    ConfigBuilder("spark.kubernetes.driver.ingress.ingressClassName")
+      .doc("Reference the IngressClass that should be used to implement the ingress for spark UI.")
+      .version("4.0.0")
+      .stringConf
+      .createOptional
+
   val KUBERNETES_DRIVER_LABEL_PREFIX = "spark.kubernetes.driver.label."
   val KUBERNETES_DRIVER_ANNOTATION_PREFIX = "spark.kubernetes.driver.annotation."
   val KUBERNETES_DRIVER_SERVICE_LABEL_PREFIX = "spark.kubernetes.driver.service.label."
@@ -756,6 +778,8 @@ private[spark] object Config extends Logging {
   val KUBERNETES_DRIVER_SECRETS_PREFIX = "spark.kubernetes.driver.secrets."
   val KUBERNETES_DRIVER_SECRET_KEY_REF_PREFIX = "spark.kubernetes.driver.secretKeyRef."
   val KUBERNETES_DRIVER_VOLUMES_PREFIX = "spark.kubernetes.driver.volumes."
+  val KUBERNETES_DRIVER_INGRESS_LABEL_PREFIX = "spark.kubernetes.driver.ingress.label."
+  val KUBERNETES_DRIVER_INGRESS_ANNOTATION_PREFIX = "spark.kubernetes.driver.ingress.annotation."
 
   val KUBERNETES_EXECUTOR_LABEL_PREFIX = "spark.kubernetes.executor.label."
   val KUBERNETES_EXECUTOR_ANNOTATION_PREFIX = "spark.kubernetes.executor.annotation."
