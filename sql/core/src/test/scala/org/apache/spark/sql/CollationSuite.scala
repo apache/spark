@@ -19,7 +19,6 @@ package org.apache.spark.sql
 
 import java.util.Locale
 
-import scala.collection.immutable.Seq
 import scala.jdk.CollectionConverters.MapHasAsJava
 
 import org.apache.spark.SparkException

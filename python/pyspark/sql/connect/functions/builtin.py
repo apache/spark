@@ -3804,12 +3804,14 @@ def sha2(col: "ColumnOrName", numBits: int) -> Column:
 sha2.__doc__ = pysparkfuncs.sha2.__doc__
 
 
-def hll_sketch_agg(col: "ColumnOrName", lgConfigK: Optional[Union[int, Column]] = None) -> Column:
+def hll_sketch_agg(
+    col: "ColumnOrName",
+    lgConfigK: Optional[Union[int, Column]] = None,
+) -> Column:
     if lgConfigK is None:
         return _invoke_function_over_columns("hll_sketch_agg", col)
     else:
-        _lgConfigK = lit(lgConfigK) if isinstance(lgConfigK, int) else lgConfigK
-        return _invoke_function_over_columns("hll_sketch_agg", col, _lgConfigK)
+        return _invoke_function_over_columns("hll_sketch_agg", col, lit(lgConfigK))
 
 
 hll_sketch_agg.__doc__ = pysparkfuncs.hll_sketch_agg.__doc__

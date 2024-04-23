@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution
 
-import scala.collection.immutable.IndexedSeq
-
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.{LogEntry, Logging, MDC}
