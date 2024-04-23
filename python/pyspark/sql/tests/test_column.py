@@ -42,7 +42,7 @@ class ColumnTestsMixin:
 
     def test_validate_column_types(self):
         from pyspark.sql.functions import udf, to_json
-        from pyspark.sql.column import _to_java_column
+        from pyspark.sql.classic.column import _to_java_column
 
         self.assertTrue("Column" in _to_java_column("a").getClass().toString())
         self.assertTrue("Column" in _to_java_column("a").getClass().toString())
