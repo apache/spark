@@ -258,7 +258,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       // string in the table properties still uses the original schema
       val hiveTable = tableDefinition.copy(
         schema = hiveCompatibleSchema,
-        properties = tableDefinition.properties ++ tableProperties,
+        properties = tableDefinition.properties ++ tableProperties
       )
 
       createDataSourceTable(
