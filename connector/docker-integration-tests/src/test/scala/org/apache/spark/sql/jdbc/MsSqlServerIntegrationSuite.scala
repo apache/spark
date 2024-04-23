@@ -437,4 +437,12 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
       .load()
     assert(df.collect().toSet === expectedResult)
   }
+
+  test("SPARK-47938: Fix 'Cannot find data type BYTE' in SQL Server") {
+    spark.sql("select cast(1 as byte) as c0")
+      .write
+      .jdbc(jdbcUrl, "test_byte", new Properties)
+    val df = spark.read.jdbc(jdbcUrl, "test_byte", new Properties)
+    checkAnswer(df, Row(1.toShort))
+  }
 }
