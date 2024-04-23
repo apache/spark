@@ -203,8 +203,8 @@
               value="\nAre you sure that you want to use toUpperCase or toLowerCase without the root locale? In most cases, you should use toUpperCase(Locale.ROOT) or toLowerCase(Locale.ROOT) instead.\n
       If you must use toUpperCase or toLowerCase without the root locale, wrap the code block with\n
       // checkstyle.off: RegexpSinglelineJava\n
-      .toUpperCase\n
-      .toLowerCase\n
+      .toUpperCase()\n
+      .toLowerCase()\n
       // checkstyle.on: RegexpSinglelineJava" />
         </module>
         <module name="IllegalImport">
