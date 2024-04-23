@@ -463,7 +463,7 @@
   },
   "COLLATION_INVALID_NAME" : {
     "message" : [
-      "The value <collationName> does not represent a correct collation name. Suggested valid collation name: [<proposal>]."
+      "The value <collationName> does not represent a correct collation name."
     ],
     "sqlState" : "42704"
   },

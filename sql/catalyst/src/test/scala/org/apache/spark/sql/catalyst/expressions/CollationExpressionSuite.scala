@@ -62,7 +62,7 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       exception = intercept[SparkException] { Collate(Literal("abc"), "UTF8_BS") },
       errorClass = "COLLATION_INVALID_NAME",
       sqlState = "42704",
-      parameters = Map("proposal" -> "UTF8_BINARY", "collationName" -> "UTF8_BS"))
+      parameters = Map("collationName" -> "UTF8_BS"))
   }
 
   test("collation on non-explicit default collation") {
@@ -71,7 +71,8 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("collation on explicitly collated string") {
     checkEvaluation(
-      Collation(Literal.create("abc", StringType(1))).replacement,
+      Collation(Literal.create("abc",
+        StringType(CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID))).replacement,
       "UTF8_BINARY_LCASE")
     checkEvaluation(
       Collation(Collate(Literal("abc"), "UTF8_BINARY_LCASE")).replacement,

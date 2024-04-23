@@ -117,20 +117,19 @@ public final class CollationFactory {
       }
     }
 
-    /*
-      collation id (32-bit integer) layout:
-
-      bit 31:    0 = predefined collation, 1 = user-defined collation
-      bit 30:    0 = utf8-binary, 1 = ICU
-      bit 29:    0 = case-sensitive, 1 = case-insensitive
-      bit 28:    0 = accent-sensitive, 1 = accent-insensitive
-      bit 27-26: 00 = unspecified, 01 = punctuation-sensitive, 10 = punctuation-insensitive
-      bit 25-24: 00 = unspecified, 01 = first-lower, 10 = first-upper
-      bit 23-22: 00 = unspecified, 01 = to-lower, 10 = to-upper
-      bit 21-20: 00 = unspecified, 01 = trim-left, 10 = trim-right, 11 = trim-both
-      bit 19-18: zeroes, reserved for version
-      bit 17-16: zeroes
-      bit 15-0:  locale id for ICU collations / zeroes for utf8-binary
+    /**
+     * collation id (32-bit integer) layout:
+     * bit 31:    0 = predefined collation, 1 = user-defined collation
+     * bit 30:    0 = utf8-binary, 1 = ICU
+     * bit 29:    0 = case-sensitive, 1 = case-insensitive
+     * bit 28:    0 = accent-sensitive, 1 = accent-insensitive
+     * bit 27-26: 00 = unspecified, 01 = punctuation-sensitive, 10 = punctuation-insensitive
+     * bit 25-24: 00 = unspecified, 01 = first-lower, 10 = first-upper
+     * bit 23-22: 00 = unspecified, 01 = to-lower, 10 = to-upper
+     * bit 21-20: 00 = unspecified, 01 = trim-left, 10 = trim-right, 11 = trim-both
+     * bit 19-18: zeroes, reserved for version
+     * bit 17-16: zeroes
+     * bit 15-0:  locale id for ICU collations / zeroes for utf8-binary
      */
     private static class CollationSpec {
       private enum ImplementationProvider {
@@ -180,28 +179,36 @@ public final class CollationFactory {
 
       private static final String[] ICULocaleNames;
       private static final Map<String, ULocale> ICULocaleMap = new HashMap<>();
+      private static final Map<String, String> ICULocaleMapUppercase = new HashMap<>();
       private static final Map<String, Integer> ICULocaleToId = new HashMap<>();
 
       static {
         ICULocaleMap.put("UNICODE", ULocale.ROOT);
         ULocale[] locales = Collator.getAvailableULocales();
         for (ULocale locale : locales) {
-          String language = locale.getLanguage();
-          assert (!language.isEmpty());
-          StringBuilder builder = new StringBuilder(language);
-          String script = locale.getScript();
-          if (!script.isEmpty()) {
-            builder.append('_');
-            builder.append(script);
+          if (locale.getVariant().isEmpty()) {
+            String language = locale.getLanguage();
+            assert (!language.isEmpty());
+            StringBuilder builder = new StringBuilder(language);
+            String script = locale.getScript();
+            if (!script.isEmpty()) {
+              builder.append('_');
+              builder.append(script);
+            }
+            String country = locale.getISO3Country();
+            if (!country.isEmpty()) {
+              builder.append('_');
+              builder.append(country);
+            }
+            String localeName = builder.toString();
+            assert (!ICULocaleMap.containsKey(localeName));
+            ICULocaleMap.put(localeName, locale);
           }
-          String country = locale.getISO3Country();
-          if (!country.isEmpty()) {
-            builder.append('_');
-            builder.append(country);
-          }
-          String localeName = builder.toString();
-          assert (!ICULocaleMap.containsKey(localeName));
-          ICULocaleMap.put(localeName, locale);
+        }
+        for (String localeName : ICULocaleMap.keySet()) {
+          String localeUppercase = localeName.toUpperCase();
+          assert (!ICULocaleMapUppercase.containsKey(localeUppercase));
+          ICULocaleMapUppercase.put(localeUppercase, localeName);
         }
         ICULocaleNames = ICULocaleMap.keySet().toArray(new String[0]);
         Arrays.sort(ICULocaleNames);
@@ -240,6 +247,18 @@ public final class CollationFactory {
           ImplementationProvider.ICU,
           "UNICODE",
           CaseSensitivity.CS,
+          AccentSensitivity.AS,
+          PunctuationSensitivity.UNSPECIFIED,
+          FirstLetterPreference.UNSPECIFIED,
+          CaseConversion.UNSPECIFIED,
+          SpaceTrimming.UNSPECIFIED
+        ).getCollationId();
+
+      public static final int UNICODE_CI_COLLATION_ID =
+        new CollationSpec(
+          ImplementationProvider.ICU,
+          "UNICODE",
+          CaseSensitivity.CI,
           AccentSensitivity.AS,
           PunctuationSensitivity.UNSPECIFIED,
           FirstLetterPreference.UNSPECIFIED,
@@ -325,11 +344,19 @@ public final class CollationFactory {
         );
       }
 
-      public static int collationNameToId(String collationName) throws SparkException {
-        if (collationName.startsWith("UTF8_BINARY")) {
-          return collationUTF8BinaryNameToId(collationName);
-        } else {
-          return collationICUNameToId(collationName);
+      public static int collationNameToId(String originalCollationName) throws SparkException {
+        String collationName = originalCollationName.toUpperCase();
+        try {
+          if (collationName.startsWith("UTF8_BINARY")) {
+            return collationUTF8BinaryNameToId(collationName);
+          } else {
+            return collationICUNameToId(collationName);
+          }
+        } catch (SparkException e) {
+          throw new SparkException(
+            "COLLATION_INVALID_NAME",
+            SparkException.constructMessageParams(Map.of("collationName", originalCollationName)),
+            e);
         }
       }
 
@@ -344,19 +371,19 @@ public final class CollationFactory {
         int lastPos = -1;
         for (int i = 1; i <= collationName.length(); i++) {
           String localeName = collationName.substring(0, i);
-          if (ICULocaleMap.containsKey(localeName)) {
+          if (ICULocaleMapUppercase.containsKey(localeName)) {
             lastPos = i;
           }
         }
         if (lastPos == -1) {
-          throw new SparkException(
-            "Invalid locale specification in collation name " + collationName);
+          throw new SparkException("Invalid locale in collation name value " + collationName);
         } else {
           int collationId = 0;
           collationId |= ImplementationProvider.ICU.ordinal() << implementationProviderOffset;
           collationId |= parseSpecifiers(collationName.substring(lastPos));
-          String localeName = collationName.substring(0, lastPos);
-          collationId |= ICULocaleToId.get(localeName) << localeOffset;
+          String normalizedLocaleName = ICULocaleMapUppercase.get(
+            collationName.substring(0, lastPos));
+          collationId |= ICULocaleToId.get(normalizedLocaleName) << localeOffset;
           return collationId;
         }
       }
@@ -367,7 +394,7 @@ public final class CollationFactory {
         for (String part : parts) {
           if (!part.isEmpty()) {
             if (part.equals("UNSPECIFIED")) {
-              throw new SparkException("Forbidden collation specifier 'UNSPECIFIED'");
+              throw new SparkException("UNSPECIFIED collation specifier reserved for internal use");
             } else if (Arrays.stream(CaseSensitivity.values()).anyMatch(
                 (s) -> s.toString().equals(part))) {
               specifiers |=
@@ -393,7 +420,7 @@ public final class CollationFactory {
               specifiers |=
                 SpaceTrimming.valueOf(part).ordinal() << spaceTrimmingOffset;
             } else {
-              throw new SparkException("Unknown collation specifier " + part);
+              throw new SparkException("Invalid collation specifier value " + part);
             }
           }
         }
@@ -570,6 +597,10 @@ public final class CollationFactory {
     Collation.CollationSpec.UTF8_BINARY_COLLATION_ID;
   public static final int UTF8_BINARY_LCASE_COLLATION_ID =
     Collation.CollationSpec.UTF8_BINARY_LCASE_COLLATION_ID;
+  public static final int UNICODE_COLLATION_ID =
+    Collation.CollationSpec.UNICODE_COLLATION_ID;
+  public static final int UNICODE_CI_COLLATION_ID =
+    Collation.CollationSpec.UNICODE_CI_COLLATION_ID;
 
   /**
    * Returns a StringSearch object for the given pattern and target strings, under collation

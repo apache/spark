@@ -30,19 +30,21 @@ import org.apache.spark.unsafe.types.UTF8String.{fromString => toUTF8}
 
 class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ignore funsuite
   test("collationId stability") {
-    val utf8Binary = fetchCollation(0)
+    assert(UTF8_BINARY_COLLATION_ID == 0)
+
+    val utf8Binary = fetchCollation(UTF8_BINARY_COLLATION_ID)
     assert(utf8Binary.collationName == "UTF8_BINARY")
     assert(utf8Binary.supportsBinaryEquality)
 
-    val utf8BinaryLcase = fetchCollation(1)
+    val utf8BinaryLcase = fetchCollation(UTF8_BINARY_LCASE_COLLATION_ID)
     assert(utf8BinaryLcase.collationName == "UTF8_BINARY_LCASE")
     assert(!utf8BinaryLcase.supportsBinaryEquality)
 
-    val unicode = fetchCollation(2)
+    val unicode = fetchCollation(UNICODE_COLLATION_ID)
     assert(unicode.collationName == "UNICODE")
-    assert(unicode.supportsBinaryEquality);
+    assert(unicode.supportsBinaryEquality)
 
-    val unicodeCi = fetchCollation(3)
+    val unicodeCi = fetchCollation(UNICODE_CI_COLLATION_ID)
     assert(unicodeCi.collationName == "UNICODE_CI")
     assert(!unicodeCi.supportsBinaryEquality)
   }
@@ -53,8 +55,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
     }
 
     assert(error.getErrorClass === "COLLATION_INVALID_NAME")
-    assert(error.getMessageParameters.asScala ===
-      Map("proposal" -> "UTF8_BINARY", "collationName" -> "UTF8_BS"))
+    assert(error.getMessageParameters.asScala === Map("collationName" -> "UTF8_BS"))
   }
 
   case class CollationTestCase[R](collationName: String, s1: String, s2: String, expectedResult: R)

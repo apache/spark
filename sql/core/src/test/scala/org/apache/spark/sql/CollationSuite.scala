@@ -66,8 +66,10 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   }
 
   test("collate function syntax") {
-    assert(sql(s"select collate('aaa', 'utf8_binary')").schema(0).dataType == StringType(0))
-    assert(sql(s"select collate('aaa', 'utf8_binary_lcase')").schema(0).dataType == StringType(1))
+    assert(sql(s"select collate('aaa', 'utf8_binary')").schema(0).dataType ==
+      StringType(CollationFactory.UTF8_BINARY_COLLATION_ID))
+    assert(sql(s"select collate('aaa', 'utf8_binary_lcase')").schema(0).dataType ==
+      StringType(CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID))
   }
 
   test("collate function syntax invalid arg count") {
@@ -140,7 +142,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       exception = intercept[SparkException] { sql("select 'aaa' collate UTF8_BS") },
       errorClass = "COLLATION_INVALID_NAME",
       sqlState = "42704",
-      parameters = Map("proposal" -> "UTF8_BINARY", "collationName" -> "UTF8_BS"))
+      parameters = Map("collationName" -> "UTF8_BS"))
   }
 
   test("disable bucketing on collated string column") {
