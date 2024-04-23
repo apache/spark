@@ -176,7 +176,9 @@ public final class CollationSupport {
       return set.findInSet(word);
     }
     public static int execLowercase(final UTF8String word, final UTF8String set) {
+      // checkstyle.off: RegexpSinglelineJava
       return set.toLowerCase().findInSet(word.toLowerCase());
+      // checkstyle.on: RegexpSinglelineJava
     }
     public static int execICU(final UTF8String word, final UTF8String set,
                                   final int collationId) {
@@ -212,7 +214,9 @@ public final class CollationSupport {
       return string.indexOf(substring, 0);
     }
     public static int execLowercase(final UTF8String string, final UTF8String substring) {
+      // checkstyle.off: RegexpSinglelineJava
       return string.toLowerCase().indexOf(substring.toLowerCase(), 0);
+      // checkstyle.on: RegexpSinglelineJava
     }
     public static int execICU(final UTF8String string, final UTF8String substring,
         final int collationId) {
