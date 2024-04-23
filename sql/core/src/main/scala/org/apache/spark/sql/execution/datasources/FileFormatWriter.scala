@@ -277,7 +277,8 @@ object FileFormatWriter extends Logging {
         log"Elapsed time: ${MDC(LogKeys.ELAPSED_TIME, duration)} ms.")
 
       processStats(
-        description.statsTrackers, ret.map(_.summary.stats).toImmutableArraySeq, duration)
+        description.statsTrackers, ret.map(_.summary.stats).toImmutableArraySeq, duration,
+        ret.map(_.summary.updatedPartitionsMap).reduce(_ ++ _))
       logInfo(log"Finished processing stats for write job ${MDC(LogKeys.UUID, description.uuid)}.")
 
       // return a set of all the partition paths that were updated during this job
@@ -419,7 +420,8 @@ object FileFormatWriter extends Logging {
   private[datasources] def processStats(
       statsTrackers: Seq[WriteJobStatsTracker],
       statsPerTask: Seq[Seq[WriteTaskStats]],
-      jobCommitDuration: Long)
+      jobCommitDuration: Long,
+      partitionsMap: Map[InternalRow, String])
   : Unit = {
 
     val numStatsTrackers = statsTrackers.length
@@ -436,7 +438,8 @@ object FileFormatWriter extends Logging {
     }
 
     statsTrackers.zip(statsPerTracker).foreach {
-      case (statsTracker, stats) => statsTracker.processStats(stats, jobCommitDuration)
+      case (statsTracker, stats) =>
+          statsTracker.processStats(stats, jobCommitDuration, partitionsMap)
     }
   }
 }

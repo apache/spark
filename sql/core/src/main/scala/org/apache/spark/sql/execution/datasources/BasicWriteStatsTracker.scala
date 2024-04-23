@@ -29,6 +29,7 @@ import org.apache.spark.{SparkContext, TaskContext}
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.LogKeys.{ACTUAL_NUM_FILES, EXPECTED_NUM_FILES}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.connector.write.{PartitionMetricsWriteInfo, SQLPartitionMetrics}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.BasicWriteJobStatsTracker._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -43,9 +44,17 @@ case class BasicWriteTaskStats(
     partitions: Seq[InternalRow],
     numFiles: Int,
     numBytes: Long,
-    numRows: Long)
+    numRows: Long,
+    partitionsStats: Map[InternalRow, BasicWritePartitionTaskStats]
+        = Map[InternalRow, BasicWritePartitionTaskStats]())
   extends WriteTaskStats
 
+
+case class BasicWritePartitionTaskStats(
+    numFiles: Int,
+    numBytes: Long,
+    numRows: Long)
+  extends PartitionTaskStats
 
 /**
  * Simple [[WriteTaskStatsTracker]] implementation that produces [[BasicWriteTaskStats]].
@@ -56,12 +65,19 @@ class BasicWriteTaskStatsTracker(
   extends WriteTaskStatsTracker with Logging {
 
   private[this] val partitions: mutable.ArrayBuffer[InternalRow] = mutable.ArrayBuffer.empty
+  // Map each partition to counts of the number of files, bytes, and rows written
+  // partition -> (files, bytes, rows)
+  private[this] val partitionsStats: mutable.Map[InternalRow, (Int, Long, Long)] =
+    mutable.Map.empty.withDefaultValue((0, 0L, 0L))
   private[this] var numFiles: Int = 0
   private[this] var numSubmittedFiles: Int = 0
   private[this] var numBytes: Long = 0L
   private[this] var numRows: Long = 0L
 
   private[this] val submittedFiles = mutable.HashSet[String]()
+  private[this] val submittedPartitionFiles = mutable.Map[String, InternalRow]()
+
+  private[this] val numFileRows: mutable.Map[String, Long] = mutable.Map.empty.withDefaultValue(0)
 
   /**
    * Get the size of the file expected to have been written by a worker.
@@ -138,25 +154,45 @@ class BasicWriteTaskStatsTracker(
     partitions.append(partitionValues)
   }
 
-  override def newFile(filePath: String): Unit = {
+  override def newFile(filePath: String, partitionValues: Option[InternalRow] = None): Unit = {
     submittedFiles += filePath
     numSubmittedFiles += 1
+
+    // Submitting a file for a partition
+    if (partitionValues.isDefined) {
+      submittedPartitionFiles += (filePath -> partitionValues.get)
+    }
   }
 
   override def closeFile(filePath: String): Unit = {
     updateFileStats(filePath)
     submittedFiles.remove(filePath)
+    submittedPartitionFiles.remove(filePath)
+    numFileRows.remove(filePath)
   }
 
   private def updateFileStats(filePath: String): Unit = {
     getFileSize(filePath).foreach { len =>
       numBytes += len
       numFiles += 1
+
+      submittedPartitionFiles.get(filePath)
+        .foreach(partition => {
+          val stats = partitionsStats(partition)
+          partitionsStats(partition) = stats.copy(
+            stats._1 + 1,
+            stats._2 + len,
+            stats._3 + numFileRows(filePath))
+        })
     }
   }
 
   override def newRow(filePath: String, row: InternalRow): Unit = {
     numRows += 1
+
+    // Track the number of rows added to each file, which may be accumulated with an associated
+    // partition
+    numFileRows(filePath) += 1
   }
 
   override def getFinalStats(taskCommitTime: Long): WriteTaskStats = {
@@ -172,7 +208,15 @@ class BasicWriteTaskStatsTracker(
         log"writing empty files, or files being not immediately visible in the filesystem.")
     }
     taskCommitTimeMetric.foreach(_ += taskCommitTime)
-    BasicWriteTaskStats(partitions.toSeq, numFiles, numBytes, numRows)
+
+    val publish: ((InternalRow, (Int, Long, Long))) =>
+      (InternalRow, BasicWritePartitionTaskStats) = {
+      case (key, value) =>
+        val newValue = BasicWritePartitionTaskStats(value._1, value._2, value._3)
+        key -> newValue
+    }
+    BasicWriteTaskStats(partitions.toSeq, numFiles, numBytes, numRows,
+      partitionsStats.map(publish).toMap)
   }
 }
 
@@ -189,6 +233,8 @@ class BasicWriteJobStatsTracker(
     taskCommitTimeMetric: SQLMetric)
   extends WriteJobStatsTracker {
 
+  val partitionMetrics: PartitionMetricsWriteInfo = new PartitionMetricsWriteInfo()
+
   def this(
       serializableHadoopConf: SerializableConfiguration,
       metrics: Map[String, SQLMetric]) = {
@@ -199,7 +245,8 @@ class BasicWriteJobStatsTracker(
     new BasicWriteTaskStatsTracker(serializableHadoopConf.value, Some(taskCommitTimeMetric))
   }
 
-  override def processStats(stats: Seq[WriteTaskStats], jobCommitTime: Long): Unit = {
+  override def processStats(stats: Seq[WriteTaskStats], jobCommitTime: Long,
+                            partitionsMap: Map[InternalRow, String]): Unit = {
     val sparkContext = SparkContext.getActive.get
     val partitionsSet: mutable.Set[InternalRow] = mutable.HashSet.empty
     var numFiles: Long = 0L
@@ -213,6 +260,14 @@ class BasicWriteJobStatsTracker(
       numFiles += summary.numFiles
       totalNumBytes += summary.numBytes
       totalNumOutput += summary.numRows
+
+      summary.partitionsStats.foreach(s => {
+        // Check if we know the mapping of the internal row to a partition path
+        if (partitionsMap.contains(s._1)) {
+          val path = partitionsMap(s._1)
+          partitionMetrics.update(path, s._2.numBytes, s._2.numRows, s._2.numFiles)
+        }
+      })
     }
 
     driverSideMetrics(JOB_COMMIT_TIME).add(jobCommitTime)
@@ -223,6 +278,9 @@ class BasicWriteJobStatsTracker(
 
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, driverSideMetrics.values.toList)
+
+    SQLPartitionMetrics.postDriverMetricUpdates(sparkContext, executionId,
+      partitionMetrics)
   }
 }
 
@@ -247,4 +305,7 @@ object BasicWriteJobStatsTracker {
       JOB_COMMIT_TIME -> SQLMetrics.createTimingMetric(sparkContext, "job commit time")
     )
   }
+
+  def partitionMetrics: mutable.Map[String, PartitionTaskStats] =
+    mutable.Map.empty.withDefaultValue(BasicWritePartitionTaskStats(0, 0L, 0L))
 }
