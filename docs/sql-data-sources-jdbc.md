@@ -1444,7 +1444,7 @@ The Spark Catalyst data types below are not supported with suitable Oracle types
 
 ### Mapping Spark SQL Data Types from Microsoft SQL Server
 
-The below table describes the data type conversions from Oracle data types to Spark SQL Data Types,
+The below table describes the data type conversions from Microsoft SQL Server data types to Spark SQL Data Types,
 when reading data from a Microsoft SQL Server table using the built-in jdbc data source with the mssql-jdbc
 as the activated JDBC Driver.
 
