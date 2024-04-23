@@ -21,7 +21,7 @@ import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, Data
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.{SparkEnv, SparkPythonException}
+import org.apache.spark.{JobArtifactSet, SparkEnv, SparkPythonException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.internal.config.Python.PYTHON_AUTH_SOCKET_TIMEOUT
@@ -62,6 +62,10 @@ private[spark] class StreamingPythonRunner(
     val env = SparkEnv.get
 
     val localdir = env.blockManager.diskBlockManager.localDirs.map(f => f.getPath()).mkString(",")
+
+    val pythonIncludes = func.pythonIncludes.asScala.toSet
+    val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
+
     envVars.put("SPARK_LOCAL_DIRS", localdir)
 
     envVars.put("SPARK_AUTH_SOCKET_TIMEOUT", authSocketTimeout.toString)
@@ -79,6 +83,7 @@ private[spark] class StreamingPythonRunner(
     val dataOut = new DataOutputStream(stream)
 
     PythonWorkerUtils.writePythonVersion(pythonVer, dataOut)
+    // PythonWorkerUtils.writeSparkFiles(jobArtifactUUID, pythonIncludes, dataOut)
 
     // Send sessionId
     PythonRDD.writeUTF(sessionId, dataOut)

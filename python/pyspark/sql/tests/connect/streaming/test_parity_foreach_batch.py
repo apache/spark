@@ -18,7 +18,7 @@
 import unittest
 
 from pyspark.sql.tests.streaming.test_streaming_foreach_batch import StreamingTestsForeachBatchMixin
-from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.testing.connectutils import Multiplication, ReusedConnectTestCase
 from pyspark.errors import PySparkPicklingError
 from pyspark.errors.exceptions.connect import SparkConnectGrpcException
 
@@ -101,6 +101,15 @@ class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedCo
             "Streaming Runner initialization failed",
             str(error.exception),
         )
+
+    def test_library_error(self):
+
+        def fcn(batch, _):
+            multiplication = Multiplication(2)
+            multiplication.multiply(batch.count())
+
+        df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
+        df.writeStream.foreachBatch(fcn).start()
 
     def test_accessing_spark_session(self):
         spark = self.spark
