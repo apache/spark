@@ -21,10 +21,12 @@ import java.math.BigDecimal
 import java.sql.{Connection, Date, Timestamp}
 import java.util.Properties
 
+import org.apache.spark.SparkSQLException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{BinaryType, DecimalType}
 import org.apache.spark.tags.DockerTest
 
 /**
@@ -150,6 +152,11 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
       """
         |INSERT INTO bits VALUES (1, 2, 1)
       """.stripMargin).executeUpdate()
+    conn.prepareStatement(
+        """CREATE TABLE test_rowversion (myKey int PRIMARY KEY,myValue int, RV rowversion)""")
+      .executeUpdate()
+    conn.prepareStatement("""INSERT INTO test_rowversion (myKey, myValue) VALUES (1, 0)""")
+      .executeUpdate()
   }
 
   test("Basic test") {
@@ -444,5 +451,35 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
       .jdbc(jdbcUrl, "test_byte", new Properties)
     val df = spark.read.jdbc(jdbcUrl, "test_byte", new Properties)
     checkAnswer(df, Row(1.toShort))
+  }
+
+  test("SPARK-47945: money types") {
+    val df = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("prepareQuery", "DECLARE @mymoney_sm SMALLMONEY = 3148.29, @mymoney MONEY = 3148.29 ")
+      .option("query", "SELECT @mymoney_sm as smallmoney, @mymoney as money")
+      .load()
+    checkAnswer(df, Row(BigDecimal.valueOf(3148.29), BigDecimal.valueOf(3148.29)))
+    assert(df.schema.fields(0).dataType === DecimalType(10, 4))
+    assert(df.schema.fields(1).dataType === DecimalType(19, 4))
+  }
+
+  test("SPARK-47945: rowversion") {
+    val df = spark.read.jdbc(jdbcUrl, "test_rowversion", new Properties)
+    assert(df.schema.fields(2).dataType === BinaryType)
+  }
+
+  test("SPARK-47945: sql_variant") {
+    checkError(
+      exception = intercept[SparkSQLException] {
+        spark.read.format("jdbc")
+          .option("url", jdbcUrl)
+          .option("prepareQuery",
+            "DECLARE @myvariant1 SQL_VARIANT = 1, @myvariant2 SQL_VARIANT = 'test'")
+          .option("query", "SELECT @myvariant1 as variant1, @myvariant2 as variant2")
+          .load()
+      },
+      errorClass = "UNRECOGNIZED_SQL_TYPE",
+      parameters = Map("typeName" -> "sql_variant", "jdbcType" -> "-156"))
   }
 }
