@@ -4671,14 +4671,20 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ...    def onQueryTerminated(self, event):
         ...        pass
         ...
-        >>> spark.streams.addListener(MyErrorListener())
-        >>> sdf = spark.readStream.format("rate").load()
+        >>> error_listener = MyErrorListener()
+        >>> spark.streams.addListener(error_listener)
+        >>> sdf = spark.readStream.format("rate").load().withColumn(
+        ...     "error", col("value")
+        ... )
         >>> # Observe row count (rc) and error row count (erc) in the streaming Dataset
         ... observed_ds = sdf.observe(
         ...     "my_event",
         ...     count(lit(1)).alias("rc"),
-        ...     count(col("error")).alias("erc"))  # doctest: +SKIP
-        >>> observed_ds.writeStream.format("console").start()
+        ...     count(col("error")).alias("erc"))
+        >>> q = observed_ds.writeStream.format("console").start()
+        >>> time.sleep(5)
+        >>> q.stop()
+        >>> spark.streams.removeListener(error_listener)
         """
         from pyspark.sql import Observation
 
