@@ -22,6 +22,8 @@ import java.util.Locale
 import scala.reflect.ClassTag
 
 import org.apache.spark.SparkContext
+import org.apache.spark.internal.LogKey.{LAST_VALID_TIME, TIME}
+import org.apache.spark.internal.MDC
 import org.apache.spark.rdd.RDDOperationScope
 import org.apache.spark.streaming.{Duration, StreamingContext, Time}
 import org.apache.spark.streaming.scheduler.RateController
@@ -91,8 +93,8 @@ abstract class InputDStream[T: ClassTag](_ssc: StreamingContext)
     } else {
       // Time is valid, but check it is more than lastValidTime
       if (lastValidTime != null && time < lastValidTime) {
-        logWarning(s"isTimeValid called with $time whereas the last valid time " +
-          s"is $lastValidTime")
+        logWarning(log"isTimeValid called with ${MDC(TIME, time)} whereas the last valid time " +
+          log"is ${MDC(LAST_VALID_TIME, lastValidTime)}")
       }
       lastValidTime = time
       true

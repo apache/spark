@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.types
 
-import scala.collection.immutable.IndexedSeq
-
 /**
  * Rule that defines which upcasts are allow in Spark.
  */
