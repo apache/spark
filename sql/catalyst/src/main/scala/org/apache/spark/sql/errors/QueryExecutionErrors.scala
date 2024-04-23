@@ -379,13 +379,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def dataTypeUnexpectedError(dataType: DataType): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2011",
+      errorClass = "UNEXPECTED_DATA_TYPE",
       messageParameters = Map("dataType" -> dataType.catalogString))
   }
 
   def typeUnsupportedError(dataType: DataType): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_2011",
+      errorClass = "UNEXPECTED_DATA_TYPE",
       messageParameters = Map("dataType" -> dataType.toString()))
   }
 
