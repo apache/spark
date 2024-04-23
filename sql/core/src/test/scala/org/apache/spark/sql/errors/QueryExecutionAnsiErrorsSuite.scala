@@ -110,7 +110,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       exception = intercept[SparkArithmeticException] {
         sql("select CAST('66666666666666.666' AS DECIMAL(8, 1))").collect()
       },
-      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE",
+      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
       sqlState = "22003",
       parameters = Map(
         "value" -> "66666666666666.666",
@@ -126,7 +126,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       exception = intercept[SparkArithmeticException] {
         OneRowRelation().select(lit("66666666666666.666").cast("DECIMAL(8, 1)")).collect()
       },
-      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE",
+      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
       sqlState = "22003",
       parameters = Map(
         "value" -> "66666666666666.666",

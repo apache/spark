@@ -23,7 +23,16 @@ import com.fasterxml.jackson.core.JsonGenerator;
 import java.io.CharArrayWriter;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeFormatterBuilder;
+import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
+import java.util.Base64;
+import java.util.Locale;
 
 import static org.apache.spark.types.variant.VariantUtil.*;
 
@@ -32,12 +41,12 @@ import static org.apache.spark.types.variant.VariantUtil.*;
  * define a new class to avoid depending on or modifying Spark.
  */
 public final class Variant {
-  private final byte[] value;
-  private final byte[] metadata;
+  final byte[] value;
+  final byte[] metadata;
   // The variant value doesn't use the whole `value` binary, but starts from its `pos` index and
   // spans a size of `valueSize(value, pos)`. This design avoids frequent copies of the value binary
   // when reading a sub-variant in the array/object element.
-  private final int pos;
+  final int pos;
 
   public Variant(byte[] value, byte[] metadata) {
     this(value, metadata, 0);
@@ -87,6 +96,16 @@ public final class Variant {
   // Get a decimal value from the variant.
   public BigDecimal getDecimal() {
     return VariantUtil.getDecimal(value, pos);
+  }
+
+  // Get a float value from the variant.
+  public float getFloat() {
+    return VariantUtil.getFloat(value, pos);
+  }
+
+  // Get a binary value from the variant.
+  public byte[] getBinary() {
+    return VariantUtil.getBinary(value, pos);
   }
 
   // Get a string value from the variant.
@@ -188,9 +207,9 @@ public final class Variant {
 
   // Stringify the variant in JSON format.
   // Throw `MALFORMED_VARIANT` if the variant is malformed.
-  public String toJson() {
+  public String toJson(ZoneId zoneId) {
     StringBuilder sb = new StringBuilder();
-    toJsonImpl(value, metadata, pos, sb);
+    toJsonImpl(value, metadata, pos, sb, zoneId);
     return sb.toString();
   }
 
@@ -208,7 +227,30 @@ public final class Variant {
     }
   }
 
-  static void toJsonImpl(byte[] value, byte[] metadata, int pos, StringBuilder sb) {
+  // A simplified and more performant version of `sb.append(escapeJson(str))`. It is used when we
+  // know `str` doesn't contain any special character that needs escaping.
+  static void appendQuoted(StringBuilder sb, String str) {
+    sb.append('"');
+    sb.append(str);
+    sb.append('"');
+  }
+
+  private static final DateTimeFormatter TIMESTAMP_NTZ_FORMATTER = new DateTimeFormatterBuilder()
+      .append(DateTimeFormatter.ISO_LOCAL_DATE)
+      .appendLiteral(' ')
+      .append(DateTimeFormatter.ISO_LOCAL_TIME)
+      .toFormatter(Locale.US);
+
+  private static final DateTimeFormatter TIMESTAMP_FORMATTER = new DateTimeFormatterBuilder()
+      .append(TIMESTAMP_NTZ_FORMATTER)
+      .appendOffset("+HH:MM", "+00:00")
+      .toFormatter(Locale.US);
+
+  private static Instant microsToInstant(long timestamp) {
+    return Instant.EPOCH.plus(timestamp, ChronoUnit.MICROS);
+  }
+
+  static void toJsonImpl(byte[] value, byte[] metadata, int pos, StringBuilder sb, ZoneId zoneId) {
     switch (VariantUtil.getType(value, pos)) {
       case OBJECT:
         handleObject(value, pos, (size, idSize, offsetSize, idStart, offsetStart, dataStart) -> {
@@ -220,7 +262,7 @@ public final class Variant {
             if (i != 0) sb.append(',');
             sb.append(escapeJson(getMetadataKey(metadata, id)));
             sb.append(':');
-            toJsonImpl(value, metadata, elementPos, sb);
+            toJsonImpl(value, metadata, elementPos, sb, zoneId);
           }
           sb.append('}');
           return null;
@@ -233,7 +275,7 @@ public final class Variant {
             int offset = readUnsigned(value, offsetStart + offsetSize * i, offsetSize);
             int elementPos = dataStart + offset;
             if (i != 0) sb.append(',');
-            toJsonImpl(value, metadata, elementPos, sb);
+            toJsonImpl(value, metadata, elementPos, sb, zoneId);
           }
           sb.append(']');
           return null;
@@ -256,6 +298,23 @@ public final class Variant {
         break;
       case DECIMAL:
         sb.append(VariantUtil.getDecimal(value, pos).toPlainString());
+        break;
+      case DATE:
+        appendQuoted(sb, LocalDate.ofEpochDay((int) VariantUtil.getLong(value, pos)).toString());
+        break;
+      case TIMESTAMP:
+        appendQuoted(sb, TIMESTAMP_FORMATTER.format(
+            microsToInstant(VariantUtil.getLong(value, pos)).atZone(zoneId)));
+        break;
+      case TIMESTAMP_NTZ:
+        appendQuoted(sb, TIMESTAMP_NTZ_FORMATTER.format(
+            microsToInstant(VariantUtil.getLong(value, pos)).atZone(ZoneOffset.UTC)));
+        break;
+      case FLOAT:
+        sb.append(VariantUtil.getFloat(value, pos));
+        break;
+      case BINARY:
+        appendQuoted(sb, Base64.getEncoder().encodeToString(VariantUtil.getBinary(value, pos)));
         break;
     }
   }

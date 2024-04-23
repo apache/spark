@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 import unittest
+import os
 
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.sql.tests.test_resources import ResourceProfileTestsMixin
@@ -23,7 +24,7 @@ from pyspark.sql.tests.test_resources import ResourceProfileTestsMixin
 class ResourceProfileTests(ResourceProfileTestsMixin, ReusedConnectTestCase):
     @classmethod
     def master(cls):
-        return "local-cluster[1, 4, 1024]"
+        return os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local-cluster[1, 4, 1024]")
 
 
 if __name__ == "__main__":

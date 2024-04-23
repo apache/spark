@@ -21,8 +21,6 @@ import java.io._
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
 import java.nio.file.Files
-import java.util.Collections
-import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable.ArrayBuffer
 

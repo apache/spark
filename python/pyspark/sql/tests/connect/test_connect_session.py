@@ -15,11 +15,12 @@
 # limitations under the License.
 #
 
+import os
 import unittest
 import uuid
 from collections import defaultdict
 
-
+from pyspark.util import is_remote_only
 from pyspark.errors import (
     PySparkException,
     PySparkValueError,
@@ -46,6 +47,7 @@ if should_test_connect:
     from pyspark.sql.connect.client.core import Retrying, SparkConnectClient
 
 
+@unittest.skipIf(is_remote_only(), "Session creation different from local mode")
 class SparkConnectSessionTests(ReusedConnectTestCase):
     def setUp(self) -> None:
         self.spark = (
@@ -248,7 +250,7 @@ class SparkConnectSessionWithOptionsTest(unittest.TestCase):
             .config("integer", 1)
             .config("boolean", False)
             .appName(self.__class__.__name__)
-            .remote("local[4]")
+            .remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[4]"))
             .getOrCreate()
         )
 
@@ -495,6 +497,26 @@ class ChannelBuilderTests(unittest.TestCase):
 
         chan = DefaultChannelBuilder("sc://host/")
         self.assertIsNone(chan.session_id)
+
+    def test_channel_options(self):
+        # SPARK-47694
+        chan = DefaultChannelBuilder(
+            "sc://host", [("grpc.max_send_message_length", 1860), ("test", "robert")]
+        )
+        options = chan._channel_options
+        self.assertEqual(
+            [k for k, _ in options].count("grpc.max_send_message_length"),
+            1,
+            "only one occurrence for defaults",
+        )
+        self.assertEqual(
+            next(v for k, v in options if k == "grpc.max_send_message_length"),
+            1860,
+            "overwrites defaults",
+        )
+        self.assertEqual(
+            next(v for k, v in options if k == "test"), "robert", "new values are picked up"
+        )
 
 
 if __name__ == "__main__":

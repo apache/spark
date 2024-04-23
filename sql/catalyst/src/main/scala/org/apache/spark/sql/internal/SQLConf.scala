@@ -772,6 +772,12 @@ object SQLConf {
         " produced by a builtin function such as to_char or CAST")
       .version("4.0.0")
       .stringConf
+      .checkValue(CollationFactory.isValidCollation,
+        "DEFAULT_COLLATION",
+        name =>
+          Map(
+            "proposal" -> CollationFactory.getClosestCollation(name)
+          ))
       .createWithDefault("UTF8_BINARY")
 
   val FETCH_SHUFFLE_BLOCKS_IN_BATCH =
@@ -1608,6 +1614,20 @@ object SQLConf {
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValues(StorageLevelMapper.values.map(_.name()).toSet)
     .createWithDefault(StorageLevelMapper.MEMORY_AND_DISK.name())
+
+  val DATAFRAME_CACHE_LOG_LEVEL = buildConf("spark.sql.dataframeCache.logLevel")
+    .internal()
+    .doc("Configures the log level of Dataframe cache operations, including adding and removing " +
+      "entries from Dataframe cache, hit and miss on cache application. The default log " +
+      "level is 'trace'. This log should only be used for debugging purposes and not in the " +
+      "production environment, since it generates a large amount of logs.")
+    .version("4.0.0")
+    .stringConf
+    .transform(_.toUpperCase(Locale.ROOT))
+    .checkValue(logLevel => Set("TRACE", "DEBUG", "INFO", "WARN", "ERROR").contains(logLevel),
+      "Invalid value for 'spark.sql.dataframeCache.logLevel'. Valid values are " +
+        "'trace', 'debug', 'info', 'warn' and 'error'.")
+    .createWithDefault("trace")
 
   val CROSS_JOINS_ENABLED = buildConf("spark.sql.crossJoin.enabled")
     .internal()
@@ -2804,7 +2824,7 @@ object SQLConf {
       "short names are not recommended to use because they can be ambiguous.")
     .version("2.2.0")
     .stringConf
-    .checkValue(isValidTimezone, errorClass = "TIME_ZONE", parameters = Map.empty)
+    .checkValue(isValidTimezone, errorClass = "TIME_ZONE", parameters = tz => Map.empty)
     .createWithDefaultFunction(() => TimeZone.getDefault.getID)
 
   val WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD =
@@ -3032,7 +3052,9 @@ object SQLConf {
   val ARROW_EXECUTION_MAX_RECORDS_PER_BATCH =
     buildConf("spark.sql.execution.arrow.maxRecordsPerBatch")
       .doc("When using Apache Arrow, limit the maximum number of records that can be written " +
-        "to a single ArrowRecordBatch in memory. If set to zero or negative there is no limit.")
+        "to a single ArrowRecordBatch in memory. This configuration is not effective for the " +
+        "grouping API such as DataFrame(.cogroup).groupby.applyInPandas because each group " +
+        "becomes each ArrowRecordBatch. If set to zero or negative there is no limit.")
       .version("2.3.0")
       .intConf
       .createWithDefault(10000)
@@ -3365,7 +3387,7 @@ object SQLConf {
       "standard directly, but their behaviors align with ANSI SQL's style")
     .version("3.0.0")
     .booleanConf
-    .createWithDefault(sys.env.get("SPARK_ANSI_SQL_MODE").contains("true"))
+    .createWithDefault(!sys.env.get("SPARK_ANSI_SQL_MODE").contains("false"))
 
   val ENFORCE_RESERVED_KEYWORDS = buildConf("spark.sql.ansi.enforceReservedKeywords")
     .doc(s"When true and '${ANSI_ENABLED.key}' is true, the Spark SQL parser enforces the ANSI " +
@@ -3436,6 +3458,17 @@ object SQLConf {
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
+
+  val USE_COMMON_EXPR_ID_FOR_ALIAS =
+    buildConf("spark.sql.useCommonExprIdForAlias")
+      .internal()
+      .doc("When true, use the common expression ID for the alias when rewriting With " +
+        "expressions. Otherwise, use the index of the common expression definition. When true " +
+        "this avoids duplicate alias names, but is helpful to set to false for testing to ensure" +
+        "that alias names are consistent.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
 
   val USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES =
     buildConf("spark.sql.defaultColumn.useNullsForMissingDefaultValues")
@@ -4129,6 +4162,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_ORACLE_TIMESTAMP_MAPPING_ENABLED =
+    buildConf("spark.sql.legacy.oracle.timestampMapping.enabled")
+      .internal()
+      .doc("When true, TimestampType maps to TIMESTAMP in Oracle; otherwise, " +
+        "TIMESTAMP WITH LOCAL TIME ZONE.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val CSV_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.csv.filterPushdown.enabled")
     .doc("When true, enable filter pushdown to CSV datasource.")
     .version("3.0.0")
@@ -4795,11 +4837,11 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val LEGACY_IGNORE_PARENTHESES_AROUND_STAR =
-    buildConf("spark.sql.legacy.ignoreParenthesesAroundStar")
+  val LEGACY_BANG_EQUALS_NOT = buildConf("spark.sql.legacy.bangEqualsNot")
     .internal()
-    .doc("When set to true, SELECT (*) equals SELECT * FROM T instead of SELECT struct(*)." +
-      "SELECT (*) was never documented as defined behavior."
+    .doc("When set to true, '!' is a lexical equivalent for 'NOT'. That is '!' can be used " +
+      "outside of the documented prefix usage in a logical expression." +
+      "Examples are: `expr ! IN (1, 2)` and `expr ! BETWEEN 1 AND 2`, but also `IF ! EXISTS`."
     )
     .version("4.0.0")
     .booleanConf
@@ -5239,6 +5281,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyMySqlBitArrayMappingEnabled: Boolean =
     getConf(LEGACY_MYSQL_BIT_ARRAY_MAPPING_ENABLED)
 
+  def legacyOracleTimestampMappingEnabled: Boolean =
+    getConf(LEGACY_ORACLE_TIMESTAMP_MAPPING_ENABLED)
+
   override def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = {
     LegacyBehaviorPolicy.withName(getConf(SQLConf.LEGACY_TIME_PARSER_POLICY))
   }
@@ -5386,6 +5431,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def defaultCacheStorageLevel: StorageLevel =
     StorageLevel.fromString(getConf(DEFAULT_CACHE_STORAGE_LEVEL))
+
+  def dataframeCacheLogLevel: String = getConf(DATAFRAME_CACHE_LOG_LEVEL)
 
   def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
 
@@ -5729,9 +5776,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyJavaCharsets: Boolean = getConf(SQLConf.LEGACY_JAVA_CHARSETS)
 
   def legacyEvalCurrentTime: Boolean = getConf(SQLConf.LEGACY_EVAL_CURRENT_TIME)
-
-  def legacyIgnoreParenthesesAroundStar: Boolean =
-    getConf(SQLConf.LEGACY_IGNORE_PARENTHESES_AROUND_STAR)
 
   /** ********************** SQLConf functionality methods ************ */
 

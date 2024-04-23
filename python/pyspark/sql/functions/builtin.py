@@ -972,12 +972,13 @@ def mode(col: "ColumnOrName", deterministic: bool = False) -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([
     ...     ("Java", 2012, 20000), ("dotNET", 2012, 5000),
     ...     ("Java", 2012, 20000), ("dotNET", 2012, 5000),
     ...     ("dotNET", 2013, 48000), ("Java", 2013, 30000)],
     ...     schema=("course", "year", "earnings"))
-    >>> df.groupby("course").agg(mode("year")).show()
+    >>> df.groupby("course").agg(sf.mode("year")).sort("course").show()
     +------+----------+
     |course|mode(year)|
     +------+----------+
@@ -989,13 +990,20 @@ def mode(col: "ColumnOrName", deterministic: bool = False) -> Column:
     deterministic is false or is not defined, or the lowest value is returned if deterministic is
     true.
 
-    >>> df2 = spark.createDataFrame([(-10,), (0,), (10,)], ["col"])
-    >>> df2.select(mode("col", False), mode("col", True)).show()
-    +---------+---------------------------------------+
-    |mode(col)|mode() WITHIN GROUP (ORDER BY col DESC)|
-    +---------+---------------------------------------+
-    |        0|                                    -10|
-    +---------+---------------------------------------+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(-10,), (0,), (10,)], ["col"])
+    >>> df.select(sf.mode("col", False)).show() # doctest: +SKIP
+    +---------+
+    |mode(col)|
+    +---------+
+    |        0|
+    +---------+
+    >>> df.select(sf.mode("col", True)).show()
+    +---------------------------------------+
+    |mode() WITHIN GROUP (ORDER BY col DESC)|
+    +---------------------------------------+
+    |                                    -10|
+    +---------------------------------------+
     """
     return _invoke_function("mode", _to_java_column(col), deterministic)
 
@@ -1230,7 +1238,7 @@ def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     ...     ("Java", 2012, 20000), ("dotNET", 2012, 5000),
     ...     ("dotNET", 2013, 48000), ("Java", 2013, 30000)],
     ...     schema=("course", "year", "earnings"))
-    >>> df.groupby("course").agg(sf.max_by("year", "earnings")).show()
+    >>> df.groupby("course").agg(sf.max_by("year", "earnings")).sort("course").show()
     +------+----------------------+
     |course|max_by(year, earnings)|
     +------+----------------------+
@@ -1245,7 +1253,9 @@ def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     ...     ("Marketing", "Anna", 4), ("IT", "Bob", 2),
     ...     ("IT", "Charlie", 3), ("Marketing", "David", 1)],
     ...     schema=("department", "name", "years_in_dept"))
-    >>> df.groupby("department").agg(sf.max_by("name", "years_in_dept")).show()
+    >>> df.groupby("department").agg(
+    ...     sf.max_by("name", "years_in_dept")
+    ... ).sort("department").show()
     +----------+---------------------------+
     |department|max_by(name, years_in_dept)|
     +----------+---------------------------+
@@ -1260,7 +1270,9 @@ def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     ...     ("Consult", "Eva", 6), ("Finance", "Frank", 5),
     ...     ("Finance", "George", 5), ("Consult", "Henry", 7)],
     ...     schema=("department", "name", "years_in_dept"))
-    >>> df.groupby("department").agg(sf.max_by("name", "years_in_dept")).show()
+    >>> df.groupby("department").agg(
+    ...     sf.max_by("name", "years_in_dept")
+    ... ).sort("department").show()
     +----------+---------------------------+
     |department|max_by(name, years_in_dept)|
     +----------+---------------------------+
@@ -1307,7 +1319,7 @@ def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     ...     ("Java", 2012, 20000), ("dotNET", 2012, 5000),
     ...     ("dotNET", 2013, 48000), ("Java", 2013, 30000)],
     ...     schema=("course", "year", "earnings"))
-    >>> df.groupby("course").agg(sf.min_by("year", "earnings")).show()
+    >>> df.groupby("course").agg(sf.min_by("year", "earnings")).sort("course").show()
     +------+----------------------+
     |course|min_by(year, earnings)|
     +------+----------------------+
@@ -1322,7 +1334,9 @@ def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     ...     ("Marketing", "Anna", 4), ("IT", "Bob", 2),
     ...     ("IT", "Charlie", 3), ("Marketing", "David", 1)],
     ...     schema=("department", "name", "years_in_dept"))
-    >>> df.groupby("department").agg(sf.min_by("name", "years_in_dept")).show()
+    >>> df.groupby("department").agg(
+    ...     sf.min_by("name", "years_in_dept")
+    ... ).sort("department").show()
     +----------+---------------------------+
     |department|min_by(name, years_in_dept)|
     +----------+---------------------------+
@@ -1337,7 +1351,9 @@ def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     ...     ("Consult", "Eva", 6), ("Finance", "Frank", 5),
     ...     ("Finance", "George", 5), ("Consult", "Henry", 7)],
     ...     schema=("department", "name", "years_in_dept"))
-    >>> df.groupby("department").agg(sf.min_by("name", "years_in_dept")).show()
+    >>> df.groupby("department").agg(
+    ...     sf.min_by("name", "years_in_dept")
+    ... ).sort("department").show()
     +----------+---------------------------+
     |department|min_by(name, years_in_dept)|
     +----------+---------------------------+
@@ -10928,7 +10944,11 @@ def repeat(col: "ColumnOrName", n: Union["ColumnOrName", int]) -> Column:
 
 
 @_try_remote_functions
-def split(str: "ColumnOrName", pattern: str, limit: int = -1) -> Column:
+def split(
+    str: "ColumnOrName",
+    pattern: Union[Column, str],
+    limit: Union["ColumnOrName", int] = -1,
+) -> Column:
     """
     Splits str around matches of the given pattern.
 
@@ -10941,10 +10961,10 @@ def split(str: "ColumnOrName", pattern: str, limit: int = -1) -> Column:
     ----------
     str : :class:`~pyspark.sql.Column` or str
         a string expression to split
-    pattern : str
+    pattern : :class:`~pyspark.sql.Column` or str
         a string representing a regular expression. The regex string should be
         a Java regular expression.
-    limit : int, optional
+    limit : :class:`~pyspark.sql.Column` or str or int
         an integer which controls the number of times `pattern` is applied.
 
         * ``limit > 0``: The resulting array's length will not be more than `limit`, and the
@@ -10956,6 +10976,11 @@ def split(str: "ColumnOrName", pattern: str, limit: int = -1) -> Column:
         .. versionchanged:: 3.0
            `split` now takes an optional `limit` field. If not provided, default limit value is -1.
 
+        .. versionchanged:: 4.0.0
+             `pattern` now accepts column. Does not accept column name since string type remain
+             accepted as a regular expression representation, for backwards compatibility.
+             In addition to int, `limit` now accepts column and column name.
+
     Returns
     -------
     :class:`~pyspark.sql.Column`
@@ -10963,13 +10988,53 @@ def split(str: "ColumnOrName", pattern: str, limit: int = -1) -> Column:
 
     Examples
     --------
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([('oneAtwoBthreeC',)], ['s',])
-    >>> df.select(split(df.s, '[ABC]', 2).alias('s')).collect()
-    [Row(s=['one', 'twoBthreeC'])]
-    >>> df.select(split(df.s, '[ABC]', -1).alias('s')).collect()
-    [Row(s=['one', 'two', 'three', ''])]
+    >>> df.select(sf.split(df.s, '[ABC]', 2).alias('s')).show()
+    +-----------------+
+    |                s|
+    +-----------------+
+    |[one, twoBthreeC]|
+    +-----------------+
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('oneAtwoBthreeC',)], ['s',])
+    >>> df.select(sf.split(df.s, '[ABC]', -1).alias('s')).show()
+    +-------------------+
+    |                  s|
+    +-------------------+
+    |[one, two, three, ]|
+    +-------------------+
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [('oneAtwoBthreeC', '[ABC]'), ('1A2B3C', '[1-9]+'), ('aa2bb3cc4', '[1-9]+')],
+    ...     ['s', 'pattern']
+    ... )
+    >>> df.select(sf.split(df.s, df.pattern).alias('s')).show()
+    +-------------------+
+    |                  s|
+    +-------------------+
+    |[one, two, three, ]|
+    |        [, A, B, C]|
+    |     [aa, bb, cc, ]|
+    +-------------------+
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [('oneAtwoBthreeC', '[ABC]', 2), ('1A2B3C', '[1-9]+', -1)],
+    ...     ['s', 'pattern', 'expected_parts']
+    ... )
+    >>> df.select(sf.split(df.s, df.pattern, df.expected_parts).alias('s')).show()
+    +-----------------+
+    |                s|
+    +-----------------+
+    |[one, twoBthreeC]|
+    |      [, A, B, C]|
+    +-----------------+
     """
-    return _invoke_function("split", _to_java_column(str), pattern, limit)
+    limit = lit(limit) if isinstance(limit, int) else limit
+    return _invoke_function_over_columns("split", str, lit(pattern), limit)
 
 
 @_try_remote_functions
@@ -15437,6 +15502,160 @@ def parse_json(
 
 
 @_try_remote_functions
+def is_variant_null(v: "ColumnOrName") -> Column:
+    """
+    Check if a variant value is a variant null. Returns true if and only if the input is a variant
+    null and false otherwise (including in the case of SQL NULL).
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    v : :class:`~pyspark.sql.Column` or str
+        a variant column or column name
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a boolean column indicating whether the variant value is a variant null
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
+    >>> df.select(is_variant_null(parse_json(df.json)).alias("r")).collect()
+    [Row(r=False)]
+    """
+
+    return _invoke_function("is_variant_null", _to_java_column(v))
+
+
+@_try_remote_functions
+def variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
+    """
+    Extracts a sub-variant from `v` according to `path`, and then cast the sub-variant to
+    `targetType`. Returns null if the path does not exist. Throws an exception if the cast fails.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    v : :class:`~pyspark.sql.Column` or str
+        a variant column or column name
+    path : str
+        the extraction path. A valid path should start with `$` and is followed by zero or more
+        segments like `[123]`, `.name`, `['name']`, or `["name"]`.
+    targetType : str
+        the target data type to cast into, in a DDL-formatted string
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a column of `targetType` representing the extracted result
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
+    >>> df.select(variant_get(parse_json(df.json), "$.a", "int").alias("r")).collect()
+    [Row(r=1)]
+    >>> df.select(variant_get(parse_json(df.json), "$.b", "int").alias("r")).collect()
+    [Row(r=None)]
+    """
+
+    return _invoke_function("variant_get", _to_java_column(v), path, targetType)
+
+
+@_try_remote_functions
+def try_variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
+    """
+    Extracts a sub-variant from `v` according to `path`, and then cast the sub-variant to
+    `targetType`. Returns null if the path does not exist or the cast fails.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    v : :class:`~pyspark.sql.Column` or str
+        a variant column or column name
+    path : str
+        the extraction path. A valid path should start with `$` and is followed by zero or more
+        segments like `[123]`, `.name`, `['name']`, or `["name"]`.
+    targetType : str
+        the target data type to cast into, in a DDL-formatted string
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a column of `targetType` representing the extracted result
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
+    >>> df.select(try_variant_get(parse_json(df.json), "$.a", "int").alias("r")).collect()
+    [Row(r=1)]
+    >>> df.select(try_variant_get(parse_json(df.json), "$.b", "int").alias("r")).collect()
+    [Row(r=None)]
+    >>> df.select(try_variant_get(parse_json(df.json), "$.a", "binary").alias("r")).collect()
+    [Row(r=None)]
+    """
+
+    return _invoke_function("try_variant_get", _to_java_column(v), path, targetType)
+
+
+@_try_remote_functions
+def schema_of_variant(v: "ColumnOrName") -> Column:
+    """
+    Returns schema in the SQL format of a variant.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    v : :class:`~pyspark.sql.Column` or str
+        a variant column or column name
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a string column representing the variant schema
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
+    >>> df.select(schema_of_variant(parse_json(df.json)).alias("r")).collect()
+    [Row(r='STRUCT<a: BIGINT>')]
+    """
+
+    return _invoke_function("schema_of_variant", _to_java_column(v))
+
+
+@_try_remote_functions
+def schema_of_variant_agg(v: "ColumnOrName") -> Column:
+    """
+    Returns the merged schema in the SQL format of a variant column.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    v : :class:`~pyspark.sql.Column` or str
+        a variant column or column name
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a string column representing the variant schema
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
+    >>> df.select(schema_of_variant_agg(parse_json(df.json)).alias("r")).collect()
+    [Row(r='STRUCT<a: BIGINT>')]
+    """
+
+    return _invoke_function("schema_of_variant_agg", _to_java_column(v))
+
+
+@_try_remote_functions
 def to_json(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
     """
     Converts a column containing a :class:`StructType`, :class:`ArrayType` or a :class:`MapType`
@@ -19338,7 +19557,8 @@ def hll_sketch_agg(col: "ColumnOrName", lgConfigK: Optional[Union[int, Column]] 
 
 @_try_remote_functions
 def hll_union_agg(
-    col: "ColumnOrName", allowDifferentLgConfigK: Optional[Union[bool, Column]] = None
+    col: "ColumnOrName",
+    allowDifferentLgConfigK: Optional[Union[bool, Column]] = None,
 ) -> Column:
     """
     Aggregate function: returns the updatable binary representation of the Datasketches
@@ -19350,8 +19570,8 @@ def hll_union_agg(
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str or bool
-    allowDifferentLgConfigK : bool, optional
+    col : :class:`~pyspark.sql.Column` or str
+    allowDifferentLgConfigK : :class:`~pyspark.sql.Column` or bool, optional
         Allow sketches with different lgConfigK values to be merged (defaults to false).
 
     Returns
@@ -19396,12 +19616,7 @@ def hll_union_agg(
     if allowDifferentLgConfigK is None:
         return _invoke_function_over_columns("hll_union_agg", col)
     else:
-        _allowDifferentLgConfigK = (
-            lit(allowDifferentLgConfigK)
-            if isinstance(allowDifferentLgConfigK, bool)
-            else allowDifferentLgConfigK
-        )
-        return _invoke_function_over_columns("hll_union_agg", col, _allowDifferentLgConfigK)
+        return _invoke_function_over_columns("hll_union_agg", col, lit(allowDifferentLgConfigK))
 
 
 @_try_remote_functions

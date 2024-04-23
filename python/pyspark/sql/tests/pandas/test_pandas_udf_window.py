@@ -292,7 +292,7 @@ class WindowPandasUDFTestsMixin:
 
         with self.assertRaisesRegex(AnalysisException, ".*not supported within a window function"):
             foo_udf = pandas_udf(lambda x: x, "v double", PandasUDFType.GROUPED_MAP)
-            df.withColumn("v2", foo_udf(df["v"]).over(w))
+            df.withColumn("v2", foo_udf(df["v"]).over(w)).schema
 
     def test_bounded_simple(self):
         from pyspark.sql.functions import mean, max, min, count

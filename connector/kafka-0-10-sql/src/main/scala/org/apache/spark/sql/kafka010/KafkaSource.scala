@@ -22,7 +22,8 @@ import java.{util => ju}
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.SparkContext
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{ERROR, FROM_OFFSET, OFFSETS, TIP, TOPIC_PARTITIONS, UNTIL_OFFSET}
 import org.apache.spark.internal.config.Network.NETWORK_TIMEOUT
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql._
@@ -127,7 +128,7 @@ private[kafka010] class KafkaSource(
           kafkaReader.fetchGlobalTimestampBasedOffsets(ts, isStartingOffsets = true, strategy)
       }
       metadataLog.add(0, offsets)
-      logInfo(s"Initial offsets: $offsets")
+      logInfo(log"Initial offsets: ${MDC(OFFSETS, offsets)}")
       offsets
     }.partitionToOffsets
   }
@@ -292,7 +293,8 @@ private[kafka010] class KafkaSource(
     // Make sure initialPartitionOffsets is initialized
     initialPartitionOffsets
 
-    logInfo(s"GetBatch called with start = $start, end = $end")
+    logInfo(log"GetBatch called with start = ${MDC(FROM_OFFSET, start)}, " +
+      log"end = ${MDC(UNTIL_OFFSET, end)}")
     val untilPartitionOffsets = KafkaSourceOffset.getPartitionOffsets(end)
 
     if (allDataForTriggerAvailableNow != null) {
@@ -330,8 +332,8 @@ private[kafka010] class KafkaSource(
         .map(converter.toInternalRowWithoutHeaders)
     }
 
-    logInfo("GetBatch generating RDD of offset range: " +
-      offsetRanges.sortBy(_.topicPartition.toString).mkString(", "))
+    logInfo(log"GetBatch generating RDD of offset range: " +
+      log"${MDC(TOPIC_PARTITIONS, offsetRanges.sortBy(_.topicPartition.toString).mkString(", "))}")
 
     sqlContext.internalCreateDataFrame(rdd.setName("kafka"), schema, isStreaming = true)
   }
@@ -351,7 +353,7 @@ private[kafka010] class KafkaSource(
     if (failOnDataLoss) {
       throw getException()
     } else {
-      logWarning(message + s". $INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE")
+      logWarning(log"${MDC(ERROR, message)}. ${MDC(TIP, INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE)}")
     }
   }
 

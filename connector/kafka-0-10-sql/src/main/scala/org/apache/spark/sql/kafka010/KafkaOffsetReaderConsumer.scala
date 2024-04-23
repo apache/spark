@@ -27,7 +27,8 @@ import org.apache.kafka.clients.consumer.{Consumer, ConsumerConfig, OffsetAndTim
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.SparkEnv
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{OFFSETS, RETRY_COUNT, TOPIC_PARTITION_OFFSET}
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.kafka010.KafkaSourceProvider.StrategyOnNoMatchStartingOffset
@@ -385,8 +386,8 @@ private[kafka010] class KafkaOffsetReaderConsumer(
 
           incorrectOffsets = findIncorrectOffsets()
           if (incorrectOffsets.nonEmpty) {
-            logWarning("Found incorrect offsets in some partitions " +
-              s"(partition, previous offset, fetched offset): $incorrectOffsets")
+            logWarning(log"Found incorrect offsets in some partitions " +
+              log"(partition, previous offset, fetched offset): ${MDC(OFFSETS, incorrectOffsets)}")
             if (attempt < maxOffsetFetchAttempts) {
               logWarning("Retrying to fetch latest offsets because of incorrect offsets")
               Thread.sleep(offsetFetchAttemptIntervalMs)
@@ -507,7 +508,7 @@ private[kafka010] class KafkaOffsetReaderConsumer(
         () =>
           KafkaExceptions.initialOffsetNotFoundForPartitions(deletedPartitions))
     }
-    logInfo(s"Partitions added: $newPartitionInitialOffsets")
+    logInfo(log"Partitions added: ${MDC(TOPIC_PARTITION_OFFSET, newPartitionInitialOffsets)}")
     newPartitionInitialOffsets.filter(_._2 != 0).foreach { case (p, o) =>
       reportDataLoss(
         s"Added partition $p starts from $o instead of 0. Some data may have been missed",
@@ -611,7 +612,8 @@ private[kafka010] class KafkaOffsetReaderConsumer(
               } catch {
                 case NonFatal(e) =>
                   lastException = e
-                  logWarning(s"Error in attempt $attempt getting Kafka offsets: ", e)
+                  logWarning(
+                    log"Error in attempt ${MDC(RETRY_COUNT, attempt)} getting Kafka offsets: ", e)
                   attempt += 1
                   Thread.sleep(offsetFetchAttemptIntervalMs)
                   resetConsumer()

@@ -30,33 +30,73 @@ class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedCo
     def test_streaming_foreach_batch_graceful_stop(self):
         super().test_streaming_foreach_batch_graceful_stop()
 
+    def test_nested_dataframes(self):
+        def curried_function(df):
+            def inner(batch_df, batch_id):
+                df.createOrReplaceTempView("updates")
+                batch_df.createOrReplaceTempView("batch_updates")
+
+            return inner
+
+        try:
+            df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
+            other_df = self.spark.range(100)
+            q = df.writeStream.foreachBatch(curried_function(other_df)).start()
+            q.processAllAvailable()
+            collected = self.spark.sql("select * from batch_updates").collect()
+            self.assertTrue(len(collected), 2)
+            self.assertEqual(100, self.spark.sql("select * from updates").count())
+        finally:
+            if q:
+                q.stop()
+
+    def test_pickling_error(self):
+        class NoPickle:
+            def __reduce__(self):
+                raise ValueError("No pickle")
+
+        no_pickle = NoPickle()
+
+        def func(df, _):
+            print(no_pickle)
+            df.count()
+
+        with self.assertRaises(PySparkPicklingError):
+            df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
+            q = df.writeStream.foreachBatch(func).start()
+            q.processAllAvailable()
+
     def test_accessing_spark_session(self):
         spark = self.spark
 
         def func(df, _):
-            spark.createDataFrame([("do", "not"), ("serialize", "spark")]).collect()
+            spark.createDataFrame([("you", "can"), ("serialize", "spark")]).createOrReplaceTempView(
+                "test_accessing_spark_session"
+            )
 
-        error_thrown = False
         try:
-            self.spark.readStream.format("rate").load().writeStream.foreachBatch(func).start()
-        except PySparkPicklingError as e:
-            self.assertEqual(e.getErrorClass(), "STREAMING_CONNECT_SERIALIZATION_ERROR")
-            error_thrown = True
-        self.assertTrue(error_thrown)
+            df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
+            q = df.writeStream.foreachBatch(func).start()
+            q.processAllAvailable()
+            self.assertEqual(2, spark.table("test_accessing_spark_session").count())
+        finally:
+            if q:
+                q.stop()
 
     def test_accessing_spark_session_through_df(self):
-        dataframe = self.spark.createDataFrame([("do", "not"), ("serialize", "dataframe")])
+        dataframe = self.spark.createDataFrame([("you", "can"), ("serialize", "dataframe")])
 
         def func(df, _):
-            dataframe.collect()
+            dataframe.createOrReplaceTempView("test_accessing_spark_session_through_df")
 
-        error_thrown = False
         try:
-            self.spark.readStream.format("rate").load().writeStream.foreachBatch(func).start()
-        except PySparkPicklingError as e:
-            self.assertEqual(e.getErrorClass(), "STREAMING_CONNECT_SERIALIZATION_ERROR")
-            error_thrown = True
-        self.assertTrue(error_thrown)
+            df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
+            q = df.writeStream.foreachBatch(func).start()
+            q.processAllAvailable()
+            self.assertEqual(2, self.spark.table("test_accessing_spark_session_through_df").count())
+        finally:
+            if q:
+                q.stop()
 
 
 if __name__ == "__main__":

@@ -141,10 +141,9 @@ def _test() -> None:
     import pyspark.sql.connect.protobuf.functions
 
     globs = pyspark.sql.connect.protobuf.functions.__dict__.copy()
-
     globs["spark"] = (
         PySparkSession.builder.appName("sql.protobuf.functions tests")
-        .remote("local[2]")
+        .remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[2]"))
         .getOrCreate()
     )
 
