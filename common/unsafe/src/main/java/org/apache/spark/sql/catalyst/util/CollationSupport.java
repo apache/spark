@@ -341,7 +341,7 @@ public final class CollationSupport {
               .collator.getLocale(ULocale.ACTUAL_LOCALE);
       return UCharacter.toTitleCase(locale, target, BreakIterator.getWordInstance(locale));
     }
-    
+
     private static int findInSet(final UTF8String match, final UTF8String set, int collationId) {
       if (match.contains(UTF8String.fromString(","))) {
         return 0;
