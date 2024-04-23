@@ -3779,7 +3779,7 @@
     ],
     "sqlState" : "42601"
   },
-  "STREAMING_PYTHON_RUNNER_DID_NOT_INITIALIZE" : {
+  "STREAMING_PYTHON_RUNNER_INITIALIZATION_FAILURE" : {
     "message" : [
       "Streaming Runner initialization failed, returned <resFromPython>. Cause: <msg>"
     ],

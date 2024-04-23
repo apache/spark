@@ -93,21 +93,21 @@ private[spark] class StreamingPythonRunner(
     val resFromPython = dataIn.readInt()
     if (resFromPython != 0) {
       val errMessage = PythonWorkerUtils.readUTF(dataIn)
-      throw streamingPythonRunnerDidNotInitialize(resFromPython, errMessage)
+      throw streamingPythonRunnerInitializationFailure(resFromPython, errMessage)
     }
     logInfo(s"Runner initialization succeeded (returned $resFromPython).")
 
     (dataOut, dataIn)
   }
 
-  def streamingPythonRunnerDidNotInitialize(resFromPython: Int, errMessage: String):
+  def streamingPythonRunnerInitializationFailure(resFromPython: Int, errMessage: String):
     StreamingPythonRunnerInitializationException = {
     new StreamingPythonRunnerInitializationException(resFromPython, errMessage)
   }
 
   class StreamingPythonRunnerInitializationException(resFromPython: Int, errMessage: String)
     extends SparkPythonException(
-      errorClass = "STREAMING_PYTHON_RUNNER_DID_NOT_INITIALIZE",
+      errorClass = "STREAMING_PYTHON_RUNNER_INITIALIZATION_FAILURE",
       messageParameters = Map(
         "resFromPython" -> resFromPython.toString,
         "msg" -> errMessage))
