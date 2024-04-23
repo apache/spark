@@ -772,12 +772,7 @@ object SQLConf {
         " produced by a builtin function such as to_char or CAST")
       .version("4.0.0")
       .stringConf
-      .checkValue(CollationFactory.isValidCollation,
-        "DEFAULT_COLLATION",
-        name =>
-          Map(
-            "proposal" -> "PLACEHOLDER"
-          ))
+      .checkValue(CollationFactory.isValidCollation, "DEFAULT_COLLATION", _ => Map())
       .createWithDefault("UTF8_BINARY")
 
   val FETCH_SHUFFLE_BLOCKS_IN_BATCH =

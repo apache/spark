@@ -1888,7 +1888,7 @@
     "subClass" : {
       "DEFAULT_COLLATION" : {
         "message" : [
-          "Cannot resolve the given default collation. Did you mean '<proposal>'?"
+          "Cannot resolve the given default collation."
         ]
       },
       "TIME_ZONE" : {

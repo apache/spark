@@ -36,6 +36,7 @@ import org.apache.spark.sql.{functions => fn}
 import org.apache.spark.sql.avro.{functions => avroFn}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
+import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.connect.client.SparkConnectClient
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
@@ -699,7 +700,8 @@ class PlanGenerationTestSuite
   }
 
   test("select collated string") {
-    val schema = StructType(StructField("s", StringType(1)) :: Nil)
+    val schema = StructType(
+      StructField("s", StringType(CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID)) :: Nil)
     createLocalRelation(schema.catalogString).select("s")
   }
 
