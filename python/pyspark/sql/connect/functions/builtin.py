@@ -43,7 +43,7 @@ import numpy as np
 
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql.dataframe import DataFrame as ParentDataFrame
-from pyspark.sql.connect.column import Column
+from pyspark.sql import Column
 from pyspark.sql.connect.expressions import (
     CaseWhen,
     SortOrder,
@@ -112,14 +112,16 @@ def _invoke_function(name: str, *args: Union[Column, Expression]) -> Column:
     -------
     :class:`Column`
     """
+    from pyspark.sql.connect.column import Column as ConnectColumn
+
     expressions: List[Expression] = []
     for arg in args:
         assert isinstance(arg, (Column, Expression))
         if isinstance(arg, Column):
-            expressions.append(arg._expr)
+            expressions.append(arg._expr)  # type: ignore[arg-type]
         else:
             expressions.append(arg)
-    return Column(UnresolvedFunction(name, expressions))
+    return ConnectColumn(UnresolvedFunction(name, expressions))
 
 
 def _invoke_function_over_columns(name: str, *cols: "ColumnOrName") -> Column:
@@ -180,6 +182,8 @@ def _create_lambda(f: Callable) -> LambdaFunction:
             - (Column, Column) -> Column: ...
             - (Column, Column, Column) -> Column: ...
     """
+    from pyspark.sql.connect.column import Column as ConnectColumn
+
     parameters = _get_lambda_parameters(f)
 
     arg_names = ["x", "y", "z"][: len(parameters)]
@@ -187,7 +191,7 @@ def _create_lambda(f: Callable) -> LambdaFunction:
         UnresolvedNamedLambdaVariable([UnresolvedNamedLambdaVariable.fresh_var_name(arg_name)])
         for arg_name in arg_names
     ]
-    arg_cols = [Column(arg_expr) for arg_expr in arg_exprs]
+    arg_cols = [ConnectColumn(arg_expr) for arg_expr in arg_exprs]
 
     result = f(*arg_cols)
 
@@ -197,7 +201,7 @@ def _create_lambda(f: Callable) -> LambdaFunction:
             message_parameters={"func_name": f.__name__, "return_type": type(result).__name__},
         )
 
-    return LambdaFunction(result._expr, arg_exprs)
+    return LambdaFunction(result._expr, arg_exprs)  # type: ignore[arg-type]
 
 
 def _invoke_higher_order_function(
@@ -234,12 +238,14 @@ def _options_to_col(options: Dict[str, Any]) -> Column:
 
 
 def col(col: str) -> Column:
+    from pyspark.sql.connect.column import Column as ConnectColumn
+
     if col == "*":
-        return Column(UnresolvedStar(unparsed_target=None))
+        return ConnectColumn(UnresolvedStar(unparsed_target=None))
     elif col.endswith(".*"):
-        return Column(UnresolvedStar(unparsed_target=col))
+        return ConnectColumn(UnresolvedStar(unparsed_target=col))
     else:
-        return Column(ColumnReference(unparsed_identifier=col))
+        return ConnectColumn(ColumnReference(unparsed_identifier=col))
 
 
 col.__doc__ = pysparkfuncs.col.__doc__
@@ -249,6 +255,8 @@ column = col
 
 
 def lit(col: Any) -> Column:
+    from pyspark.sql.connect.column import Column as ConnectColumn
+
     if isinstance(col, Column):
         return col
     elif isinstance(col, list):
@@ -272,7 +280,7 @@ def lit(col: Any) -> Column:
 
         return array(*[lit(c) for c in col])
     else:
-        return Column(LiteralExpression._from_value(col))
+        return ConnectColumn(LiteralExpression._from_value(col))
 
 
 lit.__doc__ = pysparkfuncs.lit.__doc__
@@ -336,7 +344,9 @@ coalesce.__doc__ = pysparkfuncs.coalesce.__doc__
 
 
 def expr(str: str) -> Column:
-    return Column(SQLExpression(str))
+    from pyspark.sql.connect.column import Column as ConnectColumn
+
+    return ConnectColumn(SQLExpression(str))
 
 
 expr.__doc__ = pysparkfuncs.expr.__doc__
@@ -429,6 +439,8 @@ spark_partition_id.__doc__ = pysparkfuncs.spark_partition_id.__doc__
 
 
 def when(condition: Column, value: Any) -> Column:
+    from pyspark.sql.connect.column import Column as ConnectColumn
+
     # Explicitly not using ColumnOrName type here to make reading condition less opaque
     if not isinstance(condition, Column):
         raise PySparkTypeError(
@@ -438,7 +450,12 @@ def when(condition: Column, value: Any) -> Column:
 
     value_col = value if isinstance(value, Column) else lit(value)
 
-    return Column(CaseWhen(branches=[(condition._expr, value_col._expr)], else_value=None))
+    return ConnectColumn(
+        CaseWhen(
+            branches=[(condition._expr, value_col._expr)],  # type: ignore[list-item]
+            else_value=None,
+        )
+    )
 
 
 when.__doc__ = pysparkfuncs.when.__doc__
@@ -1045,8 +1062,12 @@ countDistinct.__doc__ = pysparkfuncs.countDistinct.__doc__
 
 
 def count_distinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
+    from pyspark.sql.connect.column import Column as ConnectColumn
+
     _exprs = [_to_col(c)._expr for c in [col] + list(cols)]
-    return Column(UnresolvedFunction("count", _exprs, is_distinct=True))
+    return ConnectColumn(
+        UnresolvedFunction("count", _exprs, is_distinct=True)  # type: ignore[arg-type]
+    )
 
 
 count_distinct.__doc__ = pysparkfuncs.count_distinct.__doc__
@@ -1293,7 +1314,11 @@ sumDistinct.__doc__ = pysparkfuncs.sumDistinct.__doc__
 
 
 def sum_distinct(col: "ColumnOrName") -> Column:
-    return Column(UnresolvedFunction("sum", [_to_col(col)._expr], is_distinct=True))
+    from pyspark.sql.connect.column import Column as ConnectColumn
+
+    return ConnectColumn(
+        UnresolvedFunction("sum", [_to_col(col)._expr], is_distinct=True)  # type: ignore[list-item]
+    )
 
 
 sum_distinct.__doc__ = pysparkfuncs.sum_distinct.__doc__
@@ -4101,8 +4126,10 @@ udtf.__doc__ = pysparkfuncs.udtf.__doc__
 
 
 def call_function(funcName: str, *cols: "ColumnOrName") -> Column:
+    from pyspark.sql.connect.column import Column as ConnectColumn
+
     expressions = [_to_col(c)._expr for c in cols]
-    return Column(CallFunction(funcName, expressions))
+    return ConnectColumn(CallFunction(funcName, expressions))  # type: ignore[arg-type]
 
 
 call_function.__doc__ = pysparkfuncs.call_function.__doc__
