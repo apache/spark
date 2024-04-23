@@ -40,7 +40,6 @@ from typing import (
 
 from pyspark.conf import SparkConf
 from pyspark.util import is_remote_only
-from pyspark.sql.column import _to_java_column
 from pyspark.sql.conf import RuntimeConfig
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.functions import lit
@@ -1724,6 +1723,7 @@ class SparkSession(SparkConversionMixin):
         |  3|  6|  1|
         +---+---+---+
         """
+        from pyspark.sql.classic.column import _to_java_column
 
         formatter = SQLStringFormatter(self)
         if len(kwargs) > 0:

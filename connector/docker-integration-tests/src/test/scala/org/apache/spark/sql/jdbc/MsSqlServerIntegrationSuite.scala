@@ -152,9 +152,8 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
       """
         |INSERT INTO bits VALUES (1, 2, 1)
       """.stripMargin).executeUpdate()
-
     conn.prepareStatement(
-      """CREATE TABLE test_rowversion (myKey int PRIMARY KEY,myValue int, RV rowversion)""")
+        """CREATE TABLE test_rowversion (myKey int PRIMARY KEY,myValue int, RV rowversion)""")
       .executeUpdate()
     conn.prepareStatement("""INSERT INTO test_rowversion (myKey, myValue) VALUES (1, 0)""")
       .executeUpdate()
@@ -273,7 +272,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(types(7).equals("class java.lang.String"))
     assert(types(8).equals("class [B"))
     assert(row.getString(0).length == 10)
-    assert(row.getString(0).equals("the".padTo(10, ' ')))
+    assert(row.getString(0).trim.equals("the"))
     assert(row.getString(1).equals("quick"))
     assert(row.getString(2).length == 10)
     assert(row.getString(2).trim.equals("brown"))
@@ -444,6 +443,14 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
       .option("query", query)
       .load()
     assert(df.collect().toSet === expectedResult)
+  }
+
+  test("SPARK-47938: Fix 'Cannot find data type BYTE' in SQL Server") {
+    spark.sql("select cast(1 as byte) as c0")
+      .write
+      .jdbc(jdbcUrl, "test_byte", new Properties)
+    val df = spark.read.jdbc(jdbcUrl, "test_byte", new Properties)
+    checkAnswer(df, Row(1.toShort))
   }
 
   test("SPARK-47945: money types") {
