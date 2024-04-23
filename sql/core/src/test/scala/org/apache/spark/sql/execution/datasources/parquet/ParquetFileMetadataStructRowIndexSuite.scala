@@ -148,7 +148,9 @@ class ParquetFileMetadataStructRowIndexSuite extends QueryTest with SharedSparkS
           SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> useVectorizedReader.toString) {
         withReadDataFrame("parquet") { df =>
           val mixedCaseRowIndex = "RoW_InDeX"
-          assert(mixedCaseRowIndex.toLowerCase(Locale.ROOT) == ROW_INDEX)
+          // scalastyle:off caselocale
+          assert(mixedCaseRowIndex.toLowerCase() == ROW_INDEX)
+          // scalastyle:on caselocale
 
           assert(df.select("*", s"${FileFormat.METADATA_NAME}.$mixedCaseRowIndex")
             .where(s"$EXPECTED_ROW_ID_COL != $mixedCaseRowIndex")

@@ -212,8 +212,9 @@ class TPCDSCollationQueryTestSuite extends QueryTest with TPCDSBase with SQLQuer
       try {
         checks.foreach(batch => {
           val res = batch.map(check =>
-            withDB(check.dbName)(
-              getQueryOutput(check.queryTransform(query)).toLowerCase(Locale.ROOT)))
+            // scalastyle:off caselocale
+            withDB(check.dbName)(getQueryOutput(check.queryTransform(query)).toLowerCase()))
+            // scalastyle:off caselocale
           if (!emptyResult) {
             res.map(queryOutput => assert(queryOutput.nonEmpty))
           }
