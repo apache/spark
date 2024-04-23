@@ -641,7 +641,7 @@ private[spark] object SparkConf extends Logging {
         "Please use spark.excludeOnFailure.killExcludedExecutors"),
       DeprecatedConfig("spark.yarn.blacklist.executor.launch.blacklisting.enabled", "3.1.0",
         "Please use spark.yarn.executor.launch.excludeOnFailure.enabled"),
-      DeprecatedConfig("spark.network.remoteReadNioBufferConversion", "3.5.2", "")
+      DeprecatedConfig("spark.network.remoteReadNioBufferConversion", "3.5.2", "Not used anymore")
     )
 
     Map(configs.map { cfg => (cfg.key -> cfg) } : _*)
