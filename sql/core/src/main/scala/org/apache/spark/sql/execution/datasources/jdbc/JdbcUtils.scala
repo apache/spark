@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.jdbc
 import java.math.{BigDecimal => JBigDecimal}
 import java.nio.charset.StandardCharsets
 import java.sql.{Connection, Date, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException, Timestamp}
-import java.time.{Instant, LocalDate}
+import java.time.{Instant, LocalDate, LocalDateTime}
 import java.util
 import java.util.concurrent.TimeUnit
 
@@ -497,6 +497,12 @@ object JdbcUtils extends Logging with SQLConfHelper {
           row.update(pos, null)
         }
       }
+
+    case TimestampNTZType if metadata.contains("logical_time_type") =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
+        val micros = nullSafeConvert[java.sql.Time](rs.getTime(pos + 1), t =>
+          localDateTimeToMicros(LocalDateTime.of(LocalDate.EPOCH, t.toLocalTime)))
+        row.update(pos, micros)
 
     case TimestampType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
