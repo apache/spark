@@ -534,8 +534,8 @@ public class CollationSupportSuite {
     UTF8String sear = UTF8String.fromString(search);
     UTF8String repl = UTF8String.fromString(replace);
     int collationId = CollationFactory.collationNameToId(collationName);
-    assertEquals(expected, CollationSupport.StringReplace.
-      exec(src, sear, repl, collationId).toString());
+    assertEquals(expected, CollationSupport.StringReplace
+      .exec(src, sear, repl, collationId).toString());
   }
 
   @Test
