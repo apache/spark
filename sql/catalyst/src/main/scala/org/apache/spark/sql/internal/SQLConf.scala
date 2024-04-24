@@ -776,7 +776,7 @@ object SQLConf {
         "DEFAULT_COLLATION",
         name =>
           Map(
-            "proposal" -> CollationFactory.getClosestCollation(name)
+            "proposal" -> CollationFactory.getClosestCollation(name).collationName
           ))
       .createWithDefault("UTF8_BINARY")
 

@@ -608,6 +608,21 @@ class CollationStringExpressionsSuite
     assert(sql(query).schema.fields.head.dataType.sameType(StringType(0)))
   }
 
+  test("Support trim") {
+    val query = "SELECT trim(collate('    SparkSQL   ', 'unicode_ci'))"
+    checkAnswer(sql(query), Row("SparkSQL"))
+  }
+
+  test("Support ltrim") {
+    val query = "SELECT ltrim(collate('    SparkSQL   ', 'unicode_ci'))"
+    checkAnswer(sql(query), Row("SparkSQL   "))
+  }
+
+  test("Support rtrim") {
+    val query = "SELECT rtrim(collate('    SparkSQL   ', 'unicode_ci'))"
+    checkAnswer(sql(query), Row("    SparkSQL"))
+  }
+
   // TODO: Add more tests for other string expressions
 
 }

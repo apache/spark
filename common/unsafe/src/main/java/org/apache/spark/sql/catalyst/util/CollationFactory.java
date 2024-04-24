@@ -217,17 +217,17 @@ public final class CollationFactory {
    * Returns if the given collationName is valid one.
    */
   public static boolean isValidCollation(String collationName) {
-    return collationNameToIdMap.containsKey(collationName.toUpperCase());
+    return collationNameToIdMap.containsKey(collationName.toUpperCase(Locale.ROOT));
   }
 
   /**
    * Returns closest valid name to collationName
    */
-  public static String getClosestCollation(String collationName) {
-    Collation suggestion = Collections.min(List.of(collationTable), Comparator.comparingInt(
+  public static Collation getClosestCollation(String collationName) {
+    String normalizedName = collationName.toUpperCase(Locale.ROOT);
+    return Collections.min(List.of(collationTable), Comparator.comparingInt(
             c -> UTF8String.fromString(c.collationName).levenshteinDistance(
-                    UTF8String.fromString(collationName.toUpperCase()))));
-    return suggestion.collationName;
+                    UTF8String.fromString(normalizedName))));
   }
 
   /**
@@ -245,13 +245,11 @@ public final class CollationFactory {
    * Returns the collation id for the given collation name.
    */
   public static int collationNameToId(String collationName) throws SparkException {
-    String normalizedName = collationName.toUpperCase();
+    String normalizedName = collationName.toUpperCase(Locale.ROOT);
     if (collationNameToIdMap.containsKey(normalizedName)) {
       return collationNameToIdMap.get(normalizedName);
     } else {
-      Collation suggestion = Collections.min(List.of(collationTable), Comparator.comparingInt(
-        c -> UTF8String.fromString(c.collationName).levenshteinDistance(
-          UTF8String.fromString(normalizedName))));
+      Collation suggestion = getClosestCollation(collationName);
 
       Map<String, String> params = new HashMap<>();
       params.put("collationName", collationName);

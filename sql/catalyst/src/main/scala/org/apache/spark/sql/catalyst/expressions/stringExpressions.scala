@@ -1009,7 +1009,7 @@ trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
 
   override def children: Seq[Expression] = srcStr +: trimStr.toSeq
   override def dataType: DataType = StringType
-  override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(StringType)
+  override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(StringTypeAnyCollation)
 
   override def nullable: Boolean = children.exists(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
