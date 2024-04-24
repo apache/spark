@@ -33,7 +33,9 @@ DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
 )
 
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, globals())
-_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, "spark.connect.common_pb2", globals())
+_builder.BuildTopDescriptorsAndMessages(
+    DESCRIPTOR, "pyspark.sql.connect.proto.common_pb2", globals()
+)
 if _descriptor._USE_C_DESCRIPTORS == False:
     DESCRIPTOR._options = None
     DESCRIPTOR._serialized_options = (

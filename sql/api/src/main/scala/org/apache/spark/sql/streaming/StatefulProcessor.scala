@@ -40,11 +40,11 @@ private[sql] abstract class StatefulProcessor[K, I, O] extends Serializable {
    * Function that will be invoked as the first method that allows for users to
    * initialize all their state variables and perform other init actions before handling data.
    * @param outputMode - output mode for the stateful processor
-   * @param timeoutMode - timeout mode for the stateful processor
+   * @param timeMode - time mode for the stateful processor.
    */
   def init(
       outputMode: OutputMode,
-      timeoutMode: TimeoutMode): Unit
+      timeMode: TimeMode): Unit
 
   /**
    * Function that will allow users to interact with input data rows along with the grouping key

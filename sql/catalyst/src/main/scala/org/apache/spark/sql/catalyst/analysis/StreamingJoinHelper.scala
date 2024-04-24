@@ -87,7 +87,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
           l, r, attributesToFindStateWatermarkFor, attributesWithEventWatermark, eventWatermark)
       } catch {
         case NonFatal(e) =>
-          logWarning(s"Error trying to extract state constraint from condition $joinCondition", e)
+          logWarning(log"Error trying to extract state constraint from condition " +
+            log"${MDC(JOIN_CONDITION, joinCondition)}", e)
           None
       }
     }
@@ -165,8 +166,9 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
 
     // Verify there is only one correct constraint term and of the correct type
     if (constraintTerms.size > 1) {
-      logWarning("Failed to extract state constraint terms: multiple time terms in condition\n\t" +
-        terms.mkString("\n\t"))
+      logWarning(
+        log"Failed to extract state constraint terms: multiple time terms in condition\n\t" +
+          log"${MDC(EXPR_TERMS, terms.mkString("\n\t"))}")
       return None
     }
     if (constraintTerms.isEmpty) {
@@ -263,9 +265,10 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
               if (calendarInterval.months != 0) {
                 invalid = true
                 logWarning(
-                  s"Failed to extract state value watermark from condition $exprToCollectFrom " +
-                    s"as imprecise intervals like months and years cannot be used for" +
-                    s"watermark calculation. Use interval in terms of day instead.")
+                  log"Failed to extract state value watermark from condition " +
+                    log"${MDC(JOIN_CONDITION, exprToCollectFrom)} " +
+                    log"as imprecise intervals like months and years cannot be used for" +
+                    log"watermark calculation. Use interval in terms of day instead.")
                 Literal(0.0)
               } else {
                 Literal(calendarInterval.days * MICROS_PER_DAY.toDouble +
@@ -284,7 +287,9 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
           Seq(negateIfNeeded(castedLit, negate))
         case a @ _ =>
           logWarning(
-            s"Failed to extract state value watermark from condition $exprToCollectFrom due to $a")
+            log"Failed to extract state value watermark from condition " +
+              log"${MDC(JOIN_CONDITION, exprToCollectFrom)} due to " +
+              log"${MDC(JOIN_CONDITION_SUB_EXPR, a)}")
           invalid = true
           Seq.empty
       }

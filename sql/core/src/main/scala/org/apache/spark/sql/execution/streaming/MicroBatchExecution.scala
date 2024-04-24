@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.streaming
 import scala.collection.mutable.{Map => MutableMap}
 import scala.collection.mutable
 
+import org.apache.spark.internal.LogKey.{LATEST_BATCH_ID, LATEST_COMMITTED_BATCH_ID, READ_LIMIT, SPARK_DATA_STREAM}
+import org.apache.spark.internal.MDC
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp, FileSourceMetadataAttribute, LocalTimestamp}
@@ -109,10 +111,10 @@ class MicroBatchExecution(
           val supportsTriggerAvailableNow = sources.distinct.forall { src =>
             val supports = src.isInstanceOf[SupportsTriggerAvailableNow]
             if (!supports) {
-              logWarning(s"source [$src] does not support Trigger.AvailableNow. Falling back to " +
-                "single batch execution. Note that this may not guarantee processing new data if " +
-                "there is an uncommitted batch. Please consult with data source developer to " +
-                "support Trigger.AvailableNow.")
+              logWarning(log"source [${MDC(SPARK_DATA_STREAM, src)}] does not support " +
+                log"Trigger.AvailableNow. Falling back to single batch execution. Note that this " +
+                log"may not guarantee processing new data if there is an uncommitted batch. " +
+                log"Please consult with data source developer to support Trigger.AvailableNow.")
             }
 
             supports
@@ -212,8 +214,8 @@ class MicroBatchExecution(
           case s: SupportsAdmissionControl =>
             val limit = s.getDefaultReadLimit
             if (limit != ReadLimit.allAvailable()) {
-              logWarning(
-                s"The read limit $limit for $s is ignored when Trigger.Once is used.")
+              logWarning(log"The read limit ${MDC(READ_LIMIT, limit)} for " +
+                log"${MDC(SPARK_DATA_STREAM, s)} is ignored when Trigger.Once is used.")
             }
             s -> ReadLimit.allAvailable()
           case s =>
@@ -517,9 +519,9 @@ class MicroBatchExecution(
                   // here, so we do nothing here.
               }
             } else if (latestCommittedBatchId < latestBatchId - 1) {
-              logWarning(s"Batch completion log latest batch id is " +
-                s"${latestCommittedBatchId}, which is not trailing " +
-                s"batchid $latestBatchId by one")
+              logWarning(log"Batch completion log latest batch id is " +
+                log"${MDC(LATEST_COMMITTED_BATCH_ID, latestCommittedBatchId)}, which is not " +
+                log"trailing batchid ${MDC(LATEST_BATCH_ID, latestBatchId)} by one")
             }
           case None => logInfo("no commit log present")
         }
@@ -755,8 +757,8 @@ class MicroBatchExecution(
                 }
               } else if (catalogTable.exists(_ ne newRelation.catalogTable.get)) {
                 // Output a warning if `catalogTable` is provided by the source rather than engine
-                logWarning(
-                  s"Source $source should not produce the information of catalog table by its own.")
+                logWarning(log"Source ${MDC(SPARK_DATA_STREAM, source)} should not produce the " +
+                  log"information of catalog table by its own.")
               }
               newRelation
           }

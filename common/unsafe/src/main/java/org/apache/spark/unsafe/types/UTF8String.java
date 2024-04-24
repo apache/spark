@@ -30,7 +30,6 @@ import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
-import com.ibm.icu.text.StringSearch;
 import org.apache.spark.sql.catalyst.util.CollationFactory;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.UTF8StringBuilder;
@@ -342,25 +341,41 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return false;
   }
 
-  public boolean contains(final UTF8String substring, int collationId) {
-    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
-      return this.contains(substring);
+  /**
+   * Returns whether `this` contains `substring` in a lowercase unicode-aware manner
+   *
+   * This function is written in a way which avoids excessive allocations in case if we work with
+   * bare ASCII-character strings.
+   */
+  public boolean containsInLowerCase(final UTF8String substring) {
+    if (substring.numBytes == 0) {
+      return true;
     }
-    if (collationId == CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID) {
-      return this.toLowerCase().contains(substring.toLowerCase());
-    }
-    return collatedContains(substring, collationId);
-  }
 
-  private boolean collatedContains(final UTF8String substring, int collationId) {
-    if (substring.numBytes == 0) return true;
-    if (this.numBytes == 0) return false;
-    StringSearch stringSearch = CollationFactory.getStringSearch(this, substring, collationId);
-    while (stringSearch.next() != StringSearch.DONE) {
-      if (stringSearch.getMatchLength() == stringSearch.getPattern().length()) {
-        return true;
+    // Both `this` and the `substring` are checked for non-ASCII characters, otherwise we would
+    // have to use `startsWithLowerCase(...)` in a loop, and it would frequently allocate
+    // (e.g. in case of `containsInLowerCase("1大1大1大...", "11")`)
+    if (!substring.isFullAscii()) {
+      return toLowerCase().contains(substring.toLowerCaseSlow());
+    }
+    if (!isFullAscii()) {
+      return toLowerCaseSlow().contains(substring.toLowerCaseAscii());
+    }
+
+    if (numBytes < substring.numBytes) {
+      return false;
+    }
+
+    final var firstLower = Character.toLowerCase(substring.getByte(0));
+    for (var i = 0; i <= (numBytes - substring.numBytes); i++) {
+      if (Character.toLowerCase(getByte(i)) == firstLower) {
+        final var rest = UTF8String.fromAddress(base, offset + i, numBytes - i);
+        if (rest.matchAtInLowerCaseAscii(substring, 0)) {
+          return true;
+        }
       }
     }
+
     return false;
   }
 
@@ -378,43 +393,92 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return ByteArrayMethods.arrayEquals(base, offset + pos, s.base, s.offset, s.numBytes);
   }
 
-  private boolean matchAt(final UTF8String s, int pos, int collationId) {
-    if (s.numChars() + pos > this.numChars() || pos < 0) {
+  private boolean matchAtInLowerCaseAscii(final UTF8String s, int pos) {
+    if (s.numBytes + pos > numBytes || pos < 0) {
       return false;
     }
-    if (s.numBytes == 0 || this.numBytes == 0) {
-      return s.numBytes == 0;
+
+    for (var i = 0; i < s.numBytes; i++) {
+      if (Character.toLowerCase(getByte(pos + i)) != Character.toLowerCase(s.getByte(i))) {
+        return false;
+      }
     }
-    return CollationFactory.getStringSearch(this.substring(pos, pos + s.numChars()),
-      s, collationId).last() == 0;
+
+    return true;
   }
 
   public boolean startsWith(final UTF8String prefix) {
     return matchAt(prefix, 0);
   }
 
-  public boolean startsWith(final UTF8String prefix, int collationId) {
-    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
-      return this.startsWith(prefix);
+  /**
+   * Checks whether `prefix` is a prefix of `this` in a lowercase unicode-aware manner
+   *
+   * This function is written in a way which avoids excessive allocations in case if we work with
+   * bare ASCII-character strings.
+   */
+  public boolean startsWithInLowerCase(final UTF8String prefix) {
+    // No way to match sizes of strings for early return, since single grapheme can be expanded
+    // into several independent ones in lowercase
+    if (prefix.numBytes == 0) {
+      return true;
     }
-    if (collationId == CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID) {
-      return this.toLowerCase().startsWith(prefix.toLowerCase());
+    if (numBytes == 0) {
+      return false;
     }
-    return matchAt(prefix, 0, collationId);
+
+    if (!prefix.isFullAscii()) {
+      return toLowerCase().startsWith(prefix.toLowerCaseSlow());
+    }
+
+    final var part = prefix.numBytes >= numBytes ? this : UTF8String.fromAddress(
+      base, offset, prefix.numBytes);
+    if (!part.isFullAscii()) {
+      return toLowerCaseSlow().startsWith(prefix.toLowerCaseAscii());
+    }
+
+    if (numBytes < prefix.numBytes) {
+      return false;
+    }
+
+    return matchAtInLowerCaseAscii(prefix, 0);
   }
 
   public boolean endsWith(final UTF8String suffix) {
     return matchAt(suffix, numBytes - suffix.numBytes);
   }
 
-  public boolean endsWith(final UTF8String suffix, int collationId) {
-    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
-      return this.endsWith(suffix);
+  /**
+   * Checks whether `suffix` is a suffix of `this` in a lowercase unicode-aware manner
+   *
+   * This function is written in a way which avoids excessive allocations in case if we work with
+   * bare ASCII-character strings.
+   */
+  public boolean endsWithInLowerCase(final UTF8String suffix) {
+    // No way to match sizes of strings for early return, since single grapheme can be expanded
+    // into several independent ones in lowercase
+    if (suffix.numBytes == 0) {
+      return true;
     }
-    if (collationId == CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID) {
-      return this.toLowerCase().endsWith(suffix.toLowerCase());
+    if (numBytes == 0) {
+      return false;
     }
-    return matchAt(suffix, numBytes - suffix.numBytes, collationId);
+
+    if (!suffix.isFullAscii()) {
+      return toLowerCase().endsWith(suffix.toLowerCaseSlow());
+    }
+
+    final var part = suffix.numBytes >= numBytes ? this : UTF8String.fromAddress(
+      base, offset + numBytes - suffix.numBytes, suffix.numBytes);
+    if (!part.isFullAscii()) {
+      return toLowerCaseSlow().endsWith(suffix.toLowerCaseAscii());
+    }
+
+    if (numBytes < suffix.numBytes) {
+      return false;
+    }
+
+    return matchAtInLowerCaseAscii(suffix, numBytes - suffix.numBytes);
   }
 
   /**
@@ -424,27 +488,50 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (numBytes == 0) {
       return EMPTY_UTF8;
     }
-
-    byte[] bytes = new byte[numBytes];
-    bytes[0] = (byte) Character.toTitleCase(getByte(0));
+    // Optimization - do char level uppercase conversion in case of chars in ASCII range
     for (int i = 0; i < numBytes; i++) {
-      byte b = getByte(i);
-      if (numBytesForFirstByte(b) != 1) {
-        // fallback
+      if (getByte(i) < 0) {
+        // non-ASCII
         return toUpperCaseSlow();
       }
-      int upper = Character.toUpperCase(b);
-      if (upper > 127) {
-        // fallback
-        return toUpperCaseSlow();
-      }
-      bytes[i] = (byte) upper;
+    }
+    byte[] bytes = new byte[numBytes];
+    for (int i = 0; i < numBytes; i++) {
+      bytes[i] = (byte) Character.toUpperCase(getByte(i));
     }
     return fromBytes(bytes);
   }
 
   private UTF8String toUpperCaseSlow() {
     return fromString(toString().toUpperCase());
+  }
+
+  /**
+   * Optimized lowercase comparison for UTF8_BINARY_LCASE collation
+   * a.compareLowerCase(b) is equivalent to a.toLowerCase().binaryCompare(b.toLowerCase())
+   */
+  public int compareLowerCase(UTF8String other) {
+    int curr;
+    for (curr = 0; curr < numBytes && curr < other.numBytes; curr++) {
+      byte left, right;
+      if ((left = getByte(curr)) < 0 || (right = other.getByte(curr)) < 0) {
+        return compareLowerCaseSuffixSlow(other, curr);
+      }
+      int lowerLeft = Character.toLowerCase(left);
+      int lowerRight = Character.toLowerCase(right);
+      if (lowerLeft != lowerRight) {
+        return lowerLeft - lowerRight;
+      }
+    }
+    return numBytes - other.numBytes;
+  }
+
+  private int compareLowerCaseSuffixSlow(UTF8String other, int pref) {
+    UTF8String suffixLeft = UTF8String.fromAddress(base, offset + pref,
+      numBytes - pref);
+    UTF8String suffixRight = UTF8String.fromAddress(other.base, other.offset + pref,
+      other.numBytes - pref);
+    return suffixLeft.toLowerCaseSlow().binaryCompare(suffixRight.toLowerCaseSlow());
   }
 
   /**
@@ -455,26 +542,28 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       return EMPTY_UTF8;
     }
 
-    byte[] bytes = new byte[numBytes];
-    bytes[0] = (byte) Character.toTitleCase(getByte(0));
-    for (int i = 0; i < numBytes; i++) {
-      byte b = getByte(i);
-      if (numBytesForFirstByte(b) != 1) {
-        // fallback
-        return toLowerCaseSlow();
+    return isFullAscii() ? toLowerCaseAscii() : toLowerCaseSlow();
+  }
+
+  private boolean isFullAscii() {
+    for (var i = 0; i < numBytes; i++) {
+      if (getByte(i) < 0) {
+        return false;
       }
-      int lower = Character.toLowerCase(b);
-      if (lower > 127) {
-        // fallback
-        return toLowerCaseSlow();
-      }
-      bytes[i] = (byte) lower;
     }
-    return fromBytes(bytes);
+    return true;
   }
 
   private UTF8String toLowerCaseSlow() {
     return fromString(toString().toLowerCase());
+  }
+
+  private UTF8String toLowerCaseAscii() {
+    final var bytes = new byte[numBytes];
+    for (var i = 0; i < numBytes; i++) {
+      bytes[i] = (byte) Character.toLowerCase(getByte(i));
+    }
+    return fromBytes(bytes);
   }
 
   /**
@@ -484,24 +573,26 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (numBytes == 0) {
       return EMPTY_UTF8;
     }
-
-    byte[] bytes = new byte[numBytes];
+    // Optimization - in case of ASCII chars we can skip copying the data to and from StringBuilder
+    byte prev = ' ', curr;
     for (int i = 0; i < numBytes; i++) {
-      byte b = getByte(i);
-      if (i == 0 || getByte(i - 1) == ' ') {
-        if (numBytesForFirstByte(b) != 1) {
-          // fallback
-          return toTitleCaseSlow();
-        }
-        int upper = Character.toTitleCase(b);
-        if (upper > 127) {
-          // fallback
-          return toTitleCaseSlow();
-        }
-        bytes[i] = (byte) upper;
-      } else {
-        bytes[i] = b;
+      curr = getByte(i);
+      if (prev == ' ' && curr < 0) {
+        // non-ASCII
+        return toTitleCaseSlow();
       }
+      prev = curr;
+    }
+    byte[] bytes = new byte[numBytes];
+    prev = ' ';
+    for (int i = 0; i < numBytes; i++) {
+      curr = getByte(i);
+      if (prev == ' ') {
+        bytes[i] = (byte) Character.toTitleCase(curr);
+      } else {
+        bytes[i] = curr;
+      }
+      prev = curr;
     }
     return fromBytes(bytes);
   }

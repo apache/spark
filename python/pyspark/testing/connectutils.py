@@ -21,6 +21,7 @@ import os
 import functools
 import unittest
 import uuid
+import contextlib
 
 grpc_requirement_message = None
 try:
@@ -208,3 +209,5 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
 
         if self._legacy_sc is not None:
             return QuietTest(self._legacy_sc)
+        else:
+            return contextlib.nullcontext()

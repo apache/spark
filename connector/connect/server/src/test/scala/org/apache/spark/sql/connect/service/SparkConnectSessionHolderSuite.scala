@@ -23,14 +23,18 @@ import java.nio.file.Files
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.sys.process.Process
+import scala.util.Random
 
 import com.google.common.collect.Lists
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.api.python.SimplePythonFunction
+import org.apache.spark.connect.proto
 import org.apache.spark.sql.IntegratedUDFTestUtils
 import org.apache.spark.sql.connect.common.InvalidPlanInput
-import org.apache.spark.sql.connect.planner.{PythonStreamingQueryListener, StreamingForeachBatchHelper}
+import org.apache.spark.sql.connect.config.Connect
+import org.apache.spark.sql.connect.planner.{PythonStreamingQueryListener, SparkConnectPlanner, StreamingForeachBatchHelper}
 import org.apache.spark.sql.connect.planner.StreamingForeachBatchHelper.RunnerCleaner
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.ArrayImplicits._
@@ -288,5 +292,124 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
       // remove process termination listener
       spark.streams.listListeners().foreach(spark.streams.removeListener)
     }
+  }
+
+  private def buildRelation(query: String) = {
+    proto.Relation
+      .newBuilder()
+      .setSql(
+        proto.SQL
+          .newBuilder()
+          .setQuery(query)
+          .build())
+      .setCommon(proto.RelationCommon.newBuilder().setPlanId(Random.nextLong()).build())
+      .build()
+  }
+
+  private def assertPlanCache(
+      sessionHolder: SessionHolder,
+      optionExpectedCachedRelations: Option[Set[proto.Relation]]) = {
+    optionExpectedCachedRelations match {
+      case Some(expectedCachedRelations) =>
+        val cachedRelations = sessionHolder.getPlanCache.get.asMap().keySet().asScala
+        assert(cachedRelations.size == expectedCachedRelations.size)
+        expectedCachedRelations.foreach(relation => assert(cachedRelations.contains(relation)))
+      case None => assert(sessionHolder.getPlanCache.isEmpty)
+    }
+  }
+
+  test("Test session plan cache") {
+    val sessionHolder = SessionHolder.forTesting(spark)
+    try {
+      // Set cache size to 2
+      SparkEnv.get.conf.set(Connect.CONNECT_SESSION_PLAN_CACHE_SIZE, 2)
+      val planner = new SparkConnectPlanner(sessionHolder)
+
+      val random1 = buildRelation("select 1")
+      val random2 = buildRelation("select 2")
+      val random3 = buildRelation("select 3")
+      val query1 = proto.Relation.newBuilder
+        .setLimit(
+          proto.Limit.newBuilder
+            .setLimit(10)
+            .setInput(
+              proto.Relation
+                .newBuilder()
+                .setRange(proto.Range.newBuilder().setStart(0).setStep(1).setEnd(20))
+                .build()))
+        .setCommon(proto.RelationCommon.newBuilder().setPlanId(Random.nextLong()).build())
+        .build()
+      val query2 = proto.Relation.newBuilder
+        .setLimit(proto.Limit.newBuilder.setLimit(5).setInput(query1))
+        .setCommon(proto.RelationCommon.newBuilder().setPlanId(Random.nextLong()).build())
+        .build()
+
+      // If cachePlan is false, the cache is still empty.
+      planner.transformRelation(random1, cachePlan = false)
+      assertPlanCache(sessionHolder, Some(Set()))
+
+      // Put a random entry in cache.
+      planner.transformRelation(random1, cachePlan = true)
+      assertPlanCache(sessionHolder, Some(Set(random1)))
+
+      // Put another random entry in cache.
+      planner.transformRelation(random2, cachePlan = true)
+      assertPlanCache(sessionHolder, Some(Set(random1, random2)))
+
+      // Analyze query1. We only cache the root relation, and the random1 is evicted.
+      planner.transformRelation(query1, cachePlan = true)
+      assertPlanCache(sessionHolder, Some(Set(random2, query1)))
+
+      // Put another random entry in cache.
+      planner.transformRelation(random3, cachePlan = true)
+      assertPlanCache(sessionHolder, Some(Set(query1, random3)))
+
+      // Analyze query2. As query1 is accessed during the process, it should be in the cache.
+      planner.transformRelation(query2, cachePlan = true)
+      assertPlanCache(sessionHolder, Some(Set(query1, query2)))
+    } finally {
+      // Set back to default value.
+      SparkEnv.get.conf.set(Connect.CONNECT_SESSION_PLAN_CACHE_SIZE, 5)
+    }
+  }
+
+  test("Test session plan cache - cache size zero or negative") {
+    val sessionHolder = SessionHolder.forTesting(spark)
+    try {
+      // Set cache size to -1
+      SparkEnv.get.conf.set(Connect.CONNECT_SESSION_PLAN_CACHE_SIZE, -1)
+      val planner = new SparkConnectPlanner(sessionHolder)
+
+      val query = buildRelation("select 1")
+
+      // If cachePlan is false, the cache is still None.
+      planner.transformRelation(query, cachePlan = false)
+      assertPlanCache(sessionHolder, None)
+
+      // Even if we specify "cachePlan = true", the cache is still None.
+      planner.transformRelation(query, cachePlan = true)
+      assertPlanCache(sessionHolder, None)
+    } finally {
+      // Set back to default value.
+      SparkEnv.get.conf.set(Connect.CONNECT_SESSION_PLAN_CACHE_SIZE, 5)
+    }
+  }
+
+  test("Test session plan cache - disabled") {
+    val sessionHolder = SessionHolder.forTesting(spark)
+    // Disable plan cache of the session
+    sessionHolder.session.conf.set(Connect.CONNECT_SESSION_PLAN_CACHE_ENABLED, false)
+    val planner = new SparkConnectPlanner(sessionHolder)
+
+    val query = buildRelation("select 1")
+
+    // If cachePlan is false, the cache is still empty.
+    // Although the cache is created as cache size is greater than zero, it won't be used.
+    planner.transformRelation(query, cachePlan = false)
+    assertPlanCache(sessionHolder, Some(Set()))
+
+    // Even if we specify "cachePlan = true", the cache is still empty.
+    planner.transformRelation(query, cachePlan = true)
+    assertPlanCache(sessionHolder, Some(Set()))
   }
 }
