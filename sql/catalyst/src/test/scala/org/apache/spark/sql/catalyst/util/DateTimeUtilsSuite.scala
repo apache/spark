@@ -1040,11 +1040,14 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
 
     checkError(
-      exception = intercept[SparkException] {
+      exception = intercept[SparkIllegalArgumentException] {
         timestampAdd("SECS", 1, date(1969, 1, 1, 0, 0, 0, 1, getZoneId("UTC")), getZoneId("UTC"))
       },
-      errorClass = "INTERNAL_ERROR",
-      parameters = Map("message" -> "Got the unexpected unit 'SECS'."))
+      errorClass = "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+      parameters = Map(
+        "functionName" -> "`timestampAdd`",
+        "parameter" -> "`unit`",
+        "invalidValue" -> "'SECS'"))
   }
 
   test("SPARK-38284: difference between two timestamps in units") {
@@ -1099,7 +1102,10 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
           date(2022, 1, 1, 0, 0, 0, 1, getZoneId("UTC")),
           getZoneId("UTC"))
       },
-      errorClass = "INTERNAL_ERROR",
-      parameters = Map("message" -> "Got the unexpected unit 'SECS'."))
+      errorClass = "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+      parameters =
+        Map("functionName" -> "`timestampDiff`",
+          "parameter" -> "`unit`",
+          "invalidValue" -> "'SECS'"))
   }
 }

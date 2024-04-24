@@ -2757,4 +2757,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "numFields" -> numFields.toString,
         "schemaLen" -> schemaLen.toString))
   }
+
+  def invalidDatetimeUnitError(
+      functionName: String,
+      invalidValue: String): Throwable = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+      messageParameters = Map(
+        "functionName" -> toSQLId(functionName),
+        "parameter" -> toSQLId("unit"),
+        "invalidValue" -> s"'$invalidValue'"))
+  }
 }
