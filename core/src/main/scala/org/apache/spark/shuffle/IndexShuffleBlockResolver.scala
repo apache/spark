@@ -24,6 +24,8 @@ import java.nio.file.Files
 
 import scala.collection.mutable.ArrayBuffer
 
+import com.google.common.cache.CacheBuilder
+
 import org.apache.spark.{SecurityManager, SparkConf, SparkEnv, SparkException}
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.{config, Logging, MDC}
@@ -76,11 +78,19 @@ private[spark] class IndexShuffleBlockResolver(
   override def getStoredShuffles(): Seq[ShuffleBlockInfo] = {
     val allBlocks = blockManager.diskBlockManager.getAllBlocks()
     allBlocks.flatMap {
-      case ShuffleIndexBlockId(shuffleId, mapId, _) =>
+      case ShuffleIndexBlockId(shuffleId, mapId, _)
+        if Option(shuffleIdsToSkip.getIfPresent(shuffleId)).isEmpty =>
         Some(ShuffleBlockInfo(shuffleId, mapId))
       case _ =>
         None
     }
+  }
+
+  private val shuffleIdsToSkip =
+    CacheBuilder.newBuilder().maximumSize(1000).build[java.lang.Integer, java.lang.Boolean]()
+
+  override def addShuffleToSkip(shuffleId: ShuffleId): Unit = {
+    shuffleIdsToSkip.put(shuffleId, true)
   }
 
   private def getShuffleBytesStored(): Long = {

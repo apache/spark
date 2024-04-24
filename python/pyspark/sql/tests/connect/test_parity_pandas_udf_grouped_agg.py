@@ -26,10 +26,6 @@ class PandasUDFGroupedAggParityTests(GroupedAggPandasUDFTestsMixin, ReusedConnec
     def test_unsupported_types(self):
         super().test_unsupported_types()
 
-    @unittest.skip("Spark Connect doesn't support RDD but the test depends on it.")
-    def test_grouped_with_empty_partition(self):
-        super().test_grouped_with_empty_partition()
-
     @unittest.skip("Spark Connect does not support convert UNPARSED to catalyst types.")
     def test_manual(self):
         super().test_manual()
