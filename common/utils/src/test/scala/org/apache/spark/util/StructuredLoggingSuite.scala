@@ -25,8 +25,7 @@ import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.apache.logging.log4j.Level
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
-import org.apache.spark.internal.{LogEntry, Logging, MDC}
-import org.apache.spark.internal.LogKey.{EXECUTOR_ID, MAX_SIZE, MIN_SIZE}
+import org.apache.spark.internal.{LogEntry, LogKey, Logging, MDC}
 
 trait LoggingSuiteBase
     extends AnyFunSuite // scalastyle:ignore funsuite
@@ -54,14 +53,14 @@ trait LoggingSuiteBase
 
   def basicMsg: String = "This is a log message"
 
-  def msgWithMDC: LogEntry = log"Lost executor ${MDC(EXECUTOR_ID, "1")}."
+  def msgWithMDC: LogEntry = log"Lost executor ${MDC(LogKey.EXECUTOR_ID, "1")}."
 
-  def msgWithMDCValueIsNull: LogEntry = log"Lost executor ${MDC(EXECUTOR_ID, null)}."
+  def msgWithMDCValueIsNull: LogEntry = log"Lost executor ${MDC(LogKey.EXECUTOR_ID, null)}."
 
-  def msgWithMDCAndException: LogEntry = log"Error in executor ${MDC(EXECUTOR_ID, "1")}."
+  def msgWithMDCAndException: LogEntry = log"Error in executor ${MDC(LogKey.EXECUTOR_ID, "1")}."
 
-  def msgWithConcat: LogEntry = log"Min Size: ${MDC(MIN_SIZE, "2")}, " +
-    log"Max Size: ${MDC(MAX_SIZE, "4")}. " +
+  def msgWithConcat: LogEntry = log"Min Size: ${MDC(LogKey.MIN_SIZE, "2")}, " +
+    log"Max Size: ${MDC(LogKey.MAX_SIZE, "4")}. " +
     log"Please double check."
 
   // test for basic message (without any mdc)
@@ -78,6 +77,9 @@ trait LoggingSuiteBase
 
   // test for message and exception
   def expectedPatternForMsgWithMDCAndException(level: Level): String
+
+  // test for external LogKey
+  def expectedPatternForExternalLogKey(level: Level): String
 
   def verifyMsgWithConcat(level: Level, logOutput: String): Unit
 
@@ -142,6 +144,22 @@ trait LoggingSuiteBase
           val logOutput = captureLogOutput(logFunc)
           assert(expectedPatternForMsgWithMDCAndException(level).r.matches(logOutput))
       }
+  }
+
+  // An enumeration value that is not defined in `LogKey`, you can define it anywhere
+  private val externalLogKey = LogKey.VALUE
+  private val externalLog = log"${MDC(externalLogKey, "External log message.")}"
+  test("Logging with external LogKey") {
+    Seq(
+      (Level.ERROR, () => logError(externalLog)),
+      (Level.WARN, () => logWarning(externalLog)),
+      (Level.INFO, () => logInfo(externalLog)),
+      (Level.DEBUG, () => logDebug(externalLog)),
+      (Level.TRACE, () => logTrace(externalLog))).foreach {
+      case (level, logFunc) =>
+        val logOutput = captureLogOutput(logFunc)
+        assert(expectedPatternForExternalLogKey(level).r.matches(logOutput))
+    }
   }
 
   test("Logging with concat") {
@@ -242,6 +260,21 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
           },
           "logger": "$className"
         }""")
+  }
+
+  override def expectedPatternForExternalLogKey(level: Level): String = {
+    compactAndToRegexPattern(
+      s"""
+        {
+          "ts": "<timestamp>",
+          "level": "$level",
+          "msg": "External log message.",
+          "context": {
+              "value": "External log message."
+          },
+          "logger": "$className"
+        }"""
+    )
   }
 
   override def verifyMsgWithConcat(level: Level, logOutput: String): Unit = {
