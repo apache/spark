@@ -4144,9 +4144,11 @@ class DataFrame:
         >>> try:
         ...     q = observed_ds.writeStream.format("console").start()
         ...     time.sleep(5)
+        ...
         >>> finally:
         ...     q.stop()
         ...     spark.streams.removeListener(error_listener)
+        ...
         """
         ...
 
