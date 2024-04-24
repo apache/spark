@@ -595,7 +595,7 @@ class RocksDB(
         }
       }
 
-      logInfo(log"Syncing checkpoint for $MDC(VERSION_NUMBER, newVersion)} to DFS")
+      logInfo(log"Syncing checkpoint for ${MDC(VERSION_NUMBER, newVersion)} to DFS")
       val fileSyncTimeMs = timeTakenMs {
         if (enableChangelogCheckpointing) {
           try {

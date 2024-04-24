@@ -38,7 +38,7 @@ import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.{SparkConf, SparkEnv}
-import org.apache.spark.internal.{LogEntry, Logging, MDC}
+import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
 import org.apache.spark.internal.LogKey._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -691,11 +691,11 @@ class RocksDBFileManager(
   }
 
   /** Log the files present in a directory. This is useful for debugging. */
-  private def logFilesInDir(dir: File, msg: LogEntry): Unit = {
+  private def logFilesInDir(dir: File, msg: MessageWithContext): Unit = {
     lazy val files = Option(Utils.recursiveList(dir)).getOrElse(Array.empty).map { f =>
       s"${f.getAbsolutePath} - ${f.length()} bytes"
     }
-    logInfo(log"$msg - ${MDC(NUM_FILES, files.length)} files\n\t" +
+    logInfo(msg + log" - ${MDC(NUM_FILES, files.length)} files\n\t" +
       log"${MDC(FILE_NAME, files.mkString("\n\t"))}")
   }
 
