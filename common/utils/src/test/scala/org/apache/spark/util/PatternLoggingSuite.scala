@@ -47,8 +47,8 @@ class PatternLoggingSuite extends LoggingSuiteBase with BeforeAndAfterAll {
   override def expectedPatternForMsgWithMDCAndException(level: Level): String =
     s""".*$level $className: Error in executor 1.\njava.lang.RuntimeException: OOM\n[\\s\\S]*"""
 
-  override def expectedPatternForExternalLogKey(level: Level): String = {
-    s""".*$level $className: External log message.\n"""
+  override def expectedPatternForExternalSystemCustomLogKey(level: Level): String = {
+    s""".*$level $className: External system custom log message.\n"""
   }
 
   override def verifyMsgWithConcat(level: Level, logOutput: String): Unit = {

@@ -16,393 +16,393 @@
  */
 package org.apache.spark.internal
 
+trait ILogKey
+
 /**
  * Various keys used for mapped diagnostic contexts(MDC) in logging.
  * All structured logging keys should be defined here for standardization.
  */
-object LogKey extends Enumeration {
-  val ACCUMULATOR_ID = Value
-  val ACTUAL_NUM_FILES = Value
-  val ACTUAL_PARTITION_COLUMN = Value
-  val ALPHA = Value
-  val ANALYSIS_ERROR = Value
-  val APP_ATTEMPT_ID = Value
-  val APP_DESC = Value
-  val APP_ID = Value
-  val APP_NAME = Value
-  val APP_STATE = Value
-  val ARGS = Value
-  val BACKUP_FILE = Value
-  val BATCH_ID = Value
-  val BLOCK_ID = Value
-  val BLOCK_MANAGER_ID = Value
-  val BROADCAST_ID = Value
-  val BUCKET = Value
-  val BYTECODE_SIZE = Value
-  val CACHED_TABLE_PARTITION_METADATA_SIZE = Value
-  val CACHE_AUTO_REMOVED_SIZE = Value
-  val CACHE_UNTIL_HIGHEST_CONSUMED_SIZE = Value
-  val CACHE_UNTIL_LAST_PRODUCED_SIZE = Value
-  val CALL_SITE_LONG_FORM = Value
-  val CATALOG_NAME = Value
-  val CATEGORICAL_FEATURES = Value
-  val CHECKPOINT_FILE = Value
-  val CHECKPOINT_TIME = Value
-  val CHECKSUM_FILE_NUM = Value
-  val CLASS_LOADER = Value
-  val CLASS_NAME = Value
-  val CLUSTER_CENTROIDS = Value
-  val CLUSTER_ID = Value
-  val CLUSTER_LABEL = Value
-  val CLUSTER_LEVEL = Value
-  val CLUSTER_WEIGHT = Value
-  val CODEC_LEVEL = Value
-  val CODEC_NAME = Value
-  val CODEGEN_STAGE_ID = Value
-  val COLUMN_DATA_TYPE_SOURCE = Value
-  val COLUMN_DATA_TYPE_TARGET = Value
-  val COLUMN_DEFAULT_VALUE = Value
-  val COLUMN_NAME = Value
-  val COMMAND = Value
-  val COMMAND_OUTPUT = Value
-  val COMPONENT = Value
-  val CONFIG = Value
-  val CONFIG2 = Value
-  val CONFIG3 = Value
-  val CONFIG4 = Value
-  val CONFIG5 = Value
-  val CONSUMER = Value
-  val CONTAINER = Value
-  val CONTAINER_ID = Value
-  val CONTAINER_STATE = Value
-  val COST = Value
-  val COUNT = Value
-  val CROSS_VALIDATION_METRIC = Value
-  val CROSS_VALIDATION_METRICS = Value
-  val CSV_HEADER_COLUMN_NAME = Value
-  val CSV_HEADER_COLUMN_NAMES = Value
-  val CSV_HEADER_LENGTH = Value
-  val CSV_SCHEMA_FIELD_NAME = Value
-  val CSV_SCHEMA_FIELD_NAMES = Value
-  val CSV_SOURCE = Value
-  val CURRENT_PATH = Value
-  val DATA = Value
-  val DATABASE_NAME = Value
-  val DATAFRAME_CACHE_ENTRY = Value
-  val DATAFRAME_ID = Value
-  val DATA_FILE_NUM = Value
-  val DATA_SOURCE = Value
-  val DATA_SOURCES = Value
-  val DATA_SOURCE_PROVIDER = Value
-  val DEFAULT_ISOLATION_LEVEL = Value
-  val DEFAULT_VALUE = Value
-  val DELAY = Value
-  val DELEGATE = Value
-  val DELTA = Value
-  val DESCRIPTION = Value
-  val DESIRED_PARTITIONS_SIZE = Value
-  val DIFF_DELTA = Value
-  val DIVISIBLE_CLUSTER_INDICES_SIZE = Value
-  val DRIVER_ID = Value
-  val DROPPED_PARTITIONS = Value
-  val DURATION = Value
-  val EFFECTIVE_STORAGE_LEVEL = Value
-  val ELAPSED_TIME = Value
-  val ENCODING = Value
-  val END_INDEX = Value
-  val END_POINT = Value
-  val ENGINE = Value
-  val ERROR = Value
-  val ESTIMATOR_PARAMETER_MAP = Value
-  val EVENT_LOOP = Value
-  val EVENT_QUEUE = Value
-  val EXECUTE_INFO = Value
-  val EXECUTE_KEY = Value
-  val EXECUTION_PLAN_LEAVES = Value
-  val EXECUTOR_DESIRED_COUNT = Value
-  val EXECUTOR_ENVS = Value
-  val EXECUTOR_ENV_REGEX = Value
-  val EXECUTOR_ID = Value
-  val EXECUTOR_IDS = Value
-  val EXECUTOR_LAUNCH_COMMANDS = Value
-  val EXECUTOR_LAUNCH_COUNT = Value
-  val EXECUTOR_RESOURCES = Value
-  val EXECUTOR_STATE = Value
-  val EXECUTOR_TARGET_COUNT = Value
-  val EXIT_CODE = Value
-  val EXPECTED_NUM_FILES = Value
-  val EXPECTED_PARTITION_COLUMN = Value
-  val EXPIRY_TIMESTAMP = Value
-  val EXPR = Value
-  val EXPR_TERMS = Value
-  val EXTENDED_EXPLAIN_GENERATOR = Value
-  val FAILURES = Value
-  val FALLBACK_VERSION = Value
-  val FEATURE_COLUMN = Value
-  val FEATURE_DIMENSION = Value
-  val FIELD_NAME = Value
-  val FILE_ABSOLUTE_PATH = Value
-  val FILE_FORMAT = Value
-  val FILE_FORMAT2 = Value
-  val FILE_NAME = Value
-  val FILE_VERSION = Value
-  val FINISH_TRIGGER_DURATION = Value
-  val FROM_OFFSET = Value
-  val FROM_TIME = Value
-  val FUNCTION_NAME = Value
-  val FUNCTION_PARAMETER = Value
-  val GROUP_ID = Value
-  val HADOOP_VERSION = Value
-  val HASH_JOIN_KEYS = Value
-  val HEARTBEAT_INTERVAL = Value
-  val HISTORY_DIR = Value
-  val HIVE_CLIENT_VERSION = Value
-  val HIVE_METASTORE_VERSION = Value
-  val HIVE_OPERATION_STATE = Value
-  val HIVE_OPERATION_TYPE = Value
-  val HOST = Value
-  val HOST_PORT = Value
-  val INCOMPATIBLE_TYPES = Value
-  val INDEX = Value
-  val INDEX_FILE_NUM = Value
-  val INDEX_NAME = Value
-  val INFERENCE_MODE = Value
-  val INITIAL_CAPACITY = Value
-  val INITIAL_HEARTBEAT_INTERVAL = Value
-  val INIT_MODE = Value
-  val INTERVAL = Value
-  val ISOLATION_LEVEL = Value
-  val JOB_ID = Value
-  val JOIN_CONDITION = Value
-  val JOIN_CONDITION_SUB_EXPR = Value
-  val K8S_CONTEXT = Value
-  val KAFKA_PULLS_COUNT = Value
-  val KAFKA_RECORDS_PULLED_COUNT = Value
-  val KEY = Value
-  val KEYTAB = Value
-  val LABEL_COLUMN = Value
-  val LARGEST_CLUSTER_INDEX = Value
-  val LAST_ACCESS_TIME = Value
-  val LAST_VALID_TIME = Value
-  val LATEST_BATCH_ID = Value
-  val LATEST_COMMITTED_BATCH_ID = Value
-  val LEARNING_RATE = Value
-  val LEFT_EXPR = Value
-  val LINE = Value
-  val LINE_NUM = Value
-  val LISTENER = Value
-  val LOAD_FACTOR = Value
-  val LOAD_TIME = Value
-  val LOGICAL_PLAN_COLUMNS = Value
-  val LOGICAL_PLAN_LEAVES = Value
-  val LOG_TYPE = Value
-  val LOWER_BOUND = Value
-  val MALFORMATTED_STIRNG = Value
-  val MASTER_URL = Value
-  val MAX_ATTEMPTS = Value
-  val MAX_CACHE_UNTIL_HIGHEST_CONSUMED_SIZE = Value
-  val MAX_CACHE_UNTIL_LAST_PRODUCED_SIZE = Value
-  val MAX_CAPACITY = Value
-  val MAX_CATEGORIES = Value
-  val MAX_EXECUTOR_FAILURES = Value
-  val MAX_FILE_VERSION = Value
-  val MAX_MEMORY_SIZE = Value
-  val MAX_PARTITIONS_SIZE = Value
-  val MAX_SIZE = Value
-  val MAX_TABLE_PARTITION_METADATA_SIZE = Value
-  val MEMORY_SIZE = Value
-  val MERGE_DIR_NAME = Value
-  val MESSAGE = Value
-  val METHOD_NAME = Value
-  val MIN_FREQUENT_PATTERN_COUNT = Value
-  val MIN_POINT_PER_CLUSTER = Value
-  val MIN_SIZE = Value
-  val MODEL_WEIGHTS = Value
-  val NAMESPACE = Value
-  val NEW_FEATURE_COLUMN_NAME = Value
-  val NEW_LABEL_COLUMN_NAME = Value
-  val NEW_PATH = Value
-  val NEW_VALUE = Value
-  val NODES = Value
-  val NODE_LOCATION = Value
-  val NORM = Value
-  val NUM_BIN = Value
-  val NUM_CLASSES = Value
-  val NUM_COLUMNS = Value
-  val NUM_EXAMPLES = Value
-  val NUM_FEATURES = Value
-  val NUM_FILES = Value
-  val NUM_FREQUENT_ITEMS = Value
-  val NUM_ITERATIONS = Value
-  val NUM_LOCAL_FREQUENT_PATTERN = Value
-  val NUM_PARTITION = Value
-  val NUM_POINT = Value
-  val NUM_PREFIXES = Value
-  val NUM_SEQUENCES = Value
-  val OBJECT_ID = Value
-  val OFFSET = Value
-  val OFFSETS = Value
-  val OLD_BLOCK_MANAGER_ID = Value
-  val OLD_VALUE = Value
-  val OPTIMIZED_PLAN_COLUMNS = Value
-  val OPTIMIZER_CLASS_NAME = Value
-  val OPTIONS = Value
-  val OP_ID = Value
-  val OP_TYPE = Value
-  val OVERHEAD_MEMORY_SIZE = Value
-  val PARSE_MODE = Value
-  val PARTITIONED_FILE_READER = Value
-  val PARTITIONS_SIZE = Value
-  val PARTITION_ID = Value
-  val PARTITION_SPECIFICATION = Value
-  val PARTITION_SPECS = Value
-  val PATH = Value
-  val PATHS = Value
-  val PIPELINE_STAGE_UID = Value
-  val POD_COUNT = Value
-  val POD_ID = Value
-  val POD_NAME = Value
-  val POD_NAMESPACE = Value
-  val POD_PHASE = Value
-  val POD_SHARED_SLOT_COUNT = Value
-  val POD_STATE = Value
-  val POD_TARGET_COUNT = Value
-  val POLICY = Value
-  val PORT = Value
-  val PRINCIPAL = Value
-  val PROCESSING_TIME = Value
-  val PRODUCER_ID = Value
-  val PROVIDER = Value
-  val PVC_METADATA_NAME = Value
-  val QUERY_CACHE_VALUE = Value
-  val QUERY_HINT = Value
-  val QUERY_ID = Value
-  val QUERY_PLAN = Value
-  val QUERY_PLAN_COMPARISON = Value
-  val QUERY_PLAN_LENGTH_ACTUAL = Value
-  val QUERY_PLAN_LENGTH_MAX = Value
-  val QUERY_RUN_ID = Value
-  val RANGE = Value
-  val RDD_ID = Value
-  val READ_LIMIT = Value
-  val REASON = Value
-  val REATTACHABLE = Value
-  val RECEIVED_BLOCK_INFO = Value
-  val RECEIVED_BLOCK_TRACKER_LOG_EVENT = Value
-  val RECEIVER_ID = Value
-  val RECEIVER_IDS = Value
-  val RECORDS = Value
-  val REDACTED_STATEMENT = Value
-  val REDUCE_ID = Value
-  val RELATION_NAME = Value
-  val RELATIVE_TOLERANCE = Value
-  val REMAINING_PARTITIONS = Value
-  val REPORT_DETAILS = Value
-  val RESOURCE = Value
-  val RESOURCE_NAME = Value
-  val RESOURCE_PROFILE_ID = Value
-  val RESOURCE_PROFILE_IDS = Value
-  val RETRY_COUNT = Value
-  val RETRY_INTERVAL = Value
-  val RIGHT_EXPR = Value
-  val RMSE = Value
-  val RPC_ENDPOINT_REF = Value
-  val RULE_BATCH_NAME = Value
-  val RULE_NAME = Value
-  val RULE_NUMBER_OF_RUNS = Value
-  val RUN_ID = Value
-  val SCHEMA = Value
-  val SCHEMA2 = Value
-  val SERVICE_NAME = Value
-  val SESSION_HOLD_INFO = Value
-  val SESSION_ID = Value
-  val SESSION_KEY = Value
-  val SHARD_ID = Value
-  val SHUFFLE_BLOCK_INFO = Value
-  val SHUFFLE_ID = Value
-  val SHUFFLE_MERGE_ID = Value
-  val SHUFFLE_SERVICE_NAME = Value
-  val SIZE = Value
-  val SLEEP_TIME = Value
-  val SLIDE_DURATION = Value
-  val SMALLEST_CLUSTER_INDEX = Value
-  val SPARK_DATA_STREAM = Value
-  val SPARK_PLAN_ID = Value
-  val SQL_TEXT = Value
-  val SRC_PATH = Value
-  val STAGE_ID = Value
-  val START_INDEX = Value
-  val STATEMENT_ID = Value
-  val STATE_STORE_PROVIDER = Value
-  val STATUS = Value
-  val STORAGE_LEVEL = Value
-  val STORAGE_LEVEL_DESERIALIZED = Value
-  val STORAGE_LEVEL_REPLICATION = Value
-  val STORE_ID = Value
-  val STREAM_ID = Value
-  val STREAM_NAME = Value
-  val SUBMISSION_ID = Value
-  val SUBSAMPLING_RATE = Value
-  val SUB_QUERY = Value
-  val TABLE_NAME = Value
-  val TABLE_TYPES = Value
-  val TARGET_PATH = Value
-  val TASK_ATTEMPT_ID = Value
-  val TASK_ID = Value
-  val TASK_NAME = Value
-  val TASK_SET_NAME = Value
-  val TASK_STATE = Value
-  val TEMP_FILE = Value
-  val TEMP_PATH = Value
-  val TEST_SIZE = Value
-  val THREAD = Value
-  val THREAD_NAME = Value
-  val TID = Value
-  val TIME = Value
-  val TIMEOUT = Value
-  val TIMER = Value
-  val TIMER_LABEL = Value
-  val TIME_UNITS = Value
-  val TIP = Value
-  val TOKEN_REGEX = Value
-  val TOPIC = Value
-  val TOPIC_PARTITION = Value
-  val TOPIC_PARTITIONS = Value
-  val TOPIC_PARTITION_OFFSET = Value
-  val TOPIC_PARTITION_OFFSET_RANGE = Value
-  val TOTAL = Value
-  val TOTAL_EFFECTIVE_TIME = Value
-  val TOTAL_RECORDS_READ = Value
-  val TOTAL_TIME = Value
-  val TOTAL_TIME_READ = Value
-  val TO_TIME = Value
-  val TRAINING_SIZE = Value
-  val TRAIN_VALIDATION_SPLIT_METRIC = Value
-  val TRAIN_VALIDATION_SPLIT_METRICS = Value
-  val TRAIN_WORD_COUNT = Value
-  val TREE_NODE = Value
-  val TRIGGER_INTERVAL = Value
-  val UI_FILTER = Value
-  val UI_FILTER_PARAMS = Value
-  val UI_PROXY_BASE = Value
-  val UNSUPPORTED_EXPR = Value
-  val UNSUPPORTED_HINT_REASON = Value
-  val UNTIL_OFFSET = Value
-  val UPPER_BOUND = Value
-  val URI = Value
-  val USER_ID = Value
-  val USER_NAME = Value
-  val VALUE = Value
-  val VIRTUAL_CORES = Value
-  val VOCAB_SIZE = Value
-  val WAIT_RESULT_TIME = Value
-  val WAIT_SEND_TIME = Value
-  val WAIT_TIME = Value
-  val WATERMARK_CONSTRAINT = Value
-  val WEIGHTED_NUM = Value
-  val WORKER_URL = Value
-  val WRITE_AHEAD_LOG_INFO = Value
-  val XSD_PATH = Value
-
-  type LogKey = Value
+object LogKey extends ILogKey {
+  case object ACCUMULATOR_ID extends ILogKey
+  case object ACTUAL_NUM_FILES extends ILogKey
+  case object ACTUAL_PARTITION_COLUMN extends ILogKey
+  case object ALPHA extends ILogKey
+  case object ANALYSIS_ERROR extends ILogKey
+  case object APP_ATTEMPT_ID extends ILogKey
+  case object APP_DESC extends ILogKey
+  case object APP_ID extends ILogKey
+  case object APP_NAME extends ILogKey
+  case object APP_STATE extends ILogKey
+  case object ARGS extends ILogKey
+  case object BACKUP_FILE extends ILogKey
+  case object BATCH_ID extends ILogKey
+  case object BLOCK_ID extends ILogKey
+  case object BLOCK_MANAGER_ID extends ILogKey
+  case object BROADCAST_ID extends ILogKey
+  case object BUCKET extends ILogKey
+  case object BYTECODE_SIZE extends ILogKey
+  case object CACHED_TABLE_PARTITION_METADATA_SIZE extends ILogKey
+  case object CACHE_AUTO_REMOVED_SIZE extends ILogKey
+  case object CACHE_UNTIL_HIGHEST_CONSUMED_SIZE extends ILogKey
+  case object CACHE_UNTIL_LAST_PRODUCED_SIZE extends ILogKey
+  case object CALL_SITE_LONG_FORM extends ILogKey
+  case object CATALOG_NAME extends ILogKey
+  case object CATEGORICAL_FEATURES extends ILogKey
+  case object CHECKPOINT_FILE extends ILogKey
+  case object CHECKPOINT_TIME extends ILogKey
+  case object CHECKSUM_FILE_NUM extends ILogKey
+  case object CLASS_LOADER extends ILogKey
+  case object CLASS_NAME extends ILogKey
+  case object CLUSTER_CENTROIDS extends ILogKey
+  case object CLUSTER_ID extends ILogKey
+  case object CLUSTER_LABEL extends ILogKey
+  case object CLUSTER_LEVEL extends ILogKey
+  case object CLUSTER_WEIGHT extends ILogKey
+  case object CODEC_LEVEL extends ILogKey
+  case object CODEC_NAME extends ILogKey
+  case object CODEGEN_STAGE_ID extends ILogKey
+  case object COLUMN_DATA_TYPE_SOURCE extends ILogKey
+  case object COLUMN_DATA_TYPE_TARGET extends ILogKey
+  case object COLUMN_DEFAULT_VALUE extends ILogKey
+  case object COLUMN_NAME extends ILogKey
+  case object COMMAND extends ILogKey
+  case object COMMAND_OUTPUT extends ILogKey
+  case object COMPONENT extends ILogKey
+  case object CONFIG extends ILogKey
+  case object CONFIG2 extends ILogKey
+  case object CONFIG3 extends ILogKey
+  case object CONFIG4 extends ILogKey
+  case object CONFIG5 extends ILogKey
+  case object CONSUMER extends ILogKey
+  case object CONTAINER extends ILogKey
+  case object CONTAINER_ID extends ILogKey
+  case object CONTAINER_STATE extends ILogKey
+  case object COST extends ILogKey
+  case object COUNT extends ILogKey
+  case object CROSS_VALIDATION_METRIC extends ILogKey
+  case object CROSS_VALIDATION_METRICS extends ILogKey
+  case object CSV_HEADER_COLUMN_NAME extends ILogKey
+  case object CSV_HEADER_COLUMN_NAMES extends ILogKey
+  case object CSV_HEADER_LENGTH extends ILogKey
+  case object CSV_SCHEMA_FIELD_NAME extends ILogKey
+  case object CSV_SCHEMA_FIELD_NAMES extends ILogKey
+  case object CSV_SOURCE extends ILogKey
+  case object CURRENT_PATH extends ILogKey
+  case object DATA extends ILogKey
+  case object DATABASE_NAME extends ILogKey
+  case object DATAFRAME_CACHE_ENTRY extends ILogKey
+  case object DATAFRAME_ID extends ILogKey
+  case object DATA_FILE_NUM extends ILogKey
+  case object DATA_SOURCE extends ILogKey
+  case object DATA_SOURCES extends ILogKey
+  case object DATA_SOURCE_PROVIDER extends ILogKey
+  case object DEFAULT_ISOLATION_LEVEL extends ILogKey
+  case object DEFAULT_VALUE extends ILogKey
+  case object DELAY extends ILogKey
+  case object DELEGATE extends ILogKey
+  case object DELTA extends ILogKey
+  case object DESCRIPTION extends ILogKey
+  case object DESIRED_PARTITIONS_SIZE extends ILogKey
+  case object DIFF_DELTA extends ILogKey
+  case object DIVISIBLE_CLUSTER_INDICES_SIZE extends ILogKey
+  case object DRIVER_ID extends ILogKey
+  case object DROPPED_PARTITIONS extends ILogKey
+  case object DURATION extends ILogKey
+  case object EFFECTIVE_STORAGE_LEVEL extends ILogKey
+  case object ELAPSED_TIME extends ILogKey
+  case object ENCODING extends ILogKey
+  case object END_INDEX extends ILogKey
+  case object END_POINT extends ILogKey
+  case object ENGINE extends ILogKey
+  case object ERROR extends ILogKey
+  case object ESTIMATOR_PARAMETER_MAP extends ILogKey
+  case object EVENT_LOOP extends ILogKey
+  case object EVENT_QUEUE extends ILogKey
+  case object EXECUTE_INFO extends ILogKey
+  case object EXECUTE_KEY extends ILogKey
+  case object EXECUTION_PLAN_LEAVES extends ILogKey
+  case object EXECUTOR_DESIRED_COUNT extends ILogKey
+  case object EXECUTOR_ENVS extends ILogKey
+  case object EXECUTOR_ENV_REGEX extends ILogKey
+  case object EXECUTOR_ID extends ILogKey
+  case object EXECUTOR_IDS extends ILogKey
+  case object EXECUTOR_LAUNCH_COMMANDS extends ILogKey
+  case object EXECUTOR_LAUNCH_COUNT extends ILogKey
+  case object EXECUTOR_RESOURCES extends ILogKey
+  case object EXECUTOR_STATE extends ILogKey
+  case object EXECUTOR_TARGET_COUNT extends ILogKey
+  case object EXIT_CODE extends ILogKey
+  case object EXPECTED_NUM_FILES extends ILogKey
+  case object EXPECTED_PARTITION_COLUMN extends ILogKey
+  case object EXPIRY_TIMESTAMP extends ILogKey
+  case object EXPR extends ILogKey
+  case object EXPR_TERMS extends ILogKey
+  case object EXTENDED_EXPLAIN_GENERATOR extends ILogKey
+  case object FAILURES extends ILogKey
+  case object FALLBACK_VERSION extends ILogKey
+  case object FEATURE_COLUMN extends ILogKey
+  case object FEATURE_DIMENSION extends ILogKey
+  case object FIELD_NAME extends ILogKey
+  case object FILE_ABSOLUTE_PATH extends ILogKey
+  case object FILE_FORMAT extends ILogKey
+  case object FILE_FORMAT2 extends ILogKey
+  case object FILE_NAME extends ILogKey
+  case object FILE_VERSION extends ILogKey
+  case object FINISH_TRIGGER_DURATION extends ILogKey
+  case object FROM_OFFSET extends ILogKey
+  case object FROM_TIME extends ILogKey
+  case object FUNCTION_NAME extends ILogKey
+  case object FUNCTION_PARAMETER extends ILogKey
+  case object GROUP_ID extends ILogKey
+  case object HADOOP_VERSION extends ILogKey
+  case object HASH_JOIN_KEYS extends ILogKey
+  case object HEARTBEAT_INTERVAL extends ILogKey
+  case object HISTORY_DIR extends ILogKey
+  case object HIVE_CLIENT_VERSION extends ILogKey
+  case object HIVE_METASTORE_VERSION extends ILogKey
+  case object HIVE_OPERATION_STATE extends ILogKey
+  case object HIVE_OPERATION_TYPE extends ILogKey
+  case object HOST extends ILogKey
+  case object HOST_PORT extends ILogKey
+  case object INCOMPATIBLE_TYPES extends ILogKey
+  case object INDEX extends ILogKey
+  case object INDEX_FILE_NUM extends ILogKey
+  case object INDEX_NAME extends ILogKey
+  case object INFERENCE_MODE extends ILogKey
+  case object INITIAL_CAPACITY extends ILogKey
+  case object INITIAL_HEARTBEAT_INTERVAL extends ILogKey
+  case object INIT_MODE extends ILogKey
+  case object INTERVAL extends ILogKey
+  case object ISOLATION_LEVEL extends ILogKey
+  case object JOB_ID extends ILogKey
+  case object JOIN_CONDITION extends ILogKey
+  case object JOIN_CONDITION_SUB_EXPR extends ILogKey
+  case object K8S_CONTEXT extends ILogKey
+  case object KAFKA_PULLS_COUNT extends ILogKey
+  case object KAFKA_RECORDS_PULLED_COUNT extends ILogKey
+  case object KEY extends ILogKey
+  case object KEYTAB extends ILogKey
+  case object LABEL_COLUMN extends ILogKey
+  case object LARGEST_CLUSTER_INDEX extends ILogKey
+  case object LAST_ACCESS_TIME extends ILogKey
+  case object LAST_VALID_TIME extends ILogKey
+  case object LATEST_BATCH_ID extends ILogKey
+  case object LATEST_COMMITTED_BATCH_ID extends ILogKey
+  case object LEARNING_RATE extends ILogKey
+  case object LEFT_EXPR extends ILogKey
+  case object LINE extends ILogKey
+  case object LINE_NUM extends ILogKey
+  case object LISTENER extends ILogKey
+  case object LOAD_FACTOR extends ILogKey
+  case object LOAD_TIME extends ILogKey
+  case object LOGICAL_PLAN_COLUMNS extends ILogKey
+  case object LOGICAL_PLAN_LEAVES extends ILogKey
+  case object LOG_TYPE extends ILogKey
+  case object LOWER_BOUND extends ILogKey
+  case object MALFORMATTED_STIRNG extends ILogKey
+  case object MASTER_URL extends ILogKey
+  case object MAX_ATTEMPTS extends ILogKey
+  case object MAX_CACHE_UNTIL_HIGHEST_CONSUMED_SIZE extends ILogKey
+  case object MAX_CACHE_UNTIL_LAST_PRODUCED_SIZE extends ILogKey
+  case object MAX_CAPACITY extends ILogKey
+  case object MAX_CATEGORIES extends ILogKey
+  case object MAX_EXECUTOR_FAILURES extends ILogKey
+  case object MAX_FILE_VERSION extends ILogKey
+  case object MAX_MEMORY_SIZE extends ILogKey
+  case object MAX_PARTITIONS_SIZE extends ILogKey
+  case object MAX_SIZE extends ILogKey
+  case object MAX_TABLE_PARTITION_METADATA_SIZE extends ILogKey
+  case object MEMORY_SIZE extends ILogKey
+  case object MERGE_DIR_NAME extends ILogKey
+  case object MESSAGE extends ILogKey
+  case object METHOD_NAME extends ILogKey
+  case object MIN_FREQUENT_PATTERN_COUNT extends ILogKey
+  case object MIN_POINT_PER_CLUSTER extends ILogKey
+  case object MIN_SIZE extends ILogKey
+  case object MODEL_WEIGHTS extends ILogKey
+  case object NAMESPACE extends ILogKey
+  case object NEW_FEATURE_COLUMN_NAME extends ILogKey
+  case object NEW_LABEL_COLUMN_NAME extends ILogKey
+  case object NEW_PATH extends ILogKey
+  case object NEW_VALUE extends ILogKey
+  case object NODES extends ILogKey
+  case object NODE_LOCATION extends ILogKey
+  case object NORM extends ILogKey
+  case object NUM_BIN extends ILogKey
+  case object NUM_CLASSES extends ILogKey
+  case object NUM_COLUMNS extends ILogKey
+  case object NUM_EXAMPLES extends ILogKey
+  case object NUM_FEATURES extends ILogKey
+  case object NUM_FILES extends ILogKey
+  case object NUM_FREQUENT_ITEMS extends ILogKey
+  case object NUM_ITERATIONS extends ILogKey
+  case object NUM_LOCAL_FREQUENT_PATTERN extends ILogKey
+  case object NUM_PARTITION extends ILogKey
+  case object NUM_POINT extends ILogKey
+  case object NUM_PREFIXES extends ILogKey
+  case object NUM_SEQUENCES extends ILogKey
+  case object OBJECT_ID extends ILogKey
+  case object OFFSET extends ILogKey
+  case object OFFSETS extends ILogKey
+  case object OLD_BLOCK_MANAGER_ID extends ILogKey
+  case object OLD_VALUE extends ILogKey
+  case object OPTIMIZED_PLAN_COLUMNS extends ILogKey
+  case object OPTIMIZER_CLASS_NAME extends ILogKey
+  case object OPTIONS extends ILogKey
+  case object OP_ID extends ILogKey
+  case object OP_TYPE extends ILogKey
+  case object OVERHEAD_MEMORY_SIZE extends ILogKey
+  case object PARSE_MODE extends ILogKey
+  case object PARTITIONED_FILE_READER extends ILogKey
+  case object PARTITIONS_SIZE extends ILogKey
+  case object PARTITION_ID extends ILogKey
+  case object PARTITION_SPECIFICATION extends ILogKey
+  case object PARTITION_SPECS extends ILogKey
+  case object PATH extends ILogKey
+  case object PATHS extends ILogKey
+  case object PIPELINE_STAGE_UID extends ILogKey
+  case object POD_COUNT extends ILogKey
+  case object POD_ID extends ILogKey
+  case object POD_NAME extends ILogKey
+  case object POD_NAMESPACE extends ILogKey
+  case object POD_PHASE extends ILogKey
+  case object POD_SHARED_SLOT_COUNT extends ILogKey
+  case object POD_STATE extends ILogKey
+  case object POD_TARGET_COUNT extends ILogKey
+  case object POLICY extends ILogKey
+  case object PORT extends ILogKey
+  case object PRINCIPAL extends ILogKey
+  case object PROCESSING_TIME extends ILogKey
+  case object PRODUCER_ID extends ILogKey
+  case object PROVIDER extends ILogKey
+  case object PVC_METADATA_NAME extends ILogKey
+  case object QUERY_CACHE_VALUE extends ILogKey
+  case object QUERY_HINT extends ILogKey
+  case object QUERY_ID extends ILogKey
+  case object QUERY_PLAN extends ILogKey
+  case object QUERY_PLAN_COMPARISON extends ILogKey
+  case object QUERY_PLAN_LENGTH_ACTUAL extends ILogKey
+  case object QUERY_PLAN_LENGTH_MAX extends ILogKey
+  case object QUERY_RUN_ID extends ILogKey
+  case object RANGE extends ILogKey
+  case object RDD_ID extends ILogKey
+  case object READ_LIMIT extends ILogKey
+  case object REASON extends ILogKey
+  case object REATTACHABLE extends ILogKey
+  case object RECEIVED_BLOCK_INFO extends ILogKey
+  case object RECEIVED_BLOCK_TRACKER_LOG_EVENT extends ILogKey
+  case object RECEIVER_ID extends ILogKey
+  case object RECEIVER_IDS extends ILogKey
+  case object RECORDS extends ILogKey
+  case object REDACTED_STATEMENT extends ILogKey
+  case object REDUCE_ID extends ILogKey
+  case object RELATION_NAME extends ILogKey
+  case object RELATIVE_TOLERANCE extends ILogKey
+  case object REMAINING_PARTITIONS extends ILogKey
+  case object REPORT_DETAILS extends ILogKey
+  case object RESOURCE extends ILogKey
+  case object RESOURCE_NAME extends ILogKey
+  case object RESOURCE_PROFILE_ID extends ILogKey
+  case object RESOURCE_PROFILE_IDS extends ILogKey
+  case object RETRY_COUNT extends ILogKey
+  case object RETRY_INTERVAL extends ILogKey
+  case object RIGHT_EXPR extends ILogKey
+  case object RMSE extends ILogKey
+  case object RPC_ENDPOINT_REF extends ILogKey
+  case object RULE_BATCH_NAME extends ILogKey
+  case object RULE_NAME extends ILogKey
+  case object RULE_NUMBER_OF_RUNS extends ILogKey
+  case object RUN_ID extends ILogKey
+  case object SCHEMA extends ILogKey
+  case object SCHEMA2 extends ILogKey
+  case object SERVICE_NAME extends ILogKey
+  case object SESSION_HOLD_INFO extends ILogKey
+  case object SESSION_ID extends ILogKey
+  case object SESSION_KEY extends ILogKey
+  case object SHARD_ID extends ILogKey
+  case object SHUFFLE_BLOCK_INFO extends ILogKey
+  case object SHUFFLE_ID extends ILogKey
+  case object SHUFFLE_MERGE_ID extends ILogKey
+  case object SHUFFLE_SERVICE_NAME extends ILogKey
+  case object SIZE extends ILogKey
+  case object SLEEP_TIME extends ILogKey
+  case object SLIDE_DURATION extends ILogKey
+  case object SMALLEST_CLUSTER_INDEX extends ILogKey
+  case object SPARK_DATA_STREAM extends ILogKey
+  case object SPARK_PLAN_ID extends ILogKey
+  case object SQL_TEXT extends ILogKey
+  case object SRC_PATH extends ILogKey
+  case object STAGE_ID extends ILogKey
+  case object START_INDEX extends ILogKey
+  case object STATEMENT_ID extends ILogKey
+  case object STATE_STORE_PROVIDER extends ILogKey
+  case object STATUS extends ILogKey
+  case object STORAGE_LEVEL extends ILogKey
+  case object STORAGE_LEVEL_DESERIALIZED extends ILogKey
+  case object STORAGE_LEVEL_REPLICATION extends ILogKey
+  case object STORE_ID extends ILogKey
+  case object STREAM_ID extends ILogKey
+  case object STREAM_NAME extends ILogKey
+  case object SUBMISSION_ID extends ILogKey
+  case object SUBSAMPLING_RATE extends ILogKey
+  case object SUB_QUERY extends ILogKey
+  case object TABLE_NAME extends ILogKey
+  case object TABLE_TYPES extends ILogKey
+  case object TARGET_PATH extends ILogKey
+  case object TASK_ATTEMPT_ID extends ILogKey
+  case object TASK_ID extends ILogKey
+  case object TASK_NAME extends ILogKey
+  case object TASK_SET_NAME extends ILogKey
+  case object TASK_STATE extends ILogKey
+  case object TEMP_FILE extends ILogKey
+  case object TEMP_PATH extends ILogKey
+  case object TEST_SIZE extends ILogKey
+  case object THREAD extends ILogKey
+  case object THREAD_NAME extends ILogKey
+  case object TID extends ILogKey
+  case object TIME extends ILogKey
+  case object TIMEOUT extends ILogKey
+  case object TIMER extends ILogKey
+  case object TIMER_LABEL extends ILogKey
+  case object TIME_UNITS extends ILogKey
+  case object TIP extends ILogKey
+  case object TOKEN_REGEX extends ILogKey
+  case object TOPIC extends ILogKey
+  case object TOPIC_PARTITION extends ILogKey
+  case object TOPIC_PARTITIONS extends ILogKey
+  case object TOPIC_PARTITION_OFFSET extends ILogKey
+  case object TOPIC_PARTITION_OFFSET_RANGE extends ILogKey
+  case object TOTAL extends ILogKey
+  case object TOTAL_EFFECTIVE_TIME extends ILogKey
+  case object TOTAL_RECORDS_READ extends ILogKey
+  case object TOTAL_TIME extends ILogKey
+  case object TOTAL_TIME_READ extends ILogKey
+  case object TO_TIME extends ILogKey
+  case object TRAINING_SIZE extends ILogKey
+  case object TRAIN_VALIDATION_SPLIT_METRIC extends ILogKey
+  case object TRAIN_VALIDATION_SPLIT_METRICS extends ILogKey
+  case object TRAIN_WORD_COUNT extends ILogKey
+  case object TREE_NODE extends ILogKey
+  case object TRIGGER_INTERVAL extends ILogKey
+  case object UI_FILTER extends ILogKey
+  case object UI_FILTER_PARAMS extends ILogKey
+  case object UI_PROXY_BASE extends ILogKey
+  case object UNSUPPORTED_EXPR extends ILogKey
+  case object UNSUPPORTED_HINT_REASON extends ILogKey
+  case object UNTIL_OFFSET extends ILogKey
+  case object UPPER_BOUND extends ILogKey
+  case object URI extends ILogKey
+  case object USER_ID extends ILogKey
+  case object USER_NAME extends ILogKey
+  case object VALUE extends ILogKey
+  case object VIRTUAL_CORES extends ILogKey
+  case object VOCAB_SIZE extends ILogKey
+  case object WAIT_RESULT_TIME extends ILogKey
+  case object WAIT_SEND_TIME extends ILogKey
+  case object WAIT_TIME extends ILogKey
+  case object WATERMARK_CONSTRAINT extends ILogKey
+  case object WEIGHTED_NUM extends ILogKey
+  case object WORKER_URL extends ILogKey
+  case object WRITE_AHEAD_LOG_INFO extends ILogKey
+  case object XSD_PATH extends ILogKey
 }

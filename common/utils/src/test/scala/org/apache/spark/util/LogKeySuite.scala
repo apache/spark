@@ -22,12 +22,12 @@ import java.nio.file.{Files, Path}
 import java.util.{ArrayList => JList}
 
 import scala.jdk.CollectionConverters._
+import scala.reflect.runtime.universe._
 
 import org.apache.commons.io.FileUtils
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
 import org.apache.spark.internal.{Logging, LogKey}
-import org.apache.spark.internal.LogKey.LogKey
 
 // scalastyle:off line.size.limit
 /**
@@ -57,9 +57,9 @@ class LogKeySuite
   private val logKeyFilePath = getWorkspaceFilePath("common", "utils", "src", "main", "scala",
     "org", "apache", "spark", "internal", "LogKey.scala")
 
-  // regenerate the file `LogKey.scala` with its enumeration fields sorted alphabetically
+  // regenerate the file `LogKey.scala` with its members sorted alphabetically
   private def regenerateLogKeyFile(
-      originalKeys: Seq[LogKey], sortedKeys: Seq[LogKey]): Unit = {
+      originalKeys: Seq[String], sortedKeys: Seq[String]): Unit = {
     if (originalKeys != sortedKeys) {
       val logKeyFile = logKeyFilePath.toFile
       logInfo(s"Regenerating LogKey file $logKeyFile")
@@ -67,10 +67,10 @@ class LogKeySuite
       val sortedContents = new JList[String]()
       var firstMatch = false
       originalContents.asScala.foreach { line =>
-        if (line.trim.startsWith("val ") && line.trim.endsWith(" = Value")) {
+        if (line.trim.startsWith("case object ") && line.trim.endsWith(" extends ILogKey")) {
           if (!firstMatch) {
-            sortedKeys.foreach { logKey =>
-              sortedContents.add(s"  val ${logKey.toString} = Value")
+            sortedKeys.foreach { key =>
+              sortedContents.add(s"  case object $key extends ILogKey")
             }
             firstMatch = true
           }
@@ -83,14 +83,21 @@ class LogKeySuite
     }
   }
 
-  test("LogKey enumeration fields are correctly sorted") {
-    val originalKeys = LogKey.values.toSeq
-    val sortedKeys = originalKeys.sortBy(_.toString)
+  test("LogKey members are correctly sorted") {
+    val originalKeys = getAllLogKeys.reverse
+    val sortedKeys = originalKeys.sorted
     if (regenerateGoldenFiles) {
       regenerateLogKeyFile(originalKeys, sortedKeys)
     } else {
       assert(originalKeys === sortedKeys,
-        "LogKey enumeration fields must be sorted alphabetically")
+        "LogKey members must be sorted alphabetically")
     }
+  }
+
+  private def getAllLogKeys: List[String] = {
+    val logKeyType = typeOf[LogKey.type]
+    val logKeyClassSymbol = logKeyType.typeSymbol.asClass
+    val members = logKeyClassSymbol.typeSignature.members
+    members.filter(m => m.isTerm && !m.isMethod).map(_.name.toString).toList
   }
 }

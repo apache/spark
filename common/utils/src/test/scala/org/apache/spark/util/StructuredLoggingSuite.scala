@@ -25,7 +25,7 @@ import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.apache.logging.log4j.Level
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
-import org.apache.spark.internal.{LogEntry, Logging, LogKey, MDC}
+import org.apache.spark.internal.{ILogKey, LogEntry, Logging, LogKey, MDC}
 
 trait LoggingSuiteBase
     extends AnyFunSuite // scalastyle:ignore funsuite
@@ -78,8 +78,8 @@ trait LoggingSuiteBase
   // test for message and exception
   def expectedPatternForMsgWithMDCAndException(level: Level): String
 
-  // test for external LogKey
-  def expectedPatternForExternalLogKey(level: Level): String
+  // test for external system custom LogKey
+  def expectedPatternForExternalSystemCustomLogKey(level: Level): String
 
   def verifyMsgWithConcat(level: Level, logOutput: String): Unit
 
@@ -146,19 +146,18 @@ trait LoggingSuiteBase
       }
   }
 
-  // An enumeration value that is not defined in `LogKey`, you can define it anywhere
-  private val externalLogKey = LogKey.VALUE
-  private val externalLog = log"${MDC(externalLogKey, "External log message.")}"
-  test("Logging with external LogKey") {
+  private val externalSystemCustomLog =
+    log"${MDC(CUSTOM_LOG_KEY, "External system custom log message.")}"
+  test("Logging with external system custom LogKey") {
     Seq(
-      (Level.ERROR, () => logError(externalLog)),
-      (Level.WARN, () => logWarning(externalLog)),
-      (Level.INFO, () => logInfo(externalLog)),
-      (Level.DEBUG, () => logDebug(externalLog)),
-      (Level.TRACE, () => logTrace(externalLog))).foreach {
+      (Level.ERROR, () => logError(externalSystemCustomLog)),
+      (Level.WARN, () => logWarning(externalSystemCustomLog)),
+      (Level.INFO, () => logInfo(externalSystemCustomLog)),
+      (Level.DEBUG, () => logDebug(externalSystemCustomLog)),
+      (Level.TRACE, () => logTrace(externalSystemCustomLog))).foreach {
       case (level, logFunc) =>
         val logOutput = captureLogOutput(logFunc)
-        assert(expectedPatternForExternalLogKey(level).r.matches(logOutput))
+        assert(expectedPatternForExternalSystemCustomLogKey(level).r.matches(logOutput))
     }
   }
 
@@ -262,15 +261,15 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
         }""")
   }
 
-  override def expectedPatternForExternalLogKey(level: Level): String = {
+  override def expectedPatternForExternalSystemCustomLogKey(level: Level): String = {
     compactAndToRegexPattern(
       s"""
         {
           "ts": "<timestamp>",
           "level": "$level",
-          "msg": "External log message.",
+          "msg": "External system custom log message.",
           "context": {
-              "value": "External log message."
+              "custom_log_key": "External system custom log message."
           },
           "logger": "$className"
         }"""
@@ -306,3 +305,6 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
     assert(pattern1.r.matches(logOutput) || pattern2.r.matches(logOutput))
   }
 }
+
+// External system custom LogKey must be `extends ILogKey`
+case object CUSTOM_LOG_KEY extends ILogKey
