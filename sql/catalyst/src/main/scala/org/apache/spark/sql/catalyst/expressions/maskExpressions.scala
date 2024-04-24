@@ -113,26 +113,26 @@ case class Mask(
   def this(input: Expression) =
     this(
       input,
-      Literal(Mask.MASKED_UPPERCASE, SQLConf.get.defaultStringType),
-      Literal(Mask.MASKED_LOWERCASE, SQLConf.get.defaultStringType),
-      Literal(Mask.MASKED_DIGIT, SQLConf.get.defaultStringType),
-      Literal(Mask.MASKED_IGNORE, input.dataType))
+      Literal.create(Mask.MASKED_UPPERCASE, SQLConf.get.defaultStringType),
+      Literal.create(Mask.MASKED_LOWERCASE, SQLConf.get.defaultStringType),
+      Literal.create(Mask.MASKED_DIGIT, SQLConf.get.defaultStringType),
+      Literal.create(Mask.MASKED_IGNORE, input.dataType))
 
   def this(input: Expression, upperChar: Expression) =
     this(
       input,
       upperChar,
-      Literal(Mask.MASKED_LOWERCASE, SQLConf.get.defaultStringType),
-      Literal(Mask.MASKED_DIGIT, SQLConf.get.defaultStringType),
-      Literal(Mask.MASKED_IGNORE, input.dataType))
+      Literal.create(Mask.MASKED_LOWERCASE, SQLConf.get.defaultStringType),
+      Literal.create(Mask.MASKED_DIGIT, SQLConf.get.defaultStringType),
+      Literal.create(Mask.MASKED_IGNORE, input.dataType))
 
   def this(input: Expression, upperChar: Expression, lowerChar: Expression) =
     this(
       input,
       upperChar,
       lowerChar,
-      Literal(Mask.MASKED_DIGIT, SQLConf.get.defaultStringType),
-      Literal(Mask.MASKED_IGNORE, input.dataType))
+      Literal.create(Mask.MASKED_DIGIT, SQLConf.get.defaultStringType),
+      Literal.create(Mask.MASKED_IGNORE, input.dataType))
 
   def this(
       input: Expression,
@@ -140,7 +140,7 @@ case class Mask(
       lowerChar: Expression,
       digitChar: Expression) =
     this(input, upperChar, lowerChar, digitChar,
-      Literal(Mask.MASKED_IGNORE, input.dataType))
+      Literal.create(Mask.MASKED_IGNORE, input.dataType))
 
   override def checkInputDataTypes(): TypeCheckResult = {
 
