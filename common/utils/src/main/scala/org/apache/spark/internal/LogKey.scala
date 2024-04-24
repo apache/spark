@@ -34,6 +34,7 @@ object LogKey extends Enumeration {
   val ARGS = Value
   val BACKUP_FILE = Value
   val BATCH_ID = Value
+  val BATCH_TIMESTAMP = Value
   val BATCH_WRITE = Value
   val BLOCK_ID = Value
   val BLOCK_MANAGER_ID = Value

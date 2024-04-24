@@ -102,7 +102,7 @@ class IncrementalExecution(
       tracker).transformAllExpressionsWithPruning(
       _.containsAnyPattern(CURRENT_LIKE, EXPRESSION_WITH_RANDOM_SEED)) {
       case ts @ CurrentBatchTimestamp(timestamp, _, _) =>
-        logInfo(log"Current batch timestamp = ${MDC(TIME_UNITS, timestamp)}")
+        logInfo(log"Current batch timestamp = ${MDC(BATCH_TIMESTAMP, timestamp)}")
         ts.toLiteral
       case e: ExpressionWithRandomSeed => e.withNewSeed(Utils.random.nextLong())
     }
