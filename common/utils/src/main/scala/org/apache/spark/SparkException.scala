@@ -464,6 +464,35 @@ private[spark] class SparkRuntimeException private(
   override def getQueryContext: Array[QueryContext] = context
 }
 
+private[spark] class SparkPythonException private(
+    message: String,
+    cause: Option[Throwable],
+    errorClass: Option[String],
+    messageParameters: Map[String, String],
+    context: Array[QueryContext])
+  extends RuntimeException(message, cause.orNull) with SparkThrowable {
+
+  def this(
+      errorClass: String,
+      messageParameters: Map[String, String],
+      cause: Throwable = null,
+      context: Array[QueryContext] = Array.empty,
+      summary: String = "") = {
+    this(
+      SparkThrowableHelper.getMessage(errorClass, messageParameters, summary),
+      Option(cause),
+      Option(errorClass),
+      messageParameters,
+      context
+    )
+  }
+
+  override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
+
+  override def getErrorClass: String = errorClass.orNull
+  override def getQueryContext: Array[QueryContext] = context
+}
+
 /**
  * No such element exception thrown from Spark with an error class.
  */

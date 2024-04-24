@@ -62,13 +62,6 @@ def main(infile: IO, outfile: IO) -> None:
     assert spark_connect_session.session_id == session_id
     spark = spark_connect_session
 
-    # TODO(SPARK-44461): Enable Process Isolation
-
-    func = worker.read_command(pickle_ser, infile)
-    write_int(0, outfile)  # Indicate successful initialization
-
-    outfile.flush()
-
     log_name = "Streaming ForeachBatch worker"
 
     def process(df_id, batch_id):  # type: ignore[no-untyped-def]
@@ -78,16 +71,21 @@ def main(infile: IO, outfile: IO) -> None:
         func(batch_df, batch_id)
         print(f"{log_name} Completed batch {batch_id} with DF id {df_id}")
 
-    while True:
-        df_ref_id = utf8_deserializer.loads(infile)
-        batch_id = read_long(infile)
-        # Handle errors inside Python worker. Write 0 to outfile if no errors and write -2 with
-        # traceback string if error occurs.
-        try:
+    try:
+        func = worker.read_command(pickle_ser, infile)
+        write_int(0, outfile)
+        outfile.flush()
+
+        while True:
+            df_ref_id = utf8_deserializer.loads(infile)
+            batch_id = read_long(infile)
+            # Handle errors inside Python worker. Write 0 to outfile if no errors and write -2 with
+            # traceback string if error occurs.
             process(df_ref_id, int(batch_id))
             write_int(0, outfile)
-        except BaseException as e:
-            handle_worker_exception(e, outfile)
+            outfile.flush()
+    except Exception as e:
+        handle_worker_exception(e, outfile)
         outfile.flush()
 
 

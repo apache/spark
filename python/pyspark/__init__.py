@@ -125,8 +125,10 @@ if not is_remote_only():
     # for backward compatibility references.
     sys.modules["pyspark.context"] = context
 
-# for back compatibility
-from pyspark.sql import SQLContext, HiveContext, Row  # noqa: F401
+    # for back compatibility
+    from pyspark.sql import SQLContext, HiveContext  # noqa: F401
+
+from pyspark.sql import Row  # noqa: F401
 
 __all__ = [
     "SparkConf",

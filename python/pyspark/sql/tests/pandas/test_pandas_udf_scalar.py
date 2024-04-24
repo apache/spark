@@ -1334,7 +1334,7 @@ class ScalarPandasUDFTestsMixin:
             return x + 1
 
         def f2(x):
-            assert type(x) == col_type
+            assert isinstance(x, col_type)
             return x + 10
 
         @pandas_udf("int")

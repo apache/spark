@@ -70,6 +70,7 @@ if "SPARK_TESTING" in os.environ:
     test_packages = [
         "pyspark.tests",  # for Memory profiler parity tests
         "pyspark.testing",
+        "pyspark.resource.tests",
         "pyspark.sql.tests",
         "pyspark.sql.tests.connect",
         "pyspark.sql.tests.connect.streaming",
@@ -116,7 +117,7 @@ try:
     # binary format protocol with the Java version, see ARROW_HOME/format/* for specifications.
     # Also don't forget to update python/docs/source/getting_started/install.rst, and
     # python/packaging/classic/setup.py
-    _minimum_pandas_version = "1.4.4"
+    _minimum_pandas_version = "2.0.0"
     _minimum_numpy_version = "1.21"
     _minimum_pyarrow_version = "10.0.0"
     _minimum_grpc_version = "1.59.3"
@@ -145,6 +146,7 @@ try:
         "pyspark.sql.connect.functions",
         "pyspark.sql.connect.proto",
         "pyspark.sql.connect.protobuf",
+        "pyspark.sql.connect.resource",
         "pyspark.sql.connect.shell",
         "pyspark.sql.connect.streaming",
         "pyspark.sql.connect.streaming.worker",

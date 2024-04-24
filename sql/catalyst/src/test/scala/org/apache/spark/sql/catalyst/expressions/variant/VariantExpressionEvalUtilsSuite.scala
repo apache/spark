@@ -122,4 +122,42 @@ class VariantExpressionEvalUtilsSuite extends SparkFunSuite {
         Map("sizeLimit" -> "16.0 MiB", "functionName" -> "`parse_json`"))
     }
   }
+
+  test("isVariantNull") {
+    def check(json: String, expected: Boolean): Unit = {
+      if (json != null) {
+        val parsedVariant = VariantExpressionEvalUtils.parseJson(UTF8String.fromString(json))
+        val actual = VariantExpressionEvalUtils.isVariantNull(parsedVariant)
+        assert(actual == expected)
+      } else {
+        val actual = VariantExpressionEvalUtils.isVariantNull(null)
+        assert(actual == expected)
+      }
+    }
+
+    // Primitive types
+    check("null", expected = true)
+    check(null, expected = false)
+    check("0", expected = false)
+    check("13", expected = false)
+    check("-54", expected = false)
+    check("2147483647", expected = false)
+    check("2147483648", expected = false)
+    check("238457328534848", expected = false)
+    check("342.769", expected = false)
+    check("true", expected = false)
+    check("false", expected = false)
+    check("false", expected = false)
+    check("65.43", expected = false)
+    check("\"" + "spark" * 100 + "\"", expected = false)
+    // Short String
+    check("\"\"", expected = false)
+    check("\"null\"", expected = false)
+    // Array
+    check("[]", expected = false)
+    check("[null, null]", expected = false)
+    check("[{\"a\" : 13}, \"spark\"]", expected = false)
+    // Object
+    check("[{\"a\" : 13, \"b\" : null}]", expected = false)
+  }
 }

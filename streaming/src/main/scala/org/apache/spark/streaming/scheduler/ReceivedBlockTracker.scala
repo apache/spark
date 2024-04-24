@@ -28,7 +28,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.RECEIVED_BLOCK_INFO
+import org.apache.spark.internal.LogKey.{RECEIVED_BLOCK_INFO, RECEIVED_BLOCK_TRACKER_LOG_EVENT}
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.streaming.Time
 import org.apache.spark.streaming.util.{WriteAheadLog, WriteAheadLogUtils}
@@ -247,7 +247,8 @@ private[streaming] class ReceivedBlockTracker(
         true
       } catch {
         case NonFatal(e) =>
-          logWarning(s"Exception thrown while writing record: $record to the WriteAheadLog.", e)
+          logWarning(log"Exception thrown while writing record: " +
+            log"${MDC(RECEIVED_BLOCK_TRACKER_LOG_EVENT, record)} to the WriteAheadLog.", e)
           false
       }
     } else {
