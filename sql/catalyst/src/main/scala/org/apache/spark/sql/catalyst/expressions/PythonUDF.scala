@@ -26,7 +26,8 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCo
 import org.apache.spark.sql.catalyst.trees.TreePattern.{PYTHON_UDF, TreePattern}
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.{DataType, StringType, StructType}
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Helper functions for [[PythonUDF]]
@@ -358,4 +359,28 @@ case class PrettyPythonUDF(
 
   override protected def withNewChildrenInternal(
     newChildren: IndexedSeq[Expression]): PrettyPythonUDF = copy(children = newChildren)
+}
+
+/**
+ * This is a scalar function to call the 'analyze' method of a Python UDTF named [[name]] with the
+ * given [[arguments]]. It returns the JSON string representation of the result of the 'analyze'
+ * method.
+ */
+case class AnalyzePythonUDTF(
+    name: Expression, arguments: Expression) extends BinaryExpression with RuntimeReplaceable {
+  override def left: Expression = name
+  override def right: Expression = arguments
+  override def dataType: DataType = StringType
+  override def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression =
+    copy(name = newLeft, arguments = newRight)
+  override def replacement: Expression = {
+    // Look up the UDTF by name.
+    if (!name.foldable) {
+      throw QueryCompilationErrors.nonFoldableExpressionInUDTFAnalyzeError(name)
+    }
+    val nameString: String = name.eval().asInstanceOf[UTF8String].toString
+
+
+    Literal(name)
+  }
 }
