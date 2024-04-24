@@ -305,7 +305,7 @@ private[spark] class BlockManager(
 
   // This is a lazy val so someone can migrating RDDs even if they don't have a MigratableResolver
   // for shuffles. Used in BlockManagerDecommissioner & block puts.
-  private[storage] lazy val migratableResolver: MigratableResolver = {
+  lazy val migratableResolver: MigratableResolver = {
     shuffleManager.shuffleBlockResolver.asInstanceOf[MigratableResolver]
   }
 
