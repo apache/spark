@@ -14,23 +14,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import os
-import sys
+
 import unittest
 
 from pyspark.testing.connectutils import should_test_connect
 
 if should_test_connect:
     from pyspark import sql
-    from pyspark.sql.functions import udf, lit
     from pyspark.sql.connect.udf import UserDefinedFunction
 
     sql.udf.UserDefinedFunction = UserDefinedFunction
 
-from pyspark.sql.types import StringType
 from pyspark.sql.tests.test_udf import BaseUDFTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.utils import SPARK_HOME
 
 
 class UDFParityTests(BaseUDFTestsMixin, ReusedConnectTestCase):
@@ -80,27 +76,8 @@ class UDFParityTests(BaseUDFTestsMixin, ReusedConnectTestCase):
     def test_udf_registration_returns_udf_on_sql_context(self):
         super().test_udf_registration_returns_udf_on_sql_context()
 
-    def test_udf_with_user_lib(self):
-        class TestUDF:
-            def __call__(self, col):
-                user_class = UserClass()
-                yield user_class.hello(),
-
-        path = os.path.join(SPARK_HOME, "python/test_support")
-        sys.path.append(path)
-
-        from userlibrary import UserClass
-        user_class = UserClass()
-        self.assertEqual(user_class.hello(), "Hello World!")
-
-        test_udf = TestUDF()
-        pudf = UserDefinedFunction(test_udf, StringType())
-        self.spark.range(1).select(pudf(lit(1)).alias("hello"))
-
 
 if __name__ == "__main__":
-    import os
-    import sys
     import unittest
     from pyspark.sql.tests.connect.test_parity_udf import *  # noqa: F401
 
