@@ -1317,7 +1317,9 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
       val thrown = intercept[IllegalStateException] {
         block
       }
-      assert(thrown.getMessage.contains("stopped"))
+      assert(thrown.getMessage.contains("Cannot call methods on a stopped SparkContext"))
+      assert(thrown.getMessage.contains("This stopped SparkContext was created at:"))
+      assert(thrown.getMessage.contains("And it was stopped at:"))
     }
     assertFails { sc.parallelize(1 to 100) }
     assertFails { sc.textFile("/nonexistent-path") }
