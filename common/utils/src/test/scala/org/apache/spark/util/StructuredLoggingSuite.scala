@@ -25,7 +25,7 @@ import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.apache.logging.log4j.Level
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
-import org.apache.spark.internal.{LogEntry, LogKey, Logging, MDC}
+import org.apache.spark.internal.{LogEntry, Logging, LogKey, MDC}
 
 trait LoggingSuiteBase
     extends AnyFunSuite // scalastyle:ignore funsuite
