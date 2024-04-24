@@ -244,7 +244,7 @@ Additional libraries that enhance functionality but are not included in the inst
 - **matplotlib**: Provide plotting for visualization. The default is **plotly**.
 
 
-MLLib DataFrame-based API
+MLlib DataFrame-based API
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Installable with ``pip install "pyspark[ml]"``.
@@ -252,7 +252,7 @@ Installable with ``pip install "pyspark[ml]"``.
 ======= ================= ======================================
 Package Supported version Note
 ======= ================= ======================================
-`numpy` >=1.21            Required for MLLib DataFrame-based API
+`numpy` >=1.21            Required for MLlib DataFrame-based API
 ======= ================= ======================================
 
 Additional libraries that enhance functionality but are not included in the installation packages:
@@ -272,5 +272,5 @@ Installable with ``pip install "pyspark[mllib]"``.
 ======= ================= ==================
 Package Supported version Note
 ======= ================= ==================
-`numpy` >=1.21            Required for MLLib
+`numpy` >=1.21            Required for MLlib
 ======= ================= ==================

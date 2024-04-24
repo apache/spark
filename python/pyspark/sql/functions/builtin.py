@@ -1275,7 +1275,7 @@ def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([
     ...     ("Consult", "Eva", 6), ("Finance", "Frank", 5),
-    ...     ("Finance", "George", 5), ("Consult", "Henry", 7)],
+    ...     ("Finance", "George", 9), ("Consult", "Henry", 7)],
     ...     schema=("department", "name", "years_in_dept"))
     >>> df.groupby("department").agg(
     ...     sf.max_by("name", "years_in_dept")
@@ -1356,7 +1356,7 @@ def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([
     ...     ("Consult", "Eva", 6), ("Finance", "Frank", 5),
-    ...     ("Finance", "George", 5), ("Consult", "Henry", 7)],
+    ...     ("Finance", "George", 9), ("Consult", "Henry", 7)],
     ...     schema=("department", "name", "years_in_dept"))
     >>> df.groupby("department").agg(
     ...     sf.min_by("name", "years_in_dept")
@@ -1365,7 +1365,7 @@ def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     |department|min_by(name, years_in_dept)|
     +----------+---------------------------+
     |   Consult|                        Eva|
-    |   Finance|                     George|
+    |   Finance|                      Frank|
     +----------+---------------------------+
     """
     return _invoke_function_over_columns("min_by", col, ord)
