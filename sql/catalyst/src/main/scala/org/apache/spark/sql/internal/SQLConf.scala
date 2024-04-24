@@ -3123,6 +3123,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val PYTHON_TABLE_UDF_CALL_ANALYZE_METHOD_ON_EXECUTORS =
+    buildConf("spark.sql.execution.pythonUDTF.callAnalyzeMethodOnExecutors.enabled")
+      .doc("If true, the analyze method of Python UDTFs will be called on executors. " +
+        "If false, the analyze method will be called on the driver.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val PYTHON_PLANNER_EXEC_MEMORY =
     buildConf("spark.sql.planner.pythonExecution.memory")
       .doc("Specifies the memory allocation for executing Python code in Spark driver, in MiB. " +

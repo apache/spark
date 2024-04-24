@@ -761,7 +761,6 @@ object FunctionRegistry {
     expression[EqualNull]("equal_null"),
     expression[HllSketchEstimate]("hll_sketch_estimate"),
     expression[HllUnion]("hll_union"),
-    expression[AnalyzePythonUDTF]("analyze_python_udtf"),
 
     // grouping sets
     expression[Grouping]("grouping"),

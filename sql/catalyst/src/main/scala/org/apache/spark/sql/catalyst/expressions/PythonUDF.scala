@@ -26,8 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCo
 import org.apache.spark.sql.catalyst.trees.TreePattern.{PYTHON_UDF, TreePattern}
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.types.{DataType, StringType, StructType}
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.sql.types._
 
 /**
  * Helper functions for [[PythonUDF]]
@@ -165,7 +164,7 @@ abstract class UnevaluableGenerator extends Generator {
  *                             metadata returned including the result schema of the function call as
  *                             well as optional other information
  * @param children input arguments to the UDTF call; for scalar arguments these are the expressions
- *                 themeselves, and for TABLE arguments, these are instances of
+ *                 themselves, and for TABLE arguments, these are instances of
  *                 [[FunctionTableSubqueryArgumentExpression]]
  * @param evalType identifies whether this is a scalar or aggregate or table function, using an
  *                 instance of the [[PythonEvalType]] enumeration
@@ -175,6 +174,9 @@ abstract class UnevaluableGenerator extends Generator {
  * @param pythonUDTFPartitionColumnIndexes holds the zero-based indexes of the projected results of
  *                                         all PARTITION BY expressions within the TABLE argument of
  *                                         the Python UDTF call, if applicable
+ * @param returnResultOfAnalyzeMethod true if the 'analyze' method should be called on the
+ *                                    executors instead of the driver, when the query calls the
+ *                                    ANALYZE_PYTHON_UDTF SQL function
  */
 case class PythonUDTF(
     name: String,
@@ -185,7 +187,8 @@ case class PythonUDTF(
     evalType: Int,
     udfDeterministic: Boolean,
     resultId: ExprId = NamedExpression.newExprId,
-    pythonUDTFPartitionColumnIndexes: Option[PythonUDTFPartitionColumnIndexes] = None)
+    pythonUDTFPartitionColumnIndexes: Option[PythonUDTFPartitionColumnIndexes] = None,
+    returnResultOfAnalyzeMethod: Boolean = false)
   extends UnevaluableGenerator with PythonFuncExpression {
 
   override lazy val canonicalized: Expression = {
@@ -206,6 +209,10 @@ case class PythonUDTFPartitionColumnIndexes(partitionChildIndexes: Seq[Int])
 
 /**
  * A placeholder of a polymorphic Python table-valued function.
+ *
+ * If [[returnResultOfAnalyzeMethod]] is set to true, the Python UDTF will return the result of
+ * the `analyze` method instead of the result of the `eval` method. This can be useful to run this
+ * `analyze` method on Spark executors instead of drivers.
  */
 case class UnresolvedPolymorphicPythonUDTF(
     name: String,
@@ -214,7 +221,8 @@ case class UnresolvedPolymorphicPythonUDTF(
     evalType: Int,
     udfDeterministic: Boolean,
     resolveElementMetadata: (PythonFunction, Seq[Expression]) => PythonUDTFAnalyzeResult,
-    resultId: ExprId = NamedExpression.newExprId)
+    resultId: ExprId = NamedExpression.newExprId,
+    returnResultOfAnalyzeMethod: Boolean = false)
   extends UnevaluableGenerator with PythonFuncExpression {
 
   override lazy val resolved = false
@@ -253,10 +261,14 @@ case class UnresolvedPolymorphicPythonUDTF(
  *                                 projection to evaluate these expressions and return the result to
  *                                 the UDTF. The UDTF then receives one input column for each
  *                                 expression in the list, in the order they are listed.
- * @param pickledAnalyzeResult this is the pickled 'AnalyzeResult' instance from the UDTF, which
- *                             contains all metadata returned by the Python UDTF 'analyze' method
- *                             including the result schema of the function call as well as optional
- *                             other information
+ * @param partitionByStrings String representations of the partitioning expressions before parsing.
+ * @param orderByStrings String representations of the ordering expressions before parsing.
+ * @param selectedInputStrings String representations of the selected input expressions before
+ *                             parsing.
+ * @param pickledAnalyzeResult If non-empty, this is the pickled 'AnalyzeResult' instance from the
+ *                             UDTF, which contains all metadata returned by the Python UDTF
+ *                             'analyze' method including the result schema of the function call as
+ *                             well as optional other information
  */
 case class PythonUDTFAnalyzeResult(
     schema: StructType,
@@ -264,6 +276,9 @@ case class PythonUDTFAnalyzeResult(
     partitionByExpressions: Seq[Expression],
     orderByExpressions: Seq[SortOrder],
     selectedInputExpressions: Seq[PythonUDTFSelectedExpression],
+    partitionByStrings: Array[String],
+    orderByStrings: Array[String],
+    selectedInputStrings: Array[String],
     pickledAnalyzeResult: Array[Byte]) {
   /**
    * Applies the requested properties from this analysis result to the target TABLE argument
@@ -361,26 +376,13 @@ case class PrettyPythonUDF(
     newChildren: IndexedSeq[Expression]): PrettyPythonUDF = copy(children = newChildren)
 }
 
-/**
- * This is a scalar function to call the 'analyze' method of a Python UDTF named [[name]] with the
- * given [[arguments]]. It returns the JSON string representation of the result of the 'analyze'
- * method.
- */
-case class AnalyzePythonUDTF(
-    name: Expression, arguments: Expression) extends BinaryExpression with RuntimeReplaceable {
-  override def left: Expression = name
-  override def right: Expression = arguments
-  override def dataType: DataType = StringType
-  override def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression =
-    copy(name = newLeft, arguments = newRight)
-  override def replacement: Expression = {
-    // Look up the UDTF by name.
-    if (!name.foldable) {
-      throw QueryCompilationErrors.nonFoldableExpressionInUDTFAnalyzeError(name)
-    }
-    val nameString: String = name.eval().asInstanceOf[UTF8String].toString
-
-
-    Literal(name)
-  }
+object AnalyzePythonUDTF {
+  def schema: StructType =
+    new StructType()
+      .add("schema", StringType)
+      .add("withSinglePartition", BooleanType)
+      .add("partitionByExpressions", ArrayType(StringType))
+      .add("orderByExpressions", ArrayType(StringType))
+      .add("selectedInputExpressions", ArrayType(StringType))
+      .add("pickledAnalyzeResult", ArrayType(ByteType))
 }

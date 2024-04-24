@@ -363,4 +363,18 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         Row("abc"))
     }
   }
+
+  test("SPARK-45402: Analyze Python UDTFs on executors") {
+    assume(shouldTestPythonUDFs)
+    val pythonUDTFRunAnalyzeOnExecutors: UserDefinedPythonTableFunction =
+      pythonUDTFForwardStateFromAnalyze.copy(returnResultOfAnalyzeMethod = true)
+    val df = pythonUDTFRunAnalyzeOnExecutors(spark, lit("abc"))
+      .select("schema", "withSinglePartition", "partitionByExpressions", "orderByExpressions")
+    checkAnswer(df, Seq(Row(
+      """{"type":"struct",""" +
+        """"fields":[{"name":"_0","type":"string","nullable":true,"metadata":{}}]}""",
+      false,
+      Seq.empty,
+      Seq.empty)))
+  }
 }

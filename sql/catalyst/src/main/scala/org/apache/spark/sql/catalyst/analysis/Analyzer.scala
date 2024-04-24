@@ -2263,6 +2263,14 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             }
           }
 
+          case u: UnresolvedPolymorphicPythonUDTF if u.returnResultOfAnalyzeMethod =>
+            withPosition(u) {
+              // We are instructed to run the 'analyze' method of this Python UDTF on executors.
+              PythonUDTF(
+                u.name, u.func, AnalyzePythonUDTF.schema, None, u.children, u.evalType,
+                u.udfDeterministic, u.resultId, returnResultOfAnalyzeMethod = true)
+            }
+
           case u: UnresolvedPolymorphicPythonUDTF => withPosition(u) {
             // Check if this is a call to a Python user-defined table function whose polymorphic
             // 'analyze' method returned metadata indicated requested partitioning and/or

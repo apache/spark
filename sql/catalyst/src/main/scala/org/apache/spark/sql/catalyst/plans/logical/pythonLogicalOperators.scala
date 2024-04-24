@@ -275,6 +275,24 @@ case class ArrowEvalPythonUDTF(
 }
 
 /**
+ * A logical plan that evaluates the 'analyze' method of a [[PythonUDTF]] on the executors.
+ *
+ * @param udtf                the user-defined Python function
+ * @param requiredChildOutput the required output of the child plan. It's used for omitting data
+ *                            generation that will be discarded next by a projection.
+ * @param resultAttrs         the output schema of the Python UDTF.
+ * @param child               the child plan
+ */
+case class AnalyzePythonUDTFOnExecutors(
+    udtf: PythonUDTF,
+    requiredChildOutput: Seq[Attribute],
+    resultAttrs: Seq[Attribute],
+    child: LogicalPlan) extends BaseEvalPythonUDTF {
+  override protected def withNewChildInternal(newChild: LogicalPlan): AnalyzePythonUDTFOnExecutors =
+    copy(child = newChild)
+}
+
+/**
  * A logical plan that adds a new long column with the name `name` that
  * increases one by one. This is for 'distributed-sequence' default index
  * in pandas API on Spark.

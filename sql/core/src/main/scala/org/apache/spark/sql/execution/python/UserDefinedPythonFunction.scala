@@ -81,13 +81,18 @@ case class UserDefinedPythonFunction(
 
 /**
  * A user-defined Python table function. This is used by the Python API.
+ *
+ * If [[returnResultOfAnalyzeMethod]] is set to true, the Python UDTF will return the result of
+ * the `analyze` method instead of the result of the `eval` method. This can be useful to run this
+ * `analyze` method on Spark executors instead of drivers.
  */
 case class UserDefinedPythonTableFunction(
     name: String,
     func: PythonFunction,
     returnType: Option[StructType],
     pythonEvalType: Int,
-    udfDeterministic: Boolean) {
+    udfDeterministic: Boolean,
+    returnResultOfAnalyzeMethod: Boolean = false) {
 
   def this(
       name: String,
@@ -123,7 +128,8 @@ case class UserDefinedPythonTableFunction(
           pickledAnalyzeResult = None,
           children = exprs,
           evalType = pythonEvalType,
-          udfDeterministic = udfDeterministic)
+          udfDeterministic = udfDeterministic,
+          returnResultOfAnalyzeMethod = false)
       case _ =>
         // Check which argument is a table argument here since it will be replaced with
         // `UnresolvedAttribute` to construct lateral join.
@@ -143,7 +149,8 @@ case class UserDefinedPythonTableFunction(
           children = exprs,
           evalType = pythonEvalType,
           udfDeterministic = udfDeterministic,
-          resolveElementMetadata = runAnalyzeInPython)
+          resolveElementMetadata = runAnalyzeInPython,
+          returnResultOfAnalyzeMethod = returnResultOfAnalyzeMethod)
     }
     Generate(
       udtf,
@@ -247,14 +254,17 @@ class UserDefinedPythonTableFunctionAnalyzeRunner(
     val withSinglePartition = dataIn.readInt() == 1
     // Receive the list of requested partitioning expressions, if any.
     val partitionByExpressions = ArrayBuffer.empty[Expression]
+    val partitionByStrings = ArrayBuffer.empty[String]
     val numPartitionByExpressions = dataIn.readInt()
     for (_ <- 0 until numPartitionByExpressions) {
       val expressionSql: String = PythonWorkerUtils.readUTF(dataIn)
       val parsed: Expression = parser.parseExpression(expressionSql)
       partitionByExpressions.append(parsed)
+      partitionByStrings.append(expressionSql)
     }
     // Receive the list of requested ordering expressions, if any.
-    val orderBy = ArrayBuffer.empty[SortOrder]
+    val orderByExpressions = ArrayBuffer.empty[SortOrder]
+    val orderByStrings = ArrayBuffer.empty[String]
     val numOrderByItems = dataIn.readInt()
     for (_ <- 0 until numOrderByItems) {
       val expressionSql: String = PythonWorkerUtils.readUTF(dataIn)
@@ -271,14 +281,16 @@ class UserDefinedPythonTableFunctionAnalyzeRunner(
       val direction = if (dataIn.readInt() == 1) Ascending else Descending
       val overrideNullsFirst = dataIn.readInt()
       overrideNullsFirst match {
-        case 0 => orderBy.append(SortOrder(parsed, direction))
-        case 1 => orderBy.append(SortOrder(parsed, direction, NullsFirst, Seq.empty))
-        case 2 => orderBy.append(SortOrder(parsed, direction, NullsLast, Seq.empty))
+        case 0 => orderByExpressions.append(SortOrder(parsed, direction))
+        case 1 => orderByExpressions.append(SortOrder(parsed, direction, NullsFirst, Seq.empty))
+        case 2 => orderByExpressions.append(SortOrder(parsed, direction, NullsLast, Seq.empty))
       }
+      orderByStrings.append(expressionSql)
     }
     // Receive the list of requested input columns to select, if specified.
     val numSelectedInputExpressions = dataIn.readInt()
     val selectedInputExpressions = ArrayBuffer.empty[PythonUDTFSelectedExpression]
+    val selectedInputStrings = ArrayBuffer.empty[String]
     for (_ <- 0 until numSelectedInputExpressions) {
       val expressionSql: String = PythonWorkerUtils.readUTF(dataIn)
       val parsed: Expression = parser.parseExpression(expressionSql)
@@ -287,13 +299,17 @@ class UserDefinedPythonTableFunctionAnalyzeRunner(
         PythonUDTFSelectedExpression(
           parsed,
           if (alias.nonEmpty) Some(alias) else None))
+      selectedInputStrings.append(expressionSql)
     }
     PythonUDTFAnalyzeResult(
       schema = schema,
       withSinglePartition = withSinglePartition,
       partitionByExpressions = partitionByExpressions.toSeq,
-      orderByExpressions = orderBy.toSeq,
+      orderByExpressions = orderByExpressions.toSeq,
       selectedInputExpressions = selectedInputExpressions.toSeq,
+      partitionByStrings = partitionByStrings.toArray,
+      orderByStrings = orderByStrings.toArray,
+      selectedInputStrings = selectedInputStrings.toArray,
       pickledAnalyzeResult = pickledAnalyzeResult)
   }
 }
