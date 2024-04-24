@@ -26,10 +26,10 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
-import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
+import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, SparkSessionExtensions}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
-import org.apache.spark.sql.execution.{CollectLimitExec, ColumnarToRowExec, LocalTableScanExec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, SparkPlanInfo, UnionExec}
+import org.apache.spark.sql.execution.{CollectLimitExec, ColumnarToRowExec, LocalTableScanExec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, SparkPlanInfo, SparkStrategy, UnionExec}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.columnar.{InMemoryTableScanExec, InMemoryTableScanLike}
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
@@ -42,6 +42,7 @@ import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdat
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
+import org.apache.spark.sql.internal.StaticSQLConf.SPARK_SESSION_EXTENSIONS
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.TestData
 import org.apache.spark.sql.types.{IntegerType, StructType}
@@ -1214,7 +1215,7 @@ class AdaptiveQueryExecSuite
   }
 
   test("No deadlock in UI update") {
-    object TestStrategy extends Strategy {
+    case class TestStrategy(spark: SparkSession) extends SparkStrategy {
       def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
         case _: Aggregate =>
           withSQLConf(
@@ -1227,16 +1228,23 @@ class AdaptiveQueryExecSuite
       }
     }
 
+    class TestExtensions extends (SparkSessionExtensions => Unit) {
+      def apply(e: SparkSessionExtensions): Unit = {
+        e.injectPlannerStrategy(TestStrategy)
+      }
+    }
+
+    val sparkSession = SparkSession.builder()
+      .master("local[1]")
+      .config(SPARK_SESSION_EXTENSIONS.key,
+        classOf[TestExtensions].getCanonicalName)
+      .getOrCreate()
+
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true") {
-      try {
-        spark.experimental.extraStrategies = TestStrategy :: Nil
-        val df = spark.range(10).groupBy($"id").count()
-        df.collect()
-      } finally {
-        spark.experimental.extraStrategies = Nil
-      }
+      val df = sparkSession.range(10).groupBy($"id").count()
+      df.collect()
     }
   }
 

@@ -61,9 +61,7 @@ class IncrementalExecution(
   extends QueryExecution(sparkSession, logicalPlan) with Logging {
 
   // Modified planner with stateful operations.
-  override val planner: SparkPlanner = new SparkPlanner(
-      sparkSession,
-      sparkSession.sessionState.experimentalMethods) {
+  override val planner: SparkPlanner = new SparkPlanner(sparkSession) {
     override def strategies: Seq[Strategy] =
       extraPlanningStrategies ++
       sparkSession.sessionState.planner.strategies

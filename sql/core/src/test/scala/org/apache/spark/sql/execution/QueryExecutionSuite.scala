@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 import scala.collection.mutable
 import scala.io.Source
 
-import org.apache.spark.sql.{AnalysisException, Dataset, ExtendedExplainGenerator, FastOperator}
+import org.apache.spark.sql.{AnalysisException, Dataset, ExtendedExplainGenerator, FastOperator, SparkSession, SparkSessionExtensions}
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, QueryPlanningTrackerCallback}
 import org.apache.spark.sql.catalyst.analysis.CurrentNamespace
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -32,6 +32,7 @@ import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, QueryStag
 import org.apache.spark.sql.execution.datasources.v2.ShowTablesExec
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.StaticSQLConf.SPARK_SESSION_EXTENSIONS
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
@@ -155,27 +156,52 @@ class QueryExecutionSuite extends SharedSparkSession {
   }
 
   test("toString() exception/error handling") {
-    spark.experimental.extraStrategies = Seq[SparkStrategy]((_: LogicalPlan) => Nil)
+    case class ExceptionStrategy(spark: SparkSession) extends SparkStrategy {
+      override def apply(plan: LogicalPlan): Seq[SparkPlan] = {
+        throw new AnalysisException(
+          "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY",
+          messageParameters = Map("dataSourceType" -> "XXX"))
+      }
+    }
 
-    def qe: QueryExecution = new QueryExecution(spark, OneRowRelation())
+    class ExceptionExtensions extends (SparkSessionExtensions => Unit) {
+      def apply(e: SparkSessionExtensions): Unit = {
+        e.injectPlannerStrategy(ExceptionStrategy)
+      }
+    }
+
+    case class ErrorStrategy(spark: SparkSession) extends SparkStrategy {
+      override def apply(plan: LogicalPlan): Seq[SparkPlan] = throw new Error("error")
+    }
+
+    class ErrorExtensions extends (SparkSessionExtensions => Unit) {
+      def apply(e: SparkSessionExtensions): Unit = {
+        e.injectPlannerStrategy(ErrorStrategy)
+      }
+    }
+
+    val spark1 = SparkSession.builder()
+      .master("local[1]")
+      .config(SPARK_SESSION_EXTENSIONS.key,
+        classOf[ExceptionExtensions].getCanonicalName)
+      .getOrCreate()
+    val spark2 = SparkSession.builder()
+      .master("local[1]")
+      .config(SPARK_SESSION_EXTENSIONS.key,
+        classOf[ErrorExtensions].getCanonicalName)
+      .getOrCreate()
+
+    def qe(spark: SparkSession): QueryExecution = new QueryExecution(spark, OneRowRelation())
 
     // Nothing!
-    assert(qe.toString.contains("OneRowRelation"))
+    assert(qe(spark).toString.contains("OneRowRelation"))
 
     // Throw an AnalysisException - this should be captured.
-    spark.experimental.extraStrategies = Seq[SparkStrategy](
-      (_: LogicalPlan) => throw new AnalysisException(
-        "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY",
-        messageParameters = Map("dataSourceType" -> "XXX")))
-    assert(qe.toString.contains("org.apache.spark.sql.AnalysisException"))
+    assert(qe(spark1).toString.contains("org.apache.spark.sql.AnalysisException"))
 
     // Throw an Error - this should not be captured.
-    spark.experimental.extraStrategies = Seq[SparkStrategy](
-      (_: LogicalPlan) => throw new Error("error"))
-    val error = intercept[Error](qe.toString)
+    val error = intercept[Error](qe(spark2).toString)
     assert(error.getMessage.contains("error"))
-
-    spark.experimental.extraStrategies = Nil
   }
 
   test("SPARK-28346: clone the query plan between different stages") {
@@ -204,23 +230,31 @@ class QueryExecutionSuite extends SharedSparkSession {
     assertNoTag(tag3, analyzedPlan, cachedPlan)
 
     val tag4 = new TreeNodeTag[String]("d")
-    try {
-      spark.experimental.extraStrategies = Seq(new SparkStrategy() {
-        override def apply(plan: LogicalPlan): Seq[SparkPlan] = {
-          plan.foreach {
-            case r: org.apache.spark.sql.catalyst.plans.logical.Range =>
-              r.setTagValue(tag4, "v")
-            case _ =>
-          }
-          Seq(FastOperator(plan.output))
+
+    case class TestStrategy(spark: SparkSession) extends SparkStrategy {
+      override def apply(plan: LogicalPlan): Seq[SparkPlan] = {
+        plan.foreach {
+          case r: org.apache.spark.sql.catalyst.plans.logical.Range =>
+            r.setTagValue(tag4, "v")
+          case _ =>
         }
-      })
-      // trigger planning
-      df.queryExecution.sparkPlan
-      assert(optimizedPlan.getTagValue(tag4).isEmpty)
-    } finally {
-      spark.experimental.extraStrategies = Nil
+        Seq(FastOperator(plan.output))
+      }
     }
+
+    class TestExtensions extends (SparkSessionExtensions => Unit) {
+      def apply(e: SparkSessionExtensions): Unit = {
+        e.injectPlannerStrategy(TestStrategy)
+      }
+    }
+    val spark1 = SparkSession.builder()
+      .master("local[1]")
+      .config(SPARK_SESSION_EXTENSIONS.key,
+        classOf[TestExtensions].getCanonicalName)
+      .getOrCreate()
+    // trigger planning
+    df.queryExecution.sparkPlan
+    assert(optimizedPlan.getTagValue(tag4).isEmpty)
 
     val tag5 = new TreeNodeTag[String]("e")
     df.queryExecution.executedPlan.setTagValue(tag5, "v")

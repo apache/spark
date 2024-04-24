@@ -169,7 +169,6 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.*.this"),
 
       // Skip unsupported classes
-      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.ExperimentalMethods"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLContext"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLContext$*"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SparkSessionExtensions"),

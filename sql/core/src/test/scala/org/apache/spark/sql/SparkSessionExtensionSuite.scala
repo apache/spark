@@ -483,7 +483,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
     }
   }
 
-  test("SPARK-38697: Extend SparkSessionExtensions to inject rules into AQE Optimizer") {
+  test("SPARK-38697: Extend s to inject rules into AQE Optimizer") {
     def executedPlan(df: Dataset[java.lang.Long]): SparkPlan = {
       assert(df.queryExecution.executedPlan.isInstanceOf[AdaptiveSparkPlanExec])
       df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
@@ -503,7 +503,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
     }
   }
 
-  test("SPARK-42963: Extend SparkSessionExtensions to inject rules into AQE query stage " +
+  test("SPARK-42963: Extend s to inject rules into AQE query stage " +
     "optimizer") {
     val extensions = create { extensions =>
       extensions.injectQueryStageOptimizerRule(_ => RequireAtLeaseTwoPartitions)
@@ -520,7 +520,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
   }
 
   test("SPARK-46170: Support inject adaptive query post planner strategy rules in " +
-    "SparkSessionExtensions") {
+    "s") {
     val extensions = create { extensions =>
       extensions.injectQueryPostPlannerStrategyRule(_ => MyQueryPostPlannerStrategyRule)
     }

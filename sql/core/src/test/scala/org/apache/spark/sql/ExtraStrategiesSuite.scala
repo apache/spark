@@ -21,7 +21,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
-import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan}
+import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan, SparkStrategy}
+import org.apache.spark.sql.internal.StaticSQLConf.SPARK_SESSION_EXTENSIONS
 import org.apache.spark.sql.test.SharedSparkSession
 
 case class FastOperator(output: Seq[Attribute]) extends LeafExecNode {
@@ -37,7 +38,7 @@ case class FastOperator(output: Seq[Attribute]) extends LeafExecNode {
   override def producedAttributes: AttributeSet = outputSet
 }
 
-object TestStrategy extends Strategy {
+case class  TestStrategy(spark: SparkSession) extends SparkStrategy {
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case Project(Seq(attr), _) if attr.name == "a" =>
       FastOperator(attr.toAttribute :: Nil) :: Nil
@@ -45,23 +46,28 @@ object TestStrategy extends Strategy {
   }
 }
 
+class TestExtensions extends (SparkSessionExtensions => Unit) {
+  def apply(e: SparkSessionExtensions): Unit = {
+    e.injectPlannerStrategy(TestStrategy)
+  }
+}
+
 class ExtraStrategiesSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("insert an extraStrategy") {
-    try {
-      spark.experimental.extraStrategies = TestStrategy :: Nil
+    val sparkSession = SparkSession.builder()
+      .master("local[1]")
+      .config(SPARK_SESSION_EXTENSIONS.key,
+        classOf[TestExtensions].getCanonicalName)
+      .getOrCreate()
+    val df = sparkSession.sparkContext.parallelize(Seq(("so slow", 1))).toDF("a", "b")
+    checkAnswer(
+      df.select("a"),
+      Row("so fast"))
 
-      val df = sparkContext.parallelize(Seq(("so slow", 1))).toDF("a", "b")
-      checkAnswer(
-        df.select("a"),
-        Row("so fast"))
-
-      checkAnswer(
-        df.select("a", "b"),
-        Row("so slow", 1))
-    } finally {
-      spark.experimental.extraStrategies = Nil
-    }
+    checkAnswer(
+      df.select("a", "b"),
+      Row("so slow", 1))
   }
 }

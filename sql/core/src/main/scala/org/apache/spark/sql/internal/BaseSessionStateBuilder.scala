@@ -17,7 +17,7 @@
 package org.apache.spark.sql.internal
 
 import org.apache.spark.annotation.Unstable
-import org.apache.spark.sql.{ExperimentalMethods, SparkSession, UDFRegistration, _}
+import org.apache.spark.sql.{SparkSession, UDFRegistration, _}
 import org.apache.spark.sql.artifact.ArtifactManager
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, EvalSubqueriesForTimeTravel, FunctionRegistry, ReplaceCharWithVarchar, ResolveSessionCatalog, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.{FunctionExpressionBuilder, SessionCatalog}
@@ -46,7 +46,7 @@ import org.apache.spark.sql.util.ExecutionListenerManager
  * The builder explicitly defines all components needed by the session state, and creates a session
  * state when `build` is called. Components should only be initialized once. This is not a problem
  * for most components as they are only used in the `build` function. However some components
- * (`conf`, `catalog`, `functionRegistry`, `experimentalMethods` & `sqlParser`) are as dependencies
+ * (`conf`, `catalog`, `functionRegistry`, `sqlParser`) are as dependencies
  * for other components and are shared as a result. These components are defined as lazy vals to
  * make sure the component is created only once.
  *
@@ -56,8 +56,8 @@ import org.apache.spark.sql.util.ExecutionListenerManager
  * modifications in order to prevent initialization problems.
  *
  * A parent [[SessionState]] can be used to initialize the new [[SessionState]]. The new session
- * state will clone the parent sessions state's `conf`, `functionRegistry`, `experimentalMethods`
- * and `catalog` fields. Note that the state is cloned when `build` is called, and not before.
+ * state will clone the parent sessions state's `conf`, `functionRegistry`,and `catalog` fields.
+ * Note that the state is cloned when `build` is called, and not before.
  */
 @Unstable
 abstract class BaseSessionStateBuilder(
@@ -125,16 +125,6 @@ abstract class BaseSessionStateBuilder(
    */
   protected lazy val dataSourceManager: DataSourceManager = {
     parentState.map(_.dataSourceManager.clone()).getOrElse(new DataSourceManager)
-  }
-
-  /**
-   * Experimental methods that can be used to define custom optimization rules and custom planning
-   * strategies.
-   *
-   * This either gets cloned from a pre-existing version or newly created.
-   */
-  protected lazy val experimentalMethods: ExperimentalMethods = {
-    parentState.map(_.experimentalMethods.clone()).getOrElse(new ExperimentalMethods)
   }
 
   /**
@@ -260,10 +250,10 @@ abstract class BaseSessionStateBuilder(
   /**
    * Logical query plan optimizer.
    *
-   * Note: this depends on `catalog` and `experimentalMethods` fields.
+   * Note: this depends on `catalogManager` and `catalog` fields.
    */
   protected def optimizer: Optimizer = {
-    new SparkOptimizer(catalogManager, catalog, experimentalMethods) {
+    new SparkOptimizer(catalogManager, catalog) {
       override def earlyScanPushDownRules: Seq[Rule[LogicalPlan]] =
         super.earlyScanPushDownRules ++ customEarlyScanPushDownRules
 
@@ -306,10 +296,10 @@ abstract class BaseSessionStateBuilder(
   /**
    * Planner that converts optimized logical plans to physical plans.
    *
-   * Note: this depends on the `conf` and `experimentalMethods` fields.
+   * Note: this depends on the `session` field.
    */
   protected def planner: SparkPlanner = {
-    new SparkPlanner(session, experimentalMethods) {
+    new SparkPlanner(session) {
       override def extraPlanningStrategies: Seq[Strategy] =
         super.extraPlanningStrategies ++ customPlanningStrategies
     }
@@ -386,7 +376,6 @@ abstract class BaseSessionStateBuilder(
     new SessionState(
       session.sharedState,
       conf,
-      experimentalMethods,
       functionRegistry,
       tableFunctionRegistry,
       udfRegistration,
