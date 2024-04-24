@@ -77,36 +77,6 @@ case class ParseJson(child: Expression)
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(jsonStr) - Parse a JSON string as an Variant value. Returns null when the string is not valid JSON value.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_('{"a":1,"b":0.8}');
-       {"a":1,"b":0.8}
-  """,
-  since = "4.0.0",
-  group = "variant_funcs"
-)
-// scalastyle:on line.size.limit
-case class TryParseJson(expr: Expression, replacement: Expression)
-  extends RuntimeReplaceable with InheritAnalysisRules {
-  def this(child: Expression) = this(child, TryEval(ParseJson(child)))
-
-  override def parameters: Seq[Expression] = Seq(expr)
-
-  override def dataType: DataType = VariantType
-
-  override def prettyName: String = "try_parse_json"
-
-  override protected def withNewChildInternal(newChild: Expression): Expression =
-    copy(replacement = newChild)
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    ExpectsInputTypes.checkInputDataTypes(Seq(expr), Seq(StringType))
-  }
-}
-
-// scalastyle:off line.size.limit
-@ExpressionDescription(
   usage = "_FUNC_(expr) - Check if a variant value is a variant null. Returns true if and only if the input is a variant null and false otherwise (including in the case of SQL NULL).",
   examples = """
     Examples:
