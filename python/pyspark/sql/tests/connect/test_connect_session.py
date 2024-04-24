@@ -242,6 +242,17 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
         session = RemoteSparkSession.builder.channelBuilder(CustomChannelBuilder()).create()
         session.sql("select 1 + 1")
 
+    def test_reset_when_server_session_changes(self):
+        session = RemoteSparkSession.builder.remote("sc://localhost").getOrCreate()
+        session.range(3).collect() # run a simple query so the session id is synchronized.
+        session._client._session_id = str(uuid.uuid4()) # change the underlying session id
+        with self.assertRaises(Exception):
+            session.range(3).collect()
+
+        # assert that getOrCreate() generates a new session
+        session = RemoteSparkSession.builder.remote("sc://localhost").getOrCreate()
+        session.range(3).collect()
+
 
 class SparkConnectSessionWithOptionsTest(unittest.TestCase):
     def setUp(self) -> None:
