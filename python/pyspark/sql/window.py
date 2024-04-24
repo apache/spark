@@ -17,7 +17,6 @@
 import sys
 from typing import cast, Iterable, List, Tuple, TYPE_CHECKING, Union
 
-from pyspark.sql.column import _to_seq, _to_java_column
 from pyspark.sql.utils import (
     try_remote_window,
     try_remote_windowspec,
@@ -32,6 +31,8 @@ __all__ = ["Window", "WindowSpec"]
 
 
 def _to_java_cols(cols: Tuple[Union["ColumnOrName", List["ColumnOrName_"]], ...]) -> "JavaObject":
+    from pyspark.sql.classic.column import _to_seq, _to_java_column
+
     if len(cols) == 1 and isinstance(cols[0], list):
         cols = cols[0]  # type: ignore[assignment]
     sc = get_active_spark_context()

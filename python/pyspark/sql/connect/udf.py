@@ -161,7 +161,10 @@ class UserDefinedFunction:
         self, *args: "ColumnOrName", **kwargs: "ColumnOrName"
     ) -> CommonInlineUserDefinedFunction:
         def to_expr(col: "ColumnOrName") -> Expression:
-            return col._expr if isinstance(col, Column) else ColumnReference(col)
+            if isinstance(col, Column):
+                return col._expr
+            else:
+                return ColumnReference(col)  # type: ignore[arg-type]
 
         arg_exprs: List[Expression] = [to_expr(arg) for arg in args] + [
             NamedArgumentExpression(key, to_expr(value)) for key, value in kwargs.items()

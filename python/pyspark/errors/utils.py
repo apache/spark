@@ -174,7 +174,7 @@ def _with_origin(func: Callable[..., Any]) -> Callable[..., Any]:
         from pyspark.sql import SparkSession
 
         spark = SparkSession.getActiveSession()
-        if spark is not None:
+        if spark is not None and hasattr(func, "__name__"):
             assert spark._jvm is not None
             pyspark_origin = spark._jvm.org.apache.spark.sql.catalyst.trees.PySparkCurrentOrigin
 
