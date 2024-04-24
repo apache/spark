@@ -18,7 +18,11 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkConf
+<<<<<<< HEAD
 import org.apache.spark.sql.catalyst.util.CollationFactory
+=======
+import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, Literal, StringTrim, StringTrimLeft, StringTrimRight}
+>>>>>>> d30b9acc03 (Add tests)
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, DataType, IntegerType, StringType}
@@ -26,7 +30,8 @@ import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, DataType,
 // scalastyle:off nonascii
 class CollationStringExpressionsSuite
   extends QueryTest
-  with SharedSparkSession {
+  with SharedSparkSession
+  with ExpressionEvalHelper {
 
   test("Support ConcatWs string expression with collation") {
     // Supported collations
@@ -798,6 +803,134 @@ class CollationStringExpressionsSuite
       sql("SELECT locate(collate('aBc', 'UTF8_BINARY'),collate('abcabc', 'UTF8_BINARY_LCASE'),4)")
     }
     assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+  }
+
+  test("StringTrim* functions - unit tests for both paths (codegen and eval)") {
+    // Without trimString param.
+    checkEvaluation(StringTrim(Literal.create( "  asd  ", StringType(0))), "asd")
+    checkEvaluation(StringTrimLeft(Literal.create("  asd  ", StringType(0))), "asd  ")
+    checkEvaluation(StringTrimRight(Literal.create("  asd  ", StringType(0))), "  asd")
+
+    // With trimString param.
+    checkEvaluation(
+      StringTrim(Literal.create("  asd  ", StringType(0)), Literal.create(" ", StringType(0))),
+      "asd")
+    checkEvaluation(
+      StringTrimLeft(Literal.create("  asd  ", StringType(0)), Literal.create(" ", StringType(0))),
+      "asd  ")
+    checkEvaluation(
+      StringTrimRight(Literal.create("  asd  ", StringType(0)), Literal.create(" ", StringType(0))),
+      "  asd")
+
+    checkEvaluation(
+      StringTrim(Literal.create("xxasdxx", StringType(0)), Literal.create("x", StringType(0))),
+      "asd")
+    checkEvaluation(
+      StringTrimLeft(Literal.create("xxasdxx", StringType(0)), Literal.create("x", StringType(0))),
+      "asdxx")
+    checkEvaluation(
+      StringTrimRight(Literal.create("xxasdxx", StringType(0)), Literal.create("x", StringType(0))),
+      "xxasd")
+  }
+
+  test("StringTrim* functions - E2E tests") {
+    case class StringTrimTestCase(
+      collation: String,
+      trimFunc: String,
+      sourceString: String,
+      hasTrimString: Boolean,
+      trimString: String,
+      expectedResultString: String)
+
+    val testCases = Seq(
+      // Without trimString param.
+      StringTrimTestCase("UTF8_BINARY", "TRIM", "asd", false, null, "asd"),
+      StringTrimTestCase("UTF8_BINARY", "TRIM", "  asd  ", false, null, "asd"),
+      StringTrimTestCase("UTF8_BINARY", "BTRIM", "asd", false, null, "asd"),
+      StringTrimTestCase("UTF8_BINARY", "BTRIM", "  asd  ", false, null, "asd"),
+      StringTrimTestCase("UTF8_BINARY", "LTRIM", "asd", false, null, "asd"),
+      StringTrimTestCase("UTF8_BINARY", "LTRIM", "  asd  ", false, null, "asd  "),
+      StringTrimTestCase("UTF8_BINARY", "RTRIM", "asd", false, null, "asd"),
+      StringTrimTestCase("UTF8_BINARY", "RTRIM", "  asd  ", false, null, "  asd"),
+
+      // With null trimString param.
+      StringTrimTestCase("UTF8_BINARY", "TRIM", "asd", true, null, null),
+      StringTrimTestCase("UTF8_BINARY", "TRIM", "  asd  ", true, null, null),
+      StringTrimTestCase("UTF8_BINARY", "BTRIM", "asd", true, null, null),
+      StringTrimTestCase("UTF8_BINARY", "BTRIM", "  asd  ", true, null, null),
+      StringTrimTestCase("UTF8_BINARY", "LTRIM", "asd", true, null, null),
+      StringTrimTestCase("UTF8_BINARY", "LTRIM", "  asd  ", true, null, null),
+      StringTrimTestCase("UTF8_BINARY", "RTRIM", "asd", true, null, null),
+      StringTrimTestCase("UTF8_BINARY", "RTRIM", "  asd  ", true, null, null),
+
+      // With " " trimString param.
+      StringTrimTestCase("UTF8_BINARY", "TRIM", "asd", true, " ", "asd"),
+      StringTrimTestCase("UTF8_BINARY", "TRIM", "  asd  ", true, " ", "asd"),
+      StringTrimTestCase("UTF8_BINARY", "BTRIM", "asd", true, " ", "asd"),
+      StringTrimTestCase("UTF8_BINARY", "BTRIM", "  asd  ", true, " ", "asd"),
+      StringTrimTestCase("UTF8_BINARY", "LTRIM", "asd", true, " ", "asd"),
+      StringTrimTestCase("UTF8_BINARY", "LTRIM", "  asd  ", true, " ", "asd  "),
+      StringTrimTestCase("UTF8_BINARY", "RTRIM", "asd", true, " ", "asd"),
+      StringTrimTestCase("UTF8_BINARY", "RTRIM", "  asd  ", true, " ", "  asd"),
+
+      // Try the same with any other collation.
+      // Without trimString param.
+      StringTrimTestCase("UNICODE_CI", "TRIM", "asd", false, null, "asd"),
+      StringTrimTestCase("UNICODE_CI", "TRIM", "  asd  ", false, null, "asd"),
+      StringTrimTestCase("UNICODE_CI", "BTRIM", "asd", false, null, "asd"),
+      StringTrimTestCase("UNICODE_CI", "BTRIM", "  asd  ", false, null, "asd"),
+      StringTrimTestCase("UNICODE_CI", "LTRIM", "asd", false, null, "asd"),
+      StringTrimTestCase("UNICODE_CI", "LTRIM", "  asd  ", false, null, "asd  "),
+      StringTrimTestCase("UNICODE_CI", "RTRIM", "asd", false, null, "asd"),
+      StringTrimTestCase("UNICODE_CI", "RTRIM", "  asd  ", false, null, "  asd"),
+
+      // With null trimString param.
+      StringTrimTestCase("UNICODE_CI", "TRIM", "asd", true, null, null),
+      StringTrimTestCase("UNICODE_CI", "TRIM", "  asd  ", true, null, null),
+      StringTrimTestCase("UNICODE_CI", "BTRIM", "asd", true, null, null),
+      StringTrimTestCase("UNICODE_CI", "BTRIM", "  asd  ", true, null, null),
+      StringTrimTestCase("UNICODE_CI", "LTRIM", "asd", true, null, null),
+      StringTrimTestCase("UNICODE_CI", "LTRIM", "  asd  ", true, null, null),
+      StringTrimTestCase("UNICODE_CI", "RTRIM", "asd", true, null, null),
+      StringTrimTestCase("UNICODE_CI", "RTRIM", "  asd  ", true, null, null),
+
+      // With " " trimString param.
+      StringTrimTestCase("UNICODE_CI", "TRIM", "asd", true, " ", "asd"),
+      StringTrimTestCase("UNICODE_CI", "TRIM", "  asd  ", true, " ", "asd"),
+      StringTrimTestCase("UNICODE_CI", "BTRIM", "asd", true, " ", "asd"),
+      StringTrimTestCase("UNICODE_CI", "BTRIM", "  asd  ", true, " ", "asd"),
+      StringTrimTestCase("UNICODE_CI", "LTRIM", "asd", true, " ", "asd"),
+      StringTrimTestCase("UNICODE_CI", "LTRIM", "  asd  ", true, " ", "asd  "),
+      StringTrimTestCase("UNICODE_CI", "RTRIM", "asd", true, " ", "asd"),
+      StringTrimTestCase("UNICODE_CI", "RTRIM", "  asd  ", true, " ", "  asd")
+
+      // Other more complex cases can be found in unit tests in CollationSupportSuite.java.
+    )
+
+    // scalastyle:off
+
+    testCases.foreach(testCase => {
+      var df: DataFrame = null
+
+      if (testCase.trimFunc.equalsIgnoreCase("BTRIM")) {
+        // BTRIM has arguments in (srcStr, trimStr) order
+        df = sql(s"SELECT ${testCase.trimFunc}(" +
+          s"COLLATE('${testCase.sourceString}', '${testCase.collation}')" +
+          (if (!testCase.hasTrimString) "" else if (testCase.trimString == null) ", null" else s", COLLATE('${testCase.trimString}', '${testCase.collation}')") +
+          ")")
+      }
+      else {
+        // While other functions have arguments in (trimStr, srcStr) order
+        df = sql(s"SELECT ${testCase.trimFunc}(" +
+          (if (!testCase.hasTrimString) "" else if (testCase.trimString == null) "null, " else s"COLLATE('${testCase.trimString}', '${testCase.collation}'), ") +
+          s"COLLATE('${testCase.sourceString}', '${testCase.collation}')" +
+          ")")
+      }
+
+      checkAnswer(df = df, expectedAnswer = Row(testCase.expectedResultString))
+    })
+
+    // scalastyle:on
   }
 
   // TODO: Add more tests for other string expressions

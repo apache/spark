@@ -1042,13 +1042,19 @@ trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
     }
   }
 
-  protected val trimClass: String
-
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val evals = children.map(_.genCode(ctx))
     val srcString = evals.head
 
     if (evals.length == 1) {
+      val stringTrimCode: String = this match {
+        case _: StringTrim =>
+          CollationSupport.StringTrim.genCode(srcString.value, collationId)
+        case _: StringTrimLeft =>
+          CollationSupport.StringTrimLeft.genCode(srcString.value, collationId)
+        case _: StringTrimRight =>
+          CollationSupport.StringTrimRight.genCode(srcString.value, collationId)
+      }
       ev.copy(code = code"""
          |${srcString.code}
          |boolean ${ev.isNull} = false;
@@ -1056,10 +1062,18 @@ trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
          |if (${srcString.isNull}) {
          |  ${ev.isNull} = true;
          |} else {
-         |  ${ev.value} = $CollationSupport.$trimClass.exec(${srcString.value}, $collationId);
+         |  ${ev.value} = $stringTrimCode;
          |}""".stripMargin)
     } else {
       val trimString = evals(1)
+      val stringTrimCode: String = this match {
+        case _: StringTrim =>
+          CollationSupport.StringTrim.genCode(srcString.value, trimString.value, collationId)
+        case _: StringTrimLeft =>
+          CollationSupport.StringTrimLeft.genCode(srcString.value, trimString.value, collationId)
+        case _: StringTrimRight =>
+          CollationSupport.StringTrimRight.genCode(srcString.value, trimString.value, collationId)
+      }
       ev.copy(code = code"""
          |${srcString.code}
          |boolean ${ev.isNull} = false;
@@ -1071,8 +1085,7 @@ trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
          |  if (${trimString.isNull}) {
          |    ${ev.isNull} = true;
          |  } else {
-         |    ${ev.value} = $CollationSupport.$trimClass.exec(
-         |      ${srcString.value}, ${trimString.value}, $collationId);
+         |    ${ev.value} = $stringTrimCode;
          |  }
          |}""".stripMargin)
     }
@@ -1170,8 +1183,6 @@ case class StringTrim(srcStr: Expression, trimStr: Option[Expression] = None)
 
   override def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String =
     CollationSupport.StringTrim.exec(srcString, trimString, collationId)
-
-  override val trimClass: String = "StringTrim"
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     copy(
@@ -1280,8 +1291,6 @@ case class StringTrimLeft(srcStr: Expression, trimStr: Option[Expression] = None
   override def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String =
     CollationSupport.StringTrimLeft.exec(srcString, trimString, collationId)
 
-  override val trimClass: String = "StringTrimLeft"
-
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): StringTrimLeft =
     copy(
@@ -1341,8 +1350,6 @@ case class StringTrimRight(srcStr: Expression, trimStr: Option[Expression] = Non
 
   override def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String =
     CollationSupport.StringTrimRight.exec(srcString, trimString, collationId)
-
-  override val trimClass: String = "StringTrimRight"
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): StringTrimRight =
