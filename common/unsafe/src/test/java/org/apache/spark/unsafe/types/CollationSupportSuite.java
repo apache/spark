@@ -556,7 +556,7 @@ public class CollationSupportSuite {
     assertLocate("i̇o", "世界İo大千世界大千İo", 4, "UNICODE_CI", 11);
     assertLocate("İo", "i̇o世界大千世界", 1, "UNICODE_CI", 1);
     assertLocate("İo", "大千i̇o世界大千世界", 1, "UNICODE_CI", 3);
-    assertLocate("İo", "世界i̇o大千世界大千i̇o", 4, "UNICODE_CI", 11); // FAILING
+    assertLocate("İo", "世界i̇o大千世界大千i̇o", 4, "UNICODE_CI", 12); // 12 instead of 11
   }
 
   // TODO: Test more collation-aware string expressions.
