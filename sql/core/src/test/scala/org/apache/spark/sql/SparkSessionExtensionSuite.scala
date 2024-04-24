@@ -1014,6 +1014,7 @@ case class MyShuffleExchangeExec(delegate: ShuffleExchangeExec) extends ShuffleE
     val attributeStats = AttributeMap(Seq((child.output.head, columnStats)))
     Statistics(stats.sizeInBytes, stats.rowCount, attributeStats)
   }
+  override def shuffleId: Int = delegate.shuffleId
   override def child: SparkPlan = delegate.child
   override protected def doExecute(): RDD[InternalRow] = delegate.execute()
   override def outputPartitioning: Partitioning = delegate.outputPartitioning

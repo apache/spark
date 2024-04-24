@@ -1630,3 +1630,109 @@ as the activated JDBC Driver.
     </tr>
   </tbody>
 </table>
+
+### Mapping Spark SQL Data Types to Microsoft SQL Server
+
+The below table describes the data type conversions from Spark SQL Data Types to Microsoft SQL Server data types,
+when creating, altering, or writing data to a Microsoft SQL Server table using the built-in jdbc data source with
+the mssql-jdbc as the activated JDBC Driver.
+
+<table>
+  <thead>
+    <tr>
+      <th><b>Spark SQL Data Type</b></th>
+      <th><b>SQL Server Data Type</b></th>
+      <th><b>Remarks</b></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>BooleanType</td>
+      <td>bit</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>ByteType</td>
+      <td>smallint</td>
+      <td>Supported since Spark 4.0.0, previous versions throw errors</td>
+    </tr>
+    <tr>
+      <td>ShortType</td>
+      <td>smallint</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>IntegerType</td>
+      <td>int</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>LongType</td>
+      <td>bigint</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>FloatType</td>
+      <td>real</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>DoubleType</td>
+      <td>double precision</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>DecimalType(p, s)</td>
+      <td>number(p,s)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>DateType</td>
+      <td>date</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>TimestampType</td>
+      <td>datetime</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>TimestampNTZType</td>
+      <td>datetime</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>StringType</td>
+      <td>nvarchar(max)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>BinaryType</td>
+      <td>varbinary(max)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>CharType(n)</td>
+      <td>char(n)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>VarcharType(n)</td>
+      <td>varchar(n)</td>
+      <td></td>
+    </tr>
+  </tbody>
+</table>
+
+The Spark Catalyst data types below are not supported with suitable SQL Server types.
+
+- DayTimeIntervalType
+- YearMonthIntervalType
+- CalendarIntervalType
+- ArrayType
+- MapType
+- StructType
+- UserDefinedType
+- NullType
+- ObjectType
+- VariantType
