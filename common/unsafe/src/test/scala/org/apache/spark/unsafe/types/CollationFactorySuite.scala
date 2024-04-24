@@ -320,4 +320,38 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
         assert(col.collationName == normalized)
     }
   }
+
+  test("invalid collationId") {
+    Seq(
+      -1, // user-defined collation range
+      1 << 31, // user-defined collation range
+      123, // utf-8 binary with non-zero locale id
+      1 << 16, // utf8-binary mandatory zero bit 16 breach
+      1 << 17, // utf8-binary mandatory zero bit 17 breach
+      1 << 18, // utf8-binary mandatory zero bit 18 breach
+      1 << 19, // utf8-binary mandatory zero bit 19 breach
+      1 << 20, // utf8-binary mandatory zero bit 20 breach
+      1 << 21, // utf8-binary mandatory zero bit 21 breach
+      1 << 24, // utf8-binary mandatory zero bit 24 breach
+      1 << 25, // utf8-binary mandatory zero bit 25 breach
+      1 << 26, // utf8-binary mandatory zero bit 26 breach
+      1 << 27, // utf8-binary mandatory zero bit 27 breach
+      (1 << 30) | (1 << 16), // ICU mandatory zero bit 16 breach
+      (1 << 30) | (1 << 17), // ICU mandatory zero bit 17 breach
+      (1 << 30) | (1 << 18), // ICU mandatory zero bit 18 breach
+      (1 << 30) | (1 << 19), // ICU mandatory zero bit 19 breach
+      (1 << 30) | (1 << 20), // ICU mandatory zero bit 20 breach
+      (1 << 30) | (1 << 21), // ICU mandatory zero bit 21 breach
+      (1 << 30) | (1 << 24), // ICU mandatory zero bit 24 breach
+      (1 << 30) | (1 << 25), // ICU mandatory zero bit 25 breach
+      (1 << 30) | (1 << 26), // ICU mandatory zero bit 26 breach
+      (1 << 30) | (1 << 27), // ICU mandatory zero bit 27 breach
+      123, // utf8-binary with non-zero locale id
+      (1 << 30) | 44444, // ICU with invalid locale id
+      (1 << 23) | (1 << 22), // utf8-binary with invalid case conversion
+      (1 << 30) | (1 << 23) | (1 << 22), // ICU with invalid case conversion
+      1 << 28, // utf8-binary accent-insensitive
+      1 << 29 // utf8-binary case-insensitive
+    ).foreach(collationId => assert(fetchCollation(collationId) == null))
+  }
 }

@@ -180,7 +180,7 @@ public final class CollationFactory {
 
       private static final Map<Integer, Collation> collationMap = new ConcurrentHashMap<>();
 
-      public static Collation fetchCollation(int collationId) {
+      public static Collation fetchCollation(int collationId) throws SparkException {
         if (collationMap.containsKey(collationId)) {
           return collationMap.get(collationId);
         } else {
@@ -271,10 +271,18 @@ public final class CollationFactory {
         return collationId;
       }
 
-      public static CollationSpecUTF8Binary fromCollationId(int collationId) {
-        CaseConversion caseConversion = CaseConversion.values()[
-          (collationId >> caseConversionOffset) & ((1 << caseConversionLen) - 1)];
-        return new CollationSpecUTF8Binary(caseConversion);
+      public static CollationSpecUTF8Binary fromCollationId(int collationId)
+          throws SparkException {
+        int originalCollationId = collationId;
+        int caseConversionOrdinal =
+          (collationId >> caseConversionOffset) & ((1 << caseConversionLen) - 1);
+        collationId ^= caseConversionOrdinal << caseConversionOffset;
+        if (collationId != 0 || caseConversionOrdinal >= CaseConversion.values().length) {
+          throw new SparkException("Invalid UTF8_BINARY collation id " + originalCollationId);
+        } else {
+          CaseConversion caseConversion = CaseConversion.values()[caseConversionOrdinal];
+          return new CollationSpecUTF8Binary(caseConversion);
+        }
       }
 
       @Override
@@ -400,15 +408,27 @@ public final class CollationFactory {
         }
       }
 
-      public static CollationSpecICU fromCollationId(int collationId) {
-        CaseSensitivity caseSensitivity = CaseSensitivity.values()[
-          (collationId >> caseSensitivityOffset) & ((1 << caseSensitivityLen) - 1)];
-        AccentSensitivity accentSensitivity = AccentSensitivity.values()[
-          (collationId >> accentSensitivityOffset) & ((1 << accentSensitivityLen) - 1)];
-        CaseConversion caseConversion = CaseConversion.values()[
-          (collationId >> caseConversionOffset) & ((1 << caseConversionLen) - 1)];
-        String locale = ICULocaleNames[(collationId >> localeOffset) & ((1 << localeLen) - 1)];
-        return new CollationSpecICU(locale, caseSensitivity, accentSensitivity, caseConversion);
+      public static CollationSpecICU fromCollationId(int collationId) throws SparkException {
+        int originalCollationId = collationId;
+        int caseSensitivityOrdinal = (collationId >> caseSensitivityOffset) & ((1 << caseSensitivityLen) - 1);
+        int accentSensitivityOrdinal = (collationId >> accentSensitivityOffset) & ((1 << accentSensitivityLen) - 1);
+        int caseConversionOrdinal = (collationId >> caseConversionOffset) & ((1 << caseConversionLen) - 1);
+        int localeOrdinal = (collationId >> localeOffset) & ((1 << localeLen) - 1);
+        collationId ^= ImplementationProvider.ICU.ordinal() << implementationProviderOffset;
+        collationId ^= caseSensitivityOrdinal << caseSensitivityOffset;
+        collationId ^= accentSensitivityOrdinal << accentSensitivityOffset;
+        collationId ^= caseConversionOrdinal << caseConversionOffset;
+        collationId ^= localeOrdinal << localeOffset;
+        if (collationId != 0 || caseConversionOrdinal >= CaseConversion.values().length ||
+            localeOrdinal >= ICULocaleNames.length) {
+          throw new SparkException("Invalid ICU collation id " + originalCollationId);
+        } else {
+          CaseSensitivity caseSensitivity = CaseSensitivity.values()[caseSensitivityOrdinal];
+          AccentSensitivity accentSensitivity = AccentSensitivity.values()[accentSensitivityOrdinal];
+          CaseConversion caseConversion = CaseConversion.values()[caseConversionOrdinal];
+          String locale = ICULocaleNames[localeOrdinal];
+          return new CollationSpecICU(locale, caseSensitivity, accentSensitivity, caseConversion);
+        }
       }
 
       @Override
@@ -568,7 +588,11 @@ public final class CollationFactory {
   }
 
   public static Collation fetchCollation(int collationId) {
-    return Collation.CollationSpec.fetchCollation(collationId);
+    try {
+      return Collation.CollationSpec.fetchCollation(collationId);
+    } catch (SparkException e) {
+      return null;
+    }
   }
 
   public static Collation fetchCollation(String collationName) throws SparkException {
