@@ -245,7 +245,7 @@ public final class CollationFactory {
       protected abstract Collation buildCollation();
     }
 
-    public static class CollationSpecUTF8Binary extends CollationSpec {
+    private static class CollationSpecUTF8Binary extends CollationSpec {
 
       public static final int UTF8_BINARY_COLLATION_ID =
         new CollationSpecUTF8Binary(CaseConversion.UNSPECIFIED).getCollationId();
@@ -324,7 +324,7 @@ public final class CollationFactory {
       }
     }
 
-    public static class CollationSpecICU extends CollationSpec {
+    private static class CollationSpecICU extends CollationSpec {
 
       private static final String[] ICULocaleNames;
       private static final Map<String, ULocale> ICULocaleMap = new HashMap<>();
