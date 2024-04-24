@@ -343,7 +343,8 @@ class ExecutorPodsAllocator(
         val toDelete = newlyCreatedToDelete ++ pendingToDelete
 
         if (toDelete.nonEmpty) {
-          logInfo(s"Deleting ${toDelete.size} excess pod requests (${toDelete.mkString(",")}).")
+          logInfo(log"Deleting ${MDC(LogKey.COUNT, toDelete.size)} excess pod requests " +
+            log"(${MDC(LogKey.RESOURCE_PROFILE_IDS, toDelete.mkString(","))}).")
           _deletedExecutorIds = _deletedExecutorIds ++ toDelete
 
           Utils.tryLogNonFatalError {
@@ -397,9 +398,11 @@ class ExecutorPodsAllocator(
         val numMissingPodsForRpId = targetNum - podCountForRpId
         val numExecutorsToAllocate =
           math.min(math.min(numMissingPodsForRpId, podAllocationSize), sharedSlotFromPendingPods)
-        logInfo(s"Going to request $numExecutorsToAllocate executors from Kubernetes for " +
-          s"ResourceProfile Id: $rpId, target: $targetNum, known: $podCountForRpId, " +
-          s"sharedSlotFromPendingPods: $sharedSlotFromPendingPods.")
+        logInfo(log"Going to request ${MDC(LogKey.COUNT, numExecutorsToAllocate)} executors from " +
+          log"Kubernetes for ResourceProfile Id: ${MDC(LogKey.RESOURCE_PROFILE_ID, rpId)}, " +
+          log"target: ${MDC(LogKey.POD_TARGET_COUNT, targetNum)}, " +
+          log"known: ${MDC(LogKey.POD_COUNT, podCountForRpId)}, sharedSlotFromPendingPods: " +
+          log"${MDC(LogKey.POD_SHARED_SLOT_COUNT, sharedSlotFromPendingPods)}.")
         requestNewExecutors(numExecutorsToAllocate, applicationId, rpId, k8sKnownPVCNames)
       }
     }
@@ -428,7 +431,8 @@ class ExecutorPodsAllocator(
           .filterNot(pvc => pvcsInUse.contains(pvc.getMetadata.getName))
           .filter(pvc => now - Instant.parse(pvc.getMetadata.getCreationTimestamp).toEpochMilli
             > podAllocationDelay)
-        logInfo(s"Found ${reusablePVCs.size} reusable PVCs from ${createdPVCs.size} PVCs")
+        logInfo(log"Found ${MDC(LogKey.COUNT, reusablePVCs.size)} reusable PVCs from " +
+          log"${MDC(LogKey.TOTAL, createdPVCs.size)} PVCs")
         reusablePVCs
       } catch {
         case _: KubernetesClientException =>
@@ -449,7 +453,8 @@ class ExecutorPodsAllocator(
     val reusablePVCs = getReusablePVCs(applicationId, pvcsInUse)
     for ( _ <- 0 until numExecutorsToAllocate) {
       if (reusablePVCs.isEmpty && podAllocOnPVC && maxPVCs <= PVC_COUNTER.get()) {
-        logInfo(s"Wait to reuse one of the existing ${PVC_COUNTER.get()} PVCs.")
+        logInfo(
+          log"Wait to reuse one of the existing ${MDC(LogKey.COUNT, PVC_COUNTER.get())} PVCs.")
         return
       }
       val newExecutorId = EXECUTOR_ID_COUNTER.incrementAndGet()
@@ -480,8 +485,9 @@ class ExecutorPodsAllocator(
               addOwnerReference(driverPod.get, Seq(resource))
             }
             val pvc = resource.asInstanceOf[PersistentVolumeClaim]
-            logInfo(s"Trying to create PersistentVolumeClaim ${pvc.getMetadata.getName} with " +
-              s"StorageClass ${pvc.getSpec.getStorageClassName}")
+            logInfo(log"Trying to create PersistentVolumeClaim " +
+              log"${MDC(LogKey.PVC_METADATA_NAME, pvc.getMetadata.getName)} with " +
+              log"StorageClass ${MDC(LogKey.CLASS_NAME, pvc.getSpec.getStorageClassName)}")
             kubernetesClient.persistentVolumeClaims().inNamespace(namespace).resource(pvc).create()
             PVC_COUNTER.incrementAndGet()
           }
@@ -519,7 +525,8 @@ class ExecutorPodsAllocator(
           if (volume.nonEmpty) {
             val matchedPVC = reusablePVCs.remove(index)
             replacedResources.add(pvc)
-            logInfo(s"Reuse PersistentVolumeClaim ${matchedPVC.getMetadata.getName}")
+            logInfo(log"Reuse PersistentVolumeClaim " +
+              log"${MDC(LogKey.PVC_METADATA_NAME, matchedPVC.getMetadata.getName)}")
             volume.get.getPersistentVolumeClaim.setClaimName(matchedPVC.getMetadata.getName)
           }
         }
