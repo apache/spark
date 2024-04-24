@@ -75,13 +75,7 @@ private[spark] class StreamingPythonRunner(
 
     val workerFactory =
       new PythonWorkerFactory(pythonExec, workerModule, envVars.asScala.toMap, false)
-    val (worker: PythonWorker, _) =
-      env.createPythonWorkerBlocking(
-        pythonExec,
-        workerModule,
-        envVars.asScala.toMap,
-        useDaemon = false
-      )
+    val (worker: PythonWorker, _) = workerFactory.createSimpleWorker(blockingMode = true)
     pythonWorker = Some(worker)
     pythonWorkerFactory = Some(workerFactory)
 

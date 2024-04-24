@@ -142,8 +142,7 @@ class SparkEnv (
       workerModule: String,
       daemonModule: String,
       envVars: Map[String, String],
-      useDaemon: Boolean,
-      blockingMode: Boolean = false): (PythonWorker, Option[Long]) = {
+      useDaemon: Boolean): (PythonWorker, Option[Long]) = {
     synchronized {
       val key = PythonWorkersKey(pythonExec, workerModule, daemonModule, envVars)
       val workerFactory = pythonWorkers.getOrElseUpdate(key, new PythonWorkerFactory(
@@ -154,7 +153,7 @@ class SparkEnv (
           s"useDaemon = $useDaemon. This is not allowed to change after the PythonWorkerFactory " +
           s"is created given the same key: $key.")
       }
-      workerFactory.create(blockingMode)
+      workerFactory.create()
     }
   }
 
@@ -165,19 +164,6 @@ class SparkEnv (
       useDaemon: Boolean): (PythonWorker, Option[Long]) = {
     createPythonWorker(
       pythonExec, workerModule, PythonWorkerFactory.defaultDaemonModule, envVars, useDaemon)
-  }
-
-  private[spark] def createPythonWorkerBlocking(
-      pythonExec: String,
-      workerModule: String,
-      envVars: Map[String, String],
-      useDaemon: Boolean): (PythonWorker, Option[Long]) = {
-    createPythonWorker(
-      pythonExec,
-      workerModule,
-      PythonWorkerFactory.defaultDaemonModule,
-      envVars, useDaemon,
-      blockingMode = true)
   }
 
   private[spark] def createPythonWorker(
