@@ -28,7 +28,7 @@ import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config.Deploy.ZOOKEEPER_URL
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rpc.{RpcEndpoint, RpcEnv}
-import org.apache.spark.serializer.{JavaSerializer, KryoSerializer, Serializer}
+import org.apache.spark.serializer.{JavaSerializer, Serializer}
 import org.apache.spark.util.Utils
 
 class PersistenceEngineSuite extends SparkFunSuite {
@@ -100,18 +100,6 @@ class PersistenceEngineSuite extends SparkFunSuite {
       testPersistenceEngine(conf, serializer =>
         new RocksDBPersistenceEngine(link.toAbsolutePath.toString, serializer)
       )
-    }
-  }
-
-  test("SPARK-46205: Support KryoSerializer in FileSystemPersistenceEngine") {
-    withTempDir { dir =>
-      val conf = new SparkConf()
-      val serializer = new KryoSerializer(conf)
-      val engine = new FileSystemPersistenceEngine(dir.getAbsolutePath, serializer)
-      engine.persist("test_1", "test_1_value")
-      engine.read[String]("test_1")
-      engine.unpersist("test_1")
-      engine.close()
     }
   }
 

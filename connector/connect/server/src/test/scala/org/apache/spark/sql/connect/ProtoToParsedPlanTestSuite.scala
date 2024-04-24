@@ -126,6 +126,7 @@ class ProtoToParsedPlanTestSuite
         Connect.CONNECT_EXTENSIONS_EXPRESSION_CLASSES.key,
         "org.apache.spark.sql.connect.plugin.ExampleExpressionPlugin")
       .set(org.apache.spark.sql.internal.SQLConf.ANSI_ENABLED.key, false.toString)
+      .set(org.apache.spark.sql.internal.SQLConf.USE_COMMON_EXPR_ID_FOR_ALIAS.key, false.toString)
   }
 
   protected val suiteBaseResourcePath = commonResourcePath.resolve("query-tests")

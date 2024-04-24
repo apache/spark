@@ -1669,7 +1669,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
       case u: UpdateTable => resolveReferencesInUpdate(u)
 
-      case m @ MergeIntoTable(targetTable, sourceTable, _, _, _, _)
+      case m @ MergeIntoTable(targetTable, sourceTable, _, _, _, _, _)
         if !m.resolved && targetTable.resolved && sourceTable.resolved =>
 
         EliminateSubqueryAliases(targetTable) match {

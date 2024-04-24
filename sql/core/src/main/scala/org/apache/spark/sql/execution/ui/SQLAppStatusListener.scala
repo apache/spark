@@ -25,7 +25,8 @@ import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.spark.{JobExecutionStatus, SparkConf}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.CLASS_NAME
 import org.apache.spark.internal.config.Status._
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.connector.metric.CustomMetric
@@ -222,9 +223,9 @@ class SQLAppStatusListener(
             method
           } catch {
             case NonFatal(e) =>
-              logWarning(s"Unable to load custom metric object for class `$className`. " +
-                "Please make sure that the custom metric class is in the classpath and " +
-                "it has 0-arg constructor.", e)
+              logWarning(log"Unable to load custom metric object for class " +
+                log"`${MDC(CLASS_NAME, className)}`. Please make sure that the custom metric " +
+                log"class is in the classpath and it has 0-arg constructor.", e)
               // Cannot initialize custom metric object, we might be in history server that does
               // not have the custom metric class.
               val defaultMethod = (_: Array[Long], _: Array[Long]) => "N/A"
