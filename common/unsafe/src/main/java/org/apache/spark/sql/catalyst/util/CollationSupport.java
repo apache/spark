@@ -464,7 +464,8 @@ public final class CollationSupport {
       } else {
         count = -count;
 
-        StringSearch stringSearch = CollationFactory.getStringSearch(string, delimiter, collationId);
+        StringSearch stringSearch = CollationFactory
+          .getStringSearch(string, delimiter, collationId);
 
         int start = string.numChars() - 1;
         int lastMatchLength = 0;
