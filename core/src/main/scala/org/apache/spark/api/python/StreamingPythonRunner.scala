@@ -21,6 +21,7 @@ import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, Data
 
 import scala.jdk.CollectionConverters._
 
+
 import org.apache.spark.{JobArtifactSet, SparkEnv, SparkPythonException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.BUFFER_SIZE
@@ -106,8 +107,7 @@ private[spark] class StreamingPythonRunner(
     val resFromPython = dataIn.readInt()
     if (resFromPython != 0) {
       val errMessage = PythonWorkerUtils.readUTF(dataIn)
-      throw streamingPythonRunnerInitializationFailure(resFromPython,
-        errMessage + "\n" + message + "\n" + s"pythonExec: $pythonExec")
+      throw streamingPythonRunnerInitializationFailure(resFromPython, errMessage)
     }
     logInfo(s"Runner initialization succeeded (returned $resFromPython).")
 

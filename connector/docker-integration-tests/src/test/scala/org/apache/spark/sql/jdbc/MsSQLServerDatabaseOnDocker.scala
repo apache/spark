@@ -15,13 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.client
+package org.apache.spark.sql.jdbc
 
-private[client] trait HiveClientVersions {
-  private val testVersions = sys.env.get("SPARK_TEST_HIVE_CLIENT_VERSIONS")
-  protected val versions = if (testVersions.nonEmpty) {
-    testVersions.get.split(",").map(_.trim).filter(_.nonEmpty).toIndexedSeq
-  } else {
-    IndexedSeq("2.0", "2.1", "2.2", "2.3", "3.0", "3.1")
-  }
+class MsSQLServerDatabaseOnDocker extends DatabaseOnDocker {
+  override val imageName = sys.env.getOrElse("MSSQLSERVER_DOCKER_IMAGE_NAME",
+    "mcr.microsoft.com/mssql/server:2022-CU12-GDR1-ubuntu-22.04")
+  override val env = Map(
+    "SA_PASSWORD" -> "Sapass123",
+    "ACCEPT_EULA" -> "Y"
+  )
+  override val usesIpc = false
+  override val jdbcPort: Int = 1433
+
+  override def getJdbcUrl(ip: String, port: Int): String =
+    s"jdbc:sqlserver://$ip:$port;user=sa;password=Sapass123;"
 }

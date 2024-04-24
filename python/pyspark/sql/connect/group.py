@@ -38,7 +38,7 @@ from pyspark.sql.types import NumericType
 from pyspark.sql.types import StructType
 
 import pyspark.sql.connect.plan as plan
-from pyspark.sql.connect.column import Column
+from pyspark.sql.column import Column
 from pyspark.sql.connect.functions import builtin as F
 from pyspark.errors import PySparkNotImplementedError, PySparkTypeError
 
@@ -61,10 +61,10 @@ class GroupedData:
         self,
         df: "DataFrame",
         group_type: str,
-        grouping_cols: Sequence["Column"],
-        pivot_col: Optional["Column"] = None,
+        grouping_cols: Sequence[Column],
+        pivot_col: Optional[Column] = None,
         pivot_values: Optional[Sequence["LiteralType"]] = None,
-        grouping_sets: Optional[Sequence[Sequence["Column"]]] = None,
+        grouping_sets: Optional[Sequence[Sequence[Column]]] = None,
     ) -> None:
         from pyspark.sql.connect.dataframe import DataFrame
 

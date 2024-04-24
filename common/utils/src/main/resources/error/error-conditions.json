@@ -3804,6 +3804,21 @@
     ],
     "sqlState" : "22003"
   },
+  "SYNTAX_DISCONTINUED" : {
+    "message" : [
+      "Support of the clause or keyword: <clause> has been discontinued in this context."
+    ],
+    "subClass" : {
+      "BANG_EQUALS_NOT" : {
+        "message" : [
+          "The '!' keyword is only supported as an alias for the prefix operator 'NOT'.",
+          "Use the 'NOT' keyword instead for infix clauses such as `NOT LIKE`, `NOT IN`, `NOT BETWEEN`, etc.",
+          "To re-enable the '!' keyword, set \"spark.sql.legacy.bangEqualsNot\" to \"true\"."
+        ]
+      }
+    },
+    "sqlState" : "42601"
+  },
   "TABLE_OR_VIEW_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create table or view <relationName> because it already exists.",
