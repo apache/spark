@@ -4142,11 +4142,11 @@ class DataFrame:
         ...     count(lit(1)).alias("rc"),
         ...     count(col("error")).alias("erc"))
         >>> try:
-        >>>     q = observed_ds.writeStream.format("console").start()
-        >>>     time.sleep(5)
+        ...     q = observed_ds.writeStream.format("console").start()
+        ...     time.sleep(5)
         >>> finally:
-        >>>     q.stop()
-        >>>     spark.streams.removeListener(error_listener)
+        ...     q.stop()
+        ...     spark.streams.removeListener(error_listener)
         """
         ...
 
