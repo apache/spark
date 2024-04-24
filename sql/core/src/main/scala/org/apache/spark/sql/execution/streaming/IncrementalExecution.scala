@@ -22,7 +22,8 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.ERROR
 import org.apache.spark.sql.{SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.expressions.{CurrentBatchTimestamp, ExpressionWithRandomSeed}
@@ -419,9 +420,9 @@ class IncrementalExecution(
           } catch {
             case e: Exception =>
               // no need to throw fatal error, returns empty map
-              logWarning("Error reading metadata path for stateful operator. " +
-                s"This may due to no prior committed batch, or previously run on lower versions:" +
-                s" ${e.getMessage}")
+              logWarning(log"Error reading metadata path for stateful operator. This may due to " +
+                log"no prior committed batch, or previously run on lower versions: " +
+                log"${MDC(ERROR, e.getMessage)}")
           }
         }
         ret

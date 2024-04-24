@@ -34,6 +34,7 @@ import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils, Ins
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSourceStrategy, HadoopFsRelation, InsertIntoHadoopFsRelationCommand, LogicalRelation}
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.hive.execution.HiveScriptTransformationExec
+import org.apache.spark.sql.hive.execution.InsertIntoHiveTable.BY_CTAS
 import org.apache.spark.sql.internal.HiveSerDe
 
 
@@ -194,6 +195,8 @@ object HiveAnalysis extends Rule[LogicalPlan] {
  * - When writing to non-partitioned Hive-serde Parquet/Orc tables
  * - When writing to partitioned Hive-serde Parquet/Orc tables when
  *   `spark.sql.hive.convertInsertingPartitionedTable` is true
+ * - When writing to unpartitioned Hive-serde Parquet/Orc tables when
+ *   `spark.sql.hive.convertInsertingUnpartitionedTable` is true
  * - When writing to directory with Hive-serde
  * - When writing to non-partitioned Hive-serde Parquet/ORC tables using CTAS
  * - When scanning Hive-serde Parquet/ORC tables
@@ -230,7 +233,8 @@ case class RelationConversions(
       case InsertIntoStatement(
           r: HiveTableRelation, partition, cols, query, overwrite, ifPartitionNotExists, byName)
           if query.resolved && DDLUtils.isHiveTable(r.tableMeta) &&
-            (!r.isPartitioned || conf.getConf(HiveUtils.CONVERT_INSERTING_PARTITIONED_TABLE))
+            ((r.isPartitioned && conf.getConf(HiveUtils.CONVERT_INSERTING_PARTITIONED_TABLE)) ||
+              (!r.isPartitioned && conf.getConf(HiveUtils.CONVERT_INSERTING_UNPARTITIONED_TABLE)))
             && isConvertible(r) =>
         InsertIntoStatement(metastoreCatalog.convert(r, isWrite = true), partition, cols,
           query, overwrite, ifPartitionNotExists, byName)
@@ -245,11 +249,11 @@ case class RelationConversions(
       // that only matches table insertion inside Hive CTAS.
       // This pattern would not cause conflicts because this rule is always applied before
       // `HiveAnalysis` and both of these rules are running once.
-      case InsertIntoHiveTable(
+      case i @ InsertIntoHiveTable(
         tableDesc, _, query, overwrite, ifPartitionNotExists, _, _, _, _, _, _)
           if query.resolved && DDLUtils.isHiveTable(tableDesc) &&
             tableDesc.partitionColumnNames.isEmpty && isConvertible(tableDesc) &&
-            conf.getConf(HiveUtils.CONVERT_METASTORE_CTAS) =>
+            conf.getConf(HiveUtils.CONVERT_METASTORE_CTAS) && i.getTagValue(BY_CTAS).isDefined =>
         // validation is required to be done here before relation conversion.
         DDLUtils.checkTableColumns(tableDesc.copy(schema = query.schema))
         val hiveTable = DDLUtils.readHiveTable(tableDesc)

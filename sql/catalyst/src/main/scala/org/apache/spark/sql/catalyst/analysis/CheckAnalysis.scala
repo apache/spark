@@ -110,9 +110,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
   }
 
   /** Check and throw exception when a given resolved plan contains LateralColumnAliasReference. */
-  private def checkNotContainingLCA(exprSeq: Seq[NamedExpression], plan: LogicalPlan): Unit = {
-    if (!plan.resolved) return
-    exprSeq.foreach(_.transformDownWithPruning(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
+  private def checkNotContainingLCA(exprs: Seq[Expression], plan: LogicalPlan): Unit = {
+    exprs.foreach(_.transformDownWithPruning(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
       case lcaRef: LateralColumnAliasReference =>
         throw SparkException.internalError("Resolved plan should not contain any " +
           s"LateralColumnAliasReference.\nDebugging information: plan:\n$plan",
@@ -789,17 +788,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           msg = s"Found the unresolved operator: ${o.simpleString(SQLConf.get.maxToStringFields)}",
           context = o.origin.getQueryContext,
           summary = o.origin.context.summary)
-      // If the plan is resolved, the resolved Project, Aggregate or Window should have restored or
-      // resolved all lateral column alias references. Add check for extra safe.
-      case p @ Project(pList, _)
-        if pList.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
-        checkNotContainingLCA(pList, p)
-      case agg @ Aggregate(_, aggList, _)
-        if aggList.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
-        checkNotContainingLCA(aggList, agg)
-      case w @ Window(pList, _, _, _)
-        if pList.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
-        checkNotContainingLCA(pList, w)
+      // If the plan is resolved, all lateral column alias references should have been either
+      // restored or resolved. Add check for extra safe.
+      case o if o.expressions.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
+        checkNotContainingLCA(o.expressions, o)
       case _ =>
     }
   }
