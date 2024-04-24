@@ -49,6 +49,7 @@ abstract class StringRegexExpression extends BinaryExpression
     Seq(StringTypeBinaryLcase, StringTypeAnyCollation)
 
   final lazy val collationId: Int = left.dataType.asInstanceOf[StringType].collationId
+  final lazy val collationRegexFlags: Int = CollationSupport.collationAwareRegexFlags(collationId)
 
   // try cache foldable pattern
   private lazy val cache: Pattern = right match {
@@ -62,7 +63,7 @@ abstract class StringRegexExpression extends BinaryExpression
   } else {
     // Let it raise exception if couldn't compile the regex string
     try {
-      Pattern.compile(escape(str), CollationSupport.collationAwareRegexFlags(collationId))
+      Pattern.compile(escape(str), collationRegexFlags)
     } catch {
       case e: PatternSyntaxException =>
         throw QueryExecutionErrors.invalidPatternError(prettyName, e.getPattern, e)
@@ -163,8 +164,7 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
           StringEscapeUtils.escapeJava(escape(rVal.asInstanceOf[UTF8String].toString()))
         val pattern = ctx.addMutableState(patternClass, "patternLike",
           v =>
-            s"""$v = $patternClass.compile("$regexStr",
-               |CollationSupport.collationAwareRegexFlags($collationId));""".stripMargin)
+            s"""$v = $patternClass.compile("$regexStr", $collationRegexFlags);""".stripMargin)
 
         // We don't use nullSafeCodeGen here because we don't want to re-evaluate right again.
         val eval = left.genCode(ctx)
@@ -192,8 +192,7 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
         s"""
           String $rightStr = $eval2.toString();
           $patternClass $pattern = $patternClass.compile(
-            $escapeFunc($rightStr, '$escapedEscapeChar'),
-            CollationSupport.collationAwareRegexFlags($collationId));
+            $escapeFunc($rightStr, '$escapedEscapeChar'), $collationRegexFlags);
           ${ev.value} = $pattern.matcher($eval1.toString()).matches();
         """
       })
@@ -283,6 +282,7 @@ sealed abstract class MultiLikeBase
 
   override def inputTypes: Seq[AbstractDataType] = StringTypeBinaryLcase :: Nil
   final lazy val collationId: Int = child.dataType.asInstanceOf[StringType].collationId
+  final lazy val collationRegexFlags: Int = CollationSupport.collationAwareRegexFlags(collationId)
 
   override def nullable: Boolean = true
 
@@ -290,9 +290,8 @@ sealed abstract class MultiLikeBase
 
   protected lazy val hasNull: Boolean = patterns.contains(null)
 
-  protected lazy val cache = patterns.filterNot(_ == null)
-    .map(s => Pattern.compile(StringUtils.escapeLikeRegex(s.toString, '\\'),
-      CollationSupport.collationAwareRegexFlags(collationId)))
+  protected lazy val cache = patterns.filterNot(_ == null).map(s =>
+    Pattern.compile(StringUtils.escapeLikeRegex(s.toString, '\\'), collationRegexFlags))
 
   protected lazy val matchFunc = if (isNotSpecified) {
     (p: Pattern, inputValue: String) => !p.matcher(inputValue).matches()
@@ -485,8 +484,7 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
         val regexStr =
           StringEscapeUtils.escapeJava(rVal.asInstanceOf[UTF8String].toString())
         val pattern = ctx.addMutableState(patternClass, "patternRLike",
-          v => s"""$v = $patternClass.compile("$regexStr",
-               |CollationSupport.collationAwareRegexFlags($collationId));""".stripMargin)
+          v => s"""$v = $patternClass.compile("$regexStr", $collationRegexFlags);""".stripMargin)
 
         // We don't use nullSafeCodeGen here because we don't want to re-evaluate right again.
         val eval = left.genCode(ctx)
@@ -510,8 +508,7 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         s"""
           String $rightStr = $eval2.toString();
-          $patternClass $pattern = $patternClass.compile($rightStr,
-          CollationSupport.collationAwareRegexFlags($collationId));
+          $patternClass $pattern = $patternClass.compile($rightStr, $collationRegexFlags);
           ${ev.value} = $pattern.matcher($eval1.toString()).find(0);
         """
       })
@@ -1180,14 +1177,14 @@ object RegExpUtils {
     val classNamePattern = classOf[Pattern].getCanonicalName
     val termLastRegex = ctx.addMutableState("UTF8String", "lastRegex")
     val termPattern = ctx.addMutableState(classNamePattern, "pattern")
+    val collationRegexFlags = CollationSupport.collationAwareRegexFlags(collationId)
 
     s"""
        |if (!$regexp.equals($termLastRegex)) {
        |  // regex value changed
        |  try {
        |    UTF8String r = $regexp.clone();
-       |    $termPattern = $classNamePattern.compile(r.toString(),
-       |    CollationSupport.collationAwareRegexFlags($collationId));
+       |    $termPattern = $classNamePattern.compile(r.toString(), $collationRegexFlags);
        |    $termLastRegex = r;
        |  } catch (java.util.regex.PatternSyntaxException e) {
        |    throw QueryExecutionErrors.invalidPatternError("$prettyName", e.getPattern(), e);
