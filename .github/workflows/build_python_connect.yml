@@ -33,12 +33,11 @@ jobs:
     steps:
       - name: Checkout Spark repository
         uses: actions/checkout@v4
-      - name: Cache Scala, SBT and Maven
+      - name: Cache SBT and Maven
         uses: actions/cache@v4
         with:
           path: |
             build/apache-maven-*
-            build/scala-*
             build/*.jar
             ~/.sbt
           key: build-spark-connect-python-only-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
