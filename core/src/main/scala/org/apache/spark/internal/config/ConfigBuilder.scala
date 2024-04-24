@@ -94,7 +94,7 @@ private[spark] class TypedConfigBuilder[T](
   import ConfigHelpers._
 
   def this(parent: ConfigBuilder, converter: String => T) = {
-    this(parent, converter, Option(_).map(_.toString).orNull)
+    this(parent, converter, { v: T => v.toString })
   }
 
   /** Apply a transformation to the user-provided values of the config entry. */
