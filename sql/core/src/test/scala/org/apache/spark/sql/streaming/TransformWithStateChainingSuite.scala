@@ -134,7 +134,6 @@ class TransformWithStateChainingSuite extends StreamTest
         .groupByKey(x => x.key)
         .transformWithState[OutputRow](
           new TestStatefulProcessor(),
-          TimeMode.None(),
           "outputEventTime",
           OutputMode.Append())
         .groupBy(window($"outputEventTime", "1 minute"))
@@ -176,7 +175,6 @@ class TransformWithStateChainingSuite extends StreamTest
         .groupByKey(x => x.key)
         .transformWithState[OutputRow](
           new TestStatefulProcessor(),
-          TimeMode.None(),
           "outputEventTime",
           OutputMode.Append())
       }
@@ -221,7 +219,6 @@ class TransformWithStateChainingSuite extends StreamTest
         .groupByKey(x => x.key)
         .transformWithState[OutputRow](
           new TestStatefulProcessor(),
-          TimeMode.None(),
           "outputEventTime",
           OutputMode.Append())
         .groupByKey(x => x.key)
@@ -281,7 +278,6 @@ class TransformWithStateChainingSuite extends StreamTest
         .groupByKey(x => x.key)
         .transformWithState[OutputRow](
           new TestStatefulProcessor(),
-          TimeMode.None(),
           "outputEventTime",
           OutputMode.Append())
         .dropDuplicatesWithinWatermark()
@@ -308,7 +304,6 @@ class TransformWithStateChainingSuite extends StreamTest
           .groupByKey(x => x.key)
           .transformWithState[OutputRow](
             new TestStatefulProcessor(),
-            TimeMode.None(),
             "missingEventTimeColumn",
             OutputMode.Append())
 
@@ -330,7 +325,6 @@ class TransformWithStateChainingSuite extends StreamTest
         .groupByKey(x => x.key)
         .transformWithState[OutputRow](
           new StatefulProcessorEmittingRowsOlderThanWatermark(),
-          TimeMode.None(),
           "outputEventTime",
           OutputMode.Append())
 

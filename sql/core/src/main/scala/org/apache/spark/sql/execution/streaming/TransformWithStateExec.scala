@@ -90,6 +90,23 @@ case class TransformWithStateExec(
     }
   }
 
+  /**
+   * Controls watermark propagation to downstream modes. If timeMode is
+   * ProcessingTime, the output rows cannot be interpreted in eventTime, hence
+   * this node will not propagate watermark in this timeMode.
+   *
+   * For timeMode EventTime, output watermark is same as input Watermark because
+   * transformWithState node does not buffer any input rows between micro-batches.
+   */
+  override def produceOutputWatermark(inputWatermarkMs: Long): Option[Long] = {
+    timeMode match {
+      case ProcessingTime =>
+        None
+      case _ =>
+        Some(inputWatermarkMs)
+    }
+  }
+
   override def left: SparkPlan = child
 
   override def right: SparkPlan = initialState

@@ -347,6 +347,12 @@ class IncrementalExecution(
           eventTimeWatermarkForEviction = inputWatermarkForEviction(m.stateInfo.get)
         )
 
+      // UpdateEventTimeColumnExec is used to tag the eventTime column, and validate
+      // emitted rows adhere to watermark in the output of transformWithState.
+      // Hence, this node shares the same watermark value as TransformWithStateExec.
+      // However, given that UpdateEventTimeColumnExec does not store any state, it
+      // does not have any StateInfo. We simply use the StateInfo of transformWithStateExec
+      // to propagate watermark to both UpdateEventTimeColumnExec and transformWithStateExec.
       case UpdateEventTimeColumnExec(eventTime, delay, _,
         SerializeFromObjectExec(serializer,
         TransformWithStateExec(keyDeserializer, valueDeserializer, groupingAttributes,

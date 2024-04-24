@@ -687,11 +687,12 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * in each trigger and the user's state/state variables will be stored persistently across
    * invocations.
    *
+   * Downstream operators would use specified eventTimeColumnName to calculate watermark.
+   * Note that TimeMode is set to EventTime to ensure correct flow of watermark.
+   *
    * @tparam U The type of the output objects. Must be encodable to Spark SQL types.
    * @param statefulProcessor   Instance of statefulProcessor whose functions will
    *                            be invoked by the operator.
-   * @param timeMode            The time mode semantics of the stateful processor
-   *                            for timers and TTL.
    * @param eventTimeColumnName eventTime column in the output dataset. Any operations after
    *                            transformWithState will use the new eventTimeColumn. The user
    *                            needs to ensure that the eventTime for emitted output adheres to
@@ -702,14 +703,13 @@ class KeyValueGroupedDataset[K, V] private[sql](
    */
   private[sql] def transformWithState[U: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
-      timeMode: TimeMode,
       eventTimeColumnName: String,
       outputMode: OutputMode): Dataset[U] = {
     val transformWithState = TransformWithState[K, V, U](
       groupingAttributes,
       dataAttributes,
       statefulProcessor,
-      timeMode,
+      TimeMode.EventTime(),
       outputMode,
       child = logicalPlan
     )
@@ -747,14 +747,17 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * Invokes methods defined in the stateful processor used in arbitrary state API v2.
    * We allow the user to act on per-group set of input rows along with keyed state and the
    * user can choose to output/return 0 or more rows.
+   *
    * For a streaming dataframe, we will repeatedly invoke the interface methods for new rows
    * in each trigger and the user's state/state variables will be stored persistently across
    * invocations.
    *
+   * Downstream operators would use specified eventTimeColumnName to calculate watermark.
+   * Note that TimeMode is set to EventTime to ensure correct flow of watermark.
+   *
    * @tparam U The type of the output objects. Must be encodable to Spark SQL types.
    * @param statefulProcessor Instance of statefulProcessor whose functions will be invoked by the
    *                          operator.
-   * @param timeMode          The time mode semantics of the stateful processor for timers and TTL.
    * @param eventTimeColumnName eventTime column in the output dataset. Any operations after
    *                            transformWithState will use the new eventTimeColumn. The user
    *                            needs to ensure that the eventTime for emitted output adheres to
@@ -766,11 +769,10 @@ class KeyValueGroupedDataset[K, V] private[sql](
    */
   private[sql] def transformWithState[U: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
-      timeMode: TimeMode,
       eventTimeColumnName: String,
       outputMode: OutputMode,
       outputEncoder: Encoder[U]): Dataset[U] = {
-    transformWithState(statefulProcessor, timeMode, outputMode)(outputEncoder)
+    transformWithState(statefulProcessor, TimeMode.EventTime(), outputMode)(outputEncoder)
   }
 
   /**
@@ -817,10 +819,12 @@ class KeyValueGroupedDataset[K, V] private[sql](
    *
    * @tparam U The type of the output objects. Must be encodable to Spark SQL types.
    * @tparam S The type of initial state objects. Must be encodable to Spark SQL types.
+   *
+   * Downstream operators would use specified eventTimeColumnName to calculate watermark.
+   * Note that TimeMode is set to EventTime to ensure correct flow of watermark.
+   *
    * @param statefulProcessor   Instance of statefulProcessor whose functions will
    *                            be invoked by the operator.
-   * @param timeMode            The time mode semantics of the stateful processor for
-   *                            timers and TTL.
    * @param eventTimeColumnName eventTime column in the output dataset. Any operations after
    *                            transformWithState will use the new eventTimeColumn. The user
    *                            needs to ensure that the eventTime for emitted output adheres to
@@ -833,7 +837,6 @@ class KeyValueGroupedDataset[K, V] private[sql](
    */
   private[sql] def transformWithState[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
-      timeMode: TimeMode,
       eventTimeColumnName: String,
       outputMode: OutputMode,
       initialState: KeyValueGroupedDataset[K, S]): Dataset[U] = {
@@ -841,7 +844,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
       groupingAttributes,
       dataAttributes,
       statefulProcessor,
-      timeMode,
+      TimeMode.EventTime(),
       outputMode,
       child = logicalPlan,
       initialState.groupingAttributes,
@@ -887,11 +890,13 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * Invokes methods defined in the stateful processor used in arbitrary state API v2.
    * Functions as the function above, but with additional eventTimeColumnName for output.
    *
+   * Downstream operators would use specified eventTimeColumnName to calculate watermark.
+   * Note that TimeMode is set to EventTime to ensure correct flow of watermark.
+   *
    * @tparam U The type of the output objects. Must be encodable to Spark SQL types.
    * @tparam S The type of initial state objects. Must be encodable to Spark SQL types.
    * @param statefulProcessor Instance of statefulProcessor whose functions will
    *                          be invoked by the operator.
-   * @param timeMode          The time mode semantics of the stateful processor for timers and TTL.
    * @param outputMode        The output mode of the stateful processor.
    * @param initialState      User provided initial state that will be used to initiate state for
    *                          the query in the first batch.
@@ -906,13 +911,12 @@ class KeyValueGroupedDataset[K, V] private[sql](
    */
   private[sql] def transformWithState[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
-      timeMode: TimeMode,
       outputMode: OutputMode,
       initialState: KeyValueGroupedDataset[K, S],
       eventTimeColumnName: String,
       outputEncoder: Encoder[U],
       initialStateEncoder: Encoder[S]): Dataset[U] = {
-    transformWithState(statefulProcessor, timeMode, eventTimeColumnName,
+    transformWithState(statefulProcessor, eventTimeColumnName,
       outputMode, initialState)(outputEncoder, initialStateEncoder)
   }
 
