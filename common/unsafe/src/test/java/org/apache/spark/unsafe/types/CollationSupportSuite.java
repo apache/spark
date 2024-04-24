@@ -601,6 +601,8 @@ public class CollationSupportSuite {
     assertSubstringIndex("abİo12", "i̇o", -1, "UNICODE_CI", "12"); // FAILING
     assertSubstringIndex("abi̇o12", "İo", 1, "UNICODE_CI", "ab");
     assertSubstringIndex("abi̇o12", "İo", -1, "UNICODE_CI", "12"); // FAILING
+    assertSubstringIndex("ai̇bi̇o12", "İo", 1, "UNICODE_CI", "ai̇b");
+    assertSubstringIndex("ai̇bi̇o12i̇o", "İo", 2, "UNICODE_CI", "ai̇bi̇o12");
   }
 
   // TODO: Test more collation-aware string expressions.
