@@ -92,7 +92,7 @@ private[spark] class PythonWorkerFactory(
     envVars.getOrElse("PYTHONPATH", ""),
     sys.env.getOrElse("PYTHONPATH", ""))
 
-  def create(): (PythonWorker, Option[Long]) = {
+  def create(blockingMode: Boolean = false): (PythonWorker, Option[Long]) = {
     if (useDaemon) {
       self.synchronized {
         // Pull from idle workers until we one that is alive, otherwise create a new one.
@@ -113,7 +113,7 @@ private[spark] class PythonWorkerFactory(
       }
       createThroughDaemon()
     } else {
-      createSimpleWorker(blockingMode = false)
+      createSimpleWorker(blockingMode = blockingMode)
     }
   }
 

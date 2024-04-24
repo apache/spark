@@ -32,7 +32,7 @@ from pyspark import worker
 from pyspark.sql.connect.session import SparkSession
 from pyspark.util import handle_worker_exception
 from typing import IO
-from pyspark.worker_util import check_python_version
+from pyspark.worker_util import check_python_version, setup_broadcasts, setup_spark_files
 
 pickle_ser = CPickleSerializer()
 utf8_deserializer = UTF8Deserializer()
@@ -63,7 +63,8 @@ def main(infile: IO, outfile: IO) -> None:
     spark = spark_connect_session
 
     log_name = "Streaming ForeachBatch worker"
-
+    setup_spark_files(infile)
+    setup_broadcasts(infile)
     def process(df_id, batch_id):  # type: ignore[no-untyped-def]
         global spark
         print(f"{log_name} Started batch {batch_id} with DF id {df_id}")

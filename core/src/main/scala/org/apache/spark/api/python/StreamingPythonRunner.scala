@@ -71,10 +71,17 @@ private[spark] class StreamingPythonRunner(
     envVars.put("SPARK_AUTH_SOCKET_TIMEOUT", authSocketTimeout.toString)
     envVars.put("SPARK_BUFFER_SIZE", bufferSize.toString)
     envVars.put("SPARK_CONNECT_LOCAL_URL", connectUrl)
+    envVars.put("SPARK_JOB_ARTIFACT_UUID", jobArtifactUUID.getOrElse("default"))
 
     val workerFactory =
       new PythonWorkerFactory(pythonExec, workerModule, envVars.asScala.toMap, false)
-    val (worker: PythonWorker, _) = workerFactory.createSimpleWorker(blockingMode = true)
+    val (worker: PythonWorker, _) =
+      env.createPythonWorkerBlocking(
+        pythonExec,
+        workerModule,
+        envVars.asScala.toMap,
+        useDaemon = false
+      )
     pythonWorker = Some(worker)
     pythonWorkerFactory = Some(workerFactory)
 
@@ -83,12 +90,13 @@ private[spark] class StreamingPythonRunner(
     val dataOut = new DataOutputStream(stream)
 
     PythonWorkerUtils.writePythonVersion(pythonVer, dataOut)
-    // PythonWorkerUtils.writeSparkFiles(jobArtifactUUID, pythonIncludes, dataOut)
 
     // Send sessionId
     PythonRDD.writeUTF(sessionId, dataOut)
 
     // Send the user function to python process
+    PythonWorkerUtils.writeSparkFiles(jobArtifactUUID, pythonIncludes, dataOut)
+    PythonWorkerUtils.writeBroadcasts(func.broadcastVars.asScala.toSeq, worker, env, dataOut)
     PythonWorkerUtils.writePythonFunction(func, dataOut)
     dataOut.flush()
 
@@ -98,7 +106,8 @@ private[spark] class StreamingPythonRunner(
     val resFromPython = dataIn.readInt()
     if (resFromPython != 0) {
       val errMessage = PythonWorkerUtils.readUTF(dataIn)
-      throw streamingPythonRunnerInitializationFailure(resFromPython, errMessage)
+      throw streamingPythonRunnerInitializationFailure(resFromPython,
+        errMessage + "\n" + message + "\n" + s"pythonExec: $pythonExec")
     }
     logInfo(s"Runner initialization succeeded (returned $resFromPython).")
 
