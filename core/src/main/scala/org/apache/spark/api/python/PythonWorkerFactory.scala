@@ -102,7 +102,7 @@ private[spark] class PythonWorkerFactory(
           if (workerHandle.isAlive()) {
             try {
               worker.selectionKey.interestOps(SelectionKey.OP_READ | SelectionKey.OP_WRITE)
-              return (worker, Some(workerHandle.pid()))
+              return (worker, Some(workerHandle.pid().toInt))
             } catch {
               case c: CancelledKeyException => /* pass */
             }
