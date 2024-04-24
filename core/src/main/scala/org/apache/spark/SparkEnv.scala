@@ -142,7 +142,7 @@ class SparkEnv (
       workerModule: String,
       daemonModule: String,
       envVars: Map[String, String],
-      useDaemon: Boolean): (PythonWorker, Option[Int]) = {
+      useDaemon: Boolean): (PythonWorker, Option[Long]) = {
     synchronized {
       val key = PythonWorkersKey(pythonExec, workerModule, daemonModule, envVars)
       val workerFactory = pythonWorkers.getOrElseUpdate(key, new PythonWorkerFactory(
@@ -161,7 +161,7 @@ class SparkEnv (
       pythonExec: String,
       workerModule: String,
       envVars: Map[String, String],
-      useDaemon: Boolean): (PythonWorker, Option[Int]) = {
+      useDaemon: Boolean): (PythonWorker, Option[Long]) = {
     createPythonWorker(
       pythonExec, workerModule, PythonWorkerFactory.defaultDaemonModule, envVars, useDaemon)
   }
