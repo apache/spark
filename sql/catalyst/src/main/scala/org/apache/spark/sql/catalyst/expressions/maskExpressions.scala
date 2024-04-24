@@ -82,13 +82,13 @@ object MaskExpressionBuilder extends ExpressionBuilder {
   override def functionSignature: Option[FunctionSignature] = {
     val strArg = InputParameter("str")
     val upperCharArg = InputParameter("upperChar",
-      Some(Literal(Mask.MASKED_UPPERCASE, SQLConf.get.defaultStringType)))
+      Some(Literal.create(Mask.MASKED_UPPERCASE, SQLConf.get.defaultStringType)))
     val lowerCharArg = InputParameter("lowerChar",
-      Some(Literal(Mask.MASKED_LOWERCASE, SQLConf.get.defaultStringType)))
+      Some(Literal.create(Mask.MASKED_LOWERCASE, SQLConf.get.defaultStringType)))
     val digitCharArg = InputParameter("digitChar",
-      Some(Literal(Mask.MASKED_DIGIT, SQLConf.get.defaultStringType)))
+      Some(Literal.create(Mask.MASKED_DIGIT, SQLConf.get.defaultStringType)))
     val otherCharArg = InputParameter("otherChar",
-      Some(Literal(Mask.MASKED_IGNORE, SQLConf.get.defaultStringType)))
+      Some(Literal.create(Mask.MASKED_IGNORE, SQLConf.get.defaultStringType)))
     val functionSignature: FunctionSignature = FunctionSignature(Seq(
       strArg, upperCharArg, lowerCharArg, digitCharArg, otherCharArg))
     Some(functionSignature)
@@ -304,13 +304,13 @@ case class MaskArgument(maskChar: Char, ignore: Boolean)
 
 object Mask {
   // Default character to replace upper-case characters
-  val MASKED_UPPERCASE: UTF8String = UTF8String.fromString("X")
+  val MASKED_UPPERCASE = 'X'
   // Default character to replace lower-case characters
-  val MASKED_LOWERCASE: UTF8String = UTF8String.fromString("x")
+  val MASKED_LOWERCASE = 'x'
   // Default character to replace digits
-  val MASKED_DIGIT: UTF8String = UTF8String.fromString("n")
+  val MASKED_DIGIT = 'n'
   // This value helps to retain original value in the input by ignoring the replacement rules
-  val MASKED_IGNORE: Null = null
+  val MASKED_IGNORE = null
 
   def transformInput(
       input: Any,
