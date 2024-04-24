@@ -14,9 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import os
+import sys
 import unittest
 
 from pyspark.testing.connectutils import should_test_connect
+from pyspark.testing.utils import SPARK_HOME
 
 if should_test_connect:
     from pyspark import sql
@@ -115,8 +118,25 @@ class ArrowUDTFParityTests(UDTFArrowTestsMixin, UDTFParityTests):
         with self.assertRaisesRegex(PythonException, "NO_ACTIVE_SESSION"):
             TestUDTF().collect()
 
+    def test_udtf_with_user_lib(self):
+        @udtf(returnType="word: string")
+        class TestUDTF:
+            def eval(self):
+                user_class = UserClass()
+                yield user_class.hello(),
+
+        path = os.path.join(SPARK_HOME, "python/test_support")
+        sys.path.append(path)
+
+        from userlibrary import UserClass
+        user_class = UserClass()
+        self.assertEqual(user_class.hello(), "Hello World!")
+
+        TestUDTF().collect()
 
 if __name__ == "__main__":
+    import os
+    import sys
     import unittest
     from pyspark.sql.tests.connect.test_parity_udtf import *  # noqa: F401
 
