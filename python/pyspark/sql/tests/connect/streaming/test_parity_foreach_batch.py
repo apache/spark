@@ -15,10 +15,13 @@
 # limitations under the License.
 #
 
+import os
+import sys
 import unittest
 
 from pyspark.sql.tests.streaming.test_streaming_foreach_batch import StreamingTestsForeachBatchMixin
-from pyspark.testing.connectutils import Multiplication, ReusedConnectTestCase
+from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.testing.utils import SPARK_HOME
 from pyspark.errors import PySparkPicklingError
 from pyspark.errors.exceptions.connect import SparkConnectGrpcException
 
@@ -105,8 +108,15 @@ class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedCo
     def test_library_error(self):
 
         def fcn(batch, _):
-            multiplication = Multiplication(2)
-            multiplication.multiply(batch.count())
+            uc = UserClass()
+            uc.hello()
+
+        path = os.path.join(SPARK_HOME, "python/test_support")
+        sys.path.append(path)
+
+        from userlibrary import UserClass
+        user_class = UserClass()
+        self.assertEqual(user_class.hello(), "Hello World!")
 
         df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
         df.writeStream.foreachBatch(fcn).start()
@@ -145,6 +155,8 @@ class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedCo
 
 
 if __name__ == "__main__":
+    import os
+    import sys
     import unittest
     from pyspark.sql.tests.connect.streaming.test_parity_foreach_batch import *  # noqa: F401,E501
 
