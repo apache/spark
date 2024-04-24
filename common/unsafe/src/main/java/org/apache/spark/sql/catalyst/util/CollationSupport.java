@@ -63,7 +63,7 @@ public final class CollationSupport {
       return l.contains(r);
     }
     public static boolean execLowercase(final UTF8String l, final UTF8String r) {
-      return l.toLowerCase().contains(r.toLowerCase());
+      return l.containsInLowerCase(r);
     }
     public static boolean execICU(final UTF8String l, final UTF8String r,
         final int collationId) {
@@ -101,7 +101,7 @@ public final class CollationSupport {
       return l.startsWith(r);
     }
     public static boolean execLowercase(final UTF8String l, final UTF8String r) {
-      return l.toLowerCase().startsWith(r.toLowerCase());
+      return l.startsWithInLowerCase(r);
     }
     public static boolean execICU(final UTF8String l, final UTF8String r,
         final int collationId) {
@@ -138,7 +138,7 @@ public final class CollationSupport {
       return l.endsWith(r);
     }
     public static boolean execLowercase(final UTF8String l, final UTF8String r) {
-      return l.toLowerCase().endsWith(r.toLowerCase());
+      return l.endsWithInLowerCase(r);
     }
     public static boolean execICU(final UTF8String l, final UTF8String r,
         final int collationId) {
