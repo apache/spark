@@ -78,15 +78,11 @@ case class AdaptiveSparkPlanExec(
 
   @transient private val logOnLevel: ( => MessageWithContext) => Unit =
     conf.adaptiveExecutionLogLevel match {
-      case "TRACE" =>
-        def fn(log: => LogEntry): Unit = logTrace(log.message)
-        fn(_)
+      case "TRACE" => logTrace(_)
       case "INFO" => logInfo(_)
       case "WARN" => logWarning(_)
       case "ERROR" => logError(_)
-      case _ =>
-        def fn(log: => LogEntry): Unit = logDebug(log.message)
-        fn(_)
+      case _ => logDebug(_)
     }
 
   @transient private val planChangeLogger = new PlanChangeLogger[SparkPlan]()
@@ -359,10 +355,9 @@ case class AdaptiveSparkPlanExec(
           val newCost = costEvaluator.evaluateCost(newPhysicalPlan)
           if (newCost < origCost ||
             (newCost == origCost && currentPhysicalPlan != newPhysicalPlan)) {
-            val plans =
+            lazy val plans =
               sideBySide(currentPhysicalPlan.treeString, newPhysicalPlan.treeString).mkString("\n")
-            logOnLevel(log"Plan changed:\n" +
-              log"${MDC(QUERY_PLAN, plans)}")
+            logOnLevel(log"Plan changed:\n${MDC(QUERY_PLAN, plans)}")
             cleanUpTempTags(newPhysicalPlan)
             currentPhysicalPlan = newPhysicalPlan
             currentLogicalPlan = newLogicalPlan
