@@ -195,14 +195,14 @@ class FrameConstructorMixin:
         with ps.option_context("compute.ops_on_diff_frames", True):
             # test with ps.DataFrame and pd.Index
             self.assert_eq(
-                ps.DataFrame(data=psdf, index=pd.Index([2, 3, 4, 5, 6])),
-                pd.DataFrame(data=pdf, index=pd.Index([2, 3, 4, 5, 6])),
+                ps.DataFrame(data=psdf, index=pd.Index([2, 3, 4, 5, 6])).sort_index(),
+                pd.DataFrame(data=pdf, index=pd.Index([2, 3, 4, 5, 6])).sort_index(),
             )
 
             # test with ps.DataFrame and ps.Index
             self.assert_eq(
-                ps.DataFrame(data=psdf, index=ps.Index([2, 3, 4, 5, 6])),
-                pd.DataFrame(data=pdf, index=pd.Index([2, 3, 4, 5, 6])),
+                ps.DataFrame(data=psdf, index=ps.Index([2, 3, 4, 5, 6])).sort_index(),
+                pd.DataFrame(data=pdf, index=pd.Index([2, 3, 4, 5, 6])).sort_index(),
             )
 
         # test String Index

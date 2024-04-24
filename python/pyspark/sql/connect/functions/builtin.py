@@ -2141,7 +2141,7 @@ def sequence(
 sequence.__doc__ = pysparkfuncs.sequence.__doc__
 
 
-def schema_of_csv(csv: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
+def schema_of_csv(csv: Union[str, Column], options: Optional[Dict[str, str]] = None) -> Column:
     if isinstance(csv, Column):
         _csv = csv
     elif isinstance(csv, str):
@@ -2161,7 +2161,7 @@ def schema_of_csv(csv: "ColumnOrName", options: Optional[Dict[str, str]] = None)
 schema_of_csv.__doc__ = pysparkfuncs.schema_of_csv.__doc__
 
 
-def schema_of_json(json: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
+def schema_of_json(json: Union[str, Column], options: Optional[Dict[str, str]] = None) -> Column:
     if isinstance(json, Column):
         _json = json
     elif isinstance(json, str):
@@ -2181,7 +2181,7 @@ def schema_of_json(json: "ColumnOrName", options: Optional[Dict[str, str]] = Non
 schema_of_json.__doc__ = pysparkfuncs.schema_of_json.__doc__
 
 
-def schema_of_xml(xml: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
+def schema_of_xml(xml: Union[str, Column], options: Optional[Dict[str, str]] = None) -> Column:
     if isinstance(xml, Column):
         _xml = xml
     elif isinstance(xml, str):
