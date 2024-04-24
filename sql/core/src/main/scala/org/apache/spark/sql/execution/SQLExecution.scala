@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import java.util.concurrent.{ConcurrentHashMap, ExecutorService, Future => JFuture}
 import java.util.concurrent.atomic.AtomicLong
 
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.spark.{ErrorMessageFormat, JobArtifactSet, SparkEnv, SparkException, SparkThrowable, SparkThrowableHelper}
@@ -168,7 +169,7 @@ object SQLExecution extends Logging {
             && isExecutedPlanAvailable) {
             val shuffleIds = queryExecution.executedPlan match {
               case ae: AdaptiveSparkPlanExec =>
-                ae.context.shuffleIds.keys
+                ae.context.shuffleIds.asScala.keys
               case _ =>
                 Iterable.empty
             }

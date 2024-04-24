@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.adaptive
 
 import java.util
-import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue}
 
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
@@ -875,7 +875,7 @@ case class AdaptiveExecutionContext(session: SparkSession, qe: QueryExecution) {
   val stageCache: TrieMap[SparkPlan, ExchangeQueryStageExec] =
     new TrieMap[SparkPlan, ExchangeQueryStageExec]()
 
-  val shuffleIds: TrieMap[Int, Boolean] = new TrieMap[Int, Boolean]()
+  val shuffleIds: ConcurrentHashMap[Int, Boolean] = new ConcurrentHashMap[Int, Boolean]()
 }
 
 /**
