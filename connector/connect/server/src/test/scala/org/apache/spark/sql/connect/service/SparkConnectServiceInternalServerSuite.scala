@@ -79,6 +79,7 @@ class SparkConnectServiceInternalServerSuite extends SparkFunSuite with LocalSpa
         val portConflicts = intercept[Throwable] {
           SparkConnectService.start(sc)
         }
+        portConflicts.printStackTrace()
         assert(Utils.isBindCollision(portConflicts))
       }
     }
