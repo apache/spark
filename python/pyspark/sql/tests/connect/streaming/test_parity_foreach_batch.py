@@ -118,6 +118,8 @@ class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedCo
         user_class = UserClass()
         self.assertEqual(user_class.hello(), "Hello World!")
 
+        user_library_path = os.path.join(path, "userlibrary.py")
+        self.spark.addArtifacts(user_library_path, pyfile=True)
         df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
         df.writeStream.foreachBatch(fcn).start()
 
