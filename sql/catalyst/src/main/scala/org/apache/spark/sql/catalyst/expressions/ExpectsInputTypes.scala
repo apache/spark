@@ -48,6 +48,7 @@ trait ExpectsInputTypes extends Expression {
 }
 
 object ExpectsInputTypes extends QueryErrorsBase {
+
   def checkInputDataTypes(
       inputs: Seq[Expression],
       inputTypes: Seq[AbstractDataType]): TypeCheckResult = {
