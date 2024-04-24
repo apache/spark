@@ -410,9 +410,12 @@ public final class CollationFactory {
 
       public static CollationSpecICU fromCollationId(int collationId) throws SparkException {
         int originalCollationId = collationId;
-        int caseSensitivityOrdinal = (collationId >> caseSensitivityOffset) & ((1 << caseSensitivityLen) - 1);
-        int accentSensitivityOrdinal = (collationId >> accentSensitivityOffset) & ((1 << accentSensitivityLen) - 1);
-        int caseConversionOrdinal = (collationId >> caseConversionOffset) & ((1 << caseConversionLen) - 1);
+        int caseSensitivityOrdinal =
+          (collationId >> caseSensitivityOffset) & ((1 << caseSensitivityLen) - 1);
+        int accentSensitivityOrdinal =
+          (collationId >> accentSensitivityOffset) & ((1 << accentSensitivityLen) - 1);
+        int caseConversionOrdinal =
+          (collationId >> caseConversionOffset) & ((1 << caseConversionLen) - 1);
         int localeOrdinal = (collationId >> localeOffset) & ((1 << localeLen) - 1);
         collationId ^= ImplementationProvider.ICU.ordinal() << implementationProviderOffset;
         collationId ^= caseSensitivityOrdinal << caseSensitivityOffset;
@@ -424,7 +427,8 @@ public final class CollationFactory {
           throw new SparkException("Invalid ICU collation id " + originalCollationId);
         } else {
           CaseSensitivity caseSensitivity = CaseSensitivity.values()[caseSensitivityOrdinal];
-          AccentSensitivity accentSensitivity = AccentSensitivity.values()[accentSensitivityOrdinal];
+          AccentSensitivity accentSensitivity =
+            AccentSensitivity.values()[accentSensitivityOrdinal];
           CaseConversion caseConversion = CaseConversion.values()[caseConversionOrdinal];
           String locale = ICULocaleNames[localeOrdinal];
           return new CollationSpecICU(locale, caseSensitivity, accentSensitivity, caseConversion);
