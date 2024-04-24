@@ -202,14 +202,16 @@ class CollationStringExpressionsSuite
   }
 
   test("Support Replace string expression with collation") {
-    case class StartsWithTestCase[R](source: String, search: String, replace: String,
+    case class ReplaceTestCase[R](source: String, search: String, replace: String,
         c: String, result: R)
     val testCases = Seq(
       // scalastyle:off
-      StartsWithTestCase("r世eplace", "pl", "123", "UTF8_BINARY", "r世e123ace"),
-      StartsWithTestCase("repl世ace", "PL", "AB", "UTF8_BINARY_LCASE", "reAB世ace"),
-      StartsWithTestCase("abcdabcd", "bc", "", "UNICODE", "adad"),
-      StartsWithTestCase("aBc世abc", "b", "12", "UNICODE_CI", "a12c世a12c")
+      ReplaceTestCase("r世eplace", "pl", "123", "UTF8_BINARY", "r世e123ace"),
+      ReplaceTestCase("repl世ace", "PL", "AB", "UTF8_BINARY_LCASE", "reAB世ace"),
+      ReplaceTestCase("abcdabcd", "bc", "", "UNICODE", "adad"),
+      ReplaceTestCase("aBc世abc", "b", "12", "UNICODE_CI", "a12c世a12c"),
+      ReplaceTestCase("abi̇o12i̇o", "İo", "yy", "UNICODE_CI", "abyy12yy"),
+      ReplaceTestCase("abİo12i̇o", "i̇o", "xx", "UNICODE_CI", "abxx12xx")
       // scalastyle:on
     )
     testCases.foreach(t => {

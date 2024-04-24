@@ -395,7 +395,16 @@ public final class CollationSupport {
       while (end != StringSearch.DONE) {
         buf.appendBytes(src.getBaseObject(), src.getBaseOffset() + byteStart, byteEnd - byteStart);
         buf.append(replace);
-        byteStart = byteEnd + search.numBytes();
+
+        // Move byteStart to the beginning of the current match
+        byteStart = byteEnd;
+        int cs = c;
+        // Move cs to the end of the current match
+        // This is necessary because the search string may contain 'multi-character' characters
+        while (byteStart < src.numBytes() && cs < c + stringSearch.getMatchLength()) {
+          byteStart += UTF8String.numBytesForFirstByte(src.getByte(byteStart));
+          cs += 1;
+        }
         // Go to next match
         end = stringSearch.next();
         // Update byte positions
