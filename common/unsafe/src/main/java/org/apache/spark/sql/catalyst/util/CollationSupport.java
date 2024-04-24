@@ -438,34 +438,9 @@ public final class CollationSupport {
       return target.charPosToByte(stringSearch.next());
     }
 
-    private static int rfind(UTF8String target, UTF8String pattern, int start,
-        int collationId) {
-      assert (pattern.numBytes() > 0);
-
-      if (target.numBytes() == 0) {
-        return -1;
-      }
-
-      StringSearch stringSearch = CollationFactory.getStringSearch(target, pattern, collationId);
-
-      int prevStart = -1;
-      int matchStart = stringSearch.next();
-      while (target.charPosToByte(matchStart) <= start) {
-        if (matchStart != StringSearch.DONE) {
-          // Found a match, update the start position
-          prevStart = matchStart;
-          matchStart = stringSearch.next();
-        } else {
-          return target.charPosToByte(prevStart);
-        }
-      }
-
-      return target.charPosToByte(prevStart);
-    }
-
     private static UTF8String subStringIndex(final UTF8String string, final UTF8String delimiter,
         int count, final int collationId) {
-      if (delimiter.numBytes() == 0 || count == 0) {
+      if (delimiter.numBytes() == 0 || count == 0 || string.numBytes() == 0) {
         return UTF8String.EMPTY_UTF8;
       }
       if (count > 0) {
@@ -487,25 +462,43 @@ public final class CollationSupport {
         return UTF8String.fromBytes(bytes);
 
       } else {
-        int idx = string.numBytes() - delimiter.numBytes() + 1;
         count = -count;
+
+        StringSearch stringSearch = CollationFactory.getStringSearch(string, delimiter, collationId);
+
+        int start = string.numChars() - 1;
+        int lastMatchLength = 0;
+        int prevStart = -1;
         while (count > 0) {
-          idx = rfind(string, delimiter, idx - 1, collationId);
-          if (idx >= 0) {
-            count --;
-          } else {
+          stringSearch.reset();
+          prevStart = -1;
+          int matchStart = stringSearch.next();
+          lastMatchLength = stringSearch.getMatchLength();
+          while (matchStart <= start) {
+            if (matchStart != StringSearch.DONE) {
+              // Found a match, update the start position
+              prevStart = matchStart;
+              matchStart = stringSearch.next();
+            } else {
+              break;
+            }
+          }
+
+          if (prevStart == -1) {
             // can not find enough delim
             return string;
+          } else {
+            start = prevStart - 1;
+            count--;
           }
         }
-        if (idx + delimiter.numBytes() == string.numBytes()) {
+
+        int resultStart = prevStart + lastMatchLength;
+        if (resultStart == string.numChars()) {
           return UTF8String.EMPTY_UTF8;
         }
-        int size = string.numBytes() - delimiter.numBytes() - idx;
-        byte[] bytes = new byte[size];
-        copyMemory(string.getBaseObject(), string.getBaseOffset() + idx + delimiter.numBytes(),
-                bytes, BYTE_ARRAY_OFFSET, size);
-        return UTF8String.fromBytes(bytes);
+
+        return string.substring(resultStart, string.numChars());
       }
     }
 
