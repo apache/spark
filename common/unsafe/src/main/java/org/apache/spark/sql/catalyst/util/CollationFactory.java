@@ -602,4 +602,8 @@ public final class CollationFactory {
   public static Collation fetchCollation(String collationName) throws SparkException {
     return fetchCollation(collationNameToId(collationName));
   }
+
+  public static String[] getICULocaleNames() {
+    return Collation.CollationSpecICU.ICULocaleNames;
+  }
 }
