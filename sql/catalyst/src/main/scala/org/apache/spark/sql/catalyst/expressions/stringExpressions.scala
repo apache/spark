@@ -3203,7 +3203,7 @@ case class StringSplitSQL(
     nullSafeCodeGen(ctx, ev, (str, delimiter) => {
       // Array in java is covariant, so we don't need to cast UTF8String[] to Object[].
       s"${ev.value} = new $arrayClass(" +
-        s"CollationSupport.StringSplitSQL.genCode($str, $delimiter, $collationId));"
+        s"${CollationSupport.StringSplitSQL.genCode(str, delimiter, collationId)});"
     })
   }
 
