@@ -21,7 +21,6 @@ import scala.jdk.CollectionConverters.MapHasAsJava
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, InternalRow}
-import org.apache.spark.sql.catalyst.analysis.RewriteCollationJoin
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BindReferences, CollationKey, Literal, UnsafeProjection}
 import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory}
 import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2ProviderWithCustomSchema}
@@ -1175,7 +1174,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   }
 
   test("hash join should respect collation for strings") {
-    spark.experimental.extraOptimizations = Seq(RewriteCollationJoin)
     val t1 = "T_1"
     val t2 = "T_2"
 
@@ -1201,7 +1199,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   }
 
   test("hash join should respect collation for array of strings") {
-    spark.experimental.extraOptimizations = Seq(RewriteCollationJoin)
     val t1 = "T_1"
     val t2 = "T_2"
 
