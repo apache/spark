@@ -202,7 +202,6 @@ def with_origin_to_class(cls: Type[T]) -> Type[T]:
                 "__init__",
                 "__new__",
                 "__getattr__",
-                "__getitem__",
                 "__iter__",
                 "__nonzero__",
                 "__repr__",
