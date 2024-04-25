@@ -62,7 +62,7 @@ class LogKeySuite
       originalKeys: Seq[String], sortedKeys: Seq[String]): Unit = {
     if (originalKeys != sortedKeys) {
       val logKeyFile = logKeyFilePath.toFile
-      logInfo(s"Regenerating the file `LogKey.scala` $logKeyFile")
+      logInfo(s"Regenerating the file $logKeyFile")
       val originalContents = FileUtils.readLines(logKeyFile, StandardCharsets.UTF_8)
       val sortedContents = new JList[String]()
       var firstMatch = false
@@ -83,21 +83,21 @@ class LogKeySuite
     }
   }
 
-  test("LogKeys members are correctly sorted") {
+  test("The members of LogKeys are correctly sorted") {
     val originalKeys = getAllLogKeys.reverse
     val sortedKeys = originalKeys.sorted
     if (regenerateGoldenFiles) {
       regenerateLogKeyFile(originalKeys, sortedKeys)
     } else {
       assert(originalKeys === sortedKeys,
-        "The LogKeys members must be sorted alphabetically")
+        "The members of LogKeys must be sorted alphabetically")
     }
   }
 
-  private def getAllLogKeys: List[String] = {
+  private def getAllLogKeys: Seq[String] = {
     val logKeysType = typeOf[LogKeys.type]
     val classSymbol = logKeysType.typeSymbol.asClass
     val members = classSymbol.typeSignature.members
-    members.filter(m => m.isTerm && !m.isMethod).map(_.name.toString).toList
+    members.filter(m => m.isTerm && !m.isMethod).map(_.name.toString).toSeq
   }
 }

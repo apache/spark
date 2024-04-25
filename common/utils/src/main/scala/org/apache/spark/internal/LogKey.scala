@@ -16,6 +16,9 @@
  */
 package org.apache.spark.internal
 
+/**
+ * All structured logging `keys` used in `MDC` must be extends `LogKey`
+ */
 trait LogKey
 
 /**
@@ -368,8 +371,6 @@ object LogKeys {
   case object TIME extends LogKey
   case object TIMEOUT extends LogKey
   case object TIMER extends LogKey
-  case object TIMER_LABEL extends LogKey
-  case object TIME_UNITS extends LogKey
   case object TIP extends LogKey
   case object TOKEN_REGEX extends LogKey
   case object TOPIC extends LogKey
