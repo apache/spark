@@ -22,7 +22,7 @@ import javax.annotation.Nullable
 import scala.annotation.tailrec
 
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.{hasStringType, haveSameType}
-import org.apache.spark.sql.catalyst.expressions.{ArrayJoin, BinaryExpression, CaseWhen, Cast, Coalesce, Collate, Concat, ConcatWs, CreateArray, Elt, Expression, Greatest, If, In, InSubquery, Least, Literal, Overlay, StringLPad, StringReplace, StringRPad}
+import org.apache.spark.sql.catalyst.expressions.{ArrayJoin, BinaryExpression, CaseWhen, Cast, Coalesce, Collate, Concat, ConcatWs, CreateArray, Elt, Expression, Greatest, If, In, InSubquery, Least, Literal, Overlay, RegExpReplace, StringReplace, StringLPad, StringRPad}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
@@ -51,6 +51,11 @@ object CollationTypeCasts extends TypeCoercionRule {
     case overlayExpr: Overlay =>
       overlayExpr.withNewChildren(collateToSingleType(Seq(overlayExpr.input, overlayExpr.replace))
         ++ Seq(overlayExpr.pos, overlayExpr.len))
+
+    case regExpReplace: RegExpReplace =>
+      val Seq(subject, rep) = collateToSingleType(Seq(regExpReplace.subject, regExpReplace.rep))
+      val newChildren = Seq(subject, regExpReplace.regexp, rep, regExpReplace.pos)
+      regExpReplace.withNewChildren(newChildren)
 
     case stringPadExpr @ (_: StringRPad | _: StringLPad) =>
       val Seq(str, len, pad) = stringPadExpr.children
