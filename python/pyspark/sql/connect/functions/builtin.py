@@ -1188,20 +1188,10 @@ def percentile(
     percentage: Union[Column, float, List[float], Tuple[float]],
     frequency: Union[Column, int] = 1,
 ) -> Column:
-    if isinstance(percentage, Column):
-        _percentage = percentage
-    elif isinstance(percentage, (list, tuple)):
-        # Convert tuple to list
-        _percentage = lit(list(percentage))
-    else:
-        # Probably scalar
-        _percentage = lit(percentage)
+    if isinstance(percentage, (list, tuple)):
+        percentage = list(percentage)
 
-    if isinstance(frequency, int):
-        _frequency = lit(frequency)
-    elif isinstance(frequency, Column):
-        _frequency = frequency
-    else:
+    if not isinstance(frequency, (int, Column)):
         raise PySparkTypeError(
             error_class="NOT_COLUMN_OR_INT",
             message_parameters={
@@ -1210,7 +1200,7 @@ def percentile(
             },
         )
 
-    return _invoke_function("percentile", _to_col(col), _percentage, _frequency)
+    return _invoke_function("percentile", _to_col(col), lit(percentage), lit(frequency))
 
 
 percentile.__doc__ = pysparkfuncs.percentile.__doc__
@@ -1221,16 +1211,10 @@ def percentile_approx(
     percentage: Union[Column, float, List[float], Tuple[float]],
     accuracy: Union[Column, float] = 10000,
 ) -> Column:
-    if isinstance(percentage, Column):
-        percentage_col = percentage
-    elif isinstance(percentage, (list, tuple)):
-        # Convert tuple to list
-        percentage_col = lit(list(percentage))
-    else:
-        # Probably scalar
-        percentage_col = lit(percentage)
+    if isinstance(percentage, (list, tuple)):
+        percentage = lit(list(percentage))
 
-    return _invoke_function("percentile_approx", _to_col(col), percentage_col, lit(accuracy))
+    return _invoke_function("percentile_approx", _to_col(col), lit(percentage), lit(accuracy))
 
 
 percentile_approx.__doc__ = pysparkfuncs.percentile_approx.__doc__
@@ -1241,16 +1225,10 @@ def approx_percentile(
     percentage: Union[Column, float, List[float], Tuple[float]],
     accuracy: Union[Column, float] = 10000,
 ) -> Column:
-    if isinstance(percentage, Column):
-        percentage_col = percentage
-    elif isinstance(percentage, (list, tuple)):
-        # Convert tuple to list
-        percentage_col = lit(list(percentage))
-    else:
-        # Probably scalar
-        percentage_col = lit(percentage)
+    if isinstance(percentage, (list, tuple)):
+        percentage = list(percentage)
 
-    return _invoke_function("approx_percentile", _to_col(col), percentage_col, lit(accuracy))
+    return _invoke_function("approx_percentile", _to_col(col), lit(percentage), lit(accuracy))
 
 
 approx_percentile.__doc__ = pysparkfuncs.approx_percentile.__doc__
@@ -1878,12 +1856,10 @@ def from_json(
     schema: Union[ArrayType, StructType, Column, str],
     options: Optional[Dict[str, str]] = None,
 ) -> Column:
-    if isinstance(schema, Column):
-        _schema = schema
+    if isinstance(schema, (str, Column)):
+        _schema = lit(schema)
     elif isinstance(schema, DataType):
         _schema = lit(schema.json())
-    elif isinstance(schema, str):
-        _schema = lit(schema)
     else:
         raise PySparkTypeError(
             error_class="NOT_COLUMN_OR_DATATYPE_OR_STR",
@@ -1904,12 +1880,10 @@ def from_xml(
     schema: Union[StructType, Column, str],
     options: Optional[Dict[str, str]] = None,
 ) -> Column:
-    if isinstance(schema, Column):
-        _schema = schema
+    if isinstance(schema, (str, Column)):
+        _schema = lit(schema)
     elif isinstance(schema, StructType):
         _schema = lit(schema.json())
-    elif isinstance(schema, str):
-        _schema = lit(schema)
     else:
         raise PySparkTypeError(
             error_class="NOT_COLUMN_OR_STR_OR_STRUCT",
@@ -2142,9 +2116,7 @@ sequence.__doc__ = pysparkfuncs.sequence.__doc__
 
 
 def schema_of_csv(csv: Union[str, Column], options: Optional[Dict[str, str]] = None) -> Column:
-    if isinstance(csv, Column):
-        _csv = csv
-    elif isinstance(csv, str):
+    if isinstance(csv, (str, Column)):
         _csv = lit(csv)
     else:
         raise PySparkTypeError(
@@ -2162,9 +2134,7 @@ schema_of_csv.__doc__ = pysparkfuncs.schema_of_csv.__doc__
 
 
 def schema_of_json(json: Union[str, Column], options: Optional[Dict[str, str]] = None) -> Column:
-    if isinstance(json, Column):
-        _json = json
-    elif isinstance(json, str):
+    if isinstance(json, (str, Column)):
         _json = lit(json)
     else:
         raise PySparkTypeError(
@@ -2182,9 +2152,7 @@ schema_of_json.__doc__ = pysparkfuncs.schema_of_json.__doc__
 
 
 def schema_of_xml(xml: Union[str, Column], options: Optional[Dict[str, str]] = None) -> Column:
-    if isinstance(xml, Column):
-        _xml = xml
-    elif isinstance(xml, str):
+    if isinstance(xml, (str, Column)):
         _xml = lit(xml)
     else:
         raise PySparkTypeError(
