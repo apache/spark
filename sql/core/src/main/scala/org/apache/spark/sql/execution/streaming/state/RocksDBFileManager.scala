@@ -478,7 +478,7 @@ class RocksDBFileManager(
     logInfo(log"Deleted ${MDC(NUM_FILES, filesToDelete.size - failedToDelete)} files " +
       log"(failed to delete" +
       log"${MDC(NUM_FILES_FAILED_TO_DELETE, failedToDelete)} files) " +
-      log"not used in versions >= ${MDC(VERSION_NUMBER, minVersionToRetain)}")
+      log"not used in versions >= ${MDC(MIN_VERSION_NUMBER, minVersionToRetain)}")
     val changelogVersionsToDelete = changelogFiles
       .map(_.getName.stripSuffix(".changelog")).map(_.toLong)
       .filter(_ < minVersionToRetain)

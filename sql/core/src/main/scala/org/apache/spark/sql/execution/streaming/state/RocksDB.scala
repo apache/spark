@@ -806,7 +806,7 @@ class RocksDB(
       rocksDBMetricsOpt = recordedMetrics
     } catch {
       case ex: Exception =>
-        logInfo(log"Failed to acquire metrics with exception=${MDC(EXCEPTION, ex)}")
+        logInfo(log"Failed to acquire metrics with exception=${MDC(ERROR, ex)}")
     } finally {
       release(ReportStoreMetrics)
     }

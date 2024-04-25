@@ -111,7 +111,7 @@ abstract class StateStoreChangelogWriter(
       case NonFatal(ex) =>
         logInfo(log"Failed to cancel changelog file ${MDC(FILE_NAME, file)} " +
           log"for state store provider " +
-          log"with exception=${MDC(EXCEPTION, ex)}")
+          log"with exception=${MDC(ERROR, ex)}")
     } finally {
       backingFileStream = null
       compressedStream = null

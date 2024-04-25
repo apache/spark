@@ -129,7 +129,6 @@ object LogKey extends Enumeration {
   val ESTIMATOR_PARAMETER_MAP = Value
   val EVENT_LOOP = Value
   val EVENT_QUEUE = Value
-  val EXCEPTION = Value
   val EXECUTE_INFO = Value
   val EXECUTE_KEY = Value
   val EXECUTION_PLAN_LEAVES = Value
@@ -245,6 +244,7 @@ object LogKey extends Enumeration {
   val MIN_FREQUENT_PATTERN_COUNT = Value
   val MIN_POINT_PER_CLUSTER = Value
   val MIN_SIZE = Value
+  val MIN_VERSION_NUMBER = Value
   val MODEL_WEIGHTS = Value
   val NAMESPACE = Value
   val NEW_FEATURE_COLUMN_NAME = Value

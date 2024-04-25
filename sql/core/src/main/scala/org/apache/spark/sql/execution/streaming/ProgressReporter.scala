@@ -82,8 +82,7 @@ class ProgressReporter(
 
     addNewProgress(newProgress)
     postEvent(new QueryProgressEvent(newProgress))
-    logInfo(log"Streaming query made progress: " +
-      log"${MDC(STREAMING_QUERY_PROGRESS, newProgress)}")
+    logInfo(log"Streaming query made progress: ${MDC(STREAMING_QUERY_PROGRESS, newProgress)}")
   }
 
   private def addNewProgress(newProgress: StreamingQueryProgress): Unit = {
@@ -106,7 +105,7 @@ class ProgressReporter(
       if (lastNoExecutionProgressEventTime > Long.MinValue) {
         postEvent(new QueryIdleEvent(id, runId, formatTimestamp(currentTriggerStartTimestamp)))
         logInfo(log"Streaming query has been idle and waiting for new data more than " +
-          log"${MDC(STREAMING_QUERY_PROGRESS, noDataProgressEventInterval)} ms.")
+          log"${MDC(TIME_UNITS, noDataProgressEventInterval)} ms.")
       }
 
       lastNoExecutionProgressEventTime = now

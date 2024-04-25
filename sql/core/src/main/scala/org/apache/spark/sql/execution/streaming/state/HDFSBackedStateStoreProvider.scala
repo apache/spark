@@ -650,7 +650,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       case NonFatal(ex) =>
         logInfo(log"Failed to cancel delta file for " +
           log"provider=${MDC(STATE_STORE_ID, stateStoreId)} " +
-          log"with exception=${MDC(EXCEPTION, ex)}")
+          log"with exception=${MDC(ERROR, ex)}")
     }
   }
 

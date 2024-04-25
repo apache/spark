@@ -312,7 +312,7 @@ class ContinuousExecution(
       case t: Throwable if StreamExecution.isInterruptionException(t, sparkSession.sparkContext) &&
           state.get() == RECONFIGURING =>
         logInfo(log"Query ${MDC(QUERY_ID, id)} ignoring exception from reconfiguring: " +
-          log"${MDC(EXCEPTION, t)}")
+          log"${MDC(ERROR, t)}")
         // interrupted by reconfiguration - swallow exception so we can restart the query
     } finally {
       // The above execution may finish before getting interrupted, for example, a Spark job having
