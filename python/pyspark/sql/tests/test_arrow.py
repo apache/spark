@@ -830,7 +830,7 @@ class ArrowTestsMixin:
         pdf = pd.DataFrame({"c1": [1], "c2": ["string"]})
         df = self.spark.createDataFrame(pdf)
         self.assertEqual([Row(c1=1, c2="string")], df.collect())
-        self.assertGreater(self.spark.sparkContext.defaultParallelism, len(pdf))
+        self.assertGreater(self._legacy_sc.defaultParallelism, len(pdf))
 
     def test_toPandas_error(self):
         for arrow_enabled in [True, False]:
