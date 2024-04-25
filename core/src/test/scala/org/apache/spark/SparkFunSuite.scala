@@ -361,27 +361,30 @@ abstract class SparkFunSuite
     } else {
       assert(expectedParameters === parameters)
     }
-    val actualQueryContext = exception.getQueryContext()
-    assert(actualQueryContext.length === queryContext.length, "Invalid length of the query context")
-    actualQueryContext.zip(queryContext).foreach { case (actual, expected) =>
-      assert(actual.contextType() === expected.contextType,
-        "Invalid contextType of a query context Actual:" + actual.toString)
-      if (actual.contextType() == QueryContextType.SQL) {
-        assert(actual.objectType() === expected.objectType,
-          "Invalid objectType of a query context Actual:" + actual.toString)
-        assert(actual.objectName() === expected.objectName,
-          "Invalid objectName of a query context. Actual:" + actual.toString)
-        assert(actual.startIndex() === expected.startIndex,
-          "Invalid startIndex of a query context. Actual:" + actual.toString)
-        assert(actual.stopIndex() === expected.stopIndex,
-          "Invalid stopIndex of a query context. Actual:" + actual.toString)
-        assert(actual.fragment() === expected.fragment,
-          "Invalid fragment of a query context. Actual:" + actual.toString)
-      } else if (actual.contextType() == QueryContextType.DataFrame) {
-        assert(actual.fragment() === expected.fragment,
-          "Invalid code fragment of a query context. Actual:" + actual.toString)
-        assert(actual.callSite().matches(expected.callSitePattern),
-          "Invalid callSite of a query context. Actual:" + actual.toString)
+    val actualQueryContext = exception.getQueryContext
+    if (actualQueryContext != null) {
+      assert(actualQueryContext.length === queryContext.length,
+        "Invalid length of the query context")
+      actualQueryContext.zip(queryContext).foreach { case (actual, expected) =>
+        assert(actual.contextType() === expected.contextType,
+          "Invalid contextType of a query context Actual:" + actual.toString)
+        if (actual.contextType() == QueryContextType.SQL) {
+          assert(actual.objectType() === expected.objectType,
+            "Invalid objectType of a query context Actual:" + actual.toString)
+          assert(actual.objectName() === expected.objectName,
+            "Invalid objectName of a query context. Actual:" + actual.toString)
+          assert(actual.startIndex() === expected.startIndex,
+            "Invalid startIndex of a query context. Actual:" + actual.toString)
+          assert(actual.stopIndex() === expected.stopIndex,
+            "Invalid stopIndex of a query context. Actual:" + actual.toString)
+          assert(actual.fragment() === expected.fragment,
+            "Invalid fragment of a query context. Actual:" + actual.toString)
+        } else if (actual.contextType() == QueryContextType.DataFrame) {
+          assert(actual.fragment() === expected.fragment,
+            "Invalid code fragment of a query context. Actual:" + actual.toString)
+          assert(actual.callSite().matches(expected.callSitePattern),
+            "Invalid callSite of a query context. Actual:" + actual.toString)
+        }
       }
     }
   }

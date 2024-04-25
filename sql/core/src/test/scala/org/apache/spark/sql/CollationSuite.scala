@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import scala.jdk.CollectionConverters.MapHasAsJava
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkArrayIndexOutOfBoundsException, SparkException}
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.util.CollationFactory
@@ -142,6 +142,19 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       errorClass = "COLLATION_INVALID_NAME",
       sqlState = "42704",
       parameters = Map("proposal" -> "UTF8_BINARY", "collationName" -> "UTF8_BS"))
+  }
+
+  test("invalid collationId throws exception") {
+    val schema = StructType(StructField("s", StringType(8)) :: Nil)
+    val data = Seq(Row("Alice"), Row("Bob"), Row("bob"))
+    val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
+    checkError(
+      exception = intercept[SparkArrayIndexOutOfBoundsException] {
+        df.schema.printTreeString()
+      },
+      errorClass = "COLLATION_INVALID_ID",
+      parameters = Map("collationId" -> "8", "valueRange" -> "[0, 3]")
+    )
   }
 
   test("disable bucketing on collated string column") {
