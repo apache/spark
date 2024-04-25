@@ -26,9 +26,7 @@ class DefaultIndexParityTests(
     PandasOnSparkTestUtils,
     ReusedConnectTestCase,
 ):
-    @unittest.skip("Test depends on SparkContext which is not supported from Spark Connect.")
-    def test_index_distributed_sequence_cleanup(self):
-        super().test_index_distributed_sequence_cleanup()
+    pass
 
 
 if __name__ == "__main__":
