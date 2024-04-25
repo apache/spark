@@ -342,7 +342,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   /** Do maintenance backing data files, including creating snapshots and cleaning up old files */
   override def doMaintenance(): Unit = {
     try {
-      doSnapshot()
+      doSnapshot("maintenance")
       cleanup()
     } catch {
       case NonFatal(e) =>
@@ -437,6 +437,18 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   private def putStateIntoStateCacheMap(
       newVersion: Long,
       map: HDFSBackedStateStoreMap): Unit = synchronized {
+    val loadedEntries = loadedMaps.size()
+    val lastKey: Option[Long] = if (loadedEntries > 0) Some(loadedMaps.lastKey()) else None
+    if (lastKey.isDefined) {
+      logInfo(s"Trying to add version=$newVersion to state cache map with " +
+        s"current_size=$loadedEntries and last_loaded_version=${lastKey.get} and " +
+        s"max_versions_to_retain_in_memory=$numberOfVersionsToRetainInMemory")
+    } else {
+      logInfo(s"Trying to add version=$newVersion to state cache map with " +
+        s"current_size=$loadedEntries and " +
+        s"max_versions_to_retain_in_memory=$numberOfVersionsToRetainInMemory")
+    }
+
     if (numberOfVersionsToRetainInMemory <= 0) {
       if (loadedMaps.size() > 0) loadedMaps.clear()
       return
@@ -598,7 +610,10 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       log"of ${MDC(STATE_STORE_PROVIDER, this)} from ${MDC(FILE_NAME, fileToRead)}")
   }
 
-  private def writeSnapshotFile(version: Long, map: HDFSBackedStateStoreMap): Unit = {
+  private def writeSnapshotFile(
+      version: Long,
+      map: HDFSBackedStateStoreMap,
+      opType: String): Unit = {
     val targetFile = snapshotFile(version)
     var rawOutput: CancellableFSDataOutputStream = null
     var output: DataOutputStream = null
@@ -623,7 +638,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
         throw e
     }
     logInfo(log"Written snapshot file for version ${MDC(FILE_VERSION, version)} of " +
-      log"${MDC(STATE_STORE_PROVIDER, this)} at ${MDC(FILE_NAME, targetFile)}")
+      log"${MDC(STATE_STORE_PROVIDER, this)} at ${MDC(FILE_NAME, targetFile)} for " +
+      log"${MDC(OP_TYPE, opType)}")
   }
 
   /**
@@ -712,7 +728,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
 
   /** Perform a snapshot of the store to allow delta files to be consolidated */
-  private def doSnapshot(): Unit = {
+  private def doSnapshot(opType: String): Unit = {
     try {
       val (files, e1) = Utils.timeTakenMs(fetchFiles())
       logDebug(s"fetchFiles() took $e1 ms.")
@@ -724,7 +740,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
         synchronized { Option(loadedMaps.get(lastVersion)) } match {
           case Some(map) =>
             if (deltaFilesForLastVersion.size > storeConf.minDeltasForSnapshot) {
-              val (_, e2) = Utils.timeTakenMs(writeSnapshotFile(lastVersion, map))
+              val (_, e2) = Utils.timeTakenMs(writeSnapshotFile(lastVersion, map, opType))
               logDebug(s"writeSnapshotFile() took $e2 ms.")
             }
           case None =>
