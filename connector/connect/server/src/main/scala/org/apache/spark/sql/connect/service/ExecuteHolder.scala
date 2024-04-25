@@ -285,7 +285,7 @@ private[connect] class ExecuteHolder(
 object ExecuteJobTag {
   private val prefix = "SparkConnect_OperationTag"
 
-  def apply(sessionId: String, userId: String, operationId: String): String = {
+  def apply(userId: String, sessionId: String, operationId: String): String = {
     s"${prefix}_" +
       s"User_${userId}_" +
       s"Session_${sessionId}_" +
