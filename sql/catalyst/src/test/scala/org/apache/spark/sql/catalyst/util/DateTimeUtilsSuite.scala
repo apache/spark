@@ -1095,7 +1095,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
 
     checkError(
-      exception = intercept[SparkException] {
+      exception = intercept[SparkIllegalArgumentException] {
         timestampDiff(
           "SECS",
           date(1969, 1, 1, 0, 0, 0, 1, getZoneId("UTC")),
