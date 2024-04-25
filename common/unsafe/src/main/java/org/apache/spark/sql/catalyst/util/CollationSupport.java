@@ -546,6 +546,8 @@ public final class CollationSupport {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
       if (collation.supportsBinaryEquality) {
         return execBinary(srcString);
+      } else if (collation.supportsLowercaseEquality) {
+        return execLowercase(srcString);
       } else {
         return execICU(srcString, collationId);
       }
@@ -557,6 +559,8 @@ public final class CollationSupport {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
       if (collation.supportsBinaryEquality) {
         return execBinary(srcString, trimString);
+      } else if (collation.supportsLowercaseEquality) {
+        return execLowercase(srcString, trimString);
       } else {
         return execICU(srcString, trimString, collationId);
       }
@@ -568,6 +572,8 @@ public final class CollationSupport {
       String expr = "CollationSupport.StringTrim.exec";
       if (collation.supportsBinaryEquality) {
         return String.format(expr + "Binary(%s)", srcString);
+      } else if (collation.supportsLowercaseEquality) {
+        return String.format(expr + "Lowercase(%s)", srcString);
       } else {
         return String.format(expr + "ICU(%s, %d)", srcString, collationId);
       }
@@ -580,6 +586,8 @@ public final class CollationSupport {
       String expr = "CollationSupport.StringTrim.exec";
       if (collation.supportsBinaryEquality) {
         return String.format(expr + "Binary(%s, %s)", srcString, trimString);
+      } else if (collation.supportsLowercaseEquality) {
+        return String.format(expr + "Lowercase(%s, %s)", srcString, trimString);
       } else {
         return String.format(expr + "ICU(%s, %s, %d)", srcString, trimString, collationId);
       }
@@ -592,6 +600,15 @@ public final class CollationSupport {
         final UTF8String srcString,
         final UTF8String trimString) {
       return srcString.trim(trimString);
+    }
+    public static UTF8String execLowercase(
+        final UTF8String srcString) {
+      return srcString.trim();
+    }
+    public static UTF8String execLowercase(
+        final UTF8String srcString,
+        final UTF8String trimString) {
+      return CollationAwareUTF8String.lowercaseTrim(srcString, trimString);
     }
     public static UTF8String execICU(
         final UTF8String srcString,
@@ -613,6 +630,8 @@ public final class CollationSupport {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
       if (collation.supportsBinaryEquality) {
         return execBinary(srcString);
+      } else if (collation.supportsLowercaseEquality) {
+        return execLowercase(srcString);
       } else {
         return execICU(srcString, collationId);
       }
@@ -624,6 +643,8 @@ public final class CollationSupport {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
       if (collation.supportsBinaryEquality) {
         return execBinary(srcString, trimString);
+      } else if (collation.supportsLowercaseEquality) {
+        return execLowercase(srcString, trimString);
       } else {
         return execICU(srcString, trimString, collationId);
       }
@@ -635,6 +656,8 @@ public final class CollationSupport {
       String expr = "CollationSupport.StringTrimLeft.exec";
       if (collation.supportsBinaryEquality) {
         return String.format(expr + "Binary(%s)", srcString);
+      } else if (collation.supportsLowercaseEquality) {
+        return String.format(expr + "Lowercase(%s)", srcString);
       } else {
         return String.format(expr + "ICU(%s, %d)", srcString, collationId);
       }
@@ -647,6 +670,8 @@ public final class CollationSupport {
       String expr = "CollationSupport.StringTrimLeft.exec";
       if (collation.supportsBinaryEquality) {
         return String.format(expr + "Binary(%s, %s)", srcString, trimString);
+      } else if (collation.supportsLowercaseEquality) {
+        return String.format(expr + "Lowercase(%s, %s)", srcString, trimString);
       } else {
         return String.format(expr + "ICU(%s, %s, %d)", srcString, trimString, collationId);
       }
@@ -659,6 +684,15 @@ public final class CollationSupport {
         final UTF8String srcString,
         final UTF8String trimString) {
       return srcString.trimLeft(trimString);
+    }
+    public static UTF8String execLowercase(
+        final UTF8String srcString) {
+      return srcString.trimLeft();
+    }
+    public static UTF8String execLowercase(
+        final UTF8String srcString,
+        final UTF8String trimString) {
+      return CollationAwareUTF8String.lowercaseTrimLeft(srcString, trimString);
     }
     public static UTF8String execICU(
         final UTF8String srcString,
@@ -680,6 +714,8 @@ public final class CollationSupport {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
       if (collation.supportsBinaryEquality) {
         return execBinary(srcString);
+      } else if (collation.supportsLowercaseEquality) {
+        return execLowercase(srcString);
       } else {
         return execICU(srcString, collationId);
       }
@@ -691,6 +727,8 @@ public final class CollationSupport {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
       if (collation.supportsBinaryEquality) {
         return execBinary(srcString, trimString);
+      } else if (collation.supportsLowercaseEquality) {
+        return execLowercase(srcString, trimString);
       } else {
         return execICU(srcString, trimString, collationId);
       }
@@ -702,6 +740,8 @@ public final class CollationSupport {
       String expr = "CollationSupport.StringTrimRight.exec";
       if (collation.supportsBinaryEquality) {
         return String.format(expr + "Binary(%s)", srcString);
+      } else if (collation.supportsLowercaseEquality) {
+        return String.format(expr + "Lowercase(%s)", srcString);
       } else {
         return String.format(expr + "ICU(%s, %d)", srcString, collationId);
       }
@@ -714,18 +754,29 @@ public final class CollationSupport {
       String expr = "CollationSupport.StringTrimRight.exec";
       if (collation.supportsBinaryEquality) {
         return String.format(expr + "Binary(%s, %s)", srcString, trimString);
+      } else if (collation.supportsLowercaseEquality) {
+        return String.format(expr + "Lowercase(%s, %s)", srcString, trimString);
       } else {
         return String.format(expr + "ICU(%s, %s, %d)", srcString, trimString, collationId);
       }
     }
     public static UTF8String execBinary(
-            final UTF8String srcString) {
+        final UTF8String srcString) {
       return srcString.trimRight();
     }
     public static UTF8String execBinary(
         final UTF8String srcString,
         final UTF8String trimString) {
       return srcString.trimRight(trimString);
+    }
+    public static UTF8String execLowercase(
+        final UTF8String srcString) {
+      return srcString.trimRight();
+    }
+    public static UTF8String execLowercase(
+        final UTF8String srcString,
+        final UTF8String trimString) {
+      return CollationAwareUTF8String.lowercaseTrimRight(srcString, trimString);
     }
     public static UTF8String execICU(
         final UTF8String srcString,
@@ -1098,13 +1149,122 @@ public final class CollationSupport {
       return collationAwareDict;
     }
 
+    private static UTF8String lowercaseTrim(
+        final UTF8String srcString,
+        final UTF8String trimString) {
+      // Matching UTF8String behavior for null `trimString`.
+      if (trimString == null) {
+        return null;
+      }
+
+      UTF8String leftTrimmed = lowercaseTrimLeft(srcString, trimString);
+      return lowercaseTrimRight(leftTrimmed, trimString);
+    }
+
+    private static UTF8String lowercaseTrimLeft(
+        final UTF8String srcString,
+        final UTF8String trimString) {
+      // Matching UTF8String behavior for null `trimString`.
+      if (trimString == null) {
+        return null;
+      }
+
+      // The searching byte position in the srcString.
+      int searchIdx = 0;
+      // The byte position of a first non-matching character in the srcString.
+      int trimByteIdx = 0;
+      // Number of bytes in srcString.
+      int numBytes = srcString.numBytes();
+      // Convert trimString to lowercase so it can be searched properly.
+      UTF8String lowercaseTrimString = trimString.toLowerCase();
+
+      while (searchIdx < numBytes) {
+        UTF8String searchChar = srcString.copyUTF8String(
+          searchIdx,
+          searchIdx + UTF8String.numBytesForFirstByte(srcString.getByte(searchIdx)) - 1);
+        int searchCharBytes = searchChar.numBytes();
+
+        // Try to find the matching for the searchChar in the trimString.
+        if (lowercaseTrimString.find(searchChar.toLowerCase(), 0) >= 0) {
+          trimByteIdx += searchCharBytes;
+          searchIdx += searchCharBytes;
+        } else {
+          // No matching, exit the search.
+          break;
+        }
+      }
+
+      if (searchIdx == 0) {
+        // Nothing trimmed - return original string (not converted to lowercase).
+        return srcString;
+      }
+      if (trimByteIdx >= numBytes) {
+        // Everything trimmed.
+        return UTF8String.EMPTY_UTF8;
+      }
+      return srcString.copyUTF8String(trimByteIdx, numBytes - 1);
+    }
+
+    private static UTF8String lowercaseTrimRight(
+        final UTF8String srcString,
+        final UTF8String trimString) {
+      // Matching UTF8String behavior for null `trimString`.
+      if (trimString == null) {
+        return null;
+      }
+
+      // Number of bytes iterated from the srcString.
+      int byteIdx = 0;
+      // Number of characters iterated from the srcString.
+      int numChars = 0;
+      // Number of bytes in srcString.
+      int numBytes = srcString.numBytes();
+      // Array of character length for the srcString.
+      int[] stringCharLen = new int[numBytes];
+      // Array of the first byte position for each character in the srcString
+      int[] stringCharPos = new int[numBytes];
+      // Non-final value for trim string to use.
+      UTF8String lowercaseTrimString = trimString.toLowerCase();
+
+      // Build the position and length array.
+      while (byteIdx < numBytes) {
+        stringCharPos[numChars] = byteIdx;
+        stringCharLen[numChars] = UTF8String.numBytesForFirstByte(srcString.getByte(byteIdx));
+        byteIdx += stringCharLen[numChars];
+        numChars++;
+      }
+
+      // Index trimEnd points to the first no matching byte position from the right side of
+      //  the source string.
+      int trimByteIdx = numBytes - 1;
+
+      while (numChars > 0) {
+        UTF8String searchChar = srcString.copyUTF8String(
+          stringCharPos[numChars - 1],
+          stringCharPos[numChars - 1] + stringCharLen[numChars - 1] - 1);
+
+        if(lowercaseTrimString.find(searchChar.toLowerCase(), 0) >= 0) {
+          trimByteIdx -= stringCharLen[numChars - 1];
+          numChars--;
+        } else {
+          break;
+        }
+      }
+
+      if (trimByteIdx == numBytes - 1) {
+        // Nothing trimmed.
+        return srcString;
+      }
+      if (trimByteIdx < 0) {
+        // Everything trimmed.
+        return UTF8String.EMPTY_UTF8;
+      }
+      return srcString.copyUTF8String(0, trimByteIdx);
+    }
+
     private static UTF8String trim(
         final UTF8String srcString,
         int collationId) {
-      if (CollationFactory.fetchCollation(collationId).supportsLowercaseEquality) {
-        return srcString.trim();
-      }
-
       UTF8String leftTrimmed = trimLeft(srcString, collationId);
       return trimRight(leftTrimmed, collationId);
     }
@@ -1125,10 +1285,6 @@ public final class CollationSupport {
     private static UTF8String trimLeft(
         final UTF8String srcString,
         int collationId) {
-      if (CollationFactory.fetchCollation(collationId).supportsLowercaseEquality) {
-        return srcString.trimLeft();
-      }
-
       return trimLeft(srcString, UTF8String.fromString(" "), collationId);
     }
 
@@ -1141,20 +1297,12 @@ public final class CollationSupport {
         return null;
       }
 
-      boolean supportsLowercaseEquality =
-        CollationFactory.fetchCollation(collationId).supportsLowercaseEquality;
-      // The searching byte position in the source string.
+      // The searching byte position in the srcString.
       int searchIdx = 0;
-      // The byte position of a first non-matching character in the lowercase source string.
+      // The byte position of a first non-matching character in the srcString.
       int trimByteIdx = 0;
       // Number of bytes in srcString.
       int numBytes = srcString.numBytes();
-      // Non-final value for trim string to use.
-      UTF8String nonFinalTrimString = trimString;
-
-      if (supportsLowercaseEquality) {
-        nonFinalTrimString = nonFinalTrimString.toLowerCase();
-      }
 
       while (searchIdx < numBytes) {
         UTF8String searchChar = srcString.copyUTF8String(
@@ -1162,18 +1310,11 @@ public final class CollationSupport {
           searchIdx + UTF8String.numBytesForFirstByte(srcString.getByte(searchIdx)) - 1);
         int searchCharBytes = searchChar.numBytes();
 
-        // Convert `searchChar` to lowercase if needed.
-        if (supportsLowercaseEquality) {
-          searchChar = searchChar.toLowerCase();
-        }
-
-        // Get string search based on whether collation supports lowercase.
-        StringSearch stringSearch = supportsLowercaseEquality
-          ? CollationFactory.getStringSearch(nonFinalTrimString, searchChar)
-          : CollationFactory.getStringSearch(nonFinalTrimString, searchChar, collationId);
-
         // Try to find the matching for the searchChar in the trimString.
+        StringSearch stringSearch = CollationFactory.getStringSearch(
+          trimString, searchChar, collationId);
         int searchCharIdx = stringSearch.next();
+
         if (searchCharIdx != StringSearch.DONE
             && stringSearch.getMatchLength() == stringSearch.getPattern().length()) {
           trimByteIdx += searchCharBytes;
@@ -1198,10 +1339,6 @@ public final class CollationSupport {
     private static UTF8String trimRight(
         final UTF8String srcString,
         int collationId) {
-      if (CollationFactory.fetchCollation(collationId).supportsLowercaseEquality) {
-        return srcString.trimRight();
-      }
-
       return trimRight(srcString, UTF8String.fromString(" "), collationId);
     }
 
@@ -1214,24 +1351,16 @@ public final class CollationSupport {
         return null;
       }
 
-      boolean supportsLowercaseEquality =
-              CollationFactory.fetchCollation(collationId).supportsLowercaseEquality;
-      // Number of bytes iterated from the source string.
+      // Number of bytes iterated from the srcString.
       int byteIdx = 0;
-      // Number of characters iterated from the source string.
+      // Number of characters iterated from the srcString.
       int numChars = 0;
       // Number of bytes in srcString.
       int numBytes = srcString.numBytes();
-      // Array of character length for the source string.
+      // Array of character length for the srcString.
       int[] stringCharLen = new int[numBytes];
-      // Array of the first byte position for each character in the source string.
+      // Array of the first byte position for each character in the srcString.
       int[] stringCharPos = new int[numBytes];
-      // Non-final value for trim string to use.
-      UTF8String nonFinalTrimString = trimString;
-
-      if (supportsLowercaseEquality) {
-        nonFinalTrimString = nonFinalTrimString.toLowerCase();
-      }
 
       // Build the position and length array.
       while (byteIdx < numBytes) {
@@ -1250,18 +1379,11 @@ public final class CollationSupport {
           stringCharPos[numChars - 1],
           stringCharPos[numChars - 1] + stringCharLen[numChars - 1] - 1);
 
-        // Convert `searchChar` to lowercase if needed.
-        if (supportsLowercaseEquality) {
-          searchChar = searchChar.toLowerCase();
-        }
-
-        // Get string search based on whether collation supports lowercase.
-        StringSearch stringSearch = supportsLowercaseEquality
-          ? CollationFactory.getStringSearch(nonFinalTrimString, searchChar)
-          : CollationFactory.getStringSearch(nonFinalTrimString, searchChar, collationId);
-
         // Try to find the matching for the searchChar in the trimString.
+        StringSearch stringSearch = CollationFactory.getStringSearch(
+          trimString, searchChar, collationId);
         int searchCharIdx = stringSearch.next();
+
         if (searchCharIdx != StringSearch.DONE
             && stringSearch.getMatchLength() == stringSearch.getPattern().length()) {
           trimByteIdx -= stringCharLen[numChars - 1];
