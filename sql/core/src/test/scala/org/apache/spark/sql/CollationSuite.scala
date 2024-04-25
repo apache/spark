@@ -21,8 +21,8 @@ import scala.jdk.CollectionConverters.MapHasAsJava
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, InternalRow}
-import org.apache.spark.sql.catalyst.analysis.{CollationKey, RewriteCollationJoin}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BindReferences, Literal, UnsafeProjection}
+import org.apache.spark.sql.catalyst.analysis.RewriteCollationJoin
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BindReferences, CollationKey, Literal, UnsafeProjection}
 import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory}
 import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2ProviderWithCustomSchema}
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable}
@@ -1174,7 +1174,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("hash join should respect collation") {
+  test("hash join should respect collation for strings") {
     spark.experimental.extraOptimizations = Seq(RewriteCollationJoin)
     val t1 = "T_1"
     val t2 = "T_2"
@@ -1193,6 +1193,34 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
         sql(s"CREATE TABLE $t2 (y STRING COLLATE ${t.collation}, j int) USING PARQUET")
         sql(s"INSERT INTO $t2 VALUES ('AA', 2), ('aa', 2)")
+
+        val df = sql(s"SELECT * FROM $t1 JOIN $t2 ON $t1.x = $t2.y")
+        checkAnswer(df, t.result)
+      }
+    })
+  }
+
+  test("hash join should respect collation for array of strings") {
+    spark.experimental.extraOptimizations = Seq(RewriteCollationJoin)
+    val t1 = "T_1"
+    val t2 = "T_2"
+
+    case class HashJoinTestCase[R](collation: String, result: R)
+    val testCases = Seq(
+      HashJoinTestCase("UTF8_BINARY", Seq(Row(Seq("aa"), 1, Seq("aa"), 2))),
+      HashJoinTestCase("UTF8_BINARY_LCASE",
+        Seq(Row(Seq("aa"), 1, Seq("AA"), 2), Row(Seq("aa"), 1, Seq("aa"), 2))),
+      HashJoinTestCase("UNICODE", Seq(Row(Seq("aa"), 1, Seq("aa"), 2))),
+      HashJoinTestCase("UNICODE_CI",
+        Seq(Row(Seq("aa"), 1, Seq("AA"), 2), Row(Seq("aa"), 1, Seq("aa"), 2)))
+    )
+    testCases.foreach(t => {
+      withTable(t1, t2) {
+        sql(s"CREATE TABLE $t1 (x ARRAY<STRING COLLATE ${t.collation}>, i int) USING PARQUET")
+        sql(s"INSERT INTO $t1 VALUES (array('aa'), 1)")
+
+        sql(s"CREATE TABLE $t2 (y ARRAY<STRING COLLATE ${t.collation}>, j int) USING PARQUET")
+        sql(s"INSERT INTO $t2 VALUES (array('AA'), 2), (array('aa'), 2)")
 
         val df = sql(s"SELECT * FROM $t1 JOIN $t2 ON $t1.x = $t2.y")
         checkAnswer(df, t.result)
