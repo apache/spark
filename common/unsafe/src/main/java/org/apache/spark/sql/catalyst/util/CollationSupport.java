@@ -26,9 +26,11 @@ import org.apache.spark.unsafe.types.UTF8String;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
+import java.util.Set;
 
 import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
 import static org.apache.spark.unsafe.Platform.copyMemory;
@@ -1307,6 +1309,8 @@ public final class CollationSupport {
       // Create ICU StringSearch object.
       StringSearch stringSearch = CollationFactory.getStringSearch(
         trimString, UTF8String.EMPTY_UTF8, collationId);
+      // Create hash set to save seen chars
+      Set<UTF8String> seenChars = new HashSet<>();
 
       while (searchIdx < numBytes) {
         UTF8String searchChar = srcString.copyUTF8String(
@@ -1314,7 +1318,14 @@ public final class CollationSupport {
           searchIdx + UTF8String.numBytesForFirstByte(srcString.getByte(searchIdx)) - 1);
         int searchCharBytes = searchChar.numBytes();
 
-        // Try to find the matching for the searchChar in the trimString.
+        // First check if we have already seen this char in srcString.
+        if (seenChars.contains(searchChar)) {
+          trimByteIdx += searchCharBytes;
+          searchIdx += searchCharBytes;
+          continue;
+        }
+
+        // Otherwise, try to find the matching for the searchChar in the trimString.
         stringSearch.reset();
         stringSearch.setPattern(searchChar.toString());
         int searchCharIdx = stringSearch.next();
@@ -1323,6 +1334,7 @@ public final class CollationSupport {
             && stringSearch.getMatchLength() == stringSearch.getPattern().length()) {
           trimByteIdx += searchCharBytes;
           searchIdx += searchCharBytes;
+          seenChars.add(searchChar);
         } else {
           // No matching, exit the search.
           break;
@@ -1377,6 +1389,8 @@ public final class CollationSupport {
       // Create ICU StringSearch object.
       StringSearch stringSearch = CollationFactory.getStringSearch(
         trimString, UTF8String.EMPTY_UTF8, collationId);
+      // Create hash set to save seen chars
+      Set<UTF8String> seenChars = new HashSet<>();
 
       // Index trimEnd points to the first no matching byte position from the right side of
       //  the source string.
@@ -1387,7 +1401,14 @@ public final class CollationSupport {
           stringCharPos[numChars - 1],
           stringCharPos[numChars - 1] + stringCharLen[numChars - 1] - 1);
 
-        // Try to find the matching for the searchChar in the trimString.
+        // First check if we have already seen this char in srcString.
+        if (seenChars.contains(searchChar)) {
+          trimByteIdx -= stringCharLen[numChars - 1];
+          numChars--;
+          continue;
+        }
+
+        // Otherwise, try to find the matching for the searchChar in the trimString.
         stringSearch.reset();
         stringSearch.setPattern(searchChar.toString());
         int searchCharIdx = stringSearch.next();
@@ -1396,6 +1417,7 @@ public final class CollationSupport {
             && stringSearch.getMatchLength() == stringSearch.getPattern().length()) {
           trimByteIdx -= stringCharLen[numChars - 1];
           numChars--;
+          seenChars.add(searchChar);
         } else {
           break;
         }
