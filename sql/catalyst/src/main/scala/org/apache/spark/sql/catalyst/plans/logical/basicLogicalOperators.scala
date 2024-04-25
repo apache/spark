@@ -332,17 +332,6 @@ case class Generate(
     copy(child = newChild)
 }
 
-/**
- * Advisory filters are filters which ask for the input to be filtered if possible but can be
- * safely ignored as their is a non-advisory filter further up the chain which will perform
- * the final filtering.
- */
-private[spark] class AdvisoryFilter(condition: Expression, child: LogicalPlan) extends
-    Filter(condition, child) {
-  override private[spark] def advisory: Boolean = true
-}
-
-
 case class Filter(condition: Expression, child: LogicalPlan)
   extends OrderPreservingUnaryNode with PredicateHelper {
   override def output: Seq[Attribute] = child.output
@@ -367,8 +356,6 @@ case class Filter(condition: Expression, child: LogicalPlan)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Filter =
     copy(child = newChild)
-
-  private[spark] def advisory: Boolean = false
 }
 
 abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
