@@ -141,8 +141,8 @@ private[spark] object KubernetesClientUtils extends Logging {
         }
       }
       if (truncatedMap.nonEmpty) {
-        logInfo(s"Spark configuration files loaded from $confDir :" +
-          s" ${truncatedMap.keys.mkString(",")}")
+        logInfo(log"Spark configuration files loaded from ${MDC(PATH, confDir)} : " +
+          log"${MDC(PATHS, truncatedMap.keys.mkString(","))}")
       }
       if (skippedFiles.nonEmpty) {
         logWarning(log"Skipped conf file(s) ${MDC(PATHS, skippedFiles.mkString(","))}, due to " +

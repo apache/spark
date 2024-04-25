@@ -476,7 +476,7 @@ pyspark_sql = Module(
         "pyspark.sql.session",
         "pyspark.sql.conf",
         "pyspark.sql.catalog",
-        "pyspark.sql.column",
+        "pyspark.sql.classic.column",
         "pyspark.sql.classic.dataframe",
         "pyspark.sql.datasource",
         "pyspark.sql.group",
