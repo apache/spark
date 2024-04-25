@@ -322,7 +322,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
   }
 
   test("invalid collationId") {
-    Seq(
+    val badCollationIds = Seq(
       -1, // user-defined collation range
       1 << 31, // user-defined collation range
       123, // utf-8 binary with non-zero locale id
@@ -352,6 +352,14 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       (1 << 30) | (1 << 23) | (1 << 22), // ICU with invalid case conversion
       1 << 28, // utf8-binary accent-insensitive
       1 << 29 // utf8-binary case-insensitive
-    ).foreach(collationId => assert(fetchCollation(collationId) == null))
+    )
+    badCollationIds.foreach(collationId => {
+      val e = intercept[SparkException](fetchCollationUnsafe(collationId))
+      // user cannot specify collation ids directly so this is an internal error
+      assert(e.getErrorClass === "INTERNAL_ERROR")
+    })
+    badCollationIds.foreach(collationId => {
+      assert(fetchCollation(collationId).collationName == "UTF8_BINARY")
+    })
   }
 }
