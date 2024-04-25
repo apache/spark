@@ -103,7 +103,7 @@ object HiveSerDe {
     serdeMap.find {
       case (_, serDe) => serDe.inputFormat.get.equalsIgnoreCase(inputFormat) &&
         serDe.outputFormat.get.equalsIgnoreCase(outputFormat)
-    }.flatMap(_._2.serde).orElse(Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
+    }.flatMap(_._2.serde)
   }
 
   /**
