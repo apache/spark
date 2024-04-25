@@ -89,6 +89,7 @@ private case class MsSqlServerDialect() extends JdbcDialect {
           case "=" | "<>" | "<=>" | "<" | "<=" | ">" | ">="
               if e.children().exists(_.isInstanceOf[Predicate]) =>
             super.visitUnexpectedExpr(expr)
+          case "CASE_WHEN" => super.visitUnexpectedExpr(expr)
           case _ => super.build(expr)
         }
         case _ => super.build(expr)
