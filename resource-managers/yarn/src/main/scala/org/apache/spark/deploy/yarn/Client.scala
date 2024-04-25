@@ -1683,8 +1683,8 @@ private[spark] object Client extends Logging {
   def getClusterPath(conf: SparkConf, path: String): String = {
     val localPath = conf.get(GATEWAY_ROOT_PATH)
     val clusterPath = conf.get(REPLACEMENT_ROOT_PATH)
-    if (localPath != null && clusterPath != null) {
-      path.replace(localPath, clusterPath)
+    if (localPath.isDefined && clusterPath.isDefined) {
+      path.replace(localPath.get, clusterPath.get)
     } else {
       path
     }

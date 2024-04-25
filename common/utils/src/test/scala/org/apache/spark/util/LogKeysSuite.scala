@@ -27,7 +27,7 @@ import scala.reflect.runtime.universe._
 import org.apache.commons.io.FileUtils
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
-import org.apache.spark.internal.{Logging, LogKey}
+import org.apache.spark.internal.{Logging, LogKeys}
 
 // scalastyle:off line.size.limit
 /**
@@ -37,7 +37,7 @@ import org.apache.spark.internal.{Logging, LogKey}
  * }}}
  */
 // scalastyle:on line.size.limit
-class LogKeySuite
+class LogKeysSuite
     extends AnyFunSuite // scalastyle:ignore funsuite
     with Logging {
 
@@ -52,7 +52,7 @@ class LogKeySuite
     java.nio.file.Paths.get(sparkHome, first +: more: _*)
   }
 
-  private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
+  private val regenerateGoldenFiles: Boolean = true // System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
 
   private val logKeyFilePath = getWorkspaceFilePath("common", "utils", "src", "main", "scala",
     "org", "apache", "spark", "internal", "LogKey.scala")
@@ -95,9 +95,9 @@ class LogKeySuite
   }
 
   private def getAllLogKeys: List[String] = {
-    val logKeyType = typeOf[LogKey.type]
-    val logKeyClassSymbol = logKeyType.typeSymbol.asClass
-    val members = logKeyClassSymbol.typeSignature.members
+    val logKeysType = typeOf[LogKeys.type]
+    val classSymbol = logKeysType.typeSymbol.asClass
+    val members = classSymbol.typeSignature.members
     members.filter(m => m.isTerm && !m.isMethod).map(_.name.toString).toList
   }
 }

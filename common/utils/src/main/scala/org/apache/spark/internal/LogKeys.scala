@@ -22,7 +22,7 @@ trait ILogKey
  * Various keys used for mapped diagnostic contexts(MDC) in logging.
  * All structured logging keys should be defined here for standardization.
  */
-object LogKey extends ILogKey {
+object LogKeys extends ILogKey {
   case object ACCUMULATOR_ID extends ILogKey
   case object ACTUAL_NUM_FILES extends ILogKey
   case object ACTUAL_PARTITION_COLUMN extends ILogKey
@@ -36,6 +36,7 @@ object LogKey extends ILogKey {
   case object ARGS extends ILogKey
   case object BACKUP_FILE extends ILogKey
   case object BATCH_ID extends ILogKey
+  case object BATCH_WRITE extends ILogKey
   case object BLOCK_ID extends ILogKey
   case object BLOCK_MANAGER_ID extends ILogKey
   case object BROADCAST_ID extends ILogKey
@@ -118,6 +119,7 @@ object LogKey extends ILogKey {
   case object ESTIMATOR_PARAMETER_MAP extends ILogKey
   case object EVENT_LOOP extends ILogKey
   case object EVENT_QUEUE extends ILogKey
+  case object EXCEPTION extends ILogKey
   case object EXECUTE_INFO extends ILogKey
   case object EXECUTE_KEY extends ILogKey
   case object EXECUTION_PLAN_LEAVES extends ILogKey
@@ -164,6 +166,7 @@ object LogKey extends ILogKey {
   case object HIVE_OPERATION_TYPE extends ILogKey
   case object HOST extends ILogKey
   case object HOST_PORT extends ILogKey
+  case object IDENTIFIER extends ILogKey
   case object INCOMPATIBLE_TYPES extends ILogKey
   case object INDEX extends ILogKey
   case object INDEX_FILE_NUM extends ILogKey
@@ -332,11 +335,13 @@ object LogKey extends ILogKey {
   case object SPARK_PLAN_ID extends ILogKey
   case object SQL_TEXT extends ILogKey
   case object SRC_PATH extends ILogKey
+  case object STAGE_ATTEMPT extends ILogKey
   case object STAGE_ID extends ILogKey
   case object START_INDEX extends ILogKey
   case object STATEMENT_ID extends ILogKey
   case object STATE_STORE_PROVIDER extends ILogKey
   case object STATUS extends ILogKey
+  case object STDERR extends ILogKey
   case object STORAGE_LEVEL extends ILogKey
   case object STORAGE_LEVEL_DESERIALIZED extends ILogKey
   case object STORAGE_LEVEL_REPLICATION extends ILogKey
@@ -404,5 +409,6 @@ object LogKey extends ILogKey {
   case object WEIGHTED_NUM extends ILogKey
   case object WORKER_URL extends ILogKey
   case object WRITE_AHEAD_LOG_INFO extends ILogKey
+  case object WRITE_JOB_UUID extends ILogKey
   case object XSD_PATH extends ILogKey
 }
