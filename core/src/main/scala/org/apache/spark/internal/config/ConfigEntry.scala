@@ -227,7 +227,7 @@ private[spark] class OptionalConfigEntry[T](
     prependSeparator,
     alternatives,
     s => Some(rawValueConverter(s)),
-    v => v.map(rawStringConverter).orNull,
+    v => v.map(rawStringConverter).getOrElse(ConfigEntry.UNDEFINED),
     doc,
     isPublic,
     version
