@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
+import java.util.concurrent.atomic.AtomicReference
 
 import scala.concurrent.Future
 
-import org.apache.spark.{FutureAction, MapOutputStatistics, SparkException}
+import org.apache.spark.{MapOutputStatistics, SparkException}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -57,24 +57,12 @@ abstract class QueryStageExec extends LeafExecNode {
   val name: String = s"${this.getClass.getSimpleName}-$id"
 
   /**
-   * This flag aims to detect if the stage materialization is started. This helps
-   * to avoid unnecessary stage materialization when the stage is canceled.
-   */
-  private val materializationStarted = new AtomicBoolean()
-
-  /**
-   * Exposes status if the materialization is started
-   */
-  def isMaterializationStarted(): Boolean = materializationStarted.get()
-
-  /**
    * Materialize this query stage, to prepare for the execution, like submitting map stages,
    * broadcasting data, etc. The caller side can use the returned [[Future]] to wait until this
    * stage is ready.
    */
   final def materialize(): Future[Any] = {
     logDebug(s"Materialize query stage: $name")
-    materializationStarted.set(true)
     doMaterialize()
   }
 
@@ -168,7 +156,12 @@ abstract class ExchangeQueryStageExec extends QueryStageExec {
   /**
    * Cancel the stage materialization if in progress; otherwise do nothing.
    */
-  def cancel(): Unit
+  final def cancel(): Unit = {
+    logDebug(s"Cancel query stage: $name")
+    doCancel()
+  }
+
+  protected def doCancel(): Unit
 
   /**
    * The canonicalized plan before applying query stage optimizer rules.
@@ -201,9 +194,7 @@ case class ShuffleQueryStageExec(
 
   def advisoryPartitionSize: Option[Long] = shuffle.advisoryPartitionSize
 
-  @transient private lazy val shuffleFuture = shuffle.submitShuffleJob
-
-  override protected def doMaterialize(): Future[Any] = shuffleFuture
+  override protected def doMaterialize(): Future[Any] = shuffle.submitShuffleJob
 
   override def newReuseInstance(
       newStageId: Int, newOutput: Seq[Attribute]): ExchangeQueryStageExec = {
@@ -215,16 +206,7 @@ case class ShuffleQueryStageExec(
     reuse
   }
 
-  override def cancel(): Unit = {
-    if (isMaterializationStarted()) {
-      shuffleFuture match {
-        case action: FutureAction[MapOutputStatistics] if !action.isCompleted =>
-          action.cancel()
-          logInfo(s"$name is cancelled.")
-        case _ =>
-      }
-    }
-  }
+  override protected def doCancel(): Unit = shuffle.cancelShuffleJob
 
   /**
    * Returns the Option[MapOutputStatistics]. If the shuffle map stage has no partition,
@@ -258,9 +240,7 @@ case class BroadcastQueryStageExec(
       throw SparkException.internalError(s"wrong plan for broadcast stage:\n ${plan.treeString}")
   }
 
-  override protected def doMaterialize(): Future[Any] = {
-    broadcast.submitBroadcastJob
-  }
+  override protected def doMaterialize(): Future[Any] = broadcast.submitBroadcastJob
 
   override def newReuseInstance(
       newStageId: Int, newOutput: Seq[Attribute]): ExchangeQueryStageExec = {
@@ -272,13 +252,7 @@ case class BroadcastQueryStageExec(
     reuse
   }
 
-  override def cancel(): Unit = {
-    if (isMaterializationStarted() && !broadcast.relationFuture.isDone) {
-      sparkContext.cancelJobsWithTag(broadcast.jobTag)
-      broadcast.relationFuture.cancel(true)
-      logInfo(s"$name is cancelled.")
-    }
-  }
+  override protected def doCancel(): Unit = broadcast.cancelBroadcastJob()
 
   override def getRuntimeStatistics: Statistics = broadcast.runtimeStatistics
 }

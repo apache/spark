@@ -930,15 +930,15 @@ class AdaptiveQueryExecSuite
           s"3 ShuffleQueryStages. Physical Plan: $adaptivePlan")
         shuffleQueryStageExecs.foreach(sqse => assert(sqse.name.contains("ShuffleQueryStageExec-")))
         // First ShuffleQueryStage is materialized so it needs to be canceled.
-        assert(shuffleQueryStageExecs(0).isMaterializationStarted(),
+        assert(shuffleQueryStageExecs(0).shuffle.isMaterializationStarted(),
           "Materialization should be started.")
         // Second ShuffleQueryStage materialization is failed so
         // it is excluded from the cancellation due to earlyFailedStage.
-        assert(shuffleQueryStageExecs(1).isMaterializationStarted(),
+        assert(shuffleQueryStageExecs(1).shuffle.isMaterializationStarted(),
           "Materialization should be started but it is failed.")
         // Last ShuffleQueryStage is not materialized yet so it does not require
         // to be canceled and it is just skipped from the cancellation.
-        assert(!shuffleQueryStageExecs(2).isMaterializationStarted(),
+        assert(!shuffleQueryStageExecs(2).shuffle.isMaterializationStarted(),
           "Materialization should not be started.")
       }
     } finally {
@@ -976,7 +976,7 @@ class AdaptiveQueryExecSuite
           broadcastQueryStageExecs.foreach { bqse =>
             assert(bqse.name.contains("BroadcastQueryStageExec-"))
             // Both BroadcastQueryStages are materialized at the beginning.
-            assert(bqse.isMaterializationStarted(),
+            assert(bqse.broadcast.isMaterializationStarted(),
               s"${bqse.name}' s materialization should be started.")
           }
         }
