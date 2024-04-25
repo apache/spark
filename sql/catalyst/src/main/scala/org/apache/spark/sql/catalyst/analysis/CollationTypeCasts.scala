@@ -161,7 +161,7 @@ object CollationTypeCasts extends TypeCoercionRule {
             StringType(CollationFactory.INDETERMINATE_COLLATION_ID)
           }
         }
-        else if (implicitTypes.exists(_.collationId == -1)) {
+        else if (implicitTypes.contains(-1)) {
           if (failOnIndeterminate) {
             throw QueryCompilationErrors.indeterminateCollationError()
           }
