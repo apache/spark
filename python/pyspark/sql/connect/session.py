@@ -76,7 +76,7 @@ from pyspark.sql.pandas.types import (
     from_arrow_type,
 )
 from pyspark.sql.profiler import Profile
-from pyspark.sql.session import classproperty, SparkSession as PySparkSession
+from pyspark.sql.session import SparkSession as PySparkSession
 from pyspark.sql.types import (
     _infer_schema,
     _has_nulltype,
@@ -248,7 +248,7 @@ class SparkSession:
 
     # SPARK-47544: Explicitly declaring this as an identifier instead of a method.
     # If changing, make sure this bug is not reintroduced.
-    builder: Builder = classproperty(lambda cls: cls.Builder())  # type: ignore
+    builder: Builder = property(classmethod((lambda cls: cls.Builder())))  # type: ignore
     builder.__doc__ = PySparkSession.builder.__doc__
 
     def __init__(self, connection: Union[str, DefaultChannelBuilder], userId: Optional[str] = None):

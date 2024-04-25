@@ -308,10 +308,6 @@ class PandasUDFTypeHintsWithFutureAnnotationsTests(ReusedSQLTestCase):
         expected = df.selectExpr("id + 1 as id")
         assert_frame_equal(expected.toPandas(), actual.toPandas())
 
-    @unittest.skipIf(
-        sys.version_info < (3, 9),
-        "string annotations with future annotations do not work under Python<3.9",
-    )
     def test_string_type_annotation(self):
         def func(col: "pd.Series") -> "pd.Series":
             pass

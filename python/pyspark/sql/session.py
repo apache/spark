@@ -136,45 +136,6 @@ def _monkey_patch_RDD(sparkSession: "SparkSession") -> None:
         RDD.toDF = toDF  # type: ignore[method-assign]
 
 
-# TODO(SPARK-38912): This method can be dropped once support for Python 3.8 is dropped
-# In Python 3.9, the @property decorator has been made compatible with the
-# @classmethod decorator (https://docs.python.org/3.9/library/functions.html#classmethod)
-#
-# @classmethod + @property is also affected by a bug in Python's docstring which was backported
-# to Python 3.9.6 (https://github.com/python/cpython/pull/28838)
-class classproperty(property):
-    """Same as Python's @property decorator, but for class attributes.
-
-    Examples
-    --------
-    >>> class Builder:
-    ...    def build(self):
-    ...        return MyClass()
-    ...
-    >>> class MyClass:
-    ...     @classproperty
-    ...     def builder(cls):
-    ...         print("instantiating new builder")
-    ...         return Builder()
-    ...
-    >>> c1 = MyClass.builder
-    instantiating new builder
-    >>> c2 = MyClass.builder
-    instantiating new builder
-    >>> c1 == c2
-    False
-    >>> isinstance(c1.build(), MyClass)
-    True
-    """
-
-    def __get__(self, instance: Any, owner: Any = None) -> "SparkSession.Builder":
-        # The "type: ignore" below silences the following error from mypy:
-        # error: Argument 1 to "classmethod" has incompatible
-        # type "Optional[Callable[[Any], Any]]";
-        # expected "Callable[..., Any]"  [arg-type]
-        return classmethod(self.fget).__get__(None, owner)()  # type: ignore
-
-
 class SparkSession(SparkConversionMixin):
     """The entry point to programming Spark with the Dataset and DataFrame API.
 
@@ -591,18 +552,9 @@ class SparkSession(SparkConversionMixin):
                     message_parameters={"feature": "SparkSession.builder.create"},
                 )
 
-    # TODO(SPARK-38912): Replace classproperty with @classmethod + @property once support for
-    # Python 3.8 is dropped.
-    #
-    # In Python 3.9, the @property decorator has been made compatible with the
-    # @classmethod decorator (https://docs.python.org/3.9/library/functions.html#classmethod)
-    #
-    # @classmethod + @property is also affected by a bug in Python's docstring which was backported
-    # to Python 3.9.6 (https://github.com/python/cpython/pull/28838)
-    #
     # SPARK-47544: Explicitly declaring this as an identifier instead of a method.
     # If changing, make sure this bug is not reintroduced.
-    builder: Builder = classproperty(lambda cls: cls.Builder())  # type: ignore
+    builder: Builder = property(classmethod(lambda cls: cls.Builder()))  # type: ignore
     """Creates a :class:`Builder` for constructing a :class:`SparkSession`.
 
     .. versionchanged:: 3.4.0
