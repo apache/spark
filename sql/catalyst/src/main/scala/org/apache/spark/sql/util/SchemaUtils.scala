@@ -303,4 +303,21 @@ private[spark] object SchemaUtils {
       case _ => false
     }
   }
+
+  /**
+   * Replaces any collated string type with non collated StringType
+   * recursively in the given data type.
+   */
+  def replaceCollatedStringWithString(dt: DataType): DataType = dt match {
+    case ArrayType(et, nullable) =>
+      ArrayType(replaceCollatedStringWithString(et), nullable)
+    case MapType(kt, vt, nullable) =>
+      MapType(replaceCollatedStringWithString(kt), replaceCollatedStringWithString(vt), nullable)
+    case StructType(fields) =>
+      StructType(fields.map { field =>
+        field.copy(dataType = replaceCollatedStringWithString(field.dataType))
+      })
+    case _: StringType => StringType
+    case _ => dt
+  }
 }

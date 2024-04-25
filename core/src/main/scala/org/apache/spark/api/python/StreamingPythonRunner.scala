@@ -21,7 +21,7 @@ import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, Data
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{SparkEnv, SparkPythonException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.internal.config.Python.PYTHON_AUTH_SOCKET_TIMEOUT
@@ -91,10 +91,26 @@ private[spark] class StreamingPythonRunner(
       new BufferedInputStream(pythonWorker.get.channel.socket().getInputStream, bufferSize))
 
     val resFromPython = dataIn.readInt()
+    if (resFromPython != 0) {
+      val errMessage = PythonWorkerUtils.readUTF(dataIn)
+      throw streamingPythonRunnerInitializationFailure(resFromPython, errMessage)
+    }
     logInfo(s"Runner initialization succeeded (returned $resFromPython).")
 
     (dataOut, dataIn)
   }
+
+  def streamingPythonRunnerInitializationFailure(resFromPython: Int, errMessage: String):
+    StreamingPythonRunnerInitializationException = {
+    new StreamingPythonRunnerInitializationException(resFromPython, errMessage)
+  }
+
+  class StreamingPythonRunnerInitializationException(resFromPython: Int, errMessage: String)
+    extends SparkPythonException(
+      errorClass = "STREAMING_PYTHON_RUNNER_INITIALIZATION_FAILURE",
+      messageParameters = Map(
+        "resFromPython" -> resFromPython.toString,
+        "msg" -> errMessage))
 
   /**
    * Stops the Python worker.

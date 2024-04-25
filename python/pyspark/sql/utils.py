@@ -329,6 +329,33 @@ def dispatch_df_method(f: FuncT) -> FuncT:
     return cast(FuncT, wrapped)
 
 
+def dispatch_col_method(f: FuncT) -> FuncT:
+    """
+    For the usecases of direct Column.method(col, ...), it checks if self
+    is a Connect DataFrame or Classic DataFrame, and dispatches.
+    """
+
+    @functools.wraps(f)
+    def wrapped(*args: Any, **kwargs: Any) -> Any:
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
+            from pyspark.sql.connect.column import Column as ConnectColumn
+
+            if isinstance(args[0], ConnectColumn):
+                return getattr(ConnectColumn, f.__name__)(*args, **kwargs)
+        else:
+            from pyspark.sql.classic.column import Column as ClassicColumn
+
+            if isinstance(args[0], ClassicColumn):
+                return getattr(ClassicColumn, f.__name__)(*args, **kwargs)
+
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": f"DataFrame.{f.__name__}"},
+        )
+
+    return cast(FuncT, wrapped)
+
+
 def pyspark_column_op(
     func_name: str, left: "IndexOpsLike", right: Any, fillna: Any = None
 ) -> Union["SeriesOrIndex", None]:
@@ -359,7 +386,7 @@ def get_column_class() -> Type["Column"]:
     if is_remote():
         from pyspark.sql.connect.column import Column as ConnectColumn
 
-        return ConnectColumn  # type: ignore[return-value]
+        return ConnectColumn
     else:
         return PySparkColumn
 

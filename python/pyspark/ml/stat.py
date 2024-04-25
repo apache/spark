@@ -22,7 +22,8 @@ from pyspark import since
 from pyspark.ml.common import _java2py, _py2java
 from pyspark.ml.linalg import Matrix, Vector
 from pyspark.ml.wrapper import JavaWrapper, _jvm
-from pyspark.sql.column import Column, _to_seq
+from pyspark.sql.column import Column
+from pyspark.sql.classic.column import _to_seq
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.functions import lit
 

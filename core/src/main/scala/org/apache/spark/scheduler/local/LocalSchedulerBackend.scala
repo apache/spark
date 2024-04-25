@@ -142,6 +142,7 @@ private[spark] class LocalSchedulerBackend(
         Map.empty)))
     launcherBackend.setAppId(appId)
     launcherBackend.setState(SparkAppHandle.State.RUNNING)
+    reviveOffers()
   }
 
   override def stop(): Unit = {

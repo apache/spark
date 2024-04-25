@@ -32,10 +32,8 @@ if should_test_connect:
     from pyspark.sql.connect.column import Column
     from pyspark.sql import functions as SF
     from pyspark.sql.window import Window as SW
-    from pyspark.sql.classic.dataframe import DataFrame as SDF
     from pyspark.sql.connect import functions as CF
     from pyspark.sql.connect.window import Window as CW
-    from pyspark.sql.connect.dataframe import DataFrame as CDF
 
 
 @unittest.skipIf(is_remote_only(), "Requires JVM access")
@@ -60,6 +58,9 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         del os.environ["PYSPARK_NO_NAMESPACE_SHARE"]
 
     def compare_by_show(self, df1, df2, n: int = 20, truncate: int = 20):
+        from pyspark.sql.classic.dataframe import DataFrame as SDF
+        from pyspark.sql.connect.dataframe import DataFrame as CDF
+
         assert isinstance(df1, (SDF, CDF))
         if isinstance(df1, SDF):
             str1 = df1._jdf.showString(n, truncate, False)
