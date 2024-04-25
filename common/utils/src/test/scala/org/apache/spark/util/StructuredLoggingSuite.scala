@@ -306,5 +306,5 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
   }
 }
 
-// External system custom LogKey must be `extends ILogKey`
+// External system custom LogKey must be `extends LogKey`
 case object CUSTOM_LOG_KEY extends LogKey
