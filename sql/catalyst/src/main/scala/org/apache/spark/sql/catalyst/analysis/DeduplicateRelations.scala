@@ -39,6 +39,7 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     val newPlan = renewDuplicatedRelations(mutable.HashSet.empty, plan)._1
 
+    // Wait for `ResolveMissingReferences` to resolve missing attributes first
     def noMissingInput(p: LogicalPlan) = !p.exists(_.missingInput.nonEmpty)
 
     newPlan.resolveOperatorsUpWithPruning(
