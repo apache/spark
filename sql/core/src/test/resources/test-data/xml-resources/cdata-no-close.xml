@@ -1,0 +1,48 @@
+<?xml version="1.0"?>
+<!-- Should read 1 to 17 without any 0s -->
+<ROWSET>
+    <ROW><a>1</a></ROW>
+    <!-- <ROW><a>0</a></ROW>-->
+    <ROW><a>2</a></ROW>
+    <!-- <ROW><a>0</a></ROW>-->
+    <ROW>
+        <!-- Just another comment -->
+        <a> <!-- before a value --> 3 <!-- after a value --></a>
+        <!-- <ROW>
+             <a>3</a>
+            </ROW> -->
+    </ROW>
+    <!-- --><ROW><!----><!----><a><!---->4<!----></a><!----></ROW><!-- -->
+    <!-- --> <!----><ROW><a>5</a></ROW><!--<ROW><a>0</a></ROW>--><ROW><a>6</a></ROW>
+    <ROW><a>7</a></ROW>
+    <!-- <ROW><a>0</a></ROW>-->
+    <ROW> <!-- 0 </ROW> --> <!-- --> <a> 8 </a> </ROW>
+    <ROW><a>9</a></ROW>
+    <NOTROW><!----></NOTROW>
+    <!----><!----><NOTROW><!----><!----></NOTROW><!----><!---->
+    <ROW><a>10</a></ROW>
+    <!-- <ROW><a>0</a></ROW> -->
+    <![CDATA[<!-- <ROW><a>0</a></ROW>]]>
+    <!-- CDATA within row should not be ignored -->
+    <ROW>  <a> <![CDATA[ 11 ]]> </a> </ROW>
+    <![CDATA[<ROW><a>0</a> <!-- --> </ROW>]]><ROW> <a> <![CDATA[ 12 ]]> </a> </ROW> <![CDATA[<ROW><a>0</a></ROW>]]>
+    <ROW> <a>13</a> </ROW>
+    <![CDATA[<ROW><a>0</a></ROW> <!-- open comment]]> <ROW> <a> <![CDATA[ 14 ]]> </a> </ROW> <![CDATA[<a>0</a>]]>
+    <![CDATA[
+        <ROW><a>0</a></ROW>
+        <a>0</a> <!-- <a>0</a> -->
+        <!-- <a>0</a> -->
+        <!-- <ROW><a>0</a></ROW> -->
+        <ROW><a>0</a></ROW>
+    ]]>
+    <ROW> <a>15</a> </ROW> <![CDATA[
+    <ROW><a>0</a></ROW>
+    ]]> <![CDATA[
+        <ROW><a>0</a></ROW>
+        <!-- comments can be inside CDATA -->
+        <!-- no end to this comment tag
+    ]]> <ROW> <a>16</a> </ROW>
+    <ROW> <a>17</a> </ROW>
+</ROWSET>
+<![CDATA[
+        CDATA ending at eof

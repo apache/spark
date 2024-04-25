@@ -24,6 +24,8 @@ import java.util.Locale
 
 import scala.util.Using
 
+import org.apache.spark.internal.LogKey.COLUMN_NAME
+import org.apache.spark.internal.MDC
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NonEmptyNamespaceException, NoSuchIndexException}
@@ -368,7 +370,8 @@ private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
           }
         } catch {
           case e: SQLException =>
-            logWarning(s"Failed to get array dimension for column $columnName", e)
+            logWarning(
+              log"Failed to get array dimension for column ${MDC(COLUMN_NAME, columnName)}", e)
         }
       case _ =>
     }

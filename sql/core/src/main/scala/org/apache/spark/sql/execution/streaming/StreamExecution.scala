@@ -32,7 +32,8 @@ import com.google.common.util.concurrent.UncheckedExecutionException
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{JobArtifactSet, SparkContext, SparkException, SparkThrowable}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{PATH, SPARK_DATA_STREAM}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
@@ -411,7 +412,7 @@ abstract class StreamExecution(
             case NonFatal(e) =>
               // Deleting temp checkpoint folder is best effort, don't throw non fatal exceptions
               // when we cannot delete them.
-              logWarning(s"Cannot delete $checkpointPath", e)
+              logWarning(log"Cannot delete ${MDC(PATH, checkpointPath)}", e)
           }
         }
       } finally {
@@ -446,7 +447,8 @@ abstract class StreamExecution(
         source.stop()
       } catch {
         case NonFatal(e) =>
-          logWarning(s"Failed to stop streaming source: $source. Resources may have leaked.", e)
+          logWarning(log"Failed to stop streaming source: ${MDC(SPARK_DATA_STREAM, source)}. " +
+            log"Resources may have leaked.", e)
       }
     }
   }

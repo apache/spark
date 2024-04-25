@@ -86,6 +86,11 @@ trait ShuffleExchangeLike extends Exchange {
    * Returns the runtime statistics after shuffle materialization.
    */
   def runtimeStatistics: Statistics
+
+  /**
+   * The shuffle ID.
+   */
+  def shuffleId: Int
 }
 
 // Describes where the shuffle operator comes from.
@@ -165,6 +170,8 @@ case class ShuffleExchangeExec(
     val rowCount = metrics(SQLShuffleWriteMetricsReporter.SHUFFLE_RECORDS_WRITTEN).value
     Statistics(dataSize, Some(rowCount))
   }
+
+  override def shuffleId: Int = shuffleDependency.shuffleId
 
   /**
    * A [[ShuffleDependency]] that will partition rows of its child based on

@@ -27,7 +27,8 @@ import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.GetTablesOperation
 import org.apache.hive.service.cli.session.HiveSession
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey._
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 
@@ -57,7 +58,14 @@ private[hive] class SparkGetTablesOperation(
     val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName"
     val tableTypesStr = if (tableTypes == null) "null" else tableTypes.asScala.mkString(",")
     val logMsg = s"Listing tables '$cmdStr, tableTypes : $tableTypesStr, tableName : $tableName'"
-    logInfo(s"$logMsg with $statementId")
+
+    val catalogNameStr = if (catalogName == null) "null" else catalogName
+    val schemaNameStr = if (schemaName == null) "null" else schemaName
+    logInfo(log"Listing tables 'catalog: ${MDC(CATALOG_NAME, catalogNameStr)}, " +
+      log"schemaPattern: ${MDC(DATABASE_NAME, schemaNameStr)}, " +
+      log"tableTypes: ${MDC(TABLE_TYPES, tableTypesStr)}, " +
+      log"tableName: ${MDC(TABLE_NAME, tableName)}' " +
+      log"with ${MDC(STATEMENT_ID, statementId)}")
     setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
     val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader

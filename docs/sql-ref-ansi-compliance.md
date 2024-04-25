@@ -492,6 +492,7 @@ Below is a list of all the keywords in Spark SQL.
 |END|reserved|non-reserved|reserved|
 |ESCAPE|reserved|non-reserved|reserved|
 |ESCAPED|non-reserved|non-reserved|non-reserved|
+|EVOLUTION|non-reserved|non-reserved|non-reserved|
 |EXCEPT|reserved|strict-non-reserved|reserved|
 |EXCHANGE|non-reserved|non-reserved|non-reserved|
 |EXCLUDE|non-reserved|non-reserved|non-reserved|

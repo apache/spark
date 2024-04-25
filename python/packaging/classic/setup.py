@@ -150,7 +150,7 @@ if in_spark:
 # binary format protocol with the Java version, see ARROW_HOME/format/* for specifications.
 # Also don't forget to update python/docs/source/getting_started/install.rst, and
 # python/packaging/connect/setup.py
-_minimum_pandas_version = "1.4.4"
+_minimum_pandas_version = "2.0.0"
 _minimum_numpy_version = "1.21"
 _minimum_pyarrow_version = "10.0.0"
 _minimum_grpc_version = "1.62.0"
@@ -270,12 +270,14 @@ try:
             "pyspark.ml.deepspeed",
             "pyspark.sql",
             "pyspark.sql.avro",
+            "pyspark.sql.classic",
             "pyspark.sql.connect",
             "pyspark.sql.connect.avro",
             "pyspark.sql.connect.client",
             "pyspark.sql.connect.functions",
             "pyspark.sql.connect.proto",
             "pyspark.sql.connect.protobuf",
+            "pyspark.sql.connect.resource",
             "pyspark.sql.connect.shell",
             "pyspark.sql.connect.streaming",
             "pyspark.sql.connect.streaming.worker",
