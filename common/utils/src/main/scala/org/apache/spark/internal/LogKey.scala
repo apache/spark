@@ -39,6 +39,7 @@ object LogKeys {
   case object ARGS extends LogKey
   case object BACKUP_FILE extends LogKey
   case object BATCH_ID extends LogKey
+  case object BATCH_TIMESTAMP extends LogKey
   case object BATCH_WRITE extends LogKey
   case object BLOCK_ID extends LogKey
   case object BLOCK_MANAGER_ID extends LogKey
@@ -53,8 +54,12 @@ object LogKeys {
   case object CATALOG_NAME extends LogKey
   case object CATEGORICAL_FEATURES extends LogKey
   case object CHECKPOINT_FILE extends LogKey
+  case object CHECKPOINT_LOCATION extends LogKey
+  case object CHECKPOINT_PATH extends LogKey
+  case object CHECKPOINT_ROOT extends LogKey
   case object CHECKPOINT_TIME extends LogKey
   case object CHECKSUM_FILE_NUM extends LogKey
+  case object CHOSEN_WATERMARK extends LogKey
   case object CLASS_LOADER extends LogKey
   case object CLASS_NAME extends LogKey
   case object CLUSTER_CENTROIDS extends LogKey
@@ -71,6 +76,8 @@ object LogKeys {
   case object COLUMN_NAME extends LogKey
   case object COMMAND extends LogKey
   case object COMMAND_OUTPUT extends LogKey
+  case object COMMITTED_VERSION extends LogKey
+  case object COMPACT_INTERVAL extends LogKey
   case object COMPONENT extends LogKey
   case object CONFIG extends LogKey
   case object CONFIG2 extends LogKey
@@ -91,6 +98,7 @@ object LogKeys {
   case object CSV_SCHEMA_FIELD_NAME extends LogKey
   case object CSV_SCHEMA_FIELD_NAMES extends LogKey
   case object CSV_SOURCE extends LogKey
+  case object CURRENT_BATCH_ID extends LogKey
   case object CURRENT_PATH extends LogKey
   case object DATA extends LogKey
   case object DATABASE_NAME extends LogKey
@@ -100,6 +108,7 @@ object LogKeys {
   case object DATA_SOURCE extends LogKey
   case object DATA_SOURCES extends LogKey
   case object DATA_SOURCE_PROVIDER extends LogKey
+  case object DEFAULT_COMPACT_INTERVAL extends LogKey
   case object DEFAULT_ISOLATION_LEVEL extends LogKey
   case object DEFAULT_VALUE extends LogKey
   case object DELAY extends LogKey
@@ -107,6 +116,7 @@ object LogKeys {
   case object DELTA extends LogKey
   case object DESCRIPTION extends LogKey
   case object DESIRED_PARTITIONS_SIZE extends LogKey
+  case object DFS_FILE extends LogKey
   case object DIFF_DELTA extends LogKey
   case object DIVISIBLE_CLUSTER_INDICES_SIZE extends LogKey
   case object DRIVER_ID extends LogKey
@@ -117,7 +127,9 @@ object LogKeys {
   case object ENCODING extends LogKey
   case object END_INDEX extends LogKey
   case object END_POINT extends LogKey
+  case object END_VERSION extends LogKey
   case object ENGINE extends LogKey
+  case object EPOCH extends LogKey
   case object ERROR extends LogKey
   case object ESTIMATOR_PARAMETER_MAP extends LogKey
   case object EVENT_LOOP extends LogKey
@@ -136,6 +148,7 @@ object LogKeys {
   case object EXECUTOR_RESOURCES extends LogKey
   case object EXECUTOR_STATE extends LogKey
   case object EXECUTOR_TARGET_COUNT extends LogKey
+  case object EXISTING_FILE extends LogKey
   case object EXIT_CODE extends LogKey
   case object EXPECTED_NUM_FILES extends LogKey
   case object EXPECTED_PARTITION_COLUMN extends LogKey
@@ -149,15 +162,20 @@ object LogKeys {
   case object FEATURE_DIMENSION extends LogKey
   case object FIELD_NAME extends LogKey
   case object FILE_ABSOLUTE_PATH extends LogKey
+  case object FILE_END_OFFSET extends LogKey
   case object FILE_FORMAT extends LogKey
   case object FILE_FORMAT2 extends LogKey
+  case object FILE_MODIFICATION_TIME extends LogKey
   case object FILE_NAME extends LogKey
+  case object FILE_START_OFFSET extends LogKey
   case object FILE_VERSION extends LogKey
+  case object FINAL_PATH extends LogKey
   case object FINISH_TRIGGER_DURATION extends LogKey
   case object FROM_OFFSET extends LogKey
   case object FROM_TIME extends LogKey
   case object FUNCTION_NAME extends LogKey
   case object FUNCTION_PARAMETER extends LogKey
+  case object GLOBAL_WATERMARK extends LogKey
   case object GROUP_ID extends LogKey
   case object HADOOP_VERSION extends LogKey
   case object HASH_JOIN_KEYS extends LogKey
@@ -199,10 +217,13 @@ object LogKeys {
   case object LINE extends LogKey
   case object LINE_NUM extends LogKey
   case object LISTENER extends LogKey
+  case object LOADED_VERSION extends LogKey
   case object LOAD_FACTOR extends LogKey
   case object LOAD_TIME extends LogKey
   case object LOGICAL_PLAN_COLUMNS extends LogKey
   case object LOGICAL_PLAN_LEAVES extends LogKey
+  case object LOG_ID extends LogKey
+  case object LOG_OFFSET extends LogKey
   case object LOG_TYPE extends LogKey
   case object LOWER_BOUND extends LogKey
   case object MALFORMATTED_STIRNG extends LogKey
@@ -221,10 +242,15 @@ object LogKeys {
   case object MEMORY_SIZE extends LogKey
   case object MERGE_DIR_NAME extends LogKey
   case object MESSAGE extends LogKey
+  case object METADATA_DIRECTORY extends LogKey
+  case object METADATA_JSON extends LogKey
   case object METHOD_NAME extends LogKey
+  case object METRICS_JSON extends LogKey
+  case object MIN_COMPACTION_BATCH_ID extends LogKey
   case object MIN_FREQUENT_PATTERN_COUNT extends LogKey
   case object MIN_POINT_PER_CLUSTER extends LogKey
   case object MIN_SIZE extends LogKey
+  case object MIN_VERSION_NUMBER extends LogKey
   case object MODEL_WEIGHTS extends LogKey
   case object NAMESPACE extends LogKey
   case object NEW_FEATURE_COLUMN_NAME extends LogKey
@@ -235,11 +261,15 @@ object LogKeys {
   case object NODE_LOCATION extends LogKey
   case object NORM extends LogKey
   case object NUM_BIN extends LogKey
+  case object NUM_BYTES extends LogKey
   case object NUM_CLASSES extends LogKey
   case object NUM_COLUMNS extends LogKey
   case object NUM_EXAMPLES extends LogKey
   case object NUM_FEATURES extends LogKey
   case object NUM_FILES extends LogKey
+  case object NUM_FILES_COPIED extends LogKey
+  case object NUM_FILES_FAILED_TO_DELETE extends LogKey
+  case object NUM_FILES_REUSED extends LogKey
   case object NUM_FREQUENT_ITEMS extends LogKey
   case object NUM_ITERATIONS extends LogKey
   case object NUM_LOCAL_FREQUENT_PATTERN extends LogKey
@@ -250,6 +280,7 @@ object LogKeys {
   case object OBJECT_ID extends LogKey
   case object OFFSET extends LogKey
   case object OFFSETS extends LogKey
+  case object OFFSET_SEQUENCE_METADATA extends LogKey
   case object OLD_BLOCK_MANAGER_ID extends LogKey
   case object OLD_VALUE extends LogKey
   case object OPTIMIZED_PLAN_COLUMNS extends LogKey
@@ -277,6 +308,7 @@ object LogKeys {
   case object POD_TARGET_COUNT extends LogKey
   case object POLICY extends LogKey
   case object PORT extends LogKey
+  case object PRETTY_ID_STRING extends LogKey
   case object PRINCIPAL extends LogKey
   case object PROCESSING_TIME extends LogKey
   case object PRODUCER_ID extends LogKey
@@ -314,6 +346,8 @@ object LogKeys {
   case object RETRY_INTERVAL extends LogKey
   case object RIGHT_EXPR extends LogKey
   case object RMSE extends LogKey
+  case object ROCKS_DB_LOG_LEVEL extends LogKey
+  case object ROCKS_DB_LOG_MESSAGE extends LogKey
   case object RPC_ENDPOINT_REF extends LogKey
   case object RULE_BATCH_NAME extends LogKey
   case object RULE_NAME extends LogKey
@@ -334,6 +368,7 @@ object LogKeys {
   case object SLEEP_TIME extends LogKey
   case object SLIDE_DURATION extends LogKey
   case object SMALLEST_CLUSTER_INDEX extends LogKey
+  case object SNAPSHOT_VERSION extends LogKey
   case object SPARK_DATA_STREAM extends LogKey
   case object SPARK_PLAN_ID extends LogKey
   case object SQL_TEXT extends LogKey
@@ -342,13 +377,23 @@ object LogKeys {
   case object STAGE_ID extends LogKey
   case object START_INDEX extends LogKey
   case object STATEMENT_ID extends LogKey
+  case object STATE_STORE_ID extends LogKey
   case object STATE_STORE_PROVIDER extends LogKey
+  case object STATE_STORE_VERSION extends LogKey
   case object STATUS extends LogKey
   case object STDERR extends LogKey
   case object STORAGE_LEVEL extends LogKey
   case object STORAGE_LEVEL_DESERIALIZED extends LogKey
   case object STORAGE_LEVEL_REPLICATION extends LogKey
   case object STORE_ID extends LogKey
+  case object STREAMING_DATA_SOURCE_DESCRIPTION extends LogKey
+  case object STREAMING_DATA_SOURCE_NAME extends LogKey
+  case object STREAMING_OFFSETS_END extends LogKey
+  case object STREAMING_OFFSETS_START extends LogKey
+  case object STREAMING_QUERY_PROGRESS extends LogKey
+  case object STREAMING_SOURCE extends LogKey
+  case object STREAMING_TABLE extends LogKey
+  case object STREAMING_WRITE extends LogKey
   case object STREAM_ID extends LogKey
   case object STREAM_NAME extends LogKey
   case object SUBMISSION_ID extends LogKey
@@ -371,6 +416,7 @@ object LogKeys {
   case object TIME extends LogKey
   case object TIMEOUT extends LogKey
   case object TIMER extends LogKey
+  case object TIME_UNITS extends LogKey
   case object TIP extends LogKey
   case object TOKEN_REGEX extends LogKey
   case object TOPIC extends LogKey
@@ -401,6 +447,7 @@ object LogKeys {
   case object USER_ID extends LogKey
   case object USER_NAME extends LogKey
   case object VALUE extends LogKey
+  case object VERSION_NUMBER extends LogKey
   case object VIRTUAL_CORES extends LogKey
   case object VOCAB_SIZE extends LogKey
   case object WAIT_RESULT_TIME extends LogKey

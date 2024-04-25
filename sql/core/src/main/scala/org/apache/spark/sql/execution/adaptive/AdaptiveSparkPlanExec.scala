@@ -745,7 +745,7 @@ case class AdaptiveSparkPlanExec(
       Some((finalPlan, optimized))
     } catch {
       case e: InvalidAQEPlanException[_] =>
-        logOnLevel(log"Re-optimize - ${MDC(EXCEPTION, e.getMessage())}:\n" +
+        logOnLevel(log"Re-optimize - ${MDC(ERROR, e.getMessage())}:\n" +
           log"${MDC(QUERY_PLAN, e.plan)}")
         None
     }

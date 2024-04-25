@@ -88,6 +88,8 @@ class SparkContext(config: SparkConf) extends Logging {
   // The call site where this SparkContext was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
 
+  private var stopSite: Option[CallSite] = None
+
   if (!config.get(EXECUTOR_ALLOW_SPARK_CONTEXT)) {
     // In order to prevent SparkContext from being created in executors.
     SparkContext.assertOnDriver()
@@ -116,6 +118,10 @@ class SparkContext(config: SparkConf) extends Logging {
            |This stopped SparkContext was created at:
            |
            |${creationSite.longForm}
+           |
+           |And it was stopped at:
+           |
+           |${stopSite.getOrElse(CallSite.empty).longForm}
            |
            |The currently active SparkContext was created at:
            |
@@ -2265,7 +2271,8 @@ class SparkContext(config: SparkConf) extends Logging {
    * @param exitCode Specified exit code that will passed to scheduler backend in client mode.
    */
   def stop(exitCode: Int): Unit = {
-    logInfo(s"SparkContext is stopping with exitCode $exitCode.")
+    stopSite = Some(getCallSite())
+    logInfo(s"SparkContext is stopping with exitCode $exitCode from ${stopSite.get.shortForm}.")
     if (LiveListenerBus.withinListenerThread.value) {
       throw new SparkException(s"Cannot stop SparkContext within listener bus thread.")
     }

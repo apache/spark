@@ -4110,6 +4110,7 @@ class DataFrame:
         When ``observation`` is a string, streaming queries also work as below.
 
         >>> from pyspark.sql.streaming import StreamingQueryListener
+        >>> import time
         >>> class MyErrorListener(StreamingQueryListener):
         ...    def onQueryStarted(self, event):
         ...        pass
@@ -4130,13 +4131,24 @@ class DataFrame:
         ...    def onQueryTerminated(self, event):
         ...        pass
         ...
-        >>> spark.streams.addListener(MyErrorListener())
+        >>> error_listener = MyErrorListener()
+        >>> spark.streams.addListener(error_listener)
+        >>> sdf = spark.readStream.format("rate").load().withColumn(
+        ...     "error", col("value")
+        ... )
         >>> # Observe row count (rc) and error row count (erc) in the streaming Dataset
-        ... observed_ds = df.observe(
+        ... observed_ds = sdf.observe(
         ...     "my_event",
         ...     count(lit(1)).alias("rc"),
-        ...     count(col("error")).alias("erc"))  # doctest: +SKIP
-        >>> observed_ds.writeStream.format("console").start()  # doctest: +SKIP
+        ...     count(col("error")).alias("erc"))
+        >>> try:
+        ...     q = observed_ds.writeStream.format("console").start()
+        ...     time.sleep(5)
+        ...
+        ... finally:
+        ...     q.stop()
+        ...     spark.streams.removeListener(error_listener)
+        ...
         """
         ...
 
