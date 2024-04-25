@@ -1028,8 +1028,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.SortExec(sortExprs, global, planLater(child)) :: Nil
       case logical.Project(projectList, child) =>
         execution.ProjectExec(projectList, planLater(child)) :: Nil
-      case logical.Filter(condition, child) =>
-        execution.FilterExec(condition, planLater(child)) :: Nil
+      case f @ logical.Filter(condition, child) =>
+        // Drop advisory filters from execution plans.
+        if (!f.advisory) {
+          execution.FilterExec(condition, planLater(child)) :: Nil
+        } else {
+          Nil
+        }
       case f: logical.TypedFilter =>
         execution.FilterExec(f.typedCondition(f.deserializer), planLater(f.child)) :: Nil
       case e @ logical.Expand(_, _, child) =>

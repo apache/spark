@@ -2076,6 +2076,12 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     case f @ Filter(condition, project @ Project(fields, grandChild))
       if fields.forall(_.deterministic) && canPushThroughCondition(grandChild, condition) =>
       val aliasMap = getAliasMap(project)
+      // Special case for advisory filters we always push through and we don't need to move projections
+      if (condition.advisory) {
+        val replaced = replaceAlias(cond, aliasMap)
+        return project.copy(child = new AdvisoryFilter(replaced, grandChild))
+      }
+
       // Projection aliases that the filter references
       val filterAliasesBuf = mutable.ArrayBuffer.empty[Alias]
       // Projection aliases that are not used in the filter, so we don't need to push
@@ -2096,37 +2102,13 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       }
       val filterAliases = filterAliasesBuf.toArray.toSeq
 
-      // If there are no filter aliases then we just push the filter through as-is
       if (filterAliases.isEmpty) {
+        // If there are no filter aliases then we just push the filter through as-is
         project.copy(child = f.copy(child = grandChild))
       } else if (leftBehindAliases.isEmpty) {
         // If there are no left behind aliases then we've used all of the aliases in our filter.
-        // We can try and split on the &&s and see if we can push individual components
-        // that do not use any of the aliases.
-        val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
-          val replaced = replaceAlias(cond, aliasMap)
-          if (cond == replaced) {
-            // If nothing changes or the filter we can push it
-            true
-          } else if (replaced.expectedCost < 100) {
-            // If it's cheap we can push it because it might eliminate more data quickly and
-            // it may also be something which could be evaluated at the storage layer.
-            // We may wish to improve this heuristic in the future.
-            true
-          } else {
-            false
-          }
-        }
-        if (!pushDown.isEmpty) {
-          val childCondition = replaceAlias(pushDown.reduce(And), aliasMap)
-          if (!stayUp.isEmpty) {
-            Filter(stayUp.reduce(And), project.copy(child = Filter(childCondition, grandChild)))
-          } else {
-            project.copy(child = Filter(childCondition, grandChild))
-          }
-        } else {
-          f
-        }
+        // Now we want to push an advisory filter
+        f.copy(child = project.copy(new AdvisoryFilter(condition, grandChild))
       } else {
         // If were pushing something through the projection we may need to
         // introduce a new projection which projects the elements used in the filter.
