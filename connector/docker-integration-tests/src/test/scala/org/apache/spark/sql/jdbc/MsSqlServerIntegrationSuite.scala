@@ -223,30 +223,44 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
 
   test("Date types") {
     withDefaultTimeZone(UTC) {
-      withSQLConf(SQLConf.LEGACY_MSSQLSERVER_DATETIMEOFFSET_MAPPING_ENABLED.key -> "false") {
-        {
-          val df = spark.read
+      {
+        val df = spark.read
           .option("preferTimestampNTZ", "false")
           .jdbc(jdbcUrl, "dates", new Properties)
-        checkAnswer(df, Row(
-          Date.valueOf("1991-11-09"),
-          Timestamp.valueOf("1999-01-01 13:23:35"),
-          Timestamp.valueOf("9999-12-31 23:59:59"),
-          Timestamp.valueOf("1901-05-09 09:59:59"), // '1901-05-09 23:59:59 +14:00'
-          Timestamp.valueOf("1996-01-01 23:24:00"), // round to the nearest minute
-          Timestamp.valueOf("1970-01-01 13:31:24")))
+        Seq("true", "false").foreach { legacy =>
+          withSQLConf(SQLConf.LEGACY_MSSQLSERVER_DATETIMEOFFSET_MAPPING_ENABLED.key -> legacy) {
+            checkAnswer(df, Row(
+              Date.valueOf("1991-11-09"),
+              Timestamp.valueOf("1999-01-01 13:23:35"),
+              Timestamp.valueOf("9999-12-31 23:59:59"),
+              if (legacy.toBoolean) {
+                "1901-05-09 23:59:59.0000000 +14:00"
+              } else {
+                Timestamp.valueOf("1901-05-09 09:59:59")
+              },
+              Timestamp.valueOf("1996-01-01 23:24:00"),
+              Timestamp.valueOf("1970-01-01 13:31:24")))
+          }
         }
-        {
-          val df = spark.read
-            .option("preferTimestampNTZ", "true")
-            .jdbc(jdbcUrl, "dates", new Properties)
-          checkAnswer(df, Row(
-            Date.valueOf("1991-11-09"),
-            LocalDateTime.of(1999, 1, 1, 13, 23, 35),
-            LocalDateTime.of(9999, 12, 31, 23, 59, 59),
-            Timestamp.valueOf("1901-05-09 09:59:59"), // '1901-05-09 23:59:59 +14:00',
-            LocalDateTime.of(1996, 1, 1, 23, 24, 0),
-            LocalDateTime.of(1970, 1, 1, 13, 31, 24)))
+      }
+      {
+        val df = spark.read
+          .option("preferTimestampNTZ", "true")
+          .jdbc(jdbcUrl, "dates", new Properties)
+        Seq("true", "false").foreach { legacy =>
+          withSQLConf(SQLConf.LEGACY_MSSQLSERVER_DATETIMEOFFSET_MAPPING_ENABLED.key -> legacy) {
+            checkAnswer(df, Row(
+              Date.valueOf("1991-11-09"),
+              LocalDateTime.of(1999, 1, 1, 13, 23, 35),
+              LocalDateTime.of(9999, 12, 31, 23, 59, 59),
+              if (legacy.toBoolean) {
+                "1901-05-09 23:59:59.0000000 +14:00"
+              } else {
+                Timestamp.valueOf("1901-05-09 09:59:59")
+              },
+              LocalDateTime.of(1996, 1, 1, 23, 24, 0),
+              LocalDateTime.of(1970, 1, 1, 13, 31, 24)))
+          }
         }
       }
     }
@@ -261,7 +275,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
           Timestamp.valueOf("1999-01-01 13:23:35"),
           Timestamp.valueOf("9999-12-31 23:59:59"),
           "1901-05-09 23:59:59.0000000 +14:00",
-          Timestamp.valueOf("1996-01-01 23:23:45"),
+          Timestamp.valueOf("1996-01-01 23:24:00"),
           Timestamp.valueOf("1970-01-01 13:31:24")))
       }
     }
