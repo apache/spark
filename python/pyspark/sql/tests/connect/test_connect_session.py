@@ -244,7 +244,7 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
 
     def test_reset_when_server_session_changes(self):
         session = RemoteSparkSession.builder.remote("sc://localhost").getOrCreate()
-         # run a simple query so the session id is synchronized.
+        # run a simple query so the session id is synchronized.
         session.range(3).collect()
 
         # trigger a mismatch between client session id and server session id.
