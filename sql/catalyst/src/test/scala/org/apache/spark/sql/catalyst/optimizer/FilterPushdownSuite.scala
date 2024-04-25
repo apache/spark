@@ -203,6 +203,23 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+
+  test("SPARK-47672: Inexpensive filter pushdown should not move projections") {
+    val originalQuery = testStringRelation
+      .select($"a" as "c", $"b" + $"a")
+      .where($"c" > 5)
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    val correctAnswer = testStringRelation
+      .where($"a" > 5)
+      .select($"a" as "c", $"b" + $"a")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
   test("SPARK-47672: Avoid double evaluation with projections can't push past certain items") {
     val originalQuery = testStringRelation
       .select($"a", $"e".rlike("magic") as "f")
