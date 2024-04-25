@@ -498,12 +498,6 @@ object JdbcUtils extends Logging with SQLConfHelper {
         }
       }
 
-    case TimestampNTZType if metadata.contains("logical_time_type") =>
-      (rs: ResultSet, row: InternalRow, pos: Int) =>
-        val micros = nullSafeConvert[java.sql.Time](rs.getTime(pos + 1), t =>
-          localDateTimeToMicros(LocalDateTime.of(LocalDate.EPOCH, t.toLocalTime)))
-        row.update(pos, micros)
-
     case TimestampType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         val t = rs.getTimestamp(pos + 1)
@@ -512,6 +506,12 @@ object JdbcUtils extends Logging with SQLConfHelper {
         } else {
           row.update(pos, null)
         }
+
+    case TimestampNTZType if metadata.contains("logical_time_type") =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
+        val micros = nullSafeConvert[java.sql.Time](rs.getTime(pos + 1), t =>
+          localDateTimeToMicros(LocalDateTime.of(LocalDate.EPOCH, t.toLocalTime)))
+        row.update(pos, micros)
 
     case TimestampNTZType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>

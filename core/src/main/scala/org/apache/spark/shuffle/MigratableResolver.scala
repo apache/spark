@@ -36,6 +36,11 @@ trait MigratableResolver {
   def getStoredShuffles(): Seq[ShuffleBlockInfo]
 
   /**
+   * Mark a shuffle that should not be migrated.
+   */
+  def addShuffleToSkip(shuffleId: Int): Unit = {}
+
+  /**
    * Write a provided shuffle block as a stream. Used for block migrations.
    * Up to the implementation to support STORAGE_REMOTE_SHUFFLE_MAX_DISK
    */
