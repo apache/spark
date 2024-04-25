@@ -20,6 +20,7 @@ import unittest
 from pyspark.sql.tests.streaming.test_streaming_foreach_batch import StreamingTestsForeachBatchMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.errors import PySparkPicklingError
+from pyspark.errors.exceptions.connect import SparkConnectGrpcException
 
 
 class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedConnectTestCase):
@@ -65,6 +66,41 @@ class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedCo
             df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
             q = df.writeStream.foreachBatch(func).start()
             q.processAllAvailable()
+
+    def test_worker_initialization_error(self):
+        class SerializableButNotDeserializable:
+            @staticmethod
+            def _reduce_function():
+                raise ValueError("Cannot unpickle this object")
+
+            def __reduce__(self):
+                # Return a static method that cannot be called during unpickling
+                return self._reduce_function, ()
+
+        # Create an instance of the class
+        obj = SerializableButNotDeserializable()
+
+        df = (
+            self.spark.readStream.format("rate")
+            .option("rowsPerSecond", "10")
+            .option("numPartitions", "1")
+            .load()
+        )
+
+        obj = SerializableButNotDeserializable()
+
+        def fcn(df, _):
+            print(obj)
+
+        # Assert that an exception occurs during the initialization
+        with self.assertRaises(SparkConnectGrpcException) as error:
+            df.select("value").writeStream.foreachBatch(fcn).start()
+
+        # Assert that the error message contains the expected string
+        self.assertIn(
+            "Streaming Runner initialization failed",
+            str(error.exception),
+        )
 
     def test_accessing_spark_session(self):
         spark = self.spark

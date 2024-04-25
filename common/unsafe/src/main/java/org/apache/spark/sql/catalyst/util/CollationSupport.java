@@ -120,7 +120,7 @@ public final class CollationSupport {
       return l.contains(r);
     }
     public static boolean execLowercase(final UTF8String l, final UTF8String r) {
-      return l.toLowerCase().contains(r.toLowerCase());
+      return l.containsInLowerCase(r);
     }
     public static boolean execICU(final UTF8String l, final UTF8String r,
         final int collationId) {
@@ -158,7 +158,7 @@ public final class CollationSupport {
       return l.startsWith(r);
     }
     public static boolean execLowercase(final UTF8String l, final UTF8String r) {
-      return l.toLowerCase().startsWith(r.toLowerCase());
+      return l.startsWithInLowerCase(r);
     }
     public static boolean execICU(final UTF8String l, final UTF8String r,
         final int collationId) {
@@ -195,7 +195,7 @@ public final class CollationSupport {
       return l.endsWith(r);
     }
     public static boolean execLowercase(final UTF8String l, final UTF8String r) {
-      return l.toLowerCase().endsWith(r.toLowerCase());
+      return l.endsWithInLowerCase(r);
     }
     public static boolean execICU(final UTF8String l, final UTF8String r,
         final int collationId) {
@@ -370,7 +370,24 @@ public final class CollationSupport {
    * Collation-aware regexp expressions.
    */
 
+  public static boolean supportsLowercaseRegex(final int collationId) {
+    // for regex, only Unicode case-insensitive matching is possible,
+    // so UTF8_BINARY_LCASE is treated as UNICODE_CI in this context
+    return CollationFactory.fetchCollation(collationId).supportsLowercaseEquality;
+  }
+
   private static final int lowercaseRegexFlags = Pattern.UNICODE_CASE | Pattern.CASE_INSENSITIVE;
+  public static int collationAwareRegexFlags(final int collationId) {
+    return supportsLowercaseRegex(collationId) ? lowercaseRegexFlags : 0;
+  }
+
+  private static final UTF8String lowercaseRegexPrefix = UTF8String.fromString("(?ui)");
+  public static UTF8String lowercaseRegex(final UTF8String regex) {
+    return UTF8String.concat(lowercaseRegexPrefix, regex);
+  }
+  public static UTF8String collationAwareRegex(final UTF8String regex, final int collationId) {
+    return supportsLowercaseRegex(collationId) ? lowercaseRegex(regex) : regex;
+  }
 
   /**
    * Other collation-aware expressions.
