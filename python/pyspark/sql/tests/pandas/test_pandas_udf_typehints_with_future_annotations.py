@@ -16,7 +16,6 @@
 #
 from __future__ import annotations
 
-import sys
 import unittest
 from inspect import signature
 from typing import Union, Iterator, Tuple, cast, get_type_hints

@@ -23,7 +23,6 @@ import time
 import unittest
 from typing import cast
 from collections import namedtuple
-import sys
 
 from pyspark import SparkConf
 from pyspark.sql import Row, SparkSession

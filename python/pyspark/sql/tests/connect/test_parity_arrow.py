@@ -16,7 +16,6 @@
 #
 
 import unittest
-import sys
 
 from pyspark.sql.tests.test_arrow import ArrowTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
