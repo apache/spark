@@ -1548,13 +1548,11 @@ object CodeGenerator extends Logging {
       updateAndGetCompilationStats(evaluator)
     } catch {
       case e: InternalCompilerException =>
-        val msg = QueryExecutionErrors.failedToCompileMsg(e)
-        logError(msg, e)
+        logError("Failed to compile the generated Java code.", e)
         logGeneratedCode(code)
         throw QueryExecutionErrors.internalCompilerError(e)
       case e: CompileException =>
-        val msg = QueryExecutionErrors.failedToCompileMsg(e)
-        logError(msg, e)
+        logError("Failed to compile the generated Java code.", e)
         logGeneratedCode(code)
         throw QueryExecutionErrors.compilerError(e)
     }

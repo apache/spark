@@ -23,6 +23,8 @@ import com.ibm.icu.util.ULocale;
 
 import org.apache.spark.unsafe.types.UTF8String;
 
+import java.util.regex.Pattern;
+
 /**
  * Static entry point for collation-aware expressions (StringExpressions, RegexpExpressions, and
  * other expressions that require custom collation support), as well as private utility methods for
@@ -310,7 +312,24 @@ public final class CollationSupport {
    * Collation-aware regexp expressions.
    */
 
-  // TODO: Add more collation-aware regexp expressions.
+  public static boolean supportsLowercaseRegex(final int collationId) {
+    // for regex, only Unicode case-insensitive matching is possible,
+    // so UTF8_BINARY_LCASE is treated as UNICODE_CI in this context
+    return CollationFactory.fetchCollation(collationId).supportsLowercaseEquality;
+  }
+
+  private static final int lowercaseRegexFlags = Pattern.UNICODE_CASE | Pattern.CASE_INSENSITIVE;
+  public static int collationAwareRegexFlags(final int collationId) {
+    return supportsLowercaseRegex(collationId) ? lowercaseRegexFlags : 0;
+  }
+
+  private static final UTF8String lowercaseRegexPrefix = UTF8String.fromString("(?ui)");
+  public static UTF8String lowercaseRegex(final UTF8String regex) {
+    return UTF8String.concat(lowercaseRegexPrefix, regex);
+  }
+  public static UTF8String collationAwareRegex(final UTF8String regex, final int collationId) {
+    return supportsLowercaseRegex(collationId) ? lowercaseRegex(regex) : regex;
+  }
 
   /**
    * Other collation-aware expressions.

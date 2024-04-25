@@ -34,6 +34,7 @@ object LogKey extends Enumeration {
   val ARGS = Value
   val BACKUP_FILE = Value
   val BATCH_ID = Value
+  val BATCH_WRITE = Value
   val BLOCK_ID = Value
   val BLOCK_MANAGER_ID = Value
   val BROADCAST_ID = Value
@@ -116,6 +117,7 @@ object LogKey extends Enumeration {
   val ESTIMATOR_PARAMETER_MAP = Value
   val EVENT_LOOP = Value
   val EVENT_QUEUE = Value
+  val EXCEPTION = Value
   val EXECUTE_INFO = Value
   val EXECUTE_KEY = Value
   val EXECUTION_PLAN_LEAVES = Value
@@ -162,6 +164,7 @@ object LogKey extends Enumeration {
   val HIVE_OPERATION_TYPE = Value
   val HOST = Value
   val HOST_PORT = Value
+  val IDENTIFIER = Value
   val INCOMPATIBLE_TYPES = Value
   val INDEX = Value
   val INDEX_FILE_NUM = Value
@@ -330,11 +333,13 @@ object LogKey extends Enumeration {
   val SPARK_PLAN_ID = Value
   val SQL_TEXT = Value
   val SRC_PATH = Value
+  val STAGE_ATTEMPT = Value
   val STAGE_ID = Value
   val START_INDEX = Value
   val STATEMENT_ID = Value
   val STATE_STORE_PROVIDER = Value
   val STATUS = Value
+  val STDERR = Value
   val STORAGE_LEVEL = Value
   val STORAGE_LEVEL_DESERIALIZED = Value
   val STORAGE_LEVEL_REPLICATION = Value
@@ -402,6 +407,7 @@ object LogKey extends Enumeration {
   val WEIGHTED_NUM = Value
   val WORKER_URL = Value
   val WRITE_AHEAD_LOG_INFO = Value
+  val WRITE_JOB_UUID = Value
   val XSD_PATH = Value
 
   type LogKey = Value
