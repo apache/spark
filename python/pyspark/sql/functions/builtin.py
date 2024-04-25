@@ -15620,6 +15620,7 @@ def try_parse_json(
     >>> df.select(to_json(try_parse_json(df.json))).collect()
     [Row(to_json(try_parse_json(json))='{"a":1}'), Row(to_json(try_parse_json(json))=None)]
     """
+    from pyspark.sql.classic.column import _to_java_column
 
     return _invoke_function("try_parse_json", _to_java_column(col))
 
