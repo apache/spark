@@ -1304,6 +1304,10 @@ public final class CollationSupport {
       // Number of bytes in srcString.
       int numBytes = srcString.numBytes();
 
+      // Create ICU StringSearch object.
+      StringSearch stringSearch = CollationFactory.getStringSearch(
+        trimString, UTF8String.EMPTY_UTF8, collationId);
+
       while (searchIdx < numBytes) {
         UTF8String searchChar = srcString.copyUTF8String(
           searchIdx,
@@ -1311,8 +1315,8 @@ public final class CollationSupport {
         int searchCharBytes = searchChar.numBytes();
 
         // Try to find the matching for the searchChar in the trimString.
-        StringSearch stringSearch = CollationFactory.getStringSearch(
-          trimString, searchChar, collationId);
+        stringSearch.reset();
+        stringSearch.setPattern(searchChar.toString());
         int searchCharIdx = stringSearch.next();
 
         if (searchCharIdx != StringSearch.DONE
@@ -1370,6 +1374,10 @@ public final class CollationSupport {
         numChars++;
       }
 
+      // Create ICU StringSearch object.
+      StringSearch stringSearch = CollationFactory.getStringSearch(
+        trimString, UTF8String.EMPTY_UTF8, collationId);
+
       // Index trimEnd points to the first no matching byte position from the right side of
       //  the source string.
       int trimByteIdx = numBytes - 1;
@@ -1380,8 +1388,8 @@ public final class CollationSupport {
           stringCharPos[numChars - 1] + stringCharLen[numChars - 1] - 1);
 
         // Try to find the matching for the searchChar in the trimString.
-        StringSearch stringSearch = CollationFactory.getStringSearch(
-          trimString, searchChar, collationId);
+        stringSearch.reset();
+        stringSearch.setPattern(searchChar.toString());
         int searchCharIdx = stringSearch.next();
 
         if (searchCharIdx != StringSearch.DONE

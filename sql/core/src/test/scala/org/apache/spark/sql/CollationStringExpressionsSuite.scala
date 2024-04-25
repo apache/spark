@@ -873,6 +873,37 @@ class CollationStringExpressionsSuite
       StringTrimTestCase("UTF8_BINARY", "RTRIM", "asd", true, " ", "asd"),
       StringTrimTestCase("UTF8_BINARY", "RTRIM", "  asd  ", true, " ", "  asd"),
 
+      // Try the same with UTF8_BINARY_LCASE collation.
+      // Without trimString param.
+      StringTrimTestCase("UTF8_BINARY_LCASE", "TRIM", "asd", false, null, "asd"),
+      StringTrimTestCase("UTF8_BINARY_LCASE", "TRIM", "  asd  ", false, null, "asd"),
+      StringTrimTestCase("UTF8_BINARY_LCASE", "BTRIM", "asd", false, null, "asd"),
+      StringTrimTestCase("UTF8_BINARY_LCASE", "BTRIM", "  asd  ", false, null, "asd"),
+      StringTrimTestCase("UTF8_BINARY_LCASE", "LTRIM", "asd", false, null, "asd"),
+      StringTrimTestCase("UTF8_BINARY_LCASE", "LTRIM", "  asd  ", false, null, "asd  "),
+      StringTrimTestCase("UTF8_BINARY_LCASE", "RTRIM", "asd", false, null, "asd"),
+      StringTrimTestCase("UTF8_BINARY_LCASE", "RTRIM", "  asd  ", false, null, "  asd"),
+
+      // With null trimString param.
+      StringTrimTestCase("UTF8_BINARY_LCASE", "TRIM", "asd", true, null, null),
+      StringTrimTestCase("UTF8_BINARY_LCASE", "TRIM", "  asd  ", true, null, null),
+      StringTrimTestCase("UTF8_BINARY_LCASE", "BTRIM", "asd", true, null, null),
+      StringTrimTestCase("UTF8_BINARY_LCASE", "BTRIM", "  asd  ", true, null, null),
+      StringTrimTestCase("UTF8_BINARY_LCASE", "LTRIM", "asd", true, null, null),
+      StringTrimTestCase("UTF8_BINARY_LCASE", "LTRIM", "  asd  ", true, null, null),
+      StringTrimTestCase("UTF8_BINARY_LCASE", "RTRIM", "asd", true, null, null),
+      StringTrimTestCase("UTF8_BINARY_LCASE", "RTRIM", "  asd  ", true, null, null),
+
+      // With " " trimString param.
+      StringTrimTestCase("UTF8_BINARY_LCASE", "TRIM", "asd", true, " ", "asd"),
+      StringTrimTestCase("UTF8_BINARY_LCASE", "TRIM", "  asd  ", true, " ", "asd"),
+      StringTrimTestCase("UTF8_BINARY_LCASE", "BTRIM", "asd", true, " ", "asd"),
+      StringTrimTestCase("UTF8_BINARY_LCASE", "BTRIM", "  asd  ", true, " ", "asd"),
+      StringTrimTestCase("UTF8_BINARY_LCASE", "LTRIM", "asd", true, " ", "asd"),
+      StringTrimTestCase("UTF8_BINARY_LCASE", "LTRIM", "  asd  ", true, " ", "asd  "),
+      StringTrimTestCase("UTF8_BINARY_LCASE", "RTRIM", "asd", true, " ", "asd"),
+      StringTrimTestCase("UTF8_BINARY_LCASE", "RTRIM", "  asd  ", true, " ", "  asd"),
+
       // Try the same with any other collation.
       // Without trimString param.
       StringTrimTestCase("UNICODE_CI", "TRIM", "asd", false, null, "asd"),
@@ -916,13 +947,13 @@ class CollationStringExpressionsSuite
         // BTRIM has arguments in (srcStr, trimStr) order
         df = sql(s"SELECT ${testCase.trimFunc}(" +
           s"COLLATE('${testCase.sourceString}', '${testCase.collation}')" +
-          (if (!testCase.hasTrimString) "" else if (testCase.trimString == null) ", null" else s", COLLATE('${testCase.trimString}', '${testCase.collation}')") +
+          (if (!testCase.hasTrimString) "" else if (testCase.trimString == null) ", null" else s", '${testCase.trimString}'") +
           ")")
       }
       else {
         // While other functions have arguments in (trimStr, srcStr) order
         df = sql(s"SELECT ${testCase.trimFunc}(" +
-          (if (!testCase.hasTrimString) "" else if (testCase.trimString == null) "null, " else s"COLLATE('${testCase.trimString}', '${testCase.collation}'), ") +
+          (if (!testCase.hasTrimString) "" else if (testCase.trimString == null) "null, " else s"'${testCase.trimString}', ") +
           s"COLLATE('${testCase.sourceString}', '${testCase.collation}')" +
           ")")
       }
@@ -930,6 +961,22 @@ class CollationStringExpressionsSuite
       checkAnswer(df = df, expectedAnswer = Row(testCase.expectedResultString))
     })
 
+    // scalastyle:on
+  }
+
+  test("StringTrim* functions - collation type mismatch") {
+    // scalastyle:off
+    List("TRIM", "LTRIM", "RTRIM").foreach(func => {
+      val collationMismatch = intercept[AnalysisException] {
+        sql("SELECT " + func + "(COLLATE('x', 'UTF8_BINARY_LCASE'), COLLATE('xxaaaxx', 'UNICODE_CI'))")
+      }
+      assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+    })
+
+    val collationMismatch = intercept[AnalysisException] {
+      sql("SELECT BTRIM(COLLATE('xxaaaxx', 'UNICODE_CI'), COLLATE('x', 'UTF8_BINARY_LCASE'))")
+    }
+    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
     // scalastyle:on
   }
 
