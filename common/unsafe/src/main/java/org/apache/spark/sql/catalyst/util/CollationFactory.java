@@ -150,15 +150,15 @@ public final class CollationFactory {
       }
 
       protected static final int implementationProviderOffset = 30;
-      protected static final int implementationProviderLen = 1;
+      protected static final int implementationProviderMask = 0b1;
       protected static final int caseSensitivityOffset = 29;
-      protected static final int caseSensitivityLen = 1;
+      protected static final int caseSensitivityMask = 0b1;
       protected static final int accentSensitivityOffset = 28;
-      protected static final int accentSensitivityLen = 1;
+      protected static final int accentSensitivityMask = 0b1;
       protected static final int caseConversionOffset = 22;
-      protected static final int caseConversionLen = 2;
+      protected static final int caseConversionMask = 0b11;
       protected static final int localeOffset = 0;
-      protected static final int localeLen = 16;
+      protected static final int localeMask = 0xFFFF;
 
       protected final CaseSensitivity caseSensitivity;
       protected final AccentSensitivity accentSensitivity;
@@ -186,7 +186,7 @@ public final class CollationFactory {
         } else {
           CollationSpec spec;
           ImplementationProvider implementationProvider = ImplementationProvider.values()[
-            (collationId >> implementationProviderOffset) & ((1 << implementationProviderLen) - 1)];
+            (collationId >> implementationProviderOffset) & implementationProviderMask];
           if (implementationProvider == ImplementationProvider.UTF8_BINARY) {
             spec = CollationSpecUTF8Binary.fromCollationId(collationId);
           } else {
@@ -262,7 +262,7 @@ public final class CollationFactory {
         int collationId = 0;
         int specifiers = CollationSpec.parseSpecifiers(
           collationName.substring("UTF8_BINARY".length()));
-        collationId |= specifiers & (((1 << caseConversionLen) - 1) << caseConversionOffset);
+        collationId |= specifiers & (caseConversionMask << caseConversionOffset);
         return collationId;
       }
 
@@ -277,7 +277,7 @@ public final class CollationFactory {
           throws SparkException {
         int originalCollationId = collationId;
         int caseConversionOrdinal =
-          (collationId >> caseConversionOffset) & ((1 << caseConversionLen) - 1);
+          (collationId >> caseConversionOffset) & caseConversionMask;
         collationId ^= caseConversionOrdinal << caseConversionOffset;
         if (collationId != 0 || caseConversionOrdinal >= CaseConversion.values().length) {
           throw SparkException.internalError("Invalid UTF8_BINARY collation id " + originalCollationId);
@@ -413,12 +413,12 @@ public final class CollationFactory {
       public static CollationSpecICU fromCollationId(int collationId) throws SparkException {
         int originalCollationId = collationId;
         int caseSensitivityOrdinal =
-          (collationId >> caseSensitivityOffset) & ((1 << caseSensitivityLen) - 1);
+          (collationId >> caseSensitivityOffset) & caseSensitivityMask;
         int accentSensitivityOrdinal =
-          (collationId >> accentSensitivityOffset) & ((1 << accentSensitivityLen) - 1);
+          (collationId >> accentSensitivityOffset) & accentSensitivityMask;
         int caseConversionOrdinal =
-          (collationId >> caseConversionOffset) & ((1 << caseConversionLen) - 1);
-        int localeOrdinal = (collationId >> localeOffset) & ((1 << localeLen) - 1);
+          (collationId >> caseConversionOffset) & caseConversionMask;
+        int localeOrdinal = (collationId >> localeOffset) & localeMask;
         collationId ^= ImplementationProvider.ICU.ordinal() << implementationProviderOffset;
         collationId ^= caseSensitivityOrdinal << caseSensitivityOffset;
         collationId ^= accentSensitivityOrdinal << accentSensitivityOffset;
