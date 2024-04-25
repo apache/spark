@@ -197,6 +197,16 @@ def with_origin_to_class(cls: Type[T]) -> Type[T]:
     """
     if os.environ.get("PYSPARK_PIN_THREAD", "true").lower() == "true":
         for name, method in cls.__dict__.items():
-            if callable(method) and name != "__init__":
+            # Excluding Python magic methods that do not utilize JVM functions.
+            if callable(method) and name not in (
+                "__init__",
+                "__new__",
+                "__getattr__",
+                "__getitem__",
+                "__iter__",
+                "__nonzero__",
+                "__repr__",
+                "__bool__",
+            ):
                 setattr(cls, name, _with_origin(method))
     return cls
