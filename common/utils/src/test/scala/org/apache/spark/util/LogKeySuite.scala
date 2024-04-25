@@ -31,13 +31,13 @@ import org.apache.spark.internal.{Logging, LogKeys}
 
 // scalastyle:off line.size.limit
 /**
- * To re-generate the LogKey class file, run:
+ * To re-generate the file `LogKey.scala`, run:
  * {{{
  *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "common-utils/testOnly org.apache.spark.util.LogKeySuite"
  * }}}
  */
 // scalastyle:on line.size.limit
-class LogKeysSuite
+class LogKeySuite
     extends AnyFunSuite // scalastyle:ignore funsuite
     with Logging {
 
@@ -52,7 +52,7 @@ class LogKeysSuite
     java.nio.file.Paths.get(sparkHome, first +: more: _*)
   }
 
-  private val regenerateGoldenFiles: Boolean = true // System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
+  private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
 
   private val logKeyFilePath = getWorkspaceFilePath("common", "utils", "src", "main", "scala",
     "org", "apache", "spark", "internal", "LogKey.scala")
@@ -62,15 +62,15 @@ class LogKeysSuite
       originalKeys: Seq[String], sortedKeys: Seq[String]): Unit = {
     if (originalKeys != sortedKeys) {
       val logKeyFile = logKeyFilePath.toFile
-      logInfo(s"Regenerating LogKey file $logKeyFile")
+      logInfo(s"Regenerating the file `LogKey.scala` $logKeyFile")
       val originalContents = FileUtils.readLines(logKeyFile, StandardCharsets.UTF_8)
       val sortedContents = new JList[String]()
       var firstMatch = false
       originalContents.asScala.foreach { line =>
-        if (line.trim.startsWith("case object ") && line.trim.endsWith(" extends ILogKey")) {
+        if (line.trim.startsWith("case object ") && line.trim.endsWith(" extends LogKey")) {
           if (!firstMatch) {
             sortedKeys.foreach { key =>
-              sortedContents.add(s"  case object $key extends ILogKey")
+              sortedContents.add(s"  case object $key extends LogKey")
             }
             firstMatch = true
           }
@@ -83,14 +83,14 @@ class LogKeysSuite
     }
   }
 
-  test("LogKey members are correctly sorted") {
+  test("LogKeys members are correctly sorted") {
     val originalKeys = getAllLogKeys.reverse
     val sortedKeys = originalKeys.sorted
     if (regenerateGoldenFiles) {
       regenerateLogKeyFile(originalKeys, sortedKeys)
     } else {
       assert(originalKeys === sortedKeys,
-        "LogKey members must be sorted alphabetically")
+        "The LogKeys members must be sorted alphabetically")
     }
   }
 

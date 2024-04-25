@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.streaming
 import scala.collection.mutable.{Map => MutableMap}
 import scala.collection.mutable
 
-import org.apache.spark.internal.LogKey.{LATEST_BATCH_ID, LATEST_COMMITTED_BATCH_ID, READ_LIMIT, SPARK_DATA_STREAM}
+import org.apache.spark.internal.LogKeys.{LATEST_BATCH_ID, LATEST_COMMITTED_BATCH_ID, READ_LIMIT, SPARK_DATA_STREAM}
 import org.apache.spark.internal.MDC
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder

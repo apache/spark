@@ -47,7 +47,7 @@ import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.{Executor, ExecutorMetrics, ExecutorMetricsSource}
 import org.apache.spark.input.{FixedLengthBinaryInputFormat, PortableDataStream, StreamInputFormat, WholeTextFileInputFormat}
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey
+import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests._
 import org.apache.spark.internal.config.UI._
@@ -750,7 +750,7 @@ class SparkContext(config: SparkConf) extends Logging {
     } catch {
       case e: Exception =>
         logError(
-          log"Exception getting thread dump from executor ${MDC(LogKey.EXECUTOR_ID, executorId)}",
+          log"Exception getting thread dump from executor ${MDC(LogKeys.EXECUTOR_ID, executorId)}",
           e)
         None
     }
@@ -783,7 +783,7 @@ class SparkContext(config: SparkConf) extends Logging {
       case e: Exception =>
         logError(
           log"Exception getting heap histogram from " +
-            log"executor ${MDC(LogKey.EXECUTOR_ID, executorId)}", e)
+            log"executor ${MDC(LogKeys.EXECUTOR_ID, executorId)}", e)
         None
     }
   }
@@ -2145,7 +2145,7 @@ class SparkContext(config: SparkConf) extends Logging {
         Seq(env.rpcEnv.fileServer.addJar(file))
       } catch {
         case NonFatal(e) =>
-          logError(log"Failed to add ${MDC(LogKey.PATH, path)} to Spark environment", e)
+          logError(log"Failed to add ${MDC(LogKeys.PATH, path)} to Spark environment", e)
           Nil
       }
     }
@@ -2166,7 +2166,7 @@ class SparkContext(config: SparkConf) extends Logging {
           Seq(path)
         } catch {
           case NonFatal(e) =>
-            logError(log"Failed to add ${MDC(LogKey.PATH, path)} to Spark environment", e)
+            logError(log"Failed to add ${MDC(LogKeys.PATH, path)} to Spark environment", e)
             Nil
         }
       } else {

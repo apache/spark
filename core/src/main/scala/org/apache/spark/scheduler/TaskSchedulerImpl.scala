@@ -33,8 +33,8 @@ import org.apache.spark.InternalAccumulator.{input, shuffleRead}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.ExecutorMetrics
-import org.apache.spark.internal.{config, Logging, LogKey, MDC}
-import org.apache.spark.internal.LogKey.{REASON, TASK_SET_NAME, TASK_STATE, TID}
+import org.apache.spark.internal.{config, Logging, LogKeys, MDC}
+import org.apache.spark.internal.LogKeys.{REASON, TASK_SET_NAME, TASK_STATE, TID}
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.RpcEndpoint
@@ -1024,7 +1024,7 @@ private[spark] class TaskSchedulerImpl(
             // one may be triggered by a dropped connection from the worker while another may be a
             // report of executor termination. We produce log messages for both so we
             // eventually report the termination reason.
-            logError(log"Lost an executor ${MDC(LogKey.EXECUTOR_ID, executorId)} (already removed): ${MDC(REASON, reason)}")
+            logError(log"Lost an executor ${MDC(LogKeys.EXECUTOR_ID, executorId)} (already removed): ${MDC(REASON, reason)}")
         }
       }
     }
@@ -1052,7 +1052,7 @@ private[spark] class TaskSchedulerImpl(
       logInfo(s"Executor $executorId on $hostPort is decommissioned" +
         s"${getDecommissionDuration(executorId)}.")
     case _ =>
-      logError(log"Lost executor ${MDC(LogKey.EXECUTOR_ID, executorId)} on ${MDC(LogKey.HOST, hostPort)}: ${MDC(REASON, reason)}")
+      logError(log"Lost executor ${MDC(LogKeys.EXECUTOR_ID, executorId)} on ${MDC(LogKeys.HOST, hostPort)}: ${MDC(REASON, reason)}")
   }
 
   // return decommission duration in string or "" if decommission startTime not exists

@@ -39,7 +39,7 @@ import org.json4s.jackson.Serialization
 
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{FILE_VERSION, MAX_FILE_VERSION, PATH}
+import org.apache.spark.internal.LogKeys.{FILE_VERSION, MAX_FILE_VERSION, PATH}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager

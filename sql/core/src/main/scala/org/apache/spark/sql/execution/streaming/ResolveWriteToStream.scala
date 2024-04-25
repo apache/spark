@@ -23,7 +23,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.internal.LogKey.{CONFIG, PATH}
+import org.apache.spark.internal.LogKeys.{CONFIG, PATH}
 import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker

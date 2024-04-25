@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.Path
 import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
-import org.apache.spark.internal.LogKey.{BATCH_ID, ELAPSED_TIME}
+import org.apache.spark.internal.LogKeys.{BATCH_ID, ELAPSED_TIME}
 import org.apache.spark.internal.MDC
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors

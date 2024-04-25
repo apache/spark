@@ -33,7 +33,7 @@ import org.apache.hadoop.fs._
 
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
-import org.apache.spark.internal.LogKey.{FILE_VERSION, OP_ID, PARTITION_ID, PATH}
+import org.apache.spark.internal.LogKeys.{FILE_VERSION, OP_ID, PARTITION_ID, PATH}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors

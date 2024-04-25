@@ -25,7 +25,7 @@ import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.apache.logging.log4j.Level
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
-import org.apache.spark.internal.{ILogKey, LogEntry, Logging, LogKey, MDC}
+import org.apache.spark.internal.{LogEntry, Logging, LogKey, LogKeys, MDC}
 
 trait LoggingSuiteBase
     extends AnyFunSuite // scalastyle:ignore funsuite
@@ -53,14 +53,14 @@ trait LoggingSuiteBase
 
   def basicMsg: String = "This is a log message"
 
-  def msgWithMDC: LogEntry = log"Lost executor ${MDC(LogKey.EXECUTOR_ID, "1")}."
+  def msgWithMDC: LogEntry = log"Lost executor ${MDC(LogKeys.EXECUTOR_ID, "1")}."
 
-  def msgWithMDCValueIsNull: LogEntry = log"Lost executor ${MDC(LogKey.EXECUTOR_ID, null)}."
+  def msgWithMDCValueIsNull: LogEntry = log"Lost executor ${MDC(LogKeys.EXECUTOR_ID, null)}."
 
-  def msgWithMDCAndException: LogEntry = log"Error in executor ${MDC(LogKey.EXECUTOR_ID, "1")}."
+  def msgWithMDCAndException: LogEntry = log"Error in executor ${MDC(LogKeys.EXECUTOR_ID, "1")}."
 
-  def msgWithConcat: LogEntry = log"Min Size: ${MDC(LogKey.MIN_SIZE, "2")}, " +
-    log"Max Size: ${MDC(LogKey.MAX_SIZE, "4")}. " +
+  def msgWithConcat: LogEntry = log"Min Size: ${MDC(LogKeys.MIN_SIZE, "2")}, " +
+    log"Max Size: ${MDC(LogKeys.MAX_SIZE, "4")}. " +
     log"Please double check."
 
   // test for basic message (without any mdc)
@@ -307,4 +307,4 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
 }
 
 // External system custom LogKey must be `extends ILogKey`
-case object CUSTOM_LOG_KEY extends ILogKey
+case object CUSTOM_LOG_KEY extends LogKey

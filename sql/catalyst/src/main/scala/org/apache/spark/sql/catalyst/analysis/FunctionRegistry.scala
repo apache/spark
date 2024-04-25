@@ -25,7 +25,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.FUNCTION_NAME
+import org.apache.spark.internal.LogKeys.FUNCTION_NAME
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions._

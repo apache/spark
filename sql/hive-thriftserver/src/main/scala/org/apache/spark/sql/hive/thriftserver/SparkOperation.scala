@@ -22,7 +22,7 @@ import org.apache.hive.service.cli.operation.Operation
 
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{HIVE_OPERATION_TYPE, STATEMENT_ID}
+import org.apache.spark.internal.LogKeys.{HIVE_OPERATION_TYPE, STATEMENT_ID}
 import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
