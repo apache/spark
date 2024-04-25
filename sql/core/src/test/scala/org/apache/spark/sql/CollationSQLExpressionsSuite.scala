@@ -56,16 +56,16 @@ class CollationSQLExpressionsSuite
 
   test("Bin expression with collation") {
     // Supported collations
-    case class ConvTestCase(
+    case class BinTestCase(
         num: String,
         collationName: String,
         result: String)
 
     val testCases = Seq(
-      ConvTestCase("13", "UTF8_BINARY", "1101"),
-      ConvTestCase("13", "UTF8_BINARY_LCASE", "1101"),
-      ConvTestCase("13", "UNICODE", "1101"),
-      ConvTestCase("13", "UNICODE_CI", "1101")
+      BinTestCase("13", "UTF8_BINARY", "1101"),
+      BinTestCase("13", "UTF8_BINARY_LCASE", "1101"),
+      BinTestCase("13", "UNICODE", "1101"),
+      BinTestCase("13", "UNICODE_CI", "1101")
     )
     testCases.foreach(t => {
       val query =
@@ -81,16 +81,16 @@ class CollationSQLExpressionsSuite
   }
 
   test("Hex with non-string input expression with collation") {
-    case class ConvTestCase(
-                             num: String,
-                             collationName: String,
-                             result: String)
+    case class HexTestCase(
+        num: String,
+        collationName: String,
+        result: String)
 
     val testCases = Seq(
-      ConvTestCase("13", "UTF8_BINARY", "D"),
-      ConvTestCase("13", "UTF8_BINARY_LCASE", "D"),
-      ConvTestCase("13", "UNICODE", "D"),
-      ConvTestCase("13", "UNICODE_CI", "D")
+      HexTestCase("13", "UTF8_BINARY", "D"),
+      HexTestCase("13", "UTF8_BINARY_LCASE", "D"),
+      HexTestCase("13", "UNICODE", "D"),
+      HexTestCase("13", "UNICODE_CI", "D")
     )
     testCases.foreach(t => {
       val query =
@@ -106,16 +106,16 @@ class CollationSQLExpressionsSuite
   }
 
   test("Hex with string input expression with collation") {
-    case class ConvTestCase(
-                             num: String,
-                             collationName: String,
-                             result: String)
+    case class HexTestCase(
+        num: String,
+        collationName: String,
+        result: String)
 
     val testCases = Seq(
-      ConvTestCase("Spark SQL", "UTF8_BINARY", "537061726B2053514C"),
-      ConvTestCase("Spark SQL", "UTF8_BINARY_LCASE", "537061726B2053514C"),
-      ConvTestCase("Spark SQL", "UNICODE", "537061726B2053514C"),
-      ConvTestCase("Spark SQL", "UNICODE_CI", "537061726B2053514C")
+      HexTestCase("Spark SQL", "UTF8_BINARY", "537061726B2053514C"),
+      HexTestCase("Spark SQL", "UTF8_BINARY_LCASE", "537061726B2053514C"),
+      HexTestCase("Spark SQL", "UNICODE", "537061726B2053514C"),
+      HexTestCase("Spark SQL", "UNICODE_CI", "537061726B2053514C")
     )
     testCases.foreach(t => {
       val query =
@@ -129,16 +129,16 @@ class CollationSQLExpressionsSuite
   }
 
   test("UnHex expression with collation") {
-    case class ConvTestCase(
-                             num: String,
-                             collationName: String,
-                             result: String)
+    case class UnHexTestCase(
+        num: String,
+        collationName: String,
+        result: String)
 
     val testCases = Seq(
-      ConvTestCase("537061726B2053514C", "UTF8_BINARY", "Spark SQL"),
-      ConvTestCase("537061726B2053514C", "UTF8_BINARY_LCASE", "Spark SQL"),
-      ConvTestCase("537061726B2053514C", "UNICODE", "Spark SQL"),
-      ConvTestCase("537061726B2053514C", "UNICODE_CI", "Spark SQL")
+      UnHexTestCase("537061726B2053514C", "UTF8_BINARY", "Spark SQL"),
+      UnHexTestCase("537061726B2053514C", "UTF8_BINARY_LCASE", "Spark SQL"),
+      UnHexTestCase("537061726B2053514C", "UNICODE", "Spark SQL"),
+      UnHexTestCase("537061726B2053514C", "UNICODE_CI", "Spark SQL")
     )
     testCases.foreach(t => {
       val query =
