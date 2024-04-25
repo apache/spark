@@ -37,7 +37,8 @@ import org.apache.hadoop.security.AccessControlException
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.PATH
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.Status._
@@ -920,7 +921,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       case e: AccessControlException =>
         logWarning(s"Insufficient permission while compacting log for $rootPath", e)
       case e: Exception =>
-        logError(s"Exception while compacting log for $rootPath", e)
+        logError(log"Exception while compacting log for ${MDC(PATH, rootPath)}", e)
     } finally {
       endProcessing(rootPath)
     }
@@ -1053,17 +1054,16 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val driverLogFs = new Path(driverLogDir).getFileSystem(hadoopConf)
     val currentTime = clock.getTimeMillis()
     val maxTime = currentTime - conf.get(MAX_DRIVER_LOG_AGE_S) * 1000
-    val logFiles = driverLogFs.listLocatedStatus(new Path(driverLogDir))
-    while (logFiles.hasNext()) {
-      val f = logFiles.next()
+    val logFiles = driverLogFs.listStatus(new Path(driverLogDir))
+    logFiles.foreach { f =>
       // Do not rely on 'modtime' as it is not updated for all filesystems when files are written to
+      val logFileStr = f.getPath.toString
       val deleteFile =
         try {
-          val info = listing.read(classOf[LogInfo], f.getPath().toString())
+          val info = listing.read(classOf[LogInfo], logFileStr)
           // Update the lastprocessedtime of file if it's length or modification time has changed
           if (info.fileSize < f.getLen() || info.lastProcessed < f.getModificationTime()) {
-            listing.write(
-              info.copy(lastProcessed = currentTime, fileSize = f.getLen()))
+            listing.write(info.copy(lastProcessed = currentTime, fileSize = f.getLen))
             false
           } else if (info.lastProcessed > maxTime) {
             false
@@ -1073,13 +1073,13 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         } catch {
           case e: NoSuchElementException =>
             // For every new driver log file discovered, create a new entry in listing
-            listing.write(LogInfo(f.getPath().toString(), currentTime, LogType.DriverLogs, None,
+            listing.write(LogInfo(logFileStr, currentTime, LogType.DriverLogs, None,
               None, f.getLen(), None, None, false))
-          false
+            false
         }
       if (deleteFile) {
-        logInfo(s"Deleting expired driver log for: ${f.getPath().getName()}")
-        listing.delete(classOf[LogInfo], f.getPath().toString())
+        logInfo(s"Deleting expired driver log for: $logFileStr")
+        listing.delete(classOf[LogInfo], logFileStr)
         deleteLog(driverLogFs, f.getPath())
       }
     }
@@ -1403,7 +1403,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         case _: AccessControlException =>
           logInfo(s"No permission to delete $log, ignoring.")
         case ioe: IOException =>
-          logError(s"IOException in cleaning $log", ioe)
+          logError(log"IOException in cleaning ${MDC(PATH, log)}", ioe)
       }
     }
     deleted

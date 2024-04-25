@@ -1957,7 +1957,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
           val ex = intercept[SparkException] {
             sql(s"select a from $tableName where b > 0").collect()
           }
-          assert(ex.getErrorClass == "FAILED_READ_FILE")
+          assert(ex.getErrorClass.startsWith("FAILED_READ_FILE"))
           assert(ex.getCause.isInstanceOf[SparkRuntimeException])
           assert(ex.getCause.getMessage.contains(
             """Found duplicate field(s) "B": [B, b] in case-insensitive mode"""))
@@ -2206,6 +2206,24 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
           notIn = df.filter(!col("name").isin(null))
           checkAnswer(in, Seq())
           checkAnswer(notIn, Seq())
+        }
+      }
+    }
+  }
+
+  test("SPARK-47120: subquery literal filter pushdown") {
+    withTable("t1", "t2") {
+      sql("create table t1(d date) using parquet")
+      sql("create table t2(d date) using parquet")
+      sql("insert into t1 values date'2021-01-01'")
+      sql("insert into t2 values (null)")
+      Seq("=", ">", ">=", "<", "<=", "!=").foreach { op =>
+        checkAnswer(sql(s"select * from t1 where 1=1 and d $op (select d from t2)"), Seq.empty)
+      }
+      withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+        "org.apache.spark.sql.catalyst.optimizer.NullPropagation") {
+        Seq("=", ">", ">=", "<", "<=", "!=").foreach { op =>
+          checkAnswer(sql(s"select * from t1 where d ${op} null"), Seq.empty)
         }
       }
     }

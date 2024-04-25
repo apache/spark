@@ -959,7 +959,7 @@ class InternalFrame:
 
                 return sdf.select(
                     ConnectColumn(DistributedSequenceID()).alias(column_name),
-                    "*",  # type: ignore[call-overload]
+                    "*",
                 )
             else:
                 return PySparkDataFrame(

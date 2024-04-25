@@ -377,7 +377,7 @@ abstract class AvroSuite
           "",
           Seq())
       }
-      assert(e.getMessage.contains("Cannot generate stable indentifier"))
+      assert(e.getMessage.contains("Cannot generate stable identifier"))
     }
     {
       val e = intercept[Exception] {
@@ -388,7 +388,7 @@ abstract class AvroSuite
           "",
           Seq())
       }
-      assert(e.getMessage.contains("Cannot generate stable indentifier"))
+      assert(e.getMessage.contains("Cannot generate stable identifier"))
     }
     // Two array types or two map types are not allowed in union.
     {
@@ -438,6 +438,33 @@ abstract class AvroSuite
         )
       }
       assert(e.getMessage.contains("Schemas may not be named after primitives"))
+    }
+  }
+
+  test("SPARK-47904: Test that field name case is preserved") {
+    checkUnionStableId(
+      List(
+        Schema.createEnum("myENUM", "", null, List[String]("E1", "e2").asJava),
+        Schema.createRecord("myRecord", "", null, false,
+          List[Schema.Field](new Schema.Field("f", Schema.createFixed("myField", "", null, 6)))
+            .asJava),
+        Schema.createRecord("myRecord2", "", null, false,
+          List[Schema.Field](new Schema.Field("F", Schema.create(Type.FLOAT)))
+            .asJava)),
+      "struct<member_myENUM: string, member_myRecord: struct<f: binary>, " +
+                    "member_myRecord2: struct<F: float>>",
+      Seq())
+
+    {
+      val e = intercept[Exception] {
+        checkUnionStableId(
+          List(
+            Schema.createRecord("myRecord", "", null, false, List[Schema.Field]().asJava),
+            Schema.createRecord("myrecord", "", null, false, List[Schema.Field]().asJava)),
+          "",
+          Seq())
+      }
+      assert(e.getMessage.contains("Cannot generate stable identifier"))
     }
   }
 
@@ -864,7 +891,7 @@ abstract class AvroSuite
         val ex = intercept[SparkException] {
           spark.read.schema("a DECIMAL(4, 3)").format("avro").load(path.toString).collect()
         }
-        assert(ex.getErrorClass == "FAILED_READ_FILE")
+        assert(ex.getErrorClass.startsWith("FAILED_READ_FILE"))
         checkError(
           exception = ex.getCause.asInstanceOf[AnalysisException],
           errorClass = "AVRO_INCOMPATIBLE_READ_TYPE",
@@ -909,7 +936,7 @@ abstract class AvroSuite
           val ex = intercept[SparkException] {
             spark.read.schema(s"a $sqlType").format("avro").load(path.toString).collect()
           }
-          assert(ex.getErrorClass == "FAILED_READ_FILE")
+          assert(ex.getErrorClass.startsWith("FAILED_READ_FILE"))
           checkError(
             exception = ex.getCause.asInstanceOf[AnalysisException],
             errorClass = "AVRO_INCOMPATIBLE_READ_TYPE",
@@ -946,7 +973,7 @@ abstract class AvroSuite
           val ex = intercept[SparkException] {
             spark.read.schema(s"a $sqlType").format("avro").load(path.toString).collect()
           }
-          assert(ex.getErrorClass == "FAILED_READ_FILE")
+          assert(ex.getErrorClass.startsWith("FAILED_READ_FILE"))
           checkError(
             exception = ex.getCause.asInstanceOf[AnalysisException],
             errorClass = "AVRO_INCOMPATIBLE_READ_TYPE",
@@ -2741,6 +2768,16 @@ abstract class AvroSuite
         val records = df.collect()
         assert(count == 58)
         assert(count == records.length)
+      }
+    }
+  }
+
+  test("SPARK-46990: read an empty file where pastSync returns false at EOF") {
+    for (maxPartitionBytes <- Seq(100, 100000, 100000000)) {
+      withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> s"$maxPartitionBytes") {
+        val file = getResourceAvroFilePath("empty_file.avro")
+        val df = spark.read.format("avro").load(file)
+        assert(df.count() == 0)
       }
     }
   }

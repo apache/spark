@@ -783,6 +783,7 @@ object View {
         "spark.sql.hive.convertMetastoreParquet",
         "spark.sql.hive.convertMetastoreOrc",
         "spark.sql.hive.convertInsertingPartitionedTable",
+        "spark.sql.hive.convertInsertingUnpartitionedTable",
         "spark.sql.hive.convertMetastoreCtas"
       ).contains(key) || key.startsWith("spark.sql.catalog.")
     }
@@ -1232,9 +1233,11 @@ object Aggregate {
     schema.forall(f => UnsafeRow.isMutable(f.dataType))
   }
 
-  def supportsHashAggregate(aggregateBufferAttributes: Seq[Attribute]): Boolean = {
+  def supportsHashAggregate(
+      aggregateBufferAttributes: Seq[Attribute], groupingExpression: Seq[Expression]): Boolean = {
     val aggregationBufferSchema = DataTypeUtils.fromAttributes(aggregateBufferAttributes)
-    isAggregateBufferMutable(aggregationBufferSchema)
+    isAggregateBufferMutable(aggregationBufferSchema) &&
+      groupingExpression.forall(e => UnsafeRowUtils.isBinaryStable(e.dataType))
   }
 
   def supportsObjectHashAggregate(aggregateExpressions: Seq[AggregateExpression]): Boolean = {
@@ -2053,6 +2056,8 @@ case class LateralJoin(
     right: LateralSubquery,
     joinType: JoinType,
     condition: Option[Expression]) extends UnaryNode {
+
+  override lazy val allAttributes: AttributeSeq = left.output ++ right.plan.output
 
   require(Seq(Inner, LeftOuter, Cross).contains(joinType),
     s"Unsupported lateral join type $joinType")

@@ -375,6 +375,11 @@ class FunctionsTestsMixin:
                 df.select(getattr(F, name)(F.col("name"))).first()[0],
             )
 
+    def test_collation(self):
+        df = self.spark.createDataFrame([("a",), ("b",)], ["name"])
+        actual = df.select(F.collation(F.collate("name", "UNICODE"))).distinct().collect()
+        self.assertEqual([Row("UNICODE")], actual)
+
     def test_octet_length_function(self):
         # SPARK-36751: add octet length api for python
         df = self.spark.createDataFrame([("cat",), ("\U0001F408",)], ["cat"])
@@ -1299,6 +1304,45 @@ class FunctionsTestsMixin:
         self.assertEqual(expected, dict(actual["items"]))
         self.assertEqual({**expected, **expected2}, dict(actual["merged"]))
         self.assertEqual(expected, actual["from_items"])
+
+    def test_parse_json(self):
+        df = self.spark.createDataFrame([{"json": """{ "a" : 1 }"""}])
+        actual = df.select(
+            F.to_json(F.parse_json(df.json)).alias("var"),
+            F.to_json(F.parse_json(F.lit("""{"b": [{"c": "str2"}]}"""))).alias("var_lit"),
+        ).first()
+
+        self.assertEqual("""{"a":1}""", actual["var"])
+        self.assertEqual("""{"b":[{"c":"str2"}]}""", actual["var_lit"])
+
+    def test_variant_expressions(self):
+        df = self.spark.createDataFrame([Row(json="""{ "a" : 1 }"""), Row(json="""{ "b" : 2 }""")])
+        v = F.parse_json(df.json)
+
+        def check(resultDf, expected):
+            self.assertEqual([r[0] for r in resultDf.collect()], expected)
+
+        check(df.select(F.is_variant_null(v)), [False, False])
+        check(df.select(F.schema_of_variant(v)), ["STRUCT<a: BIGINT>", "STRUCT<b: BIGINT>"])
+        check(df.select(F.schema_of_variant_agg(v)), ["STRUCT<a: BIGINT, b: BIGINT>"])
+
+        check(df.select(F.variant_get(v, "$.a", "int")), [1, None])
+        check(df.select(F.variant_get(v, "$.b", "int")), [None, 2])
+        check(df.select(F.variant_get(v, "$.a", "double")), [1.0, None])
+
+        with self.assertRaises(SparkRuntimeException) as ex:
+            df.select(F.variant_get(v, "$.a", "binary")).collect()
+
+        self.check_error(
+            exception=ex.exception,
+            error_class="INVALID_VARIANT_CAST",
+            message_parameters={"value": "1", "dataType": '"BINARY"'},
+        )
+
+        check(df.select(F.try_variant_get(v, "$.a", "int")), [1, None])
+        check(df.select(F.try_variant_get(v, "$.b", "int")), [None, 2])
+        check(df.select(F.try_variant_get(v, "$.a", "double")), [1.0, None])
+        check(df.select(F.try_variant_get(v, "$.a", "binary")), [None, None])
 
     def test_schema_of_json(self):
         with self.assertRaises(PySparkTypeError) as pe:

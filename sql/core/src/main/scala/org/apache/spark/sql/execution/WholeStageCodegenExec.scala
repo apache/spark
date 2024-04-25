@@ -24,6 +24,8 @@ import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import org.apache.spark.{broadcast, SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.internal.LogKey.{CODEGEN_STAGE_ID, ERROR, TREE_NODE}
+import org.apache.spark.internal.MDC
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -406,7 +408,7 @@ trait CodegenSupport extends SparkPlan {
       if (Utils.isTesting) {
         throw SparkException.internalError(errMsg)
       } else {
-        logWarning(s"[BUG] $errMsg Please open a JIRA ticket to report it.")
+        logWarning(log"[BUG] ${MDC(ERROR, errMsg)} Please open a JIRA ticket to report it.")
       }
     }
     if (parent.limitNotReachedChecks.isEmpty) {
@@ -729,7 +731,9 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
     } catch {
       case NonFatal(_) if !Utils.isTesting && conf.codegenFallback =>
         // We should already saw the error message
-        logWarning(s"Whole-stage codegen disabled for plan (id=$codegenStageId):\n $treeString")
+        logWarning(log"Whole-stage codegen disabled for plan " +
+          log"(id=${MDC(CODEGEN_STAGE_ID, codegenStageId)}):\n " +
+          log"${MDC(TREE_NODE, treeString)}")
         return child.execute()
     }
 
@@ -752,8 +756,9 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
     // but the output must be rows.
     val rdds = child.asInstanceOf[CodegenSupport].inputRDDs()
     assert(rdds.size <= 2, "Up to two input RDDs can be supported")
+    val cleanedSourceOpt = tryBroadcastCleanedSource(cleanedSource)
     val evaluatorFactory = new WholeStageCodegenEvaluatorFactory(
-      cleanedSource, durationMs, references)
+      cleanedSourceOpt, durationMs, references)
     if (rdds.length == 1) {
       if (conf.usePartitionEvaluator) {
         rdds.head.mapPartitionsWithEvaluator(evaluatorFactory)
@@ -830,6 +835,23 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
 
   override protected def withNewChildInternal(newChild: SparkPlan): WholeStageCodegenExec =
     copy(child = newChild)(codegenStageId)
+
+  // Use broadcast if the conf is enabled and the code + comment size exceeds the threshold,
+  // otherwise, fallback to use cleanedSource directly. The method returns either a
+  // broadcast variable or the original form of cleanedSource.
+  private[spark] def tryBroadcastCleanedSource(code: CodeAndComment):
+      Either[broadcast.Broadcast[CodeAndComment], CodeAndComment] = {
+    def exceedThreshold(): Boolean = {
+      code.body.length + code.comment.iterator.map(
+        e => e._1.length + e._2.length).sum > conf.broadcastCleanedSourceThreshold
+    }
+    val enabled = conf.broadcastCleanedSourceThreshold >= 0
+    if (enabled && exceedThreshold()) {
+      scala.util.Left(sparkContext.broadcast(code))
+    } else {
+      scala.util.Right(code)
+    }
+  }
 }
 
 

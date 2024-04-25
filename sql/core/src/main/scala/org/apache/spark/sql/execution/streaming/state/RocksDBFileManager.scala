@@ -38,7 +38,8 @@ import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.{SparkConf, SparkEnv}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{FILE_VERSION, MAX_FILE_VERSION, PATH}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager
@@ -343,7 +344,8 @@ class RocksDBFileManager(
         logInfo(s"Deleted changelog file $version")
       } catch {
         case e: Exception =>
-          logWarning(s"Error deleting changelog file for version $version", e)
+          logWarning(
+            log"Error deleting changelog file for version ${MDC(FILE_VERSION, version)}", e)
       }
     }
   }
@@ -446,9 +448,10 @@ class RocksDBFileManager(
         case e: Exception =>
           failedToDelete += 1
           if (maxUsedVersion == -1) {
-            logWarning(s"Error deleting orphan file $dfsFileName", e)
+            logWarning(log"Error deleting orphan file ${MDC(PATH, dfsFileName)}", e)
           } else {
-            logWarning(s"Error deleting file $dfsFileName, last used in version $maxUsedVersion", e)
+            logWarning(log"Error deleting file ${MDC(PATH, dfsFileName)}, " +
+              log"last used in version ${MDC(MAX_FILE_VERSION, maxUsedVersion)}", e)
           }
       }
     }
@@ -462,7 +465,8 @@ class RocksDBFileManager(
         logDebug(s"Deleted version $version")
       } catch {
         case e: Exception =>
-          logWarning(s"Error deleting version file $versionFile for version $version", e)
+          logWarning(log"Error deleting version file ${MDC(PATH, versionFile)} for " +
+            log"version ${MDC(FILE_VERSION, version)}", e)
       }
     }
     logInfo(s"Deleted ${filesToDelete.size - failedToDelete} files (failed to delete" +
@@ -518,16 +522,12 @@ class RocksDBFileManager(
       s" DFS for version $version. $filesReused files reused without copying.")
     versionToRocksDBFiles.put(version, immutableFiles)
 
-    // clean up deleted SST files from the localFilesToDfsFiles Map
-    val currentLocalFiles = localFiles.map(_.getName).toSet
-    val mappingsToClean = localFilesToDfsFiles.asScala
-      .keys
-      .filterNot(currentLocalFiles.contains)
-
-    mappingsToClean.foreach { f =>
-      logInfo(s"cleaning $f from the localFilesToDfsFiles map")
-      localFilesToDfsFiles.remove(f)
-    }
+    // Cleanup locally deleted files from the localFilesToDfsFiles map
+    // Locally, SST Files can be deleted due to RocksDB compaction. These files need
+    // to be removed rom the localFilesToDfsFiles map to ensure that if a older version
+    // regenerates them and overwrites the version.zip, SST files from the conflicting
+    // version (previously committed) are not reused.
+    removeLocallyDeletedSSTFilesFromDfsMapping(localFiles)
 
     saveCheckpointMetrics = RocksDBFileManagerMetrics(
       bytesCopied = bytesCopied,
@@ -545,9 +545,20 @@ class RocksDBFileManager(
   private def loadImmutableFilesFromDfs(
       immutableFiles: Seq[RocksDBImmutableFile], localDir: File): Unit = {
     val requiredFileNameToFileDetails = immutableFiles.map(f => f.localFileName -> f).toMap
+
+    val localImmutableFiles = listRocksDBFiles(localDir)._1
+
+    // Cleanup locally deleted files from the localFilesToDfsFiles map
+    // Locally, SST Files can be deleted due to RocksDB compaction. These files need
+    // to be removed rom the localFilesToDfsFiles map to ensure that if a older version
+    // regenerates them and overwrites the version.zip, SST files from the conflicting
+    // version (previously committed) are not reused.
+    removeLocallyDeletedSSTFilesFromDfsMapping(localImmutableFiles)
+
     // Delete unnecessary local immutable files
-    listRocksDBFiles(localDir)._1
+    localImmutableFiles
       .foreach { existingFile =>
+        val existingFileSize = existingFile.length()
         val requiredFile = requiredFileNameToFileDetails.get(existingFile.getName)
         val prevDfsFile = localFilesToDfsFiles.asScala.get(existingFile.getName)
         val isSameFile = if (requiredFile.isDefined && prevDfsFile.isDefined) {
@@ -560,7 +571,7 @@ class RocksDBFileManager(
         if (!isSameFile) {
           existingFile.delete()
           localFilesToDfsFiles.remove(existingFile.getName)
-          logInfo(s"Deleted local file $existingFile with size ${existingFile.length()} mapped" +
+          logInfo(s"Deleted local file $existingFile with size $existingFileSize mapped" +
             s" to previous dfsFile ${prevDfsFile.getOrElse("null")}")
         } else {
           logInfo(s"reusing $prevDfsFile present at $existingFile for $requiredFile")
@@ -601,6 +612,19 @@ class RocksDBFileManager(
       bytesCopied = bytesCopied,
       filesCopied = filesCopied,
       filesReused = filesReused)
+  }
+
+  private def removeLocallyDeletedSSTFilesFromDfsMapping(localFiles: Seq[File]): Unit = {
+    // clean up deleted SST files from the localFilesToDfsFiles Map
+    val currentLocalFiles = localFiles.map(_.getName).toSet
+    val mappingsToClean = localFilesToDfsFiles.asScala
+      .keys
+      .filterNot(currentLocalFiles.contains)
+
+    mappingsToClean.foreach { f =>
+      logInfo(s"cleaning $f from the localFilesToDfsFiles map")
+      localFilesToDfsFiles.remove(f)
+    }
   }
 
   /** Get the SST files required for a version from the version zip file in DFS */

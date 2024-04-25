@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, TreeNodeTag, U
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.types.{MapType, StructType}
+import org.apache.spark.sql.types.StructType
 
 
 abstract class LogicalPlan
@@ -349,23 +349,6 @@ object LogicalPlanIntegrity {
   }
 
   /**
-   * Validate that the grouping key types in Aggregate plans are valid.
-   * Returns an error message if the check fails, or None if it succeeds.
-   */
-  def validateGroupByTypes(plan: LogicalPlan): Option[String] = {
-    plan.collectFirst {
-      case a @ Aggregate(groupingExprs, _, _) =>
-        val badExprs = groupingExprs.filter(_.dataType.isInstanceOf[MapType]).map(_.toString)
-        if (badExprs.nonEmpty) {
-          Some(s"Grouping expressions ${badExprs.mkString(", ")} cannot be of type Map " +
-            s"for plan:\n ${a.treeString}")
-        } else {
-          None
-        }
-    }.flatten
-  }
-
-  /**
    * Validate that the aggregation expressions in Aggregate plans are valid.
    * Returns an error message if the check fails, or None if it succeeds.
    */
@@ -417,7 +400,6 @@ object LogicalPlanIntegrity {
       .orElse(LogicalPlanIntegrity.validateExprIdUniqueness(currentPlan))
       .orElse(LogicalPlanIntegrity.validateSchemaOutput(previousPlan, currentPlan))
       .orElse(LogicalPlanIntegrity.validateNoDanglingReferences(currentPlan))
-      .orElse(LogicalPlanIntegrity.validateGroupByTypes(currentPlan))
       .orElse(LogicalPlanIntegrity.validateAggregateExpressions(currentPlan))
       .map(err => s"${err}\nPrevious schema:${previousPlan.output.mkString(", ")}" +
         s"\nPrevious plan: ${previousPlan.treeString}")

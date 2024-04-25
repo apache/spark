@@ -23,7 +23,8 @@ import scala.util.control.NonFatal
 
 import org.apache.kafka.clients.producer.KafkaProducer
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.PRODUCER_ID
 
 private[kafka010] class CachedKafkaProducer(
     val cacheKey: Seq[(String, Object)],
@@ -32,7 +33,7 @@ private[kafka010] class CachedKafkaProducer(
 
   private[producer] def close(): Unit = {
     try {
-      logInfo(s"Closing the KafkaProducer with id: $id.")
+      logInfo(log"Closing the KafkaProducer with id: ${MDC(PRODUCER_ID, id)}.")
       producer.close()
     } catch {
       case NonFatal(e) => logWarning("Error while closing kafka producer.", e)

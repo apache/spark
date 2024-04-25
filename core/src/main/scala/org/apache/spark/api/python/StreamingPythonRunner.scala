@@ -21,10 +21,10 @@ import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, Data
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{SparkEnv, SparkPythonException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.BUFFER_SIZE
-import org.apache.spark.internal.config.Python.{PYTHON_AUTH_SOCKET_TIMEOUT, PYTHON_USE_DAEMON}
+import org.apache.spark.internal.config.Python.PYTHON_AUTH_SOCKET_TIMEOUT
 
 
 private[spark] object StreamingPythonRunner {
@@ -68,17 +68,11 @@ private[spark] class StreamingPythonRunner(
     envVars.put("SPARK_BUFFER_SIZE", bufferSize.toString)
     envVars.put("SPARK_CONNECT_LOCAL_URL", connectUrl)
 
-    val prevConf = conf.get(PYTHON_USE_DAEMON)
-    conf.set(PYTHON_USE_DAEMON, false)
-    try {
-      val workerFactory =
-        new PythonWorkerFactory(pythonExec, workerModule, envVars.asScala.toMap)
-      val (worker: PythonWorker, _) = workerFactory.createSimpleWorker(blockingMode = true)
-      pythonWorker = Some(worker)
-      pythonWorkerFactory = Some(workerFactory)
-    } finally {
-      conf.set(PYTHON_USE_DAEMON, prevConf)
-    }
+    val workerFactory =
+      new PythonWorkerFactory(pythonExec, workerModule, envVars.asScala.toMap, false)
+    val (worker: PythonWorker, _) = workerFactory.createSimpleWorker(blockingMode = true)
+    pythonWorker = Some(worker)
+    pythonWorkerFactory = Some(workerFactory)
 
     val stream = new BufferedOutputStream(
       pythonWorker.get.channel.socket().getOutputStream, bufferSize)
@@ -97,10 +91,26 @@ private[spark] class StreamingPythonRunner(
       new BufferedInputStream(pythonWorker.get.channel.socket().getInputStream, bufferSize))
 
     val resFromPython = dataIn.readInt()
+    if (resFromPython != 0) {
+      val errMessage = PythonWorkerUtils.readUTF(dataIn)
+      throw streamingPythonRunnerInitializationFailure(resFromPython, errMessage)
+    }
     logInfo(s"Runner initialization succeeded (returned $resFromPython).")
 
     (dataOut, dataIn)
   }
+
+  def streamingPythonRunnerInitializationFailure(resFromPython: Int, errMessage: String):
+    StreamingPythonRunnerInitializationException = {
+    new StreamingPythonRunnerInitializationException(resFromPython, errMessage)
+  }
+
+  class StreamingPythonRunnerInitializationException(resFromPython: Int, errMessage: String)
+    extends SparkPythonException(
+      errorClass = "STREAMING_PYTHON_RUNNER_INITIALIZATION_FAILURE",
+      messageParameters = Map(
+        "resFromPython" -> resFromPython.toString,
+        "msg" -> errMessage))
 
   /**
    * Stops the Python worker.

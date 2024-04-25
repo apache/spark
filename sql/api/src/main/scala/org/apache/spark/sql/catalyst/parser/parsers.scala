@@ -250,7 +250,7 @@ class ParseException private(
     val builder = new StringBuilder
     builder ++= "\n" ++= message
     start match {
-      case Origin(Some(l), Some(p), _, _, _, _, _, _) =>
+      case Origin(Some(l), Some(p), _, _, _, _, _, _, _) =>
         builder ++= s" (line $l, pos $p)\n"
         command.foreach { cmd =>
           val (above, below) = cmd.split("\n").splitAt(l)
@@ -301,6 +301,18 @@ case object PostProcessor extends SqlBaseParserBaseListener {
     val ident = ctx.getParent.getText
 
     throw QueryParsingErrors.invalidIdentifierError(ident, ctx)
+  }
+
+  /** Throws error message when unquoted identifier contains characters outside a-z, A-Z, 0-9, _ */
+  override def exitUnquotedIdentifier(ctx: SqlBaseParser.UnquotedIdentifierContext): Unit = {
+    val ident = ctx.getText
+    if (ident.exists(c =>
+      !(c >= 'a' && c <= 'z') &&
+      !(c >= 'A' && c <= 'Z') &&
+      !(c >= '0' && c <= '9') &&
+      c != '_')) {
+      throw QueryParsingErrors.invalidIdentifierError(ident, ctx)
+    }
   }
 
   /** Remove the back ticks from an Identifier. */

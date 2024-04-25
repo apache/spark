@@ -18,10 +18,11 @@
 package org.apache.spark.ui.jobs
 
 import java.util.Date
-import javax.servlet.http.HttpServletRequest
 
 import scala.collection.mutable.HashSet
 import scala.xml.{Node, Unparsed}
+
+import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.scheduler.TaskLocality

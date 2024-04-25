@@ -23,6 +23,7 @@ import java.sql.{Connection, DatabaseMetaData, Driver, DriverManager, PreparedSt
 import java.util.{Locale, Properties, ServiceConfigurationError}
 
 import scala.jdk.CollectionConverters._
+import scala.reflect.ClassTag
 
 import org.apache.hadoop.fs.{LocalFileSystem, Path}
 import org.apache.hadoop.fs.permission.FsPermission
@@ -30,12 +31,13 @@ import org.mockito.Mockito.{mock, spy, when}
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
-import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, QueryTest, Row, SaveMode}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoder, KryoData, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NamedParameter, UnresolvedGenerator}
-import org.apache.spark.sql.catalyst.expressions.{Concat, CreateArray, EmptyRow, Flatten, Grouping, Literal, RowNumber}
+import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Concat, CreateArray, EmptyRow, Expression, Flatten, Grouping, Literal, RowNumber, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.objects.InitializeJavaBean
 import org.apache.spark.sql.catalyst.rules.RuleIdCollection
 import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions}
@@ -51,7 +53,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{ArrayType, BooleanType, DataType, DecimalType, LongType, MetadataBuilder, StructType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, DataType, DecimalType, IntegerType, LongType, MetadataBuilder, StructField, StructType}
 import org.apache.spark.sql.vectorized.ColumnarArray
 import org.apache.spark.unsafe.array.ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
 import org.apache.spark.util.ThreadUtils
@@ -309,7 +311,7 @@ class QueryExecutionErrorsSuite
         val ex = intercept[SparkException] {
           spark.read.schema("time timestamp_ntz").orc(file.getCanonicalPath).collect()
         }
-        assert(ex.getErrorClass == "FAILED_READ_FILE")
+        assert(ex.getErrorClass.startsWith("FAILED_READ_FILE"))
         checkError(
           exception = ex.getCause.asInstanceOf[SparkUnsupportedOperationException],
           errorClass = "UNSUPPORTED_FEATURE.ORC_TYPE_CAST",
@@ -331,7 +333,7 @@ class QueryExecutionErrorsSuite
         val ex = intercept[SparkException] {
           spark.read.schema("time timestamp_ltz").orc(file.getCanonicalPath).collect()
         }
-        assert(ex.getErrorClass == "FAILED_READ_FILE")
+        assert(ex.getErrorClass.startsWith("FAILED_READ_FILE"))
         checkError(
           exception = ex.getCause.asInstanceOf[SparkUnsupportedOperationException],
           errorClass = "UNSUPPORTED_FEATURE.ORC_TYPE_CAST",
@@ -1148,6 +1150,67 @@ class QueryExecutionErrorsSuite
         "numberOfElements" -> count.toString,
         "functionName" -> toSQLId("array_repeat"),
         "maxRoundedArrayLength" -> MAX_ROUNDED_ARRAY_LENGTH.toString
+      )
+    )
+  }
+
+  test("SPARK-43259: Uses unsupported KryoData encoder") {
+    implicit val kryoEncoder = new Encoder[KryoData] {
+      override def schema: StructType = StructType(Array.empty[StructField])
+
+      override def clsTag: ClassTag[KryoData] = ClassTag(classOf[KryoData])
+    }
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        Seq(KryoData(1), KryoData(2)).toDS()
+      },
+      errorClass = "INVALID_EXPRESSION_ENCODER",
+      parameters = Map(
+        "encoderType" -> kryoEncoder.getClass.getName,
+        "docroot" -> SPARK_DOC_ROOT
+      )
+    )
+  }
+
+  test("ExpressionEncoder.objDeserializer should be a unsolved encoder ") {
+    val rowEnc = RowEncoder.encoderFor(new StructType(Array(StructField("v", IntegerType))))
+    val enc: ExpressionEncoder[Row] = ExpressionEncoder(rowEnc)
+    val deserializer = AttributeReference.apply("v", IntegerType)()
+    implicit val im: ExpressionEncoder[Row] = new ExpressionEncoder[Row](
+      enc.objSerializer, deserializer, enc.clsTag)
+
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        spark.createDataset(Seq(Row(1))).collect()
+      },
+      errorClass = "NOT_UNRESOLVED_ENCODER",
+      parameters = Map(
+        "attr" -> deserializer.toString
+      )
+    )
+  }
+
+
+  test("UnaryExpression should override eval or nullSafeEval") {
+    case class MyUnaryExpression(child: Expression)
+      extends UnaryExpression {
+      override def dataType: DataType = IntegerType
+
+      override protected def withNewChildInternal(newChild: Expression): UnaryExpression = this
+
+      override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = null
+    }
+
+    val expr = MyUnaryExpression(Literal.create(1, IntegerType))
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        expr.eval(EmptyRow)
+      },
+      errorClass = "CLASS_NOT_OVERRIDE_EXPECTED_METHOD",
+      parameters = Map(
+        "className" -> expr.getClass.getName,
+        "method1" -> "eval",
+        "method2" -> "nullSafeEval"
       )
     )
   }

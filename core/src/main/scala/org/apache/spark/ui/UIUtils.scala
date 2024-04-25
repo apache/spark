@@ -24,14 +24,14 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.time.{Instant, ZoneId}
 import java.time.format.DateTimeFormatter
 import java.util.{Date, Locale, TimeZone}
-import javax.servlet.http.HttpServletRequest
-import javax.ws.rs.core.{MediaType, MultivaluedMap, Response}
 
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 import scala.xml._
 import scala.xml.transform.{RewriteRule, RuleTransformer}
 
+import jakarta.servlet.http.HttpServletRequest
+import jakarta.ws.rs.core.{MediaType, MultivaluedMap, Response}
 import org.glassfish.jersey.internal.util.collection.MultivaluedStringMap
 
 import org.apache.spark.internal.Logging

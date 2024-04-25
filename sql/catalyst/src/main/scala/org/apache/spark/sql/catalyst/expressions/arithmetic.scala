@@ -61,14 +61,9 @@ case class UnaryMinus(
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = dataType match {
     case _: DecimalType => defineCodeGen(ctx, ev, c => s"$c.unary_$$minus()")
     case ByteType | ShortType | IntegerType | LongType if failOnError =>
-      val typeUtils = TypeUtils.getClass.getCanonicalName.stripSuffix("$")
-      val refDataType = ctx.addReferenceObj("refDataType", dataType, dataType.getClass.getName)
+      val mathUtils = MathUtils.getClass.getCanonicalName.stripSuffix("$")
       nullSafeCodeGen(ctx, ev, eval => {
-        val javaBoxedType = CodeGenerator.boxedType(dataType)
-        s"""
-           |${ev.value} = ($javaBoxedType)$typeUtils.getNumeric(
-           |  $refDataType, $failOnError).negate($eval);
-         """.stripMargin
+        s"${ev.value} = $mathUtils.negateExact($eval);"
       })
     case dt: NumericType => nullSafeCodeGen(ctx, ev, eval => {
       val originValue = ctx.freshName("origin")
@@ -174,15 +169,8 @@ case class Abs(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled
       defineCodeGen(ctx, ev, c => s"$c.abs()")
 
     case ByteType | ShortType | IntegerType | LongType if failOnError =>
-      val typeUtils = TypeUtils.getClass.getCanonicalName.stripSuffix("$")
-      val refDataType = ctx.addReferenceObj("refDataType", dataType, dataType.getClass.getName)
-      nullSafeCodeGen(ctx, ev, eval => {
-        val javaBoxedType = CodeGenerator.boxedType(dataType)
-        s"""
-           |${ev.value} = ($javaBoxedType)$typeUtils.getNumeric(
-           |  $refDataType, $failOnError).abs($eval);
-         """.stripMargin
-      })
+      val mathUtils = MathUtils.getClass.getCanonicalName.stripSuffix("$")
+      defineCodeGen(ctx, ev, c => s"$c < 0 ? $mathUtils.negateExact($c) : $c")
 
     case _: AnsiIntervalType =>
       val mathUtils = MathUtils.getClass.getCanonicalName.stripSuffix("$")
@@ -265,12 +253,12 @@ abstract class BinaryArithmetic extends BinaryOperator
 
   /** Name of the function for this expression on a [[Decimal]] type. */
   def decimalMethod: String =
-    throw QueryExecutionErrors.notOverrideExpectedMethodsError("BinaryArithmetics",
+    throw QueryExecutionErrors.notOverrideExpectedMethodsError(this.getClass.getName,
       "decimalMethod", "genCode")
 
   /** Name of the function for this expression on a [[CalendarInterval]] type. */
   def calendarIntervalMethod: String =
-    throw QueryExecutionErrors.notOverrideExpectedMethodsError("BinaryArithmetics",
+    throw QueryExecutionErrors.notOverrideExpectedMethodsError(this.getClass.getName,
       "calendarIntervalMethod", "genCode")
 
   protected def isAnsiInterval: Boolean = dataType.isInstanceOf[AnsiIntervalType]

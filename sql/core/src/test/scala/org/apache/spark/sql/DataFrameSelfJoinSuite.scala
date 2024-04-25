@@ -488,4 +488,14 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
         context = ExpectedContext(fragment = "$", getCurrentClassCallSitePattern))
     }
   }
+
+  test("SPARK-20897: cached self-join should not fail") {
+    // force to plan sort merge join
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
+      val df = Seq(1 -> "a").toDF("i", "j")
+      val df1 = df.as("t1")
+      val df2 = df.as("t2")
+      assert(df1.join(df2, $"t1.i" === $"t2.i").cache().count() == 1)
+    }
+  }
 }

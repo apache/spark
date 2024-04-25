@@ -207,10 +207,7 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
     }
   }
 
-  // SPARK-28885 String value is not allowed to be stored as numeric type with
-  // ANSI store assignment policy.
-  // TODO: re-enable the test case when SPARK-29462 is fixed.
-  ignore("SPARK-23340 Empty float/double array columns raise EOFException") {
+  test("SPARK-23340 Empty float/double array columns raise EOFException") {
     withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "false") {
       withTable("spark_23340") {
         sql("CREATE TABLE spark_23340(a array<float>, b array<double>) STORED AS ORC")
@@ -277,6 +274,43 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
             }
 
             val df = spark.sql("SELECT key, value FROM dummy_orc_partitioned WHERE key=0")
+            checkAnswer(df, singleRowDF)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-47850 ORC conversation could be applied for unpartitioned table insertion") {
+    withTempView("single") {
+      val singleRowDF = Seq((0, "foo")).toDF("key", "value")
+      singleRowDF.createOrReplaceTempView("single")
+      Seq("true", "false").foreach { conversion =>
+        withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "true",
+          HiveUtils.CONVERT_INSERTING_UNPARTITIONED_TABLE.key -> conversion) {
+          withTable("dummy_orc_unpartitioned") {
+            spark.sql(
+              s"""
+                 |CREATE TABLE dummy_orc_unpartitioned(key INT, value STRING)
+                 |STORED AS ORC
+                 """.stripMargin)
+
+            spark.sql(
+              s"""
+                 |INSERT INTO TABLE dummy_orc_unpartitioned
+                 |SELECT key, value FROM single
+                 """.stripMargin)
+
+            val orcUnpartitionedTable = TableIdentifier("dummy_orc_unpartitioned", Some("default"))
+            if (conversion == "true") {
+              // if converted, we refresh the cached relation.
+              assert(getCachedDataSourceTable(orcUnpartitionedTable) === null)
+            } else {
+              // otherwise, not cached.
+              assert(getCachedDataSourceTable(orcUnpartitionedTable) === null)
+            }
+
+            val df = spark.sql("SELECT key, value FROM dummy_orc_unpartitioned WHERE key=0")
             checkAnswer(df, singleRowDF)
           }
         }

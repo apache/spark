@@ -470,9 +470,9 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
       checkAnswer(sql(s"SELECT testcat.ns.$name(42, 58L)"), Row(100) :: Nil)
 
       val paramIndex = name match {
-        case "add" => "1"
-        case "add2" => "2"
-        case "add3" => "1"
+        case "add" => "first"
+        case "add2" => "second"
+        case "add3" => "first"
       }
 
       // can't cast date time interval to long
@@ -640,7 +640,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
         errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         parameters = Map(
           "sqlExpr" -> "\"v2aggregator(col1)\"",
-          "paramIndex" -> "1",
+          "paramIndex" -> "first",
           "inputSql" -> "\"col1\"",
           "inputType" -> "\"INTERVAL DAY\"",
           "requiredType" -> "\"DECIMAL(38,18)\""

@@ -24,6 +24,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLType
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.types._
 
 /** A static class for testing purpose. */
@@ -140,7 +141,7 @@ class CallMethodViaReflectionSuite extends SparkFunSuite with ExpressionEvalHelp
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "3",
+          "paramIndex" -> ordinalNumber(2),
           "requiredType" -> toSQLType(
             TypeCollection(BooleanType, ByteType, ShortType,
               IntegerType, LongType, FloatType, DoubleType, StringType)),

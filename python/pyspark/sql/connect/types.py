@@ -20,7 +20,7 @@ check_dependencies(__name__)
 
 import json
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 
 from pyspark.sql.types import (
     DataType,
@@ -47,6 +47,7 @@ from pyspark.sql.types import (
     BinaryType,
     BooleanType,
     NullType,
+    VariantType,
     UserDefinedType,
 )
 from pyspark.errors import PySparkAssertionError, PySparkValueError
@@ -138,7 +139,7 @@ def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
     if isinstance(data_type, NullType):
         ret.null.CopyFrom(pb2.DataType.NULL())
     elif isinstance(data_type, StringType):
-        ret.string.CopyFrom(pb2.DataType.String())
+        ret.string.collation_id = data_type.collationId
     elif isinstance(data_type, BooleanType):
         ret.boolean.CopyFrom(pb2.DataType.Boolean())
     elif isinstance(data_type, BinaryType):
@@ -190,6 +191,8 @@ def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
     elif isinstance(data_type, ArrayType):
         ret.array.element_type.CopyFrom(pyspark_types_to_proto_types(data_type.elementType))
         ret.array.contains_null = data_type.containsNull
+    elif isinstance(data_type, VariantType):
+        ret.variant.CopyFrom(pb2.DataType.Variant())
     elif isinstance(data_type, UserDefinedType):
         json_value = data_type.jsonValue()
         ret.udt.type = "udt"
@@ -236,7 +239,7 @@ def proto_schema_to_pyspark_data_type(schema: pb2.DataType) -> DataType:
         s = schema.decimal.scale if schema.decimal.HasField("scale") else 0
         return DecimalType(precision=p, scale=s)
     elif schema.HasField("string"):
-        return StringType()
+        return StringType.fromCollationId(schema.string.collation_id)
     elif schema.HasField("char"):
         return CharType(schema.char.length)
     elif schema.HasField("var_char"):
@@ -297,6 +300,8 @@ def proto_schema_to_pyspark_data_type(schema: pb2.DataType) -> DataType:
             proto_schema_to_pyspark_data_type(schema.map.value_type),
             schema.map.value_contains_null,
         )
+    elif schema.HasField("variant"):
+        return VariantType()
     elif schema.HasField("udt"):
         assert schema.udt.type == "udt"
         json_value = {}
@@ -310,3 +315,75 @@ def proto_schema_to_pyspark_data_type(schema: pb2.DataType) -> DataType:
             error_class="UNSUPPORTED_OPERATION",
             message_parameters={"operation": f"data type {schema}"},
         )
+
+
+# The python version of org.apache.spark.sql.catalyst.util.AttributeNameParser
+def parse_attr_name(name: str) -> Optional[List[str]]:
+    name_parts: List[str] = []
+    tmp: str = ""
+
+    in_backtick = False
+    i = 0
+    n = len(name)
+    while i < n:
+        char = name[i]
+        if in_backtick:
+            if char == "`":
+                if i + 1 < n and name[i + 1] == "`":
+                    tmp += "`"
+                    i += 1
+                else:
+                    in_backtick = False
+                    if i + 1 < n and name[i + 1] != ".":
+                        return None
+            else:
+                tmp += char
+        else:
+            if char == "`":
+                if len(tmp) > 0:
+                    return None
+                in_backtick = True
+            elif char == ".":
+                if name[i - 1] == "." or i == n - 1:
+                    return None
+                name_parts.append(tmp)
+                tmp = ""
+            else:
+                tmp += char
+        i += 1
+
+    if in_backtick:
+        return None
+
+    name_parts.append(tmp)
+    return name_parts
+
+
+# Verify whether the input column name can be resolved with the given schema.
+# Note that this method can not 100% match the analyzer behavior, it is designed to
+# try the best to eliminate unnecessary validation RPCs.
+def verify_col_name(name: str, schema: StructType) -> bool:
+    parts = parse_attr_name(name)
+    if parts is None or len(parts) == 0:
+        return False
+
+    def _quick_verify(parts: List[str], schema: DataType) -> bool:
+        if len(parts) == 0:
+            return True
+
+        _schema: Optional[StructType] = None
+        if isinstance(schema, StructType):
+            _schema = schema
+        elif isinstance(schema, ArrayType) and isinstance(schema.elementType, StructType):
+            _schema = schema.elementType
+        else:
+            return False
+
+        part = parts[0]
+        for field in _schema:
+            if field.name == part:
+                return _quick_verify(parts[1:], field.dataType)
+
+        return False
+
+    return _quick_verify(parts, schema)

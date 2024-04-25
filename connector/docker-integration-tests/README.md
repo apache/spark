@@ -108,4 +108,25 @@ The following are the available properties that can be passed to optimize testin
     </td>
     <td>true</td>
   </tr>
+  <tr>
+    <td><code>spark.test.docker.imagePullTimeout</code></td>
+    <td>
+      Timeout for pulling the Docker image before the tests start.
+    </td>
+    <td>5min</td>
+  </tr>
+  <tr>
+    <td><code>spark.test.docker.startContainerTimeout</code></td>
+    <td>
+      Timeout for container to spin up.
+    </td>
+    <td>5min</td>
+  </tr>
+  <tr>
+    <td><code>spark.test.docker.connectionTimeout</code></td>
+    <td>
+      Timeout for connecting the inner service in the container, such as JDBC services.
+    </td>
+    <td>5min(might get overridden by some inherits)</td>
+  </tr>
 </table>

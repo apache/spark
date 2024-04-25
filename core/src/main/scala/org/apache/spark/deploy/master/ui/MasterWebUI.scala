@@ -18,7 +18,8 @@
 package org.apache.spark.deploy.master.ui
 
 import java.net.{InetAddress, NetworkInterface, SocketException}
-import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
+
+import jakarta.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
 import org.apache.spark.deploy.DeployMessages.{DecommissionWorkersOnHosts, MasterStateResponse, RequestMasterState}
 import org.apache.spark.deploy.Utils.addRenderLogHandler
@@ -53,6 +54,11 @@ class MasterWebUI(
     val masterPage = new MasterPage(this)
     attachPage(new ApplicationPage(this))
     attachPage(new LogPage(this))
+    val envPage = new EnvironmentPage(this, master.conf)
+    attachPage(envPage)
+    this.attachHandler(createServletHandler("/environment",
+      (request: HttpServletRequest) => envPage.render(request),
+      master.conf))
     attachPage(masterPage)
     addStaticHandler(MasterWebUI.STATIC_RESOURCE_DIR)
     addRenderLogHandler(this, master.conf)

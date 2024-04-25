@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-ARG java_image_tag=21-jre
+ARG java_image_tag=21
 
 FROM azul/zulu-openjdk:${java_image_tag}
 
@@ -42,6 +42,8 @@ RUN set -ex && \
     rm -rf /var/cache/apt/* && rm -rf /var/lib/apt/lists/*
 
 COPY jars /opt/spark/jars
+# Copy hive-jackson directory if exists
+COPY hive-jackso[n] /opt/spark/hive-jackson
 # Copy RELEASE file if exists
 COPY RELEAS[E] /opt/spark/RELEASE
 COPY bin /opt/spark/bin

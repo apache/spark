@@ -39,7 +39,7 @@ class UDFProfilerParityTests(UDFProfiler2TestsMixin, ReusedConnectTestCase):
 
         for id in self.profile_results:
             with self.trap_stdout() as io:
-                self.spark.showPerfProfiles(id)
+                self.spark.profile.show(id, type="perf")
 
             self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
             self.assertRegex(

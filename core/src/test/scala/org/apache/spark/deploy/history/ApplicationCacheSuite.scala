@@ -19,11 +19,11 @@ package org.apache.spark.deploy.history
 
 import java.util.{Date, NoSuchElementException}
 import java.util.concurrent.{CountDownLatch, Executors, TimeoutException, TimeUnit}
-import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
 import scala.collection.mutable
 
 import com.codahale.metrics.Counter
+import jakarta.servlet.http.{HttpServletRequest, HttpServletResponse}
 import org.apache.hadoop.conf.Configuration
 import org.eclipse.jetty.servlet.ServletContextHandler
 import org.mockito.ArgumentMatchers.any

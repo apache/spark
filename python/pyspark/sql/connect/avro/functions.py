@@ -26,8 +26,7 @@ check_dependencies(__name__)
 from typing import Dict, Optional, TYPE_CHECKING
 
 from pyspark.sql.avro import functions as PyAvroFunctions
-
-from pyspark.sql.connect.column import Column
+from pyspark.sql.column import Column
 from pyspark.sql.connect.functions.builtin import _invoke_function, _to_col, _options_to_col, lit
 
 if TYPE_CHECKING:
@@ -82,10 +81,9 @@ def _test() -> None:
     import pyspark.sql.connect.avro.functions
 
     globs = pyspark.sql.connect.avro.functions.__dict__.copy()
-
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.avro.functions tests")
-        .remote("local[4]")
+        .remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[4]"))
         .getOrCreate()
     )
 

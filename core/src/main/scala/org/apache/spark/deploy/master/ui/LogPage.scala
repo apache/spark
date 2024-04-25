@@ -17,9 +17,9 @@
 
 package org.apache.spark.deploy.master.ui
 
-import javax.servlet.http.HttpServletRequest
-
 import scala.xml.{Node, Unparsed}
+
+import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.deploy.Utils.{getLog, DEFAULT_BYTES}
 import org.apache.spark.internal.Logging

@@ -24,9 +24,12 @@ import java.nio.file.Files
 
 import scala.collection.mutable.ArrayBuffer
 
+import com.google.common.cache.CacheBuilder
+
 import org.apache.spark.{SecurityManager, SparkConf, SparkEnv, SparkException}
 import org.apache.spark.errors.SparkCoreErrors
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKey.PATH
 import org.apache.spark.io.NioBufferedFileInputStream
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.client.StreamCallbackWithID
@@ -75,11 +78,19 @@ private[spark] class IndexShuffleBlockResolver(
   override def getStoredShuffles(): Seq[ShuffleBlockInfo] = {
     val allBlocks = blockManager.diskBlockManager.getAllBlocks()
     allBlocks.flatMap {
-      case ShuffleIndexBlockId(shuffleId, mapId, _) =>
+      case ShuffleIndexBlockId(shuffleId, mapId, _)
+        if Option(shuffleIdsToSkip.getIfPresent(shuffleId)).isEmpty =>
         Some(ShuffleBlockInfo(shuffleId, mapId))
       case _ =>
         None
     }
+  }
+
+  private val shuffleIdsToSkip =
+    CacheBuilder.newBuilder().maximumSize(1000).build[java.lang.Integer, java.lang.Boolean]()
+
+  override def addShuffleToSkip(shuffleId: ShuffleId): Unit = {
+    shuffleIdsToSkip.put(shuffleId, true)
   }
 
   private def getShuffleBytesStored(): Long = {
@@ -417,7 +428,8 @@ private[spark] class IndexShuffleBlockResolver(
     } finally {
       logDebug(s"Shuffle index for mapId $mapId: ${lengths.mkString("[", ",", "]")}")
       if (indexTmp.exists() && !indexTmp.delete()) {
-        logError(s"Failed to delete temporary index file at ${indexTmp.getAbsolutePath}")
+        logError(log"Failed to delete temporary index file at " +
+          log"${MDC(PATH, indexTmp.getAbsolutePath)}")
       }
       checksumTmpOpt.foreach { checksumTmp =>
         if (checksumTmp.exists()) {
@@ -430,8 +442,8 @@ private[spark] class IndexShuffleBlockResolver(
             case e: Exception =>
               // Unlike index deletion, we won't propagate the error for the checksum file since
               // checksum is only a best-effort.
-              logError(s"Failed to delete temporary checksum file " +
-                s"at ${checksumTmp.getAbsolutePath}", e)
+              logError(log"Failed to delete temporary checksum file " +
+                log"at ${MDC(PATH, checksumTmp.getAbsolutePath)}", e)
           }
         }
       }

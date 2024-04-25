@@ -2554,7 +2554,10 @@ def concat(
         if isinstance(obj, Series):
             num_series += 1
             series_names.add(obj.name)
-            new_objs.append(obj.to_frame(DEFAULT_SERIES_NAME))
+            if not ignore_index and not should_return_series:
+                new_objs.append(obj.to_frame())
+            else:
+                new_objs.append(obj.to_frame(DEFAULT_SERIES_NAME))
         else:
             assert isinstance(obj, DataFrame)
             new_objs.append(obj)

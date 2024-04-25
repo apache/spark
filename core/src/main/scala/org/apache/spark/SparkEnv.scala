@@ -67,7 +67,6 @@ class SparkEnv (
     val blockManager: BlockManager,
     val securityManager: SecurityManager,
     val metricsSystem: MetricsSystem,
-    val memoryManager: MemoryManager,
     val outputCommitCoordinator: OutputCommitCoordinator,
     val conf: SparkConf) extends Logging {
 
@@ -76,6 +75,12 @@ class SparkEnv (
   private var _shuffleManager: ShuffleManager = _
 
   def shuffleManager: ShuffleManager = _shuffleManager
+
+  // We initialize the MemoryManager later in SparkContext after DriverPlugin is loaded
+  // to allow the plugin to overwrite executor memory configurations
+  private var _memoryManager: MemoryManager = _
+
+  def memoryManager: MemoryManager = _memoryManager
 
   @volatile private[spark] var isStopped = false
 
@@ -136,20 +141,39 @@ class SparkEnv (
       pythonExec: String,
       workerModule: String,
       daemonModule: String,
-      envVars: Map[String, String]): (PythonWorker, Option[Long]) = {
+      envVars: Map[String, String],
+      useDaemon: Boolean): (PythonWorker, Option[Int]) = {
     synchronized {
       val key = PythonWorkersKey(pythonExec, workerModule, daemonModule, envVars)
-      pythonWorkers.getOrElseUpdate(key,
-        new PythonWorkerFactory(pythonExec, workerModule, daemonModule, envVars)).create()
+      val workerFactory = pythonWorkers.getOrElseUpdate(key, new PythonWorkerFactory(
+          pythonExec, workerModule, daemonModule, envVars, useDaemon))
+      if (workerFactory.useDaemonEnabled != useDaemon) {
+        throw SparkException.internalError("PythonWorkerFactory is already created with " +
+          s"useDaemon = ${workerFactory.useDaemonEnabled}, but now is requested with " +
+          s"useDaemon = $useDaemon. This is not allowed to change after the PythonWorkerFactory " +
+          s"is created given the same key: $key.")
+      }
+      workerFactory.create()
     }
   }
 
   private[spark] def createPythonWorker(
       pythonExec: String,
       workerModule: String,
-      envVars: Map[String, String]): (PythonWorker, Option[Long]) = {
+      envVars: Map[String, String],
+      useDaemon: Boolean): (PythonWorker, Option[Int]) = {
     createPythonWorker(
-      pythonExec, workerModule, PythonWorkerFactory.defaultDaemonModule, envVars)
+      pythonExec, workerModule, PythonWorkerFactory.defaultDaemonModule, envVars, useDaemon)
+  }
+
+  private[spark] def createPythonWorker(
+      pythonExec: String,
+      workerModule: String,
+      daemonModule: String,
+      envVars: Map[String, String]): (PythonWorker, Option[Int]) = {
+    val useDaemon = conf.get(Python.PYTHON_USE_DAEMON)
+    createPythonWorker(
+      pythonExec, workerModule, daemonModule, envVars, useDaemon)
   }
 
   private[spark] def destroyPythonWorker(
@@ -198,6 +222,12 @@ class SparkEnv (
     Preconditions.checkState(null == _shuffleManager,
       "Shuffle manager already initialized to %s", _shuffleManager)
     _shuffleManager = ShuffleManager.create(conf, executorId == SparkContext.DRIVER_IDENTIFIER)
+  }
+
+  private[spark] def initializeMemoryManager(numUsableCores: Int): Unit = {
+    Preconditions.checkState(null == memoryManager,
+      "Memory manager already initialized to %s", _memoryManager)
+    _memoryManager = UnifiedMemoryManager(conf, numUsableCores)
   }
 }
 
@@ -276,6 +306,8 @@ object SparkEnv extends Logging {
       numCores,
       ioEncryptionKey
     )
+    // Set the memory manager since it needs to be initialized explicitly
+    env.initializeMemoryManager(numCores)
     SparkEnv.set(env)
     env
   }
@@ -358,8 +390,6 @@ object SparkEnv extends Logging {
       new MapOutputTrackerMasterEndpoint(
         rpcEnv, mapOutputTracker.asInstanceOf[MapOutputTrackerMaster], conf))
 
-    val memoryManager: MemoryManager = UnifiedMemoryManager(conf, numUsableCores)
-
     val blockManagerPort = if (isDriver) {
       conf.get(DRIVER_BLOCK_MANAGER_PORT)
     } else {
@@ -418,7 +448,7 @@ object SparkEnv extends Logging {
       blockManagerMaster,
       serializerManager,
       conf,
-      memoryManager,
+      _memoryManager = null,
       mapOutputTracker,
       _shuffleManager = null,
       blockTransferService,
@@ -463,7 +493,6 @@ object SparkEnv extends Logging {
       blockManager,
       securityManager,
       metricsSystem,
-      memoryManager,
       outputCommitCoordinator,
       conf)
 

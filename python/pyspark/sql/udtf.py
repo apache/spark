@@ -24,16 +24,14 @@ import sys
 import warnings
 from typing import Any, Type, TYPE_CHECKING, Optional, Sequence, Union
 
-from py4j.java_gateway import JavaObject
-
 from pyspark.errors import PySparkAttributeError, PySparkPicklingError, PySparkTypeError
-from pyspark.rdd import PythonEvalType
-from pyspark.sql.column import _to_java_column, _to_java_expr, _to_seq
+from pyspark.util import PythonEvalType
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 from pyspark.sql.types import DataType, StructType, _parse_datatype_string
 from pyspark.sql.udf import _wrap_function
 
 if TYPE_CHECKING:
+    from py4j.java_gateway import JavaObject
     from pyspark.sql._typing import ColumnOrName
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.session import SparkSession
@@ -62,11 +60,18 @@ class AnalyzeArgument:
         The calculated value if the argument is foldable; otherwise None
     isTable : bool
         If True, the argument is a table argument.
+    isConstantExpression : bool
+        If True, the argument is a constant-foldable scalar expression. Then the 'value' field
+        contains None if the argument is a NULL literal, or a non-None value if the argument is a
+        non-NULL literal. In this way, we can distinguish between a literal NULL argument and other
+        types of arguments such as complex expression trees or table arguments where the 'value'
+        field is always None.
     """
 
     dataType: DataType
     value: Optional[Any]
     isTable: bool
+    isConstantExpression: bool
 
 
 @dataclass(frozen=True)
@@ -321,12 +326,12 @@ class UserDefinedTableFunction:
         return self._returnType_placeholder
 
     @property
-    def _judtf(self) -> JavaObject:
+    def _judtf(self) -> "JavaObject":
         if self._judtf_placeholder is None:
             self._judtf_placeholder = self._create_judtf(self.func)
         return self._judtf_placeholder
 
-    def _create_judtf(self, func: Type) -> JavaObject:
+    def _create_judtf(self, func: Type) -> "JavaObject":
         from pyspark.sql import SparkSession
 
         spark = SparkSession._getActiveSessionOrCreate()
@@ -368,6 +373,8 @@ class UserDefinedTableFunction:
         return judtf
 
     def __call__(self, *args: "ColumnOrName", **kwargs: "ColumnOrName") -> "DataFrame":
+        from pyspark.sql.classic.column import _to_java_column, _to_java_expr, _to_seq
+
         from pyspark.sql import DataFrame, SparkSession
 
         spark = SparkSession._getActiveSessionOrCreate()

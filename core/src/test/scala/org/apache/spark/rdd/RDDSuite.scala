@@ -1269,7 +1269,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
     val rdd = sc.parallelize(0 to totalElements, totalElements)
     import scala.language.reflectiveCalls
     val jobCountListener = new SparkListener {
-      private var count: AtomicInteger = new AtomicInteger(0)
+      private val count: AtomicInteger = new AtomicInteger(0)
       def getCount: Int = count.get
       def reset(): Unit = count.set(0)
       override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
@@ -1317,7 +1317,9 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
       val thrown = intercept[IllegalStateException] {
         block
       }
-      assert(thrown.getMessage.contains("stopped"))
+      assert(thrown.getMessage.contains("Cannot call methods on a stopped SparkContext"))
+      assert(thrown.getMessage.contains("This stopped SparkContext was created at:"))
+      assert(thrown.getMessage.contains("And it was stopped at:"))
     }
     assertFails { sc.parallelize(1 to 100) }
     assertFails { sc.textFile("/nonexistent-path") }

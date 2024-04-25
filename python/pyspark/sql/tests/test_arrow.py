@@ -18,12 +18,14 @@
 import datetime
 import os
 import threading
+import calendar
 import time
 import unittest
 from typing import cast
 from collections import namedtuple
+import sys
 
-from pyspark import SparkContext, SparkConf
+from pyspark import SparkConf
 from pyspark.sql import Row, SparkSession
 from pyspark.sql.functions import rand, udf, assert_true, lit
 from pyspark.sql.types import (
@@ -53,7 +55,6 @@ from pyspark.testing.sqlutils import (
     ExamplePoint,
     ExamplePointUDT,
 )
-from pyspark.testing.utils import QuietTest
 from pyspark.errors import ArithmeticException, PySparkTypeError, UnsupportedOperationException
 
 if have_pandas:
@@ -386,7 +387,7 @@ class ArrowTestsMixin:
         self.assertTrue(pdf.empty)
 
     def test_propagates_spark_exception(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_propagates_spark_exception()
 
     def check_propagates_spark_exception(self):
@@ -457,7 +458,7 @@ class ArrowTestsMixin:
         assert_frame_equal(pdf_arrow, pdf)
 
     def test_createDataFrame_with_incorrect_schema(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_createDataFrame_with_incorrect_schema()
 
     def check_createDataFrame_with_incorrect_schema(self):
@@ -504,7 +505,7 @@ class ArrowTestsMixin:
         self.assertEqual(columns[0], "b")
 
     def test_createDataFrame_with_single_data_type(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_createDataFrame_with_single_data_type()
 
     def check_createDataFrame_with_single_data_type(self):
@@ -597,7 +598,7 @@ class ArrowTestsMixin:
                 self.assertTrue(expected[r][e] == result[r][e])
 
     def test_createDataFrame_with_map_type(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             for arrow_enabled in [True, False]:
                 with self.subTest(arrow_enabled=arrow_enabled):
                     self.check_createDataFrame_with_map_type(arrow_enabled)
@@ -668,7 +669,7 @@ class ArrowTestsMixin:
             assert_frame_equal(pandas_df, df.toPandas(), check_dtype=False)
 
     def test_toPandas_with_map_type(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             for arrow_enabled in [True, False]:
                 with self.subTest(arrow_enabled=arrow_enabled):
                     self.check_toPandas_with_map_type(arrow_enabled)
@@ -690,7 +691,7 @@ class ArrowTestsMixin:
                 assert_frame_equal(origin, pdf)
 
     def test_toPandas_with_map_type_nulls(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             for arrow_enabled in [True, False]:
                 with self.subTest(arrow_enabled=arrow_enabled):
                     self.check_toPandas_with_map_type_nulls(arrow_enabled)
@@ -996,6 +997,34 @@ class ArrowTestsMixin:
 
         self.assertEqual(df.first(), expected)
 
+    @unittest.skipIf(sys.version_info < (3, 9), "zoneinfo is available from Python 3.9+")
+    def test_toPandas_timestmap_tzinfo(self):
+        for arrow_enabled in [True, False]:
+            with self.subTest(arrow_enabled=arrow_enabled):
+                self.check_toPandas_timestmap_tzinfo(arrow_enabled)
+
+    def check_toPandas_timestmap_tzinfo(self, arrow_enabled):
+        # SPARK-47202: Test timestamp with tzinfo in toPandas and createDataFrame
+        from zoneinfo import ZoneInfo
+
+        ts_tzinfo = datetime.datetime(2023, 1, 1, 0, 0, 0, tzinfo=ZoneInfo("America/Los_Angeles"))
+        data = pd.DataFrame({"a": [ts_tzinfo]})
+        df = self.spark.createDataFrame(data)
+
+        with self.sql_conf(
+            {
+                "spark.sql.execution.arrow.pyspark.enabled": arrow_enabled,
+            }
+        ):
+            pdf = df.toPandas()
+
+        expected = pd.DataFrame(
+            # Spark unsets tzinfo and converts them to localtimes.
+            {"a": [datetime.datetime.fromtimestamp(calendar.timegm(ts_tzinfo.utctimetuple()))]}
+        )
+
+        assert_frame_equal(pdf, expected)
+
     def test_toPandas_nested_timestamp(self):
         for arrow_enabled in [True, False]:
             with self.subTest(arrow_enabled=arrow_enabled):
@@ -1173,6 +1202,8 @@ class MaxResultArrowTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        from pyspark import SparkContext
+
         cls.spark = SparkSession(
             SparkContext(
                 "local[4]", cls.__name__, conf=SparkConf().set("spark.driver.maxResultSize", "10k")

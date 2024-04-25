@@ -41,22 +41,20 @@ import org.apache.spark.sql.types.DataType.parseTypeWithFallback
 import org.apache.spark.util.Utils
 
 /**
- * Commonly used functions available for DataFrame operations. Using functions defined here provides
- * a little bit more compile-time safety to make sure the function exists.
+ * Commonly used functions available for DataFrame operations. Using functions defined here
+ * provides a little bit more compile-time safety to make sure the function exists.
  *
- * Spark also includes more built-in functions that are less common and are not defined here.
- * You can still access them (and all the functions defined here) using the `functions.expr()` API
- * and calling them through a SQL expression string. You can find the entire list of functions
- * at SQL API documentation of your Spark version, see also
- * <a href="https://spark.apache.org/docs/latest/api/sql/index.html">the latest list</a>
+ * You can call the functions defined here by two ways: `_FUNC_(...)` and
+ * `functions.expr("_FUNC_(...)")`.
  *
- * As an example, `isnan` is a function that is defined here. You can use `isnan(col("myCol"))`
- * to invoke the `isnan` function. This way the programming language's compiler ensures `isnan`
- * exists and is of the proper form. You can also use `expr("isnan(myCol)")` function to invoke the
- * same function. In this case, Spark itself will ensure `isnan` exists when it analyzes the query.
+ * As an example, `regr_count` is a function that is defined here. You can use
+ * `regr_count(col("yCol", col("xCol")))` to invoke the `regr_count` function. This way the
+ * programming language's compiler ensures `regr_count` exists and is of the proper form. You can
+ * also use `expr("regr_count(yCol, xCol)")` function to invoke the same function. In this case,
+ * Spark itself will ensure `regr_count` exists when it analyzes the query.
  *
- * `regr_count` is an example of a function that is built-in but not defined here, because it is
- * less commonly used. To invoke it, use `expr("regr_count(yCol, xCol)")`.
+ * You can find the entire list of functions at SQL API documentation of your Spark version, see
+ * also <a href="https://spark.apache.org/docs/latest/api/sql/index.html">the latest list</a>
  *
  * This function APIs usually have methods with `Column` signature only because it can support not
  * only `Column` but also other types such as a native string. The other variants currently exist
@@ -82,6 +80,7 @@ import org.apache.spark.util.Utils
  * @groupname struct_funcs Struct functions
  * @groupname csv_funcs CSV functions
  * @groupname json_funcs JSON functions
+ * @groupname variant_funcs VARIANT functions
  * @groupname xml_funcs XML functions
  * @groupname url_funcs URL functions
  * @groupname partition_transforms Partition transform functions
@@ -3947,6 +3946,22 @@ object functions {
   def octet_length(e: Column): Column = Column.fn("octet_length", e)
 
   /**
+   * Marks a given column with specified collation.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def collate(e: Column, collation: String): Column = Column.fn("collate", e, lit(collation))
+
+  /**
+   * Returns the collation name of a given column.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def collation(e: Column): Column = Column.fn("collation", e)
+
+  /**
    * Returns true if `str` matches `regexp`, or false otherwise.
    *
    * @group predicate_funcs
@@ -4130,9 +4145,11 @@ object functions {
   /**
    * Splits str around matches of the given pattern.
    *
-   * @param str a string expression to split
-   * @param pattern a string representing a regular expression. The regex string should be
-   *                a Java regular expression.
+   * @param str
+   *   a string expression to split
+   * @param pattern
+   *   a string representing a regular expression. The regex string should be a Java regular
+   *   expression.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -4142,23 +4159,58 @@ object functions {
   /**
    * Splits str around matches of the given pattern.
    *
-   * @param str a string expression to split
-   * @param pattern a string representing a regular expression. The regex string should be
-   *                a Java regular expression.
-   * @param limit an integer expression which controls the number of times the regex is applied.
-   *        <ul>
-   *          <li>limit greater than 0: The resulting array's length will not be more than limit,
-   *          and the resulting array's last entry will contain all input beyond the last
-   *          matched regex.</li>
-   *          <li>limit less than or equal to 0: `regex` will be applied as many times as
-   *          possible, and the resulting array can be of any size.</li>
-   *        </ul>
+   * @param str
+   *   a string expression to split
+   * @param pattern
+   *   a column of string representing a regular expression. The regex string should be a Java
+   *   regular expression.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def split(str: Column, pattern: Column): Column = Column.fn("split", str, pattern)
+
+  /**
+   * Splits str around matches of the given pattern.
+   *
+   * @param str
+   *   a string expression to split
+   * @param pattern
+   *   a string representing a regular expression. The regex string should be a Java regular
+   *   expression.
+   * @param limit
+   *   an integer expression which controls the number of times the regex is applied. <ul>
+   *   <li>limit greater than 0: The resulting array's length will not be more than limit, and the
+   *   resulting array's last entry will contain all input beyond the last matched regex.</li>
+   *   <li>limit less than or equal to 0: `regex` will be applied as many times as possible, and
+   *   the resulting array can be of any size.</li> </ul>
    *
    * @group string_funcs
    * @since 3.0.0
    */
   def split(str: Column, pattern: String, limit: Int): Column =
     Column.fn("split", str, lit(pattern), lit(limit))
+
+  /**
+   * Splits str around matches of the given pattern.
+   *
+   * @param str
+   *   a string expression to split
+   * @param pattern
+   *   a column of string representing a regular expression. The regex string should be a Java
+   *   regular expression.
+   * @param limit
+   *   a column of integer expression which controls the number of times the regex is applied.
+   *   <ul> <li>limit greater than 0: The resulting array's length will not be more than limit,
+   *   and the resulting array's last entry will contain all input beyond the last matched
+   *   regex.</li> <li>limit less than or equal to 0: `regex` will be applied as many times as
+   *   possible, and the resulting array can be of any size.</li> </ul>
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def split(str: Column, pattern: Column, limit: Column): Column =
+    Column.fn("split", str, pattern, limit)
 
   /**
    * Substring starts at `pos` and is of length `len` when str is String type or
@@ -6579,6 +6631,81 @@ object functions {
       options: Iterator[(String, String)]): Column = {
     fnWithOptions("from_json", options, e, schema)
   }
+
+  /**
+   * Parses a JSON string and constructs a Variant value.
+   *
+   * @param json
+   *   a string column that contains JSON data.
+   * @group variant_funcs
+   * @since 4.0.0
+   */
+  def parse_json(json: Column): Column = Column.fn("parse_json", json)
+
+  /**
+   * Check if a variant value is a variant null. Returns true if and only if the input is a
+   * variant null and false otherwise (including in the case of SQL NULL).
+   *
+   * @param v
+   *   a variant column.
+   * @group variant_funcs
+   * @since 4.0.0
+   */
+  def is_variant_null(v: Column): Column = Column.fn("is_variant_null", v)
+
+  /**
+   * Extracts a sub-variant from `v` according to `path`, and then cast the sub-variant to
+   * `targetType`. Returns null if the path does not exist. Throws an exception if the cast fails.
+   *
+   * @param v
+   *   a variant column.
+   * @param path
+   *   the extraction path. A valid path should start with `$` and is followed by zero or more
+   *   segments like `[123]`, `.name`, `['name']`, or `["name"]`.
+   * @param targetType
+   *   the target data type to cast into, in a DDL-formatted string.
+   * @group variant_funcs
+   * @since 4.0.0
+   */
+  def variant_get(v: Column, path: String, targetType: String): Column =
+    Column.fn("variant_get", v, lit(path), lit(targetType))
+
+  /**
+   * Extracts a sub-variant from `v` according to `path`, and then cast the sub-variant to
+   * `targetType`. Returns null if the path does not exist or the cast fails..
+   *
+   * @param v
+   *   a variant column.
+   * @param path
+   *   the extraction path. A valid path should start with `$` and is followed by zero or more
+   *   segments like `[123]`, `.name`, `['name']`, or `["name"]`.
+   * @param targetType
+   *   the target data type to cast into, in a DDL-formatted string.
+   * @group variant_funcs
+   * @since 4.0.0
+   */
+  def try_variant_get(v: Column, path: String, targetType: String): Column =
+    Column.fn("try_variant_get", v, lit(path), lit(targetType))
+
+  /**
+   * Returns schema in the SQL format of a variant.
+   *
+   * @param v
+   *   a variant column.
+   * @group variant_funcs
+   * @since 4.0.0
+   */
+  def schema_of_variant(v: Column): Column = Column.fn("schema_of_variant", v)
+
+  /**
+   * Returns the merged schema in the SQL format of a variant column.
+   *
+   * @param v
+   *   a variant column.
+   * @group variant_funcs
+   * @since 4.0.0
+   */
+  def schema_of_variant_agg(v: Column): Column = Column.fn("schema_of_variant_agg", v)
 
   /**
    * Parses a JSON string and infers its schema in DDL format.

@@ -23,7 +23,6 @@ from typing import Dict, List, IO, Tuple
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.errors import PySparkRuntimeError, PySparkValueError
-from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import (
     read_bool,
     read_int,
@@ -34,7 +33,7 @@ from pyspark.serializers import (
 from pyspark.sql.functions import OrderingColumn, PartitioningColumn, SelectedColumn
 from pyspark.sql.types import _parse_datatype_json_string, StructType
 from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult
-from pyspark.util import handle_worker_exception
+from pyspark.util import handle_worker_exception, local_connect_and_auth
 from pyspark.worker_util import (
     check_python_version,
     read_command,
@@ -78,14 +77,17 @@ def read_arguments(infile: IO) -> Tuple[List[AnalyzeArgument], Dict[str, Analyze
     kwargs: Dict[str, AnalyzeArgument] = {}
     for _ in range(num_args):
         dt = _parse_datatype_json_string(utf8_deserializer.loads(infile))
-        if read_bool(infile):  # is foldable
+        is_constant_expression = read_bool(infile)
+        if is_constant_expression:
             value = pickleSer._read_with_length(infile)
             if dt.needConversion():
                 value = dt.fromInternal(value)
         else:
             value = None
-        is_table = read_bool(infile)  # is table argument
-        argument = AnalyzeArgument(dataType=dt, value=value, isTable=is_table)
+        is_table = read_bool(infile)
+        argument = AnalyzeArgument(
+            dataType=dt, value=value, isTable=is_table, isConstantExpression=is_constant_expression
+        )
 
         is_named_arg = read_bool(infile)
         if is_named_arg:
@@ -262,4 +264,7 @@ if __name__ == "__main__":
     java_port = int(os.environ["PYTHON_WORKER_FACTORY_PORT"])
     auth_secret = os.environ["PYTHON_WORKER_FACTORY_SECRET"]
     (sock_file, _) = local_connect_and_auth(java_port, auth_secret)
+    # TODO: Remove the following two lines and use `Process.pid()` when we drop JDK 8.
+    write_int(os.getpid(), sock_file)
+    sock_file.flush()
     main(sock_file, sock_file)

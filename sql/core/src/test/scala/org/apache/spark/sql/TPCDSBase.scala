@@ -34,7 +34,7 @@ trait TPCDSBase extends TPCBase with TPCDSSchema {
     "q81", "q82", "q83", "q84", "q85", "q86", "q87", "q88", "q89", "q90",
     "q91", "q92", "q93", "q94", "q95", "q96", "q97", "q98", "q99")
 
-  protected val excludedTpcdsQueries: Set[String] = if (regenerateGoldenFiles) {
+  protected def excludedTpcdsQueries: Set[String] = if (regenerateGoldenFiles) {
     Set()
   } else {
     // Since `tpcdsQueriesV2_7_0` has almost the same queries with these ones below,

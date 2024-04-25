@@ -195,8 +195,8 @@ class ConversionMixin:
         psidx = self.psdf.set_index("b", append=True).index
 
         with self.sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
-            self.assert_eq(psidx.to_series(), pidx.to_series())
-            self.assert_eq(psidx.to_series(name="a"), pidx.to_series(name="a"))
+            self.assert_eq(psidx.to_series(), pidx.to_series(), check_exact=False)
+            self.assert_eq(psidx.to_series(name="a"), pidx.to_series(name="a"), check_exact=False)
 
         expected_error_message = "Series.name must be a hashable type"
         with self.assertRaisesRegex(TypeError, expected_error_message):

@@ -23,7 +23,7 @@ import java.util.Locale
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkConf, SparkRuntimeException}
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.OracleDatabaseOnDocker
@@ -77,8 +77,10 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
   override val namespaceOpt: Option[String] = Some("SYSTEM")
   override val db = new OracleDatabaseOnDocker
 
-  override val defaultMetadata: Metadata = new MetadataBuilder()
+  override def defaultMetadata(dataType: DataType): Metadata = new MetadataBuilder()
     .putLong("scale", 0)
+    .putBoolean("isTimestampNTZ", false)
+    .putBoolean("isSigned", dataType.isInstanceOf[NumericType] || dataType.isInstanceOf[StringType])
     .putString(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, "varchar(255)")
     .build()
 
@@ -100,11 +102,13 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
   override def testUpdateColumnType(tbl: String): Unit = {
     sql(s"CREATE TABLE $tbl (ID INTEGER)")
     var t = spark.table(tbl)
-    var expectedSchema = new StructType().add("ID", DecimalType(10, 0), true, super.defaultMetadata)
+    var expectedSchema = new StructType()
+      .add("ID", DecimalType(10, 0), true, super.defaultMetadata(DecimalType(10, 0)))
     assert(t.schema === expectedSchema)
     sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE LONG")
     t = spark.table(tbl)
-    expectedSchema = new StructType().add("ID", DecimalType(19, 0), true, super.defaultMetadata)
+    expectedSchema = new StructType()
+      .add("ID", DecimalType(19, 0), true, super.defaultMetadata(DecimalType(19, 0)))
     assert(t.schema === expectedSchema)
     // Update column type from LONG to INTEGER
     val sql1 = s"ALTER TABLE $tbl ALTER COLUMN id TYPE INTEGER"
@@ -136,6 +140,15 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
         errorClass = "EXCEED_LIMIT_LENGTH",
         parameters = Map("limit" -> "255")
       )
+    }
+  }
+
+  test("SPARK-47879: Use VARCHAR2 instead of VARCHAR") {
+    val tableName = catalogName + ".t1"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName(c1 varchar(10), c2 char(3))")
+      sql(s"INSERT INTO $tableName SELECT 'Eason' as c1, 'Y' as c2")
+      checkAnswer(sql(s"SELECT * FROM $tableName"), Seq(Row("Eason", "Y  ")))
     }
   }
 }

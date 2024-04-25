@@ -81,6 +81,8 @@ case class FunctionTableSubqueryArgumentExpression(
   override def nullable: Boolean = false
   override def withNewPlan(plan: LogicalPlan): FunctionTableSubqueryArgumentExpression =
     copy(plan = plan)
+  override def withNewOuterAttrs(outerAttrs: Seq[Expression])
+  : FunctionTableSubqueryArgumentExpression = copy(outerAttrs = outerAttrs)
   override def hint: Option[HintInfo] = None
   override def withNewHint(hint: Option[HintInfo]): FunctionTableSubqueryArgumentExpression =
     copy()
@@ -166,9 +168,7 @@ case class FunctionTableSubqueryArgumentExpression(
     val extraPartitionByExpressionsToIndexes: Map[Expression, Int] =
       extraProjectedPartitioningExpressions.map(_.child).zipWithIndex.toMap
     partitionByExpressions.map { e =>
-      subqueryOutputs.get(e).getOrElse {
-        extraPartitionByExpressionsToIndexes.get(e).get + plan.output.length
-      }
+      subqueryOutputs.getOrElse(e, extraPartitionByExpressionsToIndexes(e) + plan.output.length)
     }
   }
 

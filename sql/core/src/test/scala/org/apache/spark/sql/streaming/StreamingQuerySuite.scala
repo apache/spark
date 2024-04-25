@@ -34,7 +34,7 @@ import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatestplus.mockito.MockitoSugar
 
-import org.apache.spark.{SparkException, TestUtils}
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException, TestUtils}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Dataset, Row, SaveMode}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -1362,6 +1362,45 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
             s"definition: ${isStreamingForCteDef.get}, reference: ${isStreamingForCteRef.get}.")
       }
     )
+  }
+
+  test("SPARK-47776: streaming aggregation having binary inequality column in the grouping " +
+    "key must be disallowed") {
+    val tableName = "parquet_dummy_tbl"
+    val collationName = "UTF8_BINARY_LCASE"
+
+    withTable(tableName) {
+      sql(
+        s"""
+           |CREATE TABLE $tableName (c1 STRING COLLATE $collationName)
+           |USING PARQUET
+           |""".stripMargin)
+
+      sql(s"INSERT INTO $tableName VALUES ('aaa')")
+      sql(s"INSERT INTO $tableName VALUES ('AAA')")
+
+      val df = spark.readStream.table(tableName)
+        .groupBy("c1")
+        .count()
+
+      val query = df.writeStream
+        .format("memory")
+        .queryName("output")
+        .outputMode("update")
+        .start()
+
+      val ex = intercept[StreamingQueryException] {
+        query.processAllAvailable()
+      }
+      checkError(
+        ex.getCause.asInstanceOf[SparkUnsupportedOperationException],
+        errorClass = "STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY",
+        parameters = Map(
+          "schema" -> ".+\"type\":\"string collate UTF8_BINARY_LCASE\".+"
+        ),
+        matchPVals = true
+      )
+    }
   }
 
   private def checkExceptionMessage(df: DataFrame): Unit = {
