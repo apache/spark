@@ -34,6 +34,7 @@ import org.apache.spark.unsafe.types.UTF8String.{fromString => toUTF8}
 class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ignore funsuite
   test("collationId stability") {
     assert(UTF8_BINARY_COLLATION_ID == 0)
+    assert(INDETERMINATE_COLLATION_ID == 1 << 30)
 
     val utf8Binary = fetchCollation(UTF8_BINARY_COLLATION_ID)
     assert(utf8Binary.collationName == "UTF8_BINARY")
@@ -113,7 +114,12 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       "UTF8_UNICODE",
       "UTF8_BINARY_UNICODE",
       "CI_UNICODE",
-      "LCASE_UNICODE"
+      "LCASE_UNICODE",
+      "UNICODE_UNSPECIFIED",
+      "UNICODE_CI_UNSPECIFIED",
+      "UNICODE_UNSPECIFIED_CI_UNSPECIFIED",
+      "UNICODE_INDETERMINATE",
+      "UNICODE_CI_INDETERMINATE"
     ).foreach(collationName => {
       val error = intercept[SparkException] {
         fetchCollation(collationName)
@@ -286,6 +292,11 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       "en_AAA",
       "en_Something",
       "en_Something_USA",
+      "en_CI_UNSPECIFIED",
+      "en_USA_UNSPECIFIED",
+      "en_USA_UNSPECIFIED_CI",
+      "en_INDETERMINATE",
+      "en_USA_INDETERMINATE",
       "en_Latn_USA", // use en_USA instead
       "en_Cyrl_USA",
       "en_USA_AAA",
@@ -306,8 +317,15 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       ("en_CS", "en"),
       ("en_AS", "en"),
       ("en_CS_AS", "en"),
+      ("en_AS_CS", "en"),
+      ("en_CI", "en_CI"),
+      ("en_AI", "en_AI"),
       ("en_AI_CI", "en_CI_AI"),
       ("en_USA_AI_CI", "en_USA_CI_AI"),
+      ("en_USA_LCASE_AI_CI", "en_USA_CI_AI_LCASE"),
+      ("en_USA_LCASE_CI_AI", "en_USA_CI_AI_LCASE"),
+      ("en_USA_AI_LCASE_CI", "en_USA_CI_AI_LCASE"),
+      ("en_USA_CI_LCASE_AI", "en_USA_CI_AI_LCASE"),
       // randomized case
       ("EN_USA", "en_USA"),
       ("eN_usA_ci_uCASe_aI", "en_USA_CI_AI_UCASE"),
@@ -325,33 +343,42 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
     val badCollationIds = Seq(
       -1, // user-defined collation range
       1 << 31, // user-defined collation range
-      123, // utf-8 binary with non-zero locale id
+      1 << 12, // utf8-binary mandatory zero bit 12 breach
+      1 << 13, // utf8-binary mandatory zero bit 13 breach
+      1 << 14, // utf8-binary mandatory zero bit 14 breach
+      1 << 15, // utf8-binary mandatory zero bit 15 breach
       1 << 16, // utf8-binary mandatory zero bit 16 breach
       1 << 17, // utf8-binary mandatory zero bit 17 breach
       1 << 18, // utf8-binary mandatory zero bit 18 breach
       1 << 19, // utf8-binary mandatory zero bit 19 breach
       1 << 20, // utf8-binary mandatory zero bit 20 breach
-      1 << 21, // utf8-binary mandatory zero bit 21 breach
+      1 << 23, // utf8-binary mandatory zero bit 23 breach
       1 << 24, // utf8-binary mandatory zero bit 24 breach
       1 << 25, // utf8-binary mandatory zero bit 25 breach
       1 << 26, // utf8-binary mandatory zero bit 26 breach
-      1 << 27, // utf8-binary mandatory zero bit 27 breach
-      (1 << 30) | (1 << 16), // ICU mandatory zero bit 16 breach
-      (1 << 30) | (1 << 17), // ICU mandatory zero bit 17 breach
-      (1 << 30) | (1 << 18), // ICU mandatory zero bit 18 breach
-      (1 << 30) | (1 << 19), // ICU mandatory zero bit 19 breach
-      (1 << 30) | (1 << 20), // ICU mandatory zero bit 20 breach
-      (1 << 30) | (1 << 21), // ICU mandatory zero bit 21 breach
-      (1 << 30) | (1 << 24), // ICU mandatory zero bit 24 breach
-      (1 << 30) | (1 << 25), // ICU mandatory zero bit 25 breach
-      (1 << 30) | (1 << 26), // ICU mandatory zero bit 26 breach
-      (1 << 30) | (1 << 27), // ICU mandatory zero bit 27 breach
+      (1 << 29) | (1 << 12), // ICU mandatory zero bit 12 breach
+      (1 << 29) | (1 << 13), // ICU mandatory zero bit 13 breach
+      (1 << 29) | (1 << 14), // ICU mandatory zero bit 14 breach
+      (1 << 29) | (1 << 15), // ICU mandatory zero bit 15 breach
+      (1 << 29) | (1 << 16), // ICU mandatory zero bit 16 breach
+      (1 << 29) | (1 << 17), // ICU mandatory zero bit 17 breach
+      (1 << 29) | (1 << 18), // ICU mandatory zero bit 18 breach
+      (1 << 29) | (1 << 19), // ICU mandatory zero bit 19 breach
+      (1 << 29) | (1 << 20), // ICU mandatory zero bit 20 breach
+      (1 << 29) | (1 << 23), // ICU mandatory zero bit 23 breach
+      (1 << 29) | (1 << 24), // ICU mandatory zero bit 24 breach
+      (1 << 29) | (1 << 25), // ICU mandatory zero bit 25 breach
+      (1 << 29) | (1 << 26), // ICU mandatory zero bit 26 breach
       123, // utf8-binary with non-zero locale id
-      (1 << 30) | 44444, // ICU with invalid locale id
+      (1 << 29) | (1 << 12), // ICU with invalid locale id
+      (1 << 29) | 0xFFFF, // ICU with invalid locale id
       (1 << 23) | (1 << 22), // utf8-binary with invalid case conversion
-      (1 << 30) | (1 << 23) | (1 << 22), // ICU with invalid case conversion
-      1 << 28, // utf8-binary accent-insensitive
-      1 << 29 // utf8-binary case-insensitive
+      (1 << 29) | (1 << 23) | (1 << 22), // ICU with invalid case conversion
+      1 << 27, // utf8-binary accent-insensitive
+      1 << 28, // utf8-binary case-insensitive
+      INDETERMINATE_COLLATION_ID, // indeterminate collation
+      1 << 30, // indeterminate collation
+      (1 << 30) | (1 << 29) // invalid implementation provider
     )
     badCollationIds.foreach(collationId => {
       val e = intercept[SparkException](fetchCollationUnsafe(collationId))
