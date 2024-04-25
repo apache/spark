@@ -780,18 +780,6 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] {
   // We allow filter propagation into aggregates that doesn't have grouping expressions.
   private def supportsFilterPropagation(a: Aggregate) = {
     a.groupingExpressions.isEmpty
-//    &&
-//      a.aggregateExpressions.forall {
-//        !_.exists {
-//          case ae: AggregateExpression =>
-//            ae.aggregateFunction match {
-//              case _: Count | _: Sum | _: Average | _: Max | _: Min | _: BloomFilterAggregate =>
-//                false
-//              case _ => true
-//            }
-//          case _ => false
-//        }
-//      }
   }
 
   private def filterAggregateExpressions(
