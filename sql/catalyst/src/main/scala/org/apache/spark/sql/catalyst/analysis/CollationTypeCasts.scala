@@ -64,7 +64,8 @@ object CollationTypeCasts extends TypeCoercionRule {
 
     case otherExpr @ (
       _: In | _: InSubquery | _: CreateArray | _: ArrayJoin | _: Concat | _: Greatest | _: Least |
-      _: Coalesce | _: BinaryExpression | _: ConcatWs | _: Mask | _: StringReplace | _: StringTranslate) =>
+      _: Coalesce | _: BinaryExpression | _: ConcatWs | _: Mask | _: StringReplace |
+      _: StringTranslate) =>
       val newChildren = collateToSingleType(otherExpr.children)
       otherExpr.withNewChildren(newChildren)
   }
