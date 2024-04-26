@@ -552,14 +552,15 @@ class SparkSession(SparkConversionMixin):
                     message_parameters={"feature": "SparkSession.builder.create"},
                 )
 
-    # SPARK-47544: Explicitly declaring this as an identifier instead of a method.
-    # If changing, make sure this bug is not reintroduced.
-    builder: Builder = property(classmethod(lambda cls: cls.Builder()))  # type: ignore
-    """Creates a :class:`Builder` for constructing a :class:`SparkSession`.
+    @classmethod
+    @property
+    def builder(cls) -> Builder:
+        """Creates a :class:`Builder` for constructing a :class:`SparkSession`.
 
-    .. versionchanged:: 3.4.0
-        Supports Spark Connect.
-    """
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+        """
+        return cls.Builder()
 
     _instantiatedSession: ClassVar[Optional["SparkSession"]] = None
     _activeSession: ClassVar[Optional["SparkSession"]] = None
