@@ -1540,7 +1540,7 @@ as the activated JDBC Driver.
     </tr>
     <tr>
       <td>datetimeoffset [ (fractional seconds precision) ]</td>
-      <td>StringType</td>
+      <td>TimestampType</td>
       <td></td>
     </tr>
     <tr>

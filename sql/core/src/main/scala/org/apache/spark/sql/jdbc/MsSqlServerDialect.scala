@@ -111,8 +111,11 @@ private case class MsSqlServerDialect() extends JdbcDialect {
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
     sqlType match {
       case _ if typeName.contains("datetimeoffset") =>
-        // String is recommend by Microsoft SQL Server for datetimeoffset types in non-MS clients
-        Option(StringType)
+        if (SQLConf.get.legacyMsSqlServerDatetimeOffsetMappingEnabled) {
+          Some(StringType)
+        } else {
+          Some(TimestampType)
+        }
       case java.sql.Types.SMALLINT | java.sql.Types.TINYINT
           if !SQLConf.get.legacyMsSqlServerNumericMappingEnabled =>
         // Data range of TINYINT is 0-255 so it needs to be stored in ShortType.
