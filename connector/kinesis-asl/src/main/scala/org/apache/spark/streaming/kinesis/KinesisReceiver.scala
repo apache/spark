@@ -29,7 +29,7 @@ import com.amazonaws.services.kinesis.metrics.interfaces.MetricsLevel
 import com.amazonaws.services.kinesis.model.Record
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.WORKER_URL
+import org.apache.spark.internal.LogKeys.WORKER_URL
 import org.apache.spark.storage.{StorageLevel, StreamBlockId}
 import org.apache.spark.streaming.Duration
 import org.apache.spark.streaming.kinesis.KinesisInitialPositions.AtTimestamp

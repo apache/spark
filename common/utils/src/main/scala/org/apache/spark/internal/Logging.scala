@@ -29,7 +29,6 @@ import org.apache.logging.log4j.core.filter.AbstractFilter
 import org.slf4j.{Logger, LoggerFactory}
 
 import org.apache.spark.internal.Logging.SparkShellLoggingFilter
-import org.apache.spark.internal.LogKey.LogKey
 import org.apache.spark.util.SparkClassUtils
 
 /**

@@ -26,7 +26,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{QUERY_ID, RUN_ID}
+import org.apache.spark.internal.LogKeys.{QUERY_ID, RUN_ID}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.streaming.{WriteToStream, WriteToStreamStatement}

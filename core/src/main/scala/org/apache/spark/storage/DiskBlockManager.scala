@@ -31,7 +31,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.internal.{config, Logging, MDC}
-import org.apache.spark.internal.LogKey.{MERGE_DIR_NAME, PATH}
+import org.apache.spark.internal.LogKeys.{MERGE_DIR_NAME, PATH}
 import org.apache.spark.network.shuffle.ExecutorDiskUtils
 import org.apache.spark.storage.DiskBlockManager.ATTEMPT_ID_KEY
 import org.apache.spark.storage.DiskBlockManager.MERGE_DIR_KEY

@@ -28,7 +28,7 @@ import org.json4s.DefaultFormats
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{CROSS_VALIDATION_METRIC, CROSS_VALIDATION_METRICS, ESTIMATOR_PARAMETER_MAP}
+import org.apache.spark.internal.LogKeys.{CROSS_VALIDATION_METRIC, CROSS_VALIDATION_METRICS, ESTIMATOR_PARAMETER_MAP}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param.{IntParam, Param, ParamMap, ParamValidators}

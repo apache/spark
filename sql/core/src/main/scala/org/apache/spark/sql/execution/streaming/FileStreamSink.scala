@@ -24,7 +24,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey._
+import org.apache.spark.internal.LogKeys.{BATCH_ID, ERROR, PATH}
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.expressions._

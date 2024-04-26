@@ -22,7 +22,7 @@ import java.util.Locale
 import scala.collection.mutable
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey._
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.RuntimeConfig
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.internal.SQLConf

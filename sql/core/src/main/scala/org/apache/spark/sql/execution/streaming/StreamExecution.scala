@@ -33,7 +33,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{JobArtifactSet, SparkContext, SparkException, SparkThrowable}
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey._
+import org.apache.spark.internal.LogKeys.{CHECKPOINT_PATH, CHECKPOINT_ROOT, PATH, PRETTY_ID_STRING, SPARK_DATA_STREAM}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._

@@ -29,7 +29,7 @@ import io.grpc.ServerCallHandler
 import io.grpc.ServerInterceptor
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{DESCRIPTION, MESSAGE}
+import org.apache.spark.internal.LogKeys.{DESCRIPTION, MESSAGE}
 
 /**
  * A gRPC interceptor to log RPC requests and responses. It logs the protobufs as JSON. Useful for

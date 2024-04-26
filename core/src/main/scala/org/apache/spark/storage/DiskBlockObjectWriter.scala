@@ -25,7 +25,7 @@ import java.util.zip.Checksum
 import org.apache.spark.SparkException
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{ERROR, PATH}
+import org.apache.spark.internal.LogKeys.{ERROR, PATH}
 import org.apache.spark.io.MutableCheckedOutputStream
 import org.apache.spark.serializer.{SerializationStream, SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.ShuffleWriteMetricsReporter

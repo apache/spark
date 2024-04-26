@@ -25,7 +25,7 @@ import java.util.function.UnaryOperator
 import scala.collection.mutable.{Map => MutableMap}
 
 import org.apache.spark.SparkEnv
-import org.apache.spark.internal.LogKey._
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.MDC
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{CurrentDate, CurrentTimestampLike, LocalTimestamp}

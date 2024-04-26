@@ -26,7 +26,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit._
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{CONFIG, EXECUTOR_ENV_REGEX}
+import org.apache.spark.internal.LogKeys.{CONFIG, EXECUTOR_ENV_REGEX}
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 import org.apache.spark.util.Utils

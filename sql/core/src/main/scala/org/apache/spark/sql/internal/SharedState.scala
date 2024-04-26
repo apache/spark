@@ -30,7 +30,7 @@ import org.apache.hadoop.fs.{FsUrlStreamHandlerFactory, Path}
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{CONFIG, CONFIG2}
+import org.apache.spark.internal.LogKeys.{CONFIG, CONFIG2}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.CacheManager

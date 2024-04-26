@@ -24,7 +24,7 @@ import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.{Partition, SparkContext, TaskContext}
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{FROM_OFFSET, PARTITION_ID, TOPIC, UNTIL_OFFSET}
+import org.apache.spark.internal.LogKeys.{FROM_OFFSET, PARTITION_ID, TOPIC, UNTIL_OFFSET}
 import org.apache.spark.internal.config.Network._
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.rdd.RDD
