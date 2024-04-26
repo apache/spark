@@ -214,8 +214,8 @@ class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1Write
           val executedPlan = FileFormatWriter.executedPlan.get
 
           val plan = if (enabled) {
-            assert(executedPlan.isInstanceOf[WriteFilesExec])
-            executedPlan.asInstanceOf[WriteFilesExec].child
+            assert(executedPlan.isInstanceOf[WriteFilesExecBase])
+            executedPlan.asInstanceOf[WriteFilesExecBase].child
           } else {
             executedPlan.transformDown {
               case a: AdaptiveSparkPlanExec => a.executedPlan
@@ -261,8 +261,8 @@ class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1Write
         val executedPlan = FileFormatWriter.executedPlan.get
 
         val plan = if (enabled) {
-          assert(executedPlan.isInstanceOf[WriteFilesExec])
-          executedPlan.asInstanceOf[WriteFilesExec].child
+          assert(executedPlan.isInstanceOf[WriteFilesExecBase])
+          executedPlan.asInstanceOf[WriteFilesExecBase].child
         } else {
           executedPlan.transformDown {
             case a: AdaptiveSparkPlanExec => a.executedPlan

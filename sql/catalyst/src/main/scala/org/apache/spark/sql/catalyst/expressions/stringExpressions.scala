@@ -3189,13 +3189,14 @@ case class Sentences(
 case class StringSplitSQL(
     str: Expression,
     delimiter: Expression) extends BinaryExpression with NullIntolerant {
-  override def dataType: DataType = ArrayType(StringType, containsNull = false)
+  override def dataType: DataType = ArrayType(str.dataType, containsNull = false)
+  final lazy val collationId: Int = left.dataType.asInstanceOf[StringType].collationId
   override def left: Expression = str
   override def right: Expression = delimiter
 
   override def nullSafeEval(string: Any, delimiter: Any): Any = {
-    val strings = string.asInstanceOf[UTF8String].splitSQL(
-      delimiter.asInstanceOf[UTF8String], -1);
+    val strings = CollationSupport.StringSplitSQL.exec(string.asInstanceOf[UTF8String],
+      delimiter.asInstanceOf[UTF8String], collationId)
     new GenericArrayData(strings.asInstanceOf[Array[Any]])
   }
 
@@ -3203,7 +3204,8 @@ case class StringSplitSQL(
     val arrayClass = classOf[GenericArrayData].getName
     nullSafeCodeGen(ctx, ev, (str, delimiter) => {
       // Array in java is covariant, so we don't need to cast UTF8String[] to Object[].
-      s"${ev.value} = new $arrayClass($str.splitSQL($delimiter,-1));"
+      s"${ev.value} = new $arrayClass(" +
+        s"${CollationSupport.StringSplitSQL.genCode(str, delimiter, collationId)});"
     })
   }
 
@@ -3241,10 +3243,11 @@ case class SplitPart (
     partNum: Expression)
   extends RuntimeReplaceable with ImplicitCastInputTypes {
   override lazy val replacement: Expression =
-    ElementAt(StringSplitSQL(str, delimiter), partNum, Some(Literal.create("", StringType)),
+    ElementAt(StringSplitSQL(str, delimiter), partNum, Some(Literal.create("", str.dataType)),
       false)
   override def nodeName: String = "split_part"
-  override def inputTypes: Seq[DataType] = Seq(StringType, StringType, IntegerType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeAnyCollation, StringTypeAnyCollation, IntegerType)
   def children: Seq[Expression] = Seq(str, delimiter, partNum)
   protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression = {
     copy(str = newChildren.apply(0), delimiter = newChildren.apply(1),
