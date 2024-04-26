@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, CollationKey, EqualTo, Lower}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, CollationKey, EqualNullSafe, EqualTo, Lower}
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.CollationFactory
@@ -58,7 +58,42 @@ object RewriteCollationJoin extends Rule[LogicalPlan] {
               } else {
                 EqualTo(CollationKey(l), CollationKey(r))
               }
-            case _ => return plan
+            case _ =>
+              return plan
+          }
+        case EqualNullSafe(l: AttributeReference, r: AttributeReference) =>
+          (l.dataType, r.dataType) match {
+            case (_: StringType, _: StringType) =>
+              val collationId = l.dataType.asInstanceOf[StringType].collationId
+              val collation = CollationFactory.fetchCollation(collationId)
+              if (collation.supportsBinaryEquality) {
+                return plan
+              } else if (collation.supportsLowercaseEquality) {
+                EqualNullSafe(Lower(l), Lower(r))
+              } else {
+                EqualNullSafe(CollationKey(l), CollationKey(r))
+              }
+            case (ArrayType(_: StringType, _), ArrayType(_: StringType, _)) =>
+              val elementType = l.dataType.asInstanceOf[ArrayType].elementType
+              val collationId = elementType.asInstanceOf[StringType].collationId
+              val collation = CollationFactory.fetchCollation(collationId)
+              if (collation.supportsBinaryEquality) {
+                return plan
+              } else {
+                EqualNullSafe(CollationKey(l), CollationKey(r))
+              }
+            case (StructType(fields), StructType(_)) if
+              fields.exists(_.dataType.isInstanceOf[StringType]) =>
+              val collationId = fields.find(_.dataType.isInstanceOf[StringType]).get.
+                dataType.asInstanceOf[StringType].collationId
+              val collation = CollationFactory.fetchCollation(collationId)
+              if (collation.supportsBinaryEquality) {
+                return plan
+              } else {
+                EqualNullSafe(CollationKey(l), CollationKey(r))
+              }
+            case _ =>
+              return plan
           }
       }
       j.copy(condition = Some(newCondition))
