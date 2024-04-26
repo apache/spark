@@ -38,6 +38,7 @@ SELECT try_divide(0, 0);
 SELECT try_divide(1, (2147483647 + 1));
 SELECT try_divide(1L, (9223372036854775807L + 1L));
 SELECT try_divide(1, 1.0 / 0.0);
+SELECT try_divide(1, decimal(0));
 
 -- Interval / Numeric
 SELECT try_divide(interval 2 year, 2);

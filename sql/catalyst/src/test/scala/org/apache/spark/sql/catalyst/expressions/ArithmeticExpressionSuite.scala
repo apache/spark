@@ -1086,4 +1086,23 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(IntegralDivide(Literal(Duration.ofDays(1)),
       Literal(Duration.ofHours(-5))), -4L)
   }
+
+  test("BinaryArithmetic: makeCopy should include the evalMode") {
+    val originalLeft = Literal(1)
+    val originalRight = Literal(0)
+    val newLeft = Literal(1.0)
+    val newRight = Literal(0.0)
+    Seq(
+      (left: Expression, right: Expression) => Divide(left, right),
+      (left: Expression, right: Expression) => Add(left, right),
+      (left: Expression, right: Expression) => Subtract(left, right),
+      (left: Expression, right: Expression) => Multiply(left, right)
+    ).foreach { binaryOp =>
+      val original = binaryOp(originalLeft, originalRight)
+      val copy = original.makeCopy(Array(newLeft, newRight)).asInstanceOf[BinaryArithmetic]
+      assert(copy.evalMode === original.evalMode)
+      assert(copy.left == newLeft)
+      assert(copy.right == newRight)
+    }
+  }
 }

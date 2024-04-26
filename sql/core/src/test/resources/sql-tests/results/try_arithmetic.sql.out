@@ -250,6 +250,14 @@ NULL
 
 
 -- !query
+SELECT try_divide(1, decimal(0))
+-- !query schema
+struct<try_divide(1, 0):decimal(12,11)>
+-- !query output
+NULL
+
+
+-- !query
 SELECT try_divide(interval 2 year, 2)
 -- !query schema
 struct<try_divide(INTERVAL '2' YEAR, 2):interval year to month>

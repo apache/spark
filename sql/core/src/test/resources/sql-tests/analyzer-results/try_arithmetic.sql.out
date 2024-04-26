@@ -212,6 +212,13 @@ Project [try_divide(1, (1.0 / 0.0)) AS try_divide(1, (1.0 / 0.0))#x]
 
 
 -- !query
+SELECT try_divide(1, decimal(0))
+-- !query analysis
+Project [try_divide(1, cast(0 as decimal(10,0))) AS try_divide(1, 0)#x]
++- OneRowRelation
+
+
+-- !query
 SELECT try_divide(interval 2 year, 2)
 -- !query analysis
 Project [try_divide(INTERVAL '2' YEAR, 2) AS try_divide(INTERVAL '2' YEAR, 2)#x]

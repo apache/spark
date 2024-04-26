@@ -104,7 +104,7 @@ object V2FunctionBenchmark extends SqlBasedBenchmark {
       left: Expression,
       right: Expression,
       override val nullable: Boolean) extends BinaryArithmetic {
-    protected override val evalMode: EvalMode.Value = EvalMode.LEGACY
+    protected[sql] override val evalMode: EvalMode.Value = EvalMode.LEGACY
     override def inputType: AbstractDataType = NumericType
     override def symbol: String = "+"
 

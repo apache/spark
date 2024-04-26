@@ -190,7 +190,7 @@ case class Abs(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled
 abstract class BinaryArithmetic extends BinaryOperator
   with NullIntolerant with SupportQueryContext {
 
-  protected val evalMode: EvalMode.Value
+  protected[sql] val evalMode: EvalMode.Value
 
   private lazy val internalDataType: DataType = (left.dataType, right.dataType) match {
     case (DecimalType.Fixed(p1, s1), DecimalType.Fixed(p2, s2)) =>
@@ -236,6 +236,8 @@ abstract class BinaryArithmetic extends BinaryOperator
       false
     }
   }
+
+  override def otherCopyArgs: Seq[AnyRef] = evalMode :: Nil
 
   final override val nodePatterns: Seq[TreePattern] = Seq(BINARY_ARITHMETIC)
 
