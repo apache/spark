@@ -17,8 +17,6 @@
 
 package org.apache.spark.internal
 
-import java.util.Locale
-
 import scala.jdk.CollectionConverters._
 
 import org.apache.logging.log4j.{CloseableThreadContext, Level, LogManager}
@@ -110,7 +108,7 @@ trait Logging {
         val value = if (mdc.value != null) mdc.value.toString else null
         sb.append(value)
         if (Logging.isStructuredLoggingEnabled) {
-          context.put(mdc.key.toString.toLowerCase(Locale.ROOT), value)
+          context.put(mdc.key.name, value)
         }
 
         if (processedParts.hasNext) {

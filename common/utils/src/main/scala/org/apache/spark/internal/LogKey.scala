@@ -16,10 +16,14 @@
  */
 package org.apache.spark.internal
 
+import java.util.Locale
+
 /**
  * All structured logging `keys` used in `MDC` must be extends `LogKey`
  */
-trait LogKey
+trait LogKey {
+  val name: String = this.toString.toLowerCase(Locale.ROOT)
+}
 
 /**
  * Various keys used for mapped diagnostic contexts(MDC) in logging.
