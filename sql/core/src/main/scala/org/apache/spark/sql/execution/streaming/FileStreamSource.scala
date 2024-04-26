@@ -28,7 +28,7 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, GlobFilter, Path}
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{CURRENT_PATH, ELAPSED_TIME, NEW_PATH, NUM_FILES}
+import org.apache.spark.internal.LogKey._
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
@@ -126,8 +126,9 @@ class FileStreamSource(
   }
   seenFiles.purge()
 
-  logInfo(s"maxFilesPerBatch = $maxFilesPerBatch, " +
-    s"maxBytesPerBatch = $maxBytesPerBatch, maxFileAgeMs = $maxFileAgeMs")
+  logInfo(log"maxFilesPerBatch = ${MDC(NUM_FILES, maxFilesPerBatch)}, " +
+    log"maxBytesPerBatch = ${MDC(NUM_BYTES, maxBytesPerBatch)}, " +
+    log"maxFileAgeMs = ${MDC(TIME_UNITS, maxFileAgeMs)}")
 
   private var unreadFiles: Seq[NewFileEntry] = _
 
@@ -251,7 +252,8 @@ class FileStreamSource(
         FileEntry(path = p.urlEncoded, timestamp = timestamp, batchId = metadataLogCurrentOffset)
       }.toArray
       if (metadataLog.add(metadataLogCurrentOffset, fileEntries)) {
-        logInfo(s"Log offset set to $metadataLogCurrentOffset with ${batchFiles.size} new files")
+        logInfo(log"Log offset set to ${MDC(LOG_OFFSET, metadataLogCurrentOffset)} " +
+          log"with ${MDC(NUM_FILES, batchFiles.size)} new files")
       } else {
         throw new IllegalStateException("Concurrent update to the log. Multiple streaming jobs " +
           s"detected for $metadataLogCurrentOffset")
@@ -291,7 +293,8 @@ class FileStreamSource(
 
     assert(startOffset <= endOffset)
     val files = metadataLog.get(Some(startOffset + 1), Some(endOffset)).flatMap(_._2)
-    logInfo(s"Processing ${files.length} files from ${startOffset + 1}:$endOffset")
+    logInfo(log"Processing ${MDC(NUM_FILES, files.length)} " +
+      log"files from ${MDC(FILE_START_OFFSET, startOffset + 1)}:${MDC(FILE_END_OFFSET, endOffset)}")
     logTrace(s"Files are:\n\t" + files.mkString("\n\t"))
     val newDataSource =
       DataSource(

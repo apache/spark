@@ -23,7 +23,6 @@ import java.util.Locale
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.{Expression, NullOrdering, SortDirection}
@@ -35,7 +34,7 @@ import org.apache.spark.sql.jdbc.MsSqlServerDialect.{GEOGRAPHY, GEOMETRY}
 import org.apache.spark.sql.types._
 
 
-private case class MsSqlServerDialect() extends JdbcDialect with SQLConfHelper {
+private case class MsSqlServerDialect() extends JdbcDialect {
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:sqlserver")
 
@@ -112,17 +111,18 @@ private case class MsSqlServerDialect() extends JdbcDialect with SQLConfHelper {
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
     sqlType match {
       case _ if typeName.contains("datetimeoffset") =>
-        if (conf.legacyMsSqlServerDatetimeOffsetMappingEnabled) {
-          Option(StringType)
+        if (SQLConf.get.legacyMsSqlServerDatetimeOffsetMappingEnabled) {
+          Some(StringType)
         } else {
-          Option(TimestampType)
+          Some(TimestampType)
         }
-      case _ if conf.legacyMsSqlServerNumericMappingEnabled =>
-        None
-      // Data range of TINYINT is 0-255 so it needs to be stored in ShortType.
-      // Reference doc: https://learn.microsoft.com/en-us/sql/t-sql/data-types
-      case java.sql.Types.SMALLINT | java.sql.Types.TINYINT => Some(ShortType)
-      case java.sql.Types.REAL => Some(FloatType)
+      case java.sql.Types.SMALLINT | java.sql.Types.TINYINT
+          if !SQLConf.get.legacyMsSqlServerNumericMappingEnabled =>
+        // Data range of TINYINT is 0-255 so it needs to be stored in ShortType.
+        // Reference doc: https://learn.microsoft.com/en-us/sql/t-sql/data-types
+        Some(ShortType)
+      case java.sql.Types.REAL if !SQLConf.get.legacyMsSqlServerNumericMappingEnabled =>
+        Some(FloatType)
       case GEOMETRY | GEOGRAPHY => Some(BinaryType)
       case _ => None
     }

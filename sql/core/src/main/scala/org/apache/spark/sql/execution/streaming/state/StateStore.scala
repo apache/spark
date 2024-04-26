@@ -31,7 +31,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkContext, SparkEnv, SparkUnsupportedOperationException}
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{LOAD_TIME, QUERY_RUN_ID, STATE_STORE_PROVIDER, STORE_ID}
+import org.apache.spark.internal.LogKey._
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -821,7 +821,7 @@ object StateStore extends Logging {
             provider.doMaintenance()
             if (!verifyIfStoreInstanceActive(id)) {
               unload(id)
-              logInfo(s"Unloaded $provider")
+              logInfo(log"Unloaded ${MDC(STATE_STORE_PROVIDER, provider)}")
             }
           } catch {
             case NonFatal(e) =>
@@ -830,8 +830,9 @@ object StateStore extends Logging {
               threadPoolException.set(e)
           } finally {
             val duration = System.currentTimeMillis() - startTime
-            val logMsg = s"Finished maintenance task for provider=$id" +
-              s" in elapsed_time=$duration\n"
+            val logMsg =
+              log"Finished maintenance task for provider=${MDC(STATE_STORE_PROVIDER, id)}" +
+                log" in elapsed_time=${MDC(TIME_UNITS, duration)}\n"
             if (duration > 5000) {
               logInfo(logMsg)
             } else {
@@ -843,8 +844,9 @@ object StateStore extends Logging {
           }
         })
       } else {
-        logInfo(s"Not processing partition ${id} for maintenance because it is currently " +
-          s"being processed")
+        logInfo(log"Not processing partition ${MDC(PARTITION_ID, id)} " +
+          log"for maintenance because it is currently " +
+          log"being processed")
       }
     }
   }
@@ -858,8 +860,10 @@ object StateStore extends Logging {
       val providerIdsToUnload = coordinatorRef
         .map(_.reportActiveInstance(storeProviderId, host, executorId, otherProviderIds))
         .getOrElse(Seq.empty[StateStoreProviderId])
-      logInfo(s"Reported that the loaded instance $storeProviderId is active")
-      logDebug(s"The loaded instances are going to unload: ${providerIdsToUnload.mkString(", ")}")
+      logInfo(log"Reported that the loaded instance " +
+        log"${MDC(STATE_STORE_PROVIDER, storeProviderId)} is active")
+      logDebug(log"The loaded instances are going to unload: " +
+        log"${MDC(STATE_STORE_PROVIDER, providerIdsToUnload.mkString(", "))}")
       providerIdsToUnload
     } else {
       Seq.empty[StateStoreProviderId]
@@ -890,7 +894,8 @@ object StateStore extends Logging {
         logDebug("Getting StateStoreCoordinatorRef")
         _coordRef = StateStoreCoordinatorRef.forExecutor(env)
       }
-      logInfo(s"Retrieved reference to StateStoreCoordinator: ${_coordRef}")
+      logInfo(log"Retrieved reference to StateStoreCoordinator: " +
+        log"${MDC(STATE_STORE_PROVIDER, _coordRef)}")
       Some(_coordRef)
     } else {
       _coordRef = null
