@@ -1087,7 +1087,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       Literal(Duration.ofHours(-5))), -4L)
   }
 
-  test("BinaryArithmetic: makeCopy should include the evalMode") {
+  test("SPARK-48016: makeCopy should include the evalMode") {
     val originalLeft = Literal(1)
     val originalRight = Literal(0)
     val newLeft = Literal(1.0)
