@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkConf
+import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, DataType, IntegerType, StringType}
@@ -209,6 +210,41 @@ class CollationStringExpressionsSuite
       // Implicit casting
       checkAnswer(sql(s"SELECT startswith(collate('${t.l}', '${t.c}'),'${t.r}')"), Row(t.result))
       checkAnswer(sql(s"SELECT startswith('${t.l}', collate('${t.r}', '${t.c}'))"), Row(t.result))
+    })
+    // Collation mismatch
+    val collationMismatch = intercept[AnalysisException] {
+      sql("SELECT startswith(collate('abcde', 'UTF8_BINARY_LCASE'),collate('C', 'UNICODE_CI'))")
+    }
+    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+  }
+
+  test("Support Replace string expression with collation") {
+    case class ReplaceTestCase[R](source: String, search: String, replace: String,
+        c: String, result: R)
+    val testCases = Seq(
+      // scalastyle:off
+      ReplaceTestCase("r世eplace", "pl", "123", "UTF8_BINARY", "r世e123ace"),
+      ReplaceTestCase("repl世ace", "PL", "AB", "UTF8_BINARY_LCASE", "reAB世ace"),
+      ReplaceTestCase("abcdabcd", "bc", "", "UNICODE", "adad"),
+      ReplaceTestCase("aBc世abc", "b", "12", "UNICODE_CI", "a12c世a12c"),
+      ReplaceTestCase("abi̇o12i̇o", "İo", "yy", "UNICODE_CI", "abyy12yy"),
+      ReplaceTestCase("abİo12i̇o", "i̇o", "xx", "UNICODE_CI", "abxx12xx")
+      // scalastyle:on
+    )
+    testCases.foreach(t => {
+      val query = s"SELECT replace(collate('${t.source}','${t.c}'),collate('${t.search}'," +
+        s"'${t.c}'),collate('${t.replace}','${t.c}'))"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(
+        StringType(CollationFactory.collationNameToId(t.c))))
+      // Implicit casting
+      checkAnswer(sql(s"SELECT replace(collate('${t.source}','${t.c}'),'${t.search}'," +
+        s"'${t.replace}')"), Row(t.result))
+      checkAnswer(sql(s"SELECT replace('${t.source}',collate('${t.search}','${t.c}')," +
+        s"'${t.replace}')"), Row(t.result))
+      checkAnswer(sql(s"SELECT replace('${t.source}','${t.search}'," +
+        s"collate('${t.replace}','${t.c}'))"), Row(t.result))
     })
     // Collation mismatch
     val collationMismatch = intercept[AnalysisException] {
