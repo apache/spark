@@ -1028,11 +1028,6 @@ public class CollationSupportSuite {
     assertStringTrim("UNICODE_CI", "Ëaaaẞ", "Ëẞ", "aaa");
     assertStringTrimLeft("UNICODE_CI", "Ëaaaẞ", "Ëẞ", "aaaẞ");
     assertStringTrimRight("UNICODE_CI", "Ëaaaẞ", "Ëẞ", "Ëaaa");
-
-    // weird i
-    // TODO: figure out why this doesn't work...
-    //assertStringTrim("UNICODE_CI", "i̇İiİi̇ixİiiİi", "i̇", "x");
-    //assertStringTrim("UNICODE_CI", "İiİi̇ixİiiİi", "İ", "x");
   }
 
   // TODO: Test more collation-aware string expressions.

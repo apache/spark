@@ -843,97 +843,25 @@ class CollationStringExpressionsSuite
       expectedResultString: String)
 
     val testCases = Seq(
-      // Without trimString param.
-      StringTrimTestCase("UTF8_BINARY", "TRIM", "asd", false, null, "asd"),
       StringTrimTestCase("UTF8_BINARY", "TRIM", "  asd  ", false, null, "asd"),
-      StringTrimTestCase("UTF8_BINARY", "BTRIM", "asd", false, null, "asd"),
-      StringTrimTestCase("UTF8_BINARY", "BTRIM", "  asd  ", false, null, "asd"),
-      StringTrimTestCase("UTF8_BINARY", "LTRIM", "asd", false, null, "asd"),
-      StringTrimTestCase("UTF8_BINARY", "LTRIM", "  asd  ", false, null, "asd  "),
-      StringTrimTestCase("UTF8_BINARY", "RTRIM", "asd", false, null, "asd"),
-      StringTrimTestCase("UTF8_BINARY", "RTRIM", "  asd  ", false, null, "  asd"),
-
-      // With null trimString param.
-      StringTrimTestCase("UTF8_BINARY", "TRIM", "asd", true, null, null),
-      StringTrimTestCase("UTF8_BINARY", "TRIM", "  asd  ", true, null, null),
-      StringTrimTestCase("UTF8_BINARY", "BTRIM", "asd", true, null, null),
       StringTrimTestCase("UTF8_BINARY", "BTRIM", "  asd  ", true, null, null),
-      StringTrimTestCase("UTF8_BINARY", "LTRIM", "asd", true, null, null),
-      StringTrimTestCase("UTF8_BINARY", "LTRIM", "  asd  ", true, null, null),
-      StringTrimTestCase("UTF8_BINARY", "RTRIM", "asd", true, null, null),
-      StringTrimTestCase("UTF8_BINARY", "RTRIM", "  asd  ", true, null, null),
+      StringTrimTestCase("UTF8_BINARY", "LTRIM", "xxasdxx", true, "x", "asdxx"),
+      StringTrimTestCase("UTF8_BINARY", "RTRIM", "xxasdxx", true, "x", "xxasd"),
 
-      // With " " trimString param.
-      StringTrimTestCase("UTF8_BINARY", "TRIM", "asd", true, " ", "asd"),
-      StringTrimTestCase("UTF8_BINARY", "TRIM", "  asd  ", true, " ", "asd"),
-      StringTrimTestCase("UTF8_BINARY", "BTRIM", "asd", true, " ", "asd"),
-      StringTrimTestCase("UTF8_BINARY", "BTRIM", "  asd  ", true, " ", "asd"),
-      StringTrimTestCase("UTF8_BINARY", "LTRIM", "asd", true, " ", "asd"),
-      StringTrimTestCase("UTF8_BINARY", "LTRIM", "  asd  ", true, " ", "asd  "),
-      StringTrimTestCase("UTF8_BINARY", "RTRIM", "asd", true, " ", "asd"),
-      StringTrimTestCase("UTF8_BINARY", "RTRIM", "  asd  ", true, " ", "  asd"),
-
-      // Try the same with UTF8_BINARY_LCASE collation.
-      // Without trimString param.
-      StringTrimTestCase("UTF8_BINARY_LCASE", "TRIM", "asd", false, null, "asd"),
-      StringTrimTestCase("UTF8_BINARY_LCASE", "TRIM", "  asd  ", false, null, "asd"),
-      StringTrimTestCase("UTF8_BINARY_LCASE", "BTRIM", "asd", false, null, "asd"),
-      StringTrimTestCase("UTF8_BINARY_LCASE", "BTRIM", "  asd  ", false, null, "asd"),
-      StringTrimTestCase("UTF8_BINARY_LCASE", "LTRIM", "asd", false, null, "asd"),
-      StringTrimTestCase("UTF8_BINARY_LCASE", "LTRIM", "  asd  ", false, null, "asd  "),
-      StringTrimTestCase("UTF8_BINARY_LCASE", "RTRIM", "asd", false, null, "asd"),
+      StringTrimTestCase("UTF8_BINARY_LCASE", "TRIM", "  asd  ", true, null, null),
+      StringTrimTestCase("UTF8_BINARY_LCASE", "BTRIM", "xxasdxx", true, "x", "asd"),
+      StringTrimTestCase("UTF8_BINARY_LCASE", "LTRIM", "xxasdxx", true, "x", "asdxx"),
       StringTrimTestCase("UTF8_BINARY_LCASE", "RTRIM", "  asd  ", false, null, "  asd"),
 
-      // With null trimString param.
-      StringTrimTestCase("UTF8_BINARY_LCASE", "TRIM", "asd", true, null, null),
-      StringTrimTestCase("UTF8_BINARY_LCASE", "TRIM", "  asd  ", true, null, null),
-      StringTrimTestCase("UTF8_BINARY_LCASE", "BTRIM", "asd", true, null, null),
-      StringTrimTestCase("UTF8_BINARY_LCASE", "BTRIM", "  asd  ", true, null, null),
-      StringTrimTestCase("UTF8_BINARY_LCASE", "LTRIM", "asd", true, null, null),
-      StringTrimTestCase("UTF8_BINARY_LCASE", "LTRIM", "  asd  ", true, null, null),
-      StringTrimTestCase("UTF8_BINARY_LCASE", "RTRIM", "asd", true, null, null),
-      StringTrimTestCase("UTF8_BINARY_LCASE", "RTRIM", "  asd  ", true, null, null),
+      StringTrimTestCase("UNICODE", "TRIM", "xxasdxx", true, "x", "asd"),
+      StringTrimTestCase("UNICODE", "BTRIM", "xxasdxx", true, "x", "asd"),
+      StringTrimTestCase("UNICODE", "LTRIM", "  asd  ", false, null, "asd  "),
+      StringTrimTestCase("UNICODE", "RTRIM", "  asd  ", true, null, null),
 
-      // With " " trimString param.
-      StringTrimTestCase("UTF8_BINARY_LCASE", "TRIM", "asd", true, " ", "asd"),
-      StringTrimTestCase("UTF8_BINARY_LCASE", "TRIM", "  asd  ", true, " ", "asd"),
-      StringTrimTestCase("UTF8_BINARY_LCASE", "BTRIM", "asd", true, " ", "asd"),
-      StringTrimTestCase("UTF8_BINARY_LCASE", "BTRIM", "  asd  ", true, " ", "asd"),
-      StringTrimTestCase("UTF8_BINARY_LCASE", "LTRIM", "asd", true, " ", "asd"),
-      StringTrimTestCase("UTF8_BINARY_LCASE", "LTRIM", "  asd  ", true, " ", "asd  "),
-      StringTrimTestCase("UTF8_BINARY_LCASE", "RTRIM", "asd", true, " ", "asd"),
-      StringTrimTestCase("UTF8_BINARY_LCASE", "RTRIM", "  asd  ", true, " ", "  asd"),
-
-      // Try the same with any other collation.
-      // Without trimString param.
-      StringTrimTestCase("UNICODE_CI", "TRIM", "asd", false, null, "asd"),
-      StringTrimTestCase("UNICODE_CI", "TRIM", "  asd  ", false, null, "asd"),
-      StringTrimTestCase("UNICODE_CI", "BTRIM", "asd", false, null, "asd"),
+      StringTrimTestCase("UNICODE_CI", "TRIM", "xxasdxx", true, "x", "asd"),
       StringTrimTestCase("UNICODE_CI", "BTRIM", "  asd  ", false, null, "asd"),
-      StringTrimTestCase("UNICODE_CI", "LTRIM", "asd", false, null, "asd"),
-      StringTrimTestCase("UNICODE_CI", "LTRIM", "  asd  ", false, null, "asd  "),
-      StringTrimTestCase("UNICODE_CI", "RTRIM", "asd", false, null, "asd"),
-      StringTrimTestCase("UNICODE_CI", "RTRIM", "  asd  ", false, null, "  asd"),
-
-      // With null trimString param.
-      StringTrimTestCase("UNICODE_CI", "TRIM", "asd", true, null, null),
-      StringTrimTestCase("UNICODE_CI", "TRIM", "  asd  ", true, null, null),
-      StringTrimTestCase("UNICODE_CI", "BTRIM", "asd", true, null, null),
-      StringTrimTestCase("UNICODE_CI", "BTRIM", "  asd  ", true, null, null),
-      StringTrimTestCase("UNICODE_CI", "LTRIM", "asd", true, null, null),
       StringTrimTestCase("UNICODE_CI", "LTRIM", "  asd  ", true, null, null),
-      StringTrimTestCase("UNICODE_CI", "RTRIM", "asd", true, null, null),
-      StringTrimTestCase("UNICODE_CI", "RTRIM", "  asd  ", true, null, null),
-
-      // With " " trimString param.
-      StringTrimTestCase("UNICODE_CI", "TRIM", "asd", true, " ", "asd"),
-      StringTrimTestCase("UNICODE_CI", "TRIM", "  asd  ", true, " ", "asd"),
-      StringTrimTestCase("UNICODE_CI", "BTRIM", "asd", true, " ", "asd"),
-      StringTrimTestCase("UNICODE_CI", "BTRIM", "  asd  ", true, " ", "asd"),
-      StringTrimTestCase("UNICODE_CI", "LTRIM", "asd", true, " ", "asd"),
-      StringTrimTestCase("UNICODE_CI", "LTRIM", "  asd  ", true, " ", "asd  "),
-      StringTrimTestCase("UNICODE_CI", "RTRIM", "asd", true, " ", "asd"),
-      StringTrimTestCase("UNICODE_CI", "RTRIM", "  asd  ", true, " ", "  asd")
+      StringTrimTestCase("UNICODE_CI", "RTRIM", "xxasdxx", true, "x", "xxasd")
 
       // Other more complex cases can be found in unit tests in CollationSupportSuite.java.
     )
