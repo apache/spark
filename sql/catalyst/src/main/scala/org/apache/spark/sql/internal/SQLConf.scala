@@ -4149,7 +4149,7 @@ object SQLConf {
   val LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED =
     buildConf("spark.sql.legacy.mssqlserver.numericMapping.enabled")
       .internal()
-      .doc("When true, use legacy MsSqlServer SMALLINT and REAL type mapping.")
+      .doc("When true, use legacy MsSqlServer TINYINT, SMALLINT and REAL type mapping.")
       .version("2.4.5")
       .booleanConf
       .createWithDefault(false)
@@ -4535,6 +4535,7 @@ object SQLConf {
 
   val LEGACY_INFER_ARRAY_TYPE_FROM_FIRST_ELEMENT =
     buildConf("spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled")
+      .internal()
       .doc("PySpark's SparkSession.createDataFrame infers the element type of an array from all " +
         "values in the array by default. If this config is set to true, it restores the legacy " +
         "behavior of only inferring the type from the first array element.")
