@@ -547,6 +547,7 @@ VARIANT Functions
     schema_of_variant_agg
     try_variant_get
     variant_get
+    try_parse_json
 
 
 XML Functions
