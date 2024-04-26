@@ -26,7 +26,8 @@ import scala.reflect.ClassTag
 import scala.util.matching.Regex
 
 import org.apache.spark.{SparkContext, SparkException}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{FROM_TIME, SLIDE_DURATION, TO_TIME}
 import org.apache.spark.internal.io.SparkHadoopWriterUtils
 import org.apache.spark.rdd.{BlockRDD, RDD, RDDOperationScope}
 import org.apache.spark.storage.StorageLevel
@@ -884,14 +885,16 @@ abstract class DStream[T: ClassTag] (
     val alignedToTime = if ((toTime - zeroTime).isMultipleOf(slideDuration)) {
       toTime
     } else {
-      logWarning(s"toTime ($toTime) is not a multiple of slideDuration ($slideDuration)")
+      logWarning(log"toTime (${MDC(TO_TIME, toTime)}) is not a multiple of slideDuration " +
+        log"(${MDC(SLIDE_DURATION, slideDuration)})")
       toTime.floor(slideDuration, zeroTime)
     }
 
     val alignedFromTime = if ((fromTime - zeroTime).isMultipleOf(slideDuration)) {
       fromTime
     } else {
-      logWarning(s"fromTime ($fromTime) is not a multiple of slideDuration ($slideDuration)")
+      logWarning(log"fromTime (${MDC(FROM_TIME, fromTime)}) is not a multiple of slideDuration " +
+        log"(${MDC(SLIDE_DURATION, slideDuration)})")
       fromTime.floor(slideDuration, zeroTime)
     }
 

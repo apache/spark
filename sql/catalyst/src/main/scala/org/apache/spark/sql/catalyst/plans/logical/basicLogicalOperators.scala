@@ -783,6 +783,7 @@ object View {
         "spark.sql.hive.convertMetastoreParquet",
         "spark.sql.hive.convertMetastoreOrc",
         "spark.sql.hive.convertInsertingPartitionedTable",
+        "spark.sql.hive.convertInsertingUnpartitionedTable",
         "spark.sql.hive.convertMetastoreCtas"
       ).contains(key) || key.startsWith("spark.sql.catalog.")
     }
@@ -2055,6 +2056,8 @@ case class LateralJoin(
     right: LateralSubquery,
     joinType: JoinType,
     condition: Option[Expression]) extends UnaryNode {
+
+  override lazy val allAttributes: AttributeSeq = left.output ++ right.plan.output
 
   require(Seq(Inner, LeftOuter, Cross).contains(joinType),
     s"Unsupported lateral join type $joinType")

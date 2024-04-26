@@ -3748,22 +3748,21 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
   test("SPARK-33084: Add jar support Ivy URI in SQL") {
     val sc = spark.sparkContext
-    val hiveVersion = "2.3.9"
     // transitive=false, only download specified jar
-    sql(s"ADD JAR ivy://org.apache.hive.hcatalog:hive-hcatalog-core:$hiveVersion?transitive=false")
-    assert(sc.listJars()
-      .exists(_.contains(s"org.apache.hive.hcatalog_hive-hcatalog-core-$hiveVersion.jar")))
+    sql(s"ADD JAR ivy://org.springframework:spring-core:6.1.6?transitive=false")
+    assert(sc.listJars().exists(_.contains("org.springframework_spring-core-6.1.6.jar")))
+    assert(!sc.listJars().exists(_.contains("org.springframework_spring-jcl-6.1.6.jar")))
 
     // default transitive=true, test download ivy URL jar return multiple jars
-    sql("ADD JAR ivy://org.scala-js:scalajs-test-interface_2.12:1.2.0")
-    assert(sc.listJars().exists(_.contains("scalajs-library_2.12")))
-    assert(sc.listJars().exists(_.contains("scalajs-test-interface_2.12")))
+    sql("ADD JAR ivy://org.awaitility:awaitility:4.2.1")
+    assert(sc.listJars().exists(_.contains("org.awaitility_awaitility-4.2.1.jar")))
+    assert(sc.listJars().exists(_.contains("org.hamcrest_hamcrest-2.1.jar")))
 
-    sql(s"ADD JAR ivy://org.apache.hive:hive-contrib:$hiveVersion" +
-      "?exclude=org.pentaho:pentaho-aggdesigner-algorithm&transitive=true")
-    assert(sc.listJars().exists(_.contains(s"org.apache.hive_hive-contrib-$hiveVersion.jar")))
-    assert(sc.listJars().exists(_.contains(s"org.apache.hive_hive-exec-$hiveVersion.jar")))
-    assert(!sc.listJars().exists(_.contains("org.pentaho.pentaho_aggdesigner-algorithm")))
+    sql("ADD JAR ivy://org.junit.jupiter:junit-jupiter:5.10.2" +
+      "?exclude=org.junit.jupiter:junit-jupiter-engine&transitive=true")
+    assert(sc.listJars().exists(_.contains("org.junit.jupiter_junit-jupiter-api-5.10.2.jar")))
+    assert(sc.listJars().exists(_.contains("org.junit.jupiter_junit-jupiter-params-5.10.2.jar")))
+    assert(!sc.listJars().exists(_.contains("org.junit.jupiter_junit-jupiter-engine-5.10.2.jar")))
   }
 
   test("SPARK-33677: LikeSimplification should be skipped if pattern contains any escapeChar") {

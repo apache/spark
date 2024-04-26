@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.Locale
 
+import org.apache.spark.internal.LogKey.OPTIONS
+import org.apache.spark.internal.MDC
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.LocalTempView
@@ -44,7 +46,7 @@ trait BaseCacheTableExec extends LeafV2CommandExec {
     val withoutStorageLevel = options
       .filter { case (k, _) => k.toLowerCase(Locale.ROOT) != storageLevelKey }
     if (withoutStorageLevel.nonEmpty) {
-      logWarning(s"Invalid options: ${withoutStorageLevel.mkString(", ")}")
+      logWarning(log"Invalid options: ${MDC(OPTIONS, withoutStorageLevel.mkString(", "))}")
     }
 
     session.sharedState.cacheManager.cacheQuery(

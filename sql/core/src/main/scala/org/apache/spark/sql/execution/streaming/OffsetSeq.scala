@@ -20,7 +20,8 @@ package org.apache.spark.sql.execution.streaming
 import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{CONFIG, DEFAULT_VALUE, NEW_VALUE, OLD_VALUE, TIP}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.RuntimeConfig
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, SparkDataStream}
@@ -143,8 +144,9 @@ object OffsetSeqMetadata extends Logging {
           // Config value exists in the metadata, update the session config with this value
           val optionalValueInSession = sessionConf.getOption(confKey)
           if (optionalValueInSession.isDefined && optionalValueInSession.get != valueInMetadata) {
-            logWarning(s"Updating the value of conf '$confKey' in current session from " +
-              s"'${optionalValueInSession.get}' to '$valueInMetadata'.")
+            logWarning(log"Updating the value of conf '${MDC(CONFIG, confKey)}' in current " +
+              log"session from '${MDC(OLD_VALUE, optionalValueInSession.get)}' " +
+              log"to '${MDC(NEW_VALUE, valueInMetadata)}'.")
           }
           sessionConf.set(confKey, valueInMetadata)
 
@@ -156,14 +158,15 @@ object OffsetSeqMetadata extends Logging {
 
             case Some(defaultValue) =>
               sessionConf.set(confKey, defaultValue)
-              logWarning(s"Conf '$confKey' was not found in the offset log, " +
-                s"using default value '$defaultValue'")
+              logWarning(log"Conf '${MDC(CONFIG, confKey)}' was not found in the offset log, " +
+                log"using default value '${MDC(DEFAULT_VALUE, defaultValue)}'")
 
             case None =>
               val valueStr = sessionConf.getOption(confKey).map { v =>
                 s" Using existing session conf value '$v'."
               }.getOrElse { " No value set in session conf." }
-              logWarning(s"Conf '$confKey' was not found in the offset log. $valueStr")
+              logWarning(log"Conf '${MDC(CONFIG, confKey)}' was not found in the offset log. " +
+                log"${MDC(TIP, valueStr)}")
 
           }
       }
