@@ -201,7 +201,6 @@ def with_origin_to_class(cls: Type[T]) -> Type[T]:
             if callable(method) and name not in (
                 "__init__",
                 "__new__",
-                "__getattr__",
                 "__iter__",
                 "__nonzero__",
                 "__repr__",
