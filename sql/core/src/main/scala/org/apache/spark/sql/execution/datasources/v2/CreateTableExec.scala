@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.internal.LogKey.TABLE_NAME
+import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -44,7 +46,8 @@ case class CreateTableExec(
         catalog.createTable(identifier, columns, partitioning.toArray, tableProperties.asJava)
       } catch {
         case _: TableAlreadyExistsException if ignoreIfExists =>
-          logWarning(s"Table ${identifier.quoted} was created concurrently. Ignoring.")
+          logWarning(
+            log"Table ${MDC(TABLE_NAME, identifier.quoted)} was created concurrently. Ignoring.")
       }
     } else if (!ignoreIfExists) {
       throw QueryCompilationErrors.tableAlreadyExistsError(identifier)

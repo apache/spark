@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMON_EXPR_REF, TreePattern, WITH_EXPRESSION}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE_EXPRESSION, COMMON_EXPR_REF, TreePattern, WITH_EXPRESSION}
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -27,6 +27,10 @@ import org.apache.spark.sql.types.DataType
  */
 case class With(child: Expression, defs: Seq[CommonExpressionDef])
   extends Expression with Unevaluable {
+  // We do not allow With to be created with an AggregateExpression in the child, as this would
+  // create a dangling CommonExpressionRef after rewriting it in RewriteWithExpression.
+  assert(!child.containsPattern(AGGREGATE_EXPRESSION))
+
   override val nodePatterns: Seq[TreePattern] = Seq(WITH_EXPRESSION)
   override def dataType: DataType = child.dataType
   override def nullable: Boolean = child.nullable

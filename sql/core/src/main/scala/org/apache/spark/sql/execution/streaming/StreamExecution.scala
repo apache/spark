@@ -32,7 +32,8 @@ import com.google.common.util.concurrent.UncheckedExecutionException
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{JobArtifactSet, SparkContext, SparkException, SparkThrowable}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey._
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
@@ -260,7 +261,8 @@ abstract class StreamExecution(
    * has been posted to all the listeners.
    */
   def start(): Unit = {
-    logInfo(s"Starting $prettyIdString. Use $resolvedCheckpointRoot to store the query checkpoint.")
+    logInfo(log"Starting ${MDC(PRETTY_ID_STRING, prettyIdString)}. " +
+      log"Use ${MDC(CHECKPOINT_ROOT, resolvedCheckpointRoot)} to store the query checkpoint.")
     queryExecutionThread.setDaemon(true)
     queryExecutionThread.start()
     startLatch.await()  // Wait until thread started and QueryStart event has been posted
@@ -405,13 +407,13 @@ abstract class StreamExecution(
               .getConf(SQLConf.FORCE_DELETE_TEMP_CHECKPOINT_LOCATION) || exception.isEmpty)) {
           val checkpointPath = new Path(resolvedCheckpointRoot)
           try {
-            logInfo(s"Deleting checkpoint $checkpointPath.")
+            logInfo(log"Deleting checkpoint ${MDC(CHECKPOINT_PATH, checkpointPath)}.")
             fileManager.delete(checkpointPath)
           } catch {
             case NonFatal(e) =>
               // Deleting temp checkpoint folder is best effort, don't throw non fatal exceptions
               // when we cannot delete them.
-              logWarning(s"Cannot delete $checkpointPath", e)
+              logWarning(log"Cannot delete ${MDC(PATH, checkpointPath)}", e)
           }
         }
       } finally {
@@ -446,7 +448,8 @@ abstract class StreamExecution(
         source.stop()
       } catch {
         case NonFatal(e) =>
-          logWarning(s"Failed to stop streaming source: $source. Resources may have leaked.", e)
+          logWarning(log"Failed to stop streaming source: ${MDC(SPARK_DATA_STREAM, source)}. " +
+            log"Resources may have leaked.", e)
       }
     }
   }

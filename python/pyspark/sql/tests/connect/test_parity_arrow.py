@@ -24,10 +24,6 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
 class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase, PandasOnSparkTestUtils):
-    @unittest.skip("Spark Connect does not support Spark Context but the test depends on that.")
-    def test_createDataFrame_empty_partition(self):
-        super().test_createDataFrame_empty_partition()
-
     @unittest.skip("Spark Connect does not support fallback.")
     def test_createDataFrame_fallback_disabled(self):
         super().test_createDataFrame_fallback_disabled()

@@ -77,6 +77,7 @@ object EncoderUtils {
       case _: DecimalType => classOf[Decimal]
       case _: DayTimeIntervalType => classOf[PhysicalLongType.InternalType]
       case _: YearMonthIntervalType => classOf[PhysicalIntegerType.InternalType]
+      case _: StringType => classOf[UTF8String]
       case _: StructType => classOf[InternalRow]
       case _: ArrayType => classOf[ArrayData]
       case _: MapType => classOf[MapData]
