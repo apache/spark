@@ -1328,10 +1328,7 @@ public final class CollationSupport {
         // Otherwise, try to find the matching for the searchChar in the trimString.
         stringSearch.reset();
         stringSearch.setPattern(searchChar.toString());
-        int searchCharIdx = stringSearch.next();
-
-        if (searchCharIdx != StringSearch.DONE
-            && stringSearch.getMatchLength() == stringSearch.getPattern().length()) {
+        if (stringSearch.next() != StringSearch.DONE) {
           trimByteIdx += searchCharBytes;
           searchIdx += searchCharBytes;
           trimmedChars.add(searchChar);
@@ -1411,10 +1408,7 @@ public final class CollationSupport {
         // Otherwise, try to find the matching for the searchChar in the trimString.
         stringSearch.reset();
         stringSearch.setPattern(searchChar.toString());
-        int searchCharIdx = stringSearch.next();
-
-        if (searchCharIdx != StringSearch.DONE
-            && stringSearch.getMatchLength() == stringSearch.getPattern().length()) {
+        if (stringSearch.next() != StringSearch.DONE) {
           trimByteIdx -= stringCharLen[numChars - 1];
           numChars--;
           trimmedChars.add(searchChar);
