@@ -384,8 +384,8 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
             def onQueryProgress(self, event):
                 row = event.progress.observedMetrics.get("my_event")
                 # Save observed metrics for later verification
-                self.num_rows = row['rc']
-                self.num_error_rows = row['erc']
+                self.num_rows = row["rc"]
+                self.num_error_rows = row["erc"]
 
             def onQueryIdle(self, event):
                 pass
@@ -397,15 +397,15 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
             error_listener = MyErrorListener()
             self.spark.streams.addListener(error_listener)
 
-            sdf = self.spark.readStream.format("text").load("python/test_support/sql/streaming").withColumn(
-                "error", col("value")
+            sdf = (
+                self.spark.readStream.format("text")
+                .load("python/test_support/sql/streaming")
+                .withColumn("error", col("value"))
             )
 
             # Observe row count (rc) and error row count (erc) in the streaming Dataset
             observed_ds = sdf.observe(
-                "my_event",
-                count(lit(1)).alias("rc"),
-                count(col("error")).alias("erc")
+                "my_event", count(lit(1)).alias("rc"), count(col("error")).alias("erc")
             )
 
             q = observed_ds.writeStream.format("console").start()
