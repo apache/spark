@@ -118,7 +118,7 @@
     <maven.version>3.9.6</maven.version>
     <exec-maven-plugin.version>3.2.0</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
-    <asm.version>9.6</asm.version>
+    <asm.version>9.7</asm.version>
     <slf4j.version>2.0.13</slf4j.version>
     <log4j.version>2.22.1</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
@@ -217,20 +217,23 @@
     <bouncycastle.version>1.78</bouncycastle.version>
     <tink.version>1.13.0</tink.version>
     <datasketches.version>5.0.1</datasketches.version>
-    <netty.version>4.1.108.Final</netty.version>
+    <netty.version>4.1.109.Final</netty.version>
     <netty-tcnative.version>2.0.65.Final</netty-tcnative.version>
     <icu4j.version>72.1</icu4j.version>
+    <junit-jupiter.version>5.9.3</junit-jupiter.version>
+    <junit-platform.version>1.9.3</junit-platform.version>
+    <sbt-jupiter-interface.version>0.11.1</sbt-jupiter-interface.version>
     <!--
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, ./python/packaging/classic/setup.py
     and ./python/packaging/connect/setup.py too.
     -->
-    <arrow.version>15.0.2</arrow.version>
+    <arrow.version>16.0.0</arrow.version>
     <ammonite.version>3.0.0-M1</ammonite.version>
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>6.12.0</kubernetes-client.version>
+    <kubernetes-client.version>6.12.1</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -322,7 +325,7 @@
     <mysql.connector.version>8.3.0</mysql.connector.version>
     <postgresql.version>42.7.3</postgresql.version>
     <db2.jcc.version>11.5.9.0</db2.jcc.version>
-    <mssql.jdbc.version>9.4.1.jre8</mssql.jdbc.version>
+    <mssql.jdbc.version>12.6.1.jre11</mssql.jdbc.version>
     <ojdbc11.version>23.3.0.23.09</ojdbc11.version>
   </properties>
   <repositories>
@@ -481,7 +484,7 @@
       <dependency>
         <groupId>org.apache.xbean</groupId>
         <artifactId>xbean-asm9-shaded</artifactId>
-        <version>4.24</version>
+        <version>4.25</version>
       </dependency>
 
       <!-- Shaded deps marked as provided. These are promoted to compile scope
@@ -606,7 +609,7 @@
       <dependency>
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-text</artifactId>
-        <version>1.11.0</version>
+        <version>1.12.0</version>
       </dependency>
       <dependency>
         <groupId>commons-lang</groupId>
@@ -797,7 +800,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.6-2</version>
+        <version>1.5.6-3</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
@@ -826,7 +829,7 @@
       <dependency>
         <groupId>org.roaringbitmap</groupId>
         <artifactId>RoaringBitmap</artifactId>
-        <version>1.0.5</version>
+        <version>1.0.6</version>
       </dependency>
 
       <!-- Netty Begin -->
@@ -1079,15 +1082,6 @@
         <groupId>org.glassfish.jersey.test-framework.providers</groupId>
         <artifactId>jersey-test-framework-provider-simple</artifactId>
         <version>${jersey.version}</version>
-        <!--
-          TODO(SPARK-44170): Remove the exclusion of jupiter after Spark migrates to Junit5.
-        -->
-        <exclusions>
-          <exclusion>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>*</artifactId>
-          </exclusion>
-        </exclusions>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1215,16 +1209,6 @@
         <groupId>org.jmock</groupId>
         <artifactId>jmock-junit5</artifactId>
         <scope>test</scope>
-        <exclusions>
-          <exclusion>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>*</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.junit.platform</groupId>
-            <artifactId>*</artifactId>
-          </exclusion>
-        </exclusions>
         <version>2.13.1</version>
       </dependency>
       <dependency>
@@ -1236,13 +1220,49 @@
       <dependency>
         <groupId>org.junit.jupiter</groupId>
         <artifactId>junit-jupiter</artifactId>
-        <version>5.9.3</version>
+        <version>${junit-jupiter.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.junit.jupiter</groupId>
+        <artifactId>junit-jupiter-api</artifactId>
+        <version>${junit-jupiter.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.junit.jupiter</groupId>
+        <artifactId>junit-jupiter-engine</artifactId>
+        <version>${junit-jupiter.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.junit.jupiter</groupId>
+        <artifactId>junit-jupiter-params</artifactId>
+        <version>${junit-jupiter.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.junit.platform</groupId>
+        <artifactId>junit-platform-commons</artifactId>
+        <version>${junit-platform.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.junit.platform</groupId>
+        <artifactId>junit-platform-engine</artifactId>
+        <version>${junit-platform.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.junit.platform</groupId>
+        <artifactId>junit-platform-launcher</artifactId>
+        <version>${junit-platform.version}</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>net.aichler</groupId>
         <artifactId>jupiter-interface</artifactId>
-        <version>0.11.1</version>
+        <version>${sbt-jupiter-interface.version}</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1349,13 +1369,6 @@
         <groupId>org.apache.curator</groupId>
         <artifactId>curator-test</artifactId>
         <version>${curator.version}</version>
-        <!-- TODO(SPARK-44170): Remove this `exclusion` after Spark starts supporting JUnit5. -->
-        <exclusions>
-          <exclusion>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter-api</artifactId>
-          </exclusion>
-        </exclusions>
         <scope>test</scope>
       </dependency>
       <!-- Hadoop 3.x dependencies -->
@@ -3535,7 +3548,7 @@
             -->
             <groupId>com.puppycrawl.tools</groupId>
             <artifactId>checkstyle</artifactId>
-            <version>10.14.0</version>
+            <version>10.15.0</version>
           </dependency>
         </dependencies>
         <executions>
@@ -3597,7 +3610,7 @@
       <plugin>
         <groupId>org.antipathy</groupId>
         <artifactId>mvn-scalafmt_${scala.binary.version}</artifactId>
-        <version>1.1.1684076452.9f83818</version>
+        <version>1.1.1713302731.c3d0074</version>
         <configuration>
           <validateOnly>${scalafmt.validateOnly}</validateOnly> <!-- (Optional) skip formatting -->
           <skipSources>${scalafmt.skip}</skipSources>

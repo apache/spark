@@ -26,7 +26,6 @@ from typing import Any, Type, TYPE_CHECKING, Optional, Sequence, Union
 
 from pyspark.errors import PySparkAttributeError, PySparkPicklingError, PySparkTypeError
 from pyspark.util import PythonEvalType
-from pyspark.sql.column import _to_java_column, _to_java_expr, _to_seq
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 from pyspark.sql.types import DataType, StructType, _parse_datatype_string
 from pyspark.sql.udf import _wrap_function
@@ -374,6 +373,8 @@ class UserDefinedTableFunction:
         return judtf
 
     def __call__(self, *args: "ColumnOrName", **kwargs: "ColumnOrName") -> "DataFrame":
+        from pyspark.sql.classic.column import _to_java_column, _to_java_expr, _to_seq
+
         from pyspark.sql import DataFrame, SparkSession
 
         spark = SparkSession._getActiveSessionOrCreate()

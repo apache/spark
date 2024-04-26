@@ -16,9 +16,9 @@ The error state / SQLSTATE itself is comprised of two parts:
 2. Error sub-class
 
 Acceptable values for these various error parts are defined in the following files:
-* `error-classes.json`
-* `error-states.json`
-* `error-conditions.json`
+* [`error-classes.json`](error-classes.json)
+* [`error-states.json`](error-states.json)
+* [`error-conditions.json`](error-conditions.json)
 
 The terms error class, state, and condition come from the SQL standard.
 
@@ -41,7 +41,7 @@ Unfortunately, we have historically used the term "error class" inconsistently t
 
 Fixing this will require renaming `SparkException.errorClass` to `SparkException.errorCondition` and making similar changes to `ErrorClassesJsonReader` and other parts of the codebase. We will address this in [SPARK-47429]. Until that is complete, we will have to live with the fact that a string like `DATATYPE_MISSING_SIZE` is called an "error condition" in our user-facing documentation but an "error class" in the code.
 
-For more details, please see [SPARK-46810][SPARK-46810].
+For more details, please see [SPARK-46810].
 
 [SPARK-46810]: https://issues.apache.org/jira/browse/SPARK-46810
 [SPARK-47429]: https://issues.apache.org/jira/browse/SPARK-47429
@@ -51,9 +51,9 @@ For more details, please see [SPARK-46810][SPARK-46810].
 1. Check if the error is an internal error.
    Internal errors are bugs in the code that we do not expect users to encounter; this does not include unsupported operations.
    If true, use the error condition `INTERNAL_ERROR` and skip to step 4.
-2. Check if an appropriate error condition already exists in `error-conditions.json`.
+2. Check if an appropriate error condition already exists in [`error-conditions.json`](error-conditions.json).
    If true, use the error condition and skip to step 4.
-3. Add a new condition to `error-conditions.json`. If the new condition requires a new error state, add the new error state to `error-states.json`.
+3. Add a new condition to [`error-conditions.json`](error-conditions.json). If the new condition requires a new error state, add the new error state to [`error-states.json`](error-states.json).
 4. Check if the exception type already extends `SparkThrowable`.
    If true, skip to step 6.
 5. Mix `SparkThrowable` into the exception.
@@ -165,7 +165,7 @@ For example: The existing `XXKD0` is used for an internal analyzer error.
 
 #### ANSI/ISO standard
 
-The SQLSTATEs in `error-states.json` are collated from:
+The SQLSTATEs in [`error-states.json`](error-states.json) are collated from:
 - SQL2016
 - DB2 zOS/LUW
 - PostgreSQL 15

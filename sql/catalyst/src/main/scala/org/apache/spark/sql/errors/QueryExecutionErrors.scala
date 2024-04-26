@@ -629,7 +629,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def failedToCompileMsg(e: Exception): String = {
-    s"failed to compile: $e"
+    s"Failed to compile: $e"
   }
 
   def internalCompilerError(e: InternalCompilerException): Throwable = {

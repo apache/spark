@@ -1206,14 +1206,16 @@ class XmlSuite
   }
 
   test("test XSD validation") {
-    val basketDF = spark.read
-      .option("rowTag", "basket")
-      .option("inferSchema", true)
-      .option("rowValidationXSDPath", getTestResourcePath(resDir + "basket.xsd")
-        .replace("file:/", "/"))
-      .xml(getTestResourcePath(resDir + "basket.xml"))
-    // Mostly checking it doesn't fail
-    assert(basketDF.selectExpr("entry[0].key").head().getLong(0) === 9027)
+    Seq("basket.xsd", "include-example/first.xsd").foreach { xsdFile =>
+      val basketDF = spark.read
+        .option("rowTag", "basket")
+        .option("inferSchema", true)
+        .option("rowValidationXSDPath", getTestResourcePath(resDir + xsdFile)
+          .replace("file:/", "/"))
+        .xml(getTestResourcePath(resDir + "basket.xml"))
+      // Mostly checking it doesn't fail
+      assert(basketDF.selectExpr("entry[0].key").head().getLong(0) === 9027)
+    }
   }
 
   test("test XSD validation with validation error") {
@@ -2625,6 +2627,18 @@ class XmlSuite
 
     val expectedResults3 = Seq.range(1, 18).map(Row(_))
     checkAnswer(results3, expectedResults3)
+
+    val results4 = spark.read.format("xml")
+      .option("rowTag", "ROW")
+      .load(getTestResourcePath(resDir + "cdata-no-ignore.xml"))
+
+    val expectedResults4 = Seq(
+      Row("<a>1</a>"),
+      Row("2"),
+      Row("<ROW>3</ROW>"),
+      Row("4"),
+      Row("<ROW>5</ROW>"))
+    checkAnswer(results4, expectedResults4)
   }
 
   test("capture values interspersed between elements - nested struct") {

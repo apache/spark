@@ -96,6 +96,7 @@ class ValueStateImplWithTTL[S](
   /** Function to remove state for given key */
   override def clear(): Unit = {
     store.remove(stateTypesEncoder.encodeGroupingKey(), stateName)
+    clearTTLState()
   }
 
   def clearIfExpired(groupingKey: Array[Byte]): Long = {

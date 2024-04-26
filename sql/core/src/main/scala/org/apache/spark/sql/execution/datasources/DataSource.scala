@@ -27,7 +27,8 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{CLASS_NAME, DATA_SOURCE_PROVIDER, DATA_SOURCES, PATHS}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogUtils}
@@ -695,8 +696,9 @@ object DataSource extends Logging {
             throw QueryCompilationErrors
               .foundMultipleXMLDataSourceError(provider1, sourceNames, externalSource.getName)
           } else if (internalSources.size == 1) {
-            logWarning(s"Multiple sources found for $provider1 (${sourceNames.mkString(", ")}), " +
-              s"defaulting to the internal datasource (${internalSources.head.getClass.getName}).")
+            logWarning(log"Multiple sources found for ${MDC(DATA_SOURCE_PROVIDER, provider1)} " +
+              log"(${MDC(DATA_SOURCES, sourceNames.mkString(", "))}), defaulting to the " +
+              log"internal datasource (${MDC(CLASS_NAME, internalSources.head.getClass.getName)}).")
             internalSources.head.getClass
           } else {
             throw QueryCompilationErrors.findMultipleDataSourceError(provider1, sourceNames)
@@ -784,7 +786,7 @@ object DataSource extends Logging {
           globResult
         }.flatten
       } catch {
-        case e: SparkException => throw e.getCause
+        case e: SparkException => throw ThreadUtils.wrapCallerStacktrace(e.getCause)
       }
 
     if (checkFilesExist) {
@@ -796,7 +798,7 @@ object DataSource extends Logging {
           }
         }
       } catch {
-        case e: SparkException => throw e.getCause
+        case e: SparkException => throw ThreadUtils.wrapCallerStacktrace(e.getCause)
       }
     }
 
@@ -807,7 +809,7 @@ object DataSource extends Logging {
       }
       if (filteredIn.isEmpty) {
         logWarning(
-          s"All paths were ignored:\n  ${filteredOut.mkString("\n  ")}")
+          log"All paths were ignored:\n  ${MDC(PATHS, filteredOut.mkString("\n  "))}")
       } else {
         logDebug(
           s"Some paths were ignored:\n  ${filteredOut.mkString("\n  ")}")
