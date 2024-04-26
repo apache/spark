@@ -270,4 +270,17 @@ public final class CollationFactory {
     int collationId = collationNameToId(collationName);
     return collationTable[collationId];
   }
+
+  public static UTF8String getCollationKey(UTF8String input, int collationId) {
+    Collation collation = fetchCollation(collationId);
+    if (collation.supportsBinaryEquality) {
+      return input;
+    } else if (collation.supportsLowercaseEquality) {
+      return input.toLowerCase();
+    } else {
+      var collationKey = collation.collator.getCollationKey(input.toString());
+      return UTF8String.fromBytes(collationKey.toByteArray());
+    }
+  }
+
 }
