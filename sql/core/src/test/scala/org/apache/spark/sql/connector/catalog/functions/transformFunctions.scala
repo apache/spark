@@ -16,9 +16,11 @@
  */
 package org.apache.spark.sql.connector.catalog.functions
 
-import java.sql.Timestamp
+import java.time.{Instant, LocalDate, ZoneId}
+import java.time.temporal.ChronoUnit
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -44,7 +46,13 @@ object YearsFunction extends ScalarFunction[Long] {
   override def name(): String = "years"
   override def canonicalName(): String = name()
 
-  def invoke(ts: Long): Long = new Timestamp(ts).getYear + 1900
+  val UTC: ZoneId = ZoneId.of("UTC")
+  val EPOCH_LOCAL_DATE: LocalDate = Instant.EPOCH.atZone(UTC).toLocalDate
+
+  def invoke(ts: Long): Long = {
+    val localDate = DateTimeUtils.microsToInstant(ts).atZone(UTC).toLocalDate
+    ChronoUnit.YEARS.between(EPOCH_LOCAL_DATE, localDate)
+  }
 }
 
 object DaysFunction extends BoundFunction {

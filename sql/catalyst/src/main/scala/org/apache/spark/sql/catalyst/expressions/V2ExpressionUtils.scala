@@ -161,7 +161,7 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
     val declaredInputTypes = scalarFunc.inputTypes().toImmutableArraySeq
     val argClasses = declaredInputTypes.map(EncoderUtils.dataTypeJavaClass)
     findMethod(scalarFunc, MAGIC_METHOD_NAME, argClasses) match {
-      case Some(m) if Modifier.isStatic(m.getModifiers) =>
+      case Some(m) if isStatic(m) =>
         StaticInvoke(scalarFunc.getClass, scalarFunc.resultType(),
           MAGIC_METHOD_NAME, arguments, inputTypes = declaredInputTypes,
           propagateNull = false, returnNullable = scalarFunc.isResultNullable,
@@ -203,5 +203,12 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       case _: NoSuchMethodException =>
         None
     }
+  }
+
+  private def isStatic(m: Method) = {
+    val javaStatic = Modifier.isStatic(m.getModifiers)
+    val scalaObjModule = m.getDeclaringClass.getField("MODULE$")
+    val scalaStatic = scalaObjModule != null && Modifier.isStatic(scalaObjModule.getModifiers)
+    javaStatic || scalaStatic
   }
 }
