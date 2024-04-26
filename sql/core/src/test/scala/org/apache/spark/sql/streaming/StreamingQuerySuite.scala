@@ -53,6 +53,7 @@ import org.apache.spark.sql.streaming.util.{BlockingSource, MockSourceProvider, 
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.tags.SlowSQLTest
 
+//noinspection ScalaStyle
 @SlowSQLTest
 class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging with MockitoSugar {
 
@@ -1362,6 +1363,33 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
             s"definition: ${isStreamingForCteDef.get}, reference: ${isStreamingForCteRef.get}.")
       }
     )
+  }
+
+  test("Collation aware streaming") {
+    withTable("parquet_streaming_tbl") {
+      spark.sql(
+        """
+          |CREATE TABLE parquet_streaming_tbl
+          |(
+          |  key STRING COLLATE UTF8_BINARY_LCASE,
+          |  value_stream INTEGER
+          |) USING parquet""".stripMargin)
+
+      val streamDf = spark.readStream.table("parquet_streaming_tbl")
+      val filteredDf = streamDf.filter("key = 'aaa'")
+
+      val clock = new StreamManualClock()
+      testStream(filteredDf)(
+        StartStream(triggerClock = clock, trigger = Trigger.ProcessingTime(100)),
+        Execute { _ =>
+          spark.createDataFrame(Seq("aaa" -> 1, "AAA" -> 2, "bbb" -> 3, "aa" -> 4)).toDF("key", "value_stream")
+            .write.format("parquet").mode(SaveMode.Append).saveAsTable("parquet_streaming_tbl")
+        },
+        AdvanceManualClock(150),
+        waitUntilBatchProcessed(clock),
+        CheckLastBatch(("aaa", 1), ("AAA", 2)),
+      )
+    }
   }
 
   test("SPARK-47776: streaming aggregation having binary inequality column in the grouping " +
