@@ -134,7 +134,7 @@ case class CurrentTimeZone() extends LeafExpression with Unevaluable {
   since = "1.5.0")
 // scalastyle:on line.size.limit
 case class CurrentDate(timeZoneId: Option[String] = None)
-  extends LeafExpression with TimeZoneAwareExpression with Unevaluable {
+  extends LeafExpression with TimeZoneAwareExpression with FoldableUnevaluable {
   def this() = this(None)
   override def nullable: Boolean = false
   override def dataType: DataType = DateType
@@ -169,7 +169,7 @@ object CurDateExpressionBuilder extends ExpressionBuilder {
   }
 }
 
-abstract class CurrentTimestampLike() extends LeafExpression with Unevaluable {
+abstract class CurrentTimestampLike() extends LeafExpression with FoldableUnevaluable {
   override def nullable: Boolean = false
   override def dataType: DataType = TimestampType
   final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
@@ -235,7 +235,7 @@ case class Now() extends CurrentTimestampLike {
   group = "datetime_funcs",
   since = "3.4.0")
 case class LocalTimestamp(timeZoneId: Option[String] = None) extends LeafExpression
-  with TimeZoneAwareExpression with Unevaluable {
+  with TimeZoneAwareExpression with FoldableUnevaluable {
   def this() = this(None)
   override def nullable: Boolean = false
   override def dataType: DataType = TimestampNTZType

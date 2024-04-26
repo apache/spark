@@ -205,7 +205,7 @@ Installable with ``pip install "pyspark[connect]"``.
 ========================== ================= ==========================
 Package                    Supported version Note
 ========================== ================= ==========================
-`pandas`                   >=1.4.4           Required for Spark Connect
+`pandas`                   >=2.0.0           Required for Spark Connect
 `pyarrow`                  >=10.0.0          Required for Spark Connect
 `grpcio`                   >=1.62.0          Required for Spark Connect
 `grpcio-status`            >=1.62.0          Required for Spark Connect
@@ -220,7 +220,7 @@ Installable with ``pip install "pyspark[sql]"``.
 ========= ================= ======================
 Package   Supported version Note
 ========= ================= ======================
-`pandas`  >=1.4.4           Required for Spark SQL
+`pandas`  >=2.0.0           Required for Spark SQL
 `pyarrow` >=10.0.0          Required for Spark SQL
 ========= ================= ======================
 
@@ -233,7 +233,7 @@ Installable with ``pip install "pyspark[pandas_on_spark]"``.
 ========= ================= ================================
 Package   Supported version Note
 ========= ================= ================================
-`pandas`  >=1.4.4           Required for Pandas API on Spark
+`pandas`  >=2.0.0           Required for Pandas API on Spark
 `pyarrow` >=10.0.0          Required for Pandas API on Spark
 ========= ================= ================================
 
@@ -244,7 +244,7 @@ Additional libraries that enhance functionality but are not included in the inst
 - **matplotlib**: Provide plotting for visualization. The default is **plotly**.
 
 
-MLLib DataFrame-based API
+MLlib DataFrame-based API
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Installable with ``pip install "pyspark[ml]"``.
@@ -252,7 +252,7 @@ Installable with ``pip install "pyspark[ml]"``.
 ======= ================= ======================================
 Package Supported version Note
 ======= ================= ======================================
-`numpy` >=1.21            Required for MLLib DataFrame-based API
+`numpy` >=1.21            Required for MLlib DataFrame-based API
 ======= ================= ======================================
 
 Additional libraries that enhance functionality but are not included in the installation packages:
@@ -272,5 +272,5 @@ Installable with ``pip install "pyspark[mllib]"``.
 ======= ================= ==================
 Package Supported version Note
 ======= ================= ==================
-`numpy` >=1.21            Required for MLLib
+`numpy` >=1.21            Required for MLlib
 ======= ================= ==================
