@@ -2564,6 +2564,18 @@ object SQLConf {
       .intConf
       .createWithDefault(10)
 
+  val HIVE_WINDOW_FUNCTION_ORDER_SPEC =
+    buildConf("spark.sql.hive.window.function.orderSpec")
+      .internal()
+      .doc("Whether to add order expression for window function.The parser requires window to be" +
+        " ordered otherwise throw analyzed exception. When true, it will add order partition " +
+        "for  window function which has no orderSpec.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+
+
   val FILE_SOURCE_LOG_CLEANUP_DELAY =
     buildConf("spark.sql.streaming.fileSource.log.cleanupDelay")
       .internal()
@@ -5043,6 +5055,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def fileSourceLogDeletion: Boolean = getConf(FILE_SOURCE_LOG_DELETION)
 
   def fileSourceLogCompactInterval: Int = getConf(FILE_SOURCE_LOG_COMPACT_INTERVAL)
+
+  def hiveWindowFunctionOrderSpec: Boolean = getConf(HIVE_WINDOW_FUNCTION_ORDER_SPEC)
 
   def fileSourceLogCleanupDelay: Long = getConf(FILE_SOURCE_LOG_CLEANUP_DELAY)
 
