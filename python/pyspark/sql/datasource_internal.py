@@ -74,7 +74,7 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
     from cache and send it to JVM along with the input partitions.
 
     When query restart, batches in write ahead offset log that has not been committed will be
-    replayed by reading data between start and end offset through read2(start, end).
+    replayed by reading data between start and end offset through readBetweenOffsets(start, end).
     """
 
     def __init__(self, simple_reader: SimpleDataSourceStreamReader):
@@ -113,8 +113,8 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
 
     def partitions(self, start: dict, end: dict) -> Sequence["InputPartition"]:
         # when query restart from checkpoint, use the last committed offset as the start offset.
-        # This depends on the current behavior that streaming engine call getBatch on the last
-        # microbatch when query restart.
+        # This depends on the streaming engine calling planInputPartitions() of the last batch
+        # in offset log when query restart.
         if self.current_offset is None:
             self.current_offset = end
         if len(self.cache) > 0:

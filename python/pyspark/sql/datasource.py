@@ -557,8 +557,7 @@ class SimpleDataSourceStreamReader(ABC):
     def readBetweenOffsets(self, start: dict, end: dict) -> Iterator[Tuple]:
         """
         Read all available data from specific start offset and end offset.
-        This is invoked during failure recovery to re-read a batch deterministically
-        in order to achieve exactly once.
+        This is invoked during failure recovery to re-read a batch deterministically.
 
         Parameters
         ----------
