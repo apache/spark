@@ -172,7 +172,7 @@ case class ExplainCommand(
       .map(Row(_)).toImmutableArraySeq
   }
 
-  def withTransformedSupervisedPlan(transformer: (LogicalPlan) => LogicalPlan): LogicalPlan =
+  def withTransformedSupervisedPlan(transformer: LogicalPlan => LogicalPlan): LogicalPlan =
     copy(logicalPlan = transformer(logicalPlan))
 }
 

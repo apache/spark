@@ -70,7 +70,7 @@ trait AnalysisOnlyCommand extends Command {
  */
 trait SupervisingCommand extends LeafCommand {
   /**
-   * Transform its supervised plan using `transformer` and returns a copy of `SupervisingCommand`
+   * Transforms its supervised plan using `transformer` and returns a copy of `SupervisingCommand`
    */
-  def withTransformedSupervisedPlan(transformer: (LogicalPlan) => LogicalPlan): LogicalPlan
+  def withTransformedSupervisedPlan(transformer: LogicalPlan => LogicalPlan): LogicalPlan
 }

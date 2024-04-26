@@ -777,7 +777,7 @@ case class DescribeQueryCommand(queryText: String, plan: LogicalPlan)
     copy(plan = WithCTE(plan, cteDefs))
   }
 
-  def withTransformedSupervisedPlan(transformer: (LogicalPlan) => LogicalPlan): LogicalPlan =
+  def withTransformedSupervisedPlan(transformer: LogicalPlan => LogicalPlan): LogicalPlan =
     copy(plan = transformer(plan))
 }
 

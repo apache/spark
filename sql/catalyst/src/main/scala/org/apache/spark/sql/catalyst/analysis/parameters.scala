@@ -120,22 +120,26 @@ abstract class ParameterizedQueryProcessor extends Rule[LogicalPlan] {
  * Moves `ParameterizedQuery` inside `SupervisingCommand` for their supervised plans to be
  * resolved later by the analyzer.
  *
- * E.g. `PosParameterizedQuery(ExplainCommand(SomeQuery(...)))` becomes
+ * - Basic case:
+ * `PosParameterizedQuery(ExplainCommand(SomeQuery(...)))` =>
  * `ExplainCommand(PosParameterizedQuery(SomeQuery(...)))`
+ * - Nested `SupervisedCommand`s are handled recursively:
+ * `PosParameterizedQuery(ExplainCommand(ExplainCommand(SomeQuery(...))))` =>
+ * `ExplainCommand(ExplainCommand(PosParameterizedQuery(SomeQuery(...))))`
  */
 object MoveParameterizedQueriesDown extends ParameterizedQueryProcessor {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     assertUnresolvedPlanHasSingleParameterizedQuery(plan)
 
     plan.resolveOperatorsWithPruning(_.containsPattern(PARAMETERIZED_QUERY)) {
-      case pq: ParameterizedQuery if pq.exists(isSupervisingCommand(_)) =>
+      case pq: ParameterizedQuery if pq.exists(isSupervisingCommand) =>
         moveParameterizedQueryIntoSupervisingCommand(pq)
     }
   }
 
   private def moveParameterizedQueryIntoSupervisingCommand(pq: ParameterizedQuery): LogicalPlan = {
     // Moves parameterized query down recursively to handle nested `SupervisingCommand`s
-    def transformSupervisedPlan(plan: LogicalPlan): LogicalPlan = plan match {
+    def transformSupervisedPlan: PartialFunction[LogicalPlan, LogicalPlan] = {
       case command: SupervisingCommand =>
         command.withTransformedSupervisedPlan {
           transformSupervisedPlan(_)
