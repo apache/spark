@@ -237,9 +237,9 @@ class SparkSession:
         def getOrCreate(self) -> "SparkSession":
             with SparkSession._lock:
                 session = SparkSession.getActiveSession()
-                if session is None:
+                if session is None or session.is_stopped:
                     session = SparkSession._default_session
-                    if session is None:
+                    if session is None or session.is_stopped:
                         session = self.create()
                 self._apply_options(session)
                 return session
