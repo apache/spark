@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.Path
 import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
-import org.apache.spark.internal.LogKey.{BATCH_ID, ELAPSED_TIME}
+import org.apache.spark.internal.LogKey._
 import org.apache.spark.internal.MDC
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -105,8 +105,8 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
         defaultCompactInterval, compactibleBatchIds(0).toInt)
     }
     assert(interval > 0, s"intervalValue = $interval not positive value.")
-    logInfo(s"Set the compact interval to $interval " +
-      s"[defaultCompactInterval: $defaultCompactInterval]")
+    logInfo(log"Set the compact interval to ${MDC(COMPACT_INTERVAL, interval)} " +
+      log"[defaultCompactInterval: ${MDC(DEFAULT_COMPACT_INTERVAL, defaultCompactInterval)}]")
     interval
   }
 
@@ -309,8 +309,9 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
       assert(isCompactionBatch(minCompactionBatchId, compactInterval),
         s"$minCompactionBatchId is not a compaction batch")
 
-      logInfo(s"Current compact batch id = $currentBatchId " +
-        s"min compaction batch id to delete = $minCompactionBatchId")
+      logInfo(log"Current compact batch id = ${MDC(CURRENT_BATCH_ID, currentBatchId)} " +
+        log"min compaction batch id to delete = " +
+        log"${MDC(MIN_COMPACTION_BATCH_ID, minCompactionBatchId)}")
 
       val expiredTime = System.currentTimeMillis() - fileCleanupDelayMs
       fileManager.list(metadataPath, (path: Path) => {
