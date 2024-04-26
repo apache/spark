@@ -4754,80 +4754,82 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       df.collect()
         .map(_.getString(0))
         .map(_.replaceAll("#[0-9]+", "#N"))
-        .sameElements(Array(plan))
+        .sameElements(Array(plan.stripMargin))
     )
 
     checkQueryPlan(
       spark.sql("explain select ?", Array(1)),
       """== Physical Plan ==
-*(1) Project [1 AS 1#N]
-+- *(1) Scan OneRowRelation[]
+        |*(1) Project [1 AS 1#N]
+        |+- *(1) Scan OneRowRelation[]
 
-"""
+        |"""
     )
     checkQueryPlan(
       spark.sql("explain select :first", Map("first" -> 1)),
       """== Physical Plan ==
-*(1) Project [1 AS 1#N]
-+- *(1) Scan OneRowRelation[]
+        |*(1) Project [1 AS 1#N]
+        |+- *(1) Scan OneRowRelation[]
 
-"""
+        |"""
     )
 
     checkQueryPlan(
       spark.sql("explain explain explain select ?", Array(1)),
       """== Physical Plan ==
-Execute ExplainCommand
-   +- ExplainCommand ExplainCommand 'PosParameterizedQuery [1], SimpleMode, SimpleMode
+        |Execute ExplainCommand
+        |   +- ExplainCommand ExplainCommand 'PosParameterizedQuery [1], SimpleMode, SimpleMode
 
-"""
+        |"""
     )
     checkQueryPlan(
       spark.sql("explain explain explain select :first", Map("first" -> 1)),
+      // scalastyle:off
       """== Physical Plan ==
-Execute ExplainCommand
-   +- ExplainCommand ExplainCommand 'NameParameterizedQuery [first], [1], SimpleMode, SimpleMode
+        |Execute ExplainCommand
+        |   +- ExplainCommand ExplainCommand 'NameParameterizedQuery [first], [1], SimpleMode, SimpleMode
 
-"""
+        |"""
+      // scalastyle:on
     )
 
     checkQueryPlan(
       spark.sql("explain describe select ?", Array(1)),
       """== Physical Plan ==
-Execute DescribeQueryCommand
-   +- DescribeQueryCommand select ?
+        |Execute DescribeQueryCommand
+        |   +- DescribeQueryCommand select ?
 
-"""
+        |"""
     )
     checkQueryPlan(
       spark.sql("explain describe select :first", Map("first" -> 1)),
       """== Physical Plan ==
-Execute DescribeQueryCommand
-   +- DescribeQueryCommand select :first
+        |Execute DescribeQueryCommand
+        |   +- DescribeQueryCommand select :first
 
-"""
+        |"""
     )
 
     checkQueryPlan(
       spark.sql("explain extended select * from values (?, ?) t(x, y)", Array(1, "a")),
       """== Parsed Logical Plan ==
-'PosParameterizedQuery [1, a]
-+- 'Project [*]
-   +- 'SubqueryAlias t
-      +- 'UnresolvedInlineTable [x, y], [[posparameter(39), posparameter(42)]]
+        |'PosParameterizedQuery [1, a]
+        |+- 'Project [*]
+        |   +- 'SubqueryAlias t
+        |      +- 'UnresolvedInlineTable [x, y], [[posparameter(39), posparameter(42)]]
 
-== Analyzed Logical Plan ==
-x: int, y: string
-Project [x#N, y#N]
-+- SubqueryAlias t
-   +- LocalRelation [x#N, y#N]
+        |== Analyzed Logical Plan ==
+        |x: int, y: string
+        |Project [x#N, y#N]
+        |+- SubqueryAlias t
+        |   +- LocalRelation [x#N, y#N]
 
-== Optimized Logical Plan ==
-LocalRelation [x#N, y#N]
+        |== Optimized Logical Plan ==
+        |LocalRelation [x#N, y#N]
 
-== Physical Plan ==
-LocalTableScan [x#N, y#N]
-"""
+        |== Physical Plan ==
+        |LocalTableScan [x#N, y#N]
+        |"""
     )
     checkQueryPlan(
       spark.sql(
@@ -4835,23 +4837,23 @@ LocalTableScan [x#N, y#N]
         Map("first" -> 1, "second" -> "a")
       ),
       """== Parsed Logical Plan ==
-'NameParameterizedQuery [first, second], [1, a]
-+- 'Project [*]
-   +- 'SubqueryAlias t
-      +- 'UnresolvedInlineTable [x, y], [[namedparameter(first), namedparameter(second)]]
+        |'NameParameterizedQuery [first, second], [1, a]
+        |+- 'Project [*]
+        |   +- 'SubqueryAlias t
+        |      +- 'UnresolvedInlineTable [x, y], [[namedparameter(first), namedparameter(second)]]
 
-== Analyzed Logical Plan ==
-x: int, y: string
-Project [x#N, y#N]
-+- SubqueryAlias t
-   +- LocalRelation [x#N, y#N]
+        |== Analyzed Logical Plan ==
+        |x: int, y: string
+        |Project [x#N, y#N]
+        |+- SubqueryAlias t
+        |   +- LocalRelation [x#N, y#N]
 
-== Optimized Logical Plan ==
-LocalRelation [x#N, y#N]
+        |== Optimized Logical Plan ==
+        |LocalRelation [x#N, y#N]
 
-== Physical Plan ==
-LocalTableScan [x#N, y#N]
-"""
+        |== Physical Plan ==
+        |LocalTableScan [x#N, y#N]
+        |"""
     )
   }
 }
