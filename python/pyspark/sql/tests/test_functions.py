@@ -1354,6 +1354,14 @@ class FunctionsTestsMixin:
             message_parameters={"arg_name": "json", "arg_type": "int"},
         )
 
+    def test_try_parse_json(self):
+        df = self.spark.createDataFrame([{"json": """{ "a" : 1 }"""}, {"json": """{ a : 1 }"""}])
+        actual = df.select(
+            F.to_json(F.try_parse_json(df.json)).alias("var"),
+        ).collect()
+        self.assertEqual("""{"a":1}""", actual[0]["var"])
+        self.assertEqual(None, actual[1]["var"])
+
     def test_schema_of_csv(self):
         with self.assertRaises(PySparkTypeError) as pe:
             F.schema_of_csv(1)

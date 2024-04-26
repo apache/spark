@@ -142,6 +142,9 @@ def _monkey_patch_RDD(sparkSession: "SparkSession") -> None:
 #
 # @classmethod + @property is also affected by a bug in Python's docstring which was backported
 # to Python 3.9.6 (https://github.com/python/cpython/pull/28838)
+#
+# Python 3.9 with MyPy complains about @classmethod + @property combination. We should fix
+# it together with MyPy.
 class classproperty(property):
     """Same as Python's @property decorator, but for class attributes.
 
