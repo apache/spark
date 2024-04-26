@@ -149,6 +149,7 @@ class CollationSQLExpressionsSuite
       checkAnswer(sql(query), Row(t.result))
       assert(sql(query).schema.fields.head.dataType.sameType(StringType("UTF8_BINARY")))
     })
+  }
 
   test("Support StringToMap expression with collation") {
     // Supported collations
