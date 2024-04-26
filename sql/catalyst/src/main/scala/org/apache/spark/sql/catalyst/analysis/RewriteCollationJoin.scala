@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, CollationK
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.CollationFactory
-import org.apache.spark.sql.types.{ArrayType, StringType}
+import org.apache.spark.sql.types.{ArrayType, StringType, StructType}
 
 object RewriteCollationJoin extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -42,6 +42,16 @@ object RewriteCollationJoin extends Rule[LogicalPlan] {
             case (ArrayType(_: StringType, _), ArrayType(_: StringType, _)) =>
               val elementType = l.dataType.asInstanceOf[ArrayType].elementType
               val collationId = elementType.asInstanceOf[StringType].collationId
+              val collation = CollationFactory.fetchCollation(collationId)
+              if (collation.supportsBinaryEquality) {
+                return plan
+              } else {
+                EqualTo(CollationKey(l), CollationKey(r))
+              }
+            case (StructType(fields), StructType(_)) if
+              fields.exists(_.dataType.isInstanceOf[StringType]) =>
+              val collationId = fields.find(_.dataType.isInstanceOf[StringType]).get.
+                dataType.asInstanceOf[StringType].collationId
               val collation = CollationFactory.fetchCollation(collationId)
               if (collation.supportsBinaryEquality) {
                 return plan

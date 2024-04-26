@@ -21,7 +21,7 @@ import scala.jdk.CollectionConverters.MapHasAsJava
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BindReferences, CollationKey, Literal, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BindReferences, CollationKey, ExpressionEvalHelper, GenericInternalRow, Literal, UnsafeProjection}
 import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory}
 import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2ProviderWithCustomSchema}
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable}
@@ -35,7 +35,8 @@ import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.{ArrayType, MapType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
-class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
+class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper
+  with ExpressionEvalHelper {
   protected val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
 
   private val collationPreservingSources = Seq("parquet")
@@ -1046,6 +1047,32 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("CollationKey works on simple and complex types") {
+    case class CollationKeyTestCase[R](s: String, c: String, result: R)
+    val testCases = Seq(
+      CollationKeyTestCase("aA", "UTF8_BINARY", "aA"),
+      CollationKeyTestCase("Aa", "UTF8_BINARY_LCASE", "aa"),
+      CollationKeyTestCase("aa", "UNICODE", "aa"),
+      CollationKeyTestCase("AA", "UNICODE_CI", "**\u0001\u0006\u0000")
+    )
+    testCases.foreach(t => {
+      val stringType = StringType(CollationFactory.collationNameToId(t.c))
+      val str: UTF8String = UTF8String.fromString(t.s)
+      val res: UTF8String = UTF8String.fromString(t.result)
+      // simple string type
+      checkEvaluation(CollationKey(Literal(str, stringType)), res)
+      // array of strings
+      val arrayType = ArrayType(stringType)
+      val strData = ArrayData.toArrayData(Seq(str))
+      checkEvaluation(CollationKey(Literal(strData, arrayType)), Array(res))
+      // struct of strings
+      val structType = StructType(StructField("f", stringType) :: Nil)
+      val strRow = new GenericInternalRow(Array[Any](str))
+      val resRow = new GenericInternalRow(Array[Any](res))
+      checkEvaluation(CollationKey(Literal(strRow, structType)), resRow)
+    })
+  }
+
   test("CollationKey generates correct collation key for string") {
     val testCases = Seq(
       ("", "UTF8_BINARY", UTF8String.fromString("")),
@@ -1104,6 +1131,40 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       assert(collationKey.resolved)
       val arr: Array[UTF8String] = Array(UTF8String.fromString(input))
       assert(collationKey.nullSafeEval(arr) === expected)
+    }
+  }
+
+  test("CollationKey generates correct collation key for struct") {
+    val testCases = Seq(
+      ("", "UTF8_BINARY", UTF8String.fromString("")),
+      ("aa", "UTF8_BINARY", UTF8String.fromString("aa")),
+      ("AA", "UTF8_BINARY", UTF8String.fromString("AA")),
+      ("aA", "UTF8_BINARY", UTF8String.fromString("aA")),
+      ("", "UTF8_BINARY_LCASE", UTF8String.fromString("")),
+      ("aa", "UTF8_BINARY_LCASE", UTF8String.fromString("aa")),
+      ("AA", "UTF8_BINARY_LCASE", UTF8String.fromString("aa")),
+      ("aA", "UTF8_BINARY_LCASE", UTF8String.fromString("aa")),
+      ("", "UNICODE", UTF8String.fromString("")),
+      ("aa", "UNICODE", UTF8String.fromString("aa")),
+      ("AA", "UNICODE", UTF8String.fromString("AA")),
+      ("aA", "UNICODE", UTF8String.fromString("aA")),
+      ("", "UNICODE_CI", UTF8String.fromBytes(Array[Byte](1, 0))),
+      ("aa", "UNICODE_CI", UTF8String.fromBytes(Array[Byte](42, 42, 1, 6, 0))),
+      ("AA", "UNICODE_CI", UTF8String.fromBytes(Array[Byte](42, 42, 1, 6, 0))),
+      ("aA", "UNICODE_CI", UTF8String.fromBytes(Array[Byte](42, 42, 1, 6, 0)))
+    )
+    for ((input, collation, expected) <- testCases) {
+      val collationId: Int = CollationFactory.collationNameToId(collation)
+      val struct = StructType(Seq(StructField("f", StringType(collationId))))
+      val attrRef: AttributeReference = AttributeReference("attr", struct)()
+      // generate CollationKey for the input string
+      val collationKey: CollationKey = CollationKey(attrRef)
+      assert(collationKey.resolved)
+      val arrStr: Array[Any] = Array(UTF8String.fromString(input))
+      val rowStr = new GenericInternalRow(arrStr)
+      val arrRes: Array[Any] = Array(expected)
+      val rowRes = new GenericInternalRow(arrRes)
+      assert(collationKey.nullSafeEval(rowStr) === rowRes)
     }
   }
 
@@ -1173,6 +1234,39 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("CollationKey generates correct collation key for struct using codegen") {
+    val testCases = Seq(
+      ("", "UTF8_BINARY", ""),
+      ("aa", "UTF8_BINARY", "6161"),
+      ("AA", "UTF8_BINARY", "4141"),
+      ("aA", "UTF8_BINARY", "4161"),
+      ("", "UTF8_BINARY_LCASE", ""),
+      ("aa", "UTF8_BINARY_LCASE", "6161"),
+      ("AA", "UTF8_BINARY_LCASE", "6161"),
+      ("aA", "UTF8_BINARY_LCASE", "6161"),
+      ("", "UNICODE", ""),
+      ("aa", "UNICODE", "6161"),
+      ("AA", "UNICODE", "4141"),
+      ("aA", "UNICODE", "4161"),
+      ("", "UNICODE_CI", "1"),
+      ("aa", "UNICODE_CI", "6012a2a"),
+      ("AA", "UNICODE_CI", "6012a2a"),
+      ("aA", "UNICODE_CI", "6012a2a")
+    )
+    for ((input, collation, expected) <- testCases) {
+      val collationId: Int = CollationFactory.collationNameToId(collation)
+      val struct = StructType(Seq(StructField("f", StringType(collationId))))
+      val attrRef: AttributeReference = AttributeReference("attr", struct)()
+      // generate CollationKey for the input string
+      val collationKey: CollationKey = CollationKey(attrRef)
+      val row: InternalRow = InternalRow(UTF8String.fromString(input))
+      val boundExpr = BindReferences.bindReference(collationKey, Seq(attrRef))
+      val ev = UnsafeProjection.create(Array(boundExpr).toIndexedSeq)
+      val strProj = ev.apply(InternalRow(row))
+      assert(strProj.toString.split(',').last.startsWith(expected))
+    }
+  }
+
   test("hash join should respect collation for strings") {
     val t1 = "T_1"
     val t2 = "T_2"
@@ -1218,6 +1312,33 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
         sql(s"CREATE TABLE $t2 (y ARRAY<STRING COLLATE ${t.collation}>, j int) USING PARQUET")
         sql(s"INSERT INTO $t2 VALUES (array('AA'), 2), (array('aa'), 2)")
+
+        val df = sql(s"SELECT * FROM $t1 JOIN $t2 ON $t1.x = $t2.y")
+        checkAnswer(df, t.result)
+      }
+    })
+  }
+
+  test("hash join should respect collation for struct of strings") {
+    val t1 = "T_1"
+    val t2 = "T_2"
+
+    case class HashJoinTestCase[R](c: String, result: R)
+    val testCases = Seq(
+      HashJoinTestCase("UTF8_BINARY", Seq(Row(Row("aa"), 1, Row("aa"), 2))),
+      HashJoinTestCase("UTF8_BINARY_LCASE",
+        Seq(Row(Row("aa"), 1, Row("AA"), 2), Row(Row("aa"), 1, Row("aa"), 2))),
+      HashJoinTestCase("UNICODE", Seq(Row(Row("aa"), 1, Row("aa"), 2))),
+      HashJoinTestCase("UNICODE_CI",
+        Seq(Row(Row("aa"), 1, Row("AA"), 2), Row(Row("aa"), 1, Row("aa"), 2)))
+    )
+    testCases.foreach(t => {
+      withTable(t1, t2) {
+        sql(s"CREATE TABLE $t1 (x STRUCT<f:STRING COLLATE ${t.c}>, i int) USING PARQUET")
+        sql(s"INSERT INTO $t1 VALUES (named_struct('f', 'aa'), 1)")
+
+        sql(s"CREATE TABLE $t2 (y STRUCT<f:STRING COLLATE ${t.c}>, j int) USING PARQUET")
+        sql(s"INSERT INTO $t2 VALUES (named_struct('f', 'AA'), 2), (named_struct('f', 'aa'), 2)")
 
         val df = sql(s"SELECT * FROM $t1 JOIN $t2 ON $t1.x = $t2.y")
         checkAnswer(df, t.result)

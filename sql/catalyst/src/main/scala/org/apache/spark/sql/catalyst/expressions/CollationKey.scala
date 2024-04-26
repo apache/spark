@@ -22,12 +22,12 @@ import java.util.Locale
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.util.{CollationFactory, GenericArrayData}
 import org.apache.spark.sql.internal.types.{AbstractArrayType, StringTypeAnyCollation}
-import org.apache.spark.sql.types.{AbstractDataType, ArrayType, DataType, StringType, TypeCollection}
+import org.apache.spark.sql.types.{AbstractDataType, ArrayType, DataType, StringType, StructType, TypeCollection}
 import org.apache.spark.unsafe.types.UTF8String
 
 case class CollationKey(expr: Expression) extends UnaryExpression with ExpectsInputTypes {
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(StringTypeAnyCollation, AbstractArrayType(StringTypeAnyCollation)))
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(StringTypeAnyCollation,
+    AbstractArrayType(StringTypeAnyCollation), StructType))
   override def dataType: DataType = expr.dataType
 
   final lazy val collationId: Int = dataType match {
@@ -36,11 +36,17 @@ case class CollationKey(expr: Expression) extends UnaryExpression with ExpectsIn
     case ArrayType(_: StringType, _) =>
       val arr = dataType.asInstanceOf[ArrayType]
       arr.elementType.asInstanceOf[StringType].collationId
+    case StructType(fields) =>
+      val str = fields.find(_.dataType.isInstanceOf[StringType]).get
+      str.dataType.asInstanceOf[StringType].collationId
   }
 
   override def nullSafeEval(input: Any): Any = dataType match {
     case _: StringType =>
-      getCollationKey(input.asInstanceOf[UTF8String])
+      input match {
+        case str: UTF8String => getCollationKey(str)
+        case _ => None
+      }
     case ArrayType(_: StringType, _) =>
       input match {
         case arr: Array[UTF8String] =>
@@ -51,6 +57,22 @@ case class CollationKey(expr: Expression) extends UnaryExpression with ExpectsIn
             result(i) = getCollationKey(arr.getUTF8String(i))
           }
           new GenericArrayData(result)
+        case _ =>
+          None
+      }
+    case _: StructType =>
+      input match {
+        case row: GenericInternalRow =>
+          val result = new Array[Any](row.values.length)
+          for (i <- row.values.indices) {
+            result(i) = row.values(i) match {
+              case str: UTF8String =>
+                getCollationKey(str)
+              case other =>
+                other
+            }
+          }
+          new GenericInternalRow(result)
         case _ =>
           None
       }
@@ -99,6 +121,35 @@ case class CollationKey(expr: Expression) extends UnaryExpression with ExpectsIn
            |  ${ev.value} = null;
            |}
       """.stripMargin
+      })
+    case s: StructType =>
+      val expr = ctx.addReferenceObj("this", this)
+      val fields = ctx.addReferenceObj("fields", s.fields)
+      val row = ctx.freshName("row")
+      val rowLength = ctx.freshName("rowLength")
+      val rowResult = ctx.freshName("rowResult")
+      val rowIndex = ctx.freshName("rowIndex")
+      val rowValue = ctx.freshName("rowValue")
+      nullSafeCodeGen(ctx, ev, eval => {
+        s"""
+           |if ($eval instanceof InternalRow) {
+           |  InternalRow $row = (InternalRow)$eval;
+           |  int $rowLength = $row.numFields();
+           |  Object[] $rowResult = new Object[$rowLength];
+           |  for (int $rowIndex = 0; $rowIndex < $rowLength; $rowIndex++) {
+           |    System.out.println($fields[$rowIndex].dataType());
+           |    Object $rowValue = $row.get($rowIndex, $fields[$rowIndex].dataType());
+           |    if ($rowValue instanceof UTF8String) {
+           |      $rowResult[$rowIndex] = $expr.getCollationKey((UTF8String)$rowValue);
+           |    } else {
+           |      $rowResult[$rowIndex] = $rowValue;
+           |    }
+           |  }
+           |  ${ev.value} = new GenericInternalRow($rowResult);
+           |} else {
+           |  ${ev.value} = null;
+           |}
+        """.stripMargin
       })
   }
 
