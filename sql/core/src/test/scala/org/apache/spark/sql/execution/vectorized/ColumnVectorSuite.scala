@@ -499,6 +499,11 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
       case (null, idx) => testVector.isNullAt(idx)
       case (_, idx) => assert(false, s"Unexpected value at $idx")
     }
+
+    // Verify ColumnarArray.copy() works as expected
+    val arr = new ColumnarArray(testVector, 0, testVector.capacity)
+    assert(arr.toSeq(testVector.dataType) == expected)
+    assert(arr.copy().toSeq(testVector.dataType) == expected)
   }
 
   testVectors("getInts with dictionary and nulls", 3, IntegerType) { testVector =>
