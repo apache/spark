@@ -293,16 +293,6 @@ object SparkBuild extends PomBuild {
       (publishLocal / skip)).value,
     publishLocal := Seq((MavenCompile / publishLocal), (SbtCompile / publishLocal)).dependOn.value,
 
-    javaOptions ++= {
-      val versionParts = System.getProperty("java.version").split("[+.\\-]+", 3)
-      val major = versionParts(0).toInt
-      if (major >= 21) {
-        Seq("--add-modules=jdk.incubator.vector", "-Dforeign.restricted=warn")
-      } else {
-        Seq("--add-modules=jdk.incubator.vector,jdk.incubator.foreign", "-Dforeign.restricted=warn")
-      }
-    },
-
     (Compile / doc / javacOptions) ++= {
       Seq("-Xdoclint:all", "-Xdoclint:-missing")
     },
