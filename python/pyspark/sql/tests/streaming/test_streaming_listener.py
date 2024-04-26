@@ -194,6 +194,54 @@ class StreamingListenerTestsMixin:
         self.assertTrue(isinstance(progress.numOutputRows, int))
         self.assertTrue(isinstance(progress.metrics, dict))
 
+    # This is a generic test work for both classic Spark and Spark Connect
+    def test_listener_observed_metrics(self):
+        class MyErrorListener(StreamingQueryListener):
+            def __init__(self):
+                self.num_rows = -1
+                self.num_error_rows = -1
+
+            def onQueryStarted(self, event):
+                pass
+
+            def onQueryProgress(self, event):
+                row = event.progress.observedMetrics.get("my_event")
+                # Save observed metrics for later verification
+                self.num_rows = row["rc"]
+                self.num_error_rows = row["erc"]
+
+            def onQueryIdle(self, event):
+                pass
+
+            def onQueryTerminated(self, event):
+                pass
+
+        try:
+            error_listener = MyErrorListener()
+            self.spark.streams.addListener(error_listener)
+
+            sdf = (
+                self.spark.readStream.format("rate").load()
+                .withColumn("error", col("value"))
+            )
+
+            # Observe row count (rc) and error row count (erc) in the streaming Dataset
+            observed_ds = sdf.observe(
+                "my_event", count(lit(1)).alias("rc"), count(col("error")).alias("erc")
+            )
+
+            q = observed_ds.writeStream.format("console").start()
+
+            while q.lastProgress is None or q.lastProgress["batchId"] == 0:
+                q.awaitTermination(0.5)
+
+            self.assertTrue(error_listener.num_rows > 0)
+            self.assertTrue(error_listener.num_error_rows > 0)
+
+        finally:
+            q.stop()
+            self.spark.streams.removeListener(error_listener)
+
 
 class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
     def test_number_of_public_methods(self):
@@ -371,53 +419,6 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
 
         verify(TestListenerV1())
         verify(TestListenerV2())
-
-    def test_listener_observed_metrics(self):
-        class MyErrorListener(StreamingQueryListener):
-            def __init__(self):
-                self.num_rows = -1
-                self.num_error_rows = -1
-
-            def onQueryStarted(self, event):
-                pass
-
-            def onQueryProgress(self, event):
-                row = event.progress.observedMetrics.get("my_event")
-                # Save observed metrics for later verification
-                self.num_rows = row["rc"]
-                self.num_error_rows = row["erc"]
-
-            def onQueryIdle(self, event):
-                pass
-
-            def onQueryTerminated(self, event):
-                pass
-
-        try:
-            error_listener = MyErrorListener()
-            self.spark.streams.addListener(error_listener)
-
-            sdf = (
-                self.spark.readStream.format("rate").load()
-                .withColumn("error", col("value"))
-            )
-
-            # Observe row count (rc) and error row count (erc) in the streaming Dataset
-            observed_ds = sdf.observe(
-                "my_event", count(lit(1)).alias("rc"), count(col("error")).alias("erc")
-            )
-
-            q = observed_ds.writeStream.format("console").start()
-
-            while q.lastProgress is None or q.lastProgress["batchId"] == 0:
-                q.awaitTermination(0.5)
-
-            self.assertTrue(error_listener.num_rows > 0)
-            self.assertTrue(error_listener.num_error_rows > 0)
-
-        finally:
-            q.stop()
-            self.spark.streams.removeListener(error_listener)
 
     def test_query_started_event_fromJson(self):
         start_event = """
