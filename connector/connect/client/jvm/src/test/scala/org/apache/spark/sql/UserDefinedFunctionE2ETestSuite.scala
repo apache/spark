@@ -26,7 +26,8 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.api.java.function._
 import org.apache.spark.sql.api.java.UDF2
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveIntEncoder, PrimitiveLongEncoder}
-import org.apache.spark.sql.functions.{col, struct, udf}
+import org.apache.spark.sql.expressions.Aggregator
+import org.apache.spark.sql.functions.{col, struct, udaf, udf}
 import org.apache.spark.sql.test.QueryTest
 import org.apache.spark.sql.types.IntegerType
 
@@ -37,6 +38,31 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest {
   test("Dataset typed filter") {
     val rows = spark.range(10).filter(n => n % 2 == 0).collectAsList()
     assert(rows == Arrays.asList[Long](0, 2, 4, 6, 8))
+
+    val foo = udf((i: Int) => i + 1)
+    spark.udf.register("random", foo.asNondeterministic())
+
+    val agg = new Aggregator[Long, Long, Long] {
+      override def zero = 0L
+      override def reduce(b: Long, a: Long) = b + a
+      override def merge(b1: Long, b2: Long) = b1 + b2
+      override def finish(reduction: Long) = reduction
+      override def bufferEncoder: Encoder[Long] = Encoders.scalaLong
+      override def outputEncoder: Encoder[Long] = Encoders.scalaLong
+    }
+    //    val agg = new SerializedAggregator[Long, Long, Long] {
+    //      override def zero = () => 0L
+    //      override def reduce = (b: Long, a: Long) => b + a
+    //      override def merge = (b1: Long, b2: Long) => b1 + b2
+    //      override def finish = (reduction: Long) => reduction
+    //      override def bufferEncoder: Encoder[Long] = Encoders.scalaLong
+    //      override def outputEncoder: Encoder[Long] = Encoders.scalaLong
+    //    }
+
+    spark.udf.register("agg", udaf(agg.toSerializedAggregator))
+
+    val res = spark.range(10).selectExpr("agg(id)").collect()
+    val ss = res
   }
 
   test("Dataset typed filter - java") {

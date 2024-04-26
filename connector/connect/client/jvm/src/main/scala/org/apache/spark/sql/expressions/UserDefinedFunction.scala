@@ -28,7 +28,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
-import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, UdfPacket}
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, UdafPacket, UdfPacket}
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.{ClosureCleaner, SparkClassUtils, SparkSerDeUtils}
 
@@ -202,6 +202,91 @@ object ScalarUserDefinedFunction {
       function = function,
       inputEncoders = Seq.empty[AgnosticEncoder[_]],
       outputEncoder = RowEncoder.encoderForDataType(returnType, lenient = false))
+  }
+}
+
+case class UserDefinedAggregator private[sql] (
+    serializedUdafPacket: Array[Byte],
+    inputType: proto.DataType,
+    name: Option[String],
+    override val nullable: Boolean,
+    override val deterministic: Boolean)
+  extends UserDefinedFunction {
+
+  private[this] lazy val udaf = {
+    val scalaUdfBuilder = proto.ScalaUDAF
+      .newBuilder()
+      .setPayload(ByteString.copyFrom(serializedUdafPacket))
+      .setInputType(inputType)
+      .setNullable(nullable)
+
+    scalaUdfBuilder.build()
+  }
+
+  @scala.annotation.varargs
+  override def apply(exprs: Column*): Column = Column { builder =>
+    val udfBuilder = builder.getCommonInlineUserDefinedFunctionBuilder
+    udfBuilder
+      .setDeterministic(deterministic)
+      .setScalaUdaf(udaf)
+      .addAllArguments(exprs.map(_.expr).asJava)
+
+    name.foreach(udfBuilder.setFunctionName)
+  }
+
+  override def withName(name: String): UserDefinedAggregator = copy(name = Option(name))
+
+  override def asNonNullable(): UserDefinedAggregator = copy(nullable = false)
+
+  override def asNondeterministic(): UserDefinedAggregator = copy(deterministic = false)
+
+  def toProto: proto.CommonInlineUserDefinedFunction = {
+    val builder = proto.CommonInlineUserDefinedFunction.newBuilder()
+    builder
+      .setDeterministic(deterministic)
+      .setScalaUdaf(udaf)
+
+    name.foreach(builder.setFunctionName)
+    builder.build()
+  }
+}
+
+object UserDefinedAggregator {
+  private val LAMBDA_DESERIALIZATION_ERR_MSG: String =
+    "cannot assign instance of java.lang.invoke.SerializedLambda to field"
+
+  private def checkDeserializable(bytes: Array[Byte]): Unit = {
+    try {
+      SparkSerDeUtils.deserialize(bytes, SparkClassUtils.getContextOrSparkClassLoader)
+    } catch {
+      case e: ClassCastException if e.getMessage.contains(LAMBDA_DESERIALIZATION_ERR_MSG) =>
+        throw new SparkException(
+          "UDAF cannot be executed on a Spark cluster: it cannot be deserialized. " +
+            "This is very likely to be caused by the lambda function (the UDF) having a " +
+            "self-reference. This is not supported by java serialization.")
+      case NonFatal(e) =>
+        throw new SparkException(
+          "UDAF cannot be executed on a Spark cluster: it cannot be deserialized.",
+          e)
+    }
+  }
+
+  private[sql] def apply[IN, BUF, OUT](
+      aggregator: Aggregator[IN, BUF, OUT],
+      inputEncoder: AgnosticEncoder[IN]): UserDefinedAggregator = {
+    SparkConnectClosureCleaner.clean(aggregator)
+    val udafPacketBytes =
+      SparkSerDeUtils.serialize(new UdafPacket(
+        aggregator = aggregator,
+        inputEncoder = inputEncoder))
+    checkDeserializable(udafPacketBytes)
+    UserDefinedAggregator(
+      serializedUdafPacket = udafPacketBytes,
+      inputType = DataTypeProtoConverter.toConnectProtoType(inputEncoder.dataType),
+      name = None,
+      nullable = true,
+      deterministic = true
+    )
   }
 }
 
