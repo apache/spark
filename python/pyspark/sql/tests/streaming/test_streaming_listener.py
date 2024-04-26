@@ -398,8 +398,7 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
             self.spark.streams.addListener(error_listener)
 
             sdf = (
-                self.spark.readStream.format("text")
-                .load("python/test_support/sql/streaming")
+                self.spark.readStream.format("rate").load()
                 .withColumn("error", col("value"))
             )
 
@@ -410,7 +409,8 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
 
             q = observed_ds.writeStream.format("console").start()
 
-            q.processAllAvailable()
+            while q.lastProgress is None or q.lastProgress["batchId"] == 0:
+                q.awaitTermination(0.5)
 
             self.assertTrue(error_listener.num_rows > 0)
             self.assertTrue(error_listener.num_error_rows > 0)
