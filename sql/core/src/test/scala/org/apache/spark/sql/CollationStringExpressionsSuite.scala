@@ -88,6 +88,23 @@ class CollationStringExpressionsSuite
     assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
   }
 
+  test("Support SplitPart string expression with collation") {
+    // Supported collations
+    case class SplitPartTestCase[R](s: String, d: String, p: Int, c: String, result: R)
+    val testCases = Seq(
+      SplitPartTestCase("1a2", "a", 2, "UTF8_BINARY", "2"),
+      SplitPartTestCase("1a2", "a", 2, "UNICODE", "2"),
+      SplitPartTestCase("1a2", "A", 2, "UTF8_BINARY_LCASE", "2"),
+      SplitPartTestCase("1a2", "A", 2, "UNICODE_CI", "2")
+    )
+    testCases.foreach(t => {
+      val query = s"SELECT split_part(collate('${t.s}','${t.c}'),collate('${t.d}','${t.c}'),${t.p})"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
+    })
+  }
+
   test("Support Contains string expression with collation") {
     // Supported collations
     case class ContainsTestCase[R](l: String, r: String, c: String, result: R)

@@ -21,12 +21,12 @@ import scala.collection.immutable.Seq
 
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{MapType, StringType}
 
 // scalastyle:off nonascii
 class CollationSQLExpressionsSuite
   extends QueryTest
-    with SharedSparkSession {
+  with SharedSparkSession {
 
   test("Conv expression with collation") {
     // Supported collations
@@ -149,6 +149,70 @@ class CollationSQLExpressionsSuite
       checkAnswer(sql(query), Row(t.result))
       assert(sql(query).schema.fields.head.dataType.sameType(StringType("UTF8_BINARY")))
     })
+
+  test("Support StringToMap expression with collation") {
+    // Supported collations
+    case class StringToMapTestCase[R](t: String, p: String, k: String, c: String, result: R)
+    val testCases = Seq(
+      StringToMapTestCase("a:1,b:2,c:3", ",", ":", "UTF8_BINARY",
+        Map("a" -> "1", "b" -> "2", "c" -> "3")),
+      StringToMapTestCase("A-1;B-2;C-3", ";", "-", "UTF8_BINARY_LCASE",
+        Map("A" -> "1", "B" -> "2", "C" -> "3")),
+      StringToMapTestCase("1:a,2:b,3:c", ",", ":", "UNICODE",
+        Map("1" -> "a", "2" -> "b", "3" -> "c")),
+      StringToMapTestCase("1/A!2/B!3/C", "!", "/", "UNICODE_CI",
+        Map("1" -> "A", "2" -> "B", "3" -> "C"))
+    )
+    testCases.foreach(t => {
+      val query = s"SELECT str_to_map(collate('${t.t}', '${t.c}'), '${t.p}', '${t.k}');"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      val dataType = MapType(StringType(t.c), StringType(t.c), true)
+      assert(sql(query).schema.fields.head.dataType.sameType(dataType))
+    })
+  }
+
+  test("Support Mask expression with collation") {
+    // Supported collations
+    case class MaskTestCase[R](i: String, u: String, l: String, d: String, o: String, c: String,
+      result: R)
+    val testCases = Seq(
+      MaskTestCase("ab-CD-12-@$", null, null, null, null, "UTF8_BINARY", "ab-CD-12-@$"),
+      MaskTestCase("ab-CD-12-@$", "X", null, null, null, "UTF8_BINARY_LCASE", "ab-XX-12-@$"),
+      MaskTestCase("ab-CD-12-@$", "X", "x", null, null, "UNICODE", "xx-XX-12-@$"),
+      MaskTestCase("ab-CD-12-@$", "X", "x", "0", "#", "UNICODE_CI", "xx#XX#00###")
+    )
+    testCases.foreach(t => {
+      def col(s: String): String = if (s == null) "null" else s"collate('$s', '${t.c}')"
+      val query = s"SELECT mask(${col(t.i)}, ${col(t.u)}, ${col(t.l)}, ${col(t.d)}, ${col(t.o)})"
+      // Result & data type
+      var result = sql(query)
+      checkAnswer(result, Row(t.result))
+      assert(result.schema.fields.head.dataType.sameType(StringType(t.c)))
+    })
+    // Implicit casting
+    val testCasting = Seq(
+      MaskTestCase("ab-CD-12-@$", "X", "x", "0", "#", "UNICODE_CI", "xx#XX#00###")
+    )
+    testCasting.foreach(t => {
+      def col(s: String): String = if (s == null) "null" else s"collate('$s', '${t.c}')"
+      def str(s: String): String = if (s == null) "null" else s"'$s'"
+      val query1 = s"SELECT mask(${col(t.i)}, ${str(t.u)}, ${str(t.l)}, ${str(t.d)}, ${str(t.o)})"
+      val query2 = s"SELECT mask(${str(t.i)}, ${col(t.u)}, ${str(t.l)}, ${str(t.d)}, ${str(t.o)})"
+      val query3 = s"SELECT mask(${str(t.i)}, ${str(t.u)}, ${col(t.l)}, ${str(t.d)}, ${str(t.o)})"
+      val query4 = s"SELECT mask(${str(t.i)}, ${str(t.u)}, ${str(t.l)}, ${col(t.d)}, ${str(t.o)})"
+      val query5 = s"SELECT mask(${str(t.i)}, ${str(t.u)}, ${str(t.l)}, ${str(t.d)}, ${col(t.o)})"
+      for (q <- Seq(query1, query2, query3, query4, query5)) {
+        val result = sql(q)
+        checkAnswer(result, Row(t.result))
+        assert(result.schema.fields.head.dataType.sameType(StringType(t.c)))
+      }
+    })
+    // Collation mismatch
+    val collationMismatch = intercept[AnalysisException] {
+      sql("SELECT mask(collate('ab-CD-12-@$','UNICODE'),collate('X','UNICODE_CI'),'x','0','#')")
+    }
+    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
   }
 
   // TODO: Add more tests for other SQL expressions

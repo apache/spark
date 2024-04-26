@@ -1206,14 +1206,16 @@ class XmlSuite
   }
 
   test("test XSD validation") {
-    val basketDF = spark.read
-      .option("rowTag", "basket")
-      .option("inferSchema", true)
-      .option("rowValidationXSDPath", getTestResourcePath(resDir + "basket.xsd")
-        .replace("file:/", "/"))
-      .xml(getTestResourcePath(resDir + "basket.xml"))
-    // Mostly checking it doesn't fail
-    assert(basketDF.selectExpr("entry[0].key").head().getLong(0) === 9027)
+    Seq("basket.xsd", "include-example/first.xsd").foreach { xsdFile =>
+      val basketDF = spark.read
+        .option("rowTag", "basket")
+        .option("inferSchema", true)
+        .option("rowValidationXSDPath", getTestResourcePath(resDir + xsdFile)
+          .replace("file:/", "/"))
+        .xml(getTestResourcePath(resDir + "basket.xml"))
+      // Mostly checking it doesn't fail
+      assert(basketDF.selectExpr("entry[0].key").head().getLong(0) === 9027)
+    }
   }
 
   test("test XSD validation with validation error") {

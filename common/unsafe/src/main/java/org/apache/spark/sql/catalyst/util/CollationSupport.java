@@ -23,6 +23,10 @@ import com.ibm.icu.util.ULocale;
 
 import org.apache.spark.unsafe.types.UTF8String;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Pattern;
+
 /**
  * Static entry point for collation-aware expressions (StringExpressions, RegexpExpressions, and
  * other expressions that require custom collation support), as well as private utility methods for
@@ -33,6 +37,62 @@ public final class CollationSupport {
   /**
    * Collation-aware string expressions.
    */
+
+  public static class StringSplitSQL {
+    public static UTF8String[] exec(final UTF8String s, final UTF8String d, final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      if (collation.supportsBinaryEquality) {
+        return execBinary(s, d);
+      } else if (collation.supportsLowercaseEquality) {
+        return execLowercase(s, d);
+      } else {
+        return execICU(s, d, collationId);
+      }
+    }
+    public static String genCode(final String s, final String d, final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      String expr = "CollationSupport.StringSplitSQL.exec";
+      if (collation.supportsBinaryEquality) {
+        return String.format(expr + "Binary(%s, %s)", s, d);
+      } else if (collation.supportsLowercaseEquality) {
+        return String.format(expr + "Lowercase(%s, %s)", s, d);
+      } else {
+        return String.format(expr + "ICU(%s, %s, %d)", s, d, collationId);
+      }
+    }
+    public static UTF8String[] execBinary(final UTF8String string, final UTF8String delimiter) {
+      return string.splitSQL(delimiter, -1);
+    }
+    public static UTF8String[] execLowercase(final UTF8String string, final UTF8String delimiter) {
+      if (delimiter.numBytes() == 0) return new UTF8String[] { string };
+      if (string.numBytes() == 0) return new UTF8String[] { UTF8String.EMPTY_UTF8 };
+      Pattern pattern = Pattern.compile(Pattern.quote(delimiter.toString()),
+        CollationSupport.lowercaseRegexFlags);
+      String[] splits = pattern.split(string.toString(), -1);
+      UTF8String[] res = new UTF8String[splits.length];
+      for (int i = 0; i < res.length; i++) {
+        res[i] = UTF8String.fromString(splits[i]);
+      }
+      return res;
+    }
+    public static UTF8String[] execICU(final UTF8String string, final UTF8String delimiter,
+        final int collationId) {
+      if (delimiter.numBytes() == 0) return new UTF8String[] { string };
+      if (string.numBytes() == 0) return new UTF8String[] { UTF8String.EMPTY_UTF8 };
+      List<UTF8String> strings = new ArrayList<>();
+      String target = string.toString(), pattern = delimiter.toString();
+      StringSearch stringSearch = CollationFactory.getStringSearch(target, pattern, collationId);
+      int start = 0, end;
+      while ((end = stringSearch.next()) != StringSearch.DONE) {
+        strings.add(UTF8String.fromString(target.substring(start, end)));
+        start = end + stringSearch.getMatchLength();
+      }
+      if (start <= target.length()) {
+        strings.add(UTF8String.fromString(target.substring(start)));
+      }
+      return strings.toArray(new UTF8String[0]);
+    }
+  }
 
   public static class Contains {
     public static boolean exec(final UTF8String l, final UTF8String r, final int collationId) {
@@ -310,7 +370,24 @@ public final class CollationSupport {
    * Collation-aware regexp expressions.
    */
 
-  // TODO: Add more collation-aware regexp expressions.
+  public static boolean supportsLowercaseRegex(final int collationId) {
+    // for regex, only Unicode case-insensitive matching is possible,
+    // so UTF8_BINARY_LCASE is treated as UNICODE_CI in this context
+    return CollationFactory.fetchCollation(collationId).supportsLowercaseEquality;
+  }
+
+  private static final int lowercaseRegexFlags = Pattern.UNICODE_CASE | Pattern.CASE_INSENSITIVE;
+  public static int collationAwareRegexFlags(final int collationId) {
+    return supportsLowercaseRegex(collationId) ? lowercaseRegexFlags : 0;
+  }
+
+  private static final UTF8String lowercaseRegexPrefix = UTF8String.fromString("(?ui)");
+  public static UTF8String lowercaseRegex(final UTF8String regex) {
+    return UTF8String.concat(lowercaseRegexPrefix, regex);
+  }
+  public static UTF8String collationAwareRegex(final UTF8String regex, final int collationId) {
+    return supportsLowercaseRegex(collationId) ? lowercaseRegex(regex) : regex;
+  }
 
   /**
    * Other collation-aware expressions.
