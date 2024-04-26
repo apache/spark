@@ -412,8 +412,8 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
 
             q.processAllAvailable()
 
-            assert error_listener.num_rows > 0
-            assert error_listener.num_error_rows > 0
+            self.assertTrue(error_listener.num_rows > 0)
+            self.assertTrue(error_listener.num_error_rows > 0)
 
         finally:
             q.stop()
