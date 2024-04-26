@@ -58,6 +58,15 @@ class VariantSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("basic try_parse_json alias") {
+    val df = spark.createDataFrame(Seq(Row("""{ "a" : 1 }"""), Row("""{ a : 1 }""")).asJava,
+      new StructType().add("json", StringType))
+    val actual = df.select(to_json(try_parse_json(col("json")))).collect()
+
+    assert(actual(0)(0) == """{"a":1}""")
+    assert(actual(1)(0) == null)
+  }
+
   test("basic parse_json alias") {
     val df = spark.createDataFrame(Seq(Row("""{ "a" : 1 }""")).asJava,
       new StructType().add("json", StringType))
