@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.streaming.state
 import org.rocksdb._
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey._
+import org.apache.spark.internal.LogKeys._
 
 /**
  * Singleton responsible for managing cache and write buffer manager associated with all RocksDB

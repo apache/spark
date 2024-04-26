@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.streaming
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicLong
 
-import org.apache.spark.internal.LogKey.PRETTY_ID_STRING
+import org.apache.spark.internal.LogKeys.PRETTY_ID_STRING
 import org.apache.spark.internal.MDC
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.streaming.WriteToStream
