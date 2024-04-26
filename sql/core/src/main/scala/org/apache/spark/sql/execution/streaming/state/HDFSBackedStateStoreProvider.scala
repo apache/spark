@@ -438,11 +438,16 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       newVersion: Long,
       map: HDFSBackedStateStoreMap): Unit = synchronized {
     val loadedEntries = loadedMaps.size()
-    val lastKey: Option[Long] = if (loadedEntries > 0) Some(loadedMaps.lastKey()) else None
-    if (lastKey.isDefined) {
+    val earliestLoadedVersion: Option[Long] = if (loadedEntries > 0) {
+      Some(loadedMaps.lastKey())
+    } else {
+      None
+    }
+
+    if (earliestLoadedVersion.isDefined) {
       logInfo(s"Trying to add version=$newVersion to state cache map with " +
-        s"current_size=$loadedEntries and last_loaded_version=${lastKey.get} and " +
-        s"max_versions_to_retain_in_memory=$numberOfVersionsToRetainInMemory")
+        s"current_size=$loadedEntries and earliest_loaded_version=${earliestLoadedVersion.get} " +
+        s"and max_versions_to_retain_in_memory=$numberOfVersionsToRetainInMemory")
     } else {
       logInfo(s"Trying to add version=$newVersion to state cache map with " +
         s"current_size=$loadedEntries and " +
