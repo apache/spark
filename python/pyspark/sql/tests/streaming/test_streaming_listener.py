@@ -220,10 +220,7 @@ class StreamingListenerTestsMixin:
             error_listener = MyErrorListener()
             self.spark.streams.addListener(error_listener)
 
-            sdf = (
-                self.spark.readStream.format("rate").load()
-                .withColumn("error", col("value"))
-            )
+            sdf = self.spark.readStream.format("rate").load().withColumn("error", col("value"))
 
             # Observe row count (rc) and error row count (erc) in the streaming Dataset
             observed_ds = sdf.observe(
