@@ -47,7 +47,7 @@ object XSDToSchema extends Logging{
   def read(xsdPath: Path): StructType = {
     val in = ValidatorUtil.openSchemaFile(xsdPath)
     val xmlSchemaCollection = new XmlSchemaCollection()
-    xmlSchemaCollection.setBaseUri(xsdPath.getParent.toString)
+    xmlSchemaCollection.setBaseUri(xsdPath.toString)
     val xmlSchema = xmlSchemaCollection.read(new InputStreamReader(in))
     getStructType(xmlSchema)
   }

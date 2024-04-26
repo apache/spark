@@ -42,7 +42,7 @@ object ValidatorUtil extends Logging {
         val in = openSchemaFile(new Path(key))
         try {
           val schemaFactory = SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI)
-          schemaFactory.newSchema(new StreamSource(in))
+          schemaFactory.newSchema(new StreamSource(in, key))
         } finally {
           in.close()
         }
