@@ -410,8 +410,7 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
 
             q = observed_ds.writeStream.format("console").start()
 
-            while q.lastProgress is None:
-                q.awaitTermination(0.5)
+            q.processAllAvailable()
 
             assert error_listener.num_rows > 0
             assert error_listener.num_error_rows > 0
