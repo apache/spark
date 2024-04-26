@@ -86,9 +86,12 @@ private case class MsSqlServerDialect() extends JdbcDialect {
       // We shouldn't propagate these queries to MsSqlServer
       expr match {
         case e: Predicate => e.name() match {
-          case "=" | "<>" | "<=>" | "<" | "<=" | ">" | ">="
-              if e.children().exists(_.isInstanceOf[Predicate]) =>
-            super.visitUnexpectedExpr(expr)
+          case "=" | "<>" | "<=>" | "<" | "<=" | ">" | ">=" =>
+            val Array(l, r) = e.children().map {
+              case p: Predicate => s"CASE WHEN ${inputToSQL(p)} THEN 1 ELSE 0 END"
+              case o => inputToSQL(o)
+            }
+            visitBinaryComparison(e.name(), l, r)
           case _ => super.build(expr)
         }
         case _ => super.build(expr)
