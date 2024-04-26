@@ -224,7 +224,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Returns the number of bytes for a code point with the first byte as `b`
    * @param b The first byte of a code point
    */
-  private static int numBytesForFirstByte(final byte b) {
+  public static int numBytesForFirstByte(final byte b) {
     final int offset = b & 0xFF;
     byte numBytes = bytesOfCodePointInUTF8[offset];
     return (numBytes == 0) ? 1: numBytes; // Skip the first byte disallowed in UTF-8
@@ -382,7 +382,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   /**
    * Returns the byte at position `i`.
    */
-  private byte getByte(int i) {
+  public byte getByte(int i) {
     return Platform.getByte(base, offset + i);
   }
 
