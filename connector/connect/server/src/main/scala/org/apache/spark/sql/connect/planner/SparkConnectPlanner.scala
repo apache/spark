@@ -1641,43 +1641,21 @@ class SparkConnectPlanner(
   }
 
   private def unpackUdf(fun: proto.CommonInlineUserDefinedFunction): UdfPacket = {
-    unpackScalarScalaUDF[UdfPacket](fun.getScalarScalaUdf)
+    unpackUdfPayload[UdfPacket](fun.getScalarScalaUdf.getPayload.toByteArray)
   }
 
   private def unpackUdaf(fun: proto.CommonInlineUserDefinedFunction): UdafPacket = {
-    unpackScalarScalaUDAF[UdafPacket](fun.getScalaUdaf)
+    unpackUdfPayload[UdafPacket](fun.getScalaUdaf.getPayload.toByteArray)
   }
 
   private def unpackForeachWriter(fun: proto.ScalarScalaUDF): ForeachWriterPacket = {
-    unpackScalarScalaUDF[ForeachWriterPacket](fun)
+    unpackUdfPayload[ForeachWriterPacket](fun.getPayload.toByteArray)
   }
 
-  private def unpackScalarScalaUDF[T](fun: proto.ScalarScalaUDF): T = {
+  private def unpackUdfPayload[T](getByteArray: () => Array[Byte]): T = {
     try {
       logDebug(s"Unpack using class loader: ${Utils.getContextOrSparkClassLoader}")
-      Utils.deserialize[T](fun.getPayload.toByteArray, Utils.getContextOrSparkClassLoader)
-    } catch {
-      case t: Throwable =>
-        Throwables.getRootCause(t) match {
-          case nsm: NoSuchMethodException =>
-            throw new ClassNotFoundException(
-              s"Failed to load class correctly due to $nsm. " +
-                "Make sure the artifact where the class is defined is installed by calling" +
-                " session.addArtifact.")
-          case cnf: ClassNotFoundException =>
-            throw new ClassNotFoundException(
-              s"Failed to load class: ${cnf.getMessage}. " +
-                "Make sure the artifact where the class is defined is installed by calling" +
-                " session.addArtifact.")
-          case _ => throw t
-        }
-    }
-  }
-
-  private def unpackScalarScalaUDAF[T](fun: proto.ScalaUDAF): T = {
-    try {
-      logDebug(s"Unpack using class loader: ${Utils.getContextOrSparkClassLoader}")
-      Utils.deserialize[T](fun.getPayload.toByteArray, Utils.getContextOrSparkClassLoader)
+      Utils.deserialize[T](getByteArray(), Utils.getContextOrSparkClassLoader)
     } catch {
       case t: Throwable =>
         Throwables.getRootCause(t) match {
@@ -1733,7 +1711,7 @@ class SparkConnectPlanner(
   }
 
   private def transformScalaUdafFunction(
-      fun: proto.CommonInlineUserDefinedFunction): UserDefinedAggregator[Any, Any, Any] = {
+      fun: proto.CommonInlineUserDefinedFunction): UserDefinedAggregator[_, _, _] = {
     val udaf = fun.getScalaUdaf
     val udafPacket = unpackUdaf(fun)
     UserDefinedAggregator(

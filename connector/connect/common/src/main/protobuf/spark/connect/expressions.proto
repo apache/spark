@@ -381,12 +381,12 @@ message ScalarScalaUDF {
 }
 
 message ScalaUDAF {
-  // (Required) Serialized JVM object of the Aggregator, plus input, buffer, and output encoders
+  // (Required) Serialized JVM object of the Aggregator instance, including buffer and output encoders
   bytes payload = 1;
   // (Required) Input type of the UDAF
   DataType inputType = 2;
   // (Required) True if the UDAF can return null value
-  bool nullable = 5;
+  bool nullable = 3;
 }
 
 message JavaUDF {
