@@ -25,9 +25,13 @@ class VariantExpressionEvalUtilsSuite extends SparkFunSuite {
 
   test("parseJson type coercion") {
     def check(json: String, expectedValue: Array[Byte], expectedMetadata: Array[Byte]): Unit = {
+      // parse_json
       val actual = VariantExpressionEvalUtils.parseJson(UTF8String.fromString(json))
+      // try_parse_json
+      val tryActual = VariantExpressionEvalUtils.parseJson(UTF8String.fromString(json),
+        failOnError = false)
       val expected = new VariantVal(expectedValue, expectedMetadata)
-      assert(actual === expected)
+      assert(actual === expected && tryActual === expected)
     }
 
     // Dictionary size is `0` for value 0. An empty dictionary contains one offset `0` for the
@@ -104,6 +108,8 @@ class VariantExpressionEvalUtilsSuite extends SparkFunSuite {
 
   test("parseJson negative") {
     def checkException(json: String, errorClass: String, parameters: Map[String, String]): Unit = {
+      val try_parse_json_output = VariantExpressionEvalUtils.parseJson(UTF8String.fromString(json),
+        failOnError = false)
       checkError(
         exception = intercept[SparkThrowable] {
           VariantExpressionEvalUtils.parseJson(UTF8String.fromString(json))
@@ -111,6 +117,7 @@ class VariantExpressionEvalUtilsSuite extends SparkFunSuite {
         errorClass = errorClass,
         parameters = parameters
       )
+      assert(try_parse_json_output === null)
     }
     for (json <- Seq("", "[", "+1", "1a", """{"a": 1, "b": 2, "a": "3"}""")) {
       checkException(json, "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
