@@ -2602,7 +2602,7 @@ object Decode {
         val input = params.head
         val other = params.tail
         val itr = other.iterator
-        var default: Expression = Literal.create(null, StringType)
+        var default: Expression = Literal.create(null, SQLConf.get.defaultStringType)
         val branches = ArrayBuffer.empty[(Expression, Expression)]
         while (itr.hasNext) {
           val search = itr.next()
