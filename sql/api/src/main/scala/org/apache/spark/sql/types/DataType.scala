@@ -22,7 +22,7 @@ import java.util.Locale
 import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.databind.annotation.{JsonDeserialize, JsonSerialize}
-import org.json4s._
+import org.json4s.{JObject, _}
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
@@ -208,22 +208,31 @@ object DataType {
   }
 
   // NOTE: Map fields must be sorted in alphabetical order to keep consistent with the Python side.
-  private[sql] def parseDataType(json: JValue): DataType = json match {
+  private[sql] def parseDataType(
+      json: JValue,
+      path: Seq[String] = Seq.empty,
+      collationsMap: Map[String, String] = Map.empty): DataType = json match {
     case JString(name) =>
-      nameToType(name)
+      collationsMap.get(path.mkString(".")) match {
+        case Some(collation) => stringTypeWithCollation(collation)
+        case _ => nameToType(name)
+      }
 
     case JSortedObject(
     ("containsNull", JBool(n)),
     ("elementType", t: JValue),
     ("type", JString("array"))) =>
-      ArrayType(parseDataType(t), n)
+      val elementType = resolveType(t, path :+ "element", collationsMap)
+      ArrayType(elementType, n)
 
     case JSortedObject(
     ("keyType", k: JValue),
     ("type", JString("map")),
     ("valueContainsNull", JBool(n)),
     ("valueType", v: JValue)) =>
-      MapType(parseDataType(k), parseDataType(v), n)
+      val keyType = resolveType(k, path :+ "key", collationsMap)
+      val valueType = resolveType(v, path :+ "value", collationsMap)
+      MapType(keyType, valueType, n)
 
     case JSortedObject(
     ("fields", JArray(fields)),
@@ -244,20 +253,31 @@ object DataType {
     ("serializedClass", JString(serialized)),
     ("sqlType", v: JValue),
     ("type", JString("udt"))) =>
-        new PythonUserDefinedType(parseDataType(v), pyClass, serialized)
+      new PythonUserDefinedType(parseDataType(v), pyClass, serialized)
 
-    case other => throw new SparkIllegalArgumentException(
-      errorClass = "INVALID_JSON_DATA_TYPE",
-      messageParameters = Map("invalidType" -> compact(render(other))))
+    case other =>
+      throw new IllegalArgumentException(
+        s"Failed to convert the JSON string '${compact(render(other))}' to a data type.")
   }
 
-  private def parseStructField(json: JValue): StructField = json match {
+  /**
+   * This method is public so that the UC can reliably serialize and deserialize StructFields.
+   * These fields will be stored in persistent storage, so their format needs to be backwards
+   * compatible.
+   */
+  def parseStructField(json: JValue): StructField = json match {
     case JSortedObject(
     ("metadata", metadata: JObject),
     ("name", JString(name)),
     ("nullable", JBool(nullable)),
     ("type", dataType: JValue)) =>
-      StructField(name, parseDataType(dataType), nullable, Metadata.fromJObject(metadata))
+      val collationsMap = getCollationsMap(metadata)
+      StructField(
+        name,
+        parseDataType(dataType, Seq(name), collationsMap),
+        nullable,
+        // TODO: remove collations field
+        Metadata.fromJObject(metadata))
     // Support reading schema when 'metadata' is missing.
     case JSortedObject(
     ("name", JString(name)),
@@ -269,9 +289,34 @@ object DataType {
     ("name", JString(name)),
     ("type", dataType: JValue)) =>
       StructField(name, parseDataType(dataType))
-    case other => throw new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_3250",
-      messageParameters = Map("other" -> compact(render(other))))
+    case other =>
+      throw new IllegalArgumentException(
+        s"Failed to convert the JSON string '${compact(render(other))}' to a field.")
+  }
+
+  private def resolveType(json: JValue, path: Seq[String], map: Map[String, String]): DataType = {
+    map.get(path.mkString(".")) match {
+      case Some(collation) => stringTypeWithCollation(collation)
+      case _ => parseDataType(json, path, map)
+    }
+  }
+
+  private def getCollationsMap(metadata: JObject): Map[String, String] = metadata match {
+    case JObject(fields) =>
+      val json = fields.find(_._1 == "collations").map(_._2)
+      json match {
+        case Some(JObject(fields)) =>
+          fields.map {
+            case (k, JString(v)) => k -> v
+            case _ => throw new IllegalArgumentException(
+              s"Failed to convert the JSON string '${compact(render(json))}' to a collation map.")
+          }.toMap
+        case _ => Map.empty
+      }
+  }
+
+  private def stringTypeWithCollation(collation: String): StringType = {
+    StringType(CollationFactory.collationNameToId(collation))
   }
 
   protected[types] def buildFormattedString(

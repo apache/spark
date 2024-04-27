@@ -58,8 +58,7 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
    * If this is an UTF8_BINARY collation output is `string` due to backwards compatibility.
    */
   override def typeName: String =
-    if (isUTF8BinaryCollation) "string"
-    else s"string collate ${CollationFactory.fetchCollation(collationId).collationName}"
+    "string"
 
   override def equals(obj: Any): Boolean =
     obj.isInstanceOf[StringType] && obj.asInstanceOf[StringType].collationId == collationId

@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.types
 
+import scala.collection.mutable
+
+import org.json4s.{JObject, JString}
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.catalyst.util.{QuotingUtils, StringConcat}
+import org.apache.spark.sql.catalyst.util.{CollationFactory, QuotingUtils, StringConcat}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumnsUtils.{CURRENT_DEFAULT_COLUMN_METADATA_KEY, EXISTS_DEFAULT_COLUMN_METADATA_KEY}
 import org.apache.spark.util.SparkSchemaUtils
 
@@ -60,10 +63,76 @@ case class StructField(
   override def toString: String = s"StructField($name,$dataType,$nullable)"
 
   private[sql] def jsonValue: JValue = {
-    ("name" -> name) ~
+    val base: JValue = ("name" -> name) ~
       ("type" -> dataType.jsonValue) ~
-      ("nullable" -> nullable) ~
-      ("metadata" -> metadata.jsonValue)
+      ("nullable" -> nullable)
+
+    base merge getMetadataJson
+  }
+
+  private def getMetadataJson: JValue = {
+    metadata.jsonValue match {
+      case JObject(fields) =>
+        val collationMetadataMap = getCollationMetadata
+        if (collationMetadataMap.isEmpty) {
+          return "metadata" -> metadata.jsonValue
+        }
+
+        val collationMetadata = collationMetadataMap.map { case (key, value) => key -> JString(value) }
+        val xy = JObject(fields :+ ("collations" -> JObject(collationMetadata.toList)))
+        "metadata" -> xy
+      case _ => metadata.jsonValue
+    }
+  }
+
+  private def getCollationMetadata: mutable.Map[String, String] = {
+    val fieldToCollationMap = mutable.Map[String, String]()
+
+    def inner(dt: DataType, path: Seq[String]): Unit = dt match {
+      case at: ArrayType =>
+        val elementPath = path :+ "element"
+        if (isCollatedString(at.elementType)) {
+          fieldToCollationMap(elementPath.mkString(".")) = collationName(at.elementType)
+        } else {
+          inner(at.elementType, elementPath)
+        }
+
+      case mt: MapType =>
+        val keyPath = path :+ "key"
+        if (isCollatedString(mt.keyType)) {
+          fieldToCollationMap(keyPath.mkString(".")) = collationName(mt.keyType)
+        } else {
+          inner(mt.keyType, keyPath)
+        }
+
+        val valuePath = path :+ "value"
+        if (isCollatedString(mt.valueType)) {
+          fieldToCollationMap(valuePath.mkString(".")) = collationName(mt.valueType)
+        } else {
+          inner(mt.valueType, valuePath)
+        }
+
+      case st: StringType if isCollatedString(st) =>
+        fieldToCollationMap(path.mkString(".")) = collationName(st)
+
+      case _ =>
+    }
+
+    inner(dataType, Seq(name))
+    fieldToCollationMap
+//    JObject(fieldToCollationMap.map { case (key, value) => key -> JString(value) }.toList)
+  }
+
+  private def isCollatedString(dt: DataType): Boolean = dt match {
+    case st: StringType => !st.isUTF8BinaryCollation
+    case _ => false
+  }
+
+  private def collationName(dt: DataType): String = dt match {
+    case st: StringType =>
+      CollationFactory
+        .fetchCollation(st.collationId)
+        .collationName
   }
 
   /**
