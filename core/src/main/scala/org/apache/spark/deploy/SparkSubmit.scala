@@ -991,9 +991,14 @@ private[spark] class SparkSubmit extends Logging {
     } catch {
       case t: Throwable =>
         logWarning("Some ERR/Exception happened when app is running.")
-        if (args.master.startsWith("k8s")) {
+        if (DriverPodIsNormal) {
           DriverPodIsNormal = false
           driverThrow = t
+          if (isShell(args.primaryResource) ||
+            isSqlShell(args.mainClass) || isThriftServer(args.mainClass) ||
+            isConnectServer(args.mainClass)) {
+            throw findCause(t)
+          }
         } else {
           throw findCause(t)
         }
