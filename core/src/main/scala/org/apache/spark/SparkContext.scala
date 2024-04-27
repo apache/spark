@@ -28,14 +28,13 @@ import scala.collection.concurrent.{Map => ScalaConcurrentMap}
 import scala.collection.immutable
 import scala.collection.mutable.HashMap
 import scala.jdk.CollectionConverters._
-import scala.language.implicitConversions
 import scala.reflect.{classTag, ClassTag}
 import scala.util.control.NonFatal
 
 import com.google.common.collect.MapMaker
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.hadoop.io.{ArrayWritable, BooleanWritable, BytesWritable, DoubleWritable, FloatWritable, IntWritable, LongWritable, NullWritable, Text, Writable}
+import org.apache.hadoop.io.{BooleanWritable, BytesWritable, DoubleWritable, FloatWritable, IntWritable, LongWritable, NullWritable, Text, Writable}
 import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf, SequenceFileInputFormat, TextInputFormat}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHadoopJob}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
@@ -46,7 +45,8 @@ import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.{Executor, ExecutorMetrics, ExecutorMetricsSource}
 import org.apache.spark.input.{FixedLengthBinaryInputFormat, PortableDataStream, StreamInputFormat, WholeTextFileInputFormat}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests._
 import org.apache.spark.internal.config.UI._
@@ -87,6 +87,8 @@ class SparkContext(config: SparkConf) extends Logging {
   // The call site where this SparkContext was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
 
+  private var stopSite: Option[CallSite] = None
+
   if (!config.get(EXECUTOR_ALLOW_SPARK_CONTEXT)) {
     // In order to prevent SparkContext from being created in executors.
     SparkContext.assertOnDriver()
@@ -115,6 +117,10 @@ class SparkContext(config: SparkConf) extends Logging {
            |This stopped SparkContext was created at:
            |
            |${creationSite.longForm}
+           |
+           |And it was stopped at:
+           |
+           |${stopSite.getOrElse(CallSite.empty).longForm}
            |
            |The currently active SparkContext was created at:
            |
@@ -417,6 +423,9 @@ class SparkContext(config: SparkConf) extends Logging {
     if (!_conf.contains("spark.app.name")) {
       throw new SparkException("An application name must be set in your configuration")
     }
+    // HADOOP-19097 Set fs.s3a.connection.establish.timeout to 30s
+    // We can remove this after Apache Hadoop 3.4.1 releases
+    conf.setIfMissing("spark.hadoop.fs.s3a.connection.establish.timeout", "30s")
     // This should be set as early as possible.
     SparkContext.fillMissingMagicCommitterConfsIfNeeded(_conf)
 
@@ -745,7 +754,9 @@ class SparkContext(config: SparkConf) extends Logging {
       }
     } catch {
       case e: Exception =>
-        logError(s"Exception getting thread dump from executor $executorId", e)
+        logError(
+          log"Exception getting thread dump from executor ${MDC(LogKeys.EXECUTOR_ID, executorId)}",
+          e)
         None
     }
   }
@@ -775,7 +786,9 @@ class SparkContext(config: SparkConf) extends Logging {
       }
     } catch {
       case e: Exception =>
-        logError(s"Exception getting heap histogram from executor $executorId", e)
+        logError(
+          log"Exception getting heap histogram from " +
+            log"executor ${MDC(LogKeys.EXECUTOR_ID, executorId)}", e)
         None
     }
   }
@@ -2137,7 +2150,7 @@ class SparkContext(config: SparkConf) extends Logging {
         Seq(env.rpcEnv.fileServer.addJar(file))
       } catch {
         case NonFatal(e) =>
-          logError(s"Failed to add $path to Spark environment", e)
+          logError(log"Failed to add ${MDC(LogKeys.PATH, path)} to Spark environment", e)
           Nil
       }
     }
@@ -2158,7 +2171,7 @@ class SparkContext(config: SparkConf) extends Logging {
           Seq(path)
         } catch {
           case NonFatal(e) =>
-            logError(s"Failed to add $path to Spark environment", e)
+            logError(log"Failed to add ${MDC(LogKeys.PATH, path)} to Spark environment", e)
             Nil
         }
       } else {
@@ -2257,7 +2270,8 @@ class SparkContext(config: SparkConf) extends Logging {
    * @param exitCode Specified exit code that will passed to scheduler backend in client mode.
    */
   def stop(exitCode: Int): Unit = {
-    logInfo(s"SparkContext is stopping with exitCode $exitCode.")
+    stopSite = Some(getCallSite())
+    logInfo(s"SparkContext is stopping with exitCode $exitCode from ${stopSite.get.shortForm}.")
     if (LiveListenerBus.withinListenerThread.value) {
       throw new SparkException(s"Cannot stop SparkContext within listener bus thread.")
     }
@@ -3031,14 +3045,6 @@ object SparkContext extends Logging {
     }
   }
 
-  private implicit def arrayToArrayWritable[T <: Writable : ClassTag](arr: Iterable[T])
-    : ArrayWritable = {
-    def anyToWritable[U <: Writable](u: U): Writable = u
-
-    new ArrayWritable(classTag[T].runtimeClass.asInstanceOf[Class[Writable]],
-        arr.map(x => anyToWritable(x)).toArray)
-  }
-
   /**
    * Find the JAR from which a given class was loaded, to make it easy for users to pass
    * their JARs to SparkContext.
@@ -3288,7 +3294,7 @@ object SparkContext extends Logging {
   }
 
   /**
-   * SPARK-36796: This is a helper function to supplement `--add-opens` options to
+   * SPARK-36796: This is a helper function to supplement some JVM runtime options to
    * `spark.driver.extraJavaOptions` and `spark.executor.extraJavaOptions`.
    */
   private def supplementJavaModuleOptions(conf: SparkConf): Unit = {

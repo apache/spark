@@ -17,11 +17,15 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Connection, Date, SQLException, Timestamp, Types}
+import java.sql.{Connection, Date, ResultSetMetaData, SQLException, Timestamp, Types}
 import java.time.{LocalDateTime, ZoneOffset}
 import java.util
 import java.util.Locale
 
+import scala.util.Using
+
+import org.apache.spark.internal.LogKeys.COLUMN_NAME
+import org.apache.spark.internal.MDC
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NonEmptyNamespaceException, NoSuchIndexException}
@@ -66,14 +70,24 @@ private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
         // timetz represents time with time zone, currently it maps to Types.TIME.
         // We need to change to Types.TIME_WITH_TIMEZONE if the upstream changes.
         Some(TimestampType)
+      case Types.CHAR if "bpchar".equalsIgnoreCase(typeName) && size == Int.MaxValue =>
+        // bpchar with unspecified length same as text in postgres with blank-trimmed
+        Some(StringType)
       case Types.OTHER if "void".equalsIgnoreCase(typeName) => Some(NullType)
       case Types.OTHER => Some(StringType)
       case _ if "text".equalsIgnoreCase(typeName) => Some(StringType) // sqlType is Types.VARCHAR
       case Types.ARRAY =>
-        val scale = md.build().getLong("scale").toInt
-        val isTimestampNTZ = md.build().getBoolean("isTimestampNTZ")
         // postgres array type names start with underscore
-        toCatalystType(typeName.drop(1), size, scale, isTimestampNTZ).map(ArrayType(_))
+        val elementType = toCatalystType(typeName.drop(1), size, md)
+        elementType.map { et =>
+          val metadata = md.build()
+          val dim = if (metadata.contains("arrayDimension")) {
+            metadata.getLong("arrayDimension").toInt
+          } else {
+            1
+          }
+          (0 until dim).foldLeft(et)((acc, _) => ArrayType(acc))
+        }
       case _ => None
     }
   }
@@ -81,16 +95,19 @@ private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
   private def toCatalystType(
       typeName: String,
       precision: Int,
-      scale: Int,
-      isTimestampNTZ: Boolean): Option[DataType] = typeName match {
+      md: MetadataBuilder): Option[DataType] = typeName match {
     case "bool" => Some(BooleanType)
-    case "bit" => Some(BinaryType)
+    case "bit" if precision == 1 => Some(BooleanType)
+    case "bit" =>
+      md.putBoolean("pg_bit_array_type", value = true)
+      Some(BinaryType)
     case "int2" => Some(ShortType)
     case "int4" => Some(IntegerType)
     case "int8" | "oid" => Some(LongType)
     case "float4" => Some(FloatType)
     case "float8" => Some(DoubleType)
     case "varchar" => Some(VarcharType(precision))
+    case "bpchar" if precision == Int.MaxValue => Some(StringType)
     case "char" | "bpchar" => Some(CharType(precision))
     case "text" | "cidr" | "inet" | "json" | "jsonb" | "uuid" |
          "xml" | "tsvector" | "tsquery" | "macaddr" | "macaddr8" | "txid_snapshot" | "point" |
@@ -99,10 +116,11 @@ private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
       Some(StringType)
     case "bytea" => Some(BinaryType)
     case "timestamptz" | "timetz" => Some(TimestampType)
-    case "timestamp" | "time" =>
-      Some(if (isTimestampNTZ) TimestampNTZType else TimestampType)
+    case "timestamp" | "time" => Some(getTimestampType(md.build()))
     case "date" => Some(DateType)
-    case "numeric" | "decimal" if precision > 0 => Some(DecimalType.bounded(precision, scale))
+    case "numeric" | "decimal" if precision > 0 =>
+      val scale = md.build().getLong("scale").toInt
+      Some(DecimalType.bounded(precision, scale))
     case "numeric" | "decimal" =>
       // SPARK-26538: handle numeric without explicit precision and scale.
       Some(DecimalType.SYSTEM_DEFAULT)
@@ -133,7 +151,7 @@ private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
     case ShortType | ByteType => Some(JdbcType("SMALLINT", Types.SMALLINT))
     case t: DecimalType => Some(
       JdbcType(s"NUMERIC(${t.precision},${t.scale})", java.sql.Types.NUMERIC))
-    case ArrayType(et, _) if et.isInstanceOf[AtomicType] =>
+    case ArrayType(et, _) if et.isInstanceOf[AtomicType] || et.isInstanceOf[ArrayType] =>
       getJDBCType(et).map(_.databaseTypeDefinition)
         .orElse(JdbcUtils.getCommonJDBCType(et).map(_.databaseTypeDefinition))
         .map(typeName => JdbcType(s"$typeName[]", java.sql.Types.ARRAY))
@@ -324,6 +342,38 @@ private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
       case -9223372036832400000L =>
         new Date(LocalDateTime.of(1, 1, 1, 0, 0, 0).toInstant(ZoneOffset.UTC).toEpochMilli)
       case _ => d
+    }
+  }
+
+  override def updateExtraColumnMeta(
+      conn: Connection,
+      rsmd: ResultSetMetaData,
+      columnIdx: Int,
+      metadata: MetadataBuilder): Unit = {
+    rsmd.getColumnType(columnIdx) match {
+      case Types.ARRAY =>
+        val tableName = rsmd.getTableName(columnIdx)
+        val columnName = rsmd.getColumnName(columnIdx)
+        val query =
+          s"""
+             |SELECT pg_attribute.attndims
+             |FROM pg_attribute
+             |  JOIN pg_class ON pg_attribute.attrelid = pg_class.oid
+             |  JOIN pg_namespace ON pg_class.relnamespace = pg_namespace.oid
+             |WHERE pg_class.relname = '$tableName' and pg_attribute.attname = '$columnName'
+             |""".stripMargin
+        try {
+          Using.resource(conn.createStatement()) { stmt =>
+            Using.resource(stmt.executeQuery(query)) { rs =>
+              if (rs.next()) metadata.putLong("arrayDimension", rs.getLong(1))
+            }
+          }
+        } catch {
+          case e: SQLException =>
+            logWarning(
+              log"Failed to get array dimension for column ${MDC(COLUMN_NAME, columnName)}", e)
+        }
+      case _ =>
     }
   }
 }

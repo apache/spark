@@ -28,7 +28,8 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -736,10 +737,10 @@ case class RepairTableCommand(
       spark.catalog.refreshTable(tableIdentWithDB)
     } catch {
       case NonFatal(e) =>
-        logError(s"Cannot refresh the table '$tableIdentWithDB'. A query of the table " +
-          "might return wrong result if the table was cached. To avoid such issue, you should " +
-          "uncache the table manually via the UNCACHE TABLE command after table recovering will " +
-          "complete fully.", e)
+        logError(log"Cannot refresh the table '${MDC(IDENTIFIER, tableIdentWithDB)}'. " +
+          log"A query of the table might return wrong result if the table was cached. " +
+          log"To avoid such issue, you should uncache the table manually via the UNCACHE TABLE " +
+          log"command after table recovering will complete fully.", e)
     }
     logInfo(s"Recovered all partitions: added ($addedAmount), dropped ($droppedAmount).")
     Seq.empty[Row]
@@ -783,11 +784,12 @@ case class RepairTableCommand(
             partitionNames.drop(1), threshold, resolver, evalTaskSupport)
         } else {
           logWarning(
-            s"expected partition column ${partitionNames.head}, but got ${ps(0)}, ignoring it")
+            log"expected partition column ${MDC(EXPECTED_PARTITION_COLUMN, partitionNames.head)}," +
+              log" but got ${MDC(ACTUAL_PARTITION_COLUMN, ps(0))}, ignoring it")
           Seq.empty
         }
       } else {
-        logWarning(s"ignore ${new Path(path, name)}")
+        logWarning(log"ignore ${MDC(PATH, new Path(path, name))}")
         Seq.empty
       }
     }
@@ -1028,7 +1030,8 @@ object DDLUtils extends Logging {
       DataSource.lookupDataSource(provider, SQLConf.get).getConstructor().newInstance()
     } catch {
       case e: Throwable =>
-        logError(s"Failed to find data source: $provider when check data column names.", e)
+        logError(log"Failed to find data source: ${MDC(DATA_SOURCE_PROVIDER, provider)} " +
+          log"when check data column names.", e)
         return
     }
     source match {

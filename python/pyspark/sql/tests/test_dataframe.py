@@ -23,7 +23,7 @@ from typing import cast
 import io
 from contextlib import redirect_stdout
 
-from pyspark.sql import Row, functions
+from pyspark.sql import Row, functions, DataFrame
 from pyspark.sql.functions import col, lit, count, struct
 from pyspark.sql.types import (
     StringType,
@@ -122,6 +122,13 @@ class DataFrameTestsMixin:
         self.assertTrue(df.count() == 100)
         df = df2.join(df1, df2["b"] == df1["a"])
         self.assertTrue(df.count() == 100)
+
+    def test_self_join_II(self):
+        df = self.spark.createDataFrame([(1, 2), (3, 4)], schema=["a", "b"])
+        df2 = df.select(df.a.alias("aa"), df.b)
+        df3 = df2.join(df, df2.b == df.b)
+        self.assertTrue(df3.columns, ["aa", "b", "a", "b"])
+        self.assertTrue(df3.count() == 2)
 
     def test_duplicated_column_names(self):
         df = self.spark.createDataFrame([(1, 2)], ["c", "c"])
@@ -480,6 +487,12 @@ class DataFrameTestsMixin:
         self.assertEqual(df.schema.simpleString(), "struct<value:int>")
         self.assertEqual(df.collect(), [Row(key=i) for i in range(100)])
 
+    def test_create_df_with_collation(self):
+        schema = StructType([StructField("name", StringType("UNICODE_CI"), True)])
+        df = self.spark.createDataFrame([("Alice",), ("alice",)], schema)
+
+        self.assertEqual(df.select("name").distinct().count(), 1)
+
     def test_print_schema(self):
         df = self.spark.createDataFrame([(1, (2, 2))], ["a", "b"])
 
@@ -818,6 +831,13 @@ class DataFrameTestsMixin:
 
         self.assertEqual(df.schema, schema)
         self.assertEqual(df.collect(), data)
+
+    def test_union_classmethod_usage(self):
+        df = self.spark.range(1)
+        self.assertEqual(DataFrame.union(df, df).collect(), [Row(id=0), Row(id=0)])
+
+    def test_isinstance_dataframe(self):
+        self.assertIsInstance(self.spark.range(1), DataFrame)
 
 
 class DataFrameTests(DataFrameTestsMixin, ReusedSQLTestCase):

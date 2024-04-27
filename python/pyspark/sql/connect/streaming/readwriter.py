@@ -18,6 +18,7 @@ from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
 
+import json
 import sys
 import pickle
 from typing import cast, overload, Callable, Dict, List, Optional, TYPE_CHECKING, Union
@@ -31,6 +32,7 @@ from pyspark.sql.streaming.readwriter import (
     DataStreamReader as PySparkDataStreamReader,
     DataStreamWriter as PySparkDataStreamWriter,
 )
+from pyspark.sql.streaming.listener import QueryStartedEvent
 from pyspark.sql.connect.utils import get_python_ver
 from pyspark.sql.types import Row, StructType
 from pyspark.errors import PySparkTypeError, PySparkValueError, PySparkPicklingError
@@ -599,12 +601,20 @@ class DataStreamWriter:
         start_result = cast(
             pb2.WriteStreamOperationStartResult, properties["write_stream_operation_start_result"]
         )
-        return StreamingQuery(
+        query = StreamingQuery(
             session=self._session,
             queryId=start_result.query_id.id,
             runId=start_result.query_id.run_id,
             name=start_result.name,
         )
+
+        if start_result.HasField("query_started_event_json"):
+            start_event = QueryStartedEvent.fromJson(
+                json.loads(start_result.query_started_event_json)
+            )
+            self._session.streams._sqlb.post_to_all(start_event)
+
+        return query
 
     def start(
         self,
@@ -650,6 +660,7 @@ class DataStreamWriter:
 
 
 def _test() -> None:
+    import os
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
@@ -659,7 +670,7 @@ def _test() -> None:
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.streaming.readwriter tests")
-        .remote("local[4]")
+        .remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[4]"))
         .getOrCreate()
     )
 

@@ -20,7 +20,8 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkEnv, SparkException, TaskContext}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
@@ -402,16 +403,17 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode {
       commitProgress = Some(StreamWriterCommitProgress(totalNumRowsAccumulator.value))
     } catch {
       case cause: Throwable =>
-        logError(s"Data source write support $batchWrite is aborting.")
+        logError(log"Data source write support ${MDC(BATCH_WRITE, batchWrite)} is aborting.")
         try {
           batchWrite.abort(messages)
         } catch {
           case t: Throwable =>
-            logError(s"Data source write support $batchWrite failed to abort.")
+            logError(log"Data source write support ${MDC(BATCH_WRITE, batchWrite)} " +
+              log"failed to abort.")
             cause.addSuppressed(t)
             throw QueryExecutionErrors.writingJobFailedError(cause)
         }
-        logError(s"Data source write support $batchWrite aborted.")
+        logError(log"Data source write support ${MDC(BATCH_WRITE, batchWrite)} aborted.")
         throw cause
     }
 
@@ -472,11 +474,13 @@ trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serial
 
     })(catchBlock = {
       // If there is an error, abort this writer
-      logError(s"Aborting commit for partition $partId (task $taskId, attempt $attemptId, " +
-            s"stage $stageId.$stageAttempt)")
+      logError(log"Aborting commit for partition ${MDC(PARTITION_ID, partId)} " +
+        log"(task ${MDC(TASK_ID, taskId)}, attempt ${MDC(TASK_ATTEMPT_ID, attemptId)}, " +
+        log"stage ${MDC(STAGE_ID, stageId)}.${MDC(STAGE_ATTEMPT, stageAttempt)})")
       dataWriter.abort()
-      logError(s"Aborted commit for partition $partId (task $taskId, attempt $attemptId, " +
-            s"stage $stageId.$stageAttempt)")
+      logError(log"Aborted commit for partition ${MDC(PARTITION_ID, partId)} " +
+        log"(task ${MDC(TASK_ID, taskId)}, attempt ${MDC(TASK_ATTEMPT_ID, attemptId)}, " +
+        log"stage ${MDC(STAGE_ID, stageId)}.${MDC(STAGE_ATTEMPT, stageAttempt)})")
     }, finallyBlock = {
       dataWriter.close()
     })

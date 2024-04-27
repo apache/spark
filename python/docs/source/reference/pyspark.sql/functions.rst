@@ -536,6 +536,20 @@ JSON Functions
     to_json
 
 
+VARIANT Functions
+-----------------
+.. autosummary::
+    :toctree: api/
+
+    is_variant_null
+    parse_json
+    schema_of_variant
+    schema_of_variant_agg
+    try_variant_get
+    variant_get
+    try_parse_json
+
+
 XML Functions
 --------------
 .. autosummary::

@@ -47,10 +47,11 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
   protected def useHexFormatForBinary: Boolean
 
   // Makes the function accept Any type input by doing `asInstanceOf[T]`.
-  @inline private def acceptAny[T](func: T => Any): Any => Any = i => func(i.asInstanceOf[T])
+  @inline private def acceptAny[T](func: T => UTF8String): Any => UTF8String =
+    i => func(i.asInstanceOf[T])
 
   // Returns a function to convert a value to pretty string. The function assumes input is not null.
-  protected final def castToString(from: DataType): Any => Any = from match {
+  protected final def castToString(from: DataType): Any => UTF8String = from match {
     case CalendarIntervalType =>
       acceptAny[CalendarInterval](i => UTF8String.fromString(i.toString))
     case BinaryType if useHexFormatForBinary =>
@@ -72,7 +73,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
           if (array.isNullAt(0)) {
             if (nullString.nonEmpty) builder.append(nullString)
           } else {
-            builder.append(toUTF8String(array.get(0, et)).asInstanceOf[UTF8String])
+            builder.append(toUTF8String(array.get(0, et)))
           }
           var i = 1
           while (i < array.numElements()) {
@@ -81,7 +82,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
               if (nullString.nonEmpty) builder.append(" " + nullString)
             } else {
               builder.append(" ")
-              builder.append(toUTF8String(array.get(i, et)).asInstanceOf[UTF8String])
+              builder.append(toUTF8String(array.get(i, et)))
             }
             i += 1
           }
@@ -98,25 +99,24 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
           val valueArray = map.valueArray()
           val keyToUTF8String = castToString(kt)
           val valueToUTF8String = castToString(vt)
-          builder.append(keyToUTF8String(keyArray.get(0, kt)).asInstanceOf[UTF8String])
+          builder.append(keyToUTF8String(keyArray.get(0, kt)))
           builder.append(" ->")
           if (valueArray.isNullAt(0)) {
             if (nullString.nonEmpty) builder.append(" " + nullString)
           } else {
             builder.append(" ")
-            builder.append(valueToUTF8String(valueArray.get(0, vt)).asInstanceOf[UTF8String])
+            builder.append(valueToUTF8String(valueArray.get(0, vt)))
           }
           var i = 1
           while (i < map.numElements()) {
             builder.append(", ")
-            builder.append(keyToUTF8String(keyArray.get(i, kt)).asInstanceOf[UTF8String])
+            builder.append(keyToUTF8String(keyArray.get(i, kt)))
             builder.append(" ->")
             if (valueArray.isNullAt(i)) {
               if (nullString.nonEmpty) builder.append(" " + nullString)
             } else {
               builder.append(" ")
-              builder.append(valueToUTF8String(valueArray.get(i, vt))
-                .asInstanceOf[UTF8String])
+              builder.append(valueToUTF8String(valueArray.get(i, vt)))
             }
             i += 1
           }
@@ -134,7 +134,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
           if (row.isNullAt(0)) {
             if (nullString.nonEmpty) builder.append(nullString)
           } else {
-            builder.append(toUTF8StringFuncs(0)(row.get(0, st(0))).asInstanceOf[UTF8String])
+            builder.append(toUTF8StringFuncs(0)(row.get(0, st(0))))
           }
           var i = 1
           while (i < row.numFields) {
@@ -143,7 +143,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
               if (nullString.nonEmpty) builder.append(" " + nullString)
             } else {
               builder.append(" ")
-              builder.append(toUTF8StringFuncs(i)(row.get(i, st(i))).asInstanceOf[UTF8String])
+              builder.append(toUTF8StringFuncs(i)(row.get(i, st(i))))
             }
             i += 1
           }
@@ -162,7 +162,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
         IntervalUtils.toDayTimeIntervalString(i, ANSI_STYLE, startField, endField)))
     case _: DecimalType if useDecimalPlainString =>
       acceptAny[Decimal](d => UTF8String.fromString(d.toPlainString))
-    case _: StringType => identity
+    case _: StringType => acceptAny[UTF8String](identity[UTF8String])
     case _ => o => UTF8String.fromString(o.toString)
   }
 

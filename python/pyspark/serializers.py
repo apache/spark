@@ -29,7 +29,7 @@ Examples
 --------
 The serializer is chosen when creating :class:`SparkContext`:
 
->>> from pyspark.context import SparkContext
+>>> from pyspark.core.context import SparkContext
 >>> from pyspark.serializers import MarshalSerializer
 >>> sc = SparkContext('local', 'test', serializer=MarshalSerializer())
 >>> sc.parallelize(list(range(1000))).map(lambda x: 2 * x).take(10)
@@ -67,7 +67,6 @@ import pickle
 pickle_protocol = pickle.HIGHEST_PROTOCOL
 
 from pyspark import cloudpickle
-from pyspark.util import print_exec
 
 
 __all__ = [
@@ -455,6 +454,8 @@ class PickleSerializer(FramedSerializer):
 
 class CloudPickleSerializer(FramedSerializer):
     def dumps(self, obj):
+        from pyspark.util import print_exec
+
         try:
             return cloudpickle.dumps(obj, pickle_protocol)
         except pickle.PickleError:

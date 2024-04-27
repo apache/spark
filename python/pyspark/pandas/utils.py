@@ -608,7 +608,10 @@ def lazy_property(fn: Callable[[Any], Any]) -> property:
 
 def scol_for(sdf: PySparkDataFrame, column_name: str) -> Column:
     """Return Spark Column for the given column name."""
-    return sdf["`{}`".format(column_name)]
+    if is_remote():
+        return sdf._col("`{}`".format(column_name))  # type: ignore[operator]
+    else:
+        return sdf["`{}`".format(column_name)]
 
 
 def column_labels_level(column_labels: List[Label]) -> int:

@@ -26,6 +26,8 @@ import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.connect.proto
+import org.apache.spark.internal.LogKeys.PATH
+import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.{catalog, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.{caseSensitiveResolution, Analyzer, FunctionRegistry, Resolver, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
@@ -124,6 +126,7 @@ class ProtoToParsedPlanTestSuite
         Connect.CONNECT_EXTENSIONS_EXPRESSION_CLASSES.key,
         "org.apache.spark.sql.connect.plugin.ExampleExpressionPlugin")
       .set(org.apache.spark.sql.internal.SQLConf.ANSI_ENABLED.key, false.toString)
+      .set(org.apache.spark.sql.internal.SQLConf.USE_COMMON_EXPR_ID_FOR_ALIAS.key, false.toString)
   }
 
   protected val suiteBaseResourcePath = commonResourcePath.resolve("query-tests")
@@ -174,7 +177,7 @@ class ProtoToParsedPlanTestSuite
     val relativePath = inputFilePath.relativize(file)
     val fileName = relativePath.getFileName.toString
     if (!fileName.endsWith(".proto.bin")) {
-      logError(s"Skipping $fileName")
+      logError(log"Skipping ${MDC(PATH, fileName)}")
       return
     }
     val name = fileName.stripSuffix(".proto.bin")

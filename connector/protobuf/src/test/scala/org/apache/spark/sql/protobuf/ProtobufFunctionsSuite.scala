@@ -22,7 +22,6 @@ import java.time.Duration
 import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.{Any => AnyProto, BoolValue, ByteString, BytesValue, DoubleValue, DynamicMessage, FloatValue, Int32Value, Int64Value, StringValue, UInt32Value, UInt64Value}
-import org.json4s.StringInput
 import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, QueryTest, Row}
@@ -1339,7 +1338,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
 
     // Takes json string and return a json with all the extra whitespace removed.
     def compactJson(json: String): String = {
-      val jsonValue = JsonMethods.parse(StringInput(json))
+      val jsonValue = JsonMethods.parse(json)
       JsonMethods.compact(jsonValue)
     }
 

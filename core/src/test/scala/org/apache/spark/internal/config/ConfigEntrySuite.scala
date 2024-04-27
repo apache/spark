@@ -196,12 +196,6 @@ class ConfigEntrySuite extends SparkFunSuite {
     assert(conversionError.getMessage === s"${conversionTest.key} should be double, but was abc")
   }
 
-  test("default value handling is null-safe") {
-    val conf = new SparkConf()
-    val stringConf = ConfigBuilder(testKey("string")).stringConf.createWithDefault(null)
-    assert(conf.get(stringConf) === null)
-  }
-
   test("variable expansion of spark config entries") {
     val env = Map("ENV1" -> "env1")
     val conf = new SparkConfWithEnv(env)
@@ -220,7 +214,7 @@ class ConfigEntrySuite extends SparkFunSuite {
 
     val refConf = ConfigBuilder(testKey("configReferenceTest"))
       .stringConf
-      .createWithDefault(null)
+      .createWithDefault("")
 
     def ref(entry: ConfigEntry[_]): String = "${" + entry.key + "}"
 
@@ -250,12 +244,6 @@ class ConfigEntrySuite extends SparkFunSuite {
     // Make sure SparkConf's env override works.
     conf.set(refConf, "${env:ENV1}")
     assert(conf.get(refConf) === env("ENV1"))
-
-    // Conf with null default value is not expanded.
-    val nullConf = ConfigBuilder(testKey("nullString"))
-      .stringConf
-      .createWithDefault(null)
-    testEntryRef(nullConf, ref(nullConf))
   }
 
   test("conf entry : default function") {

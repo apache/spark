@@ -22,7 +22,7 @@ from pyspark.errors import PySparkImportError, PySparkRuntimeError
 def require_minimum_pandas_version() -> None:
     """Raise ImportError if minimum version of Pandas is not installed"""
     # TODO(HyukjinKwon): Relocate and deduplicate the version specification.
-    minimum_pandas_version = "1.4.4"
+    minimum_pandas_version = "2.0.0"
 
     try:
         import pandas
@@ -61,7 +61,7 @@ def require_minimum_pandas_version() -> None:
 def require_minimum_pyarrow_version() -> None:
     """Raise ImportError if minimum version of pyarrow is not installed"""
     # TODO(HyukjinKwon): Relocate and deduplicate the version specification.
-    minimum_pyarrow_version = "4.0.0"
+    minimum_pyarrow_version = "10.0.0"
 
     import os
 

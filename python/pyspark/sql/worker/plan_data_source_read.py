@@ -23,8 +23,8 @@ from typing import IO, List, Iterator, Iterable
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.errors import PySparkAssertionError, PySparkRuntimeError
-from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import (
+    read_bool,
     read_int,
     write_int,
     SpecialLengths,
@@ -38,7 +38,7 @@ from pyspark.sql.types import (
     BinaryType,
     StructType,
 )
-from pyspark.util import handle_worker_exception
+from pyspark.util import handle_worker_exception, local_connect_and_auth
 from pyspark.worker_util import (
     check_python_version,
     read_command,
@@ -127,33 +127,14 @@ def main(infile: IO, outfile: IO) -> None:
             f"'{max_arrow_batch_size}'"
         )
 
-        # Instantiate data source reader.
-        reader = data_source.reader(schema=schema)
+        is_streaming = read_bool(infile)
 
-        # Get the partitions if any.
-        try:
-            partitions = reader.partitions()
-            if not isinstance(partitions, list):
-                raise PySparkRuntimeError(
-                    error_class="DATA_SOURCE_TYPE_MISMATCH",
-                    message_parameters={
-                        "expected": "'partitions' to return a list",
-                        "actual": f"'{type(partitions).__name__}'",
-                    },
-                )
-            if not all(isinstance(p, InputPartition) for p in partitions):
-                partition_types = ", ".join([f"'{type(p).__name__}'" for p in partitions])
-                raise PySparkRuntimeError(
-                    error_class="DATA_SOURCE_TYPE_MISMATCH",
-                    message_parameters={
-                        "expected": "all elements in 'partitions' to be of type 'InputPartition'",
-                        "actual": partition_types,
-                    },
-                )
-            if len(partitions) == 0:
-                partitions = [None]  # type: ignore
-        except NotImplementedError:
-            partitions = [None]  # type: ignore
+        # Instantiate data source reader.
+        reader = (
+            data_source.streamReader(schema=schema)
+            if is_streaming
+            else data_source.reader(schema=schema)
+        )
 
         # Wrap the data source read logic in an mapInArrow UDF.
         import pyarrow as pa
@@ -195,7 +176,7 @@ def main(infile: IO, outfile: IO) -> None:
                 f"but found '{type(partition).__name__}'."
             )
 
-            output_iter = reader.read(partition)  # type: ignore[arg-type]
+            output_iter = reader.read(partition)  # type: ignore[attr-defined]
 
             # Validate the output iterator.
             if not isinstance(output_iter, Iterator):
@@ -264,11 +245,40 @@ def main(infile: IO, outfile: IO) -> None:
         command = (data_source_read_func, return_type)
         pickleSer._write_with_length(command, outfile)
 
-        # Return the serialized partition values.
-        write_int(len(partitions), outfile)
-        for partition in partitions:
-            pickleSer._write_with_length(partition, outfile)
+        if not is_streaming:
+            # The partitioning of python batch source read is determined before query execution.
+            try:
+                partitions = reader.partitions()  # type: ignore[attr-defined]
+                if not isinstance(partitions, list):
+                    raise PySparkRuntimeError(
+                        error_class="DATA_SOURCE_TYPE_MISMATCH",
+                        message_parameters={
+                            "expected": "'partitions' to return a list",
+                            "actual": f"'{type(partitions).__name__}'",
+                        },
+                    )
+                if not all(isinstance(p, InputPartition) for p in partitions):
+                    partition_types = ", ".join([f"'{type(p).__name__}'" for p in partitions])
+                    raise PySparkRuntimeError(
+                        error_class="DATA_SOURCE_TYPE_MISMATCH",
+                        message_parameters={
+                            "expected": "elements in 'partitions' to be of type 'InputPartition'",
+                            "actual": partition_types,
+                        },
+                    )
+                if len(partitions) == 0:
+                    partitions = [None]
+            except NotImplementedError:
+                partitions = [None]
 
+            # Return the serialized partition values.
+            write_int(len(partitions), outfile)
+            for partition in partitions:
+                pickleSer._write_with_length(partition, outfile)
+        else:
+            # Send an empty list of partition for stream reader because partitions are planned
+            # in each microbatch during query execution.
+            write_int(0, outfile)
     except BaseException as e:
         handle_worker_exception(e, outfile)
         sys.exit(-1)
@@ -289,4 +299,6 @@ if __name__ == "__main__":
     java_port = int(os.environ["PYTHON_WORKER_FACTORY_PORT"])
     auth_secret = os.environ["PYTHON_WORKER_FACTORY_SECRET"]
     (sock_file, _) = local_connect_and_auth(java_port, auth_secret)
+    write_int(os.getpid(), sock_file)
+    sock_file.flush()
     main(sock_file, sock_file)
