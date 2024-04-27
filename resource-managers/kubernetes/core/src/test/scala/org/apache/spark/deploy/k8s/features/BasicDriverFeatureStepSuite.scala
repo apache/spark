@@ -37,11 +37,11 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
 
   private val CUSTOM_DRIVER_LABELS = Map(
     "labelkey" -> "labelvalue",
-    "yunikorn.apache.org/app-id" -> "{{APPID}}")
+    "customAppIdLabelKey" -> "{{APP_ID}}")
   private val CONTAINER_IMAGE_PULL_POLICY = "IfNotPresent"
   private val DRIVER_ANNOTATIONS = Map(
     "customAnnotation" -> "customAnnotationValue",
-    "yunikorn.apache.org/app-id" -> "{{APPID}}")
+    "customAppIdAnnotation" -> "{{APP_ID}}")
   private val DRIVER_ENVS = Map(
     "customDriverEnv1" -> "customDriverEnv1Value",
     "customDriverEnv2" -> "customDriverEnv2Value")

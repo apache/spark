@@ -589,8 +589,8 @@ class KubernetesSuite extends SparkFunSuite
     assert(pod.getMetadata.getLabels.get("label2") === "label2-value")
     assert(pod.getMetadata.getAnnotations.get("annotation1") === "annotation1-value")
     assert(pod.getMetadata.getAnnotations.get("annotation2") === "annotation2-value")
-    val appIdLabel = pod.getMetadata.getLabels.get("yunikorn.apache.org/app-id")
-    val appIdAnnotation = pod.getMetadata.getAnnotations.get("yunikorn.apache.org/app-id")
+    val appIdLabel = pod.getMetadata.getLabels.get("customAppIdLabelKey")
+    val appIdAnnotation = pod.getMetadata.getAnnotations.get("customAppIdAnnotation")
 
     val container = pod.getSpec.getContainers.get(0)
     val envVars = container
