@@ -142,8 +142,10 @@ RUN dpkg-query -Wf '${Installed-Size}\t${Package}\n' | sort -n -r | head -n 100
 RUN df -h
 RUN apt list --installed
 RUN apt-get remove --purge -y \
-    'node-.*' 'perl.*' \
-    libgl1-mesa-dri || true
+    'gfortran-11' 'humanity-icon-theme' \
+    'libnode72' 'node-lodash-packages' 'nodejs-doc' 'libnode-dev' 'node-jsdom' \
+    'libperl5.34' 'perl-modules-5.34' 'perl-base' \
+    'libgl1-mesa-dri' || true
 RUN apt-get autoremove --purge -y
 RUN apt-get clean
 RUN dpkg-query -Wf '${Installed-Size}\t${Package}\n' | sort -n -r | head -n 100
