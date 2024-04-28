@@ -1060,4 +1060,15 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     }.getCause.getCause
     assert(e.isInstanceOf[java.lang.ArithmeticException])
   }
+
+  test("SPARK-47927: Correctly pass null values derived from join to UDF") {
+    val f = udf[Tuple1[Option[Int]], Tuple1[Option[Int]]](identity)
+    val ds1 = Seq(1).toDS()
+    val ds2 = Seq[Int]().toDS()
+
+    checkAnswer(
+      ds1.join(ds2, ds1("value") === ds2("value"), "left_outer")
+        .select(f(struct(ds2("value").as("_1")))),
+      Row(Row(null)))
+  }
 }
