@@ -463,4 +463,21 @@ object LogKeys {
   case object WRITE_AHEAD_LOG_INFO extends LogKey
   case object WRITE_JOB_UUID extends LogKey
   case object XSD_PATH extends LogKey
+
+  case object PREDICATE extends LogKey
+  case object PREDICATES extends LogKey
+  case object FILTER extends LogKey
+  case object FILTERS extends LogKey
+  case object NUM_CONCURRENT_WRITER extends LogKey
+  case object PERCENT extends LogKey
+  case object CLAUSE extends LogKey
+  case object PYTHON_EXEC extends LogKey
+  case object FILE_LENGTH_XATTR extends LogKey
+  case object MAX_SPLIT_BYTES extends LogKey
+  case object OPEN_COST_IN_BYTES extends LogKey
+  case object POST_SCAN_FILTERS extends LogKey
+  case object PUSHED_FILTERS extends LogKey
+  case object UUID extends LogKey
+  case object ADDED_PARTITIONS extends LogKey
+  case object DEFAULT_COMPACTION_INTERVAL extends LogKey
 }
