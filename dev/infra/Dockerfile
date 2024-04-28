@@ -142,7 +142,8 @@ RUN dpkg-query -Wf '${Installed-Size}\t${Package}\n' | sort -n -r | head -n 100
 RUN df -h
 RUN apt list --installed
 RUN apt-get remove --purge -y \
-    'gfortran-11' 'humanity-icon-theme' || true
+    'gfortran-11' 'humanity-icon-theme' \
+    'perl' 'nodejs' 'nodejs-doc' || true
 RUN apt-get autoremove --purge -y
 RUN apt-get clean
 RUN dpkg-query -Wf '${Installed-Size}\t${Package}\n' | sort -n -r | head -n 100
