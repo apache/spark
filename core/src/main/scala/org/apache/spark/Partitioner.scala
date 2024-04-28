@@ -151,7 +151,8 @@ private[spark] class KeyGroupedPartitioner(
   override def getPartition(key: Any): Int = {
     val keys = key.asInstanceOf[Seq[Any]]
     val normalizedKeys = ArraySeq.from(keys)
-    valueMap.getOrElseUpdate(normalizedKeys, Utils.nonNegativeMod(keys.hashCode, numPartitions))
+    valueMap.getOrElseUpdate(normalizedKeys,
+      Utils.nonNegativeMod(normalizedKeys.hashCode, numPartitions))
   }
 }
 
