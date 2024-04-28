@@ -51,6 +51,11 @@ public final class ColumnarArray extends ArrayData {
   public ArrayData copy() {
     DataType dt = data.dataType();
 
+    if (data.hasNull()) {
+      // UnsafeArrayData cannot be used if there are any nulls.
+      return new GenericArrayData(toObjectArray(dt)).copy();
+    }
+
     if (dt instanceof BooleanType) {
       return UnsafeArrayData.fromPrimitiveArray(toBooleanArray());
     } else if (dt instanceof ByteType) {
