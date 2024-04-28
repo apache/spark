@@ -22,7 +22,7 @@ import scala.math.BigDecimal.RoundingMode
 
 import org.apache.spark.Partition
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.{CLAUSE, LOWER_BOUND, NEW_VALUE, OLD_VALUE, PARTITIONS_SIZE,  UPPER_BOUND}
+import org.apache.spark.internal.LogKeys.{CLAUSE, LOWER_BOUND, NEW_VALUE, OLD_VALUE, PARTITIONS_SIZE, UPPER_BOUND}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row, SaveMode, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.analysis._

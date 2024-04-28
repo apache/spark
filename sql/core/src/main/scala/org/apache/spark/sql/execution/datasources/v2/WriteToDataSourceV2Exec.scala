@@ -455,7 +455,8 @@ trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serial
           logInfo(log"Commit authorized for partition ${MDC(LogKeys.PARTITION_ID, partId)} " +
             log"(task ${MDC(LogKeys.TASK_ID, taskId)}, " +
             log"attempt ${MDC(LogKeys.TASK_ATTEMPT_ID, attemptId)}, " +
-            log"stage ${MDC(LogKeys.STAGE_ID, stageId)}.${MDC(LogKeys.STAGE_ATTEMPT, stageAttempt)})")
+            log"stage ${MDC(LogKeys.STAGE_ID, stageId)}." +
+            log"${MDC(LogKeys.STAGE_ATTEMPT, stageAttempt)})")
 
           dataWriter.commit()
         } else {

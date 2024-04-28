@@ -23,7 +23,7 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext
 
 import org.apache.spark.TaskOutputFileAlreadyExistException
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.{NUM_CONCURRENT_WRITER, CONFIG}
+import org.apache.spark.internal.LogKeys.{CONFIG, NUM_CONCURRENT_WRITER}
 import org.apache.spark.internal.io.{FileCommitProtocol, FileNameSpec}
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.shuffle.FetchFailedException
