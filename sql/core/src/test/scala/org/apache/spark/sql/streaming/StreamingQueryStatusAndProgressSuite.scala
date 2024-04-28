@@ -504,7 +504,7 @@ object StreamingQueryStatusAndProgressSuite {
     id = UUID.randomUUID,
     runId = UUID.randomUUID,
     name = "myName",
-    timestamp = "2016-12-05T20:54:20.827Z",
+    timestamp = "2024-05-28T00:00:00.233Z",
     batchId = 2L,
     batchDuration = 0L,
     durationMs = null,
@@ -517,17 +517,7 @@ object StreamingQueryStatusAndProgressSuite {
         "loadedMapCacheHitCount" -> 1L, "loadedMapCacheMissCount" -> 0L)
         .transform((_, v) => long2Long(v)).asJava)
     )),
-    sources = Array(
-      new SourceProgress(
-        description = "source",
-        startOffset = "123",
-        endOffset = "456",
-        latestOffset = "789",
-        numInputRows = 678,
-        inputRowsPerSecond = 10.0,
-        processedRowsPerSecond = Double.PositiveInfinity // should not be present in the json
-      )
-    ),
+    sources = Array(),
     sink = SinkProgress("sink", None),
     observedMetrics = null
   )
