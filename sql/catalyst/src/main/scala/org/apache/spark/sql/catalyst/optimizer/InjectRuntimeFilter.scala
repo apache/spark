@@ -22,6 +22,7 @@ import scala.annotation.tailrec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{INVOKE, JSON_TO_STRUCT, LIKE_FAMLIY, PYTHON_UDF, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, SCALA_UDF}
@@ -86,6 +87,17 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   private def extractSelectiveFilterOverScan(
       plan: LogicalPlan,
       filterCreationSideKey: Expression): Option[(Expression, LogicalPlan)] = {
+
+    def canExtractRight(joinType: JoinType): Boolean = joinType match {
+      case Inner | LeftSemi | RightOuter => true
+      case _ => false
+    }
+
+    def canExtractLeft(joinType: JoinType): Boolean = joinType match {
+      case Inner | LeftSemi | LeftOuter | LeftAnti => true
+      case _ => false
+    }
+
     def extract(
         p: LogicalPlan,
         predicateReference: AttributeSet,
@@ -120,26 +132,38 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
           hasHitSelectiveFilter = hasHitSelectiveFilter || isLikelySelective(condition),
           currentPlan,
           targetKey)
-      case ExtractEquiJoinKeys(_, lkeys, rkeys, _, _, left, right, _) =>
+      case ExtractEquiJoinKeys(joinType, lkeys, rkeys, _, _, left, right, _) =>
         // Runtime filters use one side of the [[Join]] to build a set of join key values and prune
         // the other side of the [[Join]]. It's also OK to use a superset of the join key values
         // (ignore null values) to do the pruning.
         // We assume other rules have already pushed predicates through join if possible.
         // So the predicate references won't pass on anymore.
         if (left.output.exists(_.semanticEquals(targetKey))) {
-          extract(left, AttributeSet.empty, hasHitFilter = false, hasHitSelectiveFilter = false,
-            currentPlan = left, targetKey = targetKey).orElse {
-            // We can also extract from the right side if the join keys are transitive.
+          val extractLeft = if (canExtractLeft(joinType)) {
+            extract(left, AttributeSet.empty, hasHitFilter = false, hasHitSelectiveFilter = false,
+              currentPlan = left, targetKey = targetKey)
+          } else {
+            None
+          }
+          val extractRight = if (canExtractRight(joinType)) {
             lkeys.zip(rkeys).find(_._1.semanticEquals(targetKey)).map(_._2)
               .flatMap { newTargetKey =>
                 extract(right, AttributeSet.empty,
                   hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = right,
                   targetKey = newTargetKey)
               }
+          } else {
+            None
           }
+          extractLeft.orElse(extractRight)
         } else if (right.output.exists(_.semanticEquals(targetKey))) {
-          extract(right, AttributeSet.empty, hasHitFilter = false, hasHitSelectiveFilter = false,
-            currentPlan = right, targetKey = targetKey).orElse {
+          val extractRight = if (canExtractRight(joinType)) {
+            extract(right, AttributeSet.empty, hasHitFilter = false, hasHitSelectiveFilter = false,
+              currentPlan = right, targetKey = targetKey)
+          } else {
+            None
+          }
+          val extractLeft = if (canExtractLeft(joinType)) {
             // We can also extract from the left side if the join keys are transitive.
             rkeys.zip(lkeys).find(_._1.semanticEquals(targetKey)).map(_._2)
               .flatMap { newTargetKey =>
@@ -147,7 +171,10 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
                   hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = left,
                   targetKey = newTargetKey)
               }
+          } else {
+            None
           }
+          extractRight.orElse(extractLeft)
         } else {
           None
         }
