@@ -23,7 +23,7 @@ import java.util.Collections
 
 import org.apache.spark.sql.{catalyst, AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.{ApplyFunctionExpression, Cast, Literal}
-import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
+import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.{CoalescedBoundary, CoalescedHashPartitioning, HashPartitioning, RangePartitioning, UnknownPartitioning}
 import org.apache.spark.sql.connector.catalog.{Column, Identifier}
@@ -40,7 +40,7 @@ import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryStream
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{StreamingQueryException, Trigger}
-import org.apache.spark.sql.types.{DataTypes, DateType, IntegerType, LongType, StringType, TimestampType}
+import org.apache.spark.sql.types.{DateType, IntegerType, LongType, ObjectType, StringType, TimestampType}
 import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.tags.SlowSQLTest
 
@@ -1128,16 +1128,13 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
         Seq.empty
       ),
       catalyst.expressions.SortOrder(
-        StaticInvoke(
-          YearsFunction.getClass,
-          DataTypes.LongType,
+        Invoke(
+          Literal.create(YearsFunction, ObjectType(YearsFunction.getClass)),
           "invoke",
+          LongType,
           Seq(Cast(attr("day"), TimestampType, Some("America/Los_Angeles"))),
           Seq(TimestampType),
-          propagateNull = false,
-          returnNullable = true,
-          isDeterministic = true,
-          Some(YearsFunction)),
+          propagateNull = false),
         catalyst.expressions.Descending,
         catalyst.expressions.NullsFirst,
         Seq.empty
