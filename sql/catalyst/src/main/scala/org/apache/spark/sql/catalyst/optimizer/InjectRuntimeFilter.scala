@@ -145,6 +145,18 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
           } else {
             None
           }.orElse {
+            // For the exact join key match, like the left table here, it's always OK to generate
+            // the runtime filter using this left table, no matter what the join type is.
+            // This is because left table always produce a superset of output of the join output
+            // regarding the left keys.
+            // For transitive join key match, it's different. The right table here does
+            // not always generate a superset output regarding left keys.
+            // Let's look at an example
+            //     left table: 1, 2, 3
+            //     right table, 3, 4
+            //     left outer join output: (1, null), (2, null), (3, 3)
+            //     left keys: 1, 2, 3
+            // So we can't use right table to generate runtime filter.
             if (canExtractRight(joinType)) {
               lkeys.zip(rkeys).find(_._1.semanticEquals(targetKey)).map(_._2)
                 .flatMap { newTargetKey =>
