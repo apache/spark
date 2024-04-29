@@ -928,27 +928,6 @@ public class CollationSupportSuite {
     assertStringTrimRight("UNICODE", "xxasdxx", "x", "xxasd");
     assertStringTrimRight("UNICODE", "xa世ax", "x", "xa世a");
 
-    assertStringTrim("UNICODE_CI", "asd", null, "asd");
-    assertStringTrim("UNICODE_CI", "  asd  ", null, "asd");
-    assertStringTrim("UNICODE_CI", " a世a ", null, "a世a");
-    assertStringTrim("UNICODE_CI", "asd", "x", "asd");
-    assertStringTrim("UNICODE_CI", "xxasdxx", "x", "asd");
-    assertStringTrim("UNICODE_CI", "xa世ax", "x", "a世a");
-
-    assertStringTrimLeft("UNICODE_CI", "asd", null, "asd");
-    assertStringTrimLeft("UNICODE_CI", "  asd  ", null, "asd  ");
-    assertStringTrimLeft("UNICODE_CI", " a世a ", null, "a世a ");
-    assertStringTrimLeft("UNICODE_CI", "asd", "x", "asd");
-    assertStringTrimLeft("UNICODE_CI", "xxasdxx", "x", "asdxx");
-    assertStringTrimLeft("UNICODE_CI", "xa世ax", "x", "a世ax");
-
-    assertStringTrimRight("UNICODE_CI", "asd", null, "asd");
-    assertStringTrimRight("UNICODE_CI", "  asd  ", null, "  asd");
-    assertStringTrimRight("UNICODE_CI", " a世a ", null, " a世a");
-    assertStringTrimRight("UNICODE_CI", "asd", "x", "asd");
-    assertStringTrimRight("UNICODE_CI", "xxasdxx", "x", "xxasd");
-    assertStringTrimRight("UNICODE_CI", "xa世ax", "x", "xa世a");
-
     // Test cases where trimString has more than one character
     assertStringTrim("UTF8_BINARY", "ddsXXXaa", "asd", "XXX");
     assertStringTrimLeft("UTF8_BINARY", "ddsXXXaa", "asd", "XXXaa");
@@ -961,10 +940,6 @@ public class CollationSupportSuite {
     assertStringTrim("UNICODE", "ddsXXXaa", "asd", "XXX");
     assertStringTrimLeft("UNICODE", "ddsXXXaa", "asd", "XXXaa");
     assertStringTrimRight("UNICODE", "ddsXXXaa", "asd", "ddsXXX");
-
-    assertStringTrim("UNICODE_CI", "ddsXXXaa", "asd", "XXX");
-    assertStringTrimLeft("UNICODE_CI", "ddsXXXaa", "asd", "XXXaa");
-    assertStringTrimRight("UNICODE_CI", "ddsXXXaa", "asd", "ddsXXX");
 
     // Test cases specific to collation type
     // uppercase trim, lowercase src
@@ -992,10 +967,6 @@ public class CollationSupportSuite {
     assertStringTrimLeft("UNICODE", "ẞaaaẞ", "ß", "ẞaaaẞ");
     assertStringTrimRight("UNICODE", "ẞaaaẞ", "ß", "ẞaaaẞ");
 
-    assertStringTrim("UNICODE_CI", "ẞaaaẞ", "ß", "aaa");
-    assertStringTrimLeft("UNICODE_CI", "ẞaaaẞ", "ß", "aaaẞ");
-    assertStringTrimRight("UNICODE_CI", "ẞaaaẞ", "ß", "ẞaaa");
-
     assertStringTrim("UTF8_BINARY", "ßaaaß", "ẞ", "ßaaaß");
     assertStringTrimLeft("UTF8_BINARY", "ßaaaß", "ẞ", "ßaaaß");
     assertStringTrimRight("UTF8_BINARY", "ßaaaß", "ẞ", "ßaaaß");
@@ -1007,10 +978,6 @@ public class CollationSupportSuite {
     assertStringTrim("UNICODE", "ßaaaß", "ẞ", "ßaaaß");
     assertStringTrimLeft("UNICODE", "ßaaaß", "ẞ", "ßaaaß");
     assertStringTrimRight("UNICODE", "ßaaaß", "ẞ", "ßaaaß");
-
-    assertStringTrim("UNICODE_CI", "ßaaaß", "ẞ", "aaa");
-    assertStringTrimLeft("UNICODE_CI", "ßaaaß", "ẞ", "aaaß");
-    assertStringTrimRight("UNICODE_CI", "ßaaaß", "ẞ", "ßaaa");
 
     // different byte-length (utf8) chars trimmed
     assertStringTrim("UTF8_BINARY", "Ëaaaẞ", "Ëẞ", "aaa");
@@ -1024,10 +991,6 @@ public class CollationSupportSuite {
     assertStringTrim("UNICODE", "Ëaaaẞ", "Ëẞ", "aaa");
     assertStringTrimLeft("UNICODE", "Ëaaaẞ", "Ëẞ", "aaaẞ");
     assertStringTrimRight("UNICODE", "Ëaaaẞ", "Ëẞ", "Ëaaa");
-
-    assertStringTrim("UNICODE_CI", "Ëaaaẞ", "Ëẞ", "aaa");
-    assertStringTrimLeft("UNICODE_CI", "Ëaaaẞ", "Ëẞ", "aaaẞ");
-    assertStringTrimRight("UNICODE_CI", "Ëaaaẞ", "Ëẞ", "Ëaaa");
   }
 
   // TODO: Test more collation-aware string expressions.

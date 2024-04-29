@@ -856,12 +856,7 @@ class CollationStringExpressionsSuite
       StringTrimTestCase("UNICODE", "TRIM", "xxasdxx", true, "x", "asd"),
       StringTrimTestCase("UNICODE", "BTRIM", "xxasdxx", true, "x", "asd"),
       StringTrimTestCase("UNICODE", "LTRIM", "  asd  ", false, null, "asd  "),
-      StringTrimTestCase("UNICODE", "RTRIM", "  asd  ", true, null, null),
-
-      StringTrimTestCase("UNICODE_CI", "TRIM", "xxasdxx", true, "x", "asd"),
-      StringTrimTestCase("UNICODE_CI", "BTRIM", "  asd  ", false, null, "asd"),
-      StringTrimTestCase("UNICODE_CI", "LTRIM", "  asd  ", true, null, null),
-      StringTrimTestCase("UNICODE_CI", "RTRIM", "xxasdxx", true, "x", "xxasd")
+      StringTrimTestCase("UNICODE", "RTRIM", "  asd  ", true, null, null)
 
       // Other more complex cases can be found in unit tests in CollationSupportSuite.java.
     )
@@ -896,15 +891,31 @@ class CollationStringExpressionsSuite
     // scalastyle:off
     List("TRIM", "LTRIM", "RTRIM").foreach(func => {
       val collationMismatch = intercept[AnalysisException] {
-        sql("SELECT " + func + "(COLLATE('x', 'UTF8_BINARY_LCASE'), COLLATE('xxaaaxx', 'UNICODE_CI'))")
+        sql("SELECT " + func + "(COLLATE('x', 'UTF8_BINARY_LCASE'), COLLATE('xxaaaxx', 'UNICODE'))")
       }
       assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
     })
 
     val collationMismatch = intercept[AnalysisException] {
-      sql("SELECT BTRIM(COLLATE('xxaaaxx', 'UNICODE_CI'), COLLATE('x', 'UTF8_BINARY_LCASE'))")
+      sql("SELECT BTRIM(COLLATE('xxaaaxx', 'UNICODE'), COLLATE('x', 'UTF8_BINARY_LCASE'))")
     }
     assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+    // scalastyle:on
+  }
+
+  test("StringTrim* functions - unsupported collation types") {
+    // scalastyle:off
+    List("TRIM", "LTRIM", "RTRIM").foreach(func => {
+      val collationMismatch = intercept[AnalysisException] {
+        sql("SELECT " + func + "(COLLATE('x', 'UNICODE_CI'), COLLATE('xxaaaxx', 'UNICODE_CI'))")
+      }
+      assert(collationMismatch.getErrorClass === "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
+    })
+
+    val collationMismatch = intercept[AnalysisException] {
+      sql("SELECT BTRIM(COLLATE('xxaaaxx', 'UNICODE_CI'), COLLATE('x', 'UNICODE_CI'))")
+    }
+    assert(collationMismatch.getErrorClass === "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
     // scalastyle:on
   }
 

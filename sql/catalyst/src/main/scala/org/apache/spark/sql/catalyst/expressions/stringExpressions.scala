@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UPPER_OR_LO
 import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, CollationSupport, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.{AbstractArrayType, StringTypeAnyCollation}
+import org.apache.spark.sql.internal.types.{AbstractArrayType, StringTypeAnyCollation, StringTypeBinaryLcase}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.array.ByteArrayMethods
@@ -1021,7 +1021,7 @@ trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
 
   override def children: Seq[Expression] = srcStr +: trimStr.toSeq
   override def dataType: DataType = srcStr.dataType
-  override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(StringTypeAnyCollation)
+  override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(StringTypeBinaryLcase)
 
   final lazy val collationId: Int = srcStr.dataType.asInstanceOf[StringType].collationId
 
