@@ -771,21 +771,6 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
-  val KUBERNETES_INGRESS_PATH =
-    ConfigBuilder("spark.kubernetes.driver.ingress.path")
-      .doc("Path for driver service UI ingress")
-      .version("4.0.0")
-      .stringConf
-      .createWithDefault("/")
-
-  val KUBERNETES_INGRESS_PATH_TYPE =
-    ConfigBuilder("spark.kubernetes.driver.ingress.pathType")
-      .doc("Path type for driver service UI ingress.")
-      .version("4.0.0")
-      .stringConf
-      .checkValues(Set("ImplementationSpecific", "Exact", "Prefix"))
-      .createWithDefault("ImplementationSpecific")
-
   val KUBERNETES_DRIVER_LABEL_PREFIX = "spark.kubernetes.driver.label."
   val KUBERNETES_DRIVER_ANNOTATION_PREFIX = "spark.kubernetes.driver.annotation."
   val KUBERNETES_DRIVER_SERVICE_LABEL_PREFIX = "spark.kubernetes.driver.service.label."
