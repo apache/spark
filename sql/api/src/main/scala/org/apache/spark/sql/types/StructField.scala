@@ -70,17 +70,13 @@ case class StructField(
   }
 
   private def metadataJson: JValue = {
-    val metadataJsonVal = metadata.jsonValue
-    metadataJsonVal match {
-      case JObject(fields) =>
-        if (collationMetadata.isEmpty) {
-          return metadataJsonVal
-        }
-
+    val metadataJsonValue = metadata.jsonValue
+    metadataJsonValue match {
+      case JObject(fields) if collationMetadata.nonEmpty =>
         val collationFields = collationMetadata.map(kv => kv._1 -> JString(kv._2)).toList
         JObject(fields :+ (DataType.COLLATIONS_METADATA_KEY -> JObject(collationFields)))
 
-      case _ => metadataJsonVal
+      case _ => metadataJsonValue
     }
   }
 
