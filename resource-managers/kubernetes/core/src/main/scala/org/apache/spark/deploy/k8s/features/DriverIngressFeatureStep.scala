@@ -30,6 +30,7 @@ import org.apache.spark.internal.config.UI._
 class DriverIngressFeatureStep(kubernetesConf: KubernetesDriverConf)
   extends KubernetesFeatureConfigStep with Logging {
 
+  private val ingressName: String = s"${kubernetesConf.resourceNamePrefix}-ui-ingress"
   private lazy val driverServiceName: String = kubernetesConf.driverServiceName
 
   override def configurePod(pod: SparkPod): SparkPod = pod
@@ -82,7 +83,7 @@ class DriverIngressFeatureStep(kubernetesConf: KubernetesDriverConf)
 
     val ingress = new IngressBuilder()
       .withNewMetadata()
-        .withName(s"$driverServiceName-ingress")
+        .withName(ingressName)
         .addToLabels(labels.asJava)
         .addToAnnotations(annotations.asJava)
       .endMetadata()

@@ -98,5 +98,5 @@ private[spark] object DriverServiceFeatureStep {
   val DRIVER_BIND_ADDRESS_KEY = config.DRIVER_BIND_ADDRESS.key
   val DRIVER_HOST_KEY = config.DRIVER_HOST_ADDRESS.key
   val DRIVER_SVC_POSTFIX = "-driver-svc"
-  val MAX_SERVICE_NAME_LENGTH = KUBERNETES_DNS_LABEL_NAME_MAX_LENGTH - "-ingress".length
+  val MAX_SERVICE_NAME_LENGTH = KUBERNETES_DNS_LABEL_NAME_MAX_LENGTH
 }
