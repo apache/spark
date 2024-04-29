@@ -139,12 +139,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
         // We assume other rules have already pushed predicates through join if possible.
         // So the predicate references won't pass on anymore.
         if (left.output.exists(_.semanticEquals(targetKey))) {
-          if (canExtractLeft(joinType)) {
-            extract(left, AttributeSet.empty, hasHitFilter = false, hasHitSelectiveFilter = false,
-              currentPlan = left, targetKey = targetKey)
-          } else {
-            None
-          }.orElse {
+          extract(left, AttributeSet.empty, hasHitFilter = false, hasHitSelectiveFilter = false,
+            currentPlan = left, targetKey = targetKey).orElse {
             // For the exact join key match, like the left table here, it's always OK to generate
             // the runtime filter using this left table, no matter what the join type is.
             // This is because left table always produce a superset of output of the join output
@@ -175,18 +171,13 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
           } else {
             None
           }.orElse {
-            if (canExtractLeft(joinType)) {
-              // We can also extract from the left side if the join keys are transitive.
-              rkeys.zip(lkeys).find(_._1.semanticEquals(targetKey)).map(_._2)
-                .flatMap { newTargetKey =>
-                  extract(left, AttributeSet.empty,
-                    hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = left,
-                    targetKey = newTargetKey)
-                }
-            }
-            else {
-              None
-            }
+            // We can also extract from the left side if the join keys are transitive.
+            rkeys.zip(lkeys).find(_._1.semanticEquals(targetKey)).map(_._2)
+              .flatMap { newTargetKey =>
+                extract(left, AttributeSet.empty,
+                  hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = left,
+                  targetKey = newTargetKey)
+              }
           }
         } else {
           None
