@@ -75,6 +75,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
 
   override val origin: Origin = CurrentOrigin.get
 
+  /**
+   * A mutable map for holding auxiliary information of this tree node. It will be carried over
+   * when this node is copied via `makeCopy`, or transformed via `transformUp`/`transformDown`.
+   */
   private[this] var _tags: mutable.Map[TreeNodeTag[_], Any] = null
   private def tags: mutable.Map[TreeNodeTag[_], Any] = {
     if (_tags eq null) {
@@ -158,6 +162,12 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
     }
   }
 
+  def resetTags(): Unit = {
+    if (!(_tags eq null)) {
+      tags.clear()
+    }
+  }
+
   def setTagValue[T](tag: TreeNodeTag[T], value: T): Unit = {
     tags(tag) = value
   }
@@ -171,7 +181,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
   }
 
   def unsetTagValue[T](tag: TreeNodeTag[T]): Unit = {
-    tags -= tag
+    if (!(_tags eq null)) {
+      tags -= tag
+    }
   }
 
   /**
