@@ -78,6 +78,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
   /**
    * A mutable map for holding auxiliary information of this tree node. It will be carried over
    * when this node is copied via `makeCopy`, or transformed via `transformUp`/`transformDown`.
+   * We lazily evaluate the `tags` since the default size of a `mutable.Map` is nonzero. This
+   * will reduce unnecessary memory pressure.
    */
   private[this] var _tags: mutable.Map[TreeNodeTag[_], Any] = null
   private def tags: mutable.Map[TreeNodeTag[_], Any] = {
