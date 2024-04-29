@@ -155,11 +155,13 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
     ineffectiveRules.get(ruleId.id)
   }
 
+  def isTagsEmpty: Boolean = (_tags eq null) || _tags.isEmpty
+
   def copyTagsFrom(other: BaseType): Unit = {
     // SPARK-32753: it only makes sense to copy tags to a new node
     // but it's too expensive to detect other cases likes node removal
     // so we make a compromise here to copy tags to node with no tags
-    if ((_tags eq null) || _tags.isEmpty) {
+    if (isTagsEmpty && !other.isTagsEmpty) {
       tags ++= other.tags
     }
   }
@@ -169,7 +171,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
   }
 
   def getTagValue[T](tag: TreeNodeTag[T]): Option[T] = {
-    if (_tags eq null) {
+    if (isTagsEmpty) {
       None
     } else {
       tags.get(tag).map(_.asInstanceOf[T])
@@ -177,7 +179,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
   }
 
   def unsetTagValue[T](tag: TreeNodeTag[T]): Unit = {
-    if (_tags ne null) {
+    if (!isTagsEmpty) {
       tags -= tag
     }
   }
