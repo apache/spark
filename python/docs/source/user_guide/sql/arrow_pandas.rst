@@ -339,9 +339,9 @@ Arrow Python UDFs
 Arrow Python UDFs are user defined functions that are executed row-by-row, utilizing Arrow for efficient batch data
 transfer and serialization. To define an Arrow Python UDF, you can use the :meth:`udf` decorator or wrap the function
 with the :meth:`udf` method, ensuring the ``useArrow`` parameter is set to True. Additionally, you can enable Arrow
-optimization for Python UDFs throughout the entire SparkSession by setting the Spark configuration ``spark.sql
-.execution.pythonUDF.arrow.enabled`` to true. It's important to note that the Spark configuration takes effect only
-when ``useArrow`` is either not set or set to None.
+optimization for Python UDFs throughout the entire SparkSession by setting the Spark configuration
+``spark.sql.execution.pythonUDF.arrow.enabled`` to true. It's important to note that the Spark configuration takes
+effect only when ``useArrow`` is either not set or set to None.
 
 The type hints for Arrow Python UDFs should be specified in the same way as for default, pickled Python UDFs.
 

@@ -1457,12 +1457,15 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
     this(substr, str, Literal(1))
   }
 
+  final lazy val collationId: Int = first.dataType.asInstanceOf[StringType].collationId
+
   override def first: Expression = substr
   override def second: Expression = str
   override def third: Expression = start
   override def nullable: Boolean = substr.nullable || str.nullable
   override def dataType: DataType = IntegerType
-  override def inputTypes: Seq[DataType] = Seq(StringType, StringType, IntegerType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeAnyCollation, StringTypeAnyCollation, IntegerType)
 
   override def eval(input: InternalRow): Any = {
     val s = start.eval(input)
@@ -1482,9 +1485,8 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
           if (sVal < 1) {
             0
           } else {
-            l.asInstanceOf[UTF8String].indexOf(
-              r.asInstanceOf[UTF8String],
-              s.asInstanceOf[Int] - 1) + 1
+            CollationSupport.StringLocate.exec(l.asInstanceOf[UTF8String],
+              r.asInstanceOf[UTF8String], s.asInstanceOf[Int] - 1, collationId) + 1;
           }
         }
       }
@@ -1505,8 +1507,8 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
           ${strGen.code}
           if (!${strGen.isNull}) {
             if (${startGen.value} > 0) {
-              ${ev.value} = ${strGen.value}.indexOf(${substrGen.value},
-                ${startGen.value} - 1) + 1;
+              ${ev.value} = CollationSupport.StringLocate.exec(${strGen.value},
+              ${substrGen.value}, ${startGen.value} - 1, $collationId) + 1;
             }
           } else {
             ${ev.isNull} = true;
