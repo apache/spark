@@ -159,10 +159,12 @@ class Iso8601TimestampFormatter(
     isParsing: Boolean)
   extends TimestampFormatter with DateTimeFormatterHelper {
   @transient
-  protected lazy val formatter: DateTimeFormatter = getOrCreateFormatter(pattern, locale, isParsing)
+  protected lazy val formatter: DateTimeFormatter =
+    getOrCreateFormatter(pattern, locale, isParsing)
 
+  @transient
+  
   private lazy val zonedFormatter: DateTimeFormatter = formatter.withZone(zoneId)
-
 
   @transient
   protected lazy val legacyFormatter = TimestampFormatter.getLegacyFormatter(
