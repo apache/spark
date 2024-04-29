@@ -131,4 +131,17 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
       "WHERE (dept > 1 AND ((name LIKE 'am%') = (name LIKE '%y')))")
     assert(df3.collect().length == 3)
   }
+
+  test("SPARK-47994: SQLServer does not support 1 or 0 as boolean type in CASE WHEN filter") {
+    val df = sql(
+      s"""
+        |WITH tbl AS (
+        |SELECT CASE
+        |WHEN e.dept = 1 THEN 'first' WHEN e.dept = 2 THEN 'second' ELSE 'third' END
+        |AS deptString FROM $catalogName.employee as e)
+        |SELECT * FROM tbl
+        |WHERE deptString = 'first'
+        |""".stripMargin)
+    assert(df.collect().length == 2)
+  }
 }

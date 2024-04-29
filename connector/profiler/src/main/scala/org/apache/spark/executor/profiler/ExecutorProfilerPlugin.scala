@@ -23,7 +23,7 @@ import scala.util.Random
 
 import org.apache.spark.SparkConf
 import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext, SparkPlugin}
-import org.apache.spark.internal.LogKey.EXECUTOR_ID
+import org.apache.spark.internal.LogKeys.EXECUTOR_ID
 import org.apache.spark.internal.{Logging, MDC}
 
 

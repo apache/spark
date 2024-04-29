@@ -27,7 +27,7 @@ import net.razorvine.pickle.{Pickler, Unpickler}
 import org.apache.spark.SparkException
 import org.apache.spark.api.python.DechunkedInputStream
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.CLASS_LOADER
+import org.apache.spark.internal.LogKeys.CLASS_LOADER
 import org.apache.spark.security.SocketAuthServer
 import org.apache.spark.sql.{Column, DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}

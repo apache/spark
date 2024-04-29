@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.ERROR
+import org.apache.spark.internal.LogKeys.{BATCH_TIMESTAMP, ERROR}
 import org.apache.spark.sql.{SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.expressions.{CurrentBatchTimestamp, ExpressionWithRandomSeed}
@@ -102,7 +102,7 @@ class IncrementalExecution(
       tracker).transformAllExpressionsWithPruning(
       _.containsAnyPattern(CURRENT_LIKE, EXPRESSION_WITH_RANDOM_SEED)) {
       case ts @ CurrentBatchTimestamp(timestamp, _, _) =>
-        logInfo(s"Current batch timestamp = $timestamp")
+        logInfo(log"Current batch timestamp = ${MDC(BATCH_TIMESTAMP, timestamp)}")
         ts.toLiteral
       case e: ExpressionWithRandomSeed => e.withNewSeed(Utils.random.nextLong())
     }

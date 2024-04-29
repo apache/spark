@@ -33,7 +33,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.annotation.{DeveloperApi, Since, Stable}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.K8S_CONTEXT
+import org.apache.spark.internal.LogKeys.K8S_CONTEXT
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.util.ThreadUtils
 

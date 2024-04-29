@@ -27,7 +27,7 @@ import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext,
 import org.apache.spark.deploy.k8s.Config.{EXECUTOR_ROLL_INTERVAL, EXECUTOR_ROLL_POLICY, ExecutorRollPolicy, MINIMUM_TASKS_PER_EXECUTOR_BEFORE_ROLLING}
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{CLASS_NAME, CONFIG, EXECUTOR_ID, INTERVAL}
+import org.apache.spark.internal.LogKeys.{CLASS_NAME, CONFIG, EXECUTOR_ID, INTERVAL}
 import org.apache.spark.internal.config.DECOMMISSION_ENABLED
 import org.apache.spark.scheduler.ExecutorDecommissionInfo
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_SECOND

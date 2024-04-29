@@ -212,7 +212,7 @@ public class V2ExpressionSQLBuilder {
     return l + " LIKE '%" + escapeSpecialCharsForLikePattern(value) + "%' ESCAPE '\\'";
   }
 
-  private String inputToSQL(Expression input) {
+  protected String inputToSQL(Expression input) {
     if (input.children().length > 1) {
       return "(" + build(input) + ")";
     } else {
@@ -356,7 +356,7 @@ public class V2ExpressionSQLBuilder {
     return joiner.toString();
   }
 
-  private String[] expressionsToStringArray(Expression[] expressions) {
+  protected String[] expressionsToStringArray(Expression[] expressions) {
     String[] result = new String[expressions.length];
     for (int i = 0; i < expressions.length; i++) {
       result[i] = build(expressions[i]);

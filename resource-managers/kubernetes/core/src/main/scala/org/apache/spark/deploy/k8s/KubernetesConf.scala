@@ -26,7 +26,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit._
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{CONFIG, EXECUTOR_ENV_REGEX}
+import org.apache.spark.internal.LogKeys.{CONFIG, EXECUTOR_ENV_REGEX}
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 import org.apache.spark.util.Utils
@@ -100,8 +100,9 @@ private[spark] class KubernetesDriverConf(
       SPARK_APP_ID_LABEL -> appId,
       SPARK_APP_NAME_LABEL -> KubernetesConf.getAppNameLabel(appName),
       SPARK_ROLE_LABEL -> SPARK_POD_DRIVER_ROLE)
-    val driverCustomLabels = KubernetesUtils.parsePrefixedKeyValuePairs(
-      sparkConf, KUBERNETES_DRIVER_LABEL_PREFIX)
+    val driverCustomLabels =
+      KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_DRIVER_LABEL_PREFIX)
+        .map { case(k, v) => (k, Utils.substituteAppNExecIds(v, appId, "")) }
 
     presetLabels.keys.foreach { key =>
       require(
@@ -173,8 +174,9 @@ private[spark] class KubernetesExecutorConf(
       SPARK_ROLE_LABEL -> SPARK_POD_EXECUTOR_ROLE,
       SPARK_RESOURCE_PROFILE_ID_LABEL -> resourceProfileId.toString)
 
-    val executorCustomLabels = KubernetesUtils.parsePrefixedKeyValuePairs(
-      sparkConf, KUBERNETES_EXECUTOR_LABEL_PREFIX)
+    val executorCustomLabels =
+      KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_EXECUTOR_LABEL_PREFIX)
+        .map { case(k, v) => (k, Utils.substituteAppNExecIds(v, appId, executorId)) }
 
     presetLabels.keys.foreach { key =>
       require(

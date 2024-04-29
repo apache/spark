@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkConf
+import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, DataType, IntegerType, StringType}
@@ -86,6 +87,23 @@ class CollationStringExpressionsSuite
       sql("SELECT elt(0 ,collate('Spark', 'UTF8_BINARY_LCASE'), collate('SQL', 'UNICODE'))")
     }
     assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+  }
+
+  test("Support SplitPart string expression with collation") {
+    // Supported collations
+    case class SplitPartTestCase[R](s: String, d: String, p: Int, c: String, result: R)
+    val testCases = Seq(
+      SplitPartTestCase("1a2", "a", 2, "UTF8_BINARY", "2"),
+      SplitPartTestCase("1a2", "a", 2, "UNICODE", "2"),
+      SplitPartTestCase("1a2", "A", 2, "UTF8_BINARY_LCASE", "2"),
+      SplitPartTestCase("1a2", "A", 2, "UNICODE_CI", "2")
+    )
+    testCases.foreach(t => {
+      val query = s"SELECT split_part(collate('${t.s}','${t.c}'),collate('${t.d}','${t.c}'),${t.p})"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
+    })
   }
 
   test("Support Contains string expression with collation") {
@@ -192,6 +210,41 @@ class CollationStringExpressionsSuite
       // Implicit casting
       checkAnswer(sql(s"SELECT startswith(collate('${t.l}', '${t.c}'),'${t.r}')"), Row(t.result))
       checkAnswer(sql(s"SELECT startswith('${t.l}', collate('${t.r}', '${t.c}'))"), Row(t.result))
+    })
+    // Collation mismatch
+    val collationMismatch = intercept[AnalysisException] {
+      sql("SELECT startswith(collate('abcde', 'UTF8_BINARY_LCASE'),collate('C', 'UNICODE_CI'))")
+    }
+    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+  }
+
+  test("Support Replace string expression with collation") {
+    case class ReplaceTestCase[R](source: String, search: String, replace: String,
+        c: String, result: R)
+    val testCases = Seq(
+      // scalastyle:off
+      ReplaceTestCase("r世eplace", "pl", "123", "UTF8_BINARY", "r世e123ace"),
+      ReplaceTestCase("repl世ace", "PL", "AB", "UTF8_BINARY_LCASE", "reAB世ace"),
+      ReplaceTestCase("abcdabcd", "bc", "", "UNICODE", "adad"),
+      ReplaceTestCase("aBc世abc", "b", "12", "UNICODE_CI", "a12c世a12c"),
+      ReplaceTestCase("abi̇o12i̇o", "İo", "yy", "UNICODE_CI", "abyy12yy"),
+      ReplaceTestCase("abİo12i̇o", "i̇o", "xx", "UNICODE_CI", "abxx12xx")
+      // scalastyle:on
+    )
+    testCases.foreach(t => {
+      val query = s"SELECT replace(collate('${t.source}','${t.c}'),collate('${t.search}'," +
+        s"'${t.c}'),collate('${t.replace}','${t.c}'))"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(
+        StringType(CollationFactory.collationNameToId(t.c))))
+      // Implicit casting
+      checkAnswer(sql(s"SELECT replace(collate('${t.source}','${t.c}'),'${t.search}'," +
+        s"'${t.replace}')"), Row(t.result))
+      checkAnswer(sql(s"SELECT replace('${t.source}',collate('${t.search}','${t.c}')," +
+        s"'${t.replace}')"), Row(t.result))
+      checkAnswer(sql(s"SELECT replace('${t.source}','${t.search}'," +
+        s"collate('${t.replace}','${t.c}'))"), Row(t.result))
     })
     // Collation mismatch
     val collationMismatch = intercept[AnalysisException] {
@@ -606,6 +659,40 @@ class CollationStringExpressionsSuite
     val query = "SELECT lpad('abc', collate('5', 'unicode_ci'), ' ')"
     checkAnswer(sql(query), Row("  abc"))
     assert(sql(query).schema.fields.head.dataType.sameType(StringType(0)))
+  }
+
+  test("Support Locate string expression with collation") {
+    case class StringLocateTestCase[R](substring: String, string: String, start: Integer,
+        c: String, result: R)
+    val testCases = Seq(
+      // scalastyle:off
+      StringLocateTestCase("aa", "aaads", 0, "UTF8_BINARY", 0),
+      StringLocateTestCase("aa", "Aaads", 0, "UTF8_BINARY_LCASE", 0),
+      StringLocateTestCase("界x", "test大千世界X大千世界", 1, "UTF8_BINARY_LCASE", 8),
+      StringLocateTestCase("aBc", "abcabc", 4, "UTF8_BINARY_LCASE", 4),
+      StringLocateTestCase("aa", "Aaads", 0, "UNICODE", 0),
+      StringLocateTestCase("abC", "abCabC", 2, "UNICODE", 4),
+      StringLocateTestCase("aa", "Aaads", 0, "UNICODE_CI", 0),
+      StringLocateTestCase("界x", "test大千世界X大千世界", 1, "UNICODE_CI", 8)
+      // scalastyle:on
+    )
+    testCases.foreach(t => {
+      val query = s"SELECT locate(collate('${t.substring}','${t.c}')," +
+        s"collate('${t.string}','${t.c}'),${t.start})"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(IntegerType))
+      // Implicit casting
+      checkAnswer(sql(s"SELECT locate(collate('${t.substring}','${t.c}')," +
+        s"'${t.string}',${t.start})"), Row(t.result))
+      checkAnswer(sql(s"SELECT locate('${t.substring}',collate('${t.string}'," +
+        s"'${t.c}'),${t.start})"), Row(t.result))
+    })
+    // Collation mismatch
+    val collationMismatch = intercept[AnalysisException] {
+      sql("SELECT locate(collate('aBc', 'UTF8_BINARY'),collate('abcabc', 'UTF8_BINARY_LCASE'),4)")
+    }
+    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
   }
 
   // TODO: Add more tests for other string expressions

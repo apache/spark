@@ -30,7 +30,7 @@ import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext, SparkException,
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{CALL_SITE_LONG_FORM, CLASS_NAME}
+import org.apache.spark.internal.LogKeys.{CALL_SITE_LONG_FORM, CLASS_NAME}
 import org.apache.spark.internal.config.{ConfigEntry, EXECUTOR_ALLOW_SPARK_CONTEXT}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}

@@ -44,7 +44,7 @@ class DefaultIndexTestsMixin:
             "compute.default_index_type", "distributed-sequence"
         ), ps.option_context("compute.ops_on_diff_frames", True):
             with ps.option_context("compute.default_index_cache", "LOCAL_CHECKPOINT"):
-                cached_rdd_ids = [rdd_id for rdd_id in self.spark._jsc.getPersistentRDDs()]
+                cached_rdd_ids = [rdd_id for rdd_id in self._legacy_sc._jsc.getPersistentRDDs()]
 
                 psdf1 = (
                     self.spark.range(0, 100, 1, 10).withColumn("Key", F.col("id") % 33).pandas_api()
@@ -61,13 +61,13 @@ class DefaultIndexTestsMixin:
                 self.assertTrue(
                     any(
                         rdd_id not in cached_rdd_ids
-                        for rdd_id in self.spark._jsc.getPersistentRDDs()
+                        for rdd_id in self._legacy_sc._jsc.getPersistentRDDs()
                     )
                 )
 
             for storage_level in ["NONE", "DISK_ONLY_2", "MEMORY_AND_DISK_SER"]:
                 with ps.option_context("compute.default_index_cache", storage_level):
-                    cached_rdd_ids = [rdd_id for rdd_id in self.spark._jsc.getPersistentRDDs()]
+                    cached_rdd_ids = [rdd_id for rdd_id in self._legacy_sc._jsc.getPersistentRDDs()]
 
                     psdf1 = (
                         self.spark.range(0, 100, 1, 10)
@@ -86,7 +86,7 @@ class DefaultIndexTestsMixin:
                     self.assertTrue(
                         all(
                             rdd_id in cached_rdd_ids
-                            for rdd_id in self.spark._jsc.getPersistentRDDs()
+                            for rdd_id in self._legacy_sc._jsc.getPersistentRDDs()
                         )
                     )
 

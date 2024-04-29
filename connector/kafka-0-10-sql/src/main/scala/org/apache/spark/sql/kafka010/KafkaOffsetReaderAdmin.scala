@@ -31,7 +31,7 @@ import org.apache.kafka.common.requests.OffsetFetchResponse
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{OFFSETS, RETRY_COUNT, TOPIC_PARTITION_OFFSET}
+import org.apache.spark.internal.LogKeys.{OFFSETS, RETRY_COUNT, TOPIC_PARTITION_OFFSET}
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.kafka010.KafkaSourceProvider.StrategyOnNoMatchStartingOffset

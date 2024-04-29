@@ -26,7 +26,7 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{HOST, PORT}
+import org.apache.spark.internal.LogKeys.{HOST, PORT}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
