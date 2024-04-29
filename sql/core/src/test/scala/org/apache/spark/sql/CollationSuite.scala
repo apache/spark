@@ -1053,7 +1053,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         )),
         StructField("arrayField", ArrayType(
           StringType(3)
-        )),
+        ))
       ))),
       StructField("c2", MapType(
         StringType(1),
@@ -1065,9 +1065,9 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       )),
       StructField("c3", StructType(Seq(
         StructField("fst", StringType(1)),
-        StructField("snd", StructType(
-          StructField("snd1", StringType(1)) :: Nil
-        ))
+        StructField("snd", StructType(Seq(
+          StructField("snd1", StringType(1))
+        )))
       )))
     ))
 
