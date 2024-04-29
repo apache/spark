@@ -28,7 +28,7 @@ import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.api.r.SerDe
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.CONFIG
+import org.apache.spark.internal.LogKeys.CONFIG
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericRowWithSchema, Literal}

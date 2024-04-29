@@ -24,7 +24,7 @@ import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.CLASS_NAME
+import org.apache.spark.internal.LogKeys.CLASS_NAME
 import org.apache.spark.internal.config.DRIVER_LOG_LOCAL_DIR
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.scheduler._

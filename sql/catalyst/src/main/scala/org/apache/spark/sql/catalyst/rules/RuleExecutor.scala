@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.rules
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, MessageWithContext}
-import org.apache.spark.internal.LogKey._
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.trees.TreeNode

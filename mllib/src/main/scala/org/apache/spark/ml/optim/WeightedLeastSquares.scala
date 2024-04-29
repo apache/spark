@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.optim
 
-import org.apache.spark.internal.LogKey.COUNT
+import org.apache.spark.internal.LogKeys.COUNT
 import org.apache.spark.internal.MDC
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg._

@@ -295,6 +295,92 @@ public class CollationSupportSuite {
     assertEndsWith("The KKelvin", "KKelvin,", "UTF8_BINARY_LCASE", false);
   }
 
+  private void assertStringSplitSQL(String str, String delimiter, String collationName,
+      UTF8String[] expected) throws SparkException {
+    UTF8String s = UTF8String.fromString(str);
+    UTF8String d = UTF8String.fromString(delimiter);
+    int collationId = CollationFactory.collationNameToId(collationName);
+    assertArrayEquals(expected, CollationSupport.StringSplitSQL.exec(s, d, collationId));
+  }
+
+  @Test
+  public void testStringSplitSQL() throws SparkException {
+    // Possible splits
+    var empty_match = new UTF8String[] { UTF8String.fromString("") };
+    var array_abc = new UTF8String[] { UTF8String.fromString("abc") };
+    var array_1a2 = new UTF8String[] { UTF8String.fromString("1a2") };
+    var array_AaXbB = new UTF8String[] { UTF8String.fromString("AaXbB") };
+    var array_aBcDe = new UTF8String[] { UTF8String.fromString("aBcDe") };
+    var array_special = new UTF8String[] { UTF8String.fromString("äb世De") };
+    var array_abcde = new UTF8String[] { UTF8String.fromString("äbćδe") };
+    var full_match = new UTF8String[] { UTF8String.fromString(""), UTF8String.fromString("") };
+    var array_1_2 = new UTF8String[] { UTF8String.fromString("1"), UTF8String.fromString("2") };
+    var array_A_B = new UTF8String[] { UTF8String.fromString("A"), UTF8String.fromString("B") };
+    var array_a_e = new UTF8String[] { UTF8String.fromString("ä"), UTF8String.fromString("e") };
+    var array_Aa_bB = new UTF8String[] { UTF8String.fromString("Aa"), UTF8String.fromString("bB") };
+    // Edge cases
+    assertStringSplitSQL("", "", "UTF8_BINARY", empty_match);
+    assertStringSplitSQL("abc", "", "UTF8_BINARY", array_abc);
+    assertStringSplitSQL("", "abc", "UTF8_BINARY", empty_match);
+    assertStringSplitSQL("", "", "UNICODE", empty_match);
+    assertStringSplitSQL("abc", "", "UNICODE", array_abc);
+    assertStringSplitSQL("", "abc", "UNICODE", empty_match);
+    assertStringSplitSQL("", "", "UTF8_BINARY_LCASE", empty_match);
+    assertStringSplitSQL("abc", "", "UTF8_BINARY_LCASE", array_abc);
+    assertStringSplitSQL("", "abc", "UTF8_BINARY_LCASE", empty_match);
+    assertStringSplitSQL("", "", "UNICODE_CI", empty_match);
+    assertStringSplitSQL("abc", "", "UNICODE_CI", array_abc);
+    assertStringSplitSQL("", "abc", "UNICODE_CI", empty_match);
+    // Basic tests
+    assertStringSplitSQL("1a2", "a", "UTF8_BINARY", array_1_2);
+    assertStringSplitSQL("1a2", "A", "UTF8_BINARY", array_1a2);
+    assertStringSplitSQL("1a2", "b", "UTF8_BINARY", array_1a2);
+    assertStringSplitSQL("1a2", "1a2", "UNICODE", full_match);
+    assertStringSplitSQL("1a2", "1A2", "UNICODE", array_1a2);
+    assertStringSplitSQL("1a2", "3b4", "UNICODE", array_1a2);
+    assertStringSplitSQL("1a2", "A", "UTF8_BINARY_LCASE", array_1_2);
+    assertStringSplitSQL("1a2", "1A2", "UTF8_BINARY_LCASE", full_match);
+    assertStringSplitSQL("1a2", "X", "UTF8_BINARY_LCASE", array_1a2);
+    assertStringSplitSQL("1a2", "a", "UNICODE_CI", array_1_2);
+    assertStringSplitSQL("1a2", "A", "UNICODE_CI", array_1_2);
+    assertStringSplitSQL("1a2", "1A2", "UNICODE_CI", full_match);
+    assertStringSplitSQL("1a2", "123", "UNICODE_CI", array_1a2);
+    // Case variation
+    assertStringSplitSQL("AaXbB", "x", "UTF8_BINARY", array_AaXbB);
+    assertStringSplitSQL("AaXbB", "X", "UTF8_BINARY", array_Aa_bB);
+    assertStringSplitSQL("AaXbB", "axb", "UNICODE", array_AaXbB);
+    assertStringSplitSQL("AaXbB", "aXb", "UNICODE", array_A_B);
+    assertStringSplitSQL("AaXbB", "axb", "UTF8_BINARY_LCASE", array_A_B);
+    assertStringSplitSQL("AaXbB", "AXB", "UTF8_BINARY_LCASE", array_A_B);
+    assertStringSplitSQL("AaXbB", "axb", "UNICODE_CI", array_A_B);
+    assertStringSplitSQL("AaXbB", "AxB", "UNICODE_CI", array_A_B);
+    // Accent variation
+    assertStringSplitSQL("aBcDe", "bćd", "UTF8_BINARY", array_aBcDe);
+    assertStringSplitSQL("aBcDe", "BćD", "UTF8_BINARY", array_aBcDe);
+    assertStringSplitSQL("aBcDe", "abćde", "UNICODE", array_aBcDe);
+    assertStringSplitSQL("aBcDe", "aBćDe", "UNICODE", array_aBcDe);
+    assertStringSplitSQL("aBcDe", "bćd", "UTF8_BINARY_LCASE", array_aBcDe);
+    assertStringSplitSQL("aBcDe", "BĆD", "UTF8_BINARY_LCASE", array_aBcDe);
+    assertStringSplitSQL("aBcDe", "abćde", "UNICODE_CI", array_aBcDe);
+    assertStringSplitSQL("aBcDe", "AbĆdE", "UNICODE_CI", array_aBcDe);
+    // Variable byte length characters
+    assertStringSplitSQL("äb世De", "b世D", "UTF8_BINARY", array_a_e);
+    assertStringSplitSQL("äb世De", "B世d", "UTF8_BINARY", array_special);
+    assertStringSplitSQL("äbćδe", "bćδ", "UTF8_BINARY", array_a_e);
+    assertStringSplitSQL("äbćδe", "BcΔ", "UTF8_BINARY", array_abcde);
+    assertStringSplitSQL("äb世De", "äb世De", "UNICODE", full_match);
+    assertStringSplitSQL("äb世De", "äB世de", "UNICODE", array_special);
+    assertStringSplitSQL("äbćδe", "äbćδe", "UNICODE", full_match);
+    assertStringSplitSQL("äbćδe", "ÄBcΔÉ", "UNICODE", array_abcde);
+    assertStringSplitSQL("äb世De", "b世D", "UTF8_BINARY_LCASE", array_a_e);
+    assertStringSplitSQL("äb世De", "B世d", "UTF8_BINARY_LCASE", array_a_e);
+    assertStringSplitSQL("äbćδe", "bćδ", "UTF8_BINARY_LCASE", array_a_e);
+    assertStringSplitSQL("äbćδe", "BcΔ", "UTF8_BINARY_LCASE", array_abcde);
+    assertStringSplitSQL("äb世De", "ab世De", "UNICODE_CI", array_special);
+    assertStringSplitSQL("äb世De", "AB世dE", "UNICODE_CI", array_special);
+    assertStringSplitSQL("äbćδe", "ÄbćδE", "UNICODE_CI", full_match);
+    assertStringSplitSQL("äbćδe", "ÄBcΔÉ", "UNICODE_CI", array_abcde);
+  }
 
   private void assertUpper(String target, String collationName, String expected)
           throws SparkException {
@@ -526,6 +612,109 @@ public class CollationSupportSuite {
     assertFindInSet("大", "test,大千,世,界X,大,千,世界", "UNICODE_CI", 5);
     assertFindInSet("i̇o", "ab,İo,12", "UNICODE_CI", 2);
     assertFindInSet("İo", "ab,i̇o,12", "UNICODE_CI", 2);
+  }
+
+  private void assertReplace(String source, String search, String replace, String collationName,
+        String expected) throws SparkException {
+    UTF8String src = UTF8String.fromString(source);
+    UTF8String sear = UTF8String.fromString(search);
+    UTF8String repl = UTF8String.fromString(replace);
+    int collationId = CollationFactory.collationNameToId(collationName);
+    assertEquals(expected, CollationSupport.StringReplace
+      .exec(src, sear, repl, collationId).toString());
+  }
+
+  @Test
+  public void testReplace() throws SparkException {
+    assertReplace("r世eplace", "pl", "123", "UTF8_BINARY", "r世e123ace");
+    assertReplace("replace", "pl", "", "UTF8_BINARY", "reace");
+    assertReplace("repl世ace", "Pl", "", "UTF8_BINARY", "repl世ace");
+    assertReplace("replace", "", "123", "UTF8_BINARY", "replace");
+    assertReplace("abcabc", "b", "12", "UTF8_BINARY", "a12ca12c");
+    assertReplace("abcdabcd", "bc", "", "UTF8_BINARY", "adad");
+    assertReplace("r世eplace", "pl", "xx", "UTF8_BINARY_LCASE", "r世exxace");
+    assertReplace("repl世ace", "PL", "AB", "UTF8_BINARY_LCASE", "reAB世ace");
+    assertReplace("Replace", "", "123", "UTF8_BINARY_LCASE", "Replace");
+    assertReplace("re世place", "世", "x", "UTF8_BINARY_LCASE", "rexplace");
+    assertReplace("abcaBc", "B", "12", "UTF8_BINARY_LCASE", "a12ca12c");
+    assertReplace("AbcdabCd", "Bc", "", "UTF8_BINARY_LCASE", "Adad");
+    assertReplace("re世place", "plx", "123", "UNICODE", "re世place");
+    assertReplace("世Replace", "re", "", "UNICODE", "世Replace");
+    assertReplace("replace世", "", "123", "UNICODE", "replace世");
+    assertReplace("aBc世abc", "b", "12", "UNICODE", "aBc世a12c");
+    assertReplace("abcdabcd", "bc", "", "UNICODE", "adad");
+    assertReplace("replace", "plx", "123", "UNICODE_CI", "replace");
+    assertReplace("Replace", "re", "", "UNICODE_CI", "place");
+    assertReplace("replace", "", "123", "UNICODE_CI", "replace");
+    assertReplace("aBc世abc", "b", "12", "UNICODE_CI", "a12c世a12c");
+    assertReplace("a世Bcdabcd", "bC", "", "UNICODE_CI", "a世dad");
+    assertReplace("abİo12i̇o", "i̇o", "xx", "UNICODE_CI", "abxx12xx");
+    assertReplace("abi̇o12i̇o", "İo", "yy", "UNICODE_CI", "abyy12yy");
+  }
+
+  private void assertLocate(String substring, String string, Integer start, String collationName,
+        Integer expected) throws SparkException {
+    UTF8String substr = UTF8String.fromString(substring);
+    UTF8String str = UTF8String.fromString(string);
+    int collationId = CollationFactory.collationNameToId(collationName);
+    assertEquals(expected, CollationSupport.StringLocate.exec(str, substr,
+      start - 1, collationId) + 1);
+  }
+
+  @Test
+  public void testLocate() throws SparkException {
+    // If you add tests with start < 1 be careful to understand the behavior of the indexOf method
+    // and usage of indexOf in the StringLocate class.
+    assertLocate("aa", "aaads", 1, "UTF8_BINARY", 1);
+    assertLocate("aa", "aaads", 2, "UTF8_BINARY", 2);
+    assertLocate("aa", "aaads", 3, "UTF8_BINARY", 0);
+    assertLocate("Aa", "aaads", 1, "UTF8_BINARY", 0);
+    assertLocate("Aa", "aAads", 1, "UTF8_BINARY", 2);
+    assertLocate("界x", "test大千世界X大千世界", 1, "UTF8_BINARY", 0);
+    assertLocate("界X", "test大千世界X大千世界", 1, "UTF8_BINARY", 8);
+    assertLocate("界", "test大千世界X大千世界", 13, "UTF8_BINARY", 13);
+    assertLocate("AA", "aaads", 1, "UTF8_BINARY_LCASE", 1);
+    assertLocate("aa", "aAads", 2, "UTF8_BINARY_LCASE", 2);
+    assertLocate("aa", "aaAds", 3, "UTF8_BINARY_LCASE", 0);
+    assertLocate("abC", "abcabc", 1, "UTF8_BINARY_LCASE", 1);
+    assertLocate("abC", "abCabc", 2, "UTF8_BINARY_LCASE", 4);
+    assertLocate("abc", "abcabc", 4, "UTF8_BINARY_LCASE", 4);
+    assertLocate("界x", "test大千世界X大千世界", 1, "UTF8_BINARY_LCASE", 8);
+    assertLocate("界X", "test大千世界Xtest大千世界", 1, "UTF8_BINARY_LCASE", 8);
+    assertLocate("界", "test大千世界X大千世界", 13, "UTF8_BINARY_LCASE", 13);
+    assertLocate("大千", "test大千世界大千世界", 1, "UTF8_BINARY_LCASE", 5);
+    assertLocate("大千", "test大千世界大千世界", 9, "UTF8_BINARY_LCASE", 9);
+    assertLocate("大千", "大千世界大千世界", 1, "UTF8_BINARY_LCASE", 1);
+    assertLocate("aa", "Aaads", 1, "UNICODE", 2);
+    assertLocate("AA", "aaads", 1, "UNICODE", 0);
+    assertLocate("aa", "aAads", 2, "UNICODE", 0);
+    assertLocate("aa", "aaAds", 3, "UNICODE", 0);
+    assertLocate("abC", "abcabc", 1, "UNICODE", 0);
+    assertLocate("abC", "abCabc", 2, "UNICODE", 0);
+    assertLocate("abC", "abCabC", 2, "UNICODE", 4);
+    assertLocate("abc", "abcabc", 1, "UNICODE", 1);
+    assertLocate("abc", "abcabc", 3, "UNICODE", 4);
+    assertLocate("界x", "test大千世界X大千世界", 1, "UNICODE", 0);
+    assertLocate("界X", "test大千世界X大千世界", 1, "UNICODE", 8);
+    assertLocate("界", "test大千世界X大千世界", 13, "UNICODE", 13);
+    assertLocate("AA", "aaads", 1, "UNICODE_CI", 1);
+    assertLocate("aa", "aAads", 2, "UNICODE_CI", 2);
+    assertLocate("aa", "aaAds", 3, "UNICODE_CI", 0);
+    assertLocate("abC", "abcabc", 1, "UNICODE_CI", 1);
+    assertLocate("abC", "abCabc", 2, "UNICODE_CI", 4);
+    assertLocate("abc", "abcabc", 4, "UNICODE_CI", 4);
+    assertLocate("界x", "test大千世界X大千世界", 1, "UNICODE_CI", 8);
+    assertLocate("界", "test大千世界X大千世界", 13, "UNICODE_CI", 13);
+    assertLocate("大千", "test大千世界大千世界", 1, "UNICODE_CI", 5);
+    assertLocate("大千", "test大千世界大千世界", 9, "UNICODE_CI", 9);
+    assertLocate("大千", "大千世界大千世界", 1, "UNICODE_CI", 1);
+    // Case-variable character length
+    assertLocate("i̇o", "İo世界大千世界", 1, "UNICODE_CI", 1);
+    assertLocate("i̇o", "大千İo世界大千世界", 1, "UNICODE_CI", 3);
+    assertLocate("i̇o", "世界İo大千世界大千İo", 4, "UNICODE_CI", 11);
+    assertLocate("İo", "i̇o世界大千世界", 1, "UNICODE_CI", 1);
+    assertLocate("İo", "大千i̇o世界大千世界", 1, "UNICODE_CI", 3);
+    assertLocate("İo", "世界i̇o大千世界大千i̇o", 4, "UNICODE_CI", 12); // 12 instead of 11
   }
 
   private void assertSubstringIndex(String string, String delimiter, Integer count,

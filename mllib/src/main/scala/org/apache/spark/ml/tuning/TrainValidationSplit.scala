@@ -29,7 +29,7 @@ import org.json4s.DefaultFormats
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{ESTIMATOR_PARAMETER_MAP, TRAIN_VALIDATION_SPLIT_METRIC, TRAIN_VALIDATION_SPLIT_METRICS}
+import org.apache.spark.internal.LogKeys.{ESTIMATOR_PARAMETER_MAP, TRAIN_VALIDATION_SPLIT_METRIC, TRAIN_VALIDATION_SPLIT_METRICS}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param.{DoubleParam, ParamMap, ParamValidators}

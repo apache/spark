@@ -25,7 +25,7 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{END_INDEX, START_INDEX}
+import org.apache.spark.internal.LogKeys.{END_INDEX, START_INDEX, STATE_STORE_ID}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, JoinedRow, Literal, SafeProjection, SpecificInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
@@ -463,7 +463,7 @@ class SymmetricHashJoinStateManager(
 
     def abortIfNeeded(): Unit = {
       if (!stateStore.hasCommitted) {
-        logInfo(s"Aborted store ${stateStore.id}")
+        logInfo(log"Aborted store ${MDC(STATE_STORE_ID, stateStore.id)}")
         stateStore.abort()
       }
       // If this class manages a state store provider by itself, it should take care of closing
@@ -491,7 +491,7 @@ class SymmetricHashJoinStateManager(
           useMultipleValuesPerKey = false)
         stateStoreProvider.getStore(stateInfo.get.storeVersion)
       }
-      logInfo(s"Loaded store ${store.id}")
+      logInfo(log"Loaded store ${MDC(STATE_STORE_ID, store.id)}")
       store
     }
   }

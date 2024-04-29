@@ -25,7 +25,7 @@ import io.fabric8.kubernetes.api.model.Pod
 
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{POD_NAME, POD_NAMESPACE, POD_PHASE}
+import org.apache.spark.internal.LogKeys.{POD_NAME, POD_NAMESPACE, POD_PHASE}
 
 /**
  * An immutable view of the current executor pods that are running in the cluster.

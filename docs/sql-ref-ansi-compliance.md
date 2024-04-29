@@ -21,18 +21,18 @@ license: |
 
 In Spark SQL, there are two options to comply with the SQL standard: `spark.sql.ansi.enabled` and `spark.sql.storeAssignmentPolicy` (See a table below for details).
 
-When `spark.sql.ansi.enabled` is set to `true`, Spark SQL uses an ANSI compliant dialect instead of being Hive compliant. For example, Spark will throw an exception at runtime instead of returning null results if the inputs to a SQL operator/function are invalid. Some ANSI dialect features may be not from the ANSI SQL standard directly, but their behaviors align with ANSI SQL's style.
+By default, `spark.sql.ansi.enabled` is `true` and Spark SQL uses an ANSI compliant dialect instead of being Hive compliant. For example, Spark will throw an exception at runtime instead of returning null results if the inputs to a SQL operator/function are invalid. Some ANSI dialect features may be not from the ANSI SQL standard directly, but their behaviors align with ANSI SQL's style.
 
 Moreover, Spark SQL has an independent option to control implicit casting behaviours when inserting rows in a table.
 The casting behaviours are defined as store assignment rules in the standard.
 
-When `spark.sql.storeAssignmentPolicy` is set to `ANSI`, Spark SQL complies with the ANSI store assignment rules. This is a separate configuration because its default value is `ANSI`, while the configuration `spark.sql.ansi.enabled` is disabled by default.
+By default, `spark.sql.storeAssignmentPolicy` is `ANSI` and Spark SQL complies with the ANSI store assignment rules.
 
 <table class="spark-config">
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.sql.ansi.enabled</code></td>
-  <td>false</td>
+  <td>true</td>
   <td>
     When true, Spark tries to conform to the ANSI SQL specification: <br/>
     1. Spark SQL will throw runtime exceptions on invalid operations, including integer overflow
@@ -67,10 +67,8 @@ The following subsections present behaviour changes in arithmetic operations, ty
 
 ### Arithmetic Operations
 
-In Spark SQL, arithmetic operations performed on numeric types (with the exception of decimal) are not checked for overflows by default.
-This means that in case an operation causes overflows, the result is the same with the corresponding operation in a Java/Scala program (e.g., if the sum of 2 integers is higher than the maximum value representable, the result is a negative number).
-On the other hand, Spark SQL returns null for decimal overflows.
-When `spark.sql.ansi.enabled` is set to `true` and an overflow occurs in numeric and interval arithmetic operations, it throws an arithmetic exception at runtime.
+In Spark SQL, by default, Spark throws an arithmetic exception at runtime for both interval and numeric type overflows.
+If `spark.sql.ansi.enabled` is `false`, then the decimal type will produce `null` values and other numeric types will behave in the same way as the corresponding operation in a Java/Scala program (e.g., if the sum of 2 integers is higher than the maximum value representable, the result is a negative number) which is the behavior of Spark 3 or older.
 
 ```sql
 -- `spark.sql.ansi.enabled=true`
@@ -393,7 +391,7 @@ With the default parser, Spark SQL has two kinds of keywords:
 * Non-reserved keywords: Same definition as the one when the ANSI mode enabled.
 * Strict-non-reserved keywords: A strict version of non-reserved keywords, which can not be used as table alias.
 
-By default, both `spark.sql.ansi.enabled` and `spark.sql.ansi.enforceReservedKeywords` are false.
+By default, `spark.sql.ansi.enforceReservedKeywords` is false.
 
 Below is a list of all the keywords in Spark SQL.
 

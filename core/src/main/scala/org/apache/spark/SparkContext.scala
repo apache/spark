@@ -28,14 +28,13 @@ import scala.collection.concurrent.{Map => ScalaConcurrentMap}
 import scala.collection.immutable
 import scala.collection.mutable.HashMap
 import scala.jdk.CollectionConverters._
-import scala.language.implicitConversions
 import scala.reflect.{classTag, ClassTag}
 import scala.util.control.NonFatal
 
 import com.google.common.collect.MapMaker
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.hadoop.io.{ArrayWritable, BooleanWritable, BytesWritable, DoubleWritable, FloatWritable, IntWritable, LongWritable, NullWritable, Text, Writable}
+import org.apache.hadoop.io.{BooleanWritable, BytesWritable, DoubleWritable, FloatWritable, IntWritable, LongWritable, NullWritable, Text, Writable}
 import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf, SequenceFileInputFormat, TextInputFormat}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHadoopJob}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
@@ -47,7 +46,7 @@ import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.{Executor, ExecutorMetrics, ExecutorMetricsSource}
 import org.apache.spark.input.{FixedLengthBinaryInputFormat, PortableDataStream, StreamInputFormat, WholeTextFileInputFormat}
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey
+import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests._
 import org.apache.spark.internal.config.UI._
@@ -756,7 +755,7 @@ class SparkContext(config: SparkConf) extends Logging {
     } catch {
       case e: Exception =>
         logError(
-          log"Exception getting thread dump from executor ${MDC(LogKey.EXECUTOR_ID, executorId)}",
+          log"Exception getting thread dump from executor ${MDC(LogKeys.EXECUTOR_ID, executorId)}",
           e)
         None
     }
@@ -789,7 +788,7 @@ class SparkContext(config: SparkConf) extends Logging {
       case e: Exception =>
         logError(
           log"Exception getting heap histogram from " +
-            log"executor ${MDC(LogKey.EXECUTOR_ID, executorId)}", e)
+            log"executor ${MDC(LogKeys.EXECUTOR_ID, executorId)}", e)
         None
     }
   }
@@ -2151,7 +2150,7 @@ class SparkContext(config: SparkConf) extends Logging {
         Seq(env.rpcEnv.fileServer.addJar(file))
       } catch {
         case NonFatal(e) =>
-          logError(log"Failed to add ${MDC(LogKey.PATH, path)} to Spark environment", e)
+          logError(log"Failed to add ${MDC(LogKeys.PATH, path)} to Spark environment", e)
           Nil
       }
     }
@@ -2172,7 +2171,7 @@ class SparkContext(config: SparkConf) extends Logging {
           Seq(path)
         } catch {
           case NonFatal(e) =>
-            logError(log"Failed to add ${MDC(LogKey.PATH, path)} to Spark environment", e)
+            logError(log"Failed to add ${MDC(LogKeys.PATH, path)} to Spark environment", e)
             Nil
         }
       } else {
@@ -3044,14 +3043,6 @@ object SparkContext extends Logging {
       throw new IllegalArgumentException(
         "Spark job tag cannot be an empty string.")
     }
-  }
-
-  private implicit def arrayToArrayWritable[T <: Writable : ClassTag](arr: Iterable[T])
-    : ArrayWritable = {
-    def anyToWritable[U <: Writable](u: U): Writable = u
-
-    new ArrayWritable(classTag[T].runtimeClass.asInstanceOf[Class[Writable]],
-        arr.map(x => anyToWritable(x)).toArray)
   }
 
   /**

@@ -33,7 +33,7 @@ import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.ExecutorLogUrlHandler
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.ERROR
+import org.apache.spark.internal.LogKeys.ERROR
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Network._
 import org.apache.spark.resource.ResourceProfile

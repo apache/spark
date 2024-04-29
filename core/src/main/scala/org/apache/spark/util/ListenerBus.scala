@@ -27,7 +27,7 @@ import com.codahale.metrics.Timer
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.{config, Logging, MDC}
-import org.apache.spark.internal.LogKey.LISTENER
+import org.apache.spark.internal.LogKeys.LISTENER
 import org.apache.spark.scheduler.EventLoggingListener
 import org.apache.spark.scheduler.SparkListenerEnvironmentUpdate
 

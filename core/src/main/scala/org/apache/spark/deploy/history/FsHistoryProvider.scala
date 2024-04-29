@@ -38,7 +38,7 @@ import org.apache.hadoop.security.AccessControlException
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.PATH
+import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.Status._

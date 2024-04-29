@@ -97,7 +97,7 @@ object KafkaExceptions {
         "startOffset" -> startOffset.toString,
         "endOffset" -> endOffset.toString,
         "topicPartition" -> topicPartition.toString,
-        "groupId" -> groupId),
+        "groupId" -> Option(groupId).getOrElse("null")),
       cause = cause)
   }
 

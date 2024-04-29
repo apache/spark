@@ -25,7 +25,7 @@ import org.apache.commons.io.IOUtils
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.{config, MDC}
-import org.apache.spark.internal.LogKey.PATH
+import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.util.ArrayImplicits._
 
 /**
