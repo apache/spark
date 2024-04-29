@@ -138,9 +138,6 @@ RUN python3.12 -m pip install $BASIC_PIP_PKGS $CONNECT_PIP_PKGS lxml && \
     python3.12 -m pip cache purge
 
 # Remove unused installation packages to free up disk space
-RUN apt-get remove --purge -y \
-    '^aspnet.*' '^dotnet-.*' '^llvm-.*' 'php.*' '^mongodb-.*' \
-    snapd google-chrome-stable microsoft-edge-stable firefox \
-    azure-cli google-cloud-sdk mono-devel powershell libgl1-mesa-dri || true
+RUN apt-get remove --purge -y 'gfortran-11' 'humanity-icon-theme' 'nodejs-doc' || true
 RUN apt-get autoremove --purge -y
 RUN apt-get clean
