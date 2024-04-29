@@ -26,7 +26,8 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
 import org.apache.spark._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.io.{FileCommitProtocol, SparkHadoopWriterUtils}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
@@ -281,7 +282,7 @@ object FileFormatWriter extends Logging {
       // return a set of all the partition paths that were updated during this job
       ret.map(_.summary.updatedPartitions).reduceOption(_ ++ _).getOrElse(Set.empty)
     } catch { case cause: Throwable =>
-      logError(s"Aborting job ${description.uuid}.", cause)
+      logError(log"Aborting job ${MDC(WRITE_JOB_UUID, description.uuid)}.", cause)
       committer.abortJob(job)
       throw cause
     }
@@ -404,7 +405,7 @@ object FileFormatWriter extends Logging {
     })(catchBlock = {
       // If there is an error, abort the task
       dataWriter.abort()
-      logError(s"Job $jobId aborted.")
+      logError(log"Job ${MDC(JOB_ID, jobId)} aborted.")
     }, finallyBlock = {
       dataWriter.close()
     })

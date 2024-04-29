@@ -25,7 +25,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit._
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{CONFIG, CONFIG2, CONFIG3, CONFIG4, CONFIG5}
+import org.apache.spark.internal.LogKeys.{CONFIG, CONFIG2, CONFIG3, CONFIG4, CONFIG5}
 import org.apache.spark.internal.config.{PYSPARK_DRIVER_PYTHON, PYSPARK_PYTHON}
 import org.apache.spark.launcher.SparkLauncher
 

@@ -32,7 +32,7 @@ import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.internal.{config, Logging, MDC}
-import org.apache.spark.internal.LogKey.{DRIVER_ID, ERROR, RPC_ADDRESS}
+import org.apache.spark.internal.LogKeys.{DRIVER_ID, ERROR, HOST_PORT}
 import org.apache.spark.internal.config.Network.RPC_ASK_TIMEOUT
 import org.apache.spark.resource.ResourceUtils
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
@@ -226,7 +226,7 @@ private class ClientEndpoint(
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {
     if (!lostMasters.contains(remoteAddress)) {
-      logError(log"Error connecting to master ${MDC(RPC_ADDRESS, remoteAddress)}.")
+      logError(log"Error connecting to master ${MDC(HOST_PORT, remoteAddress)}.")
       lostMasters += remoteAddress
       // Note that this heuristic does not account for the fact that a Master can recover within
       // the lifetime of this client. Thus, once a Master is lost it is lost to us forever. This
@@ -240,7 +240,7 @@ private class ClientEndpoint(
 
   override def onNetworkError(cause: Throwable, remoteAddress: RpcAddress): Unit = {
     if (!lostMasters.contains(remoteAddress)) {
-      logError(log"Error connecting to master (${MDC(RPC_ADDRESS, remoteAddress)}).", cause)
+      logError(log"Error connecting to master (${MDC(HOST_PORT, remoteAddress)}).", cause)
       lostMasters += remoteAddress
       if (lostMasters.size >= masterEndpoints.size) {
         logError("No master is available, exiting.")

@@ -1414,16 +1414,12 @@ class SparkConnectClient(object):
                     with attempt:
                         for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
                             yield from handle_response(b)
-        except KeyboardInterrupt:
+        except KeyboardInterrupt as kb:
             logger.debug(f"Interrupt request received for operation={req.operation_id}")
-            try:
-                self.interrupt_operation(req.operation_id)
-            except Exception as e:
-                # Swallow all errors if aborted.
-                logger.debug(f"Caught an error during interrupt handling, silenced: {e}")
-                pass
             if progress is not None:
                 progress.finish()
+            self.interrupt_operation(req.operation_id)
+            raise kb
         except Exception as error:
             self._handle_error(error)
 
@@ -1766,6 +1762,9 @@ class SparkConnectClient(object):
                 if d.Is(error_details_pb2.ErrorInfo.DESCRIPTOR):
                     info = error_details_pb2.ErrorInfo()
                     d.Unpack(info)
+
+                    if info.metadata["errorClass"] == "INVALID_HANDLE.SESSION_CHANGED":
+                        self._closed = True
 
                     raise convert_exception(
                         info,

@@ -27,7 +27,8 @@ import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.internal.{LogEntry, Logging}
+import org.apache.spark.internal.{LogEntry, Logging, MDC}
+import org.apache.spark.internal.LogKeys.{CLASS_NAME, NUM_PARTITION, PIPELINE_STAGE_UID, STORAGE_LEVEL}
 import org.apache.spark.ml.{MLEvents, PipelineStage}
 import org.apache.spark.ml.param.{Param, Params}
 import org.apache.spark.rdd.RDD
@@ -53,8 +54,8 @@ private[spark] class Instrumentation private () extends Logging with MLEvents {
     // estimator.getClass.getSimpleName can cause Malformed class name error,
     // call safer `Utils.getSimpleName` instead
     val className = Utils.getSimpleName(stage.getClass)
-    logInfo(s"Stage class: $className")
-    logInfo(s"Stage uid: ${stage.uid}")
+    logInfo(log"Stage class: ${MDC(CLASS_NAME, className)}")
+    logInfo(log"Stage uid: ${MDC(PIPELINE_STAGE_UID, stage.uid)}")
   }
 
   /**
@@ -66,8 +67,8 @@ private[spark] class Instrumentation private () extends Logging with MLEvents {
    * Log some data about the dataset being fit.
    */
   def logDataset(dataset: RDD[_]): Unit = {
-    logInfo(s"training: numPartitions=${dataset.partitions.length}" +
-      s" storageLevel=${dataset.getStorageLevel}")
+    logInfo(log"training: numPartitions=${MDC(NUM_PARTITION, dataset.partitions.length)}" +
+      log" storageLevel=${MDC(STORAGE_LEVEL, dataset.getStorageLevel)}")
   }
 
   /**
@@ -250,6 +251,13 @@ private[spark] class OptionalInstrumentation private(
     instrumentation match {
       case Some(instr) => instr.logInfo(msg)
       case None => super.logInfo(msg)
+    }
+  }
+
+  override def logInfo(logEntry: LogEntry): Unit = {
+    instrumentation match {
+      case Some(instr) => instr.logInfo(logEntry)
+      case None => super.logInfo(logEntry)
     }
   }
 

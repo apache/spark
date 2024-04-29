@@ -38,7 +38,8 @@ import org.apache.spark.connect.proto.ExecutePlanResponse.SqlCommandResult
 import org.apache.spark.connect.proto.Parse.ParseFormat
 import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.StreamingQueryInstance
 import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.SESSION_ID
 import org.apache.spark.ml.{functions => MLFunctions}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
 import org.apache.spark.sql.{Column, Dataset, Encoders, ForeachWriter, Observation, RelationalGroupedDataset, SparkSession}
@@ -56,8 +57,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, CoGroup, Coll
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
-import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket}
-import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, InvalidPlanInput, LiteralValueProtoConverter, ProtoUtils, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket}
+import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_ARROW_MAX_BATCH_SIZE, CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT}
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.{ExecuteHolder, SessionHolder, SparkConnectService}
 import org.apache.spark.sql.connect.utils.MetricGenerator
@@ -231,7 +232,10 @@ class SparkConnectPlanner(
 
   @DeveloperApi
   def transformRelation(bytes: Array[Byte]): LogicalPlan = {
-    transformRelation(proto.Relation.parseFrom(bytes))
+    val recursionLimit = session.conf.get(CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT)
+    val relation =
+      ProtoUtils.parseWithRecursionLimit(bytes, proto.Relation.parser(), recursionLimit)
+    transformRelation(relation)
   }
 
   private def transformRelationPlugin(extension: ProtoAny): LogicalPlan = {
@@ -1511,7 +1515,10 @@ class SparkConnectPlanner(
 
   @DeveloperApi
   def transformExpression(bytes: Array[Byte]): Expression = {
-    transformExpression(proto.Expression.parseFrom(bytes))
+    val recursionLimit = session.conf.get(CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT)
+    val expression =
+      ProtoUtils.parseWithRecursionLimit(bytes, proto.Expression.parser(), recursionLimit)
+    transformExpression(expression)
   }
 
   private def toNamedExpression(expr: Expression): NamedExpression = expr match {
@@ -3131,7 +3138,9 @@ class SparkConnectPlanner(
         }
       } catch {
         case NonFatal(ex) => // Failed to start the query, clean up foreach runner if any.
-          logInfo(s"Removing foreachBatch worker, query failed to start for session $sessionId.")
+          logInfo(
+            log"Removing foreachBatch worker, query failed to start " +
+              log"for session ${MDC(SESSION_ID, sessionId)}.")
           foreachBatchRunnerCleaner.foreach(_.close())
           throw ex
       }

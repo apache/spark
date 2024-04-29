@@ -55,8 +55,7 @@ import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.deploy.yarn.ResourceRequestHelper._
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.deploy.yarn.config._
-import org.apache.spark.internal.{Logging, LogKey, MDC}
-import org.apache.spark.internal.LogKey.{APP_ID, CONFIG, CONFIG2, PATH}
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Python._
 import org.apache.spark.launcher.{JavaModuleOptions, LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
@@ -142,7 +141,8 @@ private[spark] class Client(
     val principal = sparkConf.get(PRINCIPAL).orNull
     require((principal == null) == (keytab == null),
       "Both principal and keytab must be defined, or neither.")
-    logInfo(s"Kerberos credentials: principal = $principal, keytab = $keytab")
+    logInfo(log"Kerberos credentials: principal = ${MDC(LogKeys.PRINCIPAL, principal)}, " +
+      log"keytab = ${MDC(LogKeys.KEYTAB, keytab)}")
     // Generate a file name that can be used for the keytab file, that does not conflict
     // with any user file.
     Some(new File(keytab).getName() + "-" + UUID.randomUUID().toString)
@@ -229,7 +229,7 @@ private[spark] class Client(
       val appContext = createApplicationSubmissionContext(newApp, containerContext)
 
       // Finally, submit and monitor the application
-      logInfo(s"Submitting application $appId to ResourceManager")
+      logInfo(log"Submitting application ${MDC(LogKeys.APP_ID, appId)} to ResourceManager")
       yarnClient.submitApplication(appContext)
       launcherBackend.setAppId(appId.toString)
       reportLauncherState(SparkAppHandle.State.SUBMITTED)
@@ -254,11 +254,11 @@ private[spark] class Client(
       try {
         val fs = stagingDirPath.getFileSystem(hadoopConf)
         if (fs.delete(stagingDirPath, true)) {
-          logInfo(s"Deleted staging directory $stagingDirPath")
+          logInfo(log"Deleted staging directory ${MDC(LogKeys.PATH, stagingDirPath)}")
         }
       } catch {
         case ioe: IOException =>
-          logWarning(log"Failed to cleanup staging dir ${MDC(PATH, stagingDirPath)}", ioe)
+          logWarning(log"Failed to cleanup staging dir ${MDC(LogKeys.PATH, stagingDirPath)}", ioe)
       }
     }
 
@@ -332,7 +332,7 @@ private[spark] class Client(
         appContext.setLogAggregationContext(logAggregationContext)
       } catch {
         case NonFatal(e) =>
-          logWarning(log"Ignoring ${MDC(CONFIG, ROLLED_LOG_INCLUDE_PATTERN.key)}} " +
+          logWarning(log"Ignoring ${MDC(LogKeys.CONFIG, ROLLED_LOG_INCLUDE_PATTERN.key)}} " +
             log"because the version of YARN does not support it", e)
       }
     }
@@ -371,14 +371,16 @@ private[spark] class Client(
     // SPARK-37205: this regex is used to grep a list of configurations and send them to YARN RM
     // for fetching delegation tokens. See YARN-5910 for more details.
     sparkConf.get(config.AM_TOKEN_CONF_REGEX).foreach { regex =>
-      logInfo(s"Processing token conf (spark.yarn.am.tokenConfRegex) with regex $regex")
+      logInfo(log"Processing token conf (spark.yarn.am.tokenConfRegex) with " +
+        log"regex ${MDC(LogKeys.TOKEN_REGEX, regex)}")
       val dob = new DataOutputBuffer()
       val copy = new Configuration(false)
       copy.clear()
       hadoopConf.asScala.foreach { entry =>
         if (entry.getKey.matches(regex)) {
           copy.set(entry.getKey, entry.getValue)
-          logInfo(s"Captured key: ${entry.getKey} -> value: ${entry.getValue}")
+          logInfo(log"Captured key: ${MDC(LogKeys.KEY, entry.getKey)} -> " +
+            log"value: ${MDC(LogKeys.VALUE, entry.getValue)}")
         }
       }
       copy.write(dob);
@@ -403,8 +405,8 @@ private[spark] class Client(
    */
   private def verifyClusterResources(newAppResponse: GetNewApplicationResponse): Unit = {
     val maxMem = newAppResponse.getMaximumResourceCapability.getMemorySize
-    logInfo("Verifying our application has not requested more than the maximum " +
-      s"memory capability of the cluster ($maxMem MB per container)")
+    logInfo(log"Verifying our application has not requested more than the maximum memory " +
+      log"capability of the cluster (${MDC(LogKeys.MAX_MEMORY_SIZE, maxMem)} MB per container)")
     val executorMem =
       executorMemory + executorOffHeapMemory + executorMemoryOverhead + pysparkWorkerMemory
     if (executorMem > maxMem) {
@@ -421,9 +423,8 @@ private[spark] class Client(
         "Please check the values of 'yarn.scheduler.maximum-allocation-mb' and/or " +
         "'yarn.nodemanager.resource.memory-mb'.")
     }
-    logInfo("Will allocate AM container, with %d MB memory including %d MB overhead".format(
-      amMem,
-      amMemoryOverhead))
+    logInfo(log"Will allocate AM container, with ${MDC(LogKeys.MEMORY_SIZE, amMem)} MB memory " +
+      log"including ${MDC(LogKeys.OVERHEAD_MEMORY_SIZE, amMemoryOverhead)} MB overhead")
 
     // We could add checks to make sure the entire cluster has enough resources but that involves
     // getting all the node reports and computing ourselves.
@@ -447,7 +448,8 @@ private[spark] class Client(
     var destPath = srcPath
     if (force || !compareFs(srcFs, destFs) || "file".equals(srcFs.getScheme)) {
       destPath = new Path(destDir, destName.getOrElse(srcPath.getName()))
-      logInfo(s"Uploading resource $srcPath -> $destPath")
+      logInfo(log"Uploading resource ${MDC(LogKeys.SRC_PATH, srcPath)} -> " +
+        log"${MDC(LogKeys.TARGET_PATH, destPath)}")
       try {
         FileUtil.copy(srcFs, srcPath, destFs, destPath, false, hadoopConf)
       } catch {
@@ -458,7 +460,8 @@ private[spark] class Client(
       replication.foreach(repl => destFs.setReplication(destPath, repl))
       destFs.setPermission(destPath, new FsPermission(APP_FILE_PERMISSION))
     } else {
-      logInfo(s"Source and destination file systems are the same. Not copying $srcPath")
+      logInfo(log"Source and destination file systems are the same. " +
+        log"Not copying ${MDC(LogKeys.SRC_PATH, srcPath)}")
     }
     // Resolve any symlinks in the URI path so using a "current" symlink to point to a specific
     // version shows the specific version in the distributed cache configuration
@@ -558,11 +561,11 @@ private[spark] class Client(
       val uriStr = uri.toString()
       val fileName = new File(uri.getPath).getName
       if (distributedUris.contains(uriStr)) {
-        logWarning(log"Same path resource ${MDC(LogKey.URI, uri)} added multiple times " +
+        logWarning(log"Same path resource ${MDC(LogKeys.URI, uri)} added multiple times " +
           log"to distributed cache.")
         false
       } else if (distributedNames.contains(fileName)) {
-        logWarning(log"Same name resource ${MDC(LogKey.URI, uri)} added multiple times " +
+        logWarning(log"Same name resource ${MDC(LogKeys.URI, uri)} added multiple times " +
           log"to distributed cache")
         false
       } else {
@@ -701,8 +704,9 @@ private[spark] class Client(
         case None =>
           // No configuration, so fall back to uploading local jar files.
           logWarning(
-            log"Neither ${MDC(CONFIG, SPARK_JARS.key)} nor ${MDC(CONFIG2, SPARK_ARCHIVE.key)}} " +
-            log"is set, falling back to uploading libraries under SPARK_HOME.")
+            log"Neither ${MDC(LogKeys.CONFIG, SPARK_JARS.key)} nor " +
+              log"${MDC(LogKeys.CONFIG2, SPARK_ARCHIVE.key)}} is set, falling back to uploading " +
+              log"libraries under SPARK_HOME.")
           val jarsDir = new File(YarnCommandBuilderUtils.findJarsDir(
             sparkConf.getenv("SPARK_HOME")))
           val jarsArchive = File.createTempFile(LOCALIZED_LIB_DIR, ".zip",
@@ -881,7 +885,7 @@ private[spark] class Client(
         if (dir.isDirectory()) {
           val files = dir.listFiles()
           if (files == null) {
-            logWarning(log"Failed to list files under directory ${MDC(PATH, dir)}")
+            logWarning(log"Failed to list files under directory ${MDC(LogKeys.PATH, dir)}")
           } else {
             files.foreach { file =>
               if (file.isFile && !hadoopConfFiles.contains(file.getName())) {
@@ -1070,7 +1074,8 @@ private[spark] class Client(
           sparkConf))
       }
       if (sparkConf.get(AM_JAVA_OPTIONS).isDefined) {
-        logWarning(log"${MDC(CONFIG, AM_JAVA_OPTIONS.key)} will not take effect in cluster mode")
+        logWarning(log"${MDC(LogKeys.CONFIG, AM_JAVA_OPTIONS.key)} will not take effect " +
+          log"in cluster mode")
       }
     } else {
       // Validate and include yarn am specific java options in yarn-client mode.
@@ -1202,7 +1207,7 @@ private[spark] class Client(
           getApplicationReport()
         } catch {
           case e: ApplicationNotFoundException =>
-            logError(log"Application ${MDC(APP_ID, appId)} not found.")
+            logError(log"Application ${MDC(LogKeys.APP_ID, appId)} not found.")
             cleanupStagingDir()
             return YarnAppReport(YarnApplicationState.KILLED, FinalApplicationStatus.KILLED, None)
           case NonFatal(e) if !e.isInstanceOf[InterruptedIOException] =>
@@ -1216,7 +1221,8 @@ private[spark] class Client(
       reportsSinceLastLog += 1
       if (logApplicationReport) {
         if (lastState != state || reportsSinceLastLog >= reportsTillNextLog) {
-          logInfo(s"Application report for $appId (state: $state)")
+          logInfo(log"Application report for ${MDC(LogKeys.APP_ID, appId)} " +
+            log"(state: ${MDC(LogKeys.APP_STATE, state)})")
           reportsSinceLastLog = 0
         }
 
@@ -1225,7 +1231,8 @@ private[spark] class Client(
         if (log.isDebugEnabled) {
           logDebug(formatReportDetails(report, getDriverLogsLink(report)))
         } else if (lastState != state) {
-          logInfo(formatReportDetails(report, getDriverLogsLink(report)))
+          logInfo(log"${MDC(LogKeys.REPORT_DETAILS,
+            formatReportDetails(report, getDriverLogsLink(report)))}")
         }
       }
 
@@ -1347,7 +1354,7 @@ private[spark] class Client(
         .getOrElse(IMap.empty)
     } catch {
       case e: Exception =>
-        logWarning(log"Unable to get driver log links for ${MDC(APP_ID, appId)}: ", e)
+        logWarning(log"Unable to get driver log links for ${MDC(LogKeys.APP_ID, appId)}: ", e)
         // Include the full stack trace only at DEBUG level to reduce verbosity
         logDebug(s"Unable to get driver log links for $appId", e)
         IMap.empty
@@ -1367,8 +1374,10 @@ private[spark] class Client(
     if (!launcherBackend.isConnected() && fireAndForget) {
       val report = getApplicationReport()
       val state = report.getYarnApplicationState
-      logInfo(s"Application report for $appId (state: $state)")
-      logInfo(formatReportDetails(report, getDriverLogsLink(report)))
+      logInfo(log"Application report for ${MDC(LogKeys.APP_ID, appId)} " +
+        log"(state: ${MDC(LogKeys.APP_STATE, state)})")
+      logInfo(log"${MDC(LogKeys.REPORT_DETAILS,
+        formatReportDetails(report, getDriverLogsLink(report)))}")
       if (state == YarnApplicationState.FAILED || state == YarnApplicationState.KILLED) {
         throw new SparkException(s"Application $appId finished with status: $state")
       }
@@ -1674,8 +1683,8 @@ private[spark] object Client extends Logging {
   def getClusterPath(conf: SparkConf, path: String): String = {
     val localPath = conf.get(GATEWAY_ROOT_PATH)
     val clusterPath = conf.get(REPLACEMENT_ROOT_PATH)
-    if (localPath != null && clusterPath != null) {
-      path.replace(localPath, clusterPath)
+    if (localPath.isDefined && clusterPath.isDefined) {
+      path.replace(localPath.get, clusterPath.get)
     } else {
       path
     }

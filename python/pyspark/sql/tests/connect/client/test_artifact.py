@@ -25,7 +25,7 @@ from pyspark.errors.exceptions.connect import SparkConnectGrpcException
 from pyspark.sql import SparkSession
 from pyspark.testing.connectutils import ReusedConnectTestCase, should_test_connect
 from pyspark.testing.utils import SPARK_HOME
-from pyspark.sql.functions import udf
+from pyspark.sql.functions import udf, assert_true, lit
 
 if should_test_connect:
     from pyspark.sql.connect.client.artifact import ArtifactManager
@@ -46,7 +46,7 @@ class ArtifactTestsMixin:
                 return my_pyfile.my_func()
 
             spark_session.addArtifacts(pyfile_path, pyfile=True)
-            self.assertEqual(spark_session.range(1).select(func("id")).first()[0], 10)
+            spark_session.range(1).select(assert_true(func("id") == lit(10))).show()
 
     def test_add_pyfile(self):
         self.check_add_pyfile(self.spark)
@@ -94,7 +94,7 @@ class ArtifactTestsMixin:
                 return my_zipfile.my_func()
 
             spark_session.addArtifacts(f"{package_path}.zip", pyfile=True)
-            self.assertEqual(spark_session.range(1).select(func("id")).first()[0], 5)
+            spark_session.range(1).select(assert_true(func("id") == lit(5))).show()
 
     def test_add_zipped_package(self):
         self.check_add_zipped_package(self.spark)
@@ -130,7 +130,7 @@ class ArtifactTestsMixin:
                 ) as my_file:
                     return my_file.read().strip()
 
-            self.assertEqual(spark_session.range(1).select(func("id")).first()[0], "hello world!")
+            spark_session.range(1).select(assert_true(func("id") == lit("hello world!"))).show()
 
     def test_add_archive(self):
         self.check_add_archive(self.spark)
@@ -160,7 +160,7 @@ class ArtifactTestsMixin:
                 with open(os.path.join(root, "my_file.txt"), "r") as my_file:
                     return my_file.read().strip()
 
-            self.assertEqual(spark_session.range(1).select(func("id")).first()[0], "Hello world!!")
+            spark_session.range(1).select(assert_true(func("id") == lit("Hello world!!"))).show()
 
     def test_add_file(self):
         self.check_add_file(self.spark)
@@ -427,7 +427,6 @@ class ArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
                 )
 
 
-@unittest.skipIf(is_remote_only(), "Requires local cluster to run")
 class LocalClusterArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
     @classmethod
     def conf(cls):
@@ -442,7 +441,7 @@ class LocalClusterArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
 
     @classmethod
     def master(cls):
-        return "local-cluster[2,2,512]"
+        return os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local-cluster[2,2,512]")
 
 
 if __name__ == "__main__":

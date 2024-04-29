@@ -21,8 +21,6 @@ import java.io.DataOutputStream
 import java.io.File
 import java.io.FileOutputStream
 
-import scala.collection.immutable.IndexedSeq
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, GzipCodec}

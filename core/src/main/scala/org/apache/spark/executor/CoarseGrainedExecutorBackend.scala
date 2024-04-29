@@ -32,7 +32,7 @@ import org.apache.spark.TaskState.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.worker.WorkerWatcher
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{CONFIG, CONFIG2, REASON}
+import org.apache.spark.internal.LogKeys.{CONFIG, CONFIG2, REASON}
 import org.apache.spark.internal.config._
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.util.NettyUtils

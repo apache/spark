@@ -31,17 +31,36 @@ import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
  */
 object VariantExpressionEvalUtils {
 
-  def parseJson(input: UTF8String): VariantVal = {
+  def parseJson(input: UTF8String, failOnError: Boolean = true): VariantVal = {
+    def parseJsonFailure(exception: Throwable): VariantVal = {
+      if (failOnError) {
+        throw exception
+      } else {
+        null
+      }
+    }
     try {
       val v = VariantBuilder.parseJson(input.toString)
       new VariantVal(v.getValue, v.getMetadata)
     } catch {
       case _: VariantSizeLimitException =>
-        throw QueryExecutionErrors.variantSizeLimitError(VariantUtil.SIZE_LIMIT, "parse_json")
+        parseJsonFailure(QueryExecutionErrors
+          .variantSizeLimitError(VariantUtil.SIZE_LIMIT, "parse_json"))
       case NonFatal(e) =>
-        throw QueryExecutionErrors.malformedRecordsDetectedInRecordParsingError(
-          input.toString, BadRecordException(() => input, cause = e))
+        parseJsonFailure(QueryExecutionErrors.malformedRecordsDetectedInRecordParsingError(
+          input.toString, BadRecordException(() => input, cause = e)))
     }
+  }
+
+  def isVariantNull(input: VariantVal): Boolean = {
+    if (input == null) {
+      // This is a SQL NULL, not a Variant NULL
+      false
+    } else {
+      val variantValue = input.getValue
+      // Variant NULL is denoted by basic_type == 0 and val_header == 0
+      variantValue(0) == 0
+     }
   }
 
   /** Cast a Spark value from `dataType` into the variant type. */
@@ -65,7 +84,8 @@ object VariantExpressionEvalUtils {
       case LongType => builder.appendLong(input.asInstanceOf[Long])
       case FloatType => builder.appendFloat(input.asInstanceOf[Float])
       case DoubleType => builder.appendDouble(input.asInstanceOf[Double])
-      case StringType => builder.appendString(input.asInstanceOf[UTF8String].toString)
+      case _: DecimalType => builder.appendDecimal(input.asInstanceOf[Decimal].toJavaBigDecimal)
+      case _: StringType => builder.appendString(input.asInstanceOf[UTF8String].toString)
       case BinaryType => builder.appendBinary(input.asInstanceOf[Array[Byte]])
       case DateType => builder.appendDate(input.asInstanceOf[Int])
       case TimestampType => builder.appendTimestamp(input.asInstanceOf[Long])

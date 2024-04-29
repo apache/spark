@@ -31,7 +31,7 @@ import org.apache.hadoop.hive.shims.ShimLoader
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkSubmit
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{FALLBACK_VERSION, HADOOP_VERSION}
+import org.apache.spark.internal.LogKeys.{FALLBACK_VERSION, HADOOP_VERSION, PATH}
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.hive.HiveUtils
@@ -149,7 +149,7 @@ private[hive] object IsolatedClientLoader extends Logging {
     // TODO: Remove copy logic.
     val tempDir = Utils.createTempDir(namePrefix = s"hive-${version}")
     allFiles.foreach(f => FileUtils.copyFileToDirectory(f, tempDir))
-    logInfo(s"Downloaded metastore jars to ${tempDir.getCanonicalPath}")
+    logInfo(log"Downloaded metastore jars to ${MDC(PATH, tempDir.getCanonicalPath)}")
     tempDir.listFiles().map(_.toURI.toURL).toImmutableArraySeq
   }
 

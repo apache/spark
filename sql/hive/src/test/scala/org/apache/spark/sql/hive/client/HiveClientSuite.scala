@@ -686,6 +686,7 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
         versionSpark.sql(
           s"""
              |CREATE TABLE tab(c1 string)
+             |USING HIVE
              |location '${tmpDir.toURI.toString}'
              """.stripMargin)
 

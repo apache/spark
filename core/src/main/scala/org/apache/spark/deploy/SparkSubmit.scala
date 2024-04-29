@@ -40,7 +40,7 @@ import org.apache.spark._
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.rest._
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.CLASS_NAME
+import org.apache.spark.internal.LogKeys.CLASS_NAME
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher.SparkLauncher

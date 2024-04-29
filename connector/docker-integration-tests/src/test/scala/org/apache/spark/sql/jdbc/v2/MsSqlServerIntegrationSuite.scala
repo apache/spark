@@ -24,7 +24,7 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.{SparkConf, SparkSQLFeatureNotSupportedException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.jdbc.DatabaseOnDocker
+import org.apache.spark.sql.jdbc.MsSQLServerDatabaseOnDocker
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
@@ -60,19 +60,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
     "scan with aggregate push-down: REGR_SXY without DISTINCT")
 
   override val catalogName: String = "mssql"
-  override val db = new DatabaseOnDocker {
-    override val imageName = sys.env.getOrElse("MSSQLSERVER_DOCKER_IMAGE_NAME",
-      "mcr.microsoft.com/mssql/server:2019-CU13-ubuntu-20.04")
-    override val env = Map(
-      "SA_PASSWORD" -> "Sapass123",
-      "ACCEPT_EULA" -> "Y"
-    )
-    override val usesIpc = false
-    override val jdbcPort: Int = 1433
-
-    override def getJdbcUrl(ip: String, port: Int): String =
-      s"jdbc:sqlserver://$ip:$port;user=sa;password=Sapass123;"
-  }
+  override val db = new MsSQLServerDatabaseOnDocker
 
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.mssql", classOf[JDBCTableCatalog].getName)
@@ -142,5 +130,18 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
       s"$catalogName.employee " +
       "WHERE (dept > 1 AND ((name LIKE 'am%') = (name LIKE '%y')))")
     assert(df3.collect().length == 3)
+  }
+
+  test("SPARK-47994: SQLServer does not support 1 or 0 as boolean type in CASE WHEN filter") {
+    val df = sql(
+      s"""
+        |WITH tbl AS (
+        |SELECT CASE
+        |WHEN e.dept = 1 THEN 'first' WHEN e.dept = 2 THEN 'second' ELSE 'third' END
+        |AS deptString FROM $catalogName.employee as e)
+        |SELECT * FROM tbl
+        |WHERE deptString = 'first'
+        |""".stripMargin)
+    assert(df.collect().length == 2)
   }
 }
