@@ -32,7 +32,10 @@ object IntegrationTestUtils {
   private val DEBUG_SC_JVM_CLIENT = "spark.debug.sc.jvm.client"
   private val DEBUG_SC_JVM_CLIENT_ENV = "SPARK_DEBUG_SC_JVM_CLIENT"
   // Enable this flag to print all server logs to the console
-  private[sql] val isDebug = true
+  private[sql] val isDebug = {
+    System.getProperty(DEBUG_SC_JVM_CLIENT, "false").toBoolean ||
+    Option(System.getenv(DEBUG_SC_JVM_CLIENT_ENV)).exists(_.toBoolean)
+  }
 
   private[sql] lazy val scalaVersion = {
     versionNumberString.split('.') match {
