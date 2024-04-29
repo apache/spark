@@ -18,11 +18,8 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkConf
-<<<<<<< HEAD
-import org.apache.spark.sql.catalyst.util.CollationFactory
-=======
 import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, Literal, StringTrim, StringTrimLeft, StringTrimRight}
->>>>>>> d30b9acc03 (Add tests)
+import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, DataType, IntegerType, StringType}
