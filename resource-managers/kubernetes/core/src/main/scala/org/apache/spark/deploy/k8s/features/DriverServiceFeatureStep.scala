@@ -24,11 +24,9 @@ import org.apache.spark.deploy.k8s.{KubernetesDriverConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config.{KUBERNETES_DNS_LABEL_NAME_MAX_LENGTH, KUBERNETES_DRIVER_SERVICE_IP_FAMILIES, KUBERNETES_DRIVER_SERVICE_IP_FAMILY_POLICY}
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.{config, Logging}
-import org.apache.spark.util.{Clock, SystemClock}
 
 private[spark] class DriverServiceFeatureStep(
-    kubernetesConf: KubernetesDriverConf,
-    clock: Clock = new SystemClock())
+    kubernetesConf: KubernetesDriverConf)
   extends KubernetesFeatureConfigStep with Logging {
   import DriverServiceFeatureStep._
 
