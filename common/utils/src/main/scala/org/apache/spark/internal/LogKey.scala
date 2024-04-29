@@ -327,6 +327,7 @@ object LogKeys {
   case object QUERY_PLAN_LENGTH_MAX extends LogKey
   case object QUERY_RUN_ID extends LogKey
   case object RANGE extends LogKey
+  case object RDD_DESCRIPTION extends LogKey
   case object RDD_ID extends LogKey
   case object READ_LIMIT extends LogKey
   case object REASON extends LogKey
