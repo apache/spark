@@ -120,7 +120,7 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
         resourceNamePrefix = Some(LONG_RESOURCE_NAME_PREFIX),
         labels = DRIVER_LABELS,
         clock = clock)
-      val configurationStep = new DriverServiceFeatureStep(kconf, clock = clock)
+      val configurationStep = new DriverServiceFeatureStep(kconf)
       val serviceName = configurationStep
         .getAdditionalKubernetesResources()
         .head
