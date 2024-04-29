@@ -84,29 +84,29 @@ case class StructField(
   private lazy val collationMetadata: mutable.Map[String, String] = {
     val fieldToCollationMap = mutable.Map[String, String]()
 
-    def visitRecursively(dt: DataType, path: Seq[String]): Unit = dt match {
+    def visitRecursively(dt: DataType, path: String): Unit = dt match {
       case at: ArrayType =>
-        processDataType(at.elementType, path :+ "element")
+        processDataType(at.elementType, path + ".element")
 
       case mt: MapType =>
-        processDataType(mt.keyType, path :+ "key")
-        processDataType(mt.valueType, path :+ "value")
+        processDataType(mt.keyType, path + ".key")
+        processDataType(mt.valueType, path + ".value")
 
       case st: StringType if isCollatedString(st) =>
-        fieldToCollationMap(path.mkString(".")) = collationName(st)
+        fieldToCollationMap(path) = collationName(st)
 
       case _ =>
     }
 
-    def processDataType(dt: DataType, path: Seq[String]): Unit = {
+    def processDataType(dt: DataType, path: String): Unit = {
       if (isCollatedString(dt)) {
-        fieldToCollationMap(path.mkString(".")) = collationName(dt)
+        fieldToCollationMap(path) = collationName(dt)
       } else {
         visitRecursively(dt, path)
       }
     }
 
-    visitRecursively(dataType, Seq(name))
+    visitRecursively(dataType, name)
     fieldToCollationMap
   }
 

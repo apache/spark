@@ -212,10 +212,10 @@ object DataType {
   // NOTE: Map fields must be sorted in alphabetical order to keep consistent with the Python side.
   private[sql] def parseDataType(
       json: JValue,
-      currentFieldPath: Seq[String] = Seq.empty,
+      currentFieldPath: String = "",
       collationsMap: Map[String, String] = Map.empty): DataType = json match {
     case JString(name) =>
-      collationsMap.get(currentFieldPath.mkString(".")) match {
+      collationsMap.get(currentFieldPath) match {
         case Some(collation) => stringTypeWithCollation(collation)
         case _ => nameToType(name)
       }
@@ -224,7 +224,7 @@ object DataType {
     ("containsNull", JBool(n)),
     ("elementType", t: JValue),
     ("type", JString("array"))) =>
-      val elementType = resolveType(t, currentFieldPath :+ "element", collationsMap)
+      val elementType = resolveType(t, currentFieldPath + ".element", collationsMap)
       ArrayType(elementType, n)
 
     case JSortedObject(
@@ -232,8 +232,8 @@ object DataType {
     ("type", JString("map")),
     ("valueContainsNull", JBool(n)),
     ("valueType", v: JValue)) =>
-      val keyType = resolveType(k, currentFieldPath :+ "key", collationsMap)
-      val valueType = resolveType(v, currentFieldPath :+ "value", collationsMap)
+      val keyType = resolveType(k, currentFieldPath + ".key", collationsMap)
+      val valueType = resolveType(v, currentFieldPath + ".value", collationsMap)
       MapType(keyType, valueType, n)
 
     case JSortedObject(
@@ -273,7 +273,7 @@ object DataType {
         JObject(metadataFields.filterNot(_._1 == COLLATIONS_METADATA_KEY))
       StructField(
         name,
-        parseDataType(dataType, Seq(name), collationsMap),
+        parseDataType(dataType, name, collationsMap),
         nullable,
         Metadata.fromJObject(metadataWithoutCollations))
     // Support reading schema when 'metadata' is missing.
@@ -298,9 +298,9 @@ object DataType {
    */
   private def resolveType(
       json: JValue,
-      path: Seq[String],
+      path: String,
       collationsMap: Map[String, String]): DataType = {
-    collationsMap.get(path.mkString(".")) match {
+    collationsMap.get(path) match {
       case Some(collation) => stringTypeWithCollation(collation)
       case _ => parseDataType(json, path, collationsMap)
     }
