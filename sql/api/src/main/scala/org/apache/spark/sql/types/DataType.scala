@@ -315,8 +315,8 @@ object DataType {
    * Returns a map of field path to collation name.
    */
   private def getCollationsMap(metadataFields: List[JField]): Map[String, String] = {
-    val collationsJson = metadataFields.find(_._1 == "COLLATIONS").map(_._2)
-    collationsJson match {
+    val collationsJsonOpt = metadataFields.find(_._1 == COLLATIONS_METADATA_KEY).map(_._2)
+    collationsJsonOpt match {
       case Some(JObject(fields)) =>
         fields.collect {
           case (name, JString(collation)) => name -> collation
