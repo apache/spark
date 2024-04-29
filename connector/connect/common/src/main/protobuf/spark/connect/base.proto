@@ -329,6 +329,11 @@ message ExecutePlanRequest {
   // Tags cannot contain ',' character and cannot be empty strings.
   // Used by Interrupt with interrupt.tag.
   repeated string tags = 7;
+
+  // (Optional)
+  // Scheduler pool to execute this query when server runs in fair-scheduler fashion.
+  // This field doesn't make sense for FIFO scheduler.
+  optional string scheduler_pool = 9;
 }
 
 // The response of a query, can be one or more for each request. Responses belonging to the

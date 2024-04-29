@@ -245,4 +245,31 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
       assert(queryError.getMessage.contains("INVALID_HANDLE.SESSION_CHANGED"))
     }
   }
+
+  test("SchedulerPool: server should use the pool set by the client") {
+    withClient(sessionId = UUID.randomUUID().toString) { client =>
+      // set schedulerPool as default
+      client.setSchedulerPool("pool1")
+      client.execute(buildPlan("SELECT 1")).hasNext
+      assert(
+        eventuallyGetExecutionHolder.schedulerPool.get == "pool1"
+      )
+      client.releaseSession()
+    }
+    withClient(sessionId = UUID.randomUUID().toString) { client =>
+      // clear schedulerPool
+      client.clearSchedulerPool()
+      client.execute(buildPlan("SELECT 1")).hasNext
+      assert(
+        eventuallyGetExecutionHolder.schedulerPool.isEmpty
+      )
+      client.releaseSession()
+    }
+    withClient(sessionId = UUID.randomUUID().toString) { client =>
+      // set an empty schedulerPool should throw exception
+      intercept[IllegalArgumentException] {
+        client.setSchedulerPool("")
+      }
+    }
+  }
 }

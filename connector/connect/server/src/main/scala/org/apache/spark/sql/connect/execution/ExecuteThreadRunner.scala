@@ -25,7 +25,7 @@ import scala.util.control.NonFatal
 import com.google.protobuf.Message
 import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.SparkSQLException
+import org.apache.spark.{SparkContext, SparkSQLException}
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.common.ProtoUtils
@@ -176,6 +176,10 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
       session.sparkContext.setJobDescription(
         s"Spark Connect - ${StringUtils.abbreviate(debugString, 128)}")
       session.sparkContext.setInterruptOnCancel(true)
+
+      executeHolder.schedulerPool.foreach{pool =>
+        session.sparkContext.setLocalProperty(SparkContext.SPARK_SCHEDULER_POOL, pool)
+      }
 
       // Add debug information to the query execution so that the jobs are traceable.
       session.sparkContext.setLocalProperty(

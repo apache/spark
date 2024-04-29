@@ -809,6 +809,33 @@ class SparkSession private[sql] (
   }
 
   /**
+   * Set the scheduler pool used to execute all the operations by this thread in this session.
+   *
+   * Spark supports FIFO scheduler (default) and Fair scheduler. When fair scheduler is enabled,
+   * jobs will be grouped into pools and each pool gets an assigned share of cluster resources.
+   * Application programmers can use this method to assign a pool to all the operations started
+   * by this thread in this session. This pool should exists in the server. If not, will
+   * fallback to FIFO scheduler.
+   *
+   * Note: this doesn't make sense for FIFO scheduler.
+   *
+   * @param pool
+   *   The scheduler pool name. Cannot be an empty string.
+   *
+   * @since 4.0.0
+   */
+  def setSchedulerPool(pool: String): Unit = {
+    client.setSchedulerPool(pool)
+  }
+
+  /**
+   * Clear the current thread's scheduler pool. After cleared, default scheduler pool will be used.
+   */
+  def clearSchedulerPool(): Unit = {
+    client.clearSchedulerPool()
+  }
+
+  /**
    * We cannot deserialize a connect [[SparkSession]] because of a class clash on the server side.
    * We null out the instance for now.
    */

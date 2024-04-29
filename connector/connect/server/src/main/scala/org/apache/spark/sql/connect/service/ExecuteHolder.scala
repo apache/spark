@@ -75,6 +75,19 @@ private[connect] class ExecuteHolder(
     .toSet
 
   /**
+   * If pool is set, the Spark jobs ran this execution will be submitted to this pool. If
+   * not set, default pool will be used.
+   */
+  val schedulerPool: Option[String] = if (request.hasSchedulerPool) {
+    if (request.getSchedulerPool.isEmpty) {
+      throw new IllegalArgumentException("Spark scheduler pool cannot be empty.")
+    }
+    Some(request.getSchedulerPool)
+  } else {
+    None
+  }
+
+  /**
    * If execution is reattachable, it's life cycle is not limited to a single ExecutePlanRequest,
    * but can be reattached with ReattachExecute, and released with ReleaseExecute
    */

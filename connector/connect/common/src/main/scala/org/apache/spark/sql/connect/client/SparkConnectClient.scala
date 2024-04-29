@@ -115,6 +115,7 @@ private[sql] class SparkConnectClient(
       .setSessionId(sessionId)
       .setClientType(userAgent)
       .addAllTags(tags.get.toSeq.asJava)
+    schedulerPool.get().foreach(request.setSchedulerPool)
     serverSideSessionId.foreach(session => request.setClientObservedServerSideSessionId(session))
     if (configuration.useReattachableExecute) {
       bstub.executePlanReattachable(request.build())
@@ -298,6 +299,21 @@ private[sql] class SparkConnectClient(
 
   private[sql] def clearTags(): Unit = {
     tags.get.clear()
+  }
+
+  private[this] val schedulerPool = new InheritableThreadLocal[Option[String]] {
+    override def initialValue(): Option[String] = None
+  }
+
+  private[sql] def setSchedulerPool(pool: String): Unit = {
+    if (pool.isEmpty) {
+      throw new IllegalArgumentException("Spark scheduler pool cannot be empty.")
+    }
+    schedulerPool.set(Some(pool))
+  }
+
+  private[sql] def clearSchedulerPool(): Unit = {
+    schedulerPool.set(None)
   }
 
   def copy(): SparkConnectClient = configuration.toSparkConnectClient
