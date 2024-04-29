@@ -26,11 +26,9 @@ import org.apache.spark.unsafe.types.UTF8String;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
-import java.util.Set;
 
 import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
 import static org.apache.spark.unsafe.Platform.copyMemory;
