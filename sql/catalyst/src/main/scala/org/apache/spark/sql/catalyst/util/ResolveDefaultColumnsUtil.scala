@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Literal => ExprLiteral}
-import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
+import org.apache.spark.sql.catalyst.optimizer.{ConstantFolding, ReplaceExpressions}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
@@ -289,7 +289,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
       val analyzer: Analyzer = DefaultColumnAnalyzer
       val analyzed = analyzer.execute(Project(Seq(Alias(parsed, colName)()), OneRowRelation()))
       analyzer.checkAnalysis(analyzed)
-      ConstantFolding(analyzed)
+      ConstantFolding(ReplaceExpressions(analyzed))
     } catch {
       case ex: AnalysisException =>
         throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
