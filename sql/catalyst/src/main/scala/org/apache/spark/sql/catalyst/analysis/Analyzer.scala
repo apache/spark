@@ -1371,7 +1371,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         partitionSpec: Map[String, Option[String]]): Unit = {
       // check that each partition name is a partition column. otherwise, it is not valid
       partitionSpec.keySet.foreach { partitionName =>
-        partitionColumnNames.find(name => conf.resolver(name, partitionName)) match {
+        partitionColumnNames.find(name => resolver(name, partitionName)) match {
           case Some(_) =>
           case None =>
             throw QueryCompilationErrors.nonPartitionColError(partitionName)
@@ -1398,11 +1398,11 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               // column names. We need to make sure the static partition column name doesn't appear
               // there to catch the following ambiguous query:
               // INSERT OVERWRITE t PARTITION (c='1') (c) VALUES ('2')
-              if (query.output.exists(col => conf.resolver(col.name, staticName))) {
+              if (query.output.exists(col => resolver(col.name, staticName))) {
                 throw QueryCompilationErrors.staticPartitionInUserSpecifiedColumnsError(staticName)
               }
             }
-            relation.output.find(col => conf.resolver(col.name, staticName)) match {
+            relation.output.find(col => resolver(col.name, staticName)) match {
               case Some(attr) =>
                 attr.name -> staticName
               case _ =>
@@ -1445,7 +1445,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         Literal(true)
       } else {
         staticPartitions.map { case (name, value) =>
-          relation.output.find(col => conf.resolver(col.name, name)) match {
+          relation.output.find(col => resolver(col.name, name)) match {
             case Some(attr) =>
               // the delete expression must reference the table's column names, but these attributes
               // are not available when CheckAnalysis runs because the relation is not a child of
@@ -3816,7 +3816,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             case u: UnresolvedFieldPosition => u.position match {
               case after: After =>
                 val allFields = parentSchema.fieldNames ++ fieldsAdded
-                allFields.find(n => conf.resolver(n, after.column())) match {
+                allFields.find(n => resolver(n, after.column())) match {
                   case Some(colName) =>
                     ResolvedFieldPosition(ColumnPosition.after(colName))
                   case None =>
