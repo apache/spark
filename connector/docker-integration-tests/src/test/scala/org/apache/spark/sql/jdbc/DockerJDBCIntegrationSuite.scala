@@ -36,7 +36,7 @@ import com.github.dockerjava.zerodep.ZerodepDockerHttpClient
 import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.internal.LogKey.{CLASS_NAME, CONTAINER, STATUS}
+import org.apache.spark.internal.LogKeys.{CLASS_NAME, CONTAINER, STATUS}
 import org.apache.spark.internal.MDC
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.test.SharedSparkSession

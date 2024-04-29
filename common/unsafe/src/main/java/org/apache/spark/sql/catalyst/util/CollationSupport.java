@@ -21,8 +21,11 @@ import com.ibm.icu.text.BreakIterator;
 import com.ibm.icu.text.StringSearch;
 import com.ibm.icu.util.ULocale;
 
+import org.apache.spark.unsafe.UTF8StringBuilder;
 import org.apache.spark.unsafe.types.UTF8String;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.regex.Pattern;
 
 /**
@@ -35,6 +38,62 @@ public final class CollationSupport {
   /**
    * Collation-aware string expressions.
    */
+
+  public static class StringSplitSQL {
+    public static UTF8String[] exec(final UTF8String s, final UTF8String d, final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      if (collation.supportsBinaryEquality) {
+        return execBinary(s, d);
+      } else if (collation.supportsLowercaseEquality) {
+        return execLowercase(s, d);
+      } else {
+        return execICU(s, d, collationId);
+      }
+    }
+    public static String genCode(final String s, final String d, final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      String expr = "CollationSupport.StringSplitSQL.exec";
+      if (collation.supportsBinaryEquality) {
+        return String.format(expr + "Binary(%s, %s)", s, d);
+      } else if (collation.supportsLowercaseEquality) {
+        return String.format(expr + "Lowercase(%s, %s)", s, d);
+      } else {
+        return String.format(expr + "ICU(%s, %s, %d)", s, d, collationId);
+      }
+    }
+    public static UTF8String[] execBinary(final UTF8String string, final UTF8String delimiter) {
+      return string.splitSQL(delimiter, -1);
+    }
+    public static UTF8String[] execLowercase(final UTF8String string, final UTF8String delimiter) {
+      if (delimiter.numBytes() == 0) return new UTF8String[] { string };
+      if (string.numBytes() == 0) return new UTF8String[] { UTF8String.EMPTY_UTF8 };
+      Pattern pattern = Pattern.compile(Pattern.quote(delimiter.toString()),
+        CollationSupport.lowercaseRegexFlags);
+      String[] splits = pattern.split(string.toString(), -1);
+      UTF8String[] res = new UTF8String[splits.length];
+      for (int i = 0; i < res.length; i++) {
+        res[i] = UTF8String.fromString(splits[i]);
+      }
+      return res;
+    }
+    public static UTF8String[] execICU(final UTF8String string, final UTF8String delimiter,
+        final int collationId) {
+      if (delimiter.numBytes() == 0) return new UTF8String[] { string };
+      if (string.numBytes() == 0) return new UTF8String[] { UTF8String.EMPTY_UTF8 };
+      List<UTF8String> strings = new ArrayList<>();
+      String target = string.toString(), pattern = delimiter.toString();
+      StringSearch stringSearch = CollationFactory.getStringSearch(target, pattern, collationId);
+      int start = 0, end;
+      while ((end = stringSearch.next()) != StringSearch.DONE) {
+        strings.add(UTF8String.fromString(target.substring(start, end)));
+        start = end + stringSearch.getMatchLength();
+      }
+      if (start <= target.length()) {
+        strings.add(UTF8String.fromString(target.substring(start)));
+      }
+      return strings.toArray(new UTF8String[0]);
+    }
+  }
 
   public static class Contains {
     public static boolean exec(final UTF8String l, final UTF8String r, final int collationId) {
@@ -306,6 +365,44 @@ public final class CollationSupport {
     }
   }
 
+  public static class StringReplace {
+    public static UTF8String exec(final UTF8String src, final UTF8String search,
+        final UTF8String replace, final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      if (collation.supportsBinaryEquality) {
+        return execBinary(src, search, replace);
+      } else if (collation.supportsLowercaseEquality) {
+        return execLowercase(src, search, replace);
+      } else {
+        return execICU(src, search, replace, collationId);
+      }
+    }
+    public static String genCode(final String src, final String search, final String replace,
+        final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      String expr = "CollationSupport.StringReplace.exec";
+      if (collation.supportsBinaryEquality) {
+        return String.format(expr + "Binary(%s, %s, %s)", src, search, replace);
+      } else if (collation.supportsLowercaseEquality) {
+        return String.format(expr + "Lowercase(%s, %s, %s)", src, search, replace);
+      } else {
+        return String.format(expr + "ICU(%s, %s, %s, %d)", src, search, replace, collationId);
+      }
+    }
+    public static UTF8String execBinary(final UTF8String src, final UTF8String search,
+        final UTF8String replace) {
+      return src.replace(search, replace);
+    }
+    public static UTF8String execLowercase(final UTF8String src, final UTF8String search,
+        final UTF8String replace) {
+      return CollationAwareUTF8String.lowercaseReplace(src, search, replace);
+    }
+    public static UTF8String execICU(final UTF8String src, final UTF8String search,
+        final UTF8String replace, final int collationId) {
+      return CollationAwareUTF8String.replace(src, search, replace, collationId);
+    }
+  }
+
   // TODO: Add more collation-aware string expressions.
 
   /**
@@ -342,6 +439,107 @@ public final class CollationSupport {
    */
 
   private static class CollationAwareUTF8String {
+
+    private static UTF8String replace(final UTF8String src, final UTF8String search,
+        final UTF8String replace, final int collationId) {
+      // This collation aware implementation is based on existing implementation on UTF8String
+      if (src.numBytes() == 0 || search.numBytes() == 0) {
+        return src;
+      }
+
+      StringSearch stringSearch = CollationFactory.getStringSearch(src, search, collationId);
+
+      // Find the first occurrence of the search string.
+      int end = stringSearch.next();
+      if (end == StringSearch.DONE) {
+        // Search string was not found, so string is unchanged.
+        return src;
+      }
+
+      // Initialize byte positions
+      int c = 0;
+      int byteStart = 0; // position in byte
+      int byteEnd = 0; // position in byte
+      while (byteEnd < src.numBytes() && c < end) {
+        byteEnd += UTF8String.numBytesForFirstByte(src.getByte(byteEnd));
+        c += 1;
+      }
+
+      // At least one match was found. Estimate space needed for result.
+      // The 16x multiplier here is chosen to match commons-lang3's implementation.
+      int increase = Math.max(0, Math.abs(replace.numBytes() - search.numBytes())) * 16;
+      final UTF8StringBuilder buf = new UTF8StringBuilder(src.numBytes() + increase);
+      while (end != StringSearch.DONE) {
+        buf.appendBytes(src.getBaseObject(), src.getBaseOffset() + byteStart, byteEnd - byteStart);
+        buf.append(replace);
+
+        // Move byteStart to the beginning of the current match
+        byteStart = byteEnd;
+        int cs = c;
+        // Move cs to the end of the current match
+        // This is necessary because the search string may contain 'multi-character' characters
+        while (byteStart < src.numBytes() && cs < c + stringSearch.getMatchLength()) {
+          byteStart += UTF8String.numBytesForFirstByte(src.getByte(byteStart));
+          cs += 1;
+        }
+        // Go to next match
+        end = stringSearch.next();
+        // Update byte positions
+        while (byteEnd < src.numBytes() && c < end) {
+          byteEnd += UTF8String.numBytesForFirstByte(src.getByte(byteEnd));
+          c += 1;
+        }
+      }
+      buf.appendBytes(src.getBaseObject(), src.getBaseOffset() + byteStart,
+        src.numBytes() - byteStart);
+      return buf.build();
+    }
+
+    private static UTF8String lowercaseReplace(final UTF8String src, final UTF8String search,
+        final UTF8String replace) {
+      if (src.numBytes() == 0 || search.numBytes() == 0) {
+        return src;
+      }
+      UTF8String lowercaseString = src.toLowerCase();
+      UTF8String lowercaseSearch = search.toLowerCase();
+
+      int start = 0;
+      int end = lowercaseString.indexOf(lowercaseSearch, 0);
+      if (end == -1) {
+        // Search string was not found, so string is unchanged.
+        return src;
+      }
+
+      // Initialize byte positions
+      int c = 0;
+      int byteStart = 0; // position in byte
+      int byteEnd = 0; // position in byte
+      while (byteEnd < src.numBytes() && c < end) {
+        byteEnd += UTF8String.numBytesForFirstByte(src.getByte(byteEnd));
+        c += 1;
+      }
+
+      // At least one match was found. Estimate space needed for result.
+      // The 16x multiplier here is chosen to match commons-lang3's implementation.
+      int increase = Math.max(0, replace.numBytes() - search.numBytes()) * 16;
+      final UTF8StringBuilder buf = new UTF8StringBuilder(src.numBytes() + increase);
+      while (end != -1) {
+        buf.appendBytes(src.getBaseObject(), src.getBaseOffset() + byteStart, byteEnd - byteStart);
+        buf.append(replace);
+        // Update character positions
+        start = end + lowercaseSearch.numChars();
+        end = lowercaseString.indexOf(lowercaseSearch, start);
+        // Update byte positions
+        byteStart = byteEnd + search.numBytes();
+        while (byteEnd < src.numBytes() && c < end) {
+          byteEnd += UTF8String.numBytesForFirstByte(src.getByte(byteEnd));
+          c += 1;
+        }
+      }
+      buf.appendBytes(src.getBaseObject(), src.getBaseOffset() + byteStart,
+        src.numBytes() - byteStart);
+      return buf.build();
+    }
 
     private static String toUpperCase(final String target, final int collationId) {
       ULocale locale = CollationFactory.fetchCollation(collationId)

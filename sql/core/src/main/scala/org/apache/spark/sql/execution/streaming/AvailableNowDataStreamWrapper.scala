@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{DELEGATE, READ_LIMIT}
+import org.apache.spark.internal.LogKeys.{DELEGATE, READ_LIMIT}
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, ReadLimit, SparkDataStream, SupportsAdmissionControl, SupportsTriggerAvailableNow}
 import org.apache.spark.sql.connector.read.streaming
 

@@ -27,7 +27,7 @@ import scala.util.matching.Regex
 
 import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{FROM_TIME, SLIDE_DURATION, TO_TIME}
+import org.apache.spark.internal.LogKeys.{FROM_TIME, SLIDE_DURATION, TO_TIME}
 import org.apache.spark.internal.io.SparkHadoopWriterUtils
 import org.apache.spark.rdd.{BlockRDD, RDD, RDDOperationScope}
 import org.apache.spark.storage.StorageLevel

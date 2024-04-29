@@ -25,7 +25,7 @@ import org.apache.hadoop.fs.{FileSystem, FSDataOutputStream, Path}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.LogKey.PATH
+import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.util.ThreadUtils
 

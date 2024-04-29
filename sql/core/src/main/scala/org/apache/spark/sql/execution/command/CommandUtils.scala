@@ -25,7 +25,7 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{DATABASE_NAME, ERROR, TABLE_NAME}
+import org.apache.spark.internal.LogKeys.{DATABASE_NAME, ERROR, TABLE_NAME}
 import org.apache.spark.sql.{Column, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, UnresolvedAttribute}

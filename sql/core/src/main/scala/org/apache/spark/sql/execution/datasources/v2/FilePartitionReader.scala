@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import java.io.{FileNotFoundException, IOException}
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.PARTITIONED_FILE_READER
+import org.apache.spark.internal.LogKeys.PARTITIONED_FILE_READER
 import org.apache.spark.rdd.InputFileBlockHolder
 import org.apache.spark.sql.catalyst.FileSourceOptions
 import org.apache.spark.sql.connector.read.PartitionReader

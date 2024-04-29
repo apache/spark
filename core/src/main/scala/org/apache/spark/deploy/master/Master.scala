@@ -33,7 +33,7 @@ import org.apache.spark.deploy.master.MasterMessages._
 import org.apache.spark.deploy.master.ui.MasterWebUI
 import org.apache.spark.deploy.rest.StandaloneRestServer
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{APP_DESC, APP_ID, EXECUTOR_ID, RETRY_COUNT}
+import org.apache.spark.internal.LogKeys.{APP_DESC, APP_ID, EXECUTOR_ID, RETRY_COUNT}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Deploy._
 import org.apache.spark.internal.config.Deploy.WorkerSelectionPolicy._

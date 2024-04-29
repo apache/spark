@@ -24,7 +24,7 @@ import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import org.apache.spark.{broadcast, SparkException, SparkUnsupportedOperationException}
-import org.apache.spark.internal.LogKey.{CODEGEN_STAGE_ID, ERROR, TREE_NODE}
+import org.apache.spark.internal.LogKeys.{CODEGEN_STAGE_ID, ERROR, TREE_NODE}
 import org.apache.spark.internal.MDC
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow

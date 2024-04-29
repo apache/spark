@@ -27,7 +27,7 @@ import io.netty.handler.timeout.ReadTimeoutException
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.api.r.SerDe._
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{METHOD_NAME, OBJECT_ID}
+import org.apache.spark.internal.LogKeys.{METHOD_NAME, OBJECT_ID}
 import org.apache.spark.internal.config.R._
 import org.apache.spark.util.{ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._

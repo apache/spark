@@ -28,7 +28,7 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.internal.{LogEntry, Logging, MDC}
-import org.apache.spark.internal.LogKey.{CLASS_NAME, NUM_PARTITION, PIPELINE_STAGE_UID, STORAGE_LEVEL}
+import org.apache.spark.internal.LogKeys.{CLASS_NAME, NUM_PARTITION, PIPELINE_STAGE_UID, STORAGE_LEVEL}
 import org.apache.spark.ml.{MLEvents, PipelineStage}
 import org.apache.spark.ml.param.{Param, Params}
 import org.apache.spark.rdd.RDD

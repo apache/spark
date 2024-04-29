@@ -25,8 +25,7 @@ import java.util.{Optional, UUID}
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{EXECUTION_PLAN_LEAVES, FINISH_TRIGGER_DURATION, LOGICAL_PLAN_LEAVES, PROCESSING_TIME}
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.optimizer.InlineCTE
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan, WithCTE}
@@ -82,7 +81,8 @@ class ProgressReporter(
 
     addNewProgress(newProgress)
     postEvent(new QueryProgressEvent(newProgress))
-    logInfo(s"Streaming query made progress: $newProgress")
+    logInfo(
+      log"Streaming query made progress: ${MDC(LogKeys.STREAMING_QUERY_PROGRESS, newProgress)}")
   }
 
   private def addNewProgress(newProgress: StreamingQueryProgress): Unit = {
@@ -104,8 +104,8 @@ class ProgressReporter(
       addNewProgress(newProgress)
       if (lastNoExecutionProgressEventTime > Long.MinValue) {
         postEvent(new QueryIdleEvent(id, runId, formatTimestamp(currentTriggerStartTimestamp)))
-        logInfo(s"Streaming query has been idle and waiting for new data more than " +
-          s"${noDataProgressEventInterval} ms.")
+        logInfo(log"Streaming query has been idle and waiting for new data more than " +
+          log"${MDC(LogKeys.TIME_UNITS, noDataProgressEventInterval)} ms.")
       }
 
       lastNoExecutionProgressEventTime = now
@@ -384,9 +384,9 @@ abstract class ProgressContext(
     val thresholdForLoggingMillis = 60 * 1000
     if (finishTriggerDurationMillis > math.max(thresholdForLoggingMillis, processingTimeMills)) {
       logWarning(log"Query progress update takes longer than batch processing time. Progress " +
-        log"update takes ${MDC(FINISH_TRIGGER_DURATION, finishTriggerDurationMillis)} " +
-        log"milliseconds. Batch processing takes ${MDC(PROCESSING_TIME, processingTimeMills)} " +
-        log"milliseconds")
+        log"update takes ${MDC(LogKeys.FINISH_TRIGGER_DURATION, finishTriggerDurationMillis)} " +
+        log"milliseconds. Batch processing takes " +
+        log"${MDC(LogKeys.PROCESSING_TIME, processingTimeMills)} milliseconds")
     }
   }
 
@@ -489,8 +489,8 @@ abstract class ProgressContext(
 
           logWarning(log"Could not report metrics as number leaves in trigger logical plan did " +
             log"not match that of the execution plan:\nlogical plan leaves: " +
-            log"${MDC(LOGICAL_PLAN_LEAVES, toString(allLogicalPlanLeaves))}\nexecution plan " +
-            log"leaves: ${MDC(EXECUTION_PLAN_LEAVES, toString(allExecPlanLeaves))}\n")
+            log"${MDC(LogKeys.LOGICAL_PLAN_LEAVES, toString(allLogicalPlanLeaves))}\nexecution " +
+            log"plan leaves: ${MDC(LogKeys.EXECUTION_PLAN_LEAVES, toString(allExecPlanLeaves))}\n")
           metricWarningLogged = true
         }
         Map.empty

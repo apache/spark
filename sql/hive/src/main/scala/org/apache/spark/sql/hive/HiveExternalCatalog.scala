@@ -34,7 +34,7 @@ import org.apache.thrift.TException
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{DATABASE_NAME, INCOMPATIBLE_TYPES, PROVIDER, SCHEMA, SCHEMA2, TABLE_NAME}
+import org.apache.spark.internal.LogKeys.{DATABASE_NAME, INCOMPATIBLE_TYPES, PROVIDER, SCHEMA, SCHEMA2, TABLE_NAME}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
