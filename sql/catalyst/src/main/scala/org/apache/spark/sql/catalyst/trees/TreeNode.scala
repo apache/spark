@@ -177,7 +177,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
   }
 
   def unsetTagValue[T](tag: TreeNodeTag[T]): Unit = {
-    if (!(_tags eq null)) {
+    if (_tags ne null) {
       tags -= tag
     }
   }
