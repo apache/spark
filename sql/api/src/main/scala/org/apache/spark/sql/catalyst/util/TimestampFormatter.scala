@@ -159,8 +159,14 @@ class Iso8601TimestampFormatter(
     isParsing: Boolean)
   extends TimestampFormatter with DateTimeFormatterHelper {
   @transient
-  protected lazy val formatter: DateTimeFormatter =
-    getOrCreateFormatter(pattern, locale, isParsing)
+  protected lazy val formatter: DateTimeFormatter = {
+    val fmt = getOrCreateFormatter(pattern, locale, isParsing)
+    if (isParsing) {
+      fmt
+    } else {
+      fmt.withZone(zoneId)
+    }
+  }
 
   @transient
   protected lazy val legacyFormatter = TimestampFormatter.getLegacyFormatter(
@@ -231,7 +237,7 @@ class Iso8601TimestampFormatter(
 
   override def format(instant: Instant): String = {
     try {
-      formatter.withZone(zoneId).format(instant)
+      formatter.format(instant)
     } catch checkFormattedDiff(toJavaTimestamp(instantToMicros(instant)),
       (t: Timestamp) => format(t))
   }
