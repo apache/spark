@@ -38,6 +38,8 @@ import org.apache.spark.sql.types.{ArrayType, DataType, DecimalType, IntegralTyp
 
 object TableOutputResolver extends SQLConfHelper with Logging {
 
+  val resolver = conf.resolver
+
   def resolveVariableOutputColumns(
       expected: Seq[VariableReference],
       query: LogicalPlan,
@@ -219,7 +221,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       fillDefaultValue: Boolean = false): Seq[NamedExpression] = {
     val matchedCols = mutable.HashSet.empty[String]
     val reordered = expectedCols.flatMap { expectedCol =>
-      val matched = inputCols.filter(col => conf.resolver(col.name, expectedCol.name))
+      val matched = inputCols.filter(col => resolver(col.name, expectedCol.name))
       val newColPath = colPath :+ expectedCol.name
       if (matched.isEmpty) {
         val defaultExpr = if (fillDefaultValue) {
@@ -477,8 +479,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       expected: Seq[Attribute],
       queryOutput: Seq[Attribute]): Unit = {
     if (!byName && expected.size == queryOutput.size &&
-      expected.forall(e => queryOutput.exists(p => conf.resolver(p.name, e.name))) &&
-      expected.zip(queryOutput).exists(e => !conf.resolver(e._1.name, e._2.name))) {
+      expected.forall(e => queryOutput.exists(p => resolver(p.name, e.name))) &&
+      expected.zip(queryOutput).exists(e => !resolver(e._1.name, e._2.name))) {
       logWarning("The query columns and the table columns have same names but different " +
         "orders. You can use INSERT [INTO | OVERWRITE] BY NAME to reorder the query columns to " +
         "align with the table columns.")
