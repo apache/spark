@@ -280,9 +280,9 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("default columns using runtime replaceable expression works") {
+  test("SPARK-48033: default columns using runtime replaceable expression works") {
     withTable("t") {
-      sql(s"CREATE TABLE t(v VARIANT DEFAULT parse_json('1')) USING PARQUET")
+      sql("CREATE TABLE t(v VARIANT DEFAULT parse_json('1')) USING PARQUET")
       sql("INSERT INTO t VALUES(DEFAULT)")
       checkAnswer(sql("select v from t"), sql("select parse_json('1')").collect())
     }
