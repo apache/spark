@@ -446,13 +446,7 @@ class ClientStreamingQuerySuite extends QueryTest with SQLHelper with Logging {
   }
 
   test("streaming query listener") {
-    testStreamingQueryListener(new EventCollectorV1, "_v1")
-    testStreamingQueryListener(new EventCollectorV2, "_v2")
-  }
-
-  private def testStreamingQueryListener(
-      listener: StreamingQueryListener,
-      tablePostfix: String): Unit = {
+    val listener = new MyListener
     assert(spark.streams.listListeners().length == 0)
 
     spark.streams.addListener(listener)
@@ -468,21 +462,16 @@ class ClientStreamingQuerySuite extends QueryTest with SQLHelper with Logging {
       q.processAllAvailable()
       eventually(timeout(30.seconds)) {
         assert(q.isActive)
-
-        assert(!spark.table(s"listener_start_events$tablePostfix").toDF().isEmpty)
-        assert(!spark.table(s"listener_progress_events$tablePostfix").toDF().isEmpty)
+        assert(listener.start.length == 1)
+        assert(listener.progress.nonEmpty)
       }
     } finally {
       q.stop()
 
       eventually(timeout(30.seconds)) {
         assert(!q.isActive)
-        assert(!spark.table(s"listener_terminated_events$tablePostfix").toDF().isEmpty)
+        assert(listener.terminate.nonEmpty)
       }
-
-      spark.sql(s"DROP TABLE IF EXISTS listener_start_events$tablePostfix")
-      spark.sql(s"DROP TABLE IF EXISTS listener_progress_events$tablePostfix")
-      spark.sql(s"DROP TABLE IF EXISTS listener_terminated_events$tablePostfix")
     }
 
     // List listeners after adding a new listener, length should be 1.
@@ -490,7 +479,7 @@ class ClientStreamingQuerySuite extends QueryTest with SQLHelper with Logging {
     assert(listeners.length == 1)
 
     // Add listener1 as another instance of EventCollector and validate
-    val listener1 = new EventCollectorV2
+    val listener1 = new MyListener
     spark.streams.addListener(listener1)
     assert(spark.streams.listListeners().length == 2)
     spark.streams.removeListener(listener1)
@@ -570,56 +559,27 @@ case class TestClass(value: Int) {
   override def toString: String = value.toString
 }
 
-abstract class EventCollector extends StreamingQueryListener {
-  private lazy val spark = SparkSession.builder().getOrCreate()
+class MyListener extends StreamingQueryListener {
 
-  protected def tablePostfix: String
+  var start: Seq[String] = Seq.empty
+  var progress: Seq[String] = Seq.empty
+  var terminate: Seq[String] = Seq.empty
 
-  protected def handleOnQueryStarted(event: QueryStartedEvent): Unit = {
-    val df = spark.createDataFrame(Seq((event.json, 0)))
-    df.write.mode("append").saveAsTable(s"listener_start_events$tablePostfix")
+  override def onQueryStarted(event: QueryStartedEvent): Unit = {
+    start = start :+ event.json
   }
 
-  protected def handleOnQueryProgress(event: QueryProgressEvent): Unit = {
-    val df = spark.createDataFrame(Seq((event.json, 0)))
-    df.write.mode("append").saveAsTable(s"listener_progress_events$tablePostfix")
+  override def onQueryProgress(event: QueryProgressEvent): Unit = {
+    progress = progress :+ event.json
   }
 
-  protected def handleOnQueryTerminated(event: QueryTerminatedEvent): Unit = {
-    val df = spark.createDataFrame(Seq((event.json, 0)))
-    df.write.mode("append").saveAsTable(s"listener_terminated_events$tablePostfix")
+  override def onQueryIdle(event: QueryIdleEvent): Unit = {
+    // Do nothing
   }
-}
 
-/**
- * V1: Initial interface of StreamingQueryListener containing methods `onQueryStarted`,
- * `onQueryProgress`, `onQueryTerminated`. It is prior to Spark 3.5.
- */
-class EventCollectorV1 extends EventCollector {
-  override protected def tablePostfix: String = "_v1"
-
-  override def onQueryStarted(event: QueryStartedEvent): Unit = handleOnQueryStarted(event)
-
-  override def onQueryProgress(event: QueryProgressEvent): Unit = handleOnQueryProgress(event)
-
-  override def onQueryTerminated(event: QueryTerminatedEvent): Unit =
-    handleOnQueryTerminated(event)
-}
-
-/**
- * V2: The interface after the method `onQueryIdle` is added. It is Spark 3.5+.
- */
-class EventCollectorV2 extends EventCollector {
-  override protected def tablePostfix: String = "_v2"
-
-  override def onQueryStarted(event: QueryStartedEvent): Unit = handleOnQueryStarted(event)
-
-  override def onQueryProgress(event: QueryProgressEvent): Unit = handleOnQueryProgress(event)
-
-  override def onQueryIdle(event: QueryIdleEvent): Unit = {}
-
-  override def onQueryTerminated(event: QueryTerminatedEvent): Unit =
-    handleOnQueryTerminated(event)
+  override def onQueryTerminated(event: QueryTerminatedEvent): Unit = {
+    terminate = terminate :+ event.json
+  }
 }
 
 class ForeachBatchFn(val viewName: String)
