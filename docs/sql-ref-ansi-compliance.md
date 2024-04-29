@@ -26,7 +26,7 @@ By default, `spark.sql.ansi.enabled` is `true` and Spark SQL uses an ANSI compli
 Moreover, Spark SQL has an independent option to control implicit casting behaviours when inserting rows in a table.
 The casting behaviours are defined as store assignment rules in the standard.
 
-When `spark.sql.storeAssignmentPolicy` is set to `ANSI`, Spark SQL complies with the ANSI store assignment rules. This is a separate configuration because its default value is `ANSI`, while the configuration `spark.sql.ansi.enabled` is disabled by default.
+By default, `spark.sql.storeAssignmentPolicy` is `ANSI` and Spark SQL complies with the ANSI store assignment rules.
 
 <table class="spark-config">
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
@@ -67,10 +67,8 @@ The following subsections present behaviour changes in arithmetic operations, ty
 
 ### Arithmetic Operations
 
-In Spark SQL, arithmetic operations performed on numeric types (with the exception of decimal) are not checked for overflows by default.
-This means that in case an operation causes overflows, the result is the same with the corresponding operation in a Java/Scala program (e.g., if the sum of 2 integers is higher than the maximum value representable, the result is a negative number).
-On the other hand, Spark SQL returns null for decimal overflows.
-When `spark.sql.ansi.enabled` is set to `true` and an overflow occurs in numeric and interval arithmetic operations, it throws an arithmetic exception at runtime.
+In Spark SQL, by default, Spark throws an artithmetic exception at runtime for non-decimal numeric overflows and returns null for decimal type overflows.
+If `spark.sql.ansi.enabled` is set to `false`, the result is the same with the corresponding operation in a Java/Scala program (e.g., if the sum of 2 integers is higher than the maximum value representable, the result is a negative number) which is the behavior of Spark 3 or older.
 
 ```sql
 -- `spark.sql.ansi.enabled=true`
