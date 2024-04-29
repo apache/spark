@@ -378,7 +378,7 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode {
 
     logInfo(log"Start processing data source write support: " +
       log"${MDC(LogKeys.BATCH_WRITE, batchWrite)}. The input RDD has " +
-      log"${MDC(LogKeys.PARTITIONS_SIZE, messages.length)}} partitions.")
+      log"${MDC(LogKeys.COUNT, messages.length)}} partitions.")
 
     // Avoid object not serializable issue.
     val writeMetrics: Map[String, SQLMetric] = customMetrics

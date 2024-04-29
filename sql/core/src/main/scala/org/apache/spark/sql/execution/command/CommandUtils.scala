@@ -25,7 +25,7 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.{DATABASE_NAME, ERROR, PARTITIONS_SIZE, TABLE_NAME, TIME}
+import org.apache.spark.internal.LogKeys.{COUNT, DATABASE_NAME, ERROR, TABLE_NAME, TIME}
 import org.apache.spark.sql.{Column, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, UnresolvedAttribute}
@@ -92,7 +92,7 @@ object CommandUtils extends Logging {
     } else {
       // Calculate table size as a sum of the visible partitions. See SPARK-21079
       val partitions = sessionState.catalog.listPartitions(catalogTable.identifier)
-      logInfo(log"Starting to calculate sizes for ${MDC(PARTITIONS_SIZE, partitions.length)} " +
+      logInfo(log"Starting to calculate sizes for ${MDC(COUNT, partitions.length)} " +
         log"partitions.")
       calculatePartitionStats(spark, catalogTable, partitions, partitionRowCount)
     }

@@ -467,7 +467,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         } else if (filteredRules.nonEmpty) {
           Some(Batch(batch.name, batch.strategy, filteredRules: _*))
         } else {
-          logInfo(log"Optimization batch '${MDC(LogKeys.RULE_BATCH_NAME, batch.name)}' " +
+          logInfo(log"Optimization batch '${MDC(LogKeys.BATCH_NAME, batch.name)}' " +
             log"is excluded from the optimizer as all enclosed rules have been excluded.")
           None
         }

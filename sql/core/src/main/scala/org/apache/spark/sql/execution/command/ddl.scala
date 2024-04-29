@@ -737,13 +737,14 @@ case class RepairTableCommand(
       spark.catalog.refreshTable(tableIdentWithDB)
     } catch {
       case NonFatal(e) =>
-        logError(log"Cannot refresh the table '${MDC(LogKeys.IDENTIFIER, tableIdentWithDB)}'. " +
+        logError(log"Cannot refresh the table '${MDC(LogKeys.TABLE_NAME, tableIdentWithDB)}'. " +
           log"A query of the table might return wrong result if the table was cached. " +
           log"To avoid such issue, you should uncache the table manually via the UNCACHE TABLE " +
           log"command after table recovering will complete fully.", e)
     }
-    logInfo(log"Recovered all partitions: added (${MDC(LogKeys.ADDED_PARTITIONS, addedAmount)}), " +
-      log"dropped (${MDC(LogKeys.DROPPED_PARTITIONS, droppedAmount)}).")
+    logInfo(log"Recovered all partitions: " +
+      log"added (${MDC(LogKeys.NUM_ADDED_PARTITIONS, addedAmount)}), " +
+      log"dropped (${MDC(LogKeys.NUM_DROPPED_PARTITIONS, droppedAmount)}).")
     Seq.empty[Row]
   }
 
@@ -1032,7 +1033,7 @@ object DDLUtils extends Logging {
       DataSource.lookupDataSource(provider, SQLConf.get).getConstructor().newInstance()
     } catch {
       case e: Throwable =>
-        logError(log"Failed to find data source: ${MDC(LogKeys.DATA_SOURCE_PROVIDER, provider)} " +
+        logError(log"Failed to find data source: ${MDC(LogKeys.DATA_SOURCE, provider)} " +
           log"when check data column names.", e)
         return
     }

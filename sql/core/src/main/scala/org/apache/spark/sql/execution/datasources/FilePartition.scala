@@ -22,7 +22,7 @@ import scala.math.BigDecimal.RoundingMode
 
 import org.apache.spark.Partition
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.{CONFIG, DESIRED_PARTITIONS_SIZE, MAX_PARTITIONS_SIZE, PARTITIONS_SIZE}
+import org.apache.spark.internal.LogKeys.{CONFIG, COUNT, DESIRED_PARTITIONS_SIZE, MAX_PARTITIONS_SIZE}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.InputPartition
 import org.apache.spark.sql.execution.ScanFileListing
@@ -99,7 +99,7 @@ object FilePartition extends Logging {
       val desiredSplitBytes =
         (totalSizeInBytes / BigDecimal(maxPartNum.get)).setScale(0, RoundingMode.UP).longValue
       val desiredPartitions = getFilePartitions(partitionedFiles, desiredSplitBytes, openCostBytes)
-      logWarning(log"The number of partitions is ${MDC(PARTITIONS_SIZE, partitions.size)}, " +
+      logWarning(log"The number of partitions is ${MDC(COUNT, partitions.size)}, " +
         log"which exceeds the maximum number configured: " +
         log"${MDC(MAX_PARTITIONS_SIZE, maxPartNum.get)}. Spark rescales it to " +
         log"${MDC(DESIRED_PARTITIONS_SIZE, desiredPartitions.size)} by ignoring the " +

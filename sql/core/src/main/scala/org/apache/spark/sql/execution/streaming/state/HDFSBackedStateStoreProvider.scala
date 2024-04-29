@@ -447,16 +447,16 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
     if (earliestLoadedVersion.isDefined) {
       logInfo(log"Trying to add version=${MDC(LogKeys.STATE_STORE_VERSION, newVersion)} to state " +
-        log"cache map with current_size=${MDC(LogKeys.SIZE, loadedEntries)} and " +
+        log"cache map with current_size=${MDC(LogKeys.NUM_LOADED_ENTRIES, loadedEntries)} and " +
         log"earliest_loaded_version=" +
         log"${MDC(LogKeys.EARLIEST_LOADED_VERSION, earliestLoadedVersion.get)}} " +
         log"and max_versions_to_retain_in_memory=" +
-        log"${MDC(LogKeys.MAX_VERSIONS_RETAIN, numberOfVersionsToRetainInMemory)}")
+        log"${MDC(LogKeys.NUM_VERSIONS_RETAIN, numberOfVersionsToRetainInMemory)}")
     } else {
       logInfo(log"Trying to add version=${MDC(LogKeys.STATE_STORE_VERSION, newVersion)} to state " +
-        log"cache map with current_size=${MDC(LogKeys.SIZE, loadedEntries)} and " +
+        log"cache map with current_size=${MDC(LogKeys.NUM_LOADED_ENTRIES, loadedEntries)} and " +
         log"max_versions_to_retain_in_memory=" +
-        log"${MDC(LogKeys.MAX_VERSIONS_RETAIN, numberOfVersionsToRetainInMemory)}")
+        log"${MDC(LogKeys.NUM_VERSIONS_RETAIN, numberOfVersionsToRetainInMemory)}")
     }
 
     if (numberOfVersionsToRetainInMemory <= 0) {

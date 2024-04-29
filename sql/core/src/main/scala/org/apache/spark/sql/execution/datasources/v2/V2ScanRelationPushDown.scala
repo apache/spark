@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.spark.internal.LogKeys.{AGGREGATE_FUNCTIONS, EXPR, POST_SCAN_FILTERS, PUSHED_FILTERS, RELATION_NAME, RELATION_OUTPUT}
+import org.apache.spark.internal.LogKeys.{AGGREGATE_FUNCTIONS, GROUP_BY_EXPRS, POST_SCAN_FILTERS, PUSHED_FILTERS, RELATION_NAME, RELATION_OUTPUT}
 import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSet, Cast, Expression, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -221,7 +221,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
             |Pushed Aggregate Functions:
             | ${MDC(AGGREGATE_FUNCTIONS, translatedAgg.aggregateExpressions().mkString(", "))}
             |Pushed Group by:
-            | ${MDC(EXPR, translatedAgg.groupByExpressions.mkString(", "))}
+            | ${MDC(GROUP_BY_EXPRS, translatedAgg.groupByExpressions.mkString(", "))}
            """.stripMargin)
 
       if (canCompletePushDown) {
