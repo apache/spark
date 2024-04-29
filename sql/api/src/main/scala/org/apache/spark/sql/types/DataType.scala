@@ -22,7 +22,7 @@ import java.util.Locale
 import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.databind.annotation.{JsonDeserialize, JsonSerialize}
-import org.json4s.{JObject, _}
+import org.json4s._
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
@@ -255,11 +255,11 @@ object DataType {
     ("serializedClass", JString(serialized)),
     ("sqlType", v: JValue),
     ("type", JString("udt"))) =>
-      new PythonUserDefinedType(parseDataType(v), pyClass, serialized)
+        new PythonUserDefinedType(parseDataType(v), pyClass, serialized)
 
-    case other =>
-      throw new IllegalArgumentException(
-        s"Failed to convert the JSON string '${compact(render(other))}' to a data type.")
+    case other => throw new SparkIllegalArgumentException(
+      errorClass = "INVALID_JSON_DATA_TYPE",
+      messageParameters = Map("invalidType" -> compact(render(other))))
   }
 
   /**
@@ -292,9 +292,9 @@ object DataType {
     ("name", JString(name)),
     ("type", dataType: JValue)) =>
       StructField(name, parseDataType(dataType))
-    case other =>
-      throw new IllegalArgumentException(
-        s"Failed to convert the JSON string '${compact(render(other))}' to a field.")
+    case other => throw new SparkIllegalArgumentException(
+      errorClass = "_LEGACY_ERROR_TEMP_3250",
+      messageParameters = Map("other" -> compact(render(other))))
   }
 
   /**
