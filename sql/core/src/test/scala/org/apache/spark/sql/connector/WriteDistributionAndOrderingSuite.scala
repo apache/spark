@@ -20,7 +20,8 @@ package org.apache.spark.sql.connector
 
 import java.sql.Date
 import java.util.Collections
-import org.apache.spark.sql.{AnalysisException, DataFrame, Row, catalyst}
+
+import org.apache.spark.sql.{catalyst, AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.{ApplyFunctionExpression, Cast, Literal}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.plans.physical
