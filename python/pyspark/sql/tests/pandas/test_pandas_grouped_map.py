@@ -52,7 +52,7 @@ from pyspark.sql.types import (
     MapType,
     YearMonthIntervalType,
 )
-from pyspark.errors import PythonException, PySparkTypeError
+from pyspark.errors import PythonException, PySparkTypeError, PySparkValueError
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pandas,
@@ -421,22 +421,23 @@ class GroupedApplyInPandasTestsMixin:
     def check_wrong_args(self):
         df = self.data
 
-        with self.assertRaisesRegex(ValueError, "Invalid function"):
+        with self.assertRaisesRegex(PySparkTypeError, "INVALID_UDF_EVAL_TYPE"):
             df.groupby("id").apply(lambda x: x)
-        with self.assertRaisesRegex(ValueError, "Invalid function"):
+        with self.assertRaisesRegex(PySparkTypeError, "INVALID_UDF_EVAL_TYPE"):
             df.groupby("id").apply(udf(lambda x: x, DoubleType()))
-        with self.assertRaisesRegex(ValueError, "Invalid function"):
+        with self.assertRaisesRegex(PySparkTypeError, "INVALID_UDF_EVAL_TYPE"):
             df.groupby("id").apply(sum(df.v))
-        with self.assertRaisesRegex(ValueError, "Invalid function"):
+        with self.assertRaisesRegex(PySparkTypeError, "INVALID_UDF_EVAL_TYPE"):
             df.groupby("id").apply(df.v + 1)
-        with self.assertRaisesRegex(ValueError, "Invalid function"):
+        with self.assertRaisesRegex(PySparkTypeError, "INVALID_UDF_EVAL_TYPE"):
+            df.groupby("id").apply(pandas_udf(lambda x, y: x, DoubleType()))
+        with self.assertRaisesRegex(PySparkTypeError, "INVALID_UDF_EVAL_TYPE"):
+            df.groupby("id").apply(pandas_udf(lambda x, y: x, DoubleType(), PandasUDFType.SCALAR))
+
+        with self.assertRaisesRegex(PySparkValueError, "INVALID_PANDAS_UDF"):
             df.groupby("id").apply(
                 pandas_udf(lambda: 1, StructType([StructField("d", DoubleType())]))
             )
-        with self.assertRaisesRegex(ValueError, "Invalid function"):
-            df.groupby("id").apply(pandas_udf(lambda x, y: x, DoubleType()))
-        with self.assertRaisesRegex(ValueError, "Invalid function.*GROUPED_MAP"):
-            df.groupby("id").apply(pandas_udf(lambda x, y: x, DoubleType(), PandasUDFType.SCALAR))
 
     def test_unsupported_types(self):
         with self.quiet():
