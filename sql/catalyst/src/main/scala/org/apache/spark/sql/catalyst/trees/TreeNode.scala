@@ -164,12 +164,6 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
     }
   }
 
-  def resetTags(): Unit = {
-    if (!(_tags eq null)) {
-      tags.clear()
-    }
-  }
-
   def setTagValue[T](tag: TreeNodeTag[T], value: T): Unit = {
     tags(tag) = value
   }
