@@ -177,9 +177,8 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
         s"Spark Connect - ${StringUtils.abbreviate(debugString, 128)}")
       session.sparkContext.setInterruptOnCancel(true)
 
-      executeHolder.schedulerPool.foreach { pool =>
-        session.sparkContext.setLocalProperty(SparkContext.SPARK_SCHEDULER_POOL, pool)
-      }
+      session.sparkContext
+        .setLocalProperty(SparkContext.SPARK_SCHEDULER_POOL, executeHolder.schedulerPool.orNull)
 
       // Add debug information to the query execution so that the jobs are traceable.
       session.sparkContext.setLocalProperty(
