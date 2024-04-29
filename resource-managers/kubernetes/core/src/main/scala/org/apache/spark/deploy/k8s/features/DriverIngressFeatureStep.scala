@@ -36,23 +36,20 @@ class DriverIngressFeatureStep(kubernetesConf: KubernetesDriverConf)
   override def configurePod(pod: SparkPod): SparkPod = pod
 
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
-    if (!kubernetesConf.get(UI_ENABLED) || !kubernetesConf.get(KUBERNETES_INGRESS_ENABLED)) {
+    if (!kubernetesConf.get(UI_ENABLED) ||
+        !kubernetesConf.get(KUBERNETES_INGRESS_ENABLED) ||
+        !kubernetesConf.contains(KUBERNETES_INGRESS_HOST_PATTERN)) {
       logInfo(
-        s"Skip building ingress for Spark UI, due to" +
-          s"${UI_ENABLED.key} or ${KUBERNETES_INGRESS_ENABLED.key} is false.")
+        s"Skip building ingress for Spark UI, due to " +
+          s"${UI_ENABLED.key} or ${KUBERNETES_INGRESS_ENABLED.key} is false, " +
+          s"or ${KUBERNETES_INGRESS_HOST_PATTERN.key} is empty.")
       return Seq.empty
     }
 
     val appId = kubernetesConf.appId
     val uiPort = kubernetesConf.get(UI_PORT)
-    val ingressHost = kubernetesConf.get(KUBERNETES_INGRESS_HOST_PATTERN) match {
-      case Some(ingressHostPattern) =>
-        ingressHostPattern.replace("{{APP_ID}}", appId)
-      case None =>
-        logWarning(s"Skip building ingress for Spark UI, due to " +
-          s"${KUBERNETES_INGRESS_HOST_PATTERN.key} is absent.")
-        return Seq.empty
-    }
+    val ingressHost = kubernetesConf.get(KUBERNETES_INGRESS_HOST_PATTERN).get
+      .replace("{{APP_ID}}", appId)
 
     val customLabels = KubernetesUtils.parsePrefixedKeyValuePairs(
       kubernetesConf.sparkConf,
