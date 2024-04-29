@@ -138,12 +138,6 @@ RUN python3.12 -m pip install $BASIC_PIP_PKGS $CONNECT_PIP_PKGS lxml && \
     python3.12 -m pip cache purge
 
 # Remove unused installation packages to free up disk space
-RUN dpkg-query -Wf '${Installed-Size}\t${Package}\n' | sort -n -r | head -n 100
-RUN df -h
-RUN apt list --installed
-RUN apt-get remove --purge -y \
-    'gfortran-11' 'humanity-icon-theme' 'nodejs-doc' || true
+RUN apt-get remove --purge -y 'gfortran-11' 'humanity-icon-theme' 'nodejs-doc' || true
 RUN apt-get autoremove --purge -y
 RUN apt-get clean
-RUN dpkg-query -Wf '${Installed-Size}\t${Package}\n' | sort -n -r | head -n 100
-RUN df -h
