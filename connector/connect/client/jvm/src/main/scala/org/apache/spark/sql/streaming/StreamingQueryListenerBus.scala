@@ -50,17 +50,15 @@ class StreamingQueryListenerBus (sparkSession: SparkSession) extends Logging {
           listeners.remove(listener)
           return
       }
-      if (iter.isDefined) {
-        executionThread = Some(new Thread(new Runnable {
-          def run(): Unit = {
-            queryEventHandler(iter.get)
-          }
-        }))
-        // Start the thread
-        executionThread.get.start()
-        logInfo("Started the execution thread for StreamingQueryListenerBus with name: " +
-          executionThread.get.getName())
-      }
+      executionThread = Some(new Thread(new Runnable {
+        def run(): Unit = {
+          queryEventHandler(iter.get)
+        }
+      }))
+      // Start the thread
+      executionThread.get.start()
+      logInfo("Started the execution thread for StreamingQueryListenerBus with name: " +
+        executionThread.get.getName())
     }
   }
 
@@ -125,31 +123,30 @@ class StreamingQueryListenerBus (sparkSession: SparkSession) extends Logging {
       }
     } catch {
       case e: Exception =>
-        logWarning("Failed to handle the event, please add the listener again.", e)
+        logWarning("Failed to handle the event, please add the listener again. ", e)
         lock.synchronized {
           executionThread = Option.empty
           listeners.forEach(remove(_))
         }
     }
-
   }
 
   def postToAll(event: Event): Unit = lock.synchronized {
     listeners.forEach(
       listener => try {event match {
         case t: QueryStartedEvent =>
-          listener.onQueryStarted(event.asInstanceOf[QueryStartedEvent])
+          listener.onQueryStarted(t)
         case t: QueryProgressEvent =>
-          listener.onQueryProgress(event.asInstanceOf[QueryProgressEvent])
+          listener.onQueryProgress(t)
         case t: QueryIdleEvent =>
-          listener.onQueryIdle(event.asInstanceOf[QueryIdleEvent])
+          listener.onQueryIdle(t)
         case t: QueryTerminatedEvent =>
-          listener.onQueryTerminated(event.asInstanceOf[QueryTerminatedEvent])
+          listener.onQueryTerminated(t)
         case _ => logWarning(s"Unknown StreamingQueryListener event: $event")
       }
-      } catch {
-        case e: Exception =>
-          logWarning(s"Listener $listener threw an exception", e)
-      })
+    } catch {
+      case e: Exception =>
+        logWarning(s"Listener $listener threw an exception", e)
+    })
   }
 }

@@ -446,9 +446,70 @@ class ClientStreamingQuerySuite extends QueryTest with SQLHelper with Logging {
   }
 
   test("streaming query listener") {
-    val listener = new MyListener
+    testStreamingQueryListener(new EventCollectorV1, "_v1")
+    testStreamingQueryListener(new EventCollectorV2, "_v2")
+  }
+
+  private def testStreamingQueryListener(
+      listener: StreamingQueryListener,
+      tablePostfix: String): Unit = {
     assert(spark.streams.listListeners().length == 0)
 
+    spark.streams.addListener(listener)
+
+    val q = spark.readStream
+      .format("rate")
+      .load()
+      .writeStream
+      .format("console")
+      .start()
+
+    try {
+      q.processAllAvailable()
+      eventually(timeout(30.seconds)) {
+        assert(q.isActive)
+
+        assert(!spark.table(s"listener_start_events$tablePostfix").toDF().isEmpty)
+        assert(!spark.table(s"listener_progress_events$tablePostfix").toDF().isEmpty)
+      }
+    } finally {
+      q.stop()
+
+      eventually(timeout(30.seconds)) {
+        assert(!q.isActive)
+        assert(!spark.table(s"listener_terminated_events$tablePostfix").toDF().isEmpty)
+      }
+
+      spark.sql(s"DROP TABLE IF EXISTS listener_start_events$tablePostfix")
+      spark.sql(s"DROP TABLE IF EXISTS listener_progress_events$tablePostfix")
+      spark.sql(s"DROP TABLE IF EXISTS listener_terminated_events$tablePostfix")
+    }
+
+    // List listeners after adding a new listener, length should be 1.
+    val listeners = spark.streams.listListeners()
+    assert(listeners.length == 1)
+
+    // Add listener1 as another instance of EventCollector and validate
+    val listener1 = new EventCollectorV2
+    spark.streams.addListener(listener1)
+    assert(spark.streams.listListeners().length == 2)
+    spark.streams.removeListener(listener1)
+    assert(spark.streams.listListeners().length == 1)
+
+    // Add the same listener again and validate, this aims to verify the listener cache
+    // is correctly stored and cleaned.
+    spark.streams.addListener(listener)
+    assert(spark.streams.listListeners().length == 2)
+    spark.streams.removeListener(listener)
+    assert(spark.streams.listListeners().length == 1)
+
+    // Remove the listener, length should be 1.
+    spark.streams.removeListener(listener)
+    assert(spark.streams.listListeners().length == 0)
+  }
+
+  test("listener events") {
+    val listener = new MyListener()
     spark.streams.addListener(listener)
 
     val q = spark.readStream
@@ -467,34 +528,11 @@ class ClientStreamingQuerySuite extends QueryTest with SQLHelper with Logging {
       }
     } finally {
       q.stop()
-
       eventually(timeout(30.seconds)) {
         assert(!q.isActive)
         assert(listener.terminate.nonEmpty)
       }
     }
-
-    // List listeners after adding a new listener, length should be 1.
-    val listeners = spark.streams.listListeners()
-    assert(listeners.length == 1)
-
-    // Add listener1 as another instance of EventCollector and validate
-    val listener1 = new MyListener
-    spark.streams.addListener(listener1)
-    assert(spark.streams.listListeners().length == 2)
-    spark.streams.removeListener(listener1)
-    assert(spark.streams.listListeners().length == 1)
-
-    // Add the same listener again and validate, this aims to verify the listener cache
-    // is correctly stored and cleaned.
-    spark.streams.addListener(listener)
-    assert(spark.streams.listListeners().length == 2)
-    spark.streams.removeListener(listener)
-    assert(spark.streams.listListeners().length == 1)
-
-    // Remove the listener, length should be 1.
-    spark.streams.removeListener(listener)
-    assert(spark.streams.listListeners().length == 0)
   }
 
   test("foreachBatch") {
@@ -532,6 +570,78 @@ class ClientStreamingQuerySuite extends QueryTest with SQLHelper with Logging {
       q.stop()
     }
   }
+
+  abstract class EventCollector extends StreamingQueryListener {
+    protected def tablePostfix: String
+
+    protected def handleOnQueryStarted(event: QueryStartedEvent): Unit = {
+      val df = spark.createDataFrame(Seq((event.json, 0)))
+      df.write.mode("append").saveAsTable(s"listener_start_events$tablePostfix")
+    }
+
+    protected def handleOnQueryProgress(event: QueryProgressEvent): Unit = {
+      val df = spark.createDataFrame(Seq((event.json, 0)))
+      df.write.mode("append").saveAsTable(s"listener_progress_events$tablePostfix")
+    }
+
+    protected def handleOnQueryTerminated(event: QueryTerminatedEvent): Unit = {
+      val df = spark.createDataFrame(Seq((event.json, 0)))
+      df.write.mode("append").saveAsTable(s"listener_terminated_events$tablePostfix")
+    }
+}
+
+  /**
+   * V1: Initial interface of StreamingQueryListener containing methods `onQueryStarted`,
+   * `onQueryProgress`, `onQueryTerminated`. It is prior to Spark 3.5.
+   */
+  class EventCollectorV1 extends EventCollector {
+    override protected def tablePostfix: String = "_v1"
+
+    override def onQueryStarted(event: QueryStartedEvent): Unit = handleOnQueryStarted(event)
+
+    override def onQueryProgress(event: QueryProgressEvent): Unit = handleOnQueryProgress(event)
+
+    override def onQueryTerminated(event: QueryTerminatedEvent): Unit =
+      handleOnQueryTerminated(event)
+  }
+
+  /**
+   * V2: The interface after the method `onQueryIdle` is added. It is Spark 3.5+.
+   */
+  class EventCollectorV2 extends EventCollector {
+    override protected def tablePostfix: String = "_v2"
+
+    override def onQueryStarted(event: QueryStartedEvent): Unit = handleOnQueryStarted(event)
+
+    override def onQueryProgress(event: QueryProgressEvent): Unit = handleOnQueryProgress(event)
+
+    override def onQueryIdle(event: QueryIdleEvent): Unit = {}
+
+    override def onQueryTerminated(event: QueryTerminatedEvent): Unit =
+      handleOnQueryTerminated(event)
+  }
+
+  class MyListener extends StreamingQueryListener {
+    var start: Seq[String] = Seq.empty
+    var progress: Seq[String] = Seq.empty
+    var terminate: Seq[String] = Seq.empty
+
+    override def onQueryStarted(event: QueryStartedEvent): Unit = {
+      start = start :+ event.json
+    }
+
+    override def onQueryProgress(event: QueryProgressEvent): Unit = {
+      progress = progress :+ event.json
+    }
+
+    override def onQueryIdle(event: QueryIdleEvent): Unit = {
+      // Do nothing
+    }
+
+    override def onQueryTerminated(event: QueryTerminatedEvent): Unit = {
+      terminate = terminate :+ event.json
+    }
+  }
 }
 
 class TestForeachWriter[T] extends ForeachWriter[T] {
@@ -557,29 +667,6 @@ class TestForeachWriter[T] extends ForeachWriter[T] {
 
 case class TestClass(value: Int) {
   override def toString: String = value.toString
-}
-
-class MyListener extends StreamingQueryListener {
-
-  var start: Seq[String] = Seq.empty
-  var progress: Seq[String] = Seq.empty
-  var terminate: Seq[String] = Seq.empty
-
-  override def onQueryStarted(event: QueryStartedEvent): Unit = {
-    start = start :+ event.json
-  }
-
-  override def onQueryProgress(event: QueryProgressEvent): Unit = {
-    progress = progress :+ event.json
-  }
-
-  override def onQueryIdle(event: QueryIdleEvent): Unit = {
-    // Do nothing
-  }
-
-  override def onQueryTerminated(event: QueryTerminatedEvent): Unit = {
-    terminate = terminate :+ event.json
-  }
 }
 
 class ForeachBatchFn(val viewName: String)

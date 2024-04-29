@@ -19,14 +19,13 @@ package org.apache.spark.sql.streaming
 
 import java.util.UUID
 
-import scala.jdk.CollectionConverters._
-
-import org.json4s.{DefaultFormats, JNothing, JObject, JString, JValue}
+import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
+import com.fasterxml.jackson.module.scala.{ClassTagExtensions, DefaultScalaModule}
+import org.json4s.{JObject, JString, JValue}
 import org.json4s.JsonDSL.{jobject2assoc, pair2Assoc}
-import org.json4s.jackson.JsonMethods.{compact, parse, render}
+import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.annotation.Evolving
-import org.apache.spark.sql.Row
 
 /**
  * Interface for listening to events related to [[StreamingQuery StreamingQueries]].
@@ -123,16 +122,18 @@ object StreamingQueryListener extends Serializable {
   }
 
   private[spark] object QueryStartedEvent {
-    private implicit val formats: DefaultFormats = DefaultFormats
-
-    def fromJson(input: String): QueryStartedEvent = {
-      val json = parse(input)
-      val id = UUID.fromString((json \ "id").extract[String])
-      val runId = UUID.fromString((json \ "runId").extract[String])
-      val name = (json \ "name").extract[String]
-      val timestamp = (json \ "timestamp").extract[String]
-      new QueryStartedEvent(id, runId, name, timestamp)
+    private val mapper = {
+      val ret = new ObjectMapper() with ClassTagExtensions
+      ret.registerModule(DefaultScalaModule)
+      ret.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+      ret
     }
+
+    private[spark] def jsonString(event: QueryStartedEvent): String =
+      mapper.writeValueAsString(event)
+
+    private[spark] def fromJson(json: String): QueryStartedEvent =
+      mapper.readValue[QueryStartedEvent](json)
   }
 
   /**
@@ -152,96 +153,18 @@ object StreamingQueryListener extends Serializable {
   }
 
   private[spark] object QueryProgressEvent {
-    private implicit val formats: DefaultFormats = DefaultFormats
-
-    def fromJson(input: String): QueryProgressEvent = {
-      val json = parse(input)
-      val progress = (json \ "progress").extract[JObject]
-      new QueryProgressEvent(toStreamingQueryProgress(progress))
+    private val mapper = {
+      val ret = new ObjectMapper() with ClassTagExtensions
+      ret.registerModule(DefaultScalaModule)
+      ret.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+      ret
     }
 
-    private def toStreamingQueryProgress(input: JObject): StreamingQueryProgress = {
-      val json = input
-      val id = UUID.fromString((json \ "id").extract[String])
-      val runId = UUID.fromString((json \ "runId").extract[String])
-      val name = (json \ "name").extract[String]
-      val timestamp = (json \ "timestamp").extract[String]
-      val batchId = (json \ "batchId").extract[Int]
-      val batchDuration = (json \ "batchDuration").extract[Long]
-      val durationMs = (json \ "durationMs").extract[Map[String, Long]].asJava
-        .asInstanceOf[java.util.Map[String, java.lang.Long]]
-      val eventTime = (json \ "eventTime").extract[Map[String, String]].asJava
-      val stateOperators = (json \ "stateOperators").extract[Array[JObject]]
-        .map(toStateOperatorProgress)
-      val sources = (json \ "sources").extract[Array[JObject]].map(toSourceProgress)
-      val sink = toSinkProgress((json \ "sink").extract[JObject])
-      val observedMetrics = (json \ "observedMetrics").extract[Map[String, Row]].asJava
-      new StreamingQueryProgress(
-        id,
-        runId,
-        name,
-        timestamp,
-        batchId,
-        batchDuration,
-        durationMs,
-        eventTime,
-        stateOperators,
-        sources,
-        sink,
-        observedMetrics)
-    }
+    private[spark] def jsonString(event: QueryProgressEvent): String =
+      mapper.writeValueAsString(event)
 
-    private def toStateOperatorProgress(input: JObject): StateOperatorProgress = {
-      val json = input
-      val operatorName = (json \ "operatorName").extract[String]
-      val numRowsTotal = (json \ "numRowsTotal").extract[Int]
-      val numRowsUpdated = (json \ "numRowsUpdated").extract[Int]
-      val allUpdatesTimeMs = (json \ "allUpdatesTimeMs").extract[Int]
-      val numRowsRemoved = (json \ "numRowsRemoved").extract[Int]
-      val allRemovalsTimeMs = (json \ "allRemovalsTimeMs").extract[Int]
-      val commitTimeMs = (json \ "commitTimeMs").extract[Int]
-      val memoryUsedBytes = (json \ "memoryUsedBytes").extract[Int]
-      val numRowsDroppedByWatermark = (json \ "numRowsDroppedByWatermark").extract[Int]
-      val numShufflePartitions = (json \ "numShufflePartitions").extract[Int]
-      val numStateStoreInstances = (json \ "numStateStoreInstances").extract[Int]
-      val customMetrics = (json \ "customMetrics").extract[Map[String, Long]].asJava
-        .asInstanceOf[java.util.Map[String, java.lang.Long]]
-      new StateOperatorProgress(
-        operatorName,
-        numRowsTotal,
-        numRowsUpdated,
-        allUpdatesTimeMs,
-        numRowsRemoved,
-        allRemovalsTimeMs,
-        commitTimeMs,
-        memoryUsedBytes,
-        numRowsDroppedByWatermark,
-        numShufflePartitions,
-        numStateStoreInstances,
-        customMetrics)
-    }
-
-    private def toSourceProgress(input: JObject): SourceProgress = {
-      val json = input
-      val description = (json \ "description").extract[String]
-      val startOffset = (json \ "startOffset").extract[Int]
-      val endOffset = (json \ "endOffset").extract[Int]
-      val latestOffset = (json \ "latestOffset").extract[Int]
-      val numInputRows = (json \ "numInputRows").extract[Long]
-      val inputRowsPerSecond = (json \ "inputRowsPerSecond").extract[Double]
-      val processedRowsPerSecond = (json \ "processedRowsPerSecond").extract[Double]
-      val metrics = (json \ "metrics").extract[Map[String, String]].asJava
-      new SourceProgress(description, startOffset.toString, endOffset.toString,
-        latestOffset.toString, numInputRows, inputRowsPerSecond, processedRowsPerSecond, metrics)
-    }
-
-    private def toSinkProgress(input: JObject): SinkProgress = {
-      val json = input
-      val description = (json \ "description").extract[String]
-      val numOutputRows = (json \ "numOutputRows").extract[Long]
-      val metrics = (json \ "metrics").extract[Map[String, String]].asJava
-      new SinkProgress(description, numOutputRows, metrics)
-    }
+    private[spark] def fromJson(json: String): QueryProgressEvent =
+      mapper.readValue[QueryProgressEvent](json)
   }
 
   /**
@@ -270,15 +193,18 @@ object StreamingQueryListener extends Serializable {
   }
 
   private[spark] object QueryIdleEvent {
-    private implicit val formats: DefaultFormats = DefaultFormats
-
-    def fromJson(input: String): QueryIdleEvent = {
-      val json = parse(input)
-      val id = UUID.fromString((json \ "id").extract[String])
-      val runId = UUID.fromString((json \ "runId").extract[String])
-      val timestamp = (json \ "timestamp").extract[String]
-      new QueryIdleEvent(id, runId, timestamp)
+    private val mapper = {
+      val ret = new ObjectMapper() with ClassTagExtensions
+      ret.registerModule(DefaultScalaModule)
+      ret.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+      ret
     }
+
+    private[spark] def jsonString(event: QueryTerminatedEvent): String =
+      mapper.writeValueAsString(event)
+
+    private[spark] def fromJson(json: String): QueryTerminatedEvent =
+      mapper.readValue[QueryTerminatedEvent](json)
   }
 
   /**
@@ -321,22 +247,17 @@ object StreamingQueryListener extends Serializable {
   }
 
   private[spark] object QueryTerminatedEvent {
-    private implicit val formats: DefaultFormats = DefaultFormats
-
-    def fromJson(input: String): QueryTerminatedEvent = {
-      val json = parse(input)
-      val id = UUID.fromString((json \ "id").extract[String])
-      val runId = UUID.fromString((json \ "runId").extract[String])
-      val exception = jsonOption(json \ "exception").map(_.extract[String])
-      val errorClassOnException = jsonOption(json \ "errorClassOnException").map(_.extract[String])
-      new QueryTerminatedEvent(id, runId, exception, errorClassOnException)
+    private val mapper = {
+      val ret = new ObjectMapper() with ClassTagExtensions
+      ret.registerModule(DefaultScalaModule)
+      ret.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+      ret
     }
 
-    private def jsonOption(json: JValue): Option[JValue] = {
-      json match {
-        case JNothing => None
-        case value: JValue => Some(value)
-      }
-    }
+    private[spark] def jsonString(event: QueryTerminatedEvent): String =
+      mapper.writeValueAsString(event)
+
+    private[spark] def fromJson(json: String): QueryTerminatedEvent =
+      mapper.readValue[QueryTerminatedEvent](json)
   }
 }
