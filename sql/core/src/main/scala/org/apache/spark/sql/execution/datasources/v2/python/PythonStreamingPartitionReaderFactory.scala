@@ -82,7 +82,7 @@ class PythonStreamingPartitionReaderFactory(
       override def close(): Unit = {}
 
       override def currentMetricsValues(): Array[CustomTaskMetric] = {
-        source.createPythonTaskMetrics(metrics.map { case (k, v) => k -> v.value})
+        source.createPythonTaskMetrics(metrics.map { case (k, v) => k -> v.value })
       }
     }
   }

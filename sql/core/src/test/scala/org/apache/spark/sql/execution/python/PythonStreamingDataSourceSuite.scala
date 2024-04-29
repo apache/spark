@@ -25,7 +25,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.IntegratedUDFTestUtils.{createUserDefinedPythonDataSource, shouldTestPandasUDFs}
 import org.apache.spark.sql.execution.datasources.v2.python.{PythonDataSourceV2, PythonMicroBatchStream, PythonStreamingSourceOffset}
-import org.apache.spark.sql.execution.streaming.{MemoryStream, ProcessingTimeTrigger}
+import org.apache.spark.sql.execution.streaming.{CommitLog, MemoryStream, OffsetSeqLog, ProcessingTimeTrigger}
 import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -301,7 +301,17 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
       val df = spark.readStream.format(dataSourceName).load()
       var lastBatch = 0
       // Restart streaming query multiple times to verify exactly once guarantee.
-      for (_ <- 1 to 5) {
+      for (i <- 1 to 5) {
+
+        if (i % 2 == 0) {
+          // Remove the last entry of commit log to test replaying microbatch during restart.
+          val offsetLog = new OffsetSeqLog(
+            spark, new File(checkpointDir, "offsets").getCanonicalPath)
+          val commitLog = new CommitLog(
+            spark, new File(checkpointDir, "commits").getCanonicalPath)
+          commitLog.purgeAfter(offsetLog.getLatest().get._1 - 1)
+        }
+
         val q = df
           .writeStream
           .option("checkpointLocation", checkpointDir.getAbsolutePath)
