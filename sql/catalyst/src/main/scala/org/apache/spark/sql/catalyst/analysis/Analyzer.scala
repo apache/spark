@@ -881,7 +881,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
   }
 
   object ResolveUnpivot extends Rule[LogicalPlan] {
-    val resolver = conf.resolver
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       _.containsPattern(UNPIVOT), ruleId) {
@@ -942,7 +941,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
   private def isReferredTempViewName(nameParts: Seq[String]): Boolean = {
     AnalysisContext.get.referredTempViewNames.exists { n =>
       (n.length == nameParts.length) && n.zip(nameParts).forall {
-        case (a, b) => conf.resolver(a, b)
+        case (a, b) => resolver(a, b)
       }
     }
   }
@@ -3554,13 +3553,13 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     import org.apache.spark.sql.catalyst.util._
 
     val leftKeys = joinNames.map { keyName =>
-      left.output.find(attr => conf.resolver(attr.name, keyName)).getOrElse {
+      left.output.find(attr => resolver(attr.name, keyName)).getOrElse {
         throw QueryCompilationErrors.unresolvedUsingColForJoinError(
           keyName, left.schema.fieldNames.sorted.map(toSQLId).mkString(", "), "left")
       }
     }
     val rightKeys = joinNames.map { keyName =>
-      right.output.find(attr => conf.resolver(attr.name, keyName)).getOrElse {
+      right.output.find(attr => resolver(attr.name, keyName)).getOrElse {
         throw QueryCompilationErrors.unresolvedUsingColForJoinError(
           keyName, right.schema.fieldNames.sorted.map(toSQLId).mkString(", "), "right")
       }
