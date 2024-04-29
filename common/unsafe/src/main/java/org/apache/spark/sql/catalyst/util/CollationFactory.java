@@ -278,7 +278,7 @@ public final class CollationFactory {
     } else if (collation.supportsLowercaseEquality) {
       return input.toLowerCase();
     } else {
-      var collationKey = collation.collator.getCollationKey(input.toString());
+      byte[] collationKey = collation.collator.getCollationKey(input.toString());
       return UTF8String.fromBytes(collationKey.toByteArray());
     }
   }
