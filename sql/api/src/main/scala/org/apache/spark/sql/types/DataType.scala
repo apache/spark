@@ -262,11 +262,6 @@ object DataType {
       messageParameters = Map("invalidType" -> compact(render(other))))
   }
 
-  /**
-   * This method is public so that the UC can reliably serialize and deserialize StructFields.
-   * These fields will be stored in persistent storage, so their format needs to be backwards
-   * compatible.
-   */
   def parseStructField(json: JValue): StructField = json match {
     case JSortedObject(
     ("metadata", JObject(metadataFields)),
