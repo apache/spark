@@ -43,16 +43,18 @@ abstract class AbstractSqlParser extends AbstractParser with ParserInterface {
   /** Creates TableIdentifier for a given SQL string. */
   override def parseTableIdentifier(sqlText: String): TableIdentifier =
     parse(sqlText) { parser =>
-      withErrorHandling(parser.singleTableIdentifier(), Some(sqlText)) {
-        astBuilder.visitSingleTableIdentifier(parser.singleTableIdentifier())
+      val ctx = parser.singleTableIdentifier()
+      withErrorHandling(ctx, Some(sqlText)) {
+        astBuilder.visitSingleTableIdentifier(ctx)
       }
     }
 
   /** Creates FunctionIdentifier for a given SQL string. */
   override def parseFunctionIdentifier(sqlText: String): FunctionIdentifier = {
     parse(sqlText) { parser =>
-      withErrorHandling(parser.singleFunctionIdentifier(), Some(sqlText)) {
-        astBuilder.visitSingleFunctionIdentifier(parser.singleFunctionIdentifier())
+      val ctx = parser.singleFunctionIdentifier()
+      withErrorHandling(ctx, Some(sqlText)) {
+        astBuilder.visitSingleFunctionIdentifier(ctx)
       }
     }
   }
@@ -60,8 +62,9 @@ abstract class AbstractSqlParser extends AbstractParser with ParserInterface {
   /** Creates a multi-part identifier for a given SQL string */
   override def parseMultipartIdentifier(sqlText: String): Seq[String] = {
     parse(sqlText) { parser =>
-      withErrorHandling(parser.singleMultipartIdentifier(), Some(sqlText)) {
-        astBuilder.visitSingleMultipartIdentifier(parser.singleMultipartIdentifier())
+      val ctx = parser.singleMultipartIdentifier()
+      withErrorHandling(ctx, Some(sqlText)) {
+        astBuilder.visitSingleMultipartIdentifier(ctx)
       }
     }
   }
