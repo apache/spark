@@ -163,7 +163,6 @@ class Iso8601TimestampFormatter(
     getOrCreateFormatter(pattern, locale, isParsing)
 
   @transient
-  
   private lazy val zonedFormatter: DateTimeFormatter = formatter.withZone(zoneId)
 
   @transient
