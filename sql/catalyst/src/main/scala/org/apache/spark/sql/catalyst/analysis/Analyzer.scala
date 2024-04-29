@@ -881,7 +881,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
   }
 
   object ResolveUnpivot extends Rule[LogicalPlan] {
-
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       _.containsPattern(UNPIVOT), ruleId) {
 
