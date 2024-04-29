@@ -22,6 +22,7 @@ import scala.jdk.CollectionConverters.MapHasAsJava
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2ProviderWithCustomSchema}
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable}
@@ -1041,7 +1042,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("schema") {
+  test("schema with collations ser/de") {
     val schema = StructType(Seq(
       StructField("c0", StringType(1)),
       StructField("c1", StructType(Seq(
@@ -1072,7 +1073,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
     val schemaStr = schema.json
     val parsedBack = DataType.fromJson(schemaStr)
-    DataType.equalsIgnoreNullability(parsedBack, schema)
-    val x = 3
+    DataTypeUtils.sameType(schema, parsedBack)
   }
 }

@@ -119,6 +119,8 @@ object DataType {
   private val VARCHAR_TYPE = """varchar\(\s*(\d+)\s*\)""".r
   private val COLLATED_STRING_TYPE = """string\s+collate\s+([\w_]+|`[\w_]`)""".r
 
+  val COLLATIONS_METADATA_KEY = "COLLATIONS"
+
   def fromDDL(ddl: String): DataType = {
     parseTypeWithFallback(
       ddl,
@@ -210,10 +212,10 @@ object DataType {
   // NOTE: Map fields must be sorted in alphabetical order to keep consistent with the Python side.
   private[sql] def parseDataType(
       json: JValue,
-      path: Seq[String] = Seq.empty,
+      currentFieldPath: Seq[String] = Seq.empty,
       collationsMap: Map[String, String] = Map.empty): DataType = json match {
     case JString(name) =>
-      collationsMap.get(path.mkString(".")) match {
+      collationsMap.get(currentFieldPath.mkString(".")) match {
         case Some(collation) => stringTypeWithCollation(collation)
         case _ => nameToType(name)
       }
@@ -222,7 +224,7 @@ object DataType {
     ("containsNull", JBool(n)),
     ("elementType", t: JValue),
     ("type", JString("array"))) =>
-      val elementType = resolveType(t, path :+ "element", collationsMap)
+      val elementType = resolveType(t, currentFieldPath :+ "element", collationsMap)
       ArrayType(elementType, n)
 
     case JSortedObject(
@@ -230,8 +232,8 @@ object DataType {
     ("type", JString("map")),
     ("valueContainsNull", JBool(n)),
     ("valueType", v: JValue)) =>
-      val keyType = resolveType(k, path :+ "key", collationsMap)
-      val valueType = resolveType(v, path :+ "value", collationsMap)
+      val keyType = resolveType(k, currentFieldPath :+ "key", collationsMap)
+      val valueType = resolveType(v, currentFieldPath :+ "value", collationsMap)
       MapType(keyType, valueType, n)
 
     case JSortedObject(
@@ -267,17 +269,18 @@ object DataType {
    */
   def parseStructField(json: JValue): StructField = json match {
     case JSortedObject(
-    ("metadata", metadata: JObject),
+    ("metadata", JObject(metadataFields)),
     ("name", JString(name)),
     ("nullable", JBool(nullable)),
     ("type", dataType: JValue)) =>
-      val collationsMap = getCollationsMap(metadata)
+      val collationsMap = getCollationsMap(metadataFields)
+      val metadataWithoutCollations =
+        JObject(metadataFields.filterNot(_._1 == COLLATIONS_METADATA_KEY))
       StructField(
         name,
         parseDataType(dataType, Seq(name), collationsMap),
         nullable,
-        // TODO: remove collations field
-        Metadata.fromJObject(metadata))
+        Metadata.fromJObject(metadataWithoutCollations))
     // Support reading schema when 'metadata' is missing.
     case JSortedObject(
     ("name", JString(name)),
@@ -294,25 +297,33 @@ object DataType {
         s"Failed to convert the JSON string '${compact(render(other))}' to a field.")
   }
 
-  private def resolveType(json: JValue, path: Seq[String], map: Map[String, String]): DataType = {
-    map.get(path.mkString(".")) match {
+  /**
+   * Checks if the current field is in the collation map, and if it is it returns
+   * a StringType with the given collation. Otherwise, it further parses its type.
+   */
+  private def resolveType(
+      json: JValue,
+      path: Seq[String],
+      collationsMap: Map[String, String]): DataType = {
+    collationsMap.get(path.mkString(".")) match {
       case Some(collation) => stringTypeWithCollation(collation)
-      case _ => parseDataType(json, path, map)
+      case _ => parseDataType(json, path, collationsMap)
     }
   }
 
-  private def getCollationsMap(metadata: JObject): Map[String, String] = metadata match {
-    case JObject(fields) =>
-      val json = fields.find(_._1 == "collations").map(_._2)
-      json match {
-        case Some(JObject(fields)) =>
-          fields.map {
-            case (k, JString(v)) => k -> v
-            case _ => throw new IllegalArgumentException(
-              s"Failed to convert the JSON string '${compact(render(json))}' to a collation map.")
-          }.toMap
-        case _ => Map.empty
-      }
+  /**
+   * Returns a map of field path to collation name.
+   */
+  private def getCollationsMap(metadataFields: List[JField]): Map[String, String] = {
+    val collationsJson = metadataFields.find(_._1 == "COLLATIONS").map(_._2)
+    collationsJson match {
+      case Some(JObject(fields)) =>
+        fields.collect {
+          case (name, JString(collation)) => name -> collation
+        }.toMap
+
+      case _ => Map.empty
+    }
   }
 
   private def stringTypeWithCollation(collation: String): StringType = {

@@ -63,54 +63,37 @@ case class StructField(
   override def toString: String = s"StructField($name,$dataType,$nullable)"
 
   private[sql] def jsonValue: JValue = {
-    val base: JValue = ("name" -> name) ~
+    ("name" -> name) ~
       ("type" -> dataType.jsonValue) ~
-      ("nullable" -> nullable)
-
-    base merge getMetadataJson
+      ("nullable" -> nullable) ~
+      ("metadata" -> metadataJson)
   }
 
-  private def getMetadataJson: JValue = {
+  private def metadataJson: JValue = {
     metadata.jsonValue match {
       case JObject(fields) =>
-        val collationMetadataMap = getCollationMetadata
-        if (collationMetadataMap.isEmpty) {
-          return "metadata" -> metadata.jsonValue
+        if (collationMetadata.isEmpty) {
+          return metadata.jsonValue
         }
 
-        val collationMetadata = collationMetadataMap.map { case (key, value) => key -> JString(value) }
-        val xy = JObject(fields :+ ("collations" -> JObject(collationMetadata.toList)))
-        "metadata" -> xy
+        val collationFields = collationMetadata.map(kv => kv._1 -> JString(kv._2)).toList
+        JObject(fields :+ (DataType.COLLATIONS_METADATA_KEY -> JObject(collationFields)))
+
       case _ => metadata.jsonValue
     }
   }
 
-  private def getCollationMetadata: mutable.Map[String, String] = {
+  /** Map of field path to collation name. */
+  private lazy val collationMetadata: mutable.Map[String, String] = {
     val fieldToCollationMap = mutable.Map[String, String]()
 
-    def inner(dt: DataType, path: Seq[String]): Unit = dt match {
+    def visitRecursively(dt: DataType, path: Seq[String]): Unit = dt match {
       case at: ArrayType =>
-        val elementPath = path :+ "element"
-        if (isCollatedString(at.elementType)) {
-          fieldToCollationMap(elementPath.mkString(".")) = collationName(at.elementType)
-        } else {
-          inner(at.elementType, elementPath)
-        }
+        processDataType(at.elementType, path :+ "element")
 
       case mt: MapType =>
-        val keyPath = path :+ "key"
-        if (isCollatedString(mt.keyType)) {
-          fieldToCollationMap(keyPath.mkString(".")) = collationName(mt.keyType)
-        } else {
-          inner(mt.keyType, keyPath)
-        }
-
-        val valuePath = path :+ "value"
-        if (isCollatedString(mt.valueType)) {
-          fieldToCollationMap(valuePath.mkString(".")) = collationName(mt.valueType)
-        } else {
-          inner(mt.valueType, valuePath)
-        }
+        processDataType(mt.keyType, path :+ "key")
+        processDataType(mt.valueType, path :+ "value")
 
       case st: StringType if isCollatedString(st) =>
         fieldToCollationMap(path.mkString(".")) = collationName(st)
@@ -118,9 +101,16 @@ case class StructField(
       case _ =>
     }
 
-    inner(dataType, Seq(name))
+    def processDataType(dt: DataType, path: Seq[String]): Unit = {
+      if (isCollatedString(dt)) {
+        fieldToCollationMap(path.mkString(".")) = collationName(dt)
+      } else {
+        visitRecursively(dt, path)
+      }
+    }
+
+    visitRecursively(dataType, Seq(name))
     fieldToCollationMap
-//    JObject(fieldToCollationMap.map { case (key, value) => key -> JString(value) }.toList)
   }
 
   private def isCollatedString(dt: DataType): Boolean = dt match {
