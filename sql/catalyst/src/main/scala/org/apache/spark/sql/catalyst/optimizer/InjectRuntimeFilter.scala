@@ -139,42 +139,43 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
         // We assume other rules have already pushed predicates through join if possible.
         // So the predicate references won't pass on anymore.
         if (left.output.exists(_.semanticEquals(targetKey))) {
-          val extractLeft = if (canExtractLeft(joinType)) {
+          if (canExtractLeft(joinType)) {
             extract(left, AttributeSet.empty, hasHitFilter = false, hasHitSelectiveFilter = false,
               currentPlan = left, targetKey = targetKey)
           } else {
             None
+          }.orElse {
+            if (canExtractRight(joinType)) {
+              lkeys.zip(rkeys).find(_._1.semanticEquals(targetKey)).map(_._2)
+                .flatMap { newTargetKey =>
+                  extract(right, AttributeSet.empty,
+                    hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = right,
+                    targetKey = newTargetKey)
+                }
+            } else {
+              None
+            }
           }
-          val extractRight = if (canExtractRight(joinType)) {
-            lkeys.zip(rkeys).find(_._1.semanticEquals(targetKey)).map(_._2)
-              .flatMap { newTargetKey =>
-                extract(right, AttributeSet.empty,
-                  hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = right,
-                  targetKey = newTargetKey)
-              }
-          } else {
-            None
-          }
-          extractLeft.orElse(extractRight)
         } else if (right.output.exists(_.semanticEquals(targetKey))) {
-          val extractRight = if (canExtractRight(joinType)) {
+          if (canExtractRight(joinType)) {
             extract(right, AttributeSet.empty, hasHitFilter = false, hasHitSelectiveFilter = false,
               currentPlan = right, targetKey = targetKey)
           } else {
             None
+          }.orElse {
+            if (canExtractLeft(joinType)) {
+              // We can also extract from the left side if the join keys are transitive.
+              rkeys.zip(lkeys).find(_._1.semanticEquals(targetKey)).map(_._2)
+                .flatMap { newTargetKey =>
+                  extract(left, AttributeSet.empty,
+                    hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = left,
+                    targetKey = newTargetKey)
+                }
+            }
+            else {
+              None
+            }
           }
-          val extractLeft = if (canExtractLeft(joinType)) {
-            // We can also extract from the left side if the join keys are transitive.
-            rkeys.zip(lkeys).find(_._1.semanticEquals(targetKey)).map(_._2)
-              .flatMap { newTargetKey =>
-                extract(left, AttributeSet.empty,
-                  hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = left,
-                  targetKey = newTargetKey)
-              }
-          } else {
-            None
-          }
-          extractRight.orElse(extractLeft)
         } else {
           None
         }
