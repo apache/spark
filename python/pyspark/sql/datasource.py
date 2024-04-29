@@ -421,8 +421,10 @@ class DataSourceStreamReader(ABC):
 
     def partitions(self, start: dict, end: dict) -> Sequence[InputPartition]:
         """
-        Returns a list of InputPartition  given the start and end offsets. Each InputPartition
-        represents a data split that can be processed by one Spark task.
+        Returns a list of InputPartition given the start and end offsets. Each InputPartition
+        represents a data split that can be processed by one Spark task. This may be called with
+        an empty offset range when start == end, in that case the method should return
+        an empty sequence of InputPartition.
 
         Parameters
         ----------

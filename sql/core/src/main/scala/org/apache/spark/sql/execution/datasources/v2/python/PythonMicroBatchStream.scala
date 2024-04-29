@@ -84,6 +84,8 @@ class PythonMicroBatchStream(
   }
 
   override def setLatestSeenOffset(offset: Offset): Unit = {
+    // Call planPartition on python with an empty offset range to initialize the start offset
+    // for the prefetching of simple reader.
     runner.partitions(offset.json(), offset.json())
   }
 
