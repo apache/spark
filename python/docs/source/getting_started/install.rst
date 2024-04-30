@@ -30,7 +30,7 @@ and building from the source.
 Python Versions Supported
 -------------------------
 
-Python 3.8 and above.
+Python 3.9 and above.
 
 
 Using PyPI
@@ -124,7 +124,7 @@ the same session as pyspark (you can install in several steps too).
 
 .. code-block:: bash
 
-    conda install -c conda-forge pyspark  # can also add "python=3.8 some_package [etc.]" here
+    conda install -c conda-forge pyspark  # can also add "python=3.9 some_package [etc.]" here
 
 Note that `PySpark for conda <https://anaconda.org/conda-forge/pyspark>`_ is maintained
 separately by the community; while new versions generally get packaged quickly, the

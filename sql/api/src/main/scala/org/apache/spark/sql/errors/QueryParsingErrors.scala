@@ -36,6 +36,12 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0001", ctx)
   }
 
+  def parserStackOverflow(parserRuleContext: ParserRuleContext): Throwable = {
+    throw new ParseException(
+      errorClass = "FAILED_TO_PARSE_TOO_COMPLEX",
+      ctx = parserRuleContext)
+  }
+
   def insertOverwriteDirectoryUnsupportedError(): Throwable = {
     SparkException.internalError("INSERT OVERWRITE DIRECTORY is not supported.")
   }

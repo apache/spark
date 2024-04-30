@@ -25,7 +25,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.FUNCTION_NAME
+import org.apache.spark.internal.LogKeys.FUNCTION_NAME
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions._
@@ -821,7 +821,8 @@ object FunctionRegistry {
     expression[JsonObjectKeys]("json_object_keys"),
 
     // Variant
-    expression[ParseJson]("parse_json"),
+    expressionBuilder("parse_json", ParseJsonExpressionBuilder),
+    expressionBuilder("try_parse_json", TryParseJsonExpressionBuilder),
     expression[IsVariantNull]("is_variant_null"),
     expressionBuilder("variant_get", VariantGetExpressionBuilder),
     expressionBuilder("try_variant_get", TryVariantGetExpressionBuilder),

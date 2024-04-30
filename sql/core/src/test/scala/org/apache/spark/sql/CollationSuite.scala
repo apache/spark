@@ -1040,4 +1040,23 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       checkAnswer(dfNonBinary, dfBinary)
     }
   }
+
+  test("hll sketch aggregate should respect collation") {
+    case class HllSketchAggTestCase[R](c: String, result: R)
+    val testCases = Seq(
+      HllSketchAggTestCase("UTF8_BINARY", 4),
+      HllSketchAggTestCase("UTF8_BINARY_LCASE", 3),
+      HllSketchAggTestCase("UNICODE", 4),
+      HllSketchAggTestCase("UNICODE_CI", 3)
+    )
+    testCases.foreach(t => {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.c) {
+        val q = "SELECT hll_sketch_estimate(hll_sketch_agg(col)) FROM " +
+          "VALUES ('a'), ('A'), ('b'), ('b'), ('c') tab(col)"
+        val df = sql(q)
+        checkAnswer(df, Seq(Row(t.result)))
+      }
+    })
+  }
+
 }

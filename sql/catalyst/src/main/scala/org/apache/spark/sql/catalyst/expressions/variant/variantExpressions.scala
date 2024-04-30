@@ -42,34 +42,30 @@ import org.apache.spark.types.variant._
 import org.apache.spark.types.variant.VariantUtil.Type
 import org.apache.spark.unsafe.types._
 
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = "_FUNC_(jsonStr) - Parse a JSON string as an Variant value. Throw an exception when the string is not valid JSON value.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_('{"a":1,"b":0.8}');
-       {"a":1,"b":0.8}
-  """,
-  since = "4.0.0",
-  group = "variant_funcs"
-)
-// scalastyle:on line.size.limit
-case class ParseJson(child: Expression)
+
+/**
+ * The implementation for `parse_json` and `try_parse_json` expressions. Parse a JSON string as a
+ * Variant value.
+ * @param child The string value to parse as a variant.
+ * @param failOnError Controls whether the expression should throw an exception or return null if
+ *                    the string does not represent a valid JSON value.
+ */
+case class ParseJson(child: Expression, failOnError: Boolean = true)
   extends UnaryExpression with ExpectsInputTypes with RuntimeReplaceable {
 
   override lazy val replacement: Expression = StaticInvoke(
     VariantExpressionEvalUtils.getClass,
     VariantType,
     "parseJson",
-    Seq(child),
-    inputTypes,
+    Seq(child, Literal(failOnError, BooleanType)),
+    inputTypes :+ BooleanType,
     returnNullable = false)
 
   override def inputTypes: Seq[AbstractDataType] = StringType :: Nil
 
   override def dataType: DataType = VariantType
 
-  override def prettyName: String = "parse_json"
+  override def prettyName: String = if (failOnError) "parse_json" else "try_parse_json"
 
   override protected def withNewChildInternal(newChild: Expression): ParseJson =
     copy(child = newChild)
@@ -424,6 +420,47 @@ case object VariantGet {
     }
   }
 }
+
+abstract class ParseJsonExpressionBuilderBase(failOnError: Boolean) extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    val numArgs = expressions.length
+    if (numArgs == 1) {
+      ParseJson(expressions.head, failOnError)
+    } else {
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(1), numArgs)
+    }
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(jsonStr) - Parse a JSON string as a Variant value. Throw an exception when the string is not valid JSON value.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('{"a":1,"b":0.8}');
+       {"a":1,"b":0.8}
+  """,
+  since = "4.0.0",
+  group = "variant_funcs"
+)
+// scalastyle:on line.size.limit
+object ParseJsonExpressionBuilder extends ParseJsonExpressionBuilderBase(true)
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(jsonStr) - Parse a JSON string as a Variant value. Return NULL when the string is not valid JSON value.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('{"a":1,"b":0.8}');
+       {"a":1,"b":0.8}
+      > SELECT _FUNC_('{"a":1,');
+       NULL
+  """,
+  since = "4.0.0",
+  group = "variant_funcs"
+)
+// scalastyle:on line.size.limit
+object TryParseJsonExpressionBuilder extends ParseJsonExpressionBuilderBase(false)
 
 abstract class VariantGetExpressionBuilderBase(failOnError: Boolean) extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {

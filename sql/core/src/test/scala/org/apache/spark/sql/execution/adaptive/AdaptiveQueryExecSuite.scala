@@ -25,11 +25,14 @@ import org.scalatest.PrivateMethodTester
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
+import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
-import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
+import org.apache.spark.sql.{DataFrame, Dataset, QueryTest, Row, SparkSession, Strategy}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
-import org.apache.spark.sql.execution.{CollectLimitExec, ColumnarToRowExec, LocalTableScanExec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, SparkPlanInfo, UnionExec}
+import org.apache.spark.sql.execution.{CollectLimitExec, ColumnarToRowExec, LocalTableScanExec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, SparkPlanInfo, UnaryExecNode, UnionExec}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.columnar.{InMemoryTableScanExec, InMemoryTableScanLike}
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
@@ -893,6 +896,92 @@ class AdaptiveQueryExecSuite
         }
         assert(error.getErrorClass === "INVALID_BUCKET_FILE")
         assert(error.getMessage contains "Invalid bucket file")
+      }
+    }
+  }
+
+  test("SPARK-47148: AQE should avoid to materialize ShuffleQueryStage on the cancellation") {
+    def createJoinedDF(): DataFrame = {
+      val df = spark.range(5).toDF("col")
+      val df2 = spark.range(10).toDF("col").coalesce(2)
+      val df3 = spark.range(15).toDF("col").filter(Symbol("col") >= 2)
+      df.join(df2, Seq("col")).join(df3, Seq("col"))
+    }
+
+    try {
+      spark.experimental.extraStrategies = TestProblematicCoalesceStrategy :: Nil
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        val joinedDF = createJoinedDF()
+
+        val error = intercept[SparkException] {
+          joinedDF.collect()
+        }
+        assert(error.getMessage() contains "ProblematicCoalesce execution is failed")
+
+        val adaptivePlan = joinedDF.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+
+        // All QueryStages should be based on ShuffleQueryStageExec
+        val shuffleQueryStageExecs = collect(adaptivePlan) {
+          case sqse: ShuffleQueryStageExec => sqse
+        }
+        assert(shuffleQueryStageExecs.length == 3, s"Physical Plan should include " +
+          s"3 ShuffleQueryStages. Physical Plan: $adaptivePlan")
+        shuffleQueryStageExecs.foreach(sqse => assert(sqse.name.contains("ShuffleQueryStageExec-")))
+        // First ShuffleQueryStage is materialized so it needs to be canceled.
+        assert(shuffleQueryStageExecs(0).shuffle.isMaterializationStarted(),
+          "Materialization should be started.")
+        // Second ShuffleQueryStage materialization is failed so
+        // it is excluded from the cancellation due to earlyFailedStage.
+        assert(shuffleQueryStageExecs(1).shuffle.isMaterializationStarted(),
+          "Materialization should be started but it is failed.")
+        // Last ShuffleQueryStage is not materialized yet so it does not require
+        // to be canceled and it is just skipped from the cancellation.
+        assert(!shuffleQueryStageExecs(2).shuffle.isMaterializationStarted(),
+          "Materialization should not be started.")
+      }
+    } finally {
+      spark.experimental.extraStrategies = Nil
+    }
+  }
+
+  test("SPARK-47148: Check if BroadcastQueryStage materialization is started") {
+    def createJoinedDF(): DataFrame = {
+      spark.range(10).toDF("col1").createTempView("t1")
+      spark.range(5).coalesce(2).toDF("col2").createTempView("t2")
+      spark.range(15).toDF("col3").filter(Symbol("col3") >= 2).createTempView("t3")
+      sql("SELECT * FROM (SELECT /*+ BROADCAST(t2) */ * FROM t1 " +
+        "INNER JOIN t2 ON t1.col1 = t2.col2) t JOIN t3 ON t.col1 = t3.col3;")
+    }
+    withTempView("t1", "t2", "t3") {
+      try {
+        spark.experimental.extraStrategies = TestProblematicCoalesceStrategy :: Nil
+        withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+          val joinedDF = createJoinedDF()
+
+          val error = intercept[SparkException] {
+            joinedDF.collect()
+          }
+          assert(error.getMessage() contains "ProblematicCoalesce execution is failed")
+
+          val adaptivePlan =
+            joinedDF.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+
+          // All QueryStages should be based on BroadcastQueryStageExec
+          val broadcastQueryStageExecs = collect(adaptivePlan) {
+            case bqse: BroadcastQueryStageExec => bqse
+          }
+          assert(broadcastQueryStageExecs.length == 2, adaptivePlan)
+          broadcastQueryStageExecs.foreach { bqse =>
+            assert(bqse.name.contains("BroadcastQueryStageExec-"))
+            // Both BroadcastQueryStages are materialized at the beginning.
+            assert(bqse.broadcast.isMaterializationStarted(),
+              s"${bqse.name}' s materialization should be started.")
+          }
+        }
+      } finally {
+        spark.experimental.extraStrategies = Nil
       }
     }
   }
@@ -1876,8 +1965,8 @@ class AdaptiveQueryExecSuite
       .map(_.getMessage.getFormattedMessage)
       .filter(_.startsWith("Materialize query stage"))
       .toArray
-    assert(materializeLogs(0).startsWith("Materialize query stage BroadcastQueryStageExec"))
-    assert(materializeLogs(1).startsWith("Materialize query stage ShuffleQueryStageExec"))
+    assert(materializeLogs(0).startsWith("Materialize query stage: BroadcastQueryStageExec-1"))
+    assert(materializeLogs(1).startsWith("Materialize query stage: ShuffleQueryStageExec-0"))
   }
 
   test("SPARK-34899: Use origin plan if we can not coalesce shuffle partition") {
@@ -2898,5 +2987,28 @@ private case class SimpleShuffleSortCostEvaluator() extends CostEvaluator {
       case s: SortExec => s
     }.size
     SimpleCost(cost)
+  }
+}
+
+/**
+ * Helps to simulate ExchangeQueryStageExec materialization failure.
+ */
+private object TestProblematicCoalesceStrategy extends Strategy {
+  private case class TestProblematicCoalesceExec(numPartitions: Int, child: SparkPlan)
+    extends UnaryExecNode {
+    override protected def doExecute(): RDD[InternalRow] =
+      throw new SparkException("ProblematicCoalesce execution is failed")
+    override def output: Seq[Attribute] = child.output
+    override protected def withNewChildInternal(newChild: SparkPlan): TestProblematicCoalesceExec =
+      copy(child = newChild)
+  }
+
+  override def apply(plan: LogicalPlan): Seq[SparkPlan] = {
+    plan match {
+      case org.apache.spark.sql.catalyst.plans.logical.Repartition(
+      numPartitions, false, child) =>
+        TestProblematicCoalesceExec(numPartitions, planLater(child)) :: Nil
+      case _ => Nil
+    }
   }
 }

@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.{config, Logging, MDC}
-import org.apache.spark.internal.LogKey.LISTENER
+import org.apache.spark.internal.LogKeys.LISTENER
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.metrics.source.Source

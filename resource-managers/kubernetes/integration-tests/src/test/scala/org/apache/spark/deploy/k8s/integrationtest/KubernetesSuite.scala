@@ -589,7 +589,8 @@ class KubernetesSuite extends SparkFunSuite
     assert(pod.getMetadata.getLabels.get("label2") === "label2-value")
     assert(pod.getMetadata.getAnnotations.get("annotation1") === "annotation1-value")
     assert(pod.getMetadata.getAnnotations.get("annotation2") === "annotation2-value")
-    val appId = pod.getMetadata.getAnnotations.get("yunikorn.apache.org/app-id")
+    val appIdLabel = pod.getMetadata.getLabels.get("customAppIdLabelKey")
+    val appIdAnnotation = pod.getMetadata.getAnnotations.get("customAppIdAnnotation")
 
     val container = pod.getSpec.getContainers.get(0)
     val envVars = container
@@ -601,7 +602,8 @@ class KubernetesSuite extends SparkFunSuite
       .toMap
     assert(envVars("ENV1") === "VALUE1")
     assert(envVars("ENV2") === "VALUE2")
-    assert(appId === envVars(ENV_APPLICATION_ID))
+    assert(appIdLabel === envVars(ENV_APPLICATION_ID))
+    assert(appIdAnnotation === envVars(ENV_APPLICATION_ID))
   }
 
   private def deleteDriverPod(): Unit = {

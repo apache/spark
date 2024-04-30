@@ -26,7 +26,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.{JobExecutionStatus, SparkConf}
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.CLASS_NAME
+import org.apache.spark.internal.LogKeys.CLASS_NAME
 import org.apache.spark.internal.config.Status._
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.connector.metric.CustomMetric

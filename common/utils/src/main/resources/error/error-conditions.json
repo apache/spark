@@ -1318,6 +1318,13 @@
     ],
     "sqlState" : "2203G"
   },
+  "FAILED_TO_PARSE_TOO_COMPLEX" : {
+    "message" : [
+      "The statement, including potential SQL functions and referenced views, was too complex to parse.",
+      "To mitigate this error divide the statement into multiple, less complex chunks."
+    ],
+    "sqlState" : "54001"
+  },
   "FIELDS_ALREADY_EXISTS" : {
     "message" : [
       "Cannot <op> column, because <fieldNames> already exists in <struct>."
@@ -3797,6 +3804,12 @@
       "Query [id = <id>, runId = <runId>] terminated with exception: <message>"
     ],
     "sqlState" : "XXKST"
+  },
+  "STRUCT_ARRAY_LENGTH_MISMATCH" : {
+    "message" : [
+      "Input row doesn't have expected number of values required by the schema. <expected> fields are required while <actual> values are provided."
+    ],
+    "sqlState" : "2201E"
   },
   "SUM_OF_LIMIT_AND_OFFSET_EXCEEDS_MAX_INT" : {
     "message" : [

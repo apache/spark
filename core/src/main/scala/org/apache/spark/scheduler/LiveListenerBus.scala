@@ -31,7 +31,7 @@ import com.codahale.metrics.{Counter, MetricRegistry, Timer}
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{CLASS_NAME, MAX_SIZE}
+import org.apache.spark.internal.LogKeys.{CLASS_NAME, MAX_SIZE}
 import org.apache.spark.internal.config._
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.metrics.source.Source
