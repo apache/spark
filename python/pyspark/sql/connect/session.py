@@ -237,9 +237,9 @@ class SparkSession:
         def getOrCreate(self) -> "SparkSession":
             with SparkSession._lock:
                 session = SparkSession.getActiveSession()
-                if session is None:
+                if session is None or session.is_stopped:
                     session = SparkSession._default_session
-                    if session is None:
+                    if session is None or session.is_stopped:
                         session = self.create()
                 self._apply_options(session)
                 return session
@@ -402,6 +402,8 @@ class SparkSession:
         self,
         data: Union["pd.DataFrame", "np.ndarray", Iterable[Any]],
         schema: Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]] = None,
+        samplingRatio: Optional[float] = None,
+        verifySchema: Optional[bool] = None,
     ) -> "ParentDataFrame":
         assert data is not None
         if isinstance(data, DataFrame):
@@ -409,6 +411,12 @@ class SparkSession:
                 error_class="INVALID_TYPE",
                 message_parameters={"arg_name": "data", "arg_type": "DataFrame"},
             )
+
+        if samplingRatio is not None:
+            warnings.warn("'samplingRatio' is ignored. It is not supported with Spark Connect.")
+
+        if verifySchema is not None:
+            warnings.warn("'verifySchema' is ignored. It is not supported with Spark Connect.")
 
         _schema: Optional[Union[AtomicType, StructType]] = None
         _cols: Optional[List[str]] = None

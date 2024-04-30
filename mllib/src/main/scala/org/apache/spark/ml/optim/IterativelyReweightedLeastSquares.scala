@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.optim
 
-import org.apache.spark.internal.LogKey.{NUM_ITERATIONS, RELATIVE_TOLERANCE}
+import org.apache.spark.internal.LogKeys.{NUM_ITERATIONS, RELATIVE_TOLERANCE}
 import org.apache.spark.internal.MDC
 import org.apache.spark.ml.feature.{Instance, OffsetInstance}
 import org.apache.spark.ml.linalg._

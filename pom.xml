@@ -189,7 +189,7 @@
     <org.glassfish.jaxb.txw2.version>3.0.2</org.glassfish.jaxb.txw2.version>
     <snappy.version>1.1.10.5</snappy.version>
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
-    <commons-codec.version>1.16.1</commons-codec.version>
+    <commons-codec.version>1.17.0</commons-codec.version>
     <commons-compress.version>1.26.1</commons-compress.version>
     <commons-io.version>2.16.1</commons-io.version>
     <!-- org.apache.commons/commons-lang/-->
@@ -304,6 +304,7 @@
     <!-- SPARK-36796 for JDK-17 test-->
     <extraJavaTestArgs>
       -XX:+IgnoreUnrecognizedVMOptions
+      --add-modules=jdk.incubator.vector
       --add-opens=java.base/java.lang=ALL-UNNAMED
       --add-opens=java.base/java.lang.invoke=ALL-UNNAMED
       --add-opens=java.base/java.lang.reflect=ALL-UNNAMED
@@ -325,7 +326,7 @@
     <mysql.connector.version>8.3.0</mysql.connector.version>
     <postgresql.version>42.7.3</postgresql.version>
     <db2.jcc.version>11.5.9.0</db2.jcc.version>
-    <mssql.jdbc.version>9.4.1.jre8</mssql.jdbc.version>
+    <mssql.jdbc.version>12.6.1.jre11</mssql.jdbc.version>
     <ojdbc11.version>23.3.0.23.09</ojdbc11.version>
   </properties>
   <repositories>
@@ -800,7 +801,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.6-2</version>
+        <version>1.5.6-3</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>

@@ -18,7 +18,7 @@
 package org.apache.spark.ml.r
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{FEATURE_COLUMN, LABEL_COLUMN, NEW_FEATURE_COLUMN_NAME, NEW_LABEL_COLUMN_NAME}
+import org.apache.spark.internal.LogKeys.{FEATURE_COLUMN, LABEL_COLUMN, NEW_FEATURE_COLUMN_NAME, NEW_LABEL_COLUMN_NAME}
 import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NominalAttribute}
 import org.apache.spark.ml.feature.{RFormula, RFormulaModel}
 import org.apache.spark.ml.util.Identifiable

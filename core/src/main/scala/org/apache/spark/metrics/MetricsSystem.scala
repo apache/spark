@@ -27,7 +27,7 @@ import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.CLASS_NAME
+import org.apache.spark.internal.LogKeys.CLASS_NAME
 import org.apache.spark.internal.config._
 import org.apache.spark.metrics.sink.{MetricsServlet, PrometheusServlet, Sink}
 import org.apache.spark.metrics.source.{Source, StaticSources}

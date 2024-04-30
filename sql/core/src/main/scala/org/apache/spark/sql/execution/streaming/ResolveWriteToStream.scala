@@ -23,7 +23,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.internal.LogKey.{CONFIG, PATH}
+import org.apache.spark.internal.LogKeys.{CHECKPOINT_LOCATION, CHECKPOINT_ROOT, CONFIG, PATH}
 import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
@@ -134,7 +134,8 @@ object ResolveWriteToStream extends Rule[LogicalPlan] with SQLConfHelper {
       val checkpointDir = fileManager.createCheckpointDirectory()
       checkpointDir.toString
     }
-    logInfo(s"Checkpoint root $checkpointLocation resolved to $resolvedCheckpointRoot.")
+    logInfo(log"Checkpoint root ${MDC(CHECKPOINT_LOCATION, checkpointLocation)} " +
+      log"resolved to ${MDC(CHECKPOINT_ROOT, resolvedCheckpointRoot)}.")
     (resolvedCheckpointRoot, deleteCheckpointOnStop)
   }
 }

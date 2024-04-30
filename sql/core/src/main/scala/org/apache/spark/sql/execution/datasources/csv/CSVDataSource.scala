@@ -29,7 +29,7 @@ import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.spark.TaskContext
 import org.apache.spark.input.{PortableDataStream, StreamInputFormat}
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.PATH
+import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.rdd.{BinaryFileRDD, RDD}
 import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow

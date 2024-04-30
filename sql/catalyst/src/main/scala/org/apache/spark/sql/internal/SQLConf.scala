@@ -4149,8 +4149,17 @@ object SQLConf {
   val LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED =
     buildConf("spark.sql.legacy.mssqlserver.numericMapping.enabled")
       .internal()
-      .doc("When true, use legacy MsSqlServer SMALLINT and REAL type mapping.")
+      .doc("When true, use legacy MsSqlServer TINYINT, SMALLINT and REAL type mapping.")
       .version("2.4.5")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_MSSQLSERVER_DATETIMEOFFSET_MAPPING_ENABLED =
+    buildConf("spark.sql.legacy.mssqlserver.datetimeoffsetMapping.enabled")
+      .internal()
+      .doc("When true, DATETIMEOFFSET is mapped to StringType; otherwise, it is mapped to " +
+        "TimestampType.")
+      .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -4448,7 +4457,7 @@ object SQLConf {
         s"instead of the value of ${DEFAULT_DATA_SOURCE_NAME.key} as the table provider.")
       .version("3.1.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val LEGACY_CHAR_VARCHAR_AS_STRING =
     buildConf("spark.sql.legacy.charVarcharAsString")
@@ -5278,6 +5287,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyMsSqlServerNumericMappingEnabled: Boolean =
     getConf(LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED)
+
+  def legacyMsSqlServerDatetimeOffsetMappingEnabled: Boolean =
+    getConf(LEGACY_MSSQLSERVER_DATETIMEOFFSET_MAPPING_ENABLED)
 
   def legacyMySqlBitArrayMappingEnabled: Boolean =
     getConf(LEGACY_MYSQL_BIT_ARRAY_MAPPING_ENABLED)
