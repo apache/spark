@@ -24,11 +24,11 @@ import com.ibm.icu.util.ULocale;
 import org.apache.spark.unsafe.UTF8StringBuilder;
 import org.apache.spark.unsafe.types.UTF8String;
 
-import java.util.HashMap;
-import java.util.Map;
-
 import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
 import static org.apache.spark.unsafe.Platform.copyMemory;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Utility class for collation-aware UTF8String operations.
@@ -381,7 +381,7 @@ public class CollationAwareUTF8String {
     int trimByteIdx = 0;
     // Number of bytes in srcString.
     int numBytes = srcString.numBytes();
-    // Convert trimString to lowercase so it can be searched properly.
+    // Convert trimString to lowercase, so it can be searched properly.
     UTF8String lowercaseTrimString = trimString.toLowerCase();
 
     while (searchIdx < numBytes) {
@@ -427,9 +427,9 @@ public class CollationAwareUTF8String {
     int numBytes = srcString.numBytes();
     // Array of character length for the srcString.
     int[] stringCharLen = new int[numBytes];
-    // Array of the first byte position for each character in the srcString
+    // Array of the first byte position for each character in the srcString.
     int[] stringCharPos = new int[numBytes];
-    // Non-final value for trim string to use.
+    // Convert trimString to lowercase, so it can be searched properly.
     UTF8String lowercaseTrimString = trimString.toLowerCase();
 
     // Build the position and length array.
