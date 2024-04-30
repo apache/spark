@@ -239,6 +239,13 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     check(expectedResult4, smallObject, smallMetadata)
   }
 
+  test("is_variant_null invalid input") {
+    checkErrorInExpression[SparkRuntimeException](
+      IsVariantNull(Literal(new VariantVal(Array(), Array(1, 2, 3)))),
+      "MALFORMED_VARIANT"
+    )
+  }
+
   private def parseJson(input: String): VariantVal =
     VariantExpressionEvalUtils.parseJson(UTF8String.fromString(input))
 
