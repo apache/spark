@@ -205,7 +205,7 @@ object ScalarUserDefinedFunction {
   }
 }
 
-case class UserDefinedAggregator private[sql] (
+case class UserDefinedAggregationFunction private[sql] (
     serializedUdafPacket: Array[Byte],
     inputType: proto.DataType,
     name: Option[String],
@@ -234,11 +234,11 @@ case class UserDefinedAggregator private[sql] (
     name.foreach(udfBuilder.setFunctionName)
   }
 
-  override def withName(name: String): UserDefinedAggregator = copy(name = Option(name))
+  override def withName(name: String): UserDefinedAggregationFunction = copy(name = Option(name))
 
-  override def asNonNullable(): UserDefinedAggregator = copy(nullable = false)
+  override def asNonNullable(): UserDefinedAggregationFunction = copy(nullable = false)
 
-  override def asNondeterministic(): UserDefinedAggregator = copy(deterministic = false)
+  override def asNondeterministic(): UserDefinedAggregationFunction = copy(deterministic = false)
 
   def toProto: proto.CommonInlineUserDefinedFunction = {
     val builder = proto.CommonInlineUserDefinedFunction.newBuilder()
@@ -251,7 +251,7 @@ case class UserDefinedAggregator private[sql] (
   }
 }
 
-object UserDefinedAggregator {
+object UserDefinedAggregationFunction {
   private val LAMBDA_DESERIALIZATION_ERR_MSG: String =
     "cannot assign instance of java.lang.invoke.SerializedLambda to field"
 
@@ -273,14 +273,14 @@ object UserDefinedAggregator {
 
   private[sql] def apply[IN, BUF, OUT](
       aggregator: Aggregator[IN, BUF, OUT],
-      inputEncoder: AgnosticEncoder[IN]): UserDefinedAggregator = {
+      inputEncoder: AgnosticEncoder[IN]): UserDefinedAggregationFunction = {
     SparkConnectClosureCleaner.clean(aggregator)
     val udafPacketBytes =
       SparkSerDeUtils.serialize(new UdafPacket(
         aggregator = aggregator,
         inputEncoder = inputEncoder))
     checkDeserializable(udafPacketBytes)
-    UserDefinedAggregator(
+    UserDefinedAggregationFunction(
       serializedUdafPacket = udafPacketBytes,
       inputType = DataTypeProtoConverter.toConnectProtoType(inputEncoder.dataType),
       name = None,

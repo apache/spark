@@ -22,7 +22,7 @@ import scala.reflect.runtime.universe.{typeTag, TypeTag}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.connect.common.UdfUtils
-import org.apache.spark.sql.expressions.{ScalarUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
+import org.apache.spark.sql.expressions.{ScalarUserDefinedFunction, UserDefinedAggregationFunction, UserDefinedFunction}
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -65,7 +65,7 @@ class UDFRegistration(session: SparkSession) extends Logging {
       case scalarUdf: ScalarUserDefinedFunction =>
         session.registerUdf(scalarUdf.toProto)
         scalarUdf
-      case scalaUDAF: UserDefinedAggregator =>
+      case scalaUDAF: UserDefinedAggregationFunction =>
         session.registerUdf(scalaUDAF.toProto)
         scalaUDAF
       case other =>

@@ -343,14 +343,17 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.catalyst.util.SparkCollectionUtils$"),
 
       // New public APIs added in the client
-      // ScalarUserDefinedFunction
+      // UserDefinedFunction
       ProblemFilters
         .exclude[MissingClassProblem](
           "org.apache.spark.sql.expressions.ScalarUserDefinedFunction"),
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.expressions.ScalarUserDefinedFunction$"),
-
-      // New private API added in the client
+      ProblemFilters
+        .exclude[MissingClassProblem](
+          "org.apache.spark.sql.expressions.UserDefinedAggregationFunction"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.expressions.UserDefinedAggregationFunction$"),
       ProblemFilters
         .exclude[MissingClassProblem](
           "org.apache.spark.sql.expressions.SparkConnectClosureCleaner"),
