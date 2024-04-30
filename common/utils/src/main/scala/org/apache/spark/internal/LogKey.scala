@@ -109,6 +109,7 @@ object LogKeys {
   case object CSV_SCHEMA_FIELD_NAMES extends LogKey
   case object CSV_SOURCE extends LogKey
   case object CURRENT_BATCH_ID extends LogKey
+  case object CURRENT_FILE extends LogKey
   case object CURRENT_PATH extends LogKey
   case object DATA extends LogKey
   case object DATABASE_NAME extends LogKey
@@ -125,7 +126,7 @@ object LogKeys {
   case object DELEGATE extends LogKey
   case object DELTA extends LogKey
   case object DESCRIPTION extends LogKey
-  case object DESIRED_PARTITIONS_SIZE extends LogKey
+  case object DESIRED_NUM_PARTITIONS extends LogKey
   case object DFS_FILE extends LogKey
   case object DIFF_DELTA extends LogKey
   case object DIVISIBLE_CLUSTER_INDICES_SIZE extends LogKey
@@ -259,8 +260,8 @@ object LogKeys {
   case object MAX_JVM_METHOD_PARAMS_LENGTH extends LogKey
   case object MAX_MEMORY_SIZE extends LogKey
   case object MAX_METHOD_CODE_SIZE extends LogKey
+  case object MAX_NUM_PARTITIONS extends LogKey
   case object MAX_NUM_ROWS_IN_MEMORY_BUFFER extends LogKey
-  case object MAX_PARTITIONS_SIZE extends LogKey
   case object MAX_SIZE extends LogKey
   case object MAX_SPLIT_BYTES extends LogKey
   case object MAX_TABLE_PARTITION_METADATA_SIZE extends LogKey
@@ -303,10 +304,11 @@ object LogKeys {
   case object NUM_LEFT_PARTITION_VALUES extends LogKey
   case object NUM_LOADED_ENTRIES extends LogKey
   case object NUM_LOCAL_FREQUENT_PATTERN extends LogKey
-  case object NUM_PARTITION extends LogKey
+  case object NUM_PARTITIONS extends LogKey
   case object NUM_PARTITION_VALUES extends LogKey
   case object NUM_POINT extends LogKey
   case object NUM_PREFIXES extends LogKey
+  case object NUM_PRUNED extends LogKey
   case object NUM_RIGHT_PARTITION_VALUES extends LogKey
   case object NUM_SEQUENCES extends LogKey
   case object NUM_VERSIONS_RETAIN extends LogKey
@@ -326,7 +328,6 @@ object LogKeys {
   case object OUTPUT extends LogKey
   case object OVERHEAD_MEMORY_SIZE extends LogKey
   case object PARSE_MODE extends LogKey
-  case object PARTITIONED_FILE extends LogKey
   case object PARTITIONED_FILE_READER extends LogKey
   case object PARTITION_ID extends LogKey
   case object PARTITION_SPECIFICATION extends LogKey

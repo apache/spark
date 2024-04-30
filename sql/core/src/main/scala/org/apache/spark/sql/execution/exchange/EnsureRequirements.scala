@@ -424,8 +424,8 @@ case class EnsureRequirements(
             .mergePartitions(leftSpec.partitioning, rightSpec.partitioning, partitionExprs)
             .map(v => (v, 1))
 
-        logInfo(
-          log"After merging, there are ${MDC(LogKeys.COUNT, mergedPartValues.size)} partitions")
+        logInfo(log"After merging, there are " +
+          log"${MDC(LogKeys.NUM_PARTITIONS, mergedPartValues.size)} partitions")
 
         var replicateLeftSide = false
         var replicateRightSide = false
@@ -510,7 +510,7 @@ case class EnsureRequirements(
               }
 
               logInfo(log"After applying partially clustered distribution, there are " +
-                log"${MDC(LogKeys.COUNT, mergedPartValues.map(_._2).sum)} partitions.")
+                log"${MDC(LogKeys.NUM_PARTITIONS, mergedPartValues.map(_._2).sum)} partitions.")
               applyPartialClustering = true
             }
           }

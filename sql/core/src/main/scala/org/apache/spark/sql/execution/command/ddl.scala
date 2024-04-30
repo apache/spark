@@ -716,15 +716,16 @@ case class RepairTableCommand(
           evalPool.shutdown()
         }
       val total = partitionSpecsAndLocs.length
-      logInfo(log"Found ${MDC(LogKeys.TOTAL, total)} partitions in ${MDC(LogKeys.PATH, root)}")
+      logInfo(log"Found ${MDC(LogKeys.NUM_PARTITIONS, total)} partitions " +
+        log"in ${MDC(LogKeys.PATH, root)}")
 
       val partitionStats = if (spark.sessionState.conf.gatherFastStats) {
         gatherPartitionStats(spark, partitionSpecsAndLocs, fs, pathFilter, threshold)
       } else {
         Map.empty[Path, PartitionStatistics]
       }
-      logInfo(log"Finished to gather the fast stats for all ${MDC(LogKeys.TOTAL, total)} " +
-        log"partitions.")
+      logInfo(log"Finished to gather the fast stats for all " +
+        log"${MDC(LogKeys.NUM_PARTITIONS, total)} partitions.")
 
       addPartitions(spark, table, partitionSpecsAndLocs, partitionStats)
       total
