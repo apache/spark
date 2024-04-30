@@ -35,7 +35,7 @@ if should_test_connect:
         DefaultPolicy,
     )
     from pyspark.sql.connect.client.reattach import ExecutePlanResponseReattachableIterator
-    from pyspark.errors import RetriesExceeded
+    from pyspark.errors import PySparkRuntimeError, RetriesExceeded
     import pyspark.sql.connect.proto as proto
 
     class TestPolicy(DefaultPolicy):
@@ -56,13 +56,13 @@ if should_test_connect:
                 self,
                 msg,
                 code=grpc.StatusCode.INTERNAL,
-                grpc_trailing_status: Union[status_pb2.Status, None] = None,
+                trailing_status: Union[status_pb2.Status, None] = None,
         ):
             self.msg = msg
             self._code = code
             self._trailer: dict[str, Any] = {}
-            if grpc_trailing_status is not None:
-                self._trailer["grpc-status-details-bin"] = grpc_trailing_status.SerializeToString()
+            if trailing_status is not None:
+                self._trailer["grpc-status-details-bin"] = trailing_status.SerializeToString()
 
         def code(self):
             return self._code
@@ -359,31 +359,62 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
     ])
     def test_not_found_recovers(self, _, error_msg: str):
         # Assert that the client recovers from session or operation not found error
-        # if no partial response has been received so far.
+        # if no partial response was never received.
 
         def not_found():
             raise TestException(
                 error_msg,
                 grpc.StatusCode.UNAVAILABLE,
-                grpc_trailing_status=status_pb2.Status(code=14, message=error_msg, details=""),
+                trailing_status=status_pb2.Status(code=14, message=error_msg, details=""),
             )
 
         stub = self._stub_with(
             [not_found, self.finished]
         )
-        ite = ExecutePlanResponseReattachableIterator(
-            self.request,
-            stub,
-            self.retrying,
-            []
-        )
+        ite = ExecutePlanResponseReattachableIterator(self.request, stub, self.retrying, [])
 
-        for b in ite:
+        for _ in ite:
             pass
 
         def checks():
             self.assertEquals(2, stub.execute_calls)
             self.assertEquals(0, stub.attach_calls)
+            self.assertEquals(0, stub.release_calls)
+            self.assertEquals(0, stub.release_until_calls)
+
+        eventually(timeout=1, catch_assertions=True)(checks)()
+
+    @parameterized.expand([
+        ("session", "INVALID_HANDLE.SESSION_NOT_FOUND"),
+        ("operation", "INVALID_HANDLE.OPERATION_NOT_FOUND")
+    ])
+    def test_not_found_fails(self, _, error_msg: str):
+        # Assert that the client fails from session or operation not found error
+        # if a partial response was previously received.
+
+        def not_found():
+            raise TestException(
+                error_msg,
+                grpc.StatusCode.UNAVAILABLE,
+                trailing_status=status_pb2.Status(code=14, message=error_msg, details=""),
+            )
+
+        stub = self._stub_with(
+            [self.response], [not_found]
+        )
+
+        with self.assertRaises(PySparkRuntimeError) as e:
+            ite = ExecutePlanResponseReattachableIterator(self.request, stub, self.retrying, [])
+            for _ in ite:
+                pass
+
+        self.assertTrue("RESPONSE_ALREADY_RECEIVED" in e.exception.getMessage())
+
+        def checks():
+            self.assertEquals(1, stub.execute_calls)
+            self.assertEquals(1, stub.attach_calls)
+            self.assertEquals(0, stub.release_calls)
+            self.assertEquals(0, stub.release_until_calls)
 
         eventually(timeout=1, catch_assertions=True)(checks)()
 
