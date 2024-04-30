@@ -33,6 +33,8 @@ jobs:
     steps:
       - name: Checkout Spark repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Cache SBT and Maven
         uses: actions/cache@v4
         with:
