@@ -661,6 +661,40 @@ class CollationStringExpressionsSuite
     assert(sql(query).schema.fields.head.dataType.sameType(StringType(0)))
   }
 
+  test("Support Locate string expression with collation") {
+    case class StringLocateTestCase[R](substring: String, string: String, start: Integer,
+        c: String, result: R)
+    val testCases = Seq(
+      // scalastyle:off
+      StringLocateTestCase("aa", "aaads", 0, "UTF8_BINARY", 0),
+      StringLocateTestCase("aa", "Aaads", 0, "UTF8_BINARY_LCASE", 0),
+      StringLocateTestCase("界x", "test大千世界X大千世界", 1, "UTF8_BINARY_LCASE", 8),
+      StringLocateTestCase("aBc", "abcabc", 4, "UTF8_BINARY_LCASE", 4),
+      StringLocateTestCase("aa", "Aaads", 0, "UNICODE", 0),
+      StringLocateTestCase("abC", "abCabC", 2, "UNICODE", 4),
+      StringLocateTestCase("aa", "Aaads", 0, "UNICODE_CI", 0),
+      StringLocateTestCase("界x", "test大千世界X大千世界", 1, "UNICODE_CI", 8)
+      // scalastyle:on
+    )
+    testCases.foreach(t => {
+      val query = s"SELECT locate(collate('${t.substring}','${t.c}')," +
+        s"collate('${t.string}','${t.c}'),${t.start})"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(IntegerType))
+      // Implicit casting
+      checkAnswer(sql(s"SELECT locate(collate('${t.substring}','${t.c}')," +
+        s"'${t.string}',${t.start})"), Row(t.result))
+      checkAnswer(sql(s"SELECT locate('${t.substring}',collate('${t.string}'," +
+        s"'${t.c}'),${t.start})"), Row(t.result))
+    })
+    // Collation mismatch
+    val collationMismatch = intercept[AnalysisException] {
+      sql("SELECT locate(collate('aBc', 'UTF8_BINARY'),collate('abcabc', 'UTF8_BINARY_LCASE'),4)")
+    }
+    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+  }
+
   // TODO: Add more tests for other string expressions
 
 }

@@ -232,6 +232,8 @@ class StreamingListenerTestsMixin:
             while q.lastProgress is None or q.lastProgress["batchId"] == 0:
                 q.awaitTermination(0.5)
 
+            time.sleep(5)
+
             self.assertTrue(error_listener.num_rows > 0)
             self.assertTrue(error_listener.num_error_rows > 0)
 

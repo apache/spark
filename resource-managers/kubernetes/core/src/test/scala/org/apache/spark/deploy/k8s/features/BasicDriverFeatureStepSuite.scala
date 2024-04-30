@@ -35,11 +35,13 @@ import org.apache.spark.util.Utils
 
 class BasicDriverFeatureStepSuite extends SparkFunSuite {
 
-  private val CUSTOM_DRIVER_LABELS = Map("labelkey" -> "labelvalue")
+  private val CUSTOM_DRIVER_LABELS = Map(
+    "labelkey" -> "labelvalue",
+    "customAppIdLabelKey" -> "{{APP_ID}}")
   private val CONTAINER_IMAGE_PULL_POLICY = "IfNotPresent"
   private val DRIVER_ANNOTATIONS = Map(
     "customAnnotation" -> "customAnnotationValue",
-    "yunikorn.apache.org/app-id" -> "{{APPID}}")
+    "customAppIdAnnotation" -> "{{APP_ID}}")
   private val DRIVER_ENVS = Map(
     "customDriverEnv1" -> "customDriverEnv1Value",
     "customDriverEnv2" -> "customDriverEnv2Value")
@@ -121,10 +123,11 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     assert(driverPodMetadata.getName === "spark-driver-pod")
 
     // Check custom and preset labels are as expected
+    val labels = driverPodMetadata.getLabels
     CUSTOM_DRIVER_LABELS.foreach { case (k, v) =>
-      assert(driverPodMetadata.getLabels.get(k) === v)
+      assert(labels.get(k) === Utils.substituteAppNExecIds(v, KubernetesTestConf.APP_ID, ""))
     }
-    assert(driverPodMetadata.getLabels === kubernetesConf.labels.asJava)
+    assert(labels === kubernetesConf.labels.asJava)
 
     val annotations = driverPodMetadata.getAnnotations.asScala
     DRIVER_ANNOTATIONS.foreach { case (k, v) =>

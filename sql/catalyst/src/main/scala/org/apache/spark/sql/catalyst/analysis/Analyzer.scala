@@ -325,6 +325,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       RewriteDeleteFromTable ::
       RewriteUpdateTable ::
       RewriteMergeIntoTable ::
+      MoveParameterizedQueriesDown ::
       BindParameters ::
       typeCoercionRules() ++
       Seq(

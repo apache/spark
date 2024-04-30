@@ -49,6 +49,7 @@ import pyarrow as pa
 import json
 import warnings
 from collections.abc import Iterable
+from functools import cached_property
 
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
@@ -1797,7 +1798,7 @@ class DataFrame(ParentDataFrame):
         assert result is not None
         return result
 
-    @property
+    @cached_property
     def isStreaming(self) -> bool:
         query = self._plan.to_proto(self._session.client)
         result = self._session.client._analyze(method="is_streaming", plan=query).is_streaming

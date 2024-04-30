@@ -45,6 +45,10 @@ object CollationTypeCasts extends TypeCoercionRule {
           caseWhenExpr.elseValue.map(e => castStringType(e, outputStringType).getOrElse(e))
         CaseWhen(newBranches, newElseValue)
 
+    case stringLocate: StringLocate =>
+      stringLocate.withNewChildren(collateToSingleType(
+        Seq(stringLocate.first, stringLocate.second)) :+ stringLocate.third)
+
     case eltExpr: Elt =>
       eltExpr.withNewChildren(eltExpr.children.head +: collateToSingleType(eltExpr.children.tail))
 
