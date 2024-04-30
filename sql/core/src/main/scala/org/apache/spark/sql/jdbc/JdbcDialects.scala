@@ -20,7 +20,7 @@ package org.apache.spark.sql.jdbc
 import java.sql.{Connection, Date, Driver, ResultSetMetaData, Statement, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime}
 import java.util
-import java.util.ServiceLoader
+import java.util.{Calendar, ServiceLoader}
 import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.ArrayBuilder
@@ -214,6 +214,16 @@ abstract class JdbcDialect extends Serializable with Logging {
     val micros = localDateTimeToMicros(ldt)
     toJavaTimestampNoRebase(micros)
   }
+
+  /**
+   * Returns a calendar that will be used when reading (rs.getTimestamp) or
+   * writing to the database (setTimestamp). This is referring to the code in
+   * [[JdbcUtils]]. This is needed for some data sources that handle timestamps
+   * differently than Spark.
+   * @return
+   */
+  @Since("3.5.0")
+  def getDatabaseCalendar: Option[Calendar] = None
 
   /**
    * Returns a factory for creating connections to the given JDBC URL.
