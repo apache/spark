@@ -38,44 +38,6 @@ import org.apache.spark.util.ArrayImplicits._
 class VariantSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
-  val jsonString = """
-  {
-    "arr": [5, 10, 15],
-    "numeric": 5,
-    "decimal": 4.4,
-    "str": "test",
-    "struct": {
-      "child": 10
-    },
-    "ts": "2024-03-01",
-    "arrayOfStructs": [{"b": "str"}, {"b": null}, {"diffKey": null}, {"diffKey": 5}]
-  }
-  """.filterNot(_.isWhitespace)
-
-  // TODO: Make more complex test caes. i.e. complex variants and nested types with variants in
-  // them.
-  test("write file") {
-    withTempDir { dir =>
-      val path = "/Users/r.chen/Documents/spark/spark-variant-parquet"
-      // val path = "/home/r.chen/spark/spark-variant-parquet"
-      println(s"PATH: ${path}")
-      // val query = scala.io.Source.fromFile(
-        // "sql/core/src/test/resources/test-data/variant/variant-table.sql").mkString
-      import scala.io.Source
-      val sqlPath = Thread.currentThread().getContextClassLoader
-        .getResource("test-data/variant/variant-table.sql").getPath.toString
-      val query = Source.fromFile(sqlPath).mkString
-      println(query)
-      val df = spark.sql(query)
-
-      df
-        .repartition(2)
-        .write.mode("overwrite").format("parquet").partitionBy("partitionKey").save(path)
-
-      Thread.sleep(1000000)
-    }
-  }
-
   test("basic tests") {
     def verifyResult(df: DataFrame): Unit = {
       val result = df.collect()
