@@ -2165,6 +2165,7 @@ def _test() -> None:
     import os
     import sys
     import doctest
+    from pyspark.util import is_remote_only
     from pyspark.sql import SparkSession as PySparkSession
     import pyspark.sql.dataframe
 
@@ -2173,6 +2174,12 @@ def _test() -> None:
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.sql.dataframe.__dict__.copy()
+
+    if not is_remote_only():
+        del pyspark.sql.dataframe.DataFrame.toJSON.__doc__
+        del pyspark.sql.dataframe.DataFrame.rdd.__doc__
+        del pyspark.sql.dataframe.DataFrame.checkpoint.__doc__
+        del pyspark.sql.dataframe.DataFrame.localCheckpoint.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.dataframe tests")

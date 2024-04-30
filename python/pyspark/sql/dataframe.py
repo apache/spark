@@ -239,7 +239,6 @@ class DataFrame:
 
     if not is_remote_only():
 
-        @dispatch_df_method
         def toJSON(self, use_unicode: bool = True) -> "RDD[str]":
             """Converts a :class:`DataFrame` into a :class:`RDD` of string.
 
@@ -978,12 +977,12 @@ class DataFrame:
 
     if not is_remote_only():
 
-        @dispatch_df_method
         def checkpoint(self, eager: bool = True) -> "DataFrame":
-            """Returns a checkpointed version of this :class:`DataFrame`. Checkpointing can be used to
-            truncate the logical plan of this :class:`DataFrame`, which is especially useful in
-            iterative algorithms where the plan may grow exponentially. It will be saved to files
-            inside the checkpoint directory set with :meth:`SparkContext.setCheckpointDir`.
+            """Returns a checkpointed version of this :class:`DataFrame`. Checkpointing can be
+            used to truncate the logical plan of this :class:`DataFrame`, which is especially
+            useful in iterative algorithms where the plan may grow exponentially. It will be
+            saved to files inside the checkpoint directory set with
+            :meth:`SparkContext.setCheckpointDir`.
 
             .. versionadded:: 2.1.0
 
@@ -1015,12 +1014,12 @@ class DataFrame:
 
     if not is_remote_only():
 
-        @dispatch_df_method
         def localCheckpoint(self, eager: bool = True) -> "DataFrame":
-            """Returns a locally checkpointed version of this :class:`DataFrame`. Checkpointing can be
-            used to truncate the logical plan of this :class:`DataFrame`, which is especially useful in
-            iterative algorithms where the plan may grow exponentially. Local checkpoints are
-            stored in the executors using the caching subsystem and therefore they are not reliable.
+            """Returns a locally checkpointed version of this :class:`DataFrame`. Checkpointing can
+            be used to truncate the logical plan of this :class:`DataFrame`, which is especially
+            useful in iterative algorithms where the plan may grow exponentially. Local checkpoints
+            are stored in the executors using the caching subsystem and therefore they are not
+            reliable.
 
             .. versionadded:: 2.3.0
 
