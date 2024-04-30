@@ -25,6 +25,7 @@ import java.util.function.ToLongFunction;
 import com.ibm.icu.text.RuleBasedCollator;
 import com.ibm.icu.text.StringSearch;
 import com.ibm.icu.util.ULocale;
+import com.ibm.icu.text.CollationKey;
 import com.ibm.icu.text.Collator;
 
 import org.apache.spark.SparkException;
@@ -278,7 +279,7 @@ public final class CollationFactory {
     } else if (collation.supportsLowercaseEquality) {
       return input.toLowerCase();
     } else {
-      byte[] collationKey = collation.collator.getCollationKey(input.toString());
+      CollationKey collationKey = collation.collator.getCollationKey(input.toString());
       return UTF8String.fromBytes(collationKey.toByteArray());
     }
   }
