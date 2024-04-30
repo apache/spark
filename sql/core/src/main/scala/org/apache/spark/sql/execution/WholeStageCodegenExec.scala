@@ -24,7 +24,7 @@ import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import org.apache.spark.{broadcast, SparkException, SparkUnsupportedOperationException}
-import org.apache.spark.internal.LogKeys.{CODEGEN_STAGE_ID, ERROR, TREE_NODE}
+import org.apache.spark.internal.LogKeys.{CODEGEN_STAGE_ID, CONFIG, ERROR, HUGE_METHOD_LIMIT, MAX_METHOD_CODE_SIZE, TREE_NODE}
 import org.apache.spark.internal.MDC
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -739,11 +739,13 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
 
     // Check if compiled code has a too large function
     if (compiledCodeStats.maxMethodCodeSize > conf.hugeMethodLimit) {
-      logInfo(s"Found too long generated codes and JIT optimization might not work: " +
-        s"the bytecode size (${compiledCodeStats.maxMethodCodeSize}) is above the limit " +
-        s"${conf.hugeMethodLimit}, and the whole-stage codegen was disabled " +
-        s"for this plan (id=$codegenStageId). To avoid this, you can raise the limit " +
-        s"`${SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key}`:\n$treeString")
+      logInfo(log"Found too long generated codes and JIT optimization might not work: " +
+        log"the bytecode size (${MDC(MAX_METHOD_CODE_SIZE, compiledCodeStats.maxMethodCodeSize)})" +
+        log" is above the limit ${MDC(HUGE_METHOD_LIMIT, conf.hugeMethodLimit)}, " +
+        log"and the whole-stage codegen was disabled for this plan " +
+        log"(id=${MDC(CODEGEN_STAGE_ID, codegenStageId)}). To avoid this, you can raise the limit" +
+        log" `${MDC(CONFIG, SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key)}`:\n" +
+        log"${MDC(TREE_NODE, treeString)}")
       return child.execute()
     }
 

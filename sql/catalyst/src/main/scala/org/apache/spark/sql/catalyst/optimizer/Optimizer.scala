@@ -20,8 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.collection.mutable
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.LogKeys._
-import org.apache.spark.internal.MDC
+import org.apache.spark.internal.{LogKeys, MDC}
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
@@ -446,7 +445,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     val excludedRules = excludedRulesConf.filter { ruleName =>
       val nonExcludable = nonExcludableRules.contains(ruleName)
       if (nonExcludable) {
-        logWarning(log"Optimization rule '${MDC(RULE_NAME, ruleName)}' " +
+        logWarning(log"Optimization rule '${MDC(LogKeys.RULE_NAME, ruleName)}' " +
           log"was not excluded from the optimizer because this rule is a non-excludable rule.")
       }
       !nonExcludable
@@ -458,7 +457,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         val filteredRules = batch.rules.filter { rule =>
           val exclude = excludedRules.contains(rule.ruleName)
           if (exclude) {
-            logInfo(log"Optimization rule '${MDC(RULE_NAME, rule.ruleName)}' " +
+            logInfo(log"Optimization rule '${MDC(LogKeys.RULE_NAME, rule.ruleName)}' " +
               log"is excluded from the optimizer.")
           }
           !exclude
@@ -468,7 +467,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         } else if (filteredRules.nonEmpty) {
           Some(Batch(batch.name, batch.strategy, filteredRules: _*))
         } else {
-          logInfo(log"Optimization batch '${MDC(RULE_BATCH_NAME, batch.name)}' " +
+          logInfo(log"Optimization batch '${MDC(LogKeys.BATCH_NAME, batch.name)}' " +
             log"is excluded from the optimizer as all enclosed rules have been excluded.")
           None
         }

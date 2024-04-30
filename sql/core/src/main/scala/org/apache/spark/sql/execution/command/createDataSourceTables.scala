@@ -233,7 +233,7 @@ case class CreateDataSourceTableAsSelectCommand(
     } catch {
       case ex: AnalysisException =>
         logError(log"Failed to write to table " +
-          log"${MDC(IDENTIFIER, table.identifier.unquotedString)}", ex)
+          log"${MDC(TABLE_NAME, table.identifier.unquotedString)}", ex)
         throw ex
     }
   }

@@ -75,11 +75,11 @@ class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
       def message(): MessageWithContext = {
         if (!oldPlan.fastEquals(newPlan)) {
           log"""
-             |=== Result of Batch ${MDC(RULE_BATCH_NAME, batchName)} ===
+             |=== Result of Batch ${MDC(BATCH_NAME, batchName)} ===
              |${MDC(QUERY_PLAN, sideBySide(oldPlan.treeString, newPlan.treeString).mkString("\n"))}
           """.stripMargin
         } else {
-          log"Batch ${MDC(RULE_BATCH_NAME, batchName)} has no effect."
+          log"Batch ${MDC(BATCH_NAME, batchName)} has no effect."
         }
       }
 
@@ -263,7 +263,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
                 log"to a larger value."
             }
             val log = log"Max iterations (${MDC(NUM_ITERATIONS, iteration - 1)}) " +
-              log"reached for batch ${MDC(RULE_BATCH_NAME, batch.name)}" +
+              log"reached for batch ${MDC(BATCH_NAME, batch.name)}" +
               endingMsg
             if (Utils.isTesting || batch.strategy.errorOnExceed) {
               throw new RuntimeException(log.message)
