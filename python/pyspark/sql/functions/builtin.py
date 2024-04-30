@@ -40,7 +40,7 @@ from typing import (
 )
 
 from pyspark.errors import PySparkTypeError, PySparkValueError
-from pyspark.sql.column import Column, _to_java_column, _to_seq, _create_column_from_literal
+from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.types import ArrayType, DataType, StringType, StructType, _from_numpy_type
 
@@ -106,6 +106,8 @@ def _invoke_function_over_columns(name: str, *cols: "ColumnOrName") -> Column:
     Invokes n-ary JVM function identified by name
     and wraps the result with :class:`~pyspark.sql.Column`.
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     return _invoke_function(name, *(_to_java_column(col) for col in cols))
 
 
@@ -114,6 +116,8 @@ def _invoke_function_over_seq_of_columns(name: str, cols: "Iterable[ColumnOrName
     Invokes unary JVM function identified by name with
     and wraps the result with :class:`~pyspark.sql.Column`.
     """
+    from pyspark.sql.classic.column import _to_java_column, _to_seq
+
     sc = _get_active_spark_context()
     return _invoke_function(name, _to_seq(sc, cols, _to_java_column))
 
@@ -123,6 +127,7 @@ def _invoke_binary_math_function(name: str, col1: Any, col2: Any) -> Column:
     Invokes binary JVM math function identified by name
     and wraps the result with :class:`~pyspark.sql.Column`.
     """
+    from pyspark.sql.classic.column import _to_java_column, _create_column_from_literal
 
     # For legacy reasons, the arguments here can be implicitly converted into column
     cols = [
@@ -1005,6 +1010,8 @@ def mode(col: "ColumnOrName", deterministic: bool = False) -> Column:
     |                                    -10|
     +---------------------------------------+
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     return _invoke_function("mode", _to_java_column(col), deterministic)
 
 
@@ -1268,7 +1275,7 @@ def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([
     ...     ("Consult", "Eva", 6), ("Finance", "Frank", 5),
-    ...     ("Finance", "George", 5), ("Consult", "Henry", 7)],
+    ...     ("Finance", "George", 9), ("Consult", "Henry", 7)],
     ...     schema=("department", "name", "years_in_dept"))
     >>> df.groupby("department").agg(
     ...     sf.max_by("name", "years_in_dept")
@@ -1349,7 +1356,7 @@ def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([
     ...     ("Consult", "Eva", 6), ("Finance", "Frank", 5),
-    ...     ("Finance", "George", 5), ("Consult", "Henry", 7)],
+    ...     ("Finance", "George", 9), ("Consult", "Henry", 7)],
     ...     schema=("department", "name", "years_in_dept"))
     >>> df.groupby("department").agg(
     ...     sf.min_by("name", "years_in_dept")
@@ -1358,7 +1365,7 @@ def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     |department|min_by(name, years_in_dept)|
     +----------+---------------------------+
     |   Consult|                        Eva|
-    |   Finance|                     George|
+    |   Finance|                      Frank|
     +----------+---------------------------+
     """
     return _invoke_function_over_columns("min_by", col, ord)
@@ -5123,6 +5130,8 @@ def approx_count_distinct(col: "ColumnOrName", rsd: Optional[float] = None) -> C
     |           95546|      102065|
     +----------------+------------+
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     if rsd is None:
         return _invoke_function_over_columns("approx_count_distinct", col)
     else:
@@ -5386,6 +5395,8 @@ def count_distinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
     |                             2|
     +------------------------------+
     """
+    from pyspark.sql.classic.column import _to_seq, _to_java_column
+
     sc = _get_active_spark_context()
     return _invoke_function(
         "count_distinct", _to_java_column(col), _to_seq(sc, cols, _to_java_column)
@@ -5443,6 +5454,8 @@ def first(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     |  Bob|         5|
     +-----+----------+
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     return _invoke_function("first", _to_java_column(col), ignorenulls)
 
 
@@ -5714,6 +5727,8 @@ def last(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     |  Bob|        5|
     +-----+---------+
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     return _invoke_function("last", _to_java_column(col), ignorenulls)
 
 
@@ -5847,6 +5862,8 @@ def percentile(
     |  2|  19.967859769284075|
     +---+--------------------+
     """
+    from pyspark.sql.classic.column import _to_seq, _create_column_from_literal, _to_java_column
+
     sc = _get_active_spark_context()
 
     if isinstance(percentage, (list, tuple)):
@@ -5924,6 +5941,8 @@ def percentile_approx(
      |-- key: long (nullable = true)
      |-- median: double (nullable = true)
     """
+    from pyspark.sql.classic.column import _to_seq, _create_column_from_literal, _to_java_column
+
     sc = _get_active_spark_context()
 
     if isinstance(percentage, (list, tuple)):
@@ -5998,6 +6017,8 @@ def approx_percentile(
      |-- key: long (nullable = true)
      |-- approx_percentile(value, 0.5, 1000000): double (nullable = true)
     """
+    from pyspark.sql.classic.column import _to_seq, _create_column_from_literal, _to_java_column
+
     sc = _get_active_spark_context()
 
     if isinstance(percentage, (list, tuple)):
@@ -6279,6 +6300,8 @@ def shiftleft(col: "ColumnOrName", numBits: int) -> Column:
     >>> spark.createDataFrame([(21,)], ['a']).select(shiftleft('a', 1).alias('r')).collect()
     [Row(r=42)]
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     return _invoke_function("shiftleft", _to_java_column(col), numBits)
 
 
@@ -6324,6 +6347,8 @@ def shiftright(col: "ColumnOrName", numBits: int) -> Column:
     >>> spark.createDataFrame([(42,)], ['a']).select(shiftright('a', 1).alias('r')).collect()
     [Row(r=21)]
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     return _invoke_function("shiftright", _to_java_column(col), numBits)
 
 
@@ -6370,6 +6395,8 @@ def shiftrightunsigned(col: "ColumnOrName", numBits: int) -> Column:
     >>> df.select(shiftrightunsigned('a', 1).alias('r')).collect()
     [Row(r=9223372036854775787)]
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     return _invoke_function("shiftrightunsigned", _to_java_column(col), numBits)
 
 
@@ -6684,6 +6711,8 @@ def log(arg1: Union["ColumnOrName", float], arg2: Optional["ColumnOrName"] = Non
     |1.3862943611198906|
     +------------------+
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     if arg2 is None:
         return _invoke_function_over_columns("log", cast("ColumnOrName", arg1))
     else:
@@ -6781,6 +6810,8 @@ def conv(col: "ColumnOrName", fromBase: int, toBase: int) -> Column:
     >>> df.select(conv(df.n, 2, 16).alias('hex')).collect()
     [Row(hex='15')]
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     return _invoke_function("conv", _to_java_column(col), fromBase, toBase)
 
 
@@ -6894,6 +6925,8 @@ def lag(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) -> 
     |  b|  8|           -1|
     +---+---+-------------+
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     return _invoke_function("lag", _to_java_column(col), offset, default)
 
 
@@ -6975,6 +7008,8 @@ def lead(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) ->
     |  b|  8|        -1|
     +---+---+----------+
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     return _invoke_function("lead", _to_java_column(col), offset, default)
 
 
@@ -7049,6 +7084,8 @@ def nth_value(col: "ColumnOrName", offset: int, ignoreNulls: Optional[bool] = Fa
     |  b|  8|        8|
     +---+---+---------+
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     return _invoke_function("nth_value", _to_java_column(col), offset, ignoreNulls)
 
 
@@ -7561,6 +7598,8 @@ def date_format(date: "ColumnOrName", format: str) -> Column:
     >>> df.select(date_format('dt', 'MM/dd/yyyy').alias('date')).collect()
     [Row(date='04/08/2015')]
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     return _invoke_function("date_format", _to_java_column(date), format)
 
 
@@ -8418,6 +8457,8 @@ def months_between(date1: "ColumnOrName", date2: "ColumnOrName", roundOff: bool 
     >>> df.select(months_between(df.date1, df.date2, False).alias('months')).collect()
     [Row(months=3.9495967741935485)]
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     return _invoke_function(
         "months_between", _to_java_column(date1), _to_java_column(date2), roundOff
     )
@@ -8459,6 +8500,8 @@ def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     >>> df.select(to_date(df.t, 'yyyy-MM-dd HH:mm:ss').alias('date')).collect()
     [Row(date=datetime.date(1997, 2, 28))]
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     if format is None:
         return _invoke_function_over_columns("to_date", col)
     else:
@@ -8595,6 +8638,8 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     |1997-02-28 10:30:00|
     +-------------------+
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     if format is None:
         return _invoke_function_over_columns("to_timestamp", col)
     else:
@@ -8852,6 +8897,8 @@ def trunc(date: "ColumnOrName", format: str) -> Column:
     >>> df.select(trunc(df.d, 'mon').alias('month')).collect()
     [Row(month=datetime.date(1997, 2, 1))]
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     return _invoke_function("trunc", _to_java_column(date), format)
 
 
@@ -8889,6 +8936,8 @@ def date_trunc(format: str, timestamp: "ColumnOrName") -> Column:
     >>> df.select(date_trunc('mon', df.t).alias('month')).collect()
     [Row(month=datetime.datetime(1997, 2, 1, 0, 0))]
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     return _invoke_function("date_trunc", format, _to_java_column(timestamp))
 
 
@@ -8922,6 +8971,8 @@ def next_day(date: "ColumnOrName", dayOfWeek: str) -> Column:
     >>> df.select(next_day(df.d, 'Sun').alias('date')).collect()
     [Row(date=datetime.date(2015, 8, 2))]
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     return _invoke_function("next_day", _to_java_column(date), dayOfWeek)
 
 
@@ -8951,6 +9002,8 @@ def last_day(date: "ColumnOrName") -> Column:
     >>> df.select(last_day(df.d).alias('date')).collect()
     [Row(date=datetime.date(1997, 2, 28))]
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     return _invoke_function("last_day", _to_java_column(date))
 
 
@@ -8986,6 +9039,8 @@ def from_unixtime(timestamp: "ColumnOrName", format: str = "yyyy-MM-dd HH:mm:ss"
     [Row(ts='2015-04-08 00:00:00')]
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     return _invoke_function("from_unixtime", _to_java_column(timestamp), format)
 
 
@@ -9066,6 +9121,8 @@ def unix_timestamp(
 
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     if timestamp is None:
         return _invoke_function("unix_timestamp")
     return _invoke_function("unix_timestamp", _to_java_column(timestamp), format)
@@ -9120,6 +9177,8 @@ def from_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
     >>> df.select(from_utc_timestamp(df.ts, df.tz).alias('local_time')).collect()
     [Row(local_time=datetime.datetime(1997, 2, 28, 19, 30))]
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     if isinstance(tz, Column):
         tz = _to_java_column(tz)
     return _invoke_function("from_utc_timestamp", _to_java_column(timestamp), tz)
@@ -9174,6 +9233,8 @@ def to_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
     >>> df.select(to_utc_timestamp(df.ts, df.tz).alias('utc_time')).collect()
     [Row(utc_time=datetime.datetime(1997, 2, 28, 1, 30))]
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     if isinstance(tz, Column):
         tz = _to_java_column(tz)
     return _invoke_function("to_utc_timestamp", _to_java_column(timestamp), tz)
@@ -9367,6 +9428,7 @@ def window(
     |2016-03-11 09:00:05|2016-03-11 09:00:10|  1|
     +-------------------+-------------------+---+
     """
+    from pyspark.sql.classic.column import _to_java_column
 
     def check_string_field(field, fieldName):  # type: ignore[no-untyped-def]
         if not field or type(field) is not str:
@@ -9438,6 +9500,8 @@ def window_time(
     ... ).collect()
     [Row(end='2016-03-11 09:00:10', window_time='2016-03-11 09:00:09.999999', sum=1)]
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     window_col = _to_java_column(windowColumn)
     return _invoke_function("window_time", window_col)
 
@@ -9493,6 +9557,7 @@ def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) 
     ...          w.session_window.end.cast("string").alias("end"), "sum").collect()
     [Row(start='2016-03-11 09:00:07', end='2016-03-11 09:00:12', sum=1)]
     """
+    from pyspark.sql.classic.column import _to_java_column
 
     def check_field(field: Union[Column, str], fieldName: str) -> None:
         if field is None or not isinstance(field, (str, Column)):
@@ -9863,6 +9928,8 @@ def sha2(col: "ColumnOrName", numBits: int) -> Column:
     |Bob  |cd9fb1e148ccd8442e5aa74904cc73bf6fb54d1d54d333bd596aa9bb4bb4e961|
     +-----+----------------------------------------------------------------+
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     if numBits not in [0, 224, 256, 384, 512]:
         raise PySparkValueError(
             error_class="VALUE_NOT_ALLOWED",
@@ -10000,6 +10067,8 @@ def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None
     java.lang.RuntimeException: My error msg
     ...
     """
+    from pyspark.sql.classic.column import _create_column_from_literal, _to_java_column
+
     if errMsg is None:
         return _invoke_function_over_columns("assert_true", col)
     if not isinstance(errMsg, (str, Column)):
@@ -10042,6 +10111,8 @@ def raise_error(errMsg: Union[Column, str]) -> Column:
     java.lang.RuntimeException: My error message
     ...
     """
+    from pyspark.sql.classic.column import _create_column_from_literal, _to_java_column
+
     if not isinstance(errMsg, (str, Column)):
         raise PySparkTypeError(
             error_class="NOT_COLUMN_OR_STR",
@@ -10368,6 +10439,8 @@ def concat_ws(sep: str, *cols: "ColumnOrName") -> Column:
     >>> df.select(concat_ws('-', df.s, df.d).alias('s')).collect()
     [Row(s='abcd-123')]
     """
+    from pyspark.sql.classic.column import _to_seq, _to_java_column
+
     sc = _get_active_spark_context()
     return _invoke_function("concat_ws", sep, _to_seq(sc, cols, _to_java_column))
 
@@ -10405,6 +10478,8 @@ def decode(col: "ColumnOrName", charset: str) -> Column:
     |            abcd|
     +----------------+
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     return _invoke_function("decode", _to_java_column(col), charset)
 
 
@@ -10441,6 +10516,8 @@ def encode(col: "ColumnOrName", charset: str) -> Column:
     |   [61 62 63 64]|
     +----------------+
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     return _invoke_function("encode", _to_java_column(col), charset)
 
 
@@ -10470,6 +10547,8 @@ def format_number(col: "ColumnOrName", d: int) -> Column:
     >>> spark.createDataFrame([(5,)], ['a']).select(format_number('a', 4).alias('v')).collect()
     [Row(v='5.0000')]
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     return _invoke_function("format_number", _to_java_column(col), d)
 
 
@@ -10501,6 +10580,8 @@ def format_string(format: str, *cols: "ColumnOrName") -> Column:
     >>> df.select(format_string('%d %s', df.a, df.b).alias('v')).collect()
     [Row(v='5 hello')]
     """
+    from pyspark.sql.classic.column import _to_seq, _to_java_column
+
     sc = _get_active_spark_context()
     return _invoke_function("format_string", format, _to_seq(sc, cols, _to_java_column))
 
@@ -10539,6 +10620,8 @@ def instr(str: "ColumnOrName", substr: str) -> Column:
     >>> df.select(instr(df.s, 'b').alias('s')).collect()
     [Row(s=2)]
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     return _invoke_function("instr", _to_java_column(str), substr)
 
 
@@ -10585,6 +10668,8 @@ def overlay(
     >>> df.select(overlay("x", "y", 7, 2).alias("overlayed")).collect()
     [Row(overlayed='SPARK_COREL')]
     """
+    from pyspark.sql.classic.column import _create_column_from_literal, _to_java_column
+
     if not isinstance(pos, (int, str, Column)):
         raise PySparkTypeError(
             error_class="NOT_COLUMN_OR_INT_OR_STR",
@@ -10692,6 +10777,8 @@ def substring(str: "ColumnOrName", pos: int, len: int) -> Column:
     >>> df.select(substring(df.s, 1, 2).alias('s')).collect()
     [Row(s='ab')]
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     return _invoke_function("substring", _to_java_column(str), pos, len)
 
 
@@ -10730,6 +10817,8 @@ def substring_index(str: "ColumnOrName", delim: str, count: int) -> Column:
     >>> df.select(substring_index(df.s, '.', -3).alias('s')).collect()
     [Row(s='b.c.d')]
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     return _invoke_function("substring_index", _to_java_column(str), delim, count)
 
 
@@ -10770,6 +10859,8 @@ def levenshtein(
     >>> df0.select(levenshtein('l', 'r', 2).alias('d')).collect()
     [Row(d=-1)]
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     if threshold is None:
         return _invoke_function_over_columns("levenshtein", left, right)
     else:
@@ -10813,6 +10904,8 @@ def locate(substr: str, str: "ColumnOrName", pos: int = 1) -> Column:
     >>> df.select(locate('b', df.s, 1).alias('s')).collect()
     [Row(s=2)]
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     return _invoke_function("locate", substr, _to_java_column(str), pos)
 
 
@@ -10846,6 +10939,8 @@ def lpad(col: "ColumnOrName", len: int, pad: str) -> Column:
     >>> df.select(lpad(df.s, 6, '#').alias('s')).collect()
     [Row(s='##abcd')]
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     return _invoke_function("lpad", _to_java_column(col), len, pad)
 
 
@@ -10879,6 +10974,8 @@ def rpad(col: "ColumnOrName", len: int, pad: str) -> Column:
     >>> df.select(rpad(df.s, 6, '#').alias('s')).collect()
     [Row(s='abcd##')]
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     return _invoke_function("rpad", _to_java_column(col), len, pad)
 
 
@@ -10944,7 +11041,11 @@ def repeat(col: "ColumnOrName", n: Union["ColumnOrName", int]) -> Column:
 
 
 @_try_remote_functions
-def split(str: "ColumnOrName", pattern: str, limit: int = -1) -> Column:
+def split(
+    str: "ColumnOrName",
+    pattern: Union[Column, str],
+    limit: Union["ColumnOrName", int] = -1,
+) -> Column:
     """
     Splits str around matches of the given pattern.
 
@@ -10957,10 +11058,10 @@ def split(str: "ColumnOrName", pattern: str, limit: int = -1) -> Column:
     ----------
     str : :class:`~pyspark.sql.Column` or str
         a string expression to split
-    pattern : str
+    pattern : :class:`~pyspark.sql.Column` or str
         a string representing a regular expression. The regex string should be
         a Java regular expression.
-    limit : int, optional
+    limit : :class:`~pyspark.sql.Column` or str or int
         an integer which controls the number of times `pattern` is applied.
 
         * ``limit > 0``: The resulting array's length will not be more than `limit`, and the
@@ -10972,6 +11073,11 @@ def split(str: "ColumnOrName", pattern: str, limit: int = -1) -> Column:
         .. versionchanged:: 3.0
            `split` now takes an optional `limit` field. If not provided, default limit value is -1.
 
+        .. versionchanged:: 4.0.0
+             `pattern` now accepts column. Does not accept column name since string type remain
+             accepted as a regular expression representation, for backwards compatibility.
+             In addition to int, `limit` now accepts column and column name.
+
     Returns
     -------
     :class:`~pyspark.sql.Column`
@@ -10979,13 +11085,53 @@ def split(str: "ColumnOrName", pattern: str, limit: int = -1) -> Column:
 
     Examples
     --------
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([('oneAtwoBthreeC',)], ['s',])
-    >>> df.select(split(df.s, '[ABC]', 2).alias('s')).collect()
-    [Row(s=['one', 'twoBthreeC'])]
-    >>> df.select(split(df.s, '[ABC]', -1).alias('s')).collect()
-    [Row(s=['one', 'two', 'three', ''])]
+    >>> df.select(sf.split(df.s, '[ABC]', 2).alias('s')).show()
+    +-----------------+
+    |                s|
+    +-----------------+
+    |[one, twoBthreeC]|
+    +-----------------+
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('oneAtwoBthreeC',)], ['s',])
+    >>> df.select(sf.split(df.s, '[ABC]', -1).alias('s')).show()
+    +-------------------+
+    |                  s|
+    +-------------------+
+    |[one, two, three, ]|
+    +-------------------+
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [('oneAtwoBthreeC', '[ABC]'), ('1A2B3C', '[1-9]+'), ('aa2bb3cc4', '[1-9]+')],
+    ...     ['s', 'pattern']
+    ... )
+    >>> df.select(sf.split(df.s, df.pattern).alias('s')).show()
+    +-------------------+
+    |                  s|
+    +-------------------+
+    |[one, two, three, ]|
+    |        [, A, B, C]|
+    |     [aa, bb, cc, ]|
+    +-------------------+
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [('oneAtwoBthreeC', '[ABC]', 2), ('1A2B3C', '[1-9]+', -1)],
+    ...     ['s', 'pattern', 'expected_parts']
+    ... )
+    >>> df.select(sf.split(df.s, df.pattern, df.expected_parts).alias('s')).show()
+    +-----------------+
+    |                s|
+    +-----------------+
+    |[one, twoBthreeC]|
+    |      [, A, B, C]|
+    +-----------------+
     """
-    return _invoke_function("split", _to_java_column(str), pattern, limit)
+    limit = lit(limit) if isinstance(limit, int) else limit
+    return _invoke_function_over_columns("split", str, lit(pattern), limit)
 
 
 @_try_remote_functions
@@ -11193,6 +11339,8 @@ def regexp_extract(str: "ColumnOrName", pattern: str, idx: int) -> Column:
     >>> df.select(regexp_extract('str', '(a+)(b)?(c)', 2).alias('d')).collect()
     [Row(d='')]
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     return _invoke_function("regexp_extract", _to_java_column(str), pattern, idx)
 
 
@@ -11271,6 +11419,8 @@ def regexp_replace(
     >>> df.select(regexp_replace("str", col("pattern"), col("replacement")).alias('d')).collect()
     [Row(d='-----')]
     """
+    from pyspark.sql.classic.column import _create_column_from_literal, _to_java_column
+
     if isinstance(pattern, str):
         pattern_col = _create_column_from_literal(pattern)
     else:
@@ -11619,6 +11769,8 @@ def translate(srcCol: "ColumnOrName", matching: str, replace: str) -> Column:
     ...     .alias('r')).collect()
     [Row(r='1a2s3ae')]
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     return _invoke_function("translate", _to_java_column(srcCol), matching, replace)
 
 
@@ -12033,6 +12185,8 @@ def printf(format: "ColumnOrName", *cols: "ColumnOrName") -> Column:
     |        aa123cc|
     +---------------+
     """
+    from pyspark.sql.classic.column import _to_seq, _to_java_column
+
     sc = _get_active_spark_context()
     return _invoke_function("printf", _to_java_column(format), _to_seq(sc, cols, _to_java_column))
 
@@ -12585,6 +12739,8 @@ def elt(*inputs: "ColumnOrName") -> Column:
     >>> df.select(elt(df.a, df.b, df.c).alias('r')).collect()
     [Row(r='scala')]
     """
+    from pyspark.sql.classic.column import _to_seq, _to_java_column
+
     sc = _get_active_spark_context()
     return _invoke_function("elt", _to_seq(sc, inputs, _to_java_column))
 
@@ -12886,6 +13042,8 @@ def collate(col: "ColumnOrName", collation: str) -> Column:
     :class:`~pyspark.sql.Column`
         A new column of string type, where each value has the specified collation.
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     return _invoke_function("collate", _to_java_column(col), collation)
 
 
@@ -13273,6 +13431,8 @@ def array_contains(col: "ColumnOrName", value: Any) -> Column:
     |      true|
     +----------+
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     value = value._jc if isinstance(value, Column) else value
     return _invoke_function("array_contains", _to_java_column(col), value)
 
@@ -13520,6 +13680,8 @@ def array_join(
     |                NULL,NULL|
     +-------------------------+
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     _get_active_spark_context()
     if null_replacement is None:
         return _invoke_function("array_join", _to_java_column(col), delimiter)
@@ -13700,6 +13862,8 @@ def array_position(col: "ColumnOrName", value: Any) -> Column:
     |                      3|
     +-----------------------+
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     return _invoke_function("array_position", _to_java_column(col), value)
 
 
@@ -14134,6 +14298,8 @@ def array_remove(col: "ColumnOrName", element: Any) -> Column:
     |                   []|
     +---------------------+
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     return _invoke_function("array_remove", _to_java_column(col), element)
 
 
@@ -15277,6 +15443,8 @@ def get_json_object(col: "ColumnOrName", path: str) -> Column:
     ...                   get_json_object(df.jstring, '$.f2').alias("c1") ).collect()
     [Row(key='1', c0='value1', c1='value2'), Row(key='2', c0='value12', c1=None)]
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     return _invoke_function("get_json_object", _to_java_column(col), path)
 
 
@@ -15308,6 +15476,8 @@ def json_tuple(col: "ColumnOrName", *fields: str) -> Column:
     >>> df.select(df.key, json_tuple(df.jstring, 'f1', 'f2')).collect()
     [Row(key='1', c0='value1', c1='value2'), Row(key='2', c0='value12', c1=None)]
     """
+    from pyspark.sql.classic.column import _to_seq, _to_java_column
+
     if len(fields) == 0:
         raise PySparkValueError(
             error_class="CANNOT_BE_EMPTY",
@@ -15415,6 +15585,7 @@ def from_json(
     |[1, 2, 3]|
     +---------+
     """
+    from pyspark.sql.classic.column import _to_java_column
 
     if isinstance(schema, DataType):
         schema = schema.json()
@@ -15424,11 +15595,43 @@ def from_json(
 
 
 @_try_remote_functions
+def try_parse_json(
+    col: "ColumnOrName",
+) -> Column:
+    """
+    Parses a column containing a JSON string into a :class:`VariantType`. Returns None if a string
+    contains an invalid JSON value.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        a column or column name JSON formatted strings
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a new column of VariantType.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''}, {'json': '''{a : 1}'''} ])
+    >>> df.select(to_json(try_parse_json(df.json))).collect()
+    [Row(to_json(try_parse_json(json))='{"a":1}'), Row(to_json(try_parse_json(json))=None)]
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    return _invoke_function("try_parse_json", _to_java_column(col))
+
+
+@_try_remote_functions
 def parse_json(
     col: "ColumnOrName",
 ) -> Column:
     """
-    Parses a column containing a JSON string into a :class:`VariantType`.
+    Parses a column containing a JSON string into a :class:`VariantType`. Throws exception if a
+    string represents an invalid JSON value.
 
     .. versionadded:: 4.0.0
 
@@ -15448,8 +15651,168 @@ def parse_json(
     >>> df.select(to_json(parse_json(df.json))).collect()
     [Row(to_json(parse_json(json))='{"a":1}')]
     """
+    from pyspark.sql.classic.column import _to_java_column
 
     return _invoke_function("parse_json", _to_java_column(col))
+
+
+@_try_remote_functions
+def is_variant_null(v: "ColumnOrName") -> Column:
+    """
+    Check if a variant value is a variant null. Returns true if and only if the input is a variant
+    null and false otherwise (including in the case of SQL NULL).
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    v : :class:`~pyspark.sql.Column` or str
+        a variant column or column name
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a boolean column indicating whether the variant value is a variant null
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
+    >>> df.select(is_variant_null(parse_json(df.json)).alias("r")).collect()
+    [Row(r=False)]
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    return _invoke_function("is_variant_null", _to_java_column(v))
+
+
+@_try_remote_functions
+def variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
+    """
+    Extracts a sub-variant from `v` according to `path`, and then cast the sub-variant to
+    `targetType`. Returns null if the path does not exist. Throws an exception if the cast fails.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    v : :class:`~pyspark.sql.Column` or str
+        a variant column or column name
+    path : str
+        the extraction path. A valid path should start with `$` and is followed by zero or more
+        segments like `[123]`, `.name`, `['name']`, or `["name"]`.
+    targetType : str
+        the target data type to cast into, in a DDL-formatted string
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a column of `targetType` representing the extracted result
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
+    >>> df.select(variant_get(parse_json(df.json), "$.a", "int").alias("r")).collect()
+    [Row(r=1)]
+    >>> df.select(variant_get(parse_json(df.json), "$.b", "int").alias("r")).collect()
+    [Row(r=None)]
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    return _invoke_function("variant_get", _to_java_column(v), path, targetType)
+
+
+@_try_remote_functions
+def try_variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
+    """
+    Extracts a sub-variant from `v` according to `path`, and then cast the sub-variant to
+    `targetType`. Returns null if the path does not exist or the cast fails.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    v : :class:`~pyspark.sql.Column` or str
+        a variant column or column name
+    path : str
+        the extraction path. A valid path should start with `$` and is followed by zero or more
+        segments like `[123]`, `.name`, `['name']`, or `["name"]`.
+    targetType : str
+        the target data type to cast into, in a DDL-formatted string
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a column of `targetType` representing the extracted result
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
+    >>> df.select(try_variant_get(parse_json(df.json), "$.a", "int").alias("r")).collect()
+    [Row(r=1)]
+    >>> df.select(try_variant_get(parse_json(df.json), "$.b", "int").alias("r")).collect()
+    [Row(r=None)]
+    >>> df.select(try_variant_get(parse_json(df.json), "$.a", "binary").alias("r")).collect()
+    [Row(r=None)]
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    return _invoke_function("try_variant_get", _to_java_column(v), path, targetType)
+
+
+@_try_remote_functions
+def schema_of_variant(v: "ColumnOrName") -> Column:
+    """
+    Returns schema in the SQL format of a variant.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    v : :class:`~pyspark.sql.Column` or str
+        a variant column or column name
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a string column representing the variant schema
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
+    >>> df.select(schema_of_variant(parse_json(df.json)).alias("r")).collect()
+    [Row(r='STRUCT<a: BIGINT>')]
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    return _invoke_function("schema_of_variant", _to_java_column(v))
+
+
+@_try_remote_functions
+def schema_of_variant_agg(v: "ColumnOrName") -> Column:
+    """
+    Returns the merged schema in the SQL format of a variant column.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    v : :class:`~pyspark.sql.Column` or str
+        a variant column or column name
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a string column representing the variant schema
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
+    >>> df.select(schema_of_variant_agg(parse_json(df.json)).alias("r")).collect()
+    [Row(r='STRUCT<a: BIGINT>')]
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    return _invoke_function("schema_of_variant_agg", _to_java_column(v))
 
 
 @_try_remote_functions
@@ -15542,6 +15905,7 @@ def to_json(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Co
     |["Alice","Bob"]|
     +---------------+
     """
+    from pyspark.sql.classic.column import _to_java_column
 
     return _invoke_function("to_json", _to_java_column(col), _options_to_str(options))
 
@@ -15584,6 +15948,8 @@ def schema_of_json(json: Union[Column, str], options: Optional[Dict[str, str]] =
     >>> df.select(schema.alias("json")).collect()
     [Row(json='STRUCT<a: BIGINT>')]
     """
+    from pyspark.sql.classic.column import _create_column_from_literal, _to_java_column
+
     if isinstance(json, str):
         col = _create_column_from_literal(json)
     elif isinstance(json, Column):
@@ -15721,6 +16087,7 @@ def from_xml(
     >>> df.select(sf.from_xml(df.value, schema).alias("xml")).collect()
     [Row(xml=Row(a=[1, 2]))]
     """
+    from pyspark.sql.classic.column import _to_java_column
 
     if isinstance(schema, StructType):
         schema = schema.json()
@@ -15799,6 +16166,8 @@ def schema_of_xml(xml: Union[Column, str], options: Optional[Dict[str, str]] = N
     ... ).collect()
     [Row(xml='STRUCT<values: STRUCT<value: ARRAY<BIGINT>>>')]
     """
+    from pyspark.sql.classic.column import _create_column_from_literal, _to_java_column
+
     if isinstance(xml, str):
         col = _create_column_from_literal(xml)
     elif isinstance(xml, Column):
@@ -15844,6 +16213,7 @@ def to_xml(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Col
     >>> df.select(to_xml(df.value, {'rowTag':'person'}).alias("xml")).collect()
     [Row(xml='<person>\\n    <age>2</age>\\n    <name>Alice</name>\\n</person>')]
     """
+    from pyspark.sql.classic.column import _to_java_column
 
     return _invoke_function("to_xml", _to_java_column(col), _options_to_str(options))
 
@@ -15920,6 +16290,8 @@ def schema_of_csv(csv: Union[Column, str], options: Optional[Dict[str, str]] = N
     |STRUCT<_c0: INT, _c1: STRING, _c2: BOOLEAN>|
     +-------------------------------------------+
     """
+    from pyspark.sql.classic.column import _create_column_from_literal, _to_java_column
+
     if isinstance(csv, str):
         col = _create_column_from_literal(csv)
     elif isinstance(csv, Column):
@@ -16020,6 +16392,7 @@ def to_csv(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Col
     | 2,Alice,true|
     +-------------+
     """
+    from pyspark.sql.classic.column import _to_java_column
 
     return _invoke_function("to_csv", _to_java_column(col), _options_to_str(options))
 
@@ -16427,6 +16800,8 @@ def sort_array(col: "ColumnOrName", asc: bool = True) -> Column:
     |    [NULL, NULL, NULL]|
     +----------------------+
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     return _invoke_function("sort_array", _to_java_column(col), asc)
 
 
@@ -16720,6 +17095,8 @@ def map_contains_key(col: "ColumnOrName", value: Any) -> Column:
     |                     false|
     +--------------------------+
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     return _invoke_function("map_contains_key", _to_java_column(col), value)
 
 
@@ -17450,6 +17827,7 @@ def from_csv(
     |      {1, 2, 3}|
     +---------------+
     """
+    from pyspark.sql.classic.column import _create_column_from_literal, _to_java_column
 
     _get_active_spark_context()
     if isinstance(schema, str):
@@ -17478,6 +17856,7 @@ def _unresolved_named_lambda_variable(*name_parts: Any) -> Column:
     name_parts : str
     """
     from py4j.java_gateway import JVMView
+    from pyspark.sql.classic.column import _to_seq
 
     sc = _get_active_spark_context()
     name_parts_seq = _to_seq(sc, name_parts)
@@ -17528,6 +17907,7 @@ def _create_lambda(f: Callable) -> Callable:
             - (Column, Column, Column) -> Column: ...
     """
     from py4j.java_gateway import JVMView
+    from pyspark.sql.classic.column import _to_seq
 
     parameters = _get_lambda_parameters(f)
 
@@ -17573,6 +17953,7 @@ def _invoke_higher_order_function(
     :return: a Column
     """
     from py4j.java_gateway import JVMView
+    from pyspark.sql.classic.column import _to_java_column
 
     sc = _get_active_spark_context()
     expressions = cast(JVMView, sc._jvm).org.apache.spark.sql.catalyst.expressions
@@ -19211,6 +19592,8 @@ def call_udf(udfName: str, *cols: "ColumnOrName") -> Column:
     |         cc|
     +-----------+
     """
+    from pyspark.sql.classic.column import _to_seq, _to_java_column
+
     sc = _get_active_spark_context()
     return _invoke_function("call_udf", udfName, _to_seq(sc, cols, _to_java_column))
 
@@ -19280,6 +19663,8 @@ def call_function(funcName: str, *cols: "ColumnOrName") -> Column:
     |                               102.0|
     +------------------------------------+
     """
+    from pyspark.sql.classic.column import _to_seq, _to_java_column
+
     sc = _get_active_spark_context()
     return _invoke_function("call_function", funcName, _to_seq(sc, cols, _to_java_column))
 
@@ -19295,11 +19680,16 @@ def unwrap_udt(col: "ColumnOrName") -> Column:
     -----
     Supports Spark Connect.
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     return _invoke_function("unwrap_udt", _to_java_column(col))
 
 
 @_try_remote_functions
-def hll_sketch_agg(col: "ColumnOrName", lgConfigK: Optional[Union[int, Column]] = None) -> Column:
+def hll_sketch_agg(
+    col: "ColumnOrName",
+    lgConfigK: Optional[Union[int, Column]] = None,
+) -> Column:
     """
     Aggregate function: returns the updatable binary representation of the Datasketches
     HllSketch configured with lgConfigK arg.
@@ -19308,8 +19698,8 @@ def hll_sketch_agg(col: "ColumnOrName", lgConfigK: Optional[Union[int, Column]] 
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str or int
-    lgConfigK : int, optional
+    col : :class:`~pyspark.sql.Column` or str
+    lgConfigK : :class:`~pyspark.sql.Column` or int, optional
         The log-base-2 of K, where K is the number of buckets or slots for the HllSketch
 
     Returns
@@ -19348,8 +19738,7 @@ def hll_sketch_agg(col: "ColumnOrName", lgConfigK: Optional[Union[int, Column]] 
     if lgConfigK is None:
         return _invoke_function_over_columns("hll_sketch_agg", col)
     else:
-        _lgConfigK = lit(lgConfigK) if isinstance(lgConfigK, int) else lgConfigK
-        return _invoke_function_over_columns("hll_sketch_agg", col, _lgConfigK)
+        return _invoke_function_over_columns("hll_sketch_agg", col, lit(lgConfigK))
 
 
 @_try_remote_functions
@@ -19444,6 +19833,8 @@ def hll_sketch_estimate(col: "ColumnOrName") -> Column:
     |           3|
     +------------+
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     return _invoke_function("hll_sketch_estimate", _to_java_column(col))
 
 
@@ -19482,6 +19873,8 @@ def hll_union(
     |           6|
     +------------+
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     if allowDifferentLgConfigK is not None:
         return _invoke_function(
             "hll_union", _to_java_column(col1), _to_java_column(col2), allowDifferentLgConfigK

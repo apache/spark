@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.EVENT_LOOP
+import org.apache.spark.internal.LogKeys.EVENT_LOOP
 
 /**
  * An event loop to receive events from the caller and process all events in the event thread. It

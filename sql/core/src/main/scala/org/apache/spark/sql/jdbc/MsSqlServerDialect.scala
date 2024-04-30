@@ -86,9 +86,13 @@ private case class MsSqlServerDialect() extends JdbcDialect {
       // We shouldn't propagate these queries to MsSqlServer
       expr match {
         case e: Predicate => e.name() match {
-          case "=" | "<>" | "<=>" | "<" | "<=" | ">" | ">="
-              if e.children().exists(_.isInstanceOf[Predicate]) =>
-            super.visitUnexpectedExpr(expr)
+          case "=" | "<>" | "<=>" | "<" | "<=" | ">" | ">=" =>
+            val Array(l, r) = e.children().map {
+              case p: Predicate => s"CASE WHEN ${inputToSQL(p)} THEN 1 ELSE 0 END"
+              case o => inputToSQL(o)
+            }
+            visitBinaryComparison(e.name(), l, r)
+          case "CASE_WHEN" => visitCaseWhen(expressionsToStringArray(e.children())) + " = 1"
           case _ => super.build(expr)
         }
         case _ => super.build(expr)
@@ -109,22 +113,22 @@ private case class MsSqlServerDialect() extends JdbcDialect {
 
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
-    if (typeName.contains("datetimeoffset")) {
-      // String is recommend by Microsoft SQL Server for datetimeoffset types in non-MS clients
-      Option(StringType)
-    } else {
-      if (SQLConf.get.legacyMsSqlServerNumericMappingEnabled) {
-        None
-      } else {
-        sqlType match {
-          // Data range of TINYINT is 0-255 so it needs to be stored in ShortType.
-          // Reference doc: https://learn.microsoft.com/en-us/sql/t-sql/data-types
-          case java.sql.Types.SMALLINT | java.sql.Types.TINYINT => Some(ShortType)
-          case java.sql.Types.REAL => Some(FloatType)
-          case GEOMETRY | GEOGRAPHY => Some(BinaryType)
-          case _ => None
+    sqlType match {
+      case _ if typeName.contains("datetimeoffset") =>
+        if (SQLConf.get.legacyMsSqlServerDatetimeOffsetMappingEnabled) {
+          Some(StringType)
+        } else {
+          Some(TimestampType)
         }
-      }
+      case java.sql.Types.SMALLINT | java.sql.Types.TINYINT
+          if !SQLConf.get.legacyMsSqlServerNumericMappingEnabled =>
+        // Data range of TINYINT is 0-255 so it needs to be stored in ShortType.
+        // Reference doc: https://learn.microsoft.com/en-us/sql/t-sql/data-types
+        Some(ShortType)
+      case java.sql.Types.REAL if !SQLConf.get.legacyMsSqlServerNumericMappingEnabled =>
+        Some(FloatType)
+      case GEOMETRY | GEOGRAPHY => Some(BinaryType)
+      case _ => None
     }
   }
 
@@ -136,6 +140,7 @@ private case class MsSqlServerDialect() extends JdbcDialect {
     case BinaryType => Some(JdbcType("VARBINARY(MAX)", java.sql.Types.VARBINARY))
     case ShortType if !SQLConf.get.legacyMsSqlServerNumericMappingEnabled =>
       Some(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
+    case ByteType => Some(JdbcType("SMALLINT", java.sql.Types.TINYINT))
     case _ => None
   }
 

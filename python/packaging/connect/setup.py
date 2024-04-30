@@ -117,7 +117,7 @@ try:
     # binary format protocol with the Java version, see ARROW_HOME/format/* for specifications.
     # Also don't forget to update python/docs/source/getting_started/install.rst, and
     # python/packaging/classic/setup.py
-    _minimum_pandas_version = "1.4.4"
+    _minimum_pandas_version = "2.0.0"
     _minimum_numpy_version = "1.21"
     _minimum_pyarrow_version = "10.0.0"
     _minimum_grpc_version = "1.59.3"
@@ -191,11 +191,10 @@ try:
             "googleapis-common-protos>=%s" % _minimum_googleapis_common_protos_version,
             "numpy>=%s" % _minimum_numpy_version,
         ],
-        python_requires=">=3.8",
+        python_requires=">=3.9",
         classifiers=[
             "Development Status :: 5 - Production/Stable",
             "License :: OSI Approved :: Apache Software License",
-            "Programming Language :: Python :: 3.8",
             "Programming Language :: Python :: 3.9",
             "Programming Language :: Python :: 3.10",
             "Programming Language :: Python :: 3.11",

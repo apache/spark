@@ -1441,3 +1441,298 @@ The Spark Catalyst data types below are not supported with suitable Oracle types
 - NullType
 - ObjectType
 - VariantType
+
+### Mapping Spark SQL Data Types from Microsoft SQL Server
+
+The below table describes the data type conversions from Microsoft SQL Server data types to Spark SQL Data Types,
+when reading data from a Microsoft SQL Server table using the built-in jdbc data source with the mssql-jdbc
+as the activated JDBC Driver.
+
+
+<table>
+  <thead>
+    <tr>
+      <th><b>SQL Server  Data Type</b></th>
+      <th><b>Spark SQL Data Type</b></th>
+      <th><b>Remarks</b></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>bit</td>
+      <td>BooleanType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>tinyint</td>
+      <td>ShortType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>smallint</td>
+      <td>ShortType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>int</td>
+      <td>IntegerType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>bigint</td>
+      <td>LongType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>float(p), real</td>
+      <td>FloatType</td>
+      <td>1 &le; p &le; 24</td>
+    </tr>
+    <tr>
+      <td>float[(p)]</td>
+      <td>DoubleType</td>
+      <td>25 &le; p &le; 53</td>
+    </tr>
+    <tr>
+      <td>double precision</td>
+      <td>DoubleType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>smallmoney</td>
+      <td>DecimalType(10, 4)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>money</td>
+      <td>DecimalType(19, 4)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>decimal[(p[, s])], numeric[(p[, s])]</td>
+      <td>DecimalType(p, s)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>date</td>
+      <td>DateType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>datetime</td>
+      <td>TimestampType</td>
+      <td>(Default)preferTimestampNTZ=false or spark.sql.timestampType=TIMESTAMP_LTZ</td>
+    </tr>
+    <tr>
+      <td>datetime</td>
+      <td>TimestampNTZType</td>
+      <td>preferTimestampNTZ=true or spark.sql.timestampType=TIMESTAMP_NTZ</td>
+    </tr>
+    <tr>
+      <td>datetime2 [ (fractional seconds precision) ]</td>
+      <td>TimestampType</td>
+      <td>(Default)preferTimestampNTZ=false or spark.sql.timestampType=TIMESTAMP_LTZ</td>
+    </tr>
+    <tr>
+      <td>datetime2 [ (fractional seconds precision) ]</td>
+      <td>TimestampNTZType</td>
+      <td>preferTimestampNTZ=true or spark.sql.timestampType=TIMESTAMP_NTZ</td>
+    </tr>
+    <tr>
+      <td>datetimeoffset [ (fractional seconds precision) ]</td>
+      <td>TimestampType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>smalldatetime</td>
+      <td>TimestampType</td>
+      <td>(Default)preferTimestampNTZ=false or spark.sql.timestampType=TIMESTAMP_LTZ</td>
+    </tr>
+    <tr>
+      <td>smalldatetime</td>
+      <td>TimestampNTZType</td>
+      <td>preferTimestampNTZ=true or spark.sql.timestampType=TIMESTAMP_NTZ</td>
+    </tr>
+    <tr>
+      <td>time [ (fractional second scale) ]</td>
+      <td>TimestampType</td>
+      <td>(Default)preferTimestampNTZ=false or spark.sql.timestampType=TIMESTAMP_LTZ</td>
+    </tr>
+    <tr>
+      <td>time [ (fractional second scale) ]</td>
+      <td>TimestampNTZType</td>
+      <td>preferTimestampNTZ=true or spark.sql.timestampType=TIMESTAMP_NTZ</td>
+    </tr>
+    <tr>
+      <td>binary [ ( n ) ]</td>
+      <td>BinaryType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>varbinary [ ( n | max ) ]</td>
+      <td>BinaryType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>char [ ( n ) ]</td>
+      <td>CharType(n)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>varchar [ ( n | max ) ]</td>
+      <td>VarcharType(n)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>nchar [ ( n ) ]</td>
+      <td>StringType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>nvarchar [ ( n | max ) ]</td>
+      <td>StringType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>text</td>
+      <td>StringType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>ntext</td>
+      <td>StringType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>image</td>
+      <td>StringType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>geography</td>
+      <td>BinaryType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>geometry</td>
+      <td>BinaryType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>rowversion</td>
+      <td>BinaryType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>sql_variant</td>
+      <td></td>
+      <td>UNRECOGNIZED_SQL_TYPE error raised</td>
+    </tr>
+  </tbody>
+</table>
+
+### Mapping Spark SQL Data Types to Microsoft SQL Server
+
+The below table describes the data type conversions from Spark SQL Data Types to Microsoft SQL Server data types,
+when creating, altering, or writing data to a Microsoft SQL Server table using the built-in jdbc data source with
+the mssql-jdbc as the activated JDBC Driver.
+
+<table>
+  <thead>
+    <tr>
+      <th><b>Spark SQL Data Type</b></th>
+      <th><b>SQL Server Data Type</b></th>
+      <th><b>Remarks</b></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>BooleanType</td>
+      <td>bit</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>ByteType</td>
+      <td>smallint</td>
+      <td>Supported since Spark 4.0.0, previous versions throw errors</td>
+    </tr>
+    <tr>
+      <td>ShortType</td>
+      <td>smallint</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>IntegerType</td>
+      <td>int</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>LongType</td>
+      <td>bigint</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>FloatType</td>
+      <td>real</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>DoubleType</td>
+      <td>double precision</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>DecimalType(p, s)</td>
+      <td>number(p,s)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>DateType</td>
+      <td>date</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>TimestampType</td>
+      <td>datetime</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>TimestampNTZType</td>
+      <td>datetime</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>StringType</td>
+      <td>nvarchar(max)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>BinaryType</td>
+      <td>varbinary(max)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>CharType(n)</td>
+      <td>char(n)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>VarcharType(n)</td>
+      <td>varchar(n)</td>
+      <td></td>
+    </tr>
+  </tbody>
+</table>
+
+The Spark Catalyst data types below are not supported with suitable SQL Server types.
+
+- DayTimeIntervalType
+- YearMonthIntervalType
+- CalendarIntervalType
+- ArrayType
+- MapType
+- StructType
+- UserDefinedType
+- NullType
+- ObjectType
+- VariantType

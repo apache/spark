@@ -1427,8 +1427,10 @@ class TypesTestsMixin:
             ("-int4", "-69633", -69633),
             ("int8", "4295033089", 4295033089),
             ("-int8", "-4294967297", -4294967297),
-            ("float4", "1.23456789e-30", 1.23456789e-30),
-            ("-float4", "-4.56789e+29", -4.56789e29),
+            ("float4", "3.402e+38", 3.402e38),
+            ("-float4", "-3.402e+38", -3.402e38),
+            ("float8", "1.79769e+308", 1.79769e308),
+            ("-float8", "-1.79769e+308", -1.79769e308),
             ("dec4", "123.456", Decimal("123.456")),
             ("-dec4", "-321.654", Decimal("-321.654")),
             ("dec8", "429.4967297", Decimal("429.4967297")),
@@ -1447,17 +1449,77 @@ class TypesTestsMixin:
             F.struct([F.parse_json(F.lit('{"b": "2"}'))]).alias("s"),
             F.create_map([F.lit("k"), F.parse_json(F.lit('{"c": true}'))]).alias("m"),
         ).collect()[0]
-        variants = [row["v"], row["a"][0], row["s"]["col1"], row["m"]["k"]]
+
+        # These data types are not supported by parse_json yet so they are being handled
+        # separately - Date, Timestamp, TimestampNTZ, Binary, Float (Single Precision)
+        date_columns = self.spark.sql(
+            "select cast(Date('2021-01-01')"
+            + " as variant) as d0, cast(Date('1800-12-31')"
+            + " as variant) as d1"
+        ).collect()[0]
+        float_columns = self.spark.sql(
+            "select cast(Float(5.5)" + " as variant) as f0, cast(Float(-5.5) as variant) as f1"
+        ).collect()[0]
+        binary_columns = self.spark.sql(
+            "select cast(binary(x'324FA69E')" + " as variant) as b"
+        ).collect()[0]
+        timetamp_ntz_columns = self.spark.sql(
+            "select cast(cast('1940-01-01 12:33:01.123'"
+            + " as timestamp_ntz) as variant) as tntz0, cast(cast('2522-12-31 05:57:13'"
+            + " as timestamp_ntz) as variant) as tntz1, cast(cast('0001-07-15 17:43:26+08:00'"
+            + " as timestamp_ntz) as variant) as tntz2"
+        ).collect()[0]
+        timetamp_columns = self.spark.sql(
+            "select cast(cast('1940-01-01 12:35:13.123+7:30'"
+            + " as timestamp) as variant) as t0, cast(cast('2522-12-31 00:00:00-5:23'"
+            + " as timestamp) as variant) as t1, cast(cast('0001-12-31 01:01:01+08:00'"
+            + " as timestamp) as variant) as t2"
+        ).collect()[0]
+
+        variants = [
+            row["v"],
+            row["a"][0],
+            row["s"]["col1"],
+            row["m"]["k"],
+            date_columns["d0"],
+            date_columns["d1"],
+            float_columns["f0"],
+            float_columns["f1"],
+            binary_columns["b"],
+            timetamp_ntz_columns["tntz0"],
+            timetamp_ntz_columns["tntz1"],
+            timetamp_ntz_columns["tntz2"],
+            timetamp_columns["t0"],
+            timetamp_columns["t1"],
+            timetamp_columns["t2"],
+        ]
+
         for v in variants:
             self.assertEqual(type(v), VariantVal)
 
-        # check str
+        # check str (to_json)
         as_string = str(variants[0])
         for key, expected, _ in expected_values:
             self.assertTrue('"%s":%s' % (key, expected) in as_string)
         self.assertEqual(str(variants[1]), '{"a":1}')
         self.assertEqual(str(variants[2]), '{"b":"2"}')
         self.assertEqual(str(variants[3]), '{"c":true}')
+        self.assertEqual(str(variants[4]), '"2021-01-01"')
+        self.assertEqual(str(variants[5]), '"1800-12-31"')
+        self.assertEqual(str(variants[6]), "5.5")
+        self.assertEqual(str(variants[7]), "-5.5")
+        self.assertEqual(str(variants[8]), '"Mk+mng=="')
+        self.assertEqual(str(variants[9]), '"1940-01-01 12:33:01.123000"')
+        self.assertEqual(str(variants[10]), '"2522-12-31 05:57:13"')
+        self.assertEqual(str(variants[11]), '"0001-07-15 17:43:26"')
+        self.assertEqual(str(variants[12]), '"1940-01-01 05:05:13.123000+00:00"')
+        self.assertEqual(str(variants[13]), '"2522-12-31 05:23:00+00:00"')
+        self.assertEqual(str(variants[14]), '"0001-12-30 17:01:01+00:00"')
+
+        # Check to_json on timestamps with custom timezones
+        self.assertEqual(
+            variants[12].toJson("America/Los_Angeles"), '"1939-12-31 21:05:13.123000-08:00"'
+        )
 
         # check toPython
         as_python = variants[0].toPython()
@@ -1466,6 +1528,51 @@ class TypesTestsMixin:
         self.assertEqual(variants[1].toPython(), {"a": 1})
         self.assertEqual(variants[2].toPython(), {"b": "2"})
         self.assertEqual(variants[3].toPython(), {"c": True})
+        self.assertEqual(variants[4].toPython(), datetime.date(2021, 1, 1))
+        self.assertEqual(variants[5].toPython(), datetime.date(1800, 12, 31))
+        self.assertEqual(variants[6].toPython(), float(5.5))
+        self.assertEqual(variants[7].toPython(), float(-5.5))
+        self.assertEqual(variants[8].toPython(), bytearray(b"2O\xa6\x9e"))
+        self.assertEqual(variants[9].toPython(), datetime.datetime(1940, 1, 1, 12, 33, 1, 123000))
+        self.assertEqual(variants[10].toPython(), datetime.datetime(2522, 12, 31, 5, 57, 13))
+        self.assertEqual(variants[11].toPython(), datetime.datetime(1, 7, 15, 17, 43, 26))
+        self.assertEqual(
+            variants[12].toPython(),
+            datetime.datetime(
+                1940,
+                1,
+                1,
+                12,
+                35,
+                13,
+                123000,
+                tzinfo=datetime.timezone(datetime.timedelta(hours=7, minutes=30)),
+            ),
+        )
+        self.assertEqual(
+            variants[13].toPython(),
+            datetime.datetime(
+                2522,
+                12,
+                31,
+                3,
+                3,
+                31,
+                tzinfo=datetime.timezone(datetime.timedelta(hours=-2, minutes=-20, seconds=31)),
+            ),
+        )
+        self.assertEqual(
+            variants[14].toPython(),
+            datetime.datetime(
+                1,
+                12,
+                31,
+                16,
+                3,
+                23,
+                tzinfo=datetime.timezone(datetime.timedelta(hours=23, minutes=2, seconds=22)),
+            ),
+        )
 
         # check repr
         self.assertEqual(str(variants[0]), str(eval(repr(variants[0]))))

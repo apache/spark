@@ -21,7 +21,7 @@ import java.io.{File, FileOutputStream, InputStream, IOException}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.{config, Logging, MDC}
-import org.apache.spark.internal.LogKey.PATH
+import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.util.{IntParam, Utils}
 
 /**

@@ -28,7 +28,7 @@ import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.SERVICE_NAME
+import org.apache.spark.internal.LogKeys.SERVICE_NAME
 import org.apache.spark.security.HadoopDelegationTokenProvider
 import org.apache.spark.util.Utils
 

@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.Locale
 
-import org.apache.spark.internal.LogKey.OPTIONS
+import org.apache.spark.internal.LogKeys.OPTIONS
 import org.apache.spark.internal.MDC
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}

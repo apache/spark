@@ -1318,6 +1318,13 @@
     ],
     "sqlState" : "2203G"
   },
+  "FAILED_TO_PARSE_TOO_COMPLEX" : {
+    "message" : [
+      "The statement, including potential SQL functions and referenced views, was too complex to parse.",
+      "To mitigate this error divide the statement into multiple, less complex chunks."
+    ],
+    "sqlState" : "54001"
+  },
   "FIELDS_ALREADY_EXISTS" : {
     "message" : [
       "Cannot <op> column, because <fieldNames> already exists in <struct>."
@@ -3779,6 +3786,12 @@
     ],
     "sqlState" : "42601"
   },
+  "STREAMING_PYTHON_RUNNER_INITIALIZATION_FAILURE" : {
+    "message" : [
+      "Streaming Runner initialization failed, returned <resFromPython>. Cause: <msg>"
+    ],
+    "sqlState" : "XXKST"
+  },
   "STREAMING_STATEFUL_OPERATOR_NOT_MATCH_IN_STATE_METADATA" : {
     "message" : [
       "Streaming stateful operator name does not match with the operator in state metadata. This likely to happen when user adds/removes/changes stateful operator of existing streaming query.",
@@ -3792,11 +3805,32 @@
     ],
     "sqlState" : "XXKST"
   },
+  "STRUCT_ARRAY_LENGTH_MISMATCH" : {
+    "message" : [
+      "Input row doesn't have expected number of values required by the schema. <expected> fields are required while <actual> values are provided."
+    ],
+    "sqlState" : "2201E"
+  },
   "SUM_OF_LIMIT_AND_OFFSET_EXCEEDS_MAX_INT" : {
     "message" : [
       "The sum of the LIMIT clause and the OFFSET clause must not be greater than the maximum 32-bit integer value (2,147,483,647) but found limit = <limit>, offset = <offset>."
     ],
     "sqlState" : "22003"
+  },
+  "SYNTAX_DISCONTINUED" : {
+    "message" : [
+      "Support of the clause or keyword: <clause> has been discontinued in this context."
+    ],
+    "subClass" : {
+      "BANG_EQUALS_NOT" : {
+        "message" : [
+          "The '!' keyword is only supported as an alias for the prefix operator 'NOT'.",
+          "Use the 'NOT' keyword instead for infix clauses such as `NOT LIKE`, `NOT IN`, `NOT BETWEEN`, etc.",
+          "To re-enable the '!' keyword, set \"spark.sql.legacy.bangEqualsNot\" to \"true\"."
+        ]
+      }
+    },
+    "sqlState" : "42601"
   },
   "TABLE_OR_VIEW_ALREADY_EXISTS" : {
     "message" : [

@@ -247,10 +247,9 @@ class ReadwriterV2TestsMixin:
 
     def test_create_without_provider(self):
         df = self.df
-        with self.assertRaisesRegex(
-            AnalysisException, "NOT_SUPPORTED_COMMAND_WITHOUT_HIVE_SUPPORT"
-        ):
+        with self.table("test_table"):
             df.writeTo("test_table").create()
+            self.assertEqual(100, self.spark.sql("select * from test_table").count())
 
     def test_table_overwrite(self):
         df = self.df

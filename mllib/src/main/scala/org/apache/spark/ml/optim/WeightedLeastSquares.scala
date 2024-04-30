@@ -17,10 +17,13 @@
 
 package org.apache.spark.ml.optim
 
+import org.apache.spark.internal.LogKeys.COUNT
+import org.apache.spark.internal.MDC
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.util.OptionalInstrumentation
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.MavenUtils.LogStringContext
 
 /**
  * Model fitted by [[WeightedLeastSquares]].
@@ -106,7 +109,7 @@ private[ml] class WeightedLeastSquares(
 
     val summary = instances.treeAggregate(new Aggregator)(_.add(_), _.merge(_), depth)
     summary.validate()
-    instr.logInfo(s"Number of instances: ${summary.count}.")
+    instr.logInfo(log"Number of instances: ${MDC(COUNT, summary.count)}.")
     val k = if (fitIntercept) summary.k + 1 else summary.k
     val numFeatures = summary.k
     val triK = summary.triK

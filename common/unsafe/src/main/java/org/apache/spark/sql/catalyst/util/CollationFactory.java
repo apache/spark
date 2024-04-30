@@ -25,6 +25,7 @@ import java.util.function.ToLongFunction;
 import com.ibm.icu.text.RuleBasedCollator;
 import com.ibm.icu.text.StringSearch;
 import com.ibm.icu.util.ULocale;
+import com.ibm.icu.text.CollationKey;
 import com.ibm.icu.text.Collator;
 
 import org.apache.spark.SparkException;
@@ -196,10 +197,21 @@ public final class CollationFactory {
       final UTF8String targetUTF8String,
       final UTF8String patternUTF8String,
       final int collationId) {
-    String pattern = patternUTF8String.toString();
-    CharacterIterator target = new StringCharacterIterator(targetUTF8String.toString());
+    return getStringSearch(targetUTF8String.toString(), patternUTF8String.toString(), collationId);
+  }
+
+  /**
+   * Returns a StringSearch object for the given pattern and target strings, under collation
+   * rules corresponding to the given collationId. The external ICU library StringSearch object can
+   * be used to find occurrences of the pattern in the target string, while respecting collation.
+   */
+  public static StringSearch getStringSearch(
+          final String targetString,
+          final String patternString,
+          final int collationId) {
+    CharacterIterator target = new StringCharacterIterator(targetString);
     Collator collator = CollationFactory.fetchCollation(collationId).collator;
-    return new StringSearch(pattern, target, (RuleBasedCollator) collator);
+    return new StringSearch(patternString, target, (RuleBasedCollator) collator);
   }
 
   /**
@@ -259,4 +271,17 @@ public final class CollationFactory {
     int collationId = collationNameToId(collationName);
     return collationTable[collationId];
   }
+
+  public static UTF8String getCollationKey(UTF8String input, int collationId) {
+    Collation collation = fetchCollation(collationId);
+    if (collation.supportsBinaryEquality) {
+      return input;
+    } else if (collation.supportsLowercaseEquality) {
+      return input.toLowerCase();
+    } else {
+      CollationKey collationKey = collation.collator.getCollationKey(input.toString());
+      return UTF8String.fromBytes(collationKey.toByteArray());
+    }
+  }
+
 }

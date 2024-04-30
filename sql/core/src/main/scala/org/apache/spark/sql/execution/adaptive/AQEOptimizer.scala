@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.adaptive
 
+import org.apache.spark.internal.LogKeys.{BATCH_NAME, RULE_NAME}
+import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.analysis.UpdateAttributeNullability
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, EliminateLimits, OptimizeOneRowPlan}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LogicalPlanIntegrity}
@@ -52,7 +54,8 @@ class AQEOptimizer(conf: SQLConf, extendedRuntimeOptimizerRules: Seq[Rule[Logica
       val filteredRules = batch.rules.filter { rule =>
         val exclude = excludedRules.contains(rule.ruleName)
         if (exclude) {
-          logInfo(s"Optimization rule '${rule.ruleName}' is excluded from the optimizer.")
+          logInfo(log"Optimization rule '${MDC(RULE_NAME, rule.ruleName)}' is excluded from " +
+            log"the optimizer.")
         }
         !exclude
       }
@@ -61,8 +64,8 @@ class AQEOptimizer(conf: SQLConf, extendedRuntimeOptimizerRules: Seq[Rule[Logica
       } else if (filteredRules.nonEmpty) {
         Some(Batch(batch.name, batch.strategy, filteredRules: _*))
       } else {
-        logInfo(s"Optimization batch '${batch.name}' is excluded from the optimizer " +
-          s"as all enclosed rules have been excluded.")
+        logInfo(log"Optimization batch '${MDC(BATCH_NAME, batch.name)}' is excluded from " +
+          log"the optimizer as all enclosed rules have been excluded.")
         None
       }
     }
