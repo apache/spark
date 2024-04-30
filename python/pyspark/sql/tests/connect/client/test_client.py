@@ -19,6 +19,7 @@ import unittest
 import uuid
 from collections.abc import Generator
 from typing import Optional, Any, Union
+from parameterized import parameterized
 
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 from pyspark.testing.utils import eventually
@@ -38,7 +39,6 @@ if should_test_connect:
     import pyspark.sql.connect.proto as proto
 
     class TestPolicy(DefaultPolicy):
-        __test__ = False
         def __init__(self):
             super().__init__(
                 max_retries=3,
@@ -47,12 +47,6 @@ if should_test_connect:
                 max_backoff=10,
                 jitter=10,
                 min_jitter_threshold=10,
-            )
-
-    class NoRetry(DefaultPolicy):
-        def __init__(self):
-            super().__init__(
-                max_retries=0
             )
 
     class TestException(grpc.RpcError, grpc.Call):
@@ -357,31 +351,34 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
 
         eventually(timeout=1, catch_assertions=True)(check)()
 
-    def test_restart_new_session(self):
-        def execute_unavailable():
-            raise TestException("Unavailable", grpc.StatusCode.UNAVAILABLE)
+    @parameterized.expand([
+        ("session", "INVALID_HANDLE.SESSION_NOT_FOUND"),
+        ("operation", "INVALID_HANDLE.OPERATION_NOT_FOUND")
+    ])
+    def test_not_found_recovers(self, _, error_msg: str):
+        # Assert that the client recovers from session or operation not found error
+        # if no partial response has been received so far.
 
         def not_found():
             raise TestException(
-                "INVALID_HANDLE.OPERATION_NOT_FOUND",
+                error_msg,
                 grpc.StatusCode.UNAVAILABLE,
                 trailing_metadata={
                     "grpc-status-details-bin": status_pb2.Status(
                         code=14,
-                        message="INVALID_HANDLE.OPERATION_NOT_FOUND",
+                        message=error_msg,
                         details="",
                     ).SerializeToString()
                 }
             )
 
         stub = self._stub_with(
-            [execute_unavailable, self.finished], [not_found]
+            [not_found, self.finished]
         )
         ite = ExecutePlanResponseReattachableIterator(
             self.request,
             stub,
             self.retrying,
-            # lambda: Retrying(NoRetry()),
             []
         )
 
@@ -389,8 +386,8 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
             pass
 
         def checks():
-            self.assertEquals(1, stub.execute_calls)
-            self.assertEquals(1, stub.attach_calls)
+            self.assertEquals(2, stub.execute_calls)
+            self.assertEquals(0, stub.attach_calls)
 
         eventually(timeout=1, catch_assertions=True)(checks)()
 
