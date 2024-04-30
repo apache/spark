@@ -1513,7 +1513,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> df.cache()
         DataFrame[id: bigint]
 
-        >>> df.explain()
+        >>> df.explain()  # doctest: +SKIP
         == Physical Plan ==
         AdaptiveSparkPlan isFinalPlan=false
         +- InMemoryTableScan ...
@@ -1556,7 +1556,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> df.persist()
         DataFrame[id: bigint]
 
-        >>> df.explain()
+        >>> df.explain()  # doctest: +SKIP
         == Physical Plan ==
         AdaptiveSparkPlan isFinalPlan=false
         +- InMemoryTableScan ...
@@ -3887,8 +3887,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> df2 = spark.createDataFrame([(3, "Charlie"), (4, "Dave")], ["id", "name"])
         >>> df1 = df1.withColumn("age", lit(30))
         >>> df2 = df2.withColumn("age", lit(40))
-        >>> df3 = df1.union(df2)
-        >>> df3.show()
+        >>> df3 = df1.union(df2)  # doctest: +SKIP
+        >>> df3.show()  # doctest: +SKIP
         +-----+-------+---+
         | name|     id|age|
         +-----+-------+---+

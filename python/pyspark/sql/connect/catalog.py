@@ -326,6 +326,7 @@ Catalog.__doc__ = PySparkCatalog.__doc__
 
 
 def _test() -> None:
+    import os
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
@@ -333,7 +334,9 @@ def _test() -> None:
 
     globs = pyspark.sql.connect.catalog.__dict__.copy()
     globs["spark"] = (
-        PySparkSession.builder.appName("sql.connect.catalog tests").remote("local[4]").getOrCreate()
+        PySparkSession.builder.appName("sql.connect.catalog tests")
+        .remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[4]"))
+        .getOrCreate()
     )
 
     (failure_count, test_count) = doctest.testmod(

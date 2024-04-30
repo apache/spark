@@ -19,7 +19,7 @@ import os
 import shutil
 import unittest
 
-have_torch = True
+have_torch = "SPARK_SKIP_CONNECT_COMPAT_TESTS" not in os.environ
 try:
     import torch  # noqa: F401
 except ImportError:
@@ -81,7 +81,7 @@ class TorchDistributorLocalUnitTestsOnConnect(
         ]
 
 
-@unittest.skipIf(not have_torch, "torch is required")
+@unittest.skipIf("SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ, "Requires JVM access")
 class TorchDistributorLocalUnitTestsIIOnConnect(
     TorchDistributorLocalUnitTestsMixin, unittest.TestCase
 ):

@@ -80,6 +80,7 @@ if should_test_connect:
     from pyspark.sql.connect.client.core import Retrying, SparkConnectClient
 
 
+@unittest.skipIf("SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ, "Requires JVM access")
 class SparkConnectSQLTestCase(ReusedConnectTestCase, SQLTestUtils, PandasOnSparkTestUtils):
     """Parent test fixture class for all Spark Connect related
     test cases."""
@@ -3250,12 +3251,15 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assertTrue(df.is_cached)
 
 
+@unittest.skipIf(
+    "SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ, "Session creation different from local mode"
+)
 class SparkConnectSessionTests(ReusedConnectTestCase):
     def setUp(self) -> None:
         self.spark = (
             PySparkSession.builder.config(conf=self.conf())
             .appName(self.__class__.__name__)
-            .remote("local[4]")
+            .remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[4]"))
             .getOrCreate()
         )
 
@@ -3347,6 +3351,7 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
             self.assertIn("Create a new SparkSession is only supported with SparkConnect.", str(e))
 
 
+@unittest.skipIf("SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ, "Requires JVM access")
 class SparkConnectSessionWithOptionsTest(unittest.TestCase):
     def setUp(self) -> None:
         self.spark = (

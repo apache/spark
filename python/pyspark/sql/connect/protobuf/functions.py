@@ -144,7 +144,7 @@ def _test() -> None:
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.protobuf.functions tests")
-        .remote("local[2]")
+        .remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[2]"))
         .getOrCreate()
     )
 
