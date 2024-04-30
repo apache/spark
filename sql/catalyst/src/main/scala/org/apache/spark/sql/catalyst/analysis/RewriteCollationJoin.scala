@@ -33,7 +33,7 @@ object RewriteCollationJoin extends Rule[LogicalPlan] {
               val collationId = l.dataType.asInstanceOf[StringType].collationId
               val collation = CollationFactory.fetchCollation(collationId)
               if (collation.supportsBinaryEquality) {
-                condition
+                return plan
               } else if (collation.supportsLowercaseEquality) {
                 EqualTo(Lower(l), Lower(r))
               } else {
@@ -44,7 +44,7 @@ object RewriteCollationJoin extends Rule[LogicalPlan] {
               val collationId = elementType.asInstanceOf[StringType].collationId
               val collation = CollationFactory.fetchCollation(collationId)
               if (collation.supportsBinaryEquality) {
-                condition
+                return plan
               } else {
                 EqualTo(CollationKey(l), CollationKey(r))
               }
@@ -54,12 +54,12 @@ object RewriteCollationJoin extends Rule[LogicalPlan] {
                 dataType.asInstanceOf[StringType].collationId
               val collation = CollationFactory.fetchCollation(collationId)
               if (collation.supportsBinaryEquality) {
-                condition
+                return plan
               } else {
                 EqualTo(CollationKey(l), CollationKey(r))
               }
             case _ =>
-              condition
+              return plan
           }
         case EqualNullSafe(l: AttributeReference, r: AttributeReference) =>
           (l.dataType, r.dataType) match {
@@ -67,7 +67,7 @@ object RewriteCollationJoin extends Rule[LogicalPlan] {
               val collationId = l.dataType.asInstanceOf[StringType].collationId
               val collation = CollationFactory.fetchCollation(collationId)
               if (collation.supportsBinaryEquality) {
-                condition
+                return plan
               } else if (collation.supportsLowercaseEquality) {
                 EqualNullSafe(Lower(l), Lower(r))
               } else {
@@ -78,7 +78,7 @@ object RewriteCollationJoin extends Rule[LogicalPlan] {
               val collationId = elementType.asInstanceOf[StringType].collationId
               val collation = CollationFactory.fetchCollation(collationId)
               if (collation.supportsBinaryEquality) {
-                condition
+                return plan
               } else {
                 EqualNullSafe(CollationKey(l), CollationKey(r))
               }
@@ -88,15 +88,14 @@ object RewriteCollationJoin extends Rule[LogicalPlan] {
                 dataType.asInstanceOf[StringType].collationId
               val collation = CollationFactory.fetchCollation(collationId)
               if (collation.supportsBinaryEquality) {
-                condition
+                return plan
               } else {
                 EqualNullSafe(CollationKey(l), CollationKey(r))
               }
             case _ =>
-              condition
+              return plan
           }
       }
-      if (newCondition fastEquals condition) j
-      else j.copy(condition = Some(newCondition))
+      j.copy(condition = Some(newCondition))
   }
 }
