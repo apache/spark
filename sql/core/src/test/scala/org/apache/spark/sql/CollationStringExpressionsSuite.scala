@@ -804,29 +804,42 @@ class CollationStringExpressionsSuite
 
   test("StringTrim* functions - unit tests for both paths (codegen and eval)") {
     // Without trimString param.
-    checkEvaluation(StringTrim(Literal.create( "  asd  ", StringType(0))), "asd")
-    checkEvaluation(StringTrimLeft(Literal.create("  asd  ", StringType(0))), "asd  ")
-    checkEvaluation(StringTrimRight(Literal.create("  asd  ", StringType(0))), "  asd")
+    checkEvaluation(StringTrim(Literal.create( "  asd  ", StringType("UTF8_BINARY"))), "asd")
+    checkEvaluation(
+      StringTrimLeft(Literal.create("  asd  ", StringType("UTF8_BINARY_LCASE"))), "asd  ")
+    checkEvaluation(StringTrimRight(Literal.create("  asd  ", StringType("UNICODE"))), "  asd")
 
     // With trimString param.
     checkEvaluation(
-      StringTrim(Literal.create("  asd  ", StringType(0)), Literal.create(" ", StringType(0))),
+      StringTrim(
+        Literal.create("  asd  ", StringType("UTF8_BINARY")),
+        Literal.create(" ", StringType("UTF8_BINARY"))),
       "asd")
     checkEvaluation(
-      StringTrimLeft(Literal.create("  asd  ", StringType(0)), Literal.create(" ", StringType(0))),
+      StringTrimLeft(
+        Literal.create("  asd  ", StringType("UTF8_BINARY_LCASE")),
+        Literal.create(" ", StringType("UTF8_BINARY_LCASE"))),
       "asd  ")
     checkEvaluation(
-      StringTrimRight(Literal.create("  asd  ", StringType(0)), Literal.create(" ", StringType(0))),
+      StringTrimRight(
+        Literal.create("  asd  ", StringType("UNICODE")),
+        Literal.create(" ", StringType("UNICODE"))),
       "  asd")
 
     checkEvaluation(
-      StringTrim(Literal.create("xxasdxx", StringType(0)), Literal.create("x", StringType(0))),
+      StringTrim(
+        Literal.create("xxasdxx", StringType("UTF8_BINARY")),
+        Literal.create("x", StringType("UTF8_BINARY"))),
       "asd")
     checkEvaluation(
-      StringTrimLeft(Literal.create("xxasdxx", StringType(0)), Literal.create("x", StringType(0))),
+      StringTrimLeft(
+        Literal.create("xxasdxx", StringType("UTF8_BINARY_LCASE")),
+        Literal.create("x", StringType("UTF8_BINARY_LCASE"))),
       "asdxx")
     checkEvaluation(
-      StringTrimRight(Literal.create("xxasdxx", StringType(0)), Literal.create("x", StringType(0))),
+      StringTrimRight(
+        Literal.create("xxasdxx", StringType("UNICODE")),
+        Literal.create("x", StringType("UNICODE"))),
       "xxasd")
   }
 
@@ -881,6 +894,40 @@ class CollationStringExpressionsSuite
       checkAnswer(df = df, expectedAnswer = Row(testCase.expectedResultString))
     })
 
+    // scalastyle:on
+  }
+
+  test("StringTrim* functions - implicit collations") {
+    // scalastyle:off
+    checkAnswer(
+      df = sql("SELECT TRIM(COLLATE('x', 'UTF8_BINARY'), COLLATE('xax', 'UTF8_BINARY'))"),
+      expectedAnswer = Row("a"))
+    checkAnswer(
+      df = sql("SELECT BTRIM(COLLATE('xax', 'UTF8_BINARY_LCASE'), COLLATE('x', 'UTF8_BINARY_LCASE'))"),
+      expectedAnswer = Row("a"))
+    checkAnswer(
+      df = sql("SELECT LTRIM(COLLATE('x', 'UNICODE'), COLLATE('xax', 'UNICODE'))"),
+      expectedAnswer = Row("ax"))
+
+    checkAnswer(
+      df = sql("SELECT RTRIM('x', COLLATE('xax', 'UTF8_BINARY'))"),
+      expectedAnswer = Row("xa"))
+    checkAnswer(
+      df = sql("SELECT TRIM('x', COLLATE('xax', 'UTF8_BINARY_LCASE'))"),
+      expectedAnswer = Row("a"))
+    checkAnswer(
+      df = sql("SELECT BTRIM('xax', COLLATE('x', 'UNICODE'))"),
+      expectedAnswer = Row("a"))
+
+    checkAnswer(
+      df = sql("SELECT LTRIM(COLLATE('x', 'UTF8_BINARY'), 'xax')"),
+      expectedAnswer = Row("ax"))
+    checkAnswer(
+      df = sql("SELECT RTRIM(COLLATE('x', 'UTF8_BINARY_LCASE'), 'xax')"),
+      expectedAnswer = Row("xa"))
+    checkAnswer(
+      df = sql("SELECT TRIM(COLLATE('x', 'UNICODE'), 'xax')"),
+      expectedAnswer = Row("a"))
     // scalastyle:on
   }
 
