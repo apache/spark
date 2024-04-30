@@ -1106,22 +1106,22 @@ object TypeCoercion extends TypeCoercionBase {
 
       case a @ BinaryArithmetic(left @ StringType(), right)
         if right.dataType != CalendarIntervalType =>
-        a.makeCopy(Array(Cast(left, DoubleType), right))
+        a.withNewChildren(Seq(Cast(left, DoubleType), right))
       case a @ BinaryArithmetic(left, right @ StringType())
         if left.dataType != CalendarIntervalType =>
-        a.makeCopy(Array(left, Cast(right, DoubleType)))
+        a.withNewChildren(Seq(left, Cast(right, DoubleType)))
 
       // For equality between string and timestamp we cast the string to a timestamp
       // so that things like rounding of subsecond precision does not affect the comparison.
       case p @ Equality(left @ StringType(), right @ TimestampType()) =>
-        p.makeCopy(Array(Cast(left, TimestampType), right))
+        p.withNewChildren(Seq(Cast(left, TimestampType), right))
       case p @ Equality(left @ TimestampType(), right @ StringType()) =>
-        p.makeCopy(Array(left, Cast(right, TimestampType)))
+        p.withNewChildren(Seq(left, Cast(right, TimestampType)))
 
       case p @ BinaryComparison(left, right)
           if findCommonTypeForBinaryComparison(left.dataType, right.dataType, conf).isDefined =>
         val commonType = findCommonTypeForBinaryComparison(left.dataType, right.dataType, conf).get
-        p.makeCopy(Array(castExpr(left, commonType), castExpr(right, commonType)))
+        p.withNewChildren(Seq(castExpr(left, commonType), castExpr(right, commonType)))
     }
   }
 
