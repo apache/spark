@@ -94,6 +94,7 @@ message AnalyzePlanRequest {
     Persist persist = 14;
     Unpersist unpersist = 15;
     GetStorageLevel get_storage_level = 16;
+    SizeInBytes size_in_bytes = 18;
   }
 
   message Schema {
@@ -199,6 +200,15 @@ message AnalyzePlanRequest {
     // (Required) The logical plan to get the storage level.
     Relation relation = 1;
   }
+
+  // Return estimated size in bytes of the top node of the plan
+  message SizeInBytes {
+    // (Required) The plan to analyze
+    Plan plan = 1;
+
+    // (Optional) Should physical plan be generated or not?
+    optional bool usePhysical = 2;
+  }
 }
 
 // Response to performing analysis of the query. Contains relevant metadata to be able to
@@ -224,6 +234,7 @@ message AnalyzePlanResponse {
     Persist persist = 12;
     Unpersist unpersist = 13;
     GetStorageLevel get_storage_level = 14;
+    SizeInBytes size_in_bytes = 16;
   }
 
   message Schema {
@@ -274,6 +285,12 @@ message AnalyzePlanResponse {
   message GetStorageLevel {
     // (Required) The StorageLevel as a result of get_storage_level request.
     StorageLevel storage_level = 1;
+  }
+
+  // Response to SizeInBytes request, contains a single double
+  message SizeInBytes {
+    // (Required) Estimated size in bytes of the provided plan
+    int64 result = 1;
   }
 }
 

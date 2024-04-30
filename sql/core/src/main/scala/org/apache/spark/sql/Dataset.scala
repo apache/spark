@@ -18,17 +18,14 @@
 package org.apache.spark.sql
 
 import java.io.{ByteArrayOutputStream, CharArrayWriter, DataOutputStream}
-
 import scala.annotation.varargs
 import scala.collection.mutable.{ArrayBuffer, HashSet}
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
-
 import org.apache.commons.lang3.StringUtils
 import org.apache.commons.text.StringEscapeUtils
-
 import org.apache.spark.TaskContext
 import org.apache.spark.annotation.{DeveloperApi, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
@@ -43,10 +40,11 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JSONOptions}
+import org.apache.spark.sql.catalyst.json.{JSONOptions, JacksonGenerator}
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.SizeInBytesOnlyStatsPlanVisitor
 import org.apache.spark.sql.catalyst.trees.{TreeNodeTag, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, IntervalUtils}
@@ -581,6 +579,23 @@ class Dataset[T] private[sql](
    */
   def printSchema(level: Int): Unit = println(schema.treeString(level))
   // scalastyle:on println
+
+  /**
+   * Returns an estimated size in bytes of the Dataset
+   *
+   * @param usePhysical
+   * specify should the plan be optimized before getting size in bytes;
+   * use logical plan otherwise.
+   * @group basic
+   * @since 4.0.0
+   */
+  def estimatedSizeInBytes(usePhysical: Boolean): Long = {
+    if (usePhysical) {
+      queryExecution.optimizedPlan.stats.sizeInBytes.toLong
+    } else {
+      SizeInBytesOnlyStatsPlanVisitor.default(logicalPlan).sizeInBytes.toLong
+    }
+  }
 
   /**
    * Prints the plans (logical and physical) with a format specified by a given explain mode.

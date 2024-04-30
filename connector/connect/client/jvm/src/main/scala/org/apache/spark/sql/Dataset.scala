@@ -284,6 +284,22 @@ class Dataset[T] private[sql] (
   // scalastyle:on println
 
   /**
+   * Returns an estimated size in bytes of the Dataset
+   *
+   * @param usePhysical
+   * specify should the plan be optimized before getting size in bytes;
+   * use logical plan otherwise.
+   * @group basic
+   * @since 4.0.0
+   */
+  def estimatedSizeInBytes(usePhysical: Boolean): Long = {
+    sparkSession
+      .analyze(builder => builder.getSizeInBytesBuilder.setPlan(plan).setUsePhysical(usePhysical))
+      .getSizeInBytes
+      .getResult
+  }
+
+  /**
    * Prints the plans (logical and physical) with a format specified by a given explain mode.
    *
    * @param mode

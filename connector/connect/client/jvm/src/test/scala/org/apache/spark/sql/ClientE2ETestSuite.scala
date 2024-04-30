@@ -637,6 +637,16 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     testCapturedStdOut(df.printSchema(5), expectedSchema.treeString(5))
   }
 
+  test("Dataframe sizeInBytes") {
+    val df = spark.sql("select * from range(10)")
+    val sizeInBytesLogical = df.estimatedSizeInBytes(false)
+    val sizeInBytesPhysical = df.estimatedSizeInBytes(true)
+    // We are checking only signature because under the hood
+    // there is only calls to Catalyst stats estimators.
+    assert(sizeInBytesLogical > 0)
+    assert(sizeInBytesPhysical > 0)
+  }
+
   test("Dataset explain") {
     val df = spark.range(10)
     val simpleExplainFragments = Seq("== Physical Plan ==")

@@ -18,12 +18,11 @@
 package org.apache.spark.sql.connect.service
 
 import scala.jdk.CollectionConverters._
-
 import io.grpc.stub.StreamObserver
-
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.SizeInBytesOnlyStatsPlanVisitor
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, StorageLevelProtoConverter}
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.execution.{CodegenMode, CostMode, ExtendedMode, FormattedMode, SimpleMode}
@@ -204,6 +203,21 @@ private[connect] class SparkConnectAnalyzeHandler(
           proto.AnalyzePlanResponse.GetStorageLevel
             .newBuilder()
             .setStorageLevel(StorageLevelProtoConverter.toConnectProtoType(storageLevel))
+            .build())
+
+      case proto.AnalyzePlanRequest.AnalyzeCase.SIZE_IN_BYTES =>
+        val queryExecution = Dataset
+          .ofRows(session, transformRelation(request.getExplain.getPlan.getRoot))
+          .queryExecution
+        val sizeInBytes = if (request.getSizeInBytes.getUsePhysical) {
+          queryExecution.optimizedPlan.stats.sizeInBytes.toLong
+        } else {
+          SizeInBytesOnlyStatsPlanVisitor.default(queryExecution.logical).sizeInBytes.toLong
+        }
+        builder.setSizeInBytes(
+          proto.AnalyzePlanResponse.SizeInBytes
+            .newBuilder()
+            .setResult(sizeInBytes)
             .build())
 
       case other => throw InvalidPlanInput(s"Unknown Analyze Method $other!")
