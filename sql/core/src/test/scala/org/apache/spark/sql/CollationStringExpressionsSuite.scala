@@ -131,6 +131,37 @@ class CollationStringExpressionsSuite
     assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
   }
 
+  test("Support SubstringIndex expression with collation") {
+    case class SubstringIndexTestCase[R](string: String, delimiter: String, count: Integer,
+      c: String, result: R)
+    val testCases = Seq(
+      SubstringIndexTestCase("wwwgapachegorg", "g", -3, "UTF8_BINARY", "apachegorg"),
+      SubstringIndexTestCase("www||apache||org", "||", 2, "UTF8_BINARY", "www||apache"),
+      SubstringIndexTestCase("wwwXapacheXorg", "x", 2, "UTF8_BINARY_LCASE", "wwwXapache"),
+      SubstringIndexTestCase("aaaaaaaaaa", "aa", 2, "UNICODE", "a"),
+      SubstringIndexTestCase("wwwmapacheMorg", "M", -2, "UNICODE_CI", "apacheMorg")
+    )
+    testCases.foreach(t => {
+      val query = s"SELECT substring_index(collate('${t.string}','${t.c}')," +
+        s"collate('${t.delimiter}','${t.c}'),${t.count})"
+      // Result & data type
+      checkAnswer(sql(query), Row(t.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(
+        StringType(CollationFactory.collationNameToId(t.c))))
+      // Implicit casting
+      checkAnswer(sql(s"SELECT substring_index(collate('${t.string}','${t.c}')," +
+        s"'${t.delimiter}',${t.count})"), Row(t.result))
+      checkAnswer(sql(s"SELECT substring_index('${t.string}',collate('${t.delimiter}','${t.c}')," +
+        s"${t.count})"), Row(t.result))
+    })
+    // Collation mismatch
+    val collationMismatch = intercept[AnalysisException] {
+      sql("SELECT substring_index(collate('abcde','UTF8_BINARY_LCASE')," +
+        "collate('C','UNICODE_CI'),1)")
+    }
+    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+  }
+
   test("Support StringInStr string expression with collation") {
     case class StringInStrTestCase[R](string: String, substring: String, c: String, result: R)
     val testCases = Seq(

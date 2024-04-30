@@ -717,6 +717,89 @@ public class CollationSupportSuite {
     assertLocate("İo", "世界i̇o大千世界大千i̇o", 4, "UNICODE_CI", 12); // 12 instead of 11
   }
 
+  private void assertSubstringIndex(String string, String delimiter, Integer count,
+        String collationName, String expected) throws SparkException {
+    UTF8String str = UTF8String.fromString(string);
+    UTF8String delim = UTF8String.fromString(delimiter);
+    int collationId = CollationFactory.collationNameToId(collationName);
+    assertEquals(expected,
+      CollationSupport.SubstringIndex.exec(str, delim, count, collationId).toString());
+  }
+
+  @Test
+  public void testSubstringIndex() throws SparkException {
+    assertSubstringIndex("wwwgapachegorg", "g", -3, "UTF8_BINARY", "apachegorg");
+    assertSubstringIndex("www||apache||org", "||", 2, "UTF8_BINARY", "www||apache");
+    assertSubstringIndex("aaaaaaaaaa", "aa", 2, "UTF8_BINARY", "a");
+    assertSubstringIndex("AaAaAaAaAa", "aa", 2, "UTF8_BINARY_LCASE", "A");
+    assertSubstringIndex("www.apache.org", ".", 3, "UTF8_BINARY_LCASE", "www.apache.org");
+    assertSubstringIndex("wwwXapacheXorg", "x", 2, "UTF8_BINARY_LCASE", "wwwXapache");
+    assertSubstringIndex("wwwxapachexorg", "X", 1, "UTF8_BINARY_LCASE", "www");
+    assertSubstringIndex("www.apache.org", ".", 0, "UTF8_BINARY_LCASE", "");
+    assertSubstringIndex("www.apache.ORG", ".", -3, "UTF8_BINARY_LCASE", "www.apache.ORG");
+    assertSubstringIndex("wwwGapacheGorg", "g", 1, "UTF8_BINARY_LCASE", "www");
+    assertSubstringIndex("wwwGapacheGorg", "g", 3, "UTF8_BINARY_LCASE", "wwwGapacheGor");
+    assertSubstringIndex("gwwwGapacheGorg", "g", 3, "UTF8_BINARY_LCASE", "gwwwGapache");
+    assertSubstringIndex("wwwGapacheGorg", "g", -3, "UTF8_BINARY_LCASE", "apacheGorg");
+    assertSubstringIndex("wwwmapacheMorg", "M", -2, "UTF8_BINARY_LCASE", "apacheMorg");
+    assertSubstringIndex("www.apache.org", ".", -1, "UTF8_BINARY_LCASE", "org");
+    assertSubstringIndex("www.apache.org.", ".", -1, "UTF8_BINARY_LCASE", "");
+    assertSubstringIndex("", ".", -2, "UTF8_BINARY_LCASE", "");
+    assertSubstringIndex("test大千世界X大千世界", "x", -1, "UTF8_BINARY_LCASE", "大千世界");
+    assertSubstringIndex("test大千世界X大千世界", "X", 1, "UTF8_BINARY_LCASE", "test大千世界");
+    assertSubstringIndex("test大千世界大千世界", "千", 2, "UTF8_BINARY_LCASE", "test大千世界大");
+    assertSubstringIndex("www||APACHE||org", "||", 2, "UTF8_BINARY_LCASE", "www||APACHE");
+    assertSubstringIndex("www||APACHE||org", "||", -1, "UTF8_BINARY_LCASE", "org");
+    assertSubstringIndex("AaAaAaAaAa", "Aa", 2, "UNICODE", "Aa");
+    assertSubstringIndex("wwwYapacheyorg", "y", 3, "UNICODE", "wwwYapacheyorg");
+    assertSubstringIndex("www.apache.org", ".", 2, "UNICODE", "www.apache");
+    assertSubstringIndex("wwwYapacheYorg", "Y", 1, "UNICODE", "www");
+    assertSubstringIndex("wwwYapacheYorg", "y", 1, "UNICODE", "wwwYapacheYorg");
+    assertSubstringIndex("wwwGapacheGorg", "g", 1, "UNICODE", "wwwGapacheGor");
+    assertSubstringIndex("GwwwGapacheGorG", "G", 3, "UNICODE", "GwwwGapache");
+    assertSubstringIndex("wwwGapacheGorG", "G", -3, "UNICODE", "apacheGorG");
+    assertSubstringIndex("www.apache.org", ".", 0, "UNICODE", "");
+    assertSubstringIndex("www.apache.org", ".", -3, "UNICODE", "www.apache.org");
+    assertSubstringIndex("www.apache.org", ".", -2, "UNICODE", "apache.org");
+    assertSubstringIndex("www.apache.org", ".", -1, "UNICODE", "org");
+    assertSubstringIndex("", ".", -2, "UNICODE", "");
+    assertSubstringIndex("test大千世界X大千世界", "X", -1, "UNICODE", "大千世界");
+    assertSubstringIndex("test大千世界X大千世界", "X", 1, "UNICODE", "test大千世界");
+    assertSubstringIndex("大x千世界大千世x界", "x", 1, "UNICODE", "大");
+    assertSubstringIndex("大x千世界大千世x界", "x", -1, "UNICODE", "界");
+    assertSubstringIndex("大x千世界大千世x界", "x", -2, "UNICODE", "千世界大千世x界");
+    assertSubstringIndex("大千世界大千世界", "千", 2, "UNICODE", "大千世界大");
+    assertSubstringIndex("www||apache||org", "||", 2, "UNICODE", "www||apache");
+    assertSubstringIndex("AaAaAaAaAa", "aa", 2, "UNICODE_CI", "A");
+    assertSubstringIndex("www.apache.org", ".", 3, "UNICODE_CI", "www.apache.org");
+    assertSubstringIndex("wwwXapacheXorg", "x", 2, "UNICODE_CI", "wwwXapache");
+    assertSubstringIndex("wwwxapacheXorg", "X", 1, "UNICODE_CI", "www");
+    assertSubstringIndex("www.apache.org", ".", 0, "UNICODE_CI", "");
+    assertSubstringIndex("wwwGapacheGorg", "G", 3, "UNICODE_CI", "wwwGapacheGor");
+    assertSubstringIndex("gwwwGapacheGorg", "g", 3, "UNICODE_CI", "gwwwGapache");
+    assertSubstringIndex("gwwwGapacheGorg", "g", -3, "UNICODE_CI", "apacheGorg");
+    assertSubstringIndex("www.apache.ORG", ".", -3, "UNICODE_CI", "www.apache.ORG");
+    assertSubstringIndex("wwwmapacheMorg", "M", -2, "UNICODE_CI", "apacheMorg");
+    assertSubstringIndex("www.apache.org", ".", -1, "UNICODE_CI", "org");
+    assertSubstringIndex("", ".", -2, "UNICODE_CI", "");
+    assertSubstringIndex("test大千世界X大千世界", "X", -1, "UNICODE_CI", "大千世界");
+    assertSubstringIndex("test大千世界X大千世界", "X", 1, "UNICODE_CI", "test大千世界");
+    assertSubstringIndex("test大千世界大千世界", "千", 2, "UNICODE_CI", "test大千世界大");
+    assertSubstringIndex("www||APACHE||org", "||", 2, "UNICODE_CI", "www||APACHE");
+    assertSubstringIndex("abİo12", "i̇o", 1, "UNICODE_CI", "ab");
+    assertSubstringIndex("abİo12", "i̇o", -1, "UNICODE_CI", "12");
+    assertSubstringIndex("abi̇o12", "İo", 1, "UNICODE_CI", "ab");
+    assertSubstringIndex("abi̇o12", "İo", -1, "UNICODE_CI", "12");
+    assertSubstringIndex("ai̇bi̇o12", "İo", 1, "UNICODE_CI", "ai̇b");
+    assertSubstringIndex("ai̇bi̇o12i̇o", "İo", 2, "UNICODE_CI", "ai̇bi̇o12");
+    assertSubstringIndex("ai̇bi̇o12i̇o", "İo", -1, "UNICODE_CI", "");
+    assertSubstringIndex("ai̇bi̇o12i̇o", "İo", -2, "UNICODE_CI", "12i̇o");
+    assertSubstringIndex("ai̇bi̇oİo12İoi̇o", "İo", -4, "UNICODE_CI", "İo12İoi̇o");
+    assertSubstringIndex("ai̇bi̇oİo12İoi̇o", "i̇o", -4, "UNICODE_CI", "İo12İoi̇o");
+    assertSubstringIndex("ai̇bİoi̇o12i̇oİo", "İo", -4, "UNICODE_CI", "i̇o12i̇oİo");
+    assertSubstringIndex("ai̇bİoi̇o12i̇oİo", "i̇o", -4, "UNICODE_CI", "i̇o12i̇oİo");
+  }
+
   // TODO: Test more collation-aware string expressions.
 
   /**
