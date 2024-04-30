@@ -450,7 +450,6 @@ public final class CollationSupport {
         return execICU(string, delimiter, count, collationId);
       }
     }
-
     public static String genCode(final String string, final String delimiter,
         final int count, final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
@@ -463,17 +462,14 @@ public final class CollationSupport {
         return String.format(expr + "ICU(%s, %s, %d, %d)", string, delimiter, count, collationId);
       }
     }
-
     public static UTF8String execBinary(final UTF8String string, final UTF8String delimiter,
         final int count) {
       return string.subStringIndex(delimiter, count);
     }
-
     public static UTF8String execLowercase(final UTF8String string, final UTF8String delimiter,
         final int count) {
       return CollationAwareUTF8String.lowercaseSubStringIndex(string, delimiter, count);
     }
-
     public static UTF8String execICU(final UTF8String string, final UTF8String delimiter,
         final int count, final int collationId) {
       return CollationAwareUTF8String.subStringIndex(string, delimiter, count,
