@@ -2174,11 +2174,6 @@ def _test() -> None:
 
     globs = pyspark.sql.dataframe.__dict__.copy()
 
-    del pyspark.sql.dataframe.DataFrame.toJSON.__doc__
-    del pyspark.sql.dataframe.DataFrame.rdd.__doc__
-    del pyspark.sql.dataframe.DataFrame.checkpoint.__doc__
-    del pyspark.sql.dataframe.DataFrame.localCheckpoint.__doc__
-
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.dataframe tests")
         .remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[4]"))
