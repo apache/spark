@@ -53,10 +53,10 @@ if should_test_connect:
         """Exception mock to test retryable exceptions."""
 
         def __init__(
-                self,
-                msg,
-                code=grpc.StatusCode.INTERNAL,
-                trailing_status: Union[status_pb2.Status, None] = None,
+            self,
+            msg,
+            code=grpc.StatusCode.INTERNAL,
+            trailing_status: Union[status_pb2.Status, None] = None,
         ):
             self.msg = msg
             self._code = code
@@ -353,10 +353,12 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
 
         eventually(timeout=1, catch_assertions=True)(check)()
 
-    @parameterized.expand([
-        ("session", "INVALID_HANDLE.SESSION_NOT_FOUND"),
-        ("operation", "INVALID_HANDLE.OPERATION_NOT_FOUND")
-    ])
+    @parameterized.expand(
+        [
+            ("session", "INVALID_HANDLE.SESSION_NOT_FOUND"),
+            ("operation", "INVALID_HANDLE.OPERATION_NOT_FOUND"),
+        ]
+    )
     def test_not_found_recovers(self, _, error_msg: str):
         # Assert that the client recovers from session or operation not found error
         # if no partial response was never received.
@@ -368,9 +370,7 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
                 trailing_status=status_pb2.Status(code=14, message=error_msg, details=""),
             )
 
-        stub = self._stub_with(
-            [not_found, self.finished]
-        )
+        stub = self._stub_with([not_found, self.finished])
         ite = ExecutePlanResponseReattachableIterator(self.request, stub, self.retrying, [])
 
         for _ in ite:
@@ -384,10 +384,12 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
 
         eventually(timeout=1, catch_assertions=True)(checks)()
 
-    @parameterized.expand([
-        ("session", "INVALID_HANDLE.SESSION_NOT_FOUND"),
-        ("operation", "INVALID_HANDLE.OPERATION_NOT_FOUND")
-    ])
+    @parameterized.expand(
+        [
+            ("session", "INVALID_HANDLE.SESSION_NOT_FOUND"),
+            ("operation", "INVALID_HANDLE.OPERATION_NOT_FOUND"),
+        ]
+    )
     def test_not_found_fails(self, _, error_msg: str):
         # Assert that the client fails from session or operation not found error
         # if a partial response was previously received.
@@ -399,9 +401,7 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
                 trailing_status=status_pb2.Status(code=14, message=error_msg, details=""),
             )
 
-        stub = self._stub_with(
-            [self.response], [not_found]
-        )
+        stub = self._stub_with([self.response], [not_found])
 
         with self.assertRaises(PySparkRuntimeError) as e:
             ite = ExecutePlanResponseReattachableIterator(self.request, stub, self.retrying, [])
@@ -417,7 +417,6 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
             self.assertEquals(0, stub.release_until_calls)
 
         eventually(timeout=1, catch_assertions=True)(checks)()
-
 
 
 if __name__ == "__main__":

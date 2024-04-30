@@ -255,8 +255,8 @@ class ExecutePlanResponseReattachableIterator(Generator):
         except grpc.RpcError as e:
             status = rpc_status.from_call(cast(grpc.Call, e))
             if status is not None and (
-                "INVALID_HANDLE.OPERATION_NOT_FOUND" in status.message or
-                "INVALID_HANDLE.SESSION_NOT_FOUND" in status.message
+                "INVALID_HANDLE.OPERATION_NOT_FOUND" in status.message
+                or "INVALID_HANDLE.SESSION_NOT_FOUND" in status.message
             ):
                 if self._last_returned_response_id is not None:
                     raise PySparkRuntimeError(
