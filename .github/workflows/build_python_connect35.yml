@@ -29,7 +29,7 @@ jobs:
   build:
     name: "Build modules: pyspark-connect"
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    timeout-minutes: 100
     steps:
       - name: Checkout Spark repository
         uses: actions/checkout@v4
@@ -71,6 +71,7 @@ jobs:
       - name: Run tests
         env:
           SPARK_TESTING: 1
+          SPARK_SKIP_JVM_REQUIRED_TESTS: 1
           SPARK_CONNECT_TESTING_REMOTE: sc://localhost
         run: |
           # Make less noisy
