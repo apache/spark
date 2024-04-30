@@ -62,6 +62,9 @@ Start by creating a new subclass of :class:`DataSource`. Define the source name,
         def streamReader(self, schema: StructType):
             return FakeStreamReader(schema, self.options)
 
+        def simpleStreamReader(self, schema: StructType):
+            return SimpleStreamReader()
+
         def streamWriter(self, schema: StructType, overwrite: bool):
             return FakeStreamWriter(self.options)
 
@@ -100,7 +103,8 @@ Define the reader logic to generate synthetic data. Use the `faker` library to p
             self.end = end
 
     class FakeStreamReader(DataSourceStreamReader):
-        current = 0
+        def __init__(self, schema, options):
+            self.current = 0
 
         def initialOffset(self):
             return {"offset": 0}
@@ -131,6 +135,39 @@ This is a dummy streaming data reader that generate 2 rows in every microbatch. 
 :meth:`pyspark.sql.datasource.DataSourceStreamReader.read` takes a partition as an input and read an iterator of tuples from the data source.
 
 :meth:`pyspark.sql.datasource.DataSourceStreamReader.commit` is invoked when the query has finished processing data before end offset, this can be used to clean up resource.
+
+**Implement the Simple Stream Reader**
+
+.. code-block:: python
+
+    class SimpleStreamReader(SimpleDataSourceStreamReader):
+        def initialOffset(self):
+            return {"offset": 0}
+
+        def read(self, start: dict):
+            start_idx = start["offset"]
+            it = iter([(i,) for i in range(start_idx, start_idx + 2)])
+            return (it, {"offset": start_idx + 2})
+
+        def readBetweenOffsets(self, start: dict, end: dict):
+            start_idx = start["offset"]
+            end_idx = end["offset"]
+            return iter([(i,) for i in range(start_idx, end_idx)])
+
+        def commit(self, end):
+            pass
+
+If the data source has low throughput and doesn't require partitioning, you can implement SimpleDataSourceStreamReader instead of DataSourceStreamReader.
+
+This is the same dummy streaming reader that generate 2 rows every batch implemented with SimpleDataSourceStreamReader interface.
+
+:meth:`pyspark.sql.datasource.SimpleDataSourceStreamReader.initialOffset` should return the initial start offset of the reader.
+
+:meth:`pyspark.sql.datasource.SimpleDataSourceStreamReader.read` takes start offset as an input, return an iterator of tuples and the start offset of next read.
+
+:meth:`pyspark.sql.datasource.SimpleDataSourceStreamReader.readBetweenOffsets` takes start and end offset as input and read an iterator of data deterministically. This is called whe query replay batches during restart or after failure.
+
+:meth:`pyspark.sql.datasource.SimpleDataSourceStreamReader.commit` is invoked when the query has finished processing data before end offset, this can be used to clean up resource.
 
 **Implement the Stream Writer**
 
