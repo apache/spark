@@ -251,18 +251,14 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
       // set schedulerPool as default
       client.setSchedulerPool("pool1")
       client.execute(buildPlan("SELECT 1")).hasNext
-      assert(
-        eventuallyGetExecutionHolder.schedulerPool.get == "pool1"
-      )
+      assert(eventuallyGetExecutionHolder.schedulerPool.get == "pool1")
       client.releaseSession()
     }
     withClient(sessionId = UUID.randomUUID().toString) { client =>
       // clear schedulerPool
       client.clearSchedulerPool()
       client.execute(buildPlan("SELECT 1")).hasNext
-      assert(
-        eventuallyGetExecutionHolder.schedulerPool.isEmpty
-      )
+      assert(eventuallyGetExecutionHolder.schedulerPool.isEmpty)
       client.releaseSession()
     }
     withClient(sessionId = UUID.randomUUID().toString) { client =>

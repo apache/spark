@@ -17,7 +17,14 @@
 
 package org.apache.spark.sql.connect.common
 
+import java.util.Locale
+
+import scala.jdk.CollectionConverters._
+
 import com.google.protobuf.{CodedInputStream, InvalidProtocolBufferException, Message, Parser}
+
+import org.apache.spark.connect.proto.AnalyzePlanResponse
+import org.apache.spark.sql.connect.client.{SchedulerPool, SchedulingMode}
 
 private[sql] object ProtoUtils {
   def abbreviate[T <: Message](message: T, maxStringSize: Int = 1024): T = {
@@ -70,6 +77,38 @@ private[sql] object ProtoUtils {
       case e: InvalidProtocolBufferException =>
         e.setUnfinishedMessage(message)
         throw e
+    }
+  }
+
+  def toSchedulingMode(
+      protoSchedulingMode: AnalyzePlanResponse.SchedulingMode): SchedulingMode = {
+    protoSchedulingMode.getMode.toUpperCase(Locale.ROOT) match {
+      case "FIFO" =>
+        if (protoSchedulingMode.getPoolsCount > 0) {
+          throw InvalidPlanInput("FIFO scheduler shouldn't have pools.")
+        }
+        new SchedulingMode(SchedulingMode.FIFO, Seq.empty)
+      case "FAIR" =>
+        if (protoSchedulingMode.getPoolsCount == 0) {
+          throw InvalidPlanInput("FAIR scheduler requires at least one pool.")
+        }
+        val pools = protoSchedulingMode.getPoolsList.asScala.map { pool =>
+          val mode = pool.getSchedulingMode.toUpperCase(Locale.ROOT)
+          if (mode != "FIFO" && mode != "FAIR") {
+            throw InvalidPlanInput(
+              s"Scheduler mode must be FIFO or FAIR, but get ${pool.getSchedulingMode}")
+          }
+
+          SchedulerPool(
+            pool.getName,
+            SchedulingMode.withName(mode),
+            pool.getWeight,
+            pool.getMinShare)
+        }
+        new SchedulingMode(SchedulingMode.FAIR, pools.toSeq)
+      case _ =>
+        throw InvalidPlanInput(
+          s"Scheduler mode must be FIFO or FAIR, but get ${protoSchedulingMode.getMode}.")
     }
   }
 }

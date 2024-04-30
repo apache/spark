@@ -206,6 +206,23 @@ private[connect] class SparkConnectAnalyzeHandler(
             .setStorageLevel(StorageLevelProtoConverter.toConnectProtoType(storageLevel))
             .build())
 
+      case proto.AnalyzePlanRequest.AnalyzeCase.SCHEDULER_MODE =>
+        val pools = session.sparkContext.getAllPools.map { pool =>
+          proto.AnalyzePlanResponse.SchedulingMode.SchedulablePool
+            .newBuilder()
+            .setName(pool.name)
+            .setSchedulingMode(pool.schedulingMode.toString)
+            .setMinShare(pool.minShare)
+            .setWeight(pool.weight)
+            .build()
+        }.toSeq
+        builder.setSchedulingMode(
+          proto.AnalyzePlanResponse.SchedulingMode
+            .newBuilder()
+            .setMode(session.sparkContext.getSchedulingMode.toString)
+            .addAllPools(pools.asJava)
+            .build())
+
       case other => throw InvalidPlanInput(s"Unknown Analyze Method $other!")
     }
 

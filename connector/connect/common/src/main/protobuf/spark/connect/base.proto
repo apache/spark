@@ -94,6 +94,7 @@ message AnalyzePlanRequest {
     Persist persist = 14;
     Unpersist unpersist = 15;
     GetStorageLevel get_storage_level = 16;
+    SchedulingMode scheduler_mode = 18;
   }
 
   message Schema {
@@ -199,6 +200,8 @@ message AnalyzePlanRequest {
     // (Required) The logical plan to get the storage level.
     Relation relation = 1;
   }
+
+  message SchedulingMode {}
 }
 
 // Response to performing analysis of the query. Contains relevant metadata to be able to
@@ -224,6 +227,7 @@ message AnalyzePlanResponse {
     Persist persist = 12;
     Unpersist unpersist = 13;
     GetStorageLevel get_storage_level = 14;
+    SchedulingMode scheduling_mode = 16;
   }
 
   message Schema {
@@ -274,6 +278,22 @@ message AnalyzePlanResponse {
   message GetStorageLevel {
     // (Required) The StorageLevel as a result of get_storage_level request.
     StorageLevel storage_level = 1;
+  }
+
+  message SchedulingMode {
+    // (Required) mode is "FIFO" or "FAIR"
+    string mode = 1;
+    // (Optional) if mode is "FIFO", pools should be empty
+    repeated SchedulablePool pools = 2;
+
+    message SchedulablePool {
+      // (Required) pool name
+      string name = 1;
+      // (Required) mode is "FIFO" or "FAIR"
+      string scheduling_mode = 2;
+      int32 weight = 3;
+      int32 min_share = 4;
+    }
   }
 }
 

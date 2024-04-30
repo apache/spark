@@ -301,18 +301,41 @@ private[sql] class SparkConnectClient(
     tags.get.clear()
   }
 
-  private[this] val schedulerPool = new InheritableThreadLocal[Option[String]] {
+  private[sql] lazy val schedulingMode: SchedulingMode = {
+    ProtoUtils.toSchedulingMode(
+      analyze(proto.AnalyzePlanRequest.AnalyzeCase.SCHEDULER_MODE).getSchedulingMode)
+  }
+
+  private val schedulerPool = new InheritableThreadLocal[Option[String]] {
     override def initialValue(): Option[String] = None
   }
 
+  private def ensureFairScheduler(): Unit = {
+    if (schedulingMode.mode != SchedulingMode.FAIR) {
+      throw new IllegalArgumentException(s"Only fair scheduler supports scheduler pool, " +
+        s"but server running under ${schedulingMode.mode} fashion."
+      )
+    }
+  }
+
   private[sql] def setSchedulerPool(pool: String): Unit = {
+    ensureFairScheduler()
+    if (schedulingMode.getPoolForName(pool).isEmpty) {
+      throw new IllegalArgumentException(s"Server doesn't have a pool with name '$pool'.")
+    }
     if (pool.isEmpty) {
       throw new IllegalArgumentException("Spark scheduler pool cannot be empty.")
     }
     schedulerPool.set(Some(pool))
   }
 
+  private[sql] def getSchedulerPool(): Option[String] = {
+    ensureFairScheduler()
+    schedulerPool.get()
+  }
+
   private[sql] def clearSchedulerPool(): Unit = {
+    ensureFairScheduler()
     schedulerPool.set(None)
   }
 

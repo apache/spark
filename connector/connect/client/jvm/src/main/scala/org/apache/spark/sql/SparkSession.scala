@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalog.Catalog
 import org.apache.spark.sql.catalyst.{JavaTypeInference, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BoxedLongEncoder, UnboundRowEncoder}
-import org.apache.spark.sql.connect.client.{ClassFinder, SparkConnectClient, SparkResult}
+import org.apache.spark.sql.connect.client.{ClassFinder, SchedulingMode, SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.connect.common.ProtoUtils
@@ -809,15 +809,25 @@ class SparkSession private[sql] (
   }
 
   /**
+   * Get scheduler mode the remote server is running under. If running under fair scheduler, all
+   * pools will also be returned.
+   *
+   * @since 4.0.0
+   */
+  def schedulingMode: SchedulingMode = {
+    client.schedulingMode
+  }
+
+  /**
    * Set the scheduler pool used to execute all the operations by this thread in this session.
    *
    * Spark supports FIFO scheduler (default) and Fair scheduler. When fair scheduler is enabled,
    * jobs will be grouped into pools and each pool gets an assigned share of cluster resources.
-   * Application programmers can use this method to assign a pool to all the operations started
-   * by this thread in this session. This pool should exists in the server. If not, will
-   * fallback to FIFO scheduler.
+   * Application programmers can use this method to assign a pool to all the operations started by
+   * this thread in this session.
    *
-   * Note: this doesn't make sense for FIFO scheduler.
+   * If server runs in FIFO fashion or this pool doesn't exist in fair scheduler's pools, throw an
+   * exception.
    *
    * @param pool
    *   The scheduler pool name. Cannot be an empty string.
@@ -829,7 +839,24 @@ class SparkSession private[sql] (
   }
 
   /**
-   * Clear the current thread's scheduler pool. After cleared, default scheduler pool will be used.
+   * Get the scheduler pool thar are currently set to execute all the operations by this thread in
+   * this session.
+   *
+   * If server runs in FIFO fashion, throws an exception.
+   *
+   * @since 4.0.0
+   */
+  def getSchedulerPool(): Option[String] = {
+    client.getSchedulerPool()
+  }
+
+  /**
+   * Clear the current thread's scheduler pool. After cleared, default scheduler pool will be
+   * used.
+   *
+   * If server runs in FIFO fashion, throws an exception.
+   *
+   * @since 4.0.0
    */
   def clearSchedulerPool(): Unit = {
     client.clearSchedulerPool()
