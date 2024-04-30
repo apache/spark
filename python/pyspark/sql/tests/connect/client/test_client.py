@@ -360,8 +360,9 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
         ]
     )
     def test_not_found_recovers(self, _, error_msg: str):
-        # Assert that the client recovers from session or operation not found error
-        # if no partial responses were previously received.
+        """SPARK-48056: Assert that the client recovers from session or operation not
+        found error if no partial responses were previously received.
+        """
 
         def not_found():
             raise TestException(
@@ -391,8 +392,9 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
         ]
     )
     def test_not_found_fails(self, _, error_msg: str):
-        # Assert that the client fails from session or operation not found error
-        # if a partial response was previously received.
+        """SPARK-48056: Assert that the client fails from session or operation not found error
+        if a partial response was previously received.
+        """
 
         def not_found():
             raise TestException(
