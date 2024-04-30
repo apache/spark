@@ -90,6 +90,7 @@ jobs:
           mv python/pyspark pyspark.back
 
           # Several tests related to catalog requires to run them sequencially, e.g., writing a table in a listener.
+          # Run branch-3.5 tests
           ./python/run-tests --parallelism=1 --python-executables=python3 --modules pyspark-connect,pyspark-ml-connect
           # None of tests are dependent on each other in Pandas API on Spark so run them in parallel
           ./python/run-tests --parallelism=4 --python-executables=python3 --modules pyspark-pandas-connect-part0,pyspark-pandas-connect-part1,pyspark-pandas-connect-part2,pyspark-pandas-connect-part3
@@ -98,6 +99,9 @@ jobs:
           ./sbin/stop-connect-server.sh
           mv lib.back python/lib
           mv pyspark.back python/pyspark
+
+          # Get back to the master to run Spark Connect server in master branch.
+          git checkout master
 
           # Start a Spark Connect server for local-cluster
           PYTHONPATH="python/lib/pyspark.zip:python/lib/py4j-0.10.9.7-src.zip:$PYTHONPATH" ./sbin/start-connect-server.sh \
@@ -108,10 +112,14 @@ jobs:
           # Make sure running Python workers that contains pyspark.core once. They will be reused.
           python -c "from pyspark.sql import SparkSession; _ = SparkSession.builder.remote('sc://localhost').getOrCreate().range(100).repartition(100).mapInPandas(lambda x: x, 'id INT').show(n=100)" > /dev/null
 
+          # Checkout to branch-3.5 to use the tests in branch-3.5.
+          git checkout branch-3.5
+
           # Remove Py4J and PySpark zipped library to make sure there is no JVM connection
           mv python/lib lib.back
           mv python/pyspark lib.back
 
+          # Run branch-3.5 tests
           ./python/run-tests --parallelism=1 --python-executables=python3 --testnames "pyspark.resource.tests.test_connect_resources,pyspark.sql.tests.connect.client.test_artifact,pyspark.sql.tests.connect.test_resources"
       - name: Upload test results to report
         if: always()
