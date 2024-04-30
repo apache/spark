@@ -24,6 +24,7 @@ from pyspark.sql.datasource import (
     DataSourceStreamReader,
     InputPartition,
     DataSourceStreamWriter,
+    SimpleDataSourceStreamReader,
     WriterCommitMessage,
 )
 from pyspark.sql.types import Row
@@ -136,9 +137,50 @@ class BasePythonStreamingDataSourceTestsMixin:
 
         return TestDataSource
 
+    def _get_simple_data_source(self):
+        class SimpleStreamReader(SimpleDataSourceStreamReader):
+            def initialOffset(self):
+                return {"offset": 0}
+
+            def read(self, start: dict):
+                start_idx = start["offset"]
+                it = iter([(i, ) for i in range(start_idx, start_idx + 2)])
+                return (it, {"offset": start_idx + 2})
+
+            def commit(self, end):
+                pass
+
+            def readBetweenOffsets(self, start: dict, end: dict):
+                start_idx = start["offset"]
+                end_idx = end["offset"]
+                return iter([(i, ) for i in range(start_idx, end_idx)])
+
+        class SimpleDataSource(DataSource):
+            def schema(self):
+                return "id INT"
+
+            def simpleStreamReader(self, schema):
+                return SimpleStreamReader()
+
+        return SimpleDataSource
+
     def test_stream_reader(self):
         self.spark.dataSource.register(self._get_test_data_source())
         df = self.spark.readStream.format("TestDataSource").load()
+
+        def check_batch(df, batch_id):
+            assertDataFrameEqual(df, [Row(batch_id * 2), Row(batch_id * 2 + 1)])
+
+        q = df.writeStream.foreachBatch(check_batch).start()
+        while len(q.recentProgress) < 10:
+            time.sleep(0.2)
+        q.stop()
+        q.awaitTermination
+        self.assertIsNone(q.exception(), "No exception has to be propagated.")
+
+    def test_simple_stream_reader(self):
+        self.spark.dataSource.register(self._get_simple_data_source())
+        df = self.spark.readStream.format("SimpleDataSource").load()
 
         def check_batch(df, batch_id):
             assertDataFrameEqual(df, [Row(batch_id * 2), Row(batch_id * 2 + 1)])
