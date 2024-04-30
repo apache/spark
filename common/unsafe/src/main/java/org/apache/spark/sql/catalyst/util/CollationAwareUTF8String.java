@@ -84,7 +84,7 @@ public class CollationAwareUTF8String {
         c += 1;
       }
     }
-    buf.appendBytes(src.getBaseObject(), src.getBaseOffset() + byteStart, 
+    buf.appendBytes(src.getBaseObject(), src.getBaseOffset() + byteStart,
       src.numBytes() - byteStart);
     return buf.build();
   }
