@@ -31,10 +31,6 @@ class GroupedApplyInPandasTests(GroupedApplyInPandasTestsMixin, ReusedConnectTes
         super().test_wrong_return_type()
 
     @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_wrong_args(self):
-        super().test_wrong_args()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_unsupported_types(self):
         super().test_unsupported_types()
 

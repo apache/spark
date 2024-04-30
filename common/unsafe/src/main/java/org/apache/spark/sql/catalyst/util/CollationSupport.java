@@ -30,6 +30,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 
+import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
+import static org.apache.spark.unsafe.Platform.copyMemory;
+
 /**
  * Static entry point for collation-aware expressions (StringExpressions, RegexpExpressions, and
  * other expressions that require custom collation support), as well as private utility methods for
@@ -405,6 +408,83 @@ public final class CollationSupport {
     }
   }
 
+  public static class StringLocate {
+    public static int exec(final UTF8String string, final UTF8String substring, final int start,
+        final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      if (collation.supportsBinaryEquality) {
+        return execBinary(string, substring, start);
+      } else if (collation.supportsLowercaseEquality) {
+        return execLowercase(string, substring, start);
+      } else {
+        return execICU(string, substring, start, collationId);
+      }
+    }
+    public static String genCode(final String string, final String substring, final int start,
+        final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      String expr = "CollationSupport.StringLocate.exec";
+      if (collation.supportsBinaryEquality) {
+        return String.format(expr + "Binary(%s, %s, %d)", string, substring, start);
+      } else if (collation.supportsLowercaseEquality) {
+        return String.format(expr + "Lowercase(%s, %s, %d)", string, substring, start);
+      } else {
+        return String.format(expr + "ICU(%s, %s, %d, %d)", string, substring, start, collationId);
+      }
+    }
+    public static int execBinary(final UTF8String string, final UTF8String substring,
+        final int start) {
+      return string.indexOf(substring, start);
+    }
+    public static int execLowercase(final UTF8String string, final UTF8String substring,
+        final int start) {
+      return string.toLowerCase().indexOf(substring.toLowerCase(), start);
+    }
+    public static int execICU(final UTF8String string, final UTF8String substring, final int start,
+                              final int collationId) {
+      return CollationAwareUTF8String.indexOf(string, substring, start, collationId);
+    }
+  }
+
+  public static class SubstringIndex {
+    public static UTF8String exec(final UTF8String string, final UTF8String delimiter,
+        final int count, final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      if (collation.supportsBinaryEquality) {
+        return execBinary(string, delimiter, count);
+      } else if (collation.supportsLowercaseEquality) {
+        return execLowercase(string, delimiter, count);
+      } else {
+        return execICU(string, delimiter, count, collationId);
+      }
+    }
+    public static String genCode(final String string, final String delimiter,
+        final int count, final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      String expr = "CollationSupport.SubstringIndex.exec";
+      if (collation.supportsBinaryEquality) {
+        return String.format(expr + "Binary(%s, %s, %d)", string, delimiter, count);
+      } else if (collation.supportsLowercaseEquality) {
+        return String.format(expr + "Lowercase(%s, %s, %d)", string, delimiter, count);
+      } else {
+        return String.format(expr + "ICU(%s, %s, %d, %d)", string, delimiter, count, collationId);
+      }
+    }
+    public static UTF8String execBinary(final UTF8String string, final UTF8String delimiter,
+        final int count) {
+      return string.subStringIndex(delimiter, count);
+    }
+    public static UTF8String execLowercase(final UTF8String string, final UTF8String delimiter,
+        final int count) {
+      return CollationAwareUTF8String.lowercaseSubStringIndex(string, delimiter, count);
+    }
+    public static UTF8String execICU(final UTF8String string, final UTF8String delimiter,
+        final int count, final int collationId) {
+      return CollationAwareUTF8String.subStringIndex(string, delimiter, count,
+              collationId);
+    }
+  }
+
   public static class StringTranslate {
     public static UTF8String exec(final UTF8String source, Map<String, String> dict,
         final int collationId) {
@@ -651,6 +731,133 @@ public final class CollationSupport {
       stringSearch.setIndex(start);
 
       return stringSearch.next();
+    }
+
+    private static int find(UTF8String target, UTF8String pattern, int start,
+        int collationId) {
+      assert (pattern.numBytes() > 0);
+
+      StringSearch stringSearch = CollationFactory.getStringSearch(target, pattern, collationId);
+      // Set search start position (start from character at start position)
+      stringSearch.setIndex(target.bytePosToChar(start));
+
+      // Return either the byte position or -1 if not found
+      return target.charPosToByte(stringSearch.next());
+    }
+
+    private static UTF8String subStringIndex(final UTF8String string, final UTF8String delimiter,
+        int count, final int collationId) {
+      if (delimiter.numBytes() == 0 || count == 0 || string.numBytes() == 0) {
+        return UTF8String.EMPTY_UTF8;
+      }
+      if (count > 0) {
+        int idx = -1;
+        while (count > 0) {
+          idx = find(string, delimiter, idx + 1, collationId);
+          if (idx >= 0) {
+            count --;
+          } else {
+            // can not find enough delim
+            return string;
+          }
+        }
+        if (idx == 0) {
+          return UTF8String.EMPTY_UTF8;
+        }
+        byte[] bytes = new byte[idx];
+        copyMemory(string.getBaseObject(), string.getBaseOffset(), bytes, BYTE_ARRAY_OFFSET, idx);
+        return UTF8String.fromBytes(bytes);
+
+      } else {
+        count = -count;
+
+        StringSearch stringSearch = CollationFactory
+          .getStringSearch(string, delimiter, collationId);
+
+        int start = string.numChars() - 1;
+        int lastMatchLength = 0;
+        int prevStart = -1;
+        while (count > 0) {
+          stringSearch.reset();
+          prevStart = -1;
+          int matchStart = stringSearch.next();
+          lastMatchLength = stringSearch.getMatchLength();
+          while (matchStart <= start) {
+            if (matchStart != StringSearch.DONE) {
+              // Found a match, update the start position
+              prevStart = matchStart;
+              matchStart = stringSearch.next();
+            } else {
+              break;
+            }
+          }
+
+          if (prevStart == -1) {
+            // can not find enough delim
+            return string;
+          } else {
+            start = prevStart - 1;
+            count--;
+          }
+        }
+
+        int resultStart = prevStart + lastMatchLength;
+        if (resultStart == string.numChars()) {
+          return UTF8String.EMPTY_UTF8;
+        }
+
+        return string.substring(resultStart, string.numChars());
+      }
+    }
+
+    private static UTF8String lowercaseSubStringIndex(final UTF8String string,
+      final UTF8String delimiter, int count) {
+      if (delimiter.numBytes() == 0 || count == 0) {
+        return UTF8String.EMPTY_UTF8;
+      }
+
+      UTF8String lowercaseString = string.toLowerCase();
+      UTF8String lowercaseDelimiter = delimiter.toLowerCase();
+
+      if (count > 0) {
+        int idx = -1;
+        while (count > 0) {
+          idx = lowercaseString.find(lowercaseDelimiter, idx + 1);
+          if (idx >= 0) {
+            count --;
+          } else {
+            // can not find enough delim
+            return string;
+          }
+        }
+        if (idx == 0) {
+          return UTF8String.EMPTY_UTF8;
+        }
+        byte[] bytes = new byte[idx];
+        copyMemory(string.getBaseObject(), string.getBaseOffset(), bytes, BYTE_ARRAY_OFFSET, idx);
+        return UTF8String.fromBytes(bytes);
+
+      } else {
+        int idx = string.numBytes() - delimiter.numBytes() + 1;
+        count = -count;
+        while (count > 0) {
+          idx = lowercaseString.rfind(lowercaseDelimiter, idx - 1);
+          if (idx >= 0) {
+            count --;
+          } else {
+            // can not find enough delim
+            return string;
+          }
+        }
+        if (idx + delimiter.numBytes() == string.numBytes()) {
+          return UTF8String.EMPTY_UTF8;
+        }
+        int size = string.numBytes() - delimiter.numBytes() - idx;
+        byte[] bytes = new byte[size];
+        copyMemory(string.getBaseObject(), string.getBaseOffset() + idx + delimiter.numBytes(),
+                bytes, BYTE_ARRAY_OFFSET, size);
+        return UTF8String.fromBytes(bytes);
+      }
     }
 
     private static Map<String, String> getCollationAwareDict(UTF8String string,

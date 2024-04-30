@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.streaming
 
 import org.apache.hadoop.fs.FileStatus
 
-import org.apache.spark.internal.LogKey._
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.MDC
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.SparkSession

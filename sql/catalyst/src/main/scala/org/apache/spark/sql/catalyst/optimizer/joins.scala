@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.annotation.tailrec
 import scala.util.control.NonFatal
 
-import org.apache.spark.internal.LogKey.JOIN_CONDITION
+import org.apache.spark.internal.LogKeys.JOIN_CONDITION
 import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression

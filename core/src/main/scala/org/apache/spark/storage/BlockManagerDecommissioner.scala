@@ -27,7 +27,7 @@ import scala.util.control.NonFatal
 import org.apache.spark._
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.{config, Logging, MDC}
-import org.apache.spark.internal.LogKey.SHUFFLE_BLOCK_INFO
+import org.apache.spark.internal.LogKeys.SHUFFLE_BLOCK_INFO
 import org.apache.spark.shuffle.ShuffleBlockInfo
 import org.apache.spark.storage.BlockManagerMessages.ReplicateBlock
 import org.apache.spark.util.{ThreadUtils, Utils}

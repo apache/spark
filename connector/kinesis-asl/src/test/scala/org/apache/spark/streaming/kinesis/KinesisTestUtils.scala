@@ -34,7 +34,7 @@ import com.amazonaws.services.kinesis.{AmazonKinesis, AmazonKinesisClient}
 import com.amazonaws.services.kinesis.model._
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{STREAM_NAME, TABLE_NAME}
+import org.apache.spark.internal.LogKeys.{STREAM_NAME, TABLE_NAME}
 
 /**
  * Shared utility methods for performing Kinesis tests that actually transfer data.

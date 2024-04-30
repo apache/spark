@@ -189,7 +189,7 @@
     <org.glassfish.jaxb.txw2.version>3.0.2</org.glassfish.jaxb.txw2.version>
     <snappy.version>1.1.10.5</snappy.version>
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
-    <commons-codec.version>1.16.1</commons-codec.version>
+    <commons-codec.version>1.17.0</commons-codec.version>
     <commons-compress.version>1.26.1</commons-compress.version>
     <commons-io.version>2.16.1</commons-io.version>
     <!-- org.apache.commons/commons-lang/-->
@@ -304,6 +304,7 @@
     <!-- SPARK-36796 for JDK-17 test-->
     <extraJavaTestArgs>
       -XX:+IgnoreUnrecognizedVMOptions
+      --add-modules=jdk.incubator.vector
       --add-opens=java.base/java.lang=ALL-UNNAMED
       --add-opens=java.base/java.lang.invoke=ALL-UNNAMED
       --add-opens=java.base/java.lang.reflect=ALL-UNNAMED

@@ -1416,21 +1416,24 @@ case class StringInstr(str: Expression, substr: Expression)
 case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr: Expression)
  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
-  override def dataType: DataType = StringType
-  override def inputTypes: Seq[DataType] = Seq(StringType, StringType, IntegerType)
+  final lazy val collationId: Int = first.dataType.asInstanceOf[StringType].collationId
+
+  override def dataType: DataType = strExpr.dataType
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeAnyCollation, StringTypeAnyCollation, IntegerType)
   override def first: Expression = strExpr
   override def second: Expression = delimExpr
   override def third: Expression = countExpr
   override def prettyName: String = "substring_index"
 
   override def nullSafeEval(str: Any, delim: Any, count: Any): Any = {
-    str.asInstanceOf[UTF8String].subStringIndex(
-      delim.asInstanceOf[UTF8String],
-      count.asInstanceOf[Int])
+    CollationSupport.SubstringIndex.exec(str.asInstanceOf[UTF8String],
+      delim.asInstanceOf[UTF8String], count.asInstanceOf[Int], collationId);
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (str, delim, count) => s"$str.subStringIndex($delim, $count)")
+    defineCodeGen(ctx, ev, (str, delim, count) =>
+      CollationSupport.SubstringIndex.genCode(str, delim, Integer.parseInt(count, 10), collationId))
   }
 
   override protected def withNewChildrenInternal(
@@ -1467,12 +1470,15 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
     this(substr, str, Literal(1))
   }
 
+  final lazy val collationId: Int = first.dataType.asInstanceOf[StringType].collationId
+
   override def first: Expression = substr
   override def second: Expression = str
   override def third: Expression = start
   override def nullable: Boolean = substr.nullable || str.nullable
   override def dataType: DataType = IntegerType
-  override def inputTypes: Seq[DataType] = Seq(StringType, StringType, IntegerType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeAnyCollation, StringTypeAnyCollation, IntegerType)
 
   override def eval(input: InternalRow): Any = {
     val s = start.eval(input)
@@ -1492,9 +1498,8 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
           if (sVal < 1) {
             0
           } else {
-            l.asInstanceOf[UTF8String].indexOf(
-              r.asInstanceOf[UTF8String],
-              s.asInstanceOf[Int] - 1) + 1
+            CollationSupport.StringLocate.exec(l.asInstanceOf[UTF8String],
+              r.asInstanceOf[UTF8String], s.asInstanceOf[Int] - 1, collationId) + 1;
           }
         }
       }
@@ -1515,8 +1520,8 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
           ${strGen.code}
           if (!${strGen.isNull}) {
             if (${startGen.value} > 0) {
-              ${ev.value} = ${strGen.value}.indexOf(${substrGen.value},
-                ${startGen.value} - 1) + 1;
+              ${ev.value} = CollationSupport.StringLocate.exec(${strGen.value},
+              ${substrGen.value}, ${startGen.value} - 1, $collationId) + 1;
             }
           } else {
             ${ev.isNull} = true;
@@ -2612,7 +2617,7 @@ object Decode {
         val input = params.head
         val other = params.tail
         val itr = other.iterator
-        var default: Expression = Literal.create(null, StringType)
+        var default: Expression = Literal.create(null, SQLConf.get.defaultStringType)
         val branches = ArrayBuffer.empty[(Expression, Expression)]
         while (itr.hasNext) {
           val search = itr.next()

@@ -32,7 +32,7 @@ import org.apache.spark.deploy.k8s.{Config, Constants, KubernetesUtils}
 import org.apache.spark.deploy.k8s.Config.{KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH, KUBERNETES_NAMESPACE}
 import org.apache.spark.deploy.k8s.Constants.ENV_SPARK_CONF_DIR
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{CONFIG, PATH, PATHS}
+import org.apache.spark.internal.LogKeys.{CONFIG, PATH, PATHS}
 import org.apache.spark.util.ArrayImplicits._
 
 private[spark] object KubernetesClientUtils extends Logging {

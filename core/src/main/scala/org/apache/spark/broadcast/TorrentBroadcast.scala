@@ -28,7 +28,7 @@ import scala.util.Random
 
 import org.apache.spark._
 import org.apache.spark.internal.{config, Logging, MDC}
-import org.apache.spark.internal.LogKey.BROADCAST_ID
+import org.apache.spark.internal.LogKeys.BROADCAST_ID
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage._

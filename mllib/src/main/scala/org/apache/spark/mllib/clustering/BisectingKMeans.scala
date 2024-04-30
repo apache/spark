@@ -25,7 +25,7 @@ import scala.collection.mutable
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{CLUSTER_LEVEL, COST, DIVISIBLE_CLUSTER_INDICES_SIZE, FEATURE_DIMENSION, MIN_POINT_PER_CLUSTER, NUM_POINT}
+import org.apache.spark.internal.LogKeys.{CLUSTER_LEVEL, COST, DIVISIBLE_CLUSTER_INDICES_SIZE, FEATURE_DIMENSION, MIN_POINT_PER_CLUSTER, NUM_POINT}
 import org.apache.spark.ml.util.Instrumentation
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS.axpy
