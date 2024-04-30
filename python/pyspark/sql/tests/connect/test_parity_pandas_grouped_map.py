@@ -38,10 +38,6 @@ class GroupedApplyInPandasTests(GroupedApplyInPandasTestsMixin, ReusedConnectTes
     def test_apply_in_pandas_returning_incompatible_type(self):
         super().test_apply_in_pandas_returning_incompatible_type()
 
-    @unittest.skip("Spark Connect doesn't support RDD but the test depends on it.")
-    def test_grouped_with_empty_partition(self):
-        super().test_grouped_with_empty_partition()
-
 
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.test_parity_pandas_grouped_map import *  # noqa: F401

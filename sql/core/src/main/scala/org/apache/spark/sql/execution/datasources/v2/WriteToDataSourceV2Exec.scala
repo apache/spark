@@ -20,8 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkEnv, SparkException, TaskContext}
-import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys._
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
@@ -377,8 +376,9 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode {
     val messages = new Array[WriterCommitMessage](rdd.partitions.length)
     val totalNumRowsAccumulator = new LongAccumulator()
 
-    logInfo(s"Start processing data source write support: $batchWrite. " +
-      s"The input RDD has ${messages.length} partitions.")
+    logInfo(log"Start processing data source write support: " +
+      log"${MDC(LogKeys.BATCH_WRITE, batchWrite)}. The input RDD has " +
+      log"${MDC(LogKeys.COUNT, messages.length)}} partitions.")
 
     // Avoid object not serializable issue.
     val writeMetrics: Map[String, SQLMetric] = customMetrics
@@ -397,23 +397,24 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode {
         }
       )
 
-      logInfo(s"Data source write support $batchWrite is committing.")
+      logInfo(log"Data source write support ${MDC(LogKeys.BATCH_WRITE, batchWrite)} is committing.")
       batchWrite.commit(messages)
-      logInfo(s"Data source write support $batchWrite committed.")
+      logInfo(log"Data source write support ${MDC(LogKeys.BATCH_WRITE, batchWrite)} committed.")
       commitProgress = Some(StreamWriterCommitProgress(totalNumRowsAccumulator.value))
     } catch {
       case cause: Throwable =>
-        logError(log"Data source write support ${MDC(BATCH_WRITE, batchWrite)} is aborting.")
+        logError(
+          log"Data source write support ${MDC(LogKeys.BATCH_WRITE, batchWrite)} is aborting.")
         try {
           batchWrite.abort(messages)
         } catch {
           case t: Throwable =>
-            logError(log"Data source write support ${MDC(BATCH_WRITE, batchWrite)} " +
+            logError(log"Data source write support ${MDC(LogKeys.BATCH_WRITE, batchWrite)} " +
               log"failed to abort.")
             cause.addSuppressed(t)
             throw QueryExecutionErrors.writingJobFailedError(cause)
         }
-        logError(log"Data source write support ${MDC(BATCH_WRITE, batchWrite)} aborted.")
+        logError(log"Data source write support ${MDC(LogKeys.BATCH_WRITE, batchWrite)} aborted.")
         throw cause
     }
 
@@ -451,36 +452,45 @@ trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serial
         val coordinator = SparkEnv.get.outputCommitCoordinator
         val commitAuthorized = coordinator.canCommit(stageId, stageAttempt, partId, attemptId)
         if (commitAuthorized) {
-          logInfo(s"Commit authorized for partition $partId (task $taskId, attempt $attemptId, " +
-            s"stage $stageId.$stageAttempt)")
+          logInfo(log"Commit authorized for partition ${MDC(LogKeys.PARTITION_ID, partId)} " +
+            log"(task ${MDC(LogKeys.TASK_ID, taskId)}, " +
+            log"attempt ${MDC(LogKeys.TASK_ATTEMPT_ID, attemptId)}, " +
+            log"stage ${MDC(LogKeys.STAGE_ID, stageId)}." +
+            log"${MDC(LogKeys.STAGE_ATTEMPT, stageAttempt)})")
+
           dataWriter.commit()
         } else {
           val commitDeniedException = QueryExecutionErrors.commitDeniedError(
             partId, taskId, attemptId, stageId, stageAttempt)
-          logInfo(commitDeniedException.getMessage)
+          logInfo(log"${MDC(LogKeys.ERROR, commitDeniedException.getMessage)}")
           // throwing CommitDeniedException will trigger the catch block for abort
           throw commitDeniedException
         }
 
       } else {
-        logInfo(s"Writer for partition ${context.partitionId()} is committing.")
+        logInfo(log"Writer for partition ${MDC(LogKeys.PARTITION_ID, context.partitionId())} " +
+          log"is committing.")
         dataWriter.commit()
       }
 
-      logInfo(s"Committed partition $partId (task $taskId, attempt $attemptId, " +
-        s"stage $stageId.$stageAttempt)")
+      logInfo(log"Committed partition ${MDC(LogKeys.PARTITION_ID, partId)} " +
+        log"(task ${MDC(LogKeys.TASK_ID, taskId)}, " +
+        log"attempt ${MDC(LogKeys.TASK_ATTEMPT_ID, attemptId)}, " +
+        log"stage ${MDC(LogKeys.STAGE_ID, stageId)}.${MDC(LogKeys.STAGE_ATTEMPT, stageAttempt)})")
 
       DataWritingSparkTaskResult(iterWithMetrics.count, msg)
 
     })(catchBlock = {
       // If there is an error, abort this writer
-      logError(log"Aborting commit for partition ${MDC(PARTITION_ID, partId)} " +
-        log"(task ${MDC(TASK_ID, taskId)}, attempt ${MDC(TASK_ATTEMPT_ID, attemptId)}, " +
-        log"stage ${MDC(STAGE_ID, stageId)}.${MDC(STAGE_ATTEMPT, stageAttempt)})")
+      logError(log"Aborting commit for partition ${MDC(LogKeys.PARTITION_ID, partId)} " +
+        log"(task ${MDC(LogKeys.TASK_ID, taskId)}, " +
+        log"attempt ${MDC(LogKeys.TASK_ATTEMPT_ID, attemptId)}, " +
+        log"stage ${MDC(LogKeys.STAGE_ID, stageId)}.${MDC(LogKeys.STAGE_ATTEMPT, stageAttempt)})")
       dataWriter.abort()
-      logError(log"Aborted commit for partition ${MDC(PARTITION_ID, partId)} " +
-        log"(task ${MDC(TASK_ID, taskId)}, attempt ${MDC(TASK_ATTEMPT_ID, attemptId)}, " +
-        log"stage ${MDC(STAGE_ID, stageId)}.${MDC(STAGE_ATTEMPT, stageAttempt)})")
+      logError(log"Aborted commit for partition ${MDC(LogKeys.PARTITION_ID, partId)} " +
+        log"(task ${MDC(LogKeys.TASK_ID, taskId)}, " +
+        log"attempt ${MDC(LogKeys.TASK_ATTEMPT_ID, attemptId)}, " +
+        log"stage ${MDC(LogKeys.STAGE_ID, stageId)}.${MDC(LogKeys.STAGE_ATTEMPT, stageAttempt)})")
     }, finallyBlock = {
       dataWriter.close()
     })

@@ -446,13 +446,17 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     }
 
     if (earliestLoadedVersion.isDefined) {
-      logInfo(s"Trying to add version=$newVersion to state cache map with " +
-        s"current_size=$loadedEntries and earliest_loaded_version=${earliestLoadedVersion.get} " +
-        s"and max_versions_to_retain_in_memory=$numberOfVersionsToRetainInMemory")
+      logInfo(log"Trying to add version=${MDC(LogKeys.STATE_STORE_VERSION, newVersion)} to state " +
+        log"cache map with current_size=${MDC(LogKeys.NUM_LOADED_ENTRIES, loadedEntries)} and " +
+        log"earliest_loaded_version=" +
+        log"${MDC(LogKeys.EARLIEST_LOADED_VERSION, earliestLoadedVersion.get)}} " +
+        log"and max_versions_to_retain_in_memory=" +
+        log"${MDC(LogKeys.NUM_VERSIONS_RETAIN, numberOfVersionsToRetainInMemory)}")
     } else {
-      logInfo(s"Trying to add version=$newVersion to state cache map with " +
-        s"current_size=$loadedEntries and " +
-        s"max_versions_to_retain_in_memory=$numberOfVersionsToRetainInMemory")
+      logInfo(log"Trying to add version=${MDC(LogKeys.STATE_STORE_VERSION, newVersion)} to state " +
+        log"cache map with current_size=${MDC(LogKeys.NUM_LOADED_ENTRIES, loadedEntries)} and " +
+        log"max_versions_to_retain_in_memory=" +
+        log"${MDC(LogKeys.NUM_VERSIONS_RETAIN, numberOfVersionsToRetainInMemory)}")
     }
 
     if (numberOfVersionsToRetainInMemory <= 0) {
