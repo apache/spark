@@ -455,7 +455,7 @@ class CanonicalizeSuite extends SparkFunSuite {
     assert(common3.canonicalized != common4.canonicalized)
   }
 
-  test("SPARK-48035: Add/Multiply operator canonicalization should take into account the" +
+  test("[SPARK-48035] Add/Multiply operator canonicalization should take into account the" +
     "evaluation mode of the operands before operand reordering") {
     Seq(1, 10) map { multiCommutativeOpOptThreshold =>
         val default = SQLConf.get.getConf(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD)
