@@ -22,6 +22,7 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 
 import scala.collection.mutable
+import scala.io.Source
 import scala.jdk.CollectionConverters._
 import scala.util.Random
 
@@ -36,6 +37,44 @@ import org.apache.spark.util.ArrayImplicits._
 
 class VariantSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
+
+  val jsonString = """
+  {
+    "arr": [5, 10, 15],
+    "numeric": 5,
+    "decimal": 4.4,
+    "str": "test",
+    "struct": {
+      "child": 10
+    },
+    "ts": "2024-03-01",
+    "arrayOfStructs": [{"b": "str"}, {"b": null}, {"diffKey": null}, {"diffKey": 5}]
+  }
+  """.filterNot(_.isWhitespace)
+
+  // TODO: Make more complex test caes. i.e. complex variants and nested types with variants in
+  // them.
+  test("write file") {
+    withTempDir { dir =>
+      val path = "/Users/r.chen/Documents/spark/spark-variant-parquet"
+      // val path = "/home/r.chen/spark/spark-variant-parquet"
+      println(s"PATH: ${path}")
+      // val query = scala.io.Source.fromFile(
+        // "sql/core/src/test/resources/test-data/variant/variant-table.sql").mkString
+      import scala.io.Source
+      val sqlPath = Thread.currentThread().getContextClassLoader
+        .getResource("test-data/variant/variant-table.sql").getPath.toString
+      val query = Source.fromFile(sqlPath).mkString
+      println(query)
+      val df = spark.sql(query)
+
+      df
+        .repartition(2)
+        .write.mode("overwrite").format("parquet").partitionBy("partitionKey").save(path)
+
+      Thread.sleep(1000000)
+    }
+  }
 
   test("basic tests") {
     def verifyResult(df: DataFrame): Unit = {
@@ -443,6 +482,23 @@ class VariantSuite extends QueryTest with SharedSparkSession {
         check("""[null, "hello", {}]""",
           Seq(Row(0, null, "null"), Row(1, null, "\"hello\""), Row(2, null, "{}")))
       }
+    }
+  }
+
+  // These tests read from tables written by other engines to ensure that Spark is compatible.
+  // The golden tables were written using "variant-table.sql" so running this SQL file in
+  // Spark should yield the same results as the golden tables.
+  Seq("variant-writer-one-parquet", "variant-writer-two-parquet").foreach { tableName =>
+    test(s"read variant table written by different writer - $tableName") {
+      val sqlPath = Thread.currentThread().getContextClassLoader
+          .getResource("test-data/variant/variant-table.sql").getPath.toString
+      val query = Source.fromFile(sqlPath).mkString
+      val actualDf = spark.sql(query)
+
+      val tablePath = Thread.currentThread().getContextClassLoader
+          .getResource(s"test-data/variant/$tableName").getPath.toString
+      val expected = spark.read.format("parquet").load(tablePath).collect()
+      checkAnswer(actualDf, expected)
     }
   }
 }
