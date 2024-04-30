@@ -21,7 +21,7 @@ import java.io.{File, FileOutputStream, InputStream, IOException}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.{config, Logging, MDC}
-import org.apache.spark.internal.LogKeys.PATH
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.util.{IntParam, Utils}
 
 /**
@@ -150,8 +150,9 @@ private[spark] object FileAppender extends Logging {
           logInfo(s"Rolling executor logs enabled for $file with rolling $seconds seconds")
           Some((seconds * 1000L, "--yyyy-MM-dd--HH-mm-ss"))
         case _ =>
-          logWarning(s"Illegal interval for rolling executor logs [$rollingInterval], " +
-              s"rolling logs not enabled")
+          logWarning(log"Illegal interval for rolling executor logs [" +
+            log"${MDC(TIME_UNITS, rollingInterval)}], " +
+            log"rolling logs not enabled")
           None
       }
       validatedParams.map {
@@ -172,7 +173,8 @@ private[spark] object FileAppender extends Logging {
             inputStream, file, new SizeBasedRollingPolicy(bytes), conf, closeStreams = closeStreams)
         case _ =>
           logWarning(
-            s"Illegal size [$rollingSizeBytes] for rolling executor logs, rolling logs not enabled")
+            log"Illegal size [${MDC(NUM_BYTES, rollingSizeBytes)}] " +
+              log"for rolling executor logs, rolling logs not enabled")
           new FileAppender(inputStream, file, closeStreams = closeStreams)
       }
     }

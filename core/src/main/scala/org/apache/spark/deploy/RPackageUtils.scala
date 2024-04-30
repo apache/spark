@@ -27,7 +27,9 @@ import scala.jdk.CollectionConverters._
 import com.google.common.io.{ByteStreams, Files}
 
 import org.apache.spark.api.r.RUtils
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{LogEntry, Logging, MDC}
+import org.apache.spark.internal.LogKeys
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.util.{RedirectThread, Utils}
 
 private[deploy] object RPackageUtils extends Logging {
@@ -43,10 +45,11 @@ private[deploy] object RPackageUtils extends Logging {
 
   /** Documentation on how the R source file layout should be in the jar. */
   private[deploy] final val RJarDoc =
-    s"""In order for Spark to build R packages that are parts of Spark Packages, there are a few
+    log"""In order for Spark to build R packages that are parts of Spark Packages, there are a few
       |requirements. The R source code must be shipped in a jar, with additional Java/Scala
       |classes. The jar must be in the following format:
-      |  1- The Manifest (META-INF/MANIFEST.mf) must contain the key-value: $hasRPackage: true
+      |  1- The Manifest (META-INF/MANIFEST.mf) must contain the key-value:
+      |  ${MDC(HAS_R_PACKAGE, hasRPackage)}: true
       |  2- The standard R package layout must be preserved under R/pkg/ inside the jar. More
       |  information on the standard R package layout can be found in:
       |  http://cran.r-project.org/doc/contrib/Leisch-CreatingPackages.pdf
@@ -62,11 +65,11 @@ private[deploy] object RPackageUtils extends Logging {
       |org/
       |org/apache/
       |...
-    """.stripMargin.trim
+    """.stripMargin
 
   /** Internal method for logging. We log to a printStream in tests, for debugging purposes. */
   private def print(
-      msg: String,
+      msg: LogEntry,
       printStream: PrintStream,
       level: Level = Level.FINE,
       e: Throwable = null): Unit = {
@@ -112,7 +115,8 @@ private[deploy] object RPackageUtils extends Logging {
     val pathToPkg = Seq(dir, "R", "pkg").mkString(File.separator)
     val installCmd = baseInstallCmd ++ Seq(libDir, pathToPkg)
     if (verbose) {
-      print(s"Building R package with the command: $installCmd", printStream)
+      print(log"Building R package with the command: ${MDC(SHELL_COMMAND, installCmd)}",
+        printStream)
     }
     try {
       val builder = new ProcessBuilder(installCmd.asJava)
@@ -131,7 +135,7 @@ private[deploy] object RPackageUtils extends Logging {
       process.waitFor() == 0
     } catch {
       case e: Throwable =>
-        print("Failed to build R package.", printStream, Level.SEVERE, e)
+        print(log"Failed to build R package.", printStream, Level.SEVERE, e)
         false
     }
   }
@@ -150,7 +154,7 @@ private[deploy] object RPackageUtils extends Logging {
         if (entry.isDirectory) {
           val dir = new File(tempDir, entryPath)
           if (verbose) {
-            print(s"Creating directory: $dir", printStream)
+            print(log"Creating directory: ${MDC(LogKeys.PATH, dir)}", printStream)
           }
           dir.mkdirs
         } else {
@@ -159,7 +163,8 @@ private[deploy] object RPackageUtils extends Logging {
           Files.createParentDirs(outPath)
           val outStream = new FileOutputStream(outPath)
           if (verbose) {
-            print(s"Extracting $entry to $outPath", printStream)
+            print(log"Extracting ${MDC(JAR_ENTRY, entry)} to ${MDC(LogKeys.PATH, outPath)}",
+              printStream)
           }
           Utils.copyStream(inStream, outStream, closeStreams = true)
         }
@@ -181,32 +186,36 @@ private[deploy] object RPackageUtils extends Logging {
         val jar = new JarFile(file)
         Utils.tryWithSafeFinally {
           if (checkManifestForR(jar)) {
-            print(s"$file contains R source code. Now installing package.", printStream, Level.INFO)
+            print(log"${MDC(LogKeys.PATH, file)} contains R source code. " +
+              log"Now installing package.", printStream, Level.INFO)
             val rSource = extractRFolder(jar, printStream, verbose)
             if (RUtils.rPackages.isEmpty) {
               RUtils.rPackages = Some(Utils.createTempDir().getAbsolutePath)
             }
             try {
               if (!rPackageBuilder(rSource, printStream, verbose, RUtils.rPackages.get)) {
-                print(s"ERROR: Failed to build R package in $file.", printStream)
+                print(log"ERROR: Failed to build R package in ${MDC(LogKeys.PATH, file)}.",
+                  printStream)
                 print(RJarDoc, printStream)
               }
             } finally {
               // clean up
               if (!rSource.delete()) {
-                logWarning(s"Error deleting ${rSource.getPath()}")
+                logWarning(log"Error deleting ${MDC(LogKeys.PATH, rSource.getPath())}")
               }
             }
           } else {
             if (verbose) {
-              print(s"$file doesn't contain R source code, skipping...", printStream)
+              print(log"${MDC(LogKeys.PATH, file)} doesn't contain R source code, " +
+                log"skipping...", printStream)
             }
           }
         } {
           jar.close()
         }
       } else {
-        print(s"WARN: $file resolved as dependency, but not found.", printStream, Level.WARNING)
+        print(log"WARN: ${MDC(LogKeys.PATH, file)} resolved as dependency, " +
+          log"but not found.", printStream, Level.WARNING)
       }
     }
   }
@@ -234,7 +243,7 @@ private[deploy] object RPackageUtils extends Logging {
     // create a zip file from scratch, do not append to existing file.
     val zipFile = new File(dir, name)
     if (!zipFile.delete()) {
-      logWarning(s"Error deleting ${zipFile.getPath()}")
+      logWarning(log"Error deleting ${MDC(LogKeys.PATH, zipFile.getPath())}")
     }
     val zipOutputStream = new ZipOutputStream(new FileOutputStream(zipFile, false))
     try {

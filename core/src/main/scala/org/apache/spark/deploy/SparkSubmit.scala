@@ -40,7 +40,7 @@ import org.apache.spark._
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.rest._
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.CLASS_NAME
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher.SparkLauncher
@@ -196,8 +196,8 @@ private[spark] class SparkSubmit extends Logging {
       } catch {
         // Fail over to use the legacy submission gateway
         case e: SubmitRestConnectionException =>
-          logWarning(s"Master endpoint ${args.master} was not a REST server. " +
-            "Falling back to legacy submission gateway instead.")
+          logWarning(log"Master endpoint ${MDC(MASTER_URL, args.master)} was not a REST server. " +
+            log"Falling back to legacy submission gateway instead.")
           args.useRest = false
           submit(args, false)
       }
@@ -897,9 +897,10 @@ private[spark] class SparkSubmit extends Logging {
 
     if (childClasspath.nonEmpty && isCustomClasspathInClusterModeDisallowed) {
       childClasspath.clear()
-      logWarning(s"Ignore classpath ${childClasspath.mkString(", ")} with proxy user specified " +
-        s"in Cluster mode when ${ALLOW_CUSTOM_CLASSPATH_BY_PROXY_USER_IN_CLUSTER_MODE.key} is " +
-        s"disabled")
+      logWarning(log"Ignore classpath ${MDC(CLASS_PATH, childClasspath.mkString(", "))} " +
+        log"with proxy user specified in Cluster mode when " +
+        log"${MDC(CONFIG_KEY, ALLOW_CUSTOM_CLASSPATH_BY_PROXY_USER_IN_CLUSTER_MODE.key)} is " +
+        log"disabled")
     }
 
     (childArgs.toSeq, childClasspath.toSeq, sparkConf, childMainClass)

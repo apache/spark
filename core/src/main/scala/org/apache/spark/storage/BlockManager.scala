@@ -18,12 +18,11 @@
 package org.apache.spark.storage
 
 import java.io._
-import java.lang.ref.{ReferenceQueue => JReferenceQueue, WeakReference}
+import java.lang.ref.{WeakReference, ReferenceQueue => JReferenceQueue}
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
 import java.util.Collections
 import java.util.concurrent.{CompletableFuture, ConcurrentHashMap, TimeUnit}
-
 import scala.collection.mutable
 import scala.collection.mutable.HashMap
 import scala.concurrent.{ExecutionContext, Future}
@@ -32,18 +31,16 @@ import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.{Failure, Random, Success, Try}
 import scala.util.control.NonFatal
-
 import com.codahale.metrics.{MetricRegistry, MetricSet}
 import com.esotericsoftware.kryo.KryoException
 import com.google.common.cache.CacheBuilder
 import org.apache.commons.io.IOUtils
-
 import org.apache.spark._
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.DataReadMethod
-import org.apache.spark.internal.{config, Logging, MDC}
-import org.apache.spark.internal.LogKeys.{BLOCK_ID, COUNT, SLEEP_TIME}
-import org.apache.spark.internal.config.{Network, RDD_CACHE_VISIBILITY_TRACKING_ENABLED, Tests}
+import org.apache.spark.internal.{Logging, MDC, config}
+import org.apache.spark.internal.LogKeys._
+import org.apache.spark.internal.config.{Network, RDD_CACHE_VISIBILITY_TRACKING_ENABLED, Tests, UNSCHEDULABLE_TASKSET_TIMEOUT}
 import org.apache.spark.memory.{MemoryManager, MemoryMode}
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.network._
@@ -67,9 +64,9 @@ import org.apache.spark.util.io.ChunkedByteBuffer
 
 /* Class for returning a fetched block and associated metrics. */
 private[spark] class BlockResult(
-    val data: Iterator[Any],
-    val readMethod: DataReadMethod.Value,
-    val bytes: Long)
+                                  val data: Iterator[Any],
+                                  val readMethod: DataReadMethod.Value,
+                                  val bytes: Long)
 
 /**
  * Abstracts away how blocks are stored and provides different ways to read the underlying block
@@ -104,8 +101,8 @@ private[spark] trait BlockData {
 }
 
 private[spark] class ByteBufferBlockData(
-    val buffer: ChunkedByteBuffer,
-    val shouldDispose: Boolean) extends BlockData {
+                                          val buffer: ChunkedByteBuffer,
+                                          val shouldDispose: Boolean) extends BlockData {
 
   override def toInputStream(): InputStream = buffer.toInputStream()
 
@@ -130,8 +127,8 @@ private[spark] class ByteBufferBlockData(
 }
 
 private[spark] class HostLocalDirManager(
-    cacheSize: Int,
-    blockStoreClient: BlockStoreClient) extends Logging {
+                                          cacheSize: Int,
+                                          blockStoreClient: BlockStoreClient) extends Logging {
 
   private val executorIdToLocalDirsCache =
     CacheBuilder
@@ -150,10 +147,10 @@ private[spark] class HostLocalDirManager(
     }
 
   private[spark] def getHostLocalDirs(
-      host: String,
-      port: Int,
-      executorIds: Array[String])(
-      callback: Try[Map[String, Array[String]]] => Unit): Unit = {
+                                       host: String,
+                                       port: Int,
+                                       executorIds: Array[String])(
+                                       callback: Try[Map[String, Array[String]]] => Unit): Unit = {
     val hostLocalDirsCompletable = new CompletableFuture[java.util.Map[String, Array[String]]]
     blockStoreClient.getHostLocalDirs(
       host,
@@ -180,17 +177,17 @@ private[spark] class HostLocalDirManager(
  * Note that [[initialize()]] must be called before the BlockManager is usable.
  */
 private[spark] class BlockManager(
-    val executorId: String,
-    rpcEnv: RpcEnv,
-    val master: BlockManagerMaster,
-    val serializerManager: SerializerManager,
-    val conf: SparkConf,
-    private val _memoryManager: MemoryManager,
-    mapOutputTracker: MapOutputTracker,
-    private val _shuffleManager: ShuffleManager,
-    val blockTransferService: BlockTransferService,
-    securityManager: SecurityManager,
-    externalBlockStoreClient: Option[ExternalBlockStoreClient])
+                                   val executorId: String,
+                                   rpcEnv: RpcEnv,
+                                   val master: BlockManagerMaster,
+                                   val serializerManager: SerializerManager,
+                                   val conf: SparkConf,
+                                   private val _memoryManager: MemoryManager,
+                                   mapOutputTracker: MapOutputTracker,
+                                   private val _shuffleManager: ShuffleManager,
+                                   val blockTransferService: BlockTransferService,
+                                   securityManager: SecurityManager,
+                                   externalBlockStoreClient: Option[ExternalBlockStoreClient])
   extends BlockDataManager with BlockEvictionHandler with Logging {
 
   // We initialize the ShuffleManager later in SparkContext and Executor, to allow
@@ -202,7 +199,7 @@ private[spark] class BlockManager(
   // allow the plugin to overwrite certain memory configurations. The `_memoryManager` will be
   // null here and we ask for the instance from SparkEnv
   private[spark] lazy val memoryManager =
-    Option(_memoryManager).getOrElse(SparkEnv.get.memoryManager)
+  Option(_memoryManager).getOrElse(SparkEnv.get.memoryManager)
 
   // same as `conf.get(config.SHUFFLE_SERVICE_ENABLED)`
   private[spark] val externalShuffleServiceEnabled: Boolean = externalBlockStoreClient.isDefined
@@ -284,9 +281,9 @@ private[spark] class BlockManager(
   // specified memory threshold. Files will be deleted automatically based on weak reference.
   // Exposed for test
   private[storage] val remoteBlockTempFileManager =
-    new BlockManager.RemoteBlockDownloadFileManager(
-      this,
-      securityManager.getIOEncryptionKey())
+  new BlockManager.RemoteBlockDownloadFileManager(
+    this,
+    securityManager.getIOEncryptionKey())
   private val maxRemoteBlockToMem = conf.get(config.MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM)
 
   var hostLocalDirManager: Option[HostLocalDirManager] = None
@@ -314,14 +311,14 @@ private[spark] class BlockManager(
   /**
    * Diagnose the possible cause of the shuffle data corruption by verifying the shuffle checksums
    *
-   * @param blockId The blockId of the corrupted shuffle block
+   * @param blockId          The blockId of the corrupted shuffle block
    * @param checksumByReader The checksum value of the corrupted block
-   * @param algorithm The checksum algorithm that is used when calculating the checksum value
+   * @param algorithm        The checksum algorithm that is used when calculating the checksum value
    */
   override def diagnoseShuffleBlockCorruption(
-      blockId: BlockId,
-      checksumByReader: Long,
-      algorithm: String): Cause = {
+                                               blockId: BlockId,
+                                               checksumByReader: Long,
+                                               algorithm: String): Cause = {
     assert(blockId.isInstanceOf[ShuffleBlockId],
       s"Corruption diagnosis only supports shuffle block yet, but got $blockId")
     val shuffleBlock = blockId.asInstanceOf[ShuffleBlockId]
@@ -339,16 +336,16 @@ private[spark] class BlockManager(
    * @param blockSize the decrypted size of the block
    */
   private[spark] abstract class BlockStoreUpdater[T](
-      blockSize: Long,
-      blockId: BlockId,
-      level: StorageLevel,
-      classTag: ClassTag[T],
-      tellMaster: Boolean,
-      keepReadLock: Boolean) {
+                                                      blockSize: Long,
+                                                      blockId: BlockId,
+                                                      level: StorageLevel,
+                                                      classTag: ClassTag[T],
+                                                      tellMaster: Boolean,
+                                                      keepReadLock: Boolean) {
 
     /**
-     *  Reads the block content into the memory. If the update of the block store is based on a
-     *  temporary file this could lead to loading the whole file into a ChunkedByteBuffer.
+     * Reads the block content into the memory. If the update of the block store is based on a
+     * temporary file this could lead to loading the whole file into a ChunkedByteBuffer.
      */
     protected def readToByteBuffer(): ChunkedByteBuffer
 
@@ -399,7 +396,7 @@ private[spark] class BlockManager(
      *
      * @return true if the block was already present or if the put succeeded, false otherwise.
      */
-     def save(): Boolean = {
+    def save(): Boolean = {
       doPut(blockId, level, classTag, tellMaster, keepReadLock) { info =>
         val startTimeNs = System.nanoTime()
 
@@ -423,7 +420,7 @@ private[spark] class BlockManager(
             saveSerializedValuesToMemoryStore(readToByteBuffer())
           }
           if (!putSucceeded && level.useDisk) {
-            logWarning(s"Persisting block $blockId to disk instead.")
+            logWarning(log"Persisting block ${MDC(BLOCK_ID, blockId)} to disk instead.")
             saveToDiskStore()
           }
         } else if (level.useDisk) {
@@ -464,12 +461,12 @@ private[spark] class BlockManager(
    * so may corrupt or change the data stored by the `BlockManager`.
    */
   private case class ByteBufferBlockStoreUpdater[T](
-      blockId: BlockId,
-      level: StorageLevel,
-      classTag: ClassTag[T],
-      bytes: ChunkedByteBuffer,
-      tellMaster: Boolean = true,
-      keepReadLock: Boolean = false)
+                                                     blockId: BlockId,
+                                                     level: StorageLevel,
+                                                     classTag: ClassTag[T],
+                                                     bytes: ChunkedByteBuffer,
+                                                     tellMaster: Boolean = true,
+                                                     keepReadLock: Boolean = false)
     extends BlockStoreUpdater[T](bytes.size, blockId, level, classTag, tellMaster, keepReadLock) {
 
     override def readToByteBuffer(): ChunkedByteBuffer = bytes
@@ -488,13 +485,13 @@ private[spark] class BlockManager(
    * Helper for storing a block based from bytes already in a local temp file.
    */
   private[spark] case class TempFileBasedBlockStoreUpdater[T](
-      blockId: BlockId,
-      level: StorageLevel,
-      classTag: ClassTag[T],
-      tmpFile: File,
-      blockSize: Long,
-      tellMaster: Boolean = true,
-      keepReadLock: Boolean = false)
+                                                               blockId: BlockId,
+                                                               level: StorageLevel,
+                                                               classTag: ClassTag[T],
+                                                               tmpFile: File,
+                                                               blockSize: Long,
+                                                               tellMaster: Boolean = true,
+                                                               keepReadLock: Boolean = false)
     extends BlockStoreUpdater[T](blockSize, blockId, level, classTag, tellMaster, keepReadLock) {
 
     override def readToByteBuffer(): ChunkedByteBuffer = {
@@ -575,8 +572,8 @@ private[spark] class BlockManager(
 
     hostLocalDirManager = {
       if ((conf.get(config.SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED) &&
-          !conf.get(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL)) ||
-          Utils.isPushBasedShuffleEnabled(conf, isDriver)) {
+        !conf.get(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL)) ||
+        Utils.isPushBasedShuffleEnabled(conf, isDriver)) {
         Some(new HostLocalDirManager(
           conf.get(config.STORAGE_LOCAL_DISK_BY_EXECUTORS_CACHE_SIZE),
           blockStoreClient))
@@ -709,8 +706,8 @@ private[spark] class BlockManager(
   }
 
   override def getHostLocalShuffleData(
-      blockId: BlockId,
-      dirs: Array[String]): ManagedBuffer = {
+                                        blockId: BlockId,
+                                        dirs: Array[String]): ManagedBuffer = {
     shuffleManager.shuffleBlockResolver.getBlockData(blockId, Some(dirs))
   }
 
@@ -752,17 +749,17 @@ private[spark] class BlockManager(
    * so may corrupt or change the data stored by the `BlockManager`.
    */
   override def putBlockData(
-      blockId: BlockId,
-      data: ManagedBuffer,
-      level: StorageLevel,
-      classTag: ClassTag[_]): Boolean = {
+                             blockId: BlockId,
+                             data: ManagedBuffer,
+                             level: StorageLevel,
+                             classTag: ClassTag[_]): Boolean = {
     putBytes(blockId, new ChunkedByteBuffer(data.nioByteBuffer()), level)(classTag)
   }
 
   override def putBlockDataAsStream(
-      blockId: BlockId,
-      level: StorageLevel,
-      classTag: ClassTag[_]): StreamCallbackWithID = {
+                                     blockId: BlockId,
+                                     level: StorageLevel,
+                                     classTag: ClassTag[_]): StreamCallbackWithID = {
 
     checkShouldStore(blockId)
 
@@ -820,8 +817,8 @@ private[spark] class BlockManager(
    * which will be memory efficient when performing certain operations.
    */
   def getLocalMergedBlockData(
-      blockId: ShuffleMergedBlockId,
-      dirs: Array[String]): Seq[ManagedBuffer] = {
+                               blockId: ShuffleMergedBlockId,
+                               dirs: Array[String]): Seq[ManagedBuffer] = {
     shuffleManager.shuffleBlockResolver.getMergedBlockData(blockId, Some(dirs))
   }
 
@@ -829,8 +826,8 @@ private[spark] class BlockManager(
    * Get the local merged shuffle block meta data for the given block ID.
    */
   def getLocalMergedBlockMeta(
-      blockId: ShuffleMergedBlockId,
-      dirs: Array[String]): MergedBlockMeta = {
+                               blockId: ShuffleMergedBlockId,
+                               dirs: Array[String]): MergedBlockMeta = {
     shuffleManager.shuffleBlockResolver.getMergedBlockMeta(blockId, Some(dirs))
   }
 
@@ -870,9 +867,9 @@ private[spark] class BlockManager(
    * memory on the storage endpoint.
    */
   private[spark] def reportBlockStatus(
-      blockId: BlockId,
-      status: BlockStatus,
-      droppedMemorySize: Long = 0L): Unit = {
+                                        blockId: BlockId,
+                                        status: BlockStatus,
+                                        droppedMemorySize: Long = 0L): Unit = {
     val needReregister = !tryToReportBlockStatus(blockId, status, droppedMemorySize)
     if (needReregister) {
       logInfo(s"Got told to re-register updating block $blockId")
@@ -888,9 +885,9 @@ private[spark] class BlockManager(
    * the storage endpoint needs to re-register.
    */
   private def tryToReportBlockStatus(
-      blockId: BlockId,
-      status: BlockStatus,
-      droppedMemorySize: Long = 0L): Boolean = {
+                                      blockId: BlockId,
+                                      status: BlockStatus,
+                                      droppedMemorySize: Long = 0L): Boolean = {
     val storageLevel = status.storageLevel
     val inMemSize = Math.max(status.memSize, droppedMemorySize)
     val onDiskSize = status.diskSize
@@ -914,7 +911,7 @@ private[spark] class BlockManager(
           val inMem = level.useMemory && memoryStore.contains(blockId)
           val onDisk = level.useDisk && diskStore.contains(blockId)
           val deserialized = if (inMem) level.deserialized else false
-          val replication = if (inMem  || onDisk) level.replication else 1
+          val replication = if (inMem || onDisk) level.replication else 1
           val storageLevel = StorageLevel(
             useDisk = onDisk,
             useMemory = inMem,
@@ -991,8 +988,12 @@ private[spark] class BlockManager(
               maybeCacheDiskValuesInMemory(info, blockId, level, diskValues)
             } else {
               val stream = maybeCacheDiskBytesInMemory(info, blockId, level, diskData)
-                .map { _.toInputStream() }
-                .getOrElse { diskData.toInputStream() }
+                .map {
+                  _.toInputStream()
+                }
+                .getOrElse {
+                  diskData.toInputStream()
+                }
               serializerManager.dataDeserializeStream(blockId, stream)(info.classTag)
             }
             val ci = CompletionIterator[Any, Iterator[Any]](iterToReturn, {
@@ -1020,10 +1021,10 @@ private[spark] class BlockManager(
   }
 
   /**
-   *  We need to have detailed log message to catch environmental problems easily.
-   *  Further details: https://issues.apache.org/jira/browse/SPARK-37710
+   * We need to have detailed log message to catch environmental problems easily.
+   * Further details: https://issues.apache.org/jira/browse/SPARK-37710
    */
-   private def extendMessageWithBlockDetails(msg: String, blockId: BlockId): String = {
+  private def extendMessageWithBlockDetails(msg: String, blockId: BlockId): String = {
     val message: String = "%s. %s - blockId: %s".format(msg, blockManagerId.toString, blockId)
     val file = diskBlockManager.getFile(blockId)
     if (file.exists()) {
@@ -1068,7 +1069,7 @@ private[spark] class BlockManager(
       } else {
         handleLocalReadFailure(blockId)
       }
-    } else {  // storage level is serialized
+    } else { // storage level is serialized
       if (level.useMemory && memoryStore.contains(blockId)) {
         new ByteBufferBlockData(memoryStore.getBytes(blockId).get, false)
       } else if (level.useDisk && diskStore.contains(blockId)) {
@@ -1106,14 +1107,14 @@ private[spark] class BlockManager(
    * transformation then block access falls back to fetching it from the remote executor via the
    * network.
    *
-   * @param blockId identifies the block to get
+   * @param blockId           identifies the block to get
    * @param bufferTransformer this transformer expected to open the file if the block is backed by a
    *                          file by this it is guaranteed the whole content can be loaded
    * @tparam T result type
    */
   private[spark] def getRemoteBlock[T](
-      blockId: BlockId,
-      bufferTransformer: ManagedBuffer => T): Option[T] = {
+                                        blockId: BlockId,
+                                        bufferTransformer: ManagedBuffer => T): Option[T] = {
     logDebug(s"Getting remote block $blockId")
     require(blockId != null, "BlockId is null")
 
@@ -1178,9 +1179,9 @@ private[spark] class BlockManager(
    * Fetch the block from remote block managers as a ManagedBuffer.
    */
   private def fetchRemoteManagedBuffer(
-      blockId: BlockId,
-      blockSize: Long,
-      locationsAndStatus: BlockManagerMessages.BlockLocationsAndStatus): Option[ManagedBuffer] = {
+                                        blockId: BlockId,
+                                        blockSize: Long,
+                                        locationsAndStatus: BlockManagerMessages.BlockLocationsAndStatus): Option[ManagedBuffer] = {
     // If the block size is above the threshold, we should pass our FileManger to
     // BlockTransferService, which will leverage it to spill the block; if not, then passed-in
     // null value means the block will be persisted in memory.
@@ -1214,14 +1215,16 @@ private[spark] class BlockManager(
             // Give up trying anymore locations. Either we've tried all of the original locations,
             // or we've refreshed the list of locations from the master, and have still
             // hit failures after trying locations from the refreshed list.
-            logWarning(s"Failed to fetch remote block $blockId " +
-              s"from [${locations.mkString(", ")}] after $totalFailureCount fetch failures. " +
-              s"Most recent failure cause:", e)
+            logWarning(log"Failed to fetch remote block ${MDC(BLOCK_ID, blockId)} " +
+              log"from [${MDC(LOCATION, locations.mkString(", "))}] " +
+              log"after ${MDC(NUM_FAILURES, totalFailureCount)} fetch failures. " +
+              log"Most recent failure cause:", e)
             return None
           }
 
-          logWarning(s"Failed to fetch remote block $blockId " +
-            s"from $loc (failed attempt $runningFailureCount)", e)
+          logWarning(log"Failed to fetch remote block ${MDC(BLOCK_ID, blockId)} " +
+            log"from ${MDC(LOCATION, loc)} (failed attempt " +
+            log"${MDC(NUM_FAILURES, runningFailureCount)})", e)
 
           // If there is a large number of executors then locations list can contain a
           // large number of stale entries causing a large number of retries that may
@@ -1257,9 +1260,9 @@ private[spark] class BlockManager(
    * Reads the block from the local directories of another executor which runs on the same host.
    */
   private[spark] def readDiskBlockFromSameHostExecutor(
-      blockId: BlockId,
-      localDirs: Array[String],
-      blockSize: Long): Option[ManagedBuffer] = {
+                                                        blockId: BlockId,
+                                                        localDirs: Array[String],
+                                                        blockSize: Long): Option[ManagedBuffer] = {
     val file = new File(ExecutorDiskUtils.getFilePath(localDirs, subDirsPerLocalDir, blockId.name))
     if (file.exists()) {
       val managedBuffer = securityManager.getIOEncryptionKey() match {
@@ -1335,7 +1338,9 @@ private[spark] class BlockManager(
     // SPARK-27666. When a task completes, Spark automatically releases all the blocks locked
     // by this task. We should not release any locks for a task that is already completed.
     if (taskContext.isDefined && taskContext.get.isCompleted()) {
-      logWarning(s"Task ${taskAttemptId.get} already completed, not releasing lock for $blockId")
+      logWarning(log"Task ${MDC(TASK_ATTEMPT_ID, taskAttemptId.get)} " +
+        log"already completed, not releasing lock for " +
+        log"${MDC(BLOCK_ID, blockId)}")
     } else {
       blockInfoManager.unlock(blockId, taskAttemptId)
     }
@@ -1365,11 +1370,11 @@ private[spark] class BlockManager(
    *         could not be cached.
    */
   def getOrElseUpdateRDDBlock[T](
-      taskId: Long,
-      blockId: RDDBlockId,
-      level: StorageLevel,
-      classTag: ClassTag[T],
-      makeIterator: () => Iterator[T]): Either[BlockResult, Iterator[T]] = {
+                                  taskId: Long,
+                                  blockId: RDDBlockId,
+                                  level: StorageLevel,
+                                  classTag: ClassTag[T],
+                                  makeIterator: () => Iterator[T]): Either[BlockResult, Iterator[T]] = {
     val isCacheVisible = isRDDBlockVisible(blockId)
     val res = getOrElseUpdate(blockId, level, classTag, makeIterator, isCacheVisible)
     if (res.isLeft && !isCacheVisible) {
@@ -1388,11 +1393,11 @@ private[spark] class BlockManager(
    *         could not be cached.
    */
   private def getOrElseUpdate[T](
-      blockId: BlockId,
-      level: StorageLevel,
-      classTag: ClassTag[T],
-      makeIterator: () => Iterator[T],
-      isCacheVisible: Boolean): Either[BlockResult, Iterator[T]] = {
+                                  blockId: BlockId,
+                                  level: StorageLevel,
+                                  classTag: ClassTag[T],
+                                  makeIterator: () => Iterator[T],
+                                  isCacheVisible: Boolean): Either[BlockResult, Iterator[T]] = {
     // Track whether the data is computed or not, force to do the computation later if need to.
     // The reason we push the force computing later is that once the executor is decommissioned we
     // will have a better chance to replicate the cache block because of the `checkShouldStore`
@@ -1409,7 +1414,7 @@ private[spark] class BlockManager(
         case Some(block) =>
           return Left(block)
         case _ =>
-          // Need to compute the block.
+        // Need to compute the block.
       }
     }
 
@@ -1440,7 +1445,7 @@ private[spark] class BlockManager(
         // The put failed, likely because the data was too large to fit in memory and could not be
         // dropped to disk. Therefore, we need to pass the input iterator back to the caller so
         // that they can decide what to do with the values (e.g. process them without caching).
-       Right(iter)
+        Right(iter)
     }
   }
 
@@ -1448,10 +1453,10 @@ private[spark] class BlockManager(
    * @return true if the block was stored or false if an error occurred.
    */
   def putIterator[T: ClassTag](
-      blockId: BlockId,
-      values: Iterator[T],
-      level: StorageLevel,
-      tellMaster: Boolean = true): Boolean = {
+                                blockId: BlockId,
+                                values: Iterator[T],
+                                level: StorageLevel,
+                                tellMaster: Boolean = true): Boolean = {
     require(values != null, "Values is null")
     doPutIterator(blockId, () => values, level, implicitly[ClassTag[T]], tellMaster) match {
       case None =>
@@ -1470,11 +1475,11 @@ private[spark] class BlockManager(
    * cases.
    */
   def getDiskWriter(
-      blockId: BlockId,
-      file: File,
-      serializerInstance: SerializerInstance,
-      bufferSize: Int,
-      writeMetrics: ShuffleWriteMetricsReporter): DiskBlockObjectWriter = {
+                     blockId: BlockId,
+                     file: File,
+                     serializerInstance: SerializerInstance,
+                     bufferSize: Int,
+                     writeMetrics: ShuffleWriteMetricsReporter): DiskBlockObjectWriter = {
     val syncWrites = conf.get(config.SHUFFLE_SYNC)
     new DiskBlockObjectWriter(file, serializerManager, serializerInstance, bufferSize,
       syncWrites, writeMetrics, blockId)
@@ -1489,10 +1494,10 @@ private[spark] class BlockManager(
    * @return true if the block was stored or false if an error occurred.
    */
   def putBytes[T: ClassTag](
-      blockId: BlockId,
-      bytes: ChunkedByteBuffer,
-      level: StorageLevel,
-      tellMaster: Boolean = true): Boolean = {
+                             blockId: BlockId,
+                             bytes: ChunkedByteBuffer,
+                             level: StorageLevel,
+                             tellMaster: Boolean = true): Boolean = {
     require(bytes != null, "Bytes is null")
     val blockStoreUpdater =
       ByteBufferBlockStoreUpdater(blockId, level, implicitly[ClassTag[T]], bytes, tellMaster)
@@ -1512,7 +1517,7 @@ private[spark] class BlockManager(
       return true
     }
 
-    if(master.isRDDBlockVisible(blockId)) {
+    if (master.isRDDBlockVisible(blockId)) {
       // Cache the visibility status if block exists.
       blockInfoManager.tryMarkBlockAsVisible(blockId)
       true
@@ -1529,11 +1534,11 @@ private[spark] class BlockManager(
    *                or Some on failure.
    */
   private def doPut[T](
-      blockId: BlockId,
-      level: StorageLevel,
-      classTag: ClassTag[_],
-      tellMaster: Boolean,
-      keepReadLock: Boolean)(putBody: BlockInfo => Option[T]): Option[T] = {
+                        blockId: BlockId,
+                        level: StorageLevel,
+                        classTag: ClassTag[_],
+                        tellMaster: Boolean,
+                        keepReadLock: Boolean)(putBody: BlockInfo => Option[T]): Option[T] = {
 
     require(blockId != null, "BlockId is null")
     require(level != null && level.isValid, "StorageLevel is null or invalid")
@@ -1544,7 +1549,8 @@ private[spark] class BlockManager(
       if (blockInfoManager.lockNewBlockForWriting(blockId, newInfo, keepReadLock)) {
         newInfo
       } else {
-        logWarning(s"Block $blockId already exists on this machine; not re-adding it")
+        logWarning(log"Block ${MDC(BLOCK_ID, blockId)} " +
+          log"already exists on this machine; not re-adding it")
         return None
       }
     }
@@ -1562,7 +1568,7 @@ private[spark] class BlockManager(
           blockInfoManager.unlock(blockId)
         }
       } else {
-        logWarning(s"Putting block $blockId failed")
+        logWarning(log"Putting block ${MDC(BLOCK_ID, blockId)} failed")
         removeBlockInternal(blockId, tellMaster = false)
       }
       res
@@ -1570,7 +1576,8 @@ private[spark] class BlockManager(
       // Since removeBlockInternal may throw exception,
       // we should print exception first to show root cause.
       case NonFatal(e) =>
-        logWarning(s"Putting block $blockId failed due to exception $e.")
+        logWarning(log"Putting block ${MDC(BLOCK_ID, blockId)} failed due to exception " +
+          log"${MDC(ERROR, e)}.")
         throw e
     } finally {
       // This cleanup is performed in a finally block rather than a `catch` to avoid having to
@@ -1610,12 +1617,12 @@ private[spark] class BlockManager(
    *         if the put failed.
    */
   private def doPutIterator[T](
-      blockId: BlockId,
-      iterator: () => Iterator[T],
-      level: StorageLevel,
-      classTag: ClassTag[T],
-      tellMaster: Boolean = true,
-      keepReadLock: Boolean = false): Option[PartiallyUnrolledIterator[T]] = {
+                                blockId: BlockId,
+                                iterator: () => Iterator[T],
+                                level: StorageLevel,
+                                classTag: ClassTag[T],
+                                tellMaster: Boolean = true,
+                                keepReadLock: Boolean = false): Option[PartiallyUnrolledIterator[T]] = {
     doPut(blockId, level, classTag, tellMaster = tellMaster, keepReadLock = keepReadLock) { info =>
       val startTimeNs = System.nanoTime()
       var iteratorFromFailedMemoryStorePut: Option[PartiallyUnrolledIterator[T]] = None
@@ -1631,7 +1638,7 @@ private[spark] class BlockManager(
             case Left(iter) =>
               // Not enough space to unroll this block; drop to disk if applicable
               if (level.useDisk) {
-                logWarning(s"Persisting block $blockId to disk instead.")
+                logWarning(log"Persisting block ${MDC(BLOCK_ID, blockId)} to disk instead.")
                 diskStore.put(blockId) { channel =>
                   val out = Channels.newOutputStream(channel)
                   serializerManager.dataSerializeStream(blockId, out, iter)(classTag)
@@ -1648,7 +1655,7 @@ private[spark] class BlockManager(
             case Left(partiallySerializedValues) =>
               // Not enough space to unroll this block; drop to disk if applicable
               if (level.useDisk) {
-                logWarning(s"Persisting block $blockId to disk instead.")
+                logWarning(log"Persisting block ${MDC(BLOCK_ID, blockId)} to disk instead.")
                 diskStore.put(blockId) { channel =>
                   val out = Channels.newOutputStream(channel)
                   partiallySerializedValues.finishWritingToStream(out)
@@ -1704,10 +1711,10 @@ private[spark] class BlockManager(
    *         if this returns None then the original disk store bytes will be unaffected.
    */
   private def maybeCacheDiskBytesInMemory(
-      blockInfo: BlockInfo,
-      blockId: BlockId,
-      level: StorageLevel,
-      diskData: BlockData): Option[ChunkedByteBuffer] = {
+                                           blockInfo: BlockInfo,
+                                           blockId: BlockId,
+                                           level: StorageLevel,
+                                           diskData: BlockData): Option[ChunkedByteBuffer] = {
     require(!level.deserialized)
     if (level.useMemory) {
       // Synchronize on blockInfo to guard against a race condition where two readers both try to
@@ -1749,10 +1756,10 @@ private[spark] class BlockManager(
    *         be used after this method returns.
    */
   private def maybeCacheDiskValuesInMemory[T](
-      blockInfo: BlockInfo,
-      blockId: BlockId,
-      level: StorageLevel,
-      diskIterator: Iterator[T]): Iterator[T] = {
+                                               blockInfo: BlockInfo,
+                                               blockId: BlockId,
+                                               level: StorageLevel,
+                                               diskIterator: Iterator[T]): Iterator[T] = {
     require(level.deserialized)
     val classTag = blockInfo.classTag.asInstanceOf[ClassTag[T]]
     if (level.useMemory) {
@@ -1792,7 +1799,7 @@ private[spark] class BlockManager(
         logDebug("Fetched peers from master: " + cachedPeers.mkString("[", ",", "]"))
       }
       if (cachedPeers.isEmpty &&
-          conf.get(config.STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined) {
+        conf.get(config.STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined) {
         Seq(FallbackStorage.FALLBACK_BLOCK_MANAGER_ID)
       } else {
         cachedPeers
@@ -1803,18 +1810,18 @@ private[spark] class BlockManager(
   /**
    * Replicates a block to peer block managers based on existingReplicas and maxReplicas
    *
-   * @param blockId blockId being replicate
-   * @param existingReplicas existing block managers that have a replica
-   * @param maxReplicas maximum replicas needed
+   * @param blockId                blockId being replicate
+   * @param existingReplicas       existing block managers that have a replica
+   * @param maxReplicas            maximum replicas needed
    * @param maxReplicationFailures number of replication failures to tolerate before
    *                               giving up.
    * @return whether block was successfully replicated or not
    */
   def replicateBlock(
-      blockId: BlockId,
-      existingReplicas: Set[BlockManagerId],
-      maxReplicas: Int,
-      maxReplicationFailures: Option[Int] = None): Boolean = {
+                      blockId: BlockId,
+                      existingReplicas: Set[BlockManagerId],
+                      maxReplicas: Int,
+                      maxReplicationFailures: Option[Int] = None): Boolean = {
     logInfo(s"Using $blockManagerId to pro-actively replicate $blockId")
     blockInfoManager.lockForReading(blockId).forall { info =>
       val data = doGetLocalBytes(blockId, info)
@@ -1843,12 +1850,12 @@ private[spark] class BlockManager(
    * the block has been replicated.
    */
   private def replicate(
-      blockId: BlockId,
-      data: BlockData,
-      level: StorageLevel,
-      classTag: ClassTag[_],
-      existingReplicas: Set[BlockManagerId] = Set.empty,
-      maxReplicationFailures: Option[Int] = None): Boolean = {
+                         blockId: BlockId,
+                         data: BlockData,
+                         level: StorageLevel,
+                         classTag: ClassTag[_],
+                         existingReplicas: Set[BlockManagerId] = Set.empty,
+                         maxReplicationFailures: Option[Int] = None): Boolean = {
 
     val maxReplicationFailureCount = maxReplicationFailures.getOrElse(
       conf.get(config.STORAGE_MAX_REPLICATION_FAILURE))
@@ -1875,7 +1882,7 @@ private[spark] class BlockManager(
       blockId,
       numPeersToReplicateTo)
 
-    while(numFailures <= maxReplicationFailureCount &&
+    while (numFailures <= maxReplicationFailureCount &&
       peersForReplication.nonEmpty &&
       peersReplicatedTo.size < numPeersToReplicateTo) {
       val peer = peersForReplication.head
@@ -1904,7 +1911,8 @@ private[spark] class BlockManager(
           throw e
         // Everything else we may retry
         case NonFatal(e) =>
-          logWarning(s"Failed to replicate $blockId to $peer, failure #$numFailures", e)
+          logWarning(log"Failed to replicate ${MDC(BLOCK_ID, blockId)} " +
+            log"to ${MDC(PEER, peer)}, failure #${MDC(NUM_FAILURES, numFailures)}", e)
           peersFailedToReplicateTo += peer
           // we have a failed replication, so we get the list of peers again
           // we don't want peers we have already replicated to and the ones that
@@ -1925,8 +1933,9 @@ private[spark] class BlockManager(
     logDebug(s"Replicating $blockId of ${data.size} bytes to " +
       s"${peersReplicatedTo.size} peer(s) took ${(System.nanoTime - startTime) / 1e6} ms")
     if (peersReplicatedTo.size < numPeersToReplicateTo) {
-      logWarning(s"Block $blockId replicated to only " +
-        s"${peersReplicatedTo.size} peer(s) instead of $numPeersToReplicateTo peers")
+      logWarning(log"Block ${MDC(BLOCK_ID, blockId)} replicated to only " +
+        log"${MDC(NUM_PEERS_REPLICATED_TO, peersReplicatedTo.size)} peer(s) " +
+        log"instead of ${MDC(NUM_PEERS_TO_REPLICATE_TO, numPeersToReplicateTo)} peers")
       return false
     }
 
@@ -1948,10 +1957,10 @@ private[spark] class BlockManager(
    *         error occurred.
    */
   def putSingle[T: ClassTag](
-      blockId: BlockId,
-      value: T,
-      level: StorageLevel,
-      tellMaster: Boolean = true): Boolean = {
+                              blockId: BlockId,
+                              value: T,
+                              level: StorageLevel,
+                              tellMaster: Boolean = true): Boolean = {
     putIterator(blockId, Iterator(value), level, tellMaster)
   }
 
@@ -1967,8 +1976,8 @@ private[spark] class BlockManager(
    * @return the block's new effective StorageLevel.
    */
   private[storage] override def dropFromMemory[T: ClassTag](
-      blockId: BlockId,
-      data: () => Either[Array[T], ChunkedByteBuffer]): StorageLevel = {
+                                                             blockId: BlockId,
+                                                             data: () => Either[Array[T], ChunkedByteBuffer]): StorageLevel = {
     logInfo(s"Dropping block $blockId from memory")
     val info = blockInfoManager.assertBlockIsLockedForWriting(blockId)
     var blockIsUpdated = false
@@ -1999,7 +2008,8 @@ private[spark] class BlockManager(
     if (blockIsRemoved) {
       blockIsUpdated = true
     } else {
-      logWarning(s"Block $blockId could not be dropped from memory as it does not exist")
+      logWarning(log"Block ${MDC(BLOCK_ID, blockId)} " +
+        log"could not be dropped from memory as it does not exist")
     }
 
     val status = getCurrentBlockStatus(blockId, info)
@@ -2039,8 +2049,8 @@ private[spark] class BlockManager(
   }
 
   /**
-   *  Returns the last migration time and a boolean denoting if all the blocks have been migrated.
-   *  If there are any tasks running since that time the boolean may be incorrect.
+   * Returns the last migration time and a boolean denoting if all the blocks have been migrated.
+   * If there are any tasks running since that time the boolean may be incorrect.
    */
   private[spark] def lastMigrationInfo(): (Long, Boolean) = {
     decommissioner.map(_.lastMigrationInfo()).getOrElse((0, false))
@@ -2055,7 +2065,7 @@ private[spark] class BlockManager(
   def removeBroadcast(broadcastId: Long, tellMaster: Boolean): Int = {
     logDebug(s"Removing broadcast $broadcastId")
     val blocksToRemove = blockInfoManager.entries.map(_._1).collect {
-      case bid @ BroadcastBlockId(`broadcastId`, _) => bid
+      case bid@BroadcastBlockId(`broadcastId`, _) => bid
     }
     blocksToRemove.foreach { blockId => removeBlock(blockId, tellMaster) }
     blocksToRemove.size
@@ -2083,7 +2093,8 @@ private[spark] class BlockManager(
     blockInfoManager.lockForWriting(blockId) match {
       case None =>
         // The block has already been removed; do nothing.
-        logWarning(s"Asked to remove block $blockId, which does not exist")
+        logWarning(log"Asked to remove block ${MDC(BLOCK_ID, blockId)}, " +
+          log"which does not exist")
       case Some(info) =>
         removeBlockInternal(blockId, tellMaster = tellMaster && info.tellMaster)
         addUpdatedBlockStatusToTaskMetrics(blockId, BlockStatus.empty)
@@ -2106,7 +2117,8 @@ private[spark] class BlockManager(
       val removedFromMemory = memoryStore.remove(blockId)
       val removedFromDisk = diskStore.remove(blockId)
       if (!removedFromMemory && !removedFromDisk) {
-        logWarning(s"Block $blockId could not be removed as it was not found on disk or in memory")
+        logWarning(log"Block ${MDC(BLOCK_ID, blockId)} " +
+          log"could not be removed as it was not found on disk or in memory")
       }
 
       blockInfoManager.removeBlock(blockId)
@@ -2118,7 +2130,7 @@ private[spark] class BlockManager(
       }
     } finally {
       if (!hasRemoveBlock) {
-        logWarning(s"Block $blockId was not removed normally.")
+        logWarning(log"Block ${MDC(BLOCK_ID, blockId)} was not removed normally.")
         blockInfoManager.removeBlock(blockId)
       }
     }
@@ -2133,9 +2145,9 @@ private[spark] class BlockManager(
   }
 
   def releaseLockAndDispose(
-      blockId: BlockId,
-      data: BlockData,
-      taskContext: Option[TaskContext] = None): Unit = {
+                             blockId: BlockId,
+                             data: BlockData,
+                             taskContext: Option[TaskContext] = None): Unit = {
     releaseLock(blockId, taskContext)
     data.dispose()
   }
@@ -2162,9 +2174,9 @@ private[spark] object BlockManager {
   private val ID_GENERATOR = new IdGenerator
 
   def blockIdsToLocations(
-      blockIds: Array[BlockId],
-      env: SparkEnv,
-      blockManagerMaster: BlockManagerMaster = null): Map[BlockId, Seq[String]] = {
+                           blockIds: Array[BlockId],
+                           env: SparkEnv,
+                           blockManagerMaster: BlockManagerMaster = null): Map[BlockId, Seq[String]] = {
 
     // blockManagerMaster != null is used in tests
     assert(env != null || blockManagerMaster != null)
@@ -2184,22 +2196,22 @@ private[spark] object BlockManager {
   }
 
   private class ShuffleMetricsSource(
-      override val sourceName: String,
-      metricSet: MetricSet) extends Source {
+                                      override val sourceName: String,
+                                      metricSet: MetricSet) extends Source {
 
     override val metricRegistry = new MetricRegistry
     metricRegistry.registerAll(metricSet)
   }
 
   class RemoteBlockDownloadFileManager(
-       blockManager: BlockManager,
-       encryptionKey: Option[Array[Byte]])
-      extends DownloadFileManager with Logging {
+                                        blockManager: BlockManager,
+                                        encryptionKey: Option[Array[Byte]])
+    extends DownloadFileManager with Logging {
 
     private class ReferenceWithCleanup(
-        file: DownloadFile,
-        referenceQueue: JReferenceQueue[DownloadFile]
-        ) extends WeakReference[DownloadFile](file, referenceQueue) {
+                                        file: DownloadFile,
+                                        referenceQueue: JReferenceQueue[DownloadFile]
+                                      ) extends WeakReference[DownloadFile](file, referenceQueue) {
 
       // we cannot use `file.delete()` here otherwise it won't be garbage-collected
       val filePath = file.path()
@@ -2219,7 +2231,11 @@ private[spark] object BlockManager {
 
     private val POLL_TIMEOUT = 1000
 
-    private val cleaningThread = new Thread() { override def run(): Unit = { keepCleaning() } }
+    private val cleaningThread = new Thread() {
+      override def run(): Unit = {
+        keepCleaning()
+      }
+    }
     cleaningThread.setDaemon(true)
     cleaningThread.setName("RemoteBlock-temp-file-clean-thread")
     cleaningThread.start()
@@ -2271,8 +2287,8 @@ private[spark] object BlockManager {
    * A DownloadFile that encrypts data when it is written, and decrypts when it's read.
    */
   private class EncryptedDownloadFile(
-      file: File,
-      key: Array[Byte]) extends DownloadFile {
+                                       file: File,
+                                       key: Array[Byte]) extends DownloadFile {
 
     private val env = SparkEnv.get
 

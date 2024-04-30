@@ -182,12 +182,12 @@ private[spark] object StratifiedSamplingUtils extends Logging {
     for ((key, acceptResult) <- finalResult) {
       val sampleSize = math.ceil(acceptResult.numItems * fractions(key)).toLong
       if (acceptResult.numAccepted > sampleSize) {
-        logWarning("Pre-accepted too many")
+        logWarning(log"Pre-accepted too many")
         thresholdByKey += (key -> acceptResult.acceptBound)
       } else {
         val numWaitListAccepted = (sampleSize - acceptResult.numAccepted).toInt
         if (numWaitListAccepted >= acceptResult.waitList.size) {
-          logWarning("WaitList too short")
+          logWarning(log"WaitList too short")
           thresholdByKey += (key -> acceptResult.waitListBound)
         } else {
           thresholdByKey += (key -> acceptResult.waitList.sorted.apply(numWaitListAccepted))

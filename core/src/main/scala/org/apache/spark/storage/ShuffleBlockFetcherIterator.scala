@@ -37,7 +37,7 @@ import org.apache.spark.{MapOutputTracker, SparkException, TaskContext}
 import org.apache.spark.MapOutputTracker.SHUFFLE_PUSH_MAP_ID
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.{BLOCK_ID, ERROR, HOST, MAX_ATTEMPTS, PORT}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.shuffle._
 import org.apache.spark.network.shuffle.checksum.{Cause, ShuffleChecksumHelper}
@@ -249,7 +249,7 @@ final class ShuffleBlockFetcherIterator(
     }
     shuffleFilesSet.foreach { file =>
       if (!file.delete()) {
-        logWarning("Failed to cleanup shuffle fetch temp file " + file.path())
+        logWarning(log"Failed to cleanup shuffle fetch temp file ${MDC(PATH, file.path())}")
       }
     }
   }
@@ -846,20 +846,23 @@ final class ShuffleBlockFetcherIterator(
             // uses are shared by the UnsafeShuffleWriter (both writers use DiskBlockObjectWriter
             // which returns a zero-size from commitAndGet() in case no records were written
             // since the last call.
-            val msg = s"Received a zero-size buffer for block $blockId from $address " +
-              s"(expectedApproxSize = $size, isNetworkReqDone=$isNetworkReqDone)"
             if (blockId.isShuffleChunk) {
               // Zero-size block may come from nodes with hardware failures, For shuffle chunks,
               // the original shuffle blocks that belong to that zero-size shuffle chunk is
               // available and we can opt to fallback immediately.
-              logWarning(msg)
+              logWarning(log"Received a zero-size buffer for block ${MDC(BLOCK_ID, blockId)} " +
+                log"from ${MDC(URI, address)} " +
+                log"(expectedApproxSize = ${MDC(NUM_BYTES, size)}, " +
+                log"isNetworkReqDone=${MDC(IS_NETWORK_REQUEST_DONE, isNetworkReqDone)})")
               pushBasedFetchHelper.initiateFallbackFetchForPushMergedBlock(blockId, address)
               shuffleMetrics.incCorruptMergedBlockChunks(1)
               // Set result to null to trigger another iteration of the while loop to get either.
               result = null
               null
             } else {
-              throwFetchFailedException(blockId, mapIndex, address, new IOException(msg))
+              throwFetchFailedException(blockId, mapIndex, address, new IOException(
+                s"Received a zero-size buffer for block $blockId from $address " +
+                  s"(expectedApproxSize = $size, isNetworkReqDone=$isNetworkReqDone)"))
             }
           } else {
             try {
@@ -945,7 +948,8 @@ final class ShuffleBlockFetcherIterator(
                   }
                 } else {
                   // It's the first time this block is detected corrupted
-                  logWarning(s"got an corrupted block $blockId from $address, fetch again", e)
+                  logWarning(log"got an corrupted block ${MDC(BLOCK_ID, blockId)} " +
+                    log"from ${MDC(URI, address)}, fetch again", e)
                   corruptedBlocks += blockId
                   fetchRequests += FetchRequest(
                     address, Array(FetchBlockInfo(blockId, size, mapIndex)))
@@ -1033,8 +1037,8 @@ final class ShuffleBlockFetcherIterator(
                 // If we see an exception with reading push-merged-local index file, we fallback
                 // to fetch the original blocks. We do not report block fetch failure
                 // and will continue with the remaining local block read.
-                logWarning(s"Error occurred while reading push-merged-local index, " +
-                  s"prepare to fetch the original blocks", e)
+                logWarning(log"Error occurred while reading push-merged-local index, " +
+                  log"prepare to fetch the original blocks", e)
                 pushBasedFetchHelper.initiateFallbackFetchForPushMergedBlock(
                   shuffleBlockId, pushBasedFetchHelper.localShuffleMergerBlockMgrId)
             }
@@ -1120,7 +1124,7 @@ final class ShuffleBlockFetcherIterator(
             checksumAlgorithm)
         } catch {
           case e: Exception =>
-            logWarning("Unable to diagnose the corruption cause of the corrupted block", e)
+            logWarning(log"Unable to diagnose the corruption cause of the corrupted block", e)
             cause = Cause.UNKNOWN_ISSUE
         }
         val duration = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)
@@ -1142,10 +1146,11 @@ final class ShuffleBlockFetcherIterator(
         diagnosisResponse
       case shuffleBlockChunk: ShuffleBlockChunkId =>
         // TODO SPARK-36284 Add shuffle checksum support for push-based shuffle
-        val diagnosisResponse = s"BlockChunk $shuffleBlockChunk is corrupted but corruption " +
+        logWarning(log"BlockChunk ${MDC(SHUFFLE_BLOCK_INFO, shuffleBlockChunk)} " +
+          log"is corrupted but corruption diagnosis is skipped due to lack of shuffle " +
+          log"checksum support for push-based shuffle.")
+        s"BlockChunk $shuffleBlockChunk is corrupted but corruption " +
           s"diagnosis is skipped due to lack of shuffle checksum support for push-based shuffle."
-        logWarning(diagnosisResponse)
-        diagnosisResponse
       case unexpected: BlockId =>
         throw SparkException.internalError(
           s"Unexpected type of BlockId, $unexpected", category = "STORAGE")

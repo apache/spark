@@ -34,6 +34,7 @@ import org.apache.spark.TaskState.TaskState
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.{config, Logging, LogKeys, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.RpcEndpoint
@@ -276,9 +277,9 @@ private[spark] class TaskSchedulerImpl(
         starvationTimer.scheduleAtFixedRate(new TimerTask() {
           override def run(): Unit = {
             if (!hasLaunchedTask) {
-              logWarning("Initial job has not accepted any resources; " +
-                "check your cluster UI to ensure that workers are registered " +
-                "and have sufficient resources")
+              logWarning(log"Initial job has not accepted any resources; " +
+                log"check your cluster UI to ensure that workers are registered " +
+                log"and have sufficient resources")
             } else {
               this.cancel()
             }
@@ -336,7 +337,8 @@ private[spark] class TaskSchedulerImpl(
       backend.killTask(taskId, execId.get, interruptThread, reason)
       true
     } else {
-      logWarning(s"Could not kill task $taskId because no task with that ID was found.")
+      logWarning(log"Could not kill task ${MDC(TASK_ID, taskId)} " +
+        log"because no task with that ID was found.")
       false
     }
   }
@@ -662,12 +664,20 @@ private[spark] class TaskSchedulerImpl(
               // always reject the offered resources. As a result, the barrier taskset can't get
               // launched. And if we retry the resourceOffer, we'd go through the same path again
               // and get into the endless loop in the end.
+              val logMsg = log"Fail resource offers for barrier stage " +
+                log"${MDC(STAGE_ID, taskSet.stageId)} because only " +
+                log"${MDC(NUM_PENDING_LAUNCH_TASKS, barrierPendingLaunchTasks.length)} " +
+                log"out of a total number " +
+                log"of ${MDC(NUM_TASKS, taskSet.numTasks)} tasks got resource offers. " +
+                log"We highly recommend you to use the non-legacy delay scheduling by setting " +
+                log"${MDC(CONFIG_KEY, LEGACY_LOCALITY_WAIT_RESET.key)} to false " +
+                log"to get rid of this error."
               val errorMsg = s"Fail resource offers for barrier stage ${taskSet.stageId} " +
                 s"because only ${barrierPendingLaunchTasks.length} out of a total number " +
                 s"of ${taskSet.numTasks} tasks got resource offers. We highly recommend " +
                 "you to use the non-legacy delay scheduling by setting " +
                 s"${LEGACY_LOCALITY_WAIT_RESET.key} to false to get rid of this error."
-              logWarning(errorMsg)
+              logWarning(logMsg)
               taskSet.abort(errorMsg)
               throw SparkCoreErrors.sparkError(errorMsg)
             } else {
