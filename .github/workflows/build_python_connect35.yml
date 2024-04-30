@@ -89,7 +89,6 @@ jobs:
 
           # Remove Py4J and PySpark zipped library to make sure it uses Spark 3.5 ones from the source.
           rm -r python/lib
-          rm -r python/pyspark
 
           # Several tests related to catalog requires to run them sequencially, e.g., writing a table in a listener.
           # Run branch-3.5 tests
