@@ -19,24 +19,24 @@ package org.apache.spark.util;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.apache.log4j.Level;
+import org.apache.logging.log4j.Level;
 
 import org.apache.spark.internal.Logger;
 import org.apache.spark.internal.LoggerFactory;
 
 public class StructuredLoggerSuite extends LoggerSuiteBase {
 
-  private final static Logger LOGGER = LoggerFactory.getLogger(StructuredLoggerSuite.class);
+  private static final Logger LOGGER = LoggerFactory.getLogger(StructuredLoggerSuite.class);
 
   private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
   private String compactAndToRegexPattern(Level level, String json) {
     try {
-      return JSON_MAPPER.readTree(json).toString().
-          replace("<level>", level.toString()).
-          replace("<className>", className()).
-          replace("<timestamp>", "[^\"]+").
-          replace("<stacktrace>", ".*").
-          replace("{", "\\{") + "\n";
+      return JSON_MAPPER.readTree(json).toString()
+         .replace("<level>", level.toString())
+         .replace("<className>", className())
+         .replace("<timestamp>", "[^\"]+")
+         .replace("<stacktrace>", ".*")
+         .replace("{", "\\{") + "\n";
     } catch (JsonProcessingException e) {
       throw new RuntimeException(e);
     }

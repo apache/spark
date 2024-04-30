@@ -23,7 +23,7 @@ import java.nio.file.Files;
 import java.util.List;
 
 import org.apache.commons.lang3.tuple.Pair;
-import org.apache.log4j.Level;
+import org.apache.logging.log4j.Level;
 import org.junit.jupiter.api.Test;
 
 import org.apache.spark.internal.JLogKey;

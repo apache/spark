@@ -17,19 +17,19 @@
 
 package org.apache.spark.util;
 
-import org.apache.log4j.Level;
+import org.apache.logging.log4j.Level;
 
 import org.apache.spark.internal.Logger;
 import org.apache.spark.internal.LoggerFactory;
 
 public class PatternLoggerSuite extends LoggerSuiteBase {
 
-  private final static Logger LOGGER = LoggerFactory.getLogger(PatternLoggerSuite.class);
+  private static final Logger LOGGER = LoggerFactory.getLogger(PatternLoggerSuite.class);
 
   private String toRegexPattern(Level level, String msg) {
-    return msg.
-        replace("<level>", level.toString()).
-        replace("<className>", className());
+    return msg
+        .replace("<level>", level.toString())
+        .replace("<className>", className());
   }
 
   @Override
