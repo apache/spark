@@ -2462,8 +2462,8 @@ private[spark] object Utils
       }
       if (!canDoPushBasedShuffle) {
         logWarning(log"Push-based shuffle can only be enabled when the application is submitted " +
-          log"to run in YARN mode, with external shuffle service enabled, IO encryption disabled, " +
-          log"and relocation of serialized objects supported.")
+          log"to run in YARN mode, with external shuffle service enabled, IO encryption " +
+          log"disabled, and relocation of serialized objects supported.")
       }
 
       canDoPushBasedShuffle

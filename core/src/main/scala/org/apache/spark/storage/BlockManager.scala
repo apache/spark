@@ -18,11 +18,12 @@
 package org.apache.spark.storage
 
 import java.io._
-import java.lang.ref.{WeakReference, ReferenceQueue => JReferenceQueue}
+import java.lang.ref.{ReferenceQueue => JReferenceQueue, WeakReference}
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
 import java.util.Collections
 import java.util.concurrent.{CompletableFuture, ConcurrentHashMap, TimeUnit}
+
 import scala.collection.mutable
 import scala.collection.mutable.HashMap
 import scala.concurrent.{ExecutionContext, Future}
@@ -31,16 +32,18 @@ import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.{Failure, Random, Success, Try}
 import scala.util.control.NonFatal
+
 import com.codahale.metrics.{MetricRegistry, MetricSet}
 import com.esotericsoftware.kryo.KryoException
 import com.google.common.cache.CacheBuilder
 import org.apache.commons.io.IOUtils
+
 import org.apache.spark._
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.DataReadMethod
-import org.apache.spark.internal.{Logging, MDC, config}
+import org.apache.spark.internal.{config, Logging, MDC}
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.internal.config.{Network, RDD_CACHE_VISIBILITY_TRACKING_ENABLED, Tests, UNSCHEDULABLE_TASKSET_TIMEOUT}
+import org.apache.spark.internal.config.{Network, RDD_CACHE_VISIBILITY_TRACKING_ENABLED, Tests}
 import org.apache.spark.memory.{MemoryManager, MemoryMode}
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.network._
@@ -64,9 +67,9 @@ import org.apache.spark.util.io.ChunkedByteBuffer
 
 /* Class for returning a fetched block and associated metrics. */
 private[spark] class BlockResult(
-                                  val data: Iterator[Any],
-                                  val readMethod: DataReadMethod.Value,
-                                  val bytes: Long)
+    val data: Iterator[Any],
+    val readMethod: DataReadMethod.Value,
+    val bytes: Long)
 
 /**
  * Abstracts away how blocks are stored and provides different ways to read the underlying block
@@ -101,8 +104,8 @@ private[spark] trait BlockData {
 }
 
 private[spark] class ByteBufferBlockData(
-                                          val buffer: ChunkedByteBuffer,
-                                          val shouldDispose: Boolean) extends BlockData {
+    val buffer: ChunkedByteBuffer,
+    val shouldDispose: Boolean) extends BlockData {
 
   override def toInputStream(): InputStream = buffer.toInputStream()
 
@@ -127,8 +130,8 @@ private[spark] class ByteBufferBlockData(
 }
 
 private[spark] class HostLocalDirManager(
-                                          cacheSize: Int,
-                                          blockStoreClient: BlockStoreClient) extends Logging {
+    cacheSize: Int,
+    blockStoreClient: BlockStoreClient) extends Logging {
 
   private val executorIdToLocalDirsCache =
     CacheBuilder
@@ -147,10 +150,10 @@ private[spark] class HostLocalDirManager(
     }
 
   private[spark] def getHostLocalDirs(
-                                       host: String,
-                                       port: Int,
-                                       executorIds: Array[String])(
-                                       callback: Try[Map[String, Array[String]]] => Unit): Unit = {
+      host: String,
+      port: Int,
+      executorIds: Array[String])(
+      callback: Try[Map[String, Array[String]]] => Unit): Unit = {
     val hostLocalDirsCompletable = new CompletableFuture[java.util.Map[String, Array[String]]]
     blockStoreClient.getHostLocalDirs(
       host,
@@ -177,17 +180,17 @@ private[spark] class HostLocalDirManager(
  * Note that [[initialize()]] must be called before the BlockManager is usable.
  */
 private[spark] class BlockManager(
-                                   val executorId: String,
-                                   rpcEnv: RpcEnv,
-                                   val master: BlockManagerMaster,
-                                   val serializerManager: SerializerManager,
-                                   val conf: SparkConf,
-                                   private val _memoryManager: MemoryManager,
-                                   mapOutputTracker: MapOutputTracker,
-                                   private val _shuffleManager: ShuffleManager,
-                                   val blockTransferService: BlockTransferService,
-                                   securityManager: SecurityManager,
-                                   externalBlockStoreClient: Option[ExternalBlockStoreClient])
+    val executorId: String,
+    rpcEnv: RpcEnv,
+    val master: BlockManagerMaster,
+    val serializerManager: SerializerManager,
+    val conf: SparkConf,
+    private val _memoryManager: MemoryManager,
+    mapOutputTracker: MapOutputTracker,
+    private val _shuffleManager: ShuffleManager,
+    val blockTransferService: BlockTransferService,
+    securityManager: SecurityManager,
+    externalBlockStoreClient: Option[ExternalBlockStoreClient])
   extends BlockDataManager with BlockEvictionHandler with Logging {
 
   // We initialize the ShuffleManager later in SparkContext and Executor, to allow
@@ -316,9 +319,9 @@ private[spark] class BlockManager(
    * @param algorithm        The checksum algorithm that is used when calculating the checksum value
    */
   override def diagnoseShuffleBlockCorruption(
-                                               blockId: BlockId,
-                                               checksumByReader: Long,
-                                               algorithm: String): Cause = {
+      blockId: BlockId,
+      checksumByReader: Long,
+      algorithm: String): Cause = {
     assert(blockId.isInstanceOf[ShuffleBlockId],
       s"Corruption diagnosis only supports shuffle block yet, but got $blockId")
     val shuffleBlock = blockId.asInstanceOf[ShuffleBlockId]
@@ -336,12 +339,12 @@ private[spark] class BlockManager(
    * @param blockSize the decrypted size of the block
    */
   private[spark] abstract class BlockStoreUpdater[T](
-                                                      blockSize: Long,
-                                                      blockId: BlockId,
-                                                      level: StorageLevel,
-                                                      classTag: ClassTag[T],
-                                                      tellMaster: Boolean,
-                                                      keepReadLock: Boolean) {
+      blockSize: Long,
+      blockId: BlockId,
+      level: StorageLevel,
+      classTag: ClassTag[T],
+      tellMaster: Boolean,
+      keepReadLock: Boolean) {
 
     /**
      * Reads the block content into the memory. If the update of the block store is based on a
@@ -461,12 +464,12 @@ private[spark] class BlockManager(
    * so may corrupt or change the data stored by the `BlockManager`.
    */
   private case class ByteBufferBlockStoreUpdater[T](
-                                                     blockId: BlockId,
-                                                     level: StorageLevel,
-                                                     classTag: ClassTag[T],
-                                                     bytes: ChunkedByteBuffer,
-                                                     tellMaster: Boolean = true,
-                                                     keepReadLock: Boolean = false)
+      blockId: BlockId,
+      level: StorageLevel,
+      classTag: ClassTag[T],
+      bytes: ChunkedByteBuffer,
+      tellMaster: Boolean = true,
+      keepReadLock: Boolean = false)
     extends BlockStoreUpdater[T](bytes.size, blockId, level, classTag, tellMaster, keepReadLock) {
 
     override def readToByteBuffer(): ChunkedByteBuffer = bytes
@@ -485,13 +488,13 @@ private[spark] class BlockManager(
    * Helper for storing a block based from bytes already in a local temp file.
    */
   private[spark] case class TempFileBasedBlockStoreUpdater[T](
-                                                               blockId: BlockId,
-                                                               level: StorageLevel,
-                                                               classTag: ClassTag[T],
-                                                               tmpFile: File,
-                                                               blockSize: Long,
-                                                               tellMaster: Boolean = true,
-                                                               keepReadLock: Boolean = false)
+      blockId: BlockId,
+      level: StorageLevel,
+      classTag: ClassTag[T],
+      tmpFile: File,
+      blockSize: Long,
+      tellMaster: Boolean = true,
+      keepReadLock: Boolean = false)
     extends BlockStoreUpdater[T](blockSize, blockId, level, classTag, tellMaster, keepReadLock) {
 
     override def readToByteBuffer(): ChunkedByteBuffer = {
@@ -706,8 +709,8 @@ private[spark] class BlockManager(
   }
 
   override def getHostLocalShuffleData(
-                                        blockId: BlockId,
-                                        dirs: Array[String]): ManagedBuffer = {
+      blockId: BlockId,
+      dirs: Array[String]): ManagedBuffer = {
     shuffleManager.shuffleBlockResolver.getBlockData(blockId, Some(dirs))
   }
 
@@ -749,17 +752,17 @@ private[spark] class BlockManager(
    * so may corrupt or change the data stored by the `BlockManager`.
    */
   override def putBlockData(
-                             blockId: BlockId,
-                             data: ManagedBuffer,
-                             level: StorageLevel,
-                             classTag: ClassTag[_]): Boolean = {
+      blockId: BlockId,
+      data: ManagedBuffer,
+      level: StorageLevel,
+      classTag: ClassTag[_]): Boolean = {
     putBytes(blockId, new ChunkedByteBuffer(data.nioByteBuffer()), level)(classTag)
   }
 
   override def putBlockDataAsStream(
-                                     blockId: BlockId,
-                                     level: StorageLevel,
-                                     classTag: ClassTag[_]): StreamCallbackWithID = {
+      blockId: BlockId,
+      level: StorageLevel,
+      classTag: ClassTag[_]): StreamCallbackWithID = {
 
     checkShouldStore(blockId)
 
@@ -817,8 +820,8 @@ private[spark] class BlockManager(
    * which will be memory efficient when performing certain operations.
    */
   def getLocalMergedBlockData(
-                               blockId: ShuffleMergedBlockId,
-                               dirs: Array[String]): Seq[ManagedBuffer] = {
+      blockId: ShuffleMergedBlockId,
+      dirs: Array[String]): Seq[ManagedBuffer] = {
     shuffleManager.shuffleBlockResolver.getMergedBlockData(blockId, Some(dirs))
   }
 
@@ -826,8 +829,8 @@ private[spark] class BlockManager(
    * Get the local merged shuffle block meta data for the given block ID.
    */
   def getLocalMergedBlockMeta(
-                               blockId: ShuffleMergedBlockId,
-                               dirs: Array[String]): MergedBlockMeta = {
+      blockId: ShuffleMergedBlockId,
+      dirs: Array[String]): MergedBlockMeta = {
     shuffleManager.shuffleBlockResolver.getMergedBlockMeta(blockId, Some(dirs))
   }
 
@@ -867,9 +870,9 @@ private[spark] class BlockManager(
    * memory on the storage endpoint.
    */
   private[spark] def reportBlockStatus(
-                                        blockId: BlockId,
-                                        status: BlockStatus,
-                                        droppedMemorySize: Long = 0L): Unit = {
+      blockId: BlockId,
+      status: BlockStatus,
+      droppedMemorySize: Long = 0L): Unit = {
     val needReregister = !tryToReportBlockStatus(blockId, status, droppedMemorySize)
     if (needReregister) {
       logInfo(s"Got told to re-register updating block $blockId")
@@ -885,9 +888,9 @@ private[spark] class BlockManager(
    * the storage endpoint needs to re-register.
    */
   private def tryToReportBlockStatus(
-                                      blockId: BlockId,
-                                      status: BlockStatus,
-                                      droppedMemorySize: Long = 0L): Boolean = {
+      blockId: BlockId,
+      status: BlockStatus,
+      droppedMemorySize: Long = 0L): Boolean = {
     val storageLevel = status.storageLevel
     val inMemSize = Math.max(status.memSize, droppedMemorySize)
     val onDiskSize = status.diskSize
@@ -1179,9 +1182,9 @@ private[spark] class BlockManager(
    * Fetch the block from remote block managers as a ManagedBuffer.
    */
   private def fetchRemoteManagedBuffer(
-                                        blockId: BlockId,
-                                        blockSize: Long,
-                                        locationsAndStatus: BlockManagerMessages.BlockLocationsAndStatus): Option[ManagedBuffer] = {
+      blockId: BlockId,
+      blockSize: Long,
+      locationsAndStatus: BlockManagerMessages.BlockLocationsAndStatus): Option[ManagedBuffer] = {
     // If the block size is above the threshold, we should pass our FileManger to
     // BlockTransferService, which will leverage it to spill the block; if not, then passed-in
     // null value means the block will be persisted in memory.
@@ -1370,11 +1373,11 @@ private[spark] class BlockManager(
    *         could not be cached.
    */
   def getOrElseUpdateRDDBlock[T](
-                                  taskId: Long,
-                                  blockId: RDDBlockId,
-                                  level: StorageLevel,
-                                  classTag: ClassTag[T],
-                                  makeIterator: () => Iterator[T]): Either[BlockResult, Iterator[T]] = {
+      taskId: Long,
+      blockId: RDDBlockId,
+      level: StorageLevel,
+      classTag: ClassTag[T],
+      makeIterator: () => Iterator[T]): Either[BlockResult, Iterator[T]] = {
     val isCacheVisible = isRDDBlockVisible(blockId)
     val res = getOrElseUpdate(blockId, level, classTag, makeIterator, isCacheVisible)
     if (res.isLeft && !isCacheVisible) {
@@ -1617,12 +1620,12 @@ private[spark] class BlockManager(
    *         if the put failed.
    */
   private def doPutIterator[T](
-                                blockId: BlockId,
-                                iterator: () => Iterator[T],
-                                level: StorageLevel,
-                                classTag: ClassTag[T],
-                                tellMaster: Boolean = true,
-                                keepReadLock: Boolean = false): Option[PartiallyUnrolledIterator[T]] = {
+      blockId: BlockId,
+      iterator: () => Iterator[T],
+      level: StorageLevel,
+      classTag: ClassTag[T],
+      tellMaster: Boolean = true,
+      keepReadLock: Boolean = false): Option[PartiallyUnrolledIterator[T]] = {
     doPut(blockId, level, classTag, tellMaster = tellMaster, keepReadLock = keepReadLock) { info =>
       val startTimeNs = System.nanoTime()
       var iteratorFromFailedMemoryStorePut: Option[PartiallyUnrolledIterator[T]] = None
@@ -1976,8 +1979,8 @@ private[spark] class BlockManager(
    * @return the block's new effective StorageLevel.
    */
   private[storage] override def dropFromMemory[T: ClassTag](
-                                                             blockId: BlockId,
-                                                             data: () => Either[Array[T], ChunkedByteBuffer]): StorageLevel = {
+      blockId: BlockId,
+      data: () => Either[Array[T], ChunkedByteBuffer]): StorageLevel = {
     logInfo(s"Dropping block $blockId from memory")
     val info = blockInfoManager.assertBlockIsLockedForWriting(blockId)
     var blockIsUpdated = false
@@ -2174,9 +2177,9 @@ private[spark] object BlockManager {
   private val ID_GENERATOR = new IdGenerator
 
   def blockIdsToLocations(
-                           blockIds: Array[BlockId],
-                           env: SparkEnv,
-                           blockManagerMaster: BlockManagerMaster = null): Map[BlockId, Seq[String]] = {
+      blockIds: Array[BlockId],
+      env: SparkEnv,
+      blockManagerMaster: BlockManagerMaster = null): Map[BlockId, Seq[String]] = {
 
     // blockManagerMaster != null is used in tests
     assert(env != null || blockManagerMaster != null)
