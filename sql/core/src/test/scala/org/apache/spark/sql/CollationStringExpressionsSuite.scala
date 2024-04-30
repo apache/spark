@@ -871,8 +871,6 @@ class CollationStringExpressionsSuite
       // Other more complex cases can be found in unit tests in CollationSupportSuite.java.
     )
 
-    // scalastyle:off
-
     testCases.foreach(testCase => {
       var df: DataFrame = null
 
@@ -880,30 +878,32 @@ class CollationStringExpressionsSuite
         // BTRIM has arguments in (srcStr, trimStr) order
         df = sql(s"SELECT ${testCase.trimFunc}(" +
           s"COLLATE('${testCase.sourceString}', '${testCase.collation}')" +
-          (if (!testCase.hasTrimString) "" else if (testCase.trimString == null) ", null" else s", '${testCase.trimString}'") +
+            (if (!testCase.hasTrimString) ""
+            else if (testCase.trimString == null) ", null"
+            else s", '${testCase.trimString}'") +
           ")")
       }
       else {
         // While other functions have arguments in (trimStr, srcStr) order
         df = sql(s"SELECT ${testCase.trimFunc}(" +
-          (if (!testCase.hasTrimString) "" else if (testCase.trimString == null) "null, " else s"'${testCase.trimString}', ") +
+            (if (!testCase.hasTrimString) ""
+            else if (testCase.trimString == null) "null, "
+            else s"'${testCase.trimString}', ") +
           s"COLLATE('${testCase.sourceString}', '${testCase.collation}')" +
           ")")
       }
 
       checkAnswer(df = df, expectedAnswer = Row(testCase.expectedResultString))
     })
-
-    // scalastyle:on
   }
 
   test("StringTrim* functions - implicit collations") {
-    // scalastyle:off
     checkAnswer(
       df = sql("SELECT TRIM(COLLATE('x', 'UTF8_BINARY'), COLLATE('xax', 'UTF8_BINARY'))"),
       expectedAnswer = Row("a"))
     checkAnswer(
-      df = sql("SELECT BTRIM(COLLATE('xax', 'UTF8_BINARY_LCASE'), COLLATE('x', 'UTF8_BINARY_LCASE'))"),
+      df = sql("SELECT BTRIM(COLLATE('xax', 'UTF8_BINARY_LCASE'), "
+        + "COLLATE('x', 'UTF8_BINARY_LCASE'))"),
       expectedAnswer = Row("a"))
     checkAnswer(
       df = sql("SELECT LTRIM(COLLATE('x', 'UNICODE'), COLLATE('xax', 'UNICODE'))"),
@@ -928,14 +928,13 @@ class CollationStringExpressionsSuite
     checkAnswer(
       df = sql("SELECT TRIM(COLLATE('x', 'UNICODE'), 'xax')"),
       expectedAnswer = Row("a"))
-    // scalastyle:on
   }
 
   test("StringTrim* functions - collation type mismatch") {
-    // scalastyle:off
     List("TRIM", "LTRIM", "RTRIM").foreach(func => {
       val collationMismatch = intercept[AnalysisException] {
-        sql("SELECT " + func + "(COLLATE('x', 'UTF8_BINARY_LCASE'), COLLATE('xxaaaxx', 'UNICODE'))")
+        sql("SELECT " + func + "(COLLATE('x', 'UTF8_BINARY_LCASE'), "
+          + "COLLATE('xxaaaxx', 'UNICODE'))")
       }
       assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
     })
@@ -944,11 +943,9 @@ class CollationStringExpressionsSuite
       sql("SELECT BTRIM(COLLATE('xxaaaxx', 'UNICODE'), COLLATE('x', 'UTF8_BINARY_LCASE'))")
     }
     assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
-    // scalastyle:on
   }
 
   test("StringTrim* functions - unsupported collation types") {
-    // scalastyle:off
     List("TRIM", "LTRIM", "RTRIM").foreach(func => {
       val collationMismatch = intercept[AnalysisException] {
         sql("SELECT " + func + "(COLLATE('x', 'UNICODE_CI'), COLLATE('xxaaaxx', 'UNICODE_CI'))")
@@ -960,7 +957,6 @@ class CollationStringExpressionsSuite
       sql("SELECT BTRIM(COLLATE('xxaaaxx', 'UNICODE_CI'), COLLATE('x', 'UNICODE_CI'))")
     }
     assert(collationMismatch.getErrorClass === "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
-    // scalastyle:on
   }
 
   // TODO: Add more tests for other string expressions
