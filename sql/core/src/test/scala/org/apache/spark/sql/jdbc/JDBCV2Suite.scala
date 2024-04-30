@@ -18,7 +18,6 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.{Connection, DriverManager}
-import java.time.ZoneId
 import java.util.Properties
 
 import scala.util.control.NonFatal
@@ -30,7 +29,6 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, Q
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, IndexAlreadyExistsException, NoSuchIndexException}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, LocalLimit, Offset, Sort}
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.withDefaultTimeZone
 import org.apache.spark.sql.connector.{IntegralAverage, StrLen}
 import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.functions.{ScalarFunction, UnboundFunction}
@@ -210,17 +208,6 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         "('amy', '2022-05-19', '2022-05-19 00:00:00')").executeUpdate()
       conn.prepareStatement("INSERT INTO \"test\".\"datetime\" VALUES " +
         "('alex', '2022-05-18', '2022-05-18 00:00:00')").executeUpdate()
-
-      conn.prepareStatement(
-          "CREATE TABLE \"test\".\"timestamps\" (timestampntz TIMESTAMP," +
-            " timestamptz TIMESTAMP WITH TIME ZONE)")
-        .executeUpdate()
-      conn.prepareStatement("INSERT INTO \"test\".\"timestamps\" VALUES " +
-        "('2022-03-03 02:00:00', '2022-03-03 02:00:00+00:00')").executeUpdate()
-      conn.prepareStatement("INSERT INTO \"test\".\"timestamps\" VALUES " +
-        "('2022-03-02 02:00:00', '2022-03-02 02:00:00+02:00')").executeUpdate()
-      conn.prepareStatement("INSERT INTO \"test\".\"timestamps\" VALUES " +
-        "('2022-03-01 02:00:00', '2022-03-01 02:00:00+03:00')").executeUpdate()
 
       conn.prepareStatement(
         "CREATE TABLE \"test\".\"address\" (email TEXT(32) NOT NULL)").executeUpdate()
