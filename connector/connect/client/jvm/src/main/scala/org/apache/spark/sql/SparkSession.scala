@@ -825,19 +825,17 @@ class SparkSession private[sql] (
   private[sql] var releaseSessionOnClose = true
 
   private[sql] def registerObservation(planId: Long, observation: Observation): Unit = {
-    if (observationRegistry.containsKey(planId)) {
+    if (observationRegistry.putIfAbsent(planId, observation) != null) {
       throw new IllegalArgumentException("An Observation can be used with a Dataset only once")
     }
-    observationRegistry.put(planId, observation)
   }
 
   private[sql] def setMetricsAndUnregisterObservation(
       planId: Long,
       metrics: Map[String, Any]): Unit = {
-    if (observationRegistry.containsKey(planId)) {
-      val observation = observationRegistry.get(planId)
-      observation.setMetricsAndNotify(Some(metrics))
-      observationRegistry.remove(planId)
+    val observationOrNull = observationRegistry.remove(planId)
+    if (observationOrNull != null) {
+      observationOrNull.setMetricsAndNotify(Some(metrics))
     }
   }
 }
