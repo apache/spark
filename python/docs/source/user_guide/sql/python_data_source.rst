@@ -159,6 +159,8 @@ This is a dummy streaming data reader that generate 2 rows in every microbatch. 
 
 If the data source has low throughput and doesn't require partitioning, you can implement SimpleDataSourceStreamReader instead of DataSourceStreamReader.
 
+One of simpleStreamReader() and streamReader() must be implemented for readable streaming data source. And simpleStreamReader() will only be invoked when streamReader() is not implemented.
+
 This is the same dummy streaming reader that generate 2 rows every batch implemented with SimpleDataSourceStreamReader interface.
 
 :meth:`pyspark.sql.datasource.SimpleDataSourceStreamReader.initialOffset` should return the initial start offset of the reader.
