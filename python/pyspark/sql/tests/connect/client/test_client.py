@@ -56,11 +56,13 @@ if should_test_connect:
                 self,
                 msg,
                 code=grpc.StatusCode.INTERNAL,
-                trailing_metadata: Union[dict[str, Any], None] = None,
+                grpc_trailing_status: Union[status_pb2.Status, None] = None,
         ):
             self.msg = msg
             self._code = code
-            self._trailing_metadata = trailing_metadata
+            self._trailer: dict[str, Any] = {}
+            if grpc_trailing_status is not None:
+                self._trailer["grpc-status-details-bin"] = grpc_trailing_status.SerializeToString()
 
         def code(self):
             return self._code
@@ -72,7 +74,7 @@ if should_test_connect:
             return self.msg
 
         def trailing_metadata(self):
-            return None if self._trailing_metadata is None else self._trailing_metadata.items()
+            return None if not self._trailer else self._trailer.items()
 
     class ResponseGenerator(Generator):
         """This class is used to generate values that are returned by the streaming
@@ -363,13 +365,7 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
             raise TestException(
                 error_msg,
                 grpc.StatusCode.UNAVAILABLE,
-                trailing_metadata={
-                    "grpc-status-details-bin": status_pb2.Status(
-                        code=14,
-                        message=error_msg,
-                        details="",
-                    ).SerializeToString()
-                }
+                grpc_trailing_status=status_pb2.Status(code=14, message=error_msg, details=""),
             )
 
         stub = self._stub_with(
