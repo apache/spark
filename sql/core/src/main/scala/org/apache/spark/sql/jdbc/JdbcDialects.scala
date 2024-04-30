@@ -217,9 +217,8 @@ abstract class JdbcDialect extends Serializable with Logging {
 
   /**
    * Returns a calendar that will be used when reading (rs.getTimestamp) or
-   * writing to the database (setTimestamp). This is referring to the code in
-   * [[JdbcUtils]]. This is needed for some data sources that handle timestamps
-   * differently than Spark.
+   * writing to the database (setTimestamp). If the calendar is None, old code path
+   * in [[JdbcUtils]] will be hit and calendar won't be used.
    * @return
    */
   @Since("3.5.0")
