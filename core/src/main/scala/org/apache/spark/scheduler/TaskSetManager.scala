@@ -942,6 +942,8 @@ private[spark] class TaskSetManager(
       log"(${MDC(HOST_PORT, info.host)} " +
       log"executor ${MDC(LogKeys.EXECUTOR_ID, info.executorId)}): " +
       log"${MDC(ERROR, reason.toErrorString)}"
+    val failureReasonString = s"Lost ${taskName(tid)} (${info.host} " +
+      s"executor ${info.executorId}): ${reason.toErrorString}"
     val failureException: Option[Throwable] = reason match {
       case fetchFailed: FetchFailed =>
         logWarning(failureReason)
@@ -1038,13 +1040,13 @@ private[spark] class TaskSetManager(
     if (!isZombie && reason.countTowardsTaskFailures) {
       assert (null != failureReason)
       taskSetExcludelistHelperOpt.foreach(_.updateExcludedForFailedTask(
-        info.host, info.executorId, index, failureReason))
+        info.host, info.executorId, index, failureReasonString))
       numFailures(index) += 1
       if (numFailures(index) >= maxTaskFailures) {
         logError(log"Task ${MDC(TASK_ID, index)} in stage ${MDC(STAGE_ID, taskSet.id)} failed " +
           log"${MDC(MAX_ATTEMPTS, maxTaskFailures)} times; aborting job")
         abort("Task %d in stage %s failed %d times, most recent failure: %s\nDriver stacktrace:"
-          .format(index, taskSet.id, maxTaskFailures, failureReason), failureException)
+          .format(index, taskSet.id, maxTaskFailures, failureReasonString), failureException)
         return
       }
     }

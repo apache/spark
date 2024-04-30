@@ -143,7 +143,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     sparkProperties.keys.foreach { k =>
       if (!k.startsWith("spark.")) {
         sparkProperties -= k
-        logWarning(log"Ignoring non-Spark config property: ${MDC(CONFIG_KEY, k)}")
+        logWarning(log"Ignoring non-Spark config property: ${MDC(CONFIG, k)}")
       }
     }
   }

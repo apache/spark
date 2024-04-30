@@ -463,7 +463,7 @@ private[spark] object ResourceUtils extends Logging {
             "your configuration."
           throw new SparkException(message)
         } else {
-          val message = log"The configuration of cores (exec = ${cores} " +
+          val message = log"The configuration of cores (exec = ${MDC(NUM_CORES, cores)} " +
             log"task = ${MDC(NUM_TASK_CPUS, taskCpus)}, runnable tasks = " +
             log"${MDC(NUM_RESOURCE_SLOTS, resourceNumSlots)}) will " +
             log"result in wasted resources due to resource ${MDC(RESOURCE, limitingResource)} " +

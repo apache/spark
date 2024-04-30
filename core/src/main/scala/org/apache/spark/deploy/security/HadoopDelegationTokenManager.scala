@@ -32,7 +32,7 @@ import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys._
+import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.config._
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.UpdateDelegationTokens
@@ -213,7 +213,7 @@ private[spark] class HadoopDelegationTokenManager(
       case e: Exception =>
         val delay = TimeUnit.SECONDS.toMillis(sparkConf.get(CREDENTIALS_RENEWAL_RETRY_WAIT))
         logWarning(log"Failed to update tokens, will try again in " +
-          log"${MDC(TIME_UNITS, UIUtils.formatDuration(delay))}!" +
+          log"${MDC(LogKeys.TIME_UNITS, UIUtils.formatDuration(delay))}!" +
           log" If this happens too often tasks will fail.", e)
         scheduleRenewal(delay)
         null
@@ -298,8 +298,8 @@ private[spark] object HadoopDelegationTokenManager extends Logging {
     deprecatedProviderEnabledConfigs.foreach { pattern =>
       val deprecatedKey = pattern.format(serviceName)
       if (sparkConf.contains(deprecatedKey)) {
-        logWarning(log"${MDC(DEPRECATED_KEY, deprecatedKey)} is deprecated. " +
-          log"Please use ${MDC(CONFIG_KEY, key)} instead.")
+        logWarning(log"${MDC(LogKeys.DEPRECATED_KEY, deprecatedKey)} is deprecated. " +
+          log"Please use ${MDC(LogKeys.CONFIG, key)} instead.")
       }
     }
 

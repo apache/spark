@@ -1794,9 +1794,9 @@ private[spark] class DAGScheduler(
         shouldInterruptThread.toBoolean
       } catch {
         case e: IllegalArgumentException =>
-          logWarning(log"${MDC(CONFIG_KEY, SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL)} " +
+          logWarning(log"${MDC(CONFIG, SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL)} " +
             log"in Job ${MDC(JOB_ID, job.jobId)} " +
-            log"is invalid: ${MDC(CONFIG_VALUE, shouldInterruptThread)}. " +
+            log"is invalid: ${MDC(CONFIG2, shouldInterruptThread)}. " +
             log"Using 'false' instead", e)
           false
       }

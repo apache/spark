@@ -26,7 +26,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.avro.{Schema, SchemaNormalization}
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys._
+import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.Kryo._
@@ -509,10 +509,10 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     sys.props.get("spark.driver.libraryPath").foreach { value =>
       val warning =
         log"""
-          |spark.driver.libraryPath was detected (set to '${MDC(CONFIG_VALUE, value)}').
+          |spark.driver.libraryPath was detected (set to '${MDC(LogKeys.CONFIG, value)}').
           |This is deprecated in Spark 1.2+.
           |
-          |Please instead use: ${MDC(DRIVER_LIBRARY_PATH_KEY, DRIVER_LIBRARY_PATH.key)}
+          |Please instead use: ${MDC(LogKeys.CONFIG2, DRIVER_LIBRARY_PATH.key)}
         """.stripMargin
       logWarning(warning)
     }
@@ -555,9 +555,12 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       val executorCores = get(EXECUTOR_CORES)
       val leftCores = totalCores % executorCores
       if (leftCores != 0) {
-        logWarning(log"Total executor cores: ${MDC(NUM_EXECUTOR_CORES_TOTAL, totalCores)} " +
-          log"is not divisible by cores per executor: ${MDC(NUM_EXECUTOR_CORES, executorCores)}, " +
-          log"the left cores: ${MDC(NUM_EXECUTOR_CORES_REMAINING, leftCores)} " +
+        logWarning(log"Total executor cores: " +
+          log"${MDC(LogKeys.NUM_EXECUTOR_CORES_TOTAL, totalCores)} " +
+          log"is not divisible by cores per executor: " +
+          log"${MDC(LogKeys.NUM_EXECUTOR_CORES, executorCores)}, " +
+          log"the left cores: " +
+          log"${MDC(LogKeys.NUM_EXECUTOR_CORES_REMAINING, leftCores)} " +
           log"will not be allocated")
       }
     }
@@ -774,19 +777,20 @@ private[spark] object SparkConf extends Logging {
   def logDeprecationWarning(key: String): Unit = {
     deprecatedConfigs.get(key).foreach { cfg =>
       logWarning(
-        log"The configuration key '${MDC(CONFIG_KEY, key)}' has been deprecated " +
-          log"as of Spark ${MDC(CONFIG_VERSION, cfg.version)} and " +
+        log"The configuration key '${MDC(LogKeys.CONFIG, key)}' has been deprecated " +
+          log"as of Spark ${MDC(LogKeys.CONFIG_VERSION, cfg.version)} and " +
           log"may be removed in the future. " +
-          log"${MDC(CONFIG_DEPRECATION_MESSAGE, cfg.deprecationMessage)}")
+          log"${MDC(LogKeys.CONFIG_DEPRECATION_MESSAGE, cfg.deprecationMessage)}")
       return
     }
 
     allAlternatives.get(key).foreach { case (newKey, cfg) =>
       logWarning(
-        log"The configuration key '${MDC(CONFIG_KEY, key)}' has been deprecated as of " +
-          log"Spark ${MDC(CONFIG_VERSION, cfg.version)} and " +
+        log"The configuration key '${MDC(LogKeys.CONFIG, key)}' " +
+          log"has been deprecated as of " +
+          log"Spark ${MDC(LogKeys.CONFIG_VERSION, cfg.version)} and " +
           log"may be removed in the future. Please use the new key " +
-          log"'${MDC(CONFIG_KEY_UPDATED, newKey)}' instead.")
+          log"'${MDC(LogKeys.CONFIG_KEY_UPDATED, newKey)}' instead.")
       return
     }
   }

@@ -97,9 +97,7 @@ object LogKeys {
   case object CONFIG4 extends LogKey
   case object CONFIG5 extends LogKey
   case object CONFIG_DEPRECATION_MESSAGE extends LogKey
-  case object CONFIG_KEY extends LogKey
   case object CONFIG_KEY_UPDATED extends LogKey
-  case object CONFIG_VALUE extends LogKey
   case object CONFIG_VERSION extends LogKey
   case object CONSUMER extends LogKey
   case object CONTAINER extends LogKey
@@ -338,6 +336,7 @@ object LogKeys {
   case object NUM_CLASSES extends LogKey
   case object NUM_COLUMNS extends LogKey
   case object NUM_CONCURRENT_WRITER extends LogKey
+  case object NUM_CORES extends LogKey
   case object NUM_DROPPED_PARTITIONS extends LogKey
   case object NUM_EVENTS extends LogKey
   case object NUM_EXAMPLES extends LogKey

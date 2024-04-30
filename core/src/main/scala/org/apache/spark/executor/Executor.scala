@@ -643,7 +643,7 @@ private[spark] class Executor(
               throw SparkException.internalError(errMsg, category = "EXECUTOR")
             } else {
               val errMsg = log"Managed memory leak detected; size = " +
-                log"${LogMDC(NUM_BYTES, freedMemory)} bytes, $taskName"
+                log"${LogMDC(NUM_BYTES, freedMemory)} bytes, ${LogMDC(TASK_NAME, taskName)}"
               logWarning(errMsg)
             }
           }
@@ -782,12 +782,13 @@ private[spark] class Executor(
           if (!t.isInstanceOf[FetchFailedException]) {
             // there was a fetch failure in the task, but some user code wrapped that exception
             // and threw something else.  Regardless, we treat it as a fetch failure.
-            val fetchFailedCls = log"${LogMDC(CLASS_NAME, classOf[FetchFailedException].getName)}"
             logWarning(log"${LogMDC(TASK_NAME, taskName)} encountered a " +
-              log"$fetchFailedCls and " +
-              log"failed, but the $fetchFailedCls was hidden by another " +
-              log"exception.  Spark is handling this like a fetch failure and ignoring the " +
-              log"other exception: $t")
+              log"${LogMDC(CLASS_NAME, classOf[FetchFailedException].getName)} " +
+              log"and failed, but the " +
+              log"${LogMDC(CLASS_NAME, classOf[FetchFailedException].getName)} " +
+              log"was hidden by another exception.  " +
+              log"Spark is handling this like a fetch failure and ignoring the other exception: " +
+              log"${LogMDC(ERROR, t)}")
           }
           setTaskFinishedAndClearInterruptStatus()
           plugins.foreach(_.onTaskFailed(reason))

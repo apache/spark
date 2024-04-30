@@ -47,7 +47,6 @@ import org.apache.spark.executor.{Executor, ExecutorMetrics, ExecutorMetricsSour
 import org.apache.spark.input.{FixedLengthBinaryInputFormat, PortableDataStream, StreamInputFormat, WholeTextFileInputFormat}
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys
-import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests._
 import org.apache.spark.internal.config.UI._
@@ -2224,8 +2223,8 @@ class SparkContext(config: SparkConf) extends Logging {
         }
         if (existed.nonEmpty) {
           val jarMessage = if (scheme != "ivy") "JAR" else "dependency jars of Ivy URI"
-          logWarning(log"The ${MDC(JAR_MESSAGE, jarMessage)} ${MDC(LogKeys.PATH, path)} " +
-            log"at ${MDC(EXISTING_PATH, existed.mkString(","))} has been added already." +
+          logWarning(log"The ${MDC(LogKeys.JAR_MESSAGE, jarMessage)} ${MDC(LogKeys.PATH, path)} " +
+            log"at ${MDC(LogKeys.EXISTING_PATH, existed.mkString(","))} has been added already." +
             log" Overwriting of added jar is not supported in the current version.")
         }
       }
@@ -2914,7 +2913,7 @@ object SparkContext extends Logging {
           log" constructor). This may indicate an error, since only one SparkContext should be" +
           log" running in this JVM (see SPARK-2243)." +
           log" The other SparkContext was created at:\n" +
-          log"${MDC(CONTEXT_CREATION_SITE, otherContextCreationSite)}"
+          log"${MDC(LogKeys.CONTEXT_CREATION_SITE, otherContextCreationSite)}"
         logWarning(warnMsg)
       }
     }

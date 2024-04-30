@@ -439,11 +439,11 @@ private[spark] object HealthTracker extends Logging {
         conf.get(config.EXCLUDE_ON_FAILURE_LEGACY_TIMEOUT_CONF).exists { legacyTimeout =>
           if (legacyTimeout == 0) {
             logWarning(log"Turning off excludeOnFailure due to legacy configuration: " +
-              log"${MDC(CONFIG_KEY, legacyKey)} == 0")
+              log"${MDC(CONFIG, legacyKey)} == 0")
             false
           } else {
             logWarning(log"Turning on excludeOnFailure due to legacy configuration: " +
-              log"${MDC(CONFIG_KEY, legacyKey)} > 0")
+              log"${MDC(CONFIG, legacyKey)} > 0")
             true
           }
         }

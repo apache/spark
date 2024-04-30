@@ -231,7 +231,7 @@ private[spark] object DriverLogger extends Logging {
         None
       } else {
         logWarning(log"Driver logs are not persisted because" +
-          log" ${MDC(CONFIG_KEY, DRIVER_LOG_DFS_DIR.key)} is not configured")
+          log" ${MDC(CONFIG, DRIVER_LOG_DFS_DIR.key)} is not configured")
         None
       }
     } else {

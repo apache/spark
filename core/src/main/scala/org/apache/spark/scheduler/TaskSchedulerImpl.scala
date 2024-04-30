@@ -670,7 +670,7 @@ private[spark] class TaskSchedulerImpl(
                 log"out of a total number " +
                 log"of ${MDC(NUM_TASKS, taskSet.numTasks)} tasks got resource offers. " +
                 log"We highly recommend you to use the non-legacy delay scheduling by setting " +
-                log"${MDC(CONFIG_KEY, LEGACY_LOCALITY_WAIT_RESET.key)} to false " +
+                log"${MDC(CONFIG, LEGACY_LOCALITY_WAIT_RESET.key)} to false " +
                 log"to get rid of this error."
               val errorMsg = s"Fail resource offers for barrier stage ${taskSet.stageId} " +
                 s"because only ${barrierPendingLaunchTasks.length} out of a total number " +

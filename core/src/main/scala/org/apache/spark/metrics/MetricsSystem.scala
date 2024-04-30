@@ -143,7 +143,7 @@ private[spark] class MetricsSystem private (
         if (metricsNamespace.isEmpty) {
           logWarning(log"Using default name ${MDC(LogKeys.DEFAULT_NAME, defaultName)} " +
             log"for source because neither " +
-            log"${MDC(LogKeys.CONFIG_KEY, METRICS_NAMESPACE.key)} nor spark.app.id is set.")
+            log"${MDC(LogKeys.CONFIG, METRICS_NAMESPACE.key)} nor spark.app.id is set.")
         }
         if (executorId.isEmpty) {
           logWarning(log"Using default name ${MDC(LogKeys.DEFAULT_NAME, defaultName)} " +

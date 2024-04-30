@@ -217,7 +217,7 @@ private[netty] class NettyRpcEnv(
       if (!promise.tryFailure(e)) {
         e match {
           case e : RpcEnvStoppedException => logDebug(s"Ignored failure: $e")
-          case _ => logWarning(s"Ignored failure: ${MDC(ERROR, e)}")
+          case _ => logWarning(log"Ignored failure: ${MDC(ERROR, e)}")
         }
       }
     }
