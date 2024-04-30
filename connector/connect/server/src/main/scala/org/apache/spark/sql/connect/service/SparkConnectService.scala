@@ -369,7 +369,7 @@ object SparkConnectService extends Logging {
     val protoReflectionService = if (debugMode) Some(ProtoReflectionService.newInstance()) else None
     val configuredInterceptors = SparkConnectInterceptorRegistry.createConfiguredInterceptors()
 
-    val startService = (port: Int) => {
+    val startServiceFn = (port: Int) => {
       val sb = bindAddress match {
         case Some(hostname) =>
           logInfo(log"start GRPC service at: ${MDC(HOST, hostname)}")
