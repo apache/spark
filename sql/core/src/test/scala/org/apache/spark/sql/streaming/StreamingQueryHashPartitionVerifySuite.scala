@@ -41,7 +41,7 @@ class StreamingQueryHashPartitionVerifySuite extends StreamTest {
   private val rowAndPartIdFilename =
     "rowsAndPartIds" // files for storing random input rows and resulting partition ids
   private val codec = CompressionCodec.createCodec(
-    sparkConf) // Used for compressing output to rowAndPartId file
+    sparkConf, "lz4") // Used for compressing output to rowAndPartId file
 
   // Configs for random schema generation
   private val variableTypes = Seq(IntegerType, DoubleType, FloatType, BinaryType,
