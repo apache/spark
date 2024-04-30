@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
+import java.lang.Double.{doubleToRawLongBits, longBitsToDouble}
+import java.lang.Float.{floatToRawIntBits, intBitsToFloat}
 import java.nio.{ByteBuffer, ByteOrder}
 
 import org.apache.spark.internal.Logging
@@ -50,8 +52,8 @@ object RocksDBStateEncoder {
       case PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey) =>
         new PrefixKeyScanStateEncoder(keySchema, numColsPrefixKey)
 
-      case RangeKeyScanStateEncoderSpec(keySchema, numOrderingCols) =>
-        new RangeKeyScanStateEncoder(keySchema, numOrderingCols)
+      case RangeKeyScanStateEncoderSpec(keySchema, orderingOrdinals) =>
+        new RangeKeyScanStateEncoder(keySchema, orderingOrdinals)
 
       case _ =>
         throw new IllegalArgumentException(s"Unsupported key state encoder spec: " +
@@ -202,35 +204,44 @@ class PrefixKeyScanStateEncoder(
 /**
  * RocksDB Key Encoder for UnsafeRow that supports range scan for fixed size fields
  *
- * To encode a row for range scan, we first project the first numOrderingCols needed
- * for the range scan into an UnsafeRow; we then rewrite that UnsafeRow's fields in BIG_ENDIAN
+ * To encode a row for range scan, we first project the orderingOrdinals from the oridinal
+ * UnsafeRow into another UnsafeRow; we then rewrite that new UnsafeRow's fields in BIG_ENDIAN
  * to allow for scanning keys in sorted order using the byte-wise comparison method that
  * RocksDB uses.
+ *
  * Then, for the rest of the fields, we project those into another UnsafeRow.
  * We then effectively join these two UnsafeRows together, and finally take those bytes
  * to get the resulting row.
- * We cannot support variable sized fields given the UnsafeRow format which stores variable
- * sized fields as offset and length pointers to the actual values, thereby changing the required
- * ordering.
+ *
+ * We cannot support variable sized fields in the range scan because the UnsafeRow format
+ * stores variable sized fields as offset and length pointers to the actual values,
+ * thereby changing the required ordering.
+ *
  * Note that we also support "null" values being passed for these fixed size fields. We prepend
  * a single byte to indicate whether the column value is null or not. We cannot change the
  * nullability on the UnsafeRow itself as the expected ordering would change if non-first
  * columns are marked as null. If the first col is null, those entries will appear last in
  * the iterator. If non-first columns are null, ordering based on the previous columns will
  * still be honored. For rows with null column values, ordering for subsequent columns
- * will also be maintained within those set of rows.
+ * will also be maintained within those set of rows. We use the same byte to also encode whether
+ * the value is negative or not. For negative float/double values, we flip all the bits to ensure
+ * the right lexicographical ordering. For the rationale around this, please check the link
+ * here: https://en.wikipedia.org/wiki/IEEE_754#Design_rationale
  *
  * @param keySchema - schema of the key to be encoded
- * @param numOrderingCols - number of columns to be used for range scan
+ * @param orderingOrdinals - the ordinals for which the range scan is constructed
  */
 class RangeKeyScanStateEncoder(
     keySchema: StructType,
-    numOrderingCols: Int) extends RocksDBKeyStateEncoder {
+    orderingOrdinals: Seq[Int]) extends RocksDBKeyStateEncoder {
 
   import RocksDBStateEncoder._
 
-  private val rangeScanKeyFieldsWithIdx: Seq[(StructField, Int)] = {
-    keySchema.zipWithIndex.take(numOrderingCols)
+  private val rangeScanKeyFieldsWithOrdinal: Seq[(StructField, Int)] = {
+    orderingOrdinals.map { ordinal =>
+      val field = keySchema(ordinal)
+      (field, ordinal)
+    }
   }
 
   private def isFixedSize(dataType: DataType): Boolean = dataType match {
@@ -240,34 +251,56 @@ class RangeKeyScanStateEncoder(
   }
 
   // verify that only fixed sized columns are used for ordering
-  rangeScanKeyFieldsWithIdx.foreach { case (field, idx) =>
+  rangeScanKeyFieldsWithOrdinal.foreach { case (field, ordinal) =>
     if (!isFixedSize(field.dataType)) {
       // NullType is technically fixed size, but not supported for ordering
       if (field.dataType == NullType) {
-        throw StateStoreErrors.nullTypeOrderingColsNotSupported(field.name, idx.toString)
+        throw StateStoreErrors.nullTypeOrderingColsNotSupported(field.name, ordinal.toString)
       } else {
-        throw StateStoreErrors.variableSizeOrderingColsNotSupported(field.name, idx.toString)
+        throw StateStoreErrors.variableSizeOrderingColsNotSupported(field.name, ordinal.toString)
       }
     }
   }
 
-  private val remainingKeyFieldsWithIdx: Seq[(StructField, Int)] = {
-    keySchema.zipWithIndex.drop(numOrderingCols)
+  private val remainingKeyFieldsWithOrdinal: Seq[(StructField, Int)] = {
+    0.to(keySchema.length - 1).diff(orderingOrdinals).map { ordinal =>
+      val field = keySchema(ordinal)
+      (field, ordinal)
+    }
   }
 
   private val rangeScanKeyProjection: UnsafeProjection = {
-    val refs = rangeScanKeyFieldsWithIdx.map(x =>
+    val refs = rangeScanKeyFieldsWithOrdinal.map(x =>
       BoundReference(x._2, x._1.dataType, x._1.nullable))
     UnsafeProjection.create(refs)
   }
 
   private val remainingKeyProjection: UnsafeProjection = {
-    val refs = remainingKeyFieldsWithIdx.map(x =>
+    val refs = remainingKeyFieldsWithOrdinal.map(x =>
       BoundReference(x._2, x._1.dataType, x._1.nullable))
     UnsafeProjection.create(refs)
   }
 
-  private val restoreKeyProjection: UnsafeProjection = UnsafeProjection.create(keySchema)
+  // The original schema that we might get could be:
+  //    [foo, bar, baz, buzz]
+  // We might order by bar and buzz, leading to:
+  //    [bar, buzz, foo, baz]
+  // We need to create a projection that sends, for example, the buzz at index 1 to index
+  // 3. Thus, for every record in the original schema, we compute where it would be in
+  // the joined row and created a projection based on that.
+  private val restoreKeyProjection: UnsafeProjection = {
+    val refs = keySchema.zipWithIndex.map { case (field, originalOrdinal) =>
+      val ordinalInJoinedRow = if (orderingOrdinals.contains(originalOrdinal)) {
+          orderingOrdinals.indexOf(originalOrdinal)
+      } else {
+          orderingOrdinals.length +
+            remainingKeyFieldsWithOrdinal.indexWhere(_._2 == originalOrdinal)
+      }
+
+      BoundReference(ordinalInJoinedRow, field.dataType, field.nullable)
+    }
+    UnsafeProjection.create(refs)
+  }
 
   // Reusable objects
   private val joinedRowOnKey = new JoinedRow()
@@ -276,53 +309,121 @@ class RangeKeyScanStateEncoder(
     rangeScanKeyProjection(key)
   }
 
+  // bit masks used for checking sign or flipping all bits for negative float/double values
+  private val floatFlipBitMask = 0xFFFFFFFF
+  private val floatSignBitMask = 0x80000000
+
+  private val doubleFlipBitMask = 0xFFFFFFFFFFFFFFFFL
+  private val doubleSignBitMask = 0x8000000000000000L
+
+  // Byte markers used to identify whether the value is null, negative or positive
+  // To ensure sorted ordering, we use the lowest byte value for negative numbers followed by
+  // positive numbers and then null values.
+  private val negativeValMarker: Byte = 0x00.toByte
+  private val positiveValMarker: Byte = 0x01.toByte
+  private val nullValMarker: Byte = 0x02.toByte
+
   // Rewrite the unsafe row by replacing fixed size fields with BIG_ENDIAN encoding
   // using byte arrays.
   // To handle "null" values, we prepend a byte to the byte array indicating whether the value
-  // is null or not. If the value is null, we write the null byte followed by a zero byte.
+  // is null or not. If the value is null, we write the null byte followed by zero bytes.
   // If the value is not null, we write the null byte followed by the value.
   // Note that setting null for the index on the unsafeRow is not feasible as it would change
   // the sorting order on iteration.
+  // Also note that the same byte is used to indicate whether the value is negative or not.
   private def encodePrefixKeyForRangeScan(row: UnsafeRow): UnsafeRow = {
-    val writer = new UnsafeRowWriter(numOrderingCols)
+    val writer = new UnsafeRowWriter(orderingOrdinals.length)
     writer.resetRowWriter()
-    rangeScanKeyFieldsWithIdx.foreach { case (field, idx) =>
+    rangeScanKeyFieldsWithOrdinal.zipWithIndex.foreach { case (fieldWithOrdinal, idx) =>
+      val field = fieldWithOrdinal._1
       val value = row.get(idx, field.dataType)
-      val isNullCol: Byte = if (value == null) 0x01.toByte else 0x00.toByte
       // Note that we cannot allocate a smaller buffer here even if the value is null
       // because the effective byte array is considered variable size and needs to have
       // the same size across all rows for the ordering to work as expected.
       val bbuf = ByteBuffer.allocate(field.dataType.defaultSize + 1)
       bbuf.order(ByteOrder.BIG_ENDIAN)
-      bbuf.put(isNullCol)
-      if (isNullCol == 0x01.toByte) {
+      if (value == null) {
+        bbuf.put(nullValMarker)
         writer.write(idx, bbuf.array())
       } else {
         field.dataType match {
           case BooleanType =>
           case ByteType =>
-            bbuf.put(value.asInstanceOf[Byte])
+            val byteVal = value.asInstanceOf[Byte]
+            val signCol = if (byteVal < 0) {
+              negativeValMarker
+            } else {
+              positiveValMarker
+            }
+            bbuf.put(signCol)
+            bbuf.put(byteVal)
             writer.write(idx, bbuf.array())
 
-          // for other multi-byte types, we need to convert to big-endian
           case ShortType =>
-            bbuf.putShort(value.asInstanceOf[Short])
+            val shortVal = value.asInstanceOf[Short]
+            val signCol = if (shortVal < 0) {
+              negativeValMarker
+            } else {
+              positiveValMarker
+            }
+            bbuf.put(signCol)
+            bbuf.putShort(shortVal)
             writer.write(idx, bbuf.array())
 
           case IntegerType =>
-            bbuf.putInt(value.asInstanceOf[Int])
+            val intVal = value.asInstanceOf[Int]
+            val signCol = if (intVal < 0) {
+              negativeValMarker
+            } else {
+              positiveValMarker
+            }
+            bbuf.put(signCol)
+            bbuf.putInt(intVal)
             writer.write(idx, bbuf.array())
 
           case LongType =>
-            bbuf.putLong(value.asInstanceOf[Long])
+            val longVal = value.asInstanceOf[Long]
+            val signCol = if (longVal < 0) {
+              negativeValMarker
+            } else {
+              positiveValMarker
+            }
+            bbuf.put(signCol)
+            bbuf.putLong(longVal)
             writer.write(idx, bbuf.array())
 
           case FloatType =>
-            bbuf.putFloat(value.asInstanceOf[Float])
+            val floatVal = value.asInstanceOf[Float]
+            val rawBits = floatToRawIntBits(floatVal)
+            // perform sign comparison using bit manipulation to ensure NaN values are handled
+            // correctly
+            if ((rawBits & floatSignBitMask) != 0) {
+              // for negative values, we need to flip all the bits to ensure correct ordering
+              val updatedVal = rawBits ^ floatFlipBitMask
+              bbuf.put(negativeValMarker)
+              // convert the bits back to float
+              bbuf.putFloat(intBitsToFloat(updatedVal))
+            } else {
+              bbuf.put(positiveValMarker)
+              bbuf.putFloat(floatVal)
+            }
             writer.write(idx, bbuf.array())
 
           case DoubleType =>
-            bbuf.putDouble(value.asInstanceOf[Double])
+            val doubleVal = value.asInstanceOf[Double]
+            val rawBits = doubleToRawLongBits(doubleVal)
+            // perform sign comparison using bit manipulation to ensure NaN values are handled
+            // correctly
+            if ((rawBits & doubleSignBitMask) != 0) {
+              // for negative values, we need to flip all the bits to ensure correct ordering
+              val updatedVal = rawBits ^ doubleFlipBitMask
+              bbuf.put(negativeValMarker)
+              // convert the bits back to double
+              bbuf.putDouble(longBitsToDouble(updatedVal))
+            } else {
+              bbuf.put(positiveValMarker)
+              bbuf.putDouble(doubleVal)
+            }
             writer.write(idx, bbuf.array())
         }
       }
@@ -336,16 +437,19 @@ class RangeKeyScanStateEncoder(
   // to determine if the value is null or not. If the value is null, we set the ordinal on
   // the UnsafeRow to null. If the value is not null, we read the rest of the bytes to get the
   // actual value.
+  // For negative float/double values, we need to flip all the bits back to get the original value.
   private def decodePrefixKeyForRangeScan(row: UnsafeRow): UnsafeRow = {
-    val writer = new UnsafeRowWriter(numOrderingCols)
+    val writer = new UnsafeRowWriter(orderingOrdinals.length)
     writer.resetRowWriter()
-    rangeScanKeyFieldsWithIdx.foreach { case (field, idx) =>
+    rangeScanKeyFieldsWithOrdinal.zipWithIndex.foreach { case (fieldWithOrdinal, idx) =>
+      val field = fieldWithOrdinal._1
+
       val value = row.getBinary(idx)
       val bbuf = ByteBuffer.wrap(value.asInstanceOf[Array[Byte]])
       bbuf.order(ByteOrder.BIG_ENDIAN)
-      val isNullCol = bbuf.get()
-      if (isNullCol == 0x01.toByte) {
-        // set the column to null and skip reading the next byte
+      val isNullOrSignCol = bbuf.get()
+      if (isNullOrSignCol == nullValMarker) {
+        // set the column to null and skip reading the next byte(s)
         writer.setNullAt(idx)
       } else {
         field.dataType match {
@@ -363,10 +467,24 @@ class RangeKeyScanStateEncoder(
             writer.write(idx, bbuf.getLong)
 
           case FloatType =>
-            writer.write(idx, bbuf.getFloat)
+            if (isNullOrSignCol == negativeValMarker) {
+              // if the number is negative, get the raw binary bits for the float
+              // and flip the bits back
+              val updatedVal = floatToRawIntBits(bbuf.getFloat) ^ floatFlipBitMask
+              writer.write(idx, intBitsToFloat(updatedVal))
+            } else {
+              writer.write(idx, bbuf.getFloat)
+            }
 
           case DoubleType =>
-            writer.write(idx, bbuf.getDouble)
+            if (isNullOrSignCol == negativeValMarker) {
+              // if the number is negative, get the raw binary bits for the double
+              // and flip the bits back
+              val updatedVal = doubleToRawLongBits(bbuf.getDouble) ^ doubleFlipBitMask
+              writer.write(idx, longBitsToDouble(updatedVal))
+            } else {
+              writer.write(idx, bbuf.getDouble)
+            }
         }
       }
     }
@@ -374,10 +492,11 @@ class RangeKeyScanStateEncoder(
   }
 
   override def encodeKey(row: UnsafeRow): Array[Byte] = {
+    // This prefix key has the columns specified by orderingOrdinals
     val prefixKey = extractPrefixKey(row)
     val rangeScanKeyEncoded = encodeUnsafeRow(encodePrefixKeyForRangeScan(prefixKey))
 
-    val result = if (numOrderingCols < keySchema.length) {
+    val result = if (orderingOrdinals.length < keySchema.length) {
       val remainingEncoded = encodeUnsafeRow(remainingKeyProjection(row))
       val encodedBytes = new Array[Byte](rangeScanKeyEncoded.length + remainingEncoded.length + 4)
       Platform.putInt(encodedBytes, Platform.BYTE_ARRAY_OFFSET, rangeScanKeyEncoded.length)
@@ -408,10 +527,10 @@ class RangeKeyScanStateEncoder(
       Platform.BYTE_ARRAY_OFFSET, prefixKeyEncodedLen)
 
     val prefixKeyDecodedForRangeScan = decodeToUnsafeRow(prefixKeyEncoded,
-      numFields = numOrderingCols)
+      numFields = orderingOrdinals.length)
     val prefixKeyDecoded = decodePrefixKeyForRangeScan(prefixKeyDecodedForRangeScan)
 
-    if (numOrderingCols < keySchema.length) {
+    if (orderingOrdinals.length < keySchema.length) {
       // Here we calculate the remainingKeyEncodedLen leveraging the length of keyBytes
       val remainingKeyEncodedLen = keyBytes.length - 4 - prefixKeyEncodedLen
 
@@ -421,9 +540,11 @@ class RangeKeyScanStateEncoder(
         remainingKeyEncodedLen)
 
       val remainingKeyDecoded = decodeToUnsafeRow(remainingKeyEncoded,
-        numFields = keySchema.length - numOrderingCols)
+        numFields = keySchema.length - orderingOrdinals.length)
 
-      restoreKeyProjection(joinedRowOnKey.withLeft(prefixKeyDecoded).withRight(remainingKeyDecoded))
+      val joined = joinedRowOnKey.withLeft(prefixKeyDecoded).withRight(remainingKeyDecoded)
+      val restored = restoreKeyProjection(joined)
+      restored
     } else {
       // if the number of ordering cols is same as the number of key schema cols, we only
       // return the prefix key decoded unsafe row.

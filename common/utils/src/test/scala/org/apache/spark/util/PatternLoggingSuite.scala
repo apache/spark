@@ -16,43 +16,44 @@
  */
 package org.apache.spark.util
 
+import org.apache.logging.log4j.Level
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.EXECUTOR_ID
+import org.apache.spark.internal.Logging
 
 class PatternLoggingSuite extends LoggingSuiteBase with BeforeAndAfterAll {
 
-  override protected def logFilePath: String = "target/pattern.log"
+  override def className: String = classOf[PatternLoggingSuite].getSimpleName
+  override def logFilePath: String = "target/pattern.log"
 
   override def beforeAll(): Unit = Logging.disableStructuredLogging()
 
   override def afterAll(): Unit = Logging.enableStructuredLogging()
 
-  test("Pattern layout logging") {
-    val msg = "This is a log message"
-
-    val logOutput = captureLogOutput(() => logError(msg))
-    // scalastyle:off line.size.limit
-    val pattern = """.*ERROR PatternLoggingSuite: This is a log message\n""".r
-    // scalastyle:on
-    assert(pattern.matches(logOutput))
+  override def expectedPatternForBasicMsg(level: Level): String = {
+    s""".*$level $className: This is a log message\n"""
   }
 
-  test("Pattern layout logging with MDC") {
-    logError(log"Lost executor ${MDC(EXECUTOR_ID, "1")}.")
-
-    val logOutput = captureLogOutput(() => logError(log"Lost executor ${MDC(EXECUTOR_ID, "1")}."))
-    val pattern = """.*ERROR PatternLoggingSuite: Lost executor 1.\n""".r
-    assert(pattern.matches(logOutput))
+  override def expectedPatternForBasicMsgWithException(level: Level): String = {
+    s""".*$level $className: This is a log message\n[\\s\\S]*"""
   }
 
-  test("Pattern layout exception logging") {
-    val exception = new RuntimeException("OOM")
+  override def expectedPatternForMsgWithMDC(level: Level): String =
+    s""".*$level $className: Lost executor 1.\n"""
 
-    val logOutput = captureLogOutput(() =>
-      logError(log"Error in executor ${MDC(EXECUTOR_ID, "1")}.", exception))
-    assert(logOutput.contains("ERROR PatternLoggingSuite: Error in executor 1."))
-    assert(logOutput.contains("java.lang.RuntimeException: OOM"))
+  override def expectedPatternForMsgWithMDCValueIsNull(level: Level): String =
+    s""".*$level $className: Lost executor null.\n"""
+
+  override def expectedPatternForMsgWithMDCAndException(level: Level): String =
+    s""".*$level $className: Error in executor 1.\njava.lang.RuntimeException: OOM\n[\\s\\S]*"""
+
+  override def expectedPatternForExternalSystemCustomLogKey(level: Level): String = {
+    s""".*$level $className: External system custom log message.\n"""
+  }
+
+  override def verifyMsgWithConcat(level: Level, logOutput: String): Unit = {
+    val pattern =
+      s""".*$level $className: Min Size: 2, Max Size: 4. Please double check.\n"""
+    assert(pattern.r.matches(logOutput))
   }
 }

@@ -31,14 +31,14 @@ from typing import (
     cast,
 )
 
-from pyspark.rdd import PythonEvalType
+from pyspark.util import PythonEvalType
 from pyspark.sql.group import GroupedData as PySparkGroupedData
 from pyspark.sql.pandas.group_ops import PandasCogroupedOps as PySparkPandasCogroupedOps
 from pyspark.sql.types import NumericType
 from pyspark.sql.types import StructType
 
 import pyspark.sql.connect.plan as plan
-from pyspark.sql.connect.column import Column
+from pyspark.sql.column import Column
 from pyspark.sql.connect.functions import builtin as F
 from pyspark.errors import PySparkNotImplementedError, PySparkTypeError
 
@@ -61,10 +61,10 @@ class GroupedData:
         self,
         df: "DataFrame",
         group_type: str,
-        grouping_cols: Sequence["Column"],
-        pivot_col: Optional["Column"] = None,
+        grouping_cols: Sequence[Column],
+        pivot_col: Optional[Column] = None,
         pivot_values: Optional[Sequence["LiteralType"]] = None,
-        grouping_sets: Optional[Sequence[Sequence["Column"]]] = None,
+        grouping_sets: Optional[Sequence[Sequence[Column]]] = None,
     ) -> None:
         from pyspark.sql.connect.dataframe import DataFrame
 
@@ -448,6 +448,7 @@ PandasCogroupedOps.__doc__ = PySparkPandasCogroupedOps.__doc__
 
 
 def _test() -> None:
+    import os
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
@@ -456,7 +457,9 @@ def _test() -> None:
     globs = pyspark.sql.connect.group.__dict__.copy()
 
     globs["spark"] = (
-        PySparkSession.builder.appName("sql.connect.group tests").remote("local[4]").getOrCreate()
+        PySparkSession.builder.appName("sql.connect.group tests")
+        .remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[4]"))
+        .getOrCreate()
     )
 
     (failure_count, test_count) = doctest.testmod(

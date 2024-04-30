@@ -19,7 +19,8 @@ package org.apache.spark.deploy.yarn
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.ARGS
 
 // TODO: Add code and support for ensuring that yarn resource 'tasks' are location aware !
 private[spark] class ClientArguments(args: Array[String]) extends Logging {
@@ -75,7 +76,7 @@ private[spark] class ClientArguments(args: Array[String]) extends Logging {
     }
 
     if (verbose) {
-      logInfo(s"Parsed user args for YARN application: [${userArgs.mkString(" ")}]")
+      logInfo(log"Parsed user args for YARN application: [${MDC(ARGS, userArgs.mkString(" "))}]")
     }
   }
 

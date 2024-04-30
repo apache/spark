@@ -871,6 +871,10 @@ class PlanGenerationTestSuite
     fn.col("a").cast("long")
   }
 
+  columnTest("try_cast") {
+    fn.col("a").try_cast("long")
+  }
+
   orderColumnTest("desc") {
     fn.col("b").desc
   }
@@ -1758,8 +1762,16 @@ class PlanGenerationTestSuite
     fn.split(fn.col("g"), ";")
   }
 
+  functionTest("split using columns") {
+    fn.split(fn.col("g"), fn.col("g"))
+  }
+
   functionTest("split with limit") {
     fn.split(fn.col("g"), ";", 10)
+  }
+
+  functionTest("split with limit using columns") {
+    fn.split(fn.col("g"), lit(";"), fn.col("a"))
   }
 
   functionTest("substring") {
@@ -2477,8 +2489,36 @@ class PlanGenerationTestSuite
       Collections.singletonMap("allowNumericLeadingZeros", "true"))
   }
 
+  functionTest("try_parse_json") {
+    fn.try_parse_json(fn.col("g"))
+  }
+
   functionTest("to_json") {
     fn.to_json(fn.col("d"), Map(("timestampFormat", "dd/MM/yyyy")))
+  }
+
+  functionTest("parse_json") {
+    fn.parse_json(fn.col("g"))
+  }
+
+  functionTest("is_variant_null") {
+    fn.is_variant_null(fn.parse_json(fn.col("g")))
+  }
+
+  functionTest("variant_get") {
+    fn.variant_get(fn.parse_json(fn.col("g")), "$", "int")
+  }
+
+  functionTest("try_variant_get") {
+    fn.try_variant_get(fn.parse_json(fn.col("g")), "$", "int")
+  }
+
+  functionTest("schema_of_variant") {
+    fn.schema_of_variant(fn.parse_json(fn.col("g")))
+  }
+
+  functionTest("schema_of_variant_agg") {
+    fn.schema_of_variant_agg(fn.parse_json(fn.col("g")))
   }
 
   functionTest("size") {
@@ -3187,12 +3227,34 @@ class PlanGenerationTestSuite
   }
 
   /* Extensions */
-  test("relation extension") {
+  test("relation extension deprecated") {
     val input = proto.ExamplePluginRelation
       .newBuilder()
       .setInput(simple.plan.getRoot)
       .build()
     session.newDataFrame(com.google.protobuf.Any.pack(input))
+  }
+
+  test("expression extension deprecated") {
+    val extension = proto.ExamplePluginExpression
+      .newBuilder()
+      .setChild(
+        proto.Expression
+          .newBuilder()
+          .setUnresolvedAttribute(proto.Expression.UnresolvedAttribute
+            .newBuilder()
+            .setUnparsedIdentifier("id")))
+      .setCustomField("abc")
+      .build()
+    simple.select(Column(com.google.protobuf.Any.pack(extension)))
+  }
+
+  test("relation extension") {
+    val input = proto.ExamplePluginRelation
+      .newBuilder()
+      .setInput(simple.plan.getRoot)
+      .build()
+    session.newDataFrame(com.google.protobuf.Any.pack(input).toByteArray)
   }
 
   test("expression extension") {
@@ -3206,7 +3268,7 @@ class PlanGenerationTestSuite
             .setUnparsedIdentifier("id")))
       .setCustomField("abc")
       .build()
-    simple.select(Column(com.google.protobuf.Any.pack(extension)))
+    simple.select(Column.forExtension(com.google.protobuf.Any.pack(extension).toByteArray))
   }
 
   test("crosstab") {

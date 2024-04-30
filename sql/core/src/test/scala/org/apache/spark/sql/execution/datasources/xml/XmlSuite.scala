@@ -181,7 +181,6 @@ class XmlSuite
   }
 
   test("DSL test bad charset name") {
-    // val exception = intercept[UnsupportedCharsetException] {
     val exception = intercept[SparkException] {
       spark.read
         .option("rowTag", "ROW")
@@ -234,23 +233,29 @@ class XmlSuite
   }
 
   test("DSL test for failing fast") {
-    val exceptionInSchemaInference = intercept[SparkException] {
-      spark.read
-        .option("rowTag", "ROW")
-        .option("mode", FailFastMode.name)
-        .xml(getTestResourcePath(resDir + "cars-malformed.xml"))
-    }.getMessage
-    assert(exceptionInSchemaInference.contains(
-      "Malformed records are detected in schema inference. Parse Mode: FAILFAST."))
+    val inputFile = getTestResourcePath(resDir + "cars-malformed.xml")
+    checkError(
+      exception = intercept[SparkException] {
+        spark.read
+          .option("rowTag", "ROW")
+          .option("mode", FailFastMode.name)
+          .xml(inputFile)
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_2165",
+      parameters = Map("failFastMode" -> "FAILFAST")
+    )
     val exceptionInParsing = intercept[SparkException] {
       spark.read
         .schema("year string")
         .option("rowTag", "ROW")
         .option("mode", FailFastMode.name)
-        .xml(getTestResourcePath(resDir + "cars-malformed.xml"))
+        .xml(inputFile)
         .collect()
     }
-    assert(exceptionInParsing.getErrorClass.startsWith("FAILED_READ_FILE"))
+    checkError(
+      exception = exceptionInParsing,
+      errorClass = "FAILED_READ_FILE.NO_HINT",
+      parameters = Map("path" -> Path.of(inputFile).toUri.toString))
     checkError(
       exception = exceptionInParsing.getCause.asInstanceOf[SparkException],
       errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
@@ -261,23 +266,28 @@ class XmlSuite
   }
 
   test("test FAILFAST with unclosed tag") {
-    val exceptionInSchemaInference = intercept[SparkException] {
-      spark.read
-        .option("rowTag", "book")
-        .option("mode", FailFastMode.name)
-        .xml(getTestResourcePath(resDir + "unclosed_tag.xml"))
-    }.getMessage
-    assert(exceptionInSchemaInference.contains(
-      "Malformed records are detected in schema inference. Parse Mode: FAILFAST."))
+    val inputFile = getTestResourcePath(resDir + "unclosed_tag.xml")
+    checkError(
+      exception = intercept[SparkException] {
+        spark.read
+          .option("rowTag", "book")
+          .option("mode", FailFastMode.name)
+          .xml(inputFile)
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_2165",
+      parameters = Map("failFastMode" -> "FAILFAST"))
     val exceptionInParsing = intercept[SparkException] {
       spark.read
         .schema("_id string")
         .option("rowTag", "book")
         .option("mode", FailFastMode.name)
-        .xml(getTestResourcePath(resDir + "unclosed_tag.xml"))
+        .xml(inputFile)
         .show()
     }
-    assert(exceptionInParsing.getErrorClass.startsWith("FAILED_READ_FILE"))
+    checkError(
+      exception = exceptionInParsing,
+      errorClass = "FAILED_READ_FILE.NO_HINT",
+      parameters = Map("path" -> Path.of(inputFile).toUri.toString))
     checkError(
       exception = exceptionInParsing.getCause.asInstanceOf[SparkException],
       errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
@@ -1196,14 +1206,16 @@ class XmlSuite
   }
 
   test("test XSD validation") {
-    val basketDF = spark.read
-      .option("rowTag", "basket")
-      .option("inferSchema", true)
-      .option("rowValidationXSDPath", getTestResourcePath(resDir + "basket.xsd")
-        .replace("file:/", "/"))
-      .xml(getTestResourcePath(resDir + "basket.xml"))
-    // Mostly checking it doesn't fail
-    assert(basketDF.selectExpr("entry[0].key").head().getLong(0) === 9027)
+    Seq("basket.xsd", "include-example/first.xsd").foreach { xsdFile =>
+      val basketDF = spark.read
+        .option("rowTag", "basket")
+        .option("inferSchema", true)
+        .option("rowValidationXSDPath", getTestResourcePath(resDir + xsdFile)
+          .replace("file:/", "/"))
+        .xml(getTestResourcePath(resDir + "basket.xml"))
+      // Mostly checking it doesn't fail
+      assert(basketDF.selectExpr("entry[0].key").head().getLong(0) === 9027)
+    }
   }
 
   test("test XSD validation with validation error") {
@@ -1304,12 +1316,11 @@ class XmlSuite
   }
 
   test("schema_of_xml with DROPMALFORMED parse error test") {
-    val e = intercept[AnalysisException] {
-       spark.sql(s"""SELECT schema_of_xml('<ROW><a>1<ROW>', map('mode', 'DROPMALFORMED'))""")
-         .collect()
-    }
     checkError(
-      exception = e,
+      exception = intercept[AnalysisException] {
+        spark.sql(s"""SELECT schema_of_xml('<ROW><a>1<ROW>', map('mode', 'DROPMALFORMED'))""")
+          .collect()
+      },
       errorClass = "_LEGACY_ERROR_TEMP_1099",
       parameters = Map(
         "funcName" -> "schema_of_xml",
@@ -1320,12 +1331,11 @@ class XmlSuite
   }
 
   test("schema_of_xml with FAILFAST parse error test") {
-    val e = intercept[SparkException] {
-       spark.sql(s"""SELECT schema_of_xml('<ROW><a>1<ROW>', map('mode', 'FAILFAST'))""")
-         .collect()
-    }
     checkError(
-      exception = e,
+      exception = intercept[SparkException] {
+        spark.sql(s"""SELECT schema_of_xml('<ROW><a>1<ROW>', map('mode', 'FAILFAST'))""")
+          .collect()
+      },
       errorClass = "_LEGACY_ERROR_TEMP_2165",
       parameters = Map(
         "failFastMode" -> FailFastMode.name)
@@ -1718,19 +1728,17 @@ class XmlSuite
   }
 
   test("Issue 588: Ensure fails when data is not present, with or without schema") {
-    val exception1 = intercept[AnalysisException] {
-      spark.read.xml("/this/file/does/not/exist")
-    }
     checkError(
-      exception = exception1,
+      exception = intercept[AnalysisException] {
+        spark.read.xml("/this/file/does/not/exist")
+      },
       errorClass = "PATH_NOT_FOUND",
       parameters = Map("path" -> "file:/this/file/does/not/exist")
     )
-    val exception2 = intercept[AnalysisException] {
-      spark.read.schema(buildSchema(field("dummy"))).xml("/this/file/does/not/exist")
-    }
     checkError(
-      exception = exception2,
+      exception = intercept[AnalysisException] {
+        spark.read.schema(buildSchema(field("dummy"))).xml("/this/file/does/not/exist")
+      },
       errorClass = "PATH_NOT_FOUND",
       parameters = Map("path" -> "file:/this/file/does/not/exist")
     )
@@ -2439,11 +2447,15 @@ class XmlSuite
     val exp = spark.sql("select timestamp_ntz'2020-12-12 12:12:12' as col0")
     for (pattern <- patterns) {
       withTempPath { path =>
+        val actualPath = path.toPath.toUri.toURL.toString
         val err = intercept[SparkException] {
           exp.write.option("timestampNTZFormat", pattern)
             .option("rowTag", "ROW").xml(path.getAbsolutePath)
         }
-        assert(err.getErrorClass == "TASK_WRITE_FAILED")
+        checkErrorMatchPVals(
+          exception = err,
+          errorClass = "TASK_WRITE_FAILED",
+          parameters = Map("path" -> s"$actualPath.*"))
         val msg = err.getCause.getMessage
         assert(
           msg.contains("Unsupported field: OffsetSeconds") ||
@@ -2594,14 +2606,39 @@ class XmlSuite
     checkAnswer(df, Seq(Row(Row(Array(1, 2, 3), Array(1, 2)))))
   }
 
-  test("ignore commented row tags") {
+  test("ignore commented and CDATA row tags") {
     val results = spark.read.format("xml")
       .option("rowTag", "ROW")
-      .option("multiLine", "true")
-      .load(getTestResourcePath(resDir + "commented-row.xml"))
+      .load(getTestResourcePath(resDir + "ignored-rows.xml"))
 
-    val expectedResults = Seq.range(1, 11).map(Row(_))
+    val expectedResults = Seq.range(1, 18).map(Row(_))
     checkAnswer(results, expectedResults)
+
+    val results2 = spark.read.format("xml")
+      .option("rowTag", "ROW")
+      .load(getTestResourcePath(resDir + "cdata-ending-eof.xml"))
+
+    val expectedResults2 = Seq.range(1, 18).map(Row(_))
+    checkAnswer(results2, expectedResults2)
+
+    val results3 = spark.read.format("xml")
+      .option("rowTag", "ROW")
+      .load(getTestResourcePath(resDir + "cdata-no-close.xml"))
+
+    val expectedResults3 = Seq.range(1, 18).map(Row(_))
+    checkAnswer(results3, expectedResults3)
+
+    val results4 = spark.read.format("xml")
+      .option("rowTag", "ROW")
+      .load(getTestResourcePath(resDir + "cdata-no-ignore.xml"))
+
+    val expectedResults4 = Seq(
+      Row("<a>1</a>"),
+      Row("2"),
+      Row("<ROW>3</ROW>"),
+      Row("4"),
+      Row("<ROW>5</ROW>"))
+    checkAnswer(results4, expectedResults4)
   }
 
   test("capture values interspersed between elements - nested struct") {
@@ -2843,7 +2880,7 @@ class XmlSuite
             df.collect()
           },
           errorClass = "FAILED_READ_FILE.FILE_NOT_EXIST",
-          parameters = Map("path" -> ".*")
+          parameters = Map("path" -> s".*$dir.*")
         )
       }
 
@@ -2937,7 +2974,11 @@ class XmlSuite
                 .mode(SaveMode.Overwrite)
                 .xml(path)
             }
-            assert(e.getErrorClass == "TASK_WRITE_FAILED")
+            val actualPath = Path.of(dir.getAbsolutePath).toUri.toURL.toString.stripSuffix("/")
+            checkErrorMatchPVals(
+              exception = e,
+              errorClass = "TASK_WRITE_FAILED",
+              parameters = Map("path" -> s"$actualPath.*"))
             assert(e.getCause.isInstanceOf[XMLStreamException])
             assert(e.getCause.getMessage.contains(errorMsg))
         }

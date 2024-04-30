@@ -23,9 +23,8 @@ import time
 import unittest
 from typing import cast
 from collections import namedtuple
-import sys
 
-from pyspark import SparkContext, SparkConf
+from pyspark import SparkConf
 from pyspark.sql import Row, SparkSession
 from pyspark.sql.functions import rand, udf, assert_true, lit
 from pyspark.sql.types import (
@@ -56,6 +55,7 @@ from pyspark.testing.sqlutils import (
     ExamplePointUDT,
 )
 from pyspark.errors import ArithmeticException, PySparkTypeError, UnsupportedOperationException
+from pyspark.util import is_remote_only
 
 if have_pandas:
     import pandas as pd
@@ -830,7 +830,8 @@ class ArrowTestsMixin:
         pdf = pd.DataFrame({"c1": [1], "c2": ["string"]})
         df = self.spark.createDataFrame(pdf)
         self.assertEqual([Row(c1=1, c2="string")], df.collect())
-        self.assertGreater(self.spark.sparkContext.defaultParallelism, len(pdf))
+        if not is_remote_only():
+            self.assertGreater(self._legacy_sc.defaultParallelism, len(pdf))
 
     def test_toPandas_error(self):
         for arrow_enabled in [True, False]:
@@ -997,7 +998,6 @@ class ArrowTestsMixin:
 
         self.assertEqual(df.first(), expected)
 
-    @unittest.skipIf(sys.version_info < (3, 9), "zoneinfo is available from Python 3.9+")
     def test_toPandas_timestmap_tzinfo(self):
         for arrow_enabled in [True, False]:
             with self.subTest(arrow_enabled=arrow_enabled):
@@ -1202,6 +1202,8 @@ class MaxResultArrowTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        from pyspark import SparkContext
+
         cls.spark = SparkSession(
             SparkContext(
                 "local[4]", cls.__name__, conf=SparkConf().set("spark.driver.maxResultSize", "10k")

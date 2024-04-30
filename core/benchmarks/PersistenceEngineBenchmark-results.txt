@@ -7,19 +7,12 @@ AMD EPYC 7763 64-Core Processor
 1000 Workers:                                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ----------------------------------------------------------------------------------------------------------------------------------------
 ZooKeeperPersistenceEngine with JavaSerializer                     5192           5309         116          0.0     5192160.2       1.0X
-ZooKeeperPersistenceEngine with KryoSerializer                     4056           4059           5          0.0     4055626.8       1.3X
 FileSystemPersistenceEngine with JavaSerializer                    2926           2934           8          0.0     2926383.4       1.8X
 FileSystemPersistenceEngine with JavaSerializer (lz4)               820            827          11          0.0      820359.8       6.3X
 FileSystemPersistenceEngine with JavaSerializer (lzf)               772            781           9          0.0      772349.1       6.7X
 FileSystemPersistenceEngine with JavaSerializer (snappy)            802            812          10          0.0      801815.8       6.5X
 FileSystemPersistenceEngine with JavaSerializer (zstd)              972            994          31          0.0      972042.3       5.3X
-FileSystemPersistenceEngine with KryoSerializer                     708            726          15          0.0      707927.8       7.3X
-FileSystemPersistenceEngine with KryoSerializer (lz4)               584            596          11          0.0      583999.8       8.9X
-FileSystemPersistenceEngine with KryoSerializer (lzf)               880            896          14          0.0      880189.2       5.9X
-FileSystemPersistenceEngine with KryoSerializer (snappy)            772            821          46          0.0      772130.1       6.7X
-FileSystemPersistenceEngine with KryoSerializer (zstd)              906            928          29          0.0      905578.7       5.7X
 RocksDBPersistenceEngine with JavaSerializer                        302            302           0          0.0      301664.5      17.2X
-RocksDBPersistenceEngine with KryoSerializer                        109            111           2          0.0      108979.5      47.6X
 BlackHolePersistenceEngine                                            0              0           0          6.3         158.3   32800.5X
 
 

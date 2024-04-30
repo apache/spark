@@ -25,7 +25,7 @@ from decimal import Decimal
 from typing import cast
 
 from pyspark import TaskContext
-from pyspark.rdd import PythonEvalType
+from pyspark.util import PythonEvalType
 from pyspark.sql import Column
 from pyspark.sql.functions import array, col, expr, lit, sum, struct, udf, pandas_udf, PandasUDFType
 from pyspark.sql.types import (
@@ -764,15 +764,17 @@ class ScalarPandasUDFTestsMixin:
             self.assertEqual(df.collect(), res.collect())
 
     def test_vectorized_udf_empty_partition(self):
-        df = self.spark.createDataFrame(self.sc.parallelize([Row(id=1)], 2))
+        df = self.spark.createDataFrame([Row(id=1)]).repartition(2)
         for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
             f = pandas_udf(lambda x: x, LongType(), udf_type)
             res = df.select(f(col("id")))
             self.assertEqual(df.collect(), res.collect())
 
     def test_vectorized_udf_struct_with_empty_partition(self):
-        df = self.spark.createDataFrame(self.sc.parallelize([Row(id=1)], 2)).withColumn(
-            "name", lit("John Doe")
+        df = (
+            self.spark.createDataFrame([Row(id=1)])
+            .repartition(2)
+            .withColumn("name", lit("John Doe"))
         )
 
         @pandas_udf("first string, last string")
@@ -1334,7 +1336,7 @@ class ScalarPandasUDFTestsMixin:
             return x + 1
 
         def f2(x):
-            assert type(x) == col_type
+            assert isinstance(x, col_type)
             return x + 10
 
         @pandas_udf("int")

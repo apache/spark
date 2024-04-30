@@ -25,7 +25,8 @@ import scala.jdk.CollectionConverters._
 import com.google.common.cache._
 import org.apache.hadoop.fs.{FileStatus, Path}
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{CACHED_TABLE_PARTITION_METADATA_SIZE, MAX_TABLE_PARTITION_METADATA_SIZE}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.util.SizeEstimator
 
@@ -111,8 +112,8 @@ private class SharedInMemoryCache(maxSizeInBytes: Long, cacheTTL: Long) extends 
       override def weigh(key: (ClientId, Path), value: Array[FileStatus]): Int = {
         val estimate = (SizeEstimator.estimate(key) + SizeEstimator.estimate(value)) / weightScale
         if (estimate > Int.MaxValue) {
-          logWarning(s"Cached table partition metadata size is too big. Approximating to " +
-            s"${Int.MaxValue.toLong * weightScale}.")
+          logWarning(log"Cached table partition metadata size is too big. Approximating to " +
+            log"${MDC(CACHED_TABLE_PARTITION_METADATA_SIZE, Int.MaxValue.toLong * weightScale)}.")
           Int.MaxValue
         } else {
           estimate.toInt
@@ -126,9 +127,10 @@ private class SharedInMemoryCache(maxSizeInBytes: Long, cacheTTL: Long) extends 
         if (removed.getCause == RemovalCause.SIZE &&
           warnedAboutEviction.compareAndSet(false, true)) {
           logWarning(
-            "Evicting cached table partition metadata from memory due to size constraints " +
-              "(spark.sql.hive.filesourcePartitionFileCacheSize = "
-              + maxSizeInBytes + " bytes). This may impact query planning performance.")
+            log"Evicting cached table partition metadata from memory due to size constraints " +
+              log"(spark.sql.hive.filesourcePartitionFileCacheSize = " +
+              log"${MDC(MAX_TABLE_PARTITION_METADATA_SIZE, maxSizeInBytes)} bytes). " +
+              log"This may impact query planning performance.")
         }
       }
     }
