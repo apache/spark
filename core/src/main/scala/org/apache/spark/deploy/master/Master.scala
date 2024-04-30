@@ -331,7 +331,7 @@ private[deploy] class Master(
           logInfo("Application has been re-registered: " + appId)
           app.state = ApplicationState.WAITING
         case None =>
-          logWarning(log"Master change ack from unknown app: ${MDC(APP_ID, appId)}")
+          logWarning(log"Master change ack from unknown app: ${MDC(LogKeys.APP_ID, appId)}")
       }
 
       if (canCompleteRecovery) { completeRecovery() }
@@ -451,8 +451,8 @@ private[deploy] class Master(
             context.reply(KillDriverResponse(self, driverId, success = true, msg))
           case None =>
             val msg = s"Driver $driverId has already finished or does not exist"
-            logWarning(
-              log"Driver ${MDC(DRIVER_ID, driverId)} has already finished or does not exist")
+            logWarning(log"Driver ${MDC(LogKeys.DRIVER_ID, driverId)} " +
+              log"has already finished or does not exist")
             context.reply(KillDriverResponse(self, driverId, success = false, msg))
         }
       }
@@ -569,9 +569,9 @@ private[deploy] class Master(
               && maxExecutorRetries >= 0) { // < 0 disables this application-killing path
               val execs = appInfo.executors.values
               if (!execs.exists(_.state == ExecutorState.RUNNING)) {
-                logError(log"Application ${MDC(APP_DESC, appInfo.desc.name)} " +
-                  log"with ID ${MDC(APP_ID, appInfo.id)} " +
-                  log"failed ${MDC(RETRY_COUNT, appInfo.retryCount)} times; removing it")
+                logError(log"Application ${MDC(LogKeys.APP_DESC, appInfo.desc.name)} " +
+                  log"with ID ${MDC(LogKeys.APP_ID, appInfo.id)} " +
+                  log"failed ${MDC(LogKeys.RETRY_COUNT, appInfo.retryCount)} times; removing it")
                 removeApplication(appInfo, ApplicationState.FAILED)
               }
             }
