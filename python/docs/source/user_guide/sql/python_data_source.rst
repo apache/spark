@@ -238,3 +238,15 @@ Start a streaming query with the fake data stream. Once we register the python d
 .. code-block:: python
 
     query = spark.readStream.format("fake").load().writeStream().format("fake").start()
+
+**Serialization Requirement**
+
+User defined DataSource, DataSourceReader, DataSourceWriter, DataSourceStreamReader and DataSourceStreamWriter and their methods must be able to be serialized by pickle.
+
+For library that are used inside a method, it must be imported inside the method. For example, Faker must be imported inside the read() method in the code below.
+
+.. code-block:: python
+
+    def read(self, partition):
+        from faker import Faker
+        fake = Faker()
