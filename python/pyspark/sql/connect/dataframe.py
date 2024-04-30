@@ -53,6 +53,7 @@ from functools import cached_property
 
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
+from pyspark.util import is_remote_only
 from pyspark.sql.types import Row, StructType, _create_row
 from pyspark.sql.dataframe import (
     DataFrame as ParentDataFrame,
@@ -94,6 +95,7 @@ if TYPE_CHECKING:
         PandasMapIterFunction,
         ArrowMapIterFunction,
     )
+    from pyspark.core.rdd import RDD
     from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
     from pyspark.sql.connect.observation import Observation
     from pyspark.sql.connect.session import SparkSession
@@ -1679,14 +1681,6 @@ class DataFrame(ParentDataFrame):
             raise PySparkAttributeError(
                 error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": name}
             )
-        elif name in [
-            "checkpoint",
-            "localCheckpoint",
-        ]:
-            raise PySparkNotImplementedError(
-                error_class="NOT_IMPLEMENTED",
-                message_parameters={"feature": f"{name}()"},
-            )
 
         if name not in self.columns:
             raise PySparkAttributeError(
@@ -2094,9 +2088,35 @@ class DataFrame(ParentDataFrame):
     def writeTo(self, table: str) -> "DataFrameWriterV2":
         return DataFrameWriterV2(self._plan, self._session, table)
 
-    # SparkConnect specific API
     def offset(self, n: int) -> ParentDataFrame:
         return DataFrame(plan.Offset(child=self._plan, offset=n), session=self._session)
+
+    if not is_remote_only():
+
+        def checkpoint(self, eager: bool = True) -> "DataFrame":
+            raise PySparkNotImplementedError(
+                error_class="NOT_IMPLEMENTED",
+                message_parameters={"feature": "checkpoint()"},
+            )
+
+        def localCheckpoint(self, eager: bool = True) -> "DataFrame":
+            raise PySparkNotImplementedError(
+                error_class="NOT_IMPLEMENTED",
+                message_parameters={"feature": "localCheckpoint()"},
+            )
+
+        def toJSON(self, use_unicode: bool = True) -> "RDD[str]":
+            raise PySparkNotImplementedError(
+                error_class="NOT_IMPLEMENTED",
+                message_parameters={"feature": "toJSON()"},
+            )
+
+        @property
+        def rdd(self) -> "RDD[Row]":
+            raise PySparkNotImplementedError(
+                error_class="NOT_IMPLEMENTED",
+                message_parameters={"feature": "rdd"},
+            )
 
 
 class DataFrameNaFunctions(ParentDataFrameNaFunctions):
@@ -2165,6 +2185,7 @@ def _test() -> None:
     import os
     import sys
     import doctest
+    from pyspark.util import is_remote_only
     from pyspark.sql import SparkSession as PySparkSession
     import pyspark.sql.dataframe
 
@@ -2174,10 +2195,11 @@ def _test() -> None:
 
     globs = pyspark.sql.dataframe.__dict__.copy()
 
-    del pyspark.sql.dataframe.DataFrame.toJSON.__doc__
-    del pyspark.sql.dataframe.DataFrame.rdd.__doc__
-    del pyspark.sql.dataframe.DataFrame.checkpoint.__doc__
-    del pyspark.sql.dataframe.DataFrame.localCheckpoint.__doc__
+    if not is_remote_only():
+        del pyspark.sql.dataframe.DataFrame.toJSON.__doc__
+        del pyspark.sql.dataframe.DataFrame.rdd.__doc__
+        del pyspark.sql.dataframe.DataFrame.checkpoint.__doc__
+        del pyspark.sql.dataframe.DataFrame.localCheckpoint.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.dataframe tests")
