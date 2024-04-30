@@ -88,13 +88,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       plan: LogicalPlan,
       filterCreationSideKey: Expression): Option[(Expression, LogicalPlan)] = {
 
-    def canExtractLeft(joinType: JoinType): Boolean = joinType match {
-      case Inner | LeftSemi | LeftOuter | LeftAnti => true
-      case _ => false
-    }
-
     def canExtractRight(joinType: JoinType): Boolean = joinType match {
-      case Inner | RightOuter => true
+      case Inner | LeftSemi | RightOuter => true
       case _ => false
     }
 
