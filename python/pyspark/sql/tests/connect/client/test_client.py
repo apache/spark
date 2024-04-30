@@ -361,7 +361,7 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
     )
     def test_not_found_recovers(self, _, error_msg: str):
         # Assert that the client recovers from session or operation not found error
-        # if no partial response was never received.
+        # if no partial responses were previously received.
 
         def not_found():
             raise TestException(
