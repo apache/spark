@@ -144,7 +144,7 @@ class BasePythonStreamingDataSourceTestsMixin:
 
             def read(self, start: dict):
                 start_idx = start["offset"]
-                it = iter([(i, ) for i in range(start_idx, start_idx + 2)])
+                it = iter([(i,) for i in range(start_idx, start_idx + 2)])
                 return (it, {"offset": start_idx + 2})
 
             def commit(self, end):
@@ -153,7 +153,7 @@ class BasePythonStreamingDataSourceTestsMixin:
             def readBetweenOffsets(self, start: dict, end: dict):
                 start_idx = start["offset"]
                 end_idx = end["offset"]
-                return iter([(i, ) for i in range(start_idx, end_idx)])
+                return iter([(i,) for i in range(start_idx, end_idx)])
 
         class SimpleDataSource(DataSource):
             def schema(self):
