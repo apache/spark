@@ -1365,12 +1365,14 @@ class SparkSession(SparkConversionMixin):
             later.
         samplingRatio : float, optional
             the sample ratio of rows used for inferring. The first few rows will be used
-            if ``samplingRatio`` is ``None``.
+            if ``samplingRatio`` is ``None``. This option is effective only when the input is
+            :class:`RDD`.
         verifySchema : bool, optional
             verify data types of every row against schema. Enabled by default.
             When the input is :class:`pandas.DataFrame` and
             `spark.sql.execution.arrow.pyspark.enabled` is enabled, this option is not
-            effective. It follows Arrow type coercion.
+            effective. It follows Arrow type coercion. This option is not supported with
+            Spark Connect.
 
             .. versionadded:: 2.1.0
 
