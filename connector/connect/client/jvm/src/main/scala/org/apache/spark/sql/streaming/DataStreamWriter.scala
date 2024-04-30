@@ -299,8 +299,8 @@ final class DataStreamWriter[T] private[sql] (ds: Dataset[T]) extends Logging {
 
     val resp = ds.sparkSession.execute(startCmd).head
     if (resp.getWriteStreamOperationStartResult.hasQueryStartedEventJson) {
-      val event = QueryStartedEvent.fromJson(resp.getWriteStreamOperationStartResult
-        .getQueryStartedEventJson)
+      val event = QueryStartedEvent.fromJson(
+        resp.getWriteStreamOperationStartResult.getQueryStartedEventJson)
       ds.sparkSession.streams.streamingQueryListenerBus.postToAll(event)
     }
     RemoteStreamingQuery.fromStartCommandResponse(ds.sparkSession, resp)

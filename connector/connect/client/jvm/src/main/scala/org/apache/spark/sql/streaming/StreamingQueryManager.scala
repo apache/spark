@@ -49,7 +49,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
 
   private[spark] val streamingQueryListenerBus = new StreamingQueryListenerBus(sparkSession)
 
-  def close(): Unit = {
+  private[spark] def close(): Unit = {
     streamingQueryListenerBus.close()
   }
 

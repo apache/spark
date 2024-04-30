@@ -588,7 +588,7 @@ class ClientStreamingQuerySuite extends QueryTest with SQLHelper with Logging {
       val df = spark.createDataFrame(Seq((event.json, 0)))
       df.write.mode("append").saveAsTable(s"listener_terminated_events$tablePostfix")
     }
-}
+  }
 
   /**
    * V1: Initial interface of StreamingQueryListener containing methods `onQueryStarted`,
