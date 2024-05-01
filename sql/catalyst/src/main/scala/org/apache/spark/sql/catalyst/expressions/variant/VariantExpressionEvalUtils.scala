@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.expressions.variant
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{ArrayData, BadRecordException, MapData}
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -59,8 +58,8 @@ object VariantExpressionEvalUtils {
       false
     } else {
       val variantValue = input.getValue
-      if(variantValue.isEmpty) {
-        throw new SparkRuntimeException("MALFORMED_VARIANT", Map.empty)
+      if (variantValue.isEmpty) {
+        throw QueryExecutionErrors.malformedVariant()
       } else {
         // Variant NULL is denoted by basic_type == 0 and val_header == 0
         variantValue(0) == 0
