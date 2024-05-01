@@ -83,13 +83,9 @@ jobs:
             --driver-java-options "-Dlog4j.configurationFile=file:$GITHUB_WORKSPACE/conf/log4j2.properties" \
             --jars "`find connector/connect/server/target -name spark-connect-*SNAPSHOT.jar`,`find connector/protobuf/target -name spark-protobuf-*SNAPSHOT.jar`,`find connector/avro/target -name spark-avro*SNAPSHOT.jar`"
 
-          PYTHONPATH="python/lib/pyspark.zip:python/lib/py4j-0.10.9.7-src.zip:$PYTHONPATH" python -c "from pyspark.sql import SparkSession; _ = SparkSession.builder.remote('sc://localhost').getOrCreate().range(100).repartition(100).mapInPandas(lambda x: x, 'id INT').collect()"
-
           # Checkout to branch-3.5 to use the tests in branch-3.5.
-          git checkout branch-3.5
-
-          # Remove Py4J and PySpark zipped library to make sure it uses Spark 3.5 ones from the source.
-          rm -r python/lib
+          cd ..
+          git clone --single-branch --branch branch-3.5 $GITHUB_SERVER_URL/$GITHUB_REPOSITORY
 
           # Several tests related to catalog requires to run them sequencially, e.g., writing a table in a listener.
           # Run branch-3.5 tests
