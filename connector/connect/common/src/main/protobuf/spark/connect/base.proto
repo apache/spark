@@ -70,7 +70,7 @@ message AnalyzePlanRequest {
   //
   // Server-side generated idempotency key from the previous responses (if any). Server
   // can use this to validate that the server side session has not changed.
-  optional string client_observed_server_side_session_id = 18;
+  optional string client_observed_server_side_session_id = 17;
 
   // (Required) User context
   UserContext user_context = 2;
@@ -94,7 +94,7 @@ message AnalyzePlanRequest {
     Persist persist = 14;
     Unpersist unpersist = 15;
     GetStorageLevel get_storage_level = 16;
-    SizeInBytes size_in_bytes = 17;
+    SizeInBytes size_in_bytes = 18;
   }
 
   message Schema {
@@ -201,10 +201,10 @@ message AnalyzePlanRequest {
     Relation relation = 1;
   }
 
-  // Return estimated size in bytes of the top node of the plan
+  // Return estimated size in bytes of the top node of the plan.
   message SizeInBytes {
-    // (Required) The plan to analyze
-    Plan plan = 1;
+    // (Required) The relation to analyze
+    Relation relation = 1;
 
     // (Optional) Should physical plan be generated or not?
     optional bool usePhysical = 2;
@@ -218,7 +218,7 @@ message AnalyzePlanResponse {
   string session_id = 1;
   // Server-side generated idempotency key that the client can use to assert that the server side
   // session has not changed.
-  string server_side_session_id = 16;
+  string server_side_session_id = 15;
 
   oneof result {
     Schema schema = 2;
@@ -234,7 +234,7 @@ message AnalyzePlanResponse {
     Persist persist = 12;
     Unpersist unpersist = 13;
     GetStorageLevel get_storage_level = 14;
-    SizeInBytes size_in_bytes = 15;
+    SizeInBytes size_in_bytes = 16;
   }
 
   message Schema {

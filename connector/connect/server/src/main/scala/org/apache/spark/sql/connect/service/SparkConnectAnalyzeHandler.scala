@@ -209,7 +209,7 @@ private[connect] class SparkConnectAnalyzeHandler(
 
       case proto.AnalyzePlanRequest.AnalyzeCase.SIZE_IN_BYTES =>
         val queryExecution = Dataset
-          .ofRows(session, transformRelation(request.getExplain.getPlan.getRoot))
+          .ofRows(session, transformRelation(request.getSizeInBytes.getRelation))
           .queryExecution
         val sizeInBytes = if (request.getSizeInBytes.getUsePhysical) {
           queryExecution.optimizedPlan.stats.sizeInBytes.toLong

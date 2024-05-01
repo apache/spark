@@ -294,7 +294,8 @@ class Dataset[T] private[sql] (
    */
   def estimatedSizeInBytes(usePhysical: Boolean): Long = {
     sparkSession
-      .analyze(builder => builder.getSizeInBytesBuilder.setPlan(plan).setUsePhysical(usePhysical))
+      .analyze(builder =>
+        builder.getSizeInBytesBuilder.setRelation(plan.getRoot).setUsePhysical(usePhysical))
       .getSizeInBytes
       .getResult
   }
