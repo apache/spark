@@ -118,6 +118,7 @@ function mypy_annotation_test {
 
     echo "starting mypy annotations test..."
     MYPY_REPORT=$( ($MYPY_BUILD \
+      --python-executable $PYTHON_EXECUTABLE \
       --namespace-packages \
       --config-file python/mypy.ini \
       --cache-dir /tmp/.mypy_cache/ \
@@ -177,6 +178,7 @@ function mypy_examples_test {
     echo "starting mypy examples test..."
 
     MYPY_REPORT=$( (MYPYPATH=python $MYPY_BUILD \
+      --python-executable $PYTHON_EXECUTABLE \
       --namespace-packages \
       --config-file python/mypy.ini \
       --exclude "mllib/*" \
