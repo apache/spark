@@ -29,8 +29,7 @@ import scala.util.{Failure, Success, Try}
 import com.codahale.metrics._
 import org.apache.hadoop.net.NetUtils
 
-import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys._
+import org.apache.spark.internal.Logging
 
 /**
  * @see <a href="https://github.com/etsy/statsd/blob/master/docs/metric_types.md">
@@ -66,9 +65,8 @@ private[spark] class StatsdReporter(
       meters: SortedMap[String, Meter],
       timers: SortedMap[String, Timer]): Unit =
     Try(new DatagramSocket) match {
-      case Failure(ioe: IOException) =>
-        logWarning(log"StatsD datagram socket construction failed " +
-          log"${MDC(ERROR, NetUtils.wrapException(host, port, NetUtils.getHostname(), 0, ioe))}")
+      case Failure(ioe: IOException) => logWarning("StatsD datagram socket construction failed",
+        NetUtils.wrapException(host, port, NetUtils.getHostname(), 0, ioe))
       case Failure(e) =>
         logWarning("StatsD datagram socket construction failed", e)
       case Success(s) =>

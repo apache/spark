@@ -315,13 +315,12 @@ private[deploy] class Master(
         case None =>
           if (workers.map(_.id).contains(workerId)) {
             logWarning(log"Got heartbeat from unregistered worker " +
-              log"${MDC(LogKeys.WORKER_ID, workerId)}." +
-              log" Asking it to re-register.")
+              log"${MDC(LogKeys.WORKER_ID, workerId)}. Asking it to re-register.")
             worker.send(ReconnectWorker(masterUrl))
           } else {
             logWarning(log"Got heartbeat from unregistered worker " +
-              log"${MDC(LogKeys.WORKER_ID, workerId)}." +
-              log" This worker was never registered, so ignoring the heartbeat.")
+              log"${MDC(LogKeys.WORKER_ID, workerId)}. " +
+              log"This worker was never registered, so ignoring the heartbeat.")
           }
       }
 
@@ -1294,7 +1293,7 @@ private[deploy] class Master(
       if (worker.state != WorkerState.DEAD) {
         val workerTimeoutSecs = TimeUnit.MILLISECONDS.toSeconds(workerTimeoutMs)
         logWarning(log"Removing ${MDC(LogKeys.WORKER_ID, worker.id)} because we got no heartbeat " +
-          log"in ${MDC(LogKeys.TIME_UNITS, workerTimeoutSecs)} seconds")
+          log"in ${MDC(LogKeys.TIME_UNITS, workerTimeoutSecs * 1000)} ms")
         removeWorker(worker, s"Not receiving heartbeat for $workerTimeoutSecs seconds")
       } else {
         if (worker.lastHeartbeat < currentTime - ((reaperIterations + 1) * workerTimeoutMs)) {

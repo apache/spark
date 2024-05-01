@@ -76,9 +76,9 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
 
   if (!conf.getBoolean("spark.shuffle.spill", true)) {
     logWarning(
-      log"spark.shuffle.spill was set to false, " +
-        log"but this configuration is ignored as of Spark 1.6+." +
-        log" Shuffle will continue to spill to disk when necessary.")
+      "spark.shuffle.spill was set to false, " +
+        "but this configuration is ignored as of Spark 1.6+." +
+        " Shuffle will continue to spill to disk when necessary.")
   }
 
   /**

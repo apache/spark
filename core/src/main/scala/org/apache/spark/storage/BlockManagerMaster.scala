@@ -302,7 +302,7 @@ class BlockManagerMaster(
       if (driverHeartbeatEndPoint.askSync[Boolean](StopBlockManagerMaster)) {
         driverHeartbeatEndPoint = null
       } else {
-        logWarning(log"Failed to stop BlockManagerMasterHeartbeatEndpoint")
+        logWarning("Failed to stop BlockManagerMasterHeartbeatEndpoint")
       }
       logInfo("BlockManagerMaster stopped")
     }

@@ -133,7 +133,7 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
       pushUpToMax()
     } catch {
       case NonFatal(e) =>
-        logWarning(log"Failure during push so stopping the block push", e)
+        logWarning("Failure during push so stopping the block push", e)
     }
   }
 

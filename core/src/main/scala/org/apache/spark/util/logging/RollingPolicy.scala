@@ -54,10 +54,9 @@ private[spark] class TimeBasedRollingPolicy(
 
   import TimeBasedRollingPolicy._
   if (checkIntervalConstraint && rolloverIntervalMillis < MINIMUM_INTERVAL_SECONDS * 1000L) {
-    logWarning(log"Rolling interval [${MDC(TIME_UNITS, rolloverIntervalMillis/1000L)} " +
-      log"seconds] is too small. " +
-      log"Setting the interval to the acceptable minimum of " +
-      log"${MDC(MIN_TIME, MINIMUM_INTERVAL_SECONDS)} seconds.")
+    logWarning(log"Rolling interval [${MDC(TIME_UNITS, rolloverIntervalMillis)} " +
+      log"ms] is too small. Setting the interval to the acceptable minimum of " +
+      log"${MDC(MIN_TIME, MINIMUM_INTERVAL_SECONDS * 1000)} ms.")
     rolloverIntervalMillis = MINIMUM_INTERVAL_SECONDS * 1000L
   }
 

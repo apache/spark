@@ -247,7 +247,7 @@ private class PushBasedFetchHelper(
           // If we see an exception with getting the local dirs for push-merged-local blocks,
           // we fallback to fetch the original blocks. We do not report block fetch failure.
           logWarning(log"Error while fetching the merged dirs for push-merged-local " +
-            log"blocks: ${MDC(BLOCK_ID, pushMergedLocalBlocks.mkString(", "))}. " +
+            log"blocks: ${MDC(BLOCK_IDS, pushMergedLocalBlocks.mkString(", "))}. " +
             log"Fetch the original blocks instead",
             throwable)
           pushMergedLocalBlocks.foreach {

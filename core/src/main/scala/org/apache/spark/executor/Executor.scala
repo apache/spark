@@ -638,12 +638,11 @@ private[spark] class Executor(
           val freedMemory = taskMemoryManager.cleanUpAllAllocatedMemory()
 
           if (freedMemory > 0 && !threwException) {
+            val errMsg = log"Managed memory leak detected; size = " +
+              log"${LogMDC(NUM_BYTES, freedMemory)} bytes, ${LogMDC(TASK_NAME, taskName)}"
             if (conf.get(UNSAFE_EXCEPTION_ON_MEMORY_LEAK)) {
-              val errMsg = s"Managed memory leak detected; size = $freedMemory bytes, $taskName"
-              throw SparkException.internalError(errMsg, category = "EXECUTOR")
+              throw SparkException.internalError(errMsg.message, category = "EXECUTOR")
             } else {
-              val errMsg = log"Managed memory leak detected; size = " +
-                log"${LogMDC(NUM_BYTES, freedMemory)} bytes, ${LogMDC(TASK_NAME, taskName)}"
               logWarning(errMsg)
             }
           }
@@ -786,9 +785,8 @@ private[spark] class Executor(
               log"${LogMDC(CLASS_NAME, classOf[FetchFailedException].getName)} " +
               log"and failed, but the " +
               log"${LogMDC(CLASS_NAME, classOf[FetchFailedException].getName)} " +
-              log"was hidden by another exception.  " +
-              log"Spark is handling this like a fetch failure and ignoring the other exception: " +
-              log"${LogMDC(ERROR, t)}")
+              log"was hidden by another exception. Spark is handling this like a fetch failure " +
+              log"and ignoring the other exception: ${LogMDC(ERROR, t)}")
           }
           setTaskFinishedAndClearInterruptStatus()
           plugins.foreach(_.onTaskFailed(reason))

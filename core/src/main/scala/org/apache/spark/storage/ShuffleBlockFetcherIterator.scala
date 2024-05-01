@@ -846,23 +846,22 @@ final class ShuffleBlockFetcherIterator(
             // uses are shared by the UnsafeShuffleWriter (both writers use DiskBlockObjectWriter
             // which returns a zero-size from commitAndGet() in case no records were written
             // since the last call.
+            val msg = log"Received a zero-size buffer for block ${MDC(BLOCK_ID, blockId)} " +
+              log"from ${MDC(URI, address)} " +
+              log"(expectedApproxSize = ${MDC(NUM_BYTES, size)}, " +
+              log"isNetworkReqDone=${MDC(IS_NETWORK_REQUEST_DONE, isNetworkReqDone)})"
             if (blockId.isShuffleChunk) {
               // Zero-size block may come from nodes with hardware failures, For shuffle chunks,
               // the original shuffle blocks that belong to that zero-size shuffle chunk is
               // available and we can opt to fallback immediately.
-              logWarning(log"Received a zero-size buffer for block ${MDC(BLOCK_ID, blockId)} " +
-                log"from ${MDC(URI, address)} " +
-                log"(expectedApproxSize = ${MDC(NUM_BYTES, size)}, " +
-                log"isNetworkReqDone=${MDC(IS_NETWORK_REQUEST_DONE, isNetworkReqDone)})")
+              logWarning(msg)
               pushBasedFetchHelper.initiateFallbackFetchForPushMergedBlock(blockId, address)
               shuffleMetrics.incCorruptMergedBlockChunks(1)
               // Set result to null to trigger another iteration of the while loop to get either.
               result = null
               null
             } else {
-              throwFetchFailedException(blockId, mapIndex, address, new IOException(
-                s"Received a zero-size buffer for block $blockId from $address " +
-                  s"(expectedApproxSize = $size, isNetworkReqDone=$isNetworkReqDone)"))
+              throwFetchFailedException(blockId, mapIndex, address, new IOException(msg.message))
             }
           } else {
             try {
@@ -1037,8 +1036,8 @@ final class ShuffleBlockFetcherIterator(
                 // If we see an exception with reading push-merged-local index file, we fallback
                 // to fetch the original blocks. We do not report block fetch failure
                 // and will continue with the remaining local block read.
-                logWarning(log"Error occurred while reading push-merged-local index, " +
-                  log"prepare to fetch the original blocks", e)
+                logWarning("Error occurred while reading push-merged-local index, " +
+                  "prepare to fetch the original blocks", e)
                 pushBasedFetchHelper.initiateFallbackFetchForPushMergedBlock(
                   shuffleBlockId, pushBasedFetchHelper.localShuffleMergerBlockMgrId)
             }
@@ -1124,7 +1123,7 @@ final class ShuffleBlockFetcherIterator(
             checksumAlgorithm)
         } catch {
           case e: Exception =>
-            logWarning(log"Unable to diagnose the corruption cause of the corrupted block", e)
+            logWarning("Unable to diagnose the corruption cause of the corrupted block", e)
             cause = Cause.UNKNOWN_ISSUE
         }
         val duration = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)

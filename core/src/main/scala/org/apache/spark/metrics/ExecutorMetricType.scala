@@ -164,8 +164,7 @@ case object GarbageCollectionMetrics extends ExecutorMetricType with Logging {
           config.EVENT_LOG_GC_METRICS_OLD_GENERATION_GARBAGE_COLLECTORS.key)
         logWarning(log"To enable non-built-in garbage collector(s) " +
           log"${MDC(NON_BUILT_IN_CONNECTORS, nonBuiltInCollectors)}, " +
-          log"users should configure it(them) to " +
-          log"$youngGenerationGc or $oldGenerationGc")
+          log"users should configure it(them) to $youngGenerationGc or $oldGenerationGc")
       } else {
         // do nothing
       }

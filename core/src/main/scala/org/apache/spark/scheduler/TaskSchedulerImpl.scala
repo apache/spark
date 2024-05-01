@@ -277,9 +277,9 @@ private[spark] class TaskSchedulerImpl(
         starvationTimer.scheduleAtFixedRate(new TimerTask() {
           override def run(): Unit = {
             if (!hasLaunchedTask) {
-              logWarning(log"Initial job has not accepted any resources; " +
-                log"check your cluster UI to ensure that workers are registered " +
-                log"and have sufficient resources")
+              logWarning("Initial job has not accepted any resources; " +
+                "check your cluster UI to ensure that workers are registered " +
+                "and have sufficient resources")
             } else {
               this.cancel()
             }
@@ -672,14 +672,9 @@ private[spark] class TaskSchedulerImpl(
                 log"We highly recommend you to use the non-legacy delay scheduling by setting " +
                 log"${MDC(CONFIG, LEGACY_LOCALITY_WAIT_RESET.key)} to false " +
                 log"to get rid of this error."
-              val errorMsg = s"Fail resource offers for barrier stage ${taskSet.stageId} " +
-                s"because only ${barrierPendingLaunchTasks.length} out of a total number " +
-                s"of ${taskSet.numTasks} tasks got resource offers. We highly recommend " +
-                "you to use the non-legacy delay scheduling by setting " +
-                s"${LEGACY_LOCALITY_WAIT_RESET.key} to false to get rid of this error."
               logWarning(logMsg)
-              taskSet.abort(errorMsg)
-              throw SparkCoreErrors.sparkError(errorMsg)
+              taskSet.abort(logMsg.message)
+              throw SparkCoreErrors.sparkError(logMsg.message)
             } else {
               val curTime = clock.getTimeMillis()
               if (curTime - taskSet.lastResourceOfferFailLogTime >

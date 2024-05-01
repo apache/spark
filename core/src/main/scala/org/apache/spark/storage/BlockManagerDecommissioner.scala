@@ -226,7 +226,7 @@ private[storage] class BlockManagerDecommissioner(
       while (!stopped && !stoppedRDD) {
         // Validate if we have peers to migrate to. Otherwise, give up migration.
         if (!bm.getPeers(false).exists(_ != FallbackStorage.FALLBACK_BLOCK_MANAGER_ID)) {
-          logWarning(log"No available peers to receive RDD blocks, stop migration.")
+          logWarning("No available peers to receive RDD blocks, stop migration.")
           stoppedRDD = true
         } else {
           try {
@@ -321,7 +321,7 @@ private[storage] class BlockManagerDecommissioner(
     deadPeers.foreach(migrationPeers.get(_).foreach(_.keepRunning = false))
     // If we don't have anyone to migrate to give up
     if (!migrationPeers.values.exists(_.keepRunning)) {
-      logWarning(log"No available peers to receive Shuffle blocks, stop migration.")
+      logWarning("No available peers to receive Shuffle blocks, stop migration.")
       stoppedShuffle = true
     }
     // If we found any new shuffles to migrate or otherwise have not migrated everything.
@@ -353,7 +353,7 @@ private[storage] class BlockManagerDecommissioner(
       logInfo(s"Need to replicate ${replicateBlocksInfo.size} RDD blocks " +
         "for block manager decommissioning")
     } else {
-      logWarning(log"Asked to decommission RDD cache blocks, but no blocks to migrate")
+      logWarning("Asked to decommission RDD cache blocks, but no blocks to migrate")
       return false
     }
 
@@ -365,7 +365,7 @@ private[storage] class BlockManagerDecommissioner(
     }.filterNot(_._2).map(_._1)
     if (blocksFailedReplication.nonEmpty) {
       logWarning(log"Blocks failed replication in cache decommissioning " +
-        log"process: ${MDC(BLOCK_ID, blocksFailedReplication.mkString(","))}")
+        log"process: ${MDC(BLOCK_IDS, blocksFailedReplication.mkString(","))}")
       return true
     }
     false

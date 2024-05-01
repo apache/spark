@@ -748,8 +748,7 @@ class SparkContext(config: SparkConf) extends Logging {
             Some(endpointRef.askSync[Array[ThreadStackTrace]](TriggerThreadDump))
           case None =>
             logWarning(log"Executor ${MDC(LogKeys.EXECUTOR_ID, executorId)} " +
-              log"might already have stopped and " +
-              log"can not request thread dump from it.")
+              log"might already have stopped and can not request thread dump from it.")
             None
         }
       }

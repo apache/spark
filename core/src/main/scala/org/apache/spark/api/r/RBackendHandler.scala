@@ -155,9 +155,8 @@ private[r] class RBackendHandler(server: RBackend)
           args)
 
         if (index.isEmpty) {
-          logWarning(log"cannot find matching method" +
-            log"${MDC(CLASS_NAME, cls)}.${MDC(METHOD_NAME, methodName)}. " +
-            log"Candidates are:")
+          logWarning(log"cannot find matching method " +
+            log"${MDC(CLASS_NAME, cls)}.${MDC(METHOD_NAME, methodName)}. Candidates are:")
           selectedMethods.foreach { method =>
             logWarning(log"${MDC(METHOD_NAME, methodName)}(" +
               log"${MDC(METHOD_PARAMETER_TYPES, method.getParameterTypes.mkString(","))})")

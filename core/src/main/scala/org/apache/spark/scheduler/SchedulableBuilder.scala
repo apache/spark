@@ -27,6 +27,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.{SCHEDULER_ALLOCATION_FILE, SCHEDULER_MODE}
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
@@ -157,7 +158,8 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, sc: SparkContext
     val warningMessage = log"Unsupported schedulingMode: " +
       log"${MDC(XML_SCHEDULING_MODE, xmlSchedulingMode)} found in " +
       log"Fair Scheduler configuration file: ${MDC(FILE_NAME, fileName)}, using " +
-      log"the default schedulingMode: ${MDC(SCHEDULING_MODE, defaultValue)} for pool: " +
+      log"the default schedulingMode: " +
+      log"${MDC(LogKeys.DEFAULT_SCHEDULING_MODE, defaultValue)} for pool: " +
       log"${MDC(POOL_NAME, poolName)}"
     try {
       if (SchedulingMode.withName(xmlSchedulingMode) != SchedulingMode.NONE) {
@@ -212,7 +214,8 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, sc: SparkContext
         log"configured. This can happen when the file that pools are read from isn't set, or " +
         log"when that file doesn't contain ${MDC(POOL_NAME, poolName)}. " +
         log"Created ${MDC(CREATED_POOL_NAME, poolName)} with default " +
-        log"configuration (schedulingMode: ${MDC(SCHEDULING_MODE, DEFAULT_SCHEDULING_MODE)}, " +
+        log"configuration (schedulingMode: " +
+        log"${MDC(LogKeys.DEFAULT_SCHEDULING_MODE, DEFAULT_SCHEDULING_MODE)}, " +
         log"minShare: ${MDC(MIN_SHARE, DEFAULT_MINIMUM_SHARE)}, " +
         log"weight: ${MDC(WEIGHT, DEFAULT_WEIGHT)}")
     }

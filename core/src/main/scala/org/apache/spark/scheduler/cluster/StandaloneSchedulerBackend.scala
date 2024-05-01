@@ -122,9 +122,9 @@ private[spark] class StandaloneSchedulerBackend(
     val initialExecutorLimit =
       if (Utils.isDynamicAllocationEnabled(conf)) {
         if (coresPerExecutor.isEmpty) {
-          logWarning(log"Dynamic allocation enabled without spark.executor.cores explicitly " +
-            log"set, you may get more executors allocated than expected. It's recommended to " +
-            log"set spark.executor.cores explicitly. Please check SPARK-30299 for more details.")
+          logWarning("Dynamic allocation enabled without spark.executor.cores explicitly " +
+            "set, you may get more executors allocated than expected. It's recommended to " +
+            "set spark.executor.cores explicitly. Please check SPARK-30299 for more details.")
         }
 
         Some(0)
@@ -154,7 +154,7 @@ private[spark] class StandaloneSchedulerBackend(
   override def disconnected(): Unit = {
     notifyContext()
     if (!stopping.get) {
-      logWarning(log"Disconnected from Spark cluster! Waiting for reconnection...")
+      logWarning("Disconnected from Spark cluster! Waiting for reconnection...")
     }
   }
 
@@ -218,7 +218,7 @@ private[spark] class StandaloneSchedulerBackend(
 
   override def applicationId(): String =
     Option(appId).getOrElse {
-      logWarning(log"Application ID is not initialized yet.")
+      logWarning("Application ID is not initialized yet.")
       super.applicationId()
     }
 
@@ -235,7 +235,7 @@ private[spark] class StandaloneSchedulerBackend(
       case Some(c) =>
         c.requestTotalExecutors(resourceProfileToTotalExecs)
       case None =>
-        logWarning(log"Attempted to request executors before driver fully initialized.")
+        logWarning("Attempted to request executors before driver fully initialized.")
         Future.successful(false)
     }
   }
@@ -248,7 +248,7 @@ private[spark] class StandaloneSchedulerBackend(
     Option(client) match {
       case Some(c) => c.killExecutors(executorIds)
       case None =>
-        logWarning(log"Attempted to kill executors before driver fully initialized.")
+        logWarning("Attempted to kill executors before driver fully initialized.")
         Future.successful(false)
     }
   }
@@ -349,8 +349,8 @@ private[spark] class StandaloneSchedulerBackend(
             _executorRemoveDelay, TimeUnit.MILLISECONDS)
         } catch {
           case _: RejectedExecutionException if stopping.get() =>
-            logWarning(log"Skipping onDisconnected RemoveExecutor call " +
-              log"because the scheduler is stopping")
+            logWarning("Skipping onDisconnected RemoveExecutor call " +
+              "because the scheduler is stopping")
         }
       }
     }

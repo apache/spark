@@ -327,7 +327,7 @@ private[spark] object HadoopFSUtils extends Logging {
 
     if (missingFiles.nonEmpty) {
       logWarning(log"the following files were missing during file scan:\n  " +
-        log"${MDC(FILE_NAME, missingFiles.mkString("\n  "))}")
+        log"${MDC(PATHS, missingFiles.mkString("\n  "))}")
     }
 
     resolvedLeafStatuses.toImmutableArraySeq

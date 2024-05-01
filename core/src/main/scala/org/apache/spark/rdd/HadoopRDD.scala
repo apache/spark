@@ -257,7 +257,7 @@ class HadoopRDD[K, V](
       array
     } catch {
       case e: InvalidInputException if ignoreMissingFiles =>
-        logWarning(log"${MDC(JOB_CONFIG, jobConf.get(FileInputFormat.INPUT_DIR))} " +
+        logWarning(log"${MDC(PATH, jobConf.get(FileInputFormat.INPUT_DIR))} " +
           log"doesn't exist and no partitions returned from this path.", e)
         Array.empty[Partition]
       case e: IOException if e.getMessage.startsWith("Not a file:") =>

@@ -398,16 +398,16 @@ private[spark] object Utils
       // Decompress the file if it's a .tar or .tar.gz
       if (fileName.endsWith(".tar.gz") || fileName.endsWith(".tgz")) {
         logWarning(
-          log"Untarring behavior will be deprecated at spark.files and " +
-            log"SparkContext.addFile. Consider using spark.archives or SparkContext.addArchive " +
-            log"instead.")
+          "Untarring behavior will be deprecated at spark.files and " +
+            "SparkContext.addFile. Consider using spark.archives or SparkContext.addArchive " +
+            "instead.")
         logInfo("Untarring " + fileName)
         executeAndGetOutput(Seq("tar", "-xzf", fileName), targetDir)
       } else if (fileName.endsWith(".tar")) {
         logWarning(
-          log"Untarring behavior will be deprecated at spark.files and " +
-            log"SparkContext.addFile. Consider using spark.archives or SparkContext.addArchive " +
-            log"instead.")
+          "Untarring behavior will be deprecated at spark.files and " +
+            "SparkContext.addFile. Consider using spark.archives or SparkContext.addArchive " +
+            "instead.")
         logInfo("Untarring " + fileName)
         executeAndGetOutput(Seq("tar", "-xf", fileName), targetDir)
       }
@@ -801,7 +801,7 @@ private[spark] object Utils
       logWarning(
         log"The configured local directories are not expected to be URIs; " +
           log"however, got suspicious values [" +
-          log"${MDC(LogKeys.URI, uris.mkString(", "))}]. " +
+          log"${MDC(LogKeys.URIS, uris.mkString(", "))}]. " +
           log"Please check your configured local directories.")
     }
 
@@ -897,14 +897,14 @@ private[spark] object Utils
               log"resolves to a loopback address: ${MDC(HOST_PORT, address.getHostAddress)}; " +
               log"using ${MDC(HOST_PORT2, strippedAddress.getHostAddress)} instead (on interface " +
               log"${MDC(NETWORK_IF, ni.getName)})")
-            logWarning(log"Set SPARK_LOCAL_IP if you need to bind to another address")
+            logWarning("Set SPARK_LOCAL_IP if you need to bind to another address")
             return strippedAddress
           }
         }
         logWarning(log"Your hostname, ${MDC(HOST, InetAddress.getLocalHost.getHostName)}, " +
           log"resolves to a loopback address: ${MDC(HOST_PORT, address.getHostAddress)}, " +
           log"but we couldn't find any external IP address!")
-        logWarning(log"Set SPARK_LOCAL_IP if you need to bind to another address")
+        logWarning("Set SPARK_LOCAL_IP if you need to bind to another address")
       }
       address
     }
@@ -1818,13 +1818,13 @@ private[spark] object Utils
       try {
         process.destroyForcibly()
       } catch {
-        case NonFatal(e) => logWarning(log"Exception when attempting to kill process", e)
+        case NonFatal(e) => logWarning("Exception when attempting to kill process", e)
       }
       // Wait, again, although this really should return almost immediately
       if (process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)) {
         Option(process.exitValue())
       } else {
-        logWarning(log"Timed out waiting to forcibly kill process")
+        logWarning("Timed out waiting to forcibly kill process")
         None
       }
     }

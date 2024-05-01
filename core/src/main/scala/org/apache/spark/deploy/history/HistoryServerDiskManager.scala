@@ -316,7 +316,7 @@ private class HistoryServerDiskManager(
         val max = Utils.bytesToString(maxUsage)
         logWarning(log"Commit of application ${MDC(APP_ID, appId)} / " +
           log"${MDC(APP_ATTEMPT_ID, attemptId)} causes maximum disk usage to be " +
-          log"exceeded (${MDC(NUM_BYTES, current > max)}")
+          log"exceeded (${MDC(NUM_BYTES, current)} > ${MDC(NUM_BYTES_MAX, max)}")
       }
 
       updateApplicationStoreInfo(appId, attemptId, newSize)

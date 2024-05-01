@@ -48,7 +48,9 @@ object LogKeys {
   case object BATCH_TIMESTAMP extends LogKey
   case object BATCH_WRITE extends LogKey
   case object BLOCK_ID extends LogKey
+  case object BLOCK_IDS extends LogKey
   case object BLOCK_MANAGER_ID extends LogKey
+  case object BLOCK_MANAGER_IDS extends LogKey
   case object BLOCK_TYPE extends LogKey
   case object BOOT extends LogKey
   case object BROADCAST extends LogKey
@@ -132,6 +134,7 @@ object LogKeys {
   case object DEFAULT_COMPACT_INTERVAL extends LogKey
   case object DEFAULT_ISOLATION_LEVEL extends LogKey
   case object DEFAULT_NAME extends LogKey
+  case object DEFAULT_SCHEDULING_MODE extends LogKey
   case object DEFAULT_VALUE extends LogKey
   case object DELAY extends LogKey
   case object DELEGATE extends LogKey
@@ -248,7 +251,6 @@ object LogKeys {
   case object IS_NETWORK_REQUEST_DONE extends LogKey
   case object JAR_ENTRY extends LogKey
   case object JAR_MESSAGE extends LogKey
-  case object JOB_CONFIG extends LogKey
   case object JOB_ID extends LogKey
   case object JOIN_CONDITION extends LogKey
   case object JOIN_CONDITION_SUB_EXPR extends LogKey
@@ -331,6 +333,8 @@ object LogKeys {
   case object NUM_ADDED_PARTITIONS extends LogKey
   case object NUM_BIN extends LogKey
   case object NUM_BYTES extends LogKey
+  case object NUM_BYTES_CURRENT extends LogKey
+  case object NUM_BYTES_MAX extends LogKey
   case object NUM_BYTES_TO_WARN extends LogKey
   case object NUM_BYTES_USED extends LogKey
   case object NUM_CLASSES extends LogKey
@@ -477,7 +481,6 @@ object LogKeys {
   case object RULE_NUMBER_OF_RUNS extends LogKey
   case object RUN_ID extends LogKey
   case object SCHEDULER_POOL_NAME extends LogKey
-  case object SCHEDULING_MODE extends LogKey
   case object SCHEMA extends LogKey
   case object SCHEMA2 extends LogKey
   case object SERVICE_NAME extends LogKey
@@ -574,6 +577,7 @@ object LogKeys {
   case object UNTIL_OFFSET extends LogKey
   case object UPPER_BOUND extends LogKey
   case object URI extends LogKey
+  case object URIS extends LogKey
   case object USER_ID extends LogKey
   case object USER_NAME extends LogKey
   case object UUID extends LogKey

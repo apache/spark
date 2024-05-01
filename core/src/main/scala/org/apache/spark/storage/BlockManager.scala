@@ -1215,7 +1215,7 @@ private[spark] class BlockManager(
             // or we've refreshed the list of locations from the master, and have still
             // hit failures after trying locations from the refreshed list.
             logWarning(log"Failed to fetch remote block ${MDC(BLOCK_ID, blockId)} " +
-              log"from [${MDC(BLOCK_MANAGER_ID, locations.mkString(", "))}] " +
+              log"from [${MDC(BLOCK_MANAGER_IDS, locations.mkString(", "))}] " +
               log"after ${MDC(NUM_FAILURES, totalFailureCount)} fetch failures. " +
               log"Most recent failure cause:", e)
             return None

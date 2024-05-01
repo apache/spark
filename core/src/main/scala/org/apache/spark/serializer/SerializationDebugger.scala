@@ -44,7 +44,7 @@ private[spark] object SerializationDebugger extends Logging {
       } catch {
         case NonFatal(t) =>
           // Fall back to old exception
-          logWarning(log"Exception in serialization debugger", t)
+          logWarning("Exception in serialization debugger", t)
           e
       }
     } else {
@@ -370,7 +370,7 @@ private[spark] object SerializationDebugger extends Logging {
     new ObjectStreamClassReflection
   } catch {
     case e: Exception =>
-      logWarning(log"Cannot find private methods using reflection", e)
+      logWarning("Cannot find private methods using reflection", e)
       null
   }
 
