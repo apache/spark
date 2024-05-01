@@ -41,6 +41,8 @@ import java.io.OutputStream;
  */
 public abstract class BloomFilter {
 
+  protected BloomFilterStrategy strategy = BloomFilterStrategies.HASH_32;
+
   public enum Version {
     /**
      * {@code BloomFilter} binary format version 1. All values written in big-endian order:
@@ -224,6 +226,24 @@ public abstract class BloomFilter {
   }
 
   /**
+   * Returns the strategy that is used by the current implementation.
+   */
+  public BloomFilterStrategy currentStrategy(){
+    // Since the optimal strategy selection depends on the bit size, we can obtain it
+    // from the current bit size of the filter.
+    return optimalStrategy(this.bitSize());
+  }
+
+  /**
+   * Determines the most suitable strategy to use based on the bit size.
+   */
+  public static BloomFilterStrategy optimalStrategy(long numBits){
+    return numBits >= Integer.MAX_VALUE
+      ? BloomFilterStrategies.HASH_128
+      : BloomFilterStrategies.HASH_32;
+  }
+
+  /**
    * Creates a {@link BloomFilter} with the expected number of insertions and a default expected
    * false positive probability of 3%.
    *
@@ -264,6 +284,7 @@ public abstract class BloomFilter {
       throw new IllegalArgumentException("Number of bits must be positive");
     }
 
-    return new BloomFilterImpl(optimalNumOfHashFunctions(expectedNumItems, numBits), numBits);
+    return new BloomFilterImpl(optimalNumOfHashFunctions(expectedNumItems, numBits),
+      numBits, optimalStrategy(numBits));
   }
 }
