@@ -213,10 +213,10 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
   if (numPartitions.toLong * partitioner.numPartitions.toLong > (1L << 30)) {
     logWarning(
       log"The number of shuffle blocks " +
-        log"(${MDC(NUM_PARTITION, numPartitions.toLong * partitioner.numPartitions.toLong)})" +
+        log"(${MDC(NUM_PARTITIONS, numPartitions.toLong * partitioner.numPartitions.toLong)})" +
         log" for shuffleId ${MDC(SHUFFLE_ID, shuffleId)} " +
         log"for ${MDC(RDD_DESCRIPTION, _rdd)} " +
-        log"with ${MDC(NUM_PARTITION, numPartitions)} partitions" +
+        log"with ${MDC(NUM_PARTITIONS2, numPartitions)} partitions" +
         log" is possibly too large, which could cause the driver to crash with an out-of-memory" +
         log" error. Consider decreasing the number of partitions in this shuffle stage."
     )
