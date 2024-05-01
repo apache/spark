@@ -19,7 +19,7 @@ import json
 import importlib.resources
 
 # Note: Though we call them "error classes" here, the proper name is "error conditions",
-#   hence why the name of the JSON file different.
+#   hence why the name of the JSON file is different.
 #   For more information, please see: https://issues.apache.org/jira/browse/SPARK-46810
 #   This discrepancy will be resolved as part of: https://issues.apache.org/jira/browse/SPARK-47429
 ERROR_CLASSES_JSON = (
