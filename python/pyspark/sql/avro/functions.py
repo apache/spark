@@ -86,24 +86,18 @@ def from_avro(
             error_class="INVALID_TYPE",
             message_parameters={
                 "arg_name": "data",
-                "arg_type": ":class:`~pyspark.sql.Column` or str"
+                "arg_type": ":class:`~pyspark.sql.Column` or str",
             },
         )
     if not isinstance(jsonFormatSchema, str):
         raise PySparkTypeError(
             error_class="INVALID_TYPE",
-            message_parameters={
-                "arg_name": "jsonFormatSchema",
-                "arg_type": "str"
-            },
+            message_parameters={"arg_name": "jsonFormatSchema", "arg_type": "str"},
         )
     if options is not None and not isinstance(options, dict):
         raise PySparkTypeError(
             error_class="INVALID_TYPE",
-            message_parameters={
-                "arg_name": "options",
-                "arg_type": "dict, optional"
-            },
+            message_parameters={"arg_name": "options", "arg_type": "dict, optional"},
         )
 
     sc = get_active_spark_context()
@@ -162,16 +156,13 @@ def to_avro(data: "ColumnOrName", jsonFormatSchema: str = "") -> Column:
             error_class="INVALID_TYPE",
             message_parameters={
                 "arg_name": "data",
-                "arg_type": ":class:`~pyspark.sql.Column` or str"
+                "arg_type": ":class:`~pyspark.sql.Column` or str",
             },
         )
     if not isinstance(jsonFormatSchema, str):
         raise PySparkTypeError(
             error_class="INVALID_TYPE",
-            message_parameters={
-                "arg_name": "jsonFormatSchema",
-                "arg_type": "str"
-            },
+            message_parameters={"arg_name": "jsonFormatSchema", "arg_type": "str"},
         )
 
     sc = get_active_spark_context()

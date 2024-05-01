@@ -1547,10 +1547,7 @@ class FunctionsTestsMixin:
             self.check_error(
                 exception=from_avro_pes[i].exception,
                 error_class="INVALID_TYPE",
-                message_parameters={
-                    "arg_name": parameters[i],
-                    "arg_type": expected_type[i]
-                },
+                message_parameters={"arg_name": parameters[i], "arg_type": expected_type[i]},
             )
 
         # test to_avro type checks for each parameter
@@ -1565,6 +1562,7 @@ class FunctionsTestsMixin:
                 error_class="INVALID_TYPE",
                 message_parameters={"arg_name": parameters[i], "arg_type": expected_type[i]},
             )
+
 
 class FunctionsTests(ReusedSQLTestCase, FunctionsTestsMixin):
     pass
