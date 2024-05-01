@@ -64,7 +64,8 @@ class AdaptiveQueryExecSuite
 
   setupTestData()
 
-  private def runAdaptiveAndVerifyResult(query: String): (SparkPlan, SparkPlan) = {
+  private def runAdaptiveAndVerifyResult(query: String,
+      skipCheckAnswer: Boolean = false): (SparkPlan, SparkPlan) = {
     var finalPlanCnt = 0
     var hasMetricsEvent = false
     val listener = new SparkListener {
@@ -88,8 +89,10 @@ class AdaptiveQueryExecSuite
     assert(planBefore.toString.startsWith("AdaptiveSparkPlan isFinalPlan=false"))
     val result = dfAdaptive.collect()
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
-      val df = sql(query)
-      checkAnswer(df, result.toImmutableArraySeq)
+      if (!skipCheckAnswer) {
+        val df = sql(query)
+        checkAnswer(df, result.toImmutableArraySeq)
+      }
     }
     val planAfter = dfAdaptive.queryExecution.executedPlan
     assert(planAfter.toString.startsWith("AdaptiveSparkPlan isFinalPlan=true"))
