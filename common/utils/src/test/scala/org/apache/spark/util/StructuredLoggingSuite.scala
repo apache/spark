@@ -192,8 +192,8 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
       s"""
         {
           "ts": "<timestamp>",
-          "level": "$level",
           "msg": "This is a log message",
+          "level": "$level",
           "logger": "$className"
         }""")
   }
@@ -203,13 +203,13 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
       s"""
         {
           "ts": "<timestamp>",
-          "level": "$level",
           "msg": "This is a log message",
           "exception": {
             "class": "java.lang.RuntimeException",
             "msg": "OOM",
             "stacktrace": "<stacktrace>"
           },
+          "level": "$level",
           "logger": "$className"
         }""")
   }
@@ -219,11 +219,11 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
       s"""
         {
           "ts": "<timestamp>",
-          "level": "$level",
           "msg": "Lost executor 1.",
           "context": {
              "executor_id": "1"
           },
+          "level": "$level",
           "logger": "$className"
         }""")
     }
@@ -233,11 +233,11 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
       s"""
         {
           "ts": "<timestamp>",
-          "level": "$level",
           "msg": "Lost executor null.",
           "context": {
              "executor_id": null
           },
+          "level": "$level",
           "logger": "$className"
         }""")
   }
@@ -247,7 +247,6 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
       s"""
         {
           "ts": "<timestamp>",
-          "level": "$level",
           "msg": "Error in executor 1.",
           "context": {
             "executor_id": "1"
@@ -257,6 +256,7 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
             "msg": "OOM",
             "stacktrace": "<stacktrace>"
           },
+          "level": "$level",
           "logger": "$className"
         }""")
   }
@@ -266,11 +266,11 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
       s"""
         {
           "ts": "<timestamp>",
-          "level": "$level",
           "msg": "External system custom log message.",
           "context": {
               "custom_log_key": "External system custom log message."
           },
+          "level": "$level",
           "logger": "$className"
         }"""
     )
@@ -281,12 +281,12 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
       s"""
         {
           "ts": "<timestamp>",
-          "level": "$level",
           "msg": "Min Size: 2, Max Size: 4. Please double check.",
           "context": {
             "min_size": "2",
             "max_size": "4"
           },
+          "level": "$level",
           "logger": "$className"
         }""")
 
@@ -294,12 +294,12 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
       s"""
         {
           "ts": "<timestamp>",
-          "level": "$level",
           "msg": "Min Size: 2, Max Size: 4. Please double check.",
           "context": {
             "max_size": "4",
             "min_size": "2"
           },
+          "level": "$level",
           "logger": "$className"
         }""")
     assert(pattern1.r.matches(logOutput) || pattern2.r.matches(logOutput))
