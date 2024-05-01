@@ -84,9 +84,16 @@ object ResolveDefaultColumns extends QueryErrorsBase
     if (SQLConf.get.enableDefaultColumns) {
       val newFields: Seq[StructField] = tableSchema.fields.map { field =>
         if (field.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
-          val analyzed: Expression = analyze(field, statementType)
+          val defaultSql: String = if (field.dataType.isInstanceOf[VariantType]) {
+            // A variant's SQL/string representation is its JSON string which cannot be directly
+            // casted to a variant type. Thus, we lazily evaluate the default expression to avoid
+            // materializing a string representation of the variant.
+            field.metadata.getString(CURRENT_DEFAULT_COLUMN_METADATA_KEY)
+          } else {
+            analyze(field, statementType).sql
+          }
           val newMetadata: Metadata = new MetadataBuilder().withMetadata(field.metadata)
-            .putString(EXISTS_DEFAULT_COLUMN_METADATA_KEY, analyzed.sql).build()
+            .putString(EXISTS_DEFAULT_COLUMN_METADATA_KEY, defaultSql).build()
           field.copy(metadata = newMetadata)
         } else {
           field

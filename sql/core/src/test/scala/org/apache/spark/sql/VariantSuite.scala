@@ -445,4 +445,33 @@ class VariantSuite extends QueryTest with SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-48067: default variant columns works") {
+    withTable("t") {
+      sql("""create table t(
+        v1 variant default null,
+        v2 variant default parse_json(null),
+        v3 variant default cast(null as variant),
+        v4 variant default parse_json('1'),
+        v5 variant default parse_json('1'),
+        v6 variant default parse_json('{\"k\": \"v\"}'),
+        v7 variant default cast(5 as int),
+        v8 variant default cast('hello' as string)
+      ) using parquet""")
+      sql("""insert into t values(DEFAULT, DEFAULT, DEFAULT, DEFAULT, DEFAULT, DEFAULT, DEFAULT,
+        DEFAULT)""")
+
+      val expected = sql("""select
+        cast(null as variant),
+        parse_json(null),
+        cast(null as variant),
+        parse_json('1'),
+        parse_json('1'),
+        parse_json('{\"k\": \"v\"}'),
+        cast(cast(5 as int) as variant),
+        cast('hello' as variant)
+      """)
+      checkAnswer(sql("select * from t"), expected.collect())
+    }
+  }
 }
