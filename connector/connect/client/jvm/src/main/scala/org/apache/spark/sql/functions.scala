@@ -24,7 +24,6 @@ import scala.reflect.runtime.universe.{typeTag, TypeTag}
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.PrimitiveLongEncoder
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter._
 import org.apache.spark.sql.connect.common.UdfUtils
@@ -8149,8 +8148,8 @@ object functions {
    */
   def udaf[IN, BUF, OUT](
       agg: Aggregator[IN, BUF, OUT],
-      inputEncoder: AgnosticEncoder[IN]): UserDefinedFunction = {
-    UserDefinedAggregationFunction(agg, inputEncoder)
+      inputEncoder: Encoder[IN]): UserDefinedFunction = {
+    UserDefinedAggregationFunction(agg, encoderFor(inputEncoder))
   }
 
   /**
