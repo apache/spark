@@ -57,9 +57,6 @@ class StreamingQueryListenerBus(sparkSession: SparkSession) extends Logging {
       }))
       // Start the thread
       executionThread.get.start()
-      logInfo(
-        "Started the execution thread for StreamingQueryListenerBus with name: " +
-          executionThread.get.getName())
     }
   }
 
@@ -124,7 +121,8 @@ class StreamingQueryListenerBus(sparkSession: SparkSession) extends Logging {
       }
     } catch {
       case e: Exception =>
-        logWarning("Failed to handle the event, please add the listener again. ", e)
+        logWarning("StreamingQueryListenerBus Handler thread received exception, all client" +
+          " side listeners are removed and handler thread is terminated.", e)
         lock.synchronized {
           executionThread = Option.empty
           listeners.forEach(remove(_))
