@@ -85,7 +85,8 @@ jobs:
 
           # Checkout to branch-3.5 to use the tests in branch-3.5.
           cd ..
-          git clone --single-branch --branch branch-3.5 $GITHUB_SERVER_URL/$GITHUB_REPOSITORY
+          git clone --single-branch --branch branch-3.5 $GITHUB_SERVER_URL/$GITHUB_REPOSITORY spark-3.5
+          cd spark-3.5
 
           # Several tests related to catalog requires to run them sequencially, e.g., writing a table in a listener.
           # Run branch-3.5 tests
