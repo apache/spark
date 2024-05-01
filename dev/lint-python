@@ -84,7 +84,10 @@ function satisfies_min_version {
     local expected_version="$2"
     echo "$(
         "$PYTHON_EXECUTABLE" << EOM
-from setuptools.extern.packaging import version
+try:
+    from setuptools.extern.packaging import version
+except ModuleNotFoundError:
+    from packaging import version
 print(version.parse('$provided_version') >= version.parse('$expected_version'))
 EOM
     )"
