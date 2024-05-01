@@ -549,6 +549,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
           s"${Literal(kv._1, mapType.keyType).sql}, ${Literal(kv._2, mapType.valueType).sql}"
         }
       s"MAP(${keysAndValues.mkString(", ")})"
+    case (v: VariantVal, variantType: VariantType) => s"PARSE_JSON('${v.toJson(timeZoneId)}')"
     case _ => value.toString
   }
 }

@@ -456,22 +456,25 @@ class VariantSuite extends QueryTest with SharedSparkSession {
         v5 variant default parse_json('1'),
         v6 variant default parse_json('{\"k\": \"v\"}'),
         v7 variant default cast(5 as int),
-        v8 variant default cast('hello' as string)
+        v8 variant default cast('hello' as string),
+        v9 variant default parse_json(to_json(parse_json('{\"k\": \"v\"}')))
       ) using parquet""")
       sql("""insert into t values(DEFAULT, DEFAULT, DEFAULT, DEFAULT, DEFAULT, DEFAULT, DEFAULT,
-        DEFAULT)""")
+        DEFAULT, DEFAULT)""")
 
       val expected = sql("""select
-        cast(null as variant),
-        parse_json(null),
-        cast(null as variant),
-        parse_json('1'),
-        parse_json('1'),
-        parse_json('{\"k\": \"v\"}'),
-        cast(cast(5 as int) as variant),
-        cast('hello' as variant)
+        cast(null as variant) as v1,
+        parse_json(null) as v2,
+        cast(null as variant) as v3,
+        parse_json('1') as v4,
+        parse_json('1') as v5,
+        parse_json('{\"k\": \"v\"}') as v6,
+        cast(cast(5 as int) as variant) as v7,
+        cast('hello' as variant) as v8,
+        parse_json(to_json(parse_json('{\"k\": \"v\"}'))) as v9
       """)
-      checkAnswer(sql("select * from t"), expected.collect())
+      val actual = sql("select * from t")
+      checkAnswer(actual, expected.collect())
     }
   }
 }
