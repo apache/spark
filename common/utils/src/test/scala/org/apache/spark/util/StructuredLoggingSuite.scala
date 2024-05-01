@@ -176,7 +176,7 @@ trait LoggingSuiteBase
 }
 
 class StructuredLoggingSuite extends LoggingSuiteBase {
-  override def className: String = classOf[StructuredLoggingSuite].getName
+  override def className: String = classOf[StructuredLoggingSuite].getSimpleName
   override def logFilePath: String = "target/structured.log"
 
   private val jsonMapper = new ObjectMapper().registerModule(DefaultScalaModule)
