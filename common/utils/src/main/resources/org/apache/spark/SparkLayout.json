@@ -7,6 +7,10 @@
       "locale": "en_US"
     }
   },
+  "level": {
+    "$resolver": "level",
+    "field": "name"
+  },
   "msg": {
     "$resolver": "message",
     "stringified": true
@@ -48,10 +52,6 @@
         }
       }
     }
-  },
-  "level": {
-    "$resolver": "level",
-    "field": "name"
   },
   "logger": {
     "$resolver": "pattern",
