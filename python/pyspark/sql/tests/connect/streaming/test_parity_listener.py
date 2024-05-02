@@ -21,6 +21,7 @@ import time
 import pyspark.cloudpickle
 from pyspark.sql.tests.streaming.test_streaming_listener import StreamingListenerTestsMixin
 from pyspark.sql.streaming.listener import StreamingQueryListener
+from pyspark.sql.connect.streaming.query import StreamingQueryManager # EDGE
 from pyspark.sql.functions import count, lit
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
@@ -93,6 +94,14 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
 
             # Remove again to verify this won't throw any error
             self.spark.streams.removeListener(test_listener)
+
+    def test_server_side_listener_conf(self):
+        with self.sql_conf({"spark.sql.connect.streaming.serverSideListener.enabled": True}):
+            sqm = StreamingQueryManager(self.spark)
+            self.assertIsNone(sqm._sqlb)
+        with self.sql_conf({"spark.sql.connect.streaming.serverSideListener.enabled": False}):
+            sqm = StreamingQueryManager(self.spark)
+            self.assertIsNotNone(sqm._sqlb)
 
 
 if __name__ == "__main__":

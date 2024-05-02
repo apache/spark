@@ -180,7 +180,17 @@ class StreamingQuery:
 
 class StreamingQueryManager:
     def __init__(self, session: "SparkSession") -> None:
-        self._session = session
+        # This config is added temporarily for branch-3.5
+        # We move the implementation of StreamingQueryListener to the client side in 15.2 and above
+        # For transition, we allow server side listeners with below config on these branches
+        (use_server_side_listener_conf,) = session.client.get_config_with_defaults(
+            ("spark.sql.connect.streaming.serverSideListener.enabled", "false"),
+        )
+        use_server_side_listener = cast(str, use_server_side_listener_conf).lower() == "true"
+        if not use_server_side_listener:
+            self._sqlb = StreamingQueryListenerBus(self)
+        else:
+            self._sqlb = None
 
     @property
     def active(self) -> List[StreamingQuery]:
@@ -234,21 +244,33 @@ class StreamingQueryManager:
     resetTerminated.__doc__ = PySparkStreamingQueryManager.resetTerminated.__doc__
 
     def addListener(self, listener: StreamingQueryListener) -> None:
-        listener._init_listener_id()
-        cmd = pb2.StreamingQueryManagerCommand()
-        expr = proto.PythonUDF()
-        expr.command = CloudPickleSerializer().dumps(listener)
-        expr.python_ver = get_python_ver()
-        cmd.add_listener.python_listener_payload.CopyFrom(expr)
-        cmd.add_listener.id = listener._id
-        self._execute_streaming_query_manager_cmd(cmd)
+        if self._sqlb:  # Use client side listener
+            self._sqlb.append(listener)
+        else:  # Use server side listener
+            listener._init_listener_id()
+            cmd = pb2.StreamingQueryManagerCommand()
+            expr = proto.PythonUDF()
+            try:
+                expr.command = CloudPickleSerializer().dumps(listener)
+            except pickle.PicklingError:
+                raise PySparkPicklingError(
+                    error_class="STREAMING_CONNECT_SERIALIZATION_ERROR",
+                    message_parameters={"name": "addListener"},
+                )
+            expr.python_ver = get_python_ver()
+            cmd.add_listener.python_listener_payload.CopyFrom(expr)
+            cmd.add_listener.id = listener._id
+            self._execute_streaming_query_manager_cmd(cmd)
 
     addListener.__doc__ = PySparkStreamingQueryManager.addListener.__doc__
 
     def removeListener(self, listener: StreamingQueryListener) -> None:
-        cmd = pb2.StreamingQueryManagerCommand()
-        cmd.remove_listener.id = listener._id
-        self._execute_streaming_query_manager_cmd(cmd)
+        if self._sqlb:  # Use client side listener
+            self._sqlb.remove(listener)
+        else:  # Use server side listener
+            cmd = pb2.StreamingQueryManagerCommand()
+            cmd.remove_listener.id = listener._id
+            self._execute_streaming_query_manager_cmd(cmd)
 
     removeListener.__doc__ = PySparkStreamingQueryManager.removeListener.__doc__
 
