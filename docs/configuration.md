@@ -3673,10 +3673,12 @@ Spark uses [log4j](http://logging.apache.org/log4j/) for logging. You can config
 `log4j2.properties` file in the `conf` directory. One way to start is to copy the existing templates `log4j2.properties.template` or `log4j2.properties.pattern-layout-template` located there.
 
 ## Structured Logging
-To enable structured logging, you can use the `log4j2.properties.template` file as a starting point. This configuration uses the [JSON Template Layout](https://logging.apache.org/log4j/2.x/manual/json-template-layout.html) to log all the logs in JSON lines. This allows you to use Spark SQL to query the logs with the JSON data source. Also, all the MDC (Mapped Diagnostic Context) are displayed in the logs for easy debugging and searching.
+Starting from version 4.0.0, Spark has adopted the [JSON Template Layout](https://logging.apache.org/log4j/2.x/manual/json-template-layout.html) for logging, which outputs logs in JSON format. This format facilitates querying logs using Spark SQL with the JSON data source. Additionally, the logs include all Mapped Diagnostic Context (MDC) information for search and debugging purposes.
+
+To implement structured logging, start with the `log4j2.properties.template` file.
 
 ## Plain Text Logging
-If you prefer plain text logging, you can use the `log4j2.properties.pattern-layout-template` file as a starting point. This is the default configuration used by Spark before the 4.0.0 release. This configuration uses the [PatternLayout](https://logging.apache.org/log4j/2.x/manual/layouts.html#PatternLayout) to log all the logs in plain text. All the MDC are not displayed in the logs. In order to print it in the logs, you can update the patternLayout in the file. For example, you can add `%X{mdc.taskName}` to print the task name in the logs.
+If you prefer plain text logging, you can use the `log4j2.properties.pattern-layout-template` file as a starting point. This is the default configuration used by Spark before the 4.0.0 release. This configuration uses the [PatternLayout](https://logging.apache.org/log4j/2.x/manual/layouts.html#PatternLayout) to log all the logs in plain text. MDC information is not included by default. In order to print it in the logs, you can update the patternLayout in the file. For example, you can add `%X{mdc.taskName}` to print the task name in the logs.
 Moreover, you can use `spark.sparkContext.setLocalProperty(s"mdc.$name", "value")` to add user specific data into MDC.
 The key in MDC will be the string of `mdc.$name`.
 
