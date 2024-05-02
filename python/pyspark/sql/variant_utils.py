@@ -115,6 +115,13 @@ class VariantUtils:
     )
     EPOCH_NTZ = datetime.datetime(year=1970, month=1, day=1, hour=0, minute=0, second=0)
 
+    MAX_DECIMAL4_PRECISION = 9
+    MAX_DECIMAL4_VALUE = 10**MAX_DECIMAL4_PRECISION
+    MAX_DECIMAL8_PRECISION = 18
+    MAX_DECIMAL8_VALUE = 10**MAX_DECIMAL8_PRECISION
+    MAX_DECIMAL16_PRECISION = 38
+    MAX_DECIMAL16_VALUE = 10**MAX_DECIMAL16_PRECISION
+
     @classmethod
     def to_json(cls, value: bytes, metadata: bytes, zone_id: str = "UTC") -> str:
         """
@@ -278,14 +285,16 @@ class VariantUtils:
         unscaled = 0
         if type_info == VariantUtils.DECIMAL4:
             unscaled = cls._read_long(value, pos + 2, 4, signed=True)
-            cls._check_decimal(unscaled, scale, 1000000000, 9)
+            cls._check_decimal(unscaled, scale, cls.MAX_DECIMAL4_VALUE, cls.MAX_DECIMAL4_PRECISION)
         elif type_info == VariantUtils.DECIMAL8:
             unscaled = cls._read_long(value, pos + 2, 8, signed=True)
-            cls._check_decimal(unscaled, scale, 1000000000000000000, 18)
+            cls._check_decimal(unscaled, scale, cls.MAX_DECIMAL8_VALUE, cls.MAX_DECIMAL8_PRECISION)
         elif type_info == VariantUtils.DECIMAL16:
             cls._check_index(pos + 17, len(value))
             unscaled = int.from_bytes(value[pos + 2 : pos + 18], byteorder="little", signed=True)
-            cls._check_decimal(unscaled, scale, 100000000000000000000000000000000000000, 38)
+            cls._check_decimal(
+                unscaled, scale, cls.MAX_DECIMAL16_VALUE, cls.MAX_DECIMAL16_PRECISION
+            )
         else:
             raise PySparkValueError(error_class="MALFORMED_VARIANT", message_parameters={})
         return decimal.Decimal(unscaled) * (decimal.Decimal(10) ** (-scale))
