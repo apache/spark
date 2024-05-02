@@ -20,11 +20,7 @@ package org.apache.spark.util;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.util.Arrays;
 import java.util.List;
-
-import scala.collection.immutable.Seq;
-import scala.jdk.javaapi.CollectionConverters;
 
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.Level;
@@ -66,7 +62,6 @@ public abstract class LoggerSuiteBase {
   private final MDC[] mdcs = new MDC[] {
       MDC.of(LogKeys.EXECUTOR_ID$.MODULE$, "1"),
       MDC.of(LogKeys.REASON$.MODULE$, "the shuffle data is too large")};
-  private final Seq<MDC> mdcSeq = CollectionConverters.asScala(Arrays.asList(mdcs)).toSeq();
   private final String msgWithMDCs = "Lost executor {}, reason: {}";
 
   private final MDC executorIDMDCValueIsNull = MDC.of(LogKeys.EXECUTOR_ID$.MODULE$, null);
@@ -85,6 +80,9 @@ public abstract class LoggerSuiteBase {
 
   // test for message (with mdcs)
   abstract String expectedPatternForMsgWithMDCs(Level level);
+
+  // test for message (with mdcs and exception)
+  abstract String expectedPatternForMsgWithMDCsAndException(Level level);
 
   // test for message (with mdc - the value is null)
   abstract String expectedPatternForMsgWithMDCValueIsNull(Level level);
@@ -161,11 +159,11 @@ public abstract class LoggerSuiteBase {
 
   @Test
   public void testLoggerWithMDCs() {
-    Runnable errorFn = () -> logger().error(msgWithMDCs, mdcSeq);
-    Runnable warnFn = () -> logger().warn(msgWithMDCs, mdcSeq);
-    Runnable infoFn = () -> logger().info(msgWithMDCs, mdcSeq);
-    Runnable debugFn = () -> logger().debug(msgWithMDCs, mdcSeq);
-    Runnable traceFn = () -> logger().trace(msgWithMDCs, mdcSeq);
+    Runnable errorFn = () -> logger().error(msgWithMDCs, mdcs);
+    Runnable warnFn = () -> logger().warn(msgWithMDCs, mdcs);
+    Runnable infoFn = () -> logger().info(msgWithMDCs, mdcs);
+    Runnable debugFn = () -> logger().debug(msgWithMDCs, mdcs);
+    Runnable traceFn = () -> logger().trace(msgWithMDCs, mdcs);
     List.of(
         Pair.of(Level.ERROR, errorFn),
         Pair.of(Level.WARN, warnFn),
@@ -175,6 +173,29 @@ public abstract class LoggerSuiteBase {
       try {
         assert (captureLogOutput(pair.getRight()).matches(
             expectedPatternForMsgWithMDCs(pair.getLeft())));
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+    });
+  }
+
+  @Test
+  public void testLoggerWithMDCsAndException() {
+    Throwable exception = new RuntimeException("OOM");
+    Runnable errorFn = () -> logger().error(msgWithMDCs, exception, mdcs);
+    Runnable warnFn = () -> logger().warn(msgWithMDCs, exception, mdcs);
+    Runnable infoFn = () -> logger().info(msgWithMDCs, exception, mdcs);
+    Runnable debugFn = () -> logger().debug(msgWithMDCs, exception, mdcs);
+    Runnable traceFn = () -> logger().trace(msgWithMDCs, exception, mdcs);
+    List.of(
+        Pair.of(Level.ERROR, errorFn),
+        Pair.of(Level.WARN, warnFn),
+        Pair.of(Level.INFO, infoFn),
+        Pair.of(Level.DEBUG, debugFn),
+        Pair.of(Level.TRACE, traceFn)).forEach(pair -> {
+      try {
+        assert (captureLogOutput(pair.getRight()).matches(
+            expectedPatternForMsgWithMDCsAndException(pair.getLeft())));
       } catch (IOException e) {
         throw new RuntimeException(e);
       }

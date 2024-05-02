@@ -21,13 +21,13 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Consumer;
 
-import scala.collection.immutable.Seq;
-import scala.jdk.javaapi.CollectionConverters;
-
 import org.apache.logging.log4j.CloseableThreadContext;
+import org.apache.logging.log4j.message.MessageFactory;
+import org.apache.logging.log4j.message.ParameterizedMessageFactory;
 
 public class Logger {
 
+  private static final MessageFactory MESSAGE_FACTORY = ParameterizedMessageFactory.INSTANCE;
   private final org.slf4j.Logger slf4jLogger;
 
   Logger(org.slf4j.Logger slf4jLogger) {
@@ -35,190 +35,150 @@ public class Logger {
   }
 
   public void error(String msg) {
-    if (slf4jLogger.isErrorEnabled()) {
-      slf4jLogger.error(msg);
-    }
+    slf4jLogger.error(msg);
   }
 
   public void error(String msg, Throwable throwable) {
-    if (slf4jLogger.isErrorEnabled()) {
-      slf4jLogger.error(msg, throwable);
-    }
+    slf4jLogger.error(msg, throwable);
   }
 
   public void error(String msg, MDC... mdcs) {
-    if (slf4jLogger.isErrorEnabled()) {
-      if (mdcs.length == 0) {
-        slf4jLogger.error(msg);
-      } else {
-        withLogContext(msg, mdcs, mwa -> slf4jLogger.error(mwa.message(), mwa.args()));
-      }
+    if (mdcs == null || mdcs.length == 0) {
+      slf4jLogger.error(msg);
+    } else {
+      withLogContext(msg, mdcs, null, mt -> slf4jLogger.error(mt.message));
     }
   }
 
-  public void error(String msg, Seq<MDC> mdcs) {
-    if (slf4jLogger.isErrorEnabled()) {
-      if (mdcs.isEmpty()) {
-        slf4jLogger.error(msg);
-      } else {
-        withLogContext(msg, mdcs, mwa -> slf4jLogger.error(mwa.message(), mwa.args()));
-      }
+  public void error(String msg, Throwable throwable, MDC... mdcs) {
+    if (mdcs == null || mdcs.length == 0) {
+      slf4jLogger.error(msg, throwable);
+    } else {
+      withLogContext(msg, mdcs, throwable, mt -> slf4jLogger.error(mt.message, mt.throwable));
     }
   }
 
   public void warn(String msg) {
-    if (slf4jLogger.isWarnEnabled()) {
-      slf4jLogger.warn(msg);
-    }
+    slf4jLogger.warn(msg);
   }
 
   public void warn(String msg, Throwable throwable) {
-    if (slf4jLogger.isWarnEnabled()) {
-      slf4jLogger.warn(msg, throwable);
-    }
+    slf4jLogger.warn(msg, throwable);
   }
 
   public void warn(String msg, MDC... mdcs) {
-    if (slf4jLogger.isWarnEnabled()) {
-      if (mdcs.length == 0) {
-        slf4jLogger.warn(msg);
-      } else {
-        withLogContext(msg, mdcs, mwa -> slf4jLogger.warn(mwa.message(), mwa.args()));
-      }
+    if (mdcs == null || mdcs.length == 0) {
+      slf4jLogger.warn(msg);
+    } else {
+      withLogContext(msg, mdcs, null, mt -> slf4jLogger.warn(mt.message));
     }
   }
 
-  public void warn(String msg, Seq<MDC> mdcs) {
-    if (slf4jLogger.isWarnEnabled()) {
-      if (mdcs.isEmpty()) {
-        slf4jLogger.warn(msg);
-      } else {
-        withLogContext(msg, mdcs, mwa -> slf4jLogger.warn(mwa.message(), mwa.args()));
-      }
+  public void warn(String msg, Throwable throwable, MDC... mdcs) {
+    if (mdcs == null || mdcs.length == 0) {
+      slf4jLogger.warn(msg);
+    } else {
+      withLogContext(msg, mdcs, throwable, mt -> slf4jLogger.warn(mt.message, mt.throwable));
     }
   }
 
   public void info(String msg) {
-    if (slf4jLogger.isInfoEnabled()) {
-      slf4jLogger.info(msg);
-    }
+    slf4jLogger.info(msg);
   }
 
   public void info(String msg, Throwable throwable) {
-    if (slf4jLogger.isInfoEnabled()) {
-      slf4jLogger.info(msg, throwable);
-    }
+    slf4jLogger.info(msg, throwable);
   }
 
   public void info(String msg, MDC... mdcs) {
-    if (slf4jLogger.isInfoEnabled()) {
-      if (mdcs.length == 0) {
-        slf4jLogger.info(msg);
-      } else {
-        withLogContext(msg, mdcs, mwa -> slf4jLogger.info(mwa.message(), mwa.args()));
-      }
+    if (mdcs == null || mdcs.length == 0) {
+      slf4jLogger.info(msg);
+    } else {
+      withLogContext(msg, mdcs, null, mt -> slf4jLogger.info(mt.message));
     }
   }
 
-  public void info(String msg, Seq<MDC> mdcs) {
-    if (slf4jLogger.isInfoEnabled()) {
-      if (mdcs.isEmpty()) {
-        slf4jLogger.info(msg);
-      } else {
-        withLogContext(msg, mdcs, mwa -> slf4jLogger.info(mwa.message(), mwa.args()));
-      }
+  public void info(String msg, Throwable throwable, MDC... mdcs) {
+    if (mdcs == null || mdcs.length == 0) {
+      slf4jLogger.info(msg);
+    } else {
+      withLogContext(msg, mdcs, throwable, mt -> slf4jLogger.info(mt.message, mt.throwable));
     }
   }
 
   public void debug(String msg) {
-    if (slf4jLogger.isDebugEnabled()) {
-      slf4jLogger.debug(msg);
-    }
+    slf4jLogger.debug(msg);
   }
 
   public void debug(String msg, Throwable throwable) {
-    if (slf4jLogger.isDebugEnabled()) {
-      slf4jLogger.debug(msg, throwable);
-    }
+    slf4jLogger.debug(msg, throwable);
   }
 
   public void debug(String msg, MDC... mdcs) {
-    if (slf4jLogger.isDebugEnabled()) {
-      if (mdcs.length == 0) {
-        slf4jLogger.debug(msg);
-      } else {
-        withLogContext(msg, mdcs, mwa -> slf4jLogger.debug(mwa.message(), mwa.args()));
-      }
+    if (mdcs == null || mdcs.length == 0) {
+      slf4jLogger.debug(msg);
+    } else {
+      withLogContext(msg, mdcs, null, mt -> slf4jLogger.debug(mt.message));
     }
   }
 
-  public void debug(String msg, Seq<MDC> mdcs) {
-    if (slf4jLogger.isDebugEnabled()) {
-      if (mdcs.isEmpty()) {
-        slf4jLogger.debug(msg);
-      } else {
-        withLogContext(msg, mdcs, mwa -> slf4jLogger.debug(mwa.message(), mwa.args()));
-      }
+  public void debug(String msg, Throwable throwable, MDC... mdcs) {
+    if (mdcs == null || mdcs.length == 0) {
+      slf4jLogger.debug(msg);
+    } else {
+      withLogContext(msg, mdcs, throwable, mt -> slf4jLogger.debug(mt.message, mt.throwable));
     }
   }
 
   public void trace(String msg) {
-    if (slf4jLogger.isTraceEnabled()) {
-      slf4jLogger.trace(msg);
-    }
+    slf4jLogger.trace(msg);
   }
 
   public void trace(String msg, Throwable throwable) {
-    if (slf4jLogger.isTraceEnabled()) {
-      slf4jLogger.trace(msg, throwable);
-    }
+    slf4jLogger.trace(msg, throwable);
   }
 
   public void trace(String msg, MDC... mdcs) {
-    if (slf4jLogger.isTraceEnabled()) {
-      if (mdcs.length == 0) {
-        slf4jLogger.trace(msg);
-      } else {
-        withLogContext(msg, mdcs, mwa -> slf4jLogger.trace(mwa.message(), mwa.args()));
-      }
+    if (mdcs == null || mdcs.length == 0) {
+      slf4jLogger.trace(msg);
+    } else {
+      withLogContext(msg, mdcs, null, mt -> slf4jLogger.trace(mt.message));
     }
   }
 
-  public void trace(String msg, Seq<MDC> mdcs) {
-    if (slf4jLogger.isTraceEnabled()) {
-      if (mdcs.isEmpty()) {
-        slf4jLogger.trace(msg);
-      } else {
-        withLogContext(msg, mdcs, mwa -> slf4jLogger.trace(mwa.message(), mwa.args()));
-      }
+  public void trace(String msg, Throwable throwable, MDC... mdcs) {
+    if (mdcs == null || mdcs.length == 0) {
+      slf4jLogger.trace(msg);
+    } else {
+      withLogContext(msg, mdcs, throwable, mt -> slf4jLogger.trace(mt.message, mt.throwable));
     }
   }
 
   private void withLogContext(
-      String message,
+      String pattern,
       MDC[] mdcs,
-      Consumer<MessageWithArgs> func) {
+      Throwable throwable,
+      Consumer<MessageThrowable> func) {
     Map<String, String> context = new HashMap<>();
     Object[] args = new Object[mdcs.length];
     for (int index = 0; index < mdcs.length; index++) {
       MDC mdc = mdcs[index];
       String value = (mdc.value() != null) ? mdc.value().toString() : null;
-      context.put(mdc.key().name(), value);
+      if (Logging$.MODULE$.isStructuredLoggingEnabled()) {
+        context.put(mdc.key().name(), value);
+      }
       args[index] = value;
     }
-    MessageWithArgs messageWithArgs = new MessageWithArgs(message, args);
+    MessageThrowable messageThrowable = MessageThrowable.of(
+        MESSAGE_FACTORY.newMessage(pattern, args).getFormattedMessage(), throwable);
     try (CloseableThreadContext.Instance ignored = CloseableThreadContext.putAll(context)) {
-      func.accept(messageWithArgs);
+      func.accept(messageThrowable);
     }
   }
 
-  private void withLogContext(
-      String message,
-      Seq<MDC> mdcs,
-      Consumer<MessageWithArgs> func) {
-    withLogContext(message,
-      CollectionConverters.asJava(mdcs).toArray(new MDC[mdcs.size()]), func);
+  private record MessageThrowable(String message, Throwable throwable) {
+    static MessageThrowable of(String message, Throwable throwable) {
+      return new MessageThrowable(message, throwable);
+    }
   }
-
-  private record MessageWithArgs(String message, Object[] args) { }
 }

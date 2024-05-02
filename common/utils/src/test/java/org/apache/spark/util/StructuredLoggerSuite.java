@@ -114,6 +114,26 @@ public class StructuredLoggerSuite extends LoggerSuiteBase {
   }
 
   @Override
+  String expectedPatternForMsgWithMDCsAndException(Level level) {
+    return compactAndToRegexPattern(level, """
+      {
+        "ts": "<timestamp>",
+        "level": "<level>",
+        "msg": "Lost executor 1, reason: the shuffle data is too large",
+        "context": {
+          "executor_id": "1",
+          "reason": "the shuffle data is too large"
+        },
+        "exception": {
+          "class": "java.lang.RuntimeException",
+          "msg": "OOM",
+          "stacktrace": "<stacktrace>"
+        },
+        "logger": "<className>"
+      }""");
+  }
+
+  @Override
   String expectedPatternForMsgWithMDCValueIsNull(Level level) {
     return compactAndToRegexPattern(level, """
       {
