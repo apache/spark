@@ -73,7 +73,7 @@
     </dependency>
     <dependency>
       <groupId>com.lihaoyi</groupId>
-      <artifactId>ammonite_2.13.13</artifactId>
+      <artifactId>ammonite_${scala.version}</artifactId>
       <version>${ammonite.version}</version>
       <scope>provided</scope>
     </dependency>
