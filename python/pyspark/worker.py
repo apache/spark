@@ -68,6 +68,8 @@ from pyspark.sql.types import (
     _create_row,
     _parse_datatype_json_string,
 )
+from pyspark.sql.worker.analyze_udtf import call_udtf_analyze_method
+from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult
 from pyspark.util import fail_on_stopiteration, handle_worker_exception
 from pyspark import shuffle
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError
@@ -901,7 +903,12 @@ def read_udtf(pickleSer, infile, eval_type):
         else:
             args_offsets.append(offset)
     num_partition_child_indexes = read_int(infile)
-    partition_child_indexes = [read_int(infile) for i in range(num_partition_child_indexes)]
+    if num_partition_child_indexes == -1:
+        partition_child_indexes = []
+        return_result_of_analyze_method = True
+    else:
+        partition_child_indexes = [read_int(infile) for i in range(num_partition_child_indexes)]
+        return_result_of_analyze_method = False
     has_pickled_analyze_result = read_bool(infile)
     if has_pickled_analyze_result:
         pickled_analyze_result = pickleSer._read_with_length(infile)
@@ -942,7 +949,7 @@ def read_udtf(pickleSer, infile, eval_type):
                 return prev_handler(dataclasses.replace(pickled_analyze_result))
 
             handler = construct_udtf
-    elif len(udtf_init_args.args) > 1:
+    elif len(udtf_init_args.args) > 1 and not return_result_of_analyze_method:
         raise PySparkRuntimeError(
             error_class="UDTF_CONSTRUCTOR_INVALID_NO_ANALYZE_METHOD",
             message_parameters={"name": udtf_name},
@@ -1054,10 +1061,73 @@ def read_udtf(pickleSer, infile, eval_type):
             else:
                 return arg
 
+    class UDTFCallAnalyzeMethod:
+        def __init__(self, handler: Any):
+            self.handler = handler
+            pass
+
+        def eval(self, *args, **kwargs) -> Iterator:
+            # We expect that the UDTF call provides a list of positional STRUCT values indicating
+            # the AnalyzeArgument values to pass to the 'analyze' method. No keyword arguments
+            # should be present.
+            assert len(kwargs) == 0
+            analyze_args: List[AnalyzeArgument] = []
+            analyze_kwargs: Dict[str, AnalyzeArgument] = {}
+            for arg in args:
+                data_type = _parse_datatype_json_string(arg.data_type)
+                is_constant_expression = arg.is_constant_expression
+                is_table = arg.is_table
+                arg_keyword = arg.arg_keyword
+                value = arg.value if is_constant_expression else None
+                analyze_argument = AnalyzeArgument(
+                    dataType=data_type,
+                    value=value,
+                    isTable=is_table,
+                    isConstantExpression=is_constant_expression,
+                )
+                if arg_keyword is None:
+                    analyze_args.append(analyze_argument)
+                else:
+                    analyze_kwargs[arg_keyword] = analyze_argument
+            result: AnalyzeResult = call_udtf_analyze_method(
+                udtf_name, self.handler.analyze, analyze_args, analyze_kwargs
+            )
+            partition_by = []
+            for col in result.partitionBy:
+                partition_by.append(f"""{{
+                  "name": "{col.name}"
+                }}""")
+            order_by = []
+            for col in result.orderBy:
+                order_by.append(f"""{{
+                  "name": "{col.name}",
+                  "ascending": "{col.ascending}",
+                  "overrideNullsFirst": "{col.overrideNullsFirst}",
+                }}""")
+            select = []
+            for col in result.select:
+                select.append(f"""{{
+                  "name": "{col.name}",
+                  "alias": "{col.alias}",
+                }}""")
+            result_json = f"""{{
+                  "schema": {result.schema.json()},
+                  "withSinglePartition": "{result.withSinglePartition}",
+                  "partitionBy": {partition_by},
+                  "orderBy": {order_by},
+                  "select": {select}
+                }}"""
+            reformatted = json.dumps(json.loads(result_json), indent=4)
+            yield (
+                reformatted,
+            )
+
     # Instantiate the UDTF class.
     try:
         if len(partition_child_indexes) > 0:
             udtf = UDTFWithPartitions(handler, partition_child_indexes)
+        elif return_result_of_analyze_method:
+            udtf = UDTFCallAnalyzeMethod(handler)
         else:
             udtf = handler()
     except Exception as e:

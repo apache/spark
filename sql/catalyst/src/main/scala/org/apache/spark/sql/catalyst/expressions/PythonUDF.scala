@@ -209,10 +209,6 @@ case class PythonUDTFPartitionColumnIndexes(partitionChildIndexes: Seq[Int])
 
 /**
  * A placeholder of a polymorphic Python table-valued function.
- *
- * If [[returnResultOfAnalyzeMethod]] is set to true, the Python UDTF will return the result of
- * the `analyze` method instead of the result of the `eval` method. This can be useful to run this
- * `analyze` method on Spark executors instead of drivers.
  */
 case class UnresolvedPolymorphicPythonUDTF(
     name: String,
@@ -261,14 +257,12 @@ case class UnresolvedPolymorphicPythonUDTF(
  *                                 projection to evaluate these expressions and return the result to
  *                                 the UDTF. The UDTF then receives one input column for each
  *                                 expression in the list, in the order they are listed.
- * @param partitionByStrings String representations of the partitioning expressions before parsing.
- * @param orderByStrings String representations of the ordering expressions before parsing.
- * @param selectedInputStrings String representations of the selected input expressions before
- *                             parsing.
- * @param pickledAnalyzeResult If non-empty, this is the pickled 'AnalyzeResult' instance from the
- *                             UDTF, which contains all metadata returned by the Python UDTF
- *                             'analyze' method including the result schema of the function call as
- *                             well as optional other information
+ * @param pickledAnalyzeResult this is the pickled 'AnalyzeResult' instance from the UDTF, which
+ *                             contains all metadata returned by the Python UDTF 'analyze' method
+ *                             including the result schema of the function call as well as optional
+ *                             other information
+ * @param returnResultOfAnalyzeMethod true if the 'analyze' method should be called on the executors
+ *                                    instead of the driver
  */
 case class PythonUDTFAnalyzeResult(
     schema: StructType,
@@ -276,9 +270,6 @@ case class PythonUDTFAnalyzeResult(
     partitionByExpressions: Seq[Expression],
     orderByExpressions: Seq[SortOrder],
     selectedInputExpressions: Seq[PythonUDTFSelectedExpression],
-    partitionByStrings: Array[String],
-    orderByStrings: Array[String],
-    selectedInputStrings: Array[String],
     pickledAnalyzeResult: Array[Byte]) {
   /**
    * Applies the requested properties from this analysis result to the target TABLE argument
@@ -379,10 +370,5 @@ case class PrettyPythonUDF(
 object AnalyzePythonUDTF {
   def schema: StructType =
     new StructType()
-      .add("schema", StringType)
-      .add("withSinglePartition", BooleanType)
-      .add("partitionByExpressions", ArrayType(StringType))
-      .add("orderByExpressions", ArrayType(StringType))
-      .add("selectedInputExpressions", ArrayType(StringType))
-      .add("pickledAnalyzeResult", ArrayType(ByteType))
+      .add("metadata", StringType)
 }

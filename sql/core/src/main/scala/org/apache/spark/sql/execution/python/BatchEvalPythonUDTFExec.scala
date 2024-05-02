@@ -31,12 +31,13 @@ import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
  * A physical plan that evaluates a [[PythonUDTF]]. This is similar to [[BatchEvalPythonExec]].
  *
  * @param udtf the user-defined Python function
+ * @param resultType indicates the names and types of the columns of the UDTF output table.
  * @param requiredChildOutput the required output of the child plan. It's used for omitting data
  *                            generation that will be discarded next by a projection.
  * @param resultAttrs the output schema of the Python UDTF.
@@ -44,6 +45,7 @@ import org.apache.spark.sql.types.StructType
  */
 case class BatchEvalPythonUDTFExec(
     udtf: PythonUDTF,
+    resultType: DataType,
     requiredChildOutput: Seq[Attribute],
     resultAttrs: Seq[Attribute],
     child: SparkPlan)
@@ -73,7 +75,6 @@ case class BatchEvalPythonUDTFExec(
     val unpickle = new Unpickler
 
     // The return type of a UDTF is an array of struct.
-    val resultType = udtf.dataType
     val fromJava = EvaluatePython.makeFromJava(resultType)
 
     outputIterator.flatMap { pickedResult =>
@@ -128,6 +129,9 @@ object PythonUDTFRunner {
     // Write the zero-based indexes of the projected results of all PARTITION BY expressions within
     // the TABLE argument of the Python UDTF call, if applicable.
     udtf.pythonUDTFPartitionColumnIndexes match {
+      case _ if udtf.returnResultOfAnalyzeMethod =>
+        // The UDTF should return the result of the "analyze" method as a single-row output table.
+        dataOut.writeInt(-1)
       case Some(partitionColumnIndexes) =>
         dataOut.writeInt(partitionColumnIndexes.partitionChildIndexes.length)
         assert(partitionColumnIndexes.partitionChildIndexes.nonEmpty)

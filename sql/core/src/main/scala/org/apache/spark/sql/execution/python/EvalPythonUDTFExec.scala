@@ -92,7 +92,7 @@ trait EvalPythonUDTFExec extends UnaryExecNode {
       // Add rows to the queue to join later with the result.
       // Also keep track of the number rows added to the queue.
       // This is needed to process extra output rows from the `terminate()` call of the UDTF.
-      count = 0L
+      var count = 0L
       val projectedRowIter = iter.map { inputRow =>
         queue.add(inputRow.asInstanceOf[UnsafeRow])
         count += 1
@@ -101,48 +101,38 @@ trait EvalPythonUDTFExec extends UnaryExecNode {
 
       val outputRowIterator = evaluate(argMetas, projectedRowIter, schema, context)
 
-      consumeEvaluateResult(outputRowIterator, queue)
-
-    }
-  }
-
-  /** This is the count of rows added to the queue and consumed later. */
-  var count = 0L
-
-  protected def consumeEvaluateResult(
-      outputRowIterator: Iterator[Iterator[InternalRow]],
-      queue: HybridRowQueue): Iterator[InternalRow] = {
-    val pruneChildForResult: InternalRow => InternalRow =
-      if (child.outputSet == AttributeSet(requiredChildOutput)) {
-        identity
-      } else {
-        UnsafeProjection.create(requiredChildOutput, child.output)
-      }
-
-    val joined = new JoinedRow
-    val nullRow = new GenericInternalRow(udtf.elementSchema.length)
-    val resultProj = UnsafeProjection.create(output, output)
-
-    outputRowIterator.flatMap { outputRows =>
-      // If `count` is greater than zero, it means there are remaining input rows in the queue.
-      // In this case, the output rows of the UDTF are joined with the corresponding input row
-      // in the queue.
-      if (count > 0) {
-        val left = queue.remove()
-        count -= 1
-        joined.withLeft(pruneChildForResult(left))
-      }
-      // If `count` is zero, it means all input rows have been consumed. Any additional rows
-      // from the UDTF are from the `terminate()` call. We leave the left side as the last
-      // element of its child output to keep it consistent with the Generate implementation
-      // and Hive UDTFs.
-      outputRows.map { r =>
-        // When the UDTF's result is None, such as `def eval(): yield`,
-        // we join it with a null row to avoid NullPointerException.
-        if (r == null) {
-          resultProj(joined.withRight(nullRow))
+      val pruneChildForResult: InternalRow => InternalRow =
+        if (child.outputSet == AttributeSet(requiredChildOutput)) {
+          identity
         } else {
-          resultProj(joined.withRight(r))
+          UnsafeProjection.create(requiredChildOutput, child.output)
+        }
+
+      val joined = new JoinedRow
+      val nullRow = new GenericInternalRow(udtf.elementSchema.length)
+      val resultProj = UnsafeProjection.create(output, output)
+
+      outputRowIterator.flatMap { outputRows =>
+        // If `count` is greater than zero, it means there are remaining input rows in the queue.
+        // In this case, the output rows of the UDTF are joined with the corresponding input row
+        // in the queue.
+        if (count > 0) {
+          val left = queue.remove()
+          count -= 1
+          joined.withLeft(pruneChildForResult(left))
+        }
+        // If `count` is zero, it means all input rows have been consumed. Any additional rows
+        // from the UDTF are from the `terminate()` call. We leave the left side as the last
+        // element of its child output to keep it consistent with the Generate implementation
+        // and Hive UDTFs.
+        outputRows.map { r =>
+          // When the UDTF's result is None, such as `def eval(): yield`,
+          // we join it with a null row to avoid NullPointerException.
+          if (r == null) {
+            resultProj(joined.withRight(nullRow))
+          } else {
+            resultProj(joined.withRight(r))
+          }
         }
       }
     }

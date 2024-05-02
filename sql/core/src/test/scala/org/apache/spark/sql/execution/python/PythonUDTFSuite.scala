@@ -21,10 +21,10 @@ import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Expression, FunctionTableSubqueryArgumentExpression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, OneRowRelation, Project, Repartition, RepartitionByExpression, Sort, SubqueryAlias}
-import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.functions.{lit, struct}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types._
 
 class PythonUDTFSuite extends QueryTest with SharedSparkSession {
 
@@ -368,13 +368,34 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
     assume(shouldTestPythonUDFs)
     val pythonUDTFRunAnalyzeOnExecutors: UserDefinedPythonTableFunction =
       pythonUDTFForwardStateFromAnalyze.copy(returnResultOfAnalyzeMethod = true)
-    val df = pythonUDTFRunAnalyzeOnExecutors(spark, lit("abc"))
-      .select("schema", "withSinglePartition", "partitionByExpressions", "orderByExpressions")
+    val df = pythonUDTFRunAnalyzeOnExecutors(
+      spark,
+      struct(
+        lit(StringType.json).as("data_type"),
+        lit("abc").as("value"),
+        lit(true).as("is_constant_expression"),
+        lit(false).as("is_table"),
+        lit(null).as("arg_keyword")
+      ))
     checkAnswer(df, Seq(Row(
-      """{"type":"struct",""" +
-        """"fields":[{"name":"_0","type":"string","nullable":true,"metadata":{}}]}""",
-      false,
-      Seq.empty,
-      Seq.empty)))
+      """
+        |{
+        |    "schema": {
+        |        "fields": [
+        |            {
+        |                "metadata": {},
+        |                "name": "result",
+        |                "nullable": true,
+        |                "type": "string"
+        |            }
+        |        ],
+        |        "type": "struct"
+        |    },
+        |    "withSinglePartition": "False",
+        |    "partitionBy": [],
+        |    "orderBy": [],
+        |    "select": []
+        |}""".stripMargin)))
+
   }
 }

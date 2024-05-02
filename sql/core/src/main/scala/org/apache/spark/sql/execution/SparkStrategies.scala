@@ -45,6 +45,7 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.MemoryPlan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.types.ArrayType
 
 /**
  * Converts a logical plan into zero or more SparkPlans.  This API is exposed for experimenting
@@ -814,13 +815,15 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case BatchEvalPython(udfs, output, child) =>
         BatchEvalPythonExec(udfs, output, planLater(child)) :: Nil
       case BatchEvalPythonUDTF(udtf, requiredChildOutput, resultAttrs, child) =>
-        BatchEvalPythonUDTFExec(udtf, requiredChildOutput, resultAttrs, planLater(child)) :: Nil
+        BatchEvalPythonUDTFExec(
+          udtf, udtf.dataType, requiredChildOutput, resultAttrs, planLater(child)) :: Nil
       case ArrowEvalPythonUDTF(udtf, requiredChildOutput, resultAttrs, child, evalType) =>
         ArrowEvalPythonUDTFExec(
           udtf, requiredChildOutput, resultAttrs, planLater(child), evalType) :: Nil
       case AnalyzePythonUDTFOnExecutors(udtf, requiredChildOutput, resultAttrs, child) =>
-        AnalyzePythonUDTFOnExecutorsExec(
-          udtf, requiredChildOutput, resultAttrs, planLater(child)) :: Nil
+        BatchEvalPythonUDTFExec(
+          udtf, ArrayType(AnalyzePythonUDTF.schema), requiredChildOutput, resultAttrs,
+          planLater(child)) :: Nil
       case _ =>
         Nil
     }
