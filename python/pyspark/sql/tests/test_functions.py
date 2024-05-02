@@ -1531,7 +1531,7 @@ class FunctionsTestsMixin:
 
     def test_avro_type_check(self):
         parameters = ["data", "jsonFormatSchema", "options"]
-        expected_type = [":class:`~pyspark.sql.Column` or str", "str", "dict, optional"]
+        expected_type = ["pyspark.sql.Column or str", "str", "dict, optional"]
         dummyDF = self.spark.createDataFrame([Row(a=i, b=i) for i in range(5)])
 
         # test from_avro type checks for each parameter

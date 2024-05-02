@@ -86,7 +86,7 @@ def from_avro(
             error_class="INVALID_TYPE",
             message_parameters={
                 "arg_name": "data",
-                "arg_type": ":class:`~pyspark.sql.Column` or str",
+                "arg_type": "pyspark.sql.Column or str",
             },
         )
     if not isinstance(jsonFormatSchema, str):
@@ -156,7 +156,7 @@ def to_avro(data: "ColumnOrName", jsonFormatSchema: str = "") -> Column:
             error_class="INVALID_TYPE",
             message_parameters={
                 "arg_name": "data",
-                "arg_type": ":class:`~pyspark.sql.Column` or str",
+                "arg_type": "pyspark.sql.Column or str",
             },
         )
     if not isinstance(jsonFormatSchema, str):
