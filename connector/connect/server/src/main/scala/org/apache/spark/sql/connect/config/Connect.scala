@@ -291,4 +291,13 @@ object Connect {
       .version("4.0.0")
       .booleanConf
       .createWithDefault(true)
+
+  val CONNECT_SERVER_SIDE_STREAMING_QUERY_LISTENER_ENABLED =
+    buildConf("spark.sql.connect.streaming.serverSideListener.enabled")
+      .doc("When true, the addListener call from StreamingQueryManager will register all" +
+        s" StreamingQueryListener on the server side. When false, it registers the listener on" +
+        " the client side.")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(false)
 }
