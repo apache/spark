@@ -861,9 +861,7 @@ case class NTile(buckets: Expression) extends RowNumberLike with SizeBasedWindow
           "inputExpr" -> toSQLExpr(buckets)
         )
       )
-    }
-
-    if (buckets.dataType != IntegerType) {
+    } else if (buckets.dataType != IntegerType) {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
@@ -872,20 +870,20 @@ case class NTile(buckets: Expression) extends RowNumberLike with SizeBasedWindow
           "inputSql" -> toSQLExpr(buckets),
           "inputType" -> toSQLType(buckets.dataType))
       )
-    }
-
-    val i = buckets.eval().asInstanceOf[Int]
-    if (i > 0) {
-      TypeCheckSuccess
     } else {
-      DataTypeMismatch(
-        errorSubClass = "VALUE_OUT_OF_RANGE",
-        messageParameters = Map(
-          "exprName" -> "buckets",
-          "valueRange" -> s"(0, ${Int.MaxValue}]",
-          "currentValue" -> toSQLValue(i, IntegerType)
+      val i = buckets.eval().asInstanceOf[Int]
+      if (i > 0) {
+        TypeCheckSuccess
+      } else {
+        DataTypeMismatch(
+          errorSubClass = "VALUE_OUT_OF_RANGE",
+          messageParameters = Map(
+            "exprName" -> "buckets",
+            "valueRange" -> s"(0, ${Int.MaxValue}]",
+            "currentValue" -> toSQLValue(i, IntegerType)
+          )
         )
-      )
+      }
     }
   }
 
