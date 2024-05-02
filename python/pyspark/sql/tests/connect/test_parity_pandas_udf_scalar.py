@@ -21,11 +21,6 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class PandasUDFScalarParityTests(ScalarPandasUDFTestsMixin, ReusedConnectTestCase):
-    # TODO(SPARK-43727): Parity returnType check in Spark Connect
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_vectorized_udf_wrong_return_type(self):
-        super().test_vectorized_udf_wrong_return_type()
-
     def test_mixed_udf_and_sql(self):
         self._test_mixed_udf_and_sql(Column)
 
