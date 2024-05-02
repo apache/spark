@@ -49,6 +49,11 @@ object CollationTypeCasts extends TypeCoercionRule {
       stringLocate.withNewChildren(collateToSingleType(
         Seq(stringLocate.first, stringLocate.second)) :+ stringLocate.third)
 
+    case substringIndex: SubstringIndex =>
+      substringIndex.withNewChildren(
+        collateToSingleType(
+          Seq(substringIndex.first, substringIndex.second)) :+ substringIndex.third)
+
     case eltExpr: Elt =>
       eltExpr.withNewChildren(eltExpr.children.head +: collateToSingleType(eltExpr.children.tail))
 
@@ -68,7 +73,8 @@ object CollationTypeCasts extends TypeCoercionRule {
 
     case otherExpr @ (
       _: In | _: InSubquery | _: CreateArray | _: ArrayJoin | _: Concat | _: Greatest | _: Least |
-      _: Coalesce | _: BinaryExpression | _: ConcatWs | _: Mask | _: StringReplace) =>
+      _: Coalesce | _: BinaryExpression | _: ConcatWs | _: Mask | _: StringReplace |
+      _: StringTranslate) =>
       val newChildren = collateToSingleType(otherExpr.children)
       otherExpr.withNewChildren(newChildren)
   }

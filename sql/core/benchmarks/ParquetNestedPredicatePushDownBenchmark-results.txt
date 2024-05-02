@@ -1,21 +1,21 @@
-OpenJDK 64-Bit Server VM 17.0.10+7-LTS on Linux 6.5.0-1016-azure
+OpenJDK 64-Bit Server VM 17.0.11+9-LTS on Linux 6.5.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 Can skip all row groups:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Without nested predicate Pushdown                  7164           7228          37         14.6          68.3       1.0X
-With nested predicate Pushdown                       67             87          15       1560.0           0.6     106.6X
+Without nested predicate Pushdown                  7218           7266          26         14.5          68.8       1.0X
+With nested predicate Pushdown                       49             72          14       2136.4           0.5     147.1X
 
-OpenJDK 64-Bit Server VM 17.0.10+7-LTS on Linux 6.5.0-1016-azure
+OpenJDK 64-Bit Server VM 17.0.11+9-LTS on Linux 6.5.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 Can skip some row groups:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Without nested predicate Pushdown                  7767           7799          36         13.5          74.1       1.0X
-With nested predicate Pushdown                       46             60          10       2287.6           0.4     169.5X
+Without nested predicate Pushdown                  7799           7864          49         13.4          74.4       1.0X
+With nested predicate Pushdown                       48             60           9       2194.5           0.5     163.2X
 
-OpenJDK 64-Bit Server VM 17.0.10+7-LTS on Linux 6.5.0-1016-azure
+OpenJDK 64-Bit Server VM 17.0.11+9-LTS on Linux 6.5.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 Can skip no row groups:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Without nested predicate Pushdown                 14168          14233          35          7.4         135.1       1.0X
-With nested predicate Pushdown                    14156          14242          84          7.4         135.0       1.0X
+Without nested predicate Pushdown                 14137          14228          42          7.4         134.8       1.0X
+With nested predicate Pushdown                    14176          14233          49          7.4         135.2       1.0X
 

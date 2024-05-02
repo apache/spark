@@ -239,7 +239,6 @@ class DataFrame:
 
     if not is_remote_only():
 
-        @dispatch_df_method
         def toJSON(self, use_unicode: bool = True) -> "RDD[str]":
             """Converts a :class:`DataFrame` into a :class:`RDD` of string.
 
@@ -976,72 +975,76 @@ class DataFrame:
         """
         ...
 
-    @dispatch_df_method
-    def checkpoint(self, eager: bool = True) -> "DataFrame":
-        """Returns a checkpointed version of this :class:`DataFrame`. Checkpointing can be used to
-        truncate the logical plan of this :class:`DataFrame`, which is especially useful in
-        iterative algorithms where the plan may grow exponentially. It will be saved to files
-        inside the checkpoint directory set with :meth:`SparkContext.setCheckpointDir`.
+    if not is_remote_only():
 
-        .. versionadded:: 2.1.0
+        def checkpoint(self, eager: bool = True) -> "DataFrame":
+            """Returns a checkpointed version of this :class:`DataFrame`. Checkpointing can be
+            used to truncate the logical plan of this :class:`DataFrame`, which is especially
+            useful in iterative algorithms where the plan may grow exponentially. It will be
+            saved to files inside the checkpoint directory set with
+            :meth:`SparkContext.setCheckpointDir`.
 
-        Parameters
-        ----------
-        eager : bool, optional, default True
-            Whether to checkpoint this :class:`DataFrame` immediately.
+            .. versionadded:: 2.1.0
 
-        Returns
-        -------
-        :class:`DataFrame`
-            Checkpointed DataFrame.
+            Parameters
+            ----------
+            eager : bool, optional, default True
+                Whether to checkpoint this :class:`DataFrame` immediately.
 
-        Notes
-        -----
-        This API is experimental.
+            Returns
+            -------
+            :class:`DataFrame`
+                Checkpointed DataFrame.
 
-        Examples
-        --------
-        >>> import tempfile
-        >>> df = spark.createDataFrame([
-        ...     (14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
-        >>> with tempfile.TemporaryDirectory(prefix="checkpoint") as d:
-        ...     spark.sparkContext.setCheckpointDir("/tmp/bb")
-        ...     df.checkpoint(False)
-        DataFrame[age: bigint, name: string]
-        """
-        ...
+            Notes
+            -----
+            This API is experimental.
 
-    @dispatch_df_method
-    def localCheckpoint(self, eager: bool = True) -> "DataFrame":
-        """Returns a locally checkpointed version of this :class:`DataFrame`. Checkpointing can be
-        used to truncate the logical plan of this :class:`DataFrame`, which is especially useful in
-        iterative algorithms where the plan may grow exponentially. Local checkpoints are
-        stored in the executors using the caching subsystem and therefore they are not reliable.
+            Examples
+            --------
+            >>> import tempfile
+            >>> df = spark.createDataFrame([
+            ...     (14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+            >>> with tempfile.TemporaryDirectory(prefix="checkpoint") as d:
+            ...     spark.sparkContext.setCheckpointDir("/tmp/bb")
+            ...     df.checkpoint(False)
+            DataFrame[age: bigint, name: string]
+            """
+            ...
 
-        .. versionadded:: 2.3.0
+    if not is_remote_only():
 
-        Parameters
-        ----------
-        eager : bool, optional, default True
-            Whether to checkpoint this :class:`DataFrame` immediately.
+        def localCheckpoint(self, eager: bool = True) -> "DataFrame":
+            """Returns a locally checkpointed version of this :class:`DataFrame`. Checkpointing can
+            be used to truncate the logical plan of this :class:`DataFrame`, which is especially
+            useful in iterative algorithms where the plan may grow exponentially. Local checkpoints
+            are stored in the executors using the caching subsystem and therefore they are not
+            reliable.
 
-        Returns
-        -------
-        :class:`DataFrame`
-            Checkpointed DataFrame.
+            .. versionadded:: 2.3.0
 
-        Notes
-        -----
-        This API is experimental.
+            Parameters
+            ----------
+            eager : bool, optional, default True
+                Whether to checkpoint this :class:`DataFrame` immediately.
 
-        Examples
-        --------
-        >>> df = spark.createDataFrame([
-        ...     (14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
-        >>> df.localCheckpoint(False)
-        DataFrame[age: bigint, name: string]
-        """
-        ...
+            Returns
+            -------
+            :class:`DataFrame`
+                Checkpointed DataFrame.
+
+            Notes
+            -----
+            This API is experimental.
+
+            Examples
+            --------
+            >>> df = spark.createDataFrame([
+            ...     (14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+            >>> df.localCheckpoint(False)
+            DataFrame[age: bigint, name: string]
+            """
+            ...
 
     @dispatch_df_method
     def withWatermark(self, eventTime: str, delayThreshold: str) -> "DataFrame":
