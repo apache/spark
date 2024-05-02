@@ -26,15 +26,17 @@ import scala.jdk.CollectionConverters._
 import scala.util.Random
 
 import org.apache.spark.SparkRuntimeException
-import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
+import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, ExpressionEvalHelper, Literal}
+import org.apache.spark.sql.catalyst.expressions.variant.{VariantExpressionEvalUtils, VariantGet}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.VariantVal
+import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 import org.apache.spark.util.ArrayImplicits._
 
-class VariantSuite extends QueryTest with SharedSparkSession {
+class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEvalHelper {
   import testImplicits._
 
   test("basic tests") {
@@ -475,6 +477,111 @@ class VariantSuite extends QueryTest with SharedSparkSession {
       """)
       val actual = sql("select * from t")
       checkAnswer(actual, expected.collect())
+    }
+  }
+
+  Seq(
+    (
+      "basic int parse json",
+      VariantExpressionEvalUtils.parseJson(UTF8String.fromString("1")),
+      VariantType
+    ),
+    (
+      "basic json parse json",
+      VariantExpressionEvalUtils.parseJson(UTF8String.fromString("{\"k\": \"v\"}")),
+      VariantType
+    ),
+    (
+      "basic null parse json",
+      VariantExpressionEvalUtils.parseJson(UTF8String.fromString("null")),
+      VariantType
+    ),
+    (
+      "basic null",
+      null,
+      VariantType
+    ),
+    (
+      "basic array",
+      new GenericArrayData(Array[Int](1, 2, 3, 4, 5)),
+      new ArrayType(IntegerType, false)
+    ),
+    (
+      "basic string",
+      UTF8String.fromString("literal string"),
+      StringType
+    ),
+    (
+      "basic timestamp",
+      0L,
+      TimestampType
+    ),
+    (
+      "basic int",
+      0,
+      IntegerType
+    ),
+    (
+      "basic struct",
+      Literal.default(new StructType().add("col0", StringType)).eval(),
+      new StructType().add("col0", StringType)
+    ),
+    (
+      "complex struct with child variant",
+      Literal.default(new StructType()
+        .add("col0", StringType)
+        .add("col1", new StructType().add("col0", VariantType))
+        .add("col2", VariantType)
+        .add("col3", new ArrayType(VariantType, false))
+      ).eval(),
+      new StructType()
+        .add("col0", StringType)
+        .add("col1", new StructType().add("col0", VariantType))
+        .add("col2", VariantType)
+        .add("col3", new ArrayType(VariantType, false))
+    ),
+    (
+      "basic array with null",
+      new GenericArrayData(Array[Any](1, 2, null)),
+      new ArrayType(IntegerType, true)
+    ),
+    (
+      "basic map with null",
+      new ArrayBasedMapData(
+        new GenericArrayData(Array[Any](UTF8String.fromString("k1"), UTF8String.fromString("k2"))),
+        new GenericArrayData(Array[Any](1, null))
+      ),
+      new MapType(StringType, IntegerType, true)
+    )
+  ).foreach { case (testName, value, dt) =>
+    test(s"SPARK-48067: Variant literal `sql` correctly recreates the variant - $testName") {
+      val l = Literal.create(
+        VariantExpressionEvalUtils.castToVariant(value, dt.asInstanceOf[DataType]), VariantType)
+      val jsonString = l.eval().asInstanceOf[VariantVal]
+        .toJson(DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
+      val expectedSql = s"PARSE_JSON('$jsonString')"
+      assert(l.sql == expectedSql)
+      val valueFromLiteralSql =
+        spark.sql(s"select ${l.sql}").collect()(0).getAs[VariantVal](0)
+
+      // Cast the variants to their specified type to compare for logical equality.
+      // Currently, variant equality naively compares its value and metadata binaries. However,
+      // variant equality is more complex than this.
+      val castVariantExpr = VariantGet(
+        l,
+        Literal.create(UTF8String.fromString("$"), StringType),
+        dt,
+        true,
+        Some(DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone).toString())
+      )
+      val sqlVariantExpr = VariantGet(
+        Literal.create(valueFromLiteralSql, VariantType),
+        Literal.create(UTF8String.fromString("$"), StringType),
+        dt,
+        true,
+        Some(DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone).toString())
+      )
+      checkEvaluation(castVariantExpr, sqlVariantExpr.eval())
     }
   }
 }

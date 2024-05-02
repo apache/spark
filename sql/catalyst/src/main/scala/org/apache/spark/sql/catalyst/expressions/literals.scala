@@ -42,6 +42,7 @@ import org.json4s.JsonAST._
 
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.variant.VariantExpressionEvalUtils
 import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LITERAL, NULL_LITERAL, TRUE_OR_FALSE_LITERAL}
 import org.apache.spark.sql.catalyst.types._
@@ -204,6 +205,8 @@ object Literal {
       create(new GenericInternalRow(
         struct.fields.map(f => default(f.dataType).value)), struct)
     case udt: UserDefinedType[_] => Literal(default(udt.sqlType).value, udt)
+    case VariantType =>
+      create(VariantExpressionEvalUtils.castToVariant(0, IntegerType), VariantType)
     case other =>
       throw QueryExecutionErrors.noDefaultForDataTypeError(dataType)
   }
