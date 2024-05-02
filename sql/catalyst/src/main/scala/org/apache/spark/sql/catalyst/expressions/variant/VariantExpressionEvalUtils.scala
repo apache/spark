@@ -58,9 +58,13 @@ object VariantExpressionEvalUtils {
       false
     } else {
       val variantValue = input.getValue
-      // Variant NULL is denoted by basic_type == 0 and val_header == 0
-      variantValue(0) == 0
-     }
+      if (variantValue.isEmpty) {
+        throw QueryExecutionErrors.malformedVariant()
+      } else {
+        // Variant NULL is denoted by basic_type == 0 and val_header == 0
+        variantValue(0) == 0
+      }
+    }
   }
 
   /** Cast a Spark value from `dataType` into the variant type. */
