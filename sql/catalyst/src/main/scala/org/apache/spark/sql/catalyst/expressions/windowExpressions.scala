@@ -848,7 +848,7 @@ case class NTile(buckets: Expression) extends RowNumberLike with SizeBasedWindow
   // for each partition.
   override def checkInputDataTypes(): TypeCheckResult = {
     if (!buckets.foldable) {
-      return DataTypeMismatch(
+      DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
           "inputName" -> "buckets",
@@ -859,7 +859,7 @@ case class NTile(buckets: Expression) extends RowNumberLike with SizeBasedWindow
     }
 
     if (buckets.dataType != IntegerType) {
-      return DataTypeMismatch(
+      DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
           "paramIndex" -> "1",
