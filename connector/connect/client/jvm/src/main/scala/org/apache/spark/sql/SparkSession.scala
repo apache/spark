@@ -549,6 +549,10 @@ class SparkSession private[sql] (
     client.semanticHash(plan).getSemanticHash.getResult
   }
 
+  private[sql] def sizeInBytes(relation: proto.Relation): Long = {
+    client.sizeInBytes(relation).getSizeInBytes.getResult
+  }
+
   private[sql] def timeZoneId: String = conf.get(SqlApiConf.SESSION_LOCAL_TIMEZONE_KEY)
 
   private[sql] def execute[T](plan: proto.Plan, encoder: AgnosticEncoder[T]): SparkResult[T] = {

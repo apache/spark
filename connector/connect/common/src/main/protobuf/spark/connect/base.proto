@@ -205,9 +205,6 @@ message AnalyzePlanRequest {
   message SizeInBytes {
     // (Required) The relation to analyze
     Relation relation = 1;
-
-    // (Optional) Should physical plan be generated or not?
-    optional bool usePhysical = 2;
   }
 }
 

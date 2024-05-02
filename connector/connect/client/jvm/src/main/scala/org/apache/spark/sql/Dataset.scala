@@ -284,20 +284,13 @@ class Dataset[T] private[sql] (
   // scalastyle:on println
 
   /**
-   * Returns an estimated size in bytes of the Dataset
+   * Returns an approximate size in bytes of the Dataset.
    *
-   * @param usePhysical
-   * specify should the plan be optimized before getting size in bytes;
-   * use logical plan otherwise.
    * @group basic
    * @since 4.0.0
    */
-  def estimatedSizeInBytes(usePhysical: Boolean): Long = {
-    sparkSession
-      .analyze(builder =>
-        builder.getSizeInBytesBuilder.setRelation(plan.getRoot).setUsePhysical(usePhysical))
-      .getSizeInBytes
-      .getResult
+  def sizeInBytesApproximation(): Long = {
+    sparkSession.sizeInBytes(plan.getRoot)
   }
 
   /**

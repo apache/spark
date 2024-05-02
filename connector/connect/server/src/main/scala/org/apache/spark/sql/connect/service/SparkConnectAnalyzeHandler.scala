@@ -24,7 +24,6 @@ import io.grpc.stub.StreamObserver
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Dataset
-import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.SizeInBytesOnlyStatsPlanVisitor
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, StorageLevelProtoConverter}
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.execution.{CodegenMode, CostMode, ExtendedMode, FormattedMode, SimpleMode}
@@ -208,14 +207,13 @@ private[connect] class SparkConnectAnalyzeHandler(
             .build())
 
       case proto.AnalyzePlanRequest.AnalyzeCase.SIZE_IN_BYTES =>
-        val queryExecution = Dataset
+        val sizeInBytes = Dataset
           .ofRows(session, transformRelation(request.getSizeInBytes.getRelation))
           .queryExecution
-        val sizeInBytes = if (request.getSizeInBytes.getUsePhysical) {
-          queryExecution.optimizedPlan.stats.sizeInBytes.toLong
-        } else {
-          SizeInBytesOnlyStatsPlanVisitor.default(queryExecution.logical).sizeInBytes.toLong
-        }
+          .optimizedPlan
+          .stats
+          .sizeInBytes
+          .toLong
         builder.setSizeInBytes(
           proto.AnalyzePlanResponse.SizeInBytes
             .newBuilder()

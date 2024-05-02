@@ -217,6 +217,15 @@ private[sql] class SparkConnectClient(
     analyze(builder)
   }
 
+  def sizeInBytes(relation: proto.Relation): proto.AnalyzePlanResponse = {
+    val builder = proto.AnalyzePlanRequest.newBuilder()
+    builder.setSizeInBytes(
+      proto.AnalyzePlanRequest.SizeInBytes
+        .newBuilder()
+        .setRelation(relation))
+    analyze(builder)
+  }
+
   private[sql] def analyze(
       builder: proto.AnalyzePlanRequest.Builder): proto.AnalyzePlanResponse = {
     val request = builder
