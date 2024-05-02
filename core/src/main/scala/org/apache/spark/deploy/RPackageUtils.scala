@@ -95,7 +95,7 @@ private[deploy] object RPackageUtils extends Logging {
     }
   }
 
-    /**
+  /**
    * Checks the manifest of the Jar whether there is any R source code bundled with it.
    * Exposed for testing.
    */
