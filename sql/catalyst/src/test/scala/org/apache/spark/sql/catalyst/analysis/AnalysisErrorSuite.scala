@@ -328,7 +328,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
     messageParameters = Map(
       "sqlExpr" -> "\"ntile(99.9)\"",
-      "paramIndex" -> "first",
+      "paramIndex" -> "1",
       "inputSql" -> "\"99.9\"",
       "inputType" -> "\"FLOAT\"",
       "requiredType" -> "\"INT\""))
@@ -346,7 +346,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     errorClass = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
     messageParameters = Map(
       "sqlExpr" -> "\"ntile(b)\"",
-      "inputName" -> "`buckets`",
+      "inputName" -> "buckets",
       "inputExpr" -> "\"b\"",
       "inputType" -> "\"INT\""))
 
