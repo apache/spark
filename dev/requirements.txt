@@ -16,7 +16,6 @@ memory-profiler>=0.61.0
 # PySpark test dependencies
 unittest-xml-reporting
 openpyxl
-parameterized
 
 # PySpark test dependencies (optional)
 coverage
