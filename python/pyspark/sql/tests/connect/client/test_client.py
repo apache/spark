@@ -19,7 +19,6 @@ import unittest
 import uuid
 from collections.abc import Generator
 from typing import Optional, Any, Union
-from parameterized import parameterized
 
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 from pyspark.testing.utils import eventually
