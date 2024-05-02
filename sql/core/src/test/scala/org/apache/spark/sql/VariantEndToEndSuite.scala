@@ -88,6 +88,41 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     check("[0.0, 1.00, 1.10, 1.23]", "[0,1,1.1,1.23]")
   }
 
+  test("try_parse_json/to_json round-trip") {
+    def check(input: String, output: String = "INPUT IS OUTPUT"): Unit = {
+      val df = Seq(input).toDF("v")
+      val variantDF = df.selectExpr("to_json(try_parse_json(v)) as v").select(Column("v"))
+      val expected = if (output != "INPUT IS OUTPUT") output else input
+      checkAnswer(variantDF, Seq(Row(expected)))
+    }
+
+    check("null")
+    check("true")
+    check("false")
+    check("-1")
+    check("1.0E10")
+    check("\"\"")
+    check("\"" + ("a" * 63) + "\"")
+    check("\"" + ("b" * 64) + "\"")
+    // scalastyle:off nonascii
+    check("\"" + ("你好，世界" * 20) + "\"")
+    // scalastyle:on nonascii
+    check("[]")
+    check("{}")
+    // scalastyle:off nonascii
+    check(
+      "[null, true,   false,-1, 1e10, \"\\uD83D\\uDE05\", [ ], { } ]",
+      "[null,true,false,-1,1.0E10,\"😅\",[],{}]"
+    )
+    // scalastyle:on nonascii
+    check("[0.0, 1.00, 1.10, 1.23]", "[0,1,1.1,1.23]")
+    // Places where parse_json should fail and therefore, try_parse_json should return null
+    check("{1:2}", null)
+    check("{\"a\":1", null)
+    check("{\"a\":[a,b,c]}", null)
+    check("\"" + "a" * (16 * 1024 * 1024) + "\"", null)
+  }
+
   test("to_json with nested variant") {
     val df = Seq(1).toDF("v")
     val variantDF1 = df.select(

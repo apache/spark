@@ -24,7 +24,7 @@ import com.codahale.metrics.{Gauge, Timer}
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.EVENT_QUEUE
+import org.apache.spark.internal.LogKeys.EVENT_QUEUE
 import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
 

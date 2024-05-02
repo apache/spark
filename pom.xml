@@ -189,7 +189,7 @@
     <org.glassfish.jaxb.txw2.version>3.0.2</org.glassfish.jaxb.txw2.version>
     <snappy.version>1.1.10.5</snappy.version>
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
-    <commons-codec.version>1.16.1</commons-codec.version>
+    <commons-codec.version>1.17.0</commons-codec.version>
     <commons-compress.version>1.26.1</commons-compress.version>
     <commons-io.version>2.16.1</commons-io.version>
     <!-- org.apache.commons/commons-lang/-->
@@ -228,7 +228,7 @@
     ./python/pyspark/sql/pandas/utils.py, ./python/packaging/classic/setup.py
     and ./python/packaging/connect/setup.py too.
     -->
-    <arrow.version>15.0.2</arrow.version>
+    <arrow.version>16.0.0</arrow.version>
     <ammonite.version>3.0.0-M1</ammonite.version>
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
@@ -304,6 +304,7 @@
     <!-- SPARK-36796 for JDK-17 test-->
     <extraJavaTestArgs>
       -XX:+IgnoreUnrecognizedVMOptions
+      --add-modules=jdk.incubator.vector
       --add-opens=java.base/java.lang=ALL-UNNAMED
       --add-opens=java.base/java.lang.invoke=ALL-UNNAMED
       --add-opens=java.base/java.lang.reflect=ALL-UNNAMED
@@ -325,7 +326,7 @@
     <mysql.connector.version>8.3.0</mysql.connector.version>
     <postgresql.version>42.7.3</postgresql.version>
     <db2.jcc.version>11.5.9.0</db2.jcc.version>
-    <mssql.jdbc.version>9.4.1.jre8</mssql.jdbc.version>
+    <mssql.jdbc.version>12.6.1.jre11</mssql.jdbc.version>
     <ojdbc11.version>23.3.0.23.09</ojdbc11.version>
   </properties>
   <repositories>
@@ -800,7 +801,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.6-2</version>
+        <version>1.5.6-3</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
@@ -3374,12 +3375,12 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-install-plugin</artifactId>
-          <version>3.1.1</version>
+          <version>3.1.2</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-deploy-plugin</artifactId>
-          <version>3.1.1</version>
+          <version>3.1.2</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
@@ -3548,7 +3549,7 @@
             -->
             <groupId>com.puppycrawl.tools</groupId>
             <artifactId>checkstyle</artifactId>
-            <version>10.14.0</version>
+            <version>10.15.0</version>
           </dependency>
         </dependencies>
         <executions>
@@ -3610,7 +3611,7 @@
       <plugin>
         <groupId>org.antipathy</groupId>
         <artifactId>mvn-scalafmt_${scala.binary.version}</artifactId>
-        <version>1.1.1684076452.9f83818</version>
+        <version>1.1.1713302731.c3d0074</version>
         <configuration>
           <validateOnly>${scalafmt.validateOnly}</validateOnly> <!-- (Optional) skip formatting -->
           <skipSources>${scalafmt.skip}</skipSources>

@@ -22,7 +22,7 @@ import java.io.EOFException
 import org.apache.spark.SparkException
 import org.apache.spark.api.python.{PythonException, PythonWorkerUtils, SimplePythonFunction, SpecialLengths, StreamingPythonRunner}
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.FUNCTION_NAME
+import org.apache.spark.internal.LogKeys.FUNCTION_NAME
 import org.apache.spark.sql.connect.service.{SessionHolder, SparkConnectService}
 import org.apache.spark.sql.streaming.StreamingQueryListener
 

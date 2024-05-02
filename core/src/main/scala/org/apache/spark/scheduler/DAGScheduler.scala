@@ -37,7 +37,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.{config, Logging, MDC}
-import org.apache.spark.internal.LogKey.{ACCUMULATOR_ID, CLASS_NAME, JOB_ID, PARTITION_ID, STAGE_ID, TASK_ID}
+import org.apache.spark.internal.LogKeys.{ACCUMULATOR_ID, CLASS_NAME, JOB_ID, PARTITION_ID, STAGE_ID, TASK_ID}
 import org.apache.spark.internal.config.{LEGACY_ABORT_STAGE_AFTER_KILL_TASKS, RDD_CACHE_VISIBILITY_TRACKING_ENABLED}
 import org.apache.spark.internal.config.Tests.TEST_NO_STAGE_RETRY
 import org.apache.spark.network.shuffle.{BlockStoreClient, MergeFinalizerListener}

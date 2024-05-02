@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{MathUtils, NumberConverter, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.types.StringTypeAnyCollation
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -450,8 +451,9 @@ case class Conv(
   override def first: Expression = numExpr
   override def second: Expression = fromBaseExpr
   override def third: Expression = toBaseExpr
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, IntegerType, IntegerType)
-  override def dataType: DataType = StringType
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeAnyCollation, IntegerType, IntegerType)
+  override def dataType: DataType = first.dataType
   override def nullable: Boolean = true
 
   override def nullSafeEval(num: Any, fromBase: Any, toBase: Any): Any = {
@@ -1002,7 +1004,7 @@ case class Bin(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
 
   override def inputTypes: Seq[DataType] = Seq(LongType)
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
 
   protected override def nullSafeEval(input: Any): Any =
     UTF8String.fromString(jl.Long.toBinaryString(input.asInstanceOf[Long]))
@@ -1108,21 +1110,24 @@ case class Hex(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(LongType, BinaryType, StringType))
+    Seq(TypeCollection(LongType, BinaryType, StringTypeAnyCollation))
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = child.dataType match {
+    case st: StringType => st
+    case _ => SQLConf.get.defaultStringType
+  }
 
   protected override def nullSafeEval(num: Any): Any = child.dataType match {
     case LongType => Hex.hex(num.asInstanceOf[Long])
     case BinaryType => Hex.hex(num.asInstanceOf[Array[Byte]])
-    case StringType => Hex.hex(num.asInstanceOf[UTF8String].getBytes)
+    case _: StringType => Hex.hex(num.asInstanceOf[UTF8String].getBytes)
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (c) => {
       val hex = Hex.getClass.getName.stripSuffix("$")
       s"${ev.value} = " + (child.dataType match {
-        case StringType => s"""$hex.hex($c.getBytes());"""
+        case _: StringType => s"""$hex.hex($c.getBytes());"""
         case _ => s"""$hex.hex($c);"""
       })
     })
@@ -1149,7 +1154,7 @@ case class Unhex(child: Expression, failOnError: Boolean = false)
 
   def this(expr: Expression) = this(expr, false)
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
 
   override def nullable: Boolean = true
   override def dataType: DataType = BinaryType

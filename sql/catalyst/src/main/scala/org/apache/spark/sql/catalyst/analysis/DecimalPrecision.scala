@@ -92,7 +92,7 @@ object DecimalPrecision extends TypeCoercionRule {
       val resultType = widerDecimalType(p1, s1, p2, s2)
       val newE1 = if (e1.dataType == resultType) e1 else Cast(e1, resultType)
       val newE2 = if (e2.dataType == resultType) e2 else Cast(e2, resultType)
-      b.makeCopy(Array(newE1, newE2))
+      b.withNewChildren(Seq(newE1, newE2))
   }
 
   /**
@@ -211,21 +211,21 @@ object DecimalPrecision extends TypeCoercionRule {
         case (l: Literal, r) if r.dataType.isInstanceOf[DecimalType] &&
             l.dataType.isInstanceOf[IntegralType] &&
             literalPickMinimumPrecision =>
-          b.makeCopy(Array(Cast(l, DataTypeUtils.fromLiteral(l)), r))
+          b.withNewChildren(Seq(Cast(l, DataTypeUtils.fromLiteral(l)), r))
         case (l, r: Literal) if l.dataType.isInstanceOf[DecimalType] &&
             r.dataType.isInstanceOf[IntegralType] &&
             literalPickMinimumPrecision =>
-          b.makeCopy(Array(l, Cast(r, DataTypeUtils.fromLiteral(r))))
+          b.withNewChildren(Seq(l, Cast(r, DataTypeUtils.fromLiteral(r))))
         // Promote integers inside a binary expression with fixed-precision decimals to decimals,
         // and fixed-precision decimals in an expression with floats / doubles to doubles
         case (l @ IntegralTypeExpression(), r @ DecimalExpression(_, _)) =>
-          b.makeCopy(Array(Cast(l, DecimalType.forType(l.dataType)), r))
+          b.withNewChildren(Seq(Cast(l, DecimalType.forType(l.dataType)), r))
         case (l @ DecimalExpression(_, _), r @ IntegralTypeExpression()) =>
-          b.makeCopy(Array(l, Cast(r, DecimalType.forType(r.dataType))))
+          b.withNewChildren(Seq(l, Cast(r, DecimalType.forType(r.dataType))))
         case (l, r @ DecimalExpression(_, _)) if isFloat(l.dataType) =>
-          b.makeCopy(Array(l, Cast(r, DoubleType)))
+          b.withNewChildren(Seq(l, Cast(r, DoubleType)))
         case (l @ DecimalExpression(_, _), r) if isFloat(r.dataType) =>
-          b.makeCopy(Array(Cast(l, DoubleType), r))
+          b.withNewChildren(Seq(Cast(l, DoubleType), r))
         case _ => b
       }
   }

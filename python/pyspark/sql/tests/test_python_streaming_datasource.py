@@ -24,6 +24,7 @@ from pyspark.sql.datasource import (
     DataSourceStreamReader,
     InputPartition,
     DataSourceStreamWriter,
+    SimpleDataSourceStreamReader,
     WriterCommitMessage,
 )
 from pyspark.sql.types import Row
@@ -150,50 +151,90 @@ class BasePythonStreamingDataSourceTestsMixin:
         q.awaitTermination
         self.assertIsNone(q.exception(), "No exception has to be propagated.")
 
+    def test_simple_stream_reader(self):
+        class SimpleStreamReader(SimpleDataSourceStreamReader):
+            def initialOffset(self):
+                return {"offset": 0}
+
+            def read(self, start: dict):
+                start_idx = start["offset"]
+                it = iter([(i,) for i in range(start_idx, start_idx + 2)])
+                return (it, {"offset": start_idx + 2})
+
+            def commit(self, end):
+                pass
+
+            def readBetweenOffsets(self, start: dict, end: dict):
+                start_idx = start["offset"]
+                end_idx = end["offset"]
+                return iter([(i,) for i in range(start_idx, end_idx)])
+
+        class SimpleDataSource(DataSource):
+            def schema(self):
+                return "id INT"
+
+            def simpleStreamReader(self, schema):
+                return SimpleStreamReader()
+
+        self.spark.dataSource.register(SimpleDataSource)
+        df = self.spark.readStream.format("SimpleDataSource").load()
+
+        def check_batch(df, batch_id):
+            assertDataFrameEqual(df, [Row(batch_id * 2), Row(batch_id * 2 + 1)])
+
+        q = df.writeStream.foreachBatch(check_batch).start()
+        while len(q.recentProgress) < 10:
+            time.sleep(0.2)
+        q.stop()
+        q.awaitTermination()
+        self.assertIsNone(q.exception(), "No exception has to be propagated.")
+
     def test_stream_writer(self):
         input_dir = tempfile.TemporaryDirectory(prefix="test_data_stream_write_input")
         output_dir = tempfile.TemporaryDirectory(prefix="test_data_stream_write_output")
         checkpoint_dir = tempfile.TemporaryDirectory(prefix="test_data_stream_write_checkpoint")
 
-        self.spark.range(0, 30).repartition(2).write.format("json").mode("append").save(
-            input_dir.name
-        )
-        self.spark.dataSource.register(self._get_test_data_source())
-        df = self.spark.readStream.schema("id int").json(input_dir.name)
-        q = (
-            df.writeStream.format("TestDataSource")
-            .option("checkpointLocation", checkpoint_dir.name)
-            .start(output_dir.name)
-        )
-        while not q.recentProgress:
-            time.sleep(0.2)
+        try:
+            self.spark.range(0, 30).repartition(2).write.format("json").mode("append").save(
+                input_dir.name
+            )
+            self.spark.dataSource.register(self._get_test_data_source())
+            df = self.spark.readStream.schema("id int").json(input_dir.name)
+            q = (
+                df.writeStream.format("TestDataSource")
+                .option("checkpointLocation", checkpoint_dir.name)
+                .start(output_dir.name)
+            )
+            while not q.recentProgress:
+                time.sleep(0.2)
 
-        # Test stream writer write and commit.
-        # The first microbatch contain 30 rows and 2 partitions.
-        # Number of rows and partitions is writen by StreamWriter.commit().
-        assertDataFrameEqual(self.spark.read.json(output_dir.name), [Row(2, 30)])
+            # Test stream writer write and commit.
+            # The first microbatch contain 30 rows and 2 partitions.
+            # Number of rows and partitions is writen by StreamWriter.commit().
+            assertDataFrameEqual(self.spark.read.json(output_dir.name), [Row(2, 30)])
 
-        self.spark.range(50, 80).repartition(2).write.format("json").mode("append").save(
-            input_dir.name
-        )
+            self.spark.range(50, 80).repartition(2).write.format("json").mode("append").save(
+                input_dir.name
+            )
 
-        # Test StreamWriter write and abort.
-        # When row id > 50, write tasks throw exception and fail.
-        # 1.txt is written by StreamWriter.abort() to record the failure.
-        while q.exception() is None:
-            time.sleep(0.2)
-        assertDataFrameEqual(
-            self.spark.read.text(os.path.join(output_dir.name, "1.txt")), [Row("failed in batch 1")]
-        )
-        q.awaitTermination
-
-        input_dir.cleanup()
-        output_dir.cleanup()
-        checkpoint_dir.cleanup()
+            # Test StreamWriter write and abort.
+            # When row id > 50, write tasks throw exception and fail.
+            # 1.txt is written by StreamWriter.abort() to record the failure.
+            while q.exception() is None:
+                time.sleep(0.2)
+            assertDataFrameEqual(
+                self.spark.read.text(os.path.join(output_dir.name, "1.txt")),
+                [Row("failed in batch 1")],
+            )
+            q.awaitTermination
+        finally:
+            input_dir.cleanup()
+            output_dir.cleanup()
+            checkpoint_dir.cleanup()
 
 
 class PythonStreamingDataSourceTests(BasePythonStreamingDataSourceTestsMixin, ReusedSQLTestCase):
-    ...
+    pass
 
 
 if __name__ == "__main__":

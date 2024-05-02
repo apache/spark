@@ -35,7 +35,7 @@ import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.broadcast.{Broadcast, BroadcastManager}
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey._
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}

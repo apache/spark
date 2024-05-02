@@ -22,7 +22,7 @@ import javax.annotation.Nullable
 import scala.annotation.tailrec
 
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.{hasStringType, haveSameType}
-import org.apache.spark.sql.catalyst.expressions.{ArrayJoin, BinaryExpression, CaseWhen, Cast, Coalesce, Collate, Concat, ConcatWs, CreateArray, Elt, Expression, Greatest, If, In, InSubquery, Least, Literal, Overlay, StringLPad, StringRPad}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
@@ -45,12 +45,26 @@ object CollationTypeCasts extends TypeCoercionRule {
           caseWhenExpr.elseValue.map(e => castStringType(e, outputStringType).getOrElse(e))
         CaseWhen(newBranches, newElseValue)
 
+    case stringLocate: StringLocate =>
+      stringLocate.withNewChildren(collateToSingleType(
+        Seq(stringLocate.first, stringLocate.second)) :+ stringLocate.third)
+
+    case substringIndex: SubstringIndex =>
+      substringIndex.withNewChildren(
+        collateToSingleType(
+          Seq(substringIndex.first, substringIndex.second)) :+ substringIndex.third)
+
     case eltExpr: Elt =>
       eltExpr.withNewChildren(eltExpr.children.head +: collateToSingleType(eltExpr.children.tail))
 
     case overlayExpr: Overlay =>
       overlayExpr.withNewChildren(collateToSingleType(Seq(overlayExpr.input, overlayExpr.replace))
         ++ Seq(overlayExpr.pos, overlayExpr.len))
+
+    case regExpReplace: RegExpReplace =>
+      val Seq(subject, rep) = collateToSingleType(Seq(regExpReplace.subject, regExpReplace.rep))
+      val newChildren = Seq(subject, regExpReplace.regexp, rep, regExpReplace.pos)
+      regExpReplace.withNewChildren(newChildren)
 
     case stringPadExpr @ (_: StringRPad | _: StringLPad) =>
       val Seq(str, len, pad) = stringPadExpr.children
@@ -59,7 +73,8 @@ object CollationTypeCasts extends TypeCoercionRule {
 
     case otherExpr @ (
       _: In | _: InSubquery | _: CreateArray | _: ArrayJoin | _: Concat | _: Greatest | _: Least |
-      _: Coalesce | _: BinaryExpression | _: ConcatWs) =>
+      _: Coalesce | _: BinaryExpression | _: ConcatWs | _: Mask | _: StringReplace |
+      _: StringTranslate) =>
       val newChildren = collateToSingleType(otherExpr.children)
       otherExpr.withNewChildren(newChildren)
   }

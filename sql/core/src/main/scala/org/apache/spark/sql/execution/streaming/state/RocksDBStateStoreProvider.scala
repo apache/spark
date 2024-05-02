@@ -24,7 +24,8 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.{SparkConf, SparkEnv}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.StructType
@@ -164,7 +165,8 @@ private[sql] class RocksDBStateStoreProvider
         verify(state == UPDATING, "Cannot commit after already committed or aborted")
         val newVersion = rocksDB.commit()
         state = COMMITTED
-        logInfo(s"Committed $newVersion for $id")
+        logInfo(log"Committed ${MDC(VERSION_NUMBER, newVersion)} " +
+          log"for ${MDC(STATE_STORE_ID, id)}")
         newVersion
       } catch {
         case e: Throwable =>
@@ -174,7 +176,8 @@ private[sql] class RocksDBStateStoreProvider
 
     override def abort(): Unit = {
       verify(state == UPDATING || state == ABORTED, "Cannot abort after already committed")
-      logInfo(s"Aborting ${version + 1} for $id")
+      logInfo(log"Aborting ${MDC(VERSION_NUMBER, version + 1)} " +
+        log"for ${MDC(STATE_STORE_ID, id)}")
       rocksDB.rollback()
       state = ABORTED
     }
@@ -238,7 +241,8 @@ private[sql] class RocksDBStateStoreProvider
           rocksDBMetrics.totalMemUsageBytes,
           stateStoreCustomMetrics)
       } else {
-        logInfo(s"Failed to collect metrics for store_id=$id and version=$version")
+        logInfo(log"Failed to collect metrics for store_id=${MDC(STATE_STORE_ID, id)} " +
+          log"and version=${MDC(VERSION_NUMBER, version)}")
         StateStoreMetrics(0, 0, Map.empty)
       }
     }

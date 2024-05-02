@@ -629,7 +629,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def failedToCompileMsg(e: Exception): String = {
-    s"failed to compile: $e"
+    s"Failed to compile: $e"
   }
 
   def internalCompilerError(e: InternalCompilerException): Throwable = {
@@ -2726,6 +2726,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       errorClass = "INVALID_VARIANT_GET_PATH",
       messageParameters = Map("path" -> path, "functionName" -> toSQLId(functionName)))
   }
+
+  def malformedVariant(): Throwable = new SparkRuntimeException(
+    "MALFORMED_VARIANT",
+    Map.empty
+  )
 
   def invalidCharsetError(functionName: String, charset: String): RuntimeException = {
     new SparkIllegalArgumentException(

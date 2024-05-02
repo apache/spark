@@ -22,7 +22,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{MODEL_WEIGHTS, TIME}
+import org.apache.spark.internal.LogKeys.{MODEL_WEIGHTS, TIME}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.streaming.api.java.{JavaDStream, JavaPairDStream}
 import org.apache.spark.streaming.dstream.DStream
