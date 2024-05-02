@@ -28,8 +28,8 @@ rootLogger.appenderRef.stdout.ref = console
 appender.console.type = Console
 appender.console.name = console
 appender.console.target = SYSTEM_ERR
-appender.console.layout.type = JsonTemplateLayout
-appender.console.layout.eventTemplateUri = classpath:org/apache/spark/SparkLayout.json
+appender.console.layout.type = PatternLayout
+appender.console.layout.pattern = %d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n%ex
 
 # Set the default spark-shell/spark-sql log level to WARN. When running the
 # spark-shell/spark-sql, the log level for these classes is used to overwrite
