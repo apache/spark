@@ -67,30 +67,35 @@ private[deploy] object RPackageUtils extends Logging {
       |...
     """.stripMargin
 
-  /** Internal method for logging. We log to a printStream in tests, for debugging purposes. */
+  /**
+   * Internal method for logging. We write the [[msg]] to a printStream in tests, for debugging
+   * purposes. The [[logEntry]] gets logged. These are different because the values may render
+   * slightly differently between the two.
+   */
   private def print(
-      msg: LogEntry,
+      msg: String,
+      logEntry: LogEntry,
       printStream: PrintStream,
       level: Level = Level.FINE,
       e: Throwable = null): Unit = {
     if (printStream != null) {
       // scalastyle:off println
-      printStream.println(msg.message)
+      printStream.println(msg)
       // scalastyle:on println
       if (e != null) {
         e.printStackTrace(printStream)
       }
     } else {
       level match {
-        case Level.INFO => logInfo(msg)
-        case Level.WARNING => logWarning(msg)
-        case Level.SEVERE => logError(msg, e)
-        case _ => logDebug(msg)
+        case Level.INFO => logInfo(logEntry)
+        case Level.WARNING => logWarning(logEntry)
+        case Level.SEVERE => logError(logEntry, e)
+        case _ => logDebug(logEntry)
       }
     }
   }
 
-  /**
+    /**
    * Checks the manifest of the Jar whether there is any R source code bundled with it.
    * Exposed for testing.
    */
@@ -115,8 +120,9 @@ private[deploy] object RPackageUtils extends Logging {
     val pathToPkg = Seq(dir, "R", "pkg").mkString(File.separator)
     val installCmd = baseInstallCmd ++ Seq(libDir, pathToPkg)
     if (verbose) {
-      print(log"Building R package with the command: " +
-        log"${MDC(SHELL_COMMAND, installCmd.mkString("List(", ", ", ")"))}", printStream)
+      print(s"Building R package with the command: $installCmd",
+        log"Building R package with the command: ${MDC(SHELL_COMMAND, installCmd)}",
+        printStream)
     }
     try {
       val builder = new ProcessBuilder(installCmd.asJava)
@@ -135,7 +141,8 @@ private[deploy] object RPackageUtils extends Logging {
       process.waitFor() == 0
     } catch {
       case e: Throwable =>
-        print(log"Failed to build R package.", printStream, Level.SEVERE, e)
+        print("Failed to build R package.",
+          log"Failed to build R package.", printStream, Level.SEVERE, e)
         false
     }
   }
@@ -154,7 +161,8 @@ private[deploy] object RPackageUtils extends Logging {
         if (entry.isDirectory) {
           val dir = new File(tempDir, entryPath)
           if (verbose) {
-            print(log"Creating directory: ${MDC(LogKeys.PATH, dir)}", printStream)
+            print(s"Creating directory: $dir",
+              log"Creating directory: ${MDC(LogKeys.PATH, dir)}", printStream)
           }
           dir.mkdirs
         } else {
@@ -163,7 +171,8 @@ private[deploy] object RPackageUtils extends Logging {
           Files.createParentDirs(outPath)
           val outStream = new FileOutputStream(outPath)
           if (verbose) {
-            print(log"Extracting ${MDC(JAR_ENTRY, entry)} to ${MDC(LogKeys.PATH, outPath)}",
+            print(s"Extracting $entry to $outPath",
+              log"Extracting ${MDC(JAR_ENTRY, entry)} to ${MDC(LogKeys.PATH, outPath)}",
               printStream)
           }
           Utils.copyStream(inStream, outStream, closeStreams = true)
@@ -186,7 +195,8 @@ private[deploy] object RPackageUtils extends Logging {
         val jar = new JarFile(file)
         Utils.tryWithSafeFinally {
           if (checkManifestForR(jar)) {
-            print(log"${MDC(LogKeys.PATH, file)} contains R source code. " +
+            print(s"$file contains R source code. Now installing package.",
+              log"${MDC(LogKeys.PATH, file)} contains R source code. " +
               log"Now installing package.", printStream, Level.INFO)
             val rSource = extractRFolder(jar, printStream, verbose)
             if (RUtils.rPackages.isEmpty) {
@@ -194,9 +204,10 @@ private[deploy] object RPackageUtils extends Logging {
             }
             try {
               if (!rPackageBuilder(rSource, printStream, verbose, RUtils.rPackages.get)) {
-                print(log"ERROR: Failed to build R package in ${MDC(LogKeys.PATH, file)}.",
+                print(s"ERROR: Failed to build R package in $file.",
+                  log"ERROR: Failed to build R package in ${MDC(LogKeys.PATH, file)}.",
                   printStream)
-                print(RJarDoc, printStream)
+                print(RJarDoc.message, RJarDoc, printStream)
               }
             } finally {
               // clean up
@@ -206,16 +217,18 @@ private[deploy] object RPackageUtils extends Logging {
             }
           } else {
             if (verbose) {
-              print(log"${MDC(LogKeys.PATH, file)} doesn't contain R source code, " +
-                log"skipping...", printStream)
+              print(s"$file doesn't contain R source code, skipping...",
+                log"${MDC(LogKeys.PATH, file)} doesn't contain R source code, " +
+                  log"skipping...", printStream)
             }
           }
         } {
           jar.close()
         }
       } else {
-        print(log"WARN: ${MDC(LogKeys.PATH, file)} resolved as dependency, " +
-          log"but not found.", printStream, Level.WARNING)
+        print(s"WARN: $file resolved as dependency, but not found.",
+          log"WARN: ${MDC(LogKeys.PATH, file)} resolved as dependency, " +
+            log"but not found.", printStream, Level.WARNING)
       }
     }
   }
