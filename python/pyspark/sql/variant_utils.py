@@ -269,7 +269,7 @@ class VariantUtils:
         raise PySparkValueError(error_class="MALFORMED_VARIANT", message_parameters={})
 
     @classmethod
-    def _check_decimal(cls, unscaled: int, scale: int, max_unscaled: int, max_scale: int):
+    def _check_decimal(cls, unscaled: int, scale: int, max_unscaled: int, max_scale: int) -> None:
         # max_unscaled == 10**max_scale, but we pass a literal parameter to avoid redundant
         # computation.
         if unscaled >= max_unscaled or unscaled <= -max_unscaled or scale > max_scale:
