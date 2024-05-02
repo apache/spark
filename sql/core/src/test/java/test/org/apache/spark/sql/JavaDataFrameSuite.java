@@ -24,7 +24,7 @@ import java.util.*;
 import java.math.BigInteger;
 import java.math.BigDecimal;
 
-import scala.collection.Seq;
+import scala.collection.immutable.Seq;
 import scala.jdk.javaapi.CollectionConverters;
 
 import com.google.common.collect.ImmutableMap;
