@@ -20,16 +20,19 @@ package org.apache.spark.util;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.util.Arrays;
 import java.util.List;
+
+import scala.collection.immutable.Seq;
+import scala.jdk.javaapi.CollectionConverters;
 
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.Level;
 import org.junit.jupiter.api.Test;
 
-import org.apache.spark.internal.JLogKey;
-import org.apache.spark.internal.JLogKeys;
-import org.apache.spark.internal.JMDC;
 import org.apache.spark.internal.Logger;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 
 public abstract class LoggerSuiteBase {
 
@@ -57,13 +60,19 @@ public abstract class LoggerSuiteBase {
     return "This is a log message";
   }
 
-  private final JMDC executorIDMDC = JMDC.of(JLogKeys.EXECUTOR_ID, "1");
+  private final MDC executorIDMDC = MDC.of(LogKeys.EXECUTOR_ID$.MODULE$, "1");
   private final String msgWithMDC = "Lost executor {}.";
 
-  private final JMDC executorIDMDCValueIsNull = JMDC.of(JLogKeys.EXECUTOR_ID, null);
+  private final MDC[] mdcs = new MDC[] {
+      MDC.of(LogKeys.EXECUTOR_ID$.MODULE$, "1"),
+      MDC.of(LogKeys.REASON$.MODULE$, "the shuffle data is too large")};
+  private final Seq<MDC> mdcSeq = CollectionConverters.asScala(Arrays.asList(mdcs)).toSeq();
+  private final String msgWithMDCs = "Lost executor {}, reason: {}";
 
-  private final JMDC externalSystemCustomLog =
-      JMDC.of(CustomLogKeys.CUSTOM_LOG_KEY, "External system custom log message.");
+  private final MDC executorIDMDCValueIsNull = MDC.of(LogKeys.EXECUTOR_ID$.MODULE$, null);
+
+  private final MDC externalSystemCustomLog =
+    MDC.of(CustomLogKeys.CUSTOM_LOG_KEY$.MODULE$, "External system custom log message.");
 
   // test for basic message (without any mdc)
   abstract String expectedPatternForBasicMsg(Level level);
@@ -73,6 +82,9 @@ public abstract class LoggerSuiteBase {
 
   // test for message (with mdc)
   abstract String expectedPatternForMsgWithMDC(Level level);
+
+  // test for message (with mdcs)
+  abstract String expectedPatternForMsgWithMDCs(Level level);
 
   // test for message (with mdc - the value is null)
   abstract String expectedPatternForMsgWithMDCValueIsNull(Level level);
@@ -148,6 +160,28 @@ public abstract class LoggerSuiteBase {
   }
 
   @Test
+  public void testLoggerWithMDCs() {
+    Runnable errorFn = () -> logger().error(msgWithMDCs, mdcSeq);
+    Runnable warnFn = () -> logger().warn(msgWithMDCs, mdcSeq);
+    Runnable infoFn = () -> logger().info(msgWithMDCs, mdcSeq);
+    Runnable debugFn = () -> logger().debug(msgWithMDCs, mdcSeq);
+    Runnable traceFn = () -> logger().trace(msgWithMDCs, mdcSeq);
+    List.of(
+        Pair.of(Level.ERROR, errorFn),
+        Pair.of(Level.WARN, warnFn),
+        Pair.of(Level.INFO, infoFn),
+        Pair.of(Level.DEBUG, debugFn),
+        Pair.of(Level.TRACE, traceFn)).forEach(pair -> {
+      try {
+        assert (captureLogOutput(pair.getRight()).matches(
+            expectedPatternForMsgWithMDCs(pair.getLeft())));
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+    });
+  }
+
+  @Test
   public void testLoggerWithMDCValueIsNull() {
     Runnable errorFn = () -> logger().error(msgWithMDC, executorIDMDCValueIsNull);
     Runnable warnFn = () -> logger().warn(msgWithMDC, executorIDMDCValueIsNull);
@@ -190,9 +224,4 @@ public abstract class LoggerSuiteBase {
       }
     });
   }
-}
-
-// External system custom LogKey must be `implements JLogKey`
-enum CustomLogKeys implements JLogKey {
-  CUSTOM_LOG_KEY
 }

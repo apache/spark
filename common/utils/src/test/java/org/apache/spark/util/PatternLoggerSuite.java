@@ -65,6 +65,12 @@ public class PatternLoggerSuite extends LoggerSuiteBase {
   }
 
   @Override
+  String expectedPatternForMsgWithMDCs(Level level) {
+    return toRegexPattern(level,
+      ".*<level> <className>: Lost executor 1, reason: the shuffle data is too large\n");
+  }
+
+  @Override
   String expectedPatternForMsgWithMDCValueIsNull(Level level) {
     return toRegexPattern(level, ".*<level> <className>: Lost executor null.\n");
   }

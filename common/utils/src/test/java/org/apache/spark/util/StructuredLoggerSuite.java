@@ -35,7 +35,7 @@ public class StructuredLoggerSuite extends LoggerSuiteBase {
          .replace("<level>", level.toString())
          .replace("<className>", className())
          .replace("<timestamp>", "[^\"]+")
-         .replace("<stacktrace>", ".*")
+         .replace("\"<stacktrace>\"", ".*")
          .replace("{", "\\{") + "\n";
     } catch (JsonProcessingException e) {
       throw new RuntimeException(e);
@@ -49,7 +49,7 @@ public class StructuredLoggerSuite extends LoggerSuiteBase {
 
   @Override
   String className() {
-    return StructuredLoggerSuite.class.getName();
+    return StructuredLoggerSuite.class.getSimpleName();
   }
 
   @Override
@@ -93,6 +93,21 @@ public class StructuredLoggerSuite extends LoggerSuiteBase {
         "msg": "Lost executor 1.",
         "context": {
           "executor_id": "1"
+        },
+        "logger": "<className>"
+      }""");
+  }
+
+  @Override
+  String expectedPatternForMsgWithMDCs(Level level) {
+    return compactAndToRegexPattern(level, """
+      {
+        "ts": "<timestamp>",
+        "level": "<level>",
+        "msg": "Lost executor 1, reason: the shuffle data is too large",
+        "context": {
+          "executor_id": "1",
+          "reason": "the shuffle data is too large"
         },
         "logger": "<className>"
       }""");
