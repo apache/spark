@@ -25,14 +25,6 @@ class CogroupedApplyInPandasTests(CogroupedApplyInPandasTestsMixin, ReusedConnec
     def test_wrong_args(self):
         self.check_wrong_args()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_apply_in_pandas_returning_incompatible_type(self):
-        super().test_apply_in_pandas_returning_incompatible_type()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_wrong_return_type(self):
-        super().test_wrong_return_type()
-
 
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.test_parity_pandas_cogrouped_map import *  # noqa: F401

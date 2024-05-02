@@ -205,54 +205,45 @@ class UserDefinedFunction:
         self.evalType = evalType
         self.deterministic = deterministic
 
-    @property
-    def returnType(self) -> DataType:
-        # This makes sure this is called after SparkContext is initialized.
-        # ``_parse_datatype_string`` accesses to JVM for parsing a DDL formatted string.
-        # TODO: PythonEvalType.SQL_BATCHED_UDF
-        if self._returnType_placeholder is None:
-            if isinstance(self._returnType, DataType):
-                self._returnType_placeholder = self._returnType
-            else:
-                self._returnType_placeholder = _parse_datatype_string(self._returnType)
-        if self.evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF:
+    @staticmethod
+    def _check_return_type(returnType: DataType, evalType: int) -> None:
+        if evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF:
             try:
-                to_arrow_type(self._returnType_placeholder)
+                to_arrow_type(returnType)
             except TypeError:
                 raise PySparkNotImplementedError(
                     error_class="NOT_IMPLEMENTED",
                     message_parameters={
                         "feature": f"Invalid return type with Arrow-optimized Python UDF: "
-                        f"{self._returnType_placeholder}"
+                        f"{returnType}"
                     },
                 )
         elif (
-            self.evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF
-            or self.evalType == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
+            evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF
+            or evalType == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
         ):
             try:
-                to_arrow_type(self._returnType_placeholder)
+                to_arrow_type(returnType)
             except TypeError:
                 raise PySparkNotImplementedError(
                     error_class="NOT_IMPLEMENTED",
                     message_parameters={
-                        "feature": f"Invalid return type with scalar Pandas UDFs: "
-                        f"{self._returnType_placeholder}"
+                        "feature": f"Invalid return type with scalar Pandas UDFs: " f"{returnType}"
                     },
                 )
         elif (
-            self.evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
-            or self.evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE
+            evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
+            or evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE
         ):
-            if isinstance(self._returnType_placeholder, StructType):
+            if isinstance(returnType, StructType):
                 try:
-                    to_arrow_type(self._returnType_placeholder)
+                    to_arrow_type(returnType)
                 except TypeError:
                     raise PySparkNotImplementedError(
                         error_class="NOT_IMPLEMENTED",
                         message_parameters={
                             "feature": f"Invalid return type with grouped map Pandas UDFs or "
-                            f"at groupby.applyInPandas(WithState): {self._returnType_placeholder}"
+                            f"at groupby.applyInPandas(WithState): {returnType}"
                         },
                     )
             else:
@@ -261,22 +252,21 @@ class UserDefinedFunction:
                     message_parameters={
                         "eval_type": "SQL_GROUPED_MAP_PANDAS_UDF or "
                         "SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE",
-                        "return_type": str(self._returnType_placeholder),
+                        "return_type": str(returnType),
                     },
                 )
         elif (
-            self.evalType == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
-            or self.evalType == PythonEvalType.SQL_MAP_ARROW_ITER_UDF
+            evalType == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
+            or evalType == PythonEvalType.SQL_MAP_ARROW_ITER_UDF
         ):
-            if isinstance(self._returnType_placeholder, StructType):
+            if isinstance(returnType, StructType):
                 try:
-                    to_arrow_type(self._returnType_placeholder)
+                    to_arrow_type(returnType)
                 except TypeError:
                     raise PySparkNotImplementedError(
                         error_class="NOT_IMPLEMENTED",
                         message_parameters={
-                            "feature": f"Invalid return type in mapInPandas: "
-                            f"{self._returnType_placeholder}"
+                            "feature": f"Invalid return type in mapInPandas: " f"{returnType}"
                         },
                     )
             else:
@@ -284,19 +274,19 @@ class UserDefinedFunction:
                     error_class="INVALID_RETURN_TYPE_FOR_PANDAS_UDF",
                     message_parameters={
                         "eval_type": "SQL_MAP_PANDAS_ITER_UDF or SQL_MAP_ARROW_ITER_UDF",
-                        "return_type": str(self._returnType_placeholder),
+                        "return_type": str(returnType),
                     },
                 )
-        elif self.evalType == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF:
-            if isinstance(self._returnType_placeholder, StructType):
+        elif evalType == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF:
+            if isinstance(returnType, StructType):
                 try:
-                    to_arrow_type(self._returnType_placeholder)
+                    to_arrow_type(returnType)
                 except TypeError:
                     raise PySparkNotImplementedError(
                         error_class="NOT_IMPLEMENTED",
                         message_parameters={
                             "feature": "Invalid return type with grouped map Arrow UDFs or "
-                            f"at groupby.applyInArrow: {self._returnType_placeholder}"
+                            f"at groupby.applyInArrow: {returnType}"
                         },
                     )
             else:
@@ -304,19 +294,19 @@ class UserDefinedFunction:
                     error_class="INVALID_RETURN_TYPE_FOR_ARROW_UDF",
                     message_parameters={
                         "eval_type": "SQL_GROUPED_MAP_ARROW_UDF",
-                        "return_type": str(self._returnType_placeholder),
+                        "return_type": str(returnType),
                     },
                 )
-        elif self.evalType == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
-            if isinstance(self._returnType_placeholder, StructType):
+        elif evalType == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
+            if isinstance(returnType, StructType):
                 try:
-                    to_arrow_type(self._returnType_placeholder)
+                    to_arrow_type(returnType)
                 except TypeError:
                     raise PySparkNotImplementedError(
                         error_class="NOT_IMPLEMENTED",
                         message_parameters={
                             "feature": f"Invalid return type in cogroup.applyInPandas: "
-                            f"{self._returnType_placeholder}"
+                            f"{returnType}"
                         },
                     )
             else:
@@ -324,19 +314,19 @@ class UserDefinedFunction:
                     error_class="INVALID_RETURN_TYPE_FOR_PANDAS_UDF",
                     message_parameters={
                         "eval_type": "SQL_COGROUPED_MAP_PANDAS_UDF",
-                        "return_type": str(self._returnType_placeholder),
+                        "return_type": str(returnType),
                     },
                 )
-        elif self.evalType == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF:
-            if isinstance(self._returnType_placeholder, StructType):
+        elif evalType == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF:
+            if isinstance(returnType, StructType):
                 try:
-                    to_arrow_type(self._returnType_placeholder)
+                    to_arrow_type(returnType)
                 except TypeError:
                     raise PySparkNotImplementedError(
                         error_class="NOT_IMPLEMENTED",
                         message_parameters={
                             "feature": "Invalid return type in cogroup.applyInArrow: "
-                            f"{self._returnType_placeholder}"
+                            f"{returnType}"
                         },
                     )
             else:
@@ -344,30 +334,42 @@ class UserDefinedFunction:
                     error_class="INVALID_RETURN_TYPE_FOR_ARROW_UDF",
                     message_parameters={
                         "eval_type": "SQL_COGROUPED_MAP_ARROW_UDF",
-                        "return_type": str(self._returnType_placeholder),
+                        "return_type": str(returnType),
                     },
                 )
-        elif self.evalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
+        elif evalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
             try:
                 # StructType is not yet allowed as a return type, explicitly check here to fail fast
-                if isinstance(self._returnType_placeholder, StructType):
+                if isinstance(returnType, StructType):
                     raise PySparkNotImplementedError(
                         error_class="NOT_IMPLEMENTED",
                         message_parameters={
                             "feature": f"Invalid return type with grouped aggregate Pandas UDFs: "
-                            f"{self._returnType_placeholder}"
+                            f"{returnType}"
                         },
                     )
-                to_arrow_type(self._returnType_placeholder)
+                to_arrow_type(returnType)
             except TypeError:
                 raise PySparkNotImplementedError(
                     error_class="NOT_IMPLEMENTED",
                     message_parameters={
                         "feature": f"Invalid return type with grouped aggregate Pandas UDFs: "
-                        f"{self._returnType_placeholder}"
+                        f"{returnType}"
                     },
                 )
 
+    @property
+    def returnType(self) -> DataType:
+        # Make sure this is called after SparkContext is initialized.
+        # ``_parse_datatype_string`` accesses to JVM for parsing a DDL formatted string.
+        # TODO: PythonEvalType.SQL_BATCHED_UDF
+        if self._returnType_placeholder is None:
+            if isinstance(self._returnType, DataType):
+                self._returnType_placeholder = self._returnType
+            else:
+                self._returnType_placeholder = _parse_datatype_string(self._returnType)
+
+        UserDefinedFunction._check_return_type(self._returnType_placeholder, self.evalType)
         return self._returnType_placeholder
 
     @property

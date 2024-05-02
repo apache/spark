@@ -1041,7 +1041,7 @@
   },
   "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT" : {
     "message" : [
-      "Call to function <functionName> is invalid because it includes multiple argument assignments to the same parameter name <parameterName>."
+      "Call to routine <functionName> is invalid because it includes multiple argument assignments to the same parameter name <parameterName>."
     ],
     "subClass" : {
       "BOTH_POSITIONAL_AND_NAMED" : {
@@ -3490,16 +3490,16 @@
   },
   "ROUTINE_ALREADY_EXISTS" : {
     "message" : [
-      "Cannot create the function <routineName> because it already exists.",
-      "Choose a different name, drop or replace the existing function, or add the IF NOT EXISTS clause to tolerate a pre-existing function."
+      "Cannot create the routine <routineName> because it already exists.",
+      "Choose a different name, drop or replace the existing routine, or add the IF NOT EXISTS clause to tolerate a pre-existing routine."
     ],
     "sqlState" : "42723"
   },
   "ROUTINE_NOT_FOUND" : {
     "message" : [
-      "The function <routineName> cannot be found. Verify the spelling and correctness of the schema and catalog.",
+      "The routine <routineName> cannot be found. Verify the spelling and correctness of the schema and catalog.",
       "If you did not qualify the name with a schema and catalog, verify the current_schema() output, or qualify the name with the correct schema and catalog.",
-      "To tolerate the error on drop use DROP FUNCTION IF EXISTS."
+      "To tolerate the error on drop use DROP ... IF EXISTS."
     ],
     "sqlState" : "42883"
   },
@@ -4079,7 +4079,7 @@
   },
   "UNRESOLVED_ROUTINE" : {
     "message" : [
-      "Cannot resolve function <routineName> on search path <searchPath>."
+      "Cannot resolve routine <routineName> on search path <searchPath>."
     ],
     "sqlState" : "42883"
   },

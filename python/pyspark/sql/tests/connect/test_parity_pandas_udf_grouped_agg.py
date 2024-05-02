@@ -21,11 +21,6 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class PandasUDFGroupedAggParityTests(GroupedAggPandasUDFTestsMixin, ReusedConnectTestCase):
-    # TODO(SPARK-43727): Parity returnType check in Spark Connect
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_unsupported_types(self):
-        super().test_unsupported_types()
-
     @unittest.skip("Spark Connect does not support convert UNPARSED to catalyst types.")
     def test_manual(self):
         super().test_manual()
