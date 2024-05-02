@@ -67,8 +67,7 @@ private[spark] class StatsdReporter(
     Try(new DatagramSocket) match {
       case Failure(ioe: IOException) => logWarning("StatsD datagram socket construction failed",
         NetUtils.wrapException(host, port, NetUtils.getHostname(), 0, ioe))
-      case Failure(e) =>
-        logWarning("StatsD datagram socket construction failed", e)
+      case Failure(e) => logWarning("StatsD datagram socket construction failed", e)
       case Success(s) =>
         implicit val socket = s
         val localAddress = Try(socket.getLocalAddress).map(_.getHostAddress).getOrElse(null)

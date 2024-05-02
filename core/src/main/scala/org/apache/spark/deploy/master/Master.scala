@@ -1293,7 +1293,7 @@ private[deploy] class Master(
       if (worker.state != WorkerState.DEAD) {
         val workerTimeoutSecs = TimeUnit.MILLISECONDS.toSeconds(workerTimeoutMs)
         logWarning(log"Removing ${MDC(LogKeys.WORKER_ID, worker.id)} because we got no heartbeat " +
-          log"in ${MDC(LogKeys.TIME_UNITS, workerTimeoutSecs * 1000)} ms")
+          log"in ${MDC(LogKeys.TIME_UNITS, workerTimeoutMs)} ms")
         removeWorker(worker, s"Not receiving heartbeat for $workerTimeoutSecs seconds")
       } else {
         if (worker.lastHeartbeat < currentTime - ((reaperIterations + 1) * workerTimeoutMs)) {

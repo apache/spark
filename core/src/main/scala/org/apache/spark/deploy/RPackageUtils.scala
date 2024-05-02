@@ -115,8 +115,8 @@ private[deploy] object RPackageUtils extends Logging {
     val pathToPkg = Seq(dir, "R", "pkg").mkString(File.separator)
     val installCmd = baseInstallCmd ++ Seq(libDir, pathToPkg)
     if (verbose) {
-      print(log"Building R package with the command: ${MDC(SHELL_COMMAND, installCmd)}",
-        printStream)
+      print(log"Building R package with the command: " +
+        log"${MDC(SHELL_COMMAND, installCmd.mkString("List(", ", ", ")"))}", printStream)
     }
     try {
       val builder = new ProcessBuilder(installCmd.asJava)
