@@ -388,7 +388,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     }
   }
 
-  test("state store unload/close happens during the maintenance") {
+  test("SPARK-48105: state store unload/close happens during the maintenance") {
     tryWithProviderResource(
       newStoreProvider(opId = Random.nextInt(), partition = 0, minDeltasForSnapshot = 1)) {
       provider =>
