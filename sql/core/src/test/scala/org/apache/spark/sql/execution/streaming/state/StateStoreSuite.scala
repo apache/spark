@@ -388,6 +388,33 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     }
   }
 
+  test("state store unload/close happens during the maintenance") {
+    tryWithProviderResource(
+      newStoreProvider(opId = Random.nextInt(), partition = 0, minDeltasForSnapshot = 1)) {
+      provider =>
+        val store = provider.getStore(0).asInstanceOf[provider.HDFSBackedStateStore]
+        val keys = (1 to 20).map(i => ("a" + i))
+        keys.foreach(put(store, _, 0, 0))
+        // commit state store with 20 keys.
+        store.commit()
+        // get the state store iterator: mimic the case which the iterator is hold in the
+        // maintenance thread.
+        val storeIterator = store.iterator()
+        // If the provider is loaded in another executor, it will be unloaded and closed in
+        // current executor.
+        provider.close()
+        // the store iterator should still be valid as the maintenance thread may have already
+        // hold it and is doing snapshotting even thought the state store is unloaded.
+        val outputKeys = new mutable.ArrayBuffer[String]
+        while (storeIterator.hasNext) {
+          val unsafeRowPair = storeIterator.next()
+          val (key, _) = keyRowToData(unsafeRowPair.key)
+          outputKeys.append(key)
+        }
+        assert(keys.sorted === outputKeys.sorted)
+    }
+  }
+
   test("maintenance") {
     val conf = new SparkConf()
       .setMaster("local")
