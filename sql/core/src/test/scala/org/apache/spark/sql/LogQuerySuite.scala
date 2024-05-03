@@ -23,7 +23,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.util.LogUtils
+import org.apache.spark.util.LogUtils.LOG_SCHEMA
 
 /**
  * Test suite for querying Spark logs using SQL.
@@ -45,8 +45,7 @@ class LogQuerySuite extends QueryTest
   }
 
   private def createTempView(viewName: String): Unit = {
-    spark.read.schema(LogUtils.LOG_SCHEMA).json(logFile.getCanonicalPath)
-      .createOrReplaceTempView(viewName)
+    spark.read.schema(LOG_SCHEMA).json(logFile.getCanonicalPath).createOrReplaceTempView(viewName)
   }
 
   test("Query Spark logs using SQL") {
