@@ -75,7 +75,11 @@ private[deploy] object RPackageUtils extends Logging {
       e: Throwable = null): Unit = {
     if (printStream != null) {
       // scalastyle:off println
-      printStream.println(msg.message)
+      if (msg.context.isEmpty) {
+        printStream.println(msg.message)
+      } else {
+        printStream.println(s"${msg.message}, ${msg.context}")
+      }
       // scalastyle:on println
       if (e != null) {
         e.printStackTrace(printStream)
