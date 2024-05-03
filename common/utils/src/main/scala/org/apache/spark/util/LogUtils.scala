@@ -16,8 +16,23 @@
  */
 package org.apache.spark.util
 
+import org.apache.spark.annotation.DeveloperApi
+
+/**
+ * :: : DeveloperApi ::
+ * Utils for querying Spark logs with Spark SQL.
+ *
+ * @since 4.0.0
+ */
+@DeveloperApi
 object LogUtils {
-  val LOG_SCHEMA = """|ts TIMESTAMP,
+  /**
+   * Schema for structured Spark logs.
+   * Example usage:
+   *   val logDf = spark.read.schema(LOG_SCHEMA).json("path/to/logs")
+   */
+  val LOG_SCHEMA: String = """
+    |ts TIMESTAMP,
     | level STRING,
     | msg STRING,
     | context map<STRING, STRING>,
