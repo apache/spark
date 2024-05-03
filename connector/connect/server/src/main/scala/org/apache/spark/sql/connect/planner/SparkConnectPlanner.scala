@@ -101,7 +101,8 @@ class SparkConnectPlanner(
     throw new IllegalArgumentException("executeHolder does not belong to sessionHolder")
   }
 
-  private[connect] def session: SparkSession = sessionHolder.session
+  @DeveloperApi
+  def session: SparkSession = sessionHolder.session
 
   private[connect] def parser = session.sessionState.sqlParser
 
