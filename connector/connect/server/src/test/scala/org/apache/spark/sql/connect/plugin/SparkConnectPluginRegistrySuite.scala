@@ -20,17 +20,17 @@ package org.apache.spark.sql.connect.plugin
 import java.util.Optional
 
 import com.google.protobuf
-import org.apache.spark.{SparkContext, SparkEnv, SparkException}
 
+import org.apache.spark.{SparkContext, SparkEnv, SparkException}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Relation
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.connect.ConnectProtoUtils
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.planner.{SparkConnectPlanner, SparkConnectPlanTest}
-import org.apache.spark.sql.connect.ConnectProtoUtils
 import org.apache.spark.sql.test.SharedSparkSession
 
 class DummyPlugin extends RelationPlugin {
