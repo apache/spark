@@ -14,7 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
+import os
+import unittest
 import shutil
 import tempfile
 import uuid
@@ -146,6 +147,9 @@ class DataSourcesTestsMixin:
         schema = self.spark.read.option("inferSchema", True).csv(rdd, samplingRatio=0.5).schema
         self.assertEqual(schema, StructType([StructField("_c0", IntegerType(), True)]))
 
+    @unittest.skipIf(
+        "SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ, "Failed with different Client <> Server"
+    )
     def test_checking_csv_header(self):
         path = tempfile.mkdtemp()
         shutil.rmtree(path)

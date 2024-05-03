@@ -178,7 +178,7 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
 
     @classmethod
     def master(cls):
-        return "local[4]"
+        return os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[4]")
 
     @classmethod
     def setUpClass(cls):
