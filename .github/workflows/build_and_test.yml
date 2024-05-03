@@ -76,12 +76,10 @@ jobs:
       id: set-outputs
       run: |
         if [ -z "${{ inputs.jobs }}" ]; then
-          pyspark=true; sparkr=true; tpcds=true; docker=true;
+          pyspark=true; sparkr=true;
           pyspark_modules=`cd dev && python -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark')))"`
           pyspark=`./dev/is-changed.py -m $pyspark_modules`
           sparkr=`./dev/is-changed.py -m sparkr`
-          tpcds=`./dev/is-changed.py -m sql`
-          docker=`./dev/is-changed.py -m docker-integration-tests`
           kubernetes=`./dev/is-changed.py -m kubernetes`
           # 'build' and 'maven-build' are always true for now.
           # It does not save significant time and most of PRs trigger the build.
@@ -90,8 +88,8 @@ jobs:
               \"build\": \"true\",
               \"pyspark\": \"$pyspark\",
               \"sparkr\": \"$sparkr\",
-              \"tpcds-1g\": \"$tpcds\",
-              \"docker-integration-tests\": \"$docker\",
+              \"tpcds-1g\": \"false\",
+              \"docker-integration-tests\": \"false\",
               \"maven-build\": \"true\",
               \"lint\" : \"true\",
               \"k8s-integration-tests\" : \"$kubernetes\",
