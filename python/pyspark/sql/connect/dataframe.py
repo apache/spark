@@ -443,8 +443,6 @@ class DataFrame(ParentDataFrame):
                 session=self._session,
             )
 
-    drop_duplicates_within_watermark = dropDuplicatesWithinWatermark
-
     def distinct(self) -> ParentDataFrame:
         return DataFrame(
             plan.Deduplicate(child=self._plan, all_columns_as_keys=True), session=self._session
