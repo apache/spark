@@ -1323,7 +1323,7 @@ class Column private[sql] (@DeveloperApi val expr: proto.Expression) extends Log
   def over(): Column = over(Window.spec)
 }
 
-private[sql] object Column {
+object Column {
 
   def apply(name: String): Column = new Column(name)
 
@@ -1344,21 +1344,11 @@ private[sql] object Column {
     builder.build()
   }
 
-  private[sql] def apply(f: proto.Expression.Builder => Unit): Column = {
+  @DeveloperApi
+  def apply(f: proto.Expression.Builder => Unit): Column = {
     val builder = proto.Expression.newBuilder()
     f(builder)
     new Column(builder.build())
-  }
-
-  @DeveloperApi
-  @deprecated("Use forExtension(Array[Byte]) instead", "4.0.0")
-  def apply(extension: com.google.protobuf.Any): Column = {
-    apply(_.setExtension(extension))
-  }
-
-  @DeveloperApi
-  def forExtension(extension: Array[Byte]): Column = {
-    apply(_.setExtension(com.google.protobuf.Any.parseFrom(extension)))
   }
 
   private[sql] def fn(name: String, inputs: Column*): Column = {

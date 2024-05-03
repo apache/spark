@@ -125,6 +125,7 @@ class SparkConnectPlanner(
    * @return
    *   The resolved logical plan.
    */
+  @DeveloperApi
   def transformRelation(rel: proto.Relation): LogicalPlan =
     transformRelation(rel, cachePlan = false)
 
@@ -138,6 +139,7 @@ class SparkConnectPlanner(
    * @return
    *   The resolved logical plan.
    */
+  @DeveloperApi
   def transformRelation(rel: proto.Relation, cachePlan: Boolean): LogicalPlan = {
     sessionHolder.usePlanCache(rel, cachePlan) { rel =>
       val plan = rel.getRelTypeCase match {
@@ -228,14 +230,6 @@ class SparkConnectPlanner(
       }
       plan
     }
-  }
-
-  @DeveloperApi
-  def transformRelation(bytes: Array[Byte]): LogicalPlan = {
-    val recursionLimit = session.conf.get(CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT)
-    val relation =
-      ProtoUtils.parseWithRecursionLimit(bytes, proto.Relation.parser(), recursionLimit)
-    transformRelation(relation)
   }
 
   private def transformRelationPlugin(extension: ProtoAny): LogicalPlan = {
@@ -1472,6 +1466,7 @@ class SparkConnectPlanner(
    * @return
    *   Catalyst expression
    */
+  @DeveloperApi
   def transformExpression(exp: proto.Expression): Expression = {
     exp.getExprTypeCase match {
       case proto.Expression.ExprTypeCase.LITERAL => transformLiteral(exp.getLiteral)
@@ -1511,14 +1506,6 @@ class SparkConnectPlanner(
         throw InvalidPlanInput(
           s"Expression with ID: ${exp.getExprTypeCase.getNumber} is not supported")
     }
-  }
-
-  @DeveloperApi
-  def transformExpression(bytes: Array[Byte]): Expression = {
-    val recursionLimit = session.conf.get(CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT)
-    val expression =
-      ProtoUtils.parseWithRecursionLimit(bytes, proto.Expression.parser(), recursionLimit)
-    transformExpression(expression)
   }
 
   private def toNamedExpression(expr: Expression): NamedExpression = expr match {
