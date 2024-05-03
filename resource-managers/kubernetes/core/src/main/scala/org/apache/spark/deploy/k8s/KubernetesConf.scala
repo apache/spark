@@ -22,6 +22,7 @@ import io.fabric8.kubernetes.api.model.{LocalObjectReference, LocalObjectReferen
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.{SPARK_VERSION, SparkConf}
+import org.apache.spark.annotation.{DeveloperApi, Since, Unstable}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.features.DriverServiceFeatureStep._
@@ -78,7 +79,15 @@ private[spark] abstract class KubernetesConf(val sparkConf: SparkConf) {
   def getOption(key: String): Option[String] = sparkConf.getOption(key)
 }
 
-private[spark] class KubernetesDriverConf(
+/**
+ * :: DeveloperApi ::
+ *
+ * Used for K8s operations internally and Spark K8s operator.
+ */
+@Unstable
+@DeveloperApi
+@Since("4.0.0")
+class KubernetesDriverConf(
     sparkConf: SparkConf,
     val appId: String,
     val mainAppResource: MainAppResource,
