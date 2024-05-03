@@ -590,7 +590,7 @@ object StateStore extends Logging {
       // Wait a while for existing tasks to terminate
       if (!threadPool.awaitTermination(5 * 60, TimeUnit.SECONDS)) {
         logWarning(
-          s"MaintenanceThreadPool is not able to be terminated within 60 seconds," +
+          s"MaintenanceThreadPool is not able to be terminated within 300 seconds," +
             " forcefully shutting down now.")
         threadPool.shutdownNow() // Cancel currently executing tasks
 
