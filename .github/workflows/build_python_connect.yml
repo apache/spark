@@ -86,9 +86,6 @@ jobs:
             --driver-java-options "-Dlog4j.configurationFile=file:$GITHUB_WORKSPACE/conf/log4j2.properties" \
             --jars "`find connector/connect/server/target -name spark-connect-*SNAPSHOT.jar`,`find connector/protobuf/target -name spark-protobuf-*SNAPSHOT.jar`,`find connector/avro/target -name spark-avro*SNAPSHOT.jar`"
 
-          # Make sure running Python workers that contains pyspark.core once. They will be reused.
-          python -c "from pyspark.sql import SparkSession; _ = SparkSession.builder.remote('sc://localhost').getOrCreate().range(100).repartition(100).mapInPandas(lambda x: x, 'id INT').collect()"
-
           # Remove Py4J and PySpark zipped library to make sure there is no JVM connection
           mv python/lib lib.back
           mv python/pyspark pyspark.back
@@ -108,9 +105,6 @@ jobs:
             --master "local-cluster[2, 4, 1024]" \
             --driver-java-options "-Dlog4j.configurationFile=file:$GITHUB_WORKSPACE/conf/log4j2.properties" \
             --jars "`find connector/connect/server/target -name spark-connect-*SNAPSHOT.jar`,`find connector/protobuf/target -name spark-protobuf-*SNAPSHOT.jar`,`find connector/avro/target -name spark-avro*SNAPSHOT.jar`"
-
-          # Make sure running Python workers that contains pyspark.core once. They will be reused.
-          python -c "from pyspark.sql import SparkSession; _ = SparkSession.builder.remote('sc://localhost').getOrCreate().range(100).repartition(100).mapInPandas(lambda x: x, 'id INT').show(n=100)" > /dev/null
 
           # Remove Py4J and PySpark zipped library to make sure there is no JVM connection
           mv python/lib lib.back
