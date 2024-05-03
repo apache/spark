@@ -25,7 +25,8 @@ import org.apache.commons.lang3.SystemUtils
 import org.slf4j.Logger
 import sun.misc.{Signal, SignalHandler}
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.SIGNAL
 
 /**
  * Contains utilities for working with posix signals.
@@ -79,7 +80,7 @@ private[spark] object SignalUtils extends Logging {
       action: => Boolean): Unit = synchronized {
     try {
       val handler = handlers.getOrElseUpdate(signal, {
-        logInfo(s"Registering signal handler for $signal")
+        logInfo(log"Registering signal handler for ${MDC(SIGNAL, signal)}")
         new ActionHandler(new Signal(signal))
       })
       handler.register(action)

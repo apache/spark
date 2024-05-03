@@ -26,6 +26,8 @@ import scala.concurrent.duration._
 
 import org.apache.spark.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.internal.LogKeys._
+import org.apache.spark.internal.MDC
 import org.apache.spark.util.ThreadUtils
 
 class SparkShellSuite extends SparkFunSuite {
@@ -68,7 +70,7 @@ class SparkShellSuite extends SparkFunSuite {
     val lock = new Object
 
     def captureOutput(source: String)(line: String): Unit = lock.synchronized {
-      val newLine = s"$source> $line"
+      val newLine = log"${MDC(STREAM_SOURCE, source)}> ${MDC(OUTPUT_LINE, line)}"
 
       logInfo(newLine)
       buffer += newLine
@@ -79,7 +81,9 @@ class SparkShellSuite extends SparkFunSuite {
 
       // If we haven't found all expected answers and another expected answer comes up...
       if (next < expectedAnswers.size && line.contains(expectedAnswers(next))) {
-        logInfo(s"$source> found expected output line $next: '${expectedAnswers(next)}'")
+        logInfo(log"${MDC(STREAM_SOURCE, source)}> found expected" +
+          log" output line ${MDC(OUTPUT_LINE_NUMBER, next)}:" +
+          log" '${MDC(EXPECTED_ANSWER, expectedAnswers(next))}'")
         next += 1
         // If all expected answers have been found...
         if (next == expectedAnswers.size) {

@@ -35,7 +35,8 @@ import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.deploy.master.RecoveryState
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
@@ -187,7 +188,7 @@ private object FaultToleranceTest extends App with Logging {
       fn
       numPassed += 1
       logInfo("==============================================")
-      logInfo("Passed: " + name)
+      logInfo(log"Passed: ${MDC(TEST_NAME, name)}")
       logInfo("==============================================")
     } catch {
       case e: Exception =>
@@ -201,12 +202,12 @@ private object FaultToleranceTest extends App with Logging {
   }
 
   private def addMasters(num: Int): Unit = {
-    logInfo(s">>>>> ADD MASTERS $num <<<<<")
+    logInfo(log">>>>> ADD MASTERS ${MDC(NUM_ADDED_MASTERS, num)} <<<<<")
     (1 to num).foreach { _ => masters += SparkDocker.startMaster(dockerMountDir) }
   }
 
   private def addWorkers(num: Int): Unit = {
-    logInfo(s">>>>> ADD WORKERS $num <<<<<")
+    logInfo(log">>>>> ADD WORKERS ${MDC(NUM_ADDED_WORKERS, num)} <<<<<")
     val masterUrls = getMasterUrls(masters.toSeq)
     (1 to num).foreach { _ => workers += SparkDocker.startWorker(dockerMountDir, masterUrls) }
   }
@@ -334,8 +335,9 @@ private object FaultToleranceTest extends App with Logging {
     }
   }
 
-  logInfo("Ran %s tests, %s passed and %s failed".format(numPassed + numFailed, numPassed,
-    numFailed))
+  logInfo(log"Ran ${MDC(NUM_TESTS, numPassed + numFailed)} tests," +
+    log" ${MDC(NUM_PASSED_TESTS, numPassed)} passed" +
+    log" and ${MDC(NUM_FAILED_TESTS, numFailed)} failed")
 }
 
 private class TestMasterInfo(val ip: String, val dockerId: DockerId, val logFile: File)
