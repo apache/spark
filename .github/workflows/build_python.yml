@@ -44,5 +44,6 @@ jobs:
         }
       jobs: >-
         {
-          "pyspark": "true"
+          "pyspark": "true",
+          "pyspark-pandas": "true"
         }
