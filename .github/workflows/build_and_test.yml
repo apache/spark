@@ -796,10 +796,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - java: 17
-            os: ubuntu-latest
-          - java: 21
-            os: ubuntu-latest
           - java: 21
             os: macos-14 
     runs-on: ${{ matrix.os }}
