@@ -667,14 +667,6 @@ class DataFrame:
         -------
         int
             Size in bytes estimated from optimized plan
-
-        Examples
-        --------
-        Example 1. Size of the Iris dataset: https://archive.ics.uci.edu/dataset/53/iris
-
-        >>> df = spark.read.csv("iris.data")
-        >>> df.sizeInBytesApproximation()
-        4551
         """
         ...
 
