@@ -747,6 +747,9 @@ def is_remote_only() -> bool:
     """
     global _is_remote_only
 
+    if "SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ:
+        return True
+
     if _is_remote_only is not None:
         return _is_remote_only
     try:
