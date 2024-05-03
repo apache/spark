@@ -351,7 +351,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   }
 
   override def close(): Unit = {
-    synchronized { loadedMaps.keySet().asScala.toSeq.foreach(loadedMaps.remove) }
+    synchronized { loadedMaps.clear() }
   }
 
   override def supportedCustomMetrics: Seq[StateStoreCustomMetric] = {

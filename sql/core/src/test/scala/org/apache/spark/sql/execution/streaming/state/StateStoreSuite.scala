@@ -393,25 +393,36 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       newStoreProvider(opId = Random.nextInt(), partition = 0, minDeltasForSnapshot = 1)) {
       provider =>
         val store = provider.getStore(0).asInstanceOf[provider.HDFSBackedStateStore]
-        val keys = (1 to 20).map(i => ("a" + i))
-        keys.foreach(put(store, _, 0, 0))
+        val values = (1 to 20)
+        val keys = values.map(i => ("a" + i))
+        keys.zip(values).map{case (k, v) => put(store, k, 0, v)}
         // commit state store with 20 keys.
         store.commit()
         // get the state store iterator: mimic the case which the iterator is hold in the
         // maintenance thread.
         val storeIterator = store.iterator()
-        // If the provider is loaded in another executor, it will be unloaded and closed in
-        // current executor.
-        provider.close()
+
         // the store iterator should still be valid as the maintenance thread may have already
-        // hold it and is doing snapshotting even thought the state store is unloaded.
+        // hold it and is doing snapshotting even though the state store is unloaded.
         val outputKeys = new mutable.ArrayBuffer[String]
+        val outputValues = new mutable.ArrayBuffer[Int]
+        var cnt = 0
         while (storeIterator.hasNext) {
+          if (cnt == 10) {
+            // Mimic the case where the provider is loaded in another executor in the middle of
+            // iteration. When this happens, the provider will be unloaded and closed in
+            // current executor.
+            provider.close()
+          }
           val unsafeRowPair = storeIterator.next()
           val (key, _) = keyRowToData(unsafeRowPair.key)
           outputKeys.append(key)
+          outputValues.append(valueRowToData(unsafeRowPair.value))
+
+          cnt = cnt + 1
         }
         assert(keys.sorted === outputKeys.sorted)
+        assert(values.sorted === outputValues.sorted)
     }
   }
 
