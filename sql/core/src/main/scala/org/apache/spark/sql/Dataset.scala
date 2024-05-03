@@ -583,7 +583,7 @@ class Dataset[T] private[sql](
   // scalastyle:on println
 
   /**
-   * Returns an estimated size in bytes of the Dataset
+   * Returns an approximate size in bytes of the Dataset.
    *
    * @group basic
    * @since 4.0.0

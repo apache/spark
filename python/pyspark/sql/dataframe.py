@@ -670,11 +670,11 @@ class DataFrame:
 
         Examples
         --------
-        >>> df = spark.read.csv("iris.csv")
+        Example 1. Size of the Iris dataset: https://archive.ics.uci.edu/dataset/53/iris
 
-        Return the size in bytes of the :class:`DataFrame`.
-
+        >>> df = spark.read.csv("iris.data")
         >>> df.sizeInBytesApproximation()
+        4551
         """
         ...
 
