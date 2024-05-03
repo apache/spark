@@ -83,7 +83,7 @@ jobs:
           tpcds=`./dev/is-changed.py -m sql`
           docker=`./dev/is-changed.py -m docker-integration-tests`
           kubernetes=`./dev/is-changed.py -m kubernetes`
-          # 'build' and 'maven-build' are always true for now.
+          # 'build' is always true for now.
           # It does not save significant time and most of PRs trigger the build.
           precondition="
             {
@@ -92,7 +92,6 @@ jobs:
               \"sparkr\": \"$sparkr\",
               \"tpcds-1g\": \"$tpcds\",
               \"docker-integration-tests\": \"$docker\",
-              \"maven-build\": \"true\",
               \"lint\" : \"true\",
               \"k8s-integration-tests\" : \"$kubernetes\",
               \"buf\" : \"true\",
@@ -788,62 +787,6 @@ jobs:
         name: site
         path: site.tar.bz2
         retention-days: 1
-
-  maven-build:
-    needs: precondition
-    if: fromJson(needs.precondition.outputs.required).maven-build == 'true'
-    name: Java ${{ matrix.java }} build with Maven (${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - java: 21
-            os: macos-14 
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 180
-    steps:
-    - name: Checkout Spark repository
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-        repository: apache/spark
-        ref: ${{ inputs.branch }}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
-    - name: Cache SBT and Maven
-      uses: actions/cache@v4
-      with:
-        path: |
-          build/apache-maven-*
-          build/*.jar
-          ~/.sbt
-        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
-        restore-keys: |
-          build-
-    - name: Cache Maven local repository
-      uses: actions/cache@v4
-      with:
-        path: ~/.m2/repository
-        key: java${{ matrix.java }}-maven-${{ hashFiles('**/pom.xml') }}
-        restore-keys: |
-          java${{ matrix.java }}-maven-
-    - name: Install Java ${{ matrix.java }}
-      uses: actions/setup-java@v4
-      with:
-        distribution: zulu
-        java-version: ${{ matrix.java }}
-    - name: Build with Maven
-      run: |
-        export MAVEN_OPTS="-Xss64m -Xmx2g -XX:ReservedCodeCacheSize=1g -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
-        export MAVEN_CLI_OPTS="--no-transfer-progress"
-        export JAVA_VERSION=${{ matrix.java }}
-        # It uses Maven's 'install' intentionally, see https://github.com/apache/spark/pull/26414.
-        ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Djava.version=${JAVA_VERSION/-ea} install
-        rm -rf ~/.m2/repository/org/apache/spark
 
   # Any TPC-DS related updates on this job need to be applied to tpcds-1g-gen job of benchmark.yml as well
   tpcds-1g:
