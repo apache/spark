@@ -1051,6 +1051,10 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             message_parameters={"explain_mode": "unknown"},
         )
 
+    def test_size_in_bytes(self):
+        size_in_bytes = self.connect.sql("SELECT 1").sizeInBytesApproximation()
+        self.assertGreater(size_in_bytes, 0)
+
     def test_count(self) -> None:
         # SPARK-41308: test count() API.
         self.assertEqual(

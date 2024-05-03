@@ -222,6 +222,9 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         else:
             print(self._jdf.schema().treeString())
 
+    def sizeInBytesApproximation(self) -> int:
+        return self._jdf.sizeInBytesApproximation()
+
     def explain(
         self, extended: Optional[Union[bool, str]] = None, mode: Optional[str] = None
     ) -> None:

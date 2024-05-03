@@ -510,6 +510,11 @@ class DataFrameTestsMixin:
             self.assertEqual(1, buf.getvalue().count("_1"))
             self.assertEqual(1, buf.getvalue().count("_2"))
 
+    def test_size_in_bytes(self):
+        df = self.spark.range(1).toDF("a")
+        size_in_bytes = df.sizeInBytesApproximation()
+        self.assertGreater(size_in_bytes, 0)
+
     def test_join_without_on(self):
         df1 = self.spark.range(1).toDF("a")
         df2 = self.spark.range(1).toDF("b")

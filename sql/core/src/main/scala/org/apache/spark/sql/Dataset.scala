@@ -47,7 +47,6 @@ import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JSONOptions}
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.SizeInBytesOnlyStatsPlanVisitor
 import org.apache.spark.sql.catalyst.trees.{TreeNodeTag, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, IntervalUtils}
@@ -586,19 +585,10 @@ class Dataset[T] private[sql](
   /**
    * Returns an estimated size in bytes of the Dataset
    *
-   * @param usePhysical
-   * specify should the plan be optimized before getting size in bytes;
-   * use logical plan otherwise.
    * @group basic
    * @since 4.0.0
    */
-  def estimatedSizeInBytes(usePhysical: Boolean): Long = {
-    if (usePhysical) {
-      queryExecution.optimizedPlan.stats.sizeInBytes.toLong
-    } else {
-      SizeInBytesOnlyStatsPlanVisitor.default(logicalPlan).sizeInBytes.toLong
-    }
-  }
+  def sizeInBytesApproximation(): Long = queryExecution.optimizedPlan.stats.sizeInBytes.toLong
 
   /**
    * Prints the plans (logical and physical) with a format specified by a given explain mode.

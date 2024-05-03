@@ -1815,6 +1815,10 @@ class DataFrame(ParentDataFrame):
     def printSchema(self, level: Optional[int] = None) -> None:
         print(self._tree_string(level))
 
+    def sizeInBytesApproximation(self) -> int:
+        relation = self._plan.plan(self._session)
+        return self._session.client._sizeInBytes(relation=relation).size_in_bytes
+
     def inputFiles(self) -> List[str]:
         query = self._plan.to_proto(self._session.client)
         result = self._session.client._analyze(method="input_files", plan=query).input_files

@@ -658,6 +658,27 @@ class DataFrame:
         ...
 
     @dispatch_df_method
+    def sizeInBytesApproximation(self) -> int:
+        """Return approximate size in bytes of a DataFrame.
+
+        .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        int
+            Size in bytes estimated from optimized plan
+
+        Examples
+        --------
+        >>> df = spark.read.csv("iris.csv")
+
+        Return the size in bytes of the :class:`DataFrame`.
+
+        >>> df.sizeInBytesApproximation()
+        """
+        ...
+
+    @dispatch_df_method
     def explain(
         self, extended: Optional[Union[bool, str]] = None, mode: Optional[str] = None
     ) -> None:

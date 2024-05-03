@@ -477,6 +477,27 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["relation", b"relation"]
         ) -> None: ...
 
+    class SizeInBytes(google.protobuf.message.Message):
+        """Return estimated size in bytes of the top node of the plan."""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        RELATION_FIELD_NUMBER: builtins.int
+        @property
+        def relation(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
+            """(Required) The relation to analyze"""
+        def __init__(
+            self,
+            *,
+            relation: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["relation", b"relation"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["relation", b"relation"]
+        ) -> None: ...
+
     SESSION_ID_FIELD_NUMBER: builtins.int
     CLIENT_OBSERVED_SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
     USER_CONTEXT_FIELD_NUMBER: builtins.int
@@ -494,6 +515,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
     PERSIST_FIELD_NUMBER: builtins.int
     UNPERSIST_FIELD_NUMBER: builtins.int
     GET_STORAGE_LEVEL_FIELD_NUMBER: builtins.int
+    SIZE_IN_BYTES_FIELD_NUMBER: builtins.int
     session_id: builtins.str
     """(Required)
 
@@ -542,6 +564,8 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
     def unpersist(self) -> global___AnalyzePlanRequest.Unpersist: ...
     @property
     def get_storage_level(self) -> global___AnalyzePlanRequest.GetStorageLevel: ...
+    @property
+    def size_in_bytes(self) -> global___AnalyzePlanRequest.SizeInBytes: ...
     def __init__(
         self,
         *,
@@ -562,6 +586,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         persist: global___AnalyzePlanRequest.Persist | None = ...,
         unpersist: global___AnalyzePlanRequest.Unpersist | None = ...,
         get_storage_level: global___AnalyzePlanRequest.GetStorageLevel | None = ...,
+        size_in_bytes: global___AnalyzePlanRequest.SizeInBytes | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -596,6 +621,8 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             b"schema",
             "semantic_hash",
             b"semantic_hash",
+            "size_in_bytes",
+            b"size_in_bytes",
             "spark_version",
             b"spark_version",
             "tree_string",
@@ -641,6 +668,8 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             b"semantic_hash",
             "session_id",
             b"session_id",
+            "size_in_bytes",
+            b"size_in_bytes",
             "spark_version",
             b"spark_version",
             "tree_string",
@@ -680,6 +709,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             "persist",
             "unpersist",
             "get_storage_level",
+            "size_in_bytes",
         ]
         | None
     ): ...
@@ -877,6 +907,23 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["storage_level", b"storage_level"]
         ) -> None: ...
 
+    class SizeInBytes(google.protobuf.message.Message):
+        """Response to SizeInBytes request, contains a single double"""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        RESULT_FIELD_NUMBER: builtins.int
+        result: builtins.int
+        """(Required) Estimated size in bytes of the provided plan"""
+        def __init__(
+            self,
+            *,
+            result: builtins.int = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["result", b"result"]
+        ) -> None: ...
+
     SESSION_ID_FIELD_NUMBER: builtins.int
     SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
     SCHEMA_FIELD_NUMBER: builtins.int
@@ -892,6 +939,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
     PERSIST_FIELD_NUMBER: builtins.int
     UNPERSIST_FIELD_NUMBER: builtins.int
     GET_STORAGE_LEVEL_FIELD_NUMBER: builtins.int
+    SIZE_IN_BYTES_FIELD_NUMBER: builtins.int
     session_id: builtins.str
     server_side_session_id: builtins.str
     """Server-side generated idempotency key that the client can use to assert that the server side
@@ -923,6 +971,8 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
     def unpersist(self) -> global___AnalyzePlanResponse.Unpersist: ...
     @property
     def get_storage_level(self) -> global___AnalyzePlanResponse.GetStorageLevel: ...
+    @property
+    def size_in_bytes(self) -> global___AnalyzePlanResponse.SizeInBytes: ...
     def __init__(
         self,
         *,
@@ -941,6 +991,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
         persist: global___AnalyzePlanResponse.Persist | None = ...,
         unpersist: global___AnalyzePlanResponse.Unpersist | None = ...,
         get_storage_level: global___AnalyzePlanResponse.GetStorageLevel | None = ...,
+        size_in_bytes: global___AnalyzePlanResponse.SizeInBytes | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -967,6 +1018,8 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             b"schema",
             "semantic_hash",
             b"semantic_hash",
+            "size_in_bytes",
+            b"size_in_bytes",
             "spark_version",
             b"spark_version",
             "tree_string",
@@ -1004,6 +1057,8 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             b"server_side_session_id",
             "session_id",
             b"session_id",
+            "size_in_bytes",
+            b"size_in_bytes",
             "spark_version",
             b"spark_version",
             "tree_string",
@@ -1029,6 +1084,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             "persist",
             "unpersist",
             "get_storage_level",
+            "size_in_bytes",
         ]
         | None
     ): ...
