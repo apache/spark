@@ -39,7 +39,6 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BoxedLongEncoder
 import org.apache.spark.sql.connect.client.{ClassFinder, SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
-import org.apache.spark.sql.connect.common.ProtoUtils
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.{CatalogImpl, SqlApiConf}
 import org.apache.spark.sql.streaming.DataStreamReader
