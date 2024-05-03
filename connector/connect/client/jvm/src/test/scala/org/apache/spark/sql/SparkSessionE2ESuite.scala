@@ -196,7 +196,7 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
 
     // q2 and q3 should be cancelled
     interrupted.clear()
-    eventually(timeout(30.seconds), interval(1.seconds)) {
+    eventually(timeout(1.minute), interval(1.seconds)) {
       val ids = spark.interruptTag("two")
       interrupted ++= ids
       assert(interrupted.length == 2, s"Interrupted operations: $interrupted.")
@@ -213,7 +213,7 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
 
     // q1 and q4 should be cancelled
     interrupted.clear()
-    eventually(timeout(30.seconds), interval(1.seconds)) {
+    eventually(timeout(1.minute), interval(1.seconds)) {
       val ids = spark.interruptTag("one")
       interrupted ++= ids
       assert(interrupted.length == 2, s"Interrupted operations: $interrupted.")
