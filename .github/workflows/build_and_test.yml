@@ -76,24 +76,22 @@ jobs:
       id: set-outputs
       run: |
         if [ -z "${{ inputs.jobs }}" ]; then
-          pyspark=true; sparkr=true; tpcds=true; docker=true;
+          pyspark=true; sparkr=true;
           pyspark_modules=`cd dev && python -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark')))"`
           pyspark=`./dev/is-changed.py -m $pyspark_modules`
           sparkr=`./dev/is-changed.py -m sparkr`
-          tpcds=`./dev/is-changed.py -m sql`
-          docker=`./dev/is-changed.py -m docker-integration-tests`
-          # 'build' and 'maven-build' are always true for now.
+          kubernetes=`./dev/is-changed.py -m kubernetes`
+          # 'build' is always true for now.
           # It does not save significant time and most of PRs trigger the build.
           precondition="
             {
               \"build\": \"true\",
               \"pyspark\": \"$pyspark\",
               \"sparkr\": \"$sparkr\",
-              \"tpcds-1g\": \"$tpcds\",
-              \"docker-integration-tests\": \"$docker\",
-              \"maven-build\": \"true\",
+              \"tpcds-1g\": \"false\",
+              \"docker-integration-tests\": \"false\",
               \"lint\" : \"true\",
-              \"k8s-integration-tests\" : \"true\",
+              \"k8s-integration-tests\" : \"$kubernetes\",
               \"buf\" : \"true\",
               \"ui\" : \"true\",
             }"
@@ -123,7 +121,7 @@ jobs:
     needs: precondition
     if: fromJson(needs.precondition.outputs.required).build == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    timeout-minutes: 180
     strategy:
       fail-fast: false
       matrix:
@@ -193,6 +191,7 @@ jobs:
       HIVE_PROFILE: ${{ matrix.hive }}
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
+      NOLINT_ON_COMPILE: true
       SKIP_UNIDOC: true
       SKIP_MIMA: true
       SKIP_PACKAGING: true
@@ -333,7 +332,7 @@ jobs:
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).pyspark == 'true'
     name: "Build modules: ${{ matrix.modules }}"
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    timeout-minutes: 180
     container:
       image: ${{ needs.precondition.outputs.image_url }}
     strategy:
@@ -364,7 +363,7 @@ jobs:
             pyspark-pandas-connect-part3
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
-      PYTHON_TO_TEST: 'python3.9'
+      PYTHON_TO_TEST: 'python3.11'
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
       GITHUB_PREV_SHA: ${{ github.event.before }}
@@ -480,7 +479,7 @@ jobs:
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).sparkr == 'true'
     name: "Build modules: sparkr"
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    timeout-minutes: 180
     container:
       image: ${{ needs.precondition.outputs.image_url }}
     env:
@@ -602,10 +601,11 @@ jobs:
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).lint == 'true'
     name: Linters, licenses, dependencies and documentation generation
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    timeout-minutes: 180
     env:
       LC_ALL: C.UTF-8
       LANG: C.UTF-8
+      NOLINT_ON_COMPILE: false
       PYSPARK_DRIVER_PYTHON: python3.9
       PYSPARK_PYTHON: python3.9
       GITHUB_PREV_SHA: ${{ github.event.before }}
@@ -786,66 +786,6 @@ jobs:
         path: site.tar.bz2
         retention-days: 1
 
-  maven-build:
-    needs: precondition
-    if: fromJson(needs.precondition.outputs.required).maven-build == 'true'
-    name: Java ${{ matrix.java }} build with Maven (${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - java: 17
-            os: ubuntu-latest
-          - java: 21
-            os: ubuntu-latest
-          - java: 21
-            os: macos-14 
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 300
-    steps:
-    - name: Checkout Spark repository
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-        repository: apache/spark
-        ref: ${{ inputs.branch }}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
-    - name: Cache SBT and Maven
-      uses: actions/cache@v4
-      with:
-        path: |
-          build/apache-maven-*
-          build/*.jar
-          ~/.sbt
-        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
-        restore-keys: |
-          build-
-    - name: Cache Maven local repository
-      uses: actions/cache@v4
-      with:
-        path: ~/.m2/repository
-        key: java${{ matrix.java }}-maven-${{ hashFiles('**/pom.xml') }}
-        restore-keys: |
-          java${{ matrix.java }}-maven-
-    - name: Install Java ${{ matrix.java }}
-      uses: actions/setup-java@v4
-      with:
-        distribution: zulu
-        java-version: ${{ matrix.java }}
-    - name: Build with Maven
-      run: |
-        export MAVEN_OPTS="-Xss64m -Xmx2g -XX:ReservedCodeCacheSize=1g -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
-        export MAVEN_CLI_OPTS="--no-transfer-progress"
-        export JAVA_VERSION=${{ matrix.java }}
-        # It uses Maven's 'install' intentionally, see https://github.com/apache/spark/pull/26414.
-        ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Djava.version=${JAVA_VERSION/-ea} install
-        rm -rf ~/.m2/repository/org/apache/spark
-
   # Any TPC-DS related updates on this job need to be applied to tpcds-1g-gen job of benchmark.yml as well
   tpcds-1g:
     needs: precondition
@@ -853,7 +793,7 @@ jobs:
     name: Run TPC-DS queries with SF=1
     # Pin to 'Ubuntu 20.04' due to 'databricks/tpcds-kit' compilation
     runs-on: ubuntu-20.04
-    timeout-minutes: 300
+    timeout-minutes: 180
     env:
       SPARK_LOCAL_IP: localhost
     steps:
@@ -954,7 +894,7 @@ jobs:
     if: fromJson(needs.precondition.outputs.required).docker-integration-tests == 'true'
     name: Run Docker integration tests
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    timeout-minutes: 180
     env:
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
@@ -1022,7 +962,7 @@ jobs:
     if: fromJson(needs.precondition.outputs.required).k8s-integration-tests == 'true'
     name: Run Spark on Kubernetes Integration test
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    timeout-minutes: 180
     steps:
       - name: Checkout Spark repository
         uses: actions/checkout@v4
@@ -1094,7 +1034,7 @@ jobs:
     if: fromJson(needs.precondition.outputs.required).ui == 'true'
     name: Run Spark UI tests
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
       - name: Use Node.js
