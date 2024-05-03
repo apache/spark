@@ -79,7 +79,6 @@ private[spark] abstract class KubernetesConf(val sparkConf: SparkConf) {
   def getOption(key: String): Option[String] = sparkConf.getOption(key)
 }
 
-
 /**
  * :: DeveloperApi ::
  *
