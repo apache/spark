@@ -33,18 +33,18 @@ object LogUtils {
    */
   val LOG_SCHEMA: String = """
     |ts TIMESTAMP,
-    | level STRING,
-    | msg STRING,
-    | context map<STRING, STRING>,
-    | exception STRUCT<
-    |   class STRING,
-    |   msg STRING,
-    |   stacktrace ARRAY<STRUCT<
-    |     class STRING,
-    |     method STRING,
-    |     file STRING,
-    |     line STRING
-    |   >>
-    | >,
-    | logger STRING""".stripMargin
+    |level STRING,
+    |msg STRING,
+    |context map<STRING, STRING>,
+    |exception STRUCT<
+    |  class STRING,
+    |  msg STRING,
+    |  stacktrace ARRAY<STRUCT<
+    |    class STRING,
+    |    method STRING,
+    |    file STRING,
+    |    line STRING
+    |  >>
+    |>,
+    |logger STRING""".stripMargin
 }
