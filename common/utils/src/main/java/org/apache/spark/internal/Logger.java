@@ -45,7 +45,7 @@ public class Logger {
   public void error(String msg, MDC... mdcs) {
     if (mdcs == null || mdcs.length == 0) {
       slf4jLogger.error(msg);
-    } else {
+    } else if (slf4jLogger.isErrorEnabled()) {
       withLogContext(msg, mdcs, null, mt -> slf4jLogger.error(mt.message));
     }
   }
@@ -53,7 +53,7 @@ public class Logger {
   public void error(String msg, Throwable throwable, MDC... mdcs) {
     if (mdcs == null || mdcs.length == 0) {
       slf4jLogger.error(msg, throwable);
-    } else {
+    } else if (slf4jLogger.isErrorEnabled()) {
       withLogContext(msg, mdcs, throwable, mt -> slf4jLogger.error(mt.message, mt.throwable));
     }
   }
@@ -69,7 +69,7 @@ public class Logger {
   public void warn(String msg, MDC... mdcs) {
     if (mdcs == null || mdcs.length == 0) {
       slf4jLogger.warn(msg);
-    } else {
+    } else if (slf4jLogger.isWarnEnabled()) {
       withLogContext(msg, mdcs, null, mt -> slf4jLogger.warn(mt.message));
     }
   }
@@ -77,7 +77,7 @@ public class Logger {
   public void warn(String msg, Throwable throwable, MDC... mdcs) {
     if (mdcs == null || mdcs.length == 0) {
       slf4jLogger.warn(msg);
-    } else {
+    } else if (slf4jLogger.isWarnEnabled()) {
       withLogContext(msg, mdcs, throwable, mt -> slf4jLogger.warn(mt.message, mt.throwable));
     }
   }
@@ -93,7 +93,7 @@ public class Logger {
   public void info(String msg, MDC... mdcs) {
     if (mdcs == null || mdcs.length == 0) {
       slf4jLogger.info(msg);
-    } else {
+    } else if (slf4jLogger.isInfoEnabled()) {
       withLogContext(msg, mdcs, null, mt -> slf4jLogger.info(mt.message));
     }
   }
@@ -101,7 +101,7 @@ public class Logger {
   public void info(String msg, Throwable throwable, MDC... mdcs) {
     if (mdcs == null || mdcs.length == 0) {
       slf4jLogger.info(msg);
-    } else {
+    } else if (slf4jLogger.isInfoEnabled()) {
       withLogContext(msg, mdcs, throwable, mt -> slf4jLogger.info(mt.message, mt.throwable));
     }
   }
@@ -117,7 +117,7 @@ public class Logger {
   public void debug(String msg, MDC... mdcs) {
     if (mdcs == null || mdcs.length == 0) {
       slf4jLogger.debug(msg);
-    } else {
+    } else if (slf4jLogger.isDebugEnabled()) {
       withLogContext(msg, mdcs, null, mt -> slf4jLogger.debug(mt.message));
     }
   }
@@ -125,7 +125,7 @@ public class Logger {
   public void debug(String msg, Throwable throwable, MDC... mdcs) {
     if (mdcs == null || mdcs.length == 0) {
       slf4jLogger.debug(msg);
-    } else {
+    } else if (slf4jLogger.isDebugEnabled()) {
       withLogContext(msg, mdcs, throwable, mt -> slf4jLogger.debug(mt.message, mt.throwable));
     }
   }
@@ -141,7 +141,7 @@ public class Logger {
   public void trace(String msg, MDC... mdcs) {
     if (mdcs == null || mdcs.length == 0) {
       slf4jLogger.trace(msg);
-    } else {
+    } else if (slf4jLogger.isTraceEnabled()) {
       withLogContext(msg, mdcs, null, mt -> slf4jLogger.trace(mt.message));
     }
   }
@@ -149,7 +149,7 @@ public class Logger {
   public void trace(String msg, Throwable throwable, MDC... mdcs) {
     if (mdcs == null || mdcs.length == 0) {
       slf4jLogger.trace(msg);
-    } else {
+    } else if (slf4jLogger.isTraceEnabled()) {
       withLogContext(msg, mdcs, throwable, mt -> slf4jLogger.trace(mt.message, mt.throwable));
     }
   }
