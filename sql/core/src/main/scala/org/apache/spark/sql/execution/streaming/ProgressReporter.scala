@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.v2.{MicroBatchScanExec, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress}
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryIdleEvent, QueryProgressEvent}
-import org.apache.spark.util.Clock
+import org.apache.spark.util.{Clock, Utils}
 
 /**
  * Responsible for continually reporting statistics about the amount of data processed as well
@@ -334,33 +334,43 @@ abstract class ProgressContext(
       inputTimeSec: Double,
       processingTimeSec: Double): Seq[SourceProgress] = {
     sources.distinct.map { source =>
-      val numRecords = execStats.flatMap(_.inputRows.get(source)).getOrElse(0L)
-      val sourceMetrics = source match {
-        case withMetrics: ReportsSourceMetrics =>
-          withMetrics.metrics(Optional.ofNullable(latestStreamProgress.get(source).orNull))
-        case _ => Map[String, String]().asJava
+      val (result, duration) = Utils.timeTakenMs {
+        val numRecords = execStats.flatMap(_.inputRows.get(source)).getOrElse(0L)
+        val sourceMetrics = source match {
+          case withMetrics: ReportsSourceMetrics =>
+            withMetrics.metrics(Optional.ofNullable(latestStreamProgress.get(source).orNull))
+          case _ => Map[String, String]().asJava
+        }
+        new SourceProgress(
+          description = source.toString,
+          startOffset = currentTriggerStartOffsets.get(source).orNull,
+          endOffset = currentTriggerEndOffsets.get(source).orNull,
+          latestOffset = currentTriggerLatestOffsets.get(source).orNull,
+          numInputRows = numRecords,
+          inputRowsPerSecond = numRecords / inputTimeSec,
+          processedRowsPerSecond = numRecords / processingTimeSec,
+          metrics = sourceMetrics
+        )
       }
-      new SourceProgress(
-        description = source.toString,
-        startOffset = currentTriggerStartOffsets.get(source).orNull,
-        endOffset = currentTriggerEndOffsets.get(source).orNull,
-        latestOffset = currentTriggerLatestOffsets.get(source).orNull,
-        numInputRows = numRecords,
-        inputRowsPerSecond = numRecords / inputTimeSec,
-        processedRowsPerSecond = numRecords / processingTimeSec,
-        metrics = sourceMetrics
-      )
+      logInfo(s"Extracting source progress metrics for source=${source.toString} took " +
+        s"duration_ms=$duration")
+      result
     }
   }
 
   private def extractSinkProgress(execStats: Option[ExecutionStats]): SinkProgress = {
-    val sinkOutput = execStats.flatMap(_.outputRows)
-    val sinkMetrics = sink match {
-      case withMetrics: ReportsSinkMetrics => withMetrics.metrics()
-      case _ => Map[String, String]().asJava
-    }
+    val (result, duration) = Utils.timeTakenMs {
+      val sinkOutput = execStats.flatMap(_.outputRows)
+      val sinkMetrics = sink match {
+        case withMetrics: ReportsSinkMetrics => withMetrics.metrics()
+        case _ => Map[String, String]().asJava
+      }
 
-    SinkProgress(sink.toString, sinkOutput, sinkMetrics)
+      SinkProgress(sink.toString, sinkOutput, sinkMetrics)
+    }
+    logInfo(s"Extracting sink progress metrics for sink=${sink.toString} took " +
+      s"duration_ms=$duration")
+    result
   }
 
   /**
