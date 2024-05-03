@@ -440,6 +440,10 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.streaming.RemoteStreamingQuery"),
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.streaming.RemoteStreamingQuery$"),
+      // Skip client side listener specific class
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.streaming.StreamingQueryListenerBus"
+      ),
 
       // Encoders are in the wrong JAR
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Encoders"),
