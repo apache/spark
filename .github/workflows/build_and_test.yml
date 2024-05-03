@@ -90,6 +90,7 @@ jobs:
           sparkr=`./dev/is-changed.py -m sparkr`
           tpcds=`./dev/is-changed.py -m sql`
           docker=`./dev/is-changed.py -m docker-integration-tests`
+          kubernetes=`./dev/is-changed.py -m kubernetes`
           build=`./dev/is-changed.py -m "core,unsafe,kvstore,avro,utils,network-common,network-shuffle,repl,launcher,examples,sketch,graphx,catalyst,hive-thriftserver,streaming,sql-kafka-0-10,streaming-kafka-0-10,mllib-local,mllib,yarn,mesos,kubernetes,hadoop-cloud,spark-ganglia-lgpl,sql,hive"`
           precondition="
             {
@@ -102,7 +103,7 @@ jobs:
               \"scala-213\": \"$build\",
               \"java-11-17\": \"$build\",
               \"lint\" : \"true\",
-              \"k8s-integration-tests\" : \"true\",
+              \"k8s-integration-tests\" : \"$kubernetes\",
               \"breaking-changes-buf\" : \"true\",
             }"
           echo $precondition # For debugging
