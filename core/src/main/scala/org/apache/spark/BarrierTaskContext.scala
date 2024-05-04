@@ -19,12 +19,14 @@ package org.apache.spark
 
 import java.util.{Properties, TimerTask}
 import java.util.concurrent.{ScheduledThreadPoolExecutor, TimeUnit}
+
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
-import scala.util.{Failure, Try, Success => ScalaSuccess}
+import scala.util.{Failure, Success => ScalaSuccess, Try}
+
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.internal.{LogEntry, Logging, MDC, MessageWithContext}
+import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.source.Source

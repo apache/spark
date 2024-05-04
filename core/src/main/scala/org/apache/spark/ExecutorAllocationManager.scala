@@ -446,9 +446,9 @@ private[spark] class ExecutorAllocationManager(
           val delta = targetNum.delta
           totalDelta += delta
           if (delta > 0) {
-            val executorsString = log"executor" + { if (delta > 1) "s" else "" }
+            val executorsString = log" new executor" + { if (delta > 1) log"s" else log"" }
             logInfo(log"Requesting ${MDC(TARGET_NUM_EXECUTOR_DELTA, delta)}" +
-              log" new $executorsString because tasks are backlogged " +
+              executorsString + log" because tasks are backlogged " +
               log"(new desired total will be" +
               log" ${MDC(TARGET_NUM_EXECUTOR, numExecutorsTargetPerResourceProfileId(rpId))} " +
               log"for resource profile id: ${MDC(RESOURCE_PROFILE_ID, rpId)})")
