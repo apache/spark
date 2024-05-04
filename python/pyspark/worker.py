@@ -1062,7 +1062,23 @@ def read_udtf(pickleSer, infile, eval_type):
                 return arg
 
     class UDTFCallAnalyzeMethod:
+        """
+        This class is used to wrap a UDTF that has an 'analyze' method that returns an AnalyzeResult
+        object. The 'eval' method of this class will call the 'analyze' method of the UDTF and then
+        return the result as a JSON string. This is useful for delegating this 'analyze' method to
+        run on the Spark executors rather than the drivers.
+        """
+
         def __init__(self, handler: Any):
+            """
+            Creates a new instance of this class to wrap the provided UDTF with another one that
+            calls the 'analyze' method and returns the result as a JSON string.
+
+            Parameters
+            ----------
+            handler: function
+                Function to create a new instance of the UDTF to be invoked.
+            """
             self.handler = handler
             pass
 
@@ -1105,7 +1121,7 @@ def read_udtf(pickleSer, infile, eval_type):
                     f"""{{
                   "name": "{col.name}",
                   "ascending": "{col.ascending}",
-                  "overrideNullsFirst": "{col.overrideNullsFirst}",
+                  "overrideNullsFirst": "{col.overrideNullsFirst}"
                 }}"""
                 )
             select = []
@@ -1113,17 +1129,17 @@ def read_udtf(pickleSer, infile, eval_type):
                 select.append(
                     f"""{{
                   "name": "{col.name}",
-                  "alias": "{col.alias}",
+                  "alias": "{col.alias}"
                 }}"""
                 )
             result_json = f"""{{
                   "schema": {result.schema.json()},
                   "withSinglePartition": "{result.withSinglePartition}",
-                  "partitionBy": {partition_by},
-                  "orderBy": {order_by},
-                  "select": {select}
+                  "partitionBy": [{", ".join(partition_by)}],
+                  "orderBy": [{", ".join(order_by)}],
+                  "select": [{", ".join(select)}]
                 }}"""
-            reformatted = json.dumps(json.loads(result_json), indent=4)
+            reformatted = json.dumps(json.loads(result_json), indent=2)
             yield (reformatted,)
 
     # Instantiate the UDTF class.

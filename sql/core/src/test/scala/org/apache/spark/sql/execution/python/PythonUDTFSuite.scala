@@ -70,6 +70,11 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
       UDTFForwardStateFromAnalyze.name,
       UDTFForwardStateFromAnalyze.pythonScript, None)
 
+  private val pythonUDTFPartitionByOrderBySelectExpr: UserDefinedPythonTableFunction =
+    createUserDefinedPythonTableFunction(
+      UDTFPartitionByOrderBySelectExpr.name,
+      UDTFPartitionByOrderBySelectExpr.pythonScript, None)
+
   test("Simple PythonUDTF") {
     assume(shouldTestPythonUDFs)
     val df = pythonUDTF(spark, lit(1), lit(2))
@@ -366,9 +371,10 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-45402: Analyze Python UDTFs on executors") {
     assume(shouldTestPythonUDFs)
-    val pythonUDTFRunAnalyzeOnExecutors: UserDefinedPythonTableFunction =
-      pythonUDTFForwardStateFromAnalyze.copy(returnResultOfAnalyzeMethod = true)
-    val df = pythonUDTFRunAnalyzeOnExecutors(
+    var pythonUDTFRunAnalyzeOnExecutors: UserDefinedPythonTableFunction =
+      pythonUDTFForwardStateFromAnalyze
+        .copy(returnResultOfAnalyzeMethod = true)
+    var df = pythonUDTFRunAnalyzeOnExecutors(
       spark,
       struct(
         lit(StringType.json).as("data_type"),
@@ -379,22 +385,93 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
       ))
     checkAnswer(df, Seq(Row(
       """{
-        |    "schema": {
-        |        "fields": [
-        |            {
-        |                "metadata": {},
-        |                "name": "result",
-        |                "nullable": true,
-        |                "type": "string"
-        |            }
-        |        ],
-        |        "type": "struct"
-        |    },
-        |    "withSinglePartition": "False",
-        |    "partitionBy": [],
-        |    "orderBy": [],
-        |    "select": []
+        |  "schema": {
+        |    "fields": [
+        |      {
+        |        "metadata": {},
+        |        "name": "result",
+        |        "nullable": true,
+        |        "type": "string"
+        |      }
+        |    ],
+        |    "type": "struct"
+        |  },
+        |  "withSinglePartition": "False",
+        |  "partitionBy": [],
+        |  "orderBy": [],
+        |  "select": []
         |}""".stripMargin)))
 
+    pythonUDTFRunAnalyzeOnExecutors =
+      pythonUDTFPartitionByOrderBySelectExpr
+        .copy(returnResultOfAnalyzeMethod = true)
+    df = pythonUDTFRunAnalyzeOnExecutors(
+      spark,
+      struct(
+        lit(
+          new StructType()
+            .add("input", IntegerType)
+            .add("partition_col", IntegerType)
+            .json)
+          .as("data_type"),
+        lit(false).as("is_constant_expression"),
+        lit(true).as("is_table"),
+        lit(null).as("arg_keyword")
+      ))
+    checkAnswer(df, Seq(Row(
+      """{
+        |  "schema": {
+        |    "fields": [
+        |      {
+        |        "metadata": {},
+        |        "name": "partition_col",
+        |        "nullable": true,
+        |        "type": "integer"
+        |      },
+        |      {
+        |        "metadata": {},
+        |        "name": "count",
+        |        "nullable": true,
+        |        "type": "integer"
+        |      },
+        |      {
+        |        "metadata": {},
+        |        "name": "total",
+        |        "nullable": true,
+        |        "type": "integer"
+        |      },
+        |      {
+        |        "metadata": {},
+        |        "name": "last",
+        |        "nullable": true,
+        |        "type": "integer"
+        |      }
+        |    ],
+        |    "type": "struct"
+        |  },
+        |  "withSinglePartition": "False",
+        |  "partitionBy": [
+        |    {
+        |      "name": "partition_col"
+        |    }
+        |  ],
+        |  "orderBy": [
+        |    {
+        |      "name": "input",
+        |      "ascending": "True",
+        |      "overrideNullsFirst": "None"
+        |    }
+        |  ],
+        |  "select": [
+        |    {
+        |      "name": "partition_col",
+        |      "alias": ""
+        |    },
+        |    {
+        |      "name": "input",
+        |      "alias": ""
+        |    }
+        |  ]
+        |}""".stripMargin)))
   }
 }
