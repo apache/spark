@@ -157,7 +157,7 @@ class BitwiseExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(BitwiseCount(Literal(2.toShort)), 1)
     checkEvaluation(BitwiseCount(Literal(3.toShort)), 2)
 
-    // Int
+    // int
     checkEvaluation(BitwiseCount(Literal(1)), 1)
     checkEvaluation(BitwiseCount(Literal(2)), 1)
     checkEvaluation(BitwiseCount(Literal(3)), 2)
