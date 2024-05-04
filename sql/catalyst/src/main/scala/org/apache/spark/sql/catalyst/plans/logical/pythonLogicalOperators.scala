@@ -277,6 +277,27 @@ case class ArrowEvalPythonUDTF(
 /**
  * A logical plan that evaluates the 'analyze' method of a [[PythonUDTF]] on the executors.
  *
+ * The way this works is that when we call a Python UDTF that has an 'analyze' method, we create a
+ * simple query to call the 'analyze' method on the executors by invoking the UDTF with the
+ * returnResultOfAnalyzeMethod bit set to true, passing struct values representing the UDTF input
+ * arguments. For example:
+ *
+ * val modified = myUDTF.copy(returnResultOfAnalyzeMethod = true)
+ * val analyzeResult = modified(
+ *   spark,
+ *   struct(
+ *     lit(StringType.json).as("data_type"),
+ *     lit("abc").as("value"),
+ *     lit(true).as("is_constant_expression"),
+ *     lit(false).as("is_table"),
+ *     lit(null).as("arg_keyword")
+ *   ))
+ *   .collect()
+ *
+ * This simple query runs on the executors and returns the result of the 'analyze' method.
+ * This result is then used to compute the output schema of the UDTF and return it to the driver,
+ * which is then unblocked to continue analyzing and processing the original query.
+ *
  * @param udtf                the user-defined Python function
  * @param requiredChildOutput the required output of the child plan. It's used for omitting data
  *                            generation that will be discarded next by a projection.
