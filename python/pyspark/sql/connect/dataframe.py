@@ -1817,7 +1817,9 @@ class DataFrame(ParentDataFrame):
 
     def sizeInBytesApproximation(self) -> int:
         relation = self._plan.plan(self._session.client)
-        return self._session.client._sizeInBytes(relation=relation).size_in_bytes
+        result = self._session.client._sizeInBytes(relation=relation).size_in_bytes
+        assert result is not None
+        return result
 
     def inputFiles(self) -> List[str]:
         query = self._plan.to_proto(self._session.client)
