@@ -25,7 +25,8 @@ import org.apache.commons.lang3.SystemUtils
 import org.slf4j.Logger
 import sun.misc.{Signal, SignalHandler}
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
+import org.apache.spark.internal.LogKeys._
 
 /**
  * Contains utilities for working with posix signals.
@@ -58,7 +59,7 @@ private[spark] object SignalUtils extends Logging {
    */
   def register(signal: String)(action: => Boolean): Unit = {
     if (SystemUtils.IS_OS_UNIX) {
-      register(signal, s"Failed to register signal handler for $signal",
+      register(signal, log"Failed to register signal handler for ${MDC(SIGNAL, signal)}",
         logStackTrace = true)(action)
     }
   }
@@ -74,7 +75,7 @@ private[spark] object SignalUtils extends Logging {
    */
   def register(
       signal: String,
-      failMessage: String,
+      failMessage: MessageWithContext,
       logStackTrace: Boolean = true)(
       action: => Boolean): Unit = synchronized {
     try {

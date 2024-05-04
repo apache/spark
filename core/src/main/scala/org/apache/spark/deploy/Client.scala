@@ -32,7 +32,7 @@ import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.internal.{config, Logging, MDC}
-import org.apache.spark.internal.LogKeys.{DRIVER_ID, ERROR, HOST_PORT}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.Network.RPC_ASK_TIMEOUT
 import org.apache.spark.resource.ResourceUtils
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
@@ -135,7 +135,8 @@ private class ClientEndpoint(
       masterEndpoint.ask[T](message).onComplete {
         case Success(v) => self.send(v)
         case Failure(e) =>
-          logWarning(s"Error sending messages to master $masterEndpoint", e)
+          logWarning(log"Error sending messages to master " +
+            log"${MDC(MASTER_URL, masterEndpoint)}", e)
       }(forwardMessageExecutionContext)
     }
   }

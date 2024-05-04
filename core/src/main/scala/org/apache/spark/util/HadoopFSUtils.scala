@@ -28,7 +28,8 @@ import org.apache.hadoop.fs.viewfs.ViewFileSystem
 import org.apache.hadoop.hdfs.DistributedFileSystem
 
 import org.apache.spark._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.util.ArrayImplicits._
 
@@ -99,7 +100,8 @@ private[spark] object HadoopFSUtils extends Logging {
       Seq((path, statues.toImmutableArraySeq))
     } catch {
       case _: FileNotFoundException =>
-        logWarning(s"The root directory $path was not found. Was it deleted very recently?")
+        logWarning(log"The root directory ${MDC(PATH, path)} " +
+          log"was not found. Was it deleted very recently?")
         Seq((path, Seq.empty[FileStatus]))
     }
   }
@@ -235,7 +237,8 @@ private[spark] object HadoopFSUtils extends Logging {
       // InMemoryFileIndex construction. However, it's still a net improvement to detect and
       // fail-fast on the non-root cases. For more info see the SPARK-27676 review discussion.
       case _: FileNotFoundException if isRootPath || ignoreMissingFiles =>
-        logWarning(s"The directory $path was not found. Was it deleted very recently?")
+        logWarning(log"The directory ${MDC(PATH, path)} " +
+          log"was not found. Was it deleted very recently?")
         Array.empty[FileStatus]
     }
 
@@ -323,8 +326,8 @@ private[spark] object HadoopFSUtils extends Logging {
     }
 
     if (missingFiles.nonEmpty) {
-      logWarning(
-        s"the following files were missing during file scan:\n  ${missingFiles.mkString("\n  ")}")
+      logWarning(log"the following files were missing during file scan:\n  " +
+        log"${MDC(PATHS, missingFiles.mkString("\n  "))}")
     }
 
     resolvedLeafStatuses.toImmutableArraySeq

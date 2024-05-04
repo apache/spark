@@ -349,8 +349,8 @@ private[spark] class StandaloneSchedulerBackend(
             _executorRemoveDelay, TimeUnit.MILLISECONDS)
         } catch {
           case _: RejectedExecutionException if stopping.get() =>
-            logWarning(
-              "Skipping onDisconnected RemoveExecutor call because the scheduler is stopping")
+            logWarning("Skipping onDisconnected RemoveExecutor call " +
+              "because the scheduler is stopping")
         }
       }
     }

@@ -29,7 +29,7 @@ import org.roaringbitmap.RoaringBitmap
 import org.apache.spark.MapOutputTracker
 import org.apache.spark.MapOutputTracker.SHUFFLE_PUSH_MAP_ID
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.{HOST, PORT, REDUCE_ID, SHUFFLE_ID, SHUFFLE_MERGE_ID}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.network.shuffle.{BlockStoreClient, MergedBlockMeta, MergedBlocksMetaListener}
 import org.apache.spark.shuffle.ShuffleReadMetricsReporter
 import org.apache.spark.storage.BlockManagerId.SHUFFLE_MERGER_IDENTIFIER
@@ -246,8 +246,9 @@ private class PushBasedFetchHelper(
         case Failure(throwable) =>
           // If we see an exception with getting the local dirs for push-merged-local blocks,
           // we fallback to fetch the original blocks. We do not report block fetch failure.
-          logWarning(s"Error while fetching the merged dirs for push-merged-local " +
-            s"blocks: ${pushMergedLocalBlocks.mkString(", ")}. Fetch the original blocks instead",
+          logWarning(log"Error while fetching the merged dirs for push-merged-local " +
+            log"blocks: ${MDC(BLOCK_IDS, pushMergedLocalBlocks.mkString(", "))}. " +
+            log"Fetch the original blocks instead",
             throwable)
           pushMergedLocalBlocks.foreach {
             blockId =>
@@ -280,8 +281,8 @@ private class PushBasedFetchHelper(
         // If we see an exception with reading a push-merged-local meta, we fallback to
         // fetch the original blocks. We do not report block fetch failure
         // and will continue with the remaining local block read.
-        logWarning(s"Error occurred while fetching push-merged-local meta, " +
-          s"prepare to fetch the original blocks", e)
+        logWarning(log"Error occurred while fetching push-merged-local meta, " +
+          log"prepare to fetch the original blocks", e)
         iterator.addToResultsQueue(
           FallbackOnPushMergedFailureResult(blockId, blockManagerId, 0, isNetworkReqDone = false))
     }
@@ -315,7 +316,8 @@ private class PushBasedFetchHelper(
       blockId: BlockId,
       address: BlockManagerId): Unit = {
     assert(blockId.isInstanceOf[ShuffleMergedBlockId] || blockId.isInstanceOf[ShuffleBlockChunkId])
-    logWarning(s"Falling back to fetch the original blocks for push-merged block $blockId")
+    logWarning(log"Falling back to fetch the original blocks for push-merged block " +
+      log"${MDC(BLOCK_ID, blockId)}")
     shuffleMetrics.incMergedFetchFallbackCount(1)
     // Increase the blocks processed since we will process another block in the next iteration of
     // the while loop in ShuffleBlockFetcherIterator.next().
