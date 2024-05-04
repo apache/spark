@@ -79,7 +79,7 @@ jobs:
           pyspark=true; sparkr=true;
           pyspark_modules=`cd dev && python -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark')))"`
           pyspark=`./dev/is-changed.py -m $pyspark_modules`
-          if [ "${{ github.repository != 'apache/spark' }}" ]; then
+          if [ "${{ github.repository }}" != 'apache/spark' ]; then
             pandas=$pyspark
           else
             pandas=false
@@ -371,12 +371,12 @@ jobs:
           # Always run if pyspark-pandas == 'true', even infra-image is skip (such as non-master job)
           # In practice, the build will run in individual PR, but not against the individual commit
           # in Apache Spark repository.
-          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas' }}
-          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-slow' }}
-          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-connect-part0' }}
-          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-connect-part1' }}
-          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-connect-part2' }}
-          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-connect-part2' }}
+          - modules: ${{ (!cancelled()) && fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas' }}
+          - modules: ${{ (!cancelled()) && fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-slow' }}
+          - modules: ${{ (!cancelled()) && fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-connect-part0' }}
+          - modules: ${{ (!cancelled()) && fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-connect-part1' }}
+          - modules: ${{ (!cancelled()) && fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-connect-part2' }}
+          - modules: ${{ (!cancelled()) && fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-connect-part2' }}
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
       PYTHON_TO_TEST: 'python3.11'
