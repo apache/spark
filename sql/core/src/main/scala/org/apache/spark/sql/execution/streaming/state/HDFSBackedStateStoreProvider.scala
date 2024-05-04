@@ -351,6 +351,9 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   }
 
   override def close(): Unit = {
+    // Clearing the map resets the TreeMap.root to null, and therefore entries inside the
+    // `loadedMaps` will be de-referenced and GCed automatically when their reference
+    // counts become 0.
     synchronized { loadedMaps.clear() }
   }
 
