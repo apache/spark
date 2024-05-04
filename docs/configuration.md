@@ -3693,7 +3693,7 @@ val logDf = spark.read.schema(LOG_SCHEMA).json("path/to/logs")
 ```
 
 ## Plain Text Logging
-If you prefer plain text logging, you can use the `log4j2.properties.pattern-layout-template` file as a starting point. This is the default configuration used by Spark before the 4.0.0 release. This configuration uses the [PatternLayout](https://logging.apache.org/log4j/2.x/manual/layouts.html#PatternLayout) to log all the logs in plain text. MDC information is not included by default. In order to print it in the logs, you can update the patternLayout in the file. For example, you can add `%X{mdc.taskName}` to print the task name in the logs.
+If you prefer plain text logging, you can use the `log4j2.properties.pattern-layout-template` file as a starting point. This is the default configuration used by Spark before the 4.0.0 release. This configuration uses the [PatternLayout](https://logging.apache.org/log4j/2.x/manual/layouts.html#PatternLayout) to log all the logs in plain text. MDC information is not included by default. In order to print it in the logs, you can update the patternLayout in the file. For example, you can add `%X{task_name}` to print the task name in the logs.
 Moreover, you can use `spark.sparkContext.setLocalProperty(s"mdc.$name", "value")` to add user specific data into MDC.
 The key in MDC will be the string of `mdc.$name`.
 
