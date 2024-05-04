@@ -19,8 +19,6 @@ package org.apache.spark.sql
 
 import java.io.File
 
-import org.scalatest.BeforeAndAfterAll
-
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.LogUtils.LOG_SCHEMA
