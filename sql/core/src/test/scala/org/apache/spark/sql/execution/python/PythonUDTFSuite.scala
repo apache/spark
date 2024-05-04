@@ -378,8 +378,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         lit(null).as("arg_keyword")
       ))
     checkAnswer(df, Seq(Row(
-      """
-        |{
+      """{
         |    "schema": {
         |        "fields": [
         |            {
