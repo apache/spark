@@ -75,7 +75,7 @@ In order to write to the data source in a streaming query, streamWriter() method
             return FakeStreamWriter(self.options)
 
 Implementing Reader for Python Data Source
------------------------------
+------------------------------------------
 **Implement the Reader**
 
 Define the reader logic to generate synthetic data. Use the `faker` library to populate each field in the schema.
@@ -101,7 +101,7 @@ Define the reader logic to generate synthetic data. Use the `faker` library to p
                 yield tuple(row)
 
 Implementing Streaming Reader and Writer for Python Data Source
------------------------------
+---------------------------------------------------------------
 **Implement the Stream Reader**
 
 This is a dummy streaming data reader that generate 2 rows in every microbatch. The streamReader instance has a integer offset that increase by 2 in every microbatch.
@@ -238,7 +238,7 @@ This is a streaming data writer that write the metadata information of each micr
                file.write(f"failed in batch {batchId}")
 
 Serialization Requirement
---------------------------
+-------------------------
 User defined DataSource, DataSourceReader, DataSourceWriter, DataSourceStreamReader and DataSourceStreamWriter and their methods must be able to be serialized by pickle.
 
 For library that are used inside a method, it must be imported inside the method. For example, TaskContext must be imported inside the read() method in the code below.
