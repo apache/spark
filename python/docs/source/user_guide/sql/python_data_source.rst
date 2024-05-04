@@ -310,6 +310,7 @@ Once we register the python data source, we can also use it in streaming queries
 Start a query that read from fake python data source and write to console
 
 .. code-block:: python
+
     query = spark.readStream.format("fake").load().writeStream().format("console").start()
 
     # +---+
