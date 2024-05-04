@@ -3677,8 +3677,15 @@ Starting from version 4.0.0, Spark has adopted the [JSON Template Layout](https:
 
 To configure the layout of structured logging, start with the `log4j2.properties.template` file.
 
-To query Spark logs using Spark SQL, you can use the following Scala code snippet:
+To query Spark logs using Spark SQL, you can use the following Python code snippet:
 
+```python
+from pyspark.util import LogUtils
+
+logDf = spark.read.schema(LogUtils.LOG_SCHEMA).json("path/to/logs")
+```
+
+Or using the following Scala code snippet:
 ```scala
 import org.apache.spark.util.LogUtils.LOG_SCHEMA
 
