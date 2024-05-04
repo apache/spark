@@ -1094,22 +1094,28 @@ def read_udtf(pickleSer, infile, eval_type):
             )
             partition_by = []
             for col in result.partitionBy:
-                partition_by.append(f"""{{
+                partition_by.append(
+                    f"""{{
                   "name": "{col.name}"
-                }}""")
+                }}"""
+                )
             order_by = []
             for col in result.orderBy:
-                order_by.append(f"""{{
+                order_by.append(
+                    f"""{{
                   "name": "{col.name}",
                   "ascending": "{col.ascending}",
                   "overrideNullsFirst": "{col.overrideNullsFirst}",
-                }}""")
+                }}"""
+                )
             select = []
             for col in result.select:
-                select.append(f"""{{
+                select.append(
+                    f"""{{
                   "name": "{col.name}",
                   "alias": "{col.alias}",
-                }}""")
+                }}"""
+                )
             result_json = f"""{{
                   "schema": {result.schema.json()},
                   "withSinglePartition": "{result.withSinglePartition}",
@@ -1118,9 +1124,7 @@ def read_udtf(pickleSer, infile, eval_type):
                   "select": {select}
                 }}"""
             reformatted = json.dumps(json.loads(result_json), indent=4)
-            yield (
-                reformatted,
-            )
+            yield (reformatted,)
 
     # Instantiate the UDTF class.
     try:
