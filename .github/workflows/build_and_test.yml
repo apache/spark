@@ -79,7 +79,7 @@ jobs:
           pyspark=true; sparkr=true;
           pyspark_modules=`cd dev && python -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark')))"`
           pyspark=`./dev/is-changed.py -m $pyspark_modules`
-          if [[ "${{ github.repository }}" != 'apache/spark' ]]; then
+          if [[ "${{ github.repository }}" != 'HyukjinKwon/spark' ]]; then
             pandas=$pyspark
           else
             pandas=false
