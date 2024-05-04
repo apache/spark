@@ -355,133 +355,6 @@ jobs:
             pyspark-mllib, pyspark-ml, pyspark-ml-connect
           - >-
             pyspark-connect
-    env:
-      MODULES_TO_TEST: ${{ matrix.modules }}
-      PYTHON_TO_TEST: 'python3.11'
-      HADOOP_PROFILE: ${{ inputs.hadoop }}
-      HIVE_PROFILE: hive2.3
-      GITHUB_PREV_SHA: ${{ github.event.before }}
-      SPARK_LOCAL_IP: localhost
-      SKIP_UNIDOC: true
-      SKIP_MIMA: true
-      SKIP_PACKAGING: true
-      METASPACE_SIZE: 1g
-      BRANCH: ${{ inputs.branch }}
-    steps:
-    - name: Checkout Spark repository
-      uses: actions/checkout@v4
-      # In order to fetch changed files
-      with:
-        fetch-depth: 0
-        repository: apache/spark
-        ref: ${{ inputs.branch }}
-    - name: Add GITHUB_WORKSPACE to git trust safe.directory
-      run: |
-        git config --global --add safe.directory ${GITHUB_WORKSPACE}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
-    # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
-    - name: Cache SBT and Maven
-      uses: actions/cache@v4
-      with:
-        path: |
-          build/apache-maven-*
-          build/*.jar
-          ~/.sbt
-        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
-        restore-keys: |
-          build-
-    - name: Cache Coursier local repository
-      uses: actions/cache@v4
-      with:
-        path: ~/.cache/coursier
-        key: pyspark-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
-        restore-keys: |
-          pyspark-coursier-
-    - name: Free up disk space
-      shell: 'script -q -e -c "bash {0}"'
-      run: |
-        if [ -f ./dev/free_disk_space_container ]; then
-          ./dev/free_disk_space_container
-        fi
-    - name: Install Java ${{ matrix.java }}
-      uses: actions/setup-java@v4
-      with:
-        distribution: zulu
-        java-version: ${{ matrix.java }}
-    - name: List Python packages (${{ env.PYTHON_TO_TEST }})
-      env: ${{ fromJSON(inputs.envs) }}
-      shell: 'script -q -e -c "bash {0}"'
-      run: |
-        for py in $(echo $PYTHON_TO_TEST | tr "," "\n")
-        do
-          echo $py
-          $py -m pip list
-        done
-    - name: Install Conda for pip packaging test
-      if: contains(matrix.modules, 'pyspark-errors')
-      run: |
-        curl -s https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh > miniconda.sh
-        bash miniconda.sh -b -p $HOME/miniconda
-        rm miniconda.sh
-    # Run the tests.
-    - name: Run tests
-      env: ${{ fromJSON(inputs.envs) }}
-      shell: 'script -q -e -c "bash {0}"'
-      run: |
-        if [[ "$MODULES_TO_TEST" == *"pyspark-errors"* ]]; then
-          export PATH=$PATH:$HOME/miniconda/bin
-          export SKIP_PACKAGING=false
-          echo "Python Packaging Tests Enabled!"
-        fi
-        if [ ! -z "$PYTHON_TO_TEST" ]; then
-          ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST" --python-executables "$PYTHON_TO_TEST"
-        else
-          # For branch-3.5 and below, it uses the default Python versions.
-          ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST"
-        fi
-    - name: Upload coverage to Codecov
-      if: fromJSON(inputs.envs).PYSPARK_CODECOV == 'true'
-      uses: codecov/codecov-action@v4
-      with:
-        files: ./python/coverage.xml
-        flags: unittests
-        name: PySpark
-    - name: Upload test results to report
-      env: ${{ fromJSON(inputs.envs) }}
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: test-results-${{ matrix.modules }}--${{ matrix.java }}-${{ inputs.hadoop }}-hive2.3-${{ env.PYTHON_TO_TEST }}
-        path: "**/target/test-reports/*.xml"
-    - name: Upload unit tests log files
-      env: ${{ fromJSON(inputs.envs) }}
-      if: ${{ !success() }}
-      uses: actions/upload-artifact@v4
-      with:
-        name: unit-tests-log-${{ matrix.modules }}--${{ matrix.java }}-${{ inputs.hadoop }}-hive2.3-${{ env.PYTHON_TO_TEST }}
-        path: "**/target/unit-tests.log"
-
-  pyspark-pandas:
-    needs: [precondition, infra-image]
-    # always run if pyspark-pandas == 'true', even infra-image is skip (such as non-master job)
-    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).pyspark-pandas == 'true'
-    name: "Build modules: ${{ matrix.modules }}"
-    runs-on: ubuntu-latest
-    timeout-minutes: 180
-    container:
-      image: ${{ needs.precondition.outputs.image_url }}
-    strategy:
-      fail-fast: false
-      matrix:
-        java:
-          - ${{ inputs.java }}
-        modules:
           - >-
             pyspark-pandas
           - >-
@@ -494,6 +367,16 @@ jobs:
             pyspark-pandas-connect-part2
           - >-
             pyspark-pandas-connect-part3
+        exclude:
+          # Always run if pyspark-pandas == 'true', even infra-image is skip (such as non-master job)
+          # In practice, the build will run in individual PR, but not against the individual commit
+          # in Apache Spark repository.
+          - modules: ${{ (!cancelled()) && fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas' }}
+          - modules: ${{ (!cancelled()) && fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-slow' }}
+          - modules: ${{ (!cancelled()) && fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-connect-part0' }}
+          - modules: ${{ (!cancelled()) && fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-connect-part1' }}
+          - modules: ${{ (!cancelled()) && fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-connect-part2' }}
+          - modules: ${{ (!cancelled()) && fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-connect-part2' }}
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
       PYTHON_TO_TEST: 'python3.11'
