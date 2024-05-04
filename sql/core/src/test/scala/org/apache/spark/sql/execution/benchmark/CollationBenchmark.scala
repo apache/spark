@@ -19,8 +19,12 @@ package org.apache.spark.sql.execution.benchmark
 import scala.concurrent.duration._
 
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
+import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.aggregate.Mode
 import org.apache.spark.sql.catalyst.util.{CollationFactory, CollationSupport}
+import org.apache.spark.sql.types.{IntegerType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.collection.OpenHashMap
 
 abstract class CollationBenchmarkBase extends BenchmarkBase {
   protected val collationTypes: Seq[String] =
@@ -185,6 +189,55 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
     }
     benchmark.run()
   }
+
+  def benchmarkMode(
+      collationTypes: Seq[String],
+      value: Seq[UTF8String]): Unit = {
+    val benchmark = new Benchmark(
+      "collation unit benchmarks - mode",
+      value.size * 10,
+      warmupTime = 10.seconds,
+      output = output)
+    collationTypes.foreach { collationType => {
+      val collation = CollationFactory.fetchCollation(collationType)
+      benchmark.addCase(s"$collationType") { _ =>
+        val modeDefaultCollation = Mode(child =
+          Literal.create("some_column_name", StringType(collationType)), collationEnabled = true)
+        val buffer = new OpenHashMap[AnyRef, Long](value.size)
+        value.zipWithIndex.sliding(20, 20).foreach(slide => {
+          slide.foreach { case (v: UTF8String, i: Int) =>
+            buffer.update(v, (i % 1000).toLong)
+          }
+          modeDefaultCollation.eval(buffer)
+
+        })
+      }
+    }
+    }
+    benchmark.addCase(s"Collation Not Enabled") { _ =>
+      val modeNoCollation = Mode(child =
+        Literal("some_column_name"), collationEnabled = false)
+      val buffer = new OpenHashMap[AnyRef, Long](value.size)
+      value.zipWithIndex.sliding(20, 20).foreach(slide => {
+        slide.foreach { case (v: UTF8String, i: Int) =>
+          buffer.update(v, (i % 1000).toLong)
+        }
+        modeNoCollation.eval(buffer)
+      })
+    }
+    benchmark.addCase(s"Numerical Type") { _ =>
+      val modeIntType = Mode(child = Literal.create(1, IntegerType))
+      val buffer = new OpenHashMap[AnyRef, Long](value.size)
+      value.zipWithIndex.sliding(20, 20).foreach(slide => {
+        slide.foreach {
+          case (_, i: Int) =>
+            buffer.update(i.asInstanceOf[AnyRef], (i % 1000).toLong)
+        }
+        modeIntType.eval(buffer)
+      })
+    }
+    benchmark.run()
+  }
 }
 
 /**
@@ -213,6 +266,7 @@ object CollationBenchmark extends CollationBenchmarkBase {
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val inputs = generateSeqInput(10000L)
+    benchmarkMode(collationTypes, inputs)
     benchmarkUTFStringEquals(collationTypes, inputs)
     benchmarkUTFStringCompare(collationTypes, inputs)
     benchmarkUTFStringHashFunction(collationTypes, inputs)
@@ -248,5 +302,6 @@ object CollationNonASCIIBenchmark extends CollationBenchmarkBase {
     benchmarkContains(collationTypes, inputs)
     benchmarkStartsWith(collationTypes, inputs)
     benchmarkEndsWith(collationTypes, inputs)
+    benchmarkMode(collationTypes, inputs)
   }
 }

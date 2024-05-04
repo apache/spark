@@ -18,10 +18,14 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkConf
+import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.aggregate.Mode
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, DataType, IntegerType, StringType}
+import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.collection.OpenHashMap
 
 // scalastyle:off nonascii
 class CollationStringExpressionsSuite
@@ -798,6 +802,90 @@ class CollationStringExpressionsSuite
       sql("SELECT locate(collate('aBc', 'UTF8_BINARY'),collate('abcabc', 'UTF8_BINARY_LCASE'),4)")
     }
     assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+  }
+
+  test("Support mode for string expression with collation") {
+    val query = "SELECT mode(collate('abc', 'utf8_binary'))"
+    checkAnswer(sql(query), Row("abc"))
+    assert(sql(query).schema.fields.head.dataType.sameType(StringType("utf8_binary")))
+  }
+
+  test("Support mode for string expression with collation ID on table") {
+    withTable("t") {
+      sql("CREATE TABLE t(i STRING) USING parquet")
+      sql("INSERT INTO t VALUES " +
+        "('a'), ('a'), ('a'), ('a'), ('a'), " +
+        "('b'), ('b'), ('b'), " +
+        "('B'), ('B'), ('B'), ('B')")
+      val query = "SELECT mode(collate(i, 'UTF8_BINARY_LCASE')) FROM t"
+      checkAnswer(sql(query), Row("b"))
+    }
+  }
+
+  test("Support mode for string expression with collation ID") {
+    val query = "SELECT mode(collate('lorem epsum', 'UTF8_BINARY_LCASE'))"
+    checkAnswer(sql(query), Row("lorem epsum"))
+    assert(sql(query).schema.fields.head.dataType.sameType(StringType("UTF8_BINARY_LCASE")))
+  }
+
+  test("Support Mode.eval(buffer)") {
+    val myMode = Mode(child = Literal("some_column_name"), collationEnabled = true)
+    val buffer = new OpenHashMap[AnyRef, Long](5)
+    buffer.update("b", 1L)
+    buffer.update("B", 1L)
+    buffer.update("c", 1L)
+    buffer.update("d", 1L)
+    buffer.update("a", 2L)
+    assert(myMode.eval(buffer).toString == "a")
+    val buffer2 = new OpenHashMap[AnyRef, Long](5)
+    buffer2.update(UTF8String.fromString("b"), 1L)
+    buffer2.update(UTF8String.fromString("B"), 1L)
+    buffer2.update(UTF8String.fromString("c"), 1L)
+    buffer2.update(UTF8String.fromString("d"), 1L)
+    buffer2.update(UTF8String.fromString("a"), 2L)
+    assert(myMode.eval(buffer2).toString == "a")
+  }
+
+  test("Support Mode.eval(buffer) with non-default collation") {
+    val myMode = Mode(
+      child = Literal.create("some_column_name", StringType("utf8_binary_lcase")),
+      collationEnabled = true)
+    val buffer = new OpenHashMap[AnyRef, Long](11)
+    buffer.update("b", 2L)
+    buffer.update("B", 2L)
+    buffer.update("c", 2L)
+    buffer.update("d", 2L)
+    buffer.update("a", 3L)
+    assert(myMode.eval(buffer).toString == "B")
+  }
+
+
+  test("Support Mode.eval(buffer) with some null values") {
+    val modeDefaultCollation = Mode(child = Literal("some_column_name"))
+    val modeLowercaseCollation = Mode(child =
+      Literal.create("some_column_name", StringType("unicode_ci")),
+      collationEnabled = true)
+    val buffer = new OpenHashMap[AnyRef, Long](7)
+    buffer.update("bb", 1L)
+    buffer.update("Bb", 1L)
+    buffer.update("BB", 1L)
+    buffer.update("c", 1L)
+    buffer.update(null, 1L)
+    buffer.update("a", 2L)
+    assert(modeDefaultCollation.eval(buffer).toString == "a")
+    assert(modeLowercaseCollation.eval(buffer).toString.toLowerCase() == "bb")
+  }
+
+  test("Support Mode.eval(buffer) with mode should = null (not yet implemented)") {
+    val modeDefaultCollation = Mode(child = Literal("some_column_name"))
+    val modeLowercaseCollation = Mode(
+      child = Literal.create("some_column_name", StringType("unicode_ci")),
+      collationEnabled = true)
+    val buffer = new OpenHashMap[AnyRef, Long](7)
+    buffer.update(null, 2L)
+    buffer.update("c", 1L)
+    assert(modeDefaultCollation.eval(buffer) == null)
+    assert(modeLowercaseCollation.eval(buffer) == null)
   }
 
   // TODO: Add more tests for other string expressions

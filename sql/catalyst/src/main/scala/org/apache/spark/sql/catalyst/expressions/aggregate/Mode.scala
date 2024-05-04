@@ -17,28 +17,36 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import scala.collection.mutable.TreeMap
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, UnresolvedWithinGroup}
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Descending, Expression, ExpressionDescription, ImplicitCastInputTypes, SortOrder}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
-import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.apache.spark.sql.catalyst.util.{CollationFactory, GenericArrayData}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, ArrayType, BooleanType, DataType}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, ArrayType, BooleanType, DataType, StringType}
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.collection.OpenHashMap
+
 
 case class Mode(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0,
-    reverseOpt: Option[Boolean] = None)
+    reverseOpt: Option[Boolean] = None,
+    collationEnabled: Boolean = false)
   extends TypedAggregateWithHashMapAsBuffer with ImplicitCastInputTypes
     with SupportsOrderingWithinGroup with UnaryLike[Expression] {
 
+  final lazy val collationId: Int = child.dataType.asInstanceOf[StringType].collationId
+
   def this(child: Expression) = this(child, 0, 0)
 
-  def this(child: Expression, reverse: Boolean) = {
-    this(child, 0, 0, Some(reverse))
+  def this(child: Expression, reverse: Boolean, collationEnabled: Boolean) = {
+    this(child, 0, 0, Some(reverse), collationEnabled = collationEnabled)
   }
 
   // Returns null for empty inputs
@@ -70,12 +78,36 @@ case class Mode(
     buffer
   }
 
-  override def eval(buffer: OpenHashMap[AnyRef, Long]): Any = {
-    if (buffer.isEmpty) {
+  override def eval(buff: OpenHashMap[AnyRef, Long]): Any = {
+    if (buff.isEmpty) {
       return null
     }
+    var nullCount = 0L
+    val buffer = if (child.dataType.isInstanceOf[StringType] && collationEnabled) {
+      val modeMap = buff.foldLeft(
+        new TreeMap[org.apache.spark.unsafe.types.UTF8String, Long]()(Ordering.comparatorToOrdering(
+          CollationFactory.fetchCollation(collationId).comparator
+          )))
+      {
+        case (map, (key: String, count)) =>
+          map(org.apache.spark.unsafe.types.UTF8String.fromString(key)) =
+            map.getOrElse(org.apache.spark.unsafe.types.UTF8String.fromString(key), 0L) + count
+          map
+        case (map, (key: UTF8String, count)) =>
+          map(key) = map.getOrElse(key, 0L) + count
+          map
+        case (map, (null, count)) =>
+          nullCount = count
+          map
+        case (_, _) =>
+          throw new IllegalArgumentException("Mode expects string type")
+      }
+      modeMap
+    } else {
+      buff
+    }
 
-    reverseOpt.map { reverse =>
+    val t2 = reverseOpt.map { reverse =>
       val defaultKeyOrdering = if (reverse) {
         PhysicalDataType.ordering(child.dataType).asInstanceOf[Ordering[AnyRef]].reverse
       } else {
@@ -83,7 +115,13 @@ case class Mode(
       }
       val ordering = Ordering.Tuple2(Ordering.Long, defaultKeyOrdering)
       buffer.maxBy { case (key, count) => (count, key) }(ordering)
-    }.getOrElse(buffer.maxBy(_._2))._1
+    }.getOrElse(buffer.maxBy(_._2))
+
+    if (nullCount > t2._2) {
+      null
+    } else {
+      t2._1
+    }
   }
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): Mode =
@@ -162,10 +200,10 @@ object ModeBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     val numArgs = expressions.length
     if (numArgs == 0) {
-      Mode(UnresolvedWithinGroup)
+      Mode(UnresolvedWithinGroup, collationEnabled = SQLConf.get.collationEnabled)
     } else if (numArgs == 1) {
       // For compatibility with function calls without WITHIN GROUP.
-      Mode(expressions(0))
+      Mode(expressions(0), collationEnabled = SQLConf.get.collationEnabled)
     } else if (numArgs == 2) {
       // For compatibility with function calls without WITHIN GROUP.
       if (!expressions(1).foldable) {
@@ -181,9 +219,9 @@ object ModeBuilder extends ExpressionBuilder {
           funcName, 2, BooleanType, expressions(1))
       }
       if (deterministicResult.asInstanceOf[Boolean]) {
-        new Mode(expressions(0), true)
+        new Mode(expressions(0), true, collationEnabled = SQLConf.get.collationEnabled)
       } else {
-        Mode(expressions(0))
+        Mode(expressions(0), collationEnabled = SQLConf.get.collationEnabled)
       }
     } else {
       throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(0), numArgs)
