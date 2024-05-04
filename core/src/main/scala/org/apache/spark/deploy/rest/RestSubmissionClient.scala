@@ -34,7 +34,7 @@ import jakarta.servlet.http.HttpServletResponse
 import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkApplication
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.{CLASS_NAME, ERROR, SUBMISSION_ID}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.util.Utils
 
 /**
@@ -509,7 +509,7 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
    */
   private def handleConnectionException(masterUrl: String): Boolean = {
     if (!lostMasters.contains(masterUrl)) {
-      logWarning(s"Unable to connect to server ${masterUrl}.")
+      logWarning(log"Unable to connect to server ${MDC(MASTER_URL, masterUrl)}.")
       lostMasters += masterUrl
     }
     lostMasters.size >= masters.length

@@ -26,7 +26,9 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.SparkSubmit
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.util.ArrayImplicits._
 
@@ -223,10 +225,10 @@ private[spark] object DependencyUtils extends Logging {
         if (file.exists()) {
           loader.addURL(file.toURI.toURL)
         } else {
-          logWarning(s"Local jar $file does not exist, skipping.")
+          logWarning(log"Local jar ${MDC(FILE_NAME, file)} does not exist, skipping.")
         }
       case _ =>
-        logWarning(s"Skip remote jar $uri.")
+        logWarning(log"Skip remote jar ${MDC(LogKeys.URI, uri)}.")
     }
   }
 

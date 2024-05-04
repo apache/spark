@@ -40,7 +40,7 @@ import org.apache.spark._
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.rest._
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.CLASS_NAME
+import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher.SparkLauncher
@@ -199,8 +199,8 @@ private[spark] class SparkSubmit extends Logging {
       } catch {
         // Fail over to use the legacy submission gateway
         case e: SubmitRestConnectionException =>
-          logWarning(s"Master endpoint ${args.master} was not a REST server. " +
-            "Falling back to legacy submission gateway instead.")
+          logWarning(log"Master endpoint ${MDC(LogKeys.MASTER_URL, args.master)} " +
+            log"was not a REST server. Falling back to legacy submission gateway instead.")
           args.useRest = false
           submit(args, false)
       }
@@ -900,9 +900,11 @@ private[spark] class SparkSubmit extends Logging {
 
     if (childClasspath.nonEmpty && isCustomClasspathInClusterModeDisallowed) {
       childClasspath.clear()
-      logWarning(s"Ignore classpath ${childClasspath.mkString(", ")} with proxy user specified " +
-        s"in Cluster mode when ${ALLOW_CUSTOM_CLASSPATH_BY_PROXY_USER_IN_CLUSTER_MODE.key} is " +
-        s"disabled")
+      logWarning(log"Ignore classpath " +
+        log"${MDC(LogKeys.CLASS_PATH, childClasspath.mkString(", "))} " +
+        log"with proxy user specified in Cluster mode when " +
+        log"${MDC(LogKeys.CONFIG, ALLOW_CUSTOM_CLASSPATH_BY_PROXY_USER_IN_CLUSTER_MODE.key)} is " +
+        log"disabled")
     }
 
     (childArgs.toSeq, childClasspath.toSeq, sparkConf, childMainClass)
@@ -973,7 +975,7 @@ private[spark] class SparkSubmit extends Logging {
       mainClass = Utils.classForName(childMainClass)
     } catch {
       case e: ClassNotFoundException =>
-        logError(log"Failed to load class ${MDC(CLASS_NAME, childMainClass)}.")
+        logError(log"Failed to load class ${MDC(LogKeys.CLASS_NAME, childMainClass)}.")
         if (childMainClass.contains("thriftserver")) {
           logInfo(s"Failed to load main class $childMainClass.")
           logInfo("You need to build Spark with -Phive and -Phive-thriftserver.")
@@ -984,7 +986,7 @@ private[spark] class SparkSubmit extends Logging {
         }
         throw new SparkUserAppException(CLASS_NOT_FOUND_EXIT_STATUS)
       case e: NoClassDefFoundError =>
-        logError(log"Failed to load ${MDC(CLASS_NAME, childMainClass)}", e)
+        logError(log"Failed to load ${MDC(LogKeys.CLASS_NAME, childMainClass)}", e)
         if (e.getMessage.contains("org/apache/hadoop/hive")) {
           logInfo(s"Failed to load hive class.")
           logInfo("You need to build Spark with -Phive and -Phive-thriftserver.")
