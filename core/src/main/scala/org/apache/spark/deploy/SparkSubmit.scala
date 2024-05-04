@@ -68,11 +68,14 @@ private[spark] class SparkSubmit extends Logging {
   import SparkSubmit._
 
   def doSubmit(args: Array[String]): Unit = {
+    val appArgs = parseArguments(args)
+    if (isShell(appArgs.primaryResource) || isSqlShell(appArgs.primaryResource)) {
+      Logging.disableStructuredLogging()
+    }
     // Initialize logging if it hasn't been done yet. Keep track of whether logging needs to
     // be reset before the application starts.
     val uninitLog = initializeLogIfNecessary(true, silent = true)
 
-    val appArgs = parseArguments(args)
     if (appArgs.verbose) {
       logInfo(appArgs.toString)
     }

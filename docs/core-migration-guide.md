@@ -42,7 +42,7 @@ license: |
 
 - Since Spark 4.0, Spark uses the external shuffle service for deleting shuffle blocks for deallocated executors when the shuffle is no longer needed. To restore the legacy behavior, you can set `spark.shuffle.service.removeShuffle` to `false`.
 
-- Since Spark 4.0, the default log4j output has shifted from plain text to JSON lines to enhance analyzability. To revert to plain text output, you can either set `spark.log.structuredLogging.enabled` to `false`, or use a custom log4j configuration.
+- Since Spark 4.0, the default log4j output of `spark-submit` has shifted from plain text to JSON lines to enhance analyzability. To revert to plain text output, you can rename the file `conf/log4j2.properties.pattern-layout-template` as `conf/log4j2.properties`, or use a custom log4j configuration file.
 
 - Since Spark 4.0, Spark performs speculative executions less agressively with `spark.speculation.multiplier=3` and `spark.speculation.quantile=0.9`. To restore the legacy behavior, you can set `spark.speculation.multiplier=1.5` and `spark.speculation.quantile=0.75`.
 
