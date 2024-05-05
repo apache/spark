@@ -26,10 +26,11 @@ import java.nio.channels.FileChannel;
 import java.nio.channels.WritableByteChannel;
 import java.util.Optional;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import org.apache.spark.SparkConf;
+import org.apache.spark.internal.Logger;
+import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.shuffle.api.ShuffleMapOutputWriter;
 import org.apache.spark.shuffle.api.ShufflePartitionWriter;
 import org.apache.spark.shuffle.api.WritableByteChannelWrapper;
@@ -44,7 +45,7 @@ import org.apache.spark.shuffle.api.metadata.MapOutputCommitMessage;
  */
 public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
 
-  private static final Logger log =
+  private static final Logger LOGGER =
     LoggerFactory.getLogger(LocalDiskShuffleMapOutputWriter.class);
 
   private final int shuffleId;
@@ -112,8 +113,8 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
     }
     cleanUp();
     File resolvedTmp = outputTempFile != null && outputTempFile.isFile() ? outputTempFile : null;
-    log.debug("Writing shuffle index file for mapId {} with length {}", mapId,
-        partitionLengths.length);
+    LOGGER.debug("Writing shuffle index file for mapId {} with length {}",
+      String.valueOf(mapId), String.valueOf(partitionLengths.length));
     blockResolver
       .writeMetadataFileAndCommit(shuffleId, mapId, partitionLengths, checksums, resolvedTmp);
     return MapOutputCommitMessage.of(partitionLengths);
@@ -123,7 +124,8 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
   public void abort(Throwable error) throws IOException {
     cleanUp();
     if (outputTempFile != null && outputTempFile.exists() && !outputTempFile.delete()) {
-      log.warn("Failed to delete temporary shuffle file at {}", outputTempFile.getAbsolutePath());
+      LOGGER.warn("Failed to delete temporary shuffle file at {}",
+        MDC.of(LogKeys.PATH$.MODULE$, outputTempFile.getAbsolutePath()));
     }
   }
 

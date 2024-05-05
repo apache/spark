@@ -34,8 +34,24 @@ public class Logger {
     this.slf4jLogger = slf4jLogger;
   }
 
+  public boolean isErrorEnabled() {
+    return slf4jLogger.isErrorEnabled();
+  }
+
   public void error(String msg) {
     slf4jLogger.error(msg);
+  }
+
+  public void error(String msg, String arg) {
+    slf4jLogger.error(msg, arg);
+  }
+
+  public void error(String msg, String arg1, String arg2) {
+    slf4jLogger.error(msg, arg1, arg2);
+  }
+
+  public void error(String msg, String... args) {
+    slf4jLogger.error(msg, args);
   }
 
   public void error(String msg, Throwable throwable) {
@@ -58,8 +74,24 @@ public class Logger {
     }
   }
 
+  public boolean isWarnEnabled() {
+    return slf4jLogger.isWarnEnabled();
+  }
+
   public void warn(String msg) {
     slf4jLogger.warn(msg);
+  }
+
+  public void warn(String msg, String arg) {
+    slf4jLogger.warn(msg, arg);
+  }
+
+  public void warn(String msg, String arg1, String arg2) {
+    slf4jLogger.warn(msg, arg1, arg2);
+  }
+
+  public void warn(String msg, String... args) {
+    slf4jLogger.warn(msg, args);
   }
 
   public void warn(String msg, Throwable throwable) {
@@ -82,8 +114,24 @@ public class Logger {
     }
   }
 
+  public boolean isInfoEnabled() {
+    return slf4jLogger.isInfoEnabled();
+  }
+
   public void info(String msg) {
     slf4jLogger.info(msg);
+  }
+
+  public void info(String msg, String arg) {
+    slf4jLogger.info(msg, arg);
+  }
+
+  public void info(String msg, String arg1, String arg2) {
+    slf4jLogger.info(msg, arg1, arg2);
+  }
+
+  public void info(String msg, String... args) {
+    slf4jLogger.info(msg, args);
   }
 
   public void info(String msg, Throwable throwable) {
@@ -106,8 +154,24 @@ public class Logger {
     }
   }
 
+  public boolean isDebugEnabled() {
+    return slf4jLogger.isDebugEnabled();
+  }
+
   public void debug(String msg) {
     slf4jLogger.debug(msg);
+  }
+
+  public void debug(String msg, String arg) {
+    slf4jLogger.debug(msg, arg);
+  }
+
+  public void debug(String msg, String arg1, String arg2) {
+    slf4jLogger.debug(msg, arg1, arg2);
+  }
+
+  public void debug(String msg, String... args) {
+    slf4jLogger.debug(msg, args);
   }
 
   public void debug(String msg, Throwable throwable) {
@@ -130,8 +194,24 @@ public class Logger {
     }
   }
 
+  public boolean isTraceEnabled() {
+    return slf4jLogger.isTraceEnabled();
+  }
+
   public void trace(String msg) {
     slf4jLogger.trace(msg);
+  }
+
+  public void trace(String msg, String arg) {
+    slf4jLogger.trace(msg, arg);
+  }
+
+  public void trace(String msg, String arg1, String arg2) {
+    slf4jLogger.trace(msg, arg1, arg2);
+  }
+
+  public void trace(String msg, String... args) {
+    slf4jLogger.trace(msg, args);
   }
 
   public void trace(String msg, Throwable throwable) {

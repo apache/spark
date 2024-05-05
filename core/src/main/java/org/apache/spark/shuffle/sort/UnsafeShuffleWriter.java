@@ -35,12 +35,14 @@ import scala.reflect.ClassTag$;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.ByteStreams;
 import com.google.common.io.Closeables;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import org.apache.spark.*;
 import org.apache.spark.annotation.Private;
 import org.apache.spark.internal.config.package$;
+import org.apache.spark.internal.Logger;
+import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.io.CompressionCodec;
 import org.apache.spark.io.CompressionCodec$;
 import org.apache.spark.io.NioBufferedFileInputStream;
@@ -66,7 +68,7 @@ import org.apache.spark.util.Utils;
 @Private
 public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
-  private static final Logger logger = LoggerFactory.getLogger(UnsafeShuffleWriter.class);
+  private static final Logger LOGGER = LoggerFactory.getLogger(UnsafeShuffleWriter.class);
 
   private static final ClassTag<Object> OBJECT_CLASS_TAG = ClassTag$.MODULE$.Object();
 
@@ -191,7 +193,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
           if (success) {
             throw e;
           } else {
-            logger.error("In addition to a failure during writing, we failed during " +
+            LOGGER.error("In addition to a failure during writing, we failed during " +
                          "cleanup.", e);
           }
         }
@@ -226,7 +228,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       sorter = null;
       for (SpillInfo spill : spills) {
         if (spill.file.exists() && !spill.file.delete()) {
-          logger.error("Error while deleting spill file {}", spill.file.getPath());
+          LOGGER.error("Error while deleting spill file {}",
+            MDC.of(LogKeys.PATH$.MODULE$, spill.file.getPath()));
         }
       }
     }
@@ -277,8 +280,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         // Here, we don't need to perform any metrics updates because the bytes written to this
         // output file would have already been counted as shuffle bytes written.
         partitionLengths = spills[0].partitionLengths;
-        logger.debug("Merge shuffle spills for mapId {} with length {}", mapId,
-            partitionLengths.length);
+        LOGGER.debug("Merge shuffle spills for mapId {} with length {}",
+          String.valueOf(mapId), String.valueOf(partitionLengths.length));
         maybeSingleFileWriter.get()
           .transferMapSpillFile(spills[0].file, partitionLengths, sorter.getChecksums());
       } else {
@@ -317,14 +320,14 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         // decompression of concatenated compressed streams, so we can perform a fast spill merge
         // that doesn't need to interpret the spilled bytes.
         if (transferToEnabled && !encryptionEnabled) {
-          logger.debug("Using transferTo-based fast merge");
+          LOGGER.debug("Using transferTo-based fast merge");
           mergeSpillsWithTransferTo(spills, mapWriter);
         } else {
-          logger.debug("Using fileStream-based fast merge");
+          LOGGER.debug("Using fileStream-based fast merge");
           mergeSpillsWithFileStream(spills, mapWriter, null);
         }
       } else {
-        logger.debug("Using slow merge");
+        LOGGER.debug("Using slow merge");
         mergeSpillsWithFileStream(spills, mapWriter, compressionCodec);
       }
       partitionLengths = mapWriter.commitAllPartitions(sorter.getChecksums()).getPartitionLengths();
@@ -332,7 +335,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       try {
         mapWriter.abort(e);
       } catch (Exception e2) {
-        logger.warn("Failed to abort writing the map output.", e2);
+        LOGGER.warn("Failed to abort writing the map output.", e2);
         e.addSuppressed(e2);
       }
       throw e;
@@ -360,7 +363,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       SpillInfo[] spills,
       ShuffleMapOutputWriter mapWriter,
       @Nullable CompressionCodec compressionCodec) throws IOException {
-    logger.debug("Merge shuffle spills with FileStream for mapId {}", mapId);
+    LOGGER.debug("Merge shuffle spills with FileStream for mapId {}", String.valueOf(mapId));
     final int numPartitions = partitioner.numPartitions();
     final InputStream[] spillInputStreams = new InputStream[spills.length];
 
@@ -371,9 +374,9 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
           spills[i].file,
           inputBufferSizeInBytes);
         // Only convert the partitionLengths when debug level is enabled.
-        if (logger.isDebugEnabled()) {
-          logger.debug("Partition lengths for mapId {} in Spill {}: {}", mapId, i,
-              Arrays.toString(spills[i].partitionLengths));
+        if (LOGGER.isDebugEnabled()) {
+          LOGGER.debug("Partition lengths for mapId {} in Spill {}: {}",
+            String.valueOf(mapId), String.valueOf(i), Arrays.toString(spills[i].partitionLengths));
         }
       }
       for (int partition = 0; partition < numPartitions; partition++) {
@@ -437,7 +440,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private void mergeSpillsWithTransferTo(
       SpillInfo[] spills,
       ShuffleMapOutputWriter mapWriter) throws IOException {
-    logger.debug("Merge shuffle spills with TransferTo for mapId {}", mapId);
+    LOGGER.debug("Merge shuffle spills with TransferTo for mapId {}", String.valueOf(mapId));
     final int numPartitions = partitioner.numPartitions();
     final FileChannel[] spillInputChannels = new FileChannel[spills.length];
     final long[] spillInputChannelPositions = new long[spills.length];
@@ -447,9 +450,9 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       for (int i = 0; i < spills.length; i++) {
         spillInputChannels[i] = new FileInputStream(spills[i].file).getChannel();
         // Only convert the partitionLengths when debug level is enabled.
-        if (logger.isDebugEnabled()) {
-          logger.debug("Partition lengths for mapId {} in Spill {}: {}", mapId, i,
-              Arrays.toString(spills[i].partitionLengths));
+        if (LOGGER.isDebugEnabled()) {
+          LOGGER.debug("Partition lengths for mapId {} in Spill {}: {}",
+            String.valueOf(mapId), String.valueOf(i), Arrays.toString(spills[i].partitionLengths));
         }
       }
       for (int partition = 0; partition < numPartitions; partition++) {

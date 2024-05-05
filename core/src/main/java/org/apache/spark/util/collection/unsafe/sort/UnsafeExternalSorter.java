@@ -28,11 +28,13 @@ import java.util.function.Supplier;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.commons.io.IOUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import org.apache.spark.TaskContext;
 import org.apache.spark.executor.ShuffleWriteMetrics;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.Logger;
+import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.memory.MemoryConsumer;
 import org.apache.spark.memory.SparkOutOfMemoryError;
 import org.apache.spark.memory.TaskMemoryManager;
@@ -50,7 +52,7 @@ import org.apache.spark.util.Utils;
  */
 public final class UnsafeExternalSorter extends MemoryConsumer {
 
-  private static final Logger logger = LoggerFactory.getLogger(UnsafeExternalSorter.class);
+  private static final Logger LOGGER = LoggerFactory.getLogger(UnsafeExternalSorter.class);
 
   @Nullable
   private final PrefixComparator prefixComparator;
@@ -216,11 +218,11 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       return 0L;
     }
 
-    logger.info("Thread {} spilling sort data of {} to disk ({} {} so far)",
-      Thread.currentThread().getId(),
-      Utils.bytesToString(getMemoryUsage()),
-      spillWriters.size(),
-      spillWriters.size() > 1 ? " times" : " time");
+    LOGGER.info("Thread {} spilling sort data of {} to disk ({} {} so far)",
+      MDC.of(LogKeys.THREAD_ID$.MODULE$, Thread.currentThread().getId()),
+      MDC.of(LogKeys.MEMORY_SIZE$.MODULE$, Utils.bytesToString(getMemoryUsage())),
+      MDC.of(LogKeys.NUM_SPILL_WRITERS$.MODULE$, spillWriters.size()),
+      MDC.of(LogKeys.TIME_UNIT$.MODULE$, spillWriters.size() > 1 ? " times" : " time"));
 
     ShuffleWriteMetrics writeMetrics = new ShuffleWriteMetrics();
 
@@ -335,7 +337,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       File file = spill.getFile();
       if (file != null && file.exists()) {
         if (!file.delete()) {
-          logger.error("Was unable to delete spill file {}", file.getAbsolutePath());
+          LOGGER.error("Was unable to delete spill file {}",
+            MDC.of(LogKeys.PATH$.MODULE$, file.getAbsolutePath()));
         }
       }
     }
@@ -396,7 +399,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
         spill();
       } catch (SparkOutOfMemoryError e) {
         if (inMemSorter.numRecords() > 0) {
-          logger.error("Unable to grow the pointer array");
+          LOGGER.error("Unable to grow the pointer array");
           throw e;
         }
         // The new array could not be allocated, but that is not an issue as it is longer needed,
@@ -476,8 +479,9 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
 
     assert(inMemSorter != null);
     if (inMemSorter.numRecords() >= numElementsForSpillThreshold) {
-      logger.info("Spilling data because number of spilledRecords crossed the threshold " +
-        numElementsForSpillThreshold);
+      LOGGER.info("Spilling data because number of spilledRecords crossed the threshold {}",
+        MDC.of(LogKeys.SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD$.MODULE$,
+          numElementsForSpillThreshold));
       spill();
     }
 
