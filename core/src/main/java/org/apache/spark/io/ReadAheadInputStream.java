@@ -13,7 +13,6 @@
  */
 package org.apache.spark.io;
 
-import javax.annotation.concurrent.GuardedBy;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
@@ -24,6 +23,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
+import javax.annotation.concurrent.GuardedBy;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
