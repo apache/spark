@@ -76,17 +76,17 @@ jobs:
       id: set-outputs
       run: |
         if [ -z "${{ inputs.jobs }}" ]; then
-          pyspark=true; sparkr=true;
           pyspark_modules=`cd dev && python -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark')))"`
           pyspark=`./dev/is-changed.py -m $pyspark_modules`
           if [[ "${{ github.repository }}" != 'apache/spark' ]]; then
             pandas=$pyspark
             kubernetes=`./dev/is-changed.py -m kubernetes`
+            sparkr=`./dev/is-changed.py -m sparkr`
           else
             pandas=false
             kubernetes=false
+            sparkr=false
           fi
-          sparkr=`./dev/is-changed.py -m sparkr`
           # 'build' is always true for now.
           # It does not save significant time and most of PRs trigger the build.
           precondition="
