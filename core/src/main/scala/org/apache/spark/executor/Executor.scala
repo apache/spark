@@ -40,7 +40,7 @@ import org.slf4j.MDC
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.{Logging, MDC => LogMDC}
+import org.apache.spark.internal.{Logging, LogKeys, MDC => LogMDC}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.plugin.PluginContainer
@@ -914,7 +914,7 @@ private[spark] class Executor(
     try {
       mdc.foreach { case (key, value) => MDC.put(key, value) }
       // avoid overriding the takName by the user
-      MDC.put("mdc.taskName", taskName)
+      MDC.put(LogKeys.TASK_NAME.name, taskName)
     } catch {
       case _: NoSuchFieldError => logInfo("MDC is not supported.")
     }
@@ -923,7 +923,7 @@ private[spark] class Executor(
   private def cleanMDCForTask(taskName: String, mdc: Seq[(String, String)]): Unit = {
     try {
       mdc.foreach { case (key, _) => MDC.remove(key) }
-      MDC.remove("mdc.taskName")
+      MDC.remove(LogKeys.TASK_NAME.name)
     } catch {
       case _: NoSuchFieldError => logInfo("MDC is not supported.")
     }
