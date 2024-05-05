@@ -239,6 +239,12 @@ object CollationNonASCIIBenchmark extends CollationBenchmarkBase {
     // scalastyle:on nonascii
   }
 
+  private def benchmarkMode(
+      collationTypes: Seq[String],
+      value: Seq[UTF8String]) = {
+
+  }
+
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     benchmarkUTFStringEquals(collationTypes, generateSeqInput(4000L))
     benchmarkUTFStringCompare(collationTypes, generateSeqInput(4000L))
@@ -246,5 +252,6 @@ object CollationNonASCIIBenchmark extends CollationBenchmarkBase {
     benchmarkContains(collationTypes, generateSeqInput(4000L))
     benchmarkStartsWith(collationTypes, generateSeqInput(4000L))
     benchmarkEndsWith(collationTypes, generateSeqInput(4000L))
+    benchmarkMode(collationTypes, generateSeqInput(4000L))
   }
 }

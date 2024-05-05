@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.Mode
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.collection.OpenHashMap
 
 // scalastyle:off nonascii
@@ -671,6 +672,16 @@ class CollationStringExpressionsSuite
     assert(sql(query).schema.fields.head.dataType.sameType(StringType("utf8_binary")))
   }
 
+  test("Support mode for string expression with collation ID on table") {
+    withTable("t") {
+      sql("CREATE TABLE t(i STRING) USING parquet")
+      sql("INSERT INTO t VALUES ('a'), ('a'), ('a'), " +
+        "('a'), ('a'), ('b'),('b'),('b'), ('B'),('B'),('B'),('B')")
+      val query = "SELECT mode(collate(i, 'UTF8_BINARY_LCASE')) FROM t"
+      checkAnswer(sql(query), Row("b"))
+    }
+  }
+
   test("Support mode for string expression with collation ID") {
     val query = "SELECT mode(collate('lorem epsum', 'UTF8_BINARY_LCASE'))"
     checkAnswer(sql(query), Row("lorem epsum"))
@@ -686,6 +697,29 @@ class CollationStringExpressionsSuite
     buffer.update("c", 1L)
     buffer.update("d", 1L)
     buffer.update("a", 2L)
+    println(myMode.eval(buffer).toString)
+    assert(myMode.eval(buffer) == "a")
+  }
+
+  test("Support mode eval 2") {
+    import org.apache.spark.sql.catalyst.expressions.Literal
+    val myMode = Mode(child = Literal("a"))
+    val buffer = new OpenHashMap[AnyRef, Long](5)
+    buffer.update(UTF8String.fromString("b"), 1L)
+    buffer.update(UTF8String.fromString("B"), 1L)
+    buffer.update(UTF8String.fromString("c"), 1L)
+    buffer.update(UTF8String.fromString("d"), 1L)
+    buffer.update(UTF8String.fromString("a"), 2L)
+    println(myMode.eval(buffer).toString)
+    assert(myMode.eval(buffer) == "a")
+  }
+
+  test("Support mode eval utf8_binary_lcase") {
+    import org.apache.spark.sql.catalyst.expressions.Literal
+    val myMode = Mode(child = Literal("a"))
+    val buffer = new OpenHashMap[AnyRef, Long](5)
+    // utf8_binary_lcase
+
     println(myMode.eval(buffer).toString)
     assert(myMode.eval(buffer) == "a")
   }
