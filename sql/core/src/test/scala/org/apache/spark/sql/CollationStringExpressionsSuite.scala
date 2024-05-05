@@ -719,6 +719,7 @@ class CollationStringExpressionsSuite
     val myMode = Mode(child = Literal("a"))
     val buffer = new OpenHashMap[AnyRef, Long](5)
     // utf8_binary_lcase
+    buffer.update("a", 1L)
 
     println(myMode.eval(buffer).toString)
     assert(myMode.eval(buffer) == "a")

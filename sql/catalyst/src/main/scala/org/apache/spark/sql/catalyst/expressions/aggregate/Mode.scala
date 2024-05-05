@@ -17,6 +17,11 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import java.text.Collator
+import java.util.Comparator
+
+import scala.collection.mutable.TreeMap
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, UnresolvedWithinGroup}
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Descending, Expression, ExpressionDescription, ImplicitCastInputTypes, SortOrder}
@@ -27,11 +32,13 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, ArrayType, BooleanType, DataType}
 import org.apache.spark.util.collection.OpenHashMap
 
+
 case class Mode(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0,
-    reverseOpt: Option[Boolean] = None)
+    reverseOpt: Option[Boolean] = None,
+    isString: Boolean = false)
   extends TypedAggregateWithHashMapAsBuffer with ImplicitCastInputTypes
     with SupportsOrderingWithinGroup with UnaryLike[Expression] {
 
@@ -70,9 +77,28 @@ case class Mode(
     buffer
   }
 
-  override def eval(buffer: OpenHashMap[AnyRef, Long]): Any = {
-    if (buffer.isEmpty) {
+  override def eval(buff: OpenHashMap[AnyRef, Long]): Any = {
+    if (buff.isEmpty) {
       return null
+    }
+
+    val buffer = if (isString) {
+      val collator = Collator.getInstance()
+      collator.setStrength(Collator.PRIMARY)
+
+      val modeMap = buff.foldLeft(
+        new TreeMap[String, Long]()(Ordering.comparatorToOrdering(
+          collator.asInstanceOf[Comparator[String]])))
+      {
+        case (map, (key: String, count)) => {
+          map(key) = map.getOrElse(key, 0L) + count
+          map
+        }
+      case (map, _) => throw new IllegalArgumentException("Mode only supports string type")
+      }
+      modeMap
+    } else {
+      buff
     }
 
     reverseOpt.map { reverse =>
