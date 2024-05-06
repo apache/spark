@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import java.text.Collator
-
 import scala.collection.mutable.TreeMap
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -28,7 +26,7 @@ import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.catalyst.util.{CollationFactory, GenericArrayData}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, ArrayType, BooleanType, DataType}
+import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, ArrayType, BooleanType, DataType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.collection.OpenHashMap
 
@@ -40,6 +38,8 @@ case class Mode(
     reverseOpt: Option[Boolean] = None)
   extends TypedAggregateWithHashMapAsBuffer with ImplicitCastInputTypes
     with SupportsOrderingWithinGroup with UnaryLike[Expression] {
+
+  final lazy val collationId: Int = child.dataType.asInstanceOf[StringType].collationId
 
   def this(child: Expression) = this(child, 0, 0)
 
@@ -83,15 +83,13 @@ case class Mode(
 
     val keytypes = buff.toMap.keys.map(_.getClass).toSet
     // scalastyle:off println
-    println(s"keytypes: $keytypes")
+    println(s"keytypes: $keytypes, cId = $collationId, child.dataType = ${child.dataType}")
     // scalastyle:on println
     val isString = !buff.toMap.keys.exists(k => !(k.isInstanceOf[String] ||
       k.isInstanceOf[org.apache.spark.unsafe.types.UTF8String]))
 
     val buffer = if (isString) {
-      val collation = CollationFactory.fetchCollation("UTF8_BINARY_LCASE")
-      val collator = Collator.getInstance()
-      collator.setStrength(Collator.PRIMARY)
+      val collation = CollationFactory.fetchCollation(collationId)
 
       val modeMap = buff.foldLeft(
         new TreeMap[org.apache.spark.unsafe.types.UTF8String, Long]()(Ordering.comparatorToOrdering(
