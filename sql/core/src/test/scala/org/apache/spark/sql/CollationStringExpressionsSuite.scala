@@ -711,7 +711,7 @@ class CollationStringExpressionsSuite
     buffer.update(UTF8String.fromString("d"), 1L)
     buffer.update(UTF8String.fromString("a"), 2L)
     println(myMode.eval(buffer).toString)
-    assert(myMode.eval(buffer) == "a")
+    assert(myMode.eval(buffer) == UTF8String.fromString("a"))
   }
 
   test("Support mode eval utf8_binary_lcase") {

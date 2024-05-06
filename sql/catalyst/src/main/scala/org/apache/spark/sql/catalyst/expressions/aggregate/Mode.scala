@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import java.text.Collator
-import java.util.Comparator
 
 import scala.collection.mutable.TreeMap
 
@@ -27,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, UnresolvedWith
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Descending, Expression, ExpressionDescription, ImplicitCastInputTypes, SortOrder}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
-import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.apache.spark.sql.catalyst.util.{CollationFactory, GenericArrayData}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, ArrayType, BooleanType, DataType}
 import org.apache.spark.util.collection.OpenHashMap
@@ -37,8 +36,7 @@ case class Mode(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0,
-    reverseOpt: Option[Boolean] = None,
-    isString: Boolean = false)
+    reverseOpt: Option[Boolean] = None)
   extends TypedAggregateWithHashMapAsBuffer with ImplicitCastInputTypes
     with SupportsOrderingWithinGroup with UnaryLike[Expression] {
 
@@ -82,19 +80,25 @@ case class Mode(
       return null
     }
 
+    val keytypes = buff.toMap.keys.map(_.getClass).toSet
+    println(s"keytypes: $keytypes")
+    val isString = !buff.toMap.keys.exists(!_.isInstanceOf[String])
+
     val buffer = if (isString) {
+      val collation = CollationFactory.fetchCollation("UTF8_BINARY_LCASE")
       val collator = Collator.getInstance()
       collator.setStrength(Collator.PRIMARY)
 
       val modeMap = buff.foldLeft(
-        new TreeMap[String, Long]()(Ordering.comparatorToOrdering(
-          collator.asInstanceOf[Comparator[String]])))
+        new TreeMap[org.apache.spark.unsafe.types.UTF8String, Long]()(Ordering.comparatorToOrdering(
+          collation.comparator
+          )))
       {
-        case (map, (key: String, count)) => {
-          map(key) = map.getOrElse(key, 0L) + count
+        case (map, (key: String, count)) =>
+          map(org.apache.spark.unsafe.types.UTF8String.fromString(key)) =
+            map.getOrElse(org.apache.spark.unsafe.types.UTF8String.fromString(key), 0L) + count
           map
-        }
-      case (map, _) => throw new IllegalArgumentException("Mode only supports string type")
+        case (map, _) => throw new IllegalArgumentException("Mode only supports string type")
       }
       modeMap
     } else {
