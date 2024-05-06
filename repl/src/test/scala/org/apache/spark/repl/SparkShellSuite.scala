@@ -26,8 +26,8 @@ import scala.concurrent.duration._
 
 import org.apache.spark.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.internal.{MDC, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.internal.MDC
 import org.apache.spark.util.ThreadUtils
 
 class SparkShellSuite extends SparkFunSuite {
@@ -66,7 +66,7 @@ class SparkShellSuite extends SparkFunSuite {
     var next = 0
     val foundMasterAndApplicationIdMessage = Promise.apply[Unit]()
     val foundAllExpectedAnswers = Promise.apply[Unit]()
-    val buffer = new ArrayBuffer[String]()
+    val buffer = new ArrayBuffer[MessageWithContext]()
     val lock = new Object
 
     def captureOutput(source: String)(line: String): Unit = lock.synchronized {
@@ -133,7 +133,7 @@ class SparkShellSuite extends SparkFunSuite {
            |Exception: $cause
            |Failed to capture next expected output "${expectedAnswers(next)}" within $timeout.
            |
-           |${buffer.mkString("\n")}
+           |${buffer.map(_.message).mkString("\n")}
            |===========================
            |End SparkShellSuite failure output
            |===========================

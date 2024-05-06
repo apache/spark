@@ -61,10 +61,10 @@ class BarrierTaskContext private[spark] (
     val waitMsg = startTime.fold(log"")(st => log", waited " +
       log"for ${MDC(TOTAL_TIME, System.currentTimeMillis() - st)} ms,")
     logInfo(log"Task ${MDC(TASK_ATTEMPT_ID, taskAttemptId())}" +
-          log" from Stage ${MDC(STAGE_ID, stageId())}" +
-          log"(Attempt ${MDC(STAGE_ATTEMPT, stageAttemptNumber())}) " +
-          msg + waitMsg +
-          log" current barrier epoch is ${MDC(BARRIER_EPOCH, barrierEpoch)}.")
+      log" from Stage ${MDC(STAGE_ID, stageId())}" +
+      log"(Attempt ${MDC(STAGE_ATTEMPT, stageAttemptNumber())}) " +
+      msg + waitMsg +
+      log" current barrier epoch is ${MDC(BARRIER_EPOCH, barrierEpoch)}.")
   }
 
   private def runBarrier(message: String, requestMethod: RequestMethod.Value): Array[String] = {
