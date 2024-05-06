@@ -68,6 +68,7 @@ In order to write to the data source in a streaming query, streamWriter() method
         def streamReader(self, schema: StructType):
             return FakeStreamReader(schema, self.options)
 
+        # Please skip the implementation of this method if streamReader has been implemented.
         def simpleStreamReader(self, schema: StructType):
             return SimpleStreamReader()
 
