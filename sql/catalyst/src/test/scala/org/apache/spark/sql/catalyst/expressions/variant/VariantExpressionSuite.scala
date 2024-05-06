@@ -807,6 +807,13 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       "Hello")
   }
 
+  test("tryParseJson negative") {
+    checkEvaluation(
+      ParseJson(Literal("["), failOnError = false).replacement,
+      null
+    )
+  }
+
   test("cast to variant") {
     def check[T : TypeTag](input: T, expectedJson: String): Unit = {
       val cast = Cast(Literal.create(input), VariantType, evalMode = EvalMode.ANSI)

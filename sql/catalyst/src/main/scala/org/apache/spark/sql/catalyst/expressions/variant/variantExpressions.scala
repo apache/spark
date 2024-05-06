@@ -59,7 +59,7 @@ case class ParseJson(child: Expression, failOnError: Boolean = true)
     "parseJson",
     Seq(child, Literal(failOnError, BooleanType)),
     inputTypes :+ BooleanType,
-    returnNullable = false)
+    returnNullable = !failOnError)
 
   override def inputTypes: Seq[AbstractDataType] = StringType :: Nil
 
