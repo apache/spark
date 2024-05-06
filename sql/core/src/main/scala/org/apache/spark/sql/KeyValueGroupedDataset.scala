@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.analysis.{EliminateEventTimeWatermark, Unre
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.expressions.ReduceAggregator
 import org.apache.spark.sql.internal.TypedAggUtils
@@ -772,7 +771,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
       eventTimeColumnName: String,
       outputMode: OutputMode,
       outputEncoder: Encoder[U]): Dataset[U] = {
-    transformWithState(statefulProcessor, TimeMode.EventTime(), outputMode)(outputEncoder)
+    transformWithState(statefulProcessor, eventTimeColumnName, outputMode)(outputEncoder)
   }
 
   /**
@@ -927,28 +926,16 @@ class KeyValueGroupedDataset[K, V] private[sql](
   private def updateEventTimeColumnAfterTransformWithState[U: Encoder](
       transformWithState: LogicalPlan,
       eventTimeColumnName: String): Dataset[U] = {
-    val existingWatermarkDelay = logicalPlan.collect {
-      case EventTimeWatermark(_, delay, _) => delay
-    }
-
-    if (existingWatermarkDelay.isEmpty) {
-      // input dataset needs to have a event time column, we transfer the
-      // watermark delay from the input column to user specified eventTimeColumnName
-      // in the output dataset.
-      throw QueryCompilationErrors.cannotAssignEventTimeColumn()
-    }
-
-    val twsDS = Dataset[U](
+    val transformWithStateDataset = Dataset[U](
       sparkSession,
       transformWithState
     )
-    val delay = existingWatermarkDelay.head
 
     Dataset[U](sparkSession, EliminateEventTimeWatermark(
       UpdateEventTimeWatermarkColumn(
         UnresolvedAttribute(eventTimeColumnName),
-        delay,
-        twsDS.logicalPlan)))
+        None,
+        transformWithStateDataset.logicalPlan)))
   }
 
   /**

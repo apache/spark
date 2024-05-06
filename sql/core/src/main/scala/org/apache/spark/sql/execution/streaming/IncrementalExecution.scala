@@ -353,25 +353,20 @@ class IncrementalExecution(
       // However, given that UpdateEventTimeColumnExec does not store any state, it
       // does not have any StateInfo. We simply use the StateInfo of transformWithStateExec
       // to propagate watermark to both UpdateEventTimeColumnExec and transformWithStateExec.
-      case UpdateEventTimeColumnExec(eventTime, delay, _,
+      case UpdateEventTimeColumnExec(eventTime, delay, None,
         SerializeFromObjectExec(serializer,
-        TransformWithStateExec(keyDeserializer, valueDeserializer, groupingAttributes,
-        dataAttributes, statefulProcessor, timeMode, outputMode,
-        keyEncoder, outputAttr, stateInfo, batchTimestampMs, _,
-        _, child, isStreaming, hasInitialState,
-        initialStateGroupingAttrs, initialStateDataAttrs,
-        initialStateDeserializer, initialState))) if stateInfo.isDefined =>
+        t: TransformWithStateExec)) if t.stateInfo.isDefined =>
 
-        val eventTimeWatermarkForLateEvents = inputWatermarkForLateEvents(stateInfo.get)
-        val eventTimeWatermarkForEviction = inputWatermarkForLateEvents(stateInfo.get)
+        val stateInfo = t.stateInfo.get
+        val eventTimeWatermarkForLateEvents = inputWatermarkForLateEvents(stateInfo)
+        val eventTimeWatermarkForEviction = inputWatermarkForLateEvents(stateInfo)
 
         UpdateEventTimeColumnExec(eventTime, delay, eventTimeWatermarkForEviction,
-          SerializeFromObjectExec(serializer, TransformWithStateExec(keyDeserializer,
-            valueDeserializer, groupingAttributes, dataAttributes, statefulProcessor,
-            timeMode, outputMode, keyEncoder, outputAttr, stateInfo, batchTimestampMs,
-            eventTimeWatermarkForLateEvents, eventTimeWatermarkForEviction, child,
-            isStreaming, hasInitialState, initialStateGroupingAttrs, initialStateDataAttrs,
-            initialStateDeserializer, initialState)))
+          SerializeFromObjectExec(serializer,
+            t.copy(
+              eventTimeWatermarkForLateEvents = eventTimeWatermarkForLateEvents,
+              eventTimeWatermarkForEviction = eventTimeWatermarkForEviction)
+          ))
 
 
       case t: TransformWithStateExec if t.stateInfo.isDefined =>

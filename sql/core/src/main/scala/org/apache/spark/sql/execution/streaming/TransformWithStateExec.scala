@@ -96,7 +96,8 @@ case class TransformWithStateExec(
    * this node will not propagate watermark in this timeMode.
    *
    * For timeMode EventTime, output watermark is same as input Watermark because
-   * transformWithState node does not buffer any input rows between micro-batches.
+   * transformWithState does not allow users to set the event time column to be
+   * earlier than the watermark.
    */
   override def produceOutputWatermark(inputWatermarkMs: Long): Option[Long] = {
     timeMode match {

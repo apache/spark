@@ -2764,11 +2764,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def emittedRowsAreOlderThanWatermark(
-      currentWatermark: Long): SparkRuntimeException = {
+      currentWatermark: Long, emittedRowEventTime: Long): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "EMITTING_ROWS_OLDER_THAN_WATERMARK_NOT_ALLOWED",
       messageParameters = Map(
-        "currentWatermark" -> currentWatermark.toString
+        "currentWatermark" -> currentWatermark.toString,
+        "emittedRowEventTime" -> emittedRowEventTime.toString
       )
     )
   }

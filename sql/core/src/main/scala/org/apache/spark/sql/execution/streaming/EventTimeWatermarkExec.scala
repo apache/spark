@@ -19,7 +19,8 @@ package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Predicate, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Predicate, SortOrder, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReference
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark.updateEventTimeColumn
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.microsToMillis
@@ -134,34 +135,37 @@ case class UpdateEventTimeColumnExec(
     child: SparkPlan) extends UnaryExecNode {
 
   override protected def doExecute(): RDD[InternalRow] = {
-    child.execute().mapPartitions[InternalRow](
-      dataIterator => {
-        val watermarkExpression = WatermarkSupport.watermarkExpression(
-          Some(eventTime), eventTimeWatermarkForEviction)
+    child.execute().mapPartitions[InternalRow] { dataIterator =>
+      val watermarkExpression = WatermarkSupport.watermarkExpression(
+        Some(eventTime), eventTimeWatermarkForEviction)
 
-        if (watermarkExpression.isEmpty) {
-          // watermark should always be defined in this node.
-          throw QueryExecutionErrors.cannotGetEventTimeWatermarkError()
-        }
+      if (watermarkExpression.isEmpty) {
+        // watermark should always be defined in this node.
+        throw QueryExecutionErrors.cannotGetEventTimeWatermarkError()
+      }
 
-        val predicate = Predicate.create(watermarkExpression.get, child.output)
-        new Iterator[InternalRow] {
-          override def hasNext: Boolean = dataIterator.hasNext
-          override def next(): InternalRow = {
-            val nextRow = dataIterator.next()
-            if (predicate.eval(nextRow)) {
-              // child node emitted a row which is older than current watermark
-              // which is not allowed
-              throw QueryExecutionErrors.emittedRowsAreOlderThanWatermark(
-                eventTimeWatermarkForEviction.get)
-            }
-            nextRow
+      val predicate = Predicate.create(watermarkExpression.get, child.output)
+      new Iterator[InternalRow] {
+        override def hasNext: Boolean = dataIterator.hasNext
+
+        override def next(): InternalRow = {
+          val row = dataIterator.next()
+          if (predicate.eval(row)) {
+            // child node emitted a row which is older than current watermark
+            // this is not allowed
+            val boundEventTimeExpression = bindReference[Expression](eventTime, child.output)
+            val eventTimeProjection = UnsafeProjection.create(boundEventTimeExpression)
+            val rowEventTime = eventTimeProjection(row)
+            throw QueryExecutionErrors.emittedRowsAreOlderThanWatermark(
+              eventTimeWatermarkForEviction.get, rowEventTime.getLong(0))
           }
+          row
         }
-      },
-      preservesPartitioning = true
-    )
+      }
+    }
   }
+
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
   // Update the metadata on the eventTime column to include the desired delay.
   override val output: Seq[Attribute] = {

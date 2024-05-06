@@ -20,8 +20,7 @@ package org.apache.spark.sql.streaming
 import java.sql.Timestamp
 import java.time.{Instant, LocalDateTime, ZoneId}
 
-import org.apache.spark.SparkRuntimeException
-import org.apache.spark.internal.Logging
+import org.apache.spark.{SparkRuntimeException, SparkThrowable}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamExecution}
@@ -40,7 +39,7 @@ case class OutputRow(
     count: Int)
 
 class TestStatefulProcessor
- extends StatefulProcessor[String, InputEventRow, OutputRow] {
+  extends StatefulProcessor[String, InputEventRow, OutputRow] {
   override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {}
 
   override def handleInputRows(
@@ -56,8 +55,8 @@ class TestStatefulProcessor
       inputRows.foreach { row =>
         if (row.eventTime.before(minEventTime)) {
           minEventTime = row.eventTime
-          count += 1
         }
+        count += 1
       }
       Iterator.single(OutputRow(key, minEventTime, count))
     }
@@ -66,8 +65,7 @@ class TestStatefulProcessor
 
 class InputCountStatefulProcessor[T]
   extends StatefulProcessor[String, T, Int] {
-  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
-  }
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {}
 
   override def handleInputRows(
       key: String,
@@ -83,8 +81,7 @@ class InputCountStatefulProcessor[T]
  */
 class StatefulProcessorEmittingRowsOlderThanWatermark
   extends StatefulProcessor[String, InputEventRow, OutputRow] {
-  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
-  }
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {}
 
   override def handleInputRows(
       key: String,
@@ -103,8 +100,8 @@ class StatefulProcessorEmittingRowsOlderThanWatermark
       inputRows.foreach { row =>
         if (row.eventTime.before(minEventTime)) {
           minEventTime = row.eventTime
-          count += 1
         }
+        count += 1
       }
       Iterator.single(OutputRow(key, minEventTime, count))
     }
@@ -119,8 +116,7 @@ case class AggEventRow(
     window: Window,
     count: Long)
 
-class TransformWithStateChainingSuite extends StreamTest
-  with Logging {
+class TransformWithStateChainingSuite extends StreamTest {
   import testImplicits._
 
   test("watermark is propagated correctly for next stateful operator" +
@@ -179,7 +175,7 @@ class TransformWithStateChainingSuite extends StreamTest
           OutputMode.Append())
       }
 
-      assert(ex.getMessage.contains("CANNOT_ASSIGN_EVENT_TIME_COLUMN_WITHOUT_WATERMARK"))
+      checkError(ex, "CANNOT_ASSIGN_EVENT_TIME_COLUMN_WITHOUT_WATERMARK")
     }
   }
 
@@ -283,9 +279,9 @@ class TransformWithStateChainingSuite extends StreamTest
         .dropDuplicatesWithinWatermark()
 
       testStream(result, OutputMode.Append())(
-        AddData(inputData, InputEventRow("k1", timestamp("2024-02-01 00:00:00"), "e1")),
-        AddData(inputData, InputEventRow("k1", timestamp("2024-02-01 00:00:00"), "e1")),
-        CheckNewAnswer(OutputRow("k1", timestamp("2024-02-01 00:00:00"), 1)),
+        AddData(inputData, InputEventRow("k1", timestamp("2024-02-01 00:00:00"), "e1"),
+          InputEventRow("k1", timestamp("2024-02-01 00:00:00"), "e1")),
+        CheckNewAnswer(OutputRow("k1", timestamp("2024-02-01 00:00:00"), 2)),
         Execute("assertWatermarkEquals") { q =>
           assertWatermarkEquals(q, timestamp("2024-01-31 23:59:00"))
         }
@@ -312,7 +308,10 @@ class TransformWithStateChainingSuite extends StreamTest
         )
       }
 
-      assert(ex.getMessage.contains("UNRESOLVED_COLUMN.WITH_SUGGESTION"))
+      checkError(ex, "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        parameters = Map(
+          "objectName" -> "`missingEventTimeColumn`",
+          "proposal" -> "`outputEventTime`, `count`, `key`"))
     }
   }
 
@@ -334,8 +333,10 @@ class TransformWithStateChainingSuite extends StreamTest
         // this batch would fail now
         AddData(inputData, InputEventRow("k1", timestamp("2024-02-02 00:00:00"), "e1")),
         ExpectFailure[SparkRuntimeException] { ex =>
-          logWarning(s"${ex.getMessage}")
-          assert(ex.getMessage.contains("EMITTING_ROWS_OLDER_THAN_WATERMARK_NOT_ALLOWED"))
+          checkError(ex.asInstanceOf[SparkThrowable],
+            "EMITTING_ROWS_OLDER_THAN_WATERMARK_NOT_ALLOWED",
+            parameters = Map("currentWatermark" -> "1706774340000",
+              "emittedRowEventTime" -> "1706774339999000"))
         }
       )
     }

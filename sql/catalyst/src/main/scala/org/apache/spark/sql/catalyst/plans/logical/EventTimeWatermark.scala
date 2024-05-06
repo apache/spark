@@ -97,12 +97,16 @@ case class EventTimeWatermark(
  */
 case class UpdateEventTimeWatermarkColumn(
     eventTime: Attribute,
-    delay: CalendarInterval,
+    delay: Option[CalendarInterval],
     child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = {
-    val delayMs = EventTimeWatermark.getDelayMs(delay)
-    updateEventTimeColumn(child.output, delayMs, eventTime)
-}
+    if (delay.isDefined) {
+      val delayMs = EventTimeWatermark.getDelayMs(delay.get)
+      updateEventTimeColumn(child.output, delayMs, eventTime)
+    } else {
+      child.output
+    }
+  }
 
   override protected def withNewChildInternal(
       newChild: LogicalPlan): UpdateEventTimeWatermarkColumn =
