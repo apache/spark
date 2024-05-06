@@ -54,7 +54,7 @@ class CustomWriteTaskStatsTracker extends WriteTaskStatsTracker {
 
   override def newPartition(partitionValues: InternalRow): Unit = {}
 
-  override def newFile(filePath: String, partitionValues: Option[InternalRow]): Unit = {
+  override def newFile(filePath: String): Unit = {
     numRowsPerFile.put(filePath, 0)
   }
 

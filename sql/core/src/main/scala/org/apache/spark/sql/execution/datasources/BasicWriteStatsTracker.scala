@@ -45,10 +45,20 @@ case class BasicWriteTaskStats(
     numFiles: Int,
     numBytes: Long,
     numRows: Long,
-    partitionsStats: Map[InternalRow, BasicWritePartitionTaskStats]
-        = Map[InternalRow, BasicWritePartitionTaskStats]())
+    partitionsStats: Map[InternalRow, BasicWritePartitionTaskStats])
   extends WriteTaskStats
 
+object BasicWriteTaskStats {
+
+  // The original case class parameter list provided for backward compatibility.
+  def apply(
+    partitions: Seq[InternalRow],
+    numFiles: Int,
+    numBytes: Long,
+    numRows: Long): BasicWriteTaskStats = new BasicWriteTaskStats(
+      partitions, numFiles, numBytes, numRows, Map[InternalRow, BasicWritePartitionTaskStats]())
+
+}
 
 case class BasicWritePartitionTaskStats(
     numFiles: Int,
@@ -154,9 +164,13 @@ class BasicWriteTaskStatsTracker(
     partitions.append(partitionValues)
   }
 
-  override def newFile(filePath: String, partitionValues: Option[InternalRow] = None): Unit = {
+  override def newFile(filePath: String): Unit = {
     submittedFiles += filePath
     numSubmittedFiles += 1
+  }
+
+  override def newFile(filePath: String, partitionValues: Option[InternalRow]): Unit = {
+    newFile(filePath)
 
     // Submitting a file for a partition
     if (partitionValues.isDefined) {
@@ -243,6 +257,10 @@ class BasicWriteJobStatsTracker(
 
   override def newTaskInstance(): WriteTaskStatsTracker = {
     new BasicWriteTaskStatsTracker(serializableHadoopConf.value, Some(taskCommitTimeMetric))
+  }
+
+  override def processStats(stats: Seq[WriteTaskStats], jobCommitTime: Long): Unit = {
+    processStats(stats, jobCommitTime, Map[InternalRow, String]())
   }
 
   override def processStats(stats: Seq[WriteTaskStats], jobCommitTime: Long,
