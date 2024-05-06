@@ -456,7 +456,7 @@ class GroupByTestsMixin:
             {
                 "A": [0, 0, 1, 1, 1],
                 "B": ["a", "a", "b", "a", "b"],
-                "C": [10, 15, 10, 20, 30]
+                "C": [10, 15, 10, 20, 30],
             }
         )
         psdf = ps.from_pandas(pdf)
