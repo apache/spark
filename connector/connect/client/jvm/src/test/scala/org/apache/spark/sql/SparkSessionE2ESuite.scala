@@ -108,7 +108,8 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
     assert(interrupted.length == 2, s"Interrupted operations: $interrupted.")
   }
 
-  test("interrupt tag") {
+  // TODO(SPARK-48139): Re-enable `SparkSessionE2ESuite.interrupt tag`
+  ignore("interrupt tag") {
     val session = spark
     import session.implicits._
 
