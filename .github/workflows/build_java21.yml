@@ -47,6 +47,7 @@ jobs:
           "sparkr": "true",
           "tpcds-1g": "true",
           "docker-integration-tests": "true",
+          "yarn": "true",
           "k8s-integration-tests": "true",
           "buf": "true",
           "ui": "true"
