@@ -19,11 +19,11 @@ package org.apache.spark.sql
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.expressions.aggregate.Mode
-import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.collection.OpenHashMap
 
 // scalastyle:off nonascii
@@ -695,7 +695,6 @@ class CollationStringExpressionsSuite
     buffer.update("c", 1L)
     buffer.update("d", 1L)
     buffer.update("a", 2L)
-    println(myMode.eval(buffer).toString)
     assert(myMode.eval(buffer).toString == "a")
   }
 
@@ -708,7 +707,6 @@ class CollationStringExpressionsSuite
     buffer.update(UTF8String.fromString("c"), 1L)
     buffer.update(UTF8String.fromString("d"), 1L)
     buffer.update(UTF8String.fromString("a"), 2L)
-    println(myMode.eval(buffer).toString)
     assert(myMode.eval(buffer).toString == "a")
   }
 
@@ -716,10 +714,7 @@ class CollationStringExpressionsSuite
     import org.apache.spark.sql.catalyst.expressions.Literal
     val myMode = Mode(child = Literal("a"))
     val buffer = new OpenHashMap[AnyRef, Long](5)
-    // utf8_binary_lcase
     buffer.update("a", 1L)
-
-    println(myMode.eval(buffer).toString)
     assert(myMode.eval(buffer).toString == "a")
   }
   // TODO: Add more tests for other string expressions
