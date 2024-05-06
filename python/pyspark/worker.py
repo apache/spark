@@ -1087,8 +1087,8 @@ def read_udtf(pickleSer, infile, eval_type):
             # the AnalyzeArgument values to pass to the 'analyze' method. No keyword arguments
             # should be present.
             assert len(kwargs) == 0
-            analyze_args: List[AnalyzeArgument] = []
-            analyze_kwargs: Dict[str, AnalyzeArgument] = {}
+            analyze_args: list[AnalyzeArgument] = []
+            analyze_kwargs: dict[str, AnalyzeArgument] = {}
             for arg in args:
                 data_type = _parse_datatype_json_string(arg.data_type)
                 is_constant_expression = arg.is_constant_expression
