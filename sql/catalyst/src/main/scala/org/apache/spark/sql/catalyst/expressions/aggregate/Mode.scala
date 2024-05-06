@@ -80,9 +80,8 @@ case class Mode(
     if (buff.isEmpty) {
       return null
     }
-
+    var nullCount = 0L
     val buffer = if (child.dataType.isInstanceOf[StringType]) {
-      var nullCount = 0L
       val modeMap = buff.foldLeft(
         new TreeMap[org.apache.spark.unsafe.types.UTF8String, Long]()(Ordering.comparatorToOrdering(
           CollationFactory.fetchCollation(collationId).comparator
@@ -114,7 +113,7 @@ case class Mode(
       }
       val ordering = Ordering.Tuple2(Ordering.Long, defaultKeyOrdering)
       buffer.maxBy { case (key, count) => (count, key) }(ordering)
-    }.getOrElse(buffer.maxBy(_._2))._1
+    }.getOrElse(buffer.maxBy(_._2))._1 // todo: Factor in nullCount.
   }
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): Mode =

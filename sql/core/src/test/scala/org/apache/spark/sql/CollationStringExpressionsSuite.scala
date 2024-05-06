@@ -689,7 +689,7 @@ class CollationStringExpressionsSuite
     assert(sql(query).schema.fields.head.dataType.sameType(StringType("UTF8_BINARY_LCASE")))
   }
 
-  test("Support mode eval") {
+  test("Support Mode.eval(buffer)") {
     val myMode = Mode(child = Literal("some_column_name"))
     val buffer = new OpenHashMap[AnyRef, Long](5)
     buffer.update("b", 1L)
@@ -698,9 +698,16 @@ class CollationStringExpressionsSuite
     buffer.update("d", 1L)
     buffer.update("a", 2L)
     assert(myMode.eval(buffer).toString == "a")
+    val buffer2 = new OpenHashMap[AnyRef, Long](5)
+    buffer2.update(UTF8String.fromString("b"), 1L)
+    buffer2.update(UTF8String.fromString("B"), 1L)
+    buffer2.update(UTF8String.fromString("c"), 1L)
+    buffer2.update(UTF8String.fromString("d"), 1L)
+    buffer2.update(UTF8String.fromString("a"), 2L)
+    assert(myMode.eval(buffer2).toString == "a")
   }
 
-  test("Support mode eval with collation") {
+  test("Support Mode.eval(buffer) with non-default collation") {
     val myMode = Mode(child = Literal.create("some_column_name", StringType("utf8_binary_lcase")))
     val buffer = new OpenHashMap[AnyRef, Long](11)
     buffer.update("b", 2L)
@@ -711,19 +718,11 @@ class CollationStringExpressionsSuite
     assert(myMode.eval(buffer).toString == "B")
   }
 
-  test("Support mode eval with null") {
-    val myMode = Mode(child = Literal("some_column_name"))
-    val buffer = new OpenHashMap[AnyRef, Long](5)
-    buffer.update("b", 1L)
-    buffer.update("B", 1L)
-    buffer.update("c", 1L)
-    buffer.update(null, 1L)
-    buffer.update("a", 2L)
-    assert(myMode.eval(buffer).toString == "a")
-  }
 
-  test("Support mode eval with null and collation") {
-    val myMode = Mode(child = Literal.create("some_column_name", StringType("unicode_ci")))
+  test("Support Mode.eval(buffer) with some null values") {
+    val modeDefaultCollation = Mode(child = Literal("some_column_name"))
+    val modeLowercaseCollation = Mode(child =
+      Literal.create("some_column_name", StringType("unicode_ci")))
     val buffer = new OpenHashMap[AnyRef, Long](7)
     buffer.update("bb", 1L)
     buffer.update("Bb", 1L)
@@ -731,25 +730,20 @@ class CollationStringExpressionsSuite
     buffer.update("c", 1L)
     buffer.update(null, 1L)
     buffer.update("a", 2L)
-    assert(myMode.eval(buffer).toString == "bb")
+    assert(modeDefaultCollation.eval(buffer).toString == "a")
+    assert(modeLowercaseCollation.eval(buffer).toString.toLowerCase() == "bb")
   }
 
-  test("Support mode eval 2") {
-    val myMode = Mode(child = Literal("some_column_name"))
-    val buffer = new OpenHashMap[AnyRef, Long](5)
-    buffer.update(UTF8String.fromString("b"), 1L)
-    buffer.update(UTF8String.fromString("B"), 1L)
-    buffer.update(UTF8String.fromString("c"), 1L)
-    buffer.update(UTF8String.fromString("d"), 1L)
-    buffer.update(UTF8String.fromString("a"), 2L)
-    assert(myMode.eval(buffer).toString == "a")
-  }
-
-  test("Support mode eval utf8_binary_lcase") {
-    val myMode = Mode(child = Literal("some_column_name"))
-    val buffer = new OpenHashMap[AnyRef, Long](5)
-    buffer.update("a", 1L)
-    assert(myMode.eval(buffer).toString == "a")
+  test("Support Mode.eval(buffer) with mode should = null (not yet implemented)") {
+    val modeDefaultCollation = Mode(child = Literal("some_column_name"))
+    val modeLowercaseCollation = Mode(child =
+      Literal.create("some_column_name", StringType("unicode_ci")))
+    val buffer = new OpenHashMap[AnyRef, Long](7)
+    buffer.update(null, 2L)
+    buffer.update("c", 1L)
+    assert(modeDefaultCollation.eval(buffer).toString == "c")
+    assert(modeLowercaseCollation.eval(buffer).toString.toLowerCase() == "c")
+    // todo: Assert that this should be null in both cases.
   }
   // TODO: Add more tests for other string expressions
 
