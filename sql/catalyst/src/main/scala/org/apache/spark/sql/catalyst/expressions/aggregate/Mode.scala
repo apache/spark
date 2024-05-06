@@ -81,7 +81,7 @@ case class Mode(
       return null
     }
 
-    val buffer = if ( child.dataType.isInstanceOf[StringType] &&
+    val buffer = if (child.dataType.isInstanceOf[StringType] &&
       !buff.toMap.keys.exists(k => !(k.isInstanceOf[String] ||
       k.isInstanceOf[org.apache.spark.unsafe.types.UTF8String]))) {
       val collation = CollationFactory.fetchCollation(collationId)
@@ -98,7 +98,7 @@ case class Mode(
         case (map, (key: UTF8String, count)) =>
           map(key) = map.getOrElse(key, 0L) + count
           map
-        case (map, _) =>
+        case (_, _) =>
           throw new IllegalArgumentException("Mode expects string type")
       }
       modeMap
