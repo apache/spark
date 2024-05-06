@@ -76,24 +76,38 @@ jobs:
       id: set-outputs
       run: |
         if [ -z "${{ inputs.jobs }}" ]; then
-          pyspark=true; sparkr=true;
           pyspark_modules=`cd dev && python -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark')))"`
           pyspark=`./dev/is-changed.py -m $pyspark_modules`
-          sparkr=`./dev/is-changed.py -m sparkr`
-          kubernetes=`./dev/is-changed.py -m kubernetes`
+          if [[ "${{ github.repository }}" != 'apache/spark' ]]; then
+            pandas=$pyspark
+            yarn=`./dev/is-changed.py -m yarn`
+            kubernetes=`./dev/is-changed.py -m kubernetes`
+            sparkr=`./dev/is-changed.py -m sparkr`
+            buf=true
+            ui=true
+          else
+            pandas=false
+            yarn=false
+            kubernetes=false
+            sparkr=false
+            buf=false
+            ui=false
+          fi
           # 'build' is always true for now.
           # It does not save significant time and most of PRs trigger the build.
           precondition="
             {
               \"build\": \"true\",
               \"pyspark\": \"$pyspark\",
+              \"pyspark-pandas\": \"$pandas\",
               \"sparkr\": \"$sparkr\",
               \"tpcds-1g\": \"false\",
               \"docker-integration-tests\": \"false\",
               \"lint\" : \"true\",
+              \"yarn\" : \"$yarn\",
               \"k8s-integration-tests\" : \"$kubernetes\",
-              \"buf\" : \"true\",
-              \"ui\" : \"true\",
+              \"buf\" : \"$buf\",
+              \"ui\" : \"$ui\",
             }"
           echo $precondition # For debugging
           # Remove `\n` to avoid "Invalid format" error
@@ -144,8 +158,8 @@ jobs:
           - >-
             streaming, sql-kafka-0-10, streaming-kafka-0-10, streaming-kinesis-asl,
             kubernetes, hadoop-cloud, spark-ganglia-lgpl, protobuf
-          - >-
-            yarn, connect
+          - yarn
+          - connect
         # Here, we split Hive and SQL tests into some of slow ones and the rest of them.
         included-tags: [""]
         excluded-tags: [""]
@@ -183,6 +197,11 @@ jobs:
             hive: hive2.3
             excluded-tags: org.apache.spark.tags.ExtendedSQLTest,org.apache.spark.tags.SlowSQLTest
             comment: "- other tests"
+        exclude:
+          # Always run if yarn == 'true', even infra-image is skip (such as non-master job)
+          # In practice, the build will run in individual PR, but not against the individual commit
+          # in Apache Spark repository.
+          - modules: ${{ fromJson(needs.precondition.outputs.required).yarn != 'true' && 'yarn' }}
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
       EXCLUDED_TAGS: ${{ matrix.excluded-tags }}
@@ -348,11 +367,11 @@ jobs:
           - >-
             pyspark-mllib, pyspark-ml, pyspark-ml-connect
           - >-
+            pyspark-connect
+          - >-
             pyspark-pandas
           - >-
             pyspark-pandas-slow
-          - >-
-            pyspark-connect
           - >-
             pyspark-pandas-connect-part0
           - >-
@@ -361,6 +380,16 @@ jobs:
             pyspark-pandas-connect-part2
           - >-
             pyspark-pandas-connect-part3
+        exclude:
+          # Always run if pyspark-pandas == 'true', even infra-image is skip (such as non-master job)
+          # In practice, the build will run in individual PR, but not against the individual commit
+          # in Apache Spark repository.
+          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas' }}
+          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-slow' }}
+          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-connect-part0' }}
+          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-connect-part1' }}
+          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-connect-part2' }}
+          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-connect-part3' }}
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
       PYTHON_TO_TEST: 'python3.11'

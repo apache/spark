@@ -32,7 +32,7 @@ import com.google.common.cache.CacheBuilder
 import org.apache.spark.{MapOutputTrackerMaster, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.{config, Logging, MDC}
-import org.apache.spark.internal.LogKeys.{BLOCK_MANAGER_ID, EXECUTOR_ID, OLD_BLOCK_MANAGER_ID}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.RDD_CACHE_VISIBILITY_TRACKING_ENABLED
 import org.apache.spark.network.shuffle.{ExternalBlockStoreClient, RemoteBlockPushResolver}
 import org.apache.spark.rpc.{IsolatedThreadSafeRpcEndpoint, RpcCallContext, RpcEndpointRef, RpcEnv}
@@ -314,8 +314,9 @@ class BlockManagerMasterEndpoint(
       defaultValue: T): PartialFunction[Throwable, T] = {
     case e: IOException =>
       if (!SparkContext.getActive.map(_.isStopped).getOrElse(true)) {
-        logWarning(s"Error trying to remove $blockType $blockId" +
-          s" from block manager $bmId", e)
+        logWarning(log"Error trying to remove ${MDC(BLOCK_TYPE, blockType)} " +
+          log"${MDC(BLOCK_ID, blockId)}" +
+          log" from block manager ${MDC(BLOCK_MANAGER_ID, bmId)}", e)
       }
       defaultValue
 
@@ -333,8 +334,9 @@ class BlockManagerMasterEndpoint(
           false
       }
       if (!isAlive) {
-        logWarning(s"Error trying to remove $blockType $blockId. " +
-          s"The executor $executorId may have been lost.", t)
+        logWarning(log"Error trying to remove ${MDC(BLOCK_TYPE, blockType)} " +
+          log"${MDC(BLOCK_ID, blockId)}. " +
+          log"The executor ${MDC(EXECUTOR_ID, executorId)} may have been lost.", t)
         defaultValue
       } else {
         throw t
@@ -516,7 +518,7 @@ class BlockManagerMasterEndpoint(
       // etc.) as replication doesn't make much sense in that context.
       if (locations.isEmpty) {
         blockLocations.remove(blockId)
-        logWarning(s"No more replicas available for $blockId !")
+        logWarning(log"No more replicas available for ${MDC(BLOCK_ID, blockId)}!")
       } else if (proactivelyReplicate && (blockId.isRDD || blockId.isInstanceOf[TestBlockId])) {
         // As a heuristic, assume single executor failure to find out the number of replicas that
         // existed before failure

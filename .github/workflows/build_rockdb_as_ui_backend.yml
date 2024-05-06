@@ -42,5 +42,6 @@ jobs:
         {
           "build": "true",
           "pyspark": "true",
-          "sparkr": "true"
+          "sparkr": "true",
+          "yarn": "true"
         }

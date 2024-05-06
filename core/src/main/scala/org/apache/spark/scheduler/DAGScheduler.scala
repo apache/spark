@@ -37,7 +37,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.{config, Logging, MDC}
-import org.apache.spark.internal.LogKeys.{ACCUMULATOR_ID, CLASS_NAME, JOB_ID, PARTITION_ID, STAGE_ID, TASK_ID}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.{LEGACY_ABORT_STAGE_AFTER_KILL_TASKS, RDD_CACHE_VISIBILITY_TRACKING_ENABLED}
 import org.apache.spark.internal.config.Tests.TEST_NO_STAGE_RETRY
 import org.apache.spark.network.shuffle.{BlockStoreClient, MergeFinalizerListener}
@@ -1221,7 +1221,8 @@ private[spark] class DAGScheduler(
       }
     }
     if (activeInGroup.isEmpty && !cancelFutureJobs) {
-      logWarning(s"Failed to cancel job group $groupId. Cannot find active jobs for it.")
+      logWarning(log"Failed to cancel job group ${MDC(GROUP_ID, groupId)}. " +
+        log"Cannot find active jobs for it.")
     }
     val jobIds = activeInGroup.map(_.jobId)
     jobIds.foreach(handleJobCancellation(_,
@@ -1328,9 +1329,11 @@ private[spark] class DAGScheduler(
         val numCheckFailures = barrierJobIdToNumTasksCheckFailures.compute(jobId,
           (_: Int, value: Int) => value + 1)
 
-        logWarning(s"Barrier stage in job $jobId requires ${e.requiredConcurrentTasks} slots, " +
-          s"but only ${e.maxConcurrentTasks} are available. " +
-          s"Will retry up to ${maxFailureNumTasksCheck - numCheckFailures + 1} more times")
+        logWarning(log"Barrier stage in job ${MDC(JOB_ID, jobId)} " +
+          log"requires ${MDC(NUM_SLOTS, e.requiredConcurrentTasks)} slots, " +
+          log"but only ${MDC(MAX_SLOTS, e.maxConcurrentTasks)} are available. " +
+          log"Will retry up to ${MDC(NUM_RETRIES, maxFailureNumTasksCheck - numCheckFailures + 1)} " +
+          log"more times")
 
         if (numCheckFailures <= maxFailureNumTasksCheck) {
           messageScheduler.schedule(
@@ -1350,7 +1353,7 @@ private[spark] class DAGScheduler(
         }
 
       case e: Exception =>
-        logWarning("Creating new stage failed due to exception - job: " + jobId, e)
+        logWarning(log"Creating new stage failed due to exception - job: ${MDC(JOB_ID, jobId)}", e)
         listener.jobFailed(e)
         return
     }
@@ -1393,7 +1396,7 @@ private[spark] class DAGScheduler(
       finalStage = getOrCreateShuffleMapStage(dependency, jobId)
     } catch {
       case e: Exception =>
-        logWarning("Creating new stage failed due to exception - job: " + jobId, e)
+        logWarning(log"Creating new stage failed due to exception - job: ${MDC(JOB_ID, jobId)}", e)
         listener.jobFailed(e)
         return
     }
@@ -1622,8 +1625,8 @@ private[spark] class DAGScheduler(
       }
 
       if (taskBinaryBytes.length > TaskSetManager.TASK_SIZE_TO_WARN_KIB * 1024) {
-        logWarning(s"Broadcasting large task binary with size " +
-          s"${Utils.bytesToString(taskBinaryBytes.length)}")
+        logWarning(log"Broadcasting large task binary with size " +
+          log"${MDC(NUM_BYTES, Utils.bytesToString(taskBinaryBytes.length))}")
       }
       taskBinary = sc.broadcast(taskBinaryBytes)
     } catch {
@@ -1791,8 +1794,10 @@ private[spark] class DAGScheduler(
         shouldInterruptThread.toBoolean
       } catch {
         case e: IllegalArgumentException =>
-          logWarning(s"${SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL} in Job ${job.jobId} " +
-            s"is invalid: $shouldInterruptThread. Using 'false' instead", e)
+          logWarning(log"${MDC(CONFIG, SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL)} " +
+            log"in Job ${MDC(JOB_ID, job.jobId)} " +
+            log"is invalid: ${MDC(CONFIG2, shouldInterruptThread)}. " +
+            log"Using 'false' instead", e)
           false
       }
     }
@@ -1931,7 +1936,8 @@ private[spark] class DAGScheduler(
                         reason = "Stage finished")
                     } catch {
                       case e: UnsupportedOperationException =>
-                        logWarning(s"Could not cancel tasks for stage $stageId", e)
+                        logWarning(log"Could not cancel tasks " +
+                          log"for stage ${MDC(STAGE_ID, stageId)}", e)
                     }
                     listenerBus.post(
                       SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), JobSucceeded))
@@ -2236,7 +2242,7 @@ private[spark] class DAGScheduler(
             case e: UnsupportedOperationException =>
               // Cannot continue with barrier stage if failed to cancel zombie barrier tasks.
               // TODO SPARK-24877 leave the zombie tasks and ignore their completion events.
-              logWarning(s"Could not kill all tasks for stage $stageId", e)
+              logWarning(log"Could not kill all tasks for stage ${MDC(STAGE_ID, stageId)}", e)
               abortStage(failedStage, "Could not kill zombie barrier tasks for stage " +
                 s"$failedStage (${failedStage.name})", Some(e))
           }
@@ -2451,8 +2457,9 @@ private[spark] class DAGScheduler(
                       }
 
                       override def onShuffleMergeFailure(e: Throwable): Unit = {
-                        logWarning(s"Exception encountered when trying to finalize shuffle " +
-                          s"merge on ${shuffleServiceLoc.host} for shuffle $shuffleId", e)
+                        logWarning(log"Exception encountered when trying to finalize shuffle " +
+                          log"merge on ${MDC(HOST_PORT, shuffleServiceLoc.host)} " +
+                          log"for shuffle ${MDC(SHUFFLE_ID, shuffleId)}", e)
                         // Do not fail the future as this would cause dag scheduler to prematurely
                         // give up on waiting for merge results from the remaining shuffle services
                         // if one fails
@@ -2892,7 +2899,7 @@ private[spark] class DAGScheduler(
               markStageAsFinished(stage, Some(reason))
             } catch {
               case e: UnsupportedOperationException =>
-                logWarning(s"Could not cancel tasks for stage $stageId", e)
+                logWarning(log"Could not cancel tasks for stage ${MDC(STAGE_ID, stageId)}", e)
                 ableToCancelStages = false
             }
           }

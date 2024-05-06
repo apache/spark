@@ -325,8 +325,8 @@ private[spark] class DiskBlockManager(
         logDebug(s"Created directory at ${dirToCreate.getAbsolutePath} with permission 770")
       } catch {
         case e: SecurityException =>
-          logWarning(s"Failed to create directory ${dirToCreate.getAbsolutePath} " +
-            s"with permission 770", e)
+          logWarning(log"Failed to create directory ${MDC(PATH, dirToCreate.getAbsolutePath)} " +
+            log"with permission 770", e)
           created = null;
       }
     }

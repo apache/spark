@@ -23,7 +23,7 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
 import org.apache.spark.{ExecutorAllocationClient, SparkConf, SparkContext}
 import org.apache.spark.internal.{config, Logging, MDC}
-import org.apache.spark.internal.LogKeys.HOST
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
@@ -209,8 +209,9 @@ private[scheduler] class HealthTracker (
             }
           }
         case None =>
-          logWarning(s"Not attempting to kill executors on excluded host $node " +
-            s"since allocation client is not defined.")
+          logWarning(
+            log"Not attempting to kill executors on excluded host ${MDC(HOST_PORT, node)} " +
+              log"since allocation client is not defined.")
       }
     }
   }
@@ -437,10 +438,12 @@ private[spark] object HealthTracker extends Logging {
         val legacyKey = config.EXCLUDE_ON_FAILURE_LEGACY_TIMEOUT_CONF.key
         conf.get(config.EXCLUDE_ON_FAILURE_LEGACY_TIMEOUT_CONF).exists { legacyTimeout =>
           if (legacyTimeout == 0) {
-            logWarning(s"Turning off excludeOnFailure due to legacy configuration: $legacyKey == 0")
+            logWarning(log"Turning off excludeOnFailure due to legacy configuration: " +
+              log"${MDC(CONFIG, legacyKey)} == 0")
             false
           } else {
-            logWarning(s"Turning on excludeOnFailure due to legacy configuration: $legacyKey > 0")
+            logWarning(log"Turning on excludeOnFailure due to legacy configuration: " +
+              log"${MDC(CONFIG, legacyKey)} > 0")
             true
           }
         }
