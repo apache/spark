@@ -87,12 +87,6 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   private def extractSelectiveFilterOverScan(
       plan: LogicalPlan,
       filterCreationSideKey: Expression): Option[(Expression, LogicalPlan)] = {
-
-    def canExtractRight(joinType: JoinType): Boolean = joinType match {
-      case Inner | LeftSemi | RightOuter => true
-      case _ => false
-    }
-
     def extract(
         p: LogicalPlan,
         predicateReference: AttributeSet,
@@ -148,7 +142,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             //     left outer join output: (1, null), (2, null), (3, 3)
             //     left keys: 1, 2, 3
             // So we can't use right table to generate runtime filter.
-            if (canExtractRight(joinType)) {
+            if (canPruneLeft(joinType)) {
               lkeys.zip(rkeys).find(_._1.semanticEquals(targetKey)).map(_._2)
                 .flatMap { newTargetKey =>
                   extract(right, AttributeSet.empty,
@@ -160,19 +154,19 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             }
           }
         } else if (right.output.exists(_.semanticEquals(targetKey))) {
-          if (canExtractRight(joinType)) {
-            extract(right, AttributeSet.empty, hasHitFilter = false, hasHitSelectiveFilter = false,
-              currentPlan = right, targetKey = targetKey)
-          } else {
-            None
-          }.orElse {
+          extract(right, AttributeSet.empty, hasHitFilter = false, hasHitSelectiveFilter = false,
+            currentPlan = right, targetKey = targetKey).orElse {
             // We can also extract from the left side if the join keys are transitive.
-            rkeys.zip(lkeys).find(_._1.semanticEquals(targetKey)).map(_._2)
-              .flatMap { newTargetKey =>
-                extract(left, AttributeSet.empty,
-                  hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = left,
-                  targetKey = newTargetKey)
-              }
+            if (canPruneRight(joinType)) {
+              rkeys.zip(lkeys).find(_._1.semanticEquals(targetKey)).map(_._2)
+                .flatMap { newTargetKey =>
+                  extract(left, AttributeSet.empty,
+                    hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = left,
+                    targetKey = newTargetKey)
+                }
+            } else {
+              None
+            }
           }
         } else {
           None
