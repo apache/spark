@@ -277,7 +277,7 @@ object SparkBuild extends PomBuild {
       Resolver.mavenLocal,
       Resolver.file("ivyLocal", file(Path.userHome.absolutePath + "/.ivy2/local"))(Resolver.ivyStylePatterns)
     ) ++ Seq(
-      "hive-staging-repo" at "https://repository.apache.org/content/repositories/orgapachehive-1128/",
+      "hive-staging-repo" at "https://repository.apache.org/content/repositories/orgapachehive-1129/",
       Resolver.file("local", file(Path.userHome.absolutePath + "/.ivy2/local"))(Resolver.ivyStylePatterns)
     ),
     externalResolvers := resolvers.value,

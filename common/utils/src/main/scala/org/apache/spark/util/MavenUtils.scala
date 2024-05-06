@@ -196,7 +196,7 @@ private[spark] object MavenUtils extends Logging {
     val staging: IBiblioResolver = new IBiblioResolver
     staging.setM2compatible(true)
     staging.setUsepoms(true)
-    staging.setRoot("https://repository.apache.org/content/repositories/orgapachehive-1128/")
+    staging.setRoot("https://repository.apache.org/content/repositories/orgapachehive-1129/")
     staging.setName("hive-staging-repo")
     cr.add(staging)
     cr

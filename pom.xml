@@ -356,7 +356,7 @@
 
     <repository>
       <id>hive-staging-repo</id>
-      <url>https://repository.apache.org/content/repositories/orgapachehive-1128/</url>
+      <url>https://repository.apache.org/content/repositories/orgapachehive-1129/</url>
       <snapshots>
         <enabled>true</enabled>
         <updatePolicy>always</updatePolicy>
