@@ -81,14 +81,11 @@ case class Mode(
       return null
     }
 
-    val buffer = if (child.dataType.isInstanceOf[StringType] &&
-      !buff.toMap.keys.exists(k => !(k.isInstanceOf[String] ||
-      k.isInstanceOf[org.apache.spark.unsafe.types.UTF8String]))) {
-      val collation = CollationFactory.fetchCollation(collationId)
-
+    val buffer = if (child.dataType.isInstanceOf[StringType]) {
+      var nullCount = 0L
       val modeMap = buff.foldLeft(
         new TreeMap[org.apache.spark.unsafe.types.UTF8String, Long]()(Ordering.comparatorToOrdering(
-          collation.comparator
+          CollationFactory.fetchCollation(collationId).comparator
           )))
       {
         case (map, (key: String, count)) =>
@@ -97,6 +94,9 @@ case class Mode(
           map
         case (map, (key: UTF8String, count)) =>
           map(key) = map.getOrElse(key, 0L) + count
+          map
+        case (map, (null, count)) =>
+          nullCount = count
           map
         case (_, _) =>
           throw new IllegalArgumentException("Mode expects string type")

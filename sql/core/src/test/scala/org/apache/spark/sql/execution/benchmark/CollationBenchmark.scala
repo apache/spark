@@ -185,6 +185,28 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
     }
     benchmark.run()
   }
+
+  def benchmarkMode(
+      collationTypes: Seq[String],
+      value: Seq[UTF8String]): Unit = {
+    val benchmark = new Benchmark(
+      "collation unit benchmarks - mode",
+      value.size * 10,
+      warmupTime = 10.seconds,
+      output = output)
+    collationTypes.foreach { collationType => {
+      val collation = CollationFactory.fetchCollation(collationType)
+      benchmark.addCase(s"$collationType") { _ =>
+        value.foreach { s =>
+          (0 to 10).foreach { _ =>
+            // todo: invoke mode function
+          }
+        }
+      }
+    }
+    }
+    benchmark.run()
+  }
 }
 
 /**
@@ -218,6 +240,7 @@ object CollationBenchmark extends CollationBenchmarkBase {
     benchmarkContains(collationTypes, generateSeqInput(10000L))
     benchmarkStartsWith(collationTypes, generateSeqInput(10000L))
     benchmarkEndsWith(collationTypes, generateSeqInput(10000L))
+    benchmarkMode(collationTypes, generateSeqInput(10000L))
   }
 }
 
@@ -237,12 +260,6 @@ object CollationNonASCIIBenchmark extends CollationBenchmarkBase {
     val inputLong: Seq[UTF8String] = (0L until n).map(i => input(i.toInt % input.size))
     inputLong
     // scalastyle:on nonascii
-  }
-
-  private def benchmarkMode(
-      collationTypes: Seq[String],
-      value: Seq[UTF8String]) = {
-
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {

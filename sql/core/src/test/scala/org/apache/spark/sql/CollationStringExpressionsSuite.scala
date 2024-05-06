@@ -674,8 +674,10 @@ class CollationStringExpressionsSuite
   test("Support mode for string expression with collation ID on table") {
     withTable("t") {
       sql("CREATE TABLE t(i STRING) USING parquet")
-      sql("INSERT INTO t VALUES ('a'), ('a'), ('a'), " +
-        "('a'), ('a'), ('b'),('b'),('b'), ('B'),('B'),('B'),('B')")
+      sql("INSERT INTO t VALUES " +
+        "('a'), ('a'), ('a'), ('a'), ('a'), " +
+        "('b'), ('b'), ('b'), " +
+        "('B'), ('B'), ('B'), ('B')")
       val query = "SELECT mode(collate(i, 'UTF8_BINARY_LCASE')) FROM t"
       checkAnswer(sql(query), Row("b"))
     }
@@ -688,7 +690,7 @@ class CollationStringExpressionsSuite
   }
 
   test("Support mode eval") {
-    val myMode = Mode(child = Literal("a"))
+    val myMode = Mode(child = Literal("some_column_name"))
     val buffer = new OpenHashMap[AnyRef, Long](5)
     buffer.update("b", 1L)
     buffer.update("B", 1L)
@@ -699,18 +701,18 @@ class CollationStringExpressionsSuite
   }
 
   test("Support mode eval with collation") {
-    val myMode = Mode(child = Literal.create("a", StringType("utf8_binary_lcase")))
+    val myMode = Mode(child = Literal.create("some_column_name", StringType("utf8_binary_lcase")))
     val buffer = new OpenHashMap[AnyRef, Long](11)
     buffer.update("b", 2L)
     buffer.update("B", 2L)
     buffer.update("c", 2L)
     buffer.update("d", 2L)
     buffer.update("a", 3L)
-    assert(myMode.eval(buffer).toString == "a")
+    assert(myMode.eval(buffer).toString == "B")
   }
 
   test("Support mode eval with null") {
-    val myMode = Mode(child = Literal("a"))
+    val myMode = Mode(child = Literal("some_column_name"))
     val buffer = new OpenHashMap[AnyRef, Long](5)
     buffer.update("b", 1L)
     buffer.update("B", 1L)
@@ -720,8 +722,20 @@ class CollationStringExpressionsSuite
     assert(myMode.eval(buffer).toString == "a")
   }
 
+  test("Support mode eval with null and collation") {
+    val myMode = Mode(child = Literal.create("some_column_name", StringType("unicode_ci")))
+    val buffer = new OpenHashMap[AnyRef, Long](7)
+    buffer.update("bb", 1L)
+    buffer.update("Bb", 1L)
+    buffer.update("BB", 1L)
+    buffer.update("c", 1L)
+    buffer.update(null, 1L)
+    buffer.update("a", 2L)
+    assert(myMode.eval(buffer).toString == "bb")
+  }
+
   test("Support mode eval 2") {
-    val myMode = Mode(child = Literal("a"))
+    val myMode = Mode(child = Literal("some_column_name"))
     val buffer = new OpenHashMap[AnyRef, Long](5)
     buffer.update(UTF8String.fromString("b"), 1L)
     buffer.update(UTF8String.fromString("B"), 1L)
@@ -732,7 +746,7 @@ class CollationStringExpressionsSuite
   }
 
   test("Support mode eval utf8_binary_lcase") {
-    val myMode = Mode(child = Literal("a"))
+    val myMode = Mode(child = Literal("some_column_name"))
     val buffer = new OpenHashMap[AnyRef, Long](5)
     buffer.update("a", 1L)
     assert(myMode.eval(buffer).toString == "a")
