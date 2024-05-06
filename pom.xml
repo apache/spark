@@ -438,11 +438,6 @@
       <artifactId>jupiter-interface</artifactId>
       <scope>test</scope>
     </dependency>
-    <dependency>
-      <groupId>org.jline</groupId>
-      <artifactId>jline</artifactId>
-      <version>3.24.1</version>
-    </dependency>
   </dependencies>
   <dependencyManagement>
     <dependencies>
@@ -1141,10 +1136,6 @@
             <groupId>org.scala-lang.modules</groupId>
             <artifactId>scala-xml_2.13</artifactId>
           </exclusion>
-          <exclusion>
-            <groupId>org.jline</groupId>
-            <artifactId>jline</artifactId>
-          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -1518,10 +1509,6 @@
           <exclusion>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.jline</groupId>
-            <artifactId>jline</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -2994,6 +2981,9 @@
                     <maxJdkVersion>${java.version}</maxJdkVersion>
                     <ignoredScopes>test</ignoredScopes>
                     <ignoredScopes>provided</ignoredScopes>
+                    <ignoreClasses>
+                      <ignoreClass>org.jline.terminal.impl.ffm.*</ignoreClass>
+                    </ignoreClasses>
                   </enforceBytecodeVersion>
                 </rules>
               </configuration>
