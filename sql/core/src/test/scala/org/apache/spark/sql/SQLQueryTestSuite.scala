@@ -358,7 +358,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       val parent = resultFile.getParentFile
       if (!parent.exists()) {
         assert(parent.mkdirs(), "Could not create directory: " + parent)
-
+      }
       stringToFile(resultFile, goldenOutput)
     }
 
