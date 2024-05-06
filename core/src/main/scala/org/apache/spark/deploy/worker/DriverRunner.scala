@@ -31,7 +31,8 @@ import org.apache.spark.deploy.DeployMessages.DriverStateChanged
 import org.apache.spark.deploy.StandaloneResourceUtils.prepareResourcesFile
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.deploy.master.DriverState.DriverState
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.{DRIVER_RESOURCES_FILE, SPARK_DRIVER_PREFIX}
 import org.apache.spark.internal.config.UI.UI_REVERSE_PROXY
 import org.apache.spark.internal.config.Worker.WORKER_DRIVER_TERMINATE_TIMEOUT
@@ -131,8 +132,8 @@ private[deploy] class DriverRunner(
       process.foreach { p =>
         val exitCode = Utils.terminateProcess(p, driverTerminateTimeoutMs)
         if (exitCode.isEmpty) {
-          logWarning("Failed to terminate driver process: " + p +
-              ". This process will likely be orphaned.")
+          logWarning(log"Failed to terminate driver process: ${MDC(PROCESS, p)} " +
+              log". This process will likely be orphaned.")
         }
       }
     }

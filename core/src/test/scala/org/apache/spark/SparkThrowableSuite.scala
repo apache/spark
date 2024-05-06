@@ -51,7 +51,7 @@ class SparkThrowableSuite extends SparkFunSuite {
 
   private val errorJsonFilePath = getWorkspaceFilePath(
     // Note that though we call them "error classes" here, the proper name is "error conditions",
-    // hence why the name of the JSON file different. We will address this inconsistency as part
+    // hence why the name of the JSON file is different. We will address this inconsistency as part
     // of this ticket: https://issues.apache.org/jira/browse/SPARK-47429
     "common", "utils", "src", "main", "resources", "error", "error-conditions.json")
 

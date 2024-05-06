@@ -25,7 +25,7 @@ license: |
 ## Upgrading from Spark SQL 3.5 to 4.0
 
 - Since Spark 4.0, `spark.sql.ansi.enabled` is on by default. To restore the previous behavior, set `spark.sql.ansi.enabled` to `false` or `SPARK_ANSI_SQL_MODE` to `false`.
-- Since Spark 4.0, `CREATE TABLE` syntax without `USING` and `STORED AS` will use the value of `spark.sql.sources.default` as the table provider instead of `Hive`. To restore the previous behavior, set `spark.sql.legacy.createHiveTableByDefault` to `true`.
+- Since Spark 4.0, `CREATE TABLE` syntax without `USING` and `STORED AS` will use the value of `spark.sql.sources.default` as the table provider instead of `Hive`. To restore the previous behavior, set `spark.sql.legacy.createHiveTableByDefault` to `true` or `SPARK_SQL_LEGACY_CREATE_HIVE_TABLE` to `true`.
 - Since Spark 4.0, the default behaviour when inserting elements in a map is changed to first normalize keys -0.0 to 0.0. The affected SQL functions are `create_map`, `map_from_arrays`, `map_from_entries`, and `map_concat`. To restore the previous behaviour, set `spark.sql.legacy.disableMapKeyNormalization` to `true`.
 - Since Spark 4.0, the default value of `spark.sql.maxSinglePartitionBytes` is changed from `Long.MaxValue` to `128m`. To restore the previous behavior, set `spark.sql.maxSinglePartitionBytes` to `9223372036854775807`(`Long.MaxValue`).
 - Since Spark 4.0, any read of SQL tables takes into consideration the SQL configs `spark.sql.files.ignoreCorruptFiles`/`spark.sql.files.ignoreMissingFiles` instead of the core config `spark.files.ignoreCorruptFiles`/`spark.files.ignoreMissingFiles`.

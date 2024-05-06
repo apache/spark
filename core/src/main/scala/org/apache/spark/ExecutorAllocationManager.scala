@@ -545,8 +545,8 @@ private[spark] class ExecutorAllocationManager(
         if (testing) {
           throw new SparkException("ResourceProfile Id was UNKNOWN, this is not expected")
         }
-        logWarning(s"Not removing executor $executorIdToBeRemoved because the " +
-          "ResourceProfile was UNKNOWN!")
+        logWarning(log"Not removing executor ${MDC(EXECUTOR_IDS, executorIdToBeRemoved)} " +
+          log"because the ResourceProfile was UNKNOWN!")
       } else {
         // get the running total as we remove or initialize it to the count - pendingRemoval
         val newExecutorTotal = numExecutorsTotalPerRpId.getOrElseUpdate(rpId,
@@ -610,8 +610,9 @@ private[spark] class ExecutorAllocationManager(
         log"removed due to idle timeout.")
       executorsRemoved.toSeq
     } else {
-      logWarning(s"Unable to reach the cluster manager to kill executor/s " +
-        s"${executorIdsToBeRemoved.mkString(",")} or no executor eligible to kill!")
+      logWarning(log"Unable to reach the cluster manager to kill executor/s " +
+        log"${MDC(EXECUTOR_IDS, executorIdsToBeRemoved.mkString(","))} " +
+        log"or no executor eligible to kill!")
       Seq.empty[String]
     }
   }
@@ -874,8 +875,9 @@ private[spark] class ExecutorAllocationManager(
           // really complete and no tasks left
           resourceProfileIdToStageAttempt(rpForStage.head) -= stageAttempt
         } else {
-          logWarning(s"Should have exactly one resource profile for stage $stageAttempt," +
-              s" but have $rpForStage")
+          logWarning(log"Should have exactly one resource profile for stage " +
+            log"${MDC(STAGE_ATTEMPT, stageAttempt)}, but have " +
+            log"${MDC(RESOURCE_PROFILE_ID, rpForStage)}")
         }
       }
     }

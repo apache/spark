@@ -201,12 +201,14 @@ private class ShuffleStatus(
             logInfo(log"Recover ${MDC(MAP_ID, mapStatus.mapId)}" +
               log" ${MDC(BLOCK_MANAGER_ID, mapStatus.location)}")
           } else {
-            logWarning(s"Asked to update map output ${mapId} for untracked map status.")
+            logWarning(log"Asked to update map output ${MDC(MAP_ID, mapId)} " +
+              log"for untracked map status.")
           }
       }
     } catch {
       case e: java.lang.NullPointerException =>
-        logWarning(s"Unable to update map output for ${mapId}, status removed in-flight")
+        logWarning(log"Unable to update map output for ${MDC(MAP_ID, mapId)}, " +
+          log"status removed in-flight")
     }
   }
 
@@ -817,7 +819,8 @@ private[spark] class MapOutputTrackerMaster(
       case Some(shuffleStatus) =>
         shuffleStatus.updateMapOutput(mapId, bmAddress)
       case None if shuffleMigrationEnabled =>
-        logWarning(s"Asked to update map output for unknown shuffle ${shuffleId}")
+        logWarning(log"Asked to update map output for unknown shuffle " +
+          log"${MDC(SHUFFLE_ID, shuffleId)}")
       case None =>
         logError(log"Asked to update map output for unknown shuffle ${MDC(SHUFFLE_ID, shuffleId)}")
     }

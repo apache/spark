@@ -4399,8 +4399,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       checkAnswer(df,
         Row(1, 2, 3, 4, 5, 6, 7, 8, 9, 10) ::
           Row(2, 4, 6, 8, 10, 12, 14, 16, 18, 20) :: Nil)
-      assert(df.schema.names.sameElements(
-        Array("max(t)", "max(t", "=", "\n", ";", "a b", "{", ".", "a.b", "a")))
+      assert(df.schema.names ===
+        Array("max(t)", "max(t", "=", "\n", ";", "a b", "{", ".", "a.b", "a"))
       checkAnswer(df.select("`max(t)`", "`a b`", "`{`", "`.`", "`a.b`"),
         Row(1, 6, 7, 8, 9) :: Row(2, 12, 14, 16, 18) :: Nil)
       checkAnswer(df.where("`a.b` > 10"),
@@ -4418,8 +4418,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       checkAnswer(df,
         Row(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11) ::
           Row(2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22) :: Nil)
-      assert(df.schema.names.sameElements(
-        Array("max(t)", "max(t", "=", "\n", ";", "a b", "{", ".", "a.b", "a", ",")))
+      assert(df.schema.names ===
+        Array("max(t)", "max(t", "=", "\n", ";", "a b", "{", ".", "a.b", "a", ","))
       checkAnswer(df.select("`max(t)`", "`a b`", "`{`", "`.`", "`a.b`"),
         Row(1, 6, 7, 8, 9) :: Row(2, 12, 14, 16, 18) :: Nil)
       checkAnswer(df.where("`a.b` > 10"),
@@ -4754,7 +4754,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       df.collect()
         .map(_.getString(0))
         .map(_.replaceAll("#[0-9]+", "#N"))
-        .sameElements(Array(plan.stripMargin))
+        === Array(plan.stripMargin)
     )
 
     checkQueryPlan(

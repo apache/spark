@@ -15,11 +15,9 @@
 # limitations under the License.
 #
 from pyspark.sql.functions import pandas_udf, PandasUDFType
+from pyspark.sql.types import DoubleType, StructType, StructField
 from pyspark.sql.tests.pandas.test_pandas_udf import PandasUDFTestsMixin
-from pyspark.testing.connectutils import should_test_connect, ReusedConnectTestCase
-
-if should_test_connect:
-    from pyspark.sql.connect.types import UnparsedDataType
+from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class PandasUDFParityTests(PandasUDFTestsMixin, ReusedConnectTestCase):
@@ -31,31 +29,31 @@ class PandasUDFParityTests(PandasUDFTestsMixin, ReusedConnectTestCase):
         def foo(x):
             return x
 
-        self.assertEqual(foo.returnType, UnparsedDataType("v double"))
+        self.assertEqual(foo.returnType, StructType([StructField("v", DoubleType(), True)]))
         self.assertEqual(foo.evalType, PandasUDFType.GROUPED_MAP)
 
         @pandas_udf(returnType="double", functionType=PandasUDFType.SCALAR)
         def foo(x):
             return x
 
-        self.assertEqual(foo.returnType, UnparsedDataType("double"))
+        self.assertEqual(foo.returnType, DoubleType())
         self.assertEqual(foo.evalType, PandasUDFType.SCALAR)
 
     def test_pandas_udf_basic_with_return_type_string(self):
         udf = pandas_udf(lambda x: x, "double", PandasUDFType.SCALAR)
-        self.assertEqual(udf.returnType, UnparsedDataType("double"))
+        self.assertEqual(udf.returnType, DoubleType())
         self.assertEqual(udf.evalType, PandasUDFType.SCALAR)
 
         udf = pandas_udf(lambda x: x, "v double", PandasUDFType.GROUPED_MAP)
-        self.assertEqual(udf.returnType, UnparsedDataType("v double"))
+        self.assertEqual(udf.returnType, StructType([StructField("v", DoubleType(), True)]))
         self.assertEqual(udf.evalType, PandasUDFType.GROUPED_MAP)
 
         udf = pandas_udf(lambda x: x, "v double", functionType=PandasUDFType.GROUPED_MAP)
-        self.assertEqual(udf.returnType, UnparsedDataType("v double"))
+        self.assertEqual(udf.returnType, StructType([StructField("v", DoubleType(), True)]))
         self.assertEqual(udf.evalType, PandasUDFType.GROUPED_MAP)
 
         udf = pandas_udf(lambda x: x, returnType="v double", functionType=PandasUDFType.GROUPED_MAP)
-        self.assertEqual(udf.returnType, UnparsedDataType("v double"))
+        self.assertEqual(udf.returnType, StructType([StructField("v", DoubleType(), True)]))
         self.assertEqual(udf.evalType, PandasUDFType.GROUPED_MAP)
 
 

@@ -19,7 +19,8 @@ package org.apache.spark.storage
 
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.util.Utils
 
 /**
@@ -78,7 +79,7 @@ class FileBasedTopologyMapper(conf: SparkConf) extends TopologyMapper(conf) with
     if (topology.isDefined) {
       logDebug(s"$hostname -> ${topology.get}")
     } else {
-      logWarning(s"$hostname does not have any topology information")
+      logWarning(log"${MDC(HOST_PORT, hostname)} does not have any topology information")
     }
     topology
   }

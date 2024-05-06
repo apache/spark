@@ -2524,7 +2524,7 @@ class DataFrame:
 
         Outer join on multiple columns
 
-        >>> df.join(df3, ["name", "age"], "outer").show()
+        >>> df.join(df3, ["name", "age"], "outer").sort("name", "age").show()
         +-----+----+------+
         | name| age|height|
         +-----+----+------+

@@ -31,6 +31,7 @@ import org.apache.spark.InternalAccumulator.{input, shuffleRead}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.scheduler.SchedulingMode._
@@ -542,9 +543,10 @@ private[spark] class TaskSetManager(
     if (serializedTask.limit() > TaskSetManager.TASK_SIZE_TO_WARN_KIB * 1024 &&
       !emittedTaskSizeWarning) {
       emittedTaskSizeWarning = true
-      logWarning(s"Stage ${task.stageId} contains a task of very large size " +
-        s"(${serializedTask.limit() / 1024} KiB). The maximum recommended task size is " +
-        s"${TaskSetManager.TASK_SIZE_TO_WARN_KIB} KiB.")
+      logWarning(log"Stage ${MDC(STAGE_ID, task.stageId)} contains a task of very large size " +
+        log"(${MDC(NUM_BYTES, serializedTask.limit() / 1024)} KiB). " +
+        log"The maximum recommended task size is " +
+        log"${MDC(NUM_BYTES_TO_WARN, TaskSetManager.TASK_SIZE_TO_WARN_KIB)} KiB.")
     }
     addRunningTask(taskId)
 
@@ -936,7 +938,11 @@ private[spark] class TaskSetManager(
     copiesRunning(index) -= 1
     var accumUpdates: Seq[AccumulatorV2[_, _]] = Seq.empty
     var metricPeaks: Array[Long] = Array.empty
-    val failureReason = s"Lost ${taskName(tid)} (${info.host} " +
+    val failureReason = log"Lost ${MDC(TASK_NAME, taskName(tid))} " +
+      log"(${MDC(HOST_PORT, info.host)} " +
+      log"executor ${MDC(LogKeys.EXECUTOR_ID, info.executorId)}): " +
+      log"${MDC(ERROR, reason.toErrorString)}"
+    val failureReasonString = s"Lost ${taskName(tid)} (${info.host} " +
       s"executor ${info.executorId}): ${reason.toErrorString}"
     val failureException: Option[Throwable] = reason match {
       case fetchFailed: FetchFailed =>
@@ -1019,7 +1025,7 @@ private[spark] class TaskSetManager(
           "maximum number of failures for the task.")
         None
 
-      case e: TaskFailedReason =>  // TaskResultLost and others
+      case _: TaskFailedReason =>  // TaskResultLost and others
         logWarning(failureReason)
         None
     }
@@ -1034,13 +1040,13 @@ private[spark] class TaskSetManager(
     if (!isZombie && reason.countTowardsTaskFailures) {
       assert (null != failureReason)
       taskSetExcludelistHelperOpt.foreach(_.updateExcludedForFailedTask(
-        info.host, info.executorId, index, failureReason))
+        info.host, info.executorId, index, failureReasonString))
       numFailures(index) += 1
       if (numFailures(index) >= maxTaskFailures) {
         logError(log"Task ${MDC(TASK_ID, index)} in stage ${MDC(STAGE_ID, taskSet.id)} failed " +
           log"${MDC(MAX_ATTEMPTS, maxTaskFailures)} times; aborting job")
         abort("Task %d in stage %s failed %d times, most recent failure: %s\nDriver stacktrace:"
-          .format(index, taskSet.id, maxTaskFailures, failureReason), failureException)
+          .format(index, taskSet.id, maxTaskFailures, failureReasonString), failureException)
         return
       }
     }
@@ -1281,7 +1287,8 @@ private[spark] class TaskSetManager(
     if (foundTasks) {
       val elapsedMs = clock.getTimeMillis() - timeMs
       if (elapsedMs > minTimeToSpeculation) {
-        logWarning(s"Time to checkSpeculatableTasks ${elapsedMs}ms > ${minTimeToSpeculation}ms")
+        logWarning(log"Time to checkSpeculatableTasks ${MDC(TIME_UNITS, elapsedMs)}ms > " +
+          log"${MDC(MIN_TIME, minTimeToSpeculation)}ms")
       }
     }
     foundTasks
