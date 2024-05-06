@@ -698,7 +698,7 @@ class CollationStringExpressionsSuite
     buffer.update("d", 1L)
     buffer.update("a", 2L)
     println(myMode.eval(buffer).toString)
-    assert(myMode.eval(buffer) == "a")
+    assert(myMode.eval(buffer).toString == "a")
   }
 
   test("Support mode eval 2") {
@@ -711,7 +711,7 @@ class CollationStringExpressionsSuite
     buffer.update(UTF8String.fromString("d"), 1L)
     buffer.update(UTF8String.fromString("a"), 2L)
     println(myMode.eval(buffer).toString)
-    assert(myMode.eval(buffer) == UTF8String.fromString("a"))
+    assert(myMode.eval(buffer).toString == "a")
   }
 
   test("Support mode eval utf8_binary_lcase") {
@@ -722,7 +722,7 @@ class CollationStringExpressionsSuite
     buffer.update("a", 1L)
 
     println(myMode.eval(buffer).toString)
-    assert(myMode.eval(buffer) == "a")
+    assert(myMode.eval(buffer).toString == "a")
   }
 /*
   test("Support mode for string expressions with collation") {
