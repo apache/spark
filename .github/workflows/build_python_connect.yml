@@ -118,7 +118,7 @@ jobs:
           name: test-results-spark-connect-python-only
           path: "**/target/test-reports/*.xml"
       - name: Upload Spark Connect server log file
-        if: failure()
+        if: ${{ !success() }}
         uses: actions/upload-artifact@v4
         with:
           name: unit-tests-log-spark-connect-python-only
