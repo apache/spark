@@ -462,13 +462,13 @@ class GroupByTestsMixin:
         psdf = ps.from_pandas(pdf)
 
         self.assert_eq(
-            pdf.groupby(["B","A"], as_index=False)
+            pdf.groupby(["B", "A"], as_index=False)
             .agg(C_MAX=("C", "max"))
-            .sort_values(["B","A"])
+            .sort_values(["B", "A"])
             .reset_index(drop=True),
-            psdf.groupby(["B","A"], as_index=False)
+            psdf.groupby(["B", "A"], as_index=False)
             .agg(C_MAX=("C", "max"))
-            .sort_values(["B","A"])
+            .sort_values(["B", "A"])
             .reset_index(drop=True),
         )
 
