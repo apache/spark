@@ -280,13 +280,32 @@ class JacksonParser(
         case VALUE_STRING =>
           UTF8String.fromString(parser.getText)
 
-        case _ =>
+        case other =>
           // Note that it always tries to convert the data as string without the case of failure.
-          val writer = new ByteArrayOutputStream()
-          Utils.tryWithResource(factory.createGenerator(writer, JsonEncoding.UTF8)) {
-            generator => generator.copyCurrentStructure(parser)
+          val startLocation = parser.getTokenLocation
+          startLocation.contentReference().getRawContent match {
+            case byteArray: Array[Byte] =>
+               other match {
+                case START_OBJECT =>
+                  parser.skipChildren()
+                case START_ARRAY =>
+                  parser.skipChildren()
+                case _ =>
+                   // Do nothing in this case; we've already read the token
+              }
+              val endLocation = parser.currentLocation.getByteOffset
+
+              UTF8String.fromBytes(
+                byteArray,
+                startLocation.getByteOffset.toInt,
+                endLocation.toInt - (startLocation.getByteOffset.toInt))
+            case _ =>
+              val writer = new ByteArrayOutputStream()
+              Utils.tryWithResource(factory.createGenerator(writer, JsonEncoding.UTF8)) {
+                generator => generator.copyCurrentStructure(parser)
+              }
+              UTF8String.fromBytes(writer.toByteArray)
           }
-          UTF8String.fromBytes(writer.toByteArray)
       }
 
     case TimestampType =>

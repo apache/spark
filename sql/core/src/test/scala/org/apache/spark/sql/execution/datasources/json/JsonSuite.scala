@@ -3865,6 +3865,24 @@ abstract class JsonSuite
       }
     }
   }
+
+  test("SPARK-48148: decimal precision is preserved when object is read as string") {
+    withTempPath { path =>
+
+      val granularFloat = "-999.99999999999999999999999999999999995"
+      val jsonString = s"""{"data": {"v": ${granularFloat}}}, {"data": {"v": ${granularFloat}}}]"""
+
+      Seq(jsonString).toDF()
+        .repartition(1)
+        .write
+        .text(path.getAbsolutePath)
+
+      val df = spark.read.schema("data STRING").json(path.getAbsolutePath)
+
+      val expected = s"""{"v": ${granularFloat}}"""
+      checkAnswer(df, Seq(Row(expected)))
+    }
+  }
 }
 
 class JsonV1Suite extends JsonSuite {
