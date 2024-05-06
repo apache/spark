@@ -21,11 +21,9 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.expressions.aggregate.Mode
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.sql.catalyst.util.CollationFactory
-import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.collection.OpenHashMap
 
 // scalastyle:off nonascii
