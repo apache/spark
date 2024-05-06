@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.catalyst.util.{CollationFactory, GenericArrayData}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, ArrayType, BooleanType, DataType}
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.collection.OpenHashMap
 
 
@@ -81,8 +82,11 @@ case class Mode(
     }
 
     val keytypes = buff.toMap.keys.map(_.getClass).toSet
+    // scalastyle:off println
     println(s"keytypes: $keytypes")
-    val isString = !buff.toMap.keys.exists(!_.isInstanceOf[String])
+    // scalastyle:on println
+    val isString = !buff.toMap.keys.exists(k => !(k.isInstanceOf[String] ||
+      k.isInstanceOf[org.apache.spark.unsafe.types.UTF8String]))
 
     val buffer = if (isString) {
       val collation = CollationFactory.fetchCollation("UTF8_BINARY_LCASE")
@@ -98,7 +102,11 @@ case class Mode(
           map(org.apache.spark.unsafe.types.UTF8String.fromString(key)) =
             map.getOrElse(org.apache.spark.unsafe.types.UTF8String.fromString(key), 0L) + count
           map
-        case (map, _) => throw new IllegalArgumentException("Mode only supports string type")
+        case (map, (key: UTF8String, count)) =>
+          map(key) = map.getOrElse(key, 0L) + count
+          map
+        case (map, _) =>
+          throw new IllegalArgumentException("if isString is set to true, Mode expects string type")
       }
       modeMap
     } else {
