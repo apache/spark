@@ -117,6 +117,10 @@ where `spark-streaming_{{site.SCALA_BINARY_VERSION}}` is the `artifactId` as def
 
     ./build/mvn -Pconnect -DskipTests clean package
 
+## Building with JVM Profile support
+
+    ./build/mvn -Pjvm-profiler -DskipTests clean package
+
 ## Continuous Compilation
 
 We use the scala-maven-plugin which supports incremental and continuous compilation. E.g.
