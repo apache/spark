@@ -308,7 +308,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             )
 
         if not self._as_index:
-            index_cols = psdf.columns
+            index_cols = list(psdf.columns)
             should_drop_index = set(
                 i for i, gkey in enumerate(self._groupkeys) if gkey._psdf is not self._psdf
             )
@@ -323,10 +323,10 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 psdf = psdf.reset_index(level=should_drop_index, drop=drop)
             if len(should_drop_index) < len(self._groupkeys):
                 psdf = psdf.reset_index()
-            index_cols = pd.Index([c for c in psdf.columns if c not in index_cols])
+            index_cols = [c for c in list(psdf.columns) if c not in index_cols]
             if relabeling:
-                psdf = psdf[index_cols.union(pd.Index(order))]
-                psdf.columns = pd.Index([c[0] for c in index_cols] + columns)
+                psdf = psdf[pd.Index(index_cols+list(order))]
+                psdf.columns = pd.Index([c[0] for c in index_cols] + list(columns))
 
         if relabeling and self._as_index:
             psdf = psdf[order]
