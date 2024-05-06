@@ -20,10 +20,11 @@ from pyspark.sql.tests.pandas.test_pandas_udf_grouped_agg import GroupedAggPanda
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class PandasUDFGroupedAggParityTests(GroupedAggPandasUDFTestsMixin, ReusedConnectTestCase):
-    @unittest.skip("Spark Connect does not support convert UNPARSED to catalyst types.")
-    def test_manual(self):
-        super().test_manual()
+class PandasUDFGroupedAggParityTests(
+    GroupedAggPandasUDFTestsMixin,
+    ReusedConnectTestCase,
+):
+    pass
 
 
 if __name__ == "__main__":
