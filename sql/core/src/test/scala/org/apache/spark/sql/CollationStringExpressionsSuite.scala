@@ -19,9 +19,9 @@ package org.apache.spark.sql
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.expressions.aggregate.Mode
-// import org.apache.spark.unsafe.types.UTF8String
-// import org.apache.spark.sql.catalyst.util.CollationFactory
-// import org.apache.spark.sql.functions.col
+import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -32,7 +32,7 @@ import org.apache.spark.util.collection.OpenHashMap
 class CollationStringExpressionsSuite
   extends QueryTest
   with SharedSparkSession {
-/*
+
   test("Support ConcatWs string expression with collation") {
     // Supported collations
     case class ConcatWsTestCase[R](s: String, a: Array[String], c: String, result: R)
@@ -665,7 +665,7 @@ class CollationStringExpressionsSuite
     checkAnswer(sql(query), Row("  abc"))
     assert(sql(query).schema.fields.head.dataType.sameType(StringType(0)))
   }
-*/
+
   test("Support mode for string expression with collation") {
     val query = "SELECT mode(collate('abc', 'utf8_binary'))"
     checkAnswer(sql(query), Row("abc"))
@@ -724,65 +724,6 @@ class CollationStringExpressionsSuite
     println(myMode.eval(buffer).toString)
     assert(myMode.eval(buffer).toString == "a")
   }
-/*
-  test("Support mode for string expressions with collation") {
-    /*
-
-val data = Seq(("Def"), ("def"), ("DEF"), ("abc"), ("abc"))
-val df = data.toDF("word")
-*/
-    implicit val spark = this.spark
-    import spark.implicits._
-    val data = Seq(("Def"), ("def"), ("DEF"), ("abc"), ("abc"))
-    val df = data.toDF("word")
-    val dfLC = df.withColumn("word",
-      col("word").cast(StringType("UTF8_BINARY_LCASE")))
-    val dfLCA = dfLC.agg(org.apache.spark.sql.functions.mode(functions.col("word")).as("count"))
-    dfLCA.show()
-    /*
-df.agg(org.apache.spark.sql.functions.mode(col("word")).as("count")).show()
-
-df.selectExpr("collate(word, 'utf8_binary')").show()
-Seq("UNICODE", "UNICODE_CI", "utf8_binary_lcase", "utf8_binary").foreach { collation =>
-  sql(s"set collation $collation")
-  assert(spark.conf.get(SQLConf.DEFAULT_COLLATION) === collation.toUpperCase(Locale.ROOT))
-}
-//withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
-spark.
-  scala> spark.sql(s"select mode(collate('Def', 'utf8_binary'))")
-val res2: org.apache.spark.sql.DataFrame = [mode(collate(Def)): string]
-
-
-dfLC.show()
-     */
-
-  }
-
-//
-//  test("left/right/substr on struct fields that are collated strings") {
-//    Seq(None, Some("utf8_binary_lcase"), Some("utf8_binary"), Some("unicode"), Some("unicode_ci"))
-//      .foreach { collationNameMaybe =>
-//        withTable("t") {
-//          sql("CREATE TABLE t(i STRING, s" +
-//            s" struct<a: string${collationNameMaybe
-  //            .map(cn => " collate " + cn).getOrElse("")}>)" +
-//            s" USING parquet")
-//          (1 to 5).map(n => "a" + " " * n).foreach { v =>
-//            sql(s"INSERT OVERWRITE t VALUES ('1', named_struct('a', '$v'))")
-//          }
-//          assert(sql(s"SELECT i, left(s.a, 1) FROM t").schema(1).dataType ==
-//            collationNameMaybe.map(cn =>
-//              StringType(CollationFactory.collationNameToId(cn))).getOrElse(StringType))
-//          assert(sql(s"SELECT i, right(s.a, 1) FROM t").schema(1).dataType ==
-//            collationNameMaybe.map(cn =>
-//              StringType(CollationFactory.collationNameToId(cn))).getOrElse(StringType))
-//          assert(sql(s"SELECT i, substr(s.a, 1, 0) FROM t").schema(1).dataType ==
-//            collationNameMaybe.map(cn =>
-//              StringType(CollationFactory.collationNameToId(cn))).getOrElse(StringType))
-//        }
-//      }
-//  }
-*/
   // TODO: Add more tests for other string expressions
 
 }

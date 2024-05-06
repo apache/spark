@@ -81,14 +81,9 @@ case class Mode(
       return null
     }
 
-    val keytypes = buff.toMap.keys.map(_.getClass).toSet
-    // scalastyle:off println
-    println(s"keytypes: $keytypes, cId = $collationId, child.dataType = ${child.dataType}")
-    // scalastyle:on println
-    val isString = !buff.toMap.keys.exists(k => !(k.isInstanceOf[String] ||
-      k.isInstanceOf[org.apache.spark.unsafe.types.UTF8String]))
-
-    val buffer = if (isString) {
+    val buffer = if ( child.dataType.isInstanceOf[StringType] &&
+      !buff.toMap.keys.exists(k => !(k.isInstanceOf[String] ||
+      k.isInstanceOf[org.apache.spark.unsafe.types.UTF8String]))) {
       val collation = CollationFactory.fetchCollation(collationId)
 
       val modeMap = buff.foldLeft(
@@ -104,7 +99,7 @@ case class Mode(
           map(key) = map.getOrElse(key, 0L) + count
           map
         case (map, _) =>
-          throw new IllegalArgumentException("if isString is set to true, Mode expects string type")
+          throw new IllegalArgumentException("Mode expects string type")
       }
       modeMap
     } else {
