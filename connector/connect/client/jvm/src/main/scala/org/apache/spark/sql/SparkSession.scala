@@ -28,7 +28,7 @@ import com.google.common.cache.{CacheBuilder, CacheLoader}
 import io.grpc.ClientInterceptor
 import org.apache.arrow.memory.RootAllocator
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.internal.Logging
@@ -482,11 +482,13 @@ class SparkSession private[sql] (
     }
   }
 
+  @Since("4.0.0")
   @DeveloperApi
   def newDataFrame(f: proto.Relation.Builder => Unit): DataFrame = {
     newDataset(UnboundRowEncoder)(f)
   }
 
+  @Since("4.0.0")
   @DeveloperApi
   def newDataset[T](encoder: AgnosticEncoder[T])(
       f: proto.Relation.Builder => Unit): Dataset[T] = {
@@ -543,6 +545,7 @@ class SparkSession private[sql] (
     client.execute(plan).foreach(_ => ())
   }
 
+  @Since("4.0.0")
   @DeveloperApi
   def execute(command: proto.Command): Seq[ExecutePlanResponse] = {
     val plan = proto.Plan.newBuilder().setCommand(command).build()
