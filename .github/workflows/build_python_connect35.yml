@@ -77,7 +77,7 @@ jobs:
       - name: Run tests
         env:
           SPARK_TESTING: 1
-          SPARK_SKIP_JVM_REQUIRED_TESTS: 1
+          SPARK_SKIP_CONNECT_COMPAT_TESTS: 1
           SPARK_CONNECT_TESTING_REMOTE: sc://localhost
         run: |
           # Make less noisy
