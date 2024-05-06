@@ -807,7 +807,9 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       "Hello")
   }
 
-  test("tryParseJson negative") {
+  test("SPARK-48150: ParseJson expression nullability") {
+    assert(!ParseJson(Literal("["), failOnError = true).replacement.nullable)
+    assert(ParseJson(Literal("["), failOnError = false).replacement.nullable)
     checkEvaluation(
       ParseJson(Literal("["), failOnError = false).replacement,
       null
