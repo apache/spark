@@ -14,20 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import os
-import unittest
-
 from pyspark.sql.tests.streaming.test_streaming import StreamingTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class StreamingParityTests(StreamingTestsMixin, ReusedConnectTestCase):
-    # TODO(SPARK-48090): Reenable this test case
-    @unittest.skipIf(
-        "SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ, "Failed with different Client <> Server"
-    )
-    def test_stream_exception(self):
-        super(StreamingParityTests, self).test_stream_exception()
+    pass
 
 
 if __name__ == "__main__":
