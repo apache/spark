@@ -28,6 +28,185 @@ class CollationSQLExpressionsSuite
   extends QueryTest
   with SharedSparkSession {
 
+  test("Support Md5 hash expression with collation") {
+    case class Md5TestCase(
+      input: String,
+      collationName: String,
+      result: String
+    )
+
+    val testCases = Seq(
+      Md5TestCase("Spark", "UTF8_BINARY", "8cde774d6f7333752ed72cacddb05126"),
+      Md5TestCase("Spark", "UTF8_BINARY_LCASE", "8cde774d6f7333752ed72cacddb05126"),
+      Md5TestCase("SQL", "UNICODE", "9778840a0100cb30c982876741b0b5a2"),
+      Md5TestCase("SQL", "UNICODE_CI", "9778840a0100cb30c982876741b0b5a2")
+    )
+
+    // Supported collations
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |select md5('${t.input}')
+           |""".stripMargin
+      // Result & data type
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        checkAnswer(testQuery, Row(t.result))
+        val dataType = StringType(t.collationName)
+        assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      }
+    })
+  }
+
+  test("Support Sha2 hash expression with collation") {
+    case class Sha2TestCase(
+      input: String,
+      collationName: String,
+      bitLength: Int,
+      result: String
+    )
+
+    val testCases = Seq(
+      Sha2TestCase("Spark", "UTF8_BINARY", 256,
+        "529bc3b07127ecb7e53a4dcf1991d9152c24537d919178022b2c42657f79a26b"),
+      Sha2TestCase("Spark", "UTF8_BINARY_LCASE", 256,
+        "529bc3b07127ecb7e53a4dcf1991d9152c24537d919178022b2c42657f79a26b"),
+      Sha2TestCase("SQL", "UNICODE", 256,
+        "a7056a455639d1c7deec82ee787db24a0c1878e2792b4597709f0facf7cc7b35"),
+      Sha2TestCase("SQL", "UNICODE_CI", 256,
+        "a7056a455639d1c7deec82ee787db24a0c1878e2792b4597709f0facf7cc7b35")
+    )
+
+    // Supported collations
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |select sha2('${t.input}', ${t.bitLength})
+           |""".stripMargin
+      // Result & data type
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        checkAnswer(testQuery, Row(t.result))
+        val dataType = StringType(t.collationName)
+        assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      }
+    })
+  }
+
+  test("Support Sha1 hash expression with collation") {
+    case class Sha1TestCase(
+      input: String,
+      collationName: String,
+      result: String
+    )
+
+    val testCases = Seq(
+      Sha1TestCase("Spark", "UTF8_BINARY", "85f5955f4b27a9a4c2aab6ffe5d7189fc298b92c"),
+      Sha1TestCase("Spark", "UTF8_BINARY_LCASE", "85f5955f4b27a9a4c2aab6ffe5d7189fc298b92c"),
+      Sha1TestCase("SQL", "UNICODE", "2064cb643caa8d9e1de12eea7f3e143ca9f8680d"),
+      Sha1TestCase("SQL", "UNICODE_CI", "2064cb643caa8d9e1de12eea7f3e143ca9f8680d")
+    )
+
+    // Supported collations
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |select sha1('${t.input}')
+           |""".stripMargin
+      // Result & data type
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        checkAnswer(testQuery, Row(t.result))
+        val dataType = StringType(t.collationName)
+        assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      }
+    })
+  }
+
+  test("Support Crc32 hash expression with collation") {
+    case class Crc321TestCase(
+     input: String,
+     collationName: String,
+     result: Int
+    )
+
+    val testCases = Seq(
+      Crc321TestCase("Spark", "UTF8_BINARY", 1557323817),
+      Crc321TestCase("Spark", "UTF8_BINARY_LCASE", 1557323817),
+      Crc321TestCase("SQL", "UNICODE", 1299261525),
+      Crc321TestCase("SQL", "UNICODE_CI", 1299261525)
+    )
+
+    // Supported collations
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |select crc32('${t.input}')
+           |""".stripMargin
+      // Result
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        checkAnswer(testQuery, Row(t.result))
+      }
+    })
+  }
+
+  test("Support Murmur3Hash hash expression with collation") {
+    case class Murmur3HashTestCase(
+     input: String,
+     collationName: String,
+     result: Int
+    )
+
+    val testCases = Seq(
+      Murmur3HashTestCase("Spark", "UTF8_BINARY", 228093765),
+      Murmur3HashTestCase("Spark", "UTF8_BINARY_LCASE", 228093765),
+      Murmur3HashTestCase("SQL", "UNICODE", 17468742),
+      Murmur3HashTestCase("SQL", "UNICODE_CI", 17468742)
+    )
+
+    // Supported collations
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |select hash('${t.input}')
+           |""".stripMargin
+      // Result
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        checkAnswer(testQuery, Row(t.result))
+      }
+    })
+  }
+
+  test("Support XxHash64 hash expression with collation") {
+    case class XxHash64TestCase(
+      input: String,
+      collationName: String,
+      result: Long
+    )
+
+    val testCases = Seq(
+      XxHash64TestCase("Spark", "UTF8_BINARY", -4294468057691064905L),
+      XxHash64TestCase("Spark", "UTF8_BINARY_LCASE", -4294468057691064905L),
+      XxHash64TestCase("SQL", "UNICODE", -2147923034195946097L),
+      XxHash64TestCase("SQL", "UNICODE_CI", -2147923034195946097L)
+    )
+
+    // Supported collations
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |select xxhash64('${t.input}')
+           |""".stripMargin
+      // Result
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        checkAnswer(testQuery, Row(t.result))
+      }
+    })
+  }
+
   test("Conv expression with collation") {
     // Supported collations
     case class ConvTestCase(
