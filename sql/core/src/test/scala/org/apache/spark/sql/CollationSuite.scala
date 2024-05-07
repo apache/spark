@@ -22,6 +22,7 @@ import scala.jdk.CollectionConverters.MapHasAsJava
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2ProviderWithCustomSchema}
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable}
@@ -883,6 +884,35 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       df.groupBy("name").count(),
       Seq(Row("Alice", 1), Row("Bob", 2))
     )
+  }
+
+  test("SPARK-47972: Cast expression limitation for collations") {
+    checkError(
+      exception = intercept[ParseException] {
+        sql("SELECT Cast('a' AS STRING COLLATE UNICODE)")
+      },
+      errorClass = "UNSUPPORTED_DATATYPE",
+      parameters = Map("typeName" -> """"STRING COLLATE UNICODE""""),
+      context = ExpectedContext(
+        fragment = "Cast('a' AS STRING COLLATE UNICODE)",
+        start = 7,
+        stop = 41)
+    )
+
+    checkError(
+      exception = intercept[ParseException] {
+        sql("SELECT 1::STRING COLLATE UNICODE")
+      },
+      errorClass = "UNSUPPORTED_DATATYPE",
+      parameters = Map("typeName" -> """"STRING COLLATE UNICODE""""),
+      context = ExpectedContext(
+        fragment = "1::STRING COLLATE UNICODE",
+        start = 7,
+        stop = 31)
+    )
+
+    checkAnswer(sql("SELECT Cast(1 AS STRING)"), Row("1"))
+    checkAnswer(sql("SELECT 1::STRING"), Row("1"))
   }
 
   test("Aggregation on complex containing collated strings") {

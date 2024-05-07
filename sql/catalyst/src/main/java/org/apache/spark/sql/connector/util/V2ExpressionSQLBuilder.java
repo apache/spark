@@ -22,6 +22,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.StringJoiner;
 
+import org.apache.commons.lang3.StringUtils;
+
 import org.apache.spark.SparkIllegalArgumentException;
 import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.connector.expressions.Cast;
@@ -65,7 +67,6 @@ public class V2ExpressionSQLBuilder {
       switch (c) {
         case '_' -> builder.append("\\_");
         case '%' -> builder.append("\\%");
-        case '\'' -> builder.append("\\\'");
         default -> builder.append(c);
       }
     }
@@ -169,7 +170,7 @@ public class V2ExpressionSQLBuilder {
   }
 
   protected String visitLiteral(Literal<?> literal) {
-    return literal.toString();
+    return StringUtils.replace(literal.toString(), "'", "\\'");
   }
 
   protected String visitNamedReference(NamedReference namedRef) {

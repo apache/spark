@@ -351,7 +351,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    */
   @Since("2.3.0")
   protected[jdbc] def escapeSql(value: String): String =
-    if (value == null) null else StringUtils.replace(value, "'", "''")
+    if (value == null) null else StringUtils.replace(value, "'", "\\'")
 
   /**
    * Converts value to SQL expression.
