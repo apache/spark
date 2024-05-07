@@ -697,7 +697,7 @@ class ArrayType(DataType):
 
     @classmethod
     def fromJson(
-        cls, json: Dict[str, Any], path: str, collationsMap: Dict[str, str]
+        cls, json: Dict[str, Any], path: str = "", collationsMap: Dict[str, str] = None
     ) -> "ArrayType":
         elementType = _resolve_type(json["elementType"], path, collationsMap)
         return ArrayType(elementType, json["containsNull"])
@@ -816,7 +816,9 @@ class MapType(DataType):
         }
 
     @classmethod
-    def fromJson(cls, json: Dict[str, Any], path: str, collationsMap: Dict[str, str]) -> "MapType":
+    def fromJson(
+        cls, json: Dict[str, Any], path: str = "", collationsMap: Dict[str, str] = None
+    ) -> "MapType":
         keyType = _resolve_type(json["keyType"], path, collationsMap)
         valueType = _resolve_type(json["valueType"], path, collationsMap)
         return MapType(
@@ -911,7 +913,9 @@ class StructField(DataType):
         metadata = json.get("metadata")
         if metadata and _COLLATIONS_METADATA_KEY in metadata:
             collationsMap = metadata[_COLLATIONS_METADATA_KEY]
-            metadata.pop(_COLLATIONS_METADATA_KEY)
+            metadata = {
+                key: value for key, value in metadata.items() if key != _COLLATIONS_METADATA_KEY
+            }
         else:
             collationsMap = {}
 
@@ -1798,7 +1802,9 @@ def _parse_datatype_json_value(
     else:
         tpe = json_value["type"]
         if tpe in _all_complex_types:
-            return _all_complex_types[tpe].fromJson(json_value, path, collationsMap)
+            if not isinstance(tpe, StructType):
+                return _all_complex_types[tpe].fromJson(json_value, path, collationsMap)
+            return tpe.fromJson(json_value)
         elif tpe == "udt":
             return UserDefinedType.fromJson(json_value)
         else:
@@ -1808,7 +1814,7 @@ def _parse_datatype_json_value(
             )
 
 
-def _resolve_type(json_value: Union[dict, str], path: str, collationsMap: Dict[str, str] = None):
+def _resolve_type(json_value: Dict[str, Any], path: str, collationsMap: Dict[str, str] = None):
     if collationsMap and path in collationsMap:
         return StringType(StringType.collationNameToId(collationsMap[path]))
     return _parse_datatype_json_value(json_value, path, collationsMap)
