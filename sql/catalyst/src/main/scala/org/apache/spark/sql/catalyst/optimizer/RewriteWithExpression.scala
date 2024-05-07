@@ -49,23 +49,10 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
         // We need to first handle a special case: if there is an aggregate function in the child of
         // a With expression, PhysicalAggregation will separate the With expression's reference(s)
         // from its definition, leaving a dangling common expression reference.
-        lazy val defs = physResExprs.flatMap(_.collect {
-          case d: CommonExpressionDef => d.id -> d.child
-        }).toMap
-        // If there is a dangling reference, we find its definition in physResExprs - by looking up
-        // by common expression ID in defs - and inline it.
-        def inlineDanglingRefs(e: Expression): Expression = e match {
-          case w: With => w
-          case ref: CommonExpressionRef => defs.getOrElse(ref.id, ref)
-          case _ => e.mapChildren(inlineDanglingRefs)
-        }
-        val aggExprs = physAggExprs.map(ae =>
-          inlineDanglingRefs(ae).asInstanceOf[AggregateExpression])
-        val resExprs = physResExprs.map(_.transformWithPruning(_.containsPattern(WITH_EXPRESSION)) {
-          // If there was a dangling reference in physAggExprs, then there will be a corresponding
-          // With expression in physResExprs without a reference, which we remove here.
-          case w: With if !w.containsPattern(COMMON_EXPR_REF) => w.child
-        })
+        val (aggExprs, resExprs) =
+          fixDanglingCommonExpressionRefs(physAggExprs, physResExprs) match {
+            case (ae, re) => (ae.map(_.asInstanceOf[AggregateExpression]), re)
+          }
         // PhysicalAggregation returns physAggExprs as attribute references, which we change to
         // aliases so that they can be referred to by physResExprs.
         val aggExprsAliases = aggExprs.map(ae => Alias(ae, "_aggregateexpression")(ae.resultId))
@@ -85,6 +72,32 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
 
   private def containsWithExpression(p: LogicalPlan): Boolean =
     p.expressions.exists(_.containsPattern(WITH_EXPRESSION))
+
+  private def fixDanglingCommonExpressionRefs(
+    exprsWithDanglingRefs: Seq[Expression],
+    exprsWithMissingRefs: Seq[Expression],
+  ): (Seq[Expression], Seq[Expression]) = {
+    lazy val defs = exprsWithMissingRefs.flatMap(_.collect {
+      case d: CommonExpressionDef => d.id -> d.child
+    }).toMap
+
+    // If there is a dangling reference, we find its definition in exprsWithMissingRefs by looking
+    // up by common expression ID in defs - and inline it.
+    def inlineDanglingRefs(e: Expression): Expression = e match {
+      case w: With => w
+      case ref: CommonExpressionRef => defs.getOrElse(ref.id, ref)
+      case _ => e.mapChildren(inlineDanglingRefs)
+    }
+
+    (
+      exprsWithDanglingRefs.map(ae => inlineDanglingRefs(ae)),
+      exprsWithMissingRefs.map(_.transformWithPruning(_.containsPattern(WITH_EXPRESSION)) {
+        // If there was a dangling reference in exprsWithDanglingRefs, then there will be a
+        // corresponding With expression in exprsWithMissingRefs without a ref, which we can unwrap.
+        case w: With if !w.containsPattern(COMMON_EXPR_REF) => w.child
+      })
+    )
+  }
 
   private def applyInternal(p: LogicalPlan): LogicalPlan = {
     val inputPlans = p.children.toArray
