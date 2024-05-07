@@ -2235,16 +2235,6 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    */
   override def visitCast(ctx: CastContext): Expression = withOrigin(ctx) {
     val rawDataType = typedVisit[DataType](ctx.dataType())
-    if (rawDataType.isInstanceOf[StringType]) {
-      val typeCtx = ctx.dataType().asInstanceOf[PrimitiveDataTypeContext].`type`
-      if (typeCtx.children.asScala.toSeq.size == 2) {
-        val collateClause = typeCtx.collateClause()
-        throw QueryParsingErrors.dataTypeUnsupportedError(
-          s"STRING COLLATE ${collateClause.identifier.getText}",
-          ctx.dataType().asInstanceOf[PrimitiveDataTypeContext])
-      }
-
-    }
     val dataType = CharVarcharUtils.replaceCharVarcharWithStringForCast(rawDataType)
     ctx.name.getType match {
       case SqlBaseParser.CAST =>
@@ -2264,16 +2254,6 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    */
   override def visitCastByColon(ctx: CastByColonContext): Expression = withOrigin(ctx) {
     val rawDataType = typedVisit[DataType](ctx.dataType())
-    if (rawDataType.isInstanceOf[StringType]) {
-      val typeCtx = ctx.dataType().asInstanceOf[PrimitiveDataTypeContext].`type`
-      if (typeCtx.children.asScala.toSeq.size == 2) {
-        val collateClause = typeCtx.collateClause()
-        throw QueryParsingErrors.dataTypeUnsupportedError(
-          s"STRING COLLATE ${collateClause.identifier.getText}",
-          ctx.dataType().asInstanceOf[PrimitiveDataTypeContext])
-      }
-
-    }
     val dataType = CharVarcharUtils.replaceCharVarcharWithStringForCast(rawDataType)
     val cast = Cast(expression(ctx.primaryExpression), dataType)
     cast.setTagValue(Cast.USER_SPECIFIED_CAST, ())
