@@ -287,7 +287,8 @@ message AnalyzePlanResponse {
   // Response to SizeInBytes request, contains a single double
   message SizeInBytes {
     // (Required) Estimated size in bytes of the provided plan
-    int64 result = 1;
+    // A bytes sequence that represents java BigInteger
+    bytes result = 1;
   }
 }
 

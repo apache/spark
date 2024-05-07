@@ -913,12 +913,14 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         RESULT_FIELD_NUMBER: builtins.int
-        result: builtins.int
-        """(Required) Estimated size in bytes of the provided plan"""
+        result: builtins.bytes
+        """(Required) Estimated size in bytes of the provided plan
+        A bytes sequence that represents java BigInteger
+        """
         def __init__(
             self,
             *,
-            result: builtins.int = ...,
+            result: builtins.bytes = ...,
         ) -> None: ...
         def ClearField(
             self, field_name: typing_extensions.Literal["result", b"result"]

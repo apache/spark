@@ -528,7 +528,7 @@ class AnalyzeResult:
         is_same_semantics: Optional[bool],
         semantic_hash: Optional[int],
         storage_level: Optional[StorageLevel],
-        size_in_bytes: Optional[int],
+        size_in_bytes: Optional[bytes],
     ):
         self.schema = schema
         self.explain_string = explain_string
@@ -556,7 +556,7 @@ class AnalyzeResult:
         is_same_semantics: Optional[bool] = None
         semantic_hash: Optional[int] = None
         storage_level: Optional[StorageLevel] = None
-        size_in_bytes: Optional[int] = None
+        size_in_bytes: Optional[bytes] = None
 
         if pb.HasField("schema"):
             schema = types.proto_schema_to_pyspark_data_type(pb.schema.schema)
@@ -1163,7 +1163,7 @@ class SparkConnectClient(object):
             req.user_context.user_id = self._user_id
         return req
 
-    def _sizeInBytes(self, relation: pb2.Relation) -> AnalyzeResult:
+    def _size_in_bytes(self, relation: pb2.Relation) -> AnalyzeResult:
         req = self._analyze_plan_request_with_metadata()
         req.size_in_bytes.relation.CopyFrom(relation)
 

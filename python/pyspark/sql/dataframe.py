@@ -667,6 +667,23 @@ class DataFrame:
         -------
         int
             Size in bytes estimated from optimized plan
+
+        Examples:
+        ---------
+        Example 1: Size of a csv file with 100 ints
+        >>> import tempfile
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     # Write a Dataframe with 100 ints across 10 rows
+        ...     spark.createDataFrame(
+        ...         [{"val": 5} for _ in range(100)]
+        ...     ).repartition(1).write.csv(d, mode="overwrite")
+        ...
+        ...     # Read the resulted CSV file as DataFrame
+        ...     df = spark.read.format("csv").load(d)
+        ...
+        ...     # Returns the size of the DataFrame
+        ...     df.sizeInBytesApproximation()
+        200
         """
         ...
 

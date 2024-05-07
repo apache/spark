@@ -20,14 +20,11 @@ import java.io.Closeable
 import java.net.URI
 import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
-
 import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
-
 import com.google.common.cache.{CacheBuilder, CacheLoader}
 import io.grpc.ClientInterceptor
 import org.apache.arrow.memory.RootAllocator
-
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ExecutePlanResponse
@@ -46,6 +43,8 @@ import org.apache.spark.sql.streaming.DataStreamReader
 import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ArrayImplicits._
+
+import java.math.BigInteger
 
 /**
  * The entry point to programming Spark with the Dataset and DataFrame API.
@@ -549,8 +548,9 @@ class SparkSession private[sql] (
     client.semanticHash(plan).getSemanticHash.getResult
   }
 
-  private[sql] def sizeInBytes(relation: proto.Relation): Long = {
-    client.sizeInBytes(relation).getSizeInBytes.getResult
+  private[sql] def sizeInBytes(relation: proto.Relation): BigInteger = {
+    val bytes = client.sizeInBytes(relation).getSizeInBytes.getResult.toByteArray
+    new BigInteger(bytes)
   }
 
   private[sql] def timeZoneId: String = conf.get(SqlApiConf.SESSION_LOCAL_TIMEZONE_KEY)

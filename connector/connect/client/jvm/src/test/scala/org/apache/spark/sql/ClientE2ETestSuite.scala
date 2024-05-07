@@ -20,15 +20,12 @@ import java.io.{ByteArrayOutputStream, PrintStream}
 import java.nio.file.Files
 import java.time.DateTimeException
 import java.util.Properties
-
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
-
 import org.apache.commons.io.FileUtils
 import org.apache.commons.io.output.TeeOutputStream
 import org.scalactic.TolerantNumerics
 import org.scalatest.PrivateMethodTester
-
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkUpgradeException}
 import org.apache.spark.SparkBuildInfo.{spark_version => SPARK_VERSION}
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchDatabaseException, TableAlreadyExistsException, TempTableAlreadyExistsException}
@@ -41,6 +38,8 @@ import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.test.{IntegrationTestUtils, RemoteSparkSession, SQLHelper}
 import org.apache.spark.sql.test.SparkConnectServerUtils.port
 import org.apache.spark.sql.types._
+
+import java.math.BigInteger
 
 class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateMethodTester {
 
@@ -640,7 +639,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   test("Dataframe sizeInBytes") {
     val df = spark.sql("select * from range(10)")
     val sizeInBytes = df.sizeInBytesApproximation()
-    assert(sizeInBytes > 0)
+    assert(sizeInBytes.compareTo(BigInteger.valueOf(0)) == 1)
   }
 
   test("Dataset explain") {
