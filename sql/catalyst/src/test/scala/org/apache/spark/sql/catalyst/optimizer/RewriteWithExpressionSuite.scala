@@ -366,6 +366,7 @@ class RewriteWithExpressionSuite extends PlanTest {
     comparePlans(
       Optimizer.execute(plan),
       testRelation
+        // Since a - 1 would become a dangling reference, it is inlined.
         .groupBy(a)(a, sum((a - 1) * (a - 1)).as(aggExprName))
         .select((a - 1).as("col1"), $"$aggExprName".as("col2"))
         .analyze
@@ -378,7 +379,7 @@ class RewriteWithExpressionSuite extends PlanTest {
       ref * ref
     }
     val nestedExpr = With(a - 1) { case Seq(ref) =>
-      max(expr) + ref
+      max(expr + ref) + ref
     }
     val plan = testRelation.groupBy(a)(nestedExpr.as("col")).analyze
     val commonExpr1Id = expr.defs.head.id.id
@@ -390,7 +391,8 @@ class RewriteWithExpressionSuite extends PlanTest {
       Optimizer.execute(plan),
       testRelation
         .select(testRelation.output :+ (a + 1).as(commonExpr1Name): _*)
-        .groupBy(a)(a, max($"$commonExpr1Name" * $"$commonExpr1Name").as(aggExprName))
+        // Since a - 1 would become a dangling reference, it is inlined.
+        .groupBy(a)(a, max($"$commonExpr1Name" * $"$commonExpr1Name" + (a - 1)).as(aggExprName))
         .select($"a", $"$aggExprName", (a - 1).as(commonExpr2Name))
         .select(($"$aggExprName" + $"$commonExpr2Name").as("col"))
         .analyze

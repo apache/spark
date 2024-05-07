@@ -46,31 +46,29 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
       // this rule from producing an invalid Aggregate operator.
       case p @ PhysicalAggregation(physGroupingExprs, physAggExprs, physResExprs, child)
         if containsWithExpression(p) =>
-        // We need to handle a special case here: if there is an aggregate function in the child of
+        // We need to first handle a special case: if there is an aggregate function in the child of
         // a With expression, PhysicalAggregation will separate the With expression's reference(s)
         // from its definition, leaving a dangling common expression reference.
-        val defs = physResExprs.flatMap(_.collect {
+        lazy val defs = physResExprs.flatMap(_.collect {
           case d: CommonExpressionDef => d.id -> d.child
         }).toMap
-        val aggExprs = physAggExprs.map {
-          // If there is a dangling reference, we find its definition in resultExpressions - by
-          // looking up by common expression ID in defs - and inline it.
-          case ae if ae.aggregateFunction.containsPattern(COMMON_EXPR_REF) &&
-            !ae.aggregateFunction.containsPattern(WITH_EXPRESSION) =>
-            ae.transformWithPruning(_.containsPattern(COMMON_EXPR_REF)) {
-              case ref: CommonExpressionRef => defs.getOrElse(ref.id, ref)
-            }.asInstanceOf[AggregateExpression]
-          case ae => ae
+        // If there is a dangling reference, we find its definition in physResExprs - by looking up
+        // by common expression ID in defs - and inline it.
+        def inlineDanglingRefs(e: Expression): Expression = e match {
+          case w: With => w
+          case ref: CommonExpressionRef => defs.getOrElse(ref.id, ref)
+          case _ => e.mapChildren(inlineDanglingRefs)
         }
+        val aggExprs = physAggExprs.map(ae =>
+          inlineDanglingRefs(ae).asInstanceOf[AggregateExpression])
         val resExprs = physResExprs.map(_.transformWithPruning(_.containsPattern(WITH_EXPRESSION)) {
           // If there was a dangling reference in physAggExprs, then there will be a corresponding
           // With expression in physResExprs without a reference, which we remove here.
           case w: With if !w.containsPattern(COMMON_EXPR_REF) => w.child
         })
-        // PhysicalAggregation returns aggregateExpressions as attribute references, which we change
-        // to aliases so that they can be referred to by resultExpressions.
-        val aggExprsAliases = aggExprs.map(
-          ae => Alias(ae, "_aggregateexpression")(ae.resultId))
+        // PhysicalAggregation returns physAggExprs as attribute references, which we change to
+        // aliases so that they can be referred to by physResExprs.
+        val aggExprsAliases = aggExprs.map(ae => Alias(ae, "_aggregateexpression")(ae.resultId))
         val aggExprIds = aggExprsAliases.map(_.exprId).toSet
         val resExprsAttrs = resExprs.map(_.transform {
           case a: AttributeReference if aggExprIds.contains(a.exprId) =>
