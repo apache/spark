@@ -17,10 +17,11 @@
 
 package org.apache.spark
 
-import java.io.{ByteArrayInputStream, IOException, InputStream, ObjectInputStream, ObjectOutputStream}
+import java.io.{ByteArrayInputStream, InputStream, IOException, ObjectInputStream, ObjectOutputStream}
 import java.nio.ByteBuffer
 import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, ThreadPoolExecutor, TimeUnit}
 import java.util.concurrent.locks.ReentrantReadWriteLock
+
 import scala.collection
 import scala.collection.mutable.{HashMap, ListBuffer, Map}
 import scala.concurrent.{ExecutionContext, Future}
@@ -28,8 +29,10 @@ import scala.concurrent.duration.Duration
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
+
 import org.apache.commons.io.output.{ByteArrayOutputStream => ApacheByteArrayOutputStream}
 import org.roaringbitmap.RoaringBitmap
+
 import org.apache.spark.broadcast.{Broadcast, BroadcastManager}
 import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
@@ -488,6 +491,7 @@ private[spark] class MapOutputTrackerMasterEndpoint(
   extends RpcEndpoint with Logging {
 
   logDebug("init") // force eager creation of logger
+
   private def logInfoMsg(msg: MessageWithContext, shuffleId: Int, context: RpcCallContext): Unit = {
     val hostPort = context.senderAddress.hostPort
     logInfo(log"Asked to send " +
