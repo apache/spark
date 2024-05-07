@@ -34,6 +34,10 @@ public class Logger {
     this.slf4jLogger = slf4jLogger;
   }
 
+  public boolean isErrorEnabled() {
+    return slf4jLogger.isErrorEnabled();
+  }
+
   public void error(String msg) {
     slf4jLogger.error(msg);
   }
@@ -56,6 +60,10 @@ public class Logger {
     } else if (slf4jLogger.isErrorEnabled()) {
       withLogContext(msg, mdcs, throwable, mt -> slf4jLogger.error(mt.message, mt.throwable));
     }
+  }
+
+  public boolean isWarnEnabled() {
+    return slf4jLogger.isWarnEnabled();
   }
 
   public void warn(String msg) {
@@ -82,6 +90,10 @@ public class Logger {
     }
   }
 
+  public boolean isInfoEnabled() {
+    return slf4jLogger.isInfoEnabled();
+  }
+
   public void info(String msg) {
     slf4jLogger.info(msg);
   }
@@ -106,6 +118,10 @@ public class Logger {
     }
   }
 
+  public boolean isDebugEnabled() {
+    return slf4jLogger.isDebugEnabled();
+  }
+
   public void debug(String msg) {
     slf4jLogger.debug(msg);
   }
@@ -124,6 +140,10 @@ public class Logger {
 
   public void debug(String msg, Throwable throwable) {
     slf4jLogger.debug(msg, throwable);
+  }
+
+  public boolean isTraceEnabled() {
+    return slf4jLogger.isTraceEnabled();
   }
 
   public void trace(String msg) {
@@ -145,7 +165,6 @@ public class Logger {
   public void trace(String msg, Throwable throwable) {
     slf4jLogger.trace(msg, throwable);
   }
-
 
   private void withLogContext(
       String pattern,

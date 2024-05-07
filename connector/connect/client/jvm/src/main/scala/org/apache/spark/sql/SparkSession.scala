@@ -28,7 +28,7 @@ import com.google.common.cache.{CacheBuilder, CacheLoader}
 import io.grpc.ClientInterceptor
 import org.apache.arrow.memory.RootAllocator
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.internal.Logging
@@ -39,7 +39,6 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BoxedLongEncoder
 import org.apache.spark.sql.connect.client.{ClassFinder, SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
-import org.apache.spark.sql.connect.common.ProtoUtils
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.{CatalogImpl, SqlApiConf}
 import org.apache.spark.sql.streaming.DataStreamReader
@@ -483,41 +482,21 @@ class SparkSession private[sql] (
     }
   }
 
-  private[sql] def newDataFrame(f: proto.Relation.Builder => Unit): DataFrame = {
+  @Since("4.0.0")
+  @DeveloperApi
+  def newDataFrame(f: proto.Relation.Builder => Unit): DataFrame = {
     newDataset(UnboundRowEncoder)(f)
   }
 
-  private[sql] def newDataset[T](encoder: AgnosticEncoder[T])(
+  @Since("4.0.0")
+  @DeveloperApi
+  def newDataset[T](encoder: AgnosticEncoder[T])(
       f: proto.Relation.Builder => Unit): Dataset[T] = {
     val builder = proto.Relation.newBuilder()
     f(builder)
     builder.getCommonBuilder.setPlanId(planIdGenerator.getAndIncrement())
     val plan = proto.Plan.newBuilder().setRoot(builder).build()
     new Dataset[T](this, plan, encoder)
-  }
-
-  @DeveloperApi
-  @deprecated("Use newDataFrame(Array[Byte]) instead", "4.0.0")
-  def newDataFrame(extension: com.google.protobuf.Any): DataFrame = {
-    newDataFrame(_.setExtension(extension))
-  }
-
-  @DeveloperApi
-  @deprecated("Use newDataFrame(Array[Byte], AgnosticEncoder[T]) instead", "4.0.0")
-  def newDataset[T](
-      extension: com.google.protobuf.Any,
-      encoder: AgnosticEncoder[T]): Dataset[T] = {
-    newDataset(encoder)(_.setExtension(extension))
-  }
-
-  @DeveloperApi
-  def newDataFrame(extension: Array[Byte]): DataFrame = {
-    newDataFrame(_.setExtension(com.google.protobuf.Any.parseFrom(extension)))
-  }
-
-  @DeveloperApi
-  def newDataset[T](extension: Array[Byte], encoder: AgnosticEncoder[T]): Dataset[T] = {
-    newDataset(encoder)(_.setExtension(com.google.protobuf.Any.parseFrom(extension)))
   }
 
   private[sql] def newCommand[T](f: proto.Command.Builder => Unit): proto.Command = {
@@ -566,7 +545,9 @@ class SparkSession private[sql] (
     client.execute(plan).foreach(_ => ())
   }
 
-  private[sql] def execute(command: proto.Command): Seq[ExecutePlanResponse] = {
+  @Since("4.0.0")
+  @DeveloperApi
+  def execute(command: proto.Command): Seq[ExecutePlanResponse] = {
     val plan = proto.Plan.newBuilder().setCommand(command).build()
     // .toSeq forces that the iterator is consumed and closed. On top, ignore all
     // progress messages.
@@ -575,26 +556,6 @@ class SparkSession private[sql] (
 
   private[sql] def registerUdf(udf: proto.CommonInlineUserDefinedFunction): Unit = {
     val command = proto.Command.newBuilder().setRegisterFunction(udf).build()
-    execute(command)
-  }
-
-  @DeveloperApi
-  @deprecated("Use execute(Array[Byte]) instead", "4.0.0")
-  def execute(extension: com.google.protobuf.Any): Unit = {
-    val command = proto.Command.newBuilder().setExtension(extension).build()
-    execute(command)
-  }
-
-  @DeveloperApi
-  def execute(extension: Array[Byte]): Unit = {
-    val any = ProtoUtils.parseWithRecursionLimit(
-      extension,
-      com.google.protobuf.Any.parser(),
-      recursionLimit = client.configuration.grpcMaxRecursionLimit)
-    val command = proto.Command
-      .newBuilder()
-      .setExtension(any)
-      .build()
     execute(command)
   }
 
