@@ -85,17 +85,16 @@ jobs:
           sparkr=`./dev/is-changed.py -m sparkr`
           tpcds=`./dev/is-changed.py -m sql`
           docker=`./dev/is-changed.py -m docker-integration-tests`
-          # 'build', 'scala-213', and 'java-11-17' are always true for now.
-          # It does not save significant time and most of PRs trigger the build.
+          build=`./dev/is-changed.py -m "core,unsafe,kvstore,avro,utils,network-common,network-shuffle,repl,launcher,examples,sketch,graphx,catalyst,hive-thriftserver,streaming,sql-kafka-0-10,streaming-kafka-0-10,mllib-local,mllib,yarn,mesos,kubernetes,hadoop-cloud,spark-ganglia-lgpl,sql,hive"`
           precondition="
             {
-              \"build\": \"true\",
+              \"build\": \"$build\",
               \"pyspark\": \"$pyspark\",
               \"sparkr\": \"$sparkr\",
               \"tpcds-1g\": \"$tpcds\",
               \"docker-integration-tests\": \"$docker\",
-              \"scala-213\": \"true\",
-              \"java-11-17\": \"true\",
+              \"scala-213\": \"$build\",
+              \"java-11-17\": \"$build\",
               \"lint\" : \"true\",
               \"k8s-integration-tests\" : \"true\",
               \"breaking-changes-buf\" : \"true\",
