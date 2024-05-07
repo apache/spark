@@ -1648,6 +1648,20 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       message = "ORDER BY cannot be specified unless either " +
         "PARTITION BY or WITH SINGLE PARTITION is also present",
       ctx = ctx.tableArgumentPartitioning)
+    def invalidPartitionOrOrderingExpression(clause: String): String = {
+      s"The table function call includes a table argument with an invalid partitioning/ordering " +
+        s"specification: the $clause clause included multiple expressions without parentheses " +
+        s"surrounding them; please add parentheses around these expressions and then retry the " +
+        s"query again"
+    }
+    validate(
+      Option(ctx.tableArgumentPartitioning.invalidMultiPartitionExpression).isEmpty,
+      message = invalidPartitionOrOrderingExpression("PARTITION BY"),
+      ctx = ctx.tableArgumentPartitioning)
+    validate(
+      Option(ctx.tableArgumentPartitioning.invalidMultiSortItem).isEmpty,
+      message = invalidPartitionOrOrderingExpression("ORDER BY"),
+      ctx = ctx.tableArgumentPartitioning)
     FunctionTableSubqueryArgumentExpression(
       plan = p,
       partitionByExpressions = partitionByExpressions,
