@@ -404,8 +404,6 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
     df.select("pickledAnalyzeResult").collect() match {
       case Array(r: Row) =>
         assert(r.getSeq(0).length > 0)
-      case other =>
-        fail(s"@@@ other type: $other")
     }
 
     pythonUDTFRunAnalyzeOnExecutors =
@@ -482,8 +480,6 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
     df.select("pickledAnalyzeResult").collect() match {
       case Array(r: Row) =>
         assert(r.getSeq(0).length > 0)
-      case other =>
-        fail(s"@@@ other type: $other")
     }
   }
 }
