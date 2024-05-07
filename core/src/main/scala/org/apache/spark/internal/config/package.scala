@@ -151,6 +151,15 @@ package object config {
       .booleanConf
       .createWithDefault(true)
 
+  private[spark] val LEGACY_TASK_NAME_MDC_ENABLED =
+    ConfigBuilder("spark.log.legacyTaskNameMdc.enabled")
+      .doc("When true, the MDC key `mdc.taskName` will be set in the logs, which is consistent " +
+        "with the behavior of Spark 3.1 to Spark 3.5 releases. When false, the logging framework " +
+        "will use `task_name` as the MDC key for consistency with other new MDC keys.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val DRIVER_LOG_LOCAL_DIR =
     ConfigBuilder("spark.driver.log.localDir")
       .doc("Specifies a local directory to write driver logs and enable Driver Log UI Tab.")
