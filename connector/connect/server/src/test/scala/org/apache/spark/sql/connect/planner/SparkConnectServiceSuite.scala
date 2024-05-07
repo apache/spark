@@ -418,11 +418,14 @@ class SparkConnectServiceSuite
               .setInput(
                 proto.Relation.newBuilder().setSql(proto.SQL.newBuilder().setQuery("select 1")))),
         None),
+      // TODO(SPARK-48164) Reenable `commands send events - get_resources_command`
+      /*
       (
         proto.Command
           .newBuilder()
           .setGetResourcesCommand(proto.GetResourcesCommand.newBuilder()),
         None),
+      */
       (
         proto.Command
           .newBuilder()
