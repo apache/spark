@@ -184,14 +184,16 @@ public final class CollationFactory {
       private static final Map<Integer, Collation> collationMap = new ConcurrentHashMap<>();
 
       public static Collation fetchCollation(int collationId) throws SparkException {
-        if (collationMap.containsKey(collationId)) {
+        if (collationId == UTF8_BINARY_COLLATION_ID) {
+          return CollationSpecUTF8Binary.UTF8_BINARY_COLLATION;
+        } else if (collationMap.containsKey(collationId)) {
           return collationMap.get(collationId);
         } else {
           CollationSpec spec;
           int implementationProviderOrdinal =
             (collationId >> IMPLEMENTATION_PROVIDER_OFFSET) & IMPLEMENTATION_PROVIDER_MASK;
           if (implementationProviderOrdinal >= ImplementationProvider.values().length) {
-            throw SparkException.internalError("Invalid implementation provider");
+            throw SparkException.internalError("Invalid collation implementation provider");
           } else {
             ImplementationProvider implementationProvider = ImplementationProvider.values()[
               implementationProviderOrdinal];
@@ -209,29 +211,28 @@ public final class CollationFactory {
         }
       }
 
-      public static int collationNameToId(String originalCollationName) throws SparkException {
-        String collationName = originalCollationName.toUpperCase();
-        try {
-          if (collationName.startsWith("UTF8_BINARY")) {
-            return CollationSpecUTF8Binary.collationNameToId(collationName);
-          } else {
-            return CollationSpecICU.collationNameToId(collationName);
-          }
-        } catch (SparkException e) {
-          throw new SparkException(
-            "COLLATION_INVALID_NAME",
-            SparkException.constructMessageParams(Map.of("collationName", originalCollationName)),
-            e);
+      protected static SparkException collationInvalidNameException(String collationName) {
+        return new SparkException("COLLATION_INVALID_NAME",
+          SparkException.constructMessageParams(Map.of("collationName", collationName)), null);
+      }
+
+      public static int collationNameToId(String collationName) throws SparkException {
+        String collationNameUpper = collationName.toUpperCase();
+        if (collationNameUpper.startsWith("UTF8_BINARY")) {
+          return CollationSpecUTF8Binary.collationNameToId(collationName, collationNameUpper);
+        } else {
+          return CollationSpecICU.collationNameToId(collationName, collationNameUpper);
         }
       }
 
-      protected static int parseSpecifiers(String specString) throws SparkException {
+      protected static int parseSpecifiers(
+          String originalName, String collationName, int splitStart) throws SparkException {
         int specifiers = 0;
-        String[] parts = specString.split("_");
+        String[] parts = collationName.substring(splitStart).split("_");
         for (String part : parts) {
           if (!part.isEmpty()) {
             if (part.equals("UNSPECIFIED") || part.equals("INDETERMINATE")) {
-              throw new SparkException(part + " collation specifier reserved for internal use");
+              throw collationInvalidNameException(originalName);
             } else if (Arrays.stream(CaseSensitivity.values()).anyMatch(
                 (s) -> s.toString().equals(part))) {
               specifiers |=
@@ -245,7 +246,7 @@ public final class CollationFactory {
               specifiers |=
                 CaseConversion.valueOf(part).ordinal() << CASE_CONVERSION_OFFSET;
             } else {
-              throw new SparkException("Invalid collation specifier value " + part);
+              throw collationInvalidNameException(originalName);
             }
           }
         }
@@ -269,11 +270,15 @@ public final class CollationFactory {
         super(null, CaseSensitivity.CS, AccentSensitivity.AS, caseConversion);
       }
 
-      public static int collationNameToId(String collationName) throws SparkException {
+      public static int collationNameToId(
+          String originalName, String collationName) throws SparkException {
         int collationId = 0;
         int specifiers = CollationSpec.parseSpecifiers(
-          collationName.substring("UTF8_BINARY".length()));
-        collationId |= specifiers & (CASE_CONVERSION_MASK << CASE_CONVERSION_OFFSET);
+          originalName, collationName, "UTF8_BINARY".length());
+        if ((specifiers & ~(CASE_CONVERSION_MASK << CASE_CONVERSION_OFFSET)) != 0) {
+          throw collationInvalidNameException(originalName);
+        }
+        collationId |= specifiers;
         return collationId;
       }
 
@@ -352,6 +357,7 @@ public final class CollationFactory {
       private static final Map<String, ULocale> ICULocaleMap = new HashMap<>();
       private static final Map<String, String> ICULocaleMapUppercase = new HashMap<>();
       private static final Map<String, Integer> ICULocaleToId = new HashMap<>();
+      private static final String ICUCollatorVersion = "153.120.0.0";
 
       static {
         ICULocaleMap.put("UNICODE", ULocale.ROOT);
@@ -401,7 +407,8 @@ public final class CollationFactory {
         super(locale, caseSensitivity, accentSensitivity, caseConversion);
       }
 
-      public static int collationNameToId(String collationName) throws SparkException {
+      public static int collationNameToId(
+          String originalName, String collationName) throws SparkException {
         int lastPos = -1;
         for (int i = 1; i <= collationName.length(); i++) {
           String localeName = collationName.substring(0, i);
@@ -410,11 +417,11 @@ public final class CollationFactory {
           }
         }
         if (lastPos == -1) {
-          throw new SparkException("Invalid locale in collation name value " + collationName);
+          throw collationInvalidNameException(originalName);
         } else {
           int collationId = 0;
           collationId |= ImplementationProvider.ICU.ordinal() << IMPLEMENTATION_PROVIDER_OFFSET;
-          collationId |= CollationSpec.parseSpecifiers(collationName.substring(lastPos));
+          collationId |= CollationSpec.parseSpecifiers(originalName, collationName, lastPos);
           String normalizedLocaleName = ICULocaleMapUppercase.get(
             collationName.substring(0, lastPos));
           collationId |= ICULocaleToId.get(normalizedLocaleName) << LOCALE_OFFSET;
@@ -488,7 +495,7 @@ public final class CollationFactory {
           collationName(),
           collator,
           comparator,
-          "153.120.0.0",
+          ICUCollatorVersion,
           s -> (long) collator.getCollationKey(s.toString()).hashCode(),
           collationId == UNICODE_COLLATION_ID,
           false,
@@ -575,18 +582,6 @@ public final class CollationFactory {
     CharacterIterator target = new StringCharacterIterator(targetString);
     Collator collator = CollationFactory.fetchCollation(collationId).collator;
     return new StringSearch(patternString, target, (RuleBasedCollator) collator);
-  }
-
-  /**
-   * Returns if the given collationName is valid one.
-   */
-  public static boolean isValidCollation(String collationName) {
-    try {
-      fetchCollation(collationName);
-      return true;
-    } catch (SparkException e) {
-      return false;
-    }
   }
 
   /**

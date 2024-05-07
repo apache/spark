@@ -73,13 +73,15 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
     Seq(
       // UTF8_BINARY
       ("UTF8_BINARY_CS", "UTF8_BINARY"),
-      ("UTF8_BINARY_CI", "UTF8_BINARY"),
       ("UTF8_BINARY_AS", "UTF8_BINARY"),
-      ("UTF8_BINARY_AI", "UTF8_BINARY"),
       ("UTF8_BINARY_CS_AS", "UTF8_BINARY"),
-      ("UTF8_BINARY_CI_AI", "UTF8_BINARY"),
+      ("UTF8_BINARY_AS_CS", "UTF8_BINARY"),
       ("UTF8_BINARY_LCASE_CS", "UTF8_BINARY_LCASE"),
       ("UTF8_BINARY_CS_LCASE", "UTF8_BINARY_LCASE"),
+      ("UTF8_BINARY_LCASE_AS", "UTF8_BINARY_LCASE"),
+      ("UTF8_BINARY_AS_LCASE", "UTF8_BINARY_LCASE"),
+      ("UTF8_BINARY_CS_LCASE_AS", "UTF8_BINARY_LCASE"),
+      ("UTF8_BINARY_AS_CS_LCASE", "UTF8_BINARY_LCASE"),
       // ICU root locale
       ("UNICODE_CS", "UNICODE"),
       ("UNICODE_CS_AS", "UNICODE"),
@@ -105,6 +107,10 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
 
   test("fetch invalid UTF8_BINARY and ICU root locale collation names") {
     Seq(
+      "UTF8_BINARY_CI",
+      "UTF8_BINARY_AI",
+      "UTF8_BINARY_CI_AI",
+      "UTF8_BINARY_AI_CI",
       "UTF8_BS",
       "BINARY_UTF8",
       "UTF8_BINARY_A",
