@@ -199,14 +199,13 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
       warmupTime = 10.seconds,
       output = output)
     collationTypes.foreach { collationType => {
-      val collation = CollationFactory.fetchCollation(collationType)
       benchmark.addCase(s"$collationType") { _ =>
         val modeDefaultCollation = Mode(child =
           Literal.create("some_column_name", StringType(collationType)), collationEnabled = true)
         val buffer = new OpenHashMap[AnyRef, Long](value.size)
         value.zipWithIndex.sliding(20, 20).foreach(slide => {
           slide.foreach { case (v: UTF8String, i: Int) =>
-            buffer.update(v, (i % 1000).toLong)
+            buffer.update(v.toString + s"_${i.toString}", (i % 1000).toLong)
           }
           modeDefaultCollation.eval(buffer)
 
