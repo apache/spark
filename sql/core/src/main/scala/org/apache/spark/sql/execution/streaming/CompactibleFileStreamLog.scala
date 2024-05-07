@@ -27,8 +27,7 @@ import org.apache.hadoop.fs.Path
 import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
-import org.apache.spark.internal.LogKey.{BATCH_ID, ELAPSED_TIME}
-import org.apache.spark.internal.MDC
+import org.apache.spark.internal.{LogKeys, MDC}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.util.Utils
@@ -105,8 +104,9 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
         defaultCompactInterval, compactibleBatchIds(0).toInt)
     }
     assert(interval > 0, s"intervalValue = $interval not positive value.")
-    logInfo(s"Set the compact interval to $interval " +
-      s"[defaultCompactInterval: $defaultCompactInterval]")
+    logInfo(log"Set the compact interval to ${MDC(LogKeys.COMPACT_INTERVAL, interval)} " +
+      log"[defaultCompactInterval: " +
+      log"${MDC(LogKeys.DEFAULT_COMPACT_INTERVAL, defaultCompactInterval)}]")
     interval
   }
 
@@ -242,8 +242,8 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
     }
 
     if (elapsedMs >= COMPACT_LATENCY_WARN_THRESHOLD_MS) {
-      logWarning(log"Compacting took ${MDC(ELAPSED_TIME, elapsedMs)} ms for compact batch " +
-        log"${MDC(BATCH_ID, batchId)}")
+      logWarning(log"Compacting took ${MDC(LogKeys.ELAPSED_TIME, elapsedMs)} ms for " +
+        log"compact batch ${MDC(LogKeys.BATCH_ID, batchId)}")
     } else {
       logDebug(s"Compacting took $elapsedMs ms for compact batch $batchId")
     }
@@ -309,8 +309,9 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
       assert(isCompactionBatch(minCompactionBatchId, compactInterval),
         s"$minCompactionBatchId is not a compaction batch")
 
-      logInfo(s"Current compact batch id = $currentBatchId " +
-        s"min compaction batch id to delete = $minCompactionBatchId")
+      logInfo(log"Current compact batch id = ${MDC(LogKeys.CURRENT_BATCH_ID, currentBatchId)} " +
+        log"min compaction batch id to delete = " +
+        log"${MDC(LogKeys.MIN_COMPACTION_BATCH_ID, minCompactionBatchId)}")
 
       val expiredTime = System.currentTimeMillis() - fileCleanupDelayMs
       fileManager.list(metadataPath, (path: Path) => {

@@ -35,7 +35,7 @@ import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.broadcast.{Broadcast, BroadcastManager}
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey._
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
@@ -202,12 +202,14 @@ private class ShuffleStatus(
             mapStatusesDeleted(index) = null
             logInfo(s"Recover ${mapStatus.mapId} ${mapStatus.location}")
           } else {
-            logWarning(s"Asked to update map output ${mapId} for untracked map status.")
+            logWarning(log"Asked to update map output ${MDC(MAP_ID, mapId)} " +
+              log"for untracked map status.")
           }
       }
     } catch {
       case e: java.lang.NullPointerException =>
-        logWarning(s"Unable to update map output for ${mapId}, status removed in-flight")
+        logWarning(log"Unable to update map output for ${MDC(MAP_ID, mapId)}, " +
+          log"status removed in-flight")
     }
   }
 
@@ -815,7 +817,8 @@ private[spark] class MapOutputTrackerMaster(
       case Some(shuffleStatus) =>
         shuffleStatus.updateMapOutput(mapId, bmAddress)
       case None if shuffleMigrationEnabled =>
-        logWarning(s"Asked to update map output for unknown shuffle ${shuffleId}")
+        logWarning(log"Asked to update map output for unknown shuffle " +
+          log"${MDC(SHUFFLE_ID, shuffleId)}")
       case None =>
         logError(log"Asked to update map output for unknown shuffle ${MDC(SHUFFLE_ID, shuffleId)}")
     }

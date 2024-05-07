@@ -24,7 +24,8 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.PREDICATES
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, QualifiedTableName, SQLConfHelper}
@@ -494,7 +495,7 @@ object DataSourceStrategy
       val partitionSet = AttributeSet(partitionColumns)
       val predicates = ExpressionSet(normalizedFilters
         .flatMap(extractPredicatesWithinOutputSet(_, partitionSet)))
-      logInfo(s"Pruning directories with: ${predicates.mkString(",")}")
+      logInfo(log"Pruning directories with: ${MDC(PREDICATES, predicates.mkString(","))}")
       predicates
     }
   }

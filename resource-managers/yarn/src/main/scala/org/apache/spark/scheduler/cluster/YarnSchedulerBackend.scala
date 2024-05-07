@@ -30,7 +30,7 @@ import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
 import org.apache.spark.SparkContext
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.{config, Logging, MDC}
-import org.apache.spark.internal.LogKey.{EXECUTOR_ID, HOST_PORT, REASON}
+import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc._
@@ -221,7 +221,9 @@ private[spark] abstract class YarnSchedulerBackend(
     if (hasFilter) {
       // SPARK-26255: Append user provided filters(spark.ui.filters) with yarn filter.
       val allFilters = Seq(filterName) ++ conf.get(UI_FILTERS)
-      logInfo(s"Add WebUI Filter. $filterName, $filterParams, $proxyBase")
+      logInfo(log"Add WebUI Filter. ${MDC(LogKeys.UI_FILTER, filterName)}, " +
+        log"${MDC(LogKeys.UI_FILTER_PARAMS, filterParams)}, " +
+        log"${MDC(LogKeys.UI_PROXY_BASE, proxyBase)}")
 
       // For already installed handlers, prepend the filter.
       scheduler.sc.ui.foreach { ui =>
@@ -306,8 +308,8 @@ private[spark] abstract class YarnSchedulerBackend(
             .recover {
               case NonFatal(e) =>
                 logWarning(log"Attempted to get executor loss reason for executor id " +
-                  log"${MDC(EXECUTOR_ID, executorId)} at RPC address " +
-                  log"${MDC(HOST_PORT, executorRpcAddress)}, but got no response. " +
+                  log"${MDC(LogKeys.EXECUTOR_ID, executorId)} at RPC address " +
+                  log"${MDC(LogKeys.HOST_PORT, executorRpcAddress)}, but got no response. " +
                   log"Marking as agent lost.", e)
                 RemoveExecutor(executorId, ExecutorProcessLost())
             }(ThreadUtils.sameThread)
@@ -332,7 +334,7 @@ private[spark] abstract class YarnSchedulerBackend(
 
     override def receive: PartialFunction[Any, Unit] = {
       case RegisterClusterManager(am) =>
-        logInfo(s"ApplicationMaster registered as $am")
+        logInfo(log"ApplicationMaster registered as ${MDC(LogKeys.RPC_ENDPOINT_REF, am)}")
         amEndpoint = Option(am)
         reset()
 
@@ -346,7 +348,7 @@ private[spark] abstract class YarnSchedulerBackend(
       case r @ RemoveExecutor(executorId, reason) =>
         if (!stopped.get) {
           logWarning(log"Requesting driver to remove executor " +
-            log"${MDC(EXECUTOR_ID, executorId)} for reason ${MDC(REASON, reason)}")
+            log"${MDC(LogKeys.EXECUTOR_ID, executorId)} for reason ${MDC(LogKeys.REASON, reason)}")
           driverEndpoint.send(r)
         }
 
@@ -395,7 +397,8 @@ private[spark] abstract class YarnSchedulerBackend(
 
     override def onDisconnected(remoteAddress: RpcAddress): Unit = {
       if (amEndpoint.exists(_.address == remoteAddress)) {
-        logWarning(log"ApplicationMaster has disassociated: ${MDC(HOST_PORT, remoteAddress)}")
+        logWarning(log"ApplicationMaster has disassociated: " +
+          log"${MDC(LogKeys.HOST_PORT, remoteAddress)}")
         amEndpoint = None
       }
     }

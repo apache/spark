@@ -25,7 +25,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.IntegratedUDFTestUtils.{createUserDefinedPythonDataSource, shouldTestPandasUDFs}
 import org.apache.spark.sql.execution.datasources.v2.python.{PythonDataSourceV2, PythonMicroBatchStream, PythonStreamingSourceOffset}
-import org.apache.spark.sql.execution.streaming.{MemoryStream, ProcessingTimeTrigger}
+import org.apache.spark.sql.execution.streaming.{CommitLog, MemoryStream, OffsetSeqLog, ProcessingTimeTrigger}
 import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -36,11 +36,11 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
 
   val waitTimeout = 15.seconds
 
-  protected def simpleDataStreamReaderScript: String =
+  protected def testDataStreamReaderScript: String =
     """
       |from pyspark.sql.datasource import DataSourceStreamReader, InputPartition
       |
-      |class SimpleDataStreamReader(DataSourceStreamReader):
+      |class TestDataStreamReader(DataSourceStreamReader):
       |    current = 0
       |    def initialOffset(self):
       |        return {"offset": {"partition-1": 0}}
@@ -55,6 +55,43 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
       |        1 + 2
       |    def read(self, partition):
       |        yield (partition.value,)
+      |""".stripMargin
+
+  protected def simpleDataStreamReaderScript: String =
+    """
+      |from pyspark.sql.datasource import SimpleDataSourceStreamReader
+      |
+      |class SimpleDataStreamReader(SimpleDataSourceStreamReader):
+      |    def initialOffset(self):
+      |        return {"partition-1": 0}
+      |    def read(self, start: dict):
+      |        start_idx = start["partition-1"]
+      |        it = iter([(i, ) for i in range(start_idx, start_idx + 2)])
+      |        return (it, {"partition-1": start_idx + 2})
+      |    def readBetweenOffsets(self, start: dict, end: dict):
+      |        start_idx = start["partition-1"]
+      |        end_idx = end["partition-1"]
+      |        return iter([(i, ) for i in range(start_idx, end_idx)])
+      |""".stripMargin
+
+  protected def simpleDataStreamReaderWithEmptyBatchScript: String =
+    """
+      |from pyspark.sql.datasource import SimpleDataSourceStreamReader
+      |
+      |class SimpleDataStreamReader(SimpleDataSourceStreamReader):
+      |    def initialOffset(self):
+      |        return {"partition-1": 0}
+      |    def read(self, start: dict):
+      |        start_idx = start["partition-1"]
+      |        if start_idx % 4 == 0:
+      |            it = iter([(i, ) for i in range(start_idx, start_idx + 2)])
+      |        else:
+      |            it = iter([])
+      |        return (it, {"partition-1": start_idx + 2})
+      |    def readBetweenOffsets(self, start: dict, end: dict):
+      |        start_idx = start["partition-1"]
+      |        end_idx = end["partition-1"]
+      |        return iter([(i, ) for i in range(start_idx, end_idx)])
       |""".stripMargin
 
   protected def errorDataStreamReaderScript: String =
@@ -117,11 +154,11 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
     val dataSourceScript =
       s"""
          |from pyspark.sql.datasource import DataSource
-         |$simpleDataStreamReaderScript
+         |$testDataStreamReaderScript
          |
          |class $dataSourceName(DataSource):
          |    def streamReader(self, schema):
-         |        return SimpleDataStreamReader()
+         |        return TestDataStreamReader()
          |""".stripMargin
     val inputSchema = StructType.fromDDL("input BINARY")
 
@@ -144,7 +181,7 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
     stream.stop()
   }
 
-  test("Read from simple data stream source") {
+  test("SimpleDataSourceStreamReader run query and restart") {
     assume(shouldTestPandasUDFs)
     val dataSourceScript =
       s"""
@@ -154,8 +191,259 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
          |class $dataSourceName(DataSource):
          |    def schema(self) -> str:
          |        return "id INT"
-         |    def streamReader(self, schema):
+         |    def simpleStreamReader(self, schema):
          |        return SimpleDataStreamReader()
+         |""".stripMargin
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    assert(spark.sessionState.dataSourceManager.dataSourceExists(dataSourceName))
+    withTempDir { dir =>
+      val path = dir.getAbsolutePath
+      val checkpointDir = new File(path, "checkpoint")
+      val df = spark.readStream.format(dataSourceName).load()
+
+      val stopSignal1 = new CountDownLatch(1)
+
+      val q1 = df
+        .writeStream
+        .option("checkpointLocation", checkpointDir.getAbsolutePath)
+        .foreachBatch((df: DataFrame, batchId: Long) => {
+          df.cache()
+          checkAnswer(df, Seq(Row(batchId * 2), Row(batchId * 2 + 1)))
+          if (batchId == 10) stopSignal1.countDown()
+        })
+        .start()
+      stopSignal1.await()
+      assert(q1.recentProgress.forall(_.numInputRows == 2))
+      q1.stop()
+      q1.awaitTermination()
+
+      val stopSignal2 = new CountDownLatch(1)
+      val q2 = df
+        .writeStream
+        .option("checkpointLocation", checkpointDir.getAbsolutePath)
+        .foreachBatch((df: DataFrame, batchId: Long) => {
+          df.cache()
+          checkAnswer(df, Seq(Row(batchId * 2), Row(batchId * 2 + 1)))
+          if (batchId == 20) stopSignal2.countDown()
+        }).start()
+      stopSignal2.await()
+      assert(q2.recentProgress.forall(_.numInputRows == 2))
+      q2.stop()
+      q2.awaitTermination()
+    }
+  }
+
+  // Verify prefetch and cache pattern of SimpleDataSourceStreamReader handle empty
+  // data batch correctly.
+  test("SimpleDataSourceStreamReader read empty batch") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource
+         |$simpleDataStreamReaderWithEmptyBatchScript
+         |
+         |class $dataSourceName(DataSource):
+         |    def schema(self) -> str:
+         |        return "id INT"
+         |    def simpleStreamReader(self, schema):
+         |        return SimpleDataStreamReader()
+         |""".stripMargin
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    assert(spark.sessionState.dataSourceManager.dataSourceExists(dataSourceName))
+    withTempDir { dir =>
+      val path = dir.getAbsolutePath
+      val checkpointDir = new File(path, "checkpoint")
+      val df = spark.readStream.format(dataSourceName).load()
+
+      val stopSignal = new CountDownLatch(1)
+
+      val q = df
+        .writeStream
+        .option("checkpointLocation", checkpointDir.getAbsolutePath)
+        .foreachBatch((df: DataFrame, batchId: Long) => {
+          df.cache()
+          if (batchId % 2 == 0) {
+            checkAnswer(df, Seq(Row(batchId * 2), Row(batchId * 2 + 1)))
+          } else {
+            assert(df.isEmpty)
+          }
+          if (batchId == 10) stopSignal.countDown()
+        })
+        .start()
+      stopSignal.await()
+      q.stop()
+      q.awaitTermination()
+    }
+  }
+
+  test("SimpleDataSourceStreamReader read exactly once") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource
+         |$simpleDataStreamReaderScript
+         |
+         |class $dataSourceName(DataSource):
+         |    def schema(self) -> str:
+         |        return "id INT"
+         |    def simpleStreamReader(self, schema):
+         |        return SimpleDataStreamReader()
+         |""".stripMargin
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    assert(spark.sessionState.dataSourceManager.dataSourceExists(dataSourceName))
+    withTempDir { dir =>
+      val path = dir.getAbsolutePath
+      val checkpointDir = new File(path, "checkpoint")
+      val outputDir = new File(path, "output")
+      val df = spark.readStream.format(dataSourceName).load()
+      var lastBatch = 0
+      // Restart streaming query multiple times to verify exactly once guarantee.
+      for (i <- 1 to 5) {
+
+        if (i % 2 == 0) {
+          // Remove the last entry of commit log to test replaying microbatch during restart.
+          val offsetLog = new OffsetSeqLog(
+            spark, new File(checkpointDir, "offsets").getCanonicalPath)
+          val commitLog = new CommitLog(
+            spark, new File(checkpointDir, "commits").getCanonicalPath)
+          commitLog.purgeAfter(offsetLog.getLatest().get._1 - 1)
+        }
+
+        val q = df
+          .writeStream
+          .option("checkpointLocation", checkpointDir.getAbsolutePath)
+          .format("json")
+          .start(outputDir.getAbsolutePath)
+
+        while (q.recentProgress.length < 5) {
+          Thread.sleep(200)
+        }
+        q.stop()
+        q.awaitTermination()
+        lastBatch = q.lastProgress.batchId.toInt
+      }
+      assert(lastBatch > 20)
+      checkAnswer(spark.read.format("json").load(outputDir.getAbsolutePath),
+        (0 to  2 * lastBatch + 1).map(Row(_)))
+    }
+  }
+
+  test("initialOffset() method not implemented in SimpleDataSourceStreamReader") {
+    assume(shouldTestPandasUDFs)
+    val initialOffsetNotImplementedScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource
+         |from pyspark.sql.datasource import SimpleDataSourceStreamReader
+         |class ErrorDataStreamReader(SimpleDataSourceStreamReader):
+         |    ...
+         |
+         |class $errorDataSourceName(DataSource):
+         |    def simpleStreamReader(self, schema):
+         |        return ErrorDataStreamReader()
+         |""".stripMargin
+    val inputSchema = StructType.fromDDL("input BINARY")
+
+    val dataSource =
+      createUserDefinedPythonDataSource(errorDataSourceName, initialOffsetNotImplementedScript)
+    spark.dataSource.registerPython(errorDataSourceName, dataSource)
+    val pythonDs = new PythonDataSourceV2
+    pythonDs.setShortName("ErrorDataSource")
+
+    def testMicroBatchStreamError(action: String, msg: String)
+                                 (func: PythonMicroBatchStream => Unit): Unit = {
+      val stream = new PythonMicroBatchStream(
+        pythonDs, errorDataSourceName, inputSchema, CaseInsensitiveStringMap.empty())
+      val err = intercept[SparkException] {
+        func(stream)
+      }
+      checkErrorMatchPVals(err,
+        errorClass = "PYTHON_STREAMING_DATA_SOURCE_RUNTIME_ERROR",
+        parameters = Map(
+          "action" -> action,
+          "msg" -> "(.|\\n)*"
+        ))
+      assert(err.getMessage.contains(msg))
+      assert(err.getMessage.contains("ErrorDataSource"))
+      stream.stop()
+    }
+
+    testMicroBatchStreamError(
+      "initialOffset", "[NOT_IMPLEMENTED] initialOffset is not implemented") {
+      stream => stream.initialOffset()
+    }
+
+    // User don't need to implement latestOffset for SimpleDataSourceStreamReader.
+    // The latestOffset method of simple stream reader invokes initialOffset() and read()
+    // So the not implemented method is initialOffset.
+    testMicroBatchStreamError(
+      "latestOffset", "[NOT_IMPLEMENTED] initialOffset is not implemented") {
+      stream => stream.latestOffset()
+    }
+  }
+
+  test("read() method throw error in SimpleDataSourceStreamReader") {
+    assume(shouldTestPandasUDFs)
+    val initialOffsetNotImplementedScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource
+         |from pyspark.sql.datasource import SimpleDataSourceStreamReader
+         |class ErrorDataStreamReader(SimpleDataSourceStreamReader):
+         |    def initialOffset(self):
+         |        return {"partition": 1}
+         |    def read(self, start):
+         |        raise Exception("error reading available data")
+         |
+         |class $errorDataSourceName(DataSource):
+         |    def simpleStreamReader(self, schema):
+         |        return ErrorDataStreamReader()
+         |""".stripMargin
+    val inputSchema = StructType.fromDDL("input BINARY")
+
+    val dataSource =
+      createUserDefinedPythonDataSource(errorDataSourceName, initialOffsetNotImplementedScript)
+    spark.dataSource.registerPython(errorDataSourceName, dataSource)
+    val pythonDs = new PythonDataSourceV2
+    pythonDs.setShortName("ErrorDataSource")
+
+    def testMicroBatchStreamError(action: String, msg: String)
+                                 (func: PythonMicroBatchStream => Unit): Unit = {
+      val stream = new PythonMicroBatchStream(
+        pythonDs, errorDataSourceName, inputSchema, CaseInsensitiveStringMap.empty())
+      val err = intercept[SparkException] {
+        func(stream)
+      }
+      checkErrorMatchPVals(err,
+        errorClass = "PYTHON_STREAMING_DATA_SOURCE_RUNTIME_ERROR",
+        parameters = Map(
+          "action" -> action,
+          "msg" -> "(.|\\n)*"
+        ))
+      assert(err.getMessage.contains(msg))
+      assert(err.getMessage.contains("ErrorDataSource"))
+      stream.stop()
+    }
+
+    testMicroBatchStreamError(
+      "latestOffset", "Exception: error reading available data") {
+      stream => stream.latestOffset()
+    }
+  }
+
+  test("Read from test data stream source") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource
+         |$testDataStreamReaderScript
+         |
+         |class $dataSourceName(DataSource):
+         |    def schema(self) -> str:
+         |        return "id INT"
+         |    def streamReader(self, schema):
+         |        return TestDataStreamReader()
          |""".stripMargin
 
     val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
@@ -188,7 +476,7 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
          |        self.start = start
          |        self.end = end
          |
-         |class SimpleDataStreamReader(DataSourceStreamReader):
+         |class TestDataStreamReader(DataSourceStreamReader):
          |    current = 0
          |    def initialOffset(self):
          |        return {"offset": 0}
@@ -210,7 +498,7 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
          |        return "id INT"
          |
          |    def streamReader(self, schema):
-         |        return SimpleDataStreamReader()
+         |        return TestDataStreamReader()
          |""".stripMargin
     val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
     spark.dataSource.registerPython(dataSourceName, dataSource)
@@ -302,7 +590,6 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
     }
     assert(err.getMessage.contains("error reading data"))
   }
-
 
   test("Method not implemented in stream reader") {
     assume(shouldTestPandasUDFs)

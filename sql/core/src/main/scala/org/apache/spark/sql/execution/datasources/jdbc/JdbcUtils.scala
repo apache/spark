@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.jdbc
 import java.math.{BigDecimal => JBigDecimal}
 import java.nio.charset.StandardCharsets
 import java.sql.{Connection, Date, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException, Timestamp}
-import java.time.{Instant, LocalDate}
+import java.time.{Instant, LocalDate, LocalDateTime}
 import java.util
 import java.util.concurrent.TimeUnit
 
@@ -33,7 +33,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{DEFAULT_ISOLATION_LEVEL, ISOLATION_LEVEL}
+import org.apache.spark.internal.LogKeys.{DEFAULT_ISOLATION_LEVEL, ISOLATION_LEVEL}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.{DecimalPrecision, Resolver}
@@ -506,6 +506,12 @@ object JdbcUtils extends Logging with SQLConfHelper {
         } else {
           row.update(pos, null)
         }
+
+    case TimestampNTZType if metadata.contains("logical_time_type") =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
+        val micros = nullSafeConvert[java.sql.Time](rs.getTime(pos + 1), t =>
+          localDateTimeToMicros(LocalDateTime.of(LocalDate.EPOCH, t.toLocalTime)))
+        row.update(pos, micros)
 
     case TimestampNTZType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>

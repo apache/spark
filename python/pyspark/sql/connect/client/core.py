@@ -1763,6 +1763,9 @@ class SparkConnectClient(object):
                     info = error_details_pb2.ErrorInfo()
                     d.Unpack(info)
 
+                    if info.metadata["errorClass"] == "INVALID_HANDLE.SESSION_CHANGED":
+                        self._closed = True
+
                     raise convert_exception(
                         info,
                         status.message,

@@ -16,7 +16,16 @@
  */
 package org.apache.spark.deploy.k8s
 
-private[spark] object Constants {
+import org.apache.spark.annotation.{DeveloperApi, Stable}
+
+/**
+ * :: DeveloperApi ::
+ *
+ * This is used in both K8s module and Spark K8s Operator.
+ */
+@Stable
+@DeveloperApi
+object Constants {
 
   // Labels
   val SPARK_VERSION_LABEL = "spark-version"

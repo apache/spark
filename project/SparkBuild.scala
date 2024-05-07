@@ -255,9 +255,11 @@ object SparkBuild extends PomBuild {
     }
   )
 
+  val noLintOnCompile = sys.env.contains("NOLINT_ON_COMPILE") &&
+      !sys.env.get("NOLINT_ON_COMPILE").contains("false")
   lazy val sharedSettings = sparkGenjavadocSettings ++
                             compilerWarningSettings ++
-      (if (sys.env.contains("NOLINT_ON_COMPILE")) Nil else enableScalaStyle) ++ Seq(
+      (if (noLintOnCompile) Nil else enableScalaStyle) ++ Seq(
     (Compile / exportJars) := true,
     (Test / exportJars) := false,
     javaHome := sys.env.get("JAVA_HOME")
@@ -294,13 +296,8 @@ object SparkBuild extends PomBuild {
     publishLocal := Seq((MavenCompile / publishLocal), (SbtCompile / publishLocal)).dependOn.value,
 
     javaOptions ++= {
-      val versionParts = System.getProperty("java.version").split("[+.\\-]+", 3)
-      val major = versionParts(0).toInt
-      if (major >= 21) {
-        Seq("--add-modules=jdk.incubator.vector", "-Dforeign.restricted=warn")
-      } else {
-        Seq("--add-modules=jdk.incubator.vector,jdk.incubator.foreign", "-Dforeign.restricted=warn")
-      }
+      // for `dev.ludovic.netlib.blas` which implements such hardware-accelerated BLAS operations
+      Seq("--add-modules=jdk.incubator.vector")
     },
 
     (Compile / doc / javacOptions) ++= {
@@ -952,7 +949,7 @@ object Unsafe {
 object DockerIntegrationTests {
   // This serves to override the override specified in DependencyOverrides:
   lazy val settings = Seq(
-    dependencyOverrides += "com.google.guava" % "guava" % "33.0.0-jre"
+    dependencyOverrides += "com.google.guava" % "guava" % "33.1.0-jre"
   )
 }
 

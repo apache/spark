@@ -14,26 +14,5 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.tests.test_python_streaming_datasource import (
-    BasePythonStreamingDataSourceTestsMixin,
-)
-from pyspark.testing.connectutils import ReusedConnectTestCase
 
-
-class PythonStreamingDataSourceParityTests(
-    BasePythonStreamingDataSourceTestsMixin, ReusedConnectTestCase
-):
-    pass
-
-
-if __name__ == "__main__":
-    import unittest
-    from pyspark.sql.tests.connect.test_parity_python_streaming_datasource import *  # noqa: F401
-
-    try:
-        import xmlrunner  # type: ignore[import]
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+"""Spark Classic specific"""

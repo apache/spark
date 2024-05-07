@@ -36,6 +36,8 @@ class BinaryComparisonSimplificationSuite extends PlanTest {
         EliminateSubqueryAliases) ::
       Batch("Infer Filters", Once,
           InferFiltersFromConstraints) ::
+      Batch("Compute current time", Once,
+        ComputeCurrentTime) ::
       Batch("Constant Folding", FixedPoint(50),
         NullPropagation,
         ConstantFolding,

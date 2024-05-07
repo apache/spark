@@ -2,7 +2,7 @@
 
 ## LogKey
 
-LogKeys serve as identifiers for mapped diagnostic contexts (MDC) within logs. Follow these guidelines when adding new LogKeys:
+`LogKey`s serve as identifiers for mapped diagnostic contexts (MDC) within logs. Follow these guidelines when adding a new LogKey:
 * Define all structured logging keys in `LogKey.scala`, and sort them alphabetically for ease of search.
 * Use `UPPER_SNAKE_CASE` for key names.
 * Key names should be both simple and broad, yet include specific identifiers like `STAGE_ID`, `TASK_ID`, and `JOB_ID` when needed for clarity. For instance, use `MAX_ATTEMPTS` as a general key instead of creating separate keys for each scenario such as `EXECUTOR_STATE_SYNC_MAX_ATTEMPTS` and `MAX_TASK_FAILURES`. This balances simplicity with the detail needed for effective logging.

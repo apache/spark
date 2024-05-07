@@ -22,7 +22,7 @@ import java.util.regex.{Pattern, PatternSyntaxException}
 import org.apache.commons.text.similarity.LevenshteinDistance
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey._
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf

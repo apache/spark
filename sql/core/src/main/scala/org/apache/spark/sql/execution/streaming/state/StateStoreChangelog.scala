@@ -25,7 +25,8 @@ import com.google.common.io.ByteStreams
 import org.apache.commons.io.IOUtils
 import org.apache.hadoop.fs.{FSError, Path}
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager
@@ -108,8 +109,9 @@ abstract class StateStoreChangelogWriter(
       // IOException into FSError.
       case e: FSError if e.getCause.isInstanceOf[IOException] =>
       case NonFatal(ex) =>
-        logInfo(s"Failed to cancel changelog file $file for state store provider " +
-          s"with exception=$ex")
+        logInfo(log"Failed to cancel changelog file ${MDC(FILE_NAME, file)} " +
+          log"for state store provider " +
+          log"with exception=${MDC(ERROR, ex)}")
     } finally {
       backingFileStream = null
       compressedStream = null

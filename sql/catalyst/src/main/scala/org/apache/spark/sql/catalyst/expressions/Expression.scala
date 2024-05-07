@@ -376,16 +376,12 @@ abstract class Expression extends TreeNode[Expression] {
     }
 }
 
-
 /**
- * An expression that cannot be evaluated. These expressions don't live past analysis or
- * optimization time (e.g. Star) and should not be evaluated during query planning and
- * execution.
+ * An expression that cannot be evaluated but is guaranteed to be replaced with a foldable value
+ * by query optimizer (e.g. CurrentDate).
  */
-trait Unevaluable extends Expression {
-
-  /** Unevaluable is not foldable because we don't have an eval for it. */
-  final override def foldable: Boolean = false
+trait FoldableUnevaluable extends Expression {
+  override def foldable: Boolean = true
 
   final override def eval(input: InternalRow = null): Any =
     throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
@@ -394,6 +390,19 @@ trait Unevaluable extends Expression {
     throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
 }
 
+/**
+ * An expression that cannot be evaluated. These expressions don't live past analysis or
+ * optimization time (e.g. Star) and should not be evaluated during query planning and
+ * execution.
+ */
+trait Unevaluable extends Expression with FoldableUnevaluable {
+
+  /** Unevaluable is not foldable by default because we don't have an eval for it.
+   * Exception are expressions that will be replaced by a literal by Optimizer (e.g. CurrentDate).
+   * Hence we allow overriding overriding of this field in special cases.
+   */
+  final override def foldable: Boolean = false
+}
 
 /**
  * An expression that gets replaced at runtime (currently by the optimizer) into a different
@@ -1368,6 +1377,20 @@ trait CommutativeExpression extends Expression {
         MultiCommutativeOp(operands, this.getClass, evalMode)(this)
       }
     reorderResult
+  }
+
+  /**
+   * Helper method to collect the evaluation mode of the commutative expressions. This is
+   * used by the canonicalized methods of [[Add]] and [[Multiply]] operators to ensure that
+   * all operands have the same evaluation mode before reordering the operands.
+   */
+  protected def collectEvalModes(
+      e: Expression,
+      f: PartialFunction[CommutativeExpression, Seq[EvalMode.Value]]
+  ): Seq[EvalMode.Value] = e match {
+    case c: CommutativeExpression if f.isDefinedAt(c) =>
+      f(c) ++ c.children.flatMap(collectEvalModes(_, f))
+    case _ => Nil
   }
 }
 

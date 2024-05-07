@@ -163,9 +163,9 @@ object GeneratedColumn {
         s"generation expression data type ${analyzed.dataType.simpleString} " +
         s"is incompatible with column data type ${dataType.simpleString}")
     }
-    if (analyzed.exists(e => SchemaUtils.hasNonBinarySortableCollatedString(e.dataType))) {
+    if (analyzed.exists(e => SchemaUtils.hasNonUTF8BinaryCollation(e.dataType))) {
       throw unsupportedExpressionError(
-        "generation expression cannot contain non-binary orderable collated string type")
+        "generation expression cannot contain non utf8 binary collated string type")
     }
   }
 

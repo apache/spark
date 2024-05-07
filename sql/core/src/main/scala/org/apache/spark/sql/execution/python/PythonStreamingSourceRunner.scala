@@ -23,13 +23,20 @@ import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, Data
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
+import org.apache.arrow.vector.ipc.ArrowStreamReader
+
 import org.apache.spark.SparkEnv
 import org.apache.spark.api.python.{PythonFunction, PythonWorker, PythonWorkerFactory, PythonWorkerUtils, SpecialLengths}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.PYTHON_EXEC
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.internal.config.Python.PYTHON_AUTH_SOCKET_TIMEOUT
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.ArrowUtils
+import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 
 object PythonStreamingSourceRunner {
   // When the python process for python_streaming_source_runner receives one of the
@@ -38,6 +45,11 @@ object PythonStreamingSourceRunner {
   val LATEST_OFFSET_FUNC_ID = 885
   val PARTITIONS_FUNC_ID = 886
   val COMMIT_FUNC_ID = 887
+  // Status code for JVM to decide how to receive prefetched record batches
+  // for simple stream reader.
+  val PREFETCHED_RECORDS_NOT_FOUND = 0
+  val NON_EMPTY_PYARROW_RECORD_BATCHES = 1
+  val EMPTY_PYARROW_RECORD_BATCHES = 2
 }
 
 /**
@@ -71,7 +83,7 @@ class PythonStreamingSourceRunner(
    * Initializes the Python worker for running the streaming source.
    */
   def init(): Unit = {
-    logInfo(s"Initializing Python runner pythonExec: $pythonExec")
+    logInfo(log"Initializing Python runner pythonExec: ${MDC(PYTHON_EXEC, pythonExec)}")
     val env = SparkEnv.get
 
     val localdir = env.blockManager.diskBlockManager.localDirs.map(f => f.getPath()).mkString(",")
@@ -100,6 +112,8 @@ class PythonStreamingSourceRunner(
 
     // Send output schema
     PythonWorkerUtils.writeUTF(outputSchema.json, dataOut)
+
+    dataOut.writeInt(SQLConf.get.arrowMaxRecordsPerBatch)
 
     dataOut.flush()
 
@@ -147,7 +161,8 @@ class PythonStreamingSourceRunner(
   /**
    * Invokes partitions(start, end) function of the stream reader and receive the return value.
    */
-  def partitions(start: String, end: String): Array[Array[Byte]] = {
+  def partitions(start: String, end: String): (Array[Array[Byte]], Option[Iterator[InternalRow]]) =
+  {
     dataOut.writeInt(PARTITIONS_FUNC_ID)
     PythonWorkerUtils.writeUTF(start, dataOut)
     PythonWorkerUtils.writeUTF(end, dataOut)
@@ -164,7 +179,20 @@ class PythonStreamingSourceRunner(
       val pickledPartition: Array[Byte] = PythonWorkerUtils.readBytes(dataIn)
       pickledPartitions.append(pickledPartition)
     }
-    pickledPartitions.toArray
+    val prefetchedRecordsStatus = dataIn.readInt()
+    val iter: Option[Iterator[InternalRow]] = prefetchedRecordsStatus match {
+      case NON_EMPTY_PYARROW_RECORD_BATCHES => Some(readArrowRecordBatches())
+      case PREFETCHED_RECORDS_NOT_FOUND => None
+      case EMPTY_PYARROW_RECORD_BATCHES => Some(Iterator.empty)
+      case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
+        val msg = PythonWorkerUtils.readUTF(dataIn)
+        throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
+          action = "planPartitions", msg)
+      case _ =>
+        throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
+          action = "planPartitions", s"unknown status code $prefetchedRecordsStatus")
+    }
+    (pickledPartitions.toArray, iter)
   }
 
   /**
@@ -198,5 +226,31 @@ class PythonStreamingSourceRunner(
       case e: Exception =>
         logError("Exception when trying to kill worker", e)
     }
+  }
+
+  private val allocator = ArrowUtils.rootAllocator.newChildAllocator(
+    s"stream reader for $pythonExec", 0, Long.MaxValue)
+
+  def readArrowRecordBatches(): Iterator[InternalRow] = {
+    assert(dataIn.readInt() == SpecialLengths.START_ARROW_STREAM)
+    val reader = new ArrowStreamReader(dataIn, allocator)
+    val root = reader.getVectorSchemaRoot()
+    // When input is empty schema can't be read.
+    val schema = ArrowUtils.fromArrowSchema(root.getSchema())
+    assert(schema == outputSchema)
+
+    val vectors = root.getFieldVectors().asScala.map { vector =>
+      new ArrowColumnVector(vector)
+    }.toArray[ColumnVector]
+    val rows = ArrayBuffer[InternalRow]()
+    while (reader.loadNextBatch()) {
+      val batch = new ColumnarBatch(vectors)
+      batch.setNumRows(root.getRowCount)
+      // Need to copy the row because the ColumnarBatch row iterator use
+      // the same underlying Internal row.
+      rows.appendAll(batch.rowIterator().asScala.map(_.copy()))
+    }
+    reader.close(false)
+    rows.iterator
   }
 }

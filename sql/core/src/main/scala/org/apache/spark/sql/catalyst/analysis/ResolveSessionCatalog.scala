@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.LogKey.CONFIG
+import org.apache.spark.internal.LogKeys.CONFIG
 import org.apache.spark.internal.MDC
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
