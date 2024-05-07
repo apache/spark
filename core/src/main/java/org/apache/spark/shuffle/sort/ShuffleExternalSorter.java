@@ -165,7 +165,7 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
         MDC.of(LogKeys.THREAD_ID$.MODULE$, Thread.currentThread().getId()),
         MDC.of(LogKeys.MEMORY_SIZE$.MODULE$, Utils.bytesToString(getMemoryUsage())),
         MDC.of(LogKeys.NUM_SPILL_INFOS$.MODULE$, spills.size()),
-        MDC.of(LogKeys.TIME_UNIT$.MODULE$, spills.size() != 1 ? " times" : " time"));
+        MDC.of(LogKeys.SPILL_TIMES$.MODULE$, spills.size() != 1 ? "times" : "time"));
     }
 
     // This call performs the actual sort.

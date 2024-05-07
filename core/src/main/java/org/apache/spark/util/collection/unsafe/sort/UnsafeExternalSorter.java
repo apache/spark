@@ -222,7 +222,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       MDC.of(LogKeys.THREAD_ID$.MODULE$, Thread.currentThread().getId()),
       MDC.of(LogKeys.MEMORY_SIZE$.MODULE$, Utils.bytesToString(getMemoryUsage())),
       MDC.of(LogKeys.NUM_SPILL_WRITERS$.MODULE$, spillWriters.size()),
-      MDC.of(LogKeys.SPILL_TIMES$.MODULE$, spillWriters.size() > 1 ? " times" : " time"));
+      MDC.of(LogKeys.SPILL_TIMES$.MODULE$, spillWriters.size() > 1 ? "times" : "time"));
 
     ShuffleWriteMetrics writeMetrics = new ShuffleWriteMetrics();
 
