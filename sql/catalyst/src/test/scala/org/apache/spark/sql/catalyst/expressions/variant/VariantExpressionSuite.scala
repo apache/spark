@@ -58,6 +58,9 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     check(Array(primitiveHeader(INT8), 0, 0, 0, 0, 0, 0, 0), emptyMetadata)
     // DECIMAL16 only has 15 byte content.
     check(Array(primitiveHeader(DECIMAL16)) ++ Array.fill(16)(0.toByte), emptyMetadata)
+    // 1e38 has a precision of 39. Even if it still fits into 16 bytes, it is not a valid decimal.
+    check(Array[Byte](primitiveHeader(DECIMAL16), 0) ++
+      BigDecimal(1e38).toBigInt.toByteArray.reverse, emptyMetadata)
     // Short string content too short.
     check(Array(shortStrHeader(2), 'x'), emptyMetadata)
     // Long string length too short (requires 4 bytes).

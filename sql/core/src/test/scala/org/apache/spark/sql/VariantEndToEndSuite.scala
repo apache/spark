@@ -157,6 +157,7 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     check("null", "VOID")
     check("1", "BIGINT")
     check("1.0", "DECIMAL(1,0)")
+    check("0.01", "DECIMAL(2,2)")
     check("1E0", "DOUBLE")
     check("true", "BOOLEAN")
     check("\"2000-01-01\"", "STRING")
