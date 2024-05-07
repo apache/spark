@@ -119,7 +119,7 @@ case class Mode(
   }
 
   private def isCollatedString(child: Expression): Boolean = {
-    child match {
+    child.dataType match {
       case s: StringType if s.collationId != CollationFactory.UTF8_BINARY_COLLATION_ID => true
       // maybe use supportsBinaryEquality or something else
       case _ => false
