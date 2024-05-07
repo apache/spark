@@ -679,13 +679,13 @@ def try_remainder(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     >>> spark.createDataFrame(
     ...     [(6000, 15), (3, 2), (1234, 0)], ["a", "b"]
     ... ).select(sf.try_remainder("a", "b")).show()
-    +----------------+
-    |try_divide(a, b)|
-    +----------------+
-    |               0|
-    |               1|
-    |            NULL|
-    +----------------+
+    +-------------------+
+    |try_remainder(a, b)|
+    +-------------------+
+    |                  0|
+    |                  1|
+    |               NULL|
+    +-------------------+
 
     Example 2: Exception druing division, resulting in NULL when ANSI mode is on
 
@@ -697,11 +697,11 @@ def try_remainder(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     ...     df.select(sf.try_remainder(df.id, sf.lit(0))).show()
     ... finally:
     ...     spark.conf.set("spark.sql.ansi.enabled", origin)
-    +-----------------+
-    |try_divide(id, 0)|
-    +-----------------+
-    |             NULL|
-    +-----------------+
+    +--------------------+
+    |try_remainder(id, 0)|
+    +--------------------+
+    |                NULL|
+    +--------------------+
     """
     return _invoke_function_over_columns("try_remainder", left, right)
 

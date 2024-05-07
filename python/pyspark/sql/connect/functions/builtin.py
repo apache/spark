@@ -937,7 +937,7 @@ def try_remainder(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("try_remainder", left, right)
 
 
-try_divide.__doc__ = pysparkfuncs.try_divide.__doc__
+try_remainder.__doc__ = pysparkfuncs.try_remainder.__doc__
 
 
 def try_multiply(left: "ColumnOrName", right: "ColumnOrName") -> Column:
