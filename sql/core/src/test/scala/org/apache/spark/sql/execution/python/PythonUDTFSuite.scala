@@ -383,7 +383,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         lit(false).as("is_table"),
         lit(null).as("arg_keyword")
       ))
-    checkAnswer(df, Seq(Row(
+    checkAnswer(df.select("metadata"), Seq(Row(
       """{
         |  "schema": {
         |    "fields": [
@@ -401,6 +401,12 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         |  "orderBy": [],
         |  "select": []
         |}""".stripMargin)))
+    df.select("pickledAnalyzeResult").collect() match {
+      case Array(r: Row) =>
+        assert(r.getSeq(0).length > 0)
+      case other =>
+        fail(s"@@@ other type: $other")
+    }
 
     pythonUDTFRunAnalyzeOnExecutors =
       pythonUDTFPartitionByOrderBySelectExpr
@@ -418,7 +424,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         lit(true).as("is_table"),
         lit(null).as("arg_keyword")
       ))
-    checkAnswer(df, Seq(Row(
+    checkAnswer(df.select("metadata"), Seq(Row(
       """{
         |  "schema": {
         |    "fields": [
@@ -473,5 +479,11 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         |    }
         |  ]
         |}""".stripMargin)))
+    df.select("pickledAnalyzeResult").collect() match {
+      case Array(r: Row) =>
+        assert(r.getSeq(0).length > 0)
+      case other =>
+        fail(s"@@@ other type: $other")
+    }
   }
 }

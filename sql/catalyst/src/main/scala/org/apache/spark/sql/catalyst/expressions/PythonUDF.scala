@@ -371,4 +371,5 @@ object AnalyzePythonUDTF {
   def schema: StructType =
     new StructType()
       .add("metadata", StringType)
+      .add("pickledAnalyzeResult", ArrayType(ByteType))
 }

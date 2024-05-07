@@ -18,6 +18,7 @@
 """
 Worker that receives input from Piped RDD.
 """
+import io
 import os
 import sys
 import dataclasses
@@ -1140,7 +1141,9 @@ def read_udtf(pickleSer, infile, eval_type):
                   "select": [{", ".join(select)}]
                 }}"""
             reformatted = json.dumps(json.loads(result_json), indent=2)
-            yield (reformatted,)
+            out_bytes = io.BytesIO()
+            pickleSer._write_with_length(result, out_bytes)
+            yield (reformatted, out_bytes.getvalue())
 
     # Instantiate the UDTF class.
     try:
