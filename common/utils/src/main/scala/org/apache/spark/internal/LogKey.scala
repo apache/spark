@@ -168,6 +168,7 @@ object LogKeys {
   case object EXCEPTION extends LogKey
   case object EXECUTE_INFO extends LogKey
   case object EXECUTE_KEY extends LogKey
+  case object EXECUTION_MEMORY_SIZE extends LogKey
   case object EXECUTION_PLAN_LEAVES extends LogKey
   case object EXECUTOR_BACKEND extends LogKey
   case object EXECUTOR_DESIRED_COUNT extends LogKey
@@ -302,6 +303,7 @@ object LogKeys {
   case object MAX_SLOTS extends LogKey
   case object MAX_SPLIT_BYTES extends LogKey
   case object MAX_TABLE_PARTITION_METADATA_SIZE extends LogKey
+  case object MEMORY_CONSUMER extends LogKey
   case object MEMORY_POOL_NAME extends LogKey
   case object MEMORY_SIZE extends LogKey
   case object MERGE_DIR_NAME extends LogKey
@@ -342,6 +344,7 @@ object LogKeys {
   case object NUM_CONCURRENT_WRITER extends LogKey
   case object NUM_CORES extends LogKey
   case object NUM_DROPPED_PARTITIONS extends LogKey
+  case object NUM_ELEMENTS_SPILL_THRESHOLD extends LogKey
   case object NUM_EVENTS extends LogKey
   case object NUM_EXAMPLES extends LogKey
   case object NUM_EXECUTOR_CORES extends LogKey
@@ -375,6 +378,8 @@ object LogKeys {
   case object NUM_RIGHT_PARTITION_VALUES extends LogKey
   case object NUM_SEQUENCES extends LogKey
   case object NUM_SLOTS extends LogKey
+  case object NUM_SPILL_INFOS extends LogKey
+  case object NUM_SPILL_WRITERS extends LogKey
   case object NUM_TASKS extends LogKey
   case object NUM_TASK_CPUS extends LogKey
   case object NUM_VERSIONS_RETAIN extends LogKey
@@ -394,6 +399,7 @@ object LogKeys {
   case object OP_TYPE extends LogKey
   case object OUTPUT extends LogKey
   case object OVERHEAD_MEMORY_SIZE extends LogKey
+  case object PAGE_SIZE extends LogKey
   case object PARSE_MODE extends LogKey
   case object PARTITIONED_FILE_READER extends LogKey
   case object PARTITIONER extends LogKey
@@ -502,6 +508,7 @@ object LogKeys {
   case object SOCKET_ADDRESS extends LogKey
   case object SPARK_DATA_STREAM extends LogKey
   case object SPARK_PLAN_ID extends LogKey
+  case object SPILL_TIMES extends LogKey
   case object SQL_TEXT extends LogKey
   case object SRC_PATH extends LogKey
   case object STAGE_ATTEMPT extends LogKey
@@ -516,6 +523,7 @@ object LogKeys {
   case object STORAGE_LEVEL extends LogKey
   case object STORAGE_LEVEL_DESERIALIZED extends LogKey
   case object STORAGE_LEVEL_REPLICATION extends LogKey
+  case object STORAGE_MEMORY_SIZE extends LogKey
   case object STORE_ID extends LogKey
   case object STREAMING_DATA_SOURCE_DESCRIPTION extends LogKey
   case object STREAMING_DATA_SOURCE_NAME extends LogKey
@@ -543,6 +551,7 @@ object LogKeys {
   case object TEMP_PATH extends LogKey
   case object TEST_SIZE extends LogKey
   case object THREAD extends LogKey
+  case object THREAD_ID extends LogKey
   case object THREAD_NAME extends LogKey
   case object TID extends LogKey
   case object TIME extends LogKey
