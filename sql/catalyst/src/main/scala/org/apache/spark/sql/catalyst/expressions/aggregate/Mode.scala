@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import scala.collection.mutable.TreeMap
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, UnresolvedWithinGroup}
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Descending, Expression, ExpressionDescription, ImplicitCastInputTypes, SortOrder}
@@ -36,8 +35,7 @@ case class Mode(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0,
-    reverseOpt: Option[Boolean] = None,
-    collationEnabled: Boolean = false)
+    reverseOpt: Option[Boolean] = None)
   extends TypedAggregateWithHashMapAsBuffer with ImplicitCastInputTypes
     with SupportsOrderingWithinGroup with UnaryLike[Expression] {
 
@@ -45,8 +43,8 @@ case class Mode(
 
   def this(child: Expression) = this(child, 0, 0)
 
-  def this(child: Expression, reverse: Boolean, collationEnabled: Boolean) = {
-    this(child, 0, 0, Some(reverse), collationEnabled = collationEnabled)
+  def this(child: Expression, reverse: Boolean) = {
+    this(child, 0, 0, Some(reverse))
   }
 
   // Returns null for empty inputs
@@ -82,7 +80,7 @@ case class Mode(
     if (buff.isEmpty) {
       return null
     }
-    val buffer = if (child.dataType.isInstanceOf[StringType] && collationEnabled) {
+    val buffer = if (isCollatedString(child)) {
       val modeMap = buff.foldLeft(
         new TreeMap[org.apache.spark.unsafe.types.UTF8String, Long]()(Ordering.comparatorToOrdering(
           CollationFactory.fetchCollation(collationId).comparator
@@ -117,6 +115,14 @@ case class Mode(
       null
     } else {
       t2._1
+    }
+  }
+
+  private def isCollatedString(child: Expression): Boolean = {
+    child match {
+      case s: StringType if s.collationId != CollationFactory.UTF8_BINARY_COLLATION_ID => true
+      // maybe use supportsBinaryEquality or something else
+      case _ => false
     }
   }
 
@@ -196,10 +202,10 @@ object ModeBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     val numArgs = expressions.length
     if (numArgs == 0) {
-      Mode(UnresolvedWithinGroup, collationEnabled = SQLConf.get.collationEnabled)
+      Mode(UnresolvedWithinGroup)
     } else if (numArgs == 1) {
       // For compatibility with function calls without WITHIN GROUP.
-      Mode(expressions(0), collationEnabled = SQLConf.get.collationEnabled)
+      Mode(expressions(0))
     } else if (numArgs == 2) {
       // For compatibility with function calls without WITHIN GROUP.
       if (!expressions(1).foldable) {
@@ -215,9 +221,9 @@ object ModeBuilder extends ExpressionBuilder {
           funcName, 2, BooleanType, expressions(1))
       }
       if (deterministicResult.asInstanceOf[Boolean]) {
-        new Mode(expressions(0), true, collationEnabled = SQLConf.get.collationEnabled)
+        new Mode(expressions(0), true)
       } else {
-        Mode(expressions(0), collationEnabled = SQLConf.get.collationEnabled)
+        Mode(expressions(0))
       }
     } else {
       throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(0), numArgs)

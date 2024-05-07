@@ -345,7 +345,7 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
     case aggregate.RegrSXY(PushableExpression(left), PushableExpression(right)) =>
       Some(new GeneralAggregateFunc("REGR_SXY", isDistinct, Array(left, right)))
     // Translate Mode if it is deterministic or reverse is defined.
-    case aggregate.Mode(PushableExpression(expr), _, _, Some(reverse), _) =>
+    case aggregate.Mode(PushableExpression(expr), _, _, Some(reverse)) =>
       Some(new GeneralAggregateFunc(
         "MODE", isDistinct, Array.empty, Array(generateSortValue(expr, !reverse))))
     case aggregate.Percentile(
