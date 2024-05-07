@@ -639,3 +639,13 @@ case class ExecutedWriteSummary(
     updatedPartitions: Set[String],
     stats: Seq[WriteTaskStats],
     updatedPartitionsMap: Map[InternalRow, String])
+
+object ExecutedWriteSummary {
+
+  // The original case class parameter list provided for backward compatibility.
+  def apply(
+    updatedPartitions: Set[String],
+    stats: Seq[WriteTaskStats]): ExecutedWriteSummary = new ExecutedWriteSummary (
+      updatedPartitions, stats, Map[InternalRow, String]())
+
+}
