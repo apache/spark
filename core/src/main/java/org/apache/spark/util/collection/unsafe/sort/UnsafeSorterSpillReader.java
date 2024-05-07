@@ -17,11 +17,8 @@
 
 package org.apache.spark.util.collection.unsafe.sort;
 
-import java.io.*;
-
 import com.google.common.io.ByteStreams;
 import com.google.common.io.Closeables;
-
 import org.apache.spark.SparkEnv;
 import org.apache.spark.TaskContext;
 import org.apache.spark.internal.config.package$;
@@ -33,6 +30,8 @@ import org.apache.spark.io.ReadAheadInputStream;
 import org.apache.spark.serializer.SerializerManager;
 import org.apache.spark.storage.BlockId;
 import org.apache.spark.unsafe.Platform;
+
+import java.io.*;
 
 /**
  * Reads spill files written by {@link UnsafeSorterSpillWriter} (see that class for a description

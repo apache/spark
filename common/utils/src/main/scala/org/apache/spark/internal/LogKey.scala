@@ -344,6 +344,7 @@ object LogKeys {
   case object NUM_CONCURRENT_WRITER extends LogKey
   case object NUM_CORES extends LogKey
   case object NUM_DROPPED_PARTITIONS extends LogKey
+  case object NUM_ELEMENTS_SPILL_THRESHOLD extends LogKey
   case object NUM_EVENTS extends LogKey
   case object NUM_EXAMPLES extends LogKey
   case object NUM_EXECUTOR_CORES extends LogKey
@@ -498,7 +499,6 @@ object LogKeys {
   case object SHUFFLE_ID extends LogKey
   case object SHUFFLE_MERGE_ID extends LogKey
   case object SHUFFLE_SERVICE_NAME extends LogKey
-  case object SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD extends LogKey
   case object SIGNAL extends LogKey
   case object SIZE extends LogKey
   case object SLEEP_TIME extends LogKey

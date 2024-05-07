@@ -420,8 +420,7 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
     assert(inMemSorter != null);
     if (inMemSorter.numRecords() >= numElementsForSpillThreshold) {
       logger.info("Spilling data because number of spilledRecords crossed the threshold {}" +
-        MDC.of(LogKeys.SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD$.MODULE$,
-          numElementsForSpillThreshold));
+        MDC.of(LogKeys.NUM_ELEMENTS_SPILL_THRESHOLD$.MODULE$, numElementsForSpillThreshold));
       spill();
     }
 
