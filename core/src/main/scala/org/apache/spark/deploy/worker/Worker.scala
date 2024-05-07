@@ -38,6 +38,7 @@ import org.apache.spark.deploy.StandaloneResourceUtils._
 import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.deploy.worker.ui.WorkerWebUI
 import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.internal.config.UI._
@@ -74,8 +75,8 @@ private[deploy] class Worker(
   if (conf.get(config.DECOMMISSION_ENABLED)) {
     val signal = conf.get(config.Worker.WORKER_DECOMMISSION_SIGNAL)
     logInfo(s"Registering SIG$signal handler to trigger decommissioning.")
-    SignalUtils.register(signal, s"Failed to register SIG$signal handler - " +
-      "disabling worker decommission feature.") {
+    SignalUtils.register(signal, log"Failed to register SIG${MDC(LogKeys.SIGNAL, signal)} " +
+      log"handler - disabling worker decommission feature.") {
        self.send(WorkerDecommissionSigReceived)
        true
     }
@@ -322,7 +323,8 @@ private[deploy] class Worker(
             sendRegisterMessageToMaster(masterEndpoint)
           } catch {
             case ie: InterruptedException => // Cancelled
-            case NonFatal(e) => logWarning(s"Failed to connect to master $masterAddress", e)
+            case NonFatal(e) => logWarning(
+              log"Failed to connect to master ${MDC(MASTER_URL, masterAddress)}", e)
           }
         }
       })
@@ -379,7 +381,9 @@ private[deploy] class Worker(
                   sendRegisterMessageToMaster(masterEndpoint)
                 } catch {
                   case ie: InterruptedException => // Cancelled
-                  case NonFatal(e) => logWarning(s"Failed to connect to master $masterAddress", e)
+                  case NonFatal(e) =>
+                    logWarning(log"Failed to connect to master " +
+                      log"${MDC(MASTER_URL, masterAddress)}", e)
                 }
               }
             }))
@@ -475,7 +479,8 @@ private[deploy] class Worker(
         // e.g. Master disconnect(maybe due to network drop) and recover immediately, see
         // SPARK-23191 for more details.
         if (duplicate) {
-          logWarning(s"Duplicate registration at master $preferredMasterAddress")
+          logWarning(log"Duplicate registration at master " +
+            log"${MDC(MASTER_URL, preferredMasterAddress)}")
         }
 
         logInfo(s"Successfully registered with master $preferredMasterAddress")
@@ -575,7 +580,8 @@ private[deploy] class Worker(
 
     case LaunchExecutor(masterUrl, appId, execId, rpId, appDesc, cores_, memory_, resources_) =>
       if (masterUrl != activeMasterUrl) {
-        logWarning("Invalid Master (" + masterUrl + ") attempted to launch executor.")
+        logWarning(log"Invalid Master (${MDC(MASTER_URL, masterUrl)}) " +
+          log"attempted to launch executor.")
       } else if (decommissioned) {
         logWarning("Asked to launch an executor while decommissioned. Not launching executor.")
       } else {
@@ -600,7 +606,7 @@ private[deploy] class Worker(
                 Some(appDir.getAbsolutePath())
               } catch {
                 case e: IOException =>
-                  logWarning(s"${e.getMessage}. Ignoring this directory.")
+                  logWarning(log"${MDC(ERROR, e.getMessage)}. Ignoring this directory.")
                   None
               }
             }.toImmutableArraySeq
@@ -655,7 +661,8 @@ private[deploy] class Worker(
 
     case KillExecutor(masterUrl, appId, execId) =>
       if (masterUrl != activeMasterUrl) {
-        logWarning("Invalid Master (" + masterUrl + ") attempted to kill executor " + execId)
+        logWarning(log"Invalid Master (${MDC(MASTER_URL, masterUrl)}) " +
+          log"attempted to kill executor ${MDC(EXECUTOR_ID, execId)}")
       } else {
         val fullId = appId + "/" + execId
         executors.get(fullId) match {
@@ -771,7 +778,8 @@ private[deploy] class Worker(
       case Some(masterRef) => masterRef.send(message)
       case None =>
         logWarning(
-          s"Dropping $message because the connection to master has not yet been established")
+          log"Dropping ${MDC(MESSAGE, message)} " +
+            log"because the connection to master has not yet been established")
     }
   }
 
@@ -821,7 +829,8 @@ private[deploy] class Worker(
 
       case None =>
         logWarning(
-          s"Dropping $newState because the connection to master has not yet been established")
+          log"Dropping ${MDC(NEW_STATE, newState)} " +
+            log"because the connection to master has not yet been established")
     }
   }
 
@@ -867,9 +876,9 @@ private[deploy] class Worker(
       decommissioned = true
       logInfo(s"Decommission worker $workerId.")
     } else if (decommissioned) {
-      logWarning(s"Worker $workerId already started decommissioning.")
+      logWarning(log"Worker ${MDC(WORKER_ID, workerId)} already started decommissioning.")
     } else {
-      logWarning(s"Receive decommission request, but decommission feature is disabled.")
+      logWarning("Receive decommission request, but decommission feature is disabled.")
     }
   }
 
@@ -879,13 +888,15 @@ private[deploy] class Worker(
     val state = driverStateChanged.state
     state match {
       case DriverState.ERROR =>
-        logWarning(s"Driver $driverId failed with unrecoverable exception: ${exception.get}")
+        logWarning(log"Driver ${MDC(DRIVER_ID, driverId)} " +
+          log"failed with unrecoverable exception: ${MDC(ERROR, exception.get)}")
       case DriverState.FAILED =>
-        logWarning(s"Driver $driverId exited with failure")
+        logWarning(log"Driver ${MDC(DRIVER_ID, driverId)} exited with failure")
       case DriverState.FINISHED =>
         registrationRetryTimer match {
           case Some(_) =>
-            logWarning(s"Driver $driverId exited successfully while master is disconnected.")
+            logWarning(log"Driver ${MDC(DRIVER_ID, driverId)} " +
+              log"exited successfully while master is disconnected.")
           case _ =>
             logInfo(s"Driver $driverId exited successfully")
         }

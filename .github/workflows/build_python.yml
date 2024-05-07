@@ -17,18 +17,26 @@
 # under the License.
 #
 
-name: "Build / Python-only (master, PyPy 3.9/Python 3.10/Python 3.11/Python 3.12)"
+# According to https://infra.apache.org/github-actions-policy.html,
+# all workflows SHOULD have a job concurrency level less than or equal to 15.
+# To do that, we run one python version per cron schedule
+name: "Build / Python-only (master, PyPy 3.9/Python 3.10/Python 3.12)"
 
 on:
   schedule:
     - cron: '0 15 * * *'
+    - cron: '0 17 * * *'
+    - cron: '0 19 * * *'
 
 jobs:
   run-build:
     strategy:
       fail-fast: false
       matrix:
-        pyversion: ["pypy3", "python3.10", "python3.11", "python3.12"]
+        include:
+          - pyversion: ${{ github.event.schedule == '0 15 * * *' && "pypy3" }}
+          - pyversion: ${{ github.event.schedule == '0 17 * * *' && "python3.10" }}
+          - pyversion: ${{ github.event.schedule == '0 19 * * *' && "python3.12" }}
     permissions:
       packages: write
     name: Run
@@ -44,5 +52,6 @@ jobs:
         }
       jobs: >-
         {
-          "pyspark": "true"
+          "pyspark": "true",
+          "pyspark-pandas": "true"
         }

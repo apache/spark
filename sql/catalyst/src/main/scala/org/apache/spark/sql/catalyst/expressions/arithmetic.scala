@@ -452,13 +452,14 @@ case class Add(
     copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    // TODO: do not reorder consecutive `Add`s with different `evalMode`
-    val reorderResult = buildCanonicalizedPlan(
+    val evalModes = collectEvalModes(this, {case Add(_, _, evalMode) => Seq(evalMode)})
+    lazy val reorderResult = buildCanonicalizedPlan(
       { case Add(l, r, _) => Seq(l, r) },
       { case (l: Expression, r: Expression) => Add(l, r, evalMode)},
       Some(evalMode)
     )
-    if (resolved && reorderResult.resolved && reorderResult.dataType == dataType) {
+    if (resolved && evalModes.forall(_ == evalMode) && reorderResult.resolved &&
+      reorderResult.dataType == dataType) {
       reorderResult
     } else {
       // SPARK-40903: Avoid reordering decimal Add for canonicalization if the result data type is
@@ -608,12 +609,16 @@ case class Multiply(
     newLeft: Expression, newRight: Expression): Multiply = copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    // TODO: do not reorder consecutive `Multiply`s with different `evalMode`
-    buildCanonicalizedPlan(
-      { case Multiply(l, r, _) => Seq(l, r) },
-      { case (l: Expression, r: Expression) => Multiply(l, r, evalMode)},
-      Some(evalMode)
-    )
+    val evalModes = collectEvalModes(this, {case Multiply(_, _, evalMode) => Seq(evalMode)})
+    if (evalModes.forall(_ == evalMode)) {
+      buildCanonicalizedPlan(
+        { case Multiply(l, r, _) => Seq(l, r) },
+        { case (l: Expression, r: Expression) => Multiply(l, r, evalMode)},
+        Some(evalMode)
+      )
+    } else {
+      withCanonicalizedChildren
+    }
   }
 }
 

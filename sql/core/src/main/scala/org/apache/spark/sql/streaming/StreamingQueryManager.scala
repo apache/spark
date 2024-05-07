@@ -26,7 +26,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.{QUERY_ID, RUN_ID}
+import org.apache.spark.internal.LogKeys.{CLASS_NAME, QUERY_ID, RUN_ID}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.streaming.{WriteToStream, WriteToStreamStatement}
@@ -78,7 +78,7 @@ class StreamingQueryManager private[sql] (
         Utils.loadExtensions(classOf[StreamingQueryListener], classNames,
           sparkSession.sparkContext.conf).foreach { listener =>
           addListener(listener)
-          logInfo(s"Registered listener ${listener.getClass.getName}")
+          logInfo(log"Registered listener ${MDC(CLASS_NAME, listener.getClass.getName)}")
         }
       }
     }

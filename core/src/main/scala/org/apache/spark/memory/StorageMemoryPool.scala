@@ -20,7 +20,8 @@ package org.apache.spark.memory
 import javax.annotation.concurrent.GuardedBy
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.storage.BlockId
 import org.apache.spark.storage.memory.MemoryStore
 
@@ -104,8 +105,8 @@ private[memory] class StorageMemoryPool(
 
   def releaseMemory(size: Long): Unit = lock.synchronized {
     if (size > _memoryUsed) {
-      logWarning(s"Attempted to release $size bytes of storage " +
-        s"memory when we only have ${_memoryUsed} bytes")
+      logWarning(log"Attempted to release ${MDC(NUM_BYTES, size)} bytes of storage " +
+        log"memory when we only have ${MDC(NUM_BYTES_USED, _memoryUsed)} bytes")
       _memoryUsed = 0
     } else {
       _memoryUsed -= size

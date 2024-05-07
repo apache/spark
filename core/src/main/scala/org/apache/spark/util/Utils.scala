@@ -69,6 +69,7 @@ import org.slf4j.Logger
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
+import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Streaming._
@@ -444,7 +445,8 @@ private[spark] object Utils
       // TODO(SPARK-38632): should keep file permissions. Java implementation doesn't.
       unTarUsingJava(source, dest)
     } else {
-      logWarning(s"Cannot unpack $source, just copying it to $dest.")
+      logWarning(log"Cannot unpack ${MDC(LogKeys.FILE_NAME, source)}, " +
+        log"just copying it to ${MDC(FILE_NAME2, dest)}.")
       copyRecursive(source, dest)
     }
   }
@@ -797,8 +799,10 @@ private[spark] object Utils
     }
     if (uris.nonEmpty) {
       logWarning(
-        "The configured local directories are not expected to be URIs; however, got suspicious " +
-        s"values [${uris.mkString(", ")}]. Please check your configured local directories.")
+        log"The configured local directories are not expected to be URIs; " +
+          log"however, got suspicious values [" +
+          log"${MDC(LogKeys.URIS, uris.mkString(", "))}]. " +
+          log"Please check your configured local directories.")
     }
 
     configuredLocalDirs.flatMap { root =>
@@ -889,16 +893,17 @@ private[spark] object Utils
             // because of Inet6Address.toHostName may add interface at the end if it knows about it
             val strippedAddress = InetAddress.getByAddress(addr.getAddress)
             // We've found an address that looks reasonable!
-            logWarning("Your hostname, " + InetAddress.getLocalHost.getHostName + " resolves to" +
-              " a loopback address: " + address.getHostAddress + "; using " +
-              strippedAddress.getHostAddress + " instead (on interface " + ni.getName + ")")
+            logWarning(log"Your hostname, ${MDC(HOST, InetAddress.getLocalHost.getHostName)}, " +
+              log"resolves to a loopback address: ${MDC(HOST_PORT, address.getHostAddress)}; " +
+              log"using ${MDC(HOST_PORT2, strippedAddress.getHostAddress)} instead (on interface " +
+              log"${MDC(NETWORK_IF, ni.getName)})")
             logWarning("Set SPARK_LOCAL_IP if you need to bind to another address")
             return strippedAddress
           }
         }
-        logWarning("Your hostname, " + InetAddress.getLocalHost.getHostName + " resolves to" +
-          " a loopback address: " + address.getHostAddress + ", but we couldn't find any" +
-          " external IP address!")
+        logWarning(log"Your hostname, ${MDC(HOST, InetAddress.getLocalHost.getHostName)}, " +
+          log"resolves to a loopback address: ${MDC(HOST_PORT, address.getHostAddress)}, " +
+          log"but we couldn't find any external IP address!")
         logWarning("Set SPARK_LOCAL_IP if you need to bind to another address")
       }
       address
@@ -1330,7 +1335,7 @@ private[spark] object Utils
           case t: Throwable =>
             if (originalThrowable != t) {
               originalThrowable.addSuppressed(t)
-              logWarning(s"Suppressing exception in catch: ${t.getMessage}", t)
+              logWarning(log"Suppressing exception in catch: ${MDC(ERROR, t.getMessage)}", t)
             }
         }
         throw originalThrowable
@@ -1340,7 +1345,7 @@ private[spark] object Utils
       } catch {
         case t: Throwable if (originalThrowable != null && originalThrowable != t) =>
           originalThrowable.addSuppressed(t)
-          logWarning(s"Suppressing exception in finally: ${t.getMessage}", t)
+          logWarning(log"Suppressing exception in finally: ${MDC(ERROR, t.getMessage)}", t)
           throw originalThrowable
       }
     }
@@ -2185,11 +2190,13 @@ private[spark] object Utils
           if (startPort == 0) {
             // As startPort 0 is for a random free port, it is most possibly binding address is
             // not correct.
-            logWarning(s"Service$serviceString could not bind on a random free port. " +
-              "You may check whether configuring an appropriate binding address.")
+            logWarning(log"Service${MDC(SERVICE_NAME, serviceString)} " +
+              log"could not bind on a random free port. " +
+              log"You may check whether configuring an appropriate binding address.")
           } else {
-            logWarning(s"Service$serviceString could not bind on port $tryPort. " +
-              s"Attempting port ${tryPort + 1}.")
+            logWarning(log"Service${MDC(SERVICE_NAME, serviceString)} " +
+              log"could not bind on port ${MDC(PORT, tryPort)}. " +
+              log"Attempting port ${MDC(PORT2, tryPort + 1)}.")
           }
       }
     }
@@ -2454,9 +2461,9 @@ private[spark] object Utils
         (isShuffleServiceAndYarn || isTesting) && ioEncryptionDisabled && serializerIsSupported
       }
       if (!canDoPushBasedShuffle) {
-        logWarning("Push-based shuffle can only be enabled when the application is submitted " +
-          "to run in YARN mode, with external shuffle service enabled, IO encryption disabled, " +
-          "and relocation of serialized objects supported.")
+        logWarning(log"Push-based shuffle can only be enabled when the application is submitted " +
+          log"to run in YARN mode, with external shuffle service enabled, IO encryption " +
+          log"disabled, and relocation of serialized objects supported.")
       }
 
       canDoPushBasedShuffle
@@ -2517,15 +2524,15 @@ private[spark] object Utils
    */
   def getDynamicAllocationInitialExecutors(conf: SparkConf): Int = {
     if (conf.get(DYN_ALLOCATION_INITIAL_EXECUTORS) < conf.get(DYN_ALLOCATION_MIN_EXECUTORS)) {
-      logWarning(s"${DYN_ALLOCATION_INITIAL_EXECUTORS.key} less than " +
-        s"${DYN_ALLOCATION_MIN_EXECUTORS.key} is invalid, ignoring its setting, " +
-          "please update your configs.")
+      logWarning(log"${MDC(CONFIG, DYN_ALLOCATION_INITIAL_EXECUTORS.key)} less than " +
+        log"${MDC(CONFIG2, DYN_ALLOCATION_MIN_EXECUTORS.key)} is invalid, ignoring its setting, " +
+        log"please update your configs.")
     }
 
     if (conf.get(EXECUTOR_INSTANCES).getOrElse(0) < conf.get(DYN_ALLOCATION_MIN_EXECUTORS)) {
-      logWarning(s"${EXECUTOR_INSTANCES.key} less than " +
-        s"${DYN_ALLOCATION_MIN_EXECUTORS.key} is invalid, ignoring its setting, " +
-          "please update your configs.")
+      logWarning(log"${MDC(CONFIG, EXECUTOR_INSTANCES.key)} less than " +
+        log"${MDC(CONFIG2, DYN_ALLOCATION_MIN_EXECUTORS.key)} is invalid, ignoring its setting, " +
+        log"please update your configs.")
     }
 
     val initialExecutors = Seq(
@@ -2758,7 +2765,7 @@ private[spark] object Utils
       case Some("https") =>
         masterWithoutK8sPrefix
       case Some("http") =>
-        logWarning("Kubernetes master URL uses HTTP instead of HTTPS.")
+        logWarning(log"Kubernetes master URL uses HTTP instead of HTTPS.")
         masterWithoutK8sPrefix
       case _ =>
         throw new IllegalArgumentException("Invalid Kubernetes master scheme: " + masterScheme
@@ -3118,7 +3125,8 @@ private[spark] class CallerContext(
       context
     } else {
       val finalContext = context.substring(0, len)
-      logWarning(s"Truncated Spark caller context from $context to $finalContext")
+      logWarning(log"Truncated Spark caller context from ${MDC(CONTEXT, context)} " +
+        log"to ${MDC(FINAL_CONTEXT, finalContext)}")
       finalContext
     }
   }

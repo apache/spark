@@ -35,7 +35,6 @@ import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_SECOND
-import org.apache.spark.sql.execution.HiveResult.getTimeFormatters
 import org.apache.spark.sql.internal.{SQLConf, VariableSubstitution}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{Utils => SparkUtils}
@@ -119,7 +118,7 @@ private[hive] class SparkExecuteStatementOperation(
     val rows = iter.take(maxRows).toList
     log.debug(s"Returning result set with ${rows.length} rows from offsets " +
       s"[${iter.getFetchStart}, ${iter.getPosition}) with $statementId")
-    RowSetUtils.toTRowSet(offset, rows, dataTypes, getProtocolVersion, getTimeFormatters)
+    RowSetUtils.toTRowSet(offset, rows, dataTypes, getProtocolVersion)
   }
 
   def getResultSetSchema: TTableSchema = resultSchema

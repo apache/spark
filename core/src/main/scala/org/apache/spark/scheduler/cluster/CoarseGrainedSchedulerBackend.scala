@@ -33,7 +33,8 @@ import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.ExecutorLogUrlHandler
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.ERROR
+import org.apache.spark.internal.LogKeys
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Network._
 import org.apache.spark.resource.ResourceProfile
@@ -181,8 +182,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
               makeOffers(executorId)
             case None =>
               // Ignoring the update since we don't know about the executor.
-              logWarning(s"Ignored task status update ($taskId state $state) " +
-                s"from unknown executor with ID $executorId")
+              logWarning(log"Ignored task status update (${MDC(TASK_ID, taskId)} " +
+                log"state ${MDC(TASK_STATE, state)}) " +
+                log"from unknown executor with ID ${MDC(LogKeys.EXECUTOR_ID, executorId)}")
           }
         }
 
@@ -199,7 +201,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
               KillTask(taskId, executorId, interruptThread, reason))
           case None =>
             // Ignoring the task kill since the executor is not registered.
-            logWarning(s"Attempted to kill task $taskId for unknown executor $executorId.")
+            logWarning(log"Attempted to kill task ${MDC(TASK_ID, taskId)} " +
+              log"for unknown executor ${MDC(LogKeys.EXECUTOR_ID, executorId)}.")
         }
 
       case KillExecutorsOnHost(host) =>
@@ -340,7 +343,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
       // Do not change this code without running the K8s integration suites
       case ExecutorDecommissioning(executorId) =>
-        logWarning(s"Received executor $executorId decommissioned message")
+        logWarning(log"Received executor ${MDC(LogKeys.EXECUTOR_ID, executorId)} " +
+          log"decommissioned message")
         context.reply(
           decommissionExecutor(
             executorId,
@@ -952,7 +956,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     val response = withLock {
       val (knownExecutors, unknownExecutors) = executorIds.partition(executorDataMap.contains)
       unknownExecutors.foreach { id =>
-        logWarning(s"Executor to kill $id does not exist!")
+        logWarning(log"Executor to kill ${MDC(LogKeys.EXECUTOR_ID, id)} does not exist!")
       }
 
       // If an executor is already pending to be removed, do not kill it again (SPARK-9795)

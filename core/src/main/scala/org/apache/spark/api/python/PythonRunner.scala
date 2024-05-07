@@ -31,7 +31,8 @@ import scala.util.control.NonFatal
 
 import org.apache.spark._
 import org.apache.spark.api.python.PythonFunction.PythonAccumulator
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.{BUFFER_SIZE, EXECUTOR_CORES, Python}
 import org.apache.spark.internal.config.Python._
 import org.apache.spark.rdd.InputFileBlockHolder
@@ -592,7 +593,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
             // Mimic the task name used in `Executor` to help the user find out the task to blame.
             val taskName = s"${context.partitionId()}.${context.attemptNumber()} " +
               s"in stage ${context.stageId()} (TID ${context.taskAttemptId()})"
-            logWarning(s"Incomplete task $taskName interrupted: Attempting to kill Python Worker")
+            logWarning(log"Incomplete task ${MDC(TASK_NAME, taskName)} " +
+              log"interrupted: Attempting to kill Python Worker")
             env.destroyPythonWorker(
               pythonExec, workerModule, daemonModule, envVars.asScala.toMap, worker)
           } catch {

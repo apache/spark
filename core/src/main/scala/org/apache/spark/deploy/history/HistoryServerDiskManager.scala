@@ -25,7 +25,8 @@ import scala.collection.mutable.{HashMap, ListBuffer}
 import org.apache.commons.io.FileUtils
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.History.HybridStoreDiskBackend.ROCKSDB
 import org.apache.spark.status.KVUtils
@@ -246,7 +247,8 @@ private class HistoryServerDiskManager(
         logInfo(s"Deleted ${evicted.size} store(s) to free ${Utils.bytesToString(freed)} " +
           s"(target = ${Utils.bytesToString(size)}).")
       } else {
-        logWarning(s"Unable to free any space to make room for ${Utils.bytesToString(size)}.")
+        logWarning(log"Unable to free any space to make room for " +
+          log"${MDC(NUM_BYTES, Utils.bytesToString(size))}.")
       }
     }
   }
@@ -312,8 +314,9 @@ private class HistoryServerDiskManager(
       if (committedUsage.get() > maxUsage) {
         val current = Utils.bytesToString(committedUsage.get())
         val max = Utils.bytesToString(maxUsage)
-        logWarning(s"Commit of application $appId / $attemptId causes maximum disk usage to be " +
-          s"exceeded ($current > $max)")
+        logWarning(log"Commit of application ${MDC(APP_ID, appId)} / " +
+          log"${MDC(APP_ATTEMPT_ID, attemptId)} causes maximum disk usage to be " +
+          log"exceeded (${MDC(NUM_BYTES, current)} > ${MDC(NUM_BYTES_MAX, max)}")
       }
 
       updateApplicationStoreInfo(appId, attemptId, newSize)

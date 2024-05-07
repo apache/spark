@@ -434,10 +434,11 @@ object ParquetUtils extends Logging {
         classOf[OutputCommitter])
 
     if (conf.get(SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key) == null) {
-      logInfo("Using default output committer for Parquet: " +
-        classOf[ParquetOutputCommitter].getCanonicalName)
+      logInfo(log"Using default output committer for Parquet: " +
+        log"${MDC(CLASS_NAME, classOf[ParquetOutputCommitter].getCanonicalName)}")
     } else {
-      logInfo("Using user defined output committer for Parquet: " + committerClass.getCanonicalName)
+      logInfo(log"Using user defined output committer for Parquet: " +
+        log"${MDC(CLASS_NAME, committerClass.getCanonicalName)}")
     }
 
     conf.setClass(
