@@ -46,7 +46,7 @@ import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.{Executor, ExecutorMetrics, ExecutorMetricsSource}
 import org.apache.spark.input.{FixedLengthBinaryInputFormat, PortableDataStream, StreamInputFormat, WholeTextFileInputFormat}
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey
+import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests._
 import org.apache.spark.internal.config.UI._
@@ -747,15 +747,15 @@ class SparkContext(config: SparkConf) extends Logging {
           case Some(endpointRef) =>
             Some(endpointRef.askSync[Array[ThreadStackTrace]](TriggerThreadDump))
           case None =>
-            logWarning(s"Executor $executorId might already have stopped and " +
-              "can not request thread dump from it.")
+            logWarning(log"Executor ${MDC(LogKeys.EXECUTOR_ID, executorId)} " +
+              log"might already have stopped and can not request thread dump from it.")
             None
         }
       }
     } catch {
       case e: Exception =>
         logError(
-          log"Exception getting thread dump from executor ${MDC(LogKey.EXECUTOR_ID, executorId)}",
+          log"Exception getting thread dump from executor ${MDC(LogKeys.EXECUTOR_ID, executorId)}",
           e)
         None
     }
@@ -779,8 +779,8 @@ class SparkContext(config: SparkConf) extends Logging {
           case Some(endpointRef) =>
             Some(endpointRef.askSync[Array[String]](TriggerHeapHistogram))
           case None =>
-            logWarning(s"Executor $executorId might already have stopped and " +
-              "can not request heap histogram from it.")
+            logWarning(log"Executor ${MDC(LogKeys.EXECUTOR_ID, executorId)} " +
+              log"might already have stopped and can not request heap histogram from it.")
             None
         }
       }
@@ -788,7 +788,7 @@ class SparkContext(config: SparkConf) extends Logging {
       case e: Exception =>
         logError(
           log"Exception getting heap histogram from " +
-            log"executor ${MDC(LogKey.EXECUTOR_ID, executorId)}", e)
+            log"executor ${MDC(LogKeys.EXECUTOR_ID, executorId)}", e)
         None
     }
   }
@@ -1785,8 +1785,9 @@ class SparkContext(config: SparkConf) extends Logging {
     val schemeCorrectedURI = uri.getScheme match {
       case null => new File(path).getCanonicalFile.toURI
       case "local" =>
-        logWarning(s"File with 'local' scheme $path is not supported to add to file server, " +
-          s"since it is already available on every node.")
+        logWarning(log"File with 'local' scheme ${MDC(LogKeys.PATH, path)} " +
+          log"is not supported to add to file server, " +
+          log"since it is already available on every node.")
         return
       case _ => uri
     }
@@ -1859,8 +1860,9 @@ class SparkContext(config: SparkConf) extends Logging {
       Utils.unpack(source, dest)
       postEnvironmentUpdate()
     } else {
-      logWarning(s"The path $path has been added already. Overwriting of added paths " +
-        "is not supported in the current version.")
+      logWarning(log"The path ${MDC(LogKeys.PATH, path)} " +
+        log"has been added already. Overwriting of added paths " +
+        log"is not supported in the current version.")
     }
   }
 
@@ -2150,7 +2152,7 @@ class SparkContext(config: SparkConf) extends Logging {
         Seq(env.rpcEnv.fileServer.addJar(file))
       } catch {
         case NonFatal(e) =>
-          logError(log"Failed to add ${MDC(LogKey.PATH, path)} to Spark environment", e)
+          logError(log"Failed to add ${MDC(LogKeys.PATH, path)} to Spark environment", e)
           Nil
       }
     }
@@ -2171,7 +2173,7 @@ class SparkContext(config: SparkConf) extends Logging {
           Seq(path)
         } catch {
           case NonFatal(e) =>
-            logError(log"Failed to add ${MDC(LogKey.PATH, path)} to Spark environment", e)
+            logError(log"Failed to add ${MDC(LogKeys.PATH, path)} to Spark environment", e)
             Nil
         }
       } else {
@@ -2220,8 +2222,9 @@ class SparkContext(config: SparkConf) extends Logging {
         }
         if (existed.nonEmpty) {
           val jarMessage = if (scheme != "ivy") "JAR" else "dependency jars of Ivy URI"
-          logWarning(s"The $jarMessage $path at ${existed.mkString(",")} has been added already." +
-            " Overwriting of added jar is not supported in the current version.")
+          logWarning(log"The ${MDC(LogKeys.JAR_MESSAGE, jarMessage)} ${MDC(LogKeys.PATH, path)} " +
+            log"at ${MDC(LogKeys.EXISTING_PATH, existed.mkString(","))} has been added already." +
+            log" Overwriting of added jar is not supported in the current version.")
         }
       }
     }
@@ -2742,9 +2745,9 @@ class SparkContext(config: SparkConf) extends Logging {
     // its own local file system, which is incorrect because the checkpoint files
     // are actually on the executor machines.
     if (!isLocal && Utils.nonLocalPaths(directory).isEmpty) {
-      logWarning("Spark is not running in local mode, therefore the checkpoint directory " +
-        s"must not be on the local filesystem. Directory '$directory' " +
-        "appears to be on the local filesystem.")
+      logWarning(log"Spark is not running in local mode, therefore the checkpoint directory " +
+        log"must not be on the local filesystem. Directory '${MDC(LogKeys.PATH, directory)}' " +
+        log"appears to be on the local filesystem.")
     }
 
     checkpointDir = Option(directory).map { dir =>
@@ -2905,10 +2908,11 @@ object SparkContext extends Logging {
         // its creationSite field being null:
         val otherContextCreationSite =
           Option(otherContext.creationSite).map(_.longForm).getOrElse("unknown location")
-        val warnMsg = "Another SparkContext is being constructed (or threw an exception in its" +
-          " constructor). This may indicate an error, since only one SparkContext should be" +
-          " running in this JVM (see SPARK-2243)." +
-          s" The other SparkContext was created at:\n$otherContextCreationSite"
+        val warnMsg = log"Another SparkContext is being constructed (or threw an exception in its" +
+          log" constructor). This may indicate an error, since only one SparkContext should be" +
+          log" running in this JVM (see SPARK-2243)." +
+          log" The other SparkContext was created at:\n" +
+          log"${MDC(LogKeys.CONTEXT_CREATION_SITE, otherContextCreationSite)}"
         logWarning(warnMsg)
       }
     }

@@ -172,6 +172,7 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
   test("StreamingQueryProgress - json") {
     assert(compact(parse(testProgress1.json)) === testProgress1.json)
     assert(compact(parse(testProgress2.json)) === testProgress2.json)
+    assert(compact(parse(testProgress3.json)) === testProgress3.json)
   }
 
   test("StreamingQueryProgress - toString") {
@@ -497,6 +498,28 @@ object StreamingQueryStatusAndProgressSuite {
       "event_a" -> row(schema1, null, -20.7d),
       "event_b1" -> row(schema2, 33L, "foo", "bar"),
       "event_b2" -> row(schema2, 200L, "fzo", "baz")).asJava)
+  )
+
+  val testProgress3 = new StreamingQueryProgress(
+    id = UUID.randomUUID,
+    runId = UUID.randomUUID,
+    name = "myName",
+    timestamp = "2024-05-28T00:00:00.233Z",
+    batchId = 2L,
+    batchDuration = 0L,
+    durationMs = null,
+    eventTime = null,
+    stateOperators = Array(new StateOperatorProgress(operatorName = "op1",
+      numRowsTotal = 0, numRowsUpdated = 1, allUpdatesTimeMs = 1, numRowsRemoved = 2,
+      allRemovalsTimeMs = 34, commitTimeMs = 23, memoryUsedBytes = 3, numRowsDroppedByWatermark = 0,
+      numShufflePartitions = 2, numStateStoreInstances = 2,
+      customMetrics = new java.util.HashMap(Map("stateOnCurrentVersionSizeBytes" -> 2L,
+        "loadedMapCacheHitCount" -> 1L, "loadedMapCacheMissCount" -> 0L)
+        .transform((_, v) => long2Long(v)).asJava)
+    )),
+    sources = Array(),
+    sink = SinkProgress("sink", None),
+    observedMetrics = null
   )
 
   val testStatus = new StreamingQueryStatus("active", true, false)

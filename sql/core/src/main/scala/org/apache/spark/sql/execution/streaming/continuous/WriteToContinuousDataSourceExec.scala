@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.streaming.continuous
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey._
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -49,7 +49,7 @@ case class WriteToContinuousDataSourceExec(write: StreamingWrite, query: SparkPl
     val rdd = new ContinuousWriteRDD(queryRdd, writerFactory, metrics)
 
     logInfo(log"Start processing data source write support: ${MDC(STREAMING_WRITE, write)}. " +
-      log"The input RDD has ${MDC(NUM_PARTITION, rdd.partitions.length)} partitions.")
+      log"The input RDD has ${MDC(NUM_PARTITIONS, rdd.partitions.length)} partitions.")
     EpochCoordinatorRef.get(
       sparkContext.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY),
       sparkContext.env)

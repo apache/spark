@@ -30,8 +30,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkContext, SparkEnv, SparkUnsupportedOperationException}
-import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey._
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -585,7 +584,21 @@ object StateStore extends Logging {
     }
 
     def stop(): Unit = {
-      threadPool.shutdown()
+      logInfo("Shutting down MaintenanceThreadPool")
+      threadPool.shutdown() // Disable new tasks from being submitted
+
+      // Wait a while for existing tasks to terminate
+      if (!threadPool.awaitTermination(5 * 60, TimeUnit.SECONDS)) {
+        logWarning(
+          s"MaintenanceThreadPool is not able to be terminated within 300 seconds," +
+            " forcefully shutting down now.")
+        threadPool.shutdownNow() // Cancel currently executing tasks
+
+        // Wait a while for tasks to respond to being cancelled
+        if (!threadPool.awaitTermination(60, TimeUnit.SECONDS)) {
+          logError("MaintenanceThreadPool did not terminate")
+        }
+      }
     }
   }
 
@@ -703,9 +716,10 @@ object StateStore extends Logging {
       }
 
       if (loadTimeMs > 2000L) {
-        logWarning(log"Loaded state store provider in loadTimeMs=${MDC(LOAD_TIME, loadTimeMs)} " +
-          log"for storeId=${MDC(STORE_ID, storeProviderId.storeId.toString)} and " +
-          log"queryRunId=${MDC(QUERY_RUN_ID, storeProviderId.queryRunId)}")
+        logWarning(log"Loaded state store provider in loadTimeMs=" +
+          log"${MDC(LogKeys.LOAD_TIME, loadTimeMs)} " +
+          log"for storeId=${MDC(LogKeys.STORE_ID, storeProviderId.storeId.toString)} and " +
+          log"queryRunId=${MDC(LogKeys.QUERY_RUN_ID, storeProviderId.queryRunId)}")
       }
 
       val otherProviderIds = loadedProviders.keys.filter(_ != storeProviderId).toSeq
@@ -821,18 +835,18 @@ object StateStore extends Logging {
             provider.doMaintenance()
             if (!verifyIfStoreInstanceActive(id)) {
               unload(id)
-              logInfo(log"Unloaded ${MDC(STATE_STORE_PROVIDER, provider)}")
+              logInfo(log"Unloaded ${MDC(LogKeys.STATE_STORE_PROVIDER, provider)}")
             }
           } catch {
             case NonFatal(e) =>
-              logWarning(log"Error managing ${MDC(STATE_STORE_PROVIDER, provider)}, " +
+              logWarning(log"Error managing ${MDC(LogKeys.STATE_STORE_PROVIDER, provider)}, " +
                 log"stopping management thread", e)
               threadPoolException.set(e)
           } finally {
             val duration = System.currentTimeMillis() - startTime
             val logMsg =
-              log"Finished maintenance task for provider=${MDC(STATE_STORE_PROVIDER, id)}" +
-                log" in elapsed_time=${MDC(TIME_UNITS, duration)}\n"
+              log"Finished maintenance task for provider=${MDC(LogKeys.STATE_STORE_PROVIDER, id)}" +
+                log" in elapsed_time=${MDC(LogKeys.TIME_UNITS, duration)}\n"
             if (duration > 5000) {
               logInfo(logMsg)
             } else {
@@ -844,7 +858,7 @@ object StateStore extends Logging {
           }
         })
       } else {
-        logInfo(log"Not processing partition ${MDC(PARTITION_ID, id)} " +
+        logInfo(log"Not processing partition ${MDC(LogKeys.PARTITION_ID, id)} " +
           log"for maintenance because it is currently " +
           log"being processed")
       }
@@ -861,9 +875,9 @@ object StateStore extends Logging {
         .map(_.reportActiveInstance(storeProviderId, host, executorId, otherProviderIds))
         .getOrElse(Seq.empty[StateStoreProviderId])
       logInfo(log"Reported that the loaded instance " +
-        log"${MDC(STATE_STORE_PROVIDER, storeProviderId)} is active")
+        log"${MDC(LogKeys.STATE_STORE_PROVIDER, storeProviderId)} is active")
       logDebug(log"The loaded instances are going to unload: " +
-        log"${MDC(STATE_STORE_PROVIDER, providerIdsToUnload.mkString(", "))}")
+        log"${MDC(LogKeys.STATE_STORE_PROVIDER, providerIdsToUnload.mkString(", "))}")
       providerIdsToUnload
     } else {
       Seq.empty[StateStoreProviderId]
@@ -895,7 +909,7 @@ object StateStore extends Logging {
         _coordRef = StateStoreCoordinatorRef.forExecutor(env)
       }
       logInfo(log"Retrieved reference to StateStoreCoordinator: " +
-        log"${MDC(STATE_STORE_PROVIDER, _coordRef)}")
+        log"${MDC(LogKeys.STATE_STORE_PROVIDER, _coordRef)}")
       Some(_coordRef)
     } else {
       _coordRef = null

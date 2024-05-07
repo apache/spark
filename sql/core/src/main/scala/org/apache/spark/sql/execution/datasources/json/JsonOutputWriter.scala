@@ -22,7 +22,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.TaskAttemptContext
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{ENCODING, PATH}
+import org.apache.spark.internal.LogKeys.{ENCODING, PATH}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JSONOptions, JSONOptionsInRead}
 import org.apache.spark.sql.execution.datasources.{CodecStreams, OutputWriter}

@@ -33,7 +33,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{JobArtifactSet, SparkContext, SparkException, SparkThrowable}
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey._
+import org.apache.spark.internal.LogKeys.{CHECKPOINT_PATH, CHECKPOINT_ROOT, PATH, PRETTY_ID_STRING, SPARK_DATA_STREAM}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
@@ -320,6 +320,10 @@ abstract class StreamExecution(
           batchWatermarkMs = 0, batchTimestampMs = 0, sparkSessionForStream.conf)
 
         if (state.compareAndSet(INITIALIZING, ACTIVE)) {
+          // Log logical plan at the start of the query to help debug issues related to
+          // plan changes.
+          logInfo(s"Finish initializing with logical plan:\n$logicalPlan")
+
           // Unblock `awaitInitialization`
           initializationLatch.countDown()
           runActivatedStream(sparkSessionForStream)

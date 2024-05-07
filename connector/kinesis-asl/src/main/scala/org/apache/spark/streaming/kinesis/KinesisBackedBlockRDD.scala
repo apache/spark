@@ -30,7 +30,7 @@ import com.amazonaws.services.kinesis.model._
 
 import org.apache.spark._
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{ERROR, RETRY_COUNT}
+import org.apache.spark.internal.LogKeys.{ERROR, RETRY_COUNT}
 import org.apache.spark.rdd.{BlockRDD, BlockRDDPartition}
 import org.apache.spark.storage.BlockId
 import org.apache.spark.util.NextIterator
