@@ -27,6 +27,7 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
+import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.{DataFrame, Dataset, QueryTest, Row, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -2507,7 +2508,8 @@ class AdaptiveQueryExecSuite
     withTable("t3") {
       withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-        SQLConf.SHUFFLE_PARTITIONS.key -> "16777217") {
+        SQLConf.SHUFFLE_PARTITIONS.key -> (SortShuffleManager
+          .MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE + 1).toString) {
         sql("CREATE TABLE t3 USING PARQUET AS SELECT id FROM range(2)")
         val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
           """
@@ -2516,6 +2518,7 @@ class AdaptiveQueryExecSuite
             |GROUP BY id
             |LIMIT 1
             |""".stripMargin, skipCheckAnswer = true)
+        // The shuffle stage produces two rows and the limit operator should not been optimized out.
         assert(findTopLevelLimit(plan).size == 1)
         assert(findTopLevelLimit(adaptivePlan).size == 1)
       }
