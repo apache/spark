@@ -19,7 +19,7 @@ import inspect
 import os
 import sys
 from textwrap import dedent
-from typing import Any, Dict, List, IO, Tuple
+from typing import Dict, List, IO, Tuple
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.errors import PySparkRuntimeError, PySparkValueError
