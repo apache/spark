@@ -221,9 +221,7 @@ def main(infile: IO, outfile: IO) -> None:
         args, kwargs = read_arguments(infile)
 
         # Invoke the UDTF's 'analyze' method.
-        result = call_udtf_analyze_method(
-            udtf_name, handler, args, kwargs
-        )  # type: ignore[attr-defined]
+        result = call_udtf_analyze_method(udtf_name, handler, args, kwargs)
 
         # Return the analyzed schema.
         write_with_length(result.schema.json().encode("utf-8"), outfile)
