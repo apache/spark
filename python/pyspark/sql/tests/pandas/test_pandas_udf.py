@@ -262,7 +262,6 @@ class PandasUDFTestsMixin:
             .collect,
         )
 
-    # TODO(SPARK-48086): Reenable this test case
     @unittest.skipIf(
         "SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ, "Failed with different Client <> Server"
     )
@@ -289,7 +288,6 @@ class PandasUDFTestsMixin:
         with self.sql_conf({"spark.sql.execution.pandas.convertToArrowArraySafely": False}):
             df.select(["A"]).withColumn("udf", udf("A")).collect()
 
-    # TODO(SPARK-48086): Reenable this test case
     @unittest.skipIf(
         "SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ, "Failed with different Client <> Server"
     )

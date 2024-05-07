@@ -32,7 +32,6 @@ class PandasUDFScalarParityTests(ScalarPandasUDFTestsMixin, ReusedConnectTestCas
     def test_vectorized_udf_struct_with_empty_partition(self):
         super().test_vectorized_udf_struct_with_empty_partition()
 
-    # TODO(SPARK-48086): Reenable this test case
     @unittest.skipIf(
         "SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ, "Failed with different Client <> Server"
     )
