@@ -146,7 +146,8 @@ package object config {
       .doc("When true, the default log4j output format is structured JSON lines, and there will " +
         "be Mapped Diagnostic Context (MDC) from Spark added to the logs. This is useful for log " +
         "aggregation and analysis tools. When false, the default log4j output will be plain " +
-        "text and no MDC from Spark will be set.")
+        "text and no MDC from Spark will be set. Note that this configuration is not effective " +
+        "for interpreters such as spark-shell and PySpark shell.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(true)
