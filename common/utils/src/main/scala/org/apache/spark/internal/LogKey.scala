@@ -150,7 +150,7 @@ object LogKeys {
   case object DEPRECATED_KEY extends LogKey
   case object DESCRIPTION extends LogKey
   case object DESIRED_NUM_PARTITIONS extends LogKey
-  case object DESTINATION_ABSOLUTE_PATH extends LogKey
+  case object DESTINATION_PATH extends LogKey
   case object DFS_FILE extends LogKey
   case object DIFF_DELTA extends LogKey
   case object DIVISIBLE_CLUSTER_INDICES_SIZE extends LogKey
@@ -539,7 +539,7 @@ object LogKeys {
   case object SMALLEST_CLUSTER_INDEX extends LogKey
   case object SNAPSHOT_VERSION extends LogKey
   case object SOCKET_ADDRESS extends LogKey
-  case object SOURCE_ABSOLUTE_PATH extends LogKey
+  case object SOURCE_PATH extends LogKey
   case object SPARK_DATA_STREAM extends LogKey
   case object SPARK_PLAN_ID extends LogKey
   case object SPARK_VERSION extends LogKey

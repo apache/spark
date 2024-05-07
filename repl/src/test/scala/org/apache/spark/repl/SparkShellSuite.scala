@@ -26,8 +26,6 @@ import scala.concurrent.duration._
 
 import org.apache.spark.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.internal.{MDC, MessageWithContext}
-import org.apache.spark.internal.LogKeys._
 import org.apache.spark.util.ThreadUtils
 
 class SparkShellSuite extends SparkFunSuite {
@@ -66,11 +64,11 @@ class SparkShellSuite extends SparkFunSuite {
     var next = 0
     val foundMasterAndApplicationIdMessage = Promise.apply[Unit]()
     val foundAllExpectedAnswers = Promise.apply[Unit]()
-    val buffer = new ArrayBuffer[MessageWithContext]()
+    val buffer = new ArrayBuffer[String]()
     val lock = new Object
 
     def captureOutput(source: String)(line: String): Unit = lock.synchronized {
-      val newLine = log"${MDC(STREAM_SOURCE, source)}> ${MDC(OUTPUT_LINE, line)}"
+      val newLine = s"$source> $line"
 
       logInfo(newLine)
       buffer += newLine
@@ -81,9 +79,7 @@ class SparkShellSuite extends SparkFunSuite {
 
       // If we haven't found all expected answers and another expected answer comes up...
       if (next < expectedAnswers.size && line.contains(expectedAnswers(next))) {
-        logInfo(log"${MDC(STREAM_SOURCE, source)}> found expected" +
-          log" output line ${MDC(OUTPUT_LINE_NUMBER, next)}:" +
-          log" '${MDC(EXPECTED_ANSWER, expectedAnswers(next))}'")
+        logInfo(s"$source> found expected output line $next: '${expectedAnswers(next)}'")
         next += 1
         // If all expected answers have been found...
         if (next == expectedAnswers.size) {
@@ -133,7 +129,7 @@ class SparkShellSuite extends SparkFunSuite {
            |Exception: $cause
            |Failed to capture next expected output "${expectedAnswers(next)}" within $timeout.
            |
-           |${buffer.map(_.message).mkString("\n")}
+           |${buffer.mkString("\n")}
            |===========================
            |End SparkShellSuite failure output
            |===========================
