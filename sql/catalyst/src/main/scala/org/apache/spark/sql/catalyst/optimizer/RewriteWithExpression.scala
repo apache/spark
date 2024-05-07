@@ -75,7 +75,7 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
 
   private def fixDanglingCommonExpressionRefs(
     exprsWithDanglingRefs: Seq[Expression],
-    exprsWithMissingRefs: Seq[Expression],
+    exprsWithMissingRefs: Seq[Expression]
   ): (Seq[Expression], Seq[Expression]) = {
     lazy val defs = exprsWithMissingRefs.flatMap(_.collect {
       case d: CommonExpressionDef => d.id -> d.child
