@@ -1769,7 +1769,7 @@ class DataFrame(ParentDataFrame):
         return (table, schema)
 
     def _toArrow(self) -> "pa.Table":
-        table = self._to_table()[0]
+        table, _ = self._to_table()
         return table
 
     def toPandas(self) -> "PandasDataFrameLike":
