@@ -1059,4 +1059,14 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     })
   }
 
+  test("GROUP BY supports explicit collation") {
+    val table = "table_agg"
+    withTable(table) {
+      sql(s"create table $table (a string collate utf8_binary_lcase) using parquet")
+      sql(s"insert into $table values ('aaa'), ('AAA')")
+      checkAnswer(sql(s"select a, count(*) from $table group by a collate utf8_binary_lcase"),
+        Seq(Row("aaa", 2)))
+    }
+  }
+
 }
