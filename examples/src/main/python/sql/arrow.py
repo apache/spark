@@ -34,7 +34,7 @@ require_minimum_pyarrow_version()
 
 
 def dataframe_to_arrow_table_example(spark: SparkSession) -> None:
-    import pyarrow as pa # noqa: F401
+    import pyarrow as pa  # noqa: F401
     from pyspark.sql.functions import rand
 
     # Create a Spark DataFrame
