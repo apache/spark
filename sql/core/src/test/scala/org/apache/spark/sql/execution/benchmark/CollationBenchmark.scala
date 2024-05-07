@@ -219,7 +219,7 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
       val buffer = new OpenHashMap[AnyRef, Long](value.size)
       value.zipWithIndex.sliding(20, 20).foreach(slide => {
         slide.foreach { case (v: UTF8String, i: Int) =>
-          buffer.update(v, (i % 1000).toLong)
+          buffer.update(v.toString + s"_${i.toString}", (i % 1000).toLong)
         }
         modeNoCollation.eval(buffer)
       })
