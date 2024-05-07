@@ -174,4 +174,8 @@ public class Logger {
       return new MessageThrowable(message, throwable);
     }
   }
+
+  public org.slf4j.Logger getSlf4jLogger() {
+    return slf4jLogger;
+  }
 }

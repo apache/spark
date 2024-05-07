@@ -42,16 +42,19 @@ import org.apache.hive.service.cli.thrift.ThriftCLIService;
 import org.apache.thrift.TProcessorFactory;
 import org.apache.thrift.transport.TTransportException;
 import org.apache.thrift.transport.TTransportFactory;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import org.apache.spark.internal.Logger;
+import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 
 /**
  * This class helps in some aspects of authentication. It creates the proper Thrift classes for the
  * given configuration as well as helps with authenticating requests.
  */
 public class HiveAuthFactory {
-  private static final Logger LOG = LoggerFactory.getLogger(HiveAuthFactory.class);
 
+  private static final Logger LOG = LoggerFactory.getLogger(HiveAuthFactory.class);
 
   public enum AuthTypes {
     NOSASL("NOSASL"),
@@ -285,9 +288,10 @@ public class HiveAuthFactory {
     try {
       return delegationTokenManager.verifyDelegationToken(delegationToken);
     } catch (IOException e) {
-      String msg =  "Error verifying delegation token " + delegationToken;
-      LOG.error(msg, e);
-      throw new HiveSQLException(msg, "08S01", e);
+      LOG.error("Error verifying delegation token {}", e,
+        MDC.of(LogKeys.DELEGATION_TOKEN$.MODULE$, delegationToken));
+      throw new HiveSQLException("Error verifying delegation token " + delegationToken,
+        "08S01", e);
     }
   }
 
