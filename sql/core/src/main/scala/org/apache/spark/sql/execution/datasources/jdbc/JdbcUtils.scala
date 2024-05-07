@@ -502,7 +502,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case TimestampType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         val t = dialect.getDatabaseCalendar match {
-          case c @ Calendar => rs.getTimestamp(pos + 1, c)
+          case Some(cal) => rs.getTimestamp(pos + 1, cal)
           case None => rs.getTimestamp(pos + 1)
         }
 
@@ -671,17 +671,17 @@ object JdbcUtils extends Logging with SQLConfHelper {
       if (conf.datetimeJava8ApiEnabled) {
         (stmt: PreparedStatement, row: Row, pos: Int) =>
           dialect.getDatabaseCalendar match {
-            case c @ Calendar =>
+            case Some(cal) =>
               stmt.setTimestamp(
-                pos + 1, toJavaTimestamp(instantToMicros(row.getAs[Instant](pos))), c)
+                pos + 1, toJavaTimestamp(instantToMicros(row.getAs[Instant](pos))), cal)
             case None =>
               stmt.setTimestamp(pos + 1, toJavaTimestamp(instantToMicros(row.getAs[Instant](pos))))
           }
       } else {
         (stmt: PreparedStatement, row: Row, pos: Int) =>
           dialect.getDatabaseCalendar match {
-            case c @ Calendar =>
-              stmt.setTimestamp(pos + 1, row.getAs[java.sql.Timestamp](pos), c)
+            case Some(cal) =>
+              stmt.setTimestamp(pos + 1, row.getAs[java.sql.Timestamp](pos), cal)
             case None =>
               stmt.setTimestamp(pos + 1, row.getAs[java.sql.Timestamp](pos))
           }
