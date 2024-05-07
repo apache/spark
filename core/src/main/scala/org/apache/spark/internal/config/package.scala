@@ -153,9 +153,10 @@ package object config {
 
   private[spark] val LEGACY_TASK_NAME_MDC_ENABLED =
     ConfigBuilder("spark.log.legacyTaskNameMdc.enabled")
-      .doc("When true, the MDC key `mdc.taskName` will be set in the logs, which is consistent " +
-        "with the behavior of Spark 3.1 to Spark 3.5 releases. When false, the logging framework " +
-        "will use `task_name` as the MDC key for consistency with other new MDC keys.")
+      .doc("When true, the MDC (Mapped Diagnostic Context) key `mdc.taskName` will be set in the " +
+        "log output, which is the behavior of Spark version 3.1 through Spark 3.5 releases. " +
+        "When false, the logging framework will use `task_name` as the MDC key, " +
+        "aligning it with the naming convention of newer MDC keys introduced in Spark 4.0 release.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
