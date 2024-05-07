@@ -656,6 +656,7 @@ def try_divide(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     """
     return _invoke_function_over_columns("try_divide", left, right)
 
+
 @_try_remote_functions
 def try_remainder(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     """

@@ -139,8 +139,10 @@ case class TryDivide(left: Expression, right: Expression, replacement: Expressio
   examples = """
     Examples:
       > SELECT _FUNC_(3, 2);
-       1.5
+       1
       > SELECT _FUNC_(2L, 2L);
+       0
+      > SELECT _FUNC_(3.0, 2.0);
        1.0
       > SELECT _FUNC_(1, 0);
        NULL

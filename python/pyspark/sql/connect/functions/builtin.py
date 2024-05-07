@@ -933,6 +933,7 @@ def try_divide(left: "ColumnOrName", right: "ColumnOrName") -> Column:
 
 try_divide.__doc__ = pysparkfuncs.try_divide.__doc__
 
+
 def try_remainder(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("try_remainder", left, right)
 
