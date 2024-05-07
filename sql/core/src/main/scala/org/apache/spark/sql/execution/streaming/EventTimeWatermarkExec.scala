@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Predica
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReference
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark.updateEventTimeColumn
+import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.microsToMillis
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
@@ -131,13 +132,13 @@ case class EventTimeWatermarkExec(
 case class UpdateEventTimeColumnExec(
     eventTime: Attribute,
     delay: CalendarInterval,
-    eventTimeWatermarkForEviction: Option[Long],
+    eventTimeWatermarkForLateEvents: Option[Long],
     child: SparkPlan) extends UnaryExecNode {
 
   override protected def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitions[InternalRow] { dataIterator =>
       val watermarkExpression = WatermarkSupport.watermarkExpression(
-        Some(eventTime), eventTimeWatermarkForEviction)
+        Some(eventTime), eventTimeWatermarkForLateEvents)
 
       if (watermarkExpression.isEmpty) {
         // watermark should always be defined in this node.
@@ -157,7 +158,7 @@ case class UpdateEventTimeColumnExec(
             val eventTimeProjection = UnsafeProjection.create(boundEventTimeExpression)
             val rowEventTime = eventTimeProjection(row)
             throw QueryExecutionErrors.emittedRowsAreOlderThanWatermark(
-              eventTimeWatermarkForEviction.get, rowEventTime.getLong(0))
+              eventTimeWatermarkForLateEvents.get, rowEventTime.getLong(0))
           }
           row
         }
@@ -166,6 +167,8 @@ case class UpdateEventTimeColumnExec(
   }
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning
 
   // Update the metadata on the eventTime column to include the desired delay.
   override val output: Seq[Attribute] = {

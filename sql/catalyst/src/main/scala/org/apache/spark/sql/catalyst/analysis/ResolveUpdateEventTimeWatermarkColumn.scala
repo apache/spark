@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan, UpdateEventTimeWatermarkColumn}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.UPDATE_EVENT_TIME_WATERMARK_COLUMN
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
@@ -31,8 +32,9 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  */
 object ResolveUpdateEventTimeWatermarkColumn extends Rule[LogicalPlan] {
 
-  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsDown {
-    case u: UpdateEventTimeWatermarkColumn =>
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
+    _.containsPattern(UPDATE_EVENT_TIME_WATERMARK_COLUMN), ruleId) {
+    case u: UpdateEventTimeWatermarkColumn if u.delay.isEmpty && u.childrenResolved =>
       val existingWatermarkDelay = u.child.collect {
         case EventTimeWatermark(_, delay, _) => delay
       }

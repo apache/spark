@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark.updateEventTimeColumn
-import org.apache.spark.sql.catalyst.trees.TreePattern.{EVENT_TIME_WATERMARK, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{EVENT_TIME_WATERMARK, TreePattern, UPDATE_EVENT_TIME_WATERMARK_COLUMN}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.types.MetadataBuilder
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -99,6 +99,9 @@ case class UpdateEventTimeWatermarkColumn(
     eventTime: Attribute,
     delay: Option[CalendarInterval],
     child: LogicalPlan) extends UnaryNode {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(UPDATE_EVENT_TIME_WATERMARK_COLUMN)
+
   override def output: Seq[Attribute] = {
     if (delay.isDefined) {
       val delayMs = EventTimeWatermark.getDelayMs(delay.get)

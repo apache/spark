@@ -358,14 +358,14 @@ class IncrementalExecution(
         t: TransformWithStateExec)) if t.stateInfo.isDefined =>
 
         val stateInfo = t.stateInfo.get
-        val eventTimeWatermarkForLateEvents = inputWatermarkForLateEvents(stateInfo)
-        val eventTimeWatermarkForEviction = inputWatermarkForLateEvents(stateInfo)
+        val iwLateEvents = inputWatermarkForLateEvents(stateInfo)
+        val iwEviction = inputWatermarkForEviction(stateInfo)
 
-        UpdateEventTimeColumnExec(eventTime, delay, eventTimeWatermarkForEviction,
+        UpdateEventTimeColumnExec(eventTime, delay, iwLateEvents,
           SerializeFromObjectExec(serializer,
             t.copy(
-              eventTimeWatermarkForLateEvents = eventTimeWatermarkForLateEvents,
-              eventTimeWatermarkForEviction = eventTimeWatermarkForEviction)
+              eventTimeWatermarkForLateEvents = iwLateEvents,
+              eventTimeWatermarkForEviction = iwEviction)
           ))
 
 

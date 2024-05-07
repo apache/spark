@@ -88,23 +88,13 @@ class StatefulProcessorEmittingRowsOlderThanWatermark
       inputRows: Iterator[InputEventRow],
       timerValues: TimerValues,
       expiredTimerInfo: ExpiredTimerInfo): Iterator[OutputRow] = {
-    if (timerValues.getCurrentWatermarkInMs() > 0) {
-      Iterator.single(
-        OutputRow(
-          key,
-          Timestamp.from(Instant.ofEpochMilli(timerValues.getCurrentWatermarkInMs() - 1)),
-          inputRows.size))
-    } else {
-      var minEventTime = inputRows.next().eventTime
-      var count = 1
-      inputRows.foreach { row =>
-        if (row.eventTime.before(minEventTime)) {
-          minEventTime = row.eventTime
-        }
-        count += 1
-      }
-      Iterator.single(OutputRow(key, minEventTime, count))
-    }
+    Iterator.single(
+      OutputRow(
+        key,
+        // always emit value with eventTime 1 which will fail after first batch, as
+        // watermark will move past 0L
+        Timestamp.from(Instant.ofEpochMilli(1)),
+        inputRows.size))
   }
 }
 
@@ -329,16 +319,72 @@ class TransformWithStateChainingSuite extends StreamTest {
 
       testStream(result, OutputMode.Append())(
         AddData(inputData, InputEventRow("k1", timestamp("2024-02-01 00:00:00"), "e1")),
-        CheckNewAnswer(OutputRow("k1", timestamp("2024-02-01 00:00:00"), 1)),
-        // this batch would fail now
+        // after first batch, the rows are emitted with timestamp 1 ms after epoch
+        CheckNewAnswer(OutputRow("k1", Timestamp.from(Instant.ofEpochMilli(1)), 1)),
+        // this batch would fail now, because watermark will move past 1ms after epoch
         AddData(inputData, InputEventRow("k1", timestamp("2024-02-02 00:00:00"), "e1")),
         ExpectFailure[SparkRuntimeException] { ex =>
           checkError(ex.asInstanceOf[SparkThrowable],
             "EMITTING_ROWS_OLDER_THAN_WATERMARK_NOT_ALLOWED",
             parameters = Map("currentWatermark" -> "1706774340000",
-              "emittedRowEventTime" -> "1706774339999000"))
+              "emittedRowEventTime" -> "1000"))
         }
       )
+    }
+  }
+
+  test("ensure that watermark delay is resolved from a view") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
+      val inputData = MemoryStream[InputEventRow]
+      inputData.toDS()
+        .withWatermark("eventTime", "1 minute")
+        .createTempView("tempViewWithWatermark")
+
+      val result = spark.readStream.table("tempViewWithWatermark")
+        .as[InputEventRow]
+        .groupByKey(x => x.key)
+        .transformWithState[OutputRow](
+          new TestStatefulProcessor(),
+          "outputEventTime",
+          OutputMode.Append())
+
+      testStream(result, OutputMode.Append())(
+        AddData(inputData, InputEventRow("k1", timestamp("2024-02-01 00:00:00"), "e1")),
+        CheckNewAnswer(OutputRow("k1", timestamp("2024-02-01 00:00:00"), 1)),
+        Execute("assertWatermarkEquals") { q =>
+          assertWatermarkEquals(q, timestamp("2024-01-31 23:59:00"))
+        }
+      )
+    }
+  }
+
+  test("ensure that query fails if there is no watermark when reading from a view") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
+      val inputData = MemoryStream[InputEventRow]
+      inputData.toDS()
+        .createTempView("tempViewWithoutWatermark")
+
+      val ex = intercept[AnalysisException] {
+        val result = spark.readStream.table("tempViewWithoutWatermark")
+          .as[InputEventRow]
+          .groupByKey(x => x.key)
+          .transformWithState[OutputRow](
+            new TestStatefulProcessor(),
+            "outputEventTime",
+            OutputMode.Append())
+
+        testStream(result, OutputMode.Append())(
+          AddData(inputData, InputEventRow("k1", timestamp("2024-02-01 00:00:00"), "e1")),
+          ExpectFailure[SparkRuntimeException] { ex =>
+            checkError(ex.asInstanceOf[AnalysisException],
+              "CANNOT_ASSIGN_EVENT_TIME_COLUMN_WITHOUT_WATERMARK")
+          }
+        )
+      }
+
+      checkError(ex, "CANNOT_ASSIGN_EVENT_TIME_COLUMN_WITHOUT_WATERMARK")
     }
   }
 

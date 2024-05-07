@@ -448,7 +448,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           // This is a sanity check. We should not reach here as delay is updated during
           // query plan resolution in [[ResolveUpdateEventTimeWatermarkColumn]] Analyzer rule.
           throw SparkException.internalError(
-            "You hit a query analyzer bug. Please report your query to Spark user mailing list.")
+            "No watermark delay found in UpdateEventTimeWatermarkColumn logical node. " +
+              "You have hit a query analyzer bug. " +
+              "Please report your query to Spark user mailing list.")
         }
         UpdateEventTimeColumnExec(columnName, delay.get, None, planLater(child)) :: Nil
 
