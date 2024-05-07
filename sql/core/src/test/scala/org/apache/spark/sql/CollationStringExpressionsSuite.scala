@@ -819,17 +819,13 @@ class CollationStringExpressionsSuite
         "('B'), ('B'), ('B'), ('B')")
       val query = "SELECT mode(collate(i, 'UTF8_BINARY_LCASE')) FROM t"
       checkAnswer(sql(query), Row("b"))
+      assert(sql(query).schema.fields.head.dataType.sameType(StringType("UTF8_BINARY_LCASE")))
+
     }
   }
 
-  test("Support mode for string expression with collation ID") {
-    val query = "SELECT mode(collate('lorem epsum', 'UTF8_BINARY_LCASE'))"
-    checkAnswer(sql(query), Row("lorem epsum"))
-    assert(sql(query).schema.fields.head.dataType.sameType(StringType("UTF8_BINARY_LCASE")))
-  }
-
   test("Support Mode.eval(buffer)") {
-    val myMode = Mode(child = Literal("some_column_name"), collationEnabled = true)
+    val myMode = Mode(child = Literal("some_column_name"))
     val buffer = new OpenHashMap[AnyRef, Long](5)
     buffer.update("b", 1L)
     buffer.update("B", 1L)
@@ -848,8 +844,7 @@ class CollationStringExpressionsSuite
 
   test("Support Mode.eval(buffer) with non-default collation") {
     val myMode = Mode(
-      child = Literal.create("some_column_name", StringType("utf8_binary_lcase")),
-      collationEnabled = true)
+      child = Literal.create("some_column_name", StringType("utf8_binary_lcase")))
     val buffer = new OpenHashMap[AnyRef, Long](11)
     buffer.update("b", 2L)
     buffer.update("B", 2L)
