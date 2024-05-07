@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.types.{ArrayType, StringType, StructType}
 
 object RewriteCollationJoin extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUpWithNewOutput {
     case j @ Join(_, _, _, Some(condition), _) =>
       val newCondition = condition transform {
         case EqualTo(l: AttributeReference, r: AttributeReference) =>
@@ -58,8 +58,6 @@ object RewriteCollationJoin extends Rule[LogicalPlan] {
               } else {
                 EqualTo(CollationKey(l), CollationKey(r))
               }
-            case _ =>
-              return plan
           }
         case EqualNullSafe(l: AttributeReference, r: AttributeReference) =>
           (l.dataType, r.dataType) match {
@@ -92,10 +90,9 @@ object RewriteCollationJoin extends Rule[LogicalPlan] {
               } else {
                 EqualNullSafe(CollationKey(l), CollationKey(r))
               }
-            case _ =>
-              return plan
           }
       }
-      j.copy(condition = Some(newCondition))
+      val newJoin = j.copy(condition = Some(newCondition))
+      (newJoin, j.output.zip(newJoin.output))
   }
 }
