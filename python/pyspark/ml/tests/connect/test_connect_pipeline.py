@@ -22,6 +22,7 @@ from pyspark.sql import SparkSession
 from pyspark.ml.tests.connect.test_legacy_mode_pipeline import PipelineTestsMixin
 
 
+@unittest.skipIf("SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ, "Requires JVM access")
 class PipelineTestsOnConnect(PipelineTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
         self.spark = (
