@@ -2149,15 +2149,15 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
     def test_date_ts_functions(self):
         query = """
             SELECT * FROM VALUES
-            ('1997/02/28 10:30:00', '2023/03/01 06:00:00', 'JST', 1428476400, 2020, 12, 6),
-            ('2000/01/01 04:30:05', '2020/05/01 12:15:00', 'PST', 1403892395, 2022, 12, 6)
+            ('1997-02-28 10:30:00', '2023-03-01 06:00:00', 'JST', 1428476400, 2020, 12, 6),
+            ('2000-01-01 04:30:05', '2020-05-01 12:15:00', 'PST', 1403892395, 2022, 12, 6)
             AS tab(ts1, ts2, tz, seconds, Y, M, D)
             """
         # +-------------------+-------------------+---+----------+----+---+---+
         # |                ts1|                ts2| tz|   seconds|   Y|  M|  D|
         # +-------------------+-------------------+---+----------+----+---+---+
-        # |1997/02/28 10:30:00|2023/03/01 06:00:00|JST|1428476400|2020| 12|  6|
-        # |2000/01/01 04:30:05|2020/05/01 12:15:00|PST|1403892395|2022| 12|  6|
+        # |1997-02-28 10:30:00|2023-03-01 06:00:00|JST|1428476400|2020| 12|  6|
+        # |2000-01-01 04:30:05|2020-05-01 12:15:00|PST|1403892395|2022| 12|  6|
         # +-------------------+-------------------+---+----------+----+---+---+
 
         cdf = self.connect.sql(query)
@@ -2213,14 +2213,14 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
             (CF.to_date, SF.to_date),
         ]:
             self.assert_eq(
-                cdf.select(cfunc(cdf.ts1, format="yyyy-MM-dd")).toPandas(),
-                sdf.select(sfunc(sdf.ts1, format="yyyy-MM-dd")).toPandas(),
+                cdf.select(cfunc(cdf.ts1, format="yyyy-MM-dd HH:mm:ss")).toPandas(),
+                sdf.select(sfunc(sdf.ts1, format="yyyy-MM-dd HH:mm:ss")).toPandas(),
             )
         self.compare_by_show(
             # [left]:  datetime64[ns, America/Los_Angeles]
             # [right]: datetime64[ns]
-            cdf.select(CF.to_timestamp(cdf.ts1, format="yyyy-MM-dd")),
-            sdf.select(SF.to_timestamp(sdf.ts1, format="yyyy-MM-dd")),
+            cdf.select(CF.to_timestamp(cdf.ts1, format="yyyy-MM-dd HH:mm:ss")),
+            sdf.select(SF.to_timestamp(sdf.ts1, format="yyyy-MM-dd HH:mm:ss")),
         )
 
         # With tz parameter
@@ -2589,9 +2589,6 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
 if __name__ == "__main__":
     import os
     from pyspark.sql.tests.connect.test_connect_function import *  # noqa: F401
-
-    # TODO(SPARK-41547): Enable ANSI mode in this file.
-    os.environ["SPARK_ANSI_SQL_MODE"] = "false"
 
     try:
         import xmlrunner  # type: ignore
