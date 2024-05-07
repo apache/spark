@@ -20,10 +20,11 @@ from pyspark.sql.tests.pandas.test_pandas_cogrouped_map import CogroupedApplyInP
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class CogroupedApplyInPandasTests(CogroupedApplyInPandasTestsMixin, ReusedConnectTestCase):
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_wrong_args(self):
-        self.check_wrong_args()
+class CogroupedApplyInPandasTests(
+    CogroupedApplyInPandasTestsMixin,
+    ReusedConnectTestCase,
+):
+    pass
 
 
 if __name__ == "__main__":

@@ -358,6 +358,15 @@ object CheckConnectJvmClientCompatibility {
         .exclude[MissingClassProblem](
           "org.apache.spark.sql.expressions.SparkConnectClosureCleaner$"),
 
+      // Column
+      // developer API
+      ProblemFilters.exclude[IncompatibleMethTypeProblem](
+        "org.apache.spark.sql.Column.apply"
+      ),
+      ProblemFilters.exclude[IncompatibleResultTypeProblem](
+        "org.apache.spark.sql.Column.expr"
+      ),
+
       // Dataset
       ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.Dataset.plan"

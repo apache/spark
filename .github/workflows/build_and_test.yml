@@ -93,11 +93,10 @@ jobs:
             buf=false
             ui=false
           fi
-          # 'build' is always true for now.
-          # It does not save significant time and most of PRs trigger the build.
+          build=`./dev/is-changed.py -m "core,unsafe,kvstore,avro,utils,network-common,network-shuffle,repl,launcher,examples,sketch,variant,api,catalyst,hive-thriftserver,mllib-local,mllib,graphx,streaming,sql-kafka-0-10,streaming-kafka-0-10,streaming-kinesis-asl,kubernetes,hadoop-cloud,spark-ganglia-lgpl,protobuf,yarn,connect,sql,hive"`
           precondition="
             {
-              \"build\": \"true\",
+              \"build\": \"$build\",
               \"pyspark\": \"$pyspark\",
               \"pyspark-pandas\": \"$pandas\",
               \"sparkr\": \"$sparkr\",
@@ -157,9 +156,8 @@ jobs:
             mllib-local, mllib, graphx
           - >-
             streaming, sql-kafka-0-10, streaming-kafka-0-10, streaming-kinesis-asl,
-            kubernetes, hadoop-cloud, spark-ganglia-lgpl, protobuf
+            kubernetes, hadoop-cloud, spark-ganglia-lgpl, protobuf, connect
           - yarn
-          - connect
         # Here, we split Hive and SQL tests into some of slow ones and the rest of them.
         included-tags: [""]
         excluded-tags: [""]
@@ -929,7 +927,6 @@ jobs:
       HIVE_PROFILE: hive2.3
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
-      ORACLE_DOCKER_IMAGE_NAME: gvenzl/oracle-free:23.3
       SKIP_UNIDOC: true
       SKIP_MIMA: true
       SKIP_PACKAGING: true
@@ -1049,6 +1046,11 @@ jobs:
           minikube mount ${PVC_TESTS_HOST_PATH}:${PVC_TESTS_VM_PATH} --gid=0 --uid=185 &
           kubectl create clusterrolebinding serviceaccounts-cluster-admin --clusterrole=cluster-admin --group=system:serviceaccounts || true
           kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.8.2/installer/volcano-development.yaml || true
+          if [[ "${{ inputs.branch }}" == 'branch-3.5' || "${{ inputs.branch }}" == 'branch-3.4' ]]; then
+            kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.7.0/installer/volcano-development.yaml || true
+          else
+            kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.8.2/installer/volcano-development.yaml || true
+          fi
           eval $(minikube docker-env)
           build/sbt -Phadoop-3 -Psparkr -Pkubernetes -Pvolcano -Pkubernetes-integration-tests -Dspark.kubernetes.test.volcanoMaxConcurrencyJobNum=1 -Dtest.exclude.tags=local "kubernetes-integration-tests/test"
       - name: Upload Spark on K8S integration tests log files

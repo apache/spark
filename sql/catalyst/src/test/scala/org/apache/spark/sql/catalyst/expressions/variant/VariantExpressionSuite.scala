@@ -58,6 +58,9 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     check(Array(primitiveHeader(INT8), 0, 0, 0, 0, 0, 0, 0), emptyMetadata)
     // DECIMAL16 only has 15 byte content.
     check(Array(primitiveHeader(DECIMAL16)) ++ Array.fill(16)(0.toByte), emptyMetadata)
+    // 1e38 has a precision of 39. Even if it still fits into 16 bytes, it is not a valid decimal.
+    check(Array[Byte](primitiveHeader(DECIMAL16), 0) ++
+      BigDecimal(1e38).toBigInt.toByteArray.reverse, emptyMetadata)
     // Short string content too short.
     check(Array(shortStrHeader(2), 'x'), emptyMetadata)
     // Long string length too short (requires 4 bytes).
@@ -805,6 +808,15 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       "\u0001\u0002\u0003")
     checkCast(Array(primitiveHeader(BINARY), 5, 0, 0, 0, 72, 101, 108, 108, 111), StringType,
       "Hello")
+  }
+
+  test("SPARK-48150: ParseJson expression nullability") {
+    assert(!ParseJson(Literal("["), failOnError = true).replacement.nullable)
+    assert(ParseJson(Literal("["), failOnError = false).replacement.nullable)
+    checkEvaluation(
+      ParseJson(Literal("["), failOnError = false).replacement,
+      null
+    )
   }
 
   test("cast to variant") {
