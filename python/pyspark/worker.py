@@ -1106,30 +1106,30 @@ def read_udtf(pickleSer, infile, eval_type):
                 else:
                     analyze_kwargs[arg_keyword] = analyze_argument
             result: AnalyzeResult = call_udtf_analyze_method(
-                udtf_name, self.handler.analyze, analyze_args, analyze_kwargs
+                udtf_name, self.handler, analyze_args, analyze_kwargs
             )
             partition_by = []
-            for col in result.partitionBy:
+            for partition_col in result.partitionBy:
                 partition_by.append(
                     f"""{{
-                  "name": "{col.name}"
+                  "name": "{partition_col.name}"
                 }}"""
                 )
             order_by = []
-            for col in result.orderBy:
+            for order_col in result.orderBy:
                 order_by.append(
                     f"""{{
-                  "name": "{col.name}",
-                  "ascending": "{col.ascending}",
-                  "overrideNullsFirst": "{col.overrideNullsFirst}"
+                  "name": "{order_col.name}",
+                  "ascending": "{order_col.ascending}",
+                  "overrideNullsFirst": "{order_col.overrideNullsFirst}"
                 }}"""
                 )
             select = []
-            for col in result.select:
+            for select_col in result.select:
                 select.append(
                     f"""{{
-                  "name": "{col.name}",
-                  "alias": "{col.alias}"
+                  "name": "{select_col.name}",
+                  "alias": "{select_col.alias}"
                 }}"""
                 )
             result_json = f"""{{

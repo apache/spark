@@ -99,7 +99,7 @@ def read_arguments(infile: IO) -> Tuple[List[AnalyzeArgument], Dict[str, Analyze
 
 
 def call_udtf_analyze_method(
-    udtf_name: str, analyze_method: Any, args: Tuple, kwargs: Dict
+    udtf_name: str, handler: type, args: List, kwargs: Dict
 ) -> AnalyzeResult:
     error_prefix = f"Failed to evaluate the user-defined table function '{udtf_name}'"
 
@@ -109,7 +109,7 @@ def call_udtf_analyze_method(
     # Check that the arguments provided to the UDTF call match the expected parameters defined
     # in the static 'analyze' method signature.
     try:
-        inspect.signature(analyze_method).bind(*args, **kwargs)  # type: ignore[attr-defined]
+        inspect.signature(handler.analyze).bind(*args, **kwargs)  # type: ignore[attr-defined]
     except TypeError as e:
         # The UDTF call's arguments did not match the expected signature.
         raise PySparkValueError(
@@ -124,7 +124,7 @@ def call_udtf_analyze_method(
         )
 
     # Invoke the UDTF's 'analyze' method.
-    result = analyze_method(*args, **kwargs)  # type: ignore[attr-defined]
+    result = handler.analyze(*args, **kwargs)  # type: ignore[attr-defined]
 
     # Check invariants about the 'analyze' method after running it.
     if not isinstance(result, AnalyzeResult):
@@ -222,7 +222,7 @@ def main(infile: IO, outfile: IO) -> None:
 
         # Invoke the UDTF's 'analyze' method.
         result = call_udtf_analyze_method(
-            udtf_name, handler.analyze, args, kwargs
+            udtf_name, handler, args, kwargs
         )  # type: ignore[attr-defined]
 
         # Return the analyzed schema.
