@@ -322,3 +322,27 @@ org.apache.spark.SparkIllegalArgumentException
     "upper" : "64"
   }
 }
+
+
+-- !query
+SELECT 20181117 >> 2
+-- !query schema
+struct<(20181117 >> 2):int>
+-- !query output
+5045279
+
+
+-- !query
+SELECT 20181117 << 2
+-- !query schema
+struct<(20181117 << 2):int>
+-- !query output
+80724468
+
+
+-- !query
+SELECT 20181117 >>> 2
+-- !query schema
+struct<(20181117 >>> 2):int>
+-- !query output
+5045279
