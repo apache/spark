@@ -425,7 +425,7 @@ class SparkConnectServiceSuite
           .newBuilder()
           .setGetResourcesCommand(proto.GetResourcesCommand.newBuilder()),
         None),
-      */
+       */
       (
         proto.Command
           .newBuilder()
