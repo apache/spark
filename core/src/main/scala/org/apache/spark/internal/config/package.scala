@@ -143,11 +143,11 @@ package object config {
 
   private[spark] val STRUCTURED_LOGGING_ENABLED =
     ConfigBuilder("spark.log.structuredLogging.enabled")
-      .doc("When true, the default log4j output format is structured JSON lines, and there will " +
-        "be Mapped Diagnostic Context (MDC) from Spark added to the logs. This is useful for log " +
-        "aggregation and analysis tools. When false, the default log4j output will be plain " +
-        "text and no MDC from Spark will be set. Note that this configuration is not effective " +
-        "for interpreters such as spark-shell and PySpark shell.")
+      .doc("When true, Spark logs are output as structured JSON lines with added Spark " +
+        "Mapped Diagnostic Context (MDC), facilitating easier integration with log aggregation " +
+        "and analysis tools. When false, logs are plain text without MDC. This configuration " +
+        "does not apply to interactive environments such as spark-shell, spark-sql, and " +
+        "PySpark shell.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(true)
