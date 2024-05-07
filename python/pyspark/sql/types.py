@@ -696,7 +696,9 @@ class ArrayType(DataType):
         }
 
     @classmethod
-    def fromJson(cls, json: Dict[str, Any], path: str, collationsMap: Dict[str, str]) -> "ArrayType":
+    def fromJson(
+        cls, json: Dict[str, Any], path: str, collationsMap: Dict[str, str]
+    ) -> "ArrayType":
         elementType = _resolve_type(json["elementType"], path, collationsMap)
         return ArrayType(elementType, json["containsNull"])
 
@@ -891,8 +893,11 @@ class StructField(DataType):
         return "StructField('%s', %s, %s)" % (self.name, self.dataType, str(self.nullable))
 
     def jsonValue(self) -> Dict[str, Any]:
-        metadata = self.metadata if not self.collationMetadata else \
-            {**self.metadata, _COLLATIONS_METADATA_KEY: self.collationMetadata}
+        metadata = (
+            self.metadata
+            if not self.collationMetadata
+            else {**self.metadata, _COLLATIONS_METADATA_KEY: self.collationMetadata}
+        )
 
         return {
             "name": self.name,
@@ -1614,6 +1619,7 @@ _INTERVAL_YEARMONTH = re.compile(r"interval (year|month)( to (year|month))?")
 
 _COLLATIONS_METADATA_KEY = "__COLLATIONS"
 
+
 def _parse_datatype_string(s: str) -> DataType:
     """
     Parses the given data type string to a :class:`DataType`. The data type string format equals
@@ -1747,7 +1753,9 @@ def _parse_datatype_json_string(json_string: str) -> DataType:
     return _parse_datatype_json_value(json.loads(json_string))
 
 
-def _parse_datatype_json_value(json_value: Union[dict, str], path: str = "", collationsMap: Dict[str, str] = None) -> DataType:
+def _parse_datatype_json_value(
+    json_value: Union[dict, str], path: str = "", collationsMap: Dict[str, str] = None
+) -> DataType:
     if not isinstance(json_value, dict):
         if json_value in _all_atomic_types.keys():
             if collationsMap is not None and path in collationsMap:
@@ -1798,6 +1806,7 @@ def _parse_datatype_json_value(json_value: Union[dict, str], path: str = "", col
                 error_class="UNSUPPORTED_DATA_TYPE",
                 message_parameters={"data_type": str(tpe)},
             )
+
 
 def _resolve_type(json_value: Union[dict, str], path: str, collationsMap: Dict[str, str] = None):
     if collationsMap and path in collationsMap:
