@@ -2222,9 +2222,12 @@ class SparkContext(config: SparkConf) extends Logging {
           .getOrElseUpdate(jobArtifactUUID, new ConcurrentHashMap[String, Long]().asScala)
           .putIfAbsent(_, timestamp).isEmpty)
         if (added.nonEmpty) {
-          val jarMessage = if (scheme != "ivy") "JAR" else "dependency jars of Ivy URI"
-          logInfo(log"Added" +
-            log" ${MDC(LogKeys.ADDED_JARS_MESSAGE, jarMessage)} ${MDC(LogKeys.PATH, path)}" +
+          val jarMessage = if (scheme != "ivy") {
+            log"Added JAR"
+          } else {
+            log"Added dependency jars of Ivy URI"
+          }
+          logInfo(jarMessage + log" ${MDC(LogKeys.PATH, path)}" +
             log" at ${MDC(LogKeys.ADDED_JARS, added.mkString(","))}" +
             log" with timestamp ${MDC(LogKeys.TIMESTAMP, timestamp)}")
           postEnvironmentUpdate()

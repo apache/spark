@@ -35,7 +35,6 @@ object LogKeys {
   case object ACTUAL_NUM_FILES extends LogKey
   case object ACTUAL_PARTITION_COLUMN extends LogKey
   case object ADDED_JARS extends LogKey
-  case object ADDED_JARS_MESSAGE extends LogKey
   case object AGGREGATE_FUNCTIONS extends LogKey
   case object ALPHA extends LogKey
   case object ANALYSIS_ERROR extends LogKey
