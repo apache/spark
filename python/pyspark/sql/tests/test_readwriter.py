@@ -16,6 +16,7 @@
 #
 
 import os
+import unittest
 import shutil
 import tempfile
 
@@ -245,6 +246,8 @@ class ReadwriterV2TestsMixin:
             df.writeTo("test_table").using("parquet").create()
             self.assertEqual(100, self.spark.sql("select * from test_table").count())
 
+    @unittest.skipIf(
+        "SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ, "Known behavior change in 4.0")
     def test_create_without_provider(self):
         df = self.df
         with self.assertRaisesRegex(
