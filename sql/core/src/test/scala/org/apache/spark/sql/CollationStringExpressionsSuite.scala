@@ -868,8 +868,12 @@ class CollationStringExpressionsSuite
       ModeTestCase("unicode_ci", bufferValues, "b"),
       ModeTestCase("unicode", bufferValues, "a"))
 
-    val bufferValuesUTF8String = Map(UTF8String.fromString("a") -> 5L, UTF8String.fromString("b") -> 4L,
-      UTF8String.fromString("B") -> 3L, UTF8String.fromString("d") -> 2L, UTF8String.fromString("e") -> 1L)
+    val bufferValuesUTF8String = Map(
+      UTF8String.fromString("a") -> 5L,
+      UTF8String.fromString("b") -> 4L,
+      UTF8String.fromString("B") -> 3L,
+      UTF8String.fromString("d") -> 2L,
+      UTF8String.fromString("e") -> 1L)
     val testCasesUTF8String = Seq(UTF8StringModeTestCase("utf8_binary", bufferValuesUTF8String, "a"),
       UTF8StringModeTestCase("utf8_binary_lcase", bufferValuesUTF8String, "b"),
       UTF8StringModeTestCase("unicode_ci", bufferValuesUTF8String, "b"),
