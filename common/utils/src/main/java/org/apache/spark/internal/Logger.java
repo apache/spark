@@ -42,18 +42,6 @@ public class Logger {
     slf4jLogger.error(msg);
   }
 
-  public void error(String msg, String arg) {
-    slf4jLogger.error(msg, arg);
-  }
-
-  public void error(String msg, String arg1, String arg2) {
-    slf4jLogger.error(msg, arg1, arg2);
-  }
-
-  public void error(String msg, String... args) {
-    slf4jLogger.error(msg, args);
-  }
-
   public void error(String msg, Throwable throwable) {
     slf4jLogger.error(msg, throwable);
   }
@@ -82,18 +70,6 @@ public class Logger {
     slf4jLogger.warn(msg);
   }
 
-  public void warn(String msg, String arg) {
-    slf4jLogger.warn(msg, arg);
-  }
-
-  public void warn(String msg, String arg1, String arg2) {
-    slf4jLogger.warn(msg, arg1, arg2);
-  }
-
-  public void warn(String msg, String... args) {
-    slf4jLogger.warn(msg, args);
-  }
-
   public void warn(String msg, Throwable throwable) {
     slf4jLogger.warn(msg, throwable);
   }
@@ -120,18 +96,6 @@ public class Logger {
 
   public void info(String msg) {
     slf4jLogger.info(msg);
-  }
-
-  public void info(String msg, String arg) {
-    slf4jLogger.info(msg, arg);
-  }
-
-  public void info(String msg, String arg1, String arg2) {
-    slf4jLogger.info(msg, arg1, arg2);
-  }
-
-  public void info(String msg, String... args) {
-    slf4jLogger.info(msg, args);
   }
 
   public void info(String msg, Throwable throwable) {
