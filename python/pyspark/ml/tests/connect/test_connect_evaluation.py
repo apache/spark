@@ -20,7 +20,6 @@ import unittest
 from pyspark.sql import SparkSession
 from pyspark.ml.tests.connect.test_legacy_mode_evaluation import EvaluationTestsMixin
 
-# TODO(SPARK-48084): Reenable this test case
 have_torcheval = "SPARK_SKIP_CONNECT_COMPAT_TESTS" not in os.environ
 try:
     import torcheval  # noqa: F401
