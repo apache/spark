@@ -366,7 +366,6 @@ object LogKeys {
   case object NUM_EXECUTOR_CORES extends LogKey
   case object NUM_EXECUTOR_CORES_REMAINING extends LogKey
   case object NUM_EXECUTOR_CORES_TOTAL extends LogKey
-  case object NUM_FAILED_TESTS extends LogKey
   case object NUM_FAILURES extends LogKey
   case object NUM_FEATURES extends LogKey
   case object NUM_FILES extends LogKey
@@ -381,7 +380,6 @@ object LogKeys {
   case object NUM_PARTITIONS extends LogKey
   case object NUM_PARTITIONS2 extends LogKey
   case object NUM_PARTITION_VALUES extends LogKey
-  case object NUM_PASSED_TESTS extends LogKey
   case object NUM_PEERS extends LogKey
   case object NUM_PEERS_REPLICATED_TO extends LogKey
   case object NUM_PEERS_TO_REPLICATE_TO extends LogKey
@@ -399,7 +397,6 @@ object LogKeys {
   case object NUM_SLOTS extends LogKey
   case object NUM_TASKS extends LogKey
   case object NUM_TASK_CPUS extends LogKey
-  case object NUM_TESTS extends LogKey
   case object NUM_VERSIONS_RETAIN extends LogKey
   case object OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD extends LogKey
   case object OBJECT_ID extends LogKey
@@ -587,7 +584,6 @@ object LogKeys {
   case object TEMP_FILE extends LogKey
   case object TEMP_OUTPUT_PATH extends LogKey
   case object TEMP_PATH extends LogKey
-  case object TEST_NAME extends LogKey
   case object TEST_SIZE extends LogKey
   case object THREAD extends LogKey
   case object THREAD_NAME extends LogKey
