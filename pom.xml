@@ -2982,6 +2982,11 @@
                     <ignoredScopes>test</ignoredScopes>
                     <ignoredScopes>provided</ignoredScopes>
                     <ignoreClasses>
+                      <!--
+                        The package `org.jline.terminal.impl.ffm.*` contains some class files
+                        that are not compatible with JDK17 (only JDK21 is supported).
+                        However, it will not cause problems for use. See: https://github.com/scala/bug/issues/12994
+                      -->
                       <ignoreClass>org.jline.terminal.impl.ffm.*</ignoreClass>
                     </ignoreClasses>
                   </enforceBytecodeVersion>
