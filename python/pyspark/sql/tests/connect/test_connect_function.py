@@ -2030,7 +2030,6 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
             (CF.sentences, SF.sentences),
             (CF.initcap, SF.initcap),
             (CF.soundex, SF.soundex),
-            (CF.bin, SF.bin),
             (CF.hex, SF.hex),
             (CF.unhex, SF.unhex),
             (CF.length, SF.length),
@@ -2042,6 +2041,19 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
                 cdf.select(cfunc("a"), cfunc(cdf.b)).toPandas(),
                 sdf.select(sfunc("a"), sfunc(sdf.b)).toPandas(),
             )
+
+        query = """
+                SELECT * FROM VALUES
+                ('   1   ', '2   ', NULL), ('   3', NULL, '4')
+                AS tab(a, b, c)
+                """
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        self.assert_eq(
+            cdf.select(CF.bin(cdf.a), CF.bin(cdf.b)).toPandas(),
+            sdf.select(SF.bin(sdf.a), SF.bin(sdf.b)).toPandas(),
+        )
 
     def test_string_functions_multi_args(self):
         query = """
