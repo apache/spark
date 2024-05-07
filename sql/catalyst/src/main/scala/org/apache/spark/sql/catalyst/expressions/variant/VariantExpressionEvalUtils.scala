@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.variant
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.{ArrayData, BadRecordException, MapData}
+import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.types.variant.{Variant, VariantBuilder, VariantSizeLimitException, VariantUtil}
@@ -48,7 +48,7 @@ object VariantExpressionEvalUtils {
           .variantSizeLimitError(VariantUtil.SIZE_LIMIT, "parse_json"))
       case NonFatal(e) =>
         parseJsonFailure(QueryExecutionErrors.malformedRecordsDetectedInRecordParsingError(
-          input.toString, BadRecordException(() => input, cause = e)))
+          input.toString, e))
     }
   }
 
