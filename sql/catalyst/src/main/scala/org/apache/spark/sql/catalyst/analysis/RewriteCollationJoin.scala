@@ -58,6 +58,8 @@ object RewriteCollationJoin extends Rule[LogicalPlan] {
               } else {
                 EqualTo(CollationKey(l), CollationKey(r))
               }
+            case _ =>
+              return plan
           }
         case EqualNullSafe(l: AttributeReference, r: AttributeReference) =>
           (l.dataType, r.dataType) match {
@@ -90,6 +92,8 @@ object RewriteCollationJoin extends Rule[LogicalPlan] {
               } else {
                 EqualNullSafe(CollationKey(l), CollationKey(r))
               }
+            case _ =>
+              return plan
           }
       }
       val newJoin = j.copy(condition = Some(newCondition))
