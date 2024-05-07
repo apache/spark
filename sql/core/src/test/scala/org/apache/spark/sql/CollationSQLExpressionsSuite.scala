@@ -19,9 +19,10 @@ package org.apache.spark.sql
 
 import scala.collection.immutable.Seq
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{MapType, StringType}
+import org.apache.spark.sql.types._
 
 // scalastyle:off nonascii
 class CollationSQLExpressionsSuite
@@ -179,6 +180,74 @@ class CollationSQLExpressionsSuite
         assert(testQuery.schema.fields.head.dataType.sameType(dataType))
       }
     })
+  }
+
+  test("Support ToNumber & TryToNumber expressions with collation") {
+    case class ToNumberTestCase(
+      input: String,
+      collationName: String,
+      format: String,
+      result: Any,
+      resultType: DataType
+    )
+
+    val testCases = Seq(
+      ToNumberTestCase("123", "UTF8_BINARY", "999", 123, DecimalType(3, 0)),
+      ToNumberTestCase("1", "UTF8_BINARY_LCASE", "0.00", 1.00, DecimalType(3, 2)),
+      ToNumberTestCase("99,999", "UNICODE", "99,999", 99999, DecimalType(5, 0)),
+      ToNumberTestCase("$14.99", "UNICODE_CI", "$99.99", 14.99, DecimalType(4, 2))
+    )
+
+    // Supported collations (ToNumber)
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |select to_number('${t.input}', '${t.format}')
+           |""".stripMargin
+      // Result & data type
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        checkAnswer(testQuery, Row(t.result))
+        assert(testQuery.schema.fields.head.dataType.sameType(t.resultType))
+      }
+    })
+
+    // Supported collations (TryToNumber)
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |select try_to_number('${t.input}', '${t.format}')
+           |""".stripMargin
+      // Result & data type
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        checkAnswer(testQuery, Row(t.result))
+        assert(testQuery.schema.fields.head.dataType.sameType(t.resultType))
+      }
+    })
+  }
+
+  test("Handle invalid number for ToNumber variant expression with collation") {
+    // to_number should throw an exception if the conversion fails
+    val number = "xx"
+    val query = s"SELECT to_number('$number', '999');"
+    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
+      val e = intercept[SparkIllegalArgumentException] {
+        val testQuery = sql(query)
+        testQuery.collect()
+      }
+      assert(e.getErrorClass === "INVALID_FORMAT.MISMATCH_INPUT")
+    }
+  }
+
+  test("Handle invalid number for TryToNumber variant expression with collation") {
+    // try_to_number shouldn't throw an exception if the conversion fails
+    val number = "xx"
+    val query = s"SELECT try_to_number('$number', '999');"
+    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
+      val testQuery = sql(query)
+      checkAnswer(testQuery, Row(null))
+    }
   }
 
   test("Support ToChar expression with collation") {
