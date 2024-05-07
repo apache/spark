@@ -804,10 +804,39 @@ class CollationStringExpressionsSuite
     assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
   }
 
-  test("Support mode for string expression with collation") {
-    val query = "SELECT mode(collate('abc', 'utf8_binary'))"
-    checkAnswer(sql(query), Row("abc"))
-    assert(sql(query).schema.fields.head.dataType.sameType(StringType("utf8_binary")))
+  test("Support mode for string expression with collation - Basic Test") {
+    Seq("utf8_binary", "utf8_binary_lcase", "unicode_ci", "unicode").foreach { collationId =>
+      val query = s"SELECT mode(collate('abc', '${collationId}'))"
+      checkAnswer(sql(query), Row("abc"))
+      assert(sql(query).schema.fields.head.dataType.sameType(StringType(collationId)))
+    }
+  }
+
+  test("Support mode for string expression with collation2 ") {
+    case class ModeTestCase[R](collationId: String, bufferValues: Map[String, Long], result: R)
+    val testCases = Seq(
+      ModeTestCase("utf8_binary", Map("a" -> 5L, "b" -> 4L, "B" -> 3L, "d" -> 2L, "e" -> 1L),
+        "a"),
+      ModeTestCase("utf8_binary_lcase", Map("a" -> 5L, "b" -> 4L, "B" -> 3L, "d" -> 2L, "e" -> 1L),
+        "b"),
+      ModeTestCase("unicode_ci", Map("a" -> 5L, "b" -> 4L, "B" -> 3L, "d" -> 2L, "e" -> 1L),
+        "b"),
+      ModeTestCase("unicode", Map("a" -> 5L, "b" -> 4L, "B" -> 3L, "d" -> 2L, "e" -> 1L),
+        "a")
+    )
+    testCases.foreach(t => {
+      withTable("t") {
+        sql("CREATE TABLE t(i STRING) USING parquet")
+        sql("INSERT INTO t VALUES " +
+          t.bufferValues.map { case (elt, numRepeats) =>
+            (0L to numRepeats).map(_ => s"('$elt')").mkString(",")
+          }.mkString(","))
+        val query = s"SELECT mode(collate(i, '${t.collationId}')) FROM t"
+        checkAnswer(sql(query), Row(t.result))
+        assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.collationId)))
+
+      }
+    })
   }
 
   test("Support mode for string expression with collation ID on table") {
@@ -820,38 +849,45 @@ class CollationStringExpressionsSuite
       val query = "SELECT mode(collate(i, 'UTF8_BINARY_LCASE')) FROM t"
       checkAnswer(sql(query), Row("b"))
       assert(sql(query).schema.fields.head.dataType.sameType(StringType("UTF8_BINARY_LCASE")))
-
     }
   }
 
   test("Support Mode.eval(buffer)") {
-    val myMode = Mode(child = Literal("some_column_name"))
-    val buffer = new OpenHashMap[AnyRef, Long](5)
-    buffer.update("b", 1L)
-    buffer.update("B", 1L)
-    buffer.update("c", 1L)
-    buffer.update("d", 1L)
-    buffer.update("a", 2L)
-    assert(myMode.eval(buffer).toString == "a")
-    val buffer2 = new OpenHashMap[AnyRef, Long](5)
-    buffer2.update(UTF8String.fromString("b"), 1L)
-    buffer2.update(UTF8String.fromString("B"), 1L)
-    buffer2.update(UTF8String.fromString("c"), 1L)
-    buffer2.update(UTF8String.fromString("d"), 1L)
-    buffer2.update(UTF8String.fromString("a"), 2L)
-    assert(myMode.eval(buffer2).toString == "a")
-  }
+    case class ModeTestCase[R](
+        collationId: String,
+        bufferValues: Map[String, Long],
+        result: R)
+    case class UTF8StringModeTestCase[R](
+        collationId: String,
+        bufferValues: Map[UTF8String, Long],
+        result: R)
 
-  test("Support Mode.eval(buffer) with non-default collation") {
-    val myMode = Mode(
-      child = Literal.create("some_column_name", StringType("utf8_binary_lcase")))
-    val buffer = new OpenHashMap[AnyRef, Long](11)
-    buffer.update("b", 2L)
-    buffer.update("B", 2L)
-    buffer.update("c", 2L)
-    buffer.update("d", 2L)
-    buffer.update("a", 3L)
-    assert(myMode.eval(buffer).toString == "B")
+    val bufferValues = Map("a" -> 5L, "b" -> 4L, "B" -> 3L, "d" -> 2L, "e" -> 1L)
+    val testCasesStrings = Seq(ModeTestCase("utf8_binary", bufferValues, "a"),
+      ModeTestCase("utf8_binary_lcase", bufferValues, "b"),
+      ModeTestCase("unicode_ci", bufferValues, "b"),
+      ModeTestCase("unicode", bufferValues, "a"))
+
+    val bufferValuesUTF8String = Map(UTF8String.fromString("a") -> 5L, UTF8String.fromString("b") -> 4L,
+      UTF8String.fromString("B") -> 3L, UTF8String.fromString("d") -> 2L, UTF8String.fromString("e") -> 1L)
+    val testCasesUTF8String = Seq(UTF8StringModeTestCase("utf8_binary", bufferValuesUTF8String, "a"),
+      UTF8StringModeTestCase("utf8_binary_lcase", bufferValuesUTF8String, "b"),
+      UTF8StringModeTestCase("unicode_ci", bufferValuesUTF8String, "b"),
+      UTF8StringModeTestCase("unicode", bufferValuesUTF8String, "a"))
+
+    testCasesStrings.foreach(t => {
+      val buffer = new OpenHashMap[AnyRef, Long](5)
+      val myMode = Mode(child = Literal.create("some_column_name", StringType(t.collationId)))
+      t.bufferValues.foreach { case (k, v) => buffer.update(k, v) }
+      assert(myMode.eval(buffer).toString == t.result)
+    })
+
+    testCasesUTF8String.foreach(t => {
+      val buffer = new OpenHashMap[AnyRef, Long](5)
+      val myMode = Mode(child = Literal.create("some_column_name", StringType(t.collationId)))
+      t.bufferValues.foreach { case (k, v) => buffer.update(k, v) }
+      assert(myMode.eval(buffer).toString == t.result)
+    })
   }
 
   // TODO: Add more tests for other string expressions

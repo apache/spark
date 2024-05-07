@@ -101,7 +101,7 @@ case class Mode(
       buff
     }
 
-    val t2 = reverseOpt.map { reverse =>
+    reverseOpt.map { reverse =>
       val defaultKeyOrdering = if (reverse) {
         PhysicalDataType.ordering(child.dataType).asInstanceOf[Ordering[AnyRef]].reverse
       } else {
@@ -110,12 +110,6 @@ case class Mode(
       val ordering = Ordering.Tuple2(Ordering.Long, defaultKeyOrdering)
       buffer.maxBy { case (key, count) => (count, key) }(ordering)
     }.getOrElse(buffer.maxBy(_._2))
-
-    if (t2._2 == 0L) {
-      null
-    } else {
-      t2._1
-    }
   }
 
   private def isCollatedString(child: Expression): Boolean = {
