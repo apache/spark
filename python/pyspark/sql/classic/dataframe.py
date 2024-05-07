@@ -223,7 +223,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
             print(self._jdf.schema().treeString())
 
     def sizeInBytesApproximation(self) -> int:
-        java_big_int = self._jdf.sizeInBytesApproximation() # java.math.BigInteger
+        java_big_int = self._jdf.sizeInBytesApproximation()  # java.math.BigInteger
         return int.from_bytes(
             bytes=java_big_int.toByteArray(),
             byteorder="big",
