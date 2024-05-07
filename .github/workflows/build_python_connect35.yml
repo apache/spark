@@ -59,10 +59,10 @@ jobs:
         with:
           distribution: zulu
           java-version: 17
-      - name: Free up disk space
-        shell: 'script -q -e -c "bash {0}"'
-        run: |
-          ./dev/free_disk_space_container
+      - name: Free Up GitHub Actions Ubuntu Runner Disk Space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
       - name: Build Spark
         run: |
           ./build/sbt -Phive Test/package
@@ -75,6 +75,18 @@ jobs:
           conda create -c conda-forge -q -n python3.11 python=3.11
           conda activate python3.11
           pip install -r dev/requirements.txt
+          conda deactivate
+
+          # Client enviornment
+          conda create -c conda-forge -q -n python3.9 python=3.9
+          conda activate python3.9
+          pip install 'numpy==1.25.1' 'pyarrow==12.0.1' 'pandas<=2.0.3' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.3.1' coverage 'matplotlib==3.7.2' openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*'
+
+          # Add Python deps for Spark Connect.
+          pip install 'grpcio>=1.48,<1.57' 'grpcio-status>=1.48,<1.57' 'protobuf==3.20.3' 'googleapis-common-protos==1.56.4'
+
+          # Add torch as a testing dependency for TorchDistributor
+          pip install 'torch==2.0.1' 'torchvision==0.15.2' torcheval
           conda deactivate
       - name: Run tests
         env:
@@ -95,22 +107,7 @@ jobs:
             --driver-java-options "-Dlog4j.configurationFile=file:$GITHUB_WORKSPACE/conf/log4j2.properties" \
             --jars "`find connector/connect/server/target -name spark-connect-*SNAPSHOT.jar`,`find connector/protobuf/target -name spark-protobuf-*SNAPSHOT.jar`,`find connector/avro/target -name spark-avro*SNAPSHOT.jar`"
 
-          # Make sure running Python workers that contains pyspark.core once. They will be reused.
-          python -c "from pyspark.sql import SparkSession; _ = SparkSession.builder.remote('sc://localhost').getOrCreate().range(100).repartition(100).mapInPandas(lambda x: x, 'id INT').collect()"
-
           conda deactivate
-          conda env remove --name python3.11
-
-          # Client enviornment
-          conda create -c conda-forge -q -n python3.9 python=3.9
-          conda activate python3.9
-          pip install 'numpy==1.25.1' 'pyarrow==12.0.1' 'pandas<=2.0.3' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.3.1' coverage 'matplotlib==3.7.2' openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*'
-
-          # Add Python deps for Spark Connect.
-          pip install 'grpcio>=1.48,<1.57' 'grpcio-status>=1.48,<1.57' 'protobuf==3.20.3' 'googleapis-common-protos==1.56.4'
-
-          # Add torch as a testing dependency for TorchDistributor
-          pip install 'torch==2.0.1' 'torchvision==0.15.2' torcheval
 
           # Checkout to branch-3.5 to use the tests in branch-3.5.
           cd ..
