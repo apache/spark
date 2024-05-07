@@ -82,7 +82,6 @@ case class Mode(
     if (buff.isEmpty) {
       return null
     }
-    var nullCount = 0L
     val buffer = if (child.dataType.isInstanceOf[StringType] && collationEnabled) {
       val modeMap = buff.foldLeft(
         new TreeMap[org.apache.spark.unsafe.types.UTF8String, Long]()(Ordering.comparatorToOrdering(
@@ -96,11 +95,8 @@ case class Mode(
         case (map, (key: UTF8String, count)) =>
           map(key) = map.getOrElse(key, 0L) + count
           map
-        case (map, (null, count)) =>
-          nullCount = count
-          map
         case (_, _) =>
-          throw new IllegalArgumentException("Mode expects string type")
+          throw new IllegalArgumentException("Mode expects non-null string type.")
       }
       modeMap
     } else {
@@ -117,7 +113,7 @@ case class Mode(
       buffer.maxBy { case (key, count) => (count, key) }(ordering)
     }.getOrElse(buffer.maxBy(_._2))
 
-    if (nullCount > t2._2) {
+    if (t2._2 == 0L) {
       null
     } else {
       t2._1
