@@ -508,6 +508,7 @@ object LogKeys {
   case object SOCKET_ADDRESS extends LogKey
   case object SPARK_DATA_STREAM extends LogKey
   case object SPARK_PLAN_ID extends LogKey
+  case object SPILL_TIMES extends LogKey
   case object SQL_TEXT extends LogKey
   case object SRC_PATH extends LogKey
   case object STAGE_ATTEMPT extends LogKey
@@ -556,7 +557,6 @@ object LogKeys {
   case object TIME extends LogKey
   case object TIMEOUT extends LogKey
   case object TIMER extends LogKey
-  case object TIME_UNIT extends LogKey
   case object TIME_UNITS extends LogKey
   case object TIP extends LogKey
   case object TOKEN_KIND extends LogKey

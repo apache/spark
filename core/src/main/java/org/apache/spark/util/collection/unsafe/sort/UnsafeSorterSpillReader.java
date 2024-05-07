@@ -39,7 +39,7 @@ import org.apache.spark.unsafe.Platform;
  * of the file format).
  */
 public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implements Closeable {
-  private static final Logger LOGGER = LoggerFactory.getLogger(UnsafeSorterSpillReader.class);
+  private static final Logger logger = LoggerFactory.getLogger(UnsafeSorterSpillReader.class);
   public static final int MAX_BUFFER_SIZE_BYTES = 16777216; // 16 mb
 
   private InputStream in;
@@ -91,7 +91,7 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
         try {
           close();
         } catch (IOException e) {
-          LOGGER.info("error while closing UnsafeSorterSpillReader", e);
+          logger.info("error while closing UnsafeSorterSpillReader", e);
         }
       });
     }

@@ -68,7 +68,7 @@ import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterSpillWriter;
  */
 public final class BytesToBytesMap extends MemoryConsumer {
 
-  private static final Logger LOGGER = LoggerFactory.getLogger(BytesToBytesMap.class);
+  private static final Logger logger = LoggerFactory.getLogger(BytesToBytesMap.class);
 
   private static final HashMapGrowthStrategy growthStrategy = HashMapGrowthStrategy.DOUBLING;
 
@@ -333,7 +333,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
           try {
             reader.close();
           } catch(IOException e2) {
-            LOGGER.error("Error while closing spill reader", e2);
+            logger.error("Error while closing spill reader", e2);
           }
           // Scala iterator does not handle exception
           Platform.throwException(e);
@@ -394,7 +394,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
         // remove the spill file from disk
         File file = spillWriters.removeFirst().getFile();
         if (file != null && file.exists() && !file.delete()) {
-          LOGGER.error("Was unable to delete spill file {}",
+          logger.error("Was unable to delete spill file {}",
             MDC.of(LogKeys.PATH$.MODULE$, file.getAbsolutePath()));
         }
       }
@@ -896,7 +896,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
       File file = spillWriters.removeFirst().getFile();
       if (file != null && file.exists()) {
         if (!file.delete()) {
-          LOGGER.error("Was unable to delete spill file {}",
+          logger.error("Was unable to delete spill file {}",
             MDC.of(LogKeys.PATH$.MODULE$, file.getAbsolutePath()));
         }
       }

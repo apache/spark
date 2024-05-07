@@ -60,7 +60,7 @@ import org.apache.spark.util.Utils;
  */
 public class TaskMemoryManager {
 
-  private static final Logger LOGGER = LoggerFactory.getLogger(TaskMemoryManager.class);
+  private static final Logger logger = LoggerFactory.getLogger(TaskMemoryManager.class);
 
   /** The number of bits used to address the page table. */
   private static final int PAGE_NUMBER_BITS = 13;
@@ -151,9 +151,9 @@ public class TaskMemoryManager {
       // Try to release memory from other consumers first, then we can reduce the frequency of
       // spilling, avoid to have too many spilled files.
       if (got < required) {
-        if (LOGGER.isDebugEnabled()) {
-          LOGGER.debug("Task {} need to spill {} for {}", String.valueOf(taskAttemptId),
-            Utils.bytesToString(required - got), requestingConsumer.toString());
+        if (logger.isDebugEnabled()) {
+          logger.debug("Task {} need to spill {} for {}", taskAttemptId,
+            Utils.bytesToString(required - got), requestingConsumer);
         }
         // We need to call spill() on consumers to free up more memory. We want to optimize for two
         // things:
@@ -197,9 +197,9 @@ public class TaskMemoryManager {
       }
 
       consumers.add(requestingConsumer);
-      if (LOGGER.isDebugEnabled()) {
-        LOGGER.debug("Task {} acquired {} for {}", String.valueOf(taskAttemptId),
-          Utils.bytesToString(got), requestingConsumer.toString());
+      if (logger.isDebugEnabled()) {
+        logger.debug("Task {} acquired {} for {}", taskAttemptId, Utils.bytesToString(got),
+          requestingConsumer);
       }
       return got;
     }
@@ -221,19 +221,17 @@ public class TaskMemoryManager {
       int idx) {
     MemoryMode mode = requestingConsumer.getMode();
     MemoryConsumer consumerToSpill = cList.get(idx);
-    if (LOGGER.isDebugEnabled()) {
-      LOGGER.debug("Task {} try to spill {} from {} for {}",
-        String.valueOf(taskAttemptId), Utils.bytesToString(requested),
-        String.valueOf(consumerToSpill), requestingConsumer.toString());
+    if (logger.isDebugEnabled()) {
+      logger.debug("Task {} try to spill {} from {} for {}", taskAttemptId,
+        Utils.bytesToString(requested), consumerToSpill, requestingConsumer);
     }
     try {
       long released = consumerToSpill.spill(requested, requestingConsumer);
       if (released > 0) {
-        if (LOGGER.isDebugEnabled()) {
-          LOGGER.debug("Task {} spilled {} of requested {} from {} for {}",
-            String.valueOf(taskAttemptId), Utils.bytesToString(released),
-            Utils.bytesToString(requested), String.valueOf(consumerToSpill),
-            requestingConsumer.toString());
+        if (logger.isDebugEnabled()) {
+          logger.debug("Task {} spilled {} of requested {} from {} for {}", taskAttemptId,
+            Utils.bytesToString(released), Utils.bytesToString(requested), consumerToSpill,
+            requestingConsumer);
         }
 
         // When our spill handler releases memory, `ExecutionMemoryPool#releaseMemory()` will
@@ -248,11 +246,11 @@ public class TaskMemoryManager {
       }
     } catch (ClosedByInterruptException e) {
       // This called by user to kill a task (e.g: speculative task).
-      LOGGER.error("error while calling spill() on {}", e,
+      logger.error("error while calling spill() on {}", e,
         MDC.of(LogKeys.MEMORY_CONSUMER$.MODULE$, consumerToSpill));
       throw new RuntimeException(e.getMessage());
     } catch (IOException e) {
-      LOGGER.error("error while calling spill() on {}", e,
+      logger.error("error while calling spill() on {}", e,
         MDC.of(LogKeys.MEMORY_CONSUMER$.MODULE$, consumerToSpill));
       // checkstyle.off: RegexpSinglelineJava
       throw new SparkOutOfMemoryError("error while calling spill() on " + consumerToSpill + " : "
@@ -265,10 +263,9 @@ public class TaskMemoryManager {
    * Release N bytes of execution memory for a MemoryConsumer.
    */
   public void releaseExecutionMemory(long size, MemoryConsumer consumer) {
-    if (LOGGER.isDebugEnabled()) {
-      LOGGER.debug("Task {} release {} from {}",
-        String.valueOf(taskAttemptId), Utils.bytesToString(size),
-        (consumer == null) ? null : consumer.toString());
+    if (logger.isDebugEnabled()) {
+      logger.debug("Task {} release {} from {}", taskAttemptId, Utils.bytesToString(size),
+        consumer);
     }
     memoryManager.releaseExecutionMemory(size, taskAttemptId, consumer.getMode());
   }
@@ -277,7 +274,7 @@ public class TaskMemoryManager {
    * Dump the memory usage of all consumers.
    */
   public void showMemoryUsage() {
-    LOGGER.info("Memory used in task {}",
+    logger.info("Memory used in task {}",
       MDC.of(LogKeys.TASK_ATTEMPT_ID$.MODULE$, taskAttemptId));
     synchronized (this) {
       long memoryAccountedForByConsumers = 0;
@@ -285,18 +282,18 @@ public class TaskMemoryManager {
         long totalMemUsage = c.getUsed();
         memoryAccountedForByConsumers += totalMemUsage;
         if (totalMemUsage > 0) {
-          LOGGER.info("Acquired by {}: {}",
+          logger.info("Acquired by {}: {}",
             MDC.of(LogKeys.MEMORY_CONSUMER$.MODULE$, c),
             MDC.of(LogKeys.MEMORY_SIZE$.MODULE$, Utils.bytesToString(totalMemUsage)));
         }
       }
       long memoryNotAccountedFor =
         memoryManager.getExecutionMemoryUsageForTask(taskAttemptId) - memoryAccountedForByConsumers;
-      LOGGER.info(
+      logger.info(
         "{} bytes of memory were used by task {} but are not associated with specific consumers",
         MDC.of(LogKeys.MEMORY_SIZE$.MODULE$, memoryNotAccountedFor),
         MDC.of(LogKeys.TASK_ATTEMPT_ID$.MODULE$, taskAttemptId));
-      LOGGER.info(
+      logger.info(
         "{} bytes of memory are used for execution and {} bytes of memory are used for storage",
         MDC.of(LogKeys.EXECUTION_MEMORY_SIZE$.MODULE$, memoryManager.executionMemoryUsed()),
         MDC.of(LogKeys.STORAGE_MEMORY_SIZE$.MODULE$,  memoryManager.storageMemoryUsed()));
@@ -345,7 +342,7 @@ public class TaskMemoryManager {
     try {
       page = memoryManager.tungstenMemoryAllocator().allocate(acquired);
     } catch (OutOfMemoryError e) {
-      LOGGER.warn("Failed to allocate a page ({} bytes), try again.",
+      logger.warn("Failed to allocate a page ({} bytes), try again.",
         MDC.of(LogKeys.PAGE_SIZE$.MODULE$, acquired));
       // there is no enough memory actually, it means the actual free memory is smaller than
       // MemoryManager thought, we should keep the acquired memory.
@@ -358,9 +355,8 @@ public class TaskMemoryManager {
     }
     page.pageNumber = pageNumber;
     pageTable[pageNumber] = page;
-    if (LOGGER.isTraceEnabled()) {
-      LOGGER.trace("Allocate page number {} ({} bytes)",
-        String.valueOf(pageNumber), String.valueOf(acquired));
+    if (logger.isTraceEnabled()) {
+      logger.trace("Allocate page number {} ({} bytes)", pageNumber, acquired);
     }
     return page;
   }
@@ -380,9 +376,8 @@ public class TaskMemoryManager {
     synchronized (this) {
       allocatedPages.clear(page.pageNumber);
     }
-    if (LOGGER.isTraceEnabled()) {
-      LOGGER.trace("Freed page number {} ({} bytes)",
-        String.valueOf(page.pageNumber), String.valueOf(page.size()));
+    if (logger.isTraceEnabled()) {
+      logger.trace("Freed page number {} ({} bytes)", page.pageNumber, page.size());
     }
     long pageSize = page.size();
     // Clear the page number before passing the block to the MemoryAllocator's free().
@@ -472,10 +467,9 @@ public class TaskMemoryManager {
     synchronized (this) {
       for (MemoryConsumer c: consumers) {
         if (c != null && c.getUsed() > 0) {
-          if (LOGGER.isDebugEnabled()) {
+          if (logger.isDebugEnabled()) {
             // In case of failed task, it's normal to see leaked memory
-            LOGGER.debug("unreleased {} memory from {}",
-              Utils.bytesToString(c.getUsed()), c.toString());
+            logger.debug("unreleased {} memory from {}", Utils.bytesToString(c.getUsed()), c);
           }
         }
       }
@@ -483,9 +477,8 @@ public class TaskMemoryManager {
 
       for (MemoryBlock page : pageTable) {
         if (page != null) {
-          if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug("unreleased page: {} in task {}",
-              String.valueOf(page), String.valueOf(taskAttemptId));
+          if (logger.isDebugEnabled()) {
+            logger.debug("unreleased page: {} in task {}", page, taskAttemptId);
           }
           page.pageNumber = MemoryBlock.FREED_IN_TMM_PAGE_NUMBER;
           memoryManager.tungstenMemoryAllocator().free(page);

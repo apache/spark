@@ -162,36 +162,20 @@ public class Logger {
     slf4jLogger.debug(msg);
   }
 
-  public void debug(String msg, String arg) {
-    slf4jLogger.debug(msg, arg);
+  public void debug(String format, Object arg) {
+    slf4jLogger.debug(format, arg);
   }
 
-  public void debug(String msg, String arg1, String arg2) {
-    slf4jLogger.debug(msg, arg1, arg2);
+  public void debug(String format, Object arg1, Object arg2) {
+    slf4jLogger.debug(format, arg1, arg2);
   }
 
-  public void debug(String msg, String... args) {
-    slf4jLogger.debug(msg, args);
+  public void debug(String format, Object... arguments) {
+    slf4jLogger.debug(format, arguments);
   }
 
   public void debug(String msg, Throwable throwable) {
     slf4jLogger.debug(msg, throwable);
-  }
-
-  public void debug(String msg, MDC... mdcs) {
-    if (mdcs == null || mdcs.length == 0) {
-      slf4jLogger.debug(msg);
-    } else if (slf4jLogger.isDebugEnabled()) {
-      withLogContext(msg, mdcs, null, mt -> slf4jLogger.debug(mt.message));
-    }
-  }
-
-  public void debug(String msg, Throwable throwable, MDC... mdcs) {
-    if (mdcs == null || mdcs.length == 0) {
-      slf4jLogger.debug(msg);
-    } else if (slf4jLogger.isDebugEnabled()) {
-      withLogContext(msg, mdcs, throwable, mt -> slf4jLogger.debug(mt.message, mt.throwable));
-    }
   }
 
   public boolean isTraceEnabled() {
@@ -202,36 +186,20 @@ public class Logger {
     slf4jLogger.trace(msg);
   }
 
-  public void trace(String msg, String arg) {
-    slf4jLogger.trace(msg, arg);
+  public void trace(String format, Object arg) {
+    slf4jLogger.trace(format, arg);
   }
 
-  public void trace(String msg, String arg1, String arg2) {
-    slf4jLogger.trace(msg, arg1, arg2);
+  public void trace(String format, Object arg1, Object arg2) {
+    slf4jLogger.trace(format, arg1, arg2);
   }
 
-  public void trace(String msg, String... args) {
-    slf4jLogger.trace(msg, args);
+  public void trace(String format, Object... arguments) {
+    slf4jLogger.trace(format, arguments);
   }
 
   public void trace(String msg, Throwable throwable) {
     slf4jLogger.trace(msg, throwable);
-  }
-
-  public void trace(String msg, MDC... mdcs) {
-    if (mdcs == null || mdcs.length == 0) {
-      slf4jLogger.trace(msg);
-    } else if (slf4jLogger.isTraceEnabled()) {
-      withLogContext(msg, mdcs, null, mt -> slf4jLogger.trace(mt.message));
-    }
-  }
-
-  public void trace(String msg, Throwable throwable, MDC... mdcs) {
-    if (mdcs == null || mdcs.length == 0) {
-      slf4jLogger.trace(msg);
-    } else if (slf4jLogger.isTraceEnabled()) {
-      withLogContext(msg, mdcs, throwable, mt -> slf4jLogger.trace(mt.message, mt.throwable));
-    }
   }
 
   private void withLogContext(

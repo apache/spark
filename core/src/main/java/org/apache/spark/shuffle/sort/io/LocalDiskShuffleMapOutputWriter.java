@@ -45,7 +45,7 @@ import org.apache.spark.shuffle.api.metadata.MapOutputCommitMessage;
  */
 public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
 
-  private static final Logger LOGGER =
+  private static final Logger log =
     LoggerFactory.getLogger(LocalDiskShuffleMapOutputWriter.class);
 
   private final int shuffleId;
@@ -113,8 +113,8 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
     }
     cleanUp();
     File resolvedTmp = outputTempFile != null && outputTempFile.isFile() ? outputTempFile : null;
-    LOGGER.debug("Writing shuffle index file for mapId {} with length {}",
-      String.valueOf(mapId), String.valueOf(partitionLengths.length));
+    log.debug("Writing shuffle index file for mapId {} with length {}", mapId,
+        partitionLengths.length);
     blockResolver
       .writeMetadataFileAndCommit(shuffleId, mapId, partitionLengths, checksums, resolvedTmp);
     return MapOutputCommitMessage.of(partitionLengths);
@@ -124,7 +124,7 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
   public void abort(Throwable error) throws IOException {
     cleanUp();
     if (outputTempFile != null && outputTempFile.exists() && !outputTempFile.delete()) {
-      LOGGER.warn("Failed to delete temporary shuffle file at {}",
+      log.warn("Failed to delete temporary shuffle file at {}",
         MDC.of(LogKeys.PATH$.MODULE$, outputTempFile.getAbsolutePath()));
     }
   }

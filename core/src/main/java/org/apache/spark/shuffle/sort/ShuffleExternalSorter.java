@@ -72,7 +72,7 @@ import org.apache.spark.util.Utils;
  */
 final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleChecksumSupport {
 
-  private static final Logger LOGGER = LoggerFactory.getLogger(ShuffleExternalSorter.class);
+  private static final Logger logger = LoggerFactory.getLogger(ShuffleExternalSorter.class);
 
   @VisibleForTesting
   static final int DISK_WRITE_BUFFER_SIZE = 1024 * 1024;
@@ -159,7 +159,7 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
   private void writeSortedFile(boolean isFinalFile) {
     // Only emit the log if this is an actual spilling.
     if (!isFinalFile) {
-      LOGGER.info(
+      logger.info(
         "Task {} on Thread {} spilling sort data of {} to disk ({} {} so far)",
         MDC.of(LogKeys.TASK_ATTEMPT_ID$.MODULE$, taskContext.taskAttemptId()),
         MDC.of(LogKeys.THREAD_ID$.MODULE$, Thread.currentThread().getId()),
@@ -351,7 +351,7 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
     }
     for (SpillInfo spill : spills) {
       if (spill.file.exists() && !spill.file.delete()) {
-        LOGGER.error("Unable to delete spill file {}",
+        logger.error("Unable to delete spill file {}",
           MDC.of(LogKeys.PATH$.MODULE$, spill.file.getPath()));
       }
     }
@@ -377,7 +377,7 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
       } catch (SparkOutOfMemoryError e) {
         // should have trigger spilling
         if (!inMemSorter.hasSpaceForAnotherRecord()) {
-          LOGGER.error("Unable to grow the pointer array");
+          logger.error("Unable to grow the pointer array");
           throw e;
         }
         return;
@@ -419,7 +419,7 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
     // for tests
     assert(inMemSorter != null);
     if (inMemSorter.numRecords() >= numElementsForSpillThreshold) {
-      LOGGER.info("Spilling data because number of spilledRecords crossed the threshold {}" +
+      logger.info("Spilling data because number of spilledRecords crossed the threshold {}" +
         MDC.of(LogKeys.SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD$.MODULE$,
           numElementsForSpillThreshold));
       spill();

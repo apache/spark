@@ -45,7 +45,7 @@ import org.apache.spark.util.ThreadUtils;
  */
 public class ReadAheadInputStream extends InputStream {
 
-  private static final Logger LOGGER = LoggerFactory.getLogger(ReadAheadInputStream.class);
+  private static final Logger logger = LoggerFactory.getLogger(ReadAheadInputStream.class);
 
   private ReentrantLock stateChangeLock = new ReentrantLock();
 
@@ -208,7 +208,7 @@ public class ReadAheadInputStream extends InputStream {
       try {
         underlyingInputStream.close();
       } catch (IOException e) {
-        LOGGER.warn("{}", e, MDC.of(LogKeys.REASON$.MODULE$, e.getMessage()));
+        logger.warn("{}", e, MDC.of(LogKeys.ERROR$.MODULE$, e.getMessage()));
       }
     }
   }

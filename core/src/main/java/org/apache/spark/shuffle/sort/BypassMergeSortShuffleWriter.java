@@ -83,7 +83,7 @@ final class BypassMergeSortShuffleWriter<K, V>
   extends ShuffleWriter<K, V>
   implements ShuffleChecksumSupport {
 
-  private static final Logger LOGGER = LoggerFactory.getLogger(BypassMergeSortShuffleWriter.class);
+  private static final Logger logger = LoggerFactory.getLogger(BypassMergeSortShuffleWriter.class);
 
   private final int fileBufferSize;
   private final boolean transferToEnabled;
@@ -186,7 +186,7 @@ final class BypassMergeSortShuffleWriter<K, V>
       try {
         mapOutputWriter.abort(e);
       } catch (Exception e2) {
-        LOGGER.error("Failed to abort the writer after failing to write map output.", e2);
+        logger.error("Failed to abort the writer after failing to write map output.", e2);
         e.addSuppressed(e2);
       }
       throw e;
@@ -225,7 +225,7 @@ final class BypassMergeSortShuffleWriter<K, V>
               writePartitionedDataWithStream(file, writer);
             }
             if (!file.delete()) {
-              LOGGER.error("Unable to delete file for partition {}",
+              logger.error("Unable to delete file for partition {}",
                 MDC.of(LogKeys.PARTITION_ID$.MODULE$, i));
             }
           }

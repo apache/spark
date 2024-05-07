@@ -77,7 +77,7 @@ jobs:
       - name: Run tests
         env:
           SPARK_TESTING: 1
-          SPARK_SKIP_JVM_REQUIRED_TESTS: 1
+          SPARK_SKIP_CONNECT_COMPAT_TESTS: 1
           SPARK_CONNECT_TESTING_REMOTE: sc://localhost
         run: |
           # Make less noisy
@@ -106,7 +106,7 @@ jobs:
           name: test-results-spark-connect-python-only
           path: "**/target/test-reports/*.xml"
       - name: Upload Spark Connect server log file
-        if: failure()
+        if: ${{ !success() }}
         uses: actions/upload-artifact@v4
         with:
           name: unit-tests-log-spark-connect-python-only
