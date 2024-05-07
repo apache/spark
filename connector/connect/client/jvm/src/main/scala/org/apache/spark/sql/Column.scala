@@ -52,7 +52,7 @@ import org.apache.spark.util.ArrayImplicits._
  *
  * @since 3.4.0
  */
-class Column private[sql] (@DeveloperApi val expr: proto.Expression) extends Logging {
+class Column(@DeveloperApi val expr: proto.Expression) extends Logging {
 
   private[sql] def this(name: String, planId: Option[Long]) =
     this(Column.nameToExpression(name, planId))
@@ -1325,11 +1325,12 @@ class Column private[sql] (@DeveloperApi val expr: proto.Expression) extends Log
 
 object Column {
 
-  def apply(name: String): Column = new Column(name)
+  private[sql] def apply(name: String): Column = new Column(name)
 
-  def apply(name: String, planId: Option[Long]): Column = new Column(name, planId)
+  private[sql] def apply(name: String, planId: Option[Long]): Column = new Column(name, planId)
 
-  def nameToExpression(name: String, planId: Option[Long] = None): proto.Expression = {
+  private[sql] def nameToExpression(
+      name: String, planId: Option[Long] = None): proto.Expression = {
     val builder = proto.Expression.newBuilder()
     name match {
       case "*" =>
