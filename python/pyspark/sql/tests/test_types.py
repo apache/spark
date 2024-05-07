@@ -550,7 +550,7 @@ class TypesTestsMixin:
         self.assertEqual(df.head(), Row(name="[123]", income=120))
 
     def test_udt(self):
-        from pyspark.sql.types import _parse_datatype_json_string, _infer_type, _make_type_verifier
+        from pyspark.sql.types import _parse_datatype_json_string, _infer_type, _make_type_verifier)
 
         def check_datatype(datatype):
             pickled = pickle.loads(pickle.dumps(datatype))
@@ -864,27 +864,6 @@ class TypesTestsMixin:
                 self.assertEqual(t(), _parse_datatype_string(k))
         self.assertEqual(IntegerType(), _parse_datatype_string("int"))
         self.assertEqual(StringType(), _parse_datatype_string("string"))
-        self.assertEqual(StringType(), _parse_datatype_string("string collate UTF8_BINARY"))
-        self.assertEqual(StringType(), _parse_datatype_string("string COLLATE UTF8_BINARY"))
-        self.assertEqual(
-            StringType.fromCollationId(0), _parse_datatype_string("string COLLATE   UTF8_BINARY")
-        )
-        self.assertEqual(
-            StringType.fromCollationId(1),
-            _parse_datatype_string("string COLLATE UTF8_BINARY_LCASE"),
-        )
-        self.assertEqual(
-            StringType.fromCollationId(2), _parse_datatype_string("string COLLATE UNICODE")
-        )
-        self.assertEqual(
-            StringType.fromCollationId(2), _parse_datatype_string("string COLLATE `UNICODE`")
-        )
-        self.assertEqual(
-            StringType.fromCollationId(3), _parse_datatype_string("string COLLATE UNICODE_CI")
-        )
-        self.assertEqual(
-            StringType.fromCollationId(3), _parse_datatype_string("string COLLATE `UNICODE_CI`")
-        )
         self.assertEqual(CharType(1), _parse_datatype_string("char(1)"))
         self.assertEqual(CharType(10), _parse_datatype_string("char( 10   )"))
         self.assertEqual(CharType(11), _parse_datatype_string("char( 11)"))
@@ -911,6 +890,48 @@ class TypesTestsMixin:
             _parse_datatype_string("a INT, c DOUBLE"),
         )
         self.assertEqual(VariantType(), _parse_datatype_string("variant"))
+
+    def test_schema_with_collations_json_ser_de(self):
+        from pyspark.sql.types import _parse_datatype_json_string
+        unicode_collation = "UNICODE"
+
+        simple_struct = StructType([
+            StructField("c1", StringType(unicode_collation))
+        ])
+
+        nested_struct = StructType([
+            StructField("nested", simple_struct)
+        ])
+
+        array_in_schema = StructType([
+            StructField("array", ArrayType(StringType(unicode_collation)))
+        ])
+
+        map_in_schema = StructType([
+            StructField("map", MapType(StringType(unicode_collation), StringType(unicode_collation)))
+        ])
+
+        array_in_map_in_nested_schema = StructType([
+            StructField("arrInMap", MapType(StringType(unicode_collation), ArrayType(StringType(unicode_collation))))
+        ])
+
+        nested_array_in_map = StructType([
+            StructField("nestedArrayInMap", ArrayType(MapType(StringType(unicode_collation),
+                                                              ArrayType(ArrayType(StringType(unicode_collation))))))
+        ])
+
+        schema_with_multiple_fields = StructType(
+            simple_struct.fields + nested_struct.fields + array_in_schema.fields +
+            map_in_schema.fields + array_in_map_in_nested_schema.fields + nested_array_in_map.fields
+        )
+
+        schemas = [simple_struct, nested_struct, array_in_schema, map_in_schema, nested_array_in_map,
+                   array_in_map_in_nested_schema, schema_with_multiple_fields]
+
+        for schema in schemas:
+            json_schema = schema.json()
+            parsed_schema = _parse_datatype_json_string(json_schema)
+            self.assertEqual(parsed_schema, schema)
 
     def test_metadata_null(self):
         schema = StructType(

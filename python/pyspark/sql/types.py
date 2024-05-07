@@ -277,7 +277,7 @@ class StringType(AtomicType):
         return "string" + self.collationIdToName()
 
     def jsonValue(self) -> str:
-        return "string" + self.collationIdToName()
+        return "string"
 
     def __repr__(self) -> str:
         return (
@@ -285,6 +285,9 @@ class StringType(AtomicType):
             if self.collationId != 0
             else "StringType()"
         )
+
+    def isUTF8BinaryCollation(self) -> bool:
+        return self.collationId == 0
 
 
 class CharType(AtomicType):
@@ -693,8 +696,9 @@ class ArrayType(DataType):
         }
 
     @classmethod
-    def fromJson(cls, json: Dict[str, Any]) -> "ArrayType":
-        return ArrayType(_parse_datatype_json_value(json["elementType"]), json["containsNull"])
+    def fromJson(cls, json: Dict[str, Any], path: str, collationsMap: Dict[str, str]) -> "ArrayType":
+        elementType = _resolve_type(json["elementType"], path, collationsMap)
+        return ArrayType(elementType, json["containsNull"])
 
     def needConversion(self) -> bool:
         return self.elementType.needConversion()
@@ -810,10 +814,12 @@ class MapType(DataType):
         }
 
     @classmethod
-    def fromJson(cls, json: Dict[str, Any]) -> "MapType":
+    def fromJson(cls, json: Dict[str, Any], path: str, collationsMap: Dict[str, str]) -> "MapType":
+        keyType = _resolve_type(json["keyType"], path, collationsMap)
+        valueType = _resolve_type(json["valueType"], path, collationsMap)
         return MapType(
-            _parse_datatype_json_value(json["keyType"]),
-            _parse_datatype_json_value(json["valueType"]),
+            keyType,
+            valueType,
             json["valueContainsNull"],
         )
 
@@ -876,6 +882,7 @@ class StructField(DataType):
         self.dataType = dataType
         self.nullable = nullable
         self.metadata = metadata or {}
+        self._collationMetadata = None
 
     def simpleString(self) -> str:
         return "%s:%s" % (self.name, self.dataType.simpleString())
@@ -884,21 +891,59 @@ class StructField(DataType):
         return "StructField('%s', %s, %s)" % (self.name, self.dataType, str(self.nullable))
 
     def jsonValue(self) -> Dict[str, Any]:
+        metadata = self.metadata if not self.collationMetadata else \
+            {**self.metadata, _COLLATIONS_METADATA_KEY: self.collationMetadata}
+
         return {
             "name": self.name,
             "type": self.dataType.jsonValue(),
             "nullable": self.nullable,
-            "metadata": self.metadata,
+            "metadata": metadata,
         }
 
     @classmethod
     def fromJson(cls, json: Dict[str, Any]) -> "StructField":
+        metadata = json.get("metadata")
+        if metadata and _COLLATIONS_METADATA_KEY in metadata:
+            collationsMap = metadata[_COLLATIONS_METADATA_KEY]
+            metadata.pop(_COLLATIONS_METADATA_KEY)
+        else:
+            collationsMap = {}
+
         return StructField(
             json["name"],
-            _parse_datatype_json_value(json["type"]),
+            _parse_datatype_json_value(json["type"], json["name"], collationsMap),
             json.get("nullable", True),
-            json.get("metadata"),
+            metadata,
         )
+
+    @property
+    def collationMetadata(self):
+        def visitRecursively(dt: DataType, path: str):
+            if isinstance(dt, ArrayType):
+                processDataType(dt.elementType, path + ".element")
+            elif isinstance(dt, MapType):
+                processDataType(dt.keyType, path + ".key")
+                processDataType(dt.valueType, path + ".value")
+            elif isinstance(dt, StringType) and self._isCollatedString(dt):
+                self._collationMetadata[path] = self.collationName(dt)
+
+        def processDataType(dt: DataType, path: str):
+            if self._isCollatedString(dt):
+                self._collationMetadata[path] = self.collationName(dt)
+            else:
+                visitRecursively(dt, path)
+
+        if self._collationMetadata is None:
+            self._collationMetadata = {}
+            visitRecursively(self.dataType, self.name)
+        return self._collationMetadata
+
+    def _isCollatedString(self, dt: DataType) -> bool:
+        return isinstance(dt, StringType) and not dt.isUTF8BinaryCollation()
+
+    def collationName(self, dt: StringType) -> str:
+        return StringType.fromCollationId(dt.collationId)
 
     def needConversion(self) -> bool:
         return self.dataType.needConversion()
@@ -1561,13 +1606,13 @@ _all_complex_types: Dict[str, Type[Union[ArrayType, MapType, StructType]]] = dic
     (v.typeName(), v) for v in _complex_types
 )
 
-_COLLATED_STRING = re.compile(r"string\s+collate\s+([\w_]+|`[\w_]`)")
 _LENGTH_CHAR = re.compile(r"char\(\s*(\d+)\s*\)")
 _LENGTH_VARCHAR = re.compile(r"varchar\(\s*(\d+)\s*\)")
 _FIXED_DECIMAL = re.compile(r"decimal\(\s*(\d+)\s*,\s*(-?\d+)\s*\)")
 _INTERVAL_DAYTIME = re.compile(r"interval (day|hour|minute|second)( to (day|hour|minute|second))?")
 _INTERVAL_YEARMONTH = re.compile(r"interval (year|month)( to (year|month))?")
 
+_COLLATIONS_METADATA_KEY = "__COLLATIONS"
 
 def _parse_datatype_string(s: str) -> DataType:
     """
@@ -1702,9 +1747,11 @@ def _parse_datatype_json_string(json_string: str) -> DataType:
     return _parse_datatype_json_value(json.loads(json_string))
 
 
-def _parse_datatype_json_value(json_value: Union[dict, str]) -> DataType:
+def _parse_datatype_json_value(json_value: Union[dict, str], path: str = "", collationsMap: Dict[str, str] = None) -> DataType:
     if not isinstance(json_value, dict):
         if json_value in _all_atomic_types.keys():
+            if collationsMap is not None and path in collationsMap:
+                return StringType(StringType.collationNameToId(collationsMap[path]))
             return _all_atomic_types[json_value]()
         elif json_value == "decimal":
             return DecimalType()
@@ -1729,9 +1776,6 @@ def _parse_datatype_json_value(json_value: Union[dict, str]) -> DataType:
             return YearMonthIntervalType(first_field, second_field)
         elif json_value == "interval":
             return CalendarIntervalType()
-        elif _COLLATED_STRING.match(json_value):
-            m = _COLLATED_STRING.match(json_value)
-            return StringType(m.group(1))  # type: ignore[union-attr]
         elif _LENGTH_CHAR.match(json_value):
             m = _LENGTH_CHAR.match(json_value)
             return CharType(int(m.group(1)))  # type: ignore[union-attr]
@@ -1746,7 +1790,7 @@ def _parse_datatype_json_value(json_value: Union[dict, str]) -> DataType:
     else:
         tpe = json_value["type"]
         if tpe in _all_complex_types:
-            return _all_complex_types[tpe].fromJson(json_value)
+            return _all_complex_types[tpe].fromJson(json_value, path, collationsMap)
         elif tpe == "udt":
             return UserDefinedType.fromJson(json_value)
         else:
@@ -1754,6 +1798,11 @@ def _parse_datatype_json_value(json_value: Union[dict, str]) -> DataType:
                 error_class="UNSUPPORTED_DATA_TYPE",
                 message_parameters={"data_type": str(tpe)},
             )
+
+def _resolve_type(json_value: Union[dict, str], path: str, collationsMap: Dict[str, str] = None):
+    if collationsMap and path in collationsMap:
+        return StringType(StringType.collationNameToId(collationsMap[path]))
+    return _parse_datatype_json_value(json_value, path, collationsMap)
 
 
 # Mapping Python types to Spark SQL DataType
