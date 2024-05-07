@@ -1768,7 +1768,7 @@ class DataFrame(ParentDataFrame):
         assert table is not None
         return (table, schema)
 
-    def _toArrow(self) -> "pa.Table":
+    def toArrowTable(self) -> "pa.Table":
         table, _ = self._to_table()
         return table
 

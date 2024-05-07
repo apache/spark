@@ -225,7 +225,7 @@ class PandasConversionMixin:
         else:
             return pdf
 
-    def _toArrow(self) -> "pa.Table":
+    def toArrowTable(self) -> "pa.Table":
         """
         Returns the contents of this :class:`DataFrame` as PyArrow ``pyarrow.Table``.
 
@@ -238,15 +238,13 @@ class PandasConversionMixin:
 
         Examples
         --------
-        >>> df.toArrow()  # doctest: +SKIP
+        >>> df.toArrowTable()  # doctest: +SKIP
         pyarrow.Table
         age: int64
         name: string
         ----
         age: [[2,5]]
         name: [["Alice","Bob"]]
-
-        .. note:: Experimental.
         """
         from pyspark.sql.dataframe import DataFrame
 
