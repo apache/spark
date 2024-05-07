@@ -148,7 +148,7 @@ class StaxXmlParser(
         // XML parser currently doesn't support partial results for corrupted records.
         // For such records, all fields other than the field configured by
         // `columnNameOfCorruptRecord` are set to `null`.
-        throw BadRecordException(() => xmlRecord, cause = e)
+        throw BadRecordException(() => xmlRecord, cause = () => e)
       case e: CharConversionException if options.charset.isEmpty =>
         val msg =
           """XML parser cannot handle a character in its input.
@@ -156,17 +156,17 @@ class StaxXmlParser(
             |""".stripMargin + e.getMessage
         val wrappedCharException = new CharConversionException(msg)
         wrappedCharException.initCause(e)
-        throw BadRecordException(() => xmlRecord, cause = wrappedCharException)
+        throw BadRecordException(() => xmlRecord, cause = () => wrappedCharException)
       case PartialResultException(row, cause) =>
         throw BadRecordException(
           record = () => xmlRecord,
           partialResults = () => Array(row),
-          cause)
+          () => cause)
       case PartialResultArrayException(rows, cause) =>
         throw BadRecordException(
           record = () => xmlRecord,
           partialResults = () => rows,
-          cause)
+          () => cause)
     }
   }
 
