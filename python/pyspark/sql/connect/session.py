@@ -237,9 +237,9 @@ class SparkSession:
         def getOrCreate(self) -> "SparkSession":
             with SparkSession._lock:
                 session = SparkSession.getActiveSession()
-                if session is None or session.is_stopped:
-                    session = SparkSession._default_session
-                    if session is None or session.is_stopped:
+                if session is None:
+                    session = SparkSession.getDefaultSession()
+                    if session is None:
                         session = self.create()
                 self._apply_options(session)
                 return session
@@ -280,14 +280,24 @@ class SparkSession:
         active :class:`SparkSession` when they are not set yet.
         """
         with cls._lock:
-            if cls._default_session is None:
+            if cls.getDefaultSession() is None:
                 cls._default_session = session
-        if getattr(cls._active_session, "session", None) is None:
+        if cls.getActiveSession() is None:
             cls._active_session.session = session
 
     @classmethod
     def getActiveSession(cls) -> Optional["SparkSession"]:
-        return getattr(cls._active_session, "session", None)
+        s = getattr(cls._active_session, "session", None)
+        if s is not None and not s.is_stopped:
+            return s
+        return None
+
+    @classmethod
+    def getDefaultSession(cls) -> Optional["SparkSession"]:
+        s = cls._default_session
+        if s is not None and not s.is_stopped:
+            return s
+        return None
 
     @classmethod
     def _getActiveSessionIfMatches(cls, session_id: str) -> "SparkSession":
@@ -315,7 +325,7 @@ class SparkSession:
     def active(cls) -> "SparkSession":
         session = cls.getActiveSession()
         if session is None:
-            session = cls._default_session
+            session = cls.getDefaultSession()
             if session is None:
                 raise PySparkRuntimeError(
                     error_class="NO_ACTIVE_OR_DEFAULT_SESSION",
