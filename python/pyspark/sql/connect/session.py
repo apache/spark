@@ -726,6 +726,9 @@ class SparkSession:
 
     def __del__(self) -> None:
         try:
+            # StreamingQueryManager has client states that needs to be cleaned up
+            if hasattr(self, "_sqm"):
+                self._sqm.close()
             # Try its best to close.
             self.client.close()
         except Exception:
