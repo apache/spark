@@ -3944,6 +3944,16 @@ object EliminateUnions extends Rule[LogicalPlan] {
 }
 
 /**
+ * Removes [[Collate]] expressions if the input is already the correct type.
+ */
+object EliminateCollates extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressions {
+    case Collate(child, collation) if child.dataType.sameType(StringType(collation)) =>
+      child
+  }
+}
+
+/**
  * Cleans up unnecessary Aliases inside the plan. Basically we only need Alias as a top level
  * expression in Project(project list) or Aggregate(aggregate expressions) or
  * Window(window expressions). Notice that if an expression has other expression parameters which

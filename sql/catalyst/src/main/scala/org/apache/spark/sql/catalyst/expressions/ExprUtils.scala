@@ -168,7 +168,8 @@ object ExprUtils extends QueryErrorsBase {
         a.failAnalysis(
           errorClass = "MISSING_GROUP_BY",
           messageParameters = Map.empty)
-      case e: Attribute if !a.groupingExpressions.exists(_.semanticEquals(e)) =>
+      case e: Attribute if !a.groupingExpressions.exists(_.semanticEquals(e)) &&
+        !a.groupingExpressions.exists(_.dataType.sameType(e.dataType)) =>
         throw QueryCompilationErrors.columnNotInGroupByClauseError(e)
       case s: ScalarSubquery
         if s.children.nonEmpty && !a.groupingExpressions.exists(_.semanticEquals(s)) =>

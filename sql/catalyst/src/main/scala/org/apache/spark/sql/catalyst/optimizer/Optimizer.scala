@@ -291,6 +291,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     // However, because we also use the analyzer to canonicalized queries (for view definition),
     // we do not eliminate subqueries or compute current time in the analyzer.
     private val rules = Seq(
+      EliminateCollates,
       EliminateResolvedHint,
       EliminateSubqueryAliases,
       EliminateView,
