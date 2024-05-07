@@ -16,12 +16,15 @@
  */
 package org.apache.spark.sql
 
+import java.math.BigInteger
 import java.util.{Collections, Locale}
+
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
+
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.java.function._
@@ -40,7 +43,6 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkClassUtils
 
-import java.math.BigInteger
 
 /**
  * A Dataset is a strongly typed collection of domain-specific objects that can be transformed in
