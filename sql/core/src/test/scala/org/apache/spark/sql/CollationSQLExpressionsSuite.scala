@@ -426,7 +426,7 @@ class CollationSQLExpressionsSuite
           StructField("pos", IntegerType, nullable = false),
           StructField("key", StringType("UNICODE_CI")),
           StructField("value", VariantType, nullable = false)
-        ),
+        )
       )
     )
 
