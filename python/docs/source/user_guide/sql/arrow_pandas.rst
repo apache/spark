@@ -46,7 +46,7 @@ You can call :meth:`DataFrame.toArrowTable` to convert a Spark DataFrame to a Py
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/arrow.py
     :language: python
-    :lines: 37-48
+    :lines: 37-49
     :dedent: 4
 
 Note that :meth:`DataFrame.toArrowTable` results in the collection of all records in the DataFrame
@@ -67,7 +67,7 @@ This can be controlled by ``spark.sql.execution.arrow.pyspark.fallback.enabled``
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/arrow.py
     :language: python
-    :lines: 52-67
+    :lines: 53-68
     :dedent: 4
 
 Using the above optimizations with Arrow will produce the same results as when Arrow is not
@@ -104,7 +104,7 @@ specify the type hints of ``pandas.Series`` and ``pandas.DataFrame`` as below:
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/arrow.py
     :language: python
-    :lines: 71-95
+    :lines: 72-96
     :dedent: 4
 
 In the following sections, it describes the combinations of the supported type hints. For simplicity,
@@ -127,7 +127,7 @@ The following example shows how to create this Pandas UDF that computes the prod
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/arrow.py
     :language: python
-    :lines: 99-129
+    :lines: 100-130
     :dedent: 4
 
 For detailed usage, please see :func:`pandas_udf`.
@@ -166,7 +166,7 @@ The following example shows how to create this Pandas UDF:
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/arrow.py
     :language: python
-    :lines: 133-155
+    :lines: 134-156
     :dedent: 4
 
 For detailed usage, please see :func:`pandas_udf`.
@@ -188,7 +188,7 @@ The following example shows how to create this Pandas UDF:
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/arrow.py
     :language: python
-    :lines: 159-182
+    :lines: 160-183
     :dedent: 4
 
 For detailed usage, please see :func:`pandas_udf`.
@@ -219,7 +219,7 @@ and window operations:
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/arrow.py
     :language: python
-    :lines: 186-227
+    :lines: 187-228
     :dedent: 4
 
 .. currentmodule:: pyspark.sql.functions
@@ -284,7 +284,7 @@ in the group.
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/arrow.py
     :language: python
-    :lines: 231-249
+    :lines: 232-250
     :dedent: 4
 
 For detailed usage, please see  please see :meth:`GroupedData.applyInPandas`
@@ -302,7 +302,7 @@ The following example shows how to use :meth:`DataFrame.mapInPandas`:
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/arrow.py
     :language: python
-    :lines: 253-264
+    :lines: 254-265
     :dedent: 4
 
 For detailed usage, please see :meth:`DataFrame.mapInPandas`.
@@ -341,7 +341,7 @@ The following example shows how to use ``DataFrame.groupby().cogroup().applyInPa
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/arrow.py
     :language: python
-    :lines: 268-290
+    :lines: 269-291
     :dedent: 4
 
 
@@ -363,7 +363,7 @@ Here's an example that demonstrates the usage of both a default, pickled Python 
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/arrow.py
     :language: python
-    :lines: 294-312
+    :lines: 295-313
     :dedent: 4
 
 Compared to the default, pickled Python UDFs, Arrow Python UDFs provide a more coherent type coercion mechanism. UDF
