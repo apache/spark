@@ -117,9 +117,8 @@ object DataType {
   private val FIXED_DECIMAL = """decimal\(\s*(\d+)\s*,\s*(\-?\d+)\s*\)""".r
   private val CHAR_TYPE = """char\(\s*(\d+)\s*\)""".r
   private val VARCHAR_TYPE = """varchar\(\s*(\d+)\s*\)""".r
-  private val COLLATED_STRING_TYPE = """string\s+collate\s+([\w_]+|`[\w_]`)""".r
 
-  val COLLATIONS_METADATA_KEY = "COLLATIONS"
+  val COLLATIONS_METADATA_KEY = "__COLLATIONS"
 
   def fromDDL(ddl: String): DataType = {
     parseTypeWithFallback(
@@ -184,9 +183,6 @@ object DataType {
   /** Given the string representation of a type, return its DataType */
   private def nameToType(name: String): DataType = {
     name match {
-      case COLLATED_STRING_TYPE(collation) =>
-        val collationId = CollationFactory.collationNameToId(collation)
-        StringType(collationId)
       case "decimal" => DecimalType.USER_DEFAULT
       case FIXED_DECIMAL(precision, scale) => DecimalType(precision.toInt, scale.toInt)
       case CHAR_TYPE(length) => CharType(length.toInt)

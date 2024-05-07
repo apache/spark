@@ -23,10 +23,12 @@ import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentExce
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.StringConcat
+import org.apache.spark.sql.catalyst.util.{CollationFactory, StringConcat}
 import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, yearMonthIntervalTypes}
 
 class DataTypeSuite extends SparkFunSuite {
+
+  private val UNICODE_COLLATION = CollationFactory.collationNameToId("UNICODE")
 
   test("construct an ArrayType") {
     val array = ArrayType(StringType)
@@ -711,5 +713,43 @@ class DataTypeSuite extends SparkFunSuite {
         |""".stripMargin
 
     assert(result === expected)
+  }
+
+  test("schema with collation should not change during ser/de") {
+    val simpleStruct = StructType(
+      StructField("c1", StringType(UNICODE_COLLATION)) :: Nil)
+
+    val nestedStruct = StructType(
+      StructField("nested", simpleStruct) :: Nil)
+
+    val arrayInSchema = StructType(
+      StructField("array", ArrayType(StringType(UNICODE_COLLATION))) :: Nil)
+
+    val mapInSchema = StructType(
+      StructField("map",
+        MapType(StringType(UNICODE_COLLATION), StringType(UNICODE_COLLATION))) :: Nil)
+
+    val arrayInMapInNestedSchema = StructType(
+      StructField("arrInMap",
+        MapType(StringType(UNICODE_COLLATION),
+        ArrayType(StringType(UNICODE_COLLATION)))) :: Nil)
+
+    val nestedArrayInMap = StructType(
+      StructField("nestedArrayInMap",
+        ArrayType(MapType(StringType(UNICODE_COLLATION),
+          ArrayType(ArrayType(StringType(UNICODE_COLLATION)))))) :: Nil)
+
+    val schemaWithMultipleFields = StructType(
+      simpleStruct.fields ++ nestedStruct.fields ++ arrayInSchema.fields ++
+      mapInSchema.fields ++ arrayInMapInNestedSchema.fields ++ nestedArrayInMap.fields)
+
+    Seq(
+      simpleStruct, nestedStruct, arrayInSchema, mapInSchema, nestedArrayInMap,
+      arrayInMapInNestedSchema, schemaWithMultipleFields)
+      .foreach { schema =>
+        val json = schema.json
+        val parsed = DataType.fromJson(json)
+        assert(parsed === schema)
+      }
   }
 }
