@@ -28,7 +28,7 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.internal.{LogEntry, Logging, MDC}
-import org.apache.spark.internal.LogKeys.{CLASS_NAME, NUM_PARTITION, PIPELINE_STAGE_UID, STORAGE_LEVEL}
+import org.apache.spark.internal.LogKeys.{CLASS_NAME, NUM_PARTITIONS, PIPELINE_STAGE_UID, STORAGE_LEVEL}
 import org.apache.spark.ml.{MLEvents, PipelineStage}
 import org.apache.spark.ml.param.{Param, Params}
 import org.apache.spark.rdd.RDD
@@ -67,7 +67,7 @@ private[spark] class Instrumentation private () extends Logging with MLEvents {
    * Log some data about the dataset being fit.
    */
   def logDataset(dataset: RDD[_]): Unit = {
-    logInfo(log"training: numPartitions=${MDC(NUM_PARTITION, dataset.partitions.length)}" +
+    logInfo(log"training: numPartitions=${MDC(NUM_PARTITIONS, dataset.partitions.length)}" +
       log" storageLevel=${MDC(STORAGE_LEVEL, dataset.getStorageLevel)}")
   }
 

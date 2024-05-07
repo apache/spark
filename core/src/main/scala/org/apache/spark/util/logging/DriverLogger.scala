@@ -33,7 +33,8 @@ import org.apache.logging.log4j.core.layout.PatternLayout
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -229,8 +230,8 @@ private[spark] object DriverLogger extends Logging {
         // Return None because we don't need DFS-related logic in SparkContext and DfsAsyncWriter
         None
       } else {
-        logWarning(s"Driver logs are not persisted because" +
-          s" ${DRIVER_LOG_DFS_DIR.key} is not configured")
+        logWarning(log"Driver logs are not persisted because" +
+          log" ${MDC(CONFIG, DRIVER_LOG_DFS_DIR.key)} is not configured")
         None
       }
     } else {

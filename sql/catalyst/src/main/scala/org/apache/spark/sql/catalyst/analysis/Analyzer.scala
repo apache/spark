@@ -325,6 +325,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       RewriteDeleteFromTable ::
       RewriteUpdateTable ::
       RewriteMergeIntoTable ::
+      MoveParameterizedQueriesDown ::
       BindParameters ::
       typeCoercionRules() ++
       Seq(
@@ -339,11 +340,11 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       new ResolveHints.RemoveAllHints),
     Batch("Nondeterministic", Once,
       PullOutNondeterministic),
+    Batch("UpdateNullability", Once,
+      UpdateAttributeNullability),
     Batch("UDF", Once,
       HandleNullInputsForUDF,
       ResolveEncodersInUDF),
-    Batch("UpdateNullability", Once,
-      UpdateAttributeNullability),
     Batch("Subquery", Once,
       UpdateOuterReferences),
     Batch("Cleanup", fixedPoint,

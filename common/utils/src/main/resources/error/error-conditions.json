@@ -1041,7 +1041,7 @@
   },
   "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT" : {
     "message" : [
-      "Call to function <functionName> is invalid because it includes multiple argument assignments to the same parameter name <parameterName>."
+      "Call to routine <functionName> is invalid because it includes multiple argument assignments to the same parameter name <parameterName>."
     ],
     "subClass" : {
       "BOTH_POSITIONAL_AND_NAMED" : {
@@ -1317,6 +1317,13 @@
       "Failed to convert the row value <value> of the class <class> to the target SQL type <sqlType> in the JSON format."
     ],
     "sqlState" : "2203G"
+  },
+  "FAILED_TO_PARSE_TOO_COMPLEX" : {
+    "message" : [
+      "The statement, including potential SQL functions and referenced views, was too complex to parse.",
+      "To mitigate this error divide the statement into multiple, less complex chunks."
+    ],
+    "sqlState" : "54001"
   },
   "FIELDS_ALREADY_EXISTS" : {
     "message" : [
@@ -3483,16 +3490,16 @@
   },
   "ROUTINE_ALREADY_EXISTS" : {
     "message" : [
-      "Cannot create the function <routineName> because it already exists.",
-      "Choose a different name, drop or replace the existing function, or add the IF NOT EXISTS clause to tolerate a pre-existing function."
+      "Cannot create the routine <routineName> because it already exists.",
+      "Choose a different name, drop or replace the existing routine, or add the IF NOT EXISTS clause to tolerate a pre-existing routine."
     ],
     "sqlState" : "42723"
   },
   "ROUTINE_NOT_FOUND" : {
     "message" : [
-      "The function <routineName> cannot be found. Verify the spelling and correctness of the schema and catalog.",
+      "The routine <routineName> cannot be found. Verify the spelling and correctness of the schema and catalog.",
       "If you did not qualify the name with a schema and catalog, verify the current_schema() output, or qualify the name with the correct schema and catalog.",
-      "To tolerate the error on drop use DROP FUNCTION IF EXISTS."
+      "To tolerate the error on drop use DROP ... IF EXISTS."
     ],
     "sqlState" : "42883"
   },
@@ -3798,6 +3805,12 @@
     ],
     "sqlState" : "XXKST"
   },
+  "STRUCT_ARRAY_LENGTH_MISMATCH" : {
+    "message" : [
+      "Input row doesn't have expected number of values required by the schema. <expected> fields are required while <actual> values are provided."
+    ],
+    "sqlState" : "2201E"
+  },
   "SUM_OF_LIMIT_AND_OFFSET_EXCEEDS_MAX_INT" : {
     "message" : [
       "The sum of the LIMIT clause and the OFFSET clause must not be greater than the maximum 32-bit integer value (2,147,483,647) but found limit = <limit>, offset = <offset>."
@@ -4066,7 +4079,7 @@
   },
   "UNRESOLVED_ROUTINE" : {
     "message" : [
-      "Cannot resolve function <routineName> on search path <searchPath>."
+      "Cannot resolve routine <routineName> on search path <searchPath>."
     ],
     "sqlState" : "42883"
   },

@@ -92,6 +92,7 @@ private case class MsSqlServerDialect() extends JdbcDialect {
               case o => inputToSQL(o)
             }
             visitBinaryComparison(e.name(), l, r)
+          case "CASE_WHEN" => visitCaseWhen(expressionsToStringArray(e.children())) + " = 1"
           case _ => super.build(expr)
         }
         case _ => super.build(expr)

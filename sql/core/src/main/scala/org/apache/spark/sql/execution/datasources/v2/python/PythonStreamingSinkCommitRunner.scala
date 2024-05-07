@@ -23,7 +23,8 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.api.python.{PythonFunction, PythonWorker, PythonWorkerFactory, PythonWorkerUtils, SpecialLengths}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.PYTHON_EXEC
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.internal.config.Python.PYTHON_AUTH_SOCKET_TIMEOUT
 import org.apache.spark.sql.connector.write.WriterCommitMessage
@@ -60,7 +61,7 @@ class PythonStreamingSinkCommitRunner(
    * Initializes the Python worker for running the streaming sink committer.
    */
   def init(): Unit = {
-    logInfo(s"Initializing Python runner pythonExec: $pythonExec")
+    logInfo(log"Initializing Python runner pythonExec: ${MDC(PYTHON_EXEC, pythonExec)}")
     val env = SparkEnv.get
 
     val localdir = env.blockManager.diskBlockManager.localDirs.map(f => f.getPath()).mkString(",")

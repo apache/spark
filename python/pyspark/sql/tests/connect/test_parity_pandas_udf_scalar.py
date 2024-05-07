@@ -21,22 +21,6 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class PandasUDFScalarParityTests(ScalarPandasUDFTestsMixin, ReusedConnectTestCase):
-    def test_nondeterministic_vectorized_udf_in_aggregate(self):
-        self.check_nondeterministic_analysis_exception()
-
-    @unittest.skip("Spark Connect doesn't support RDD but the test depends on it.")
-    def test_vectorized_udf_empty_partition(self):
-        super().test_vectorized_udf_empty_partition()
-
-    @unittest.skip("Spark Connect doesn't support RDD but the test depends on it.")
-    def test_vectorized_udf_struct_with_empty_partition(self):
-        super().test_vectorized_udf_struct_with_empty_partition()
-
-    # TODO(SPARK-43727): Parity returnType check in Spark Connect
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_vectorized_udf_wrong_return_type(self):
-        super().test_vectorized_udf_wrong_return_type()
-
     def test_mixed_udf_and_sql(self):
         self._test_mixed_udf_and_sql(Column)
 

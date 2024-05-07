@@ -40,8 +40,8 @@ import org.slf4j.MDC
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.{Logging, MDC => LogMDC}
-import org.apache.spark.internal.LogKeys.{CLASS_NAME, ERROR, MAX_ATTEMPTS, TASK_ID, TASK_NAME, TIMEOUT}
+import org.apache.spark.internal.{Logging, LogKeys, MDC => LogMDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.plugin.PluginContainer
 import org.apache.spark.memory.{SparkOutOfMemoryError, TaskMemoryManager}
@@ -638,9 +638,10 @@ private[spark] class Executor(
           val freedMemory = taskMemoryManager.cleanUpAllAllocatedMemory()
 
           if (freedMemory > 0 && !threwException) {
-            val errMsg = s"Managed memory leak detected; size = $freedMemory bytes, $taskName"
+            val errMsg = log"Managed memory leak detected; size = " +
+              log"${LogMDC(NUM_BYTES, freedMemory)} bytes, ${LogMDC(TASK_NAME, taskName)}"
             if (conf.get(UNSAFE_EXCEPTION_ON_MEMORY_LEAK)) {
-              throw SparkException.internalError(errMsg, category = "EXECUTOR")
+              throw SparkException.internalError(errMsg.message, category = "EXECUTOR")
             } else {
               logWarning(errMsg)
             }
@@ -727,9 +728,11 @@ private[spark] class Executor(
         // directSend = sending directly back to the driver
         val serializedResult: ByteBuffer = {
           if (maxResultSize > 0 && resultSize > maxResultSize) {
-            logWarning(s"Finished $taskName. Result is larger than maxResultSize " +
-              s"(${Utils.bytesToString(resultSize)} > ${Utils.bytesToString(maxResultSize)}), " +
-              s"dropping it.")
+            logWarning(log"Finished ${LogMDC(TASK_NAME, taskName)}. " +
+              log"Result is larger than maxResultSize " +
+              log"(${LogMDC(RESULT_SIZE_BYTES, Utils.bytesToString(resultSize))} > " +
+              log"${LogMDC(RESULT_SIZE_BYTES_MAX, Utils.bytesToString(maxResultSize))}), " +
+              log"dropping it.")
             ser.serialize(new IndirectTaskResult[Any](TaskResultBlockId(taskId), resultSize))
           } else if (resultSize > maxDirectResultSize) {
             val blockId = TaskResultBlockId(taskId)
@@ -778,11 +781,12 @@ private[spark] class Executor(
           if (!t.isInstanceOf[FetchFailedException]) {
             // there was a fetch failure in the task, but some user code wrapped that exception
             // and threw something else.  Regardless, we treat it as a fetch failure.
-            val fetchFailedCls = classOf[FetchFailedException].getName
-            logWarning(s"$taskName encountered a ${fetchFailedCls} and " +
-              s"failed, but the ${fetchFailedCls} was hidden by another " +
-              s"exception.  Spark is handling this like a fetch failure and ignoring the " +
-              s"other exception: $t")
+            logWarning(log"${LogMDC(TASK_NAME, taskName)} encountered a " +
+              log"${LogMDC(CLASS_NAME, classOf[FetchFailedException].getName)} " +
+              log"and failed, but the " +
+              log"${LogMDC(CLASS_NAME, classOf[FetchFailedException].getName)} " +
+              log"was hidden by another exception. Spark is handling this like a fetch failure " +
+              log"and ignoring the other exception: ${LogMDC(ERROR, t)}")
           }
           setTaskFinishedAndClearInterruptStatus()
           plugins.foreach(_.onTaskFailed(reason))
@@ -910,7 +914,7 @@ private[spark] class Executor(
     try {
       mdc.foreach { case (key, value) => MDC.put(key, value) }
       // avoid overriding the takName by the user
-      MDC.put("mdc.taskName", taskName)
+      MDC.put(LogKeys.TASK_NAME.name, taskName)
     } catch {
       case _: NoSuchFieldError => logInfo("MDC is not supported.")
     }
@@ -919,7 +923,7 @@ private[spark] class Executor(
   private def cleanMDCForTask(taskName: String, mdc: Seq[(String, String)]): Unit = {
     try {
       mdc.foreach { case (key, _) => MDC.remove(key) }
-      MDC.remove("mdc.taskName")
+      MDC.remove(LogKeys.TASK_NAME.name)
     } catch {
       case _: NoSuchFieldError => logInfo("MDC is not supported.")
     }
@@ -994,12 +998,14 @@ private[spark] class Executor(
             finished = true
           } else {
             val elapsedTimeMs = TimeUnit.NANOSECONDS.toMillis(elapsedTimeNs)
-            logWarning(s"Killed task $taskId is still running after $elapsedTimeMs ms")
+            logWarning(log"Killed task ${LogMDC(TASK_ID, taskId)} " +
+              log"is still running after ${LogMDC(TIME_UNITS, elapsedTimeMs)} ms")
             if (takeThreadDump) {
               try {
                 taskRunner.theadDump().foreach { thread =>
                   if (thread.threadName == taskRunner.threadName) {
-                    logWarning(s"Thread dump from task $taskId:\n${thread.toString}")
+                    logWarning(log"Thread dump from task ${LogMDC(TASK_ID, taskId)}:\n" +
+                      log"${LogMDC(THREAD, thread.toString)}")
                   }
                 }
               } catch {
@@ -1259,7 +1265,7 @@ private[spark] class Executor(
     if (runner != null) {
       runner.theadDump()
     } else {
-      logWarning(s"Failed to dump thread for task $taskId")
+      logWarning(log"Failed to dump thread for task ${LogMDC(TASK_ID, taskId)}")
       None
     }
   }

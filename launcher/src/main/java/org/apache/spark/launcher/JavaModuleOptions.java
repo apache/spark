@@ -27,6 +27,7 @@ package org.apache.spark.launcher;
 public class JavaModuleOptions {
     private static final String[] DEFAULT_MODULE_OPTIONS = {
       "-XX:+IgnoreUnrecognizedVMOptions",
+      "--add-modules=jdk.incubator.vector",
       "--add-opens=java.base/java.lang=ALL-UNNAMED",
       "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
       "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",

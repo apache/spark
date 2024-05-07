@@ -1378,6 +1378,20 @@ trait CommutativeExpression extends Expression {
       }
     reorderResult
   }
+
+  /**
+   * Helper method to collect the evaluation mode of the commutative expressions. This is
+   * used by the canonicalized methods of [[Add]] and [[Multiply]] operators to ensure that
+   * all operands have the same evaluation mode before reordering the operands.
+   */
+  protected def collectEvalModes(
+      e: Expression,
+      f: PartialFunction[CommutativeExpression, Seq[EvalMode.Value]]
+  ): Seq[EvalMode.Value] = e match {
+    case c: CommutativeExpression if f.isDefinedAt(c) =>
+      f(c) ++ c.children.flatMap(collectEvalModes(_, f))
+    case _ => Nil
+  }
 }
 
 /**

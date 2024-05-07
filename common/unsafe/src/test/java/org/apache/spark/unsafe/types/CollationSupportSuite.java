@@ -652,6 +652,154 @@ public class CollationSupportSuite {
     assertReplace("abi̇o12i̇o", "İo", "yy", "UNICODE_CI", "abyy12yy");
   }
 
+  private void assertLocate(String substring, String string, Integer start, String collationName,
+        Integer expected) throws SparkException {
+    UTF8String substr = UTF8String.fromString(substring);
+    UTF8String str = UTF8String.fromString(string);
+    int collationId = CollationFactory.collationNameToId(collationName);
+    assertEquals(expected, CollationSupport.StringLocate.exec(str, substr,
+      start - 1, collationId) + 1);
+  }
+
+  @Test
+  public void testLocate() throws SparkException {
+    // If you add tests with start < 1 be careful to understand the behavior of the indexOf method
+    // and usage of indexOf in the StringLocate class.
+    assertLocate("aa", "aaads", 1, "UTF8_BINARY", 1);
+    assertLocate("aa", "aaads", 2, "UTF8_BINARY", 2);
+    assertLocate("aa", "aaads", 3, "UTF8_BINARY", 0);
+    assertLocate("Aa", "aaads", 1, "UTF8_BINARY", 0);
+    assertLocate("Aa", "aAads", 1, "UTF8_BINARY", 2);
+    assertLocate("界x", "test大千世界X大千世界", 1, "UTF8_BINARY", 0);
+    assertLocate("界X", "test大千世界X大千世界", 1, "UTF8_BINARY", 8);
+    assertLocate("界", "test大千世界X大千世界", 13, "UTF8_BINARY", 13);
+    assertLocate("AA", "aaads", 1, "UTF8_BINARY_LCASE", 1);
+    assertLocate("aa", "aAads", 2, "UTF8_BINARY_LCASE", 2);
+    assertLocate("aa", "aaAds", 3, "UTF8_BINARY_LCASE", 0);
+    assertLocate("abC", "abcabc", 1, "UTF8_BINARY_LCASE", 1);
+    assertLocate("abC", "abCabc", 2, "UTF8_BINARY_LCASE", 4);
+    assertLocate("abc", "abcabc", 4, "UTF8_BINARY_LCASE", 4);
+    assertLocate("界x", "test大千世界X大千世界", 1, "UTF8_BINARY_LCASE", 8);
+    assertLocate("界X", "test大千世界Xtest大千世界", 1, "UTF8_BINARY_LCASE", 8);
+    assertLocate("界", "test大千世界X大千世界", 13, "UTF8_BINARY_LCASE", 13);
+    assertLocate("大千", "test大千世界大千世界", 1, "UTF8_BINARY_LCASE", 5);
+    assertLocate("大千", "test大千世界大千世界", 9, "UTF8_BINARY_LCASE", 9);
+    assertLocate("大千", "大千世界大千世界", 1, "UTF8_BINARY_LCASE", 1);
+    assertLocate("aa", "Aaads", 1, "UNICODE", 2);
+    assertLocate("AA", "aaads", 1, "UNICODE", 0);
+    assertLocate("aa", "aAads", 2, "UNICODE", 0);
+    assertLocate("aa", "aaAds", 3, "UNICODE", 0);
+    assertLocate("abC", "abcabc", 1, "UNICODE", 0);
+    assertLocate("abC", "abCabc", 2, "UNICODE", 0);
+    assertLocate("abC", "abCabC", 2, "UNICODE", 4);
+    assertLocate("abc", "abcabc", 1, "UNICODE", 1);
+    assertLocate("abc", "abcabc", 3, "UNICODE", 4);
+    assertLocate("界x", "test大千世界X大千世界", 1, "UNICODE", 0);
+    assertLocate("界X", "test大千世界X大千世界", 1, "UNICODE", 8);
+    assertLocate("界", "test大千世界X大千世界", 13, "UNICODE", 13);
+    assertLocate("AA", "aaads", 1, "UNICODE_CI", 1);
+    assertLocate("aa", "aAads", 2, "UNICODE_CI", 2);
+    assertLocate("aa", "aaAds", 3, "UNICODE_CI", 0);
+    assertLocate("abC", "abcabc", 1, "UNICODE_CI", 1);
+    assertLocate("abC", "abCabc", 2, "UNICODE_CI", 4);
+    assertLocate("abc", "abcabc", 4, "UNICODE_CI", 4);
+    assertLocate("界x", "test大千世界X大千世界", 1, "UNICODE_CI", 8);
+    assertLocate("界", "test大千世界X大千世界", 13, "UNICODE_CI", 13);
+    assertLocate("大千", "test大千世界大千世界", 1, "UNICODE_CI", 5);
+    assertLocate("大千", "test大千世界大千世界", 9, "UNICODE_CI", 9);
+    assertLocate("大千", "大千世界大千世界", 1, "UNICODE_CI", 1);
+    // Case-variable character length
+    assertLocate("i̇o", "İo世界大千世界", 1, "UNICODE_CI", 1);
+    assertLocate("i̇o", "大千İo世界大千世界", 1, "UNICODE_CI", 3);
+    assertLocate("i̇o", "世界İo大千世界大千İo", 4, "UNICODE_CI", 11);
+    assertLocate("İo", "i̇o世界大千世界", 1, "UNICODE_CI", 1);
+    assertLocate("İo", "大千i̇o世界大千世界", 1, "UNICODE_CI", 3);
+    assertLocate("İo", "世界i̇o大千世界大千i̇o", 4, "UNICODE_CI", 12); // 12 instead of 11
+  }
+
+  private void assertSubstringIndex(String string, String delimiter, Integer count,
+        String collationName, String expected) throws SparkException {
+    UTF8String str = UTF8String.fromString(string);
+    UTF8String delim = UTF8String.fromString(delimiter);
+    int collationId = CollationFactory.collationNameToId(collationName);
+    assertEquals(expected,
+      CollationSupport.SubstringIndex.exec(str, delim, count, collationId).toString());
+  }
+
+  @Test
+  public void testSubstringIndex() throws SparkException {
+    assertSubstringIndex("wwwgapachegorg", "g", -3, "UTF8_BINARY", "apachegorg");
+    assertSubstringIndex("www||apache||org", "||", 2, "UTF8_BINARY", "www||apache");
+    assertSubstringIndex("aaaaaaaaaa", "aa", 2, "UTF8_BINARY", "a");
+    assertSubstringIndex("AaAaAaAaAa", "aa", 2, "UTF8_BINARY_LCASE", "A");
+    assertSubstringIndex("www.apache.org", ".", 3, "UTF8_BINARY_LCASE", "www.apache.org");
+    assertSubstringIndex("wwwXapacheXorg", "x", 2, "UTF8_BINARY_LCASE", "wwwXapache");
+    assertSubstringIndex("wwwxapachexorg", "X", 1, "UTF8_BINARY_LCASE", "www");
+    assertSubstringIndex("www.apache.org", ".", 0, "UTF8_BINARY_LCASE", "");
+    assertSubstringIndex("www.apache.ORG", ".", -3, "UTF8_BINARY_LCASE", "www.apache.ORG");
+    assertSubstringIndex("wwwGapacheGorg", "g", 1, "UTF8_BINARY_LCASE", "www");
+    assertSubstringIndex("wwwGapacheGorg", "g", 3, "UTF8_BINARY_LCASE", "wwwGapacheGor");
+    assertSubstringIndex("gwwwGapacheGorg", "g", 3, "UTF8_BINARY_LCASE", "gwwwGapache");
+    assertSubstringIndex("wwwGapacheGorg", "g", -3, "UTF8_BINARY_LCASE", "apacheGorg");
+    assertSubstringIndex("wwwmapacheMorg", "M", -2, "UTF8_BINARY_LCASE", "apacheMorg");
+    assertSubstringIndex("www.apache.org", ".", -1, "UTF8_BINARY_LCASE", "org");
+    assertSubstringIndex("www.apache.org.", ".", -1, "UTF8_BINARY_LCASE", "");
+    assertSubstringIndex("", ".", -2, "UTF8_BINARY_LCASE", "");
+    assertSubstringIndex("test大千世界X大千世界", "x", -1, "UTF8_BINARY_LCASE", "大千世界");
+    assertSubstringIndex("test大千世界X大千世界", "X", 1, "UTF8_BINARY_LCASE", "test大千世界");
+    assertSubstringIndex("test大千世界大千世界", "千", 2, "UTF8_BINARY_LCASE", "test大千世界大");
+    assertSubstringIndex("www||APACHE||org", "||", 2, "UTF8_BINARY_LCASE", "www||APACHE");
+    assertSubstringIndex("www||APACHE||org", "||", -1, "UTF8_BINARY_LCASE", "org");
+    assertSubstringIndex("AaAaAaAaAa", "Aa", 2, "UNICODE", "Aa");
+    assertSubstringIndex("wwwYapacheyorg", "y", 3, "UNICODE", "wwwYapacheyorg");
+    assertSubstringIndex("www.apache.org", ".", 2, "UNICODE", "www.apache");
+    assertSubstringIndex("wwwYapacheYorg", "Y", 1, "UNICODE", "www");
+    assertSubstringIndex("wwwYapacheYorg", "y", 1, "UNICODE", "wwwYapacheYorg");
+    assertSubstringIndex("wwwGapacheGorg", "g", 1, "UNICODE", "wwwGapacheGor");
+    assertSubstringIndex("GwwwGapacheGorG", "G", 3, "UNICODE", "GwwwGapache");
+    assertSubstringIndex("wwwGapacheGorG", "G", -3, "UNICODE", "apacheGorG");
+    assertSubstringIndex("www.apache.org", ".", 0, "UNICODE", "");
+    assertSubstringIndex("www.apache.org", ".", -3, "UNICODE", "www.apache.org");
+    assertSubstringIndex("www.apache.org", ".", -2, "UNICODE", "apache.org");
+    assertSubstringIndex("www.apache.org", ".", -1, "UNICODE", "org");
+    assertSubstringIndex("", ".", -2, "UNICODE", "");
+    assertSubstringIndex("test大千世界X大千世界", "X", -1, "UNICODE", "大千世界");
+    assertSubstringIndex("test大千世界X大千世界", "X", 1, "UNICODE", "test大千世界");
+    assertSubstringIndex("大x千世界大千世x界", "x", 1, "UNICODE", "大");
+    assertSubstringIndex("大x千世界大千世x界", "x", -1, "UNICODE", "界");
+    assertSubstringIndex("大x千世界大千世x界", "x", -2, "UNICODE", "千世界大千世x界");
+    assertSubstringIndex("大千世界大千世界", "千", 2, "UNICODE", "大千世界大");
+    assertSubstringIndex("www||apache||org", "||", 2, "UNICODE", "www||apache");
+    assertSubstringIndex("AaAaAaAaAa", "aa", 2, "UNICODE_CI", "A");
+    assertSubstringIndex("www.apache.org", ".", 3, "UNICODE_CI", "www.apache.org");
+    assertSubstringIndex("wwwXapacheXorg", "x", 2, "UNICODE_CI", "wwwXapache");
+    assertSubstringIndex("wwwxapacheXorg", "X", 1, "UNICODE_CI", "www");
+    assertSubstringIndex("www.apache.org", ".", 0, "UNICODE_CI", "");
+    assertSubstringIndex("wwwGapacheGorg", "G", 3, "UNICODE_CI", "wwwGapacheGor");
+    assertSubstringIndex("gwwwGapacheGorg", "g", 3, "UNICODE_CI", "gwwwGapache");
+    assertSubstringIndex("gwwwGapacheGorg", "g", -3, "UNICODE_CI", "apacheGorg");
+    assertSubstringIndex("www.apache.ORG", ".", -3, "UNICODE_CI", "www.apache.ORG");
+    assertSubstringIndex("wwwmapacheMorg", "M", -2, "UNICODE_CI", "apacheMorg");
+    assertSubstringIndex("www.apache.org", ".", -1, "UNICODE_CI", "org");
+    assertSubstringIndex("", ".", -2, "UNICODE_CI", "");
+    assertSubstringIndex("test大千世界X大千世界", "X", -1, "UNICODE_CI", "大千世界");
+    assertSubstringIndex("test大千世界X大千世界", "X", 1, "UNICODE_CI", "test大千世界");
+    assertSubstringIndex("test大千世界大千世界", "千", 2, "UNICODE_CI", "test大千世界大");
+    assertSubstringIndex("www||APACHE||org", "||", 2, "UNICODE_CI", "www||APACHE");
+    assertSubstringIndex("abİo12", "i̇o", 1, "UNICODE_CI", "ab");
+    assertSubstringIndex("abİo12", "i̇o", -1, "UNICODE_CI", "12");
+    assertSubstringIndex("abi̇o12", "İo", 1, "UNICODE_CI", "ab");
+    assertSubstringIndex("abi̇o12", "İo", -1, "UNICODE_CI", "12");
+    assertSubstringIndex("ai̇bi̇o12", "İo", 1, "UNICODE_CI", "ai̇b");
+    assertSubstringIndex("ai̇bi̇o12i̇o", "İo", 2, "UNICODE_CI", "ai̇bi̇o12");
+    assertSubstringIndex("ai̇bi̇o12i̇o", "İo", -1, "UNICODE_CI", "");
+    assertSubstringIndex("ai̇bi̇o12i̇o", "İo", -2, "UNICODE_CI", "12i̇o");
+    assertSubstringIndex("ai̇bi̇oİo12İoi̇o", "İo", -4, "UNICODE_CI", "İo12İoi̇o");
+    assertSubstringIndex("ai̇bi̇oİo12İoi̇o", "i̇o", -4, "UNICODE_CI", "İo12İoi̇o");
+    assertSubstringIndex("ai̇bİoi̇o12i̇oİo", "İo", -4, "UNICODE_CI", "i̇o12i̇oİo");
+    assertSubstringIndex("ai̇bİoi̇o12i̇oİo", "i̇o", -4, "UNICODE_CI", "i̇o12i̇oİo");
+  }
+
   // TODO: Test more collation-aware string expressions.
 
   /**

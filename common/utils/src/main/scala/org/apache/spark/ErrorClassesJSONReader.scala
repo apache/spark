@@ -49,7 +49,8 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
     sub.setEnableUndefinedVariableException(true)
     sub.setDisableSubstitutionInValues(true)
     try {
-      sub.replace(messageTemplate.replaceAll("<([a-zA-Z0-9_-]+)>", "\\$\\{$1\\}"))
+      sub.replace(ErrorClassesJsonReader.TEMPLATE_REGEX.replaceAllIn(
+        messageTemplate, "\\$\\{$1\\}"))
     } catch {
       case _: IllegalArgumentException => throw SparkException.internalError(
         s"Undefined error message parameter for error class: '$errorClass'. " +
@@ -59,8 +60,7 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
 
   def getMessageParameters(errorClass: String): Seq[String] = {
     val messageTemplate = getMessageTemplate(errorClass)
-    val pattern = "<([a-zA-Z0-9_-]+)>".r
-    val matches = pattern.findAllIn(messageTemplate).toSeq
+    val matches = ErrorClassesJsonReader.TEMPLATE_REGEX.findAllIn(messageTemplate).toSeq
     matches.map(m => m.stripSuffix(">").stripPrefix("<"))
   }
 
@@ -106,6 +106,8 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
 }
 
 private object ErrorClassesJsonReader {
+  private val TEMPLATE_REGEX = "<([a-zA-Z0-9_-]+)>".r
+
   private val mapper: JsonMapper = JsonMapper.builder()
     .addModule(DefaultScalaModule)
     .build()

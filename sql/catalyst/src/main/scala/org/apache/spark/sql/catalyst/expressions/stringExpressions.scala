@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UPPER_OR_LOWER}
-import org.apache.spark.sql.catalyst.util.{ArrayData, CollationSupport, GenericArrayData, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, CollationSupport, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.{AbstractArrayType, StringTypeAnyCollation}
@@ -859,9 +859,14 @@ case class Overlay(input: Expression, replace: Expression, pos: Expression, len:
 
 object StringTranslate {
 
-  def buildDict(matchingString: UTF8String, replaceString: UTF8String)
+  def buildDict(matchingString: UTF8String, replaceString: UTF8String, collationId: Int)
     : JMap[String, String] = {
-    val matching = matchingString.toString()
+    val matching = if (CollationFactory.fetchCollation(collationId).supportsLowercaseEquality) {
+      matchingString.toString().toLowerCase()
+    } else {
+      matchingString.toString()
+    }
+
     val replace = replaceString.toString()
     val dict = new HashMap[String, String]()
     var i = 0
@@ -912,13 +917,16 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
   @transient private var lastReplace: UTF8String = _
   @transient private var dict: JMap[String, String] = _
 
+  final lazy val collationId: Int = first.dataType.asInstanceOf[StringType].collationId
+
   override def nullSafeEval(srcEval: Any, matchingEval: Any, replaceEval: Any): Any = {
     if (matchingEval != lastMatching || replaceEval != lastReplace) {
       lastMatching = matchingEval.asInstanceOf[UTF8String].clone()
       lastReplace = replaceEval.asInstanceOf[UTF8String].clone()
-      dict = StringTranslate.buildDict(lastMatching, lastReplace)
+      dict = StringTranslate.buildDict(lastMatching, lastReplace, collationId)
     }
-    srcEval.asInstanceOf[UTF8String].translate(dict)
+
+    CollationSupport.StringTranslate.exec(srcEval.asInstanceOf[UTF8String], dict, collationId)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -939,15 +947,17 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
         $termLastMatching = $matching.clone();
         $termLastReplace = $replace.clone();
         $termDict = org.apache.spark.sql.catalyst.expressions.StringTranslate
-          .buildDict($termLastMatching, $termLastReplace);
+          .buildDict($termLastMatching, $termLastReplace, $collationId);
       }
-      ${ev.value} = $src.translate($termDict);
+      ${ev.value} = CollationSupport.StringTranslate.
+      exec($src, $termDict, $collationId);
       """
     })
   }
 
-  override def dataType: DataType = StringType
-  override def inputTypes: Seq[DataType] = Seq(StringType, StringType, StringType)
+  override def dataType: DataType = srcExpr.dataType
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeAnyCollation, StringTypeAnyCollation, StringTypeAnyCollation)
   override def first: Expression = srcExpr
   override def second: Expression = matchingExpr
   override def third: Expression = replaceExpr
@@ -1406,21 +1416,24 @@ case class StringInstr(str: Expression, substr: Expression)
 case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr: Expression)
  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
-  override def dataType: DataType = StringType
-  override def inputTypes: Seq[DataType] = Seq(StringType, StringType, IntegerType)
+  final lazy val collationId: Int = first.dataType.asInstanceOf[StringType].collationId
+
+  override def dataType: DataType = strExpr.dataType
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeAnyCollation, StringTypeAnyCollation, IntegerType)
   override def first: Expression = strExpr
   override def second: Expression = delimExpr
   override def third: Expression = countExpr
   override def prettyName: String = "substring_index"
 
   override def nullSafeEval(str: Any, delim: Any, count: Any): Any = {
-    str.asInstanceOf[UTF8String].subStringIndex(
-      delim.asInstanceOf[UTF8String],
-      count.asInstanceOf[Int])
+    CollationSupport.SubstringIndex.exec(str.asInstanceOf[UTF8String],
+      delim.asInstanceOf[UTF8String], count.asInstanceOf[Int], collationId);
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (str, delim, count) => s"$str.subStringIndex($delim, $count)")
+    defineCodeGen(ctx, ev, (str, delim, count) =>
+      CollationSupport.SubstringIndex.genCode(str, delim, Integer.parseInt(count, 10), collationId))
   }
 
   override protected def withNewChildrenInternal(
@@ -1457,12 +1470,15 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
     this(substr, str, Literal(1))
   }
 
+  final lazy val collationId: Int = first.dataType.asInstanceOf[StringType].collationId
+
   override def first: Expression = substr
   override def second: Expression = str
   override def third: Expression = start
   override def nullable: Boolean = substr.nullable || str.nullable
   override def dataType: DataType = IntegerType
-  override def inputTypes: Seq[DataType] = Seq(StringType, StringType, IntegerType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeAnyCollation, StringTypeAnyCollation, IntegerType)
 
   override def eval(input: InternalRow): Any = {
     val s = start.eval(input)
@@ -1482,9 +1498,8 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
           if (sVal < 1) {
             0
           } else {
-            l.asInstanceOf[UTF8String].indexOf(
-              r.asInstanceOf[UTF8String],
-              s.asInstanceOf[Int] - 1) + 1
+            CollationSupport.StringLocate.exec(l.asInstanceOf[UTF8String],
+              r.asInstanceOf[UTF8String], s.asInstanceOf[Int] - 1, collationId) + 1;
           }
         }
       }
@@ -1505,8 +1520,8 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
           ${strGen.code}
           if (!${strGen.isNull}) {
             if (${startGen.value} > 0) {
-              ${ev.value} = ${strGen.value}.indexOf(${substrGen.value},
-                ${startGen.value} - 1) + 1;
+              ${ev.value} = CollationSupport.StringLocate.exec(${strGen.value},
+              ${substrGen.value}, ${startGen.value} - 1, $collationId) + 1;
             }
           } else {
             ${ev.isNull} = true;
@@ -1891,7 +1906,7 @@ case class StringRepeat(str: Expression, times: Expression)
 case class StringSpace(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
   override def inputTypes: Seq[DataType] = Seq(IntegerType)
 
   override def nullSafeEval(s: Any): Any = {
@@ -2602,7 +2617,7 @@ object Decode {
         val input = params.head
         val other = params.tail
         val itr = other.iterator
-        var default: Expression = Literal.create(null, StringType)
+        var default: Expression = Literal.create(null, SQLConf.get.defaultStringType)
         val branches = ArrayBuffer.empty[(Expression, Expression)]
         while (itr.hasNext) {
           val search = itr.next()
