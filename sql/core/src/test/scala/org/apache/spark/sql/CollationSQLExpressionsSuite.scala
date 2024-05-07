@@ -151,6 +151,67 @@ class CollationSQLExpressionsSuite
     })
   }
 
+  test("Support StringSpace expression with collation") {
+    case class StringSpaceTestCase(
+      input: Int,
+      collationName: String,
+      result: String
+    )
+
+    val testCases = Seq(
+      StringSpaceTestCase(1, "UTF8_BINARY", " "),
+      StringSpaceTestCase(2, "UTF8_BINARY_LCASE", "  "),
+      StringSpaceTestCase(3, "UNICODE", "   "),
+      StringSpaceTestCase(4, "UNICODE_CI", "    ")
+    )
+
+    // Supported collations
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |select space(${t.input})
+           |""".stripMargin
+      // Result & data type
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        checkAnswer(testQuery, Row(t.result))
+        val dataType = StringType(t.collationName)
+        assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      }
+    })
+  }
+
+  test("Support ToChar expression with collation") {
+    case class ToCharTestCase(
+      input: Int,
+      collationName: String,
+      format: String,
+      result: String
+    )
+
+    val testCases = Seq(
+      ToCharTestCase(12, "UTF8_BINARY", "999", " 12"),
+      ToCharTestCase(34, "UTF8_BINARY_LCASE", "000D00", "034.00"),
+      ToCharTestCase(56, "UNICODE", "$99.99", "$56.00"),
+      ToCharTestCase(78, "UNICODE_CI", "99D9S", "78.0+")
+    )
+
+    // Supported collations
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |select to_char(${t.input}, '${t.format}')
+           |""".stripMargin
+      // Result & data type
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        checkAnswer(testQuery, Row(t.result))
+        val dataType = StringType(t.collationName)
+        assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      }
+    })
+  }
+
   test("Support StringToMap expression with collation") {
     // Supported collations
     case class StringToMapTestCase[R](t: String, p: String, k: String, c: String, result: R)
