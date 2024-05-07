@@ -21,7 +21,6 @@ import os
 from pyspark.sql import SparkSession
 from pyspark.ml.tests.connect.test_legacy_mode_classification import ClassificationTestsMixin
 
-# TODO(SPARK-48083): Reenable this test case
 have_torch = "SPARK_SKIP_CONNECT_COMPAT_TESTS" not in os.environ
 try:
     import torch  # noqa: F401
