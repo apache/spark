@@ -175,8 +175,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       }
     }
     // Inline all CTEs in the plan to help check query plan structures in subqueries.
-    var inlinedPlan: LogicalPlan = plan
-    inlinedPlan = inlineCTE(plan)
+    var inlinedPlan: LogicalPlan = inlineCTE(plan)
     if (danglingCTERelations.nonEmpty) {
       inlinedPlan = WithCTE(inlinedPlan, danglingCTERelations.toSeq)
     }
