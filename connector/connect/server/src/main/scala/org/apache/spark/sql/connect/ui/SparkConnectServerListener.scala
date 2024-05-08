@@ -22,7 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{OP_ID, SESSION_ID}
+import org.apache.spark.internal.LogKeys.{OP_ID, SESSION_ID}
 import org.apache.spark.internal.config.Status.LIVE_ENTITY_UPDATE_PERIOD
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.connect.config.Connect.{CONNECT_UI_SESSION_LIMIT, CONNECT_UI_STATEMENT_LIMIT}

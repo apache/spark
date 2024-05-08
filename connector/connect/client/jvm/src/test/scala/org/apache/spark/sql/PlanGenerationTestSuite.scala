@@ -2489,6 +2489,10 @@ class PlanGenerationTestSuite
       Collections.singletonMap("allowNumericLeadingZeros", "true"))
   }
 
+  functionTest("try_parse_json") {
+    fn.try_parse_json(fn.col("g"))
+  }
+
   functionTest("to_json") {
     fn.to_json(fn.col("d"), Map(("timestampFormat", "dd/MM/yyyy")))
   }
@@ -3223,34 +3227,12 @@ class PlanGenerationTestSuite
   }
 
   /* Extensions */
-  test("relation extension deprecated") {
-    val input = proto.ExamplePluginRelation
-      .newBuilder()
-      .setInput(simple.plan.getRoot)
-      .build()
-    session.newDataFrame(com.google.protobuf.Any.pack(input))
-  }
-
-  test("expression extension deprecated") {
-    val extension = proto.ExamplePluginExpression
-      .newBuilder()
-      .setChild(
-        proto.Expression
-          .newBuilder()
-          .setUnresolvedAttribute(proto.Expression.UnresolvedAttribute
-            .newBuilder()
-            .setUnparsedIdentifier("id")))
-      .setCustomField("abc")
-      .build()
-    simple.select(Column(com.google.protobuf.Any.pack(extension)))
-  }
-
   test("relation extension") {
     val input = proto.ExamplePluginRelation
       .newBuilder()
       .setInput(simple.plan.getRoot)
       .build()
-    session.newDataFrame(com.google.protobuf.Any.pack(input).toByteArray)
+    session.newDataFrame(_.setExtension(com.google.protobuf.Any.pack(input)))
   }
 
   test("expression extension") {
@@ -3264,7 +3246,7 @@ class PlanGenerationTestSuite
             .setUnparsedIdentifier("id")))
       .setCustomField("abc")
       .build()
-    simple.select(Column.forExtension(com.google.protobuf.Any.pack(extension).toByteArray))
+    simple.select(Column(_.setExtension(com.google.protobuf.Any.pack(extension))))
   }
 
   test("crosstab") {

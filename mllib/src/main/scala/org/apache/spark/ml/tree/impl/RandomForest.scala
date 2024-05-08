@@ -22,7 +22,7 @@ import scala.util.Random
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{NUM_CLASSES, NUM_EXAMPLES, NUM_FEATURES, TIMER, WEIGHTED_NUM}
+import org.apache.spark.internal.LogKeys.{NUM_CLASSES, NUM_EXAMPLES, NUM_FEATURES, TIMER, WEIGHTED_NUM}
 import org.apache.spark.ml.classification.DecisionTreeClassificationModel
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.impl.Utils

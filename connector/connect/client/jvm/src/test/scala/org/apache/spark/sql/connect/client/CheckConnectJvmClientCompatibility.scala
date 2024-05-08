@@ -358,6 +358,15 @@ object CheckConnectJvmClientCompatibility {
         .exclude[MissingClassProblem](
           "org.apache.spark.sql.expressions.SparkConnectClosureCleaner$"),
 
+      // Column
+      // developer API
+      ProblemFilters.exclude[IncompatibleMethTypeProblem](
+        "org.apache.spark.sql.Column.apply"
+      ),
+      ProblemFilters.exclude[IncompatibleResultTypeProblem](
+        "org.apache.spark.sql.Column.expr"
+      ),
+
       // Dataset
       ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.Dataset.plan"
@@ -440,6 +449,10 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.streaming.RemoteStreamingQuery"),
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.streaming.RemoteStreamingQuery$"),
+      // Skip client side listener specific class
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.streaming.StreamingQueryListenerBus"
+      ),
 
       // Encoders are in the wrong JAR
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Encoders"),

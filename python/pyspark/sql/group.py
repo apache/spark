@@ -43,9 +43,9 @@ def dfapi(f: Callable[..., DataFrame]) -> Callable[..., DataFrame]:
 
 
 def df_varargs_api(f: Callable[..., DataFrame]) -> Callable[..., DataFrame]:
-    from pyspark.sql.classic.column import _to_seq
-
     def _api(self: "GroupedData", *cols: str) -> DataFrame:
+        from pyspark.sql.classic.column import _to_seq
+
         name = f.__name__
         jdf = getattr(self._jgd, name)(_to_seq(self.session._sc, cols))
         return DataFrame(jdf, self.session)

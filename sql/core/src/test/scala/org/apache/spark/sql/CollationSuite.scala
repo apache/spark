@@ -21,6 +21,7 @@ import scala.jdk.CollectionConverters.MapHasAsJava
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2ProviderWithCustomSchema}
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable}
@@ -412,7 +413,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("implicit casting of collated strings") {
+  test("SPARK-47210: Implicit casting of collated strings") {
     val tableName = "parquet_dummy_implicit_cast_t22"
     withTable(tableName) {
       spark.sql(
@@ -566,7 +567,66 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("cast of default collated strings in IN expression") {
+  test("SPARK-47692: Parameter marker with EXECUTE IMMEDIATE implicit casting") {
+    sql(s"DECLARE stmtStr1 = 'SELECT collation(:var1 || :var2)';")
+    sql(s"DECLARE stmtStr2 = 'SELECT collation(:var1 || (\\\'a\\\' COLLATE UNICODE))';")
+
+    checkAnswer(
+      sql(
+        """EXECUTE IMMEDIATE stmtStr1 USING
+          | 'a' AS var1,
+          | 'b' AS var2;""".stripMargin),
+      Seq(Row("UTF8_BINARY"))
+    )
+
+    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
+      checkAnswer(
+        sql(
+          """EXECUTE IMMEDIATE stmtStr1 USING
+            | 'a' AS var1,
+            | 'b' AS var2;""".stripMargin),
+        Seq(Row("UNICODE"))
+      )
+    }
+
+    checkAnswer(
+      sql(
+        """EXECUTE IMMEDIATE stmtStr2 USING
+          | 'a' AS var1;""".stripMargin),
+      Seq(Row("UNICODE"))
+    )
+
+    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
+      checkAnswer(
+        sql(
+          """EXECUTE IMMEDIATE stmtStr2 USING
+            | 'a' AS var1;""".stripMargin),
+        Seq(Row("UNICODE"))
+      )
+    }
+  }
+
+  test("SPARK-47692: Parameter markers with variable mapping") {
+    checkAnswer(
+      spark.sql(
+        "SELECT collation(:var1 || :var2)",
+        Map("var1" -> Literal.create('a', StringType("UTF8_BINARY")),
+            "var2" -> Literal.create('b', StringType("UNICODE")))),
+      Seq(Row("UTF8_BINARY"))
+    )
+
+    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
+      checkAnswer(
+        spark.sql(
+          "SELECT collation(:var1 || :var2)",
+          Map("var1" -> Literal.create('a', StringType("UTF8_BINARY")),
+              "var2" -> Literal.create('b', StringType("UNICODE")))),
+        Seq(Row("UNICODE"))
+      )
+    }
+  }
+
+  test("SPARK-47210: Cast of default collated strings in IN expression") {
     val tableName = "t1"
     withTable(tableName) {
       spark.sql(
@@ -591,7 +651,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   }
 
   // TODO(SPARK-47210): Add indeterminate support
-  test("indeterminate collation checks") {
+  test("SPARK-47210: Indeterminate collation checks") {
     val tableName = "t1"
     val newTableName = "t2"
     withTable(tableName) {
@@ -980,4 +1040,23 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       checkAnswer(dfNonBinary, dfBinary)
     }
   }
+
+  test("hll sketch aggregate should respect collation") {
+    case class HllSketchAggTestCase[R](c: String, result: R)
+    val testCases = Seq(
+      HllSketchAggTestCase("UTF8_BINARY", 4),
+      HllSketchAggTestCase("UTF8_BINARY_LCASE", 3),
+      HllSketchAggTestCase("UNICODE", 4),
+      HllSketchAggTestCase("UNICODE_CI", 3)
+    )
+    testCases.foreach(t => {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.c) {
+        val q = "SELECT hll_sketch_estimate(hll_sketch_agg(col)) FROM " +
+          "VALUES ('a'), ('A'), ('b'), ('b'), ('c') tab(col)"
+        val df = sql(q)
+        checkAnswer(df, Seq(Row(t.result)))
+      }
+    })
+  }
+
 }

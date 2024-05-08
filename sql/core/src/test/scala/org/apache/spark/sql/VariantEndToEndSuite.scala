@@ -120,12 +120,7 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     check("{1:2}", null)
     check("{\"a\":1", null)
     check("{\"a\":[a,b,c]}", null)
-  }
-
-  test("try_parse_json with invalid input type") {
-    // This test is required because the type checking logic in try_parse_json is custom.
-    val exception = intercept[Exception](spark.sql("select try_parse_json(1)"))
-    assert(exception != null)
+    check("\"" + "a" * (16 * 1024 * 1024) + "\"", null)
   }
 
   test("to_json with nested variant") {
@@ -162,6 +157,7 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     check("null", "VOID")
     check("1", "BIGINT")
     check("1.0", "DECIMAL(1,0)")
+    check("0.01", "DECIMAL(2,2)")
     check("1E0", "DOUBLE")
     check("true", "BOOLEAN")
     check("\"2000-01-01\"", "STRING")

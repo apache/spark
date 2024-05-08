@@ -24,7 +24,7 @@ import java.util.Locale
 
 import scala.util.Using
 
-import org.apache.spark.internal.LogKey.COLUMN_NAME
+import org.apache.spark.internal.LogKeys.COLUMN_NAME
 import org.apache.spark.internal.MDC
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper

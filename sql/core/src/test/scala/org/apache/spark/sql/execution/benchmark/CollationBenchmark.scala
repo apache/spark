@@ -41,7 +41,7 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
       benchmark.addCase(s"$collationType") { _ =>
         sublistStrings.foreach { s1 =>
           utf8Strings.foreach { s =>
-            (0 to 10).foreach { _ =>
+            (0 to 3).foreach { _ =>
               collation.equalsFunction(s, s1).booleanValue()
             }
           }
@@ -65,7 +65,7 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
       benchmark.addCase(s"$collationType") { _ =>
         sublistStrings.foreach { s1 =>
           utf8Strings.foreach { s =>
-            (0 to 10).foreach { _ =>
+            (0 to 3).foreach { _ =>
               collation.comparator.compare(s, s1)
             }
           }
@@ -91,7 +91,7 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
       benchmark.addCase(s"$collationType") { _ =>
         sublistStrings.foreach { _ =>
           utf8Strings.foreach { s =>
-            (0 to 10).foreach { _ =>
+            (0 to 3).foreach { _ =>
               collation.hashFunction.applyAsLong(s)
             }
           }
@@ -117,7 +117,7 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
       benchmark.addCase(s"$collationType") { _ =>
         sublistStrings.foreach { s1 =>
           utf8Strings.foreach { s =>
-            (0 to 10).foreach { _ =>
+            (0 to 3).foreach { _ =>
               CollationSupport.Contains.exec(
                 s, s1, CollationFactory.collationNameToId(collation.collationName)
               )
@@ -145,7 +145,7 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
       benchmark.addCase(s"$collationType") { _ =>
         sublistStrings.foreach { s1 =>
           utf8Strings.foreach { s =>
-            (0 to 10).foreach { _ =>
+            (0 to 3).foreach { _ =>
               CollationSupport.StartsWith.exec(
                 s, s1, CollationFactory.collationNameToId(collation.collationName)
               )
@@ -173,7 +173,7 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
       benchmark.addCase(s"$collationType") { _ =>
         sublistStrings.foreach { s1 =>
           utf8Strings.foreach { s =>
-            (0 to 10).foreach { _ =>
+            (0 to 3).foreach { _ =>
               CollationSupport.EndsWith.exec(
                 s, s1, CollationFactory.collationNameToId(collation.collationName)
               )
@@ -212,12 +212,13 @@ object CollationBenchmark extends CollationBenchmarkBase {
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    benchmarkUTFStringEquals(collationTypes, generateSeqInput(10000L))
-    benchmarkUTFStringCompare(collationTypes, generateSeqInput(10000L))
-    benchmarkUTFStringHashFunction(collationTypes, generateSeqInput(10000L))
-    benchmarkContains(collationTypes, generateSeqInput(10000L))
-    benchmarkStartsWith(collationTypes, generateSeqInput(10000L))
-    benchmarkEndsWith(collationTypes, generateSeqInput(10000L))
+    val inputs = generateSeqInput(10000L)
+    benchmarkUTFStringEquals(collationTypes, inputs)
+    benchmarkUTFStringCompare(collationTypes, inputs)
+    benchmarkUTFStringHashFunction(collationTypes, inputs)
+    benchmarkContains(collationTypes, inputs)
+    benchmarkStartsWith(collationTypes, inputs)
+    benchmarkEndsWith(collationTypes, inputs)
   }
 }
 
@@ -240,11 +241,12 @@ object CollationNonASCIIBenchmark extends CollationBenchmarkBase {
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    benchmarkUTFStringEquals(collationTypes, generateSeqInput(4000L))
-    benchmarkUTFStringCompare(collationTypes, generateSeqInput(4000L))
-    benchmarkUTFStringHashFunction(collationTypes, generateSeqInput(4000L))
-    benchmarkContains(collationTypes, generateSeqInput(4000L))
-    benchmarkStartsWith(collationTypes, generateSeqInput(4000L))
-    benchmarkEndsWith(collationTypes, generateSeqInput(4000L))
+    val inputs = generateSeqInput(4000L)
+    benchmarkUTFStringEquals(collationTypes, inputs)
+    benchmarkUTFStringCompare(collationTypes, inputs)
+    benchmarkUTFStringHashFunction(collationTypes, inputs)
+    benchmarkContains(collationTypes, inputs)
+    benchmarkStartsWith(collationTypes, inputs)
+    benchmarkEndsWith(collationTypes, inputs)
   }
 }

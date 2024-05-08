@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.variant
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.{ArrayData, BadRecordException, MapData}
+import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.types.variant.{Variant, VariantBuilder, VariantSizeLimitException, VariantUtil}
@@ -31,16 +31,24 @@ import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
  */
 object VariantExpressionEvalUtils {
 
-  def parseJson(input: UTF8String): VariantVal = {
+  def parseJson(input: UTF8String, failOnError: Boolean = true): VariantVal = {
+    def parseJsonFailure(exception: Throwable): VariantVal = {
+      if (failOnError) {
+        throw exception
+      } else {
+        null
+      }
+    }
     try {
       val v = VariantBuilder.parseJson(input.toString)
       new VariantVal(v.getValue, v.getMetadata)
     } catch {
       case _: VariantSizeLimitException =>
-        throw QueryExecutionErrors.variantSizeLimitError(VariantUtil.SIZE_LIMIT, "parse_json")
+        parseJsonFailure(QueryExecutionErrors
+          .variantSizeLimitError(VariantUtil.SIZE_LIMIT, "parse_json"))
       case NonFatal(e) =>
-        throw QueryExecutionErrors.malformedRecordsDetectedInRecordParsingError(
-          input.toString, BadRecordException(() => input, cause = e))
+        parseJsonFailure(QueryExecutionErrors.malformedRecordsDetectedInRecordParsingError(
+          input.toString, e))
     }
   }
 
@@ -50,9 +58,13 @@ object VariantExpressionEvalUtils {
       false
     } else {
       val variantValue = input.getValue
-      // Variant NULL is denoted by basic_type == 0 and val_header == 0
-      variantValue(0) == 0
-     }
+      if (variantValue.isEmpty) {
+        throw QueryExecutionErrors.malformedVariant()
+      } else {
+        // Variant NULL is denoted by basic_type == 0 and val_header == 0
+        variantValue(0) == 0
+      }
+    }
   }
 
   /** Cast a Spark value from `dataType` into the variant type. */

@@ -75,8 +75,13 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   /**
    * The set of all attributes that are input to this operator by its children.
    */
-  def inputSet: AttributeSet =
-    AttributeSet(children.flatMap(_.asInstanceOf[QueryPlan[PlanType]].output))
+  def inputSet: AttributeSet = {
+    children match {
+      case Seq() => AttributeSet.empty
+      case Seq(c) => c.outputSet
+      case _ => AttributeSet.fromAttributeSets(children.map(_.outputSet))
+    }
+  }
 
   /**
    * The set of all attributes that are produced by this node.

@@ -32,7 +32,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{ALPHA, COUNT, TRAIN_WORD_COUNT, VOCAB_SIZE}
+import org.apache.spark.internal.LogKeys.{ALPHA, COUNT, TRAIN_WORD_COUNT, VOCAB_SIZE}
 import org.apache.spark.internal.config.Kryo.KRYO_SERIALIZER_MAX_BUFFER_SIZE
 import org.apache.spark.ml.linalg.BLAS
 import org.apache.spark.mllib.linalg.{Vector, Vectors}

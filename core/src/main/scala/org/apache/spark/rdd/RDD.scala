@@ -36,7 +36,8 @@ import org.apache.spark.Partitioner._
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.errors.SparkCoreErrors
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.RDD_LIMIT_SCALE_UP_FACTOR
 import org.apache.spark.partial.BoundedDouble
@@ -643,7 +644,8 @@ abstract class RDD[T: ClassTag](
           // this shouldn't happen often because we use a big multiplier for the initial size
           var numIters = 0
           while (samples.length < num) {
-            logWarning(s"Needed to re-sample due to insufficient sample size. Repeat #$numIters")
+            logWarning(log"Needed to re-sample due to insufficient sample size. " +
+              log"Repeat #${MDC(NUM_ITERATIONS, numIters)}")
             samples = this.sample(withReplacement, fraction, rand.nextInt()).collect()
             numIters += 1
           }

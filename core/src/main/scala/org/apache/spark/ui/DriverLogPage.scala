@@ -22,7 +22,7 @@ import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{LOG_TYPE, PATH}
+import org.apache.spark.internal.LogKeys.{LOG_TYPE, PATH}
 import org.apache.spark.internal.config.DRIVER_LOG_LOCAL_DIR
 import org.apache.spark.util.Utils
 import org.apache.spark.util.logging.DriverLogger.DRIVER_LOG_FILE
