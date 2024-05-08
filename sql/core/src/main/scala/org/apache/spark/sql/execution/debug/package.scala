@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeFormatter, CodegenContext, CodeGenerator, ExprCode}
-import org.apache.spark.sql.catalyst.plans.logical.{DebugSampleColumn, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{DebugInlineColumnsCount, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.util.StringConcat
@@ -202,8 +202,15 @@ package object debug {
       debugPrint(codegenString(query.queryExecution.executedPlan))
     }
 
-    def inlineColumnStats(columns: Expression *): Dataset[_] = {
-      val plan = DebugSampleColumn(query.logicalPlan, columns)
+    /**
+     * Counts the occurrence of values for the specified column combinations and periodically
+     * prints the results to stdout. Results will not have perfect accuracy because it only
+     * maintains the top K values. This is useful for identifying which values are creating skew
+     * in a column.
+     * @param columns The combination of columns to count the value occurrences for
+     */
+    def inlineColumnsCount(columns: Expression *): Dataset[_] = {
+      val plan = DebugInlineColumnsCount(query.logicalPlan, columns)
       Dataset.ofRows(query.sparkSession, plan)
     }
   }
@@ -303,7 +310,7 @@ package object debug {
       copy(child = newChild)
   }
 
-  case class DebugSampleColumnExec(
+  case class DebugInlineColumnsCountExec(
     child: SparkPlan,
     sampleColumns: Seq[Expression]) extends UnaryExecNode {
     // TODO only keep top K based on count
@@ -316,7 +323,7 @@ package object debug {
       }
     }
 
-    override protected def withNewChildInternal(newChild: SparkPlan): DebugSampleColumnExec =
+    override protected def withNewChildInternal(newChild: SparkPlan): DebugInlineColumnsCountExec =
       copy(child = newChild)
 
     override protected def doExecute(): RDD[InternalRow] = {
@@ -348,8 +355,8 @@ package object debug {
   object DebugPlanner extends SparkStrategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = {
       plan match {
-        case DebugSampleColumn(child, sampleColumns) =>
-          DebugSampleColumnExec(planLater(child), sampleColumns) :: Nil
+        case DebugInlineColumnsCount(child, sampleColumns) =>
+          DebugInlineColumnsCountExec(planLater(child), sampleColumns) :: Nil
         case _ => Nil
       }
     }

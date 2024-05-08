@@ -354,7 +354,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       HandleSpecialCommand),
     Batch("Remove watermark for batch query", Once,
       EliminateEventTimeWatermark),
-    Batch("Debug", Once, DebugSampleColumnPushDown)
+    Batch("Debug", Once, DebugInlineColumnsCountPushDown)
   )
 
   /**
@@ -4129,13 +4129,18 @@ object RemoveTempResolvedColumn extends Rule[LogicalPlan] {
   }
 }
 
-object DebugSampleColumnPushDown extends Rule[LogicalPlan] {
+/**
+ * This pushes down the a [[DebugInlineColumnsCount]] for a join to its children and
+ * infers the columns to count from the join keys. The column inference is done so
+ * the application code does not need to specify the same columns twice.
+ */
+object DebugInlineColumnsCountPushDown extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.transform {
-      case DebugSampleColumn(j @ ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _,
+      case DebugInlineColumnsCount(j @ ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _,
       left, right, _), sampleColumns) if sampleColumns.isEmpty =>
-        val newLeftChild = DebugSampleColumn(left, leftKeys)
-        val newRightChild = DebugSampleColumn(right, rightKeys)
+        val newLeftChild = DebugInlineColumnsCount(left, leftKeys)
+        val newRightChild = DebugInlineColumnsCount(right, rightKeys)
         j.withNewChildren(Seq(newLeftChild, newRightChild))
     }
   }

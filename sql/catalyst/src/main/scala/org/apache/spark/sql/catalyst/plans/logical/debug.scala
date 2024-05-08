@@ -20,11 +20,11 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 
 
-case class DebugSampleColumn(
+case class DebugInlineColumnsCount(
   child: LogicalPlan,
   sampleColumns: Seq[Expression]) extends UnaryNode {
 
-  override protected def withNewChildInternal(newChild: LogicalPlan): DebugSampleColumn =
+  override protected def withNewChildInternal(newChild: LogicalPlan): DebugInlineColumnsCount =
     copy(child = newChild)
 
   override def output: Seq[Attribute] = child.output
