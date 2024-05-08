@@ -22,6 +22,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.StringJoiner;
 
+import org.apache.commons.lang3.StringUtils;
+
 import org.apache.spark.SparkIllegalArgumentException;
 import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.connector.expressions.Cast;
@@ -43,6 +45,7 @@ import org.apache.spark.sql.connector.expressions.aggregate.GeneralAggregateFunc
 import org.apache.spark.sql.connector.expressions.aggregate.Sum;
 import org.apache.spark.sql.connector.expressions.aggregate.UserDefinedAggregateFunc;
 import org.apache.spark.sql.types.DataType;
+import org.apache.spark.sql.types.StringType;
 
 /**
  * The builder to generate SQL from V2 expressions.
@@ -168,7 +171,11 @@ public class V2ExpressionSQLBuilder {
   }
 
   protected String visitLiteral(Literal<?> literal) {
-    return literal.toString();
+    String litString = literal.toString();
+    if (literal.dataType() instanceof StringType) {
+      return "'" + StringUtils.replace(litString.substring(1, litString.length() - 1), "'", "''") + "'";
+    }
+    return litString;
   }
 
   protected String visitNamedReference(NamedReference namedRef) {
