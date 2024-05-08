@@ -83,6 +83,8 @@ jobs:
             yarn=`./dev/is-changed.py -m yarn`
             kubernetes=`./dev/is-changed.py -m kubernetes`
             sparkr=`./dev/is-changed.py -m sparkr`
+            tpcds=`./dev/is-changed.py -m sql`
+            docker=`./dev/is-changed.py -m docker-integration-tests`
             buf=true
             ui=true
             docs=true
@@ -91,6 +93,8 @@ jobs:
             yarn=false
             kubernetes=false
             sparkr=false
+            tpcds=false
+            docker=false
             buf=false
             ui=false
             docs=false
@@ -102,8 +106,8 @@ jobs:
               \"pyspark\": \"$pyspark\",
               \"pyspark-pandas\": \"$pandas\",
               \"sparkr\": \"$sparkr\",
-              \"tpcds-1g\": \"false\",
-              \"docker-integration-tests\": \"false\",
+              \"tpcds-1g\": \"$tpcds\",
+              \"docker-integration-tests\": \"$docker\",
               \"lint\" : \"true\",
               \"docs\" : \"$docs\",
               \"yarn\" : \"$yarn\",
