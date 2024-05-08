@@ -103,7 +103,7 @@ public class CLIService extends CompositeService implements ICLIService {
       String keyTabFile = hiveConf.getVar(ConfVars.HIVE_SERVER2_SPNEGO_KEYTAB);
       if (principal.isEmpty() || keyTabFile.isEmpty()) {
         LOG.info("SPNego httpUGI not created, spNegoPrincipal: {}, keytabFile: {}",
-          MDC.of(LogKeys.PREDICATE$.MODULE$, principal),
+          MDC.of(LogKeys.PRINCIPAL$.MODULE$, principal),
           MDC.of(LogKeys.KEYTAB_FILE$.MODULE$, keyTabFile));
       } else {
         try {

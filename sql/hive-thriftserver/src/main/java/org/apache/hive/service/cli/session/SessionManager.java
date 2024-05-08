@@ -91,11 +91,11 @@ public class SessionManager extends CompositeService {
       MDC.of(LogKeys.THREAD_POOL_SIZE$.MODULE$, poolSize));
     int poolQueueSize = hiveConf.getIntVar(ConfVars.HIVE_SERVER2_ASYNC_EXEC_WAIT_QUEUE_SIZE);
     LOG.info("HiveServer2: Background operation thread wait queue size: {}",
-      MDC.of(LogKeys.THREAD_WAIT_QUEUE_SIZE$.MODULE$, poolQueueSize));
+      MDC.of(LogKeys.THREAD_POOL_WAIT_QUEUE_SIZE$.MODULE$, poolQueueSize));
     long keepAliveTime = HiveConf.getTimeVar(
         hiveConf, ConfVars.HIVE_SERVER2_ASYNC_EXEC_KEEPALIVE_TIME, TimeUnit.SECONDS);
     LOG.info("HiveServer2: Background operation thread keepalive time: {} ms",
-      MDC.of(LogKeys.THREAD_KEEP_ALIVE_TIME$.MODULE$, keepAliveTime * 1000));
+      MDC.of(LogKeys.THREAD_POOL_KEEPALIVE_TIME$.MODULE$, keepAliveTime * 1000));
 
     // Create a thread pool with #poolSize threads
     // Threads terminate when they are idle for more than the keepAliveTime

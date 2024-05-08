@@ -146,7 +146,6 @@ object LogKeys {
   case object DEFAULT_VALUE extends LogKey
   case object DELAY extends LogKey
   case object DELEGATE extends LogKey
-  case object DELEGATION_TOKEN extends LogKey
   case object DELTA extends LogKey
   case object DEPRECATED_KEY extends LogKey
   case object DESCRIPTION extends LogKey
@@ -605,10 +604,10 @@ object LogKeys {
   case object TEST_SIZE extends LogKey
   case object THREAD extends LogKey
   case object THREAD_ID extends LogKey
-  case object THREAD_KEEP_ALIVE_TIME extends LogKey
   case object THREAD_NAME extends LogKey
+  case object THREAD_POOL_KEEPALIVE_TIME extends LogKey
   case object THREAD_POOL_SIZE extends LogKey
-  case object THREAD_WAIT_QUEUE_SIZE extends LogKey
+  case object THREAD_POOL_WAIT_QUEUE_SIZE extends LogKey
   case object TID extends LogKey
   case object TIME extends LogKey
   case object TIMEOUT extends LogKey
