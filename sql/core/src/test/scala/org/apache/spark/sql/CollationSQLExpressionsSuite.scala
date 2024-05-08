@@ -208,6 +208,109 @@ class CollationSQLExpressionsSuite
     })
   }
 
+  test("Support UrlEncode hash expression with collation") {
+    case class UrlEncodeTestCase(
+     input: String,
+     collationName: String,
+     result: String
+    )
+
+    val testCases = Seq(
+      UrlEncodeTestCase("https://spark.apache.org", "UTF8_BINARY",
+        "https%3A%2F%2Fspark.apache.org"),
+      UrlEncodeTestCase("https://spark.apache.org", "UTF8_BINARY_LCASE",
+        "https%3A%2F%2Fspark.apache.org"),
+      UrlEncodeTestCase("https://spark.apache.org", "UNICODE",
+        "https%3A%2F%2Fspark.apache.org"),
+      UrlEncodeTestCase("https://spark.apache.org", "UNICODE_CI",
+        "https%3A%2F%2Fspark.apache.org")
+    )
+
+    // Supported collations
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |select url_encode('${t.input}')
+           |""".stripMargin
+      // Result
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        checkAnswer(testQuery, Row(t.result))
+        val dataType = StringType(t.collationName)
+        assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      }
+    })
+  }
+
+  test("Support UrlDecode hash expression with collation") {
+    case class UrlDecodeTestCase(
+      input: String,
+      collationName: String,
+      result: String
+    )
+
+    val testCases = Seq(
+      UrlDecodeTestCase("https%3A%2F%2Fspark.apache.org", "UTF8_BINARY",
+        "https://spark.apache.org"),
+      UrlDecodeTestCase("https%3A%2F%2Fspark.apache.org", "UTF8_BINARY_LCASE",
+        "https://spark.apache.org"),
+      UrlDecodeTestCase("https%3A%2F%2Fspark.apache.org", "UNICODE",
+        "https://spark.apache.org"),
+      UrlDecodeTestCase("https%3A%2F%2Fspark.apache.org", "UNICODE_CI",
+        "https://spark.apache.org")
+    )
+
+    // Supported collations
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |select url_decode('${t.input}')
+           |""".stripMargin
+      // Result
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        checkAnswer(testQuery, Row(t.result))
+        val dataType = StringType(t.collationName)
+        assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      }
+    })
+  }
+
+  test("Support ParseUrl hash expression with collation") {
+    case class ParseUrlTestCase(
+      input: String,
+      collationName: String,
+      path: String,
+      result: String
+    )
+
+    val testCases = Seq(
+      ParseUrlTestCase("http://spark.apache.org/path?query=1", "UTF8_BINARY", "HOST",
+        "spark.apache.org"),
+      ParseUrlTestCase("http://spark.apache.org/path?query=2", "UTF8_BINARY_LCASE", "PATH",
+        "/path"),
+      ParseUrlTestCase("http://spark.apache.org/path?query=3", "UNICODE", "QUERY",
+        "query=3"),
+      ParseUrlTestCase("http://spark.apache.org/path?query=4", "UNICODE_CI", "PROTOCOL",
+        "http")
+    )
+
+    // Supported collations
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |select parse_url('${t.input}', '${t.path}')
+           |""".stripMargin
+      // Result
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        checkAnswer(testQuery, Row(t.result))
+        val dataType = StringType(t.collationName)
+        assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      }
+    })
+  }
+
   test("Conv expression with collation") {
     // Supported collations
     case class ConvTestCase(
