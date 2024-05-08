@@ -3906,19 +3906,20 @@ abstract class JsonSuite
       )
       extractData(
         s"""{"data": ["white",    "space"]}""",
-        expectedInexactData = Seq(s"""["white","space"}]"""),
-        expectedExactData = Seq(s"""["white":    "space"]""")
+        expectedInexactData = Seq(s"""["white","space"]"""),
+        expectedExactData = Seq(s"""["white",    "space"]""")
       )
       val granularFloat = "-999.99999999999999999999999999999999995"
       extractData(
-        s"""{"data": {"v": ${granularFloat}}""",
-        expectedInexactData = Seq(s"""{"v": 1000.0}"""),
+        s"""{"data": {"v": ${granularFloat}}}""",
+        expectedInexactData = Seq(s"""{"v":-1000.0}"""),
         expectedExactData = Seq(s"""{"v": ${granularFloat}}""")
       )
+      // In multiLine, we fall back to the inexact method:
       extractData(
         s"""{"data": {"white":\n"space"}}""",
         expectedInexactData = Seq(s"""{"white":"space"}"""),
-        expectedExactData = Seq(s"""{"white":\n"space"}"""),
+        expectedExactData = Seq(s"""{"white":"space"}"""),
         multiLine = true
       )
     }
