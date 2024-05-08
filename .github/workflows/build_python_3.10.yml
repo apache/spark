@@ -17,18 +17,14 @@
 # under the License.
 #
 
-name: "Build / Python-only (master, PyPy 3.9/Python 3.10/Python 3.12)"
+name: "Build / Python-only (master, Python 3.10)"
 
 on:
   schedule:
-    - cron: '0 15 * * *'
+    - cron: '0 17 * * *'
 
 jobs:
   run-build:
-    strategy:
-      fail-fast: false
-      matrix:
-        pyversion: ["pypy3", "python3.10", "python3.12"]
     permissions:
       packages: write
     name: Run
@@ -40,7 +36,7 @@ jobs:
       hadoop: hadoop3
       envs: >-
         {
-          "PYTHON_TO_TEST": "${{ matrix.pyversion }}"
+          "PYTHON_TO_TEST": "python3.10"
         }
       jobs: >-
         {
