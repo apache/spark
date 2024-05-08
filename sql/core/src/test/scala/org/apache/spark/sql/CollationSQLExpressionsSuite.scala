@@ -402,7 +402,7 @@ class CollationSQLExpressionsSuite
               StructField("pos", IntegerType, nullable = false),
               StructField("key", StringType("UTF8_BINARY")),
               StructField("value", VariantType, nullable = false)
-          ),
+          )
       ),
       VariantExplodeTestCase("[\"Spark\", \"SQL\"]", "UTF8_BINARY_LCASE",
         Row(0, "null", "\"Spark\"").toString() + Row(1, "null", "\"SQL\"").toString(),
@@ -410,7 +410,7 @@ class CollationSQLExpressionsSuite
           StructField("pos", IntegerType, nullable = false),
           StructField("key", StringType("UTF8_BINARY_LCASE")),
           StructField("value", VariantType, nullable = false)
-        ),
+        )
       ),
       VariantExplodeTestCase("{\"a\": true, \"b\": 3.14}", "UNICODE",
         Row(0, "a", "true").toString() + Row(1, "b", "3.14").toString(),
@@ -418,7 +418,7 @@ class CollationSQLExpressionsSuite
           StructField("pos", IntegerType, nullable = false),
           StructField("key", StringType("UNICODE")),
           StructField("value", VariantType, nullable = false)
-        ),
+        )
       ),
       VariantExplodeTestCase("{\"A\": 9.99, \"B\": false}", "UNICODE_CI",
         Row(0, "A", "9.99").toString() + Row(1, "B", "false").toString(),
