@@ -72,14 +72,14 @@ jobs:
           # See also https://github.com/conda/conda/issues/7980
           source "$CONDA_PREFIX/etc/profile.d/conda.sh"
           conda update -q conda
-          conda create -c conda-forge -q -n python3.11 python=3.11
-          conda activate python3.11
+          conda create -c conda-forge -q -n server-env python=3.11
+          conda activate server-env
           pip install -r dev/requirements.txt
           conda deactivate
 
           # Client enviornment
-          conda create -c conda-forge -q -n python3.11 python=3.11
-          conda activate python3.11
+          conda create -c conda-forge -q -n client-env python=3.11
+          conda activate client-env
           pip install 'numpy==1.25.1' 'pyarrow==12.0.1' 'pandas<=2.0.3' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.3.1' coverage 'matplotlib==3.7.2' openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*'
 
           # Add Python deps for Spark Connect.
@@ -96,7 +96,7 @@ jobs:
         run: |
           # See also https://github.com/conda/conda/issues/7980
           source "$CONDA_PREFIX/etc/profile.d/conda.sh"
-          conda activate python3.11
+          conda activate server-env
 
           # Make less noisy
           cp conf/log4j2.properties.template conf/log4j2.properties
@@ -114,7 +114,7 @@ jobs:
           git clone --single-branch --branch branch-3.5 $GITHUB_SERVER_URL/$GITHUB_REPOSITORY spark-3.5
           cd spark-3.5
 
-          conda activate python3.11
+          conda activate client-env
 
           # Several tests related to catalog requires to run them sequencially, e.g., writing a table in a listener.
           # Run branch-3.5 tests
