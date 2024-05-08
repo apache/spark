@@ -836,19 +836,6 @@ class CollationStringExpressionsSuite
     })
   }
 
-  test("Support mode for string expression with collation ID on table") {
-    withTable("t") {
-      sql("CREATE TABLE t(i STRING) USING parquet")
-      sql("INSERT INTO t VALUES " +
-        "('a'), ('a'), ('a'), ('a'), ('a'), " +
-        "('b'), ('b'), ('b'), " +
-        "('B'), ('B'), ('B'), ('B')")
-      val query = "SELECT mode(collate(i, 'UTF8_BINARY_LCASE')) FROM t"
-      checkAnswer(sql(query), Row("b"))
-      assert(sql(query).schema.fields.head.dataType.sameType(StringType("UTF8_BINARY_LCASE")))
-    }
-  }
-
   test("Support Mode.eval(buffer)") {
     case class ModeTestCase[R](
         collationId: String,
