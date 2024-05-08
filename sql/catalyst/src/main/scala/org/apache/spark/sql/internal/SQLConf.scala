@@ -4249,6 +4249,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val JSON_EXACT_STRING_PARSING =
+    buildConf("spark.sql.json.enableExactStringParsing")
+      .internal()
+      .doc("When set to true, string columns extracted from JSON objects will be extracted " +
+        "exactly as they appear in the input string, with no changes")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val LEGACY_CSV_ENABLE_DATE_TIME_PARSING_FALLBACK =
     buildConf("spark.sql.legacy.csv.enableDateTimeParsingFallback")
       .internal()

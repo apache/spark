@@ -284,7 +284,7 @@ class JacksonParser(
           // Note that it always tries to convert the data as string without the case of failure.
           val startLocation = parser.getTokenLocation
           startLocation.contentReference().getRawContent match {
-            case byteArray: Array[Byte] =>
+            case byteArray: Array[Byte] if exactStringParsing =>
                other match {
                 case START_OBJECT =>
                   parser.skipChildren()
@@ -447,6 +447,8 @@ class JacksonParser(
   }
 
   private val allowEmptyString = SQLConf.get.getConf(SQLConf.LEGACY_ALLOW_EMPTY_STRING_IN_JSON)
+
+  private val exactStringParsing = SQLConf.get.getConf(SQLConf.JSON_EXACT_STRING_PARSING)
 
   /**
    * This function throws an exception for failed conversion. For empty string on data types

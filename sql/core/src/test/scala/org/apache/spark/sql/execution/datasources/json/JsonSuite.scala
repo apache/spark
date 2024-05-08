@@ -3866,21 +3866,55 @@ abstract class JsonSuite
     }
   }
 
-  test("SPARK-48148: decimal precision is preserved when object is read as string") {
+  test("SPARK-48148: values are unchanged when read as string") {
     withTempPath { path =>
+      def extractData(
+          jsonString: String,
+          expectedInexactData: Seq[String],
+          expectedExactData: Seq[String],
+          multiLine: Boolean = false): Unit = {
+        Seq(jsonString).toDF()
+          .repartition(1)
+          .write
+          .mode("overwrite")
+          .text(path.getAbsolutePath)
 
-      val granularFloat = "-999.99999999999999999999999999999999995"
-      val jsonString = s"""{"data": {"v": ${granularFloat}}}, {"data": {"v": ${granularFloat}}}]"""
+        withClue("Exact string parsing") {
+          withSQLConf(SQLConf.JSON_EXACT_STRING_PARSING.key -> "false") {
+            val df = spark.read
+              .schema("data STRING")
+              .option("multiLine", multiLine.toString)
+              .json(path.getAbsolutePath)
+            checkAnswer(df, expectedInexactData.map(d => Row(d)))
+          }
+        }
 
-      Seq(jsonString).toDF()
-        .repartition(1)
-        .write
-        .text(path.getAbsolutePath)
-
-      val df = spark.read.schema("data STRING").json(path.getAbsolutePath)
-
-      val expected = s"""{"v": ${granularFloat}}"""
-      checkAnswer(df, Seq(Row(expected)))
+        withClue("Inexact string parsing") {
+          withSQLConf(SQLConf.JSON_EXACT_STRING_PARSING.key -> "true") {
+            val df = spark.read
+              .schema("data STRING")
+              .option("multiLine", multiLine.toString)
+              .json(path.getAbsolutePath)
+            checkAnswer(df, expectedExactData.map(d => Row(d)))
+          }
+        }
+      }
+      extractData(
+        s"""{"data": {"white":    "space"}}""",
+        expectedInexactData = Seq(s"""{"white":"space"}"""),
+        expectedExactData = Seq(s"""{"white":    "space"}""")
+      )
+//      extractData(s"""{"data": ["white",  "space"]}""", Seq(s"""["white",  "space"]"""))
+//
+//
+//      extractData(
+//        s"""{"data": {"white":\n"space"}}""",
+//        Seq(s"""{"white":\n"space"}"""),
+//        multiLine = true)
+//
+//
+//      val granularFloat = "-999.99999999999999999999999999999999995"
+//      extractData(s"""{"data": {"v": ${granularFloat}}}""", Seq(s"""{"v": ${granularFloat}}"""))
     }
   }
 }
