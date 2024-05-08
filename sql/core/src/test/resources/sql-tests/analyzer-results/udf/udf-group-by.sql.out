@@ -362,7 +362,7 @@ SELECT udf(1) FROM range(10) HAVING true
 -- !query analysis
 Filter cast(true as boolean)
 +- Aggregate [cast(udf(cast(1 as string)) as int) AS udf(1)#x]
-   +- Range (0, 10, step=1, splits=None)
+   +- Range (0, 10, step=1)
 
 
 -- !query
@@ -371,7 +371,7 @@ SELECT udf(udf(1)) FROM range(10) HAVING MAX(id) > 0
 Project [udf(udf(1))#x]
 +- Filter (max(id#xL)#xL > cast(0 as bigint))
    +- Aggregate [cast(udf(cast(cast(udf(cast(1 as string)) as int) as string)) as int) AS udf(udf(1))#x, max(id#xL) AS max(id#xL)#xL]
-      +- Range (0, 10, step=1, splits=None)
+      +- Range (0, 10, step=1)
 
 
 -- !query
