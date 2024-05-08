@@ -816,8 +816,8 @@ class CollationStringExpressionsSuite
     case class ModeTestCase[R](collationId: String, bufferValues: Map[String, Long], result: R)
     val testCases = Seq(
       ModeTestCase("utf8_binary", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
-      ModeTestCase("utf8_binary_lcase", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b"),
-      ModeTestCase("unicode_ci", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b"),
+      ModeTestCase("utf8_binary_lcase", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "B"),
+      ModeTestCase("unicode_ci", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "B"),
       ModeTestCase("unicode", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a")
     )
     testCases.foreach(t => {
@@ -844,7 +844,7 @@ class CollationStringExpressionsSuite
         "('b'), ('b'), ('b'), " +
         "('B'), ('B'), ('B'), ('B')")
       val query = "SELECT mode(collate(i, 'UTF8_BINARY_LCASE')) FROM t"
-      checkAnswer(sql(query), Row("b"))
+      checkAnswer(sql(query), Row("B"))
       assert(sql(query).schema.fields.head.dataType.sameType(StringType("UTF8_BINARY_LCASE")))
     }
   }

@@ -80,6 +80,7 @@ case class Mode(
     if (buff.isEmpty) {
       return null
     }
+    val aliasHashMap = new OpenHashMap[AnyRef, UTF8String](buff.size)
     val buffer = if (isCollatedString(child)) {
       val collation = CollationFactory.fetchCollation(collationId)
       val modeMap = buff.foldLeft(
@@ -88,11 +89,13 @@ case class Mode(
           val utf8 = org.apache.spark.unsafe.types.UTF8String.fromString(key)
           val k = org.apache.spark.unsafe.types.UTF8String.fromString(
             collation.hashFunction.applyAsLong(utf8).toString + "_" + utf8.toLowerCase())
+          aliasHashMap.update(k, utf8)
           map.update(k, map.get(k).getOrElse(0L) + count)
           map
         case (map, (key: UTF8String, count)) =>
           val k = org.apache.spark.unsafe.types.UTF8String.fromString(
             collation.hashFunction.applyAsLong(key).toString + "_" + key.toLowerCase())
+          aliasHashMap.update(k, key)
           map.update(k, map.get(k).getOrElse(0L) + count)
           map
         case (_, _) =>
@@ -103,7 +106,7 @@ case class Mode(
       buff
     }
 
-    reverseOpt.map { reverse =>
+    val k = reverseOpt.map { reverse =>
       val defaultKeyOrdering = if (reverse) {
         PhysicalDataType.ordering(child.dataType).asInstanceOf[Ordering[AnyRef]].reverse
       } else {
@@ -112,6 +115,8 @@ case class Mode(
       val ordering = Ordering.Tuple2(Ordering.Long, defaultKeyOrdering)
       buffer.maxBy { case (key, count) => (count, key) }(ordering)
     }.getOrElse(buffer.maxBy(_._2))._1
+
+    aliasHashMap.get(k).getOrElse(k)
   }
 
   private def impl2(buff: OpenHashMap[AnyRef, Long]): OpenHashMap[UTF8String, Long] = {
