@@ -430,7 +430,7 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         self.assertEqual(plan.root.sample.lower_bound, 0.0)
         self.assertEqual(plan.root.sample.upper_bound, 0.3)
         self.assertEqual(plan.root.sample.with_replacement, False)
-        self.assertEqual(plan.root.sample.HasField("seed"), False)
+        self.assertEqual(plan.root.sample.HasField("seed"), True)
         self.assertEqual(plan.root.sample.deterministic_order, False)
 
         plan = (
