@@ -699,7 +699,10 @@ class ArrayType(DataType):
 
     @classmethod
     def fromJson(
-        cls, json: Dict[str, Any], fieldPath: str = "", collationsMap: Optional[Dict[str, str]] = None
+        cls,
+        json: Dict[str, Any],
+        fieldPath: str = "",
+        collationsMap: Optional[Dict[str, str]] = None,
     ) -> "ArrayType":
         elementType = _resolve_type(json["elementType"], fieldPath + ".element", collationsMap)
         return ArrayType(elementType, json["containsNull"])
@@ -819,7 +822,10 @@ class MapType(DataType):
 
     @classmethod
     def fromJson(
-        cls, json: Dict[str, Any], fieldPath: str = "", collationsMap: Optional[Dict[str, str]] = None
+        cls,
+        json: Dict[str, Any],
+        fieldPath: str = "",
+        collationsMap: Optional[Dict[str, str]] = None,
     ) -> "MapType":
         keyType = _resolve_type(json["keyType"], fieldPath + ".key", collationsMap)
         valueType = _resolve_type(json["valueType"], fieldPath + ".value", collationsMap)
@@ -1769,7 +1775,9 @@ def _parse_datatype_json_string(json_string: str) -> DataType:
 
 
 def _parse_datatype_json_value(
-    json_value: Union[dict, str], fieldPath: str = "", collationsMap: Optional[Dict[str, str]] = None
+    json_value: Union[dict, str],
+    fieldPath: str = "",
+    collationsMap: Optional[Dict[str, str]] = None,
 ) -> DataType:
     if not isinstance(json_value, dict):
         if json_value in _all_atomic_types.keys():
@@ -1827,7 +1835,7 @@ def _parse_datatype_json_value(
 
 
 def _resolve_type(
-    json_value: Dict[str, Any], fieldPath: str, collationsMap: Optional[Dict[str, str]] = None
+    json_value: Dict[str, Any], fieldPath: str, collationsMap: Optional[Dict[str, str]]
 ):
     if collationsMap and fieldPath in collationsMap:
         return StringType(collationsMap[fieldPath])

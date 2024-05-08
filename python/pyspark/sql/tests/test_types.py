@@ -549,6 +549,76 @@ class TypesTestsMixin:
         self.assertEqual(df.count(), 1)
         self.assertEqual(df.head(), Row(name="[123]", income=120))
 
+    def test_schema_with_collations_json_ser_de(self):
+        from pyspark.sql.types import _parse_datatype_json_string
+
+        unicode_collation = "UNICODE"
+
+        simple_struct = StructType([StructField("c1", StringType(unicode_collation))])
+
+        nested_struct = StructType([StructField("nested", simple_struct)])
+
+        array_in_schema = StructType(
+            [StructField("array", ArrayType(StringType(unicode_collation)))]
+        )
+
+        map_in_schema = StructType(
+            [
+                StructField(
+                    "map", MapType(StringType(unicode_collation), StringType(unicode_collation))
+                )
+            ]
+        )
+
+        array_in_map_in_nested_schema = StructType(
+            [
+                StructField(
+                    "arrInMap",
+                    MapType(
+                        StringType(unicode_collation), ArrayType(StringType(unicode_collation))
+                    ),
+                )
+            ]
+        )
+
+        nested_array_in_map = StructType(
+            [
+                StructField(
+                    "nestedArrayInMap",
+                    ArrayType(
+                        MapType(
+                            StringType(unicode_collation),
+                            ArrayType(ArrayType(StringType(unicode_collation))),
+                        )
+                    ),
+                )
+            ]
+        )
+
+        schema_with_multiple_fields = StructType(
+            simple_struct.fields
+            + nested_struct.fields
+            + array_in_schema.fields
+            + map_in_schema.fields
+            + array_in_map_in_nested_schema.fields
+            + nested_array_in_map.fields
+        )
+
+        schemas = [
+            simple_struct,
+            nested_struct,
+            array_in_schema,
+            map_in_schema,
+            nested_array_in_map,
+            array_in_map_in_nested_schema,
+            schema_with_multiple_fields,
+        ]
+
+        for schema in schemas:
+            scala_datatype = self.spark._jsparkSession.parseDataType(schema.json())
+            python_datatype = _parse_datatype_json_string(scala_datatype.json())
+            assert schema == python_datatype
+
     def test_udt(self):
         from pyspark.sql.types import _parse_datatype_json_string, _infer_type, _make_type_verifier
 
@@ -890,76 +960,6 @@ class TypesTestsMixin:
             _parse_datatype_string("a INT, c DOUBLE"),
         )
         self.assertEqual(VariantType(), _parse_datatype_string("variant"))
-
-    def test_schema_with_collations_json_ser_de(self):
-        from pyspark.sql.types import _parse_datatype_json_string
-
-        unicode_collation = "UNICODE"
-
-        simple_struct = StructType([StructField("c1", StringType(unicode_collation))])
-
-        nested_struct = StructType([StructField("nested", simple_struct)])
-
-        array_in_schema = StructType(
-            [StructField("array", ArrayType(StringType(unicode_collation)))]
-        )
-
-        map_in_schema = StructType(
-            [
-                StructField(
-                    "map", MapType(StringType(unicode_collation), StringType(unicode_collation))
-                )
-            ]
-        )
-
-        array_in_map_in_nested_schema = StructType(
-            [
-                StructField(
-                    "arrInMap",
-                    MapType(
-                        StringType(unicode_collation), ArrayType(StringType(unicode_collation))
-                    ),
-                )
-            ]
-        )
-
-        nested_array_in_map = StructType(
-            [
-                StructField(
-                    "nestedArrayInMap",
-                    ArrayType(
-                        MapType(
-                            StringType(unicode_collation),
-                            ArrayType(ArrayType(StringType(unicode_collation))),
-                        )
-                    ),
-                )
-            ]
-        )
-
-        schema_with_multiple_fields = StructType(
-            simple_struct.fields
-            + nested_struct.fields
-            + array_in_schema.fields
-            + map_in_schema.fields
-            + array_in_map_in_nested_schema.fields
-            + nested_array_in_map.fields
-        )
-
-        schemas = [
-            simple_struct,
-            nested_struct,
-            array_in_schema,
-            map_in_schema,
-            nested_array_in_map,
-            array_in_map_in_nested_schema,
-            schema_with_multiple_fields,
-        ]
-
-        for schema in schemas:
-            scala_datatype = self.spark._jsparkSession.parseDataType(schema.json())
-            python_datatype = _parse_datatype_json_string(scala_datatype.json())
-            assert schema == python_datatype
 
     def test_metadata_null(self):
         schema = StructType(
