@@ -866,25 +866,28 @@ class TypesTestsMixin:
         self.assertEqual(StringType(), _parse_datatype_string("string"))
         self.assertEqual(StringType(), _parse_datatype_string("string collate UTF8_BINARY"))
         self.assertEqual(StringType(), _parse_datatype_string("string COLLATE UTF8_BINARY"))
+        self.assertEqual(StringType(), _parse_datatype_string("string COLLATE   UTF8_BINARY"))
         self.assertEqual(
-            StringType.fromCollationId(0), _parse_datatype_string("string COLLATE   UTF8_BINARY")
+            StringType("UTF8_BINARY"), _parse_datatype_string("string COLLATE   UTF8_BINARY")
         )
         self.assertEqual(
-            StringType.fromCollationId(1),
+            StringType("UTF8_BINARY_LCASE"),
             _parse_datatype_string("string COLLATE UTF8_BINARY_LCASE"),
         )
         self.assertEqual(
-            StringType.fromCollationId(2), _parse_datatype_string("string COLLATE UNICODE")
+            StringType("UNICODE"), _parse_datatype_string("string COLLATE UNICODE")
         )
         self.assertEqual(
-            StringType.fromCollationId(2), _parse_datatype_string("string COLLATE `UNICODE`")
+            StringType("UNICODE"), _parse_datatype_string("string COLLATE `UNICODE`")
         )
         self.assertEqual(
-            StringType.fromCollationId(3), _parse_datatype_string("string COLLATE UNICODE_CI")
+            StringType("UNICODE_CI"), _parse_datatype_string("string COLLATE UNICODE_CI")
         )
         self.assertEqual(
-            StringType.fromCollationId(3), _parse_datatype_string("string COLLATE `UNICODE_CI`")
+            StringType("UNICODE_CI"), _parse_datatype_string("string COLLATE `UNICODE_CI`")
         )
+        self.assertEqual(StringType("en"), _parse_datatype_string("string COLLATE en"))
+        self.assertEqual(StringType("en_USA"), _parse_datatype_string("string COLLATE en_USA"))
         self.assertEqual(CharType(1), _parse_datatype_string("char(1)"))
         self.assertEqual(CharType(10), _parse_datatype_string("char( 10   )"))
         self.assertEqual(CharType(11), _parse_datatype_string("char( 11)"))

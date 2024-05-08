@@ -254,24 +254,15 @@ class StringType(AtomicType):
         name of the collation, default is UTF8_BINARY.
     """
 
-    collationNames = ["UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI"]
-
-    def __init__(self, collation: Optional[str] = None):
-        self.collationId = 0 if collation is None else self.collationNameToId(collation)
-
-    @classmethod
-    def fromCollationId(self, collationId: int) -> "StringType":
-        return StringType(StringType.collationNames[collationId])
+    def __init__(self, collation: str = "UTF8_BINARY"):
+        self.collation = collation
 
     def collationIdToName(self) -> str:
-        if self.collationId == 0:
-            return ""
-        else:
-            return " collate %s" % StringType.collationNames[self.collationId]
-
-    @classmethod
-    def collationNameToId(cls, collationName: str) -> int:
-        return StringType.collationNames.index(collationName)
+        return (
+            " collate %s" % self.collation
+            if self.collation != "UTF8_BINARY"
+            else ""
+        )
 
     def simpleString(self) -> str:
         return "string" + self.collationIdToName()
@@ -281,8 +272,8 @@ class StringType(AtomicType):
 
     def __repr__(self) -> str:
         return (
-            "StringType('%s')" % StringType.collationNames[self.collationId]
-            if self.collationId != 0
+            "StringType('%s')" % self.collation
+            if self.collation != "UTF8_BINARY"
             else "StringType()"
         )
 
