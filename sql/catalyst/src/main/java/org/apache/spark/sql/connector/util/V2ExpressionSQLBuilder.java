@@ -22,8 +22,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.StringJoiner;
 
-import org.apache.commons.lang3.StringUtils;
-
 import org.apache.spark.SparkIllegalArgumentException;
 import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.connector.expressions.Cast;
