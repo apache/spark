@@ -82,6 +82,11 @@ jobs:
           pyspark=true; sparkr=true; tpcds=true; docker=true;
           pyspark_modules=`cd dev && python -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark')))"`
           pyspark=`./dev/is-changed.py -m $pyspark_modules`
+          if [ "${{ github.repository != 'apache/spark' }}" ]; then
+            pandas=$pyspark
+          else
+            pandas=false
+          fi
           sparkr=`./dev/is-changed.py -m sparkr`
           tpcds=`./dev/is-changed.py -m sql`
           docker=`./dev/is-changed.py -m docker-integration-tests`
@@ -90,6 +95,7 @@ jobs:
             {
               \"build\": \"$build\",
               \"pyspark\": \"$pyspark\",
+              \"pyspark-pandas\": \"$pandas\",
               \"sparkr\": \"$sparkr\",
               \"tpcds-1g\": \"$tpcds\",
               \"docker-integration-tests\": \"$docker\",
@@ -361,6 +367,14 @@ jobs:
             pyspark-pandas-connect
           - >-
             pyspark-pandas-slow-connect
+        exclude:
+          # Always run if pyspark-pandas == 'true', even infra-image is skip (such as non-master job)
+          # In practice, the build will run in individual PR, but not against the individual commit
+          # in Apache Spark repository.
+          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas' }}
+          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-slow' }}
+          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-connect' }}
+          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-slow-connect' }}
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
       HADOOP_PROFILE: ${{ inputs.hadoop }}
