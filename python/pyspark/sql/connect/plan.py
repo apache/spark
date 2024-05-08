@@ -717,7 +717,7 @@ class Sample(LogicalPlan):
         lower_bound: float,
         upper_bound: float,
         with_replacement: bool,
-        seed: Optional[int],
+        seed: int,
         deterministic_order: bool = False,
     ) -> None:
         super().__init__(child)
@@ -734,8 +734,7 @@ class Sample(LogicalPlan):
         plan.sample.lower_bound = self.lower_bound
         plan.sample.upper_bound = self.upper_bound
         plan.sample.with_replacement = self.with_replacement
-        if self.seed is not None:
-            plan.sample.seed = self.seed
+        plan.sample.seed = self.seed
         plan.sample.deterministic_order = self.deterministic_order
         return plan
 
@@ -1526,7 +1525,7 @@ class StatSampleBy(LogicalPlan):
         child: Optional["LogicalPlan"],
         col: Column,
         fractions: Sequence[Tuple[Column, float]],
-        seed: Optional[int],
+        seed: int,
     ) -> None:
         super().__init__(child)
 
@@ -1554,8 +1553,7 @@ class StatSampleBy(LogicalPlan):
                 fraction.stratum.CopyFrom(k.to_plan(session).literal)
                 fraction.fraction = float(v)
                 plan.sample_by.fractions.append(fraction)
-        if self._seed is not None:
-            plan.sample_by.seed = self._seed
+        plan.sample_by.seed = self._seed
         return plan
 
 
