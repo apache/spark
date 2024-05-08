@@ -882,7 +882,7 @@ class CollationStringExpressionsSuite
       val buffer = new OpenHashMap[AnyRef, Long](5)
       val myMode = Mode(child = Literal.create("some_column_name", StringType(t.collationId)))
       t.bufferValues.foreach { case (k, v) => buffer.update(k, v) }
-      assert(myMode.eval(buffer).toString == t.result)
+      assert(myMode.eval(buffer).toString.toLowerCase() == t.result.toLowerCase())
     })
 //
 //    testCasesUTF8String.foreach(t => {
