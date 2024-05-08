@@ -271,14 +271,6 @@ benchmarking framework, which can be obtained at:
   * HOMEPAGE:
     * https://github.com/google/caliper
 
-This product optionally depends on 'Apache Commons Logging', a logging
-framework, which can be obtained at:
-
-  * LICENSE:
-    * license/LICENSE.commons-logging.txt (Apache License 2.0)
-  * HOMEPAGE:
-    * http://commons.apache.org/logging/
-
 This product optionally depends on 'Apache Log4J', a logging framework, which
 can be obtained at:
 

@@ -246,7 +246,7 @@ abstract class DynamicPartitionPruningSuiteBase
 
     val buf = collectDynamicPruningExpressions(df.queryExecution.executedPlan).collect {
       case InSubqueryExec(_, b: SubqueryBroadcastExec, _, _, _, _) =>
-        b.index
+        b.indices.map(idx => b.buildKeys(idx))
     }
     assert(buf.distinct.size == n)
   }

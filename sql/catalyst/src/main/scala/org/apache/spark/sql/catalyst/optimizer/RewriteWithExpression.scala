@@ -21,31 +21,65 @@ import scala.collection.mutable
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.planning.PhysicalAggregation
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, PlanHelper, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMON_EXPR_REF, WITH_EXPRESSION}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Rewrites the `With` expressions by adding a `Project` to pre-evaluate the common expressions, or
  * just inline them if they are cheap.
+ *
+ * Since this rule can introduce new `Project` operators, it is advised to run [[CollapseProject]]
+ * after this rule.
  *
  * Note: For now we only use `With` in a few `RuntimeReplaceable` expressions. If we expand its
  *       usage, we should support aggregate/window functions as well.
  */
 object RewriteWithExpression extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    plan.transformWithPruning(_.containsPattern(WITH_EXPRESSION)) {
+    plan.transformUpWithSubqueriesAndPruning(_.containsPattern(WITH_EXPRESSION)) {
+      // For aggregates, separate the computation of the aggregations themselves from the final
+      // result by moving the final result computation into a projection above it. This prevents
+      // this rule from producing an invalid Aggregate operator.
+      case p @ PhysicalAggregation(
+          groupingExpressions, aggregateExpressions, resultExpressions, child)
+          if p.expressions.exists(_.containsPattern(WITH_EXPRESSION)) =>
+        // PhysicalAggregation returns aggregateExpressions as attribute references, which we change
+        // to aliases so that they can be referred to by resultExpressions.
+        val aggExprs = aggregateExpressions.map(
+          ae => Alias(ae, "_aggregateexpression")(ae.resultId))
+        val aggExprIds = aggExprs.map(_.exprId).toSet
+        val resExprs = resultExpressions.map(_.transform {
+          case a: AttributeReference if aggExprIds.contains(a.exprId) =>
+            a.withName("_aggregateexpression")
+        }.asInstanceOf[NamedExpression])
+        // Rewrite the projection and the aggregate separately and then piece them together.
+        val agg = Aggregate(groupingExpressions, groupingExpressions ++ aggExprs, child)
+        val rewrittenAgg = applyInternal(agg)
+        val proj = Project(resExprs, rewrittenAgg)
+        applyInternal(proj)
       case p if p.expressions.exists(_.containsPattern(WITH_EXPRESSION)) =>
-        val inputPlans = p.children.toArray
-        var newPlan: LogicalPlan = p.mapExpressions { expr =>
-          rewriteWithExprAndInputPlans(expr, inputPlans)
-        }
-        newPlan = newPlan.withNewChildren(inputPlans.toIndexedSeq)
-        if (p.output == newPlan.output) {
-          newPlan
-        } else {
-          Project(p.output, newPlan)
-        }
+        applyInternal(p)
+    }
+  }
+
+  private def applyInternal(p: LogicalPlan): LogicalPlan = {
+    val inputPlans = p.children.toArray
+    var newPlan: LogicalPlan = p.mapExpressions { expr =>
+      rewriteWithExprAndInputPlans(expr, inputPlans)
+    }
+    newPlan = newPlan.withNewChildren(inputPlans.toIndexedSeq)
+    // Since we add extra Projects with extra columns to pre-evaluate the common expressions,
+    // the current operator may have extra columns if it inherits the output columns from its
+    // child, and we need to project away the extra columns to keep the plan schema unchanged.
+    assert(p.output.length <= newPlan.output.length)
+    if (p.output.length < newPlan.output.length) {
+      assert(p.outputSet.subsetOf(newPlan.outputSet))
+      Project(p.output, newPlan)
+    } else {
+      newPlan
     }
   }
 
@@ -58,13 +92,17 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
         // Rewrite nested With expressions first
         val child = rewriteWithExprAndInputPlans(w.child, inputPlans)
         val defs = w.defs.map(rewriteWithExprAndInputPlans(_, inputPlans))
-        val refToExpr = mutable.HashMap.empty[Long, Expression]
+        val refToExpr = mutable.HashMap.empty[CommonExpressionId, Expression]
         val childProjections = Array.fill(inputPlans.length)(mutable.ArrayBuffer.empty[Alias])
 
         defs.zipWithIndex.foreach { case (CommonExpressionDef(child, id), index) =>
           if (child.containsPattern(COMMON_EXPR_REF)) {
             throw SparkException.internalError(
               "Common expression definition cannot reference other Common expression definitions")
+          }
+          if (id.canonicalized) {
+            throw SparkException.internalError(
+              "Cannot rewrite canonicalized Common expression definitions")
           }
 
           if (CollapseProject.isCheap(child)) {
@@ -84,9 +122,20 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
               //       if it's ref count is 1.
               refToExpr(id) = child
             } else {
-              val alias = Alias(child, s"_common_expr_$index")()
-              childProjections(childProjectionIndex) += alias
-              refToExpr(id) = alias.toAttribute
+              val aliasName = if (SQLConf.get.getConf(SQLConf.USE_COMMON_EXPR_ID_FOR_ALIAS)) {
+                s"_common_expr_${id.id}"
+              } else {
+                s"_common_expr_$index"
+              }
+              val alias = Alias(child, aliasName)()
+              val fakeProj = Project(Seq(alias), inputPlans(childProjectionIndex))
+              if (PlanHelper.specialExpressionsInUnsupportedOperator(fakeProj).nonEmpty) {
+                // We have to inline the common expression if it cannot be put in a Project.
+                refToExpr(id) = child
+              } else {
+                childProjections(childProjectionIndex) += alias
+                refToExpr(id) = alias.toAttribute
+              }
             }
           }
         }
@@ -102,6 +151,10 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
           case ref: CommonExpressionRef =>
             if (!refToExpr.contains(ref.id)) {
               throw SparkException.internalError("Undefined common expression id " + ref.id)
+            }
+            if (ref.id.canonicalized) {
+              throw SparkException.internalError(
+                "Cannot rewrite canonicalized Common expression references")
             }
             refToExpr(ref.id)
         }

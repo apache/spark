@@ -30,12 +30,14 @@ import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
+import org.apache.spark.sql.catalyst.util.CollationFactory;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.UTF8StringBuilder;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.hash.Murmur3_x86_32;
 
 import static org.apache.spark.unsafe.Platform.*;
+import org.apache.spark.util.SparkEnvUtils$;
 
 
 /**
@@ -222,7 +224,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Returns the number of bytes for a code point with the first byte as `b`
    * @param b The first byte of a code point
    */
-  private static int numBytesForFirstByte(final byte b) {
+  public static int numBytesForFirstByte(final byte b) {
     final int offset = b & 0xFF;
     byte numBytes = bytesOfCodePointInUTF8[offset];
     return (numBytes == 0) ? 1: numBytes; // Skip the first byte disallowed in UTF-8
@@ -340,9 +342,47 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
+   * Returns whether `this` contains `substring` in a lowercase unicode-aware manner
+   *
+   * This function is written in a way which avoids excessive allocations in case if we work with
+   * bare ASCII-character strings.
+   */
+  public boolean containsInLowerCase(final UTF8String substring) {
+    if (substring.numBytes == 0) {
+      return true;
+    }
+
+    // Both `this` and the `substring` are checked for non-ASCII characters, otherwise we would
+    // have to use `startsWithLowerCase(...)` in a loop, and it would frequently allocate
+    // (e.g. in case of `containsInLowerCase("1大1大1大...", "11")`)
+    if (!substring.isFullAscii()) {
+      return toLowerCase().contains(substring.toLowerCaseSlow());
+    }
+    if (!isFullAscii()) {
+      return toLowerCaseSlow().contains(substring.toLowerCaseAscii());
+    }
+
+    if (numBytes < substring.numBytes) {
+      return false;
+    }
+
+    final var firstLower = Character.toLowerCase(substring.getByte(0));
+    for (var i = 0; i <= (numBytes - substring.numBytes); i++) {
+      if (Character.toLowerCase(getByte(i)) == firstLower) {
+        final var rest = UTF8String.fromAddress(base, offset + i, numBytes - i);
+        if (rest.matchAtInLowerCaseAscii(substring, 0)) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  /**
    * Returns the byte at position `i`.
    */
-  private byte getByte(int i) {
+  public byte getByte(int i) {
     return Platform.getByte(base, offset + i);
   }
 
@@ -353,12 +393,92 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return ByteArrayMethods.arrayEquals(base, offset + pos, s.base, s.offset, s.numBytes);
   }
 
+  private boolean matchAtInLowerCaseAscii(final UTF8String s, int pos) {
+    if (s.numBytes + pos > numBytes || pos < 0) {
+      return false;
+    }
+
+    for (var i = 0; i < s.numBytes; i++) {
+      if (Character.toLowerCase(getByte(pos + i)) != Character.toLowerCase(s.getByte(i))) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
   public boolean startsWith(final UTF8String prefix) {
     return matchAt(prefix, 0);
   }
 
+  /**
+   * Checks whether `prefix` is a prefix of `this` in a lowercase unicode-aware manner
+   *
+   * This function is written in a way which avoids excessive allocations in case if we work with
+   * bare ASCII-character strings.
+   */
+  public boolean startsWithInLowerCase(final UTF8String prefix) {
+    // No way to match sizes of strings for early return, since single grapheme can be expanded
+    // into several independent ones in lowercase
+    if (prefix.numBytes == 0) {
+      return true;
+    }
+    if (numBytes == 0) {
+      return false;
+    }
+
+    if (!prefix.isFullAscii()) {
+      return toLowerCase().startsWith(prefix.toLowerCaseSlow());
+    }
+
+    final var part = prefix.numBytes >= numBytes ? this : UTF8String.fromAddress(
+      base, offset, prefix.numBytes);
+    if (!part.isFullAscii()) {
+      return toLowerCaseSlow().startsWith(prefix.toLowerCaseAscii());
+    }
+
+    if (numBytes < prefix.numBytes) {
+      return false;
+    }
+
+    return matchAtInLowerCaseAscii(prefix, 0);
+  }
+
   public boolean endsWith(final UTF8String suffix) {
     return matchAt(suffix, numBytes - suffix.numBytes);
+  }
+
+  /**
+   * Checks whether `suffix` is a suffix of `this` in a lowercase unicode-aware manner
+   *
+   * This function is written in a way which avoids excessive allocations in case if we work with
+   * bare ASCII-character strings.
+   */
+  public boolean endsWithInLowerCase(final UTF8String suffix) {
+    // No way to match sizes of strings for early return, since single grapheme can be expanded
+    // into several independent ones in lowercase
+    if (suffix.numBytes == 0) {
+      return true;
+    }
+    if (numBytes == 0) {
+      return false;
+    }
+
+    if (!suffix.isFullAscii()) {
+      return toLowerCase().endsWith(suffix.toLowerCaseSlow());
+    }
+
+    final var part = suffix.numBytes >= numBytes ? this : UTF8String.fromAddress(
+      base, offset + numBytes - suffix.numBytes, suffix.numBytes);
+    if (!part.isFullAscii()) {
+      return toLowerCaseSlow().endsWith(suffix.toLowerCaseAscii());
+    }
+
+    if (numBytes < suffix.numBytes) {
+      return false;
+    }
+
+    return matchAtInLowerCaseAscii(suffix, numBytes - suffix.numBytes);
   }
 
   /**
@@ -368,27 +488,50 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (numBytes == 0) {
       return EMPTY_UTF8;
     }
-
-    byte[] bytes = new byte[numBytes];
-    bytes[0] = (byte) Character.toTitleCase(getByte(0));
+    // Optimization - do char level uppercase conversion in case of chars in ASCII range
     for (int i = 0; i < numBytes; i++) {
-      byte b = getByte(i);
-      if (numBytesForFirstByte(b) != 1) {
-        // fallback
+      if (getByte(i) < 0) {
+        // non-ASCII
         return toUpperCaseSlow();
       }
-      int upper = Character.toUpperCase(b);
-      if (upper > 127) {
-        // fallback
-        return toUpperCaseSlow();
-      }
-      bytes[i] = (byte) upper;
+    }
+    byte[] bytes = new byte[numBytes];
+    for (int i = 0; i < numBytes; i++) {
+      bytes[i] = (byte) Character.toUpperCase(getByte(i));
     }
     return fromBytes(bytes);
   }
 
   private UTF8String toUpperCaseSlow() {
     return fromString(toString().toUpperCase());
+  }
+
+  /**
+   * Optimized lowercase comparison for UTF8_BINARY_LCASE collation
+   * a.compareLowerCase(b) is equivalent to a.toLowerCase().binaryCompare(b.toLowerCase())
+   */
+  public int compareLowerCase(UTF8String other) {
+    int curr;
+    for (curr = 0; curr < numBytes && curr < other.numBytes; curr++) {
+      byte left, right;
+      if ((left = getByte(curr)) < 0 || (right = other.getByte(curr)) < 0) {
+        return compareLowerCaseSuffixSlow(other, curr);
+      }
+      int lowerLeft = Character.toLowerCase(left);
+      int lowerRight = Character.toLowerCase(right);
+      if (lowerLeft != lowerRight) {
+        return lowerLeft - lowerRight;
+      }
+    }
+    return numBytes - other.numBytes;
+  }
+
+  private int compareLowerCaseSuffixSlow(UTF8String other, int pref) {
+    UTF8String suffixLeft = UTF8String.fromAddress(base, offset + pref,
+      numBytes - pref);
+    UTF8String suffixRight = UTF8String.fromAddress(other.base, other.offset + pref,
+      other.numBytes - pref);
+    return suffixLeft.toLowerCaseSlow().binaryCompare(suffixRight.toLowerCaseSlow());
   }
 
   /**
@@ -399,26 +542,28 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       return EMPTY_UTF8;
     }
 
-    byte[] bytes = new byte[numBytes];
-    bytes[0] = (byte) Character.toTitleCase(getByte(0));
-    for (int i = 0; i < numBytes; i++) {
-      byte b = getByte(i);
-      if (numBytesForFirstByte(b) != 1) {
-        // fallback
-        return toLowerCaseSlow();
+    return isFullAscii() ? toLowerCaseAscii() : toLowerCaseSlow();
+  }
+
+  private boolean isFullAscii() {
+    for (var i = 0; i < numBytes; i++) {
+      if (getByte(i) < 0) {
+        return false;
       }
-      int lower = Character.toLowerCase(b);
-      if (lower > 127) {
-        // fallback
-        return toLowerCaseSlow();
-      }
-      bytes[i] = (byte) lower;
     }
-    return fromBytes(bytes);
+    return true;
   }
 
   private UTF8String toLowerCaseSlow() {
     return fromString(toString().toLowerCase());
+  }
+
+  private UTF8String toLowerCaseAscii() {
+    final var bytes = new byte[numBytes];
+    for (var i = 0; i < numBytes; i++) {
+      bytes[i] = (byte) Character.toLowerCase(getByte(i));
+    }
+    return fromBytes(bytes);
   }
 
   /**
@@ -428,24 +573,26 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (numBytes == 0) {
       return EMPTY_UTF8;
     }
-
-    byte[] bytes = new byte[numBytes];
+    // Optimization - in case of ASCII chars we can skip copying the data to and from StringBuilder
+    byte prev = ' ', curr;
     for (int i = 0; i < numBytes; i++) {
-      byte b = getByte(i);
-      if (i == 0 || getByte(i - 1) == ' ') {
-        if (numBytesForFirstByte(b) != 1) {
-          // fallback
-          return toTitleCaseSlow();
-        }
-        int upper = Character.toTitleCase(b);
-        if (upper > 127) {
-          // fallback
-          return toTitleCaseSlow();
-        }
-        bytes[i] = (byte) upper;
-      } else {
-        bytes[i] = b;
+      curr = getByte(i);
+      if (prev == ' ' && curr < 0) {
+        // non-ASCII
+        return toTitleCaseSlow();
       }
+      prev = curr;
+    }
+    byte[] bytes = new byte[numBytes];
+    prev = ' ';
+    for (int i = 0; i < numBytes; i++) {
+      curr = getByte(i);
+      if (prev == ' ') {
+        bytes[i] = (byte) Character.toTitleCase(curr);
+      } else {
+        bytes[i] = curr;
+      }
+      prev = curr;
     }
     return fromBytes(bytes);
   }
@@ -779,10 +926,34 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return -1;
   }
 
+  public int charPosToByte(int charPos) {
+    if (charPos < 0) {
+      return -1;
+    }
+
+    int i = 0;
+    int c = 0;
+    while (i < numBytes && c < charPos) {
+      i += numBytesForFirstByte(getByte(i));
+      c += 1;
+    }
+    return i;
+  }
+
+  public int bytePosToChar(int bytePos) {
+    int i = 0;
+    int c = 0;
+    while (i < numBytes && i < bytePos) {
+      i += numBytesForFirstByte(getByte(i));
+      c += 1;
+    }
+    return c;
+  }
+
   /**
    * Find the `str` from left to right.
    */
-  private int find(UTF8String str, int start) {
+  public int find(UTF8String str, int start) {
     assert (str.numBytes > 0);
     while (start <= numBytes - str.numBytes) {
       if (ByteArrayMethods.arrayEquals(base, offset + start, str.base, str.offset, str.numBytes)) {
@@ -796,7 +967,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   /**
    * Find the `str` from right to left.
    */
-  private int rfind(UTF8String str, int start) {
+  public int rfind(UTF8String str, int start) {
     assert (str.numBytes > 0);
     while (start >= 0) {
       if (ByteArrayMethods.arrayEquals(base, offset + start, str.base, str.offset, str.numBytes)) {
@@ -1388,26 +1559,69 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return fromBytes(bytes);
   }
 
+  /**
+   * Implementation of Comparable interface. This method is kept for backwards compatibility.
+   * It should not be used in spark code base, given that string comparison requires passing
+   * collation id. Either explicitly use `binaryCompare` or use `semanticCompare`.
+   */
   @Override
   public int compareTo(@Nonnull final UTF8String other) {
+    if (SparkEnvUtils$.MODULE$.isTesting()) {
+      throw new UnsupportedOperationException(
+        "compareTo should not be used in spark code base. Use binaryCompare or semanticCompare.");
+    } else {
+      return binaryCompare(other);
+    }
+  }
+
+  /**
+   * Binary comparison of two UTF8String. Can only be used for default UTF8_BINARY collation.
+   */
+  public int binaryCompare(final UTF8String other) {
     return ByteArray.compareBinary(
-        base, offset, numBytes, other.base, other.offset, other.numBytes);
+      base, offset, numBytes, other.base, other.offset, other.numBytes);
   }
 
-  public int compare(final UTF8String other) {
-    return compareTo(other);
+  /**
+   * Collation-aware comparison of two UTF8String. The collation to use is specified by the
+   * `collationId` parameter.
+   */
+  public int semanticCompare(final UTF8String other, int collationId) {
+    return CollationFactory.fetchCollation(collationId).comparator.compare(this, other);
   }
 
+  /**
+   * Binary equality check of two UTF8String. Note that binary equality is not the same as
+   * equality under given collation. E.g. if string is collated in case-insensitive two strings
+   * are considered equal even if they are different in binary comparison.
+   */
   @Override
   public boolean equals(final Object other) {
     if (other instanceof UTF8String o) {
-      if (numBytes != o.numBytes) {
-        return false;
-      }
-      return ByteArrayMethods.arrayEquals(base, offset, o.base, o.offset, numBytes);
+      return binaryEquals(o);
     } else {
       return false;
     }
+  }
+
+  /**
+   * Binary equality check of two UTF8String. Note that binary equality is not the same as
+   * equality under given collation. E.g. if string is collated in case-insensitive two strings
+   * are considered equal even if they are different in binary comparison.
+   */
+  public boolean binaryEquals(final UTF8String other) {
+    if (numBytes != other.numBytes) {
+      return false;
+    }
+
+    return ByteArrayMethods.arrayEquals(base, offset, other.base, other.offset, numBytes);
+  }
+
+  /**
+   * Collation-aware equality comparison of two UTF8String.
+   */
+  public boolean semanticEquals(final UTF8String other, int collationId) {
+    return CollationFactory.fetchCollation(collationId).equalsFunction.apply(this, other);
   }
 
   /**

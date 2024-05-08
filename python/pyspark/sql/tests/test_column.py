@@ -42,7 +42,7 @@ class ColumnTestsMixin:
 
     def test_validate_column_types(self):
         from pyspark.sql.functions import udf, to_json
-        from pyspark.sql.column import _to_java_column
+        from pyspark.sql.classic.column import _to_java_column
 
         self.assertTrue("Column" in _to_java_column("a").getClass().toString())
         self.assertTrue("Column" in _to_java_column("a").getClass().toString())
@@ -247,6 +247,13 @@ class ColumnTestsMixin:
             error_class="NOT_WINDOWSPEC",
             message_parameters={"arg_name": "window", "arg_type": "int"},
         )
+
+    def test_union_classmethod_usage(self):
+        df = self.spark.range(1)
+        self.assertEqual(df.select(Column.eqNullSafe(df.id, df.id)).first()[0], True)
+
+    def test_isinstance_dataframe(self):
+        self.assertIsInstance(self.spark.range(1).id, Column)
 
 
 class ColumnTests(ColumnTestsMixin, ReusedSQLTestCase):

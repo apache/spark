@@ -29,7 +29,7 @@ import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.time.FastDateFormat
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.{LegacyDateFormat, LENIENT_SIMPLE_DATE_FORMAT}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime._
@@ -163,6 +163,9 @@ class Iso8601TimestampFormatter(
     getOrCreateFormatter(pattern, locale, isParsing)
 
   @transient
+  private lazy val zonedFormatter: DateTimeFormatter = formatter.withZone(zoneId)
+
+  @transient
   protected lazy val legacyFormatter = TimestampFormatter.getLegacyFormatter(
     pattern, zoneId, locale, legacyFormat)
 
@@ -231,7 +234,7 @@ class Iso8601TimestampFormatter(
 
   override def format(instant: Instant): String = {
     try {
-      formatter.withZone(zoneId).format(instant)
+      zonedFormatter.format(instant)
     } catch checkFormattedDiff(toJavaTimestamp(instantToMicros(instant)),
       (t: Timestamp) => format(t))
   }
@@ -408,7 +411,9 @@ class LegacyFastTimestampFormatter(
   override def parse(s: String): Long = {
     cal.clear() // Clear the calendar because it can be re-used many times
     if (!fastDateFormat.parse(s, new ParsePosition(0), cal)) {
-      throw new IllegalArgumentException(s"'$s' is an invalid timestamp")
+      throw new SparkIllegalArgumentException(
+        errorClass = "_LEGACY_ERROR_TEMP_3260",
+        messageParameters = Map("s" -> s))
     }
     extractMicros(cal)
   }

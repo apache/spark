@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.internal
 
-import java.util.TimeZone
+import java.util.{Locale, TimeZone}
 
 import org.apache.hadoop.fs.Path
 import org.apache.logging.log4j.Level
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkNoSuchElementException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkIllegalArgumentException, SparkNoSuchElementException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.MIT
@@ -445,15 +445,19 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     spark.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, "GMT+8:00")
     assert(sql(s"set ${SQLConf.SESSION_LOCAL_TIMEZONE.key}").head().getString(1) === "GMT+8:00")
 
-    intercept[IllegalArgumentException] {
+    intercept[SparkIllegalArgumentException] {
       spark.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, "pst")
     }
-    val e = intercept[IllegalArgumentException] {
-      spark.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, "Asia/shanghai")
-    }
-    assert(e.getMessage ===
-      s"'Asia/shanghai' in ${SQLConf.SESSION_LOCAL_TIMEZONE.key} is invalid." +
-        " Cannot resolve the given timezone with ZoneId.of(_, ZoneId.SHORT_IDS)")
+
+    val invalidTz = "Asia/shanghai"
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        spark.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, invalidTz)
+      },
+      errorClass = "INVALID_CONF_VALUE.TIME_ZONE",
+      parameters = Map(
+        "confValue" -> invalidTz,
+        "confName" -> SQLConf.SESSION_LOCAL_TIMEZONE.key))
   }
 
   test("set time zone") {
@@ -464,9 +468,15 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     sql("set time zone local")
     assert(spark.conf.get(SQLConf.SESSION_LOCAL_TIMEZONE) === TimeZone.getDefault.getID)
 
-    val e1 = intercept[IllegalArgumentException](sql("set time zone 'invalid'"))
-    assert(e1.getMessage === s"'invalid' in ${SQLConf.SESSION_LOCAL_TIMEZONE.key} is invalid." +
-      " Cannot resolve the given timezone with ZoneId.of(_, ZoneId.SHORT_IDS)")
+    val tz = "Invalid TZ"
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        sql(s"SET TIME ZONE '$tz'").collect()
+      },
+      errorClass = "INVALID_CONF_VALUE.TIME_ZONE",
+      parameters = Map(
+        "confValue" -> tz,
+        "confName" -> SQLConf.SESSION_LOCAL_TIMEZONE.key))
 
     (-18 to 18).map(v => (v, s"interval '$v' hours")).foreach { case (i, interval) =>
       sql(s"set time zone $interval")
@@ -493,6 +503,32 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
          |Non internal legacy SQL configs:
          |${nonInternalLegacyConfigs.map(_._1).mkString("\n")}
          |""".stripMargin)
+  }
+
+  test("SPARK-47765: set collation") {
+    Seq("UNICODE", "UNICODE_CI", "utf8_binary_lcase", "utf8_binary").foreach { collation =>
+      sql(s"set collation $collation")
+      assert(spark.conf.get(SQLConf.DEFAULT_COLLATION) === collation.toUpperCase(Locale.ROOT))
+    }
+
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        sql(s"SET COLLATION unicode_c").collect()
+      },
+      errorClass = "INVALID_CONF_VALUE.DEFAULT_COLLATION",
+      parameters = Map(
+        "confValue" -> "UNICODE_C",
+        "confName" -> "spark.sql.session.collation.default",
+        "proposal" -> "UNICODE_CI"
+      ))
+
+    withSQLConf(SQLConf.COLLATION_ENABLED.key -> "false") {
+      checkError(
+        exception = intercept[AnalysisException](sql(s"SET COLLATION UNICODE_CI")),
+        errorClass = "UNSUPPORTED_FEATURE.COLLATION",
+        parameters = Map.empty
+      )
+    }
   }
 
   test("SPARK-43028: config not found error") {

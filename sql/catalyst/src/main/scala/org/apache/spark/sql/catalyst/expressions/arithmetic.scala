@@ -60,20 +60,7 @@ case class UnaryMinus(
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = dataType match {
     case _: DecimalType => defineCodeGen(ctx, ev, c => s"$c.unary_$$minus()")
-    case ByteType | ShortType if failOnError =>
-      nullSafeCodeGen(ctx, ev, eval => {
-        val javaBoxedType = CodeGenerator.boxedType(dataType)
-        val javaType = CodeGenerator.javaType(dataType)
-        val originValue = ctx.freshName("origin")
-        s"""
-           |$javaType $originValue = ($javaType)($eval);
-           |if ($originValue == $javaBoxedType.MIN_VALUE) {
-           |  throw QueryExecutionErrors.unaryMinusCauseOverflowError($originValue);
-           |}
-           |${ev.value} = ($javaType)(-($originValue));
-           """.stripMargin
-      })
-    case IntegerType | LongType if failOnError =>
+    case ByteType | ShortType | IntegerType | LongType if failOnError =>
       val mathUtils = MathUtils.getClass.getCanonicalName.stripSuffix("$")
       nullSafeCodeGen(ctx, ev, eval => {
         s"${ev.value} = $mathUtils.negateExact($eval);"
@@ -181,21 +168,7 @@ case class Abs(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled
     case _: DecimalType =>
       defineCodeGen(ctx, ev, c => s"$c.abs()")
 
-    case ByteType | ShortType if failOnError =>
-      val javaBoxedType = CodeGenerator.boxedType(dataType)
-      val javaType = CodeGenerator.javaType(dataType)
-      nullSafeCodeGen(ctx, ev, eval =>
-        s"""
-          |if ($eval == $javaBoxedType.MIN_VALUE) {
-          |  throw QueryExecutionErrors.unaryMinusCauseOverflowError($eval);
-          |} else if ($eval < 0) {
-          |  ${ev.value} = ($javaType)-$eval;
-          |} else {
-          |  ${ev.value} = $eval;
-          |}
-          |""".stripMargin)
-
-    case IntegerType | LongType if failOnError =>
+    case ByteType | ShortType | IntegerType | LongType if failOnError =>
       val mathUtils = MathUtils.getClass.getCanonicalName.stripSuffix("$")
       defineCodeGen(ctx, ev, c => s"$c < 0 ? $mathUtils.negateExact($c) : $c")
 
@@ -280,12 +253,12 @@ abstract class BinaryArithmetic extends BinaryOperator
 
   /** Name of the function for this expression on a [[Decimal]] type. */
   def decimalMethod: String =
-    throw QueryExecutionErrors.notOverrideExpectedMethodsError("BinaryArithmetics",
+    throw QueryExecutionErrors.notOverrideExpectedMethodsError(this.getClass.getName,
       "decimalMethod", "genCode")
 
   /** Name of the function for this expression on a [[CalendarInterval]] type. */
   def calendarIntervalMethod: String =
-    throw QueryExecutionErrors.notOverrideExpectedMethodsError("BinaryArithmetics",
+    throw QueryExecutionErrors.notOverrideExpectedMethodsError(this.getClass.getName,
       "calendarIntervalMethod", "genCode")
 
   protected def isAnsiInterval: Boolean = dataType.isInstanceOf[AnsiIntervalType]
@@ -479,13 +452,14 @@ case class Add(
     copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    // TODO: do not reorder consecutive `Add`s with different `evalMode`
-    val reorderResult = buildCanonicalizedPlan(
+    val evalModes = collectEvalModes(this, {case Add(_, _, evalMode) => Seq(evalMode)})
+    lazy val reorderResult = buildCanonicalizedPlan(
       { case Add(l, r, _) => Seq(l, r) },
       { case (l: Expression, r: Expression) => Add(l, r, evalMode)},
       Some(evalMode)
     )
-    if (resolved && reorderResult.resolved && reorderResult.dataType == dataType) {
+    if (resolved && evalModes.forall(_ == evalMode) && reorderResult.resolved &&
+      reorderResult.dataType == dataType) {
       reorderResult
     } else {
       // SPARK-40903: Avoid reordering decimal Add for canonicalization if the result data type is
@@ -635,12 +609,16 @@ case class Multiply(
     newLeft: Expression, newRight: Expression): Multiply = copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    // TODO: do not reorder consecutive `Multiply`s with different `evalMode`
-    buildCanonicalizedPlan(
-      { case Multiply(l, r, _) => Seq(l, r) },
-      { case (l: Expression, r: Expression) => Multiply(l, r, evalMode)},
-      Some(evalMode)
-    )
+    val evalModes = collectEvalModes(this, {case Multiply(_, _, evalMode) => Seq(evalMode)})
+    if (evalModes.forall(_ == evalMode)) {
+      buildCanonicalizedPlan(
+        { case Multiply(l, r, _) => Seq(l, r) },
+        { case (l: Expression, r: Expression) => Multiply(l, r, evalMode)},
+        Some(evalMode)
+      )
+    } else {
+      withCanonicalizedChildren
+    }
   }
 }
 

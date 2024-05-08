@@ -16,6 +16,22 @@ NULL
 
 
 -- !query
+SELECT try_add(2147483647, decimal(1))
+-- !query schema
+struct<try_add(2147483647, 1):decimal(11,0)>
+-- !query output
+2147483648
+
+
+-- !query
+SELECT try_add(2147483647, "1")
+-- !query schema
+struct<try_add(2147483647, 1):bigint>
+-- !query output
+2147483648
+
+
+-- !query
 SELECT try_add(-2147483648, -1)
 -- !query schema
 struct<try_add(-2147483648, -1):int>
@@ -217,7 +233,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"INTERVAL '2' YEAR\"",
     "inputType" : "\"INTERVAL YEAR\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
     "sqlExpr" : "\"INTERVAL '2' YEAR + INTERVAL '02' SECOND\""
   },
@@ -342,6 +358,22 @@ org.apache.spark.SparkArithmeticException
 
 
 -- !query
+SELECT try_divide(1, decimal(0))
+-- !query schema
+struct<try_divide(1, 0):decimal(12,11)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT try_divide(1, "0")
+-- !query schema
+struct<try_divide(1, 0):double>
+-- !query output
+NULL
+
+
+-- !query
 SELECT try_divide(interval 2 year, 2)
 -- !query schema
 struct<try_divide(INTERVAL '2' YEAR, 2):interval year to month>
@@ -403,6 +435,22 @@ SELECT try_subtract(2147483647, -1)
 struct<try_subtract(2147483647, -1):int>
 -- !query output
 NULL
+
+
+-- !query
+SELECT try_subtract(2147483647, decimal(-1))
+-- !query schema
+struct<try_subtract(2147483647, -1):decimal(11,0)>
+-- !query output
+2147483648
+
+
+-- !query
+SELECT try_subtract(2147483647, "-1")
+-- !query schema
+struct<try_subtract(2147483647, -1):bigint>
+-- !query output
+2147483648
 
 
 -- !query
@@ -545,6 +593,22 @@ SELECT try_multiply(2147483647, -2)
 struct<try_multiply(2147483647, -2):int>
 -- !query output
 NULL
+
+
+-- !query
+SELECT try_multiply(2147483647, decimal(-2))
+-- !query schema
+struct<try_multiply(2147483647, -2):decimal(21,0)>
+-- !query output
+-4294967294
+
+
+-- !query
+SELECT try_multiply(2147483647, "-2")
+-- !query schema
+struct<try_multiply(2147483647, -2):bigint>
+-- !query output
+-4294967294
 
 
 -- !query

@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.types.StringTypeAnyCollation
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
@@ -78,7 +79,7 @@ case class CreateArray(children: Seq[Expression], useStringTypeWhenEmpty: Boolea
 
   private val defaultElementType: DataType = {
     if (useStringTypeWhenEmpty) {
-      StringType
+      SQLConf.get.defaultStringType
     } else {
       NullType
     }
@@ -374,6 +375,7 @@ object CreateStruct {
       // alias name inside CreateNamedStruct.
       case (u: UnresolvedAttribute, _) => Seq(Literal(u.nameParts.last), u)
       case (u @ UnresolvedExtractValue(_, e: Literal), _) if e.dataType == StringType => Seq(e, u)
+      case (a: Alias, _) => Seq(Literal(a.name), a)
       case (e: NamedExpression, _) if e.resolved => Seq(Literal(e.name), e)
       case (e: NamedExpression, _) => Seq(NamePlaceholder, e)
       case (g @ GetStructField(_, _, Some(name)), _) => Seq(Literal(name), g)
@@ -569,11 +571,12 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
   override def second: Expression = pairDelim
   override def third: Expression = keyValueDelim
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, StringType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeAnyCollation, StringTypeAnyCollation, StringTypeAnyCollation)
 
-  override def dataType: DataType = MapType(StringType, StringType)
+  override def dataType: DataType = MapType(first.dataType, first.dataType)
 
-  private lazy val mapBuilder = new ArrayBasedMapBuilder(StringType, StringType)
+  private lazy val mapBuilder = new ArrayBasedMapBuilder(first.dataType, first.dataType)
 
   override def nullSafeEval(
       inputString: Any,
@@ -696,7 +699,7 @@ case class UpdateFields(structExpr: Expression, fieldOps: Seq[StructFieldsOperat
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "1",
+          "paramIndex" -> ordinalNumber(0),
           "requiredType" -> toSQLType(StructType),
           "inputSql" -> toSQLExpr(structExpr),
           "inputType" -> toSQLType(structExpr.dataType))

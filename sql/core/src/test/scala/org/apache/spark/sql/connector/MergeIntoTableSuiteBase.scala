@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, In, Not}
 import org.apache.spark.sql.catalyst.optimizer.BuildLeft
@@ -1611,9 +1611,9 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase {
   }
 
   private def assertCardinalityError(query: String): Unit = {
-    val e = intercept[SparkException] {
+    val e = intercept[SparkRuntimeException] {
       sql(query)
     }
-    assert(e.getCause.getMessage.contains("ON search condition of the MERGE statement"))
+    assert(e.getMessage.contains("ON search condition of the MERGE statement"))
   }
 }

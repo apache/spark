@@ -356,8 +356,8 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
         "(bf1.c1 = bf2.c2 and bf2.a2 = 5)) as a join bf3 on bf3.c3 = a.c1", 2)
       // left anti join unsupported.
       // bf2 as creation side and inject runtime filter for bf3(by passing key).
-      assertRewroteWithBloomFilter("select * from (select * from bf1 left anti join bf2 on " +
-        "(bf1.c1 = bf2.c2 and bf2.a2 = 5)) as a join bf3 on bf3.c3 = a.c1")
+      assertDidNotRewriteWithBloomFilter("select * from (select * from bf1 left anti join bf2 " +
+        "on (bf1.c1 = bf2.c2 and bf2.a2 = 5)) as a join bf3 on bf3.c3 = a.c1")
       // left anti join unsupported and hasn't selective filter.
       assertRewroteWithBloomFilter("select * from (select * from bf1 left anti join bf2 on " +
         "(bf1.c1 = bf2.c2 and bf1.a1 = 5)) as a join bf3 on bf3.c3 = a.c1", 0)

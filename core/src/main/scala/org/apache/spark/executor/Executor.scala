@@ -27,7 +27,6 @@ import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.ReentrantLock
 import javax.annotation.concurrent.GuardedBy
-import javax.ws.rs.core.UriBuilder
 
 import scala.collection.immutable
 import scala.collection.mutable.{ArrayBuffer, HashMap}
@@ -41,7 +40,8 @@ import org.slf4j.MDC
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC => LogMDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.plugin.PluginContainer
 import org.apache.spark.memory.{SparkOutOfMemoryError, TaskMemoryManager}
@@ -638,9 +638,10 @@ private[spark] class Executor(
           val freedMemory = taskMemoryManager.cleanUpAllAllocatedMemory()
 
           if (freedMemory > 0 && !threwException) {
-            val errMsg = s"Managed memory leak detected; size = $freedMemory bytes, $taskName"
+            val errMsg = log"Managed memory leak detected; size = " +
+              log"${LogMDC(NUM_BYTES, freedMemory)} bytes, ${LogMDC(TASK_NAME, taskName)}"
             if (conf.get(UNSAFE_EXCEPTION_ON_MEMORY_LEAK)) {
-              throw SparkException.internalError(errMsg, category = "EXECUTOR")
+              throw SparkException.internalError(errMsg.message, category = "EXECUTOR")
             } else {
               logWarning(errMsg)
             }
@@ -661,9 +662,10 @@ private[spark] class Executor(
           // uh-oh.  it appears the user code has caught the fetch-failure without throwing any
           // other exceptions.  Its *possible* this is what the user meant to do (though highly
           // unlikely).  So we will log an error and keep going.
-          logError(s"$taskName completed successfully though internally it encountered " +
-            s"unrecoverable fetch failures!  Most likely this means user code is incorrectly " +
-            s"swallowing Spark's internal ${classOf[FetchFailedException]}", fetchFailure)
+          logError(log"${LogMDC(TASK_NAME, taskName)} completed successfully though internally " +
+            log"it encountered unrecoverable fetch failures! Most likely this means user code " +
+            log"is incorrectly swallowing Spark's internal " +
+            log"${LogMDC(CLASS_NAME, classOf[FetchFailedException])}", fetchFailure)
         }
         val taskFinishNs = System.nanoTime()
         val taskFinishCpu = if (threadMXBean.isCurrentThreadCpuTimeSupported) {
@@ -726,9 +728,11 @@ private[spark] class Executor(
         // directSend = sending directly back to the driver
         val serializedResult: ByteBuffer = {
           if (maxResultSize > 0 && resultSize > maxResultSize) {
-            logWarning(s"Finished $taskName. Result is larger than maxResultSize " +
-              s"(${Utils.bytesToString(resultSize)} > ${Utils.bytesToString(maxResultSize)}), " +
-              s"dropping it.")
+            logWarning(log"Finished ${LogMDC(TASK_NAME, taskName)}. " +
+              log"Result is larger than maxResultSize " +
+              log"(${LogMDC(RESULT_SIZE_BYTES, Utils.bytesToString(resultSize))} > " +
+              log"${LogMDC(RESULT_SIZE_BYTES_MAX, Utils.bytesToString(maxResultSize))}), " +
+              log"dropping it.")
             ser.serialize(new IndirectTaskResult[Any](TaskResultBlockId(taskId), resultSize))
           } else if (resultSize > maxDirectResultSize) {
             val blockId = TaskResultBlockId(taskId)
@@ -777,11 +781,12 @@ private[spark] class Executor(
           if (!t.isInstanceOf[FetchFailedException]) {
             // there was a fetch failure in the task, but some user code wrapped that exception
             // and threw something else.  Regardless, we treat it as a fetch failure.
-            val fetchFailedCls = classOf[FetchFailedException].getName
-            logWarning(s"$taskName encountered a ${fetchFailedCls} and " +
-              s"failed, but the ${fetchFailedCls} was hidden by another " +
-              s"exception.  Spark is handling this like a fetch failure and ignoring the " +
-              s"other exception: $t")
+            logWarning(log"${LogMDC(TASK_NAME, taskName)} encountered a " +
+              log"${LogMDC(CLASS_NAME, classOf[FetchFailedException].getName)} " +
+              log"and failed, but the " +
+              log"${LogMDC(CLASS_NAME, classOf[FetchFailedException].getName)} " +
+              log"was hidden by another exception. Spark is handling this like a fetch failure " +
+              log"and ignoring the other exception: ${LogMDC(ERROR, t)}")
           }
           setTaskFinishedAndClearInterruptStatus()
           plugins.foreach(_.onTaskFailed(reason))
@@ -796,13 +801,13 @@ private[spark] class Executor(
         case t: Throwable if env.isStopped =>
           // Log the expected exception after executor.stop without stack traces
           // see: SPARK-19147
-          logError(s"Exception in $taskName: ${t.getMessage}")
+          logError(log"Exception in ${LogMDC(TASK_NAME, taskName)}: ${LogMDC(ERROR, t.getMessage)}")
 
         case t: Throwable =>
           // Attempt to exit cleanly by informing the driver of our failure.
           // If anything goes wrong (or this was a fatal exception), we will delegate to
           // the default uncaught exception handler, which will terminate the Executor.
-          logError(s"Exception in $taskName", t)
+          logError(log"Exception in ${LogMDC(TASK_NAME, taskName)}", t)
 
           // SPARK-20904: Do not report failure to driver if if happened during shut down. Because
           // libraries may set up shutdown hooks that race with running tasks during shutdown,
@@ -909,7 +914,7 @@ private[spark] class Executor(
     try {
       mdc.foreach { case (key, value) => MDC.put(key, value) }
       // avoid overriding the takName by the user
-      MDC.put("mdc.taskName", taskName)
+      MDC.put(LogKeys.TASK_NAME.name, taskName)
     } catch {
       case _: NoSuchFieldError => logInfo("MDC is not supported.")
     }
@@ -918,7 +923,7 @@ private[spark] class Executor(
   private def cleanMDCForTask(taskName: String, mdc: Seq[(String, String)]): Unit = {
     try {
       mdc.foreach { case (key, _) => MDC.remove(key) }
-      MDC.remove("mdc.taskName")
+      MDC.remove(LogKeys.TASK_NAME.name)
     } catch {
       case _: NoSuchFieldError => logInfo("MDC is not supported.")
     }
@@ -993,12 +998,14 @@ private[spark] class Executor(
             finished = true
           } else {
             val elapsedTimeMs = TimeUnit.NANOSECONDS.toMillis(elapsedTimeNs)
-            logWarning(s"Killed task $taskId is still running after $elapsedTimeMs ms")
+            logWarning(log"Killed task ${LogMDC(TASK_ID, taskId)} " +
+              log"is still running after ${LogMDC(TIME_UNITS, elapsedTimeMs)} ms")
             if (takeThreadDump) {
               try {
                 taskRunner.theadDump().foreach { thread =>
                   if (thread.threadName == taskRunner.threadName) {
-                    logWarning(s"Thread dump from task $taskId:\n${thread.toString}")
+                    logWarning(log"Thread dump from task ${LogMDC(TASK_ID, taskId)}:\n" +
+                      log"${LogMDC(THREAD, thread.toString)}")
                   }
                 }
               } catch {
@@ -1012,8 +1019,9 @@ private[spark] class Executor(
         if (!taskRunner.isFinished && timeoutExceeded()) {
           val killTimeoutMs = TimeUnit.NANOSECONDS.toMillis(killTimeoutNs)
           if (isLocal) {
-            logError(s"Killed task $taskId could not be stopped within $killTimeoutMs ms; " +
-              "not killing JVM because we are running in local mode.")
+            logError(log"Killed task ${LogMDC(TASK_ID, taskId)} could not be stopped within " +
+              log"${LogMDC(TIMEOUT, killTimeoutMs)} ms; " +
+              log"not killing JVM because we are running in local mode.")
           } else {
             // In non-local-mode, the exception thrown here will bubble up to the uncaught exception
             // handler and cause the executor JVM to exit.
@@ -1157,7 +1165,7 @@ private[spark] class Executor(
           state.currentArchives.getOrElse(name, -1L) < timestamp) {
         logInfo(s"Fetching $name with timestamp $timestamp")
         val sourceURI = new URI(name)
-        val uriToDownload = UriBuilder.fromUri(sourceURI).fragment(null).build()
+        val uriToDownload = Utils.getUriBuilder(sourceURI).fragment(null).build()
         val source = Utils.fetchFile(uriToDownload.toString, Utils.createTempDir(), conf,
           hadoopConf, timestamp, useCache = !isLocal, shouldUntar = false)
         val dest = new File(
@@ -1245,8 +1253,8 @@ private[spark] class Executor(
         logWarning("Issue communicating with driver in heartbeater", e)
         heartbeatFailures += 1
         if (heartbeatFailures >= HEARTBEAT_MAX_FAILURES) {
-          logError(s"Exit as unable to send heartbeats to driver " +
-            s"more than $HEARTBEAT_MAX_FAILURES times")
+          logError(log"Exit as unable to send heartbeats to driver " +
+            log"more than ${LogMDC(MAX_ATTEMPTS, HEARTBEAT_MAX_FAILURES)} times")
           System.exit(ExecutorExitCode.HEARTBEAT_FAILURE)
         }
     }
@@ -1257,7 +1265,7 @@ private[spark] class Executor(
     if (runner != null) {
       runner.theadDump()
     } else {
-      logWarning(s"Failed to dump thread for task $taskId")
+      logWarning(log"Failed to dump thread for task ${LogMDC(TASK_ID, taskId)}")
       None
     }
   }

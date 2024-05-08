@@ -66,12 +66,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       messageParameters = messageParameters)
   }
 
-  protected def containsMultipleGenerators(exprs: Seq[Expression]): Boolean = {
-    exprs.flatMap(_.collect {
-      case e: Generator => e
-    }).length > 1
-  }
-
   protected def hasMapType(dt: DataType): Boolean = {
     dt.existsRecursively(_.isInstanceOf[MapType])
   }
@@ -116,9 +110,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
   }
 
   /** Check and throw exception when a given resolved plan contains LateralColumnAliasReference. */
-  private def checkNotContainingLCA(exprSeq: Seq[NamedExpression], plan: LogicalPlan): Unit = {
-    if (!plan.resolved) return
-    exprSeq.foreach(_.transformDownWithPruning(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
+  private def checkNotContainingLCA(exprs: Seq[Expression], plan: LogicalPlan): Unit = {
+    exprs.foreach(_.transformDownWithPruning(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
       case lcaRef: LateralColumnAliasReference =>
         throw SparkException.internalError("Resolved plan should not contain any " +
           s"LateralColumnAliasReference.\nDebugging information: plan:\n$plan",
@@ -543,6 +536,19 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               }
             }
 
+          case Window(_, partitionSpec, _, _) =>
+            // Both `partitionSpec` and `orderSpec` must be orderable. We only need an extra check
+            // for `partitionSpec` here because `orderSpec` has the type check itself.
+            partitionSpec.foreach { p =>
+              if (!RowOrdering.isOrderable(p.dataType)) {
+                p.failAnalysis(
+                  errorClass = "EXPRESSION_TYPE_IS_NOT_ORDERABLE",
+                  messageParameters = Map(
+                    "expr" -> toSQLExpr(p),
+                    "exprType" -> toSQLType(p.dataType)))
+              }
+            }
+
           case GlobalLimit(limitExpr, _) => checkLimitLikeClause("limit", limitExpr)
 
           case LocalLimit(limitExpr, child) =>
@@ -567,12 +573,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
           case e @ (_: Union | _: SetOperation) if operator.children.length > 1 =>
             def dataTypes(plan: LogicalPlan): Seq[DataType] = plan.output.map(_.dataType)
-            def ordinalNumber(i: Int): String = i match {
-              case 0 => "first"
-              case 1 => "second"
-              case 2 => "third"
-              case i => s"${i + 1}th"
-            }
+
             val ref = dataTypes(operator.children.head)
             operator.children.tail.zipWithIndex.foreach { case (child, ti) =>
               // Check the number of columns
@@ -673,10 +674,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                   "operator" -> operator.simpleString(SQLConf.get.maxToStringFields)
                 ))
             }
-
-          case p @ Project(exprs, _) if containsMultipleGenerators(exprs) =>
-            val generators = exprs.filter(expr => expr.exists(_.isInstanceOf[Generator]))
-            throw QueryCompilationErrors.moreThanOneGeneratorError(generators, "SELECT")
 
           case p @ Project(projectList, _) =>
             projectList.foreach(_.transformDownWithPruning(
@@ -791,17 +788,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           msg = s"Found the unresolved operator: ${o.simpleString(SQLConf.get.maxToStringFields)}",
           context = o.origin.getQueryContext,
           summary = o.origin.context.summary)
-      // If the plan is resolved, the resolved Project, Aggregate or Window should have restored or
-      // resolved all lateral column alias references. Add check for extra safe.
-      case p @ Project(pList, _)
-        if pList.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
-        checkNotContainingLCA(pList, p)
-      case agg @ Aggregate(_, aggList, _)
-        if aggList.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
-        checkNotContainingLCA(aggList, agg)
-      case w @ Window(pList, _, _, _)
-        if pList.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
-        checkNotContainingLCA(pList, w)
+      // If the plan is resolved, all lateral column alias references should have been either
+      // restored or resolved. Add check for extra safe.
+      case o if o.expressions.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
+        checkNotContainingLCA(o.expressions, o)
       case _ =>
     }
   }

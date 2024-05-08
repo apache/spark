@@ -585,14 +585,6 @@ private[kafka010] object KafkaSourceProvider extends Logging {
       | option "failOnDataLoss" to "true".
     """.stripMargin
 
-  val INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE =
-    """
-      |Some data may have been lost because they are not available in Kafka any more; either the
-      | data was aged out by Kafka or the topic may have been deleted before all the data in the
-      | topic was processed. If you don't want your streaming query to fail on such cases, set the
-      | source option "failOnDataLoss" to "false".
-    """.stripMargin
-
   val CUSTOM_GROUP_ID_ERROR_MESSAGE =
     s"""Kafka option 'kafka.${ConsumerConfig.GROUP_ID_CONFIG}' has been set on this query, it is
        | not recommended to set this option. This option is unsafe to use since multiple concurrent

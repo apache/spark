@@ -18,7 +18,8 @@
 package org.apache.spark.deploy.master.ui
 
 import java.net.{InetAddress, NetworkInterface, SocketException}
-import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
+
+import jakarta.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
 import org.apache.spark.deploy.DeployMessages.{DecommissionWorkersOnHosts, MasterStateResponse, RequestMasterState}
 import org.apache.spark.deploy.Utils.addRenderLogHandler
@@ -43,7 +44,7 @@ class MasterWebUI(
 
   val masterEndpointRef = master.self
   val killEnabled = master.conf.get(UI_KILL_ENABLED)
-  val decommissionDisabled = !master.conf.get(DECOMMISSION_ENABLED)
+  val decommissionEnabled = master.conf.get(DECOMMISSION_ENABLED)
   val decommissionAllowMode = master.conf.get(MASTER_UI_DECOMMISSION_ALLOW_MODE)
 
   initialize()
@@ -53,6 +54,11 @@ class MasterWebUI(
     val masterPage = new MasterPage(this)
     attachPage(new ApplicationPage(this))
     attachPage(new LogPage(this))
+    val envPage = new EnvironmentPage(this, master.conf)
+    attachPage(envPage)
+    this.attachHandler(createServletHandler("/environment",
+      (request: HttpServletRequest) => envPage.render(request),
+      master.conf))
     attachPage(masterPage)
     addStaticHandler(MasterWebUI.STATIC_RESOURCE_DIR)
     addRenderLogHandler(this, master.conf)
@@ -61,11 +67,13 @@ class MasterWebUI(
         "/app/kill", "/", masterPage.handleAppKillRequest, httpMethods = Set("POST")))
       attachHandler(createRedirectHandler(
         "/driver/kill", "/", masterPage.handleDriverKillRequest, httpMethods = Set("POST")))
+    }
+    if (decommissionEnabled) {
       attachHandler(createServletHandler("/workers/kill", new HttpServlet {
         override def doPost(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
           val hostnames: Seq[String] = Option(req.getParameterValues("host"))
             .getOrElse(Array[String]()).toImmutableArraySeq
-          if (decommissionDisabled || !isDecommissioningRequestAllowed(req)) {
+          if (!isDecommissioningRequestAllowed(req)) {
             resp.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED)
           } else {
             val removedWorkers = masterEndpointRef.askSync[Integer](

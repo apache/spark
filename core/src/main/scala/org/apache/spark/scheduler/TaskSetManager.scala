@@ -30,7 +30,9 @@ import org.apache.spark.InternalAccumulator
 import org.apache.spark.InternalAccumulator.{input, shuffleRead}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.errors.SparkCoreErrors
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKeys
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.scheduler.SchedulingMode._
 import org.apache.spark.util.{AccumulatorV2, Clock, LongAccumulator, SystemClock, Utils}
@@ -533,17 +535,18 @@ private[spark] class TaskSetManager(
       // If the task cannot be serialized, then there's no point to re-attempt the task,
       // as it will always fail. So just abort the whole task-set.
       case NonFatal(e) =>
-        val msg = s"Failed to serialize task $taskId, not attempting to retry it."
+        val msg = log"Failed to serialize task ${MDC(TASK_ID, taskId)}, not attempting to retry it."
         logError(msg, e)
-        abort(s"$msg Exception during serialization: $e")
+        abort(s"${msg.message} Exception during serialization: $e")
         throw SparkCoreErrors.failToSerializeTaskError(e)
     }
     if (serializedTask.limit() > TaskSetManager.TASK_SIZE_TO_WARN_KIB * 1024 &&
       !emittedTaskSizeWarning) {
       emittedTaskSizeWarning = true
-      logWarning(s"Stage ${task.stageId} contains a task of very large size " +
-        s"(${serializedTask.limit() / 1024} KiB). The maximum recommended task size is " +
-        s"${TaskSetManager.TASK_SIZE_TO_WARN_KIB} KiB.")
+      logWarning(log"Stage ${MDC(STAGE_ID, task.stageId)} contains a task of very large size " +
+        log"(${MDC(NUM_BYTES, serializedTask.limit() / 1024)} KiB). " +
+        log"The maximum recommended task size is " +
+        log"${MDC(NUM_BYTES_TO_WARN, TaskSetManager.TASK_SIZE_TO_WARN_KIB)} KiB.")
     }
     addRunningTask(taskId)
 
@@ -769,11 +772,12 @@ private[spark] class TaskSetManager(
     totalResultSize += size
     calculatedTasks += 1
     if (!isShuffleMapTasks && maxResultSize > 0 && totalResultSize > maxResultSize) {
-      val msg = s"Total size of serialized results of ${calculatedTasks} tasks " +
-        s"(${Utils.bytesToString(totalResultSize)}) is bigger than ${config.MAX_RESULT_SIZE.key} " +
-        s"(${Utils.bytesToString(maxResultSize)})"
+      val msg = log"Total size of serialized results of ${MDC(COUNT, calculatedTasks)} tasks " +
+        log"(${MDC(SIZE, Utils.bytesToString(totalResultSize))}) is bigger than " +
+        log"${MDC(CONFIG, config.MAX_RESULT_SIZE.key)} " +
+        log"(${MDC(MAX_SIZE, Utils.bytesToString(maxResultSize))})"
       logError(msg)
-      abort(msg)
+      abort(msg.message)
       false
     } else {
       true
@@ -934,7 +938,11 @@ private[spark] class TaskSetManager(
     copiesRunning(index) -= 1
     var accumUpdates: Seq[AccumulatorV2[_, _]] = Seq.empty
     var metricPeaks: Array[Long] = Array.empty
-    val failureReason = s"Lost ${taskName(tid)} (${info.host} " +
+    val failureReason = log"Lost ${MDC(TASK_NAME, taskName(tid))} " +
+      log"(${MDC(HOST_PORT, info.host)} " +
+      log"executor ${MDC(LogKeys.EXECUTOR_ID, info.executorId)}): " +
+      log"${MDC(ERROR, reason.toErrorString)}"
+    val failureReasonString = s"Lost ${taskName(tid)} (${info.host} " +
       s"executor ${info.executorId}): ${reason.toErrorString}"
     val failureException: Option[Throwable] = reason match {
       case fetchFailed: FetchFailed =>
@@ -959,7 +967,8 @@ private[spark] class TaskSetManager(
         val task = taskName(tid)
         if (ef.className == classOf[NotSerializableException].getName) {
           // If the task result wasn't serializable, there's no point in trying to re-execute it.
-          logError(s"$task had a not serializable result: ${ef.description}; not retrying")
+          logError(log"${MDC(TASK_NAME, task)} had a not serializable result: " +
+            log"${MDC(ERROR, ef.description)}; not retrying")
           emptyTaskInfoAccumulablesAndNotifyDagScheduler(tid, tasks(index), reason, null,
             accumUpdates, metricPeaks)
           abort(s"$task had a not serializable result: ${ef.description}")
@@ -968,8 +977,9 @@ private[spark] class TaskSetManager(
         if (ef.className == classOf[TaskOutputFileAlreadyExistException].getName) {
           // If we can not write to output file in the task, there's no point in trying to
           // re-execute it.
-          logError("Task %s in stage %s (TID %d) can not write to output file: %s; not retrying"
-            .format(info.id, taskSet.id, tid, ef.description))
+          logError(log"Task ${MDC(TASK_ID, info.id)} in stage ${MDC(STAGE_ID, taskSet.id)} " +
+            log"(TID ${MDC(TID, tid)}) can not write to output file: " +
+            log"${MDC(ERROR, ef.description)}; not retrying")
           emptyTaskInfoAccumulablesAndNotifyDagScheduler(tid, tasks(index), reason, null,
             accumUpdates, metricPeaks)
           abort("Task %s in stage %s (TID %d) can not write to output file: %s".format(
@@ -1015,7 +1025,7 @@ private[spark] class TaskSetManager(
           "maximum number of failures for the task.")
         None
 
-      case e: TaskFailedReason =>  // TaskResultLost and others
+      case _: TaskFailedReason =>  // TaskResultLost and others
         logWarning(failureReason)
         None
     }
@@ -1030,13 +1040,13 @@ private[spark] class TaskSetManager(
     if (!isZombie && reason.countTowardsTaskFailures) {
       assert (null != failureReason)
       taskSetExcludelistHelperOpt.foreach(_.updateExcludedForFailedTask(
-        info.host, info.executorId, index, failureReason))
+        info.host, info.executorId, index, failureReasonString))
       numFailures(index) += 1
       if (numFailures(index) >= maxTaskFailures) {
-        logError("Task %d in stage %s failed %d times; aborting job".format(
-          index, taskSet.id, maxTaskFailures))
+        logError(log"Task ${MDC(TASK_ID, index)} in stage ${MDC(STAGE_ID, taskSet.id)} failed " +
+          log"${MDC(MAX_ATTEMPTS, maxTaskFailures)} times; aborting job")
         abort("Task %d in stage %s failed %d times, most recent failure: %s\nDriver stacktrace:"
-          .format(index, taskSet.id, maxTaskFailures, failureReason), failureException)
+          .format(index, taskSet.id, maxTaskFailures, failureReasonString), failureException)
         return
       }
     }
@@ -1277,7 +1287,8 @@ private[spark] class TaskSetManager(
     if (foundTasks) {
       val elapsedMs = clock.getTimeMillis() - timeMs
       if (elapsedMs > minTimeToSpeculation) {
-        logWarning(s"Time to checkSpeculatableTasks ${elapsedMs}ms > ${minTimeToSpeculation}ms")
+        logWarning(log"Time to checkSpeculatableTasks ${MDC(TIME_UNITS, elapsedMs)}ms > " +
+          log"${MDC(MIN_TIME, minTimeToSpeculation)}ms")
       }
     }
     foundTasks

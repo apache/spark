@@ -49,10 +49,7 @@ private[sql] object ByteExactNumeric extends ByteIsIntegral with Ordering.ByteOr
   }
 
   override def negate(x: Byte): Byte = {
-    if (x == Byte.MinValue) { // if and only if x is Byte.MinValue, overflow can happen
-      throw QueryExecutionErrors.unaryMinusCauseOverflowError(x)
-    }
-    (-x).toByte
+    MathUtils.negateExact(x)
   }
 }
 
@@ -83,10 +80,7 @@ private[sql] object ShortExactNumeric extends ShortIsIntegral with Ordering.Shor
   }
 
   override def negate(x: Short): Short = {
-    if (x == Short.MinValue) { // if and only if x is Byte.MinValue, overflow can happen
-      throw QueryExecutionErrors.unaryMinusCauseOverflowError(x)
-    }
-    (-x).toShort
+    MathUtils.negateExact(x)
   }
 }
 

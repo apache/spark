@@ -22,9 +22,9 @@ Upgrading PySpark
 Upgrading from PySpark 3.5 to 4.0
 ---------------------------------
 
-* In Spark 4.0, it is recommended to use Pandas version 2.0.0 or above with PySpark for optimal compatibility.
-* In Spark 4.0, the minimum supported version for Pandas has been raised from 1.0.5 to 1.4.4 in PySpark.
+* In Spark 4.0, the minimum supported version for Pandas has been raised from 1.0.5 to 2.0.0 in PySpark.
 * In Spark 4.0, the minimum supported version for Numpy has been raised from 1.15 to 1.21 in PySpark.
+* In Spark 4.0, the minimum supported version for PyArrow has been raised from 4.0.0 to 10.0.0 in PySpark.
 * In Spark 4.0, ``Int64Index`` and ``Float64Index`` have been removed from pandas API on Spark, ``Index`` should be used directly.
 * In Spark 4.0, ``DataFrame.iteritems`` has been removed from pandas API on Spark, use ``DataFrame.items`` instead.
 * In Spark 4.0, ``Series.iteritems`` has been removed from pandas API on Spark, use ``Series.items`` instead.
@@ -69,6 +69,7 @@ Upgrading from PySpark 3.5 to 4.0
 * In Spark 4.0, ``Series.dt.week`` and ``Series.dt.weekofyear`` have been removed from Pandas API on Spark, use ``Series.dt.isocalendar().week`` instead.
 * In Spark 4.0, when applying ``astype`` to a decimal type object, the existing missing value is changed to ``True`` instead of ``False`` from Pandas API on Spark.
 * In Spark 4.0, ``pyspark.testing.assertPandasOnSparkEqual`` has been removed from Pandas API on Spark, use ``pyspark.pandas.testing.assert_frame_equal`` instead.
+* In Spark 4.0, the aliases ``Y``, ``M``, ``H``, ``T``, ``S`` have been deprecated from Pandas API on Spark, use ``YE``, ``ME``, ``h``, ``min``, ``s`` instead respectively.
 
 
 

@@ -28,7 +28,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -390,7 +390,7 @@ case class AlterTableChangeColumnCommand(
     // Throw an AnalysisException if the column name/dataType is changed.
     if (!columnEqual(originColumn, newColumn, resolver)) {
       throw QueryCompilationErrors.alterTableChangeColumnNotSupportedForColumnTypeError(
-        toSQLId(table.identifier.nameParts), originColumn, newColumn)
+        toSQLId(table.identifier.nameParts), originColumn, newColumn, this.origin)
     }
 
     val newDataSchema = table.dataSchema.fields.map { field =>
@@ -696,7 +696,7 @@ case class RepairTableCommand(
     }
 
     val root = new Path(table.location)
-    logInfo(s"Recover all the partitions in $root")
+    logInfo(log"Recover all the partitions in ${MDC(LogKeys.PATH, root)}")
     val hadoopConf = spark.sessionState.newHadoopConf()
     val fs = root.getFileSystem(hadoopConf)
 
@@ -716,14 +716,16 @@ case class RepairTableCommand(
           evalPool.shutdown()
         }
       val total = partitionSpecsAndLocs.length
-      logInfo(s"Found $total partitions in $root")
+      logInfo(log"Found ${MDC(LogKeys.NUM_PARTITIONS, total)} partitions " +
+        log"in ${MDC(LogKeys.PATH, root)}")
 
       val partitionStats = if (spark.sessionState.conf.gatherFastStats) {
         gatherPartitionStats(spark, partitionSpecsAndLocs, fs, pathFilter, threshold)
       } else {
         Map.empty[Path, PartitionStatistics]
       }
-      logInfo(s"Finished to gather the fast stats for all $total partitions.")
+      logInfo(log"Finished to gather the fast stats for all " +
+        log"${MDC(LogKeys.NUM_PARTITIONS, total)} partitions.")
 
       addPartitions(spark, table, partitionSpecsAndLocs, partitionStats)
       total
@@ -736,12 +738,14 @@ case class RepairTableCommand(
       spark.catalog.refreshTable(tableIdentWithDB)
     } catch {
       case NonFatal(e) =>
-        logError(s"Cannot refresh the table '$tableIdentWithDB'. A query of the table " +
-          "might return wrong result if the table was cached. To avoid such issue, you should " +
-          "uncache the table manually via the UNCACHE TABLE command after table recovering will " +
-          "complete fully.", e)
+        logError(log"Cannot refresh the table '${MDC(LogKeys.TABLE_NAME, tableIdentWithDB)}'. " +
+          log"A query of the table might return wrong result if the table was cached. " +
+          log"To avoid such issue, you should uncache the table manually via the UNCACHE TABLE " +
+          log"command after table recovering will complete fully.", e)
     }
-    logInfo(s"Recovered all partitions: added ($addedAmount), dropped ($droppedAmount).")
+    logInfo(log"Recovered all partitions: " +
+      log"added (${MDC(LogKeys.NUM_ADDED_PARTITIONS, addedAmount)}), " +
+      log"dropped (${MDC(LogKeys.NUM_DROPPED_PARTITIONS, droppedAmount)}).")
     Seq.empty[Row]
   }
 
@@ -782,12 +786,13 @@ case class RepairTableCommand(
           scanPartitions(spark, fs, filter, st.getPath, spec ++ Map(partitionNames.head -> value),
             partitionNames.drop(1), threshold, resolver, evalTaskSupport)
         } else {
-          logWarning(
-            s"expected partition column ${partitionNames.head}, but got ${ps(0)}, ignoring it")
+          logWarning(log"expected partition column " +
+            log"${MDC(LogKeys.EXPECTED_PARTITION_COLUMN, partitionNames.head)}," +
+            log" but got ${MDC(LogKeys.ACTUAL_PARTITION_COLUMN, ps(0))}, ignoring it")
           Seq.empty
         }
       } else {
-        logWarning(s"ignore ${new Path(path, name)}")
+        logWarning(log"ignore ${MDC(LogKeys.PATH, new Path(path, name))}")
         Seq.empty
       }
     }
@@ -811,7 +816,8 @@ case class RepairTableCommand(
         Math.min(spark.sparkContext.defaultParallelism, 10000))
       // gather the fast stats for all the partitions otherwise Hive metastore will list all the
       // files for all the new partitions in sequential way, which is super slow.
-      logInfo(s"Gather the fast stats in parallel using $numParallelism tasks.")
+      logInfo(log"Gather the fast stats in parallel using ${MDC(LogKeys.COUNT, numParallelism)} " +
+        log"tasks.")
       spark.sparkContext.parallelize(locations, numParallelism)
         .mapPartitions { locationsEachPartition =>
           val pathFilter = getPathFilter(serializableConfiguration.value)
@@ -1028,7 +1034,8 @@ object DDLUtils extends Logging {
       DataSource.lookupDataSource(provider, SQLConf.get).getConstructor().newInstance()
     } catch {
       case e: Throwable =>
-        logError(s"Failed to find data source: $provider when check data column names.", e)
+        logError(log"Failed to find data source: ${MDC(LogKeys.DATA_SOURCE, provider)} " +
+          log"when check data column names.", e)
         return
     }
     source match {

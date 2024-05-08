@@ -47,6 +47,8 @@ from pyspark.sql.types import (
     NullType,
     DataType,
     UserDefinedType,
+    VariantType,
+    VariantVal,
     _create_row,
 )
 from pyspark.errors import PySparkTypeError, UnsupportedOperationException, PySparkValueError
@@ -108,6 +110,12 @@ def to_arrow_type(dt: DataType) -> "pa.DataType":
         arrow_type = pa.null()
     elif isinstance(dt, UserDefinedType):
         arrow_type = to_arrow_type(dt.sqlType())
+    elif type(dt) == VariantType:
+        fields = [
+            pa.field("value", pa.binary(), nullable=False),
+            pa.field("metadata", pa.binary(), nullable=False),
+        ]
+        arrow_type = pa.struct(fields)
     else:
         raise PySparkTypeError(
             error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
@@ -539,7 +547,7 @@ def _create_converter_to_pandas(
             def correct_dtype(pser: pd.Series) -> pd.Series:
                 if not isinstance(pser.dtype, pd.DatetimeTZDtype):
                     pser = pser.astype(pandas_type, copy=False)
-                return _check_series_convert_timestamps_local_tz(pser, timezone=cast(str, timezone))
+                return _check_series_convert_timestamps_local_tz(pser, timezone=timezone)
 
         else:
 
@@ -563,35 +571,29 @@ def _create_converter_to_pandas(
                         return list(value)
 
                 else:
+                    assert _element_conv is not None
 
                     def convert_array_ndarray_as_list(value: Any) -> Any:
                         # In Arrow Python UDF, ArrayType is converted to `np.ndarray`
                         # whereas a list is expected.
-                        return [
-                            _element_conv(v) if v is not None else None  # type: ignore[misc]
-                            for v in value
-                        ]
+                        return [_element_conv(v) if v is not None else None for v in value]
 
                 return convert_array_ndarray_as_list
             else:
                 if _element_conv is None:
                     return None
 
+                assert _element_conv is not None
+
                 def convert_array_ndarray_as_ndarray(value: Any) -> Any:
                     if isinstance(value, np.ndarray):
                         # `pyarrow.Table.to_pandas` uses `np.ndarray`.
                         return np.array(
-                            [
-                                _element_conv(v) if v is not None else None  # type: ignore[misc]
-                                for v in value
-                            ]
+                            [_element_conv(v) if v is not None else None for v in value]
                         )
                     else:
                         # otherwise, `list` should be used.
-                        return [
-                            _element_conv(v) if v is not None else None  # type: ignore[misc]
-                            for v in value
-                        ]
+                        return [_element_conv(v) if v is not None else None for v in value]
 
                 return convert_array_ndarray_as_ndarray
 
@@ -765,9 +767,23 @@ def _create_converter_to_pandas(
                         assert isinstance(value.__UDT__, type(udt))
                         return value
                     else:
-                        return udt.deserialize(conv(value))  # type: ignore[misc]
+                        return udt.deserialize(conv(value))
 
             return convert_udt
+
+        elif isinstance(dt, VariantType):
+
+            def convert_variant(value: Any) -> Any:
+                if (
+                    isinstance(value, dict)
+                    and all(key in value for key in ["value", "metadata"])
+                    and all(isinstance(value[key], bytes) for key in ["value", "metadata"])
+                ):
+                    return VariantVal(value["value"], value["metadata"])
+                else:
+                    raise PySparkValueError(error_class="MALFORMED_VARIANT")
+
+            return convert_variant
 
         else:
             return None
@@ -775,7 +791,7 @@ def _create_converter_to_pandas(
     conv = _converter(data_type, struct_in_pandas, ndarray_as_list)
     if conv is not None:
         return lambda pser: pser.apply(  # type: ignore[return-value]
-            lambda x: conv(x) if x is not None else None  # type: ignore[misc]
+            lambda x: conv(x) if x is not None else None
         )
     else:
         return lambda pser: pser
@@ -822,7 +838,7 @@ def _create_converter_from_pandas(
         assert timezone is not None
 
         def correct_timestamp(pser: pd.Series) -> pd.Series:
-            return _check_series_convert_timestamps_internal(pser, cast(str, timezone))
+            return _check_series_convert_timestamps_internal(pser, timezone)
 
         return correct_timestamp
 
@@ -840,13 +856,11 @@ def _create_converter_from_pandas(
                             return value
 
                 else:
+                    assert _element_conv is not None
 
                     def convert_array(value: Any) -> Any:
                         if isinstance(value, Iterable):
-                            return [
-                                _element_conv(v) if v is not None else None  # type: ignore[misc]
-                                for v in value
-                            ]
+                            return [_element_conv(v) if v is not None else None for v in value]
                         else:
                             return value
 
@@ -857,13 +871,11 @@ def _create_converter_from_pandas(
                         return list(value)
 
                 else:
+                    assert _element_conv is not None
 
                     def convert_array(value: Any) -> Any:
                         # Iterable
-                        return [
-                            _element_conv(v) if v is not None else None  # type: ignore[misc]
-                            for v in value
-                        ]
+                        return [_element_conv(v) if v is not None else None for v in value]
 
             return convert_array
 
@@ -1003,7 +1015,7 @@ def _create_converter_from_pandas(
 
             def convert_timestamp(value: Any) -> Any:
                 if isinstance(value, datetime.datetime) and value.tzinfo is not None:
-                    ts = pd.Timstamp(value)
+                    ts = pd.Timestamp(value)
                 else:
                     ts = pd.Timestamp(value).tz_localize(timezone)
                 return ts.to_pydatetime()
@@ -1023,7 +1035,7 @@ def _create_converter_from_pandas(
             else:
 
                 def convert_udt(value: Any) -> Any:
-                    return conv(udt.serialize(value))  # type: ignore[misc]
+                    return conv(udt.serialize(value))
 
             return convert_udt
 
@@ -1032,7 +1044,7 @@ def _create_converter_from_pandas(
     conv = _converter(data_type)
     if conv is not None:
         return lambda pser: pser.apply(  # type: ignore[return-value]
-            lambda x: conv(x) if x is not None else None  # type: ignore[misc]
+            lambda x: conv(x) if x is not None else None
         )
     else:
         return lambda pser: pser

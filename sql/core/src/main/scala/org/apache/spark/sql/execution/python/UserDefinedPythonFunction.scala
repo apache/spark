@@ -25,7 +25,7 @@ import net.razorvine.pickle.Pickler
 
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction, PythonWorkerUtils, SpecialLengths}
 import org.apache.spark.sql.{Column, DataFrame, Dataset, SparkSession}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NullsFirst, NullsLast, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, SortOrder, UnresolvedPolymorphicPythonUDTF}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NullsFirst, NullsLast, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, PythonUDTFSelectedExpression, SortOrder, UnresolvedPolymorphicPythonUDTF}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, NamedParametersSupport, OneRowRelation}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -276,11 +276,24 @@ class UserDefinedPythonTableFunctionAnalyzeRunner(
         case 2 => orderBy.append(SortOrder(parsed, direction, NullsLast, Seq.empty))
       }
     }
+    // Receive the list of requested input columns to select, if specified.
+    val numSelectedInputExpressions = dataIn.readInt()
+    val selectedInputExpressions = ArrayBuffer.empty[PythonUDTFSelectedExpression]
+    for (_ <- 0 until numSelectedInputExpressions) {
+      val expressionSql: String = PythonWorkerUtils.readUTF(dataIn)
+      val parsed: Expression = parser.parseExpression(expressionSql)
+      val alias: String = PythonWorkerUtils.readUTF(dataIn)
+      selectedInputExpressions.append(
+        PythonUDTFSelectedExpression(
+          parsed,
+          if (alias.nonEmpty) Some(alias) else None))
+    }
     PythonUDTFAnalyzeResult(
       schema = schema,
       withSinglePartition = withSinglePartition,
       partitionByExpressions = partitionByExpressions.toSeq,
       orderByExpressions = orderBy.toSeq,
+      selectedInputExpressions = selectedInputExpressions.toSeq,
       pickledAnalyzeResult = pickledAnalyzeResult)
   }
 }

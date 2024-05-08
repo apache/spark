@@ -30,7 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLQueryTestSuite
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.util.fileToString
-import org.apache.spark.sql.execution.HiveResult.{getTimeFormatters, toHiveString, TimeFormatters}
+import org.apache.spark.sql.execution.HiveResult.{getBinaryFormatter, getTimeFormatters, toHiveString, BinaryFormatter, TimeFormatters}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.TimestampTypes
 import org.apache.spark.sql.types._
@@ -101,7 +101,12 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     "subquery/in-subquery/in-order-by.sql",
     "subquery/in-subquery/in-set-operations.sql",
     // SPARK-42921
-    "timestampNTZ/datetime-special-ansi.sql"
+    "timestampNTZ/datetime-special-ansi.sql",
+    // SPARK-47264
+    "collations.sql",
+    "binary_hex.sql",
+    "binary_basic.sql",
+    "binary_base64.sql"
   )
 
   override def runQueries(
@@ -296,8 +301,9 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     val rs = statement.executeQuery(sql)
     val cols = rs.getMetaData.getColumnCount
     val timeFormatters = getTimeFormatters
+    val binaryFormatter = getBinaryFormatter
     val buildStr = () => (for (i <- 1 to cols) yield {
-      getHiveResult(rs.getObject(i), timeFormatters)
+      getHiveResult(rs.getObject(i), timeFormatters, binaryFormatter)
     }).mkString("\t")
 
     val answer = Iterator.continually(rs.next()).takeWhile(identity).map(_ => buildStr()).toSeq
@@ -319,18 +325,20 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
       upperCase.startsWith("(")
   }
 
-  private def getHiveResult(obj: Object, timeFormatters: TimeFormatters): String = {
+  private def getHiveResult(
+      obj: Object, timeFormatters: TimeFormatters, binaryFormatter: BinaryFormatter): String = {
     obj match {
       case null =>
-        toHiveString((null, StringType), false, timeFormatters)
+        toHiveString((null, StringType), false, timeFormatters, binaryFormatter)
       case d: java.sql.Date =>
-        toHiveString((d, DateType), false, timeFormatters)
+        toHiveString((d, DateType), false, timeFormatters, binaryFormatter)
       case t: Timestamp =>
-        toHiveString((t, TimestampType), false, timeFormatters)
+        toHiveString((t, TimestampType), false, timeFormatters, binaryFormatter)
       case d: java.math.BigDecimal =>
-        toHiveString((d, DecimalType.fromDecimal(Decimal(d))), false, timeFormatters)
+        toHiveString((
+          d, DecimalType.fromDecimal(Decimal(d))), false, timeFormatters, binaryFormatter)
       case bin: Array[Byte] =>
-        toHiveString((bin, BinaryType), false, timeFormatters)
+        toHiveString((bin, BinaryType), false, timeFormatters, binaryFormatter)
       case other =>
         other.toString
     }

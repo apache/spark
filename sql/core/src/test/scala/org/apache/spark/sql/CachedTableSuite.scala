@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Join, JoinStrategyHint, SHUFFLE_HASH}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
-import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, RDDScanExec, SparkPlan}
+import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, RDDScanExec, SparkPlan, SparkPlanInfo}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEPropagateEmptyRelation}
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
@@ -1630,18 +1630,35 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
 
-      var finalPlan = ""
+      var finalPlan: SparkPlanInfo = null
       val listener = new SparkListener {
         override def onOtherEvent(event: SparkListenerEvent): Unit = {
           event match {
-            case SparkListenerSQLAdaptiveExecutionUpdate(_, physicalPlanDesc, sparkPlanInfo) =>
+            case SparkListenerSQLAdaptiveExecutionUpdate(_, _, sparkPlanInfo) =>
               if (sparkPlanInfo.simpleString.startsWith(
                   "AdaptiveSparkPlan isFinalPlan=true")) {
-                finalPlan = physicalPlanDesc
+                finalPlan = sparkPlanInfo
               }
             case _ => // ignore other events
           }
         }
+      }
+
+      def findNodeInSparkPlanInfo(root: SparkPlanInfo, cond: SparkPlanInfo => Boolean):
+      Option[SparkPlanInfo] = {
+        if (cond(root)) {
+          Some(root)
+        } else {
+          root.children.flatMap(findNodeInSparkPlanInfo(_, cond)).headOption
+        }
+      }
+
+      def cachedFinalStageCoalesced(sparkPlanInfo: SparkPlanInfo): Boolean = {
+        val inMemoryScanNode = findNodeInSparkPlanInfo(sparkPlanInfo,
+          _.nodeName.contains("TableCacheQueryStage"))
+        val aqeNode = findNodeInSparkPlanInfo(inMemoryScanNode.get,
+          _.nodeName.contains("AdaptiveSparkPlan"))
+        aqeNode.get.children.head.nodeName == "AQEShuffleRead"
       }
 
       withTempView("t0", "t1", "t2") {
@@ -1655,16 +1672,16 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
               "SELECT distinct (id+1) FROM t0)")
             assert(spark.table("t1").rdd.partitions.length == 2)
             spark.sparkContext.listenerBus.waitUntilEmpty()
-            assert(finalPlan.nonEmpty && !finalPlan.contains("coalesced"))
+            assert(finalPlan != null && !cachedFinalStageCoalesced(finalPlan))
           }
 
-          finalPlan = "" // reset finalPlan
+          finalPlan = null // reset finalPlan
           withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true") {
             sql("CACHE TABLE t2 as SELECT /*+ REPARTITION */ * FROM (" +
               "SELECT distinct (id-1) FROM t0)")
-            assert(spark.table("t2").rdd.partitions.length == 2)
+            assert(spark.table("t2").rdd.partitions.length == 1)
             spark.sparkContext.listenerBus.waitUntilEmpty()
-            assert(finalPlan.nonEmpty && finalPlan.contains("coalesced"))
+            assert(finalPlan != null && cachedFinalStageCoalesced(finalPlan))
           }
         } finally {
           spark.sparkContext.removeSparkListener(listener)
@@ -1752,5 +1769,24 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
     intercept[IllegalArgumentException] {
       withSQLConf(SQLConf.DEFAULT_CACHE_STORAGE_LEVEL.key -> "DISK") {}
     }
+  }
+
+  test("SPARK-47633: Cache hit for lateral join with join condition") {
+    withTempView("t", "q1") {
+      sql("create or replace temp view t(c1, c2) as values (0, 1), (1, 2)")
+      val query = """select *
+                    |from t
+                    |join lateral (
+                    |  select c1 as a, c2 as b
+                    |  from t)
+                    |on c1 = a;
+                    |""".stripMargin
+      sql(s"cache table q1 as $query")
+      val df = sql(query)
+      checkAnswer(df,
+        Row(0, 1, 0, 1) :: Row(1, 2, 1, 2) :: Nil)
+      assert(getNumInMemoryRelations(df) == 1)
+    }
+
   }
 }

@@ -24,7 +24,7 @@ import java.util.Locale
 
 import org.apache.commons.text.StringEscapeUtils
 
-import org.apache.spark.SparkDateTimeException
+import org.apache.spark.{SparkDateTimeException, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry}
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -134,7 +134,7 @@ case class CurrentTimeZone() extends LeafExpression with Unevaluable {
   since = "1.5.0")
 // scalastyle:on line.size.limit
 case class CurrentDate(timeZoneId: Option[String] = None)
-  extends LeafExpression with TimeZoneAwareExpression with Unevaluable {
+  extends LeafExpression with TimeZoneAwareExpression with FoldableUnevaluable {
   def this() = this(None)
   override def nullable: Boolean = false
   override def dataType: DataType = DateType
@@ -169,7 +169,7 @@ object CurDateExpressionBuilder extends ExpressionBuilder {
   }
 }
 
-abstract class CurrentTimestampLike() extends LeafExpression with Unevaluable {
+abstract class CurrentTimestampLike() extends LeafExpression with FoldableUnevaluable {
   override def nullable: Boolean = false
   override def dataType: DataType = TimestampType
   final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
@@ -235,7 +235,7 @@ case class Now() extends CurrentTimestampLike {
   group = "datetime_funcs",
   since = "3.4.0")
 case class LocalTimestamp(timeZoneId: Option[String] = None) extends LeafExpression
-  with TimeZoneAwareExpression with Unevaluable {
+  with TimeZoneAwareExpression with FoldableUnevaluable {
   def this() = this(None)
   override def nullable: Boolean = false
   override def dataType: DataType = TimestampNTZType
@@ -1519,7 +1519,7 @@ case class LastDay(startDate: Expression)
     """_FUNC_(start_date, day_of_week) - Returns the first date which is later than `start_date` and named as indicated.
       The function returns NULL if at least one of the input parameters is NULL.
       When both of the input parameters are not NULL and day_of_week is an invalid input,
-      the function throws IllegalArgumentException if `spark.sql.ansi.enabled` is set to true, otherwise NULL.
+      the function throws SparkIllegalArgumentException if `spark.sql.ansi.enabled` is set to true, otherwise NULL.
       """,
   examples = """
     Examples:
@@ -1551,9 +1551,9 @@ case class NextDay(
       val sd = start.asInstanceOf[Int]
       DateTimeUtils.getNextDateForDayOfWeek(sd, dow)
     } catch {
-      case e: IllegalArgumentException =>
+      case e: SparkIllegalArgumentException =>
         if (failOnError) {
-          throw QueryExecutionErrors.ansiIllegalArgumentError(e)
+          throw e
         } else {
           null
         }
@@ -1568,7 +1568,7 @@ case class NextDay(
       sd: String,
       dowS: String): String = {
     val failOnErrorBranch = if (failOnError) {
-      "throw QueryExecutionErrors.ansiIllegalArgumentError(e);"
+      "throw e;"
     } else {
       s"${ev.isNull} = true;"
     }
@@ -1576,7 +1576,7 @@ case class NextDay(
      |try {
      |  int $dayOfWeekTerm = $dateTimeUtilClass.getDayOfWeekFromString($dowS);
      |  ${ev.value} = $dateTimeUtilClass.getNextDateForDayOfWeek($sd, $dayOfWeekTerm);
-     |} catch (IllegalArgumentException e) {
+     |} catch (org.apache.spark.SparkIllegalArgumentException e) {
      |  $failOnErrorBranch
      |}
      |""".stripMargin
@@ -1594,7 +1594,7 @@ case class NextDay(
             val dayOfWeekValue = DateTimeUtils.getDayOfWeekFromString(input)
             s"${ev.value} = $dateTimeUtilClass.getNextDateForDayOfWeek($sd, $dayOfWeekValue);"
           } catch {
-            case _: IllegalArgumentException => nextDayGenCode(ev, dayOfWeekTerm, sd, dowS)
+            case _: SparkIllegalArgumentException => nextDayGenCode(ev, dayOfWeekTerm, sd, dowS)
           }
         }
       } else {

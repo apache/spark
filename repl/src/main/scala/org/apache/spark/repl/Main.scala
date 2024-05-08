@@ -19,7 +19,6 @@ package org.apache.spark.repl
 
 import java.io.File
 import java.net.URI
-import java.util.Locale
 
 import scala.tools.nsc.GenericRunnerSettings
 
@@ -104,9 +103,7 @@ object Main extends Logging {
       }
 
       val builder = SparkSession.builder().config(conf)
-      if (conf
-            .get(CATALOG_IMPLEMENTATION.key, "hive")
-            .toLowerCase(Locale.ROOT) == "hive") {
+      if (conf.get(CATALOG_IMPLEMENTATION.key, "hive") == "hive") {
         if (SparkSession.hiveClassesArePresent) {
           // In the case that the property is not set at all, builder's config
           // does not have this value set to 'hive' yet. The original default

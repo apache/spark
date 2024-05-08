@@ -73,14 +73,14 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
   private def assertUnsupportedFeature(
       body: => Unit,
-      message: String,
+      operation: String,
       expectedContext: ExpectedContext): Unit = {
     checkError(
       exception = intercept[ParseException] {
         body
       },
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
-      parameters = Map("message" -> message),
+      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      parameters = Map("operation" -> operation),
       context = expectedContext)
   }
 
@@ -159,28 +159,6 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       |    SELECT explode(array(1,2,3)) FROM src LIMIT 3;
       |  SELECT key FROM gen_tmp ORDER BY key ASC;
     """.stripMargin)
-
-  test("multiple generators in projection") {
-    checkError(
-      exception = intercept[AnalysisException] {
-        sql("SELECT explode(array(key, key)), explode(array(key, key)) FROM src").collect()
-      },
-      errorClass = "UNSUPPORTED_GENERATOR.MULTI_GENERATOR",
-      parameters = Map(
-        "clause" -> "SELECT",
-        "num" -> "2",
-        "generators" -> "\"explode(array(key, key))\", \"explode(array(key, key))\""))
-
-    checkError(
-      exception = intercept[AnalysisException] {
-        sql("SELECT explode(array(key, key)) as k1, explode(array(key, key)) FROM src").collect()
-      },
-      errorClass = "UNSUPPORTED_GENERATOR.MULTI_GENERATOR",
-      parameters = Map(
-        "clause" -> "SELECT",
-        "num" -> "2",
-        "generators" -> "\"explode(array(key, key))\", \"explode(array(key, key))\""))
-  }
 
   createQueryTest("! operator",
     """
@@ -391,7 +369,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
   test("SPARK-7270: consider dynamic partition when comparing table output") {
     withTable("test_partition", "ptest") {
-      sql(s"CREATE TABLE test_partition (a STRING) PARTITIONED BY (b BIGINT, c STRING)")
+      sql(s"CREATE TABLE test_partition (a STRING) USING HIVE PARTITIONED BY (b BIGINT, c STRING)")
       sql(s"CREATE TABLE ptest (a STRING, b BIGINT, c STRING)")
 
       val analyzedPlan = sql(
@@ -826,7 +804,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   }
 
   test("ADD JAR command") {
-    sql("CREATE TABLE alter1(a INT, b INT)")
+    sql("CREATE TABLE alter1(a INT, b INT) USING HIVE")
     checkError(
       exception = intercept[AnalysisException] {
         sql(
@@ -1247,7 +1225,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
   test("Partition spec validation") {
     sql("DROP TABLE IF EXISTS dp_test")
-    sql("CREATE TABLE dp_test(key INT, value STRING) PARTITIONED BY (dp INT, sp INT)")
+    sql("CREATE TABLE dp_test(key INT, value STRING) USING HIVE PARTITIONED BY (dp INT, sp INT)")
     sql("SET hive.exec.dynamic.partition.mode=strict")
 
     // Should throw when using strict dynamic partition mode without any static partition

@@ -25,7 +25,8 @@ import org.apache.hadoop.fs.{FileSystem, FSDataOutputStream, Path}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.util.ThreadUtils
 
 
@@ -51,7 +52,7 @@ private[spark] class ExecutorJVMProfiler(conf: SparkConf, executorId: String) ex
   private var inputStream: InputStream = _
   private val dataBuffer = new Array[Byte](UPLOAD_SIZE)
   private var threadpool: ScheduledExecutorService = _
-  private var writing: Boolean = false
+  @volatile private var writing: Boolean = false
 
   val profiler: Option[AsyncProfiler] = {
     Option(
@@ -108,7 +109,7 @@ private[spark] class ExecutorJVMProfiler(conf: SparkConf, executorId: String) ex
         if (fs.exists(filenamePath)) {
           fs.delete(filenamePath, true)
         }
-        logInfo(s"Copying executor profiling file to $profileOutputFile")
+        logInfo(log"Copying executor profiling file to ${MDC(PATH, profileOutputFile)}")
         inputStream = new BufferedInputStream(new FileInputStream(s"$profilerLocalDir/profile.jfr"))
         threadpool = ThreadUtils.newDaemonSingleThreadScheduledExecutor("profilerOutputThread")
         threadpool.scheduleWithFixedDelay(

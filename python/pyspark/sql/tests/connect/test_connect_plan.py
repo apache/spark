@@ -333,6 +333,11 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         from pyspark.sql.connect.observation import Observation
 
         class MockDF(DataFrame):
+            def __new__(cls, df: DataFrame) -> "DataFrame":
+                self = object.__new__(cls)
+                self.__init__(df)  # type: ignore[misc]
+                return self
+
             def __init__(self, df: DataFrame):
                 super().__init__(df._plan, df._session)
 
@@ -756,7 +761,7 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         # SPARK-41717: test print
         self.assertEqual(
             self.connect.sql("SELECT 1")._plan.print().strip(),
-            "<SQL query='SELECT 1', args='None'>",
+            "<SQL query='SELECT 1', args='None', named_args='None', views='None'>",
         )
         self.assertEqual(
             self.connect.range(1, 10)._plan.print().strip(),

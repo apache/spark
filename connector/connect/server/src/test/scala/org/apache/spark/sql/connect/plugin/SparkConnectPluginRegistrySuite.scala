@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connect.plugin
 
+import java.util.Optional
+
 import com.google.protobuf
 
 import org.apache.spark.{SparkContext, SparkEnv, SparkException}
@@ -25,6 +27,7 @@ import org.apache.spark.connect.proto.Relation
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.connect.ConnectProtoUtils
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.planner.{SparkConnectPlanner, SparkConnectPlanTest}
@@ -32,20 +35,20 @@ import org.apache.spark.sql.test.SharedSparkSession
 
 class DummyPlugin extends RelationPlugin {
   override def transform(
-      relation: protobuf.Any,
-      planner: SparkConnectPlanner): Option[LogicalPlan] = None
+      relation: Array[Byte],
+      planner: SparkConnectPlanner): Optional[LogicalPlan] = Optional.empty()
 }
 
 class DummyExpressionPlugin extends ExpressionPlugin {
   override def transform(
-      relation: protobuf.Any,
-      planner: SparkConnectPlanner): Option[Expression] = None
+      relation: Array[Byte],
+      planner: SparkConnectPlanner): Optional[Expression] = Optional.empty()
 }
 
 class DummyPluginNoTrivialCtor(id: Int) extends RelationPlugin {
   override def transform(
-      relation: protobuf.Any,
-      planner: SparkConnectPlanner): Option[LogicalPlan] = None
+      relation: Array[Byte],
+      planner: SparkConnectPlanner): Optional[LogicalPlan] = Optional.empty()
 }
 
 class DummyPluginInstantiationError extends RelationPlugin {
@@ -53,46 +56,50 @@ class DummyPluginInstantiationError extends RelationPlugin {
   throw new ArrayIndexOutOfBoundsException("Bad Plugin Error")
 
   override def transform(
-      relation: protobuf.Any,
-      planner: SparkConnectPlanner): Option[LogicalPlan] = None
+      relation: Array[Byte],
+      planner: SparkConnectPlanner): Optional[LogicalPlan] = Optional.empty()
 }
 
 class ExampleRelationPlugin extends RelationPlugin {
   override def transform(
-      relation: protobuf.Any,
-      planner: SparkConnectPlanner): Option[LogicalPlan] = {
-
-    if (!relation.is(classOf[proto.ExamplePluginRelation])) {
-      return None
+      relation: Array[Byte],
+      planner: SparkConnectPlanner): Optional[LogicalPlan] = {
+    val rel = protobuf.Any.parseFrom(relation)
+    if (!rel.is(classOf[proto.ExamplePluginRelation])) {
+      return Optional.empty()
     }
-    val plugin = relation.unpack(classOf[proto.ExamplePluginRelation])
-    Some(planner.transformRelation(plugin.getInput))
+    val plugin = rel.unpack(classOf[proto.ExamplePluginRelation])
+    val input = ConnectProtoUtils.parseRelationWithRecursionLimit(
+      plugin.getInput.toByteArray, recursionLimit = 1024)
+    Optional.of(planner.transformRelation(input))
   }
 }
 
 class ExampleExpressionPlugin extends ExpressionPlugin {
   override def transform(
-      relation: protobuf.Any,
-      planner: SparkConnectPlanner): Option[Expression] = {
-    if (!relation.is(classOf[proto.ExamplePluginExpression])) {
-      return None
+      relation: Array[Byte],
+      planner: SparkConnectPlanner): Optional[Expression] = {
+    val rel = protobuf.Any.parseFrom(relation)
+    if (!rel.is(classOf[proto.ExamplePluginExpression])) {
+      return Optional.empty()
     }
-    val exp = relation.unpack(classOf[proto.ExamplePluginExpression])
-    Some(
-      Alias(planner.transformExpression(exp.getChild), exp.getCustomField)(explicitMetadata =
-        None))
+    val exp = rel.unpack(classOf[proto.ExamplePluginExpression])
+    val child = ConnectProtoUtils.parseExpressionWithRecursionLimit(
+      exp.getChild.toByteArray, recursionLimit = 1024)
+    Optional.of(Alias(planner.transformExpression(child), exp.getCustomField)())
   }
 }
 
 class ExampleCommandPlugin extends CommandPlugin {
-  override def process(command: protobuf.Any, planner: SparkConnectPlanner): Option[Unit] = {
-    if (!command.is(classOf[proto.ExamplePluginCommand])) {
-      return None
+  override def process(command: Array[Byte], planner: SparkConnectPlanner): Boolean = {
+    val rcmd = protobuf.Any.parseFrom(command)
+    if (!rcmd.is(classOf[proto.ExamplePluginCommand])) {
+      return false
     }
-    val cmd = command.unpack(classOf[proto.ExamplePluginCommand])
+    val cmd = rcmd.unpack(classOf[proto.ExamplePluginCommand])
     assert(planner.session != null)
     SparkContext.getActive.get.setLocalProperty("testingProperty", cmd.getCustomField)
-    Some(())
+    true
   }
 }
 
@@ -195,9 +202,7 @@ class SparkConnectPluginRegistrySuite extends SharedSparkSession with SparkConne
               .build()))
         .build()
 
-      val executeHolder = buildExecutePlanHolder(plan)
-      new SparkConnectPlanner(executeHolder)
-        .process(plan, new MockObserver())
+      transform(plan)
       assert(spark.sparkContext.getLocalProperty("testingProperty").equals("Martin"))
     }
   }

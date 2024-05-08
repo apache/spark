@@ -45,7 +45,7 @@ the container bootstrapping. To run an individual Docker integration test, use t
 
 Besides the default Docker images, the integration tests can be run with custom Docker images. For example,
 
-    ORACLE_DOCKER_IMAGE_NAME=gvenzl/oracle-free:23.3-slim-faststart ./build/sbt -Pdocker-integration-tests "docker-integration-tests/testOnly *OracleIntegrationSuite"
+    ORACLE_DOCKER_IMAGE_NAME=gvenzl/oracle-free:23.4-slim-faststart ./build/sbt -Pdocker-integration-tests "docker-integration-tests/testOnly *OracleIntegrationSuite"
 
 The following environment variables can be used to specify the custom Docker images for different databases:
 
@@ -107,5 +107,26 @@ The following are the available properties that can be passed to optimize testin
       When true, the Docker image used for the test will not be preserved after all tests finished in a single test file.
     </td>
     <td>true</td>
+  </tr>
+  <tr>
+    <td><code>spark.test.docker.imagePullTimeout</code></td>
+    <td>
+      Timeout for pulling the Docker image before the tests start.
+    </td>
+    <td>5min</td>
+  </tr>
+  <tr>
+    <td><code>spark.test.docker.startContainerTimeout</code></td>
+    <td>
+      Timeout for container to spin up.
+    </td>
+    <td>5min</td>
+  </tr>
+  <tr>
+    <td><code>spark.test.docker.connectionTimeout</code></td>
+    <td>
+      Timeout for connecting the inner service in the container, such as JDBC services.
+    </td>
+    <td>5min(might get overridden by some inherits)</td>
   </tr>
 </table>

@@ -525,6 +525,33 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       Row(Seq("aa", "bb", "cc", "")))
   }
 
+  test("SPARK-47845: string split function with column types") {
+    val df = Seq(
+      ("aa2bb3cc4", "[1-9]+", 0),
+      ("aa2bb3cc4", "[1-9]+", 2),
+      ("aa2bb3cc4", "[1-9]+", -2)).toDF("a", "b", "c")
+
+    // without limit
+    val expectedNoLimit = Seq(
+      Row(Seq("aa", "bb", "cc", "")),
+      Row(Seq("aa", "bb", "cc", "")),
+      Row(Seq("aa", "bb", "cc", "")))
+
+    checkAnswer(df.select(split($"a", $"b")), expectedNoLimit)
+
+    checkAnswer(df.selectExpr("split(a, b)"), expectedNoLimit)
+
+    // with limit
+    val expectedWithLimit = Seq(
+      Row(Seq("aa", "bb", "cc", "")),
+      Row(Seq("aa", "bb3cc4")),
+      Row(Seq("aa", "bb", "cc", "")))
+
+    checkAnswer(df.select(split($"a", $"b", $"c")), expectedWithLimit)
+
+    checkAnswer(df.selectExpr("split(a, b, c)"), expectedWithLimit)
+  }
+
   test("string / binary length function") {
     val df = Seq(("123", Array[Byte](1, 2, 3, 4), 123, 2.0f, 3.015))
       .toDF("a", "b", "c", "d", "e")
@@ -787,7 +814,7 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"regexp_replace(collect_list(1), 1, 2, 1)\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> "first",
         "inputSql" -> "\"collect_list(1)\"",
         "inputType" -> "\"ARRAY<INT>\"",
         "requiredType" -> "\"STRING\""),
@@ -1221,6 +1248,11 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(df.selectExpr("try_to_number(a, '$99.99')"), Seq(Row(78.12)))
     checkAnswer(df.select(try_to_number(col("a"), lit("$99.99"))), Seq(Row(78.12)))
+  }
+
+  test("SPARK-47646: try_to_number should return NULL for malformed input") {
+    val df = spark.createDataset(spark.sparkContext.parallelize(Seq("11")))
+    checkAnswer(df.select(try_to_number($"value", lit("$99.99"))), Seq(Row(null)))
   }
 
   test("SPARK-44905: stateful lastRegex causes NullPointerException on eval for regexp_replace") {

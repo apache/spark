@@ -24,9 +24,12 @@ import java.nio.file.Files
 
 import scala.collection.mutable.ArrayBuffer
 
+import com.google.common.cache.CacheBuilder
+
 import org.apache.spark.{SecurityManager, SparkConf, SparkEnv, SparkException}
 import org.apache.spark.errors.SparkCoreErrors
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.io.NioBufferedFileInputStream
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.client.StreamCallbackWithID
@@ -75,11 +78,19 @@ private[spark] class IndexShuffleBlockResolver(
   override def getStoredShuffles(): Seq[ShuffleBlockInfo] = {
     val allBlocks = blockManager.diskBlockManager.getAllBlocks()
     allBlocks.flatMap {
-      case ShuffleIndexBlockId(shuffleId, mapId, _) =>
+      case ShuffleIndexBlockId(shuffleId, mapId, _)
+        if Option(shuffleIdsToSkip.getIfPresent(shuffleId)).isEmpty =>
         Some(ShuffleBlockInfo(shuffleId, mapId))
       case _ =>
         None
     }
+  }
+
+  private val shuffleIdsToSkip =
+    CacheBuilder.newBuilder().maximumSize(1000).build[java.lang.Integer, java.lang.Boolean]()
+
+  override def addShuffleToSkip(shuffleId: ShuffleId): Unit = {
+    shuffleIdsToSkip.put(shuffleId, true)
   }
 
   private def getShuffleBytesStored(): Long = {
@@ -161,17 +172,17 @@ private[spark] class IndexShuffleBlockResolver(
   def removeDataByMap(shuffleId: Int, mapId: Long): Unit = {
     var file = getDataFile(shuffleId, mapId)
     if (file.exists() && !file.delete()) {
-      logWarning(s"Error deleting data ${file.getPath()}")
+      logWarning(log"Error deleting data ${MDC(PATH, file.getPath())}")
     }
 
     file = getIndexFile(shuffleId, mapId)
     if (file.exists() && !file.delete()) {
-      logWarning(s"Error deleting index ${file.getPath()}")
+      logWarning(log"Error deleting index ${MDC(PATH, file.getPath())}")
     }
 
     file = getChecksumFile(shuffleId, mapId, conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM))
     if (file.exists() && !file.delete()) {
-      logWarning(s"Error deleting checksum ${file.getPath()}")
+      logWarning(log"Error deleting checksum ${MDC(PATH, file.getPath())}")
     }
   }
 
@@ -279,7 +290,7 @@ private[spark] class IndexShuffleBlockResolver(
 
       override def onFailure(streamId: String, cause: Throwable): Unit = {
         // the framework handles the connection itself, we just need to do local cleanup
-        logWarning(s"Error while uploading $blockId", cause)
+        logWarning(log"Error while uploading ${MDC(BLOCK_ID, blockId)}", cause)
         channel.close()
         fileTmp.delete()
       }
@@ -317,8 +328,9 @@ private[spark] class IndexShuffleBlockResolver(
       }
     } catch {
       case _: Exception => // If we can't load the blocks ignore them.
-        logWarning(s"Failed to resolve shuffle block ${shuffleBlockInfo}. " +
-          "This is expected to occur if a block is removed after decommissioning has started.")
+        logWarning(log"Failed to resolve shuffle block " +
+          log"${MDC(SHUFFLE_BLOCK_INFO, shuffleBlockInfo)}. " +
+          log"This is expected to occur if a block is removed after decommissioning has started.")
         List.empty[(BlockId, ManagedBuffer)]
     }
   }
@@ -417,7 +429,8 @@ private[spark] class IndexShuffleBlockResolver(
     } finally {
       logDebug(s"Shuffle index for mapId $mapId: ${lengths.mkString("[", ",", "]")}")
       if (indexTmp.exists() && !indexTmp.delete()) {
-        logError(s"Failed to delete temporary index file at ${indexTmp.getAbsolutePath}")
+        logError(log"Failed to delete temporary index file at " +
+          log"${MDC(PATH, indexTmp.getAbsolutePath)}")
       }
       checksumTmpOpt.foreach { checksumTmp =>
         if (checksumTmp.exists()) {
@@ -430,8 +443,8 @@ private[spark] class IndexShuffleBlockResolver(
             case e: Exception =>
               // Unlike index deletion, we won't propagate the error for the checksum file since
               // checksum is only a best-effort.
-              logError(s"Failed to delete temporary checksum file " +
-                s"at ${checksumTmp.getAbsolutePath}", e)
+              logError(log"Failed to delete temporary checksum file " +
+                log"at ${MDC(PATH, checksumTmp.getAbsolutePath)}", e)
           }
         }
       }
@@ -473,7 +486,8 @@ private[spark] class IndexShuffleBlockResolver(
       if (propagateError) {
         throw SparkCoreErrors.failedRenameTempFileError(tmpFile, targetFile)
       } else {
-        logWarning(s"fail to rename file $tmpFile to $targetFile")
+        logWarning(log"fail to rename file ${MDC(TEMP_FILE, tmpFile)} " +
+          log"to ${MDC(TARGET_PATH, targetFile)}")
       }
     }
   }

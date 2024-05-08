@@ -698,6 +698,11 @@ class PlanGenerationTestSuite
     simple.distinct()
   }
 
+  test("select collated string") {
+    val schema = StructType(StructField("s", StringType(1)) :: Nil)
+    createLocalRelation(schema.catalogString).select("s")
+  }
+
   /* Column API */
   private def columnTest(name: String)(f: => Column): Unit = {
     test("column " + name) {
@@ -864,6 +869,10 @@ class PlanGenerationTestSuite
 
   columnTest("cast") {
     fn.col("a").cast("long")
+  }
+
+  columnTest("try_cast") {
+    fn.col("a").try_cast("long")
   }
 
   orderColumnTest("desc") {
@@ -1753,8 +1762,16 @@ class PlanGenerationTestSuite
     fn.split(fn.col("g"), ";")
   }
 
+  functionTest("split using columns") {
+    fn.split(fn.col("g"), fn.col("g"))
+  }
+
   functionTest("split with limit") {
     fn.split(fn.col("g"), ";", 10)
+  }
+
+  functionTest("split with limit using columns") {
+    fn.split(fn.col("g"), lit(";"), fn.col("a"))
   }
 
   functionTest("substring") {
@@ -1811,6 +1828,14 @@ class PlanGenerationTestSuite
 
   functionTest("hours") {
     fn.hours(Column("a"))
+  }
+
+  functionTest("collate") {
+    fn.collate(fn.col("g"), "UNICODE")
+  }
+
+  functionTest("collation") {
+    fn.collation(fn.col("g"))
   }
 
   temporalFunctionTest("convert_timezone with source time zone") {
@@ -2464,8 +2489,36 @@ class PlanGenerationTestSuite
       Collections.singletonMap("allowNumericLeadingZeros", "true"))
   }
 
+  functionTest("try_parse_json") {
+    fn.try_parse_json(fn.col("g"))
+  }
+
   functionTest("to_json") {
     fn.to_json(fn.col("d"), Map(("timestampFormat", "dd/MM/yyyy")))
+  }
+
+  functionTest("parse_json") {
+    fn.parse_json(fn.col("g"))
+  }
+
+  functionTest("is_variant_null") {
+    fn.is_variant_null(fn.parse_json(fn.col("g")))
+  }
+
+  functionTest("variant_get") {
+    fn.variant_get(fn.parse_json(fn.col("g")), "$", "int")
+  }
+
+  functionTest("try_variant_get") {
+    fn.try_variant_get(fn.parse_json(fn.col("g")), "$", "int")
+  }
+
+  functionTest("schema_of_variant") {
+    fn.schema_of_variant(fn.parse_json(fn.col("g")))
+  }
+
+  functionTest("schema_of_variant_agg") {
+    fn.schema_of_variant_agg(fn.parse_json(fn.col("g")))
   }
 
   functionTest("size") {
@@ -3179,7 +3232,7 @@ class PlanGenerationTestSuite
       .newBuilder()
       .setInput(simple.plan.getRoot)
       .build()
-    session.newDataFrame(com.google.protobuf.Any.pack(input))
+    session.newDataFrame(_.setExtension(com.google.protobuf.Any.pack(input)))
   }
 
   test("expression extension") {
@@ -3193,7 +3246,7 @@ class PlanGenerationTestSuite
             .setUnparsedIdentifier("id")))
       .setCustomField("abc")
       .build()
-    simple.select(Column(com.google.protobuf.Any.pack(extension)))
+    simple.select(Column(_.setExtension(com.google.protobuf.Any.pack(extension))))
   }
 
   test("crosstab") {

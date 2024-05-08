@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.adaptive
 
 import java.util
-import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue}
 
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
@@ -28,6 +28,8 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
 import org.apache.spark.broadcast
+import org.apache.spark.internal.{MDC, MessageWithContext}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
@@ -41,7 +43,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec._
 import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
-import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
+import org.apache.spark.sql.execution.columnar.InMemoryTableScanLike
 import org.apache.spark.sql.execution.exchange._
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLAdaptiveSQLMetricUpdates, SQLPlanMetric}
 import org.apache.spark.sql.internal.SQLConf
@@ -74,20 +76,20 @@ case class AdaptiveSparkPlanExec(
 
   @transient private val lock = new Object()
 
-  @transient private val logOnLevel: ( => String) => Unit = conf.adaptiveExecutionLogLevel match {
-    case "TRACE" => logTrace(_)
-    case "DEBUG" => logDebug(_)
-    case "INFO" => logInfo(_)
-    case "WARN" => logWarning(_)
-    case "ERROR" => logError(_)
-    case _ => logDebug(_)
-  }
+  @transient private val logOnLevel: ( => MessageWithContext) => Unit =
+    conf.adaptiveExecutionLogLevel match {
+      case "TRACE" => logTrace(_)
+      case "INFO" => logInfo(_)
+      case "WARN" => logWarning(_)
+      case "ERROR" => logError(_)
+      case _ => logDebug(_)
+    }
 
   @transient private val planChangeLogger = new PlanChangeLogger[SparkPlan]()
 
   // The logical plan optimizer for re-optimizing the current logical plan.
   @transient private val optimizer = new AQEOptimizer(conf,
-    session.sessionState.adaptiveRulesHolder.runtimeOptimizerRules)
+    context.session.sessionState.adaptiveRulesHolder.runtimeOptimizerRules)
 
   // `EnsureRequirements` may remove user-specified repartition and assume the query plan won't
   // change its output partitioning. This assumption is not true in AQE. Here we check the
@@ -103,7 +105,8 @@ case class AdaptiveSparkPlanExec(
 
   @transient private val costEvaluator =
     conf.getConf(SQLConf.ADAPTIVE_CUSTOM_COST_EVALUATOR_CLASS) match {
-      case Some(className) => CostEvaluator.instantiate(className, session.sparkContext.getConf)
+      case Some(className) =>
+        CostEvaluator.instantiate(className, context.session.sparkContext.getConf)
       case _ => SimpleCostEvaluator(conf.getConf(SQLConf.ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN))
     }
 
@@ -254,7 +257,7 @@ case class AdaptiveSparkPlanExec(
     //    and display SQL metrics correctly.
     // 2. If the `QueryExecution` does not match the current execution ID, it means the execution
     //    ID belongs to another (parent) query, and we should not call update UI in this query.
-    //    e.g., a nested `AdaptiveSparkPlanExec` in `InMemoryTableScanExec`.
+    //    e.g., a nested `AdaptiveSparkPlanExec` in `InMemoryTableScanLike`.
     //
     // That means only the root `AdaptiveSparkPlanExec` of the main query that triggers this
     // query execution need to do a plan update for the UI.
@@ -301,6 +304,11 @@ case class AdaptiveSparkPlanExec(
             try {
               stage.materialize().onComplete { res =>
                 if (res.isSuccess) {
+                  // record shuffle IDs for successful stages for cleanup
+                  stage.plan.collect {
+                    case s: ShuffleExchangeLike =>
+                      context.shuffleIds.put(s.shuffleId, true)
+                  }
                   events.offer(StageSuccess(stage, res.get))
                 } else {
                   events.offer(StageFailure(stage, res.failed.get))
@@ -352,8 +360,9 @@ case class AdaptiveSparkPlanExec(
           val newCost = costEvaluator.evaluateCost(newPhysicalPlan)
           if (newCost < origCost ||
             (newCost == origCost && currentPhysicalPlan != newPhysicalPlan)) {
-            logOnLevel("Plan changed:\n" +
-              sideBySide(currentPhysicalPlan.treeString, newPhysicalPlan.treeString).mkString("\n"))
+            lazy val plans =
+              sideBySide(currentPhysicalPlan.treeString, newPhysicalPlan.treeString).mkString("\n")
+            logOnLevel(log"Plan changed:\n${MDC(QUERY_PLAN, plans)}")
             cleanUpTempTags(newPhysicalPlan)
             currentPhysicalPlan = newPhysicalPlan
             currentLogicalPlan = newLogicalPlan
@@ -383,7 +392,7 @@ case class AdaptiveSparkPlanExec(
     if (shouldUpdatePlan && currentPhysicalPlan.exists(_.subqueries.nonEmpty)) {
       getExecutionId.foreach(onUpdatePlan(_, Seq.empty))
     }
-    logOnLevel(s"Final plan:\n$currentPhysicalPlan")
+    logOnLevel(log"Final plan:\n${MDC(QUERY_PLAN, currentPhysicalPlan)}")
   }
 
   override def executeCollect(): Array[InternalRow] = {
@@ -557,9 +566,9 @@ case class AdaptiveSparkPlanExec(
           }
       }
 
-    case i: InMemoryTableScanExec =>
-      // There is no reuse for `InMemoryTableScanExec`, which is different from `Exchange`. If we
-      // hit it the first time, we should always create a new query stage.
+    case i: InMemoryTableScanLike =>
+      // There is no reuse for `InMemoryTableScanLike`, which is different from `Exchange`.
+      // If we hit it the first time, we should always create a new query stage.
       val newStage = newQueryStage(i)
       CreateStageResult(
         newPlan = newStage,
@@ -604,12 +613,12 @@ case class AdaptiveSparkPlanExec(
           }
           BroadcastQueryStageExec(currentStageId, newPlan, e.canonicalized)
         }
-      case i: InMemoryTableScanExec =>
+      case i: InMemoryTableScanLike =>
         // Apply `queryStageOptimizerRules` so that we can reuse subquery.
-        // No need to apply `postStageCreationRules` for `InMemoryTableScanExec`
+        // No need to apply `postStageCreationRules` for `InMemoryTableScanLike`
         // as it's a leaf node.
         val newPlan = optimizeQueryStage(i, isFinalStage = false)
-        if (!newPlan.isInstanceOf[InMemoryTableScanExec]) {
+        if (!newPlan.isInstanceOf[InMemoryTableScanLike]) {
           throw SparkException.internalError(
             "Custom AQE rules cannot transform table scan node to something else.")
         }
@@ -736,7 +745,8 @@ case class AdaptiveSparkPlanExec(
       Some((finalPlan, optimized))
     } catch {
       case e: InvalidAQEPlanException[_] =>
-        logOnLevel(s"Re-optimize - ${e.getMessage()}:\n${e.plan}")
+        logOnLevel(log"Re-optimize - ${MDC(ERROR, e.getMessage())}:\n" +
+          log"${MDC(QUERY_PLAN, e.plan)}")
         None
     }
   }
@@ -794,7 +804,8 @@ case class AdaptiveSparkPlanExec(
           s.cancel()
         } catch {
           case NonFatal(t) =>
-            logError(s"Exception in cancelling query stage: ${s.treeString}", t)
+            logError(log"Exception in cancelling query stage: " +
+              log"${MDC(QUERY_PLAN, s.treeString)}", t)
         }
       case _ =>
     }
@@ -868,6 +879,8 @@ case class AdaptiveExecutionContext(session: SparkSession, qe: QueryExecution) {
    */
   val stageCache: TrieMap[SparkPlan, ExchangeQueryStageExec] =
     new TrieMap[SparkPlan, ExchangeQueryStageExec]()
+
+  val shuffleIds: ConcurrentHashMap[Int, Boolean] = new ConcurrentHashMap[Int, Boolean]()
 }
 
 /**

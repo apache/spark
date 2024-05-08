@@ -32,7 +32,6 @@ import org.apache.avro.file.{DataFileReader, DataFileWriter}
 import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericDatumWriter, GenericRecord}
 import org.apache.avro.generic.GenericData.{EnumSymbol, Fixed}
 import org.apache.commons.io.FileUtils
-import org.apache.commons.lang3.exception.ExceptionUtils
 
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException, SparkUpgradeException}
 import org.apache.spark.TestUtils.assertExceptionMsg
@@ -378,7 +377,7 @@ abstract class AvroSuite
           "",
           Seq())
       }
-      assert(e.getMessage.contains("Cannot generate stable indentifier"))
+      assert(e.getMessage.contains("Cannot generate stable identifier"))
     }
     {
       val e = intercept[Exception] {
@@ -389,7 +388,7 @@ abstract class AvroSuite
           "",
           Seq())
       }
-      assert(e.getMessage.contains("Cannot generate stable indentifier"))
+      assert(e.getMessage.contains("Cannot generate stable identifier"))
     }
     // Two array types or two map types are not allowed in union.
     {
@@ -439,6 +438,33 @@ abstract class AvroSuite
         )
       }
       assert(e.getMessage.contains("Schemas may not be named after primitives"))
+    }
+  }
+
+  test("SPARK-47904: Test that field name case is preserved") {
+    checkUnionStableId(
+      List(
+        Schema.createEnum("myENUM", "", null, List[String]("E1", "e2").asJava),
+        Schema.createRecord("myRecord", "", null, false,
+          List[Schema.Field](new Schema.Field("f", Schema.createFixed("myField", "", null, 6)))
+            .asJava),
+        Schema.createRecord("myRecord2", "", null, false,
+          List[Schema.Field](new Schema.Field("F", Schema.create(Type.FLOAT)))
+            .asJava)),
+      "struct<member_myENUM: string, member_myRecord: struct<f: binary>, " +
+                    "member_myRecord2: struct<F: float>>",
+      Seq())
+
+    {
+      val e = intercept[Exception] {
+        checkUnionStableId(
+          List(
+            Schema.createRecord("myRecord", "", null, false, List[Schema.Field]().asJava),
+            Schema.createRecord("myrecord", "", null, false, List[Schema.Field]().asJava)),
+          "",
+          Seq())
+      }
+      assert(e.getMessage.contains("Cannot generate stable identifier"))
     }
   }
 
@@ -862,23 +888,19 @@ abstract class AvroSuite
       sql("SELECT 13.1234567890 a").write.format("avro").save(path.toString)
       // With the flag disabled, we will throw an exception if there is a mismatch
       withSQLConf(confKey -> "false") {
-        val e = intercept[SparkException] {
+        val ex = intercept[SparkException] {
           spark.read.schema("a DECIMAL(4, 3)").format("avro").load(path.toString).collect()
         }
-        ExceptionUtils.getRootCause(e) match {
-          case ex: AnalysisException =>
-            checkError(
-              exception = ex,
-              errorClass = "AVRO_INCOMPATIBLE_READ_TYPE",
-              parameters = Map("avroPath" -> "field 'a'",
-                "sqlPath" -> "field 'a'",
-                "avroType" -> "decimal\\(12,10\\)",
-                "sqlType" -> "\"DECIMAL\\(4,3\\)\""),
-              matchPVals = true
-            )
-          case other =>
-            fail(s"Received unexpected exception", other)
-        }
+        assert(ex.getErrorClass.startsWith("FAILED_READ_FILE"))
+        checkError(
+          exception = ex.getCause.asInstanceOf[AnalysisException],
+          errorClass = "AVRO_INCOMPATIBLE_READ_TYPE",
+          parameters = Map("avroPath" -> "field 'a'",
+            "sqlPath" -> "field 'a'",
+            "avroType" -> "decimal\\(12,10\\)",
+            "sqlType" -> "\"DECIMAL\\(4,3\\)\""),
+          matchPVals = true
+        )
       }
       // The following used to work, so it should still work with the flag enabled
       checkAnswer(
@@ -911,24 +933,19 @@ abstract class AvroSuite
 
       withSQLConf(confKey -> "false") {
         Seq("DATE", "TIMESTAMP", "TIMESTAMP_NTZ").foreach { sqlType =>
-          val e = intercept[SparkException] {
+          val ex = intercept[SparkException] {
             spark.read.schema(s"a $sqlType").format("avro").load(path.toString).collect()
           }
-
-          ExceptionUtils.getRootCause(e) match {
-            case ex: AnalysisException =>
-              checkError(
-                exception = ex,
-                errorClass = "AVRO_INCOMPATIBLE_READ_TYPE",
-                parameters = Map("avroPath" -> "field 'a'",
-                  "sqlPath" -> "field 'a'",
-                  "avroType" -> "interval day to second",
-                  "sqlType" -> s""""$sqlType""""),
-                matchPVals = true
-              )
-            case other =>
-              fail(s"Received unexpected exception", other)
-          }
+          assert(ex.getErrorClass.startsWith("FAILED_READ_FILE"))
+          checkError(
+            exception = ex.getCause.asInstanceOf[AnalysisException],
+            errorClass = "AVRO_INCOMPATIBLE_READ_TYPE",
+            parameters = Map("avroPath" -> "field 'a'",
+              "sqlPath" -> "field 'a'",
+              "avroType" -> "interval day to second",
+              "sqlType" -> s""""$sqlType""""),
+            matchPVals = true
+          )
         }
       }
 
@@ -953,24 +970,19 @@ abstract class AvroSuite
 
       withSQLConf(confKey -> "false") {
         Seq("DATE", "TIMESTAMP", "TIMESTAMP_NTZ").foreach { sqlType =>
-          val e = intercept[SparkException] {
+          val ex = intercept[SparkException] {
             spark.read.schema(s"a $sqlType").format("avro").load(path.toString).collect()
           }
-
-          ExceptionUtils.getRootCause(e) match {
-            case ex: AnalysisException =>
-              checkError(
-                exception = ex,
-                errorClass = "AVRO_INCOMPATIBLE_READ_TYPE",
-                parameters = Map("avroPath" -> "field 'a'",
-                  "sqlPath" -> "field 'a'",
-                  "avroType" -> "interval year to month",
-                  "sqlType" -> s""""$sqlType""""),
-                matchPVals = true
-              )
-            case other =>
-              fail(s"Received unexpected exception", other)
-          }
+          assert(ex.getErrorClass.startsWith("FAILED_READ_FILE"))
+          checkError(
+            exception = ex.getCause.asInstanceOf[AnalysisException],
+            errorClass = "AVRO_INCOMPATIBLE_READ_TYPE",
+            parameters = Map("avroPath" -> "field 'a'",
+              "sqlPath" -> "field 'a'",
+              "avroType" -> "interval year to month",
+              "sqlType" -> s""""$sqlType""""),
+            matchPVals = true
+          )
         }
       }
 
@@ -1465,13 +1477,15 @@ abstract class AvroSuite
       df.write.format("avro").option("avroSchema", avroSchema).save(tempSaveDir)
       checkAvroSchemaEquals(avroSchema, getAvroSchemaStringFromFiles(tempSaveDir))
 
-      val message = intercept[SparkException] {
+      val ex = intercept[SparkException] {
         spark.createDataFrame(spark.sparkContext.parallelize(Seq(Row(2, null))), catalystSchema)
           .write.format("avro").option("avroSchema", avroSchema)
           .save(s"$tempDir/${UUID.randomUUID()}")
-      }.getMessage
-      assert(message.contains("Caused by: java.lang.NullPointerException: "))
-      assert(message.contains("null value for (non-nullable) string at test_schema.Name"))
+      }
+      assert(ex.getErrorClass == "TASK_WRITE_FAILED")
+      assert(ex.getCause.isInstanceOf[java.lang.NullPointerException])
+      assert(ex.getCause.getMessage.contains(
+        "null value for (non-nullable) string at test_schema.Name"))
     }
   }
 
@@ -2380,7 +2394,8 @@ abstract class AvroSuite
             val e = intercept[SparkException] {
               df.write.format("avro").option("avroSchema", avroSchema).save(path3_x)
             }
-            assert(e.getCause.getCause.isInstanceOf[SparkUpgradeException])
+            assert(e.getErrorClass == "TASK_WRITE_FAILED")
+            assert(e.getCause.isInstanceOf[SparkUpgradeException])
           }
           checkDefaultLegacyRead(oldPath)
 
@@ -2405,10 +2420,6 @@ abstract class AvroSuite
       }
     }
 
-    def failInRead(path: String): Unit = {
-      val e = intercept[SparkException](spark.read.format("avro").load(path).collect())
-      assert(e.getCause.isInstanceOf[SparkUpgradeException])
-    }
     def successInRead(path: String): Unit = spark.read.format("avro").load(path).collect()
     Seq(
       // By default we should not fail to read ancient datetime values when parquet files don't
@@ -2638,7 +2649,8 @@ abstract class AvroSuite
           val e = intercept[SparkException] {
             df.write.format("avro").option("avroSchema", avroSchema).save(dir.getCanonicalPath)
           }
-          val errMsg = e.getCause.getCause.asInstanceOf[SparkUpgradeException].getMessage
+          assert(e.getErrorClass == "TASK_WRITE_FAILED")
+          val errMsg = e.getCause.asInstanceOf[SparkUpgradeException].getMessage
           assert(errMsg.contains("You may get a different result due to the upgrading"))
         }
       }
@@ -2648,7 +2660,8 @@ abstract class AvroSuite
         val e = intercept[SparkException] {
           df.write.format("avro").save(dir.getCanonicalPath)
         }
-        val errMsg = e.getCause.getCause.asInstanceOf[SparkUpgradeException].getMessage
+        assert(e.getErrorClass == "TASK_WRITE_FAILED")
+        val errMsg = e.getCause.asInstanceOf[SparkUpgradeException].getMessage
         assert(errMsg.contains("You may get a different result due to the upgrading"))
       }
     }
@@ -2659,11 +2672,10 @@ abstract class AvroSuite
         "before_1582_timestamp_micros_v2_4_5.avro",
         "before_1582_timestamp_millis_v2_4_5.avro"
       ).foreach { fileName =>
-        val e = intercept[SparkException] {
+        val e = intercept[SparkUpgradeException] {
           spark.read.format("avro").load(getResourceAvroFilePath(fileName)).collect()
         }
-        val errMsg = e.getCause.asInstanceOf[SparkUpgradeException].getMessage
-        assert(errMsg.contains("You may get a different result due to the upgrading"))
+        assert(e.getMessage.contains("You may get a different result due to the upgrading"))
       }
     }
   }
@@ -2756,6 +2768,16 @@ abstract class AvroSuite
         val records = df.collect()
         assert(count == 58)
         assert(count == records.length)
+      }
+    }
+  }
+
+  test("SPARK-46990: read an empty file where pastSync returns false at EOF") {
+    for (maxPartitionBytes <- Seq(100, 100000, 100000000)) {
+      withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> s"$maxPartitionBytes") {
+        val file = getResourceAvroFilePath("empty_file.avro")
+        val df = spark.read.format("avro").load(file)
+        assert(df.count() == 0)
       }
     }
   }

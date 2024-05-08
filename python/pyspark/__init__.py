@@ -46,18 +46,29 @@ Public classes:
       A inheritable thread to use in Spark when the pinned thread mode is on.
 """
 
+import sys
 from functools import wraps
-import types
-from typing import cast, Any, Callable, Optional, TypeVar, Union
+from typing import cast, Any, Callable, TypeVar, Union
+
+from pyspark.util import is_remote_only
+
+if not is_remote_only():
+    from pyspark.core.rdd import RDD, RDDBarrier
+    from pyspark.core.files import SparkFiles
+    from pyspark.core.status import StatusTracker, SparkJobInfo, SparkStageInfo
+    from pyspark.core.broadcast import Broadcast
+    from pyspark.core import rdd, files, status, broadcast
+
+    # for backward compatibility references.
+    sys.modules["pyspark.rdd"] = rdd
+    sys.modules["pyspark.files"] = files
+    sys.modules["pyspark.status"] = status
+    sys.modules["pyspark.broadcast"] = broadcast
 
 from pyspark.conf import SparkConf
-from pyspark.rdd import RDD, RDDBarrier
-from pyspark.files import SparkFiles
-from pyspark.status import StatusTracker, SparkJobInfo, SparkStageInfo
 from pyspark.util import InheritableThread, inheritable_thread_target
 from pyspark.storagelevel import StorageLevel
 from pyspark.accumulators import Accumulator, AccumulatorParam
-from pyspark.broadcast import Broadcast
 from pyspark.serializers import MarshalSerializer, CPickleSerializer
 from pyspark.taskcontext import TaskContext, BarrierTaskContext, BarrierTaskInfo
 from pyspark.profiler import Profiler, BasicProfiler
@@ -86,36 +97,6 @@ def since(version: Union[str, float]) -> Callable[[_F], _F]:
     return deco
 
 
-def copy_func(
-    f: _F,
-    name: Optional[str] = None,
-    sinceversion: Optional[Union[str, float]] = None,
-    doc: Optional[str] = None,
-) -> _F:
-    """
-    Returns a function with same code, globals, defaults, closure, and
-    name (or provide a new name).
-    """
-    # See
-    # http://stackoverflow.com/questions/6527633/how-can-i-make-a-deepcopy-of-a-function-in-python
-    assert isinstance(f, types.FunctionType)
-
-    fn = types.FunctionType(
-        f.__code__,
-        f.__globals__,
-        name or f.__name__,
-        f.__defaults__,
-        f.__closure__,
-    )
-    # in case f was given attrs (note this dict is a shallow copy):
-    fn.__dict__.update(f.__dict__)
-    if doc is not None:
-        fn.__doc__ = doc
-    if sinceversion is not None:
-        fn = since(sinceversion)(fn)
-    return cast(_F, fn)
-
-
 def keyword_only(func: _F) -> _F:
     """
     A decorator that forces keyword arguments in the wrapped method
@@ -137,10 +118,17 @@ def keyword_only(func: _F) -> _F:
 
 
 # To avoid circular dependencies
-from pyspark.context import SparkContext
+if not is_remote_only():
+    from pyspark.core.context import SparkContext
+    from pyspark.core import context
 
-# for back compatibility
-from pyspark.sql import SQLContext, HiveContext, Row  # noqa: F401
+    # for backward compatibility references.
+    sys.modules["pyspark.context"] = context
+
+    # for back compatibility
+    from pyspark.sql import SQLContext, HiveContext  # noqa: F401
+
+from pyspark.sql import Row  # noqa: F401
 
 __all__ = [
     "SparkConf",

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.{SparkArithmeticException, SparkException, SparkFileNotFoundException}
+import org.apache.spark.{SparkArithmeticException, SparkException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Divide}
@@ -1068,9 +1068,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           checkErrorMatchPVals(
             exception = intercept[SparkException] {
               sql("SELECT * FROM v1").collect()
-            }.getCause.asInstanceOf[SparkFileNotFoundException],
-            errorClass = "_LEGACY_ERROR_TEMP_2055",
-            parameters = Map("message" -> ".* does not exist")
+            },
+            errorClass = "FAILED_READ_FILE.FILE_NOT_EXIST",
+            parameters = Map("path" -> ".*")
           )
         }
 
@@ -1088,9 +1088,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           checkErrorMatchPVals(
             exception = intercept[SparkException] {
               sql("SELECT * FROM v1").collect()
-            }.getCause.asInstanceOf[SparkFileNotFoundException],
-            errorClass = "_LEGACY_ERROR_TEMP_2055",
-            parameters = Map("message" -> ".* does not exist")
+            },
+            errorClass = "FAILED_READ_FILE.FILE_NOT_EXIST",
+            parameters = Map("path" -> ".*")
           )
         }
       }

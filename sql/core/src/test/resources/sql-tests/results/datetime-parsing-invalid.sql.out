@@ -11,17 +11,9 @@ long overflow
 -- !query
 select to_timestamp('1', 'yy')
 -- !query schema
-struct<>
+struct<to_timestamp(1, yy):timestamp>
 -- !query output
-org.apache.spark.SparkUpgradeException
-{
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
-  "sqlState" : "42K0B",
-  "messageParameters" : {
-    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
-    "datetime" : "'1'"
-  }
-}
+NULL
 
 
 -- !query
@@ -35,33 +27,17 @@ NULL
 -- !query
 select to_timestamp('123', 'yy')
 -- !query schema
-struct<>
+struct<to_timestamp(123, yy):timestamp>
 -- !query output
-org.apache.spark.SparkUpgradeException
-{
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
-  "sqlState" : "42K0B",
-  "messageParameters" : {
-    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
-    "datetime" : "'123'"
-  }
-}
+NULL
 
 
 -- !query
 select to_timestamp('1', 'yyy')
 -- !query schema
-struct<>
+struct<to_timestamp(1, yyy):timestamp>
 -- !query output
-org.apache.spark.SparkUpgradeException
-{
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
-  "sqlState" : "42K0B",
-  "messageParameters" : {
-    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
-    "datetime" : "'1'"
-  }
-}
+NULL
 
 
 -- !query
@@ -92,49 +68,33 @@ NULL
 -- !query
 select to_timestamp('9', 'DD')
 -- !query schema
-struct<>
+struct<to_timestamp(9, DD):timestamp>
 -- !query output
-org.apache.spark.SparkUpgradeException
-{
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
-  "sqlState" : "42K0B",
-  "messageParameters" : {
-    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
-    "datetime" : "'9'"
-  }
-}
+NULL
+
+
+-- !query
+select to_timestamp('366', 'DD')
+-- !query schema
+struct<to_timestamp(366, DD):timestamp>
+-- !query output
+NULL
 
 
 -- !query
 select to_timestamp('9', 'DDD')
 -- !query schema
-struct<>
+struct<to_timestamp(9, DDD):timestamp>
 -- !query output
-org.apache.spark.SparkUpgradeException
-{
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
-  "sqlState" : "42K0B",
-  "messageParameters" : {
-    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
-    "datetime" : "'9'"
-  }
-}
+NULL
 
 
 -- !query
 select to_timestamp('99', 'DDD')
 -- !query schema
-struct<>
+struct<to_timestamp(99, DDD):timestamp>
 -- !query output
-org.apache.spark.SparkUpgradeException
-{
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
-  "sqlState" : "42K0B",
-  "messageParameters" : {
-    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
-    "datetime" : "'99'"
-  }
-}
+NULL
 
 
 -- !query
@@ -196,17 +156,9 @@ NULL
 -- !query
 select from_csv('2018-366', 'date Date', map('dateFormat', 'yyyy-DDD'))
 -- !query schema
-struct<>
+struct<from_csv(2018-366):struct<date:date>>
 -- !query output
-org.apache.spark.SparkUpgradeException
-{
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
-  "sqlState" : "42K0B",
-  "messageParameters" : {
-    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
-    "datetime" : "'2018-366'"
-  }
-}
+{"date":null}
 
 
 -- !query

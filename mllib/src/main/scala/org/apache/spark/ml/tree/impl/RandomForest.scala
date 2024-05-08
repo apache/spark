@@ -21,7 +21,8 @@ import scala.collection.mutable
 import scala.util.Random
 
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{NUM_CLASSES, NUM_EXAMPLES, NUM_FEATURES, TIMER, WEIGHTED_NUM}
 import org.apache.spark.ml.classification.DecisionTreeClassificationModel
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.impl.Utils
@@ -131,10 +132,11 @@ private[spark] object RandomForest extends Logging with Serializable {
         instrumentation.logNumExamples(metadata.numExamples)
         instrumentation.logSumOfWeights(metadata.weightedNumExamples)
       case None =>
-        logInfo(s"numFeatures: ${metadata.numFeatures}")
-        logInfo(s"numClasses: ${metadata.numClasses}")
-        logInfo(s"numExamples: ${metadata.numExamples}")
-        logInfo(s"weightedNumExamples: ${metadata.weightedNumExamples}")
+        logInfo(log"numFeatures: ${MDC(NUM_FEATURES, metadata.numFeatures)}")
+        logInfo(log"numClasses: ${MDC(NUM_CLASSES, metadata.numClasses)}")
+        logInfo(log"numExamples: ${MDC(NUM_EXAMPLES, metadata.numExamples)}")
+        logInfo(log"weightedNumExamples: " +
+          log"${MDC(WEIGHTED_NUM, metadata.weightedNumExamples)}")
     }
 
     timer.start("init")
@@ -217,7 +219,7 @@ private[spark] object RandomForest extends Logging with Serializable {
     timer.stop("total")
 
     logInfo("Internal timing for DecisionTree:")
-    logInfo(s"$timer")
+    logInfo(log"${MDC(TIMER, timer)}")
 
     if (strategy.useNodeIdCache) {
       // Delete any remaining checkpoints used for node Id cache.

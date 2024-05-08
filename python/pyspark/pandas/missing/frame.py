@@ -44,7 +44,6 @@ class MissingPandasLikeDataFrame:
     set_axis = _unsupported_function("set_axis")
     to_period = _unsupported_function("to_period")
     to_sql = _unsupported_function("to_sql")
-    to_stata = _unsupported_function("to_stata")
     to_timestamp = _unsupported_function("to_timestamp")
     tz_convert = _unsupported_function("tz_convert")
     tz_localize = _unsupported_function("tz_localize")

@@ -18,8 +18,8 @@
 package org.apache.spark.deploy.master.ui
 
 import java.util.Date
-import javax.servlet.http.HttpServletRequest
 
+import jakarta.servlet.http.HttpServletRequest
 import org.mockito.Mockito.{mock, when}
 
 import org.apache.spark.SparkFunSuite

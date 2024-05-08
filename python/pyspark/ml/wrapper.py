@@ -19,7 +19,6 @@ from abc import ABCMeta, abstractmethod
 from typing import Any, Generic, Optional, List, Type, TypeVar, TYPE_CHECKING
 
 from pyspark import since
-from pyspark import SparkContext
 from pyspark.sql import DataFrame
 from pyspark.ml import Estimator, Predictor, PredictionModel, Transformer, Model
 from pyspark.ml.base import _PredictorParams
@@ -49,6 +48,8 @@ class JavaWrapper:
         self._java_obj = java_obj
 
     def __del__(self) -> None:
+        from pyspark.core.context import SparkContext
+
         if SparkContext._active_spark_context and self._java_obj is not None:
             SparkContext._active_spark_context._gateway.detach(  # type: ignore[union-attr]
                 self._java_obj
@@ -63,6 +64,8 @@ class JavaWrapper:
         return cls(java_obj)
 
     def _call_java(self, name: str, *args: Any) -> Any:
+        from pyspark.core.context import SparkContext
+
         m = getattr(self._java_obj, name)
         sc = SparkContext._active_spark_context
         assert sc is not None
@@ -75,6 +78,8 @@ class JavaWrapper:
         """
         Returns a new Java object.
         """
+        from pyspark.core.context import SparkContext
+
         sc = SparkContext._active_spark_context
         assert sc is not None
 
@@ -114,6 +119,8 @@ class JavaWrapper:
         :py:class:`py4j.java_collections.JavaArray`
           Java Array of converted pylist.
         """
+        from pyspark.core.context import SparkContext
+
         sc = SparkContext._active_spark_context
         assert sc is not None
         assert sc._gateway is not None
@@ -150,6 +157,8 @@ class JavaParams(JavaWrapper, Params, metaclass=ABCMeta):
         """
         Makes a Java param pair.
         """
+        from pyspark.core.context import SparkContext
+
         sc = SparkContext._active_spark_context
         assert sc is not None and self._java_obj is not None
 
@@ -162,6 +171,8 @@ class JavaParams(JavaWrapper, Params, metaclass=ABCMeta):
         """
         Transforms the embedded params to the companion Java object.
         """
+        from pyspark.core.context import SparkContext
+
         assert self._java_obj is not None
 
         pair_defaults = []
@@ -211,6 +222,8 @@ class JavaParams(JavaWrapper, Params, metaclass=ABCMeta):
         """
         Transforms the embedded params from the companion Java object.
         """
+        from pyspark.core.context import SparkContext
+
         sc = SparkContext._active_spark_context
         assert sc is not None and self._java_obj is not None
 
@@ -234,6 +247,8 @@ class JavaParams(JavaWrapper, Params, metaclass=ABCMeta):
         """
         Transforms a Java ParamMap into a Python ParamMap.
         """
+        from pyspark.core.context import SparkContext
+
         sc = SparkContext._active_spark_context
         assert sc is not None
 

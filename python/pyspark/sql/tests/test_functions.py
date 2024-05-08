@@ -24,10 +24,9 @@ import math
 import re
 import unittest
 
-from py4j.protocol import Py4JJavaError
-
-from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.errors import PySparkTypeError, PySparkValueError, SparkRuntimeException
 from pyspark.sql import Row, Window, functions as F, types
+from pyspark.sql.avro.functions import from_avro, to_avro
 from pyspark.sql.column import Column
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
 from pyspark.testing.utils import have_numpy
@@ -376,6 +375,11 @@ class FunctionsTestsMixin:
                 df.select(getattr(F, name)("name")).first()[0],
                 df.select(getattr(F, name)(F.col("name"))).first()[0],
             )
+
+    def test_collation(self):
+        df = self.spark.createDataFrame([("a",), ("b",)], ["name"])
+        actual = df.select(F.collation(F.collate("name", "UNICODE"))).distinct().collect()
+        self.assertEqual([Row("UNICODE")], actual)
 
     def test_octet_length_function(self):
         # SPARK-36751: add octet length api for python
@@ -1073,7 +1077,7 @@ class FunctionsTestsMixin:
         self.assertEqual(datetime.date(2017, 1, 22), parse_result["to_date(dateCol)"])
 
     def test_assert_true(self):
-        self.check_assert_true(Py4JJavaError)
+        self.check_assert_true(SparkRuntimeException)
 
     def check_assert_true(self, tpe):
         df = self.spark.range(3)
@@ -1099,7 +1103,7 @@ class FunctionsTestsMixin:
         )
 
     def test_raise_error(self):
-        self.check_raise_error(Py4JJavaError)
+        self.check_raise_error(SparkRuntimeException)
 
     def check_raise_error(self, tpe):
         df = self.spark.createDataFrame([Row(id="foobar")])
@@ -1302,6 +1306,45 @@ class FunctionsTestsMixin:
         self.assertEqual({**expected, **expected2}, dict(actual["merged"]))
         self.assertEqual(expected, actual["from_items"])
 
+    def test_parse_json(self):
+        df = self.spark.createDataFrame([{"json": """{ "a" : 1 }"""}])
+        actual = df.select(
+            F.to_json(F.parse_json(df.json)).alias("var"),
+            F.to_json(F.parse_json(F.lit("""{"b": [{"c": "str2"}]}"""))).alias("var_lit"),
+        ).first()
+
+        self.assertEqual("""{"a":1}""", actual["var"])
+        self.assertEqual("""{"b":[{"c":"str2"}]}""", actual["var_lit"])
+
+    def test_variant_expressions(self):
+        df = self.spark.createDataFrame([Row(json="""{ "a" : 1 }"""), Row(json="""{ "b" : 2 }""")])
+        v = F.parse_json(df.json)
+
+        def check(resultDf, expected):
+            self.assertEqual([r[0] for r in resultDf.collect()], expected)
+
+        check(df.select(F.is_variant_null(v)), [False, False])
+        check(df.select(F.schema_of_variant(v)), ["STRUCT<a: BIGINT>", "STRUCT<b: BIGINT>"])
+        check(df.select(F.schema_of_variant_agg(v)), ["STRUCT<a: BIGINT, b: BIGINT>"])
+
+        check(df.select(F.variant_get(v, "$.a", "int")), [1, None])
+        check(df.select(F.variant_get(v, "$.b", "int")), [None, 2])
+        check(df.select(F.variant_get(v, "$.a", "double")), [1.0, None])
+
+        with self.assertRaises(SparkRuntimeException) as ex:
+            df.select(F.variant_get(v, "$.a", "binary")).collect()
+
+        self.check_error(
+            exception=ex.exception,
+            error_class="INVALID_VARIANT_CAST",
+            message_parameters={"value": "1", "dataType": '"BINARY"'},
+        )
+
+        check(df.select(F.try_variant_get(v, "$.a", "int")), [1, None])
+        check(df.select(F.try_variant_get(v, "$.b", "int")), [None, 2])
+        check(df.select(F.try_variant_get(v, "$.a", "double")), [1.0, None])
+        check(df.select(F.try_variant_get(v, "$.a", "binary")), [None, None])
+
     def test_schema_of_json(self):
         with self.assertRaises(PySparkTypeError) as pe:
             F.schema_of_json(1)
@@ -1311,6 +1354,14 @@ class FunctionsTestsMixin:
             error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "json", "arg_type": "int"},
         )
+
+    def test_try_parse_json(self):
+        df = self.spark.createDataFrame([{"json": """{ "a" : 1 }"""}, {"json": """{ a : 1 }"""}])
+        actual = df.select(
+            F.to_json(F.try_parse_json(df.json)).alias("var"),
+        ).collect()
+        self.assertEqual("""{"a":1}""", actual[0]["var"])
+        self.assertEqual(None, actual[1]["var"])
 
     def test_schema_of_csv(self):
         with self.assertRaises(PySparkTypeError) as pe:
@@ -1477,6 +1528,40 @@ class FunctionsTestsMixin:
             "At least one field must be specified",
             lambda: df.select(F.json_tuple(df.jstring)),
         )
+
+    def test_avro_type_check(self):
+        parameters = ["data", "jsonFormatSchema", "options"]
+        expected_type = ["pyspark.sql.Column or str", "str", "dict, optional"]
+        dummyDF = self.spark.createDataFrame([Row(a=i, b=i) for i in range(5)])
+
+        # test from_avro type checks for each parameter
+        wrong_type_value = 1
+        with self.assertRaises(PySparkTypeError) as pe1:
+            dummyDF.select(from_avro(wrong_type_value, "jsonSchema", None))
+        with self.assertRaises(PySparkTypeError) as pe2:
+            dummyDF.select(from_avro("value", wrong_type_value, None))
+        with self.assertRaises(PySparkTypeError) as pe3:
+            dummyDF.select(from_avro("value", "jsonSchema", wrong_type_value))
+        from_avro_pes = [pe1, pe2, pe3]
+        for i in range(3):
+            self.check_error(
+                exception=from_avro_pes[i].exception,
+                error_class="INVALID_TYPE",
+                message_parameters={"arg_name": parameters[i], "arg_type": expected_type[i]},
+            )
+
+        # test to_avro type checks for each parameter
+        with self.assertRaises(PySparkTypeError) as pe4:
+            dummyDF.select(to_avro(wrong_type_value, "jsonSchema"))
+        with self.assertRaises(PySparkTypeError) as pe5:
+            dummyDF.select(to_avro("value", wrong_type_value))
+        to_avro_pes = [pe4, pe5]
+        for i in range(2):
+            self.check_error(
+                exception=to_avro_pes[i].exception,
+                error_class="INVALID_TYPE",
+                message_parameters={"arg_name": parameters[i], "arg_type": expected_type[i]},
+            )
 
 
 class FunctionsTests(ReusedSQLTestCase, FunctionsTestsMixin):

@@ -18,10 +18,12 @@
 package org.apache.spark.deploy
 
 import java.io.File
-import javax.servlet.http.HttpServletRequest
+
+import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{LOG_TYPE, PATH}
 import org.apache.spark.ui.JettyUtils.createServletHandler
 import org.apache.spark.ui.WebUI
 import org.apache.spark.util.Utils.{getFileLength, offsetBytes}
@@ -32,6 +34,7 @@ import org.apache.spark.util.logging.RollingFileAppender
  */
 private[deploy] object Utils extends Logging {
   val DEFAULT_BYTES = 100 * 1024
+  val SUPPORTED_LOG_TYPES = Set("stderr", "stdout", "out")
 
   def addRenderLogHandler(page: WebUI, conf: SparkConf): Unit = {
     page.attachHandler(createServletHandler("/log",
@@ -58,6 +61,9 @@ private[deploy] object Utils extends Logging {
       logType: String,
       offsetOption: Option[Long],
       byteLength: Int): (String, Long, Long, Long) = {
+    if (!SUPPORTED_LOG_TYPES.contains(logType)) {
+      return ("Error: Log type must be one of " + SUPPORTED_LOG_TYPES.mkString(", "), 0, 0, 0)
+    }
     try {
       // Find a log file name
       val fileName = if (logType.equals("out")) {
@@ -90,7 +96,8 @@ private[deploy] object Utils extends Logging {
       (logText, startIndex, endIndex, totalLength)
     } catch {
       case e: Exception =>
-        logError(s"Error getting $logType logs from directory $logDirectory", e)
+        logError(log"Error getting ${MDC(LOG_TYPE, logType)} logs from " +
+          log"directory ${MDC(PATH, logDirectory)}", e)
         ("Error getting logs due to exception: " + e.getMessage, 0, 0, 0)
     }
   }

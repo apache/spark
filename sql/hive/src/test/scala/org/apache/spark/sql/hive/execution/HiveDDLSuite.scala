@@ -30,14 +30,14 @@ import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.execution.command.{DDLSuite, DDLUtils}
 import org.apache.spark.sql.execution.datasources.orc.OrcCompressionCodec
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetCompressionCodec, ParquetFooterReader}
-import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.HiveUtils.{CONVERT_METASTORE_ORC, CONVERT_METASTORE_PARQUET}
 import org.apache.spark.sql.hive.orc.OrcFileOperator
@@ -174,22 +174,18 @@ class HiveDDLSuite
     testAddColumnPartitioned("orc")
   }
 
-  test("SPARK-22431: illegal nested type") {
-    checkError(
-      exception = intercept[SparkException] {
-        spark.sql("CREATE TABLE t USING hive AS SELECT STRUCT('a' AS `$a`, 1 AS b) q")
-      },
-      errorClass = "CANNOT_RECOGNIZE_HIVE_TYPE",
-      parameters = Map("fieldType" -> "\"STRUCT<$A:STRING,B:INT>\"", "fieldName" -> "`q`")
-    )
+  test("SPARK-46934: quote element name before parsing struct") {
+    withTable("t") {
+      sql("CREATE TABLE t USING hive AS SELECT STRUCT('a' AS `$a`, 1 AS b) q")
+      assert(spark.table("t").schema === CatalystSqlParser.parseTableSchema(
+        "q STRUCT<`$a`: STRING, b: INT>"))
+    }
 
-    checkError(
-      exception = intercept[SparkException] {
-        spark.sql("CREATE TABLE t(q STRUCT<`$a`:INT, col2:STRING>, i1 INT) USING hive")
-      },
-      errorClass = "CANNOT_RECOGNIZE_HIVE_TYPE",
-      parameters = Map("fieldType" -> "\"STRUCT<$A:INT,COL2:STRING>\"", "fieldName" -> "`q`")
-    )
+    withTable("t") {
+      sql("CREATE TABLE t(q STRUCT<`$a`:INT, col2:STRING>, i1 INT) USING hive")
+      assert(spark.table("t").schema === CatalystSqlParser.parseTableSchema(
+        "q STRUCT<`$a`:INT, col2:STRING>, i1 INT"))
+    }
 
     withView("v") {
       spark.sql("CREATE VIEW v AS SELECT STRUCT('a' AS `a`, 1 AS b) q")
@@ -220,7 +216,7 @@ class HiveDDLSuite
 
   test("SPARK-22431: alter table tests with nested types") {
     withTable("t1", "t2", "t3") {
-      spark.sql("CREATE TABLE t1 (q STRUCT<col1:INT, col2:STRING>, i1 INT)")
+      spark.sql("CREATE TABLE t1 (q STRUCT<col1:INT, col2:STRING>, i1 INT) USING HIVE")
       spark.sql("ALTER TABLE t1 ADD COLUMNS (newcol1 STRUCT<`col1`:STRING, col2:Int>)")
       val newcol = spark.sql("SELECT * FROM t1").schema.fields(2).name
       assert("newcol1".equals(newcol))
@@ -245,19 +241,12 @@ class HiveDDLSuite
     }
   }
 
-  test("SPARK-22431: negative alter table tests with nested types") {
+  test("SPARK-46934: alter table tests with nested types") {
     withTable("t1") {
-      spark.sql("CREATE TABLE t1 (q STRUCT<col1:INT, col2:STRING>, i1 INT) USING hive")
-      checkError(
-        exception = intercept[SparkException] {
-          spark.sql("ALTER TABLE t1 ADD COLUMNS (newcol1 STRUCT<`$col1`:STRING, col2:Int>)")
-        },
-        errorClass = "CANNOT_RECOGNIZE_HIVE_TYPE",
-        parameters = Map(
-          "fieldType" -> "\"STRUCT<$COL1:STRING,COL2:INT>\"",
-          "fieldName" -> "`newcol1`"
-        )
-      )
+      sql("CREATE TABLE t1 (q STRUCT<col1:INT, col2:STRING>, i1 INT) USING hive")
+      sql("ALTER TABLE t1 ADD COLUMNS (newcol1 STRUCT<`$col1`:STRING, col2:Int>)")
+      assert(spark.table("t1").schema == CatalystSqlParser.parseTableSchema(
+        "q STRUCT<col1:INT, col2:STRING>, i1 INT,newcol1 STRUCT<`$col1`:STRING, col2:Int>"))
     }
   }
 
@@ -2625,7 +2614,7 @@ class HiveDDLSuite
           "msg" -> "java.lang.UnsupportedOperationException: Unknown field type: void")
       )
 
-      sql("CREATE TABLE t3 AS SELECT NULL AS null_col")
+      sql("CREATE TABLE t3 USING HIVE AS SELECT NULL AS null_col")
       checkAnswer(sql("SELECT * FROM t3"), Row(null))
     }
 
@@ -2653,9 +2642,6 @@ class HiveDDLSuite
 
       sql("CREATE TABLE t3 (v VOID) USING hive")
       checkAnswer(sql("SELECT * FROM t3"), Seq.empty)
-
-      sql("CREATE TABLE t4 (v VOID)")
-      checkAnswer(sql("SELECT * FROM t4"), Seq.empty)
     }
 
     // Create table with void type using spark.catalog.createTable
@@ -2887,22 +2873,39 @@ class HiveDDLSuite
     }
   }
 
-  test("SPARK-24681 checks if nested column names do not include ',', ':', and ';'") {
-    Seq("nested,column", "nested:column", "nested;column").foreach { nestedColumnName =>
+  test("SPARK-47101 checks if nested column names do not include invalid characters") {
+    // delimiter characters
+    Seq(",", ":").foreach { c =>
+      val typ = s"array<struct<`abc${c}xyz`:int>>"
+      // The regex is from HiveClientImpl.getSparkSQLDataType, please keep them in sync.
+      val replaced = typ.replaceAll("`", "").replaceAll("(?<=struct<|,)([^,<:]+)(?=:)", "`$1`")
+      withTable("t") {
+        checkError(
+          exception = intercept[SparkException] {
+            sql(s"CREATE TABLE t (a $typ) USING hive")
+          },
+          errorClass = "CANNOT_RECOGNIZE_HIVE_TYPE",
+          parameters = Map(
+            "fieldType" -> toSQLType(replaced),
+            "fieldName" -> "`a`")
+        )
+      }
+    }
+    // other special characters
+    Seq(";", "^", "\\", "/", "%").foreach { c =>
+      val typ = s"array<struct<`abc${c}xyz`:int>>"
+      val replaced = typ.replaceAll("`", "")
+      val msg = s"java.lang.IllegalArgumentException: Error: : expected at the position " +
+        s"16 of '$replaced' but '$c' is found."
       withTable("t") {
         checkError(
           exception = intercept[AnalysisException] {
-            spark.range(1)
-              .select(struct(lit(0).as(nestedColumnName)).as("toplevel"))
-              .write
-              .format("hive")
-              .saveAsTable("t")
+            sql(s"CREATE TABLE t (a $typ) USING hive")
           },
-          errorClass = "INVALID_HIVE_COLUMN_NAME",
+          errorClass = "_LEGACY_ERROR_TEMP_3065",
           parameters = Map(
-            "invalidChars" -> "',', ':', ';'",
-            "tableName" -> "`spark_catalog`.`default`.`t`",
-            "columnName" -> s"`$nestedColumnName`")
+            "clazz" -> "org.apache.hadoop.hive.ql.metadata.HiveException",
+            "msg" -> msg)
         )
       }
     }
@@ -3041,10 +3044,10 @@ class HiveDDLSuite
         exception = intercept[ParseException] {
           sql(sql1)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_0035",
+        errorClass = "INVALID_STATEMENT_OR_CLAUSE",
         parameters = Map(
-          "message" -> ("CREATE TABLE LIKE ... USING ... ROW FORMAT SERDE " +
-            "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")),
+          "operation" -> ("CREATE TABLE LIKE ... USING ... ROW FORMAT SERDE " +
+            "ORG.APACHE.HADOOP.HIVE.SERDE2.LAZY.LAZYSIMPLESERDE")),
         context = ExpectedContext(fragment = sql1, start = 0, stop = 130)
       )
 
@@ -3057,10 +3060,10 @@ class HiveDDLSuite
         exception = intercept[ParseException] {
           sql(sql2)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_0035",
+        errorClass = "INVALID_STATEMENT_OR_CLAUSE",
         parameters = Map(
-          "message" -> ("CREATE TABLE LIKE ... USING ... ROW FORMAT SERDE " +
-            "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")),
+          "operation" -> ("CREATE TABLE LIKE ... USING ... ROW FORMAT SERDE " +
+            "ORG.APACHE.HADOOP.HIVE.SERDE2.LAZY.LAZYSIMPLESERDE")),
         context = ExpectedContext(fragment = sql2, start = 0, stop = 168)
       )
 
@@ -3087,11 +3090,11 @@ class HiveDDLSuite
         exception = intercept[ParseException] {
           sql(sql4)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_0035",
+        errorClass = "INVALID_STATEMENT_OR_CLAUSE",
         parameters = Map(
-          "message" -> ("CREATE TABLE LIKE ... USING ... STORED AS " +
-            "INPUTFORMAT inFormat OUTPUTFORMAT outFormat ROW FORMAT " +
-            "SERDE org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")),
+          "operation" -> ("CREATE TABLE LIKE ... USING ... STORED AS " +
+            "INPUTFORMAT INFORMAT OUTPUTFORMAT OUTFORMAT ROW FORMAT " +
+            "SERDE ORG.APACHE.HADOOP.HIVE.SERDE2.LAZY.LAZYSIMPLESERDE")),
         context = ExpectedContext(fragment = sql4, start = 0, stop = 185)
       )
     }
@@ -3318,7 +3321,7 @@ class HiveDDLSuite
            |  INTERVAL '1-1' YEAR TO MONTH AS YM,
            |  INTERVAL '1 02:03:04.123456' DAY TO SECOND AS DT
            |""".stripMargin,
-        s"CREATE TABLE $tbl (dt INTERVAL HOUR TO MINUTE)"
+        s"CREATE TABLE $tbl (dt INTERVAL HOUR TO MINUTE) USING HIVE"
       ).foreach { sqlCmd =>
         checkError(
           exception = intercept[SparkUnsupportedOperationException] {
@@ -3396,24 +3399,11 @@ class HiveDDLSuite
     }
   }
 
-  test("SPARK-44911: Create the table with invalid column") {
+  test("SPARK-47101: comma is allowed in column name") {
     val tbl = "t1"
     withTable(tbl) {
-      val e = intercept[AnalysisException] {
-        sql(
-          s"""
-             |CREATE TABLE t1
-             |STORED AS parquet
-             |SELECT id, DATE'2018-01-01' + MAKE_DT_INTERVAL(0, id) FROM RANGE(0, 10)
-         """.stripMargin)
-      }
-      checkError(e,
-        errorClass = "INVALID_HIVE_COLUMN_NAME",
-        parameters = Map(
-          "invalidChars" -> "','",
-          "tableName" -> "`spark_catalog`.`default`.`t1`",
-          "columnName" -> "`DATE '2018-01-01' + make_dt_interval(0, id, 0, 0`.`000000)`")
-      )
+      sql("CREATE TABLE t1 STORED AS parquet SELECT id as `a,b` FROM range(1)")
+      checkAnswer(sql("SELECT * FROM t1"), Row(0))
     }
   }
 }

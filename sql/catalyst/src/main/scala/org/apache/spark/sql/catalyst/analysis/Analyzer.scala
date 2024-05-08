@@ -325,6 +325,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       RewriteDeleteFromTable ::
       RewriteUpdateTable ::
       RewriteMergeIntoTable ::
+      MoveParameterizedQueriesDown ::
       BindParameters ::
       typeCoercionRules() ++
       Seq(
@@ -339,11 +340,11 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       new ResolveHints.RemoveAllHints),
     Batch("Nondeterministic", Once,
       PullOutNondeterministic),
+    Batch("UpdateNullability", Once,
+      UpdateAttributeNullability),
     Batch("UDF", Once,
       HandleNullInputsForUDF,
       ResolveEncodersInUDF),
-    Batch("UpdateNullability", Once,
-      UpdateAttributeNullability),
     Batch("Subquery", Once,
       UpdateOuterReferences),
     Batch("Cleanup", fixedPoint,
@@ -382,10 +383,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
    * 2. otherwise, stays the same.
    */
   object ResolveBinaryArithmetic extends Rule[LogicalPlan] {
-    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-      _.containsPattern(BINARY_ARITHMETIC), ruleId) {
-      case p: LogicalPlan => p.transformExpressionsUpWithPruning(
-        _.containsPattern(BINARY_ARITHMETIC), ruleId) {
+    override def apply(plan: LogicalPlan): LogicalPlan =
+      plan.resolveExpressionsUpWithPruning(_.containsPattern(BINARY_ARITHMETIC), ruleId) {
         case a @ Add(l, r, mode) if a.childrenResolved => (l.dataType, r.dataType) match {
           case (DateType, DayTimeIntervalType(DAY, DAY)) => DateAdd(l, ExtractANSIIntervalDays(r))
           case (DateType, _: DayTimeIntervalType) => TimeAdd(Cast(l, TimestampType), r)
@@ -455,7 +454,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           case _ => d
         }
       }
-    }
   }
 
   /**
@@ -1275,16 +1273,29 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             val key =
               ((catalog.name +: ident.namespace :+ ident.name).toImmutableArraySeq,
               finalTimeTravelSpec)
-            AnalysisContext.get.relationCache.get(key).map(_.transform {
-              case multi: MultiInstanceRelation =>
-                val newRelation = multi.newInstance()
-                newRelation.copyTagsFrom(multi)
-                newRelation
-            }).orElse {
+            AnalysisContext.get.relationCache.get(key).map { cache =>
+              val cachedRelation = cache.transform {
+                case multi: MultiInstanceRelation =>
+                  val newRelation = multi.newInstance()
+                  newRelation.copyTagsFrom(multi)
+                  newRelation
+              }
+              u.getTagValue(LogicalPlan.PLAN_ID_TAG).map { planId =>
+                val cachedConnectRelation = cachedRelation.clone()
+                cachedConnectRelation.setTagValue(LogicalPlan.PLAN_ID_TAG, planId)
+                cachedConnectRelation
+              }.getOrElse(cachedRelation)
+            }.orElse {
               val table = CatalogV2Util.loadTable(catalog, ident, finalTimeTravelSpec)
               val loaded = createRelation(catalog, ident, table, u.options, u.isStreaming)
               loaded.foreach(AnalysisContext.get.relationCache.update(key, _))
-              loaded
+              u.getTagValue(LogicalPlan.PLAN_ID_TAG).map { planId =>
+                loaded.map { loadedRelation =>
+                  val loadedConnectRelation = loadedRelation.clone()
+                  loadedConnectRelation.setTagValue(LogicalPlan.PLAN_ID_TAG, planId)
+                  loadedConnectRelation
+                }
+              }.getOrElse(loaded)
             }
           case _ => None
         }
@@ -1649,7 +1660,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
       case u: UpdateTable => resolveReferencesInUpdate(u)
 
-      case m @ MergeIntoTable(targetTable, sourceTable, _, _, _, _)
+      case m @ MergeIntoTable(targetTable, sourceTable, _, _, _, _, _)
         if !m.resolved && targetTable.resolved && sourceTable.resolved =>
 
         EliminateSubqueryAliases(targetTable) match {
@@ -2403,13 +2414,19 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
           u.filter match {
             case Some(filter) if !filter.deterministic =>
-              throw QueryCompilationErrors.nonDeterministicFilterInAggregateError()
+              throw QueryCompilationErrors.nonDeterministicFilterInAggregateError(
+                filterExpr = filter)
             case Some(filter) if filter.dataType != BooleanType =>
-              throw QueryCompilationErrors.nonBooleanFilterInAggregateError()
+              throw QueryCompilationErrors.nonBooleanFilterInAggregateError(
+                filterExpr = filter)
             case Some(filter) if filter.exists(_.isInstanceOf[AggregateExpression]) =>
-              throw QueryCompilationErrors.aggregateInAggregateFilterError()
+              throw QueryCompilationErrors.aggregateInAggregateFilterError(
+                filterExpr = filter,
+                aggExpr = filter.find(_.isInstanceOf[AggregateExpression]).get)
             case Some(filter) if filter.exists(_.isInstanceOf[WindowExpression]) =>
-              throw QueryCompilationErrors.windowFunctionInAggregateFilterError()
+              throw QueryCompilationErrors.windowFunctionInAggregateFilterError(
+                filterExpr = filter,
+                windowExpr = filter.find(_.isInstanceOf[WindowExpression]).get)
             case _ =>
           }
           if (u.ignoreNulls) {
@@ -2866,15 +2883,25 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       }
     }
 
+    // We must wait until all expressions except for generator functions are resolved before
+    // rewriting generator functions in Project/Aggregate. This is necessary to make this rule
+    // stable for different execution orders of analyzer rules. See also SPARK-47241.
+    private def canRewriteGenerator(namedExprs: Seq[NamedExpression]): Boolean = {
+      namedExprs.forall { ne =>
+        ne.resolved || {
+          trimNonTopLevelAliases(ne) match {
+            case AliasedGenerator(_, _, _) => true
+            case _ => false
+          }
+        }
+      }
+    }
+
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsPattern(GENERATOR), ruleId) {
       case Project(projectList, _) if projectList.exists(hasNestedGenerator) =>
         val nestedGenerator = projectList.find(hasNestedGenerator).get
         throw QueryCompilationErrors.nestedGeneratorError(trimAlias(nestedGenerator))
-
-      case Project(projectList, _) if projectList.count(hasGenerator) > 1 =>
-        val generators = projectList.filter(hasGenerator).map(trimAlias)
-        throw QueryCompilationErrors.moreThanOneGeneratorError(generators, "SELECT")
 
       case Aggregate(_, aggList, _) if aggList.exists(hasNestedGenerator) =>
         val nestedGenerator = aggList.find(hasNestedGenerator).get
@@ -2882,12 +2909,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
       case Aggregate(_, aggList, _) if aggList.count(hasGenerator) > 1 =>
         val generators = aggList.filter(hasGenerator).map(trimAlias)
-        throw QueryCompilationErrors.moreThanOneGeneratorError(generators, "aggregate")
+        throw QueryCompilationErrors.moreThanOneGeneratorError(generators)
 
-      case agg @ Aggregate(groupList, aggList, child) if aggList.forall {
-          case AliasedGenerator(_, _, _) => true
-          case other => other.resolved
-        } && aggList.exists(hasGenerator) =>
+      case Aggregate(groupList, aggList, child) if canRewriteGenerator(aggList) &&
+          aggList.exists(hasGenerator) =>
         // If generator in the aggregate list was visited, set the boolean flag true.
         var generatorVisited = false
 
@@ -2932,16 +2957,16 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         // first for replacing `Project` with `Aggregate`.
         p
 
-      case p @ Project(projectList, child) =>
+      case p @ Project(projectList, child) if canRewriteGenerator(projectList) &&
+          projectList.exists(hasGenerator) =>
         val (resolvedGenerator, newProjectList) = projectList
           .map(trimNonTopLevelAliases)
           .foldLeft((None: Option[Generate], Nil: Seq[NamedExpression])) { (res, e) =>
             e match {
-              case AliasedGenerator(generator, names, outer) if generator.childrenResolved =>
-                // It's a sanity check, this should not happen as the previous case will throw
-                // exception earlier.
-                assert(res._1.isEmpty, "More than one generator found in SELECT.")
-
+              // If there are more than one generator, we only rewrite the first one and wait for
+              // the next analyzer iteration to rewrite the next one.
+              case AliasedGenerator(generator, names, outer) if res._1.isEmpty &&
+                  generator.childrenResolved =>
                 val g = Generate(
                   generator,
                   unrequiredChildIndex = Nil,
@@ -2949,7 +2974,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                   qualifier = None,
                   generatorOutput = ResolveGenerate.makeGeneratorOutput(generator, names),
                   child)
-
                 (Some(g), res._2 ++ g.nullableOutput)
               case other =>
                 (res._1, res._2 :+ other)
@@ -2968,6 +2992,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       case g: Generate => g
 
       case u: UnresolvedTableValuedFunction => u
+
+      case p: Project => p
+
+      case a: Aggregate => a
 
       case p if p.expressions.exists(hasGenerator) =>
         throw QueryCompilationErrors.generatorOutsideSelectError(p)

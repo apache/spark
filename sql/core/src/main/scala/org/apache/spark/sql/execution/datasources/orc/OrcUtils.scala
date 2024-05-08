@@ -31,7 +31,8 @@ import org.apache.orc.{BooleanColumnStatistics, ColumnStatistics, DateColumnStat
 
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.sql.{SPARK_VERSION_METADATA_KEY, SparkSession}
 import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
@@ -55,7 +56,8 @@ object OrcUtils extends Logging {
     OrcCompressionCodec.ZLIB.name() -> ".zlib",
     OrcCompressionCodec.ZSTD.name() -> ".zstd",
     OrcCompressionCodec.LZ4.name() -> ".lz4",
-    OrcCompressionCodec.LZO.name() -> ".lzo")
+    OrcCompressionCodec.LZO.name() -> ".lzo",
+    OrcCompressionCodec.BROTLI.name() -> ".brotli")
 
   val CATALYST_TYPE_ATTRIBUTE_NAME = "spark.sql.catalyst.type"
 
@@ -86,7 +88,7 @@ object OrcUtils extends Logging {
     } catch {
       case e: org.apache.orc.FileFormatException =>
         if (ignoreCorruptFiles) {
-          logWarning(s"Skipped the footer in the corrupted file: $file", e)
+          logWarning(log"Skipped the footer in the corrupted file: ${MDC(PATH, file)}", e)
           None
         } else {
           throw QueryExecutionErrors.cannotReadFooterForFileError(file, e)
@@ -303,6 +305,10 @@ object OrcUtils extends Logging {
         case t: TimestampType =>
           val typeDesc = new TypeDescription(TypeDescription.Category.TIMESTAMP)
           typeDesc.setAttribute(CATALYST_TYPE_ATTRIBUTE_NAME, t.typeName)
+          Some(typeDesc)
+        case _: StringType =>
+          val typeDesc = new TypeDescription(TypeDescription.Category.STRING)
+          typeDesc.setAttribute(CATALYST_TYPE_ATTRIBUTE_NAME, StringType.typeName)
           Some(typeDesc)
         case _ => None
       }

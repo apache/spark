@@ -744,7 +744,7 @@ private[hive] trait HiveInspectors {
         }
         data: Any => {
           if (data != null) {
-            InternalRow.fromSeq(unwrappers.map(_(data)).toSeq)
+            new GenericInternalRow(unwrappers.map(_(data)).toArray)
           } else {
             null
           }

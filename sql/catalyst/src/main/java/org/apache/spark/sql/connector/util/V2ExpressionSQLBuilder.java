@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.StringJoiner;
 
+import org.apache.spark.SparkIllegalArgumentException;
 import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.connector.expressions.Cast;
 import org.apache.spark.sql.connector.expressions.Expression;
@@ -211,7 +212,7 @@ public class V2ExpressionSQLBuilder {
     return l + " LIKE '%" + escapeSpecialCharsForLikePattern(value) + "%' ESCAPE '\\'";
   }
 
-  private String inputToSQL(Expression input) {
+  protected String inputToSQL(Expression input) {
     if (input.children().length > 1) {
       return "(" + build(input) + ")";
     } else {
@@ -305,7 +306,8 @@ public class V2ExpressionSQLBuilder {
   }
 
   protected String visitUnexpectedExpr(Expression expr) throws IllegalArgumentException {
-    throw new IllegalArgumentException("Unexpected V2 expression: " + expr);
+    throw new SparkIllegalArgumentException(
+      "_LEGACY_ERROR_TEMP_3207", Map.of("expr", String.valueOf(expr)));
   }
 
   protected String visitOverlay(String[] inputs) {
@@ -354,7 +356,7 @@ public class V2ExpressionSQLBuilder {
     return joiner.toString();
   }
 
-  private String[] expressionsToStringArray(Expression[] expressions) {
+  protected String[] expressionsToStringArray(Expression[] expressions) {
     String[] result = new String[expressions.length];
     for (int i = 0; i < expressions.length; i++) {
       result[i] = build(expressions[i]);

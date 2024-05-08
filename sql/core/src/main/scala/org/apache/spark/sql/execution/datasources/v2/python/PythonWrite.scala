@@ -18,7 +18,8 @@ package org.apache.spark.sql.execution.datasources.v2.python
 
 import org.apache.spark.JobArtifactSet
 import org.apache.spark.sql.connector.metric.CustomMetric
-import org.apache.spark.sql.connector.write._
+import org.apache.spark.sql.connector.write.{BatchWrite, _}
+import org.apache.spark.sql.connector.write.streaming.StreamingWrite
 
 
 class PythonWrite(
@@ -26,20 +27,44 @@ class PythonWrite(
     shortName: String,
     info: LogicalWriteInfo,
     isTruncate: Boolean
-  ) extends Write with BatchWrite {
-  private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
+  ) extends Write {
+
+  override def toString: String = shortName
+
+  override def toBatch: BatchWrite = new PythonBatchWrite(ds, shortName, info, isTruncate)
+
+  override def toStreaming: StreamingWrite =
+    new PythonStreamingWrite(ds, shortName, info, isTruncate)
+
+  override def description: String = "(Python)"
+
+  override def supportedCustomMetrics(): Array[CustomMetric] =
+    ds.source.createPythonMetrics()
+}
+
+/**
+ * A [[BatchWrite]] for python data source writing. Responsible for generating the writer factory.
+ * */
+class PythonBatchWrite(
+    ds: PythonDataSourceV2,
+    shortName: String,
+    info: LogicalWriteInfo,
+    isTruncate: Boolean
+  ) extends BatchWrite {
 
   // Store the pickled data source writer instance.
   private var pythonDataSourceWriter: Array[Byte] = _
 
-  override def createBatchWriterFactory(
-      physicalInfo: PhysicalWriteInfo): DataWriterFactory = {
+  private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
 
+  override def createBatchWriterFactory(physicalInfo: PhysicalWriteInfo): DataWriterFactory =
+  {
     val writeInfo = ds.source.createWriteInfoInPython(
       shortName,
       info.schema(),
       info.options(),
-      isTruncate)
+      isTruncate,
+      isStreaming = false)
 
     pythonDataSourceWriter = writeInfo.writer
 
@@ -53,13 +78,4 @@ class PythonWrite(
   override def abort(messages: Array[WriterCommitMessage]): Unit = {
     ds.source.commitWriteInPython(pythonDataSourceWriter, messages, abort = true)
   }
-
-  override def toString: String = shortName
-
-  override def toBatch: BatchWrite = this
-
-  override def description: String = "(Python)"
-
-  override def supportedCustomMetrics(): Array[CustomMetric] =
-    ds.source.createPythonMetrics()
 }

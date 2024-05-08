@@ -18,18 +18,19 @@
 package org.apache.spark.ui
 
 import java.util.EnumSet
-import javax.servlet.DispatcherType
-import javax.servlet.http.{HttpServlet, HttpServletRequest}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 import scala.xml.Node
 
+import jakarta.servlet.DispatcherType
+import jakarta.servlet.http.{HttpServlet, HttpServletRequest}
 import org.eclipse.jetty.servlet.{FilterHolder, FilterMapping, ServletContextHandler, ServletHolder}
 import org.json4s.JsonAST.{JNothing, JValue}
 
 import org.apache.spark.{SecurityManager, SparkConf, SSLOptions}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.CLASS_NAME
 import org.apache.spark.internal.config._
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.Utils
@@ -158,7 +159,7 @@ private[spark] abstract class WebUI(
       logInfo(s"Bound $className to $hostName, and started at $webUrl")
     } catch {
       case e: Exception =>
-        logError(s"Failed to bind $className", e)
+        logError(log"Failed to bind ${MDC(CLASS_NAME, className)}", e)
         System.exit(1)
     }
   }

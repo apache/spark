@@ -51,7 +51,8 @@ import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys
 import org.apache.spark.kafka010.KafkaTokenUtil
 import org.apache.spark.util.{SecurityUtils, ShutdownHookManager, Utils}
 import org.apache.spark.util.ArrayImplicits._
@@ -69,7 +70,7 @@ class KafkaTestUtils(
   private val JAVA_AUTH_CONFIG = "java.security.auth.login.config"
 
   private val localHostNameForURI = Utils.localHostNameForURI()
-  logInfo(s"Local host name is $localHostNameForURI")
+  logInfo(log"Local host name is ${MDC(LogKeys.URI, localHostNameForURI)}")
 
   // MiniKDC uses canonical host name on host part, hence we need to provide canonical host name
   // on the 'host' part of the principal.
@@ -332,7 +333,7 @@ class KafkaTestUtils(
         Utils.deleteRecursively(new File(f))
       } catch {
         case e: IOException if Utils.isWindows =>
-          logWarning(e.getMessage)
+          logWarning(log"${MDC(LogKeys.ERROR, e.getMessage)}")
       }
     }
 
@@ -649,20 +650,17 @@ class KafkaTestUtils(
 
     def shutdown(): Unit = {
       factory.shutdown()
-      // The directories are not closed even if the ZooKeeper server is shut down.
-      // Please see ZOOKEEPER-1844, which is fixed in 3.4.6+. It leads to test failures
-      // on Windows if the directory deletion failure throws an exception.
       try {
         Utils.deleteRecursively(snapshotDir)
       } catch {
         case e: IOException if Utils.isWindows =>
-          logWarning(e.getMessage)
+          logWarning(log"${MDC(LogKeys.ERROR, e.getMessage)}")
       }
       try {
         Utils.deleteRecursively(logDir)
       } catch {
         case e: IOException if Utils.isWindows =>
-          logWarning(e.getMessage)
+          logWarning(log"${MDC(LogKeys.ERROR, e.getMessage)}")
       }
       System.clearProperty(ZOOKEEPER_AUTH_PROVIDER)
     }

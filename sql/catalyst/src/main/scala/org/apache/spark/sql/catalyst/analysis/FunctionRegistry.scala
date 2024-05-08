@@ -24,7 +24,8 @@ import scala.collection.mutable
 import scala.reflect.ClassTag
 
 import org.apache.spark.SparkUnsupportedOperationException
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.FUNCTION_NAME
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions._
@@ -223,7 +224,8 @@ trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging
     val newFunction = (info, builder)
     functionBuilders.put(name, newFunction) match {
       case Some(previousFunction) if previousFunction != newFunction =>
-        logWarning(s"The function $name replaced a previously registered function.")
+        logWarning(log"The function ${MDC(FUNCTION_NAME, name)} replaced a " +
+          log"previously registered function.")
       case _ =>
     }
   }
@@ -520,6 +522,8 @@ object FunctionRegistry {
     expression[Ascii]("ascii"),
     expression[Chr]("char", true),
     expression[Chr]("chr"),
+    expressionBuilder("collate", CollateExpressionBuilder),
+    expression[Collation]("collation"),
     expressionBuilder("contains", ContainsExpressionBuilder),
     expressionBuilder("startswith", StartsWithExpressionBuilder),
     expressionBuilder("endswith", EndsWithExpressionBuilder),
@@ -817,7 +821,13 @@ object FunctionRegistry {
     expression[JsonObjectKeys]("json_object_keys"),
 
     // Variant
-    expression[ParseJson]("parse_json"),
+    expressionBuilder("parse_json", ParseJsonExpressionBuilder),
+    expressionBuilder("try_parse_json", TryParseJsonExpressionBuilder),
+    expression[IsVariantNull]("is_variant_null"),
+    expressionBuilder("variant_get", VariantGetExpressionBuilder),
+    expressionBuilder("try_variant_get", TryVariantGetExpressionBuilder),
+    expression[SchemaOfVariant]("schema_of_variant"),
+    expression[SchemaOfVariantAgg]("schema_of_variant_agg"),
 
     // cast
     expression[Cast]("cast"),
@@ -1089,7 +1099,9 @@ object TableFunctionRegistry {
     generator[PosExplode]("posexplode"),
     generator[PosExplode]("posexplode_outer", outer = true),
     generator[Stack]("stack"),
-    generator[SQLKeywords]("sql_keywords")
+    generator[SQLKeywords]("sql_keywords"),
+    generator[VariantExplode]("variant_explode"),
+    generator[VariantExplode]("variant_explode_outer", outer = true)
   )
 
   val builtin: SimpleTableFunctionRegistry = {

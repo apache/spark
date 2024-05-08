@@ -33,8 +33,10 @@ import org.scalatest.matchers.should.Matchers._
 import org.scalatest.time.SpanSugar._
 import org.scalatestplus.selenium.WebBrowser
 
+import org.apache.spark.tags.WebBrowserTest
 import org.apache.spark.ui.SparkUICssErrorHandler
 
+@WebBrowserTest
 class UISeleniumSuite
   extends HiveThriftServer2TestBase
   with WebBrowser with Matchers with BeforeAndAfterAll {
@@ -90,8 +92,8 @@ class UISeleniumSuite
 
     s"""$startScript
         |  --master local
-        |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}=$metastoreJdbcUri
-        |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
+        |  --hiveconf javax.jdo.option.ConnectionURL=$metastoreJdbcUri
+        |  --hiveconf hive.metastore.warehouse.dir=$warehousePath
         |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST}=$localhost
         |  --hiveconf ${ConfVars.HIVE_SERVER2_TRANSPORT_MODE}=$mode
         |  --hiveconf $portConf=0
@@ -106,7 +108,7 @@ class UISeleniumSuite
       val baseURL = s"http://$localhost:$uiPort"
 
       val queries = Seq(
-        "CREATE TABLE test_map(key INT, value STRING)",
+        "CREATE TABLE test_map (key INT, value STRING) USING HIVE",
         s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE test_map")
 
       queries.foreach(statement.execute)

@@ -181,8 +181,7 @@ case class AggregateInPandasExec(
         pythonRunnerConf,
         pythonMetrics,
         jobArtifactUUID,
-        None) // TODO(SPARK-46688): Support profiling on AggregateInPandasExec
-        .compute(projectedRowIter, context.partitionId(), context)
+        conf.pythonUDFProfiler).compute(projectedRowIter, context.partitionId(), context)
 
       val joinedAttributes =
         groupingExpressions.map(_.toAttribute) ++ aggExpressions.map(_.resultAttribute)

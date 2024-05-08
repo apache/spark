@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.types
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -37,18 +37,24 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
   private val s = StructType.fromDDL("a INT, b STRING")
 
   test("lookup a single missing field should output existing fields") {
-    val e = intercept[IllegalArgumentException](s("c")).getMessage
-    assert(e.contains("Available: a, b"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException](s("c")),
+      errorClass = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`c`", "fields" -> "`a`, `b`"))
   }
 
   test("lookup a set of missing fields should output existing fields") {
-    val e = intercept[IllegalArgumentException](s(Set("a", "c"))).getMessage
-    assert(e.contains("Available: a, b"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException](s(Set("a", "c"))),
+      errorClass = "NONEXISTENT_FIELD_NAME_IN_LIST",
+      parameters = Map("nonExistFields" -> "`c`", "fieldNames" -> "`a`, `b`"))
   }
 
   test("lookup fieldIndex for missing field should output existing fields") {
-    val e = intercept[IllegalArgumentException](s.fieldIndex("c")).getMessage
-    assert(e.contains("Available: a, b"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException](s.fieldIndex("c")),
+      errorClass = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`c`", "fields" -> "`a`, `b`"))
   }
 
   test("SPARK-24849: toDDL - simple struct") {

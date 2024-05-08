@@ -296,7 +296,7 @@ object InterpretedUnsafeProjection {
    */
   @scala.annotation.tailrec
   private def getElementSize(dataType: DataType): Int = dataType match {
-    case NullType | StringType | BinaryType | CalendarIntervalType | VariantType |
+    case NullType | _: StringType | BinaryType | CalendarIntervalType | VariantType |
          _: DecimalType | _: StructType | _: ArrayType | _: MapType => 8
     case udt: UserDefinedType[_] =>
       getElementSize(udt.sqlType)

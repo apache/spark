@@ -58,10 +58,10 @@ object BuildCommons {
 
   val allProjects@Seq(
     core, graphx, mllib, mllibLocal, repl, networkCommon, networkShuffle, launcher, unsafe, tags, sketch, kvstore,
-    commonUtils, sqlApi, _*
+    commonUtils, sqlApi, variant, _*
   ) = Seq(
     "core", "graphx", "mllib", "mllib-local", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
-    "tags", "sketch", "kvstore", "common-utils", "sql-api"
+    "tags", "sketch", "kvstore", "common-utils", "sql-api", "variant"
   ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ Seq(connectCommon, connect, connectClient)
 
   val optionallyEnabledProjects@Seq(kubernetes, yarn,
@@ -91,7 +91,7 @@ object BuildCommons {
   // SPARK-41247: needs to be consistent with `protobuf.version` in `pom.xml`.
   val protoVersion = "3.25.1"
   // GRPC version used for Spark Connect.
-  val grpcVersion = "1.59.0"
+  val grpcVersion = "1.62.2"
 }
 
 object SparkBuild extends PomBuild {
@@ -160,16 +160,21 @@ object SparkBuild extends PomBuild {
     val replacements = Map(
       """customId="println" level="error"""" -> """customId="println" level="warn""""
     )
-    var contents = Source.fromFile(in).getLines.mkString("\n")
-    for ((k, v) <- replacements) {
-      require(contents.contains(k), s"Could not rewrite '$k' in original scalastyle config.")
-      contents = contents.replace(k, v)
+    val source = Source.fromFile(in)
+    try {
+      var contents = source.getLines.mkString("\n")
+      for ((k, v) <- replacements) {
+        require(contents.contains(k), s"Could not rewrite '$k' in original scalastyle config.")
+        contents = contents.replace(k, v)
+      }
+      new PrintWriter(out) {
+        write(contents)
+        close()
+      }
+      out
+    } finally {
+      source.close()
     }
-    new PrintWriter(out) {
-      write(contents)
-      close()
-    }
-    out
   }
 
   // Return a cached scalastyle task for a given configuration (usually Compile or Test)
@@ -236,12 +241,6 @@ object SparkBuild extends PomBuild {
         "-Wconf:msg=^(?=.*?Widening conversion from)(?=.*?is deprecated because it loses precision).+$:e",
         // SPARK-45610 Convert "Auto-application to `()` is deprecated" to compile error, as it will become a compile error in Scala 3.
         "-Wconf:cat=deprecation&msg=Auto-application to \\`\\(\\)\\` is deprecated:e",
-        // TODO(SPARK-45615): The issue described by https://github.com/scalatest/scalatest/issues/2297 can cause false positives.
-        //  So SPARK-45610 added the following 4 suppression rules, which can be removed after upgrading scalatest to 3.2.18.
-        "-Wconf:cat=deprecation&msg=Auto-application to \\`\\(\\)\\` is deprecated&site=org.apache.spark.rdd.RDDSuite:s",
-        "-Wconf:cat=deprecation&msg=Auto-application to \\`\\(\\)\\` is deprecated&site=org.apache.spark.scheduler.TaskSetManagerSuite:s",
-        "-Wconf:cat=deprecation&msg=Auto-application to \\`\\(\\)\\` is deprecated&site=org.apache.spark.streaming.ReceiverInputDStreamSuite:s",
-        "-Wconf:cat=deprecation&msg=Auto-application to \\`\\(\\)\\` is deprecated&site=org.apache.spark.streaming.kafka010.KafkaRDDSuite:s",
         // SPARK-35574 Prevent the recurrence of compilation warnings related to `procedure syntax is deprecated`
         "-Wconf:cat=deprecation&msg=procedure syntax is deprecated:e",
         // SPARK-45627 Symbol literals are deprecated in Scala 2.13 and it's a compile error in Scala 3.
@@ -249,14 +248,18 @@ object SparkBuild extends PomBuild {
         // SPARK-45627 `enum`, `export` and `given` will become keywords in Scala 3,
         // so they are prohibited from being used as variable names in Scala 2.13 to
         // reduce the cost of migration in subsequent versions.
-        "-Wconf:cat=deprecation&msg=it will become a keyword in Scala 3:e"
+        "-Wconf:cat=deprecation&msg=it will become a keyword in Scala 3:e",
+        // SPARK-46938 to prevent enum scan on pmml-model, under spark-mllib module.
+        "-Wconf:cat=other&site=org.dmg.pmml.*:w"
       )
     }
   )
 
+  val noLintOnCompile = sys.env.contains("NOLINT_ON_COMPILE") &&
+      !sys.env.get("NOLINT_ON_COMPILE").contains("false")
   lazy val sharedSettings = sparkGenjavadocSettings ++
                             compilerWarningSettings ++
-      (if (sys.env.contains("NOLINT_ON_COMPILE")) Nil else enableScalaStyle) ++ Seq(
+      (if (noLintOnCompile) Nil else enableScalaStyle) ++ Seq(
     (Compile / exportJars) := true,
     (Test / exportJars) := false,
     javaHome := sys.env.get("JAVA_HOME")
@@ -293,13 +296,8 @@ object SparkBuild extends PomBuild {
     publishLocal := Seq((MavenCompile / publishLocal), (SbtCompile / publishLocal)).dependOn.value,
 
     javaOptions ++= {
-      val versionParts = System.getProperty("java.version").split("[+.\\-]+", 3)
-      val major = versionParts(0).toInt
-      if (major >= 21) {
-        Seq("--add-modules=jdk.incubator.vector", "-Dforeign.restricted=warn")
-      } else {
-        Seq("--add-modules=jdk.incubator.vector,jdk.incubator.foreign", "-Dforeign.restricted=warn")
-      }
+      // for `dev.ludovic.netlib.blas` which implements such hardware-accelerated BLAS operations
+      Seq("--add-modules=jdk.incubator.vector")
     },
 
     (Compile / doc / javacOptions) ++= {
@@ -310,18 +308,18 @@ object SparkBuild extends PomBuild {
 
     (Compile / javacOptions) ++= Seq(
       "-encoding", UTF_8.name(),
-      "-source", javaVersion.value
+      "-g",
+      "--release", javaVersion.value
     ),
     // This -target and Xlint:unchecked options cannot be set in the Compile configuration scope since
     // `javadoc` doesn't play nicely with them; see https://github.com/sbt/sbt/issues/355#issuecomment-3817629
     // for additional discussion and explanation.
     (Compile / compile / javacOptions) ++= Seq(
-      "-target", javaVersion.value,
       "-Xlint:unchecked"
     ),
 
     (Compile / scalacOptions) ++= Seq(
-      s"-target:${javaVersion.value}",
+      "-release", javaVersion.value,
       "-sourcepath", (ThisBuild / baseDirectory).value.getAbsolutePath  // Required for relative source links in scaladoc
     ),
 
@@ -365,7 +363,8 @@ object SparkBuild extends PomBuild {
   val mimaProjects = allProjects.filterNot { x =>
     Seq(
       spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
-      unsafe, tags, tokenProviderKafka010, sqlKafka010, connectCommon, connect, connectClient
+      unsafe, tags, tokenProviderKafka010, sqlKafka010, connectCommon, connect, connectClient,
+      variant
     ).contains(x)
   }
 
@@ -517,7 +516,6 @@ object SparkParallelTestGrouping {
     "org.apache.spark.sql.catalyst.expressions.MathExpressionsSuite",
     "org.apache.spark.sql.hive.HiveExternalCatalogSuite",
     "org.apache.spark.sql.hive.StatisticsSuite",
-    "org.apache.spark.sql.hive.client.VersionsSuite",
     "org.apache.spark.sql.hive.client.HiveClientVersions",
     "org.apache.spark.sql.hive.HiveExternalCatalogVersionsSuite",
     "org.apache.spark.ml.classification.LogisticRegressionSuite",
@@ -951,7 +949,7 @@ object Unsafe {
 object DockerIntegrationTests {
   // This serves to override the override specified in DependencyOverrides:
   lazy val settings = Seq(
-    dependencyOverrides += "com.google.guava" % "guava" % "19.0"
+    dependencyOverrides += "com.google.guava" % "guava" % "33.1.0-jre"
   )
 }
 
@@ -1081,7 +1079,7 @@ object ExcludedDependencies {
     // purpose only. Here we exclude them from the whole project scope and add them w/ yarn only.
     excludeDependencies ++= Seq(
       ExclusionRule(organization = "com.sun.jersey"),
-      ExclusionRule("javax.servlet", "javax.servlet-api"),
+      ExclusionRule(organization = "ch.qos.logback"),
       ExclusionRule("javax.ws.rs", "jsr311-api"))
   )
 }
@@ -1515,7 +1513,11 @@ object TestSettings {
   import BuildCommons._
   private val defaultExcludedTags = Seq("org.apache.spark.tags.ChromeUITest",
     "org.apache.spark.deploy.k8s.integrationtest.YuniKornTag",
-    "org.apache.spark.internal.io.cloud.IntegrationTestSuite")
+    "org.apache.spark.internal.io.cloud.IntegrationTestSuite") ++
+    (if (System.getProperty("os.name").startsWith("Mac OS X") &&
+        System.getProperty("os.arch").equals("aarch64")) {
+      Seq("org.apache.spark.tags.ExtendedLevelDBTest")
+    } else Seq.empty)
 
   lazy val settings = Seq (
     // Fork new JVMs for tests and set Java options for those
@@ -1557,7 +1559,6 @@ object TestSettings {
     (Test / javaOptions) += "-Dhive.conf.validation=false",
     (Test / javaOptions) += "-Dsun.io.serialization.extendedDebugInfo=false",
     (Test / javaOptions) += "-Dderby.system.durability=test",
-    (Test / javaOptions) += "-Dio.netty.tryReflectionSetAccessible=true",
     (Test / javaOptions) ++= {
       if ("true".equals(System.getProperty("java.net.preferIPv6Addresses"))) {
         Seq("-Djava.net.preferIPv6Addresses=true")
@@ -1586,7 +1587,8 @@ object TestSettings {
         "--add-opens=java.base/sun.nio.cs=ALL-UNNAMED",
         "--add-opens=java.base/sun.security.action=ALL-UNNAMED",
         "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED",
-        "-Djdk.reflect.useDirectMethodHandle=false").mkString(" ")
+        "-Djdk.reflect.useDirectMethodHandle=false",
+        "-Dio.netty.tryReflectionSetAccessible=true").mkString(" ")
       s"-Xmx$heapSize -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:ReservedCodeCacheSize=128m -Dfile.encoding=UTF-8 $extraTestJavaArgs"
         .split(" ").toSeq
     },

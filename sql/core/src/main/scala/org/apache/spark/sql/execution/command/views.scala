@@ -155,7 +155,7 @@ case class CreateViewCommand(
 
         // uncache the cached data before replacing an exists view
         logDebug(s"Try to uncache ${viewIdent.quotedString} before replacing.")
-        CommandUtils.uncacheTableOrView(sparkSession, viewIdent.quotedString)
+        CommandUtils.uncacheTableOrView(sparkSession, viewIdent)
 
         // Handles `CREATE OR REPLACE VIEW v0 AS SELECT ...`
         // Nothing we need to retain from the old view, so just drop and create a new one
@@ -298,7 +298,7 @@ case class AlterViewAsCommand(
     checkCyclicViewReference(analyzedPlan, Seq(viewIdent), viewIdent)
 
     logDebug(s"Try to uncache ${viewIdent.quotedString} before replacing.")
-    CommandUtils.uncacheTableOrView(session, viewIdent.quotedString)
+    CommandUtils.uncacheTableOrView(session, viewIdent)
 
     val newProperties = generateViewProperties(
       viewMeta.properties, session, analyzedPlan, analyzedPlan.schema.fieldNames)
@@ -360,6 +360,7 @@ object ViewHelper extends SQLConfHelper with Logging {
     "spark.sql.hive.convertMetastoreParquet",
     "spark.sql.hive.convertMetastoreOrc",
     "spark.sql.hive.convertInsertingPartitionedTable",
+    "spark.sql.hive.convertInsertingUnpartitionedTable",
     "spark.sql.hive.convertMetastoreCtas",
     SQLConf.ADDITIONAL_REMOTE_REPOSITORIES.key)
 
@@ -667,7 +668,7 @@ object ViewHelper extends SQLConfHelper with Logging {
         // view is already converted to the underlying tables. So no cyclic views.
         checkCyclicViewReference(analyzedPlan, Seq(name), name)
       }
-      CommandUtils.uncacheTableOrView(session, name.quotedString)
+      CommandUtils.uncacheTableOrView(session, name)
     }
     if (!storeAnalyzedPlanForView) {
       TemporaryViewRelation(

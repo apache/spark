@@ -23,7 +23,6 @@ from typing import Dict, List, IO, Tuple
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.errors import PySparkRuntimeError, PySparkValueError
-from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import (
     read_bool,
     read_int,
@@ -31,10 +30,10 @@ from pyspark.serializers import (
     write_with_length,
     SpecialLengths,
 )
-from pyspark.sql.functions import PartitioningColumn
+from pyspark.sql.functions import OrderingColumn, PartitioningColumn, SelectedColumn
 from pyspark.sql.types import _parse_datatype_json_string, StructType
 from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult
-from pyspark.util import handle_worker_exception
+from pyspark.util import handle_worker_exception, local_connect_and_auth
 from pyspark.worker_util import (
     check_python_version,
     read_command,
@@ -78,14 +77,17 @@ def read_arguments(infile: IO) -> Tuple[List[AnalyzeArgument], Dict[str, Analyze
     kwargs: Dict[str, AnalyzeArgument] = {}
     for _ in range(num_args):
         dt = _parse_datatype_json_string(utf8_deserializer.loads(infile))
-        if read_bool(infile):  # is foldable
+        is_constant_expression = read_bool(infile)
+        if is_constant_expression:
             value = pickleSer._read_with_length(infile)
             if dt.needConversion():
                 value = dt.fromInternal(value)
         else:
             value = None
-        is_table = read_bool(infile)  # is table argument
-        argument = AnalyzeArgument(dataType=dt, value=value, isTable=is_table)
+        is_table = read_bool(infile)
+        argument = AnalyzeArgument(
+            dataType=dt, value=value, isTable=is_table, isConstantExpression=is_constant_expression
+        )
 
         is_named_arg = read_bool(infile)
         if is_named_arg:
@@ -163,6 +165,18 @@ def main(infile: IO, outfile: IO) -> None:
                     but the 'schema' field had the wrong type: {type(result.schema)}"""
                 )
             )
+
+        def invalid_analyze_result_field(field_name: str, expected_field: str) -> PySparkValueError:
+            return PySparkValueError(
+                format_error(
+                    f"""
+                    {error_prefix} because the static 'analyze' method returned an
+                    'AnalyzeResult' object with the '{field_name}' field set to a value besides a
+                    list or tuple of '{expected_field}' objects. Please update the table function
+                    and then try the query again."""
+                )
+            )
+
         has_table_arg = any(arg.isTable for arg in args) or any(
             arg.isTable for arg in kwargs.values()
         )
@@ -190,19 +204,18 @@ def main(infile: IO, outfile: IO) -> None:
                     set to empty, and then try the query again."""
                 )
             )
-        elif isinstance(result.partitionBy, (list, tuple)) and (
-            len(result.partitionBy) > 0
-            and not all([isinstance(val, PartitioningColumn) for val in result.partitionBy])
+        elif not isinstance(result.partitionBy, (list, tuple)) or not all(
+            isinstance(val, PartitioningColumn) for val in result.partitionBy
         ):
-            raise PySparkValueError(
-                format_error(
-                    f"""
-                    {error_prefix} because the static 'analyze' method returned an
-                    'AnalyzeResult' object with the 'partitionBy' field set to a value besides a
-                    list or tuple of 'PartitioningColumn' objects. Please update the table function
-                    and then try the query again."""
-                )
-            )
+            raise invalid_analyze_result_field("partitionBy", "PartitioningColumn")
+        elif not isinstance(result.orderBy, (list, tuple)) or not all(
+            isinstance(val, OrderingColumn) for val in result.orderBy
+        ):
+            raise invalid_analyze_result_field("orderBy", "OrderingColumn")
+        elif not isinstance(result.select, (list, tuple)) or not all(
+            isinstance(val, SelectedColumn) for val in result.select
+        ):
+            raise invalid_analyze_result_field("select", "SelectedColumn")
 
         # Return the analyzed schema.
         write_with_length(result.schema.json().encode("utf-8"), outfile)
@@ -225,6 +238,11 @@ def main(infile: IO, outfile: IO) -> None:
                 write_int(1, outfile)
             else:
                 write_int(2, outfile)
+        # Return the requested selected input table columns, if specified.
+        write_int(len(result.select), outfile)
+        for col in result.select:
+            write_with_length(col.name.encode("utf-8"), outfile)
+            write_with_length(col.alias.encode("utf-8"), outfile)
 
     except BaseException as e:
         handle_worker_exception(e, outfile)
@@ -246,4 +264,7 @@ if __name__ == "__main__":
     java_port = int(os.environ["PYTHON_WORKER_FACTORY_PORT"])
     auth_secret = os.environ["PYTHON_WORKER_FACTORY_SECRET"]
     (sock_file, _) = local_connect_and_auth(java_port, auth_secret)
+    # TODO: Remove the following two lines and use `Process.pid()` when we drop JDK 8.
+    write_int(os.getpid(), sock_file)
+    sock_file.flush()
     main(sock_file, sock_file)

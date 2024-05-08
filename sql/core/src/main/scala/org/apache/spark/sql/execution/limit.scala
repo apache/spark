@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.TaskContext
 import org.apache.spark.rdd.{ParallelCollectionRDD, RDD}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.sql.catalyst.InternalRow
@@ -26,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.metric.{SQLShuffleReadMetricsReporter, SQLShuffleWriteMetricsReporter}
-import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.sql.execution.python.HybridRowQueue
 import org.apache.spark.util.collection.Utils
 
 /**
@@ -50,11 +51,6 @@ case class CollectLimitExec(limit: Int = -1, child: SparkPlan, offset: Int = 0) 
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = SinglePartition
   override def executeCollect(): Array[InternalRow] = {
-    // Because CollectLimitExec collect all the output of child to a single partition, so we need
-    // collect the first `limit` + `offset` elements and then to drop the first `offset` elements.
-    // For example: limit is 1 and offset is 2 and the child output two partition.
-    // The first partition output [1, 2] and the Second partition output [3, 4, 5].
-    // Then [1, 2, 3] will be taken and output [3].
     if (limit >= 0) {
       if (offset > 0) {
         child.executeTake(limit).drop(offset)
@@ -73,13 +69,13 @@ case class CollectLimitExec(limit: Int = -1, child: SparkPlan, offset: Int = 0) 
   override lazy val metrics = readMetrics ++ writeMetrics
   protected override def doExecute(): RDD[InternalRow] = {
     val childRDD = child.execute()
-    if (childRDD.getNumPartitions == 0) {
+    if (childRDD.getNumPartitions == 0 || limit == 0) {
       new ParallelCollectionRDD(sparkContext, Seq.empty[InternalRow], 1, Map.empty)
     } else {
       val singlePartitionRDD = if (childRDD.getNumPartitions == 1) {
         childRDD
       } else {
-        val locallyLimited = if (limit >= 0) {
+        val locallyLimited = if (limit > 0) {
           childRDD.mapPartitionsInternal(_.take(limit))
         } else {
           childRDD
@@ -123,18 +119,57 @@ case class CollectLimitExec(limit: Int = -1, child: SparkPlan, offset: Int = 0) 
  * logical plan, which happens when the user is collecting results back to the driver.
  */
 case class CollectTailExec(limit: Int, child: SparkPlan) extends LimitExec {
+  assert(limit >= 0)
+
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = SinglePartition
   override def executeCollect(): Array[InternalRow] = child.executeTail(limit)
+  private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
+  private lazy val writeMetrics =
+    SQLShuffleWriteMetricsReporter.createShuffleWriteMetrics(sparkContext)
+  private lazy val readMetrics =
+    SQLShuffleReadMetricsReporter.createShuffleReadMetrics(sparkContext)
+  override lazy val metrics = readMetrics ++ writeMetrics
   protected override def doExecute(): RDD[InternalRow] = {
-    // This is a bit hacky way to avoid a shuffle and scanning all data when it performs
-    // at `Dataset.tail`.
-    // Since this execution plan and `execute` are currently called only when
-    // `Dataset.tail` is invoked, the jobs are always executed when they are supposed to be.
+    val childRDD = child.execute()
+    if (childRDD.getNumPartitions == 0 || limit == 0) {
+      new ParallelCollectionRDD(sparkContext, Seq.empty[InternalRow], 1, Map.empty)
+    } else {
+      val singlePartitionRDD = if (childRDD.getNumPartitions == 1) {
+        childRDD
+      } else {
+        val locallyLimited = childRDD.mapPartitionsInternal(takeRight)
+        new ShuffledRowRDD(
+          ShuffleExchangeExec.prepareShuffleDependency(
+            locallyLimited,
+            child.output,
+            SinglePartition,
+            serializer,
+            writeMetrics),
+          readMetrics)
+      }
+      singlePartitionRDD.mapPartitionsInternal(takeRight)
+    }
+  }
 
-    // If we use this execution plan separately like `Dataset.limit` without an actual
-    // job launch, we might just have to mimic the implementation of `CollectLimitExec`.
-    sparkContext.parallelize(executeCollect().toImmutableArraySeq, numSlices = 1)
+  private def takeRight(iter: Iterator[InternalRow]): Iterator[InternalRow] = {
+    if (iter.isEmpty) {
+      Iterator.empty[InternalRow]
+    } else {
+      val context = TaskContext.get()
+      val queue = HybridRowQueue.apply(context.taskMemoryManager(), output.size)
+      context.addTaskCompletionListener[Unit](_ => queue.close())
+      var count = 0
+      while (iter.hasNext) {
+        queue.add(iter.next().copy().asInstanceOf[UnsafeRow])
+        if (count < limit) {
+          count += 1
+        } else {
+          queue.remove()
+        }
+      }
+      Iterator.range(0, count).map(_ => queue.remove())
+    }
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
@@ -294,6 +329,7 @@ case class TakeOrderedAndProjectExec(
     val data = if (offset > 0) limited.drop(offset) else limited
     if (projectList != child.output) {
       val proj = UnsafeProjection.create(projectList, child.output)
+      proj.initialize(0)
       data.map(r => proj(r).copy())
     } else {
       data
@@ -335,11 +371,12 @@ case class TakeOrderedAndProjectExec(
             writeMetrics),
           readMetrics)
       }
-      singlePartitionRDD.mapPartitionsInternal { iter =>
+      singlePartitionRDD.mapPartitionsWithIndexInternal { (idx, iter) =>
         val limited = Utils.takeOrdered(iter.map(_.copy()), limit)(ord)
         val topK = if (offset > 0) limited.drop(offset) else limited
         if (projectList != child.output) {
           val proj = UnsafeProjection.create(projectList, child.output)
+          proj.initialize(idx)
           topK.map(r => proj(r))
         } else {
           topK
@@ -358,7 +395,8 @@ case class TakeOrderedAndProjectExec(
     val orderByString = truncatedString(sortOrder, "[", ",", "]", maxFields)
     val outputString = truncatedString(output, "[", ",", "]", maxFields)
 
-    s"TakeOrderedAndProject(limit=$limit, orderBy=$orderByString, output=$outputString)"
+    val offsetStr = if (offset > 0) s" offset=$offset," else ""
+    s"TakeOrderedAndProject(limit=$limit,$offsetStr orderBy=$orderByString, output=$outputString)"
   }
 
   override def stringArgs: Iterator[Any] = {

@@ -19,13 +19,13 @@ package org.apache.spark.ui
 
 import java.net.{URI, URL, URLDecoder}
 import java.util.EnumSet
-import javax.servlet.DispatcherType
-import javax.servlet.http._
 
 import scala.language.implicitConversions
 import scala.util.Try
 import scala.xml.Node
 
+import jakarta.servlet.DispatcherType
+import jakarta.servlet.http._
 import org.eclipse.jetty.client.HttpClient
 import org.eclipse.jetty.client.api.Response
 import org.eclipse.jetty.client.http.HttpClientTransportOverHTTP
@@ -40,7 +40,9 @@ import org.json4s.JValue
 import org.json4s.jackson.JsonMethods.{pretty, render}
 
 import org.apache.spark.{SecurityManager, SparkConf, SSLOptions}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.util.Utils
 
@@ -84,7 +86,8 @@ private[spark] object JettyUtils extends Logging {
           case e: IllegalArgumentException =>
             response.sendError(HttpServletResponse.SC_BAD_REQUEST, e.getMessage)
           case e: Exception =>
-            logWarning(s"GET ${request.getRequestURI} failed: $e", e)
+            logWarning(log"GET ${MDC(LogKeys.URI, request.getRequestURI)} failed: " +
+              log"${MDC(ERROR, e)}", e)
             throw e
         }
       }

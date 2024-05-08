@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.xml
 
-import java.io.{CharConversionException, FileNotFoundException, InputStream, InputStreamReader, IOException, StringReader}
+import java.io.{BufferedReader, CharConversionException, FileNotFoundException, InputStream, InputStreamReader, IOException, StringReader}
 import java.nio.charset.{Charset, MalformedInputException}
 import java.text.NumberFormat
 import java.util.Locale
@@ -33,25 +33,11 @@ import scala.xml.SAXException
 
 import org.apache.commons.lang3.exception.ExceptionUtils
 
-import org.apache.spark.SparkUpgradeException
+import org.apache.spark.{SparkIllegalArgumentException, SparkUpgradeException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.ExprUtils
-import org.apache.spark.sql.catalyst.util.{
-  ArrayBasedMapData,
-  BadRecordException,
-  CaseInsensitiveMap,
-  DateFormatter,
-  DropMalformedMode,
-  FailureSafeParser,
-  GenericArrayData,
-  MapData,
-  ParseMode,
-  PartialResultArrayException,
-  PartialResultException,
-  PermissiveMode,
-  TimestampFormatter
-}
+import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, BadRecordException, DateFormatter, DropMalformedMode, FailureSafeParser, GenericArrayData, MapData, ParseMode, PartialResultArrayException, PartialResultException, PermissiveMode, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.catalyst.xml.StaxXmlParser.convertStream
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -101,11 +87,11 @@ class StaxXmlParser(
     }
   }
 
-  private def getFieldNameToIndex(schema: StructType): Map[String, Int] = {
+  private def getFieldIndex(schema: StructType, fieldName: String): Option[Int] = {
     if (caseSensitive) {
-      schema.map(_.name).zipWithIndex.toMap
+      schema.getFieldIndex(fieldName)
     } else {
-      CaseInsensitiveMap(schema.map(_.name).zipWithIndex.toMap)
+      schema.getFieldIndexCaseInsensitive(fieldName)
     }
   }
 
@@ -246,8 +232,11 @@ class StaxXmlParser(
         StaxXmlParserUtils.skipNextEndElement(parser, startElementName, options)
         value
       case (e: XMLEvent, dt: DataType) =>
-        throw new IllegalArgumentException(
-          s"Failed to parse a value for data type $dt with event ${e.toString}")
+        throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3240",
+          messageParameters = Map(
+            "dt" -> dt.toString,
+            "e" -> e.toString))
     }
   }
 
@@ -292,8 +281,8 @@ class StaxXmlParser(
     val convertedValuesMap = collection.mutable.Map.empty[String, Any]
     val valuesMap = StaxXmlParserUtils.convertAttributesToValuesMap(attributes, options)
     valuesMap.foreach { case (f, v) =>
-      val nameToIndex = getFieldNameToIndex(schema)
-      nameToIndex.get(f).foreach { i =>
+      val indexOpt = getFieldIndex(schema, f)
+      indexOpt.foreach { i =>
         convertedValuesMap(f) = convertTo(v, schema(i).dataType)
       }
     }
@@ -332,15 +321,15 @@ class StaxXmlParser(
     // Here we merge both to a row.
     val valuesMap = fieldsMap ++ attributesMap
     valuesMap.foreach { case (f, v) =>
-      val nameToIndex = getFieldNameToIndex(schema)
-      nameToIndex.get(f).foreach { row(_) = v }
+      val indexOpt = getFieldIndex(schema, f)
+      indexOpt.foreach { row(_) = v }
     }
 
     if (valuesMap.isEmpty) {
       // Return an empty row with all nested elements by the schema set to null.
-      InternalRow.fromSeq(Seq.fill(schema.fieldNames.length)(null))
+      new GenericInternalRow(Array.fill[Any](schema.length)(null))
     } else {
-      InternalRow.fromSeq(row.toIndexedSeq)
+      new GenericInternalRow(row)
     }
   }
 
@@ -353,11 +342,10 @@ class StaxXmlParser(
       schema: StructType,
       rootAttributes: Array[Attribute] = Array.empty): InternalRow = {
     val row = new Array[Any](schema.length)
-    val nameToIndex = getFieldNameToIndex(schema)
     // If there are attributes, then we process them first.
     convertAttributes(rootAttributes, schema).toSeq.foreach {
       case (f, v) =>
-        nameToIndex.get(f).foreach { row(_) = v }
+        getFieldIndex(schema, f).foreach { row(_) = v }
     }
 
     val wildcardColName = options.wildcardColName
@@ -372,7 +360,7 @@ class StaxXmlParser(
           val attributes = e.getAttributes.asScala.toArray
           val field = StaxXmlParserUtils.getName(e.asStartElement.getName, options)
 
-          nameToIndex.get(field) match {
+          getFieldIndex(schema, field) match {
             case Some(index) => schema(index).dataType match {
               case st: StructType =>
                 row(index) = convertObjectWithAttributes(parser, st, field, attributes)
@@ -443,9 +431,9 @@ class StaxXmlParser(
     }
 
     if (badRecordException.isEmpty) {
-      InternalRow.fromSeq(newRow.toIndexedSeq)
+      new GenericInternalRow(newRow)
     } else {
-      throw PartialResultException(InternalRow.fromSeq(newRow.toIndexedSeq),
+      throw PartialResultException(new GenericInternalRow(newRow),
         badRecordException.get)
     }
   }
@@ -482,7 +470,9 @@ class StaxXmlParser(
         case _: TimestampNTZType => timestampNTZFormatter.parseWithoutTimeZone(datum, false)
         case _: DateType => parseXmlDate(datum, options)
         case _: StringType => UTF8String.fromString(datum)
-        case _ => throw new IllegalArgumentException(s"Unsupported type: ${castType.typeName}")
+        case _ => throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3244",
+          messageParameters = Map("castType" -> "castType.typeName"))
       }
     }
   }
@@ -491,7 +481,9 @@ class StaxXmlParser(
     s.toLowerCase(Locale.ROOT) match {
       case "true" | "1" => true
       case "false" | "0" => false
-      case _ => throw new IllegalArgumentException(s"For input string: $s")
+      case _ => throw new SparkIllegalArgumentException(
+        errorClass = "_LEGACY_ERROR_TEMP_3245",
+        messageParameters = Map("s" -> s))
     }
   }
 
@@ -529,8 +521,9 @@ class StaxXmlParser(
         case ShortType => castTo(value, ShortType)
         case IntegerType => signSafeToInt(value)
         case dt: DecimalType => castTo(value, dt)
-        case _ => throw new IllegalArgumentException(
-          s"Failed to parse a value for data type $dataType.")
+        case _ => throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3246",
+          messageParameters = Map("dataType" -> dataType.toString))
       }
     }
   }
@@ -612,7 +605,7 @@ class StaxXmlParser(
         }
       case None => // do nothing
     }
-    InternalRow.fromSeq(row.toIndexedSeq)
+    new GenericInternalRow(row)
   }
 }
 
@@ -625,11 +618,16 @@ class StaxXmlParser(
 class XmlTokenizer(
   inputStream: InputStream,
   options: XmlOptions) extends Logging {
-  private var reader = new InputStreamReader(inputStream, Charset.forName(options.charset))
+  private var reader = new BufferedReader(
+    new InputStreamReader(inputStream, Charset.forName(options.charset)))
   private var currentStartTag: String = _
   private var buffer = new StringBuilder()
   private val startTag = s"<${options.rowTag}>"
   private val endTag = s"</${options.rowTag}>"
+  private val commentStart = s"<!--"
+  private val commentEnd = s"-->"
+  private val cdataStart = s"<![CDATA["
+  private val cdataEnd = s"]]>"
 
     /**
    * Finds the start of the next record.
@@ -677,9 +675,35 @@ class XmlTokenizer(
       nextString
     }
 
+  private def readUntilMatch(end: String): Boolean = {
+    var i = 0
+    while (true) {
+      val cOrEOF = reader.read()
+      if (cOrEOF == -1) {
+        // End of file.
+        return false
+      }
+      val c = cOrEOF.toChar
+      if (c == end(i)) {
+        i += 1
+        if (i >= end.length) {
+          // Found the end string.
+          return true
+        }
+      } else {
+        i = 0
+      }
+    }
+    // Unreachable.
+    false
+  }
+
   private def readUntilStartElement(): Boolean = {
     currentStartTag = startTag
     var i = 0
+    var commentIdx = 0
+    var cdataIdx = 0
+
     while (true) {
       val cOrEOF = reader.read()
       if (cOrEOF == -1) { // || (i == 0 && getFilePosition() > end)) {
@@ -687,6 +711,31 @@ class XmlTokenizer(
         return false
       }
       val c = cOrEOF.toChar
+
+      if (c == commentStart(commentIdx)) {
+        if (commentIdx >= commentStart.length - 1) {
+          //  If a comment beigns we must ignore all character until its end
+          commentIdx = 0
+          readUntilMatch(commentEnd)
+        } else {
+          commentIdx += 1
+        }
+      } else {
+        commentIdx = 0
+      }
+
+      if (c == cdataStart(cdataIdx)) {
+        if (cdataIdx >= cdataStart.length - 1) {
+          //  If a CDATA beigns we must ignore all character until its end
+          cdataIdx = 0
+          readUntilMatch(cdataEnd)
+        } else {
+          cdataIdx += 1
+        }
+      } else {
+        cdataIdx = 0
+      }
+
       if (c == startTag(i)) {
         if (i >= startTag.length - 1) {
           // Found start tag.
@@ -714,6 +763,10 @@ class XmlTokenizer(
     // Index into the start or end tag that has matched so far
     var si = 0
     var ei = 0
+    // Index into the start of a comment tag that matched so far
+    var commentIdx = 0
+    // Index into the start of a CDATA tag that matched so far
+    var cdataIdx = 0
     // How many other start tags enclose the one that's started already?
     var depth = 0
     // Previously read character
@@ -735,6 +788,19 @@ class XmlTokenizer(
 
       val c = cOrEOF.toChar
       buffer.append(c)
+
+      if (c == commentStart(commentIdx)) {
+        if (commentIdx >= commentStart.length - 1) {
+          //  If a comment beigns we must ignore everything until its end
+          buffer.setLength(buffer.length - commentStart.length)
+          commentIdx = 0
+          readUntilMatch(commentEnd)
+        } else {
+          commentIdx += 1
+        }
+      } else {
+        commentIdx = 0
+      }
 
       if (c == '>' && prevC != '/') {
         canSelfClose = false

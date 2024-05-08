@@ -16,10 +16,20 @@
  */
 package org.apache.spark.deploy.k8s
 
+import java.lang.Long.parseLong
+
 import org.apache.spark.SparkConf
+import org.apache.spark.annotation.{DeveloperApi, Since, Unstable}
 import org.apache.spark.deploy.k8s.Config._
 
-private[spark] object KubernetesVolumeUtils {
+/**
+ * :: DeveloperApi ::
+ *
+ * A utility class used for K8s operations internally and Spark K8s operator.
+ */
+@Unstable
+@DeveloperApi
+object KubernetesVolumeUtils {
   /**
    * Extract Spark volume configuration properties with a given name prefix.
    *
@@ -27,6 +37,7 @@ private[spark] object KubernetesVolumeUtils {
    * @param prefix the given property name prefix
    * @return a Map storing with volume name as key and spec as value
    */
+  @Since("3.0.0")
   def parseVolumesWithPrefix(sparkConf: SparkConf, prefix: String): Seq[KubernetesVolumeSpec] = {
     val properties = sparkConf.getAllWithPrefix(prefix).toMap
 
@@ -76,6 +87,7 @@ private[spark] object KubernetesVolumeUtils {
           s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_CLAIM_STORAGE_CLASS_KEY"
         val sizeLimitKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_SIZE_LIMIT_KEY"
         verifyOptionKey(options, claimNameKey, KUBERNETES_VOLUMES_PVC_TYPE)
+        verifySize(options.get(sizeLimitKey))
         KubernetesPVCVolumeConf(
           options(claimNameKey),
           options.get(storageClassKey),
@@ -84,6 +96,7 @@ private[spark] object KubernetesVolumeUtils {
       case KUBERNETES_VOLUMES_EMPTYDIR_TYPE =>
         val mediumKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_MEDIUM_KEY"
         val sizeLimitKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_SIZE_LIMIT_KEY"
+        verifySize(options.get(sizeLimitKey))
         KubernetesEmptyDirVolumeConf(options.get(mediumKey), options.get(sizeLimitKey))
 
       case KUBERNETES_VOLUMES_NFS_TYPE =>
@@ -103,6 +116,15 @@ private[spark] object KubernetesVolumeUtils {
   private def verifyOptionKey(options: Map[String, String], key: String, msg: String): Unit = {
     if (!options.isDefinedAt(key)) {
       throw new NoSuchElementException(key + s" is required for $msg")
+    }
+  }
+
+  private def verifySize(size: Option[String]): Unit = {
+    size.foreach { v =>
+      if (v.forall(_.isDigit) && parseLong(v) < 1024) {
+        throw new IllegalArgumentException(
+          s"Volume size `$v` is smaller than 1KiB. Missing units?")
+      }
     }
   }
 }

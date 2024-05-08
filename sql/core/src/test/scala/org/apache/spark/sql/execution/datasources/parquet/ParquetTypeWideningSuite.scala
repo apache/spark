@@ -75,9 +75,9 @@ class ParquetTypeWideningSuite
                 readParquetFiles(dir, toType).collect()
               }
               assert(
-                exception.getCause.getCause
+                exception.getCause
                   .isInstanceOf[SchemaColumnConvertNotSupportedException] ||
-                exception.getCause.getCause
+                exception.getCause
                   .isInstanceOf[org.apache.parquet.io.ParquetDecodingException] ||
                 exception.getCause.getMessage.contains(
                   "Unable to create Parquet converter for data type"))

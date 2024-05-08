@@ -116,10 +116,20 @@ object SparkException {
   def require(
       requirement: Boolean,
       errorClass: String,
-      messageParameters: Map[String, String]): Unit = {
+      messageParameters: => Map[String, String]): Unit = {
     if (!requirement) {
       throw new SparkIllegalArgumentException(errorClass, messageParameters)
     }
+  }
+
+  /**
+   * Utility method to construct message params from Java Map.
+   * @param messageParameters The Java Map.
+   * @return Scala collection that can be passed to SparkException constructor.
+   */
+  def constructMessageParams(
+      messageParameters: java.util.Map[String, String]): Map[String, String] = {
+    messageParameters.asScala.toMap
   }
 }
 
@@ -252,7 +262,8 @@ private[spark] object SparkUnsupportedOperationException {
     } else {
       Map("className" -> "?", "methodName" -> "?")
     }
-    new SparkUnsupportedOperationException("UNSUPPORTED_CALL", messageParameters)
+    new SparkUnsupportedOperationException(
+      "UNSUPPORTED_CALL.WITHOUT_SUGGESTION", messageParameters)
   }
 }
 
@@ -387,9 +398,9 @@ private[spark] class SparkIllegalArgumentException private(
   def this(
     errorClass: String,
     messageParameters: Map[String, String],
-    context: Array[QueryContext] = Array.empty,
-    summary: String = "",
-    cause: Throwable = null) = {
+    context: Array[QueryContext],
+    summary: String,
+    cause: Throwable) = {
     this(
       SparkThrowableHelper.getMessage(errorClass, messageParameters, summary),
       Option(cause),
@@ -398,6 +409,25 @@ private[spark] class SparkIllegalArgumentException private(
       context
     )
   }
+
+  def this(
+    errorClass: String,
+    messageParameters: Map[String, String],
+    cause: Throwable) =
+    this(errorClass, messageParameters, Array.empty[QueryContext], "", cause)
+
+  def this(
+    errorClass: String,
+    messageParameters: Map[String, String]) =
+    this(errorClass, messageParameters, cause = null)
+
+  def this(
+    errorClass: String,
+    messageParameters: java.util.Map[String, String]) =
+    this(errorClass, messageParameters.asScala.toMap)
+
+  def this(errorClass: String) =
+    this(errorClass, messageParameters = Map.empty[String, String], cause = null)
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
@@ -419,6 +449,35 @@ private[spark] class SparkRuntimeException private(
     cause: Throwable = null,
     context: Array[QueryContext] = Array.empty,
     summary: String = "") = {
+    this(
+      SparkThrowableHelper.getMessage(errorClass, messageParameters, summary),
+      Option(cause),
+      Option(errorClass),
+      messageParameters,
+      context
+    )
+  }
+
+  override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
+
+  override def getErrorClass: String = errorClass.orNull
+  override def getQueryContext: Array[QueryContext] = context
+}
+
+private[spark] class SparkPythonException private(
+    message: String,
+    cause: Option[Throwable],
+    errorClass: Option[String],
+    messageParameters: Map[String, String],
+    context: Array[QueryContext])
+  extends RuntimeException(message, cause.orNull) with SparkThrowable {
+
+  def this(
+      errorClass: String,
+      messageParameters: Map[String, String],
+      cause: Throwable = null,
+      context: Array[QueryContext] = Array.empty,
+      summary: String = "") = {
     this(
       SparkThrowableHelper.getMessage(errorClass, messageParameters, summary),
       Option(cause),

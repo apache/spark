@@ -26,14 +26,14 @@ import scala.collection.mutable
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{LocalFileSystem, Path}
 
-import org.apache.spark.{SparkException, SparkFileNotFoundException, SparkRuntimeException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.TestingUDT.{IntervalUDT, NullData, NullUDT}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GreaterThan, Literal}
 import org.apache.spark.sql.catalyst.expressions.IntegralLiteralTestUtils.{negativeInt, positiveInt}
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.execution.{FileSourceScanLike, SimpleMode}
+import org.apache.spark.sql.execution.{ExplainMode, FileSourceScanLike, SimpleMode}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.FilePartition
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, FileScan}
@@ -246,16 +246,12 @@ class FileBasedDataSourceSuite extends QueryTest
           if (ignore.toBoolean) {
             testIgnoreMissingFiles(options)
           } else {
-            val errorClass = sources match {
-              case "" => "_LEGACY_ERROR_TEMP_2062"
-              case _ => "_LEGACY_ERROR_TEMP_2055"
-            }
             checkErrorMatchPVals(
               exception = intercept[SparkException] {
                 testIgnoreMissingFiles(options)
-              }.getCause.asInstanceOf[SparkFileNotFoundException],
-              errorClass = errorClass,
-              parameters = Map("message" -> ".*does not exist")
+              },
+              errorClass = "FAILED_READ_FILE.FILE_NOT_EXIST",
+              parameters = Map("path" -> ".*")
             )
           }
         }
@@ -1242,6 +1238,59 @@ class FileBasedDataSourceSuite extends QueryTest
             case b: BatchScanExec => b.scan.asInstanceOf[FileScan].dataFilters
           }.flatten
           assert(filters.contains(GreaterThan(scan.logicalPlan.output.head, Literal(5L))))
+        }
+      }
+    }
+  }
+
+  test("disable filter pushdown for collated strings") {
+    Seq("parquet").foreach { format =>
+      Seq(format, "").foreach { conf =>
+        withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> conf) {
+          withTempPath { path =>
+            val collation = "'UTF8_BINARY_LCASE'"
+            val df = sql(
+              s"""SELECT
+                 |  COLLATE(c, $collation) as c1,
+                 |  struct(COLLATE(c, $collation)) as str,
+                 |  named_struct('f1', named_struct('f2',
+                 |    COLLATE(c, $collation), 'f3', 1)) as namedstr,
+                 |  array(COLLATE(c, $collation)) as arr,
+                 |  map(COLLATE(c, $collation), 1) as map1,
+                 |  map(1, COLLATE(c, $collation)) as map2
+                 |FROM VALUES ('aaa'), ('AAA'), ('bbb')
+                 |as data(c)
+                 |""".stripMargin)
+
+            df.write.format(format).save(path.getAbsolutePath)
+
+            // filter and expected result
+            val filters = Seq(
+              ("==", Seq(Row("aaa"), Row("AAA"))),
+              ("!=", Seq(Row("bbb"))),
+              ("<", Seq()),
+              ("<=", Seq(Row("aaa"), Row("AAA"))),
+              (">", Seq(Row("bbb"))),
+              (">=", Seq(Row("aaa"), Row("AAA"), Row("bbb"))))
+
+            filters.foreach { filter =>
+              val readback = spark.read
+                .format(format)
+                .load(path.getAbsolutePath)
+                .where(s"c1 ${filter._1} collate('aaa', $collation)")
+                .where(s"str ${filter._1} struct(collate('aaa', $collation))")
+                .where(s"namedstr.f1.f2 ${filter._1} collate('aaa', $collation)")
+                .where(s"arr ${filter._1} array(collate('aaa', $collation))")
+                .where(s"map_keys(map1) ${filter._1} array(collate('aaa', $collation))")
+                .where(s"map_values(map2) ${filter._1} array(collate('aaa', $collation))")
+                .select("c1")
+
+              val explain = readback.queryExecution.explainString(
+                ExplainMode.fromString("extended"))
+              assert(explain.contains("PushedFilters: []"))
+              checkAnswer(readback, filter._2)
+            }
+          }
         }
       }
     }

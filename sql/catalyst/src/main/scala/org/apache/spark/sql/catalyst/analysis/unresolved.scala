@@ -68,25 +68,37 @@ case class PlanWithUnresolvedIdentifier(
 /**
  * An expression placeholder that holds the identifier clause string expression. It will be
  * replaced by the actual expression with the evaluated identifier string.
+ *
+ * Note, the `exprBuilder` is a lambda and may hide other expressions from the expression tree. To
+ * avoid it, this placeholder has a field to hold other expressions, so that they can be properly
+ * transformed by catalyst rules.
  */
 case class ExpressionWithUnresolvedIdentifier(
     identifierExpr: Expression,
-    exprBuilder: Seq[String] => Expression)
-  extends UnaryExpression with Unevaluable {
+    otherExprs: Seq[Expression],
+    exprBuilder: (Seq[String], Seq[Expression]) => Expression)
+  extends Expression with Unevaluable {
+
+  def this(identifierExpr: Expression, exprBuilder: Seq[String] => Expression) = {
+    this(identifierExpr, Nil, (ident, _) => exprBuilder(ident))
+  }
+
   override lazy val resolved = false
-  override def child: Expression = identifierExpr
+  override def children: Seq[Expression] = identifierExpr +: otherExprs
   override def dataType: DataType = throw new UnresolvedException("dataType")
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_IDENTIFIER)
-  override protected def withNewChildInternal(newChild: Expression): Expression = {
-    copy(identifierExpr = newChild)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression = {
+    copy(identifierExpr = newChildren.head, otherExprs = newChildren.drop(1))
   }
 }
 
 /**
  * Holds the name of a relation that has yet to be looked up in a catalog.
  *
- * @param multipartIdentifier table name
+ * @param multipartIdentifier table name, the location of files or Kafka topic name, etc.
  * @param options options to scan this relation.
  */
 case class UnresolvedRelation(

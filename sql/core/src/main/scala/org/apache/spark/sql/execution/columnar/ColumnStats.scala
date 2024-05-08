@@ -270,8 +270,8 @@ private[columnar] final class StringColumnStats extends ColumnStats {
   }
 
   def gatherValueStats(value: UTF8String, size: Int): Unit = {
-    if (upper == null || value.compareTo(upper) > 0) upper = value.clone()
-    if (lower == null || value.compareTo(lower) < 0) lower = value.clone()
+    if (upper == null || value.binaryCompare(upper) > 0) upper = value.clone()
+    if (lower == null || value.binaryCompare(lower) < 0) lower = value.clone()
     sizeInBytes += size
     count += 1
   }

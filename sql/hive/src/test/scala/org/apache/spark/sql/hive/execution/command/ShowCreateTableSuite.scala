@@ -43,6 +43,7 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
            |  c1 INT COMMENT 'bla',
            |  c2 STRING
            |)
+           |USING HIVE
            |TBLPROPERTIES (
            |  'prop1' = 'value1',
            |  'prop2' = 'value2'
@@ -67,6 +68,7 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
              |  c1 INT COMMENT 'bla',
              |  c2 STRING
              |)
+             |USING HIVE
              |LOCATION '${dir.toURI}'
              |TBLPROPERTIES (
              |  'prop1' = 'value1',
@@ -94,6 +96,7 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
            |  c1 INT COMMENT 'bla',
            |  c2 STRING
            |)
+           |USING HIVE
            |COMMENT 'bla'
            |PARTITIONED BY (
            |  p1 BIGINT COMMENT 'bla',
@@ -193,6 +196,7 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
     withNamespaceAndTable(ns, table) { t =>
       sql(
         s"""CREATE TABLE $t (a INT, b STRING)
+           |STORED AS TEXTFILE
            |CLUSTERED BY (a)
            |SORTED BY (b)
            |INTO 2 BUCKETS

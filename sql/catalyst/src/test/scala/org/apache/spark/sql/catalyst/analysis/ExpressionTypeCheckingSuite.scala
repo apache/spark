@@ -96,7 +96,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"~stringField\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> ordinalNumber(0),
         "inputSql" -> "\"stringField\"",
         "inputType" -> "\"STRING\"",
         "requiredType" -> "\"INTEGRAL\""))
@@ -340,7 +340,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "1",
+          "paramIndex" -> ordinalNumber(0),
           "requiredType" -> toSQLType(BooleanType),
           "inputSql" -> "\"1\"",
           "inputType" -> "\"INT\""
@@ -385,7 +385,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "2",
+          "paramIndex" -> ordinalNumber(1),
           "requiredType" -> "\"BOOLEAN\"",
           "inputSql" -> "\"2\"",
           "inputType" -> "\"INT\""
@@ -429,7 +429,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"sum(booleanField)\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> ordinalNumber(0),
         "inputSql" -> "\"booleanField\"",
         "inputType" -> "\"BOOLEAN\"",
         "requiredType" -> "\"NUMERIC\" or \"ANSI INTERVAL\""))
@@ -440,7 +440,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"avg(booleanField)\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> ordinalNumber(0),
         "inputSql" -> "\"booleanField\"",
         "inputType" -> "\"BOOLEAN\"",
         "requiredType" -> "\"NUMERIC\" or \"ANSI INTERVAL\""))
@@ -507,7 +507,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"explode(intField)\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> ordinalNumber(0),
         "inputSql" -> "\"intField\"",
         "inputType" -> "\"INT\"",
         "requiredType" -> "(\"ARRAY\" or \"MAP\")"))
@@ -519,7 +519,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"posexplode(intField)\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> ordinalNumber(0),
         "inputSql" -> "\"intField\"",
         "inputType" -> "\"INT\"",
         "requiredType" -> "(\"ARRAY\" or \"MAP\")")
@@ -613,7 +613,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"round(intField, booleanField)\"",
-        "paramIndex" -> "2",
+        "paramIndex" -> ordinalNumber(1),
         "inputSql" -> "\"booleanField\"",
         "inputType" -> "\"BOOLEAN\"",
         "requiredType" -> "\"INT\""))
@@ -624,7 +624,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"round(intField, mapField)\"",
-        "paramIndex" -> "2",
+        "paramIndex" -> ordinalNumber(1),
         "inputSql" -> "\"mapField\"",
         "inputType" -> "\"MAP<STRING, BIGINT>\"",
         "requiredType" -> "\"INT\""))
@@ -635,7 +635,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"round(booleanField, intField)\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> ordinalNumber(0),
         "inputSql" -> "\"booleanField\"",
         "inputType" -> "\"BOOLEAN\"",
         "requiredType" -> "\"NUMERIC\""))
@@ -659,7 +659,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"bround(intField, booleanField)\"",
-        "paramIndex" -> "2",
+        "paramIndex" -> ordinalNumber(1),
         "inputSql" -> "\"booleanField\"",
         "inputType" -> "\"BOOLEAN\"",
         "requiredType" -> "\"INT\""))
@@ -670,7 +670,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"bround(intField, mapField)\"",
-        "paramIndex" -> "2",
+        "paramIndex" -> ordinalNumber(1),
         "inputSql" -> "\"mapField\"",
         "inputType" -> "\"MAP<STRING, BIGINT>\"",
         "requiredType" -> "\"INT\""))
@@ -681,7 +681,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"bround(booleanField, intField)\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> ordinalNumber(0),
         "inputSql" -> "\"booleanField\"",
         "inputType" -> "\"BOOLEAN\"",
         "requiredType" -> "\"NUMERIC\""))
@@ -747,6 +747,17 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
     )
   }
 
+  test("hash expressions are prohibited on VariantType elements") {
+    val argument = Literal.create(null, VariantType)
+    val murmur3Hash = new Murmur3Hash(Seq(argument))
+    assert(murmur3Hash.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "HASH_VARIANT_TYPE",
+        messageParameters = Map("functionName" -> toSQLId(murmur3Hash.prettyName))
+      )
+    )
+  }
+
   test("check types for Lag") {
     val lag = Lag(Literal(1), NonFoldableLiteral(10), Literal(null), true)
     assert(lag.checkInputDataTypes() ==
@@ -799,5 +810,10 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       parameters = Map("message" -> ("Cannot use an UnspecifiedFrame. " +
         "This should have been converted during analysis."))
     )
+  }
+
+  test("check that current time is foldable") {
+    val rnd = Rand(Month(CurrentDate()))
+    assert(rnd.checkInputDataTypes().isSuccess)
   }
 }
