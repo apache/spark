@@ -81,7 +81,7 @@ jobs:
           # Client enviornment
           conda create -c conda-forge -q -n client-env python=3.10
           conda activate client-env
-          pip install 'numpy==1.25.1' 'pyarrow==4.0.0' 'pandas==1.5.3' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.3.1' coverage 'matplotlib==3.7.2' openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*'
+          pip install 'numpy==1.25.1' 'pyarrow==12.0.1' 'pandas==1.5.3' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.3.1' coverage 'matplotlib==3.7.2' openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*'
 
           # Add Python deps for Spark Connect.
           pip install 'grpcio>=1.48,<1.57' 'grpcio-status>=1.48,<1.57' 'protobuf==3.20.3' 'googleapis-common-protos==1.56.4'
@@ -120,8 +120,6 @@ jobs:
 
           # Several tests related to catalog requires to run them sequencially, e.g., writing a table in a listener.
           # Run branch-3.5 tests
-          ./python/run-tests --parallelism=1 --python-executables=python3 --modules pyspark-connect
-          # None of tests are dependent on each other in Pandas API on Spark so run them in parallel
           ./python/run-tests --parallelism=4 --python-executables=python3 --modules pyspark-pandas-connect,pyspark-pandas-slow-connect
       - name: Upload test results to report
         if: always()
