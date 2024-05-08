@@ -170,7 +170,7 @@ public class V2ExpressionSQLBuilder {
   }
 
   protected String visitLiteral(Literal<?> literal) {
-    return StringUtils.replace(literal.toString(), "'", "\\'");
+    return literal.toString();
   }
 
   protected String visitNamedReference(NamedReference namedRef) {
