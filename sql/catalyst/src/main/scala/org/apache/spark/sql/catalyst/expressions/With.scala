@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE_EXPRESSION, COMMON_EXPR_REF, TreePattern, WITH_EXPRESSION}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMON_EXPR_REF, TreePattern, WITH_EXPRESSION}
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -96,28 +96,24 @@ object With {
     With(replaced(commonExprRefs), commonExprDefs)
   }
 
-  private def containsUnsupportedAggExpr(
+  private def containsUnsupportedRef(
     expr: Expression,
-    commonExprDefIds: Set[CommonExpressionId]
+    commonExprIds: Set[CommonExpressionId]
   ): Boolean = {
     expr match {
-      case _ if !expr.containsPattern(AGGREGATE_EXPRESSION) => false
-      case agg: AggregateExpression =>
-        if (agg.containsPattern(COMMON_EXPR_REF)) {
-          agg.exists {
-            case w: With => containsUnsupportedAggExpr(w)
-            case r: CommonExpressionRef => commonExprDefIds.contains(r.id)
-            case _ => false
-          }
-        } else {
-          false
-        }
-      case _ => expr.children.exists(containsUnsupportedAggExpr(_, commonExprDefIds))
+      case _ if !expr.containsPattern(COMMON_EXPR_REF) => false
+      case w: With => containsUnsupportedAggExpr(w)
+      case r: CommonExpressionRef => commonExprIds.contains(r.id)
+      case _ => expr.children.exists(containsUnsupportedRef(_, commonExprIds))
     }
   }
 
   private[sql] def containsUnsupportedAggExpr(withExpr: With): Boolean = {
-    containsUnsupportedAggExpr(withExpr.child, withExpr.defs.map(_.id).toSet)
+    lazy val commonExprIds = withExpr.defs.map(_.id).toSet
+    withExpr.child.exists {
+      case agg: AggregateExpression => containsUnsupportedRef(agg, commonExprIds)
+      case _ => false
+    }
   }
 }
 

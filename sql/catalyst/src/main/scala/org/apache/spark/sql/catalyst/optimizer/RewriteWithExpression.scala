@@ -44,8 +44,8 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
       // result by moving the final result computation into a projection above it. This prevents
       // this rule from producing an invalid Aggregate operator.
       case p @ PhysicalAggregation(
-        groupingExpressions, aggregateExpressions, resultExpressions, child)
-        if p.expressions.exists(_.containsPattern(WITH_EXPRESSION)) =>
+          groupingExpressions, aggregateExpressions, resultExpressions, child)
+          if p.expressions.exists(_.containsPattern(WITH_EXPRESSION)) =>
         // PhysicalAggregation returns aggregateExpressions as attribute references, which we change
         // to aliases so that they can be referred to by resultExpressions.
         val aggExprs = aggregateExpressions.map(
@@ -62,12 +62,8 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
         applyInternal(proj)
       case p if p.expressions.exists(_.containsPattern(WITH_EXPRESSION)) =>
         applyInternal(p)
-      case p if containsWithExpression(p) => applyInternal(p)
     }
   }
-
-  private def containsWithExpression(p: LogicalPlan): Boolean =
-    p.expressions.exists(_.containsPattern(WITH_EXPRESSION))
 
   private def applyInternal(p: LogicalPlan): LogicalPlan = {
     val inputPlans = p.children.toArray
