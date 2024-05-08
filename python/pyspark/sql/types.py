@@ -258,11 +258,7 @@ class StringType(AtomicType):
         self.collation = collation
 
     def collationIdToName(self) -> str:
-        return (
-            " collate %s" % self.collation
-            if self.collation != "UTF8_BINARY"
-            else ""
-        )
+        return " collate %s" % self.collation if self.collation != "UTF8_BINARY" else ""
 
     def simpleString(self) -> str:
         return "string" + self.collationIdToName()

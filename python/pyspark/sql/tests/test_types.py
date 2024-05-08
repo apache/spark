@@ -874,12 +874,8 @@ class TypesTestsMixin:
             StringType("UTF8_BINARY_LCASE"),
             _parse_datatype_string("string COLLATE UTF8_BINARY_LCASE"),
         )
-        self.assertEqual(
-            StringType("UNICODE"), _parse_datatype_string("string COLLATE UNICODE")
-        )
-        self.assertEqual(
-            StringType("UNICODE"), _parse_datatype_string("string COLLATE `UNICODE`")
-        )
+        self.assertEqual(StringType("UNICODE"), _parse_datatype_string("string COLLATE UNICODE"))
+        self.assertEqual(StringType("UNICODE"), _parse_datatype_string("string COLLATE `UNICODE`"))
         self.assertEqual(
             StringType("UNICODE_CI"), _parse_datatype_string("string COLLATE UNICODE_CI")
         )

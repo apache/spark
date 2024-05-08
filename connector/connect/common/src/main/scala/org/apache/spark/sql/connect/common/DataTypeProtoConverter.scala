@@ -181,7 +181,8 @@ object DataTypeProtoConverter {
           .setString(
             proto.DataType.String
               .newBuilder()
-              .setCollation(CollationFactory.fetchCollation(s.collationId).collationName).build())
+              .setCollation(CollationFactory.fetchCollation(s.collationId).collationName)
+              .build())
           .build()
 
       case CharType(length) =>
