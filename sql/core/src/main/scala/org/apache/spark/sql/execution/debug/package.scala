@@ -27,8 +27,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeFormatter, CodegenContext, CodeGenerator, ExprCode}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.util.StringConcat
@@ -198,6 +199,11 @@ package object debug {
     def debugCodegen(): Unit = {
       debugPrint(codegenString(query.queryExecution.executedPlan))
     }
+
+    def inlineColumnStats(columns: Expression *): Dataset[_] = {
+      val plan = DebugSampleColumn(query.logicalPlan, columns)
+      Dataset.ofRows(query.sparkSession, plan)
+    }
   }
 
   implicit class DebugStreamQuery(query: StreamingQuery) extends Logging {
@@ -205,7 +211,6 @@ package object debug {
       debugPrint(codegenString(query))
     }
   }
-
 
   class SetAccumulator[T] extends AccumulatorV2[T, java.util.Set[T]] {
     private val _set = Collections.synchronizedSet(new java.util.HashSet[T]())
@@ -294,5 +299,29 @@ package object debug {
 
     override protected def withNewChildInternal(newChild: SparkPlan): DebugExec =
       copy(child = newChild)
+  }
+
+  case class DebugSampleColumn(
+    child: LogicalPlan,
+    sampleColumns: Seq[Expression]) extends UnaryNode {
+
+    override protected def withNewChildInternal(newChild: LogicalPlan): DebugSampleColumn = copy(child = newChild)
+
+    override def output: Seq[Attribute] = child.output
+  }
+
+  case class DebugSampleColumnExec(
+    child: SparkPlan,
+    sampleColumns: Seq[Expression]) extends UnaryExecNode {
+    override protected def withNewChildInternal(newChild: SparkPlan): DebugSampleColumnExec =
+      copy(child = newChild)
+
+    override protected def doExecute(): RDD[InternalRow] = {
+      child.execute().mapPartitions { iter =>
+        iter
+      }
+    }
+
+    override def output: Seq[Attribute] = child.output
   }
 }
