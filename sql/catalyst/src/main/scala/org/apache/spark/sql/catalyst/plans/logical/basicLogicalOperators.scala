@@ -910,33 +910,6 @@ case class WithCTE(plan: LogicalPlan, cteDefs: Seq[CTERelationDef]) extends Logi
   def withNewPlan(newPlan: LogicalPlan): WithCTE = {
     withNewChildren(children.init :+ newPlan).asInstanceOf[WithCTE]
   }
-
-  override def doCanonicalize(): LogicalPlan = {
-    val canonicalized = super.doCanonicalize().asInstanceOf[WithCTE]
-    val defIndex = canonicalized.cteDefs.map(_.id).zipWithIndex.toMap
-
-    def canonicalizeCTE(plan: LogicalPlan): LogicalPlan = {
-      plan.resolveOperatorsUpWithPruning(
-        _.containsAnyPattern(CTE, PLAN_EXPRESSION)) {
-
-        // For nested WithCTE, if defIndex didn't contain the cteId,
-        // means it's not current WithCTE's ref.
-        case ref: CTERelationRef if defIndex.contains(ref.cteId) =>
-          ref.copy(cteId = defIndex(ref.cteId).toLong)
-
-        case other =>
-          other.transformExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
-            case e: SubqueryExpression => e.withNewPlan(canonicalizeCTE(e.plan))
-          }
-      }
-    }
-
-    canonicalized.copy(
-      plan = canonicalizeCTE(canonicalized.plan),
-      cteDefs = canonicalized.cteDefs.map { cteDef =>
-        cteDef.copy(id = defIndex(cteDef.id).toLong)
-      })
-  }
 }
 
 /**
