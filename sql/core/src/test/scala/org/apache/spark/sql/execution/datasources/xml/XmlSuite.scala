@@ -2995,7 +2995,7 @@ class XmlSuite
       .add("name", StringType)
       .add("metadata", StringType)
     val df = readData(xmlString, Some(schema), baseOptions)
-    checkAnswer(df.select("John"), Seq(Row("John")))
+    checkAnswer(df.select("name"), Seq(Row("John")))
   }
 
   test("select with duplicate field name in string xml object") {
