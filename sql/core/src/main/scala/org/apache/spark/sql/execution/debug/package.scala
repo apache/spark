@@ -305,7 +305,8 @@ package object debug {
     child: LogicalPlan,
     sampleColumns: Seq[Expression]) extends UnaryNode {
 
-    override protected def withNewChildInternal(newChild: LogicalPlan): DebugSampleColumn = copy(child = newChild)
+    override protected def withNewChildInternal(newChild: LogicalPlan): DebugSampleColumn =
+      copy(child = newChild)
 
     override def output: Seq[Attribute] = child.output
   }
@@ -323,5 +324,15 @@ package object debug {
     }
 
     override def output: Seq[Attribute] = child.output
+  }
+
+  object DebugPlanner extends SparkStrategy {
+    override def apply(plan: LogicalPlan): Seq[SparkPlan] = {
+      plan match {
+        case DebugSampleColumn(child, sampleColumns) =>
+          DebugSampleColumnExec(planLater(child), sampleColumns) :: Nil
+        case _ => Nil
+      }
+    }
   }
 }
