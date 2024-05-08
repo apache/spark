@@ -326,8 +326,11 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
         lastBatch = q.lastProgress.batchId.toInt
       }
       assert(lastBatch > 20)
+      val rowCount = spark.read.format("json").load(outputDir.getAbsolutePath).count()
+      // There may be one uncommitted batch that is not recorded in query progress.
+      assert(rowCount == 2 * lastBatch + 2 || rowCount == 2 * lastBatch + 4)
       checkAnswer(spark.read.format("json").load(outputDir.getAbsolutePath),
-        (0 to  2 * lastBatch + 1).map(Row(_)))
+        (0 until rowCount.toInt).map(Row(_)))
     }
   }
 
