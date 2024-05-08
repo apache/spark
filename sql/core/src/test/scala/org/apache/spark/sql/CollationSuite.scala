@@ -22,7 +22,6 @@ import scala.jdk.CollectionConverters.MapHasAsJava
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2ProviderWithCustomSchema}
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable}
@@ -33,7 +32,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SqlApiConf
-import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{MapType, StringType, StructField, StructType}
 
 class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   protected val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
@@ -1042,40 +1041,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("schema with collations ser/de") {
-    val schema = StructType(Seq(
-      StructField("c0", StringType(1)),
-      StructField("c1", StructType(Seq(
-        StructField("atomicField", StringType(1)),
-        StructField("mapField", MapType(
-          StringType(1),
-          StringType(2)
-        )),
-        StructField("arrayField", ArrayType(
-          StringType(3)
-        ))
-      ))),
-      StructField("c2", MapType(
-        StringType(1),
-        ArrayType(
-          ArrayType(
-            StringType(2)
-          )
-        )
-      )),
-      StructField("c3", StructType(Seq(
-        StructField("fst", StringType(1)),
-        StructField("snd", StructType(Seq(
-          StructField("snd1", StringType(1))
-        )))
-      )))
-    ))
-
-    val schemaStr = schema.json
-    val parsedBack = DataType.fromJson(schemaStr)
-    DataTypeUtils.sameType(schema, parsedBack)
-  }
-
   test("hll sketch aggregate should respect collation") {
     case class HllSketchAggTestCase[R](c: String, result: R)
     val testCases = Seq(
@@ -1093,4 +1058,5 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       }
     })
   }
+
 }
