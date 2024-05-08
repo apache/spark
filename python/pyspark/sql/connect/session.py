@@ -280,9 +280,9 @@ class SparkSession:
         active :class:`SparkSession` when they are not set yet.
         """
         with cls._lock:
-            if cls.getDefaultSession() is None:
+            if cls._default_session is None:
                 cls._default_session = session
-        if cls.getActiveSession() is None:
+        if getattr(cls._active_session, "session", None) is None:
             cls._active_session.session = session
 
     @classmethod
