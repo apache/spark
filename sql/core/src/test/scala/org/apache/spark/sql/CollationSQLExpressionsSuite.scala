@@ -19,9 +19,10 @@ package org.apache.spark.sql
 
 import scala.collection.immutable.Seq
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{MapType, StringType}
+import org.apache.spark.sql.types._
 
 // scalastyle:off nonascii
 class CollationSQLExpressionsSuite
@@ -327,6 +328,135 @@ class CollationSQLExpressionsSuite
       // Result & data type
       checkAnswer(sql(query), Row(t.result))
       assert(sql(query).schema.fields.head.dataType.sameType(StringType("UTF8_BINARY")))
+    })
+  }
+
+  test("Support StringSpace expression with collation") {
+    case class StringSpaceTestCase(
+      input: Int,
+      collationName: String,
+      result: String
+    )
+
+    val testCases = Seq(
+      StringSpaceTestCase(1, "UTF8_BINARY", " "),
+      StringSpaceTestCase(2, "UTF8_BINARY_LCASE", "  "),
+      StringSpaceTestCase(3, "UNICODE", "   "),
+      StringSpaceTestCase(4, "UNICODE_CI", "    ")
+    )
+
+    // Supported collations
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |select space(${t.input})
+           |""".stripMargin
+      // Result & data type
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        checkAnswer(testQuery, Row(t.result))
+        val dataType = StringType(t.collationName)
+        assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      }
+    })
+  }
+
+  test("Support ToNumber & TryToNumber expressions with collation") {
+    case class ToNumberTestCase(
+      input: String,
+      collationName: String,
+      format: String,
+      result: Any,
+      resultType: DataType
+    )
+
+    val testCases = Seq(
+      ToNumberTestCase("123", "UTF8_BINARY", "999", 123, DecimalType(3, 0)),
+      ToNumberTestCase("1", "UTF8_BINARY_LCASE", "0.00", 1.00, DecimalType(3, 2)),
+      ToNumberTestCase("99,999", "UNICODE", "99,999", 99999, DecimalType(5, 0)),
+      ToNumberTestCase("$14.99", "UNICODE_CI", "$99.99", 14.99, DecimalType(4, 2))
+    )
+
+    // Supported collations (ToNumber)
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |select to_number('${t.input}', '${t.format}')
+           |""".stripMargin
+      // Result & data type
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        checkAnswer(testQuery, Row(t.result))
+        assert(testQuery.schema.fields.head.dataType.sameType(t.resultType))
+      }
+    })
+
+    // Supported collations (TryToNumber)
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |select try_to_number('${t.input}', '${t.format}')
+           |""".stripMargin
+      // Result & data type
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        checkAnswer(testQuery, Row(t.result))
+        assert(testQuery.schema.fields.head.dataType.sameType(t.resultType))
+      }
+    })
+  }
+
+  test("Handle invalid number for ToNumber variant expression with collation") {
+    // to_number should throw an exception if the conversion fails
+    val number = "xx"
+    val query = s"SELECT to_number('$number', '999');"
+    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
+      val e = intercept[SparkIllegalArgumentException] {
+        val testQuery = sql(query)
+        testQuery.collect()
+      }
+      assert(e.getErrorClass === "INVALID_FORMAT.MISMATCH_INPUT")
+    }
+  }
+
+  test("Handle invalid number for TryToNumber variant expression with collation") {
+    // try_to_number shouldn't throw an exception if the conversion fails
+    val number = "xx"
+    val query = s"SELECT try_to_number('$number', '999');"
+    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
+      val testQuery = sql(query)
+      checkAnswer(testQuery, Row(null))
+    }
+  }
+
+  test("Support ToChar expression with collation") {
+    case class ToCharTestCase(
+      input: Int,
+      collationName: String,
+      format: String,
+      result: String
+    )
+
+    val testCases = Seq(
+      ToCharTestCase(12, "UTF8_BINARY", "999", " 12"),
+      ToCharTestCase(34, "UTF8_BINARY_LCASE", "000D00", "034.00"),
+      ToCharTestCase(56, "UNICODE", "$99.99", "$56.00"),
+      ToCharTestCase(78, "UNICODE_CI", "99D9S", "78.0+")
+    )
+
+    // Supported collations
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |select to_char(${t.input}, '${t.format}')
+           |""".stripMargin
+      // Result & data type
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        checkAnswer(testQuery, Row(t.result))
+        val dataType = StringType(t.collationName)
+        assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      }
     })
   }
 

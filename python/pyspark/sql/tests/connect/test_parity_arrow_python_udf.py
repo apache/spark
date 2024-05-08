@@ -58,10 +58,6 @@ class ArrowPythonUDFParityTests(UDFParityTests, PythonUDFArrowTestsMixin):
         with self.assertRaises(PythonException):
             self.spark.sql("SELECT test_udf(id, a => id * 10) FROM range(2)").show()
 
-    @unittest.skip("Spark Connect does not validate return type in client.")
-    def test_err_return_type(self):
-        super.test_err_return_type()
-
 
 if __name__ == "__main__":
     import unittest
