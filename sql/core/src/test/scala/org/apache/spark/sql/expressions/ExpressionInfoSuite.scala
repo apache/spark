@@ -141,7 +141,10 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       // Examples demonstrate alternative syntax, see SPARK-45574
       "org.apache.spark.sql.catalyst.expressions.Cast",
       // Examples demonstrate alternative syntax, see SPARK-47012
-      "org.apache.spark.sql.catalyst.expressions.Collate"
+      "org.apache.spark.sql.catalyst.expressions.Collate",
+      classOf[ShiftLeft].getName,
+      classOf[ShiftRight].getName,
+      classOf[ShiftRightUnsigned].getName
     )
     spark.sessionState.functionRegistry.listFunction().foreach { funcId =>
       val info = spark.sessionState.catalog.lookupFunctionInfo(funcId)
