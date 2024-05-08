@@ -2183,14 +2183,10 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   override def visitShiftExpression(ctx: ShiftExpressionContext): Expression = withOrigin(ctx) {
     val left = expression(ctx.left)
     val right = expression(ctx.right)
-    val operator = ctx.shiftOperator().getChild(0).asInstanceOf[TerminalNode]
-    operator.getSymbol.getType match {
-      case SqlBaseParser.SHIFT_LEFT =>
-        ShiftLeft(left, right)
-      case SqlBaseParser.SHIFT_RIGHT =>
-        ShiftRight(left, right)
-      case SqlBaseParser.SHIFT_RIGHT_UNSIGNED =>
-        ShiftRightUnsigned(left, right)
+    ctx.shiftOperator.getText match {
+      case "<<" => ShiftLeft(left, right)
+      case ">>" => ShiftRight(left, right)
+      case ">>>" => ShiftRightUnsigned(left, right)
     }
   }
 

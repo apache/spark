@@ -457,9 +457,6 @@ FAT_ARROW : '=>';
 HENT_START: '/*+';
 HENT_END: '*/';
 QUESTION: '?';
-SHIFT_LEFT: '<<';
-SHIFT_RIGHT: '>>';
-SHIFT_RIGHT_UNSIGNED: '>>>';
 
 STRING_LITERAL
     : '\'' ( ~('\''|'\\') | ('\\' .) )* '\''

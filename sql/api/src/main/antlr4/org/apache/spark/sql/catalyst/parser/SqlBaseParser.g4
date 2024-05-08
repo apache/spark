@@ -389,7 +389,6 @@ describeFuncName
     | comparisonOperator
     | arithmeticOperator
     | predicateOperator
-    | shiftOperator
     | BANG
     ;
 
@@ -981,8 +980,14 @@ valueExpression
     | left=valueExpression operator=AMPERSAND right=valueExpression                          #arithmeticBinary
     | left=valueExpression operator=HAT right=valueExpression                                #arithmeticBinary
     | left=valueExpression operator=PIPE right=valueExpression                               #arithmeticBinary
-    | left=valueExpression shiftOperator right=valueExpression                               #shiftExpression
+    | left=valueExpression shiftOperator right=valueExpression                              #shiftExpression
     | left=valueExpression comparisonOperator right=valueExpression                          #comparison
+    ;
+
+shiftOperator
+    : LT LT
+    | GT GT
+    | GT GT GT
     ;
 
 datetimeUnit
@@ -1059,10 +1064,6 @@ arithmeticOperator
 
 predicateOperator
     : OR | AND | IN | NOT
-    ;
-
-shiftOperator
-    : SHIFT_LEFT | SHIFT_RIGHT | SHIFT_RIGHT_UNSIGNED
     ;
 
 booleanValue
