@@ -83,15 +83,21 @@ jobs:
             yarn=`./dev/is-changed.py -m yarn`
             kubernetes=`./dev/is-changed.py -m kubernetes`
             sparkr=`./dev/is-changed.py -m sparkr`
+            tpcds=`./dev/is-changed.py -m sql`
+            docker=`./dev/is-changed.py -m docker-integration-tests`
             buf=true
             ui=true
+            docs=true
           else
             pandas=false
             yarn=false
             kubernetes=false
             sparkr=false
+            tpcds=false
+            docker=false
             buf=false
             ui=false
+            docs=false
           fi
           build=`./dev/is-changed.py -m "core,unsafe,kvstore,avro,utils,network-common,network-shuffle,repl,launcher,examples,sketch,variant,api,catalyst,hive-thriftserver,mllib-local,mllib,graphx,streaming,sql-kafka-0-10,streaming-kafka-0-10,streaming-kinesis-asl,kubernetes,hadoop-cloud,spark-ganglia-lgpl,protobuf,yarn,connect,sql,hive"`
           precondition="
@@ -100,9 +106,10 @@ jobs:
               \"pyspark\": \"$pyspark\",
               \"pyspark-pandas\": \"$pandas\",
               \"sparkr\": \"$sparkr\",
-              \"tpcds-1g\": \"false\",
-              \"docker-integration-tests\": \"false\",
+              \"tpcds-1g\": \"$tpcds\",
+              \"docker-integration-tests\": \"$docker\",
               \"lint\" : \"true\",
+              \"docs\" : \"$docs\",
               \"yarn\" : \"$yarn\",
               \"k8s-integration-tests\" : \"$kubernetes\",
               \"buf\" : \"$buf\",
@@ -156,9 +163,8 @@ jobs:
             mllib-local, mllib, graphx
           - >-
             streaming, sql-kafka-0-10, streaming-kafka-0-10, streaming-kinesis-asl,
-            kubernetes, hadoop-cloud, spark-ganglia-lgpl, protobuf
+            kubernetes, hadoop-cloud, spark-ganglia-lgpl, protobuf, connect
           - yarn
-          - connect
         # Here, we split Hive and SQL tests into some of slow ones and the rest of them.
         included-tags: [""]
         excluded-tags: [""]
@@ -622,12 +628,12 @@ jobs:
     - name: Python CodeGen check
       run: ./dev/connect-check-protos.py
 
-  # Static analysis, and documentation build
+  # Static analysis
   lint:
     needs: [precondition, infra-image]
     # always run if lint == 'true', even infra-image is skip (such as non-master job)
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).lint == 'true'
-    name: Linters, licenses, dependencies and documentation generation
+    name: Linters, licenses, and dependencies
     runs-on: ubuntu-latest
     timeout-minutes: 180
     env:
@@ -765,7 +771,90 @@ jobs:
         Rscript -e "devtools::install_version('lintr', version='2.0.1', repos='https://cloud.r-project.org')"
     - name: Install R linter dependencies and SparkR
       run: ./R/install-dev.sh
-    # Should delete this section after SPARK 3.5 EOL.
+    - name: R linter
+      run: ./dev/lint-r
+
+  # Documentation build
+  docs:
+    needs: [precondition, infra-image]
+    # always run if lint == 'true', even infra-image is skip (such as non-master job)
+    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).docs == 'true'
+    name: Documentation generation
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      LC_ALL: C.UTF-8
+      LANG: C.UTF-8
+      NOLINT_ON_COMPILE: false
+      PYSPARK_DRIVER_PYTHON: python3.9
+      PYSPARK_PYTHON: python3.9
+      GITHUB_PREV_SHA: ${{ github.event.before }}
+    container:
+      image: ${{ needs.precondition.outputs.image_url }}
+    steps:
+    - name: Checkout Spark repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        repository: apache/spark
+        ref: ${{ inputs.branch }}
+    - name: Add GITHUB_WORKSPACE to git trust safe.directory
+      run: |
+        git config --global --add safe.directory ${GITHUB_WORKSPACE}
+    - name: Sync the current branch with the latest in Apache Spark
+      if: github.repository != 'apache/spark'
+      run: |
+        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
+        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+    # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
+    - name: Cache SBT and Maven
+      uses: actions/cache@v4
+      with:
+        path: |
+          build/apache-maven-*
+          build/*.jar
+          ~/.sbt
+        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        restore-keys: |
+          build-
+    - name: Cache Coursier local repository
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/coursier
+        key: docs-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        restore-keys: |
+          docs-coursier-
+    - name: Cache Maven local repository
+      uses: actions/cache@v4
+      with:
+        path: ~/.m2/repository
+        key: docs-maven-${{ hashFiles('**/pom.xml') }}
+        restore-keys: |
+          docs-maven-
+    - name: Free up disk space
+      run: |
+        if [ -f ./dev/free_disk_space_container ]; then
+          ./dev/free_disk_space_container
+        fi
+    - name: Install Java ${{ inputs.java }}
+      uses: actions/setup-java@v4
+      with:
+        distribution: zulu
+        java-version: ${{ inputs.java }}
+    - name: Install Python dependencies for python linter and documentation generation
+      if: inputs.branch != 'branch-3.4' && inputs.branch != 'branch-3.5'
+      run: |
+        # Should unpin 'sphinxcontrib-*' after upgrading sphinx>5
+        # See 'ipython_genutils' in SPARK-38517
+        # See 'docutils<0.18.0' in SPARK-39421
+        python3.9 -m pip install 'sphinx==4.5.0' mkdocs 'pydata_sphinx_theme>=0.13' sphinx-copybutton nbsphinx numpydoc jinja2 markupsafe 'pyzmq<24.0.0' \
+          ipython ipython_genutils sphinx_plotly_directive 'numpy>=1.20.0' pyarrow pandas 'plotly>=4.8' 'docutils<0.18.0' \
+          'flake8==3.9.0' 'mypy==1.8.0' 'pytest==7.1.3' 'pytest-mypy-plugins==1.9.3' 'black==23.9.1' \
+          'pandas-stubs==1.2.0.53' 'grpcio==1.62.0' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0' \
+          'sphinxcontrib-applehelp==1.0.4' 'sphinxcontrib-devhelp==1.0.2' 'sphinxcontrib-htmlhelp==2.0.1' 'sphinxcontrib-qthelp==1.0.3' 'sphinxcontrib-serializinghtml==1.1.5'
+        python3.9 -m pip list
     - name: Install dependencies for documentation generation for branch-3.4, branch-3.5
       if: inputs.branch == 'branch-3.4' || inputs.branch == 'branch-3.5'
       run: |
@@ -786,8 +875,6 @@ jobs:
         gem install bundler -v 2.4.22
         cd docs
         bundle install
-    - name: R linter
-      run: ./dev/lint-r
     - name: Run documentation build
       run: |
         # We need this link because the jekyll build calls `python`.

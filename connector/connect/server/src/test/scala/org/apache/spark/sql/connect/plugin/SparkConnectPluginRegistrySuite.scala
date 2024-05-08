@@ -27,6 +27,7 @@ import org.apache.spark.connect.proto.Relation
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.connect.ConnectProtoUtils
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.planner.{SparkConnectPlanner, SparkConnectPlanTest}
@@ -68,7 +69,9 @@ class ExampleRelationPlugin extends RelationPlugin {
       return Optional.empty()
     }
     val plugin = rel.unpack(classOf[proto.ExamplePluginRelation])
-    Optional.of(planner.transformRelation(plugin.getInput.toByteArray))
+    val input = ConnectProtoUtils.parseRelationWithRecursionLimit(
+      plugin.getInput.toByteArray, recursionLimit = 1024)
+    Optional.of(planner.transformRelation(input))
   }
 }
 
@@ -81,8 +84,9 @@ class ExampleExpressionPlugin extends ExpressionPlugin {
       return Optional.empty()
     }
     val exp = rel.unpack(classOf[proto.ExamplePluginExpression])
-    Optional.of(
-      Alias(planner.transformExpression(exp.getChild.toByteArray), exp.getCustomField)())
+    val child = ConnectProtoUtils.parseExpressionWithRecursionLimit(
+      exp.getChild.toByteArray, recursionLimit = 1024)
+    Optional.of(Alias(planner.transformExpression(child), exp.getCustomField)())
   }
 }
 
@@ -198,9 +202,7 @@ class SparkConnectPluginRegistrySuite extends SharedSparkSession with SparkConne
               .build()))
         .build()
 
-      val executeHolder = buildExecutePlanHolder(plan)
-      new SparkConnectPlanner(executeHolder)
-        .process(plan, new MockObserver())
+      transform(plan)
       assert(spark.sparkContext.getLocalProperty("testingProperty").equals("Martin"))
     }
   }
