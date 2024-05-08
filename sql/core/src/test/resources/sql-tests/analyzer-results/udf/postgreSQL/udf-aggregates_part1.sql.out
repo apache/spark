@@ -154,70 +154,70 @@ Aggregate [stddev_pop(cast(cast(udf(cast(cast(3.0 as decimal(38,0)) as string)) 
 select sum(udf(CAST(null AS int))) from range(1,4)
 -- !query analysis
 Aggregate [sum(cast(udf(cast(cast(null as int) as string)) as int)) AS sum(udf(CAST(NULL AS INT)))#xL]
-+- Range (1, 4, step=1, splits=None)
++- Range (1, 4, step=1)
 
 
 -- !query
 select sum(udf(CAST(null AS long))) from range(1,4)
 -- !query analysis
 Aggregate [sum(cast(udf(cast(cast(null as bigint) as string)) as bigint)) AS sum(udf(CAST(NULL AS BIGINT)))#xL]
-+- Range (1, 4, step=1, splits=None)
++- Range (1, 4, step=1)
 
 
 -- !query
 select sum(udf(CAST(null AS Decimal(38,0)))) from range(1,4)
 -- !query analysis
 Aggregate [sum(cast(udf(cast(cast(null as decimal(38,0)) as string)) as decimal(38,0))) AS sum(udf(CAST(NULL AS DECIMAL(38,0))))#x]
-+- Range (1, 4, step=1, splits=None)
++- Range (1, 4, step=1)
 
 
 -- !query
 select sum(udf(CAST(null AS DOUBLE))) from range(1,4)
 -- !query analysis
 Aggregate [sum(cast(udf(cast(cast(null as double) as string)) as double)) AS sum(udf(CAST(NULL AS DOUBLE)))#x]
-+- Range (1, 4, step=1, splits=None)
++- Range (1, 4, step=1)
 
 
 -- !query
 select avg(udf(CAST(null AS int))) from range(1,4)
 -- !query analysis
 Aggregate [avg(cast(udf(cast(cast(null as int) as string)) as int)) AS avg(udf(CAST(NULL AS INT)))#x]
-+- Range (1, 4, step=1, splits=None)
++- Range (1, 4, step=1)
 
 
 -- !query
 select avg(udf(CAST(null AS long))) from range(1,4)
 -- !query analysis
 Aggregate [avg(cast(udf(cast(cast(null as bigint) as string)) as bigint)) AS avg(udf(CAST(NULL AS BIGINT)))#x]
-+- Range (1, 4, step=1, splits=None)
++- Range (1, 4, step=1)
 
 
 -- !query
 select avg(udf(CAST(null AS Decimal(38,0)))) from range(1,4)
 -- !query analysis
 Aggregate [avg(cast(udf(cast(cast(null as decimal(38,0)) as string)) as decimal(38,0))) AS avg(udf(CAST(NULL AS DECIMAL(38,0))))#x]
-+- Range (1, 4, step=1, splits=None)
++- Range (1, 4, step=1)
 
 
 -- !query
 select avg(udf(CAST(null AS DOUBLE))) from range(1,4)
 -- !query analysis
 Aggregate [avg(cast(udf(cast(cast(null as double) as string)) as double)) AS avg(udf(CAST(NULL AS DOUBLE)))#x]
-+- Range (1, 4, step=1, splits=None)
++- Range (1, 4, step=1)
 
 
 -- !query
 select sum(CAST(udf('NaN') AS DOUBLE)) from range(1,4)
 -- !query analysis
 Aggregate [sum(cast(cast(udf(cast(NaN as string)) as string) as double)) AS sum(CAST(udf(NaN) AS DOUBLE))#x]
-+- Range (1, 4, step=1, splits=None)
++- Range (1, 4, step=1)
 
 
 -- !query
 select avg(CAST(udf('NaN') AS DOUBLE)) from range(1,4)
 -- !query analysis
 Aggregate [avg(cast(cast(udf(cast(NaN as string)) as string) as double)) AS avg(CAST(udf(NaN) AS DOUBLE))#x]
-+- Range (1, 4, step=1, splits=None)
++- Range (1, 4, step=1)
 
 
 -- !query

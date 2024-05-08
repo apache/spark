@@ -1716,7 +1716,7 @@ CreateViewCommand `tt3`, select * from
          +- Project [id#x AS f1#x, repeat(xyzzy, 100)#x AS f2#x]
             +- Project [cast(id#xL as int) AS id#x, repeat(xyzzy, 100) AS repeat(xyzzy, 100)#x]
                +- SubqueryAlias x
-                  +- Range (1, 10001, step=1, splits=None)
+                  +- Range (1, 10001, step=1)
 
 
 -- !query
@@ -1767,7 +1767,7 @@ Project [f1#x]
                   :                 +- Project [id#x AS f1#x, repeat(xyzzy, 100)#x AS f2#x]
                   :                    +- Project [cast(id#xL as int) AS id#x, repeat(xyzzy, 100) AS repeat(xyzzy, 100)#x]
                   :                       +- SubqueryAlias x
-                  :                          +- Range (1, 10001, step=1, splits=None)
+                  :                          +- Range (1, 10001, step=1)
                   +- SubqueryAlias c
                      +- SubqueryAlias tt3
                         +- View (`tt3`, [f1#x, f2#x])
@@ -1777,7 +1777,7 @@ Project [f1#x]
                                     +- Project [id#x AS f1#x, repeat(xyzzy, 100)#x AS f2#x]
                                        +- Project [cast(id#xL as int) AS id#x, repeat(xyzzy, 100) AS repeat(xyzzy, 100)#x]
                                           +- SubqueryAlias x
-                                             +- Range (1, 10001, step=1, splits=None)
+                                             +- Range (1, 10001, step=1)
 
 
 -- !query

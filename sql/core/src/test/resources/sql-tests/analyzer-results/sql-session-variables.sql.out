@@ -498,7 +498,7 @@ SELECT (SELECT MAX(id) FROM RANGE(10) WHERE id < title) FROM VALUES 1, 2 AS t(ti
 Project [scalar-subquery#x [title#x] AS scalarsubquery(title)#xL]
 :  +- Aggregate [max(id#xL) AS max(id)#xL]
 :     +- Filter (id#xL < cast(outer(title#x) as bigint))
-:        +- Range (0, 10, step=1, splits=None)
+:        +- Range (0, 10, step=1)
 +- SubqueryAlias t
    +- LocalRelation [title#x]
 
