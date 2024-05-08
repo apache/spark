@@ -813,7 +813,7 @@ class DataFrame(ParentDataFrame):
         if withReplacement is None:
             withReplacement = False
 
-        seed = int(seed) if seed is not None else None
+        seed = int(seed) if seed is not None else random.randint(0, sys.maxsize)
 
         return DataFrame(
             plan.Sample(
