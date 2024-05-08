@@ -75,6 +75,7 @@ jobs:
           conda create -c conda-forge -q -n server-env python=3.11
           conda activate server-env
           pip install -r dev/requirements.txt
+          pip list
           conda deactivate
 
           # Client enviornment
@@ -87,6 +88,7 @@ jobs:
 
           # Add torch as a testing dependency for TorchDistributor
           pip install 'torch==2.0.1' 'torchvision==0.15.2' torcheval
+          pip list
           conda deactivate
       - name: Run tests
         env:
