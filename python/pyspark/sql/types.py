@@ -699,9 +699,9 @@ class ArrayType(DataType):
 
     @classmethod
     def fromJson(
-        cls, json: Dict[str, Any], path: str = "", collationsMap: Optional[Dict[str, str]] = None
+        cls, json: Dict[str, Any], fieldPath: str = "", collationsMap: Optional[Dict[str, str]] = None
     ) -> "ArrayType":
-        elementType = _resolve_type(json["elementType"], path + ".element", collationsMap)
+        elementType = _resolve_type(json["elementType"], fieldPath + ".element", collationsMap)
         return ArrayType(elementType, json["containsNull"])
 
     def needConversion(self) -> bool:
@@ -819,10 +819,10 @@ class MapType(DataType):
 
     @classmethod
     def fromJson(
-        cls, json: Dict[str, Any], path: str = "", collationsMap: Optional[Dict[str, str]] = None
+        cls, json: Dict[str, Any], fieldPath: str = "", collationsMap: Optional[Dict[str, str]] = None
     ) -> "MapType":
-        keyType = _resolve_type(json["keyType"], path + ".key", collationsMap)
-        valueType = _resolve_type(json["valueType"], path + ".value", collationsMap)
+        keyType = _resolve_type(json["keyType"], fieldPath + ".key", collationsMap)
+        valueType = _resolve_type(json["valueType"], fieldPath + ".value", collationsMap)
         return MapType(
             keyType,
             valueType,
@@ -939,20 +939,20 @@ class StructField(DataType):
 
     @property
     def collationMetadata(self):
-        def visitRecursively(dt: DataType, path: str):
+        def visitRecursively(dt: DataType, fieldPath: str):
             if isinstance(dt, ArrayType):
-                processDataType(dt.elementType, path + ".element")
+                processDataType(dt.elementType, fieldPath + ".element")
             elif isinstance(dt, MapType):
-                processDataType(dt.keyType, path + ".key")
-                processDataType(dt.valueType, path + ".value")
+                processDataType(dt.keyType, fieldPath + ".key")
+                processDataType(dt.valueType, fieldPath + ".value")
             elif isinstance(dt, StringType) and self._isCollatedString(dt):
-                self._collationMetadata[path] = self.collationName(dt)
+                self._collationMetadata[fieldPath] = self.collationName(dt)
 
-        def processDataType(dt: DataType, path: str):
+        def processDataType(dt: DataType, fieldPath: str):
             if self._isCollatedString(dt):
-                self._collationMetadata[path] = self.collationName(dt)
+                self._collationMetadata[fieldPath] = self.collationName(dt)
             else:
-                visitRecursively(dt, path)
+                visitRecursively(dt, fieldPath)
 
         if self._collationMetadata is None:
             self._collationMetadata = {}
@@ -1769,12 +1769,12 @@ def _parse_datatype_json_string(json_string: str) -> DataType:
 
 
 def _parse_datatype_json_value(
-    json_value: Union[dict, str], path: str = "", collationsMap: Optional[Dict[str, str]] = None
+    json_value: Union[dict, str], fieldPath: str = "", collationsMap: Optional[Dict[str, str]] = None
 ) -> DataType:
     if not isinstance(json_value, dict):
         if json_value in _all_atomic_types.keys():
-            if collationsMap is not None and path in collationsMap:
-                return StringType(collationsMap[path])
+            if collationsMap is not None and fieldPath in collationsMap:
+                return StringType(collationsMap[fieldPath])
             return _all_atomic_types[json_value]()
         elif json_value == "decimal":
             return DecimalType()
@@ -1815,7 +1815,7 @@ def _parse_datatype_json_value(
         if tpe in _all_complex_types:
             complex_type = _all_complex_types[tpe]
             if complex_type in (ArrayType, MapType):
-                return complex_type.fromJson(json_value, path, collationsMap)
+                return complex_type.fromJson(json_value, fieldPath, collationsMap)
             return complex_type.fromJson(json_value)
         elif tpe == "udt":
             return UserDefinedType.fromJson(json_value)
@@ -1827,11 +1827,11 @@ def _parse_datatype_json_value(
 
 
 def _resolve_type(
-    json_value: Dict[str, Any], path: str, collationsMap: Optional[Dict[str, str]] = None
+    json_value: Dict[str, Any], fieldPath: str, collationsMap: Optional[Dict[str, str]] = None
 ):
-    if collationsMap and path in collationsMap:
-        return StringType(collationsMap[path])
-    return _parse_datatype_json_value(json_value, path, collationsMap)
+    if collationsMap and fieldPath in collationsMap:
+        return StringType(collationsMap[fieldPath])
+    return _parse_datatype_json_value(json_value, fieldPath, collationsMap)
 
 
 # Mapping Python types to Spark SQL DataType
