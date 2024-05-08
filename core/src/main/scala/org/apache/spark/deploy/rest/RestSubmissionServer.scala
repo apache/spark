@@ -28,7 +28,8 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.util.Utils
 
 /**
@@ -76,7 +77,8 @@ private[spark] abstract class RestSubmissionServer(
   def start(): Int = {
     val (server, boundPort) = Utils.startServiceOnPort[Server](requestedPort, doStart, masterConf)
     _server = Some(server)
-    logInfo(s"Started REST server for submitting applications on $host with port $boundPort")
+    logInfo(log"Started REST server for submitting applications on ${MDC(HOST, host)}" +
+      log" with port ${MDC(PORT, boundPort)}")
     boundPort
   }
 
