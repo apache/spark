@@ -109,10 +109,11 @@ case class Mode(
       }
       val ordering = Ordering.Tuple2(Ordering.Long, defaultKeyOrdering)
       buffer.maxBy { case (key, count) => (count, key) }(ordering)
-    }.getOrElse(buffer.maxBy(_._2))
+    }.getOrElse(buffer.maxBy(_._2))._1
   }
 
   private def isCollatedString(child: Expression): Boolean = {
+    println("child.dataType: " + child.dataType)
     child.dataType match {
       case s: StringType if s.collationId != CollationFactory.UTF8_BINARY_COLLATION_ID => true
       // maybe use supportsBinaryEquality or something else

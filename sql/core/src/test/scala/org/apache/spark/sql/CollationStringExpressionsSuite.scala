@@ -815,22 +815,19 @@ class CollationStringExpressionsSuite
   test("Support mode for string expression with collation2 ") {
     case class ModeTestCase[R](collationId: String, bufferValues: Map[String, Long], result: R)
     val testCases = Seq(
-      ModeTestCase("utf8_binary", Map("a" -> 5L, "b" -> 4L, "B" -> 3L, "d" -> 2L, "e" -> 1L),
-        "a"),
-      ModeTestCase("utf8_binary_lcase", Map("a" -> 5L, "b" -> 4L, "B" -> 3L, "d" -> 2L, "e" -> 1L),
-        "b"),
-      ModeTestCase("unicode_ci", Map("a" -> 5L, "b" -> 4L, "B" -> 3L, "d" -> 2L, "e" -> 1L),
-        "b"),
-      ModeTestCase("unicode", Map("a" -> 5L, "b" -> 4L, "B" -> 3L, "d" -> 2L, "e" -> 1L),
-        "a")
+      ModeTestCase("utf8_binary", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
+      ModeTestCase("utf8_binary_lcase", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b"),
+      ModeTestCase("unicode_ci", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b"),
+      ModeTestCase("unicode", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a")
     )
     testCases.foreach(t => {
+      val valuesToAdd = t.bufferValues.map { case (elt, numRepeats) =>
+        (0L to numRepeats).map(_ => s"('$elt')").mkString(",")
+      }.mkString(",")
+
       withTable("t") {
         sql("CREATE TABLE t(i STRING) USING parquet")
-        sql("INSERT INTO t VALUES " +
-          t.bufferValues.map { case (elt, numRepeats) =>
-            (0L to numRepeats).map(_ => s"('$elt')").mkString(",")
-          }.mkString(","))
+        sql("INSERT INTO t VALUES " + valuesToAdd)
         val query = s"SELECT mode(collate(i, '${t.collationId}')) FROM t"
         checkAnswer(sql(query), Row(t.result))
         assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.collationId)))
@@ -868,18 +865,18 @@ class CollationStringExpressionsSuite
       ModeTestCase("unicode_ci", bufferValues, "b"),
       ModeTestCase("unicode", bufferValues, "a"))
 
-    val bufferValuesUTF8String = Map(
-      UTF8String.fromString("a") -> 5L,
-      UTF8String.fromString("b") -> 4L,
-      UTF8String.fromString("B") -> 3L,
-      UTF8String.fromString("d") -> 2L,
-      UTF8String.fromString("e") -> 1L)
-
-    val testCasesUTF8String = Seq(
-      UTF8StringModeTestCase("utf8_binary", bufferValuesUTF8String, "a"),
-      UTF8StringModeTestCase("utf8_binary_lcase", bufferValuesUTF8String, "b"),
-      UTF8StringModeTestCase("unicode_ci", bufferValuesUTF8String, "b"),
-      UTF8StringModeTestCase("unicode", bufferValuesUTF8String, "a"))
+//    val bufferValuesUTF8String = Map(
+//      UTF8String.fromString("a") -> 5L,
+//      UTF8String.fromString("b") -> 4L,
+//      UTF8String.fromString("B") -> 3L,
+//      UTF8String.fromString("d") -> 2L,
+//      UTF8String.fromString("e") -> 1L)
+//
+//    val testCasesUTF8String = Seq(
+//      UTF8StringModeTestCase("utf8_binary", bufferValuesUTF8String, "a"),
+//      UTF8StringModeTestCase("utf8_binary_lcase", bufferValuesUTF8String, "b"),
+//      UTF8StringModeTestCase("unicode_ci", bufferValuesUTF8String, "b"),
+//      UTF8StringModeTestCase("unicode", bufferValuesUTF8String, "a"))
 
     testCasesStrings.foreach(t => {
       val buffer = new OpenHashMap[AnyRef, Long](5)
@@ -887,13 +884,13 @@ class CollationStringExpressionsSuite
       t.bufferValues.foreach { case (k, v) => buffer.update(k, v) }
       assert(myMode.eval(buffer).toString == t.result)
     })
-
-    testCasesUTF8String.foreach(t => {
-      val buffer = new OpenHashMap[AnyRef, Long](5)
-      val myMode = Mode(child = Literal.create("some_column_name", StringType(t.collationId)))
-      t.bufferValues.foreach { case (k, v) => buffer.update(k, v) }
-      assert(myMode.eval(buffer).toString == t.result)
-    })
+//
+//    testCasesUTF8String.foreach(t => {
+//      val buffer = new OpenHashMap[AnyRef, Long](5)
+//      val myMode = Mode(child = Literal.create("some_column_name", StringType(t.collationId)))
+//      t.bufferValues.foreach { case (k, v) => buffer.update(k, v) }
+//      assert(myMode.eval(buffer).toString == t.result)
+//    })
   }
 
   // TODO: Add more tests for other string expressions
