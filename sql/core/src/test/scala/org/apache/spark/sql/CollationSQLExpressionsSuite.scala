@@ -527,7 +527,9 @@ class CollationSQLExpressionsSuite
         val query = s"SELECT version()"
         // Result & data type
         val testQuery = sql(query)
-        checkAnswer(testQuery, Row("4.0.0 04fcae457a589e6c93a86683b9b4a09ed3aa3578"))
+        val queryResult = testQuery.collect().head.getString(0)
+        val versionFormat = "^[0-9]\\.[0-9]\\.[0-9] [0-9a-f]{40}$"
+        assert(queryResult.matches(versionFormat))
         val dataType = StringType(collationName)
         assert(testQuery.schema.fields.head.dataType.sameType(dataType))
       }
