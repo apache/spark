@@ -81,17 +81,19 @@ case class Mode(
       return null
     }
     val buffer = if (isCollatedString(child)) {
+      val collation = CollationFactory.fetchCollation(collationId)
       val modeMap = buff.foldLeft(
-        new TreeMap[org.apache.spark.unsafe.types.UTF8String, Long]()(Ordering.comparatorToOrdering(
-          CollationFactory.fetchCollation(collationId).comparator
-          )))
-      {
+        new OpenHashMap[AnyRef, Long](buff.size)) {
         case (map, (key: String, count)) =>
-          map(org.apache.spark.unsafe.types.UTF8String.fromString(key)) =
-            map.getOrElse(org.apache.spark.unsafe.types.UTF8String.fromString(key), 0L) + count
+          val utf8 = org.apache.spark.unsafe.types.UTF8String.fromString(key)
+          val k = org.apache.spark.unsafe.types.UTF8String.fromString(
+            collation.hashFunction.applyAsLong(utf8).toString + "_" + utf8.toLowerCase())
+          map.update(k, map.get(k).getOrElse(0L) + count)
           map
         case (map, (key: UTF8String, count)) =>
-          map(key) = map.getOrElse(key, 0L) + count
+          val k = org.apache.spark.unsafe.types.UTF8String.fromString(
+            collation.hashFunction.applyAsLong(key).toString + "_" + key.toLowerCase())
+          map.update(k, map.get(k).getOrElse(0L) + count)
           map
         case (_, _) =>
           throw new IllegalArgumentException("Mode expects non-null string type.")
@@ -110,6 +112,45 @@ case class Mode(
       val ordering = Ordering.Tuple2(Ordering.Long, defaultKeyOrdering)
       buffer.maxBy { case (key, count) => (count, key) }(ordering)
     }.getOrElse(buffer.maxBy(_._2))._1
+  }
+
+  private def impl2(buff: OpenHashMap[AnyRef, Long]): OpenHashMap[UTF8String, Long] = {
+    val collation = CollationFactory.fetchCollation(collationId)
+    val modeMap = buff.foldLeft(
+      new OpenHashMap[org.apache.spark.unsafe.types.UTF8String, Long](buff.size)) {
+      case (map, (key: String, count)) =>
+        val utf8 = org.apache.spark.unsafe.types.UTF8String.fromString(key)
+        val k = org.apache.spark.unsafe.types.UTF8String.fromString(
+          collation.hashFunction.applyAsLong(utf8).toString + "_" + utf8.toLowerCase())
+        map.update(k, map.get(k).getOrElse(0L) + count)
+        map
+      case (map, (key: UTF8String, count)) =>
+        val k = org.apache.spark.unsafe.types.UTF8String.fromString(
+          collation.hashFunction.applyAsLong(key).toString + "_" + key.toLowerCase())
+        map.update(k, map.get(k).getOrElse(0L) + count)
+        map
+      case (_, _) =>
+        throw new IllegalArgumentException("Mode expects non-null string type.")
+    }
+    modeMap
+  }
+
+  private def impl1(buff: OpenHashMap[AnyRef, Long]): TreeMap[UTF8String, Long] = {
+    val modeMap = buff.foldLeft(
+      new TreeMap[org.apache.spark.unsafe.types.UTF8String, Long]()(Ordering.comparatorToOrdering(
+        CollationFactory.fetchCollation(collationId).comparator
+      ))) {
+      case (map, (key: String, count)) =>
+        map(org.apache.spark.unsafe.types.UTF8String.fromString(key)) =
+          map.getOrElse(org.apache.spark.unsafe.types.UTF8String.fromString(key), 0L) + count
+        map
+      case (map, (key: UTF8String, count)) =>
+        map(key) = map.getOrElse(key, 0L) + count
+        map
+      case (_, _) =>
+        throw new IllegalArgumentException("Mode expects non-null string type.")
+    }
+    modeMap
   }
 
   private def isCollatedString(child: Expression): Boolean = {
