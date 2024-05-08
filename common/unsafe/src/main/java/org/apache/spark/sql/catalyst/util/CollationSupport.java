@@ -523,7 +523,7 @@ public final class CollationSupport {
     public static UTF8String execICU(final UTF8String source, Map<String, String> dict,
         final int collationId) {
       return source.translate(CollationAwareUTF8String.getCollationAwareDict(
-              source, dict, collationId));
+        source, dict, collationId));
     }
   }
 
