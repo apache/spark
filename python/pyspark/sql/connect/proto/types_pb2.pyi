@@ -190,10 +190,7 @@ class DataType(google.protobuf.message.Message):
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "collation",
-                b"collation",
-                "type_variation_reference",
-                b"type_variation_reference",
+                "collation", b"collation", "type_variation_reference", b"type_variation_reference"
             ],
         ) -> None: ...
 
