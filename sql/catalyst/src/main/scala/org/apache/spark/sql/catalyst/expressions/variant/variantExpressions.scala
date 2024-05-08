@@ -61,7 +61,7 @@ case class ParseJson(child: Expression, failOnError: Boolean = true)
     "parseJson",
     Seq(child, Literal(failOnError, BooleanType)),
     inputTypes :+ BooleanType,
-    returnNullable = false)
+    returnNullable = !failOnError)
 
   override def inputTypes: Seq[AbstractDataType] = StringTypeAnyCollation :: Nil
 
@@ -683,7 +683,8 @@ object SchemaOfVariant {
     case Type.DOUBLE => DoubleType
     case Type.DECIMAL =>
       val d = v.getDecimal
-      DecimalType(d.precision(), d.scale())
+      // Spark doesn't allow `DecimalType` to have `precision < scale`.
+      DecimalType(d.precision().max(d.scale()), d.scale())
     case Type.DATE => DateType
     case Type.TIMESTAMP => TimestampType
     case Type.TIMESTAMP_NTZ => TimestampNTZType

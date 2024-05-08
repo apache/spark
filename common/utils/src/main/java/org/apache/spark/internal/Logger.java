@@ -34,6 +34,10 @@ public class Logger {
     this.slf4jLogger = slf4jLogger;
   }
 
+  public boolean isErrorEnabled() {
+    return slf4jLogger.isErrorEnabled();
+  }
+
   public void error(String msg) {
     slf4jLogger.error(msg);
   }
@@ -56,6 +60,10 @@ public class Logger {
     } else if (slf4jLogger.isErrorEnabled()) {
       withLogContext(msg, mdcs, throwable, mt -> slf4jLogger.error(mt.message, mt.throwable));
     }
+  }
+
+  public boolean isWarnEnabled() {
+    return slf4jLogger.isWarnEnabled();
   }
 
   public void warn(String msg) {
@@ -82,6 +90,10 @@ public class Logger {
     }
   }
 
+  public boolean isInfoEnabled() {
+    return slf4jLogger.isInfoEnabled();
+  }
+
   public void info(String msg) {
     slf4jLogger.info(msg);
   }
@@ -106,52 +118,52 @@ public class Logger {
     }
   }
 
+  public boolean isDebugEnabled() {
+    return slf4jLogger.isDebugEnabled();
+  }
+
   public void debug(String msg) {
     slf4jLogger.debug(msg);
+  }
+
+  public void debug(String format, Object arg) {
+    slf4jLogger.debug(format, arg);
+  }
+
+  public void debug(String format, Object arg1, Object arg2) {
+    slf4jLogger.debug(format, arg1, arg2);
+  }
+
+  public void debug(String format, Object... arguments) {
+    slf4jLogger.debug(format, arguments);
   }
 
   public void debug(String msg, Throwable throwable) {
     slf4jLogger.debug(msg, throwable);
   }
 
-  public void debug(String msg, MDC... mdcs) {
-    if (mdcs == null || mdcs.length == 0) {
-      slf4jLogger.debug(msg);
-    } else if (slf4jLogger.isDebugEnabled()) {
-      withLogContext(msg, mdcs, null, mt -> slf4jLogger.debug(mt.message));
-    }
-  }
-
-  public void debug(String msg, Throwable throwable, MDC... mdcs) {
-    if (mdcs == null || mdcs.length == 0) {
-      slf4jLogger.debug(msg);
-    } else if (slf4jLogger.isDebugEnabled()) {
-      withLogContext(msg, mdcs, throwable, mt -> slf4jLogger.debug(mt.message, mt.throwable));
-    }
+  public boolean isTraceEnabled() {
+    return slf4jLogger.isTraceEnabled();
   }
 
   public void trace(String msg) {
     slf4jLogger.trace(msg);
   }
 
+  public void trace(String format, Object arg) {
+    slf4jLogger.trace(format, arg);
+  }
+
+  public void trace(String format, Object arg1, Object arg2) {
+    slf4jLogger.trace(format, arg1, arg2);
+  }
+
+  public void trace(String format, Object... arguments) {
+    slf4jLogger.trace(format, arguments);
+  }
+
   public void trace(String msg, Throwable throwable) {
     slf4jLogger.trace(msg, throwable);
-  }
-
-  public void trace(String msg, MDC... mdcs) {
-    if (mdcs == null || mdcs.length == 0) {
-      slf4jLogger.trace(msg);
-    } else if (slf4jLogger.isTraceEnabled()) {
-      withLogContext(msg, mdcs, null, mt -> slf4jLogger.trace(mt.message));
-    }
-  }
-
-  public void trace(String msg, Throwable throwable, MDC... mdcs) {
-    if (mdcs == null || mdcs.length == 0) {
-      slf4jLogger.trace(msg);
-    } else if (slf4jLogger.isTraceEnabled()) {
-      withLogContext(msg, mdcs, throwable, mt -> slf4jLogger.trace(mt.message, mt.throwable));
-    }
   }
 
   private void withLogContext(
