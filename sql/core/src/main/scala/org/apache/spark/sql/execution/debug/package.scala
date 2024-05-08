@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 
 import java.util.Collections
 
+import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
@@ -28,6 +29,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
+import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeFormatter, CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.plans.logical.{DebugSampleColumn, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
@@ -304,12 +306,39 @@ package object debug {
   case class DebugSampleColumnExec(
     child: SparkPlan,
     sampleColumns: Seq[Expression]) extends UnaryExecNode {
+    // TODO only keep top K based on count
+    lazy val counts = new mutable.HashMap[Seq[Any], Long]
+
+    private def printVals(): Unit = {
+      counts.foreachEntry { (k, v) =>
+        val values = sampleColumns.zip(k).map(z => s"${z._1}: ${z._2}").mkString(",")
+        debugPrint(s"$values = $v")
+      }
+    }
+
     override protected def withNewChildInternal(newChild: SparkPlan): DebugSampleColumnExec =
       copy(child = newChild)
 
     override protected def doExecute(): RDD[InternalRow] = {
+      val exprs = bindReferences[Expression](sampleColumns, child.output)
+
+      var rowCount = 0
       child.execute().mapPartitions { iter =>
-        iter
+        iter.map { row =>
+          val sampleVals = exprs.map(_.eval(row))
+
+          val count = counts.getOrElse(sampleVals, 0L)
+          counts.put(sampleVals, count + 1)
+
+          rowCount += 1
+          // TODO make configurable
+          if (rowCount > 10) {
+            rowCount = 0
+            printVals()
+          }
+
+          row
+        }
       }
     }
 
