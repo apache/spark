@@ -187,6 +187,22 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("SPARK-47672: Make sure that we handle the case where everything is expensive") {
+    val originalQuery = testStringRelation
+      .select($"e".rlike("magic") as "f")
+      .where($"f")
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    val correctAnswer = testStringRelation
+      .select($"e".rlike("magic") as "f")
+      .where($"f")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
   test("SPARK-47672: Ensure filter pushdown without alias reference does not move a projection.") {
     val originalQuery = testStringRelation
       .select($"a", $"e".rlike("magic") as "f", $"b" + $"a")
