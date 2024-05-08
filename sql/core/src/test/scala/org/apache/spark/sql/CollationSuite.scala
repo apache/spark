@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import scala.jdk.CollectionConverters.MapHasAsJava
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.util.CollationFactory
@@ -849,6 +849,27 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
       checkAnswer(sql(s"SELECT collation('aa')"), Seq(Row("UNICODE")))
     }
+  }
+
+  test("SPARK-47972: Cast expression limitation for collations") {
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException]
+        (sql("SELECT cast(1 as string collate unicode)")),
+      errorClass = "UNSUPPORTED_DATATYPE",
+      parameters = Map(
+        "typeName" -> toSQLType(StringType("UNICODE")))
+    )
+
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException]
+        (sql("SELECT 'A' :: string collate unicode")),
+      errorClass = "UNSUPPORTED_DATATYPE",
+      parameters = Map(
+        "typeName" -> toSQLType(StringType("UNICODE")))
+    )
+
+    checkAnswer(sql(s"SELECT cast(1 as string)"), Seq(Row("1")))
+    checkAnswer(sql(s"SELECT cast('A' as string)"), Seq(Row("A")))
   }
 
   test("SPARK-47431: Default collation set to UNICODE, column type test") {
