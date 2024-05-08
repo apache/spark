@@ -610,4 +610,10 @@ object LogKeys {
   case object XML_SCHEDULING_MODE extends LogKey
   case object XSD_PATH extends LogKey
   case object YOUNG_GENERATION_GC extends LogKey
+  case object NUM_CHUNKS_BEING_TRANSFERRED extends LogKey
+  case object MAX_CHUNKS_BEING_TRANSFERRED extends LogKey
+  case object REQUEST_ID extends LogKey
+  case object RESULT extends LogKey
+  case object MODULE_NAME extends LogKey
+  case object STREAM_CHUNK_ID extends LogKey
 }
