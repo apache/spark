@@ -72,14 +72,14 @@ jobs:
           # See also https://github.com/conda/conda/issues/7980
           source "$CONDA_PREFIX/etc/profile.d/conda.sh"
           conda update -q conda
-          conda create -c conda-forge -q -n server-env python=3.11
+          conda create -c conda-forge -q -n server-env python=3.10
           conda activate server-env
           pip install -r dev/requirements.txt
           pip list
           conda deactivate
 
           # Client enviornment
-          conda create -c conda-forge -q -n client-env python=3.11
+          conda create -c conda-forge -q -n client-env python=3.10
           conda activate client-env
           pip install 'numpy==1.25.1' 'pyarrow==4.0.0' 'pandas==1.5.3' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.3.1' coverage 'matplotlib==3.7.2' openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*'
 
