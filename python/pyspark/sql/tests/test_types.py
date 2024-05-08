@@ -557,7 +557,6 @@ class TypesTestsMixin:
             assert datatype == pickled
             scala_datatype = self.spark._jsparkSession.parseDataType(datatype.json())
             python_datatype = _parse_datatype_json_string(scala_datatype.json())
-            assert datatype.json() == python_datatype.json()
             assert datatype == python_datatype
 
         check_datatype(ExamplePointUDT())
@@ -960,7 +959,6 @@ class TypesTestsMixin:
         for schema in schemas:
             scala_datatype = self.spark._jsparkSession.parseDataType(schema.json())
             python_datatype = _parse_datatype_json_string(scala_datatype.json())
-            assert schema.json() == python_datatype.json()
             assert schema == python_datatype
 
     def test_metadata_null(self):

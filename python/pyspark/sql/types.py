@@ -699,7 +699,7 @@ class ArrayType(DataType):
 
     @classmethod
     def fromJson(
-        cls, json: Dict[str, Any], path: str = "", collationsMap: Dict[str, str] = None
+        cls, json: Dict[str, Any], path: str = "", collationsMap: Optional[Dict[str, str]] = None
     ) -> "ArrayType":
         elementType = _resolve_type(json["elementType"], path + ".element", collationsMap)
         return ArrayType(elementType, json["containsNull"])
@@ -819,7 +819,7 @@ class MapType(DataType):
 
     @classmethod
     def fromJson(
-        cls, json: Dict[str, Any], path: str = "", collationsMap: Dict[str, str] = None
+        cls, json: Dict[str, Any], path: str = "", collationsMap: Optional[Dict[str, str]] = None
     ) -> "MapType":
         keyType = _resolve_type(json["keyType"], path + ".key", collationsMap)
         valueType = _resolve_type(json["valueType"], path + ".value", collationsMap)
@@ -896,6 +896,16 @@ class StructField(DataType):
     def __repr__(self) -> str:
         return "StructField('%s', %s, %s)" % (self.name, self.dataType, str(self.nullable))
 
+    def __eq__(self, other: Any) -> bool:
+        # since collationMetadata is lazy evaluated we should not use it in equality check
+        return (
+            isinstance(other, self.__class__)
+            and self.name == other.name
+            and self.dataType == other.dataType
+            and self.nullable == other.nullable
+            and self.metadata == other.metadata
+        )
+
     def jsonValue(self) -> Dict[str, Any]:
         metadata = (
             self.metadata
@@ -913,14 +923,12 @@ class StructField(DataType):
     @classmethod
     def fromJson(cls, json: Dict[str, Any]) -> "StructField":
         metadata = json.get("metadata")
-        if metadata is not None and _COLLATIONS_METADATA_KEY in metadata:
+        collationsMap = {}
+        if metadata and _COLLATIONS_METADATA_KEY in metadata:
             collationsMap = metadata[_COLLATIONS_METADATA_KEY]
-            #     metadata.pop(_COLLATIONS_METADATA_KEY)
             metadata = {
                 key: value for key, value in metadata.items() if key != _COLLATIONS_METADATA_KEY
             }
-        else:
-            collationsMap = {}
 
         return StructField(
             json["name"],
@@ -1761,7 +1769,7 @@ def _parse_datatype_json_string(json_string: str) -> DataType:
 
 
 def _parse_datatype_json_value(
-    json_value: Union[dict, str], path: str = "", collationsMap: Dict[str, str] = None
+    json_value: Union[dict, str], path: str = "", collationsMap: Optional[Dict[str, str]] = None
 ) -> DataType:
     if not isinstance(json_value, dict):
         if json_value in _all_atomic_types.keys():
@@ -1818,7 +1826,9 @@ def _parse_datatype_json_value(
             )
 
 
-def _resolve_type(json_value: Dict[str, Any], path: str, collationsMap: Dict[str, str] = None):
+def _resolve_type(
+    json_value: Dict[str, Any], path: str, collationsMap: Optional[Dict[str, str]] = None
+):
     if collationsMap and path in collationsMap:
         return StringType(collationsMap[path])
     return _parse_datatype_json_value(json_value, path, collationsMap)
