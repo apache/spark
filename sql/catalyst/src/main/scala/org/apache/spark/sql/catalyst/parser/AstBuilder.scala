@@ -1638,6 +1638,20 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       }
       partitionByExpressions = p.partition.asScala.map(expression).toSeq
       orderByExpressions = p.sortItem.asScala.map(visitSortItem).toSeq
+      def invalidPartitionOrOrderingExpression(clause: String): String = {
+        "The table function call includes a table argument with an invalid " +
+          s"partitioning/ordering specification: the $clause clause included multiple " +
+          "expressions without parentheses surrounding them; please add parentheses around " +
+          "these expressions and then retry the query again"
+      }
+      validate(
+        Option(p.invalidMultiPartitionExpression).isEmpty,
+        message = invalidPartitionOrOrderingExpression("PARTITION BY"),
+        ctx = p)
+      validate(
+        Option(p.invalidMultiSortItem).isEmpty,
+        message = invalidPartitionOrOrderingExpression("ORDER BY"),
+        ctx = p)
     }
     validate(
       !(withSinglePartition && partitionByExpressions.nonEmpty),
@@ -1647,20 +1661,6 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       !(orderByExpressions.nonEmpty && partitionByExpressions.isEmpty && !withSinglePartition),
       message = "ORDER BY cannot be specified unless either " +
         "PARTITION BY or WITH SINGLE PARTITION is also present",
-      ctx = ctx.tableArgumentPartitioning)
-    def invalidPartitionOrOrderingExpression(clause: String): String = {
-      s"The table function call includes a table argument with an invalid partitioning/ordering " +
-        s"specification: the $clause clause included multiple expressions without parentheses " +
-        s"surrounding them; please add parentheses around these expressions and then retry the " +
-        s"query again"
-    }
-    validate(
-      Option(ctx.tableArgumentPartitioning.invalidMultiPartitionExpression).isEmpty,
-      message = invalidPartitionOrOrderingExpression("PARTITION BY"),
-      ctx = ctx.tableArgumentPartitioning)
-    validate(
-      Option(ctx.tableArgumentPartitioning.invalidMultiSortItem).isEmpty,
-      message = invalidPartitionOrOrderingExpression("ORDER BY"),
       ctx = ctx.tableArgumentPartitioning)
     FunctionTableSubqueryArgumentExpression(
       plan = p,
