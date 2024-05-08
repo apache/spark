@@ -208,6 +208,14 @@ The following table describes the different options available for configuring th
   <td>2.2.0</td>
 </tr>
 <tr>
+  <td><code>spark.network.crypto.cipher</code></td>
+  <td>AES/CTR/NoPadding</td>
+  <td>
+    Cipher mode to use. Defaults "AES/CTR/NoPadding". Also supports "AES/GCM/NoPadding"
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
   <td><code>spark.network.crypto.authEngineVersion</code></td>
   <td>1</td>
   <td>Version of AES-based RPC encryption to use. Valid versions are 1 or 2. Version 2 is recommended.</td>

@@ -20,12 +20,15 @@ package org.apache.spark.network.crypto;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 import java.security.GeneralSecurityException;
-import java.util.Collections;
+import java.util.Map;
 import java.util.Random;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.crypto.tink.subtle.Hex;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelPromise;
 import io.netty.channel.FileRegion;
 import org.apache.spark.network.util.ByteArrayWritableChannel;
 import org.apache.spark.network.util.ConfigProvider;
@@ -35,8 +38,12 @@ import static org.junit.jupiter.api.Assertions.*;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import static org.mockito.Mockito.*;
+
+import org.mockito.ArgumentCaptor;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
+
+import javax.crypto.AEADBadTagException;
 
 public class AuthEngineSuite {
 
@@ -59,16 +66,31 @@ public class AuthEngineSuite {
   private static final String outputIv = "a72709baf00785cad6329ce09f631f71";
   private static TransportConf conf;
 
+  private static TransportConf getConf(int authEngineVerison, boolean useCtr) {
+    String authEngineVersion = (authEngineVerison == 1) ? "1" : "2";
+    String mode = useCtr ? "AES/CTR/NoPadding" : "AES/GCM/NoPadding";
+    Map<String, String> confMap = ImmutableMap.of(
+            "spark.network.crypto.enabled", "true",
+            "spark.network.crypto.authEngineVersion", authEngineVersion,
+            "spark.network.crypto.cipher", mode
+    );
+    ConfigProvider v2Provider = new MapConfigProvider(confMap);
+    return new TransportConf("rpc", v2Provider);
+  }
+
   @BeforeAll
   public static void setUp() {
-    ConfigProvider v2Provider = new MapConfigProvider(Collections.singletonMap(
-            "spark.network.crypto.authEngineVersion", "2"));
-    conf = new TransportConf("rpc", v2Provider);
+    Map<String, String> confMap = ImmutableMap.of(
+      "spark.network.crypto.enabled", "true",
+      "spark.network.crypto.authEngineVersion", "2",
+      "spark.network.crypto.cipher", "AES/CTR/NoPadding"
+    );
+    ConfigProvider v2Provider = new MapConfigProvider(confMap);
+    conf = getConf(2, true);
   }
 
   @Test
   public void testAuthEngine() throws Exception {
-
     try (AuthEngine client = new AuthEngine("appId", "secret", conf);
          AuthEngine server = new AuthEngine("appId", "secret", conf)) {
       AuthMessage clientChallenge = client.challenge();
@@ -77,16 +99,18 @@ public class AuthEngineSuite {
 
       TransportCipher serverCipher = server.sessionCipher();
       TransportCipher clientCipher = client.sessionCipher();
-
-      assertArrayEquals(serverCipher.getInputIv(), clientCipher.getOutputIv());
-      assertArrayEquals(serverCipher.getOutputIv(), clientCipher.getInputIv());
-      assertEquals(serverCipher.getKey(), clientCipher.getKey());
+      assert(clientCipher instanceof CtrTransportCipher);
+      assert(serverCipher instanceof CtrTransportCipher);
+      CtrTransportCipher ctrClient = (CtrTransportCipher) clientCipher;
+      CtrTransportCipher ctrServer = (CtrTransportCipher) serverCipher;
+      assertArrayEquals(ctrServer.getInputIv(), ctrClient.getOutputIv());
+      assertArrayEquals(ctrServer.getOutputIv(), ctrClient.getInputIv());
+      assertEquals(ctrServer.getKey(), ctrClient.getKey());
     }
   }
 
   @Test
   public void testCorruptChallengeAppId() throws Exception {
-
     try (AuthEngine client = new AuthEngine("appId", "secret", conf);
          AuthEngine server = new AuthEngine("appId", "secret", conf)) {
       AuthMessage clientChallenge = client.challenge();
@@ -98,7 +122,6 @@ public class AuthEngineSuite {
 
   @Test
   public void testCorruptChallengeSalt() throws Exception {
-
     try (AuthEngine client = new AuthEngine("appId", "secret", conf);
          AuthEngine server = new AuthEngine("appId", "secret", conf)) {
       AuthMessage clientChallenge = client.challenge();
@@ -109,7 +132,6 @@ public class AuthEngineSuite {
 
   @Test
   public void testCorruptChallengeCiphertext() throws Exception {
-
     try (AuthEngine client = new AuthEngine("appId", "secret", conf);
          AuthEngine server = new AuthEngine("appId", "secret", conf)) {
       AuthMessage clientChallenge = client.challenge();
@@ -120,7 +142,6 @@ public class AuthEngineSuite {
 
   @Test
   public void testCorruptResponseAppId() throws Exception {
-
     try (AuthEngine client = new AuthEngine("appId", "secret", conf);
          AuthEngine server = new AuthEngine("appId", "secret", conf)) {
       AuthMessage clientChallenge = client.challenge();
@@ -134,7 +155,6 @@ public class AuthEngineSuite {
 
   @Test
   public void testCorruptResponseSalt() throws Exception {
-
     try (AuthEngine client = new AuthEngine("appId", "secret", conf);
          AuthEngine server = new AuthEngine("appId", "secret", conf)) {
       AuthMessage clientChallenge = client.challenge();
@@ -147,7 +167,6 @@ public class AuthEngineSuite {
 
   @Test
   public void testCorruptServerCiphertext() throws Exception {
-
     try (AuthEngine client = new AuthEngine("appId", "secret", conf);
          AuthEngine server = new AuthEngine("appId", "secret", conf)) {
       AuthMessage clientChallenge = client.challenge();
@@ -181,17 +200,17 @@ public class AuthEngineSuite {
       // Verify that the client will accept an old transcript.
       client.deriveSessionCipher(clientChallenge, serverResponse);
       TransportCipher clientCipher = client.sessionCipher();
-      assertEquals(Hex.encode(clientCipher.getKey().getEncoded()), derivedKey);
-      assertEquals(Hex.encode(clientCipher.getInputIv()), inputIv);
-      assertEquals(Hex.encode(clientCipher.getOutputIv()), outputIv);
+      assert(clientCipher instanceof CtrTransportCipher);
+      CtrTransportCipher ctrTransportCipher = (CtrTransportCipher) clientCipher;
+      assertEquals(Hex.encode(ctrTransportCipher.getKey().getEncoded()), derivedKey);
+      assertEquals(Hex.encode(ctrTransportCipher.getInputIv()), inputIv);
+      assertEquals(Hex.encode(ctrTransportCipher.getOutputIv()), outputIv);
     }
   }
 
   @Test
   public void testFixedChallengeResponseUnsafeVersion() throws Exception {
-    ConfigProvider v1Provider = new MapConfigProvider(Collections.singletonMap(
-            "spark.network.crypto.authEngineVersion", "1"));
-    TransportConf v1Conf = new TransportConf("rpc", v1Provider);
+    TransportConf v1Conf = getConf(1, true);
     try (AuthEngine client = new AuthEngine("appId", "secret", v1Conf)) {
       byte[] clientPrivateKey = Hex.decode(clientPrivate);
       client.setClientPrivateKey(clientPrivateKey);
@@ -202,9 +221,11 @@ public class AuthEngineSuite {
       // Verify that the client will accept an old transcript.
       client.deriveSessionCipher(clientChallenge, serverResponse);
       TransportCipher clientCipher = client.sessionCipher();
-      assertEquals(Hex.encode(clientCipher.getKey().getEncoded()), unsafeDerivedKey);
-      assertEquals(Hex.encode(clientCipher.getInputIv()), inputIv);
-      assertEquals(Hex.encode(clientCipher.getOutputIv()), outputIv);
+      assert(clientCipher instanceof CtrTransportCipher);
+      CtrTransportCipher ctrTransportCipher = (CtrTransportCipher) clientCipher;
+      assertEquals(Hex.encode(ctrTransportCipher.getKey().getEncoded()), unsafeDerivedKey);
+      assertEquals(Hex.encode(ctrTransportCipher.getInputIv()), inputIv);
+      assertEquals(Hex.encode(ctrTransportCipher.getOutputIv()), outputIv);
     }
   }
 
@@ -218,22 +239,25 @@ public class AuthEngineSuite {
   }
 
   @Test
-  public void testEncryptedMessage() throws Exception {
+  public void testCtrEncryptedMessage() throws Exception {
     try (AuthEngine client = new AuthEngine("appId", "secret", conf);
          AuthEngine server = new AuthEngine("appId", "secret", conf)) {
       AuthMessage clientChallenge = client.challenge();
       AuthMessage serverResponse = server.response(clientChallenge);
       client.deriveSessionCipher(clientChallenge, serverResponse);
 
-      TransportCipher cipher = server.sessionCipher();
-      TransportCipher.EncryptionHandler handler = new TransportCipher.EncryptionHandler(cipher);
+      TransportCipher clientCipher = server.sessionCipher();
+      assert(clientCipher instanceof CtrTransportCipher);
+      CtrTransportCipher ctrTransportCipher = (CtrTransportCipher) clientCipher;
+      CtrTransportCipher.EncryptionHandler handler =
+              new CtrTransportCipher.EncryptionHandler(ctrTransportCipher);
 
-      byte[] data = new byte[TransportCipher.STREAM_BUFFER_SIZE + 1];
+      byte[] data = new byte[CtrTransportCipher.STREAM_BUFFER_SIZE + 1];
       new Random().nextBytes(data);
       ByteBuf buf = Unpooled.wrappedBuffer(data);
 
       ByteArrayWritableChannel channel = new ByteArrayWritableChannel(data.length);
-      TransportCipher.EncryptedMessage emsg = handler.createEncryptedMessage(buf);
+      CtrTransportCipher.EncryptedMessage emsg = handler.createEncryptedMessage(buf);
       while (emsg.transferred() < emsg.count()) {
         emsg.transferTo(channel, emsg.transferred());
       }
@@ -241,17 +265,111 @@ public class AuthEngineSuite {
     }
   }
 
+  private ChannelHandlerContext mockChannelHandlerContext() {
+    ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
+    when(ctx.fireChannelRead(any())).thenAnswer(in -> {
+      ByteBuf buf = (ByteBuf) in.getArguments()[0];
+      buf.release();
+      return null;
+    });
+    return ctx;
+  }
+
   @Test
-  public void testEncryptedMessageWhenTransferringZeroBytes() throws Exception {
+  public void testGcmEncryptedMessage() throws Exception {
+    TransportConf gcmConf = getConf(2, false);
+
+    try (AuthEngine client = new AuthEngine("appId", "secret", gcmConf);
+         AuthEngine server = new AuthEngine("appId", "secret", gcmConf)) {
+      AuthMessage clientChallenge = client.challenge();
+      AuthMessage serverResponse = server.response(clientChallenge);
+      client.deriveSessionCipher(clientChallenge, serverResponse);
+
+      TransportCipher clientCipher = server.sessionCipher();
+      assert (clientCipher instanceof GcmTransportCipher);
+
+      GcmTransportCipher gcmTransportCipher = (GcmTransportCipher) clientCipher;
+      GcmTransportCipher.EncryptionHandler encryptionHandler =
+              gcmTransportCipher.getEncryptionHandler();
+      GcmTransportCipher.DecryptionHandler decryptionHandler =
+              gcmTransportCipher.getDecryptionHandler();
+      byte[] data = new byte[1024 * 32];
+      // Just writing some bytes.
+      data[0] = 'a';
+      data[512] = 'b';
+      data[1024 * 16] = 'c';
+      ByteBuf buf = Unpooled.wrappedBuffer(data);
+
+      // Mock the context and capture the arguments passed to it
+      ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
+      ChannelPromise promise = mock(ChannelPromise.class);
+      ArgumentCaptor<ByteBuf> captorWrappedEncrypted =
+              ArgumentCaptor.forClass(ByteBuf.class);
+      encryptionHandler.write(ctx, buf, promise);
+      verify(ctx).write(captorWrappedEncrypted.capture(), eq(promise));
+      ByteBuf encrypted = captorWrappedEncrypted.getValue();
+
+      ArgumentCaptor<ByteBuf> captorPlaintext =
+              ArgumentCaptor.forClass(ByteBuf.class);
+      decryptionHandler.channelRead(ctx, encrypted);
+      verify(ctx).fireChannelRead(captorPlaintext.capture());
+      ByteBuf plaintext = captorPlaintext.getValue();
+      assert(plaintext.readableBytes() == 1024 * 32);
+      assert(plaintext.getByte(0) == 'a');
+      assert(plaintext.getByte(512) == 'b');
+      assert(plaintext.getByte(1024 * 16) == 'c');
+    }
+  }
+
+  @Test
+  public void testCorruptGcmEncryptedMessage() throws Exception {
+    TransportConf gcmConf = getConf(2, false);
+
+    try (AuthEngine client = new AuthEngine("appId", "secret", gcmConf);
+         AuthEngine server = new AuthEngine("appId", "secret", gcmConf)) {
+      AuthMessage clientChallenge = client.challenge();
+      AuthMessage serverResponse = server.response(clientChallenge);
+      client.deriveSessionCipher(clientChallenge, serverResponse);
+
+      TransportCipher clientCipher = server.sessionCipher();
+      assert (clientCipher instanceof GcmTransportCipher);
+
+      GcmTransportCipher gcmTransportCipher = (GcmTransportCipher) clientCipher;
+      GcmTransportCipher.EncryptionHandler encryptionHandler =
+              gcmTransportCipher.getEncryptionHandler();
+      GcmTransportCipher.DecryptionHandler decryptionHandler =
+              gcmTransportCipher.getDecryptionHandler();
+      byte[] zeroData = new byte[1024 * 32];
+      // Just writing some bytes.
+      ByteBuf buf = Unpooled.wrappedBuffer(zeroData);
+
+      // Mock the context and capture the arguments passed to it
+      ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
+      ChannelPromise promise = mock(ChannelPromise.class);
+      ArgumentCaptor<ByteBuf> captorWrappedEncrypted = ArgumentCaptor.forClass(ByteBuf.class);
+      encryptionHandler.write(ctx, buf, promise);
+      verify(ctx).write(captorWrappedEncrypted.capture(), eq(promise));
+      ByteBuf encrypted = captorWrappedEncrypted.getValue();
+
+      byte b = encrypted.getByte(100);
+      // Inverting the bits of the 100th bit
+      encrypted.setByte(100, ~b & 0xFF);
+      assertThrows(AEADBadTagException.class, () -> decryptionHandler.channelRead(ctx, encrypted));
+    }
+  }
+
+  @Test
+  public void testCtrEncryptedMessageWhenTransferringZeroBytes() throws Exception {
     try (AuthEngine client = new AuthEngine("appId", "secret", conf);
          AuthEngine server = new AuthEngine("appId", "secret", conf)) {
       AuthMessage clientChallenge = client.challenge();
       AuthMessage serverResponse = server.response(clientChallenge);
       client.deriveSessionCipher(clientChallenge, serverResponse);
-
-      TransportCipher cipher = server.sessionCipher();
-      TransportCipher.EncryptionHandler handler = new TransportCipher.EncryptionHandler(cipher);
-
+      TransportCipher clientCipher = server.sessionCipher();
+      assert(clientCipher instanceof CtrTransportCipher);
+      CtrTransportCipher ctrTransportCipher = (CtrTransportCipher) clientCipher;
+      CtrTransportCipher.EncryptionHandler handler =
+              new CtrTransportCipher.EncryptionHandler(ctrTransportCipher);
       int testDataLength = 4;
       FileRegion region = mock(FileRegion.class);
       when(region.count()).thenReturn((long) testDataLength);
@@ -273,7 +391,7 @@ public class AuthEngineSuite {
         }
       });
 
-      TransportCipher.EncryptedMessage emsg = handler.createEncryptedMessage(region);
+      CtrTransportCipher.EncryptedMessage emsg = handler.createEncryptedMessage(region);
       ByteArrayWritableChannel channel = new ByteArrayWritableChannel(testDataLength);
       // "transferTo" should act correctly when the underlying FileRegion transfers 0 bytes.
       assertEquals(0L, emsg.transferTo(channel, emsg.transferred()));

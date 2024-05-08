@@ -49,7 +49,7 @@ public class AuthIntegrationSuite {
   private AuthTestCtx ctx;
 
   @AfterEach
-  public void cleanUp() throws Exception {
+  public void cleanUp() {
     if (ctx != null) {
       ctx.close();
     }
@@ -57,11 +57,21 @@ public class AuthIntegrationSuite {
   }
 
   @Test
-  public void testNewAuth() throws Exception {
-    ctx = new AuthTestCtx();
+  public void testNewCtrAuth() throws Exception {
+    ctx = new AuthTestCtx(new DummyRpcHandler(), "AES/CTR/NoPadding");
     ctx.createServer("secret");
     ctx.createClient("secret");
 
+    ByteBuffer reply = ctx.client.sendRpcSync(JavaUtils.stringToBytes("Ping"), 5000);
+    assertEquals("Pong", JavaUtils.bytesToString(reply));
+    assertNull(ctx.authRpcHandler.saslHandler);
+  }
+
+  @Test
+  public void testNewGcmAuth() throws Exception {
+    ctx = new AuthTestCtx(new DummyRpcHandler(), "AES/GCM/NoPadding");
+    ctx.createServer("secret");
+    ctx.createClient("secret");
     ByteBuffer reply = ctx.client.sendRpcSync(JavaUtils.stringToBytes("Ping"), 5000);
     assertEquals("Pong", JavaUtils.bytesToString(reply));
     assertNull(ctx.authRpcHandler.saslHandler);
@@ -110,16 +120,16 @@ public class AuthIntegrationSuite {
     ctx.createClient("secret");
 
     assertNotNull(ctx.client.getChannel().pipeline()
-      .remove(TransportCipher.ENCRYPTION_HANDLER_NAME));
+      .remove(CtrTransportCipher.ENCRYPTION_HANDLER_NAME));
     assertThrows(Exception.class,
       () -> ctx.client.sendRpcSync(JavaUtils.stringToBytes("Ping"), 5000));
     assertTrue(ctx.authRpcHandler.isAuthenticated());
   }
 
   @Test
-  public void testLargeMessageEncryption() throws Exception {
+  public void testLargeCtrMessageEncryption() throws Exception {
     // Use a big length to create a message that cannot be put into the encryption buffer completely
-    final int testErrorMessageLength = TransportCipher.STREAM_BUFFER_SIZE;
+    final int testErrorMessageLength = CtrTransportCipher.STREAM_BUFFER_SIZE;
     ctx = new AuthTestCtx(new RpcHandler() {
       @Override
       public void receive(
@@ -150,11 +160,55 @@ public class AuthIntegrationSuite {
   }
 
   @Test
+  public void testCorruptedGcmMessageDecryption() throws Exception {
+    ctx = new AuthTestCtx(new RpcHandler() {
+      @Override
+      public void receive(
+              TransportClient client,
+              ByteBuffer message,
+              RpcResponseCallback callback) {
+        String messageString = JavaUtils.bytesToString(message);
+        assertEquals("Ping", messageString);
+        callback.onFailure(new RuntimeException("Junk"));
+      }
+
+      @Override
+      public StreamManager getStreamManager() {
+        return null;
+      }
+    }, "AES/GCM/NoPadding");
+    ctx.createServer("secret");
+    ctx.createClient("secret");
+
+    Exception e = assertThrows(Exception.class,
+            () -> ctx.client.sendRpcSync(JavaUtils.stringToBytes("Ping"), 5000));
+    assertTrue(ctx.authRpcHandler.isAuthenticated());
+    assertTrue(e.getMessage().contains("javax.crypto.AEADBadTagException: Tag mismatch!"));
+  }
+
+  @Test
   public void testValidMergedBlockMetaReqHandler() throws Exception {
     ctx = new AuthTestCtx();
     ctx.createServer("secret");
     ctx.createClient("secret");
     assertNotNull(ctx.authRpcHandler.getMergedBlockMetaReqHandler());
+  }
+
+  private static class DummyRpcHandler extends RpcHandler {
+    @Override
+    public void receive(
+            TransportClient client,
+            ByteBuffer message,
+            RpcResponseCallback callback) {
+      String messageString = JavaUtils.bytesToString(message);
+      assertEquals("Ping", messageString);
+      callback.onSuccess(JavaUtils.stringToBytes("Pong"));
+    }
+
+    @Override
+    public StreamManager getStreamManager() {
+      return null;
+    }
   }
 
   private static class AuthTestCtx {
@@ -169,25 +223,17 @@ public class AuthIntegrationSuite {
     volatile AuthRpcHandler authRpcHandler;
 
     AuthTestCtx() throws Exception {
-      this(new RpcHandler() {
-        @Override
-        public void receive(
-            TransportClient client,
-            ByteBuffer message,
-            RpcResponseCallback callback) {
-          assertEquals("Ping", JavaUtils.bytesToString(message));
-          callback.onSuccess(JavaUtils.stringToBytes("Pong"));
-        }
-
-        @Override
-        public StreamManager getStreamManager() {
-          return null;
-        }
-      });
+      this(new DummyRpcHandler());
     }
 
     AuthTestCtx(RpcHandler rpcHandler) throws Exception {
-      Map<String, String> testConf = ImmutableMap.of("spark.network.crypto.enabled", "true");
+        this(rpcHandler, "AES/CTR/NoPadding");
+    }
+
+    AuthTestCtx(RpcHandler rpcHandler, String mode) throws Exception {
+      Map<String, String> testConf = ImmutableMap.of(
+              "spark.network.crypto.enabled", "true",
+              "spark.network.crypto.cipher", mode);
       this.conf = new TransportConf("rpc", new MapConfigProvider(testConf));
       this.ctx = new TransportContext(conf, rpcHandler);
     }
