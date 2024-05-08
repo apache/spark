@@ -45,11 +45,12 @@ public class TSetIpAddressProcessor<I extends Iface> extends TCLIService.Process
   }
 
   @Override
-  public boolean process(final TProtocol in, final TProtocol out) throws TException {
+  public void process(final TProtocol in, final TProtocol out) throws TException {
     setIpAddress(in);
     setUserName(in);
     try {
-      return super.process(in, out);
+      super.process(in, out);
+      return;
     } finally {
       THREAD_LOCAL_USER_NAME.remove();
       THREAD_LOCAL_IP_ADDRESS.remove();
