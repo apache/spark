@@ -77,12 +77,20 @@ case class PartialResultArrayException(
  */
 case class BadRecordException(
     @transient record: () => UTF8String,
-    @transient partialResults: () => Array[InternalRow] = () => Array.empty[InternalRow],
+    @transient partialResults: () => Array[InternalRow],
     @transient cause: () => Throwable)
     extends Exception() {
 
   override def getStackTrace(): Array[StackTraceElement] = new Array[StackTraceElement](0)
   override def fillInStackTrace(): Throwable = this
+}
+
+object BadRecordException {
+  def apply(
+      record: () => UTF8String,
+      partialResults: () => Array[InternalRow] = () => Array.empty[InternalRow],
+      cause: Throwable): BadRecordException =
+    new BadRecordException(record, partialResults, () => cause)
 }
 
 /**
