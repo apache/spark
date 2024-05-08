@@ -865,18 +865,18 @@ class CollationStringExpressionsSuite
       ModeTestCase("unicode_ci", bufferValues, "b"),
       ModeTestCase("unicode", bufferValues, "a"))
 
-//    val bufferValuesUTF8String = Map(
-//      UTF8String.fromString("a") -> 5L,
-//      UTF8String.fromString("b") -> 4L,
-//      UTF8String.fromString("B") -> 3L,
-//      UTF8String.fromString("d") -> 2L,
-//      UTF8String.fromString("e") -> 1L)
-//
-//    val testCasesUTF8String = Seq(
-//      UTF8StringModeTestCase("utf8_binary", bufferValuesUTF8String, "a"),
-//      UTF8StringModeTestCase("utf8_binary_lcase", bufferValuesUTF8String, "b"),
-//      UTF8StringModeTestCase("unicode_ci", bufferValuesUTF8String, "b"),
-//      UTF8StringModeTestCase("unicode", bufferValuesUTF8String, "a"))
+    val bufferValuesUTF8String = Map(
+      UTF8String.fromString("a") -> 5L,
+      UTF8String.fromString("b") -> 4L,
+      UTF8String.fromString("B") -> 3L,
+      UTF8String.fromString("d") -> 2L,
+      UTF8String.fromString("e") -> 1L)
+
+    val testCasesUTF8String = Seq(
+      UTF8StringModeTestCase("utf8_binary", bufferValuesUTF8String, "a"),
+      UTF8StringModeTestCase("utf8_binary_lcase", bufferValuesUTF8String, "b"),
+      UTF8StringModeTestCase("unicode_ci", bufferValuesUTF8String, "b"),
+      UTF8StringModeTestCase("unicode", bufferValuesUTF8String, "a"))
 
     testCasesStrings.foreach(t => {
       val buffer = new OpenHashMap[AnyRef, Long](5)
@@ -884,13 +884,13 @@ class CollationStringExpressionsSuite
       t.bufferValues.foreach { case (k, v) => buffer.update(k, v) }
       assert(myMode.eval(buffer).toString.toLowerCase() == t.result.toLowerCase())
     })
-//
-//    testCasesUTF8String.foreach(t => {
-//      val buffer = new OpenHashMap[AnyRef, Long](5)
-//      val myMode = Mode(child = Literal.create("some_column_name", StringType(t.collationId)))
-//      t.bufferValues.foreach { case (k, v) => buffer.update(k, v) }
-//      assert(myMode.eval(buffer).toString == t.result)
-//    })
+
+    testCasesUTF8String.foreach(t => {
+      val buffer = new OpenHashMap[AnyRef, Long](5)
+      val myMode = Mode(child = Literal.create("some_column_name", StringType(t.collationId)))
+      t.bufferValues.foreach { case (k, v) => buffer.update(k, v) }
+      assert(myMode.eval(buffer).toString.toLowerCase() == t.result.toLowerCase())
+    })
   }
 
   // TODO: Add more tests for other string expressions

@@ -194,7 +194,7 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
       collationTypes: Seq[String],
       value: Seq[UTF8String]): Unit = {
     val benchmark = new Benchmark(
-      "collation unit benchmarks - mode",
+      s"collation unit benchmarks - mode - ${value.size} elements",
       value.size * 10,
       warmupTime = 10.seconds,
       output = output)
@@ -203,31 +203,32 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
         val modeDefaultCollation = Mode(child =
           Literal.create("some_column_name", StringType(collationType)))
         val buffer = new OpenHashMap[AnyRef, Long](value.size)
-        value.zipWithIndex.sliding(20, 20).foreach(slide => {
+        value.zipWithIndex.sliding(2000, 2000).foreach(slide => {
           slide.foreach { case (v: UTF8String, i: Int) =>
             buffer.update(v.toString + s"_${i.toString}", (i % 1000).toLong)
           }
           modeDefaultCollation.eval(buffer)
-
         })
       }
     }
     }
-    benchmark.addCase(s"Collation Not Enabled") { _ =>
+
+    benchmark.addCase(s"Collation Not Enabled - mode - ${value.size} elements") { _ =>
       val modeNoCollation = Mode(child =
         Literal("some_column_name"))
       val buffer = new OpenHashMap[AnyRef, Long](value.size)
-      value.zipWithIndex.sliding(20, 20).foreach(slide => {
+      value.zipWithIndex.sliding(2000, 2000).foreach(slide => {
         slide.foreach { case (v: UTF8String, i: Int) =>
           buffer.update(v.toString + s"_${i.toString}", (i % 1000).toLong)
         }
         modeNoCollation.eval(buffer)
       })
     }
-    benchmark.addCase(s"Numerical Type") { _ =>
+
+    benchmark.addCase(s"Numerical Type - mode - ${value.size} elements") { _ =>
       val modeIntType = Mode(child = Literal.create(1, IntegerType))
       val buffer = new OpenHashMap[AnyRef, Long](value.size)
-      value.zipWithIndex.sliding(20, 20).foreach(slide => {
+      value.zipWithIndex.sliding(2000, 2000).foreach(slide => {
         slide.foreach {
           case (_, i: Int) =>
             buffer.update(i.asInstanceOf[AnyRef], (i % 1000).toLong)
@@ -266,6 +267,8 @@ object CollationBenchmark extends CollationBenchmarkBase {
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val inputs = generateSeqInput(10000L)
     benchmarkMode(collationTypes, inputs)
+    benchmarkMode(collationTypes, generateSeqInput(5000L))
+    benchmarkMode(collationTypes, generateSeqInput(2500L))
     benchmarkUTFStringEquals(collationTypes, inputs)
     benchmarkUTFStringCompare(collationTypes, inputs)
     benchmarkUTFStringHashFunction(collationTypes, inputs)
