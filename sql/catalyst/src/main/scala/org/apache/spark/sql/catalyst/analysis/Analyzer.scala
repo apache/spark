@@ -4139,9 +4139,10 @@ object DebugInlineColumnsCountPushDown extends Rule[LogicalPlan] {
     plan.transform {
       case DebugInlineColumnsCount(j @ ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _,
       left, right, _), sampleColumns) if sampleColumns.isEmpty =>
-        val newLeftChild = DebugInlineColumnsCount(left, leftKeys)
-        val newRightChild = DebugInlineColumnsCount(right, rightKeys)
-        j.withNewChildren(Seq(newLeftChild, newRightChild))
+          DebugInlineColumnsCount(j, leftKeys ++ rightKeys)
+//        val newLeftChild = DebugInlineColumnsCount(left, leftKeys)
+//        val newRightChild = DebugInlineColumnsCount(right, rightKeys)
+//        j.withNewChildren(Seq(newLeftChild, newRightChild))
     }
   }
 }

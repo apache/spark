@@ -313,15 +313,6 @@ package object debug {
   case class DebugInlineColumnsCountExec(
     child: SparkPlan,
     sampleColumns: Seq[Expression]) extends UnaryExecNode {
-    // TODO only keep top K based on count
-    lazy val counts = new mutable.HashMap[Seq[Any], Long]
-
-    private def printVals(): Unit = {
-      counts.foreachEntry { (k, v) =>
-        val values = sampleColumns.zip(k).map(z => s"${z._1}: ${z._2}").mkString(",")
-        debugPrint(s"$values = $v")
-      }
-    }
 
     override protected def withNewChildInternal(newChild: SparkPlan): DebugInlineColumnsCountExec =
       copy(child = newChild)
@@ -329,7 +320,18 @@ package object debug {
     override protected def doExecute(): RDD[InternalRow] = {
       val exprs = bindReferences[Expression](sampleColumns, child.output)
 
-      var rowCount = 0
+      var rowCount = 0L
+      // TODO only keep top K based on count
+      val counts = new mutable.HashMap[Seq[Any], Long]
+
+      def printVals(): Unit = {
+        debugPrint(s"Column value counts after processing $rowCount rows")
+        counts.foreachEntry { (k, v) =>
+          val values = sampleColumns.zip(k).map(z => s"${z._1}: ${z._2}").mkString(",")
+          debugPrint(s"$values = $v (${v * 100 / rowCount}%)")
+        }
+      }
+
       child.execute().mapPartitions { iter =>
         iter.map { row =>
           val sampleVals = exprs.map(_.eval(row))
@@ -339,14 +341,15 @@ package object debug {
 
           rowCount += 1
           // TODO make configurable
-          if (rowCount > 10) {
-            rowCount = 0
+          if (rowCount % 10 == 0) {
             printVals()
           }
 
           row
         }
       }
+
+      // TODO figure out how to print counts once completed
     }
 
     override def output: Seq[Attribute] = child.output
