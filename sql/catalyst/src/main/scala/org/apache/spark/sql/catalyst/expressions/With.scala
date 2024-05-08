@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMON_EXPR_REF, TreePattern, WITH_EXPRESSION}
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE_EXPRESSION, COMMON_EXPR_REF, TreePattern, WITH_EXPRESSION}
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -27,6 +28,12 @@ import org.apache.spark.sql.types.DataType
  */
 case class With(child: Expression, defs: Seq[CommonExpressionDef])
   extends Expression with Unevaluable {
+  // We do not allow creating a With expression with an AggregateExpression that contains a
+  // reference to a common expression defined in that scope (note that it can contain another With
+  // expression with a common expression ref of the inner With). This is to prevent the creation of
+  // a dangling CommonExpressionRef after rewriting it in RewriteWithExpression.
+  assert(!With.containsUnsupportedAggExpr(this))
+
   override val nodePatterns: Seq[TreePattern] = Seq(WITH_EXPRESSION)
   override def dataType: DataType = child.dataType
   override def nullable: Boolean = child.nullable
@@ -87,6 +94,30 @@ object With {
     val commonExprDefs = commonExprs.map(CommonExpressionDef(_))
     val commonExprRefs = commonExprDefs.map(new CommonExpressionRef(_))
     With(replaced(commonExprRefs), commonExprDefs)
+  }
+
+  private def containsUnsupportedAggExpr(
+    expr: Expression,
+    commonExprDefIds: Set[CommonExpressionId]
+  ): Boolean = {
+    expr match {
+      case _ if !expr.containsPattern(AGGREGATE_EXPRESSION) => false
+      case agg: AggregateExpression =>
+        if (agg.containsPattern(COMMON_EXPR_REF)) {
+          agg.exists {
+            case w: With => containsUnsupportedAggExpr(w)
+            case r: CommonExpressionRef => commonExprDefIds.contains(r.id)
+            case _ => false
+          }
+        } else {
+          false
+        }
+      case _ => expr.children.exists(containsUnsupportedAggExpr(_, commonExprDefIds))
+    }
+  }
+
+  private[sql] def containsUnsupportedAggExpr(withExpr: With): Boolean = {
+    containsUnsupportedAggExpr(withExpr.child, withExpr.defs.map(_.id).toSet)
   }
 }
 

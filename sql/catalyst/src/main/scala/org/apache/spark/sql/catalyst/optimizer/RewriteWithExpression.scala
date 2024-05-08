@@ -21,7 +21,6 @@ import scala.collection.mutable
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.PhysicalAggregation
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, PlanHelper, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -44,60 +43,31 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
       // For aggregates, separate the computation of the aggregations themselves from the final
       // result by moving the final result computation into a projection above it. This prevents
       // this rule from producing an invalid Aggregate operator.
-      case p @ PhysicalAggregation(physGroupingExprs, physAggExprs, physResExprs, child)
-        if containsWithExpression(p) =>
-        // We need to first handle a special case: if there is an aggregate function in the child of
-        // a With expression, PhysicalAggregation will separate the With expression's reference(s)
-        // from its definition, leaving a dangling common expression reference.
-        val (aggExprs, resExprs) =
-          fixDanglingCommonExpressionRefs(physAggExprs, physResExprs) match {
-            case (ae, re) => (ae.map(_.asInstanceOf[AggregateExpression]), re)
-          }
-        // PhysicalAggregation returns physAggExprs as attribute references, which we change to
-        // aliases so that they can be referred to by physResExprs.
-        val aggExprsAliases = aggExprs.map(ae => Alias(ae, "_aggregateexpression")(ae.resultId))
-        val aggExprIds = aggExprsAliases.map(_.exprId).toSet
-        val resExprsAttrs = resExprs.map(_.transform {
+      case p @ PhysicalAggregation(
+        groupingExpressions, aggregateExpressions, resultExpressions, child)
+        if p.expressions.exists(_.containsPattern(WITH_EXPRESSION)) =>
+        // PhysicalAggregation returns aggregateExpressions as attribute references, which we change
+        // to aliases so that they can be referred to by resultExpressions.
+        val aggExprs = aggregateExpressions.map(
+          ae => Alias(ae, "_aggregateexpression")(ae.resultId))
+        val aggExprIds = aggExprs.map(_.exprId).toSet
+        val resExprs = resultExpressions.map(_.transform {
           case a: AttributeReference if aggExprIds.contains(a.exprId) =>
             a.withName("_aggregateexpression")
         }.asInstanceOf[NamedExpression])
         // Rewrite the projection and the aggregate separately and then piece them together.
-        val agg = Aggregate(physGroupingExprs, physGroupingExprs ++ aggExprsAliases, child)
+        val agg = Aggregate(groupingExpressions, groupingExpressions ++ aggExprs, child)
         val rewrittenAgg = applyInternal(agg)
-        val proj = Project(resExprsAttrs, rewrittenAgg)
+        val proj = Project(resExprs, rewrittenAgg)
         applyInternal(proj)
+      case p if p.expressions.exists(_.containsPattern(WITH_EXPRESSION)) =>
+        applyInternal(p)
       case p if containsWithExpression(p) => applyInternal(p)
     }
   }
 
   private def containsWithExpression(p: LogicalPlan): Boolean =
     p.expressions.exists(_.containsPattern(WITH_EXPRESSION))
-
-  private def fixDanglingCommonExpressionRefs(
-    exprsWithDanglingRefs: Seq[Expression],
-    exprsWithMissingRefs: Seq[Expression]
-  ): (Seq[Expression], Seq[Expression]) = {
-    lazy val defs = exprsWithMissingRefs.flatMap(_.collect {
-      case d: CommonExpressionDef => d.id -> d.child
-    }).toMap
-
-    // If there is a dangling reference, we find its definition in exprsWithMissingRefs by looking
-    // up by common expression ID in defs - and inline it.
-    def inlineDanglingRefs(e: Expression): Expression = e match {
-      case w: With => w
-      case ref: CommonExpressionRef => defs.getOrElse(ref.id, ref)
-      case _ => e.mapChildren(inlineDanglingRefs)
-    }
-
-    (
-      exprsWithDanglingRefs.map(ae => inlineDanglingRefs(ae)),
-      exprsWithMissingRefs.map(_.transformWithPruning(_.containsPattern(WITH_EXPRESSION)) {
-        // If there was a dangling reference in exprsWithDanglingRefs, then there will be a
-        // corresponding With expression in exprsWithMissingRefs without a ref, which we can unwrap.
-        case w: With if !w.containsPattern(COMMON_EXPR_REF) => w.child
-      })
-    )
-  }
 
   private def applyInternal(p: LogicalPlan): LogicalPlan = {
     val inputPlans = p.children.toArray
