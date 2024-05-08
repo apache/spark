@@ -17,7 +17,7 @@
 
 import unittest
 
-from pyspark.errors import PythonException, PySparkNotImplementedError
+from pyspark.errors import AnalysisException, PythonException, PySparkNotImplementedError
 from pyspark.sql import Row
 from pyspark.sql.functions import udf
 from pyspark.sql.tests.test_udf import BaseUDFTestsMixin
@@ -196,6 +196,28 @@ class PythonUDFArrowTestsMixin(BaseUDFTestsMixin):
             "Arrow optimization for Python UDFs cannot be enabled for functions"
             " without arguments.",
         )
+
+    def test_named_arguments_negative(self):
+        @udf("int")
+        def test_udf(a, b):
+            return a + b
+
+        self.spark.udf.register("test_udf", test_udf)
+
+        with self.assertRaisesRegex(
+            AnalysisException,
+            "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
+        ):
+            self.spark.sql("SELECT test_udf(a => id, a => id * 10) FROM range(2)").show()
+
+        with self.assertRaisesRegex(AnalysisException, "UNEXPECTED_POSITIONAL_ARGUMENT"):
+            self.spark.sql("SELECT test_udf(a => id, id * 10) FROM range(2)").show()
+
+        with self.assertRaises(PythonException):
+            self.spark.sql("SELECT test_udf(c => 'x') FROM range(2)").show()
+
+        with self.assertRaises(PythonException):
+            self.spark.sql("SELECT test_udf(id, a => id * 10) FROM range(2)").show()
 
 
 class PythonUDFArrowTests(PythonUDFArrowTestsMixin, ReusedSQLTestCase):
