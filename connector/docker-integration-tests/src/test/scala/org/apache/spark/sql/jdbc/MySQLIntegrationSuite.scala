@@ -97,6 +97,24 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     conn.prepareStatement("CREATE TABLE TBL_GEOMETRY (col0 GEOMETRY)").executeUpdate()
     conn.prepareStatement("INSERT INTO TBL_GEOMETRY VALUES (ST_GeomFromText('POINT(0 0)'))")
       .executeUpdate()
+
+    conn.prepareStatement(
+      s"""CREATE TABLE pattern_testing_table (
+         |pattern_testing_col LONGTEXT
+         |)
+               """.stripMargin
+    ).executeUpdate()
+
+    conn.prepareStatement(
+      s"""
+         |INSERT INTO pattern_testing_table VALUES
+         |('special_character_quote\\'_present'),
+         |('special_character_quote_not_present'),
+         |('special_character_percent%_present'),
+         |('special_character_percent_not_present'),
+         |('special_character_underscore_present'),
+         |('special_character_underscorenot_present')
+         """.stripMargin).executeUpdate()
   }
 
   def testConnection(): Unit = {
@@ -357,6 +375,184 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
       .jdbc(jdbcUrl, "smallint_round_trip", new Properties)
     val df = spark.read.jdbc(jdbcUrl, "smallint_round_trip", new Properties)
     assert(df.schema.fields.head.dataType === ShortType)
+  }
+
+  test("test contains pushdown") {
+    // this one should map to contains
+    val df1 = spark.sql(
+      s"""
+         |SELECT * FROM pattern_testing_table
+         |WHERE contains(pattern_testing_col, 'quote\\'')""".stripMargin)
+    df1.explain("formatted")
+
+    checkAnswer(df1, Row("special_character_quote'_present"))
+
+    val df2 = spark.sql(
+      s"""SELECT * FROM pattern_testing_table
+         |WHERE contains(pattern_testing_col, 'percent%')""".stripMargin)
+    checkAnswer(df2, Row("special_character_percent%_present"))
+
+    val df3 = spark.
+      sql(
+        s"""SELECT * FROM pattern_testing_table
+           |WHERE contains(pattern_testing_col, 'underscore_')""".stripMargin)
+    checkAnswer(df3, Row("special_character_underscore_present"))
+
+    val df4 = spark.
+      sql(
+        s"""SELECT * FROM pattern_testing_table
+           |WHERE contains(pattern_testing_col, 'character')
+           |ORDER BY pattern_testing_col""".stripMargin)
+    checkAnswer(df4, Seq(
+      Row("special_character_percent%_present"),
+      Row("special_character_percent_not_present"),
+      Row("special_character_quote'_present"),
+      Row("special_character_quote_not_present"),
+      Row("special_character_underscore_present"),
+      Row("special_character_underscorenot_present")))
+  }
+
+  test("endswith pushdown") {
+    val df9 = spark.sql(
+      s"""SELECT * FROM pattern_testing_table
+         |WHERE endswith(pattern_testing_col, 'quote\\'_present')""".stripMargin)
+    checkAnswer(df9, Row("special_character_quote'_present"))
+    val df10 = spark.sql(
+      s"""SELECT * FROM pattern_testing_table
+         |WHERE endswith(pattern_testing_col, 'percent%_present')""".stripMargin)
+    checkAnswer(df10, Row("special_character_percent%_present"))
+    val df11 = spark.
+      sql(
+        s"""SELECT * FROM pattern_testing_table
+           |WHERE endswith(pattern_testing_col, 'underscore_present')""".stripMargin)
+    checkAnswer(df11, Row("special_character_underscore_present"))
+    val df12 = spark.
+      sql(
+        s"""SELECT * FROM pattern_testing_table
+           |WHERE endswith(pattern_testing_col, 'present')
+           |ORDER BY pattern_testing_col""".stripMargin)
+    checkAnswer(df12, Seq(
+      Row("special_character_percent%_present"),
+      Row("special_character_percent_not_present"),
+      Row("special_character_quote'_present"),
+      Row("special_character_quote_not_present"),
+      Row("special_character_underscore_present"),
+      Row("special_character_underscorenot_present")))
+  }
+
+  test("startswith pushdown") {
+    val df5 = spark.sql(
+      s"""SELECT * FROM pattern_testing_table
+         |WHERE startswith(pattern_testing_col, 'special_character_quote\\'')""".stripMargin)
+    checkAnswer(df5, Row("special_character_quote'_present"))
+    val df6 = spark.sql(
+      s"""SELECT * FROM pattern_testing_table
+         |WHERE startswith(pattern_testing_col, 'special_character_percent%')""".stripMargin)
+    checkAnswer(df6, Row("special_character_percent%_present"))
+    val df7 = spark.
+      sql(
+        s"""SELECT * FROM pattern_testing_table
+           |WHERE startswith(pattern_testing_col, 'special_character_underscore_')""".stripMargin)
+    checkAnswer(df7, Row("special_character_underscore_present"))
+    val df8 = spark.
+      sql(
+        s"""SELECT * FROM pattern_testing_table
+           |WHERE startswith(pattern_testing_col, 'special_character')
+           |ORDER BY pattern_testing_col""".stripMargin)
+    checkAnswer(df8, Seq(
+      Row("special_character_percent%_present"),
+      Row("special_character_percent_not_present"),
+      Row("special_character_quote'_present"),
+      Row("special_character_quote_not_present"),
+      Row("special_character_underscore_present"),
+      Row("special_character_underscorenot_present")))
+  }
+
+  test("test like pushdown") {
+    // this one should map to contains
+    val df1 = spark.sql(
+      s"""SELECT * FROM pattern_testing_table
+         |WHERE pattern_testing_col LIKE '%quote\\'%'""".stripMargin)
+
+    checkAnswer(df1, Row("special_character_quote'_present"))
+
+    val df2 = spark.sql(
+      s"""SELECT * FROM pattern_testing_table
+         |WHERE pattern_testing_col LIKE '%percent\\%%'""".stripMargin)
+    checkAnswer(df2, Row("special_character_percent%_present"))
+
+    val df3 = spark.
+      sql(
+        s"""SELECT * FROM pattern_testing_table
+           |WHERE pattern_testing_col LIKE '%underscore\\_%'""".stripMargin)
+    checkAnswer(df3, Row("special_character_underscore_present"))
+
+    val df4 = spark.
+      sql(
+        s"""SELECT * FROM pattern_testing_table
+           |WHERE pattern_testing_col LIKE '%character%'
+           |ORDER BY pattern_testing_col""".stripMargin)
+    checkAnswer(df4, Seq(
+      Row("special_character_percent%_present"),
+      Row("special_character_percent_not_present"),
+      Row("special_character_quote'_present"),
+      Row("special_character_quote_not_present"),
+      Row("special_character_underscore_present"),
+      Row("special_character_underscorenot_present")))
+
+    // map to startsWith
+    // this one should map to contains
+    val df5 = spark.sql(
+      s"""SELECT * FROM pattern_testing_table
+         |WHERE pattern_testing_col LIKE 'special_character_quote\\'%'""".stripMargin)
+    checkAnswer(df5, Row("special_character_quote'_present"))
+    val df6 = spark.sql(
+      s"""SELECT * FROM pattern_testing_table
+         |WHERE pattern_testing_col LIKE 'special_character_percent\\%%'""".stripMargin)
+    checkAnswer(df6, Row("special_character_percent%_present"))
+    val df7 = spark.
+      sql(
+        s"""SELECT * FROM pattern_testing_table
+           |WHERE pattern_testing_col LIKE 'special_character_underscore\\_%'""".stripMargin)
+    checkAnswer(df7, Row("special_character_underscore_present"))
+    val df8 = spark.
+      sql(
+        s"""SELECT * FROM pattern_testing_table
+           |WHERE pattern_testing_col LIKE 'special_character%'
+           |ORDER BY pattern_testing_col""".stripMargin)
+    checkAnswer(df8, Seq(
+      Row("special_character_percent%_present"),
+      Row("special_character_percent_not_present"),
+      Row("special_character_quote'_present"),
+      Row("special_character_quote_not_present"),
+      Row("special_character_underscore_present"),
+      Row("special_character_underscorenot_present")))
+    // map to endsWith
+    // this one should map to contains
+    val df9 = spark.sql(
+      s"""SELECT * FROM pattern_testing_table
+         |WHERE pattern_testing_col LIKE '%quote\\'_present'""".stripMargin)
+    checkAnswer(df9, Row("special_character_quote'_present"))
+    val df10 = spark.sql(
+      s"""SELECT * FROM pattern_testing_table
+         |WHERE pattern_testing_col LIKE '%percent\\%_present'""".stripMargin)
+    checkAnswer(df10, Row("special_character_percent%_present"))
+    val df11 = spark.
+      sql(
+        s"""SELECT * FROM pattern_testing_table
+           |WHERE pattern_testing_col LIKE '%underscore\\_present'""".stripMargin)
+    checkAnswer(df11, Row("special_character_underscore_present"))
+    val df12 = spark.
+      sql(
+        s"""SELECT * FROM pattern_testing_table
+           |WHERE pattern_testing_col LIKE '%present' ORDER BY pattern_testing_col""".stripMargin)
+    checkAnswer(df12, Seq(
+      Row("special_character_percent%_present"),
+      Row("special_character_percent_not_present"),
+      Row("special_character_quote'_present"),
+      Row("special_character_quote_not_present"),
+      Row("special_character_underscore_present"),
+      Row("special_character_underscorenot_present")))
   }
 }
 
