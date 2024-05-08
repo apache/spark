@@ -86,6 +86,10 @@ class TypesParityTests(TypesTestsMixin, ReusedConnectTestCase):
     def test_udt(self):
         super().test_udt()
 
+    @unittest.skip("Requires JVM access.")
+    def test_schema_with_collations_json_ser_de(self):
+        super().test_schema_with_collations_json_ser_de()
+
     @unittest.skip("Does not test anything related to Spark Connect")
     def test_parse_datatype_string(self):
         super().test_parse_datatype_string()

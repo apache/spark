@@ -894,7 +894,7 @@ class StructField(DataType):
         self.dataType = dataType
         self.nullable = nullable
         self.metadata = metadata or {}
-        self._collationMetadata = None
+        self._collationMetadata: Optional[None, Dict[str, str]] = None
 
     def simpleString(self) -> str:
         return "%s:%s" % (self.name, self.dataType.simpleString())
@@ -944,31 +944,34 @@ class StructField(DataType):
         )
 
     @property
-    def collationMetadata(self):
-        def visitRecursively(dt: DataType, fieldPath: str):
+    def collationMetadata(self) -> Dict[str, str]:
+        def visitRecursively(dt: DataType, fieldPath: str) -> None:
             if isinstance(dt, ArrayType):
                 processDataType(dt.elementType, fieldPath + ".element")
             elif isinstance(dt, MapType):
                 processDataType(dt.keyType, fieldPath + ".key")
                 processDataType(dt.valueType, fieldPath + ".value")
             elif isinstance(dt, StringType) and self._isCollatedString(dt):
-                self._collationMetadata[fieldPath] = self.collationName(dt)
+                collationMetadata[fieldPath] = self.collationName(dt)
 
-        def processDataType(dt: DataType, fieldPath: str):
+        def processDataType(dt: DataType, fieldPath: str) -> None:
             if self._isCollatedString(dt):
-                self._collationMetadata[fieldPath] = self.collationName(dt)
+                collationMetadata[fieldPath] = self.collationName(dt)
             else:
                 visitRecursively(dt, fieldPath)
 
         if self._collationMetadata is None:
-            self._collationMetadata = {}
+            collationMetadata = {}
             visitRecursively(self.dataType, self.name)
+            self._collationMetadata = collationMetadata
+
         return self._collationMetadata
 
     def _isCollatedString(self, dt: DataType) -> bool:
         return isinstance(dt, StringType) and not dt.isUTF8BinaryCollation()
 
-    def collationName(self, dt: StringType) -> str:
+    def collationName(self, dt: DataType) -> str:
+        assert isinstance(dt, StringType)
         return StringType.collationIdToName(dt.collationId)
 
     def needConversion(self) -> bool:
@@ -1822,9 +1825,14 @@ def _parse_datatype_json_value(
         tpe = json_value["type"]
         if tpe in _all_complex_types:
             complex_type = _all_complex_types[tpe]
-            if complex_type in (ArrayType, MapType):
+            if complex_type is StructType:
+                return complex_type.fromJson(json_value)
+            elif complex_type in [ArrayType, MapType]:
                 return complex_type.fromJson(json_value, fieldPath, collationsMap)
-            return complex_type.fromJson(json_value)
+            raise PySparkValueError(
+                error_class="UNSUPPORTED_DATA_TYPE",
+                message_parameters={"data_type": str(tpe)},
+            )
         elif tpe == "udt":
             return UserDefinedType.fromJson(json_value)
         else:
@@ -1836,7 +1844,7 @@ def _parse_datatype_json_value(
 
 def _resolve_type(
     json_value: Dict[str, Any], fieldPath: str, collationsMap: Optional[Dict[str, str]]
-):
+) -> DataType:
     if collationsMap and fieldPath in collationsMap:
         return StringType(collationsMap[fieldPath])
     return _parse_datatype_json_value(json_value, fieldPath, collationsMap)
