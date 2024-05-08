@@ -894,7 +894,7 @@ class StructField(DataType):
         self.dataType = dataType
         self.nullable = nullable
         self.metadata = metadata or {}
-        self._collationMetadata: Optional[None, Dict[str, str]] = None
+        self._collationMetadata: Optional[Dict[str, str]] = None
 
     def simpleString(self) -> str:
         return "%s:%s" % (self.name, self.dataType.simpleString())
@@ -961,7 +961,7 @@ class StructField(DataType):
                 visitRecursively(dt, fieldPath)
 
         if self._collationMetadata is None:
-            collationMetadata = {}
+            collationMetadata: Dict[str, str] = {}
             visitRecursively(self.dataType, self.name)
             self._collationMetadata = collationMetadata
 
@@ -1239,7 +1239,12 @@ class StructType(DataType):
         return {"type": self.typeName(), "fields": [f.jsonValue() for f in self]}
 
     @classmethod
-    def fromJson(cls, json: Dict[str, Any]) -> "StructType":
+    def fromJson(
+        cls,
+        json: Dict[str, Any],
+        fieldPath: str = "",
+        collationsMap: Optional[Dict[str, str]] = None,
+    ) -> "StructType":
         """
         Constructs :class:`StructType` from a schema defined in JSON format.
 
