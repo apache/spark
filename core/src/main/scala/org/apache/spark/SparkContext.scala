@@ -199,10 +199,11 @@ class SparkContext(config: SparkConf) extends Logging {
     this(master, appName, sparkHome, jars, Map())
 
   // log out Spark Version in Spark driver log
-  logInfo(s"Running Spark version $SPARK_VERSION")
-  logInfo(s"OS info ${System.getProperty("os.name")}, ${System.getProperty("os.version")}, " +
-    s"${System.getProperty("os.arch")}")
-  logInfo(s"Java version ${System.getProperty("java.version")}")
+  logInfo(log"Running Spark version ${MDC(LogKeys.SPARK_VERSION, SPARK_VERSION)}")
+  logInfo(log"OS info ${MDC(LogKeys.OS_NAME, System.getProperty("os.name"))}," +
+    log" ${MDC(LogKeys.OS_VERSION, System.getProperty("os.version"))}, " +
+    log"${MDC(LogKeys.OS_ARCH, System.getProperty("os.arch"))}")
+  logInfo(log"Java version ${MDC(LogKeys.JAVA_VERSION, System.getProperty("java.version"))}")
 
   /* ------------------------------------------------------------------------------------- *
    | Private variables. These variables keep the internal state of the context, and are    |
@@ -439,7 +440,7 @@ class SparkContext(config: SparkConf) extends Logging {
     logResourceInfo(SPARK_DRIVER_PREFIX, _resources)
 
     // log out spark.app.name in the Spark driver logs
-    logInfo(s"Submitted application: $appName")
+    logInfo(log"Submitted application: ${MDC(LogKeys.APP_NAME, appName)}")
 
     // System property spark.yarn.app.id must be set if user code ran by AM on a YARN cluster
     if (master == "yarn" && deployMode == "cluster" && !_conf.contains("spark.yarn.app.id")) {
@@ -448,7 +449,7 @@ class SparkContext(config: SparkConf) extends Logging {
     }
 
     if (_conf.getBoolean("spark.logConf", false)) {
-      logInfo("Spark configuration:\n" + _conf.toDebugString)
+      logInfo(log"Spark configuration:\n${MDC(LogKeys.CONFIG, _conf.toDebugString)}")
     }
 
     // Set Spark driver host and port system properties. This explicitly sets the configuration
@@ -1704,7 +1705,8 @@ class SparkContext(config: SparkConf) extends Logging {
       "Can not directly broadcast RDDs; instead, call collect() and broadcast the result.")
     val bc = env.broadcastManager.newBroadcast[T](value, isLocal, serializedOnly)
     val callSite = getCallSite()
-    logInfo("Created broadcast " + bc.id + " from " + callSite.shortForm)
+    logInfo(log"Created broadcast ${MDC(LogKeys.BROADCAST_ID, bc.id)}" +
+      log" from ${MDC(LogKeys.CALL_SITE_SHORT_FORM, callSite.shortForm)}")
     cleaner.foreach(_.registerBroadcastForCleanup(bc))
     bc
   }
@@ -1833,7 +1835,8 @@ class SparkContext(config: SparkConf) extends Logging {
         addedFiles
           .getOrElseUpdate(jobArtifactUUID, new ConcurrentHashMap[String, Long]().asScala)
           .putIfAbsent(key, timestamp).isEmpty) {
-      logInfo(s"Added file $path at $key with timestamp $timestamp")
+      logInfo(log"Added file ${MDC(LogKeys.PATH, path)} at ${MDC(LogKeys.KEY, key)} with" +
+        log" timestamp ${MDC(LogKeys.TIMESTAMP, timestamp)}")
       // Fetch the file locally so that closures which are run on the driver can still use the
       // SparkFiles API to access files.
       Utils.fetchFile(uri.toString, root, conf, hadoopConfiguration, timestamp, useCache = false)
@@ -1845,7 +1848,8 @@ class SparkContext(config: SparkConf) extends Logging {
           .putIfAbsent(
           Utils.getUriBuilder(new URI(key)).fragment(uri.getFragment).build().toString,
           timestamp).isEmpty) {
-      logInfo(s"Added archive $path at $key with timestamp $timestamp")
+      logInfo(log"Added archive ${MDC(LogKeys.PATH, path)} at ${MDC(LogKeys.KEY, key)}" +
+        log" with timestamp ${MDC(LogKeys.TIMESTAMP, timestamp)}")
       // If the scheme is file, use URI to simply copy instead of downloading.
       val uriToUse = if (!isLocal && scheme == "file") uri else new URI(key)
       val uriToDownload = Utils.getUriBuilder(uriToUse).fragment(null).build()
@@ -1855,7 +1859,9 @@ class SparkContext(config: SparkConf) extends Logging {
         root,
         if (uri.getFragment != null) uri.getFragment else source.getName)
       logInfo(
-        s"Unpacking an archive $path from ${source.getAbsolutePath} to ${dest.getAbsolutePath}")
+        log"Unpacking an archive ${MDC(LogKeys.PATH, path)}" +
+          log" from ${MDC(LogKeys.SOURCE_PATH, source.getAbsolutePath)}" +
+          log" to ${MDC(LogKeys.DESTINATION_PATH, dest.getAbsolutePath)}")
       Utils.deleteRecursively(dest)
       Utils.unpack(source, dest)
       postEnvironmentUpdate()
@@ -2216,8 +2222,14 @@ class SparkContext(config: SparkConf) extends Logging {
           .getOrElseUpdate(jobArtifactUUID, new ConcurrentHashMap[String, Long]().asScala)
           .putIfAbsent(_, timestamp).isEmpty)
         if (added.nonEmpty) {
-          val jarMessage = if (scheme != "ivy") "JAR" else "dependency jars of Ivy URI"
-          logInfo(s"Added $jarMessage $path at ${added.mkString(",")} with timestamp $timestamp")
+          val jarMessage = if (scheme != "ivy") {
+            log"Added JAR"
+          } else {
+            log"Added dependency jars of Ivy URI"
+          }
+          logInfo(jarMessage + log" ${MDC(LogKeys.PATH, path)}" +
+            log" at ${MDC(LogKeys.ADDED_JARS, added.mkString(","))}" +
+            log" with timestamp ${MDC(LogKeys.TIMESTAMP, timestamp)}")
           postEnvironmentUpdate()
         }
         if (existed.nonEmpty) {
@@ -2274,7 +2286,8 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def stop(exitCode: Int): Unit = {
     stopSite = Some(getCallSite())
-    logInfo(s"SparkContext is stopping with exitCode $exitCode from ${stopSite.get.shortForm}.")
+    logInfo(log"SparkContext is stopping with exitCode ${MDC(LogKeys.EXIT_CODE, exitCode)}" +
+      log" from ${MDC(LogKeys.STOP_SITE_SHORT_FORM, stopSite.get.shortForm)}.")
     if (LiveListenerBus.withinListenerThread.value) {
       throw new SparkException(s"Cannot stop SparkContext within listener bus thread.")
     }
@@ -2438,9 +2451,10 @@ class SparkContext(config: SparkConf) extends Logging {
     }
     val callSite = getCallSite()
     val cleanedFunc = clean(func)
-    logInfo("Starting job: " + callSite.shortForm)
+    logInfo(log"Starting job: ${MDC(LogKeys.CALL_SITE_SHORT_FORM, callSite.shortForm)}")
     if (conf.getBoolean("spark.logLineage", false)) {
-      logInfo("RDD's recursive dependencies:\n" + rdd.toDebugString)
+      logInfo(log"RDD's recursive dependencies:\n" +
+        log"${MDC(LogKeys.RDD_DEBUG_STRING, rdd.toDebugString)}")
     }
     dagScheduler.runJob(rdd, cleanedFunc, partitions, callSite, resultHandler, localProperties.get)
     progressBar.foreach(_.finishAll())
@@ -2559,13 +2573,14 @@ class SparkContext(config: SparkConf) extends Logging {
       timeout: Long): PartialResult[R] = {
     assertNotStopped()
     val callSite = getCallSite()
-    logInfo("Starting job: " + callSite.shortForm)
-    val start = System.nanoTime
+    logInfo(log"Starting job: ${MDC(LogKeys.CALL_SITE_SHORT_FORM, callSite.shortForm)}")
+    val start = System.currentTimeMillis()
     val cleanedFunc = clean(func)
     val result = dagScheduler.runApproximateJob(rdd, cleanedFunc, evaluator, callSite, timeout,
       localProperties.get)
     logInfo(
-      "Job finished: " + callSite.shortForm + ", took " + (System.nanoTime - start) / 1e9 + " s")
+      log"Job finished: ${MDC(LogKeys.CALL_SITE_SHORT_FORM, callSite.shortForm)}," +
+        log" took ${MDC(LogKeys.TOTAL_TIME, System.currentTimeMillis() - start)}ms")
     result
   }
 
@@ -2793,7 +2808,8 @@ class SparkContext(config: SparkConf) extends Logging {
         val listeners = Utils.loadExtensions(classOf[SparkListenerInterface], classNames, conf)
         listeners.foreach { listener =>
           listenerBus.addToSharedQueue(listener)
-          logInfo(s"Registered listener ${listener.getClass().getName()}")
+          logInfo(log"Registered listener" +
+            log"${MDC(LogKeys.CLASS_NAME, listener.getClass().getName())}")
         }
       }
     } catch {

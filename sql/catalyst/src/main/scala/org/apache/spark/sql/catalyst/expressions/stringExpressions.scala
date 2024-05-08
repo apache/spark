@@ -1906,7 +1906,7 @@ case class StringRepeat(str: Expression, times: Expression)
 case class StringSpace(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
   override def inputTypes: Seq[DataType] = Seq(IntegerType)
 
   override def nullSafeEval(s: Any): Any = {
@@ -2646,7 +2646,7 @@ object Decode {
   arguments = """
     Arguments:
       * bin - a binary expression to decode
-      * charset - one of the charsets 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16' to decode `bin` into a STRING. It is case insensitive.
+      * charset - one of the charsets 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16', 'UTF-32' to decode `bin` into a STRING. It is case insensitive.
   """,
   examples = """
     Examples:
@@ -2690,7 +2690,7 @@ case class Decode(params: Seq[Expression], replacement: Expression)
   arguments = """
     Arguments:
       * bin - a binary expression to decode
-      * charset - one of the charsets 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16' to decode `bin` into a STRING. It is case insensitive.
+      * charset - one of the charsets 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16', 'UTF-32' to decode `bin` into a STRING. It is case insensitive.
   """,
   since = "1.5.0",
   group = "string_funcs")
@@ -2707,7 +2707,7 @@ case class StringDecode(bin: Expression, charset: Expression, legacyCharsets: Bo
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, StringTypeAnyCollation)
 
   private val supportedCharsets = Set(
-    "US-ASCII", "ISO-8859-1", "UTF-8", "UTF-16BE", "UTF-16LE", "UTF-16")
+    "US-ASCII", "ISO-8859-1", "UTF-8", "UTF-16BE", "UTF-16LE", "UTF-16", "UTF-32")
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     val fromCharset = input2.asInstanceOf[UTF8String].toString
@@ -2762,7 +2762,7 @@ object StringDecode {
   arguments = """
     Arguments:
       * str - a string expression
-      * charset - one of the charsets 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16' to encode `str` into a BINARY. It is case insensitive.
+      * charset - one of the charsets 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16', 'UTF-32' to encode `str` into a BINARY. It is case insensitive.
   """,
   examples = """
     Examples:
@@ -2785,7 +2785,7 @@ case class Encode(str: Expression, charset: Expression, legacyCharsets: Boolean)
     Seq(StringTypeAnyCollation, StringTypeAnyCollation)
 
   private val supportedCharsets = Set(
-    "US-ASCII", "ISO-8859-1", "UTF-8", "UTF-16BE", "UTF-16LE", "UTF-16")
+    "US-ASCII", "ISO-8859-1", "UTF-8", "UTF-16BE", "UTF-16LE", "UTF-16", "UTF-32")
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     val toCharset = input2.asInstanceOf[UTF8String].toString

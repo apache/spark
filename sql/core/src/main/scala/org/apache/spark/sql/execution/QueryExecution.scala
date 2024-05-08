@@ -155,6 +155,11 @@ class QueryExecution(
     case other => other
   }
 
+  // The plan that has been normalized by custom rules, so that it's more likely to hit cache.
+  lazy val normalized: LogicalPlan = {
+    QueryExecution.normalize(sparkSession, commandExecuted, Some(tracker))
+  }
+
   lazy val withCachedData: LogicalPlan = sparkSession.withActive {
     assertAnalyzed()
     assertSupported()
@@ -617,6 +622,29 @@ object QueryExecution {
       block
     } catch {
       case e: Throwable => throw toInternalError(msg, e)
+    }
+  }
+
+  def normalize(
+      session: SparkSession,
+      plan: LogicalPlan,
+      tracker: Option[QueryPlanningTracker] = None): LogicalPlan = {
+    val normalizationRules = session.sessionState.planNormalizationRules
+    if (normalizationRules.isEmpty) {
+      plan
+    } else {
+      val planChangeLogger = new PlanChangeLogger[LogicalPlan]()
+      val normalized = normalizationRules.foldLeft(plan) { (p, rule) =>
+        val startTime = System.nanoTime()
+        val result = rule.apply(p)
+        val runTime = System.nanoTime() - startTime
+        val effective = !result.fastEquals(p)
+        tracker.foreach(_.recordRuleInvocation(rule.ruleName, runTime, effective))
+        planChangeLogger.logRule(rule.ruleName, p, result)
+        result
+      }
+      planChangeLogger.logBatch("Plan Normalization", plan, normalized)
+      normalized
     }
   }
 }
