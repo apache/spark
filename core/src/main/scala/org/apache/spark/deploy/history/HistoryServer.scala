@@ -115,9 +115,9 @@ class HistoryServer(
       // requested, and the proper data should be served at that point.
       // Also, make sure that the redirect url contains the query string present in the request.
       val redirect = if (shouldAppendAttemptId) {
-        req.getRequestURI.stripSuffix("/") + "/" + attemptId.get
+        req.getRequestURI.stripSuffix("/") + "/" + attemptId.get + "/"
       } else {
-        req.getRequestURI
+        req.getRequestURI.stripSuffix("/") + "/"
       }
       val query = Option(req.getQueryString).map("?" + _).getOrElse("")
       res.sendRedirect(res.encodeRedirectURL(redirect + query))

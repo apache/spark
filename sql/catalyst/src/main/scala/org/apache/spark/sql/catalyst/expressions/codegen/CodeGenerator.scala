@@ -33,7 +33,7 @@ import org.codehaus.janino.util.ClassFile
 import org.apache.spark.{SparkException, SparkIllegalArgumentException, TaskContext, TaskKilledException}
 import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.LogKey._
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.MDC
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.catalyst.InternalRow
@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.encoders.HashableWeakReference
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, MapData, SQLOrderingUtil, UnsafeRowUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, CollationSupport, MapData, SQLOrderingUtil, UnsafeRowUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -1531,6 +1531,7 @@ object CodeGenerator extends Logging {
       classOf[TaskKilledException].getName,
       classOf[InputMetrics].getName,
       classOf[CollationFactory].getName,
+      classOf[CollationSupport].getName,
       QueryExecutionErrors.getClass.getName.stripSuffix("$")
     )
     evaluator.setExtendedClass(classOf[GeneratedClass])
@@ -1546,13 +1547,11 @@ object CodeGenerator extends Logging {
       updateAndGetCompilationStats(evaluator)
     } catch {
       case e: InternalCompilerException =>
-        val msg = QueryExecutionErrors.failedToCompileMsg(e)
-        logError(msg, e)
+        logError("Failed to compile the generated Java code.", e)
         logGeneratedCode(code)
         throw QueryExecutionErrors.internalCompilerError(e)
       case e: CompileException =>
-        val msg = QueryExecutionErrors.failedToCompileMsg(e)
-        logError(msg, e)
+        logError("Failed to compile the generated Java code.", e)
         logGeneratedCode(code)
         throw QueryExecutionErrors.compilerError(e)
     }

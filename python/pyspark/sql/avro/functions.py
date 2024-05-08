@@ -22,7 +22,8 @@ A collections of builtin avro functions
 
 from typing import Dict, Optional, TYPE_CHECKING, cast
 
-from pyspark.sql.column import Column, _to_java_column
+from pyspark.errors import PySparkTypeError
+from pyspark.sql.column import Column
 from pyspark.sql.utils import get_active_spark_context, try_remote_avro_functions
 from pyspark.util import _print_missing_jar
 
@@ -78,6 +79,26 @@ def from_avro(
     [Row(value=Row(avro=Row(age=2, name='Alice')))]
     """
     from py4j.java_gateway import JVMView
+    from pyspark.sql.classic.column import _to_java_column
+
+    if not isinstance(data, (Column, str)):
+        raise PySparkTypeError(
+            error_class="INVALID_TYPE",
+            message_parameters={
+                "arg_name": "data",
+                "arg_type": "pyspark.sql.Column or str",
+            },
+        )
+    if not isinstance(jsonFormatSchema, str):
+        raise PySparkTypeError(
+            error_class="INVALID_TYPE",
+            message_parameters={"arg_name": "jsonFormatSchema", "arg_type": "str"},
+        )
+    if options is not None and not isinstance(options, dict):
+        raise PySparkTypeError(
+            error_class="INVALID_TYPE",
+            message_parameters={"arg_name": "options", "arg_type": "dict, optional"},
+        )
 
     sc = get_active_spark_context()
     try:
@@ -128,6 +149,21 @@ def to_avro(data: "ColumnOrName", jsonFormatSchema: str = "") -> Column:
     [Row(suite=bytearray(b'\\x02\\x00'))]
     """
     from py4j.java_gateway import JVMView
+    from pyspark.sql.classic.column import _to_java_column
+
+    if not isinstance(data, (Column, str)):
+        raise PySparkTypeError(
+            error_class="INVALID_TYPE",
+            message_parameters={
+                "arg_name": "data",
+                "arg_type": "pyspark.sql.Column or str",
+            },
+        )
+    if not isinstance(jsonFormatSchema, str):
+        raise PySparkTypeError(
+            error_class="INVALID_TYPE",
+            message_parameters={"arg_name": "jsonFormatSchema", "arg_type": "str"},
+        )
 
     sc = get_active_spark_context()
     try:

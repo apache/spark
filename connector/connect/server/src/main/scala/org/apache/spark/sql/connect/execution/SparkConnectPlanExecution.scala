@@ -35,8 +35,9 @@ import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.service.ExecuteHolder
 import org.apache.spark.sql.connect.utils.MetricGenerator
-import org.apache.spark.sql.execution.{LocalTableScanExec, SQLExecution}
+import org.apache.spark.sql.execution.{DoNotCleanup, LocalTableScanExec, RemoveShuffleFiles, SkipMigration, SQLExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ThreadUtils
 
@@ -58,11 +59,21 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
     }
     val planner = new SparkConnectPlanner(executeHolder)
     val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
+    val conf = session.sessionState.conf
+    val shuffleCleanupMode =
+      if (conf.getConf(SQLConf.SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED)) {
+        RemoveShuffleFiles
+      } else if (conf.getConf(SQLConf.SHUFFLE_DEPENDENCY_SKIP_MIGRATION_ENABLED)) {
+        SkipMigration
+      } else {
+        DoNotCleanup
+      }
     val dataframe =
       Dataset.ofRows(
         sessionHolder.session,
-        planner.transformRelation(request.getPlan.getRoot),
-        tracker)
+        planner.transformRelation(request.getPlan.getRoot, cachePlan = true),
+        tracker,
+        shuffleCleanupMode)
     responseObserver.onNext(createSchemaResponse(request.getSessionId, dataframe.schema))
     processAsArrowBatches(dataframe, responseObserver, executeHolder)
     responseObserver.onNext(MetricGenerator.createMetricsResponse(sessionHolder, dataframe))

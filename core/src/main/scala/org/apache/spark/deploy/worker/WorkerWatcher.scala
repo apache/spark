@@ -20,7 +20,7 @@ package org.apache.spark.deploy.worker
 import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.WORKER_URL
+import org.apache.spark.internal.LogKeys.WORKER_URL
 import org.apache.spark.rpc._
 
 /**

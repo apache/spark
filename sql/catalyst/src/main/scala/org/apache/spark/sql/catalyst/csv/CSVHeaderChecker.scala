@@ -22,7 +22,7 @@ import com.univocity.parsers.csv.{CsvParser, CsvParserSettings}
 
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
-import org.apache.spark.internal.LogKey.{CSV_HEADER_COLUMN_NAME, CSV_HEADER_COLUMN_NAMES, CSV_HEADER_LENGTH, CSV_SCHEMA_FIELD_NAME, CSV_SCHEMA_FIELD_NAMES, CSV_SOURCE, NUM_COLUMNS}
+import org.apache.spark.internal.LogKeys.{CSV_HEADER_COLUMN_NAME, CSV_HEADER_COLUMN_NAMES, CSV_HEADER_LENGTH, CSV_SCHEMA_FIELD_NAME, CSV_SCHEMA_FIELD_NAMES, CSV_SOURCE, NUM_COLUMNS}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
@@ -75,22 +75,24 @@ class CSVHeaderChecker(
             // scalastyle:on caselocale
           }
           if (nameInHeader != nameInSchema) {
+            // scalastyle:off line.size.limit
             errorMessage = Some(
               log"""|CSV header does not conform to the schema.
                     | Header: ${MDC(CSV_HEADER_COLUMN_NAMES, columnNames.mkString(", "))}
                     | Schema: ${MDC(CSV_SCHEMA_FIELD_NAMES, fieldNames.mkString(", "))}
-                    |Expected: ${MDC(CSV_SCHEMA_FIELD_NAME, fieldNames(i))}
-                    |but found: ${MDC(CSV_HEADER_COLUMN_NAME, columnNames(i))}
+                    |Expected: ${MDC(CSV_SCHEMA_FIELD_NAME, fieldNames(i))} but found: ${MDC(CSV_HEADER_COLUMN_NAME, columnNames(i))}
                     |${MDC(CSV_SOURCE, source)}""".stripMargin)
+            // scalastyle:on line.size.limit
           }
           i += 1
         }
       } else {
         errorMessage = Some(
+          // scalastyle:off line.size.limit
           log"""|Number of column in CSV header is not equal to number of fields in the schema:
-                | Header length: ${MDC(CSV_HEADER_LENGTH, headerLen)},
-                | schema size: ${MDC(NUM_COLUMNS, schemaSize)}
+                | Header length: ${MDC(CSV_HEADER_LENGTH, headerLen)}, schema size: ${MDC(NUM_COLUMNS, schemaSize)}
                 |${MDC(CSV_SOURCE, source)}""".stripMargin)
+          // scalastyle:on line.size.limit
       }
 
       errorMessage.foreach { msg =>

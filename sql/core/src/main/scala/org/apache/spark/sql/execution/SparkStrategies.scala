@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution
 import java.util.Locale
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.internal.LogKeys.HASH_JOIN_KEYS
+import org.apache.spark.internal.MDC
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{execution, AnalysisException, Strategy}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -212,10 +214,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       if (!result) {
         val keysNotSupportingHashJoin = leftKeys.concat(rightKeys).filterNot(
           e => UnsafeRowUtils.isBinaryStable(e.dataType))
-        logWarning("Hash based joins are not supported due to " +
-          "joining on keys that don't support binary equality. " +
-          "Keys not supporting hash joins: " + keysNotSupportingHashJoin
-          .map(e => e.toString + " due to DataType: " + e.dataType.typeName).mkString(", "))
+        logWarning(log"Hash based joins are not supported due to joining on keys that don't " +
+          log"support binary equality. Keys not supporting hash joins: " +
+          log"${MDC(HASH_JOIN_KEYS, keysNotSupportingHashJoin.map(
+            e => e.toString + " due to DataType: " + e.dataType.typeName).mkString(", "))}")
       }
       result
     }
@@ -439,6 +441,18 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       case EventTimeWatermark(columnName, delay, child) =>
         EventTimeWatermarkExec(columnName, delay, planLater(child)) :: Nil
+
+      case UpdateEventTimeWatermarkColumn(columnName, delay, child) =>
+        // we expect watermarkDelay to be resolved before physical planning.
+        if (delay.isEmpty) {
+          // This is a sanity check. We should not reach here as delay is updated during
+          // query plan resolution in [[ResolveUpdateEventTimeWatermarkColumn]] Analyzer rule.
+          throw SparkException.internalError(
+            "No watermark delay found in UpdateEventTimeWatermarkColumn logical node. " +
+              "You have hit a query analyzer bug. " +
+              "Please report your query to Spark user mailing list.")
+        }
+        UpdateEventTimeColumnExec(columnName, delay.get, None, planLater(child)) :: Nil
 
       case PhysicalAggregation(
         namedGroupingExpressions, aggregateExpressions, rewrittenResultExpressions, child) =>
@@ -751,7 +765,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case TransformWithState(
         keyDeserializer, valueDeserializer, groupingAttributes,
-        dataAttributes, statefulProcessor, ttlMode, timeoutMode, outputMode,
+        dataAttributes, statefulProcessor, timeMode, outputMode,
         keyEncoder, outputAttr, child, hasInitialState,
         initialStateGroupingAttrs, initialStateDataAttrs,
         initialStateDeserializer, initialState) =>
@@ -761,8 +775,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           groupingAttributes,
           dataAttributes,
           statefulProcessor,
-          ttlMode,
-          timeoutMode,
+          timeMode,
           outputMode,
           keyEncoder,
           outputAttr,
@@ -926,12 +939,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           hasInitialState, planLater(initialState), planLater(child)
         ) :: Nil
       case logical.TransformWithState(keyDeserializer, valueDeserializer, groupingAttributes,
-          dataAttributes, statefulProcessor, ttlMode, timeoutMode, outputMode, keyEncoder,
+          dataAttributes, statefulProcessor, timeMode, outputMode, keyEncoder,
           outputObjAttr, child, hasInitialState,
           initialStateGroupingAttrs, initialStateDataAttrs,
           initialStateDeserializer, initialState) =>
         TransformWithStateExec.generateSparkPlanForBatchQueries(keyDeserializer, valueDeserializer,
-          groupingAttributes, dataAttributes, statefulProcessor, ttlMode, timeoutMode, outputMode,
+          groupingAttributes, dataAttributes, statefulProcessor, timeMode, outputMode,
           keyEncoder, outputObjAttr, planLater(child), hasInitialState,
           initialStateGroupingAttrs, initialStateDataAttrs,
           initialStateDeserializer, planLater(initialState)) :: Nil

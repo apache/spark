@@ -106,7 +106,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       decimalScale: Int,
       context: QueryContext = null): ArithmeticException = {
     new SparkArithmeticException(
-      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE",
+      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
       messageParameters = Map(
         "value" -> value.toPlainString,
         "precision" -> decimalPrecision.toString,
@@ -629,7 +629,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def failedToCompileMsg(e: Exception): String = {
-    s"failed to compile: $e"
+    s"Failed to compile: $e"
   }
 
   def internalCompilerError(e: InternalCompilerException): Throwable = {
@@ -2727,6 +2727,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map("path" -> path, "functionName" -> toSQLId(functionName)))
   }
 
+  def malformedVariant(): Throwable = new SparkRuntimeException(
+    "MALFORMED_VARIANT",
+    Map.empty
+  )
+
   def invalidCharsetError(functionName: String, charset: String): RuntimeException = {
     new SparkIllegalArgumentException(
       errorClass = "INVALID_PARAMETER_VALUE.CHARSET",
@@ -2756,5 +2761,16 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "numFields" -> numFields.toString,
         "schemaLen" -> schemaLen.toString))
+  }
+
+  def emittedRowsAreOlderThanWatermark(
+      currentWatermark: Long, emittedRowEventTime: Long): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "EMITTING_ROWS_OLDER_THAN_WATERMARK_NOT_ALLOWED",
+      messageParameters = Map(
+        "currentWatermark" -> currentWatermark.toString,
+        "emittedRowEventTime" -> emittedRowEventTime.toString
+      )
+    )
   }
 }

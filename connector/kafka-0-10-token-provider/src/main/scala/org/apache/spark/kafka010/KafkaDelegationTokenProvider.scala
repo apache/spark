@@ -24,7 +24,8 @@ import org.apache.hadoop.security.Credentials
 import org.apache.kafka.common.security.auth.SecurityProtocol.{SASL_PLAINTEXT, SASL_SSL, SSL}
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{CLUSTER_ID, SERVICE_NAME}
 import org.apache.spark.security.HadoopDelegationTokenProvider
 
 private[spark] class KafkaDelegationTokenProvider
@@ -54,9 +55,10 @@ private[spark] class KafkaDelegationTokenProvider
           }
         } catch {
           case NonFatal(e) =>
-            logWarning(s"Failed to get token from service: $serviceName due to $e on " +
-              s"cluster: ${clusterConf.identifier}. If $serviceName is not used, " +
-              s"set spark.security.credentials.$serviceName.enabled to false")
+            logWarning(log"Failed to get token from service: ${MDC(SERVICE_NAME, serviceName)} " +
+              log"on cluster: ${MDC(CLUSTER_ID, clusterConf.identifier)}. If " +
+              log"${MDC(SERVICE_NAME, serviceName)} is not used, please set " +
+              log"spark.security.credentials.${MDC(SERVICE_NAME, serviceName)}.enabled to false", e)
         }
       }
     } catch {

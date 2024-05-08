@@ -17,7 +17,7 @@
 # under the License.
 #
 
-name: Cancelling Duplicates
+name: Cancelling duplicates
 on:
   workflow_run:
     workflows: 

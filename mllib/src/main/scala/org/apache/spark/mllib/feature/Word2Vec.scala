@@ -31,7 +31,8 @@ import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{ALPHA, COUNT, TRAIN_WORD_COUNT, VOCAB_SIZE}
 import org.apache.spark.internal.config.Kryo.KRYO_SERIALIZER_MAX_BUFFER_SIZE
 import org.apache.spark.ml.linalg.BLAS
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
@@ -208,7 +209,8 @@ class Word2Vec extends Serializable with Logging {
       trainWordsCount += vocab(a).cn
       a += 1
     }
-    logInfo(s"vocabSize = $vocabSize, trainWordsCount = $trainWordsCount")
+    logInfo(log"vocabSize = ${MDC(VOCAB_SIZE, vocabSize)}," +
+      log" trainWordsCount = ${MDC(TRAIN_WORD_COUNT, trainWordsCount)}")
   }
 
   private def createExpTable(): Array[Float] = {
@@ -379,8 +381,9 @@ class Word2Vec extends Serializable with Logging {
                 (1 - (numPartitions * wordCount.toDouble + numWordsProcessedInPreviousIterations) /
                   totalWordsCounts)
               if (alpha < learningRate * 0.0001) alpha = learningRate * 0.0001
-              logInfo(s"wordCount = ${wordCount + numWordsProcessedInPreviousIterations}, " +
-                s"alpha = $alpha")
+              logInfo(log"wordCount =" +
+                log" ${MDC(COUNT, wordCount + numWordsProcessedInPreviousIterations)}," +
+                log" alpha = ${MDC(ALPHA, alpha)}")
             }
             wc += sentence.length
             var pos = 0

@@ -19,12 +19,22 @@ package org.apache.spark.deploy.k8s.submit
 import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.SparkException
+import org.apache.spark.annotation.{DeveloperApi, Since, Unstable}
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.features._
 import org.apache.spark.util.Utils
 
-private[spark] class KubernetesDriverBuilder {
+/**
+ * ::DeveloperApi::
+ *
+ * KubernetesDriverBuilder builds k8s spec for driver, used for K8s operations internally
+ * and Spark K8s operator.
+ */
+@Unstable
+@DeveloperApi
+class KubernetesDriverBuilder {
 
+  @Since("3.0.0")
   def buildFromFeatures(
       conf: KubernetesDriverConf,
       client: KubernetesClient): KubernetesDriverSpec = {

@@ -70,7 +70,7 @@ class FailureSafeParser[IN](
         case DropMalformedMode =>
           Iterator.empty
         case FailFastMode =>
-          e.getCause match {
+          e.cause() match {
             case _: JsonArraysAsStructsException =>
               // SPARK-42298 we recreate the exception here to make sure the error message
               // have the record content.

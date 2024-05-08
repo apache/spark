@@ -27,7 +27,8 @@ import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{CROSS_VALIDATION_METRIC, CROSS_VALIDATION_METRICS, ESTIMATOR_PARAMETER_MAP}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param.{IntParam, Param, ParamMap, ParamValidators}
@@ -192,12 +193,13 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
       foldMetrics
     }.transpose.map(_.sum / $(numFolds)) // Calculate average metric over all splits
 
-    instr.logInfo(s"Average cross-validation metrics: ${metrics.toImmutableArraySeq}")
+    instr.logInfo(log"Average cross-validation metrics: ${MDC(
+      CROSS_VALIDATION_METRICS, metrics.mkString("[", ", ", "]"))}")
     val (bestMetric, bestIndex) =
       if (eval.isLargerBetter) metrics.zipWithIndex.maxBy(_._1)
       else metrics.zipWithIndex.minBy(_._1)
-    instr.logInfo(s"Best set of parameters:\n${epm(bestIndex)}")
-    instr.logInfo(s"Best cross-validation metric: $bestMetric.")
+    instr.logInfo(log"Best set of parameters:\n${MDC(ESTIMATOR_PARAMETER_MAP, epm(bestIndex))}")
+    instr.logInfo(log"Best cross-validation metric: ${MDC(CROSS_VALIDATION_METRIC, bestMetric)}.")
     val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model[_]]
     copyValues(new CrossValidatorModel(uid, bestModel, metrics)
       .setSubModels(subModels).setParent(this))

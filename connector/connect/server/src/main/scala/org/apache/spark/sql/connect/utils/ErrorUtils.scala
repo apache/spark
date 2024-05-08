@@ -39,7 +39,7 @@ import org.apache.spark.{SparkEnv, SparkException, SparkThrowable}
 import org.apache.spark.api.python.PythonException
 import org.apache.spark.connect.proto.FetchErrorDetailsResponse
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{OP_TYPE, SESSION_ID, USER_ID}
+import org.apache.spark.internal.LogKeys.{OP_TYPE, SESSION_ID, USER_ID}
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.service.{ExecuteEventsManager, SessionHolder, SessionKey, SparkConnectService}
 import org.apache.spark.sql.internal.SQLConf
@@ -290,8 +290,8 @@ private[connect] object ErrorUtils extends Logging {
         if (events.isDefined) {
           // Errors thrown inside execution are user query errors, return then as INFO.
           logInfo(
-            s"Spark Connect error " +
-              s"during: $opType. UserId: $userId. SessionId: $sessionId.",
+            log"Spark Connect error during: ${MDC(OP_TYPE, opType)}. " +
+              log"UserId: ${MDC(USER_ID, userId)}. SessionId: ${MDC(SESSION_ID, sessionId)}.",
             original)
         } else {
           // Other errors are server RPC errors, return them as ERROR.
