@@ -17,7 +17,7 @@
 # under the License.
 #
 
-name: "Build (branch-3.4, Scala 2.13, Hadoop 3, JDK 8)"
+name: "Build / Python-only (branch-3.4)"
 
 on:
   schedule:
@@ -36,16 +36,10 @@ jobs:
       hadoop: hadoop3
       envs: >-
         {
-          "SCALA_PROFILE": "scala2.13",
-          "PYTHON_TO_TEST": "",
-          "ORACLE_DOCKER_IMAGE_NAME": "gvenzl/oracle-xe:21.3.0"
+          "PYTHON_TO_TEST": ""
         }
       jobs: >-
         {
-          "build": "true",
-          "sparkr": "true",
-          "tpcds-1g": "true",
-          "docker-integration-tests": "true",
-          "k8s-integration-tests": "true",
-          "lint" : "true"
+          "pyspark": "true",
+          "pyspark-pandas": "true"
         }
