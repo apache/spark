@@ -45,10 +45,6 @@ class TestListener(StreamingQueryListener):
         df.write.mode("append").saveAsTable("listener_terminated_events")
 
 
-# TODO(SPARK-48089): Reenable this test case
-@unittest.skipIf(
-    "SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ, "Failed with different Client <> Server"
-)
 class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTestCase):
     def test_listener_events(self):
         test_listener = TestListener()
