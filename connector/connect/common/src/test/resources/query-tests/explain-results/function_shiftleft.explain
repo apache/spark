@@ -1,2 +1,2 @@
-Project [shiftleft(cast(b#0 as int), 2) AS shiftleft(b, 2)#0]
+Project [(cast(b#0 as int) << 2) AS (b << 2)#0]
 +- LocalRelation <empty>, [id#0L, a#0, b#0, d#0, e#0, f#0, g#0]
