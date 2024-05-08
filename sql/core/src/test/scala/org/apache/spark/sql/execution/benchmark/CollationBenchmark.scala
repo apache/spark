@@ -199,7 +199,7 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
       warmupTime = 10.seconds,
       output = output)
     collationTypes.foreach { collationType => {
-      benchmark.addCase(s"$collationType") { _ =>
+      benchmark.addCase(s"$collationType - mode - ${value.size} elements") { _ =>
         val modeDefaultCollation = Mode(child =
           Literal.create("some_column_name", StringType(collationType)))
         val buffer = new OpenHashMap[AnyRef, Long](value.size)
@@ -211,18 +211,6 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
         })
       }
     }
-    }
-
-    benchmark.addCase(s"Collation Not Enabled - mode - ${value.size} elements") { _ =>
-      val modeNoCollation = Mode(child =
-        Literal("some_column_name"))
-      val buffer = new OpenHashMap[AnyRef, Long](value.size)
-      value.zipWithIndex.sliding(2000, 2000).foreach(slide => {
-        slide.foreach { case (v: UTF8String, i: Int) =>
-          buffer.update(v.toString + s"_${i.toString}", (i % 1000).toLong)
-        }
-        modeNoCollation.eval(buffer)
-      })
     }
 
     benchmark.addCase(s"Numerical Type - mode - ${value.size} elements") { _ =>
