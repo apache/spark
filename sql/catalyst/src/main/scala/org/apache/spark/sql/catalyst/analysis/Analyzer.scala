@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.optimizer.OptimizeUpdateFields
+import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -352,7 +353,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     Batch("HandleSpecialCommand", Once,
       HandleSpecialCommand),
     Batch("Remove watermark for batch query", Once,
-      EliminateEventTimeWatermark)
+      EliminateEventTimeWatermark),
+    Batch("Debug", Once, DebugSampleColumnPushDown)
   )
 
   /**
@@ -4123,6 +4125,18 @@ object RemoveTempResolvedColumn extends Rule[LogicalPlan] {
         } else {
           t.child
         }
+    }
+  }
+}
+
+object DebugSampleColumnPushDown extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    plan.transform {
+      case DebugSampleColumn(j @ ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _,
+      left, right, _), sampleColumns) if sampleColumns.isEmpty =>
+        val newLeftChild = DebugSampleColumn(left, leftKeys)
+        val newRightChild = DebugSampleColumn(right, rightKeys)
+        j.withNewChildren(Seq(newLeftChild, newRightChild))
     }
   }
 }
