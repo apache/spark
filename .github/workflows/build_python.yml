@@ -34,9 +34,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - pyversion: ${{ github.event.schedule == '0 15 * * *' && "pypy3" }}
-          - pyversion: ${{ github.event.schedule == '0 17 * * *' && "python3.10" }}
-          - pyversion: ${{ github.event.schedule == '0 19 * * *' && "python3.12" }}
+          - pyversion: ${{ github.event.schedule == '0 15 * * *' && 'pypy3' }}
+          - pyversion: ${{ github.event.schedule == '0 17 * * *' && 'python3.10' }}
+          - pyversion: ${{ github.event.schedule == '0 19 * * *' && 'python3.12' }}
     permissions:
       packages: write
     name: Run
