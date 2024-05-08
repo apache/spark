@@ -638,7 +638,7 @@ def try_divide(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     |                                          4 months|
     +--------------------------------------------------+
 
-    Example 3: Exception druing division, resulting in NULL when ANSI mode is on
+    Example 3: Exception during division, resulting in NULL when ANSI mode is on
 
     >>> import pyspark.sql.functions as sf
     >>> origin = spark.conf.get("spark.sql.ansi.enabled")
@@ -688,7 +688,7 @@ def try_remainder(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     |               NULL|
     +-------------------+
 
-    Example 2: Exception druing division, resulting in NULL when ANSI mode is on
+    Example 2: Exception during division, resulting in NULL when ANSI mode is on
 
     >>> import pyspark.sql.functions as sf
     >>> origin = spark.conf.get("spark.sql.ansi.enabled")
