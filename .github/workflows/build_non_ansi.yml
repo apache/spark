@@ -41,6 +41,7 @@ jobs:
       jobs: >-
         {
           "build": "true",
+          "docs": "true",
           "pyspark": "true",
           "sparkr": "true",
           "tpcds-1g": "true",
