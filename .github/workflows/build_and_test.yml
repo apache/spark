@@ -88,12 +88,18 @@ jobs:
             tpcds=`./dev/is-changed.py -m sql`
             docker=`./dev/is-changed.py -m docker-integration-tests`
           fi
+          if [ "${{ github.repository != 'apache/spark' }}" ]; then
+            pandas=$pyspark
+          else
+            pandas=false
+          fi
           # 'build', 'scala-213', and 'java-11-17' are always true for now.
           # It does not save significant time and most of PRs trigger the build.
           precondition="
             {
               \"build\": \"true\",
               \"pyspark\": \"$pyspark\",
+              \"pyspark-pandas\": \"$pandas\",
               \"sparkr\": \"$sparkr\",
               \"tpcds-1g\": \"$tpcds\",
               \"docker-integration-tests\": \"$docker\",
@@ -349,6 +355,12 @@ jobs:
             pyspark-pandas-slow
           - >-
             pyspark-connect
+        exclude:
+          # Always run if pyspark-pandas == 'true', even infra-image is skip (such as non-master job)
+          # In practice, the build will run in individual PR, but not against the individual commit
+          # in Apache Spark repository.
+          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas' }}
+          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-slow' }}
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
       HADOOP_PROFILE: ${{ inputs.hadoop }}
