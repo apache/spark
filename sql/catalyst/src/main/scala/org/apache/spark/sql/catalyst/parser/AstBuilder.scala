@@ -1647,11 +1647,11 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       validate(
         Option(p.invalidMultiPartitionExpression).isEmpty,
         message = invalidPartitionOrOrderingExpression("PARTITION BY"),
-        ctx = p)
+        ctx = p.invalidMultiPartitionExpression)
       validate(
         Option(p.invalidMultiSortItem).isEmpty,
         message = invalidPartitionOrOrderingExpression("ORDER BY"),
-        ctx = p)
+        ctx = p.invalidMultiSortItem)
     }
     validate(
       !(withSinglePartition && partitionByExpressions.nonEmpty),
