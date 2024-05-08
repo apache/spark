@@ -197,8 +197,8 @@ trait SparkDateTimeUtils {
     rebaseJulianToGregorianDays(julianDays)
   }
 
-  private lazy val zoneInfoClassName = "sun.util.calendar.ZoneInfo"
-  private lazy val getOffsetsByWallHandle = {
+  private val zoneInfoClassName = "sun.util.calendar.ZoneInfo"
+  private val getOffsetsByWallHandle = {
     val lookup = MethodHandles.lookup()
     val classType = SparkClassUtils.classForName(zoneInfoClassName)
     val methodName = "getOffsetsByWall"
