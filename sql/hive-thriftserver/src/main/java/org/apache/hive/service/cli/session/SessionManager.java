@@ -172,7 +172,7 @@ public class SessionManager extends CompositeService {
               SessionHandle handle = session.getSessionHandle();
               LOG.warn("Session {} is Timed-out (last access : {}) and will be closed",
                 MDC.of(LogKeys.SESSION_HANDLE$.MODULE$, handle),
-                MDC.of(LAST_ACCESS_TIME$.MODULE$, new Date(session.getLastAccessTime())));
+                MDC.of(LogKeys.LAST_ACCESS_TIME$.MODULE$, new Date(session.getLastAccessTime())));
               try {
                 closeSession(handle);
               } catch (HiveSQLException e) {
