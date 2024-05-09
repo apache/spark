@@ -237,8 +237,8 @@ private[kinesis] class KinesisReceiver[T](
         scheduler.shutdown()
         scheduler = null
       }
-      workerThread.join()
-      workerThread = null
+      schedulerThread.join()
+      schedulerThread = null
       logInfo(log"Stopped receiver for schedulerId ${MDC(WORKER_URL, schedulerId)}")
     }
     schedulerId = null

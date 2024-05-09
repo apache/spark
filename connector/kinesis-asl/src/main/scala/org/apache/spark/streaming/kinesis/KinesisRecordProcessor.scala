@@ -24,7 +24,7 @@ import software.amazon.kinesis.lifecycle.events.{InitializationInput, LeaseLostI
 import software.amazon.kinesis.processor.ShardRecordProcessor
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.{REASON, RETRY_INTERVAL, SHARD_ID, WORKER_URL}
+import org.apache.spark.internal.LogKeys.{RETRY_INTERVAL, SHARD_ID, WORKER_URL}
 
 /**
  * Kinesis-specific implementation of the Kinesis Client Library (KCL) IRecordProcessor.
@@ -98,8 +98,9 @@ private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], s
       }
     } else {
       /* RecordProcessor has been stopped. */
-      logInfo(log"Stopped: KinesisReceiver has stopped for schedulerId ${MDC(WORKER_URL, schedulerId)}" +
-          log" and shardId ${MDC(SHARD_ID, shardId)}. No more records will be processed.")
+      logInfo(log"Stopped: KinesisReceiver has stopped for schedulerId " +
+        log"${MDC(WORKER_URL, schedulerId)} and shardId ${MDC(SHARD_ID, shardId)}. " +
+        log"No more records will be processed.")
     }
   }
 
@@ -111,7 +112,7 @@ private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], s
    * Currently this has no functionality.
    */
   override def leaseLost(leaseLostInput: LeaseLostInput): Unit = {
-    logInfo(log"The lease for shardId: $shardId is lost.")
+    logInfo(log"The lease for shardId: ${MDC(WORKER_URL, schedulerId)} is lost.")
   }
 
   /**
