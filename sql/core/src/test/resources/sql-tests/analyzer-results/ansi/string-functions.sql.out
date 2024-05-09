@@ -751,6 +751,13 @@ Project [decode(encode(abc, utf-8, false), utf-8) AS decode(encode(abc, utf-8), 
 
 
 -- !query
+select decode(encode('大千世界', 'utf-32'), 'utf-32')
+-- !query analysis
+Project [decode(encode(大千世界, utf-32, false), utf-32) AS decode(encode(大千世界, utf-32), utf-32)#x]
++- OneRowRelation
+
+
+-- !query
 select decode(1, 1, 'Southlake')
 -- !query analysis
 Project [decode(1, 1, Southlake) AS decode(1, 1, Southlake)#x]
