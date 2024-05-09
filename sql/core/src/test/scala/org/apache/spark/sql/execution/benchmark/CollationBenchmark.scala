@@ -192,10 +192,12 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
 
   def benchmarkMode(
       collationTypes: Seq[String],
-      value: Seq[UTF8String]): Unit = {
+      value: Seq[UTF8String],
+      whichImpl: (Mode, OpenHashMap[AnyRef, Long]) => Any = (m, b) => m.eval(b),
+      nameOfImpl: String = "treemap"): Unit = {
     val benchmark = new Benchmark(
       s"collation unit benchmarks - mode - ${value.size} elements",
-      value.size * 10,
+      value.size,
       warmupTime = 10.seconds,
       output = output)
     collationTypes.foreach { collationType => {
@@ -207,7 +209,7 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
           slide.foreach { case (v: UTF8String, i: Int) =>
             buffer.update(v.toString + s"_${i.toString}", (i % 1000).toLong)
           }
-          modeDefaultCollation.eval(buffer)
+          whichImpl(modeDefaultCollation, buffer)
         })
       }
     }
@@ -254,15 +256,17 @@ object CollationBenchmark extends CollationBenchmarkBase {
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val inputs = generateSeqInput(10000L)
-    benchmarkMode(collationTypes, inputs)
-    benchmarkMode(collationTypes, generateSeqInput(5000L))
-    benchmarkMode(collationTypes, generateSeqInput(2500L))
-    benchmarkUTFStringEquals(collationTypes, inputs)
-    benchmarkUTFStringCompare(collationTypes, inputs)
-    benchmarkUTFStringHashFunction(collationTypes, inputs)
-    benchmarkContains(collationTypes, inputs)
-    benchmarkStartsWith(collationTypes, inputs)
-    benchmarkEndsWith(collationTypes, inputs)
+    Seq(2500L, 5000L, 10000L, 20000L, 40000L).foreach { n =>
+      benchmarkMode(collationTypes, generateSeqInput(n))
+      benchmarkMode(collationTypes, generateSeqInput(n), (m, b) => m.eval2(b), "hashmap")
+      benchmarkMode(collationTypes, generateSeqInput(n), (m, b) => m.eval3(b), "mapreduce")
+    }
+//    benchmarkUTFStringEquals(collationTypes, inputs)
+//    benchmarkUTFStringCompare(collationTypes, inputs)
+//    benchmarkUTFStringHashFunction(collationTypes, inputs)
+//    benchmarkContains(collationTypes, inputs)
+//    benchmarkStartsWith(collationTypes, inputs)
+//    benchmarkEndsWith(collationTypes, inputs)
   }
 }
 

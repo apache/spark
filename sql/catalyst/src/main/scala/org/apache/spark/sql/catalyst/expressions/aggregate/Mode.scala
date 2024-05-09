@@ -76,7 +76,7 @@ case class Mode(
     buffer
   }
 
-  override def eval(buff: OpenHashMap[AnyRef, Long]): Any = {
+  def eval2(buff: OpenHashMap[AnyRef, Long]): Any = {
     if (buff.isEmpty) {
       return null
     }
@@ -119,25 +119,57 @@ case class Mode(
     aliasHashMap.get(k).getOrElse(k)
   }
 
-  private def impl2(buff: OpenHashMap[AnyRef, Long]): OpenHashMap[UTF8String, Long] = {
-    val collation = CollationFactory.fetchCollation(collationId)
-    val modeMap = buff.foldLeft(
-      new OpenHashMap[org.apache.spark.unsafe.types.UTF8String, Long](buff.size)) {
-      case (map, (key: String, count)) =>
-        val utf8 = org.apache.spark.unsafe.types.UTF8String.fromString(key)
-        val k = org.apache.spark.unsafe.types.UTF8String.fromString(
-          collation.hashFunction.applyAsLong(utf8).toString + "_" + utf8.toLowerCase())
-        map.update(k, map.get(k).getOrElse(0L) + count)
-        map
-      case (map, (key: UTF8String, count)) =>
-        val k = org.apache.spark.unsafe.types.UTF8String.fromString(
-          collation.hashFunction.applyAsLong(key).toString + "_" + key.toLowerCase())
-        map.update(k, map.get(k).getOrElse(0L) + count)
-        map
-      case (_, _) =>
-        throw new IllegalArgumentException("Mode expects non-null string type.")
+  def eval3(buff: OpenHashMap[AnyRef, Long]): Any = {
+    if (buff.isEmpty) {
+      return null
     }
+    val buffer = if (isCollatedString(child)) {
+      impl3(buff)
+    } else {
+      buff
+    }
+
+    val k = reverseOpt.map { reverse =>
+      val defaultKeyOrdering = if (reverse) {
+        PhysicalDataType.ordering(child.dataType).asInstanceOf[Ordering[AnyRef]].reverse
+      } else {
+        PhysicalDataType.ordering(child.dataType).asInstanceOf[Ordering[AnyRef]]
+      }
+      val ordering = Ordering.Tuple2(Ordering.Long, defaultKeyOrdering)
+      buffer.maxBy { case (key, count) => (count, key) }(ordering)
+    }.getOrElse(buffer.maxBy(_._2))._1
+  }
+
+  private def impl3(buff: OpenHashMap[AnyRef, Long]) = {
+    val modeMap = buff.toSeq.groupMapReduce {
+      case (key: String, _) =>
+        CollationFactory.getCollationKey(UTF8String.fromString(key), collationId)
+      case (key: UTF8String, _) =>
+        CollationFactory.getCollationKey(key, collationId)
+      case (key, _) => key
+    }(x => x)((x, y) => (x._1, x._2 + y._2)).values
     modeMap
+  }
+
+  override def eval(buff: OpenHashMap[AnyRef, Long]): Any = {
+    if (buff.isEmpty) {
+      return null
+    }
+    val buffer = if (isCollatedString(child)) {
+      impl1(buff)
+    } else {
+      buff
+    }
+
+    val k = reverseOpt.map { reverse =>
+      val defaultKeyOrdering = if (reverse) {
+        PhysicalDataType.ordering(child.dataType).asInstanceOf[Ordering[AnyRef]].reverse
+      } else {
+        PhysicalDataType.ordering(child.dataType).asInstanceOf[Ordering[AnyRef]]
+      }
+      val ordering = Ordering.Tuple2(Ordering.Long, defaultKeyOrdering)
+      buffer.maxBy { case (key, count) => (count, key) }(ordering)
+    }.getOrElse(buffer.maxBy(_._2))._1
   }
 
   private def impl1(buff: OpenHashMap[AnyRef, Long]): TreeMap[UTF8String, Long] = {
