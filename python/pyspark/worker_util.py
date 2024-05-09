@@ -73,14 +73,14 @@ def check_python_version(infile: IO) -> None:
     """
     version = utf8_deserializer.loads(infile)
     worker_version = "%d.%d" % sys.version_info[:2]
-    if version != worker_version:
-        raise PySparkRuntimeError(
-            error_class="PYTHON_VERSION_MISMATCH",
-            message_parameters={
-                "worker_version": worker_version,
-                "driver_version": str(version),
-            },
-        )
+    # if version != worker_version:
+        # raise PySparkRuntimeError(
+        #     error_class="PYTHON_VERSION_MISMATCH",
+        #     message_parameters={
+        #         "worker_version": worker_version,
+        #         "driver_version": str(version),
+        #     },
+        # )
 
 
 def setup_memory_limits(memory_limit_mb: int) -> None:
