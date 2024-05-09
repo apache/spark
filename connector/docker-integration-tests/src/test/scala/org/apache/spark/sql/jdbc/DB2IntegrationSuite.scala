@@ -90,7 +90,6 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
         } else {
           assert(types(0).equals("class java.lang.Short"))
         }
-        assert(types(0).equals("class java.lang.Short"))
         assert(types(1).equals("class java.lang.Integer"))
         assert(types(2).equals("class java.lang.Long"))
         assert(types(3).equals("class java.math.BigDecimal"))
@@ -105,7 +104,6 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
         } else {
           assert(rows(0).getShort(0) == 17)
         }
-        assert(rows(0).getShort(0) == 17)
         assert(rows(0).getInt(1) == 77777)
         assert(rows(0).getLong(2) == 922337203685477580L)
         val bd = new BigDecimal("123456745.56789012345000000000")
@@ -170,7 +168,7 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
     df4.write.jdbc(jdbcUrl, "otherscopy", new Properties)
     val rows = sqlContext.read.jdbc(jdbcUrl, "otherscopy", new Properties).collect()
     assert(rows(0).getShort(0) == 1)
-    assert(rows(0).getInt(1) == 20)
+    assert(rows(0).getShort(1) == 20)
     assert(rows(0).getString(2) == "1")
   }
 
