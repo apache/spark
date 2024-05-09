@@ -24,6 +24,9 @@ import java.util.ConcurrentModificationException
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.internal.{LogKeys, MDC}
+import org.apache.spark.util.MavenUtils.LogStringContext
+
 class SparkException(
     message: String,
     cause: Throwable,
@@ -146,8 +149,9 @@ private[spark] class SparkDriverExecutionException(cause: Throwable)
  * the parent SparkSubmit process to exit with the same exit code.
  */
 private[spark] case class SparkUserAppException(exitCode: Int, errorMsg: Option[String] = None)
-  extends SparkException(s"User application exited with $exitCode" +
-    errorMsg.map(error => s" and caused by\n$error").getOrElse(""))
+  extends SparkException(
+    log"User application exited with ${MDC(LogKeys.EXIT_CODE, exitCode)}".message +
+      errorMsg.map(error => s" and caused by\n$error").getOrElse(""))
 
 /**
  * Exception thrown when the relative executor to access is dead.
