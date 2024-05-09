@@ -1402,7 +1402,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       if (struct.findNestedField(
           fieldNames, includeCollections = true, alter.conf.resolver).isDefined) {
         alter.failAnalysis(
-          errorClass = "FIELDS_ALREADY_EXISTS",
+          errorClass = "FIELD_ALREADY_EXISTS",
           messageParameters = Map(
             "op" -> op,
             "fieldNames" -> toSQLId(fieldNames),
