@@ -86,6 +86,7 @@ private case class DB2Dialect() extends JdbcDialect {
       typeName: String,
       size: Int,
       md: MetadataBuilder): Option[DataType] = sqlType match {
+    case Types.SMALLINT => Option(ShortType)
     case Types.REAL => Option(FloatType)
     case Types.OTHER =>
       typeName match {
