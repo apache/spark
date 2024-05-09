@@ -371,7 +371,7 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
       assert(messageParameters === Map("keyType" -> "\"VARIANT\""))
   }
 
-  // map key can't contain variant as a
+  // map key can't contain variant
   val map7 = CreateMap(
     Seq(
       CreateStruct(
