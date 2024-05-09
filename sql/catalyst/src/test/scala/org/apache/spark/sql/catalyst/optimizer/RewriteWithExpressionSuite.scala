@@ -416,13 +416,14 @@ class RewriteWithExpressionSuite extends PlanTest {
     val expr = With(winExpr) {
       case Seq(ref) => ref * ref
     }
-    val plan = testRelation.window(Seq(expr.as("col")), Seq(a), Nil)
+    val plan = testRelation.select(expr.as("col")).analyze
     comparePlans(
       Optimizer.execute(plan),
       testRelation
-        .window(Seq(winExpr.as("_windowexpression")), Seq(a), Nil)
-        .select(testRelation.output :+
-          ($"_windowexpression" * $"_windowexpression").as("col"): _*)
+        .select(a)
+        .window(Seq(winExpr.as("_we0")), Seq(a), Nil)
+        .select(a, $"_we0", ($"_we0" * $"_we0").as("col"))
+        .select($"col")
         .analyze
     )
   }
