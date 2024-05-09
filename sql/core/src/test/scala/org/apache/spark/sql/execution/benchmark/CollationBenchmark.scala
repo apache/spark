@@ -190,43 +190,52 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
     benchmark.run()
   }
 
-  def benchmarkMode(
+  def makeBenchmarkMode(
       collationTypes: Seq[String],
       value: Seq[UTF8String],
       whichImpl: (Mode, OpenHashMap[AnyRef, Long]) => Any = (m, b) => m.eval(b),
-      nameOfImpl: String = "treemap"): Unit = {
-    val benchmark = new Benchmark(
+      nameOfImpl: String = "treemap",
+      benchmarkMaybe: Option[Benchmark] = None): Benchmark = {
+    val benchmark = benchmarkMaybe.getOrElse(new Benchmark(
       s"collation unit benchmarks - mode - ${value.size} elements",
       value.size,
       warmupTime = 10.seconds,
-      output = output)
+      output = output))
+    addCasesToBenchmarkMode(benchmark, collationTypes, value, whichImpl, nameOfImpl)
+
+    benchmark
+  }
+
+  private def addCasesToBenchmarkMode(
+      benchmark: Benchmark,
+      collationTypes: Seq[String],
+      value: Seq[UTF8String],
+      whichImpl: (Mode, OpenHashMap[AnyRef, Long]) => Any,
+      nameOfImpl: String) = {
     collationTypes.foreach { collationType => {
-      benchmark.addCase(s"$collationType - mode - ${value.size} elements") { _ =>
+      benchmark.addCase(s"$collationType - mode (${nameOfImpl}) - ${value.size} elements") { _ =>
         val modeDefaultCollation = Mode(child =
           Literal.create("some_column_name", StringType(collationType)))
         val buffer = new OpenHashMap[AnyRef, Long](value.size)
-        value.zipWithIndex.sliding(2000, 2000).foreach(slide => {
-          slide.foreach { case (v: UTF8String, i: Int) =>
-            buffer.update(v.toString + s"_${i.toString}", (i % 1000).toLong)
-          }
-          whichImpl(modeDefaultCollation, buffer)
-        })
+        value.zipWithIndex.foreach { case (v: UTF8String, i: Int) =>
+          buffer.update(v.toString + s"_${i.toString}", (i % 1000).toLong)
+        }
+        whichImpl(modeDefaultCollation, buffer)
+
       }
     }
     }
 
-    benchmark.addCase(s"Numerical Type - mode - ${value.size} elements") { _ =>
+    benchmark.addCase(s"Numerical Type - mode (${nameOfImpl}) - ${value.size} elements") { _ =>
       val modeIntType = Mode(child = Literal.create(1, IntegerType))
       val buffer = new OpenHashMap[AnyRef, Long](value.size)
-      value.zipWithIndex.sliding(2000, 2000).foreach(slide => {
-        slide.foreach {
-          case (_, i: Int) =>
-            buffer.update(i.asInstanceOf[AnyRef], (i % 1000).toLong)
-        }
-        modeIntType.eval(buffer)
-      })
+      value.zipWithIndex.foreach {
+        case (v: UTF8String, i: Int) =>
+          buffer.update(i.asInstanceOf[AnyRef], (i % 1000).toLong)
+      }
+      modeIntType.eval(buffer)
     }
-    benchmark.run()
+    benchmark
   }
 }
 
@@ -256,10 +265,11 @@ object CollationBenchmark extends CollationBenchmarkBase {
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val inputs = generateSeqInput(10000L)
-    Seq(2500L, 5000L, 10000L, 20000L, 40000L).foreach { n =>
-      benchmarkMode(collationTypes, generateSeqInput(n))
-      benchmarkMode(collationTypes, generateSeqInput(n), (m, b) => m.eval2(b), "hashmap")
-      benchmarkMode(collationTypes, generateSeqInput(n), (m, b) => m.eval3(b), "mapreduce")
+    Seq(2000L, 4000L, 8000L, 16000L, 40000L).foreach { n =>
+      var bm = makeBenchmarkMode(collationTypes, generateSeqInput(n))
+      bm = makeBenchmarkMode(collationTypes, generateSeqInput(n), (m, b) => m.eval2(b), "hashmap", Some(bm))
+      bm = makeBenchmarkMode(collationTypes, generateSeqInput(n), (m, b) => m.eval3(b), "mapreduce", Some(bm))
+      bm.run()
     }
 //    benchmarkUTFStringEquals(collationTypes, inputs)
 //    benchmarkUTFStringCompare(collationTypes, inputs)
@@ -296,6 +306,5 @@ object CollationNonASCIIBenchmark extends CollationBenchmarkBase {
     benchmarkContains(collationTypes, inputs)
     benchmarkStartsWith(collationTypes, inputs)
     benchmarkEndsWith(collationTypes, inputs)
-    benchmarkMode(collationTypes, inputs)
   }
 }
