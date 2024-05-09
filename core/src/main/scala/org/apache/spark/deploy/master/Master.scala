@@ -143,8 +143,9 @@ private[deploy] class Master(
   }
 
   override def onStart(): Unit = {
-    logInfo("Starting Spark master at " + masterUrl)
-    logInfo(s"Running Spark version ${org.apache.spark.SPARK_VERSION}")
+    logInfo(log"Starting Spark master at ${MDC(LogKeys.MASTER_URL, masterUrl)}")
+    logInfo(log"Running Spark version" +
+      log" ${MDC(LogKeys.SPARK_VERSION, org.apache.spark.SPARK_VERSION)}")
     webUi = new MasterWebUI(this, webUiPort)
     webUi.bind()
     masterWebUiUrl = webUi.webUrl
@@ -157,8 +158,8 @@ private[deploy] class Master(
         masterWebUiUrl = uiReverseProxyUrl.get + "/"
       }
       webUi.addProxy()
-      logInfo(s"Spark Master is acting as a reverse proxy. Master, Workers and " +
-       s"Applications UIs are available at $masterWebUiUrl")
+      logInfo(log"Spark Master is acting as a reverse proxy. Master, Workers and " +
+       log"Applications UIs are available at ${MDC(LogKeys.WEB_URL, masterWebUiUrl)}")
     }
     checkForWorkerTimeOutTask = forwardMessageThread.scheduleAtFixedRate(
       () => Utils.tryLogNonFatalError { self.send(CheckForWorkerTimeOut) },
@@ -242,7 +243,7 @@ private[deploy] class Master(
       } else {
         RecoveryState.RECOVERING
       }
-      logInfo("I have been elected leader! New state: " + state)
+      logInfo(log"I have been elected leader! New state: ${MDC(LogKeys.RECOVERY_STATE, state)}")
       if (state == RecoveryState.RECOVERING) {
         if (beginRecovery(storedApps, storedDrivers, storedWorkers)) {
           recoveryCompletionTask = forwardMessageThread.schedule(new Runnable {
@@ -291,10 +292,11 @@ private[deploy] class Master(
       if (state == RecoveryState.STANDBY) {
         // ignore, don't send response
       } else {
-        logInfo("Registering app " + description.name)
+        logInfo(log"Registering app ${MDC(LogKeys.APP_NAME, description.name)}")
         val app = createApplication(description, driver)
         registerApplication(app)
-        logInfo("Registered app " + description.name + " with ID " + app.id)
+        logInfo(log"Registered app ${MDC(LogKeys.APP_NAME, description.name)} with" +
+          log" ID ${MDC(LogKeys.APP_ID, app.id)}")
         persistenceEngine.addApplication(app)
         driver.send(RegisteredApplication(app.id, self))
         schedule()
@@ -327,7 +329,7 @@ private[deploy] class Master(
     case MasterChangeAcknowledged(appId) =>
       idToApp.get(appId) match {
         case Some(app) =>
-          logInfo("Application has been re-registered: " + appId)
+          logInfo(log"Application has been re-registered: ${MDC(LogKeys.APP_ID, appId)}")
           app.state = ApplicationState.WAITING
         case None =>
           logWarning(log"Master change ack from unknown app: ${MDC(LogKeys.APP_ID, appId)}")
@@ -338,7 +340,7 @@ private[deploy] class Master(
     case WorkerSchedulerStateResponse(workerId, execResponses, driverResponses) =>
       idToWorker.get(workerId) match {
         case Some(worker) =>
-          logInfo("Worker has been re-registered: " + workerId)
+          logInfo(log"Worker has been re-registered: ${MDC(LogKeys.WORKER_ID, workerId)}")
           worker.state = WorkerState.ALIVE
 
           val validExecutors = execResponses.filter(
@@ -394,7 +396,8 @@ private[deploy] class Master(
       }
 
     case UnregisterApplication(applicationId) =>
-      logInfo(s"Received unregister request from application $applicationId")
+      logInfo(log"Received unregister request from application" +
+        log" ${MDC(LogKeys.APP_ID, applicationId)}")
       idToApp.get(applicationId).foreach(finishApplication)
 
     case CheckForWorkerTimeOut =>
@@ -409,7 +412,7 @@ private[deploy] class Master(
           "Can only accept driver submissions in ALIVE state."
         context.reply(SubmitDriverResponse(self, false, None, msg))
       } else {
-        logInfo("Driver submitted " + description.command.mainClass)
+        logInfo(log"Driver submitted ${MDC(LogKeys.CLASS_NAME, description.command.mainClass)}")
         val driver = createDriver(description)
         persistenceEngine.addDriver(driver)
         waitingDrivers += driver
@@ -429,7 +432,7 @@ private[deploy] class Master(
           s"Can only kill drivers in ALIVE state."
         context.reply(KillDriverResponse(self, driverId, success = false, msg))
       } else {
-        logInfo("Asked to kill driver " + driverId)
+        logInfo(log"Asked to kill driver ${MDC(LogKeys.DRIVER_ID, driverId)}")
         val driver = drivers.find(_.id == driverId)
         driver match {
           case Some(d) =>
@@ -445,9 +448,9 @@ private[deploy] class Master(
               }
             }
             // TODO: It would be nice for this to be a synchronous response
-            val msg = s"Kill request for $driverId submitted"
+            val msg = log"Kill request for ${MDC(LogKeys.DRIVER_ID, driverId)} submitted"
             logInfo(msg)
-            context.reply(KillDriverResponse(self, driverId, success = true, msg))
+            context.reply(KillDriverResponse(self, driverId, success = true, msg.message))
           case None =>
             val msg = s"Driver $driverId has already finished or does not exist"
             logWarning(log"Driver ${MDC(LogKeys.DRIVER_ID, driverId)} " +
@@ -476,7 +479,7 @@ private[deploy] class Master(
               w.endpoint.send(KillDriver(driverId))
             }
           }
-          logInfo(s"Kill request for $driverId submitted")
+          logInfo(log"Kill request for ${MDC(LogKeys.DRIVER_ID, driverId)} submitted")
         }
         context.reply(KillAllDriversResponse(self, true, "Kill request for all drivers submitted"))
       }
@@ -484,7 +487,8 @@ private[deploy] class Master(
     case RequestClearCompletedDriversAndApps =>
       val numDrivers = completedDrivers.length
       val numApps = completedApps.length
-      logInfo(s"Asked to clear $numDrivers completed drivers and $numApps completed apps.")
+      logInfo(log"Asked to clear ${MDC(LogKeys.NUM_DRIVERS, numDrivers)} completed drivers and" +
+        log" ${MDC(LogKeys.NUM_APPS, numApps)} completed apps.")
       completedDrivers.clear()
       completedApps.clear()
       context.reply(true)
@@ -549,7 +553,8 @@ private[deploy] class Master(
 
           if (ExecutorState.isFinished(state)) {
             // Remove this executor from the worker and app
-            logInfo(s"Removing executor ${exec.fullId} because it is $state")
+            logInfo(log"Removing executor ${MDC(LogKeys.EXECUTOR_ID, exec.fullId)}" +
+              log" because it is ${MDC(LogKeys.EXECUTOR_STATE, state)}")
             // If an application has already finished, preserve its
             // state to display its information properly on the UI
             if (!appInfo.isFinished) {
@@ -585,7 +590,7 @@ private[deploy] class Master(
 
   override def onDisconnected(address: RpcAddress): Unit = {
     // The disconnected client could've been either a worker or an app; remove whichever it was
-    logInfo(s"$address got disassociated, removing it.")
+    logInfo(log"${MDC(LogKeys.RPC_ADDRESS, address)} got disassociated, removing it.")
     addressToWorker.get(address).foreach(removeWorker(_, s"${address} got disassociated"))
     addressToApp.get(address).foreach(finishApplication)
     if (state == RecoveryState.RECOVERING && canCompleteRecovery) { completeRecovery() }
@@ -595,19 +600,20 @@ private[deploy] class Master(
     workers.count(_.state == WorkerState.UNKNOWN) == 0 &&
       apps.count(_.state == ApplicationState.UNKNOWN) == 0
 
-  private var recoveryStartTimeNs = 0L
+  private var recoveryStartTimeMs = 0L
 
   private def beginRecovery(storedApps: Seq[ApplicationInfo], storedDrivers: Seq[DriverInfo],
       storedWorkers: Seq[WorkerInfo]): Boolean = {
-    recoveryStartTimeNs = System.nanoTime()
+    recoveryStartTimeMs = System.currentTimeMillis()
     for (app <- storedApps) {
-      logInfo("Trying to recover app: " + app.id)
+      logInfo(log"Trying to recover app: ${MDC(LogKeys.APP_ID, app.id)}")
       try {
         registerApplication(app)
         app.state = ApplicationState.UNKNOWN
         app.driver.send(MasterChanged(self, masterWebUiUrl))
       } catch {
-        case e: Exception => logInfo("App " + app.id + " had exception on reconnect")
+        case e: Exception => logInfo(log"App ${MDC(LogKeys.APP_ID, app.id)}" +
+          log" had exception on reconnect")
       }
     }
 
@@ -618,13 +624,14 @@ private[deploy] class Master(
     }
 
     for (worker <- storedWorkers) {
-      logInfo("Trying to recover worker: " + worker.id)
+      logInfo(log"Trying to recover worker: ${MDC(LogKeys.WORKER_ID, worker.id)}")
       try {
         registerWorker(worker)
         worker.state = WorkerState.UNKNOWN
         worker.endpoint.send(MasterChanged(self, masterWebUiUrl))
       } catch {
-        case e: Exception => logInfo("Worker " + worker.id + " had exception on reconnect")
+        case e: Exception => logInfo(log"Worker ${MDC(LogKeys.WORKER_ID, worker.id)}" +
+          log" had exception on reconnect")
       }
     }
 
@@ -666,8 +673,9 @@ private[deploy] class Master(
 
     state = RecoveryState.ALIVE
     schedule()
-    val timeTakenNs = System.nanoTime() - recoveryStartTimeNs
-    logInfo(f"Recovery complete in ${timeTakenNs / 1000000000d}%.3fs - resuming operations!")
+    val timeTakenMs = System.currentTimeMillis() - recoveryStartTimeMs
+    logInfo(log"Recovery complete in ${MDC(LogKeys.TOTAL_TIME, timeTakenMs)} ms" +
+      log" - resuming operations!")
   }
 
   private[master] def handleRegisterWorker(
@@ -680,8 +688,8 @@ private[deploy] class Master(
       workerWebUiUrl: String,
       masterAddress: RpcAddress,
       resources: Map[String, ResourceInformation]): Unit = {
-    logInfo("Registering worker %s:%d with %d cores, %s RAM".format(
-      workerHost, workerPort, cores, Utils.megabytesToString(memory)))
+    logInfo(log"Registering worker ${MDC(LogKeys.WORKER_HOST, workerHost)}:${MDC(LogKeys.WORKER_PORT, workerPort)} with %d cores, %s RAM".format(
+      cores, Utils.megabytesToString(memory)))
     if (state == RecoveryState.STANDBY) {
       workerRef.send(MasterInStandby)
     } else if (idToWorker.contains(id)) {
@@ -824,7 +832,8 @@ private[deploy] class Master(
     // first.
     for (app <- waitingApps) {
       for (rpId <- app.getRequestedRPIds()) {
-        logInfo(s"Start scheduling for app ${app.id} with rpId: $rpId")
+        logInfo(log"Start scheduling for app ${MDC(LogKeys.APP_ID, app.id)} with" +
+          log" rpId: ${MDC(LogKeys.RESOURCE_PROFILE_ID, rpId)}")
         val resourceDesc = app.getResourceDescriptionForRpId(rpId)
         val coresPerExecutor = resourceDesc.coresPerExecutor.getOrElse(1)
 
@@ -1036,7 +1045,7 @@ private[deploy] class Master(
       .values
 
     val workersToRemoveHostPorts = workersToRemove.map(_.hostPort)
-    logInfo(s"Decommissioning the workers with host:ports ${workersToRemoveHostPorts}")
+    logInfo(log"Decommissioning the workers with host:ports ${MDC(LogKeys.HOST_PORT, workersToRemoveHostPorts)}")
 
     // The workers are removed async to avoid blocking the receive loop for the entire batch
     self.send(DecommissionWorkers(workersToRemove.map(_.id).toSeq))
@@ -1085,14 +1094,15 @@ private[deploy] class Master(
     }
     for (driver <- worker.drivers.values) {
       if (driver.desc.supervise) {
-        logInfo(s"Re-launching ${driver.id}")
+        logInfo(log"Re-launching ${MDC(LogKeys.DRIVER_ID, driver.id)}")
         relaunchDriver(driver)
       } else {
-        logInfo(s"Not re-launching ${driver.id} because it was not supervised")
+        logInfo(log"Not re-launching ${MDC(LogKeys.DRIVER_ID, driver.id)}" +
+          log" because it was not supervised")
         removeDriver(driver.id, DriverState.ERROR, None)
       }
     }
-    logInfo(s"Telling app of lost worker: " + worker.id)
+    logInfo(log"Telling app of lost worker: ${MDC(LogKeys.WORKER_ID, worker.id)}")
     apps.filterNot(completedApps.contains(_)).foreach { app =>
       app.driver.send(WorkerRemoved(worker.id, worker.host, msg))
     }
@@ -1197,7 +1207,8 @@ private[deploy] class Master(
       resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Boolean = {
     idToApp.get(appId) match {
       case Some(appInfo) =>
-        logInfo(s"Application $appId requested executors: ${resourceProfileToTotalExecs}.")
+        logInfo(log"Application ${MDC(LogKeys.APP_ID, appId)} requested executors:" +
+          log" ${MDC(LogKeys.RESOURCE_PROFILE_TO_TOTAL_EXECS, resourceProfileToTotalExecs)}.")
         appInfo.requestExecutors(resourceProfileToTotalExecs)
         schedule()
         true
@@ -1221,7 +1232,8 @@ private[deploy] class Master(
   private def handleKillExecutors(appId: String, executorIds: Seq[Int]): Boolean = {
     idToApp.get(appId) match {
       case Some(appInfo) =>
-        logInfo(s"Application $appId requests to kill executors: " + executorIds.mkString(", "))
+        logInfo(log"Application ${MDC(LogKeys.APP_ID, appId)} requests to kill" +
+          log" executors: ${MDC(LogKeys.EXECUTOR_IDS, executorIds.mkString(", "))}")
         val (known, unknown) = executorIds.partition(appInfo.executors.contains)
         known.foreach { executorId =>
           val desc = appInfo.executors(executorId)
@@ -1330,7 +1342,8 @@ private[deploy] class Master(
       exception: Option[Exception]): Unit = {
     drivers.find(d => d.id == driverId) match {
       case Some(driver) =>
-        logInfo(s"Removing driver: $driverId ($finalState)")
+        logInfo(log"Removing driver: ${MDC(LogKeys.DRIVER_ID, driverId)}" +
+          log" (${MDC(LogKeys.DRIVER_STATE, finalState)})")
         drivers -= driver
         if (completedDrivers.size >= retainedDrivers) {
           val toRemove = math.max(retainedDrivers / 10, 1)

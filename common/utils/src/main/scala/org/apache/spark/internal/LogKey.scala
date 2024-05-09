@@ -117,6 +117,7 @@ object LogKeys {
   case object COST extends LogKey
   case object COUNT extends LogKey
   case object CREATED_POOL_NAME extends LogKey
+  case object CREDENTIALS_RENEWAL_INTERVAL_RATIO extends LogKey
   case object CROSS_VALIDATION_METRIC extends LogKey
   case object CROSS_VALIDATION_METRICS extends LogKey
   case object CSV_HEADER_COLUMN_NAME extends LogKey
@@ -220,6 +221,7 @@ object LogKeys {
   case object FILE_NAME2 extends LogKey
   case object FILE_NAME3 extends LogKey
   case object FILE_START_OFFSET extends LogKey
+  case object FILE_SYSTEM extends LogKey
   case object FILE_VERSION extends LogKey
   case object FILTER extends LogKey
   case object FILTERS extends LogKey
@@ -278,6 +280,7 @@ object LogKeys {
   case object KAFKA_PULLS_COUNT extends LogKey
   case object KAFKA_RECORDS_PULLED_COUNT extends LogKey
   case object KEY extends LogKey
+  case object KEY2 extends LogKey
   case object KEYTAB extends LogKey
   case object LABEL_COLUMN extends LogKey
   case object LARGEST_CLUSTER_INDEX extends LogKey
@@ -348,6 +351,7 @@ object LogKeys {
   case object NEW_RDD_ID extends LogKey
   case object NEW_STATE extends LogKey
   case object NEW_VALUE extends LogKey
+  case object NEXT_RENEWAL_TIME extends LogKey
   case object NODES extends LogKey
   case object NODE_LOCATION extends LogKey
   case object NON_BUILT_IN_CONNECTORS extends LogKey
@@ -355,16 +359,21 @@ object LogKeys {
   case object NUM_ADDED_MASTERS extends LogKey
   case object NUM_ADDED_PARTITIONS extends LogKey
   case object NUM_ADDED_WORKERS extends LogKey
+  case object NUM_APPS extends LogKey
   case object NUM_BIN extends LogKey
+  case object NUM_BROADCAST_BLOCK extends LogKey
   case object NUM_BYTES extends LogKey
   case object NUM_BYTES_CURRENT extends LogKey
+  case object NUM_BYTES_EVICTED extends LogKey
   case object NUM_BYTES_MAX extends LogKey
   case object NUM_BYTES_TO_WARN extends LogKey
+  case object NUM_BYTES_TO_FREE extends LogKey
   case object NUM_BYTES_USED extends LogKey
   case object NUM_CLASSES extends LogKey
   case object NUM_COLUMNS extends LogKey
   case object NUM_CONCURRENT_WRITER extends LogKey
   case object NUM_CORES extends LogKey
+  case object NUM_DRIVERS extends LogKey
   case object NUM_DROPPED_PARTITIONS extends LogKey
   case object NUM_ELEMENTS_SPILL_THRESHOLD extends LogKey
   case object NUM_EVENTS extends LogKey
@@ -383,6 +392,7 @@ object LogKeys {
   case object NUM_LEFT_PARTITION_VALUES extends LogKey
   case object NUM_LOADED_ENTRIES extends LogKey
   case object NUM_LOCAL_FREQUENT_PATTERN extends LogKey
+  case object NUM_MERGER_LOCATIONS extends LogKey
   case object NUM_PARTITIONS extends LogKey
   case object NUM_PARTITIONS2 extends LogKey
   case object NUM_PARTITION_VALUES extends LogKey
@@ -458,6 +468,7 @@ object LogKeys {
   case object POST_SCAN_FILTERS extends LogKey
   case object PREDICATE extends LogKey
   case object PREDICATES extends LogKey
+  case object PREFIX extends LogKey
   case object PRETTY_ID_STRING extends LogKey
   case object PRINCIPAL extends LogKey
   case object PROCESS extends LogKey
@@ -494,6 +505,7 @@ object LogKeys {
   case object RECEIVER_ID extends LogKey
   case object RECEIVER_IDS extends LogKey
   case object RECORDS extends LogKey
+  case object RECOVERY_STATE extends LogKey
   case object REDACTED_STATEMENT extends LogKey
   case object REDUCE_ID extends LogKey
   case object RELATION_NAME extends LogKey
@@ -619,7 +631,9 @@ object LogKeys {
   case object TIMESTAMP extends LogKey
   case object TIME_UNITS extends LogKey
   case object TIP extends LogKey
+  case object TOKEN extends LogKey
   case object TOKEN_KIND extends LogKey
+  case object TOKEN_RE_NEWER extends LogKey
   case object TOKEN_REGEX extends LogKey
   case object TOPIC extends LogKey
   case object TOPIC_PARTITION extends LogKey
@@ -648,6 +662,8 @@ object LogKeys {
   case object UPPER_BOUND extends LogKey
   case object URI extends LogKey
   case object URIS extends LogKey
+  case object URL extends LogKey
+  case object URL2 extends LogKey
   case object USER_ID extends LogKey
   case object USER_NAME extends LogKey
   case object UUID extends LogKey
