@@ -74,6 +74,7 @@ from pyspark.sql.pandas.map_ops import PandasMapOpsMixin
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
+    import pyarrow as pa
     from pyspark.core.rdd import RDD
     from pyspark.core.context import SparkContext
     from pyspark._typing import PrimitiveType
