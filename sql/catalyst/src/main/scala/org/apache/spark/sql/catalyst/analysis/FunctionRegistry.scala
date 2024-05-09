@@ -955,7 +955,14 @@ object FunctionRegistry {
       since: Option[String] = None): (String, (ExpressionInfo, FunctionBuilder)) = {
     val info = FunctionRegistryBase.expressionInfo[T](name, since)
     val funcBuilder = (expressions: Seq[Expression]) => {
-      assert(expressions.forall(_.resolved), "function arguments must be resolved.")
+      val (lambdas, others) = expressions.partition(_.isInstanceOf[LambdaFunction])
+      if (lambdas.nonEmpty && !builder.supportsLambda) {
+        throw new AnalysisException(
+          errorClass = "INVALID_LAMBDA_FUNCTION_CALL.NON_HIGHER_ORDER_FUNCTION",
+          messageParameters = Map(
+            "class" -> builder.getClass.getCanonicalName))
+      }
+      assert(others.forall(_.resolved), "function arguments must be resolved.")
       val rearrangedExpressions = rearrangeExpressions(name, builder, expressions)
       val expr = builder.build(name, rearrangedExpressions)
       if (setAlias) expr.setTagValue(FUNC_ALIAS, name)
