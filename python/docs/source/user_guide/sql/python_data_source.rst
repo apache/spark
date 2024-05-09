@@ -144,7 +144,7 @@ This is a dummy streaming data reader that generate 2 rows in every microbatch. 
             """
             pass
 
-        def read(self, partition):
+        def read(self, partition) -> Iterator[Tuple]:
             """
             Takes a partition as an input and read an iterator of tuples from the data source.
             """
@@ -208,7 +208,7 @@ This is a streaming data writer that write the metadata information of each micr
            self.path = self.options.get("path")
            assert self.path is not None
 
-       def write(self, iterator) -> WriterCommitMessage:
+       def write(self, iterator):
            """
            Write the data and return the commit message of that partition
            """
