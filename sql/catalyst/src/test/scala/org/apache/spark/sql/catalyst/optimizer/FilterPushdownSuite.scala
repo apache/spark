@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -1532,5 +1533,34 @@ class FilterPushdownSuite extends PlanTest {
     val correctAnswer = x.where(IsNotNull(Sequence($"x.a", $"x.b", None)) && $"x.c" > 1)
       .analyze
     comparePlans(optimizedQueryWithoutStep, correctAnswer)
+  }
+
+  test("SPARK-48213: do not push down predicate if non-cheap expression exceed reused limit") {
+    withSQLConf(SQLConf.MAX_EXPRESSION_REUSED_IN_PUSH_PREDICATE.key -> "1") {
+      // through project
+      val caseWhen = CaseWhen(Seq(
+        (EqualTo(1, $"a"), $"a" + 1),
+        (EqualTo(2, $"a"), $"a" + 2),
+        (Literal(true), $"a")))
+      val originalQuery1 = testRelation.select($"b", caseWhen as "d")
+        .where(If(LessThan(0, $"d"), -$"d", $"d") > 1 && $"b" > 1)
+      val optimized1 = Optimize.execute(originalQuery1.analyze)
+      val correctAnswer1 = testRelation
+        .where($"b" > 1)
+        .select($"b", caseWhen as "d")
+        .where(If(LessThan(0, $"d"), -$"d", $"d") > 1)
+        .analyze
+      comparePlans(optimized1, correctAnswer1)
+
+      // through aggregate
+      val originalQuery2 = testRelation.groupBy($"a")($"a", sum($"b").as("d"))
+        .where(If(LessThan(0, $"d"), -$"d", $"d") > 1 && $"a" > 1)
+      val optimized2 = Optimize.execute(originalQuery2.analyze)
+      val correctAnswer2 = testRelation.where($"a" > 1)
+        .groupBy($"a")($"a", sum($"b").as("d"))
+        .where(If(LessThan(0, $"d"), -$"d", $"d") > 1)
+        .analyze
+      comparePlans(optimized2, correctAnswer2)
+    }
   }
 }

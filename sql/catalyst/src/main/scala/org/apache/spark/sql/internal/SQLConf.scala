@@ -4805,6 +4805,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val MAX_EXPRESSION_REUSED_IN_PUSH_PREDICATE =
+    buildConf("spark.sql.optimizer.maxExpressionReuseInPushPredicate")
+      .internal()
+      .doc("An integer number indicates the maximum reused number of predicate expression, do " +
+        s"not push down and replace it if exceed limit and the predicate is non-cheap.")
+      .version("4.0.0")
+      .intConf
+      .createWithDefault(Int.MaxValue)
+
   val TIME_TRAVEL_TIMESTAMP_KEY =
     buildConf("spark.sql.timeTravelTimestampKey")
       .doc("The option name to specify the time travel timestamp when reading a table.")

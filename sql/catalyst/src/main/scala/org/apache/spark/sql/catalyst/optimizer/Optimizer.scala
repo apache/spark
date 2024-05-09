@@ -1248,7 +1248,7 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
    * Return all the references of the given expression without deduplication, which is different
    * from `Expression.references`.
    */
-  private def collectReferences(e: Expression): Seq[Attribute] = e.collect {
+  def collectReferences(e: Expression): Seq[Attribute] = e.collect {
     case a: Attribute => a
   }
 
@@ -1763,10 +1763,19 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     // state and all the input rows processed before. In another word, the order of input rows
     // matters for non-deterministic expressions, while pushing down predicates changes the order.
     // This also applies to Aggregate.
-    case Filter(condition, project @ Project(fields, grandChild))
+    case filter @ Filter(condition, project @ Project(fields, grandChild))
       if fields.forall(_.deterministic) && canPushThroughCondition(grandChild, condition) =>
       val aliasMap = getAliasMap(project)
-      project.copy(child = Filter(replaceAlias(condition, aliasMap), grandChild))
+      val (pushDown, stayUp) = splitConjunctivePredicates(condition)
+        .partition(canCollapseExpression(_, aliasMap))
+      if (pushDown.nonEmpty) {
+        val pushDownPredicate = pushDown.reduce(And)
+        val replaced = replaceAlias(pushDownPredicate, aliasMap)
+        val newProject = project.copy(child = Filter(replaced, grandChild))
+        if (stayUp.isEmpty) newProject else Filter(stayUp.reduce(And), newProject)
+      } else {
+        filter
+      }
 
     // We can push down deterministic predicate through Aggregate, including throwable predicate.
     // If we can push down a filter through Aggregate, it means the filter only references the
@@ -1781,8 +1790,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       // attributes produced by the aggregate operator's child operator.
       val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
         val replaced = replaceAlias(cond, aliasMap)
-        cond.deterministic && cond.references.nonEmpty &&
-          replaced.references.subsetOf(aggregate.child.outputSet)
+        cond.deterministic && canCollapseExpression(cond, aliasMap) &&
+          cond.references.nonEmpty && replaced.references.subsetOf(aggregate.child.outputSet)
       }
 
       if (pushDown.nonEmpty) {
@@ -1874,6 +1883,25 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         u.withNewChildren(Seq(Filter(predicate, u.child)))
       }
   }
+
+  /**
+   * Check if we can collapse expression for predicate safely.
+   */
+  def canCollapseExpression(
+      consumer: Expression,
+      producerMap: Map[Attribute, Expression]): Boolean =
+    conf.getConf(SQLConf.MAX_EXPRESSION_REUSED_IN_PUSH_PREDICATE) match {
+      case Int.MaxValue => true
+      case maxReused =>
+        CollapseProject.collectReferences(consumer)
+          .groupBy(identity)
+          .transform((_, v) => v.size)
+          .forall {
+            case (reference, count) =>
+              val producer = producerMap.getOrElse(reference, reference)
+              count <= maxReused || CollapseProject.isCheap(trimAliases(producer))
+          }
+    }
 
   def canPushThrough(p: UnaryNode): Boolean = p match {
     // Note that some operators (e.g. project, aggregate, union) are being handled separately
