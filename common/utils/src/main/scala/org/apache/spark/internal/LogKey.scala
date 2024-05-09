@@ -78,7 +78,6 @@ object LogKeys {
   case object CHECKPOINT_TIME extends LogKey
   case object CHECKSUM_FILE_NUM extends LogKey
   case object CHOSEN_WATERMARK extends LogKey
-  case object CLASSIS_TABLE_TYPE extends LogKey
   case object CLASS_LOADER extends LogKey
   case object CLASS_NAME extends LogKey
   case object CLASS_PATH extends LogKey
@@ -246,7 +245,6 @@ object LogKeys {
   case object HIVE_METASTORE_VERSION extends LogKey
   case object HIVE_OPERATION_STATE extends LogKey
   case object HIVE_OPERATION_TYPE extends LogKey
-  case object HIVE_TABLE_TYPE extends LogKey
   case object HOST extends LogKey
   case object HOST_PORT extends LogKey
   case object HOST_PORT2 extends LogKey
@@ -588,6 +586,7 @@ object LogKeys {
   case object SUBSAMPLING_RATE extends LogKey
   case object SUB_QUERY extends LogKey
   case object TABLE_NAME extends LogKey
+  case object TABLE_TYPE extends LogKey
   case object TABLE_TYPES extends LogKey
   case object TARGET_NUM_EXECUTOR extends LogKey
   case object TARGET_NUM_EXECUTOR_DELTA extends LogKey

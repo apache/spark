@@ -73,7 +73,7 @@ public class ClassicTableTypeMapping implements TableTypeMapping {
     Collection<String> hiveTableType = clientToHiveMap.get(clientTypeName.toUpperCase());
     if (hiveTableType == null) {
       LOG.warn("Not supported client table type {}",
-        MDC.of(LogKeys.CLASSIS_TABLE_TYPE$.MODULE$, clientTypeName));
+        MDC.of(LogKeys.TABLE_TYPE$.MODULE$, clientTypeName));
       return new String[] {clientTypeName};
     }
     return Iterables.toArray(hiveTableType, String.class);
@@ -84,7 +84,7 @@ public class ClassicTableTypeMapping implements TableTypeMapping {
     String clientTypeName = hiveToClientMap.get(hiveTypeName);
     if (clientTypeName == null) {
       LOG.warn("Invalid hive table type {}",
-        MDC.of(LogKeys.HIVE_TABLE_TYPE$.MODULE$, hiveTypeName));
+        MDC.of(LogKeys.TABLE_TYPE$.MODULE$, hiveTypeName));
       return hiveTypeName;
     }
     return clientTypeName;
