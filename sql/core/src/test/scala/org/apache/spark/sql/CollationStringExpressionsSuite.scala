@@ -18,8 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.{Collation, ConcatWs, ExpressionEvalHelper, Levenshtein, Literal, StringRepeat}
+import org.apache.spark.sql.catalyst.expressions.{Levenshtein, Literal}
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -813,31 +812,30 @@ class CollationStringExpressionsSuite
       Levenshtein(leftLit, rightLit)
     }
 
+    case class LevenshteinTestCase[R](l: String, r: String, c: String, result: R)
     Seq(
-      CollationTestCase("", "", "UTF8_BINARY", 0),
-      CollationTestCase("", "something", "UTF8_BINARY", 9),
-      CollationTestCase("a", "a", "UTF8_BINARY", 0),
-      CollationTestCase("a", "A", "UTF8_BINARY", 1),
-      CollationTestCase("a", "a", "UTF8_BINARY_LCASE", 0),
-      CollationTestCase("a", "A", "UTF8_BINARY_LCASE", 0),
-      CollationTestCase("bd", "ABc", "UTF8_BINARY_LCASE", 2),
-      CollationTestCase("Xü", "Ü", "UTF8_BINARY_LCASE", 1),
-      CollationTestCase("Xũ", "Üx", "UTF8_BINARY_LCASE", 2),
-      CollationTestCase("", "something", "UTF8_BINARY_LCASE", 9),
-      CollationTestCase("sOmeThINg", "SOMETHING", "UTF8_BINARY_LCASE", 0),
-      CollationTestCase("sOmeThINg", "SOMETHING", "UNICODE", 5),
-      CollationTestCase("sOmeThINg", "SOMETHING", "UNICODE_CI", 0)
-    ).foreach(c => checkEvaluation(prepareLevenshtein(c.s1, c.s2, c.collation), c.expectedResult))
+      LevenshteinTestCase("", "", "UTF8_BINARY", 0),
+      LevenshteinTestCase("", "something", "UTF8_BINARY", 9),
+      LevenshteinTestCase("a", "a", "UTF8_BINARY", 0),
+      LevenshteinTestCase("a", "A", "UTF8_BINARY", 1),
+      LevenshteinTestCase("a", "a", "UTF8_BINARY_LCASE", 0),
+      LevenshteinTestCase("a", "A", "UTF8_BINARY_LCASE", 0),
+      LevenshteinTestCase("bd", "ABc", "UTF8_BINARY_LCASE", 2),
+      LevenshteinTestCase("Xü", "Ü", "UTF8_BINARY_LCASE", 1),
+      LevenshteinTestCase("Xũ", "Üx", "UTF8_BINARY_LCASE", 2),
+      LevenshteinTestCase("", "something", "UTF8_BINARY_LCASE", 9),
+      LevenshteinTestCase("sOmeThINg", "SOMETHING", "UTF8_BINARY_LCASE", 0),
+      LevenshteinTestCase("sOmeThINg", "SOMETHING", "UNICODE", 5),
+      LevenshteinTestCase("sOmeThINg", "SOMETHING", "UNICODE_CI", 0)
+    ).foreach(c => {
+      val query = s"SELECT levenshtein(collate('${c.l}', '${c.c}'), collate('${c.r}', '${c.c}'))"
+      // Result & data type
+      checkAnswer(sql(query), Row(c.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(IntegerType))
+    })
   }
 
   test("Levenshtein expression with collation and threshold") {
-    case class CollationThresholdTestCase(
-        s1: String,
-        s2: String,
-        collation: String,
-        threshold: Int,
-        expectedResult: Int)
-
     def prepareLevenshtein(
         left: String,
         right: String,
@@ -849,20 +847,25 @@ class CollationStringExpressionsSuite
       Levenshtein(leftLit, rightLit, Some(Literal.create(threshold)))
     }
 
+    case class LevenshteinThresholdTestCase(l: String, r: String, c: String, t: Int, result: Int)
     Seq(
-      CollationThresholdTestCase("", "", "UTF8_BINARY", 0, 0),
-      CollationThresholdTestCase("", "something", "UTF8_BINARY", 0, -1),
-      CollationThresholdTestCase("aaa", "AAA", "UTF8_BINARY_LCASE", 0, 0),
-      CollationThresholdTestCase("a", "b", "UTF8_BINARY_LCASE", 1, 1),
-      CollationThresholdTestCase("Xü", "Ü", "UTF8_BINARY_LCASE", 1, 1),
-      CollationThresholdTestCase("Xũ", "Üx", "UTF8_BINARY_LCASE", 1, -1),
-      CollationThresholdTestCase("sOmeThINg", "SOMETHING", "UNICODE", 0, -1),
-      CollationThresholdTestCase("sOmeThINg", "SOMETHING", "UNICODE", 10, 5),
-      CollationThresholdTestCase("sOmeThINg", "SOMETHING", "UNICODE_CI", 0, 0),
-      CollationThresholdTestCase("sOmeThINg", "SOMETHING", "UNICODE_CI", 10, 0)
-    ).foreach(c =>
-      checkEvaluation(prepareLevenshtein(c.s1, c.s2, c.collation, c.threshold), c.expectedResult)
-    )
+      LevenshteinThresholdTestCase("", "", "UTF8_BINARY", 0, 0),
+      LevenshteinThresholdTestCase("", "something", "UTF8_BINARY", 0, -1),
+      LevenshteinThresholdTestCase("aaa", "AAA", "UTF8_BINARY_LCASE", 0, 0),
+      LevenshteinThresholdTestCase("a", "b", "UTF8_BINARY_LCASE", 1, 1),
+      LevenshteinThresholdTestCase("Xü", "Ü", "UTF8_BINARY_LCASE", 1, 1),
+      LevenshteinThresholdTestCase("Xũ", "Üx", "UTF8_BINARY_LCASE", 1, -1),
+      LevenshteinThresholdTestCase("sOmeThINg", "SOMETHING", "UNICODE", 0, -1),
+      LevenshteinThresholdTestCase("sOmeThINg", "SOMETHING", "UNICODE", 10, 5),
+      LevenshteinThresholdTestCase("sOmeThINg", "SOMETHING", "UNICODE_CI", 0, 0),
+      LevenshteinThresholdTestCase("sOmeThINg", "SOMETHING", "UNICODE_CI", 10, 0)
+    ).foreach(c => {
+      val query = s"SELECT levenshtein(collate('${c.l}', '${c.c}'), " +
+        s"collate('${c.r}', '${c.c}'), ${c.t})"
+      // Result & data type
+      checkAnswer(sql(query), Row(c.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(IntegerType))
+    })
   }
 
   // TODO: Add more tests for other string expressions
