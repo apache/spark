@@ -226,26 +226,6 @@ class PandasConversionMixin:
             return pdf
 
     def toArrowTable(self) -> "pa.Table":
-        """
-        Returns the contents of this :class:`DataFrame` as PyArrow ``pyarrow.Table``.
-
-        This is only available if PyArrow is installed and available.
-
-        Notes
-        -----
-        This method should only be used if the resulting PyArrow ``pyarrow.Table`` is
-        expected to be small, as all the data is loaded into the driver's memory.
-
-        Examples
-        --------
-        >>> df.toArrowTable()  # doctest: +SKIP
-        pyarrow.Table
-        age: int64
-        name: string
-        ----
-        age: [[2,5]]
-        name: [["Alice","Bob"]]
-        """
         from pyspark.sql.dataframe import DataFrame
 
         assert isinstance(self, DataFrame)

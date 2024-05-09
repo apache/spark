@@ -1200,6 +1200,7 @@ class DataFrame:
         DataFrame.take : Returns the first `n` rows.
         DataFrame.head : Returns the first `n` rows.
         DataFrame.toPandas : Returns the data as a pandas DataFrame.
+        DataFrame.toArrowTable : Returns the data as a PyArrow Table.
 
         Notes
         -----
@@ -6210,6 +6211,31 @@ class DataFrame:
         --------
         pyspark.sql.functions.pandas_udf
         pyspark.sql.DataFrame.mapInPandas
+        """
+        ...
+
+    def toArrowTable(self) -> "pa.Table":
+        """
+        Returns the contents of this :class:`DataFrame` as PyArrow ``pyarrow.Table``.
+
+        This is only available if PyArrow is installed and available.
+
+        .. versionadded:: 4.0.0
+
+        Notes
+        -----
+        This method should only be used if the resulting PyArrow ``pyarrow.Table`` is
+        expected to be small, as all the data is loaded into the driver's memory.
+
+        Examples
+        --------
+        >>> df.toArrowTable()  # doctest: +SKIP
+        pyarrow.Table
+        age: int64
+        name: string
+        ----
+        age: [[2,5]]
+        name: [["Alice","Bob"]]
         """
         ...
 
