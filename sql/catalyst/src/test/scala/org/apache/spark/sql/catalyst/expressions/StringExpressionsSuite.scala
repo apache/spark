@@ -490,6 +490,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       StringDecode(Encode(Literal("大千世界"), Literal("UTF-16LE")), Literal("UTF-16LE")), "大千世界")
     checkEvaluation(
+      StringDecode(Encode(Literal("大千世界"), Literal("UTF-32")), Literal("UTF-32")), "大千世界")
+    checkEvaluation(
       StringDecode(Encode(a, Literal("utf-8")), Literal("utf-8")), "大千世界", create_row("大千世界"))
     checkEvaluation(
       StringDecode(Encode(a, Literal("utf-8")), Literal("utf-8")), "", create_row(""))

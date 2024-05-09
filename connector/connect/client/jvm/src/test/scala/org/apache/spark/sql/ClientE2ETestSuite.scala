@@ -22,6 +22,8 @@ import java.time.DateTimeException
 import java.util.Properties
 
 import scala.collection.mutable
+import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration.DurationInt
 import scala.jdk.CollectionConverters._
 
 import org.apache.commons.io.FileUtils
@@ -41,6 +43,7 @@ import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.test.{IntegrationTestUtils, RemoteSparkSession, SQLHelper}
 import org.apache.spark.sql.test.SparkConnectServerUtils.port
 import org.apache.spark.sql.types._
+import org.apache.spark.util.SparkThreadUtils
 
 class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateMethodTester {
 
@@ -1510,6 +1513,46 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
       .foreach { row =>
         (0 until 5).foreach(i => assert(row.get(i * 2) === row.get(i * 2 + 1)))
       }
+  }
+
+  test("Observable metrics") {
+    val df = spark.range(99).withColumn("extra", col("id") - 1)
+    val ob1 = new Observation("ob1")
+    val observedDf = df.observe(ob1, min("id"), avg("id"), max("id"))
+    val observedObservedDf = observedDf.observe("ob2", min("extra"), avg("extra"), max("extra"))
+
+    val ob1Schema = new StructType()
+      .add("min(id)", LongType)
+      .add("avg(id)", DoubleType)
+      .add("max(id)", LongType)
+    val ob2Schema = new StructType()
+      .add("min(extra)", LongType)
+      .add("avg(extra)", DoubleType)
+      .add("max(extra)", LongType)
+    val ob1Metrics = Map("ob1" -> new GenericRowWithSchema(Array(0, 49, 98), ob1Schema))
+    val ob2Metrics = Map("ob2" -> new GenericRowWithSchema(Array(-1, 48, 97), ob2Schema))
+
+    assert(df.collectResult().getObservedMetrics === Map.empty)
+    assert(observedDf.collectResult().getObservedMetrics === ob1Metrics)
+    assert(observedObservedDf.collectResult().getObservedMetrics === ob1Metrics ++ ob2Metrics)
+  }
+
+  test("Observation.get is blocked until the query is finished") {
+    val df = spark.range(99).withColumn("extra", col("id") - 1)
+    val observation = new Observation("ob1")
+    val observedDf = df.observe(observation, min("id"), avg("id"), max("id"))
+
+    // Start a new thread to get the observation
+    val future = Future(observation.get)(ExecutionContext.global)
+    // make sure the thread is blocked right now
+    val e = intercept[java.util.concurrent.TimeoutException] {
+      SparkThreadUtils.awaitResult(future, 2.seconds)
+    }
+    assert(e.getMessage.contains("Future timed out"))
+    observedDf.collect()
+    // make sure the thread is unblocked after the query is finished
+    val metrics = SparkThreadUtils.awaitResult(future, 2.seconds)
+    assert(metrics === Map("min(id)" -> 0, "avg(id)" -> 49, "max(id)" -> 98))
   }
 }
 

@@ -17,38 +17,26 @@
 # under the License.
 #
 
-# According to https://infra.apache.org/github-actions-policy.html,
-# all workflows SHOULD have a job concurrency level less than or equal to 15.
-# To do that, we run one python version per cron schedule
-name: "Build / Python-only (master, PyPy 3.9/Python 3.10/Python 3.12)"
+name: "Build / Python-only (branch-3.5)"
 
 on:
   schedule:
-    - cron: '0 15 * * *'
-    - cron: '0 17 * * *'
-    - cron: '0 19 * * *'
+    - cron: '0 11 * * *'
 
 jobs:
   run-build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - pyversion: ${{ github.event.schedule == '0 15 * * *' && 'pypy3' }}
-          - pyversion: ${{ github.event.schedule == '0 17 * * *' && 'python3.10' }}
-          - pyversion: ${{ github.event.schedule == '0 19 * * *' && 'python3.12' }}
     permissions:
       packages: write
     name: Run
     uses: ./.github/workflows/build_and_test.yml
     if: github.repository == 'apache/spark'
     with:
-      java: 17
-      branch: master
+      java: 8
+      branch: branch-3.5
       hadoop: hadoop3
       envs: >-
         {
-          "PYTHON_TO_TEST": "${{ matrix.pyversion }}"
+          "PYTHON_TO_TEST": ""
         }
       jobs: >-
         {
