@@ -147,7 +147,7 @@ private[spark] class SparkDriverExecutionException(cause: Throwable)
  */
 private[spark] case class SparkUserAppException(exitCode: Int, errorMsg: Option[String] = None)
   extends SparkException(s"User application exited with $exitCode" +
-    s"${errorMsg.map(error => s" and caused by\n$error").getOrElse("")}")
+    errorMsg.map(error => s" and caused by\n$error").getOrElse(""))
 
 /**
  * Exception thrown when the relative executor to access is dead.
