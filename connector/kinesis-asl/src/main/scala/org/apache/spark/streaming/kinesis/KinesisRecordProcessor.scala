@@ -112,7 +112,7 @@ private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], s
    * Currently this has no functionality.
    */
   override def leaseLost(leaseLostInput: LeaseLostInput): Unit = {
-    logInfo(log"The lease for shardId: ${MDC(WORKER_URL, schedulerId)} is lost.")
+    logInfo(log"The lease for shardId: ${MDC(SHARD_ID, shardId)} is lost.")
   }
 
   /**
@@ -126,9 +126,9 @@ private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], s
    * processing of the shard.
    */
   override def shardEnded(shardEndedInput: ShardEndedInput): Unit = {
-    log.info(s"Reached shard end. Checkpointing for shardId: $shardId")
+    logInfo(log"Reached shard end. Checkpointing for shardId: ${MDC(SHARD_ID, shardId)}")
     if (shardId == null) {
-      logWarning("shardId is not initialized for this record processor.")
+      logWarning(log"No shardId for schedulerId ${MDC(WORKER_URL, schedulerId)}?")
     } else {
       receiver.removeCheckpointer(shardId, shardEndedInput.checkpointer)
     }
