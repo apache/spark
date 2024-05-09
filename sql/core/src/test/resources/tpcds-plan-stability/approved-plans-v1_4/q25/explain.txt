@@ -102,7 +102,7 @@ Condition : (isnotnull(cs_bill_customer_sk#14) AND isnotnull(cs_item_sk#15))
 
 (13) BroadcastExchange
 Input [4]: [cs_bill_customer_sk#14, cs_item_sk#15, cs_net_profit#16, cs_sold_date_sk#17]
-Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[0, int, false] as bigint), 32) | (cast(input[1, int, false] as bigint) & 4294967295))),false), [plan_id=2]
+Arguments: HashedRelationBroadcastMode(List(((cast(input[0, int, false] as bigint) << 32) | (cast(input[1, int, false] as bigint) & 4294967295))),false), [plan_id=2]
 
 (14) BroadcastHashJoin [codegen id : 8]
 Left keys [2]: [sr_customer_sk#9, sr_item_sk#8]

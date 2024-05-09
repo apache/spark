@@ -389,6 +389,7 @@ describeFuncName
     | comparisonOperator
     | arithmeticOperator
     | predicateOperator
+    | shiftOperator
     | BANG
     ;
 
