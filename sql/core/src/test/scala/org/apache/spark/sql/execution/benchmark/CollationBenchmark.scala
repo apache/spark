@@ -254,15 +254,15 @@ object CollationBenchmark extends CollationBenchmarkBase {
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val inputs = generateSeqInput(10000L)
-    benchmarkMode(collationTypes, inputs)
-    benchmarkMode(collationTypes, generateSeqInput(5000L))
-    benchmarkMode(collationTypes, generateSeqInput(2500L))
     benchmarkUTFStringEquals(collationTypes, inputs)
     benchmarkUTFStringCompare(collationTypes, inputs)
     benchmarkUTFStringHashFunction(collationTypes, inputs)
     benchmarkContains(collationTypes, inputs)
     benchmarkStartsWith(collationTypes, inputs)
     benchmarkEndsWith(collationTypes, inputs)
+    benchmarkMode(collationTypes, inputs)
+    benchmarkMode(collationTypes, generateSeqInput(5000L))
+    benchmarkMode(collationTypes, generateSeqInput(2500L))
   }
 }
 
