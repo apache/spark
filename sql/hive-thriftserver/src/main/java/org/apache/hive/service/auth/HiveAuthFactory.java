@@ -288,10 +288,9 @@ public class HiveAuthFactory {
     try {
       return delegationTokenManager.verifyDelegationToken(delegationToken);
     } catch (IOException e) {
-      LOG.error("Error verifying delegation token {}", e,
-        MDC.of(LogKeys.TOKEN$.MODULE$, delegationToken));
-      throw new HiveSQLException("Error verifying delegation token " + delegationToken,
-        "08S01", e);
+      String msg = "Error verifying delegation token";
+      LOG.error(msg + " {}", e, MDC.of(LogKeys.TOKEN$.MODULE$, delegationToken));
+      throw new HiveSQLException(msg + delegationToken, "08S01", e);
     }
   }
 

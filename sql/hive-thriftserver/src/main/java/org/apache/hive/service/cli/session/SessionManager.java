@@ -95,7 +95,7 @@ public class SessionManager extends CompositeService {
     long keepAliveTime = HiveConf.getTimeVar(
         hiveConf, ConfVars.HIVE_SERVER2_ASYNC_EXEC_KEEPALIVE_TIME, TimeUnit.SECONDS);
     LOG.info("HiveServer2: Background operation thread keepalive time: {} ms",
-      MDC.of(LogKeys.THREAD_POOL_KEEPALIVE_TIME$.MODULE$, keepAliveTime * 1000));
+      MDC.of(LogKeys.THREAD_POOL_KEEPALIVE_TIME$.MODULE$, keepAliveTime * 1000L));
 
     // Create a thread pool with #poolSize threads
     // Threads terminate when they are idle for more than the keepAliveTime

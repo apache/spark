@@ -78,11 +78,11 @@ object LogKeys {
   case object CHECKPOINT_TIME extends LogKey
   case object CHECKSUM_FILE_NUM extends LogKey
   case object CHOSEN_WATERMARK extends LogKey
+  case object CLASSIS_TABLE_TYPE extends LogKey
   case object CLASS_LOADER extends LogKey
   case object CLASS_NAME extends LogKey
   case object CLASS_PATH extends LogKey
   case object CLAUSES extends LogKey
-  case object CLIENT_TABLE_TYPE extends LogKey
   case object CLUSTER_CENTROIDS extends LogKey
   case object CLUSTER_ID extends LogKey
   case object CLUSTER_LABEL extends LogKey
