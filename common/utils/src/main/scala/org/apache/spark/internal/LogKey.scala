@@ -366,8 +366,8 @@ object LogKeys {
   case object NUM_BYTES_CURRENT extends LogKey
   case object NUM_BYTES_EVICTED extends LogKey
   case object NUM_BYTES_MAX extends LogKey
-  case object NUM_BYTES_TO_WARN extends LogKey
   case object NUM_BYTES_TO_FREE extends LogKey
+  case object NUM_BYTES_TO_WARN extends LogKey
   case object NUM_BYTES_USED extends LogKey
   case object NUM_CLASSES extends LogKey
   case object NUM_COLUMNS extends LogKey
@@ -404,8 +404,8 @@ object LogKeys {
   case object NUM_POINT extends LogKey
   case object NUM_PREFIXES extends LogKey
   case object NUM_PRUNED extends LogKey
-  case object NUM_REPLICAS extends LogKey
   case object NUM_REMOVED_WORKERS extends LogKey
+  case object NUM_REPLICAS extends LogKey
   case object NUM_REQUESTS extends LogKey
   case object NUM_REQUEST_SYNC_TASK extends LogKey
   case object NUM_RESOURCE_SLOTS extends LogKey
@@ -633,8 +633,8 @@ object LogKeys {
   case object TIP extends LogKey
   case object TOKEN extends LogKey
   case object TOKEN_KIND extends LogKey
-  case object TOKEN_RE_NEWER extends LogKey
   case object TOKEN_REGEX extends LogKey
+  case object TOKEN_RE_NEWER extends LogKey
   case object TOPIC extends LogKey
   case object TOPIC_PARTITION extends LogKey
   case object TOPIC_PARTITIONS extends LogKey
