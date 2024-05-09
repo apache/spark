@@ -20,7 +20,7 @@ package org.apache.spark
 import java.util.regex.Pattern
 
 import org.apache.spark.annotation.{DeveloperApi, Unstable}
-import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, PySparkCurrentOrigin}
 import org.apache.spark.sql.execution.SparkStrategy
 import org.apache.spark.sql.internal.SQLConf
 
@@ -106,7 +106,8 @@ package object sql {
       while (i < st.length && sparkCode(st(i))) i += 1
       val origin = Origin(stackTrace = Some(st.slice(
         from = i - 1,
-        until = i + SQLConf.get.stackTracesInDataFrameContext)))
+        until = i + SQLConf.get.stackTracesInDataFrameContext)),
+        pysparkErrorContext = PySparkCurrentOrigin.get())
       CurrentOrigin.withOrigin(origin)(f)
     }
   }

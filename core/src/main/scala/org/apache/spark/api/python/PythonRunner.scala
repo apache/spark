@@ -31,7 +31,8 @@ import scala.util.control.NonFatal
 
 import org.apache.spark._
 import org.apache.spark.api.python.PythonFunction.PythonAccumulator
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.TASK_NAME
 import org.apache.spark.internal.config.{BUFFER_SIZE, EXECUTOR_CORES, Python}
 import org.apache.spark.internal.config.Python._
 import org.apache.spark.rdd.InputFileBlockHolder
@@ -88,7 +89,7 @@ private object BasePythonRunner {
 
   private lazy val faultHandlerLogDir = Utils.createTempDir(namePrefix = "faulthandler")
 
-  private def faultHandlerLogPath(pid: Long): Path = {
+  private def faultHandlerLogPath(pid: Int): Path = {
     new File(faultHandlerLogDir, pid.toString).toPath
   }
 }
@@ -204,7 +205,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
     envVars.put("SPARK_JOB_ARTIFACT_UUID", jobArtifactUUID.getOrElse("default"))
 
-    val (worker: PythonWorker, pid: Option[Long]) = env.createPythonWorker(
+    val (worker: PythonWorker, pid: Option[Int]) = env.createPythonWorker(
       pythonExec, workerModule, daemonModule, envVars.asScala.toMap)
     // Whether is the worker released into idle pool or closed. When any codes try to release or
     // close a worker, they should use `releasedOrClosed.compareAndSet` to flip the state to make
@@ -257,7 +258,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       startTime: Long,
       env: SparkEnv,
       worker: PythonWorker,
-      pid: Option[Long],
+      pid: Option[Int],
       releasedOrClosed: AtomicBoolean,
       context: TaskContext): Iterator[OUT]
 
@@ -465,7 +466,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       startTime: Long,
       env: SparkEnv,
       worker: PythonWorker,
-      pid: Option[Long],
+      pid: Option[Int],
       releasedOrClosed: AtomicBoolean,
       context: TaskContext)
     extends Iterator[OUT] {
@@ -592,7 +593,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
             // Mimic the task name used in `Executor` to help the user find out the task to blame.
             val taskName = s"${context.partitionId()}.${context.attemptNumber()} " +
               s"in stage ${context.stageId()} (TID ${context.taskAttemptId()})"
-            logWarning(s"Incomplete task $taskName interrupted: Attempting to kill Python Worker")
+            logWarning(log"Incomplete task ${MDC(TASK_NAME, taskName)} " +
+              log"interrupted: Attempting to kill Python Worker")
             env.destroyPythonWorker(
               pythonExec, workerModule, daemonModule, envVars.asScala.toMap, worker)
           } catch {
@@ -842,7 +844,7 @@ private[spark] class PythonRunner(
       startTime: Long,
       env: SparkEnv,
       worker: PythonWorker,
-      pid: Option[Long],
+      pid: Option[Int],
       releasedOrClosed: AtomicBoolean,
       context: TaskContext): Iterator[Array[Byte]] = {
     new ReaderIterator(

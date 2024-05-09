@@ -54,6 +54,11 @@ class MasterWebUI(
     val masterPage = new MasterPage(this)
     attachPage(new ApplicationPage(this))
     attachPage(new LogPage(this))
+    val envPage = new EnvironmentPage(this, master.conf)
+    attachPage(envPage)
+    this.attachHandler(createServletHandler("/environment",
+      (request: HttpServletRequest) => envPage.render(request),
+      master.conf))
     attachPage(masterPage)
     addStaticHandler(MasterWebUI.STATIC_RESOURCE_DIR)
     addRenderLogHandler(this, master.conf)

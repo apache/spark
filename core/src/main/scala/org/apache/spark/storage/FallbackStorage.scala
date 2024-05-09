@@ -28,7 +28,8 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.{STORAGE_DECOMMISSION_FALLBACK_STORAGE_CLEANUP, STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH}
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.util.JavaUtils
@@ -84,7 +85,7 @@ private[storage] class FallbackStorage(conf: SparkConf) extends Logging {
           }
         }
       case r =>
-        logWarning(s"Unsupported Resolver: ${r.getClass.getName}")
+        logWarning(log"Unsupported Resolver: ${MDC(CLASS_NAME, r.getClass.getName)}")
     }
   }
 
@@ -141,7 +142,7 @@ private[spark] object FallbackStorage extends Logging {
           logInfo(s"Succeed to clean up: $fallbackUri")
         } else {
           // Clean-up can fail due to the permission issues.
-          logWarning(s"Failed to clean up: $fallbackUri")
+          logWarning(log"Failed to clean up: ${MDC(URI, fallbackUri)}")
         }
       }
     }
@@ -188,15 +189,15 @@ private[spark] object FallbackStorage extends Logging {
         val name = ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID).name
         val hash = JavaUtils.nonNegativeHash(name)
         val dataFile = new Path(fallbackPath, s"$appId/$shuffleId/$hash/$name")
-        val f = fallbackFileSystem.open(dataFile)
         val size = nextOffset - offset
         logDebug(s"To byte array $size")
         val array = new Array[Byte](size.toInt)
         val startTimeNs = System.nanoTime()
-        f.seek(offset)
-        f.readFully(array)
-        logDebug(s"Took ${(System.nanoTime() - startTimeNs) / (1000 * 1000)}ms")
-        f.close()
+        Utils.tryWithResource(fallbackFileSystem.open(dataFile)) { f =>
+          f.seek(offset)
+          f.readFully(array)
+          logDebug(s"Took ${(System.nanoTime() - startTimeNs) / (1000 * 1000)}ms")
+        }
         new NioManagedBuffer(ByteBuffer.wrap(array))
       }
     }

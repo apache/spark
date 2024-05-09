@@ -847,7 +847,7 @@ class TorchDistributor(Distributor):
         partition_data_iterator: Iterator[Any], input_schema_json: Dict[str, Any]
     ) -> Iterator[Any]:
         from pyspark.sql.pandas.serializers import ArrowStreamSerializer
-        from pyspark.files import SparkFiles
+        from pyspark.core.files import SparkFiles
         import json
 
         if input_schema_json is None:

@@ -23,7 +23,8 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext, SparkPlugin}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.DRIVER_TIMEOUT
 import org.apache.spark.util.{SparkExitCode, ThreadUtils}
 
@@ -48,8 +49,9 @@ class DriverTimeoutDriverPlugin extends DriverPlugin with Logging {
       logWarning("Disabled with the timeout value 0.")
     } else {
       val task: Runnable = () => {
-        logWarning(s"Terminate Driver JVM because it runs after $timeout minute" +
-          (if (timeout == 1) "" else "s"))
+        logWarning(log"Terminate Driver JVM because it runs after " +
+          log"${MDC(TIME_UNITS, timeout)} minute" +
+          (if (timeout == 1) log"" else log"s"))
         // We cannot use 'SparkContext.stop' because SparkContext might be in abnormal situation.
         System.exit(SparkExitCode.DRIVER_TIMEOUT)
       }

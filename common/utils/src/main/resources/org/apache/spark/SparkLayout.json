@@ -1,0 +1,61 @@
+{
+  "ts": {
+    "$resolver": "timestamp",
+    "pattern": {
+      "format": "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+      "timeZone": "UTC",
+      "locale": "en_US"
+    }
+  },
+  "level": {
+    "$resolver": "level",
+    "field": "name"
+  },
+  "msg": {
+    "$resolver": "message",
+    "stringified": true
+  },
+  "context": {
+    "$resolver": "mdc"
+  },
+  "exception": {
+    "class": {
+      "$resolver": "exception",
+      "field": "className"
+    },
+    "msg": {
+      "$resolver": "exception",
+      "field": "message",
+      "stringified": true
+    },
+    "stacktrace": {
+      "$resolver": "exception",
+      "field": "stackTrace",
+      "stackTrace": {
+        "elementTemplate": {
+          "class": {
+            "$resolver": "stackTraceElement",
+            "field": "className"
+          },
+          "method": {
+            "$resolver": "stackTraceElement",
+            "field": "methodName"
+          },
+          "file": {
+            "$resolver": "stackTraceElement",
+            "field": "fileName"
+          },
+          "line": {
+            "$resolver": "stackTraceElement",
+            "field": "lineNumber"
+          }
+        }
+      }
+    }
+  },
+  "logger": {
+    "$resolver": "pattern",
+    "pattern": "%c{1}",
+    "stackTraceEnabled": false
+  }
+}

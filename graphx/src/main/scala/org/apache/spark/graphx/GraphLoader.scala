@@ -21,7 +21,8 @@ import java.util.concurrent.TimeUnit
 
 import org.apache.spark.SparkContext
 import org.apache.spark.graphx.impl.{EdgePartitionBuilder, GraphImpl}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.TOTAL_TIME
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -95,8 +96,9 @@ object GraphLoader extends Logging {
     }.persist(edgeStorageLevel).setName("GraphLoader.edgeListFile - edges (%s)".format(path))
     edges.count()
 
-    logInfo(s"It took ${TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)} ms" +
-      " to load the edges")
+    logInfo(log"It took " +
+      log"${MDC(TOTAL_TIME, TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs))} ms " +
+      log"to load the edges")
 
     GraphImpl.fromEdgePartitions(edges, defaultVertexAttr = 1, edgeStorageLevel = edgeStorageLevel,
       vertexStorageLevel = vertexStorageLevel)

@@ -65,7 +65,7 @@ if should_test_connect:
 
 class SparkConnectColumnTests(SparkConnectSQLTestCase):
     def compare_by_show(self, df1, df2, n: int = 20, truncate: int = 20):
-        from pyspark.sql.dataframe import DataFrame as SDF
+        from pyspark.sql.classic.dataframe import DataFrame as SDF
         from pyspark.sql.connect.dataframe import DataFrame as CDF
 
         assert isinstance(df1, (SDF, CDF))
@@ -813,12 +813,9 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
             ).toPandas(),
         )
 
-        # TODO(SPARK-41762): make __neg__ return the correct column name
-        # [left]:  Index(['negative(a)'], dtype='object')
-        # [right]: Index(['(- a)'], dtype='object')
         self.assert_eq(
-            cdf.select((-cdf.a).alias("x")).toPandas(),
-            sdf.select((-sdf.a).alias("x")).toPandas(),
+            cdf.select((-cdf.a)).toPandas(),
+            sdf.select((-sdf.a)).toPandas(),
         )
 
         self.assert_eq(

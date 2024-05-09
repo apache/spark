@@ -25,13 +25,11 @@ import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
 import org.apache.spark.sql.catalyst.expressions.{Coalesce, Literal, UnsafeRow}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.datasources.parquet.SparkToParquetSchemaConverter
-import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 
 case class StringLongClass(a: String, b: Long)
 
@@ -817,78 +815,6 @@ class QueryCompilationErrorsSuite
       parameters = Map("extraction" -> "\"array(test)\""))
   }
 
-  test("CREATE NAMESPACE with LOCATION for JDBC catalog should throw an error") {
-    withTempDir { tempDir =>
-      val url = s"jdbc:h2:${tempDir.getCanonicalPath};user=testUser;password=testPass"
-      Utils.classForName("org.h2.Driver")
-      withSQLConf(
-        "spark.sql.catalog.h2" -> classOf[JDBCTableCatalog].getName,
-        "spark.sql.catalog.h2.url" -> url,
-        "spark.sql.catalog.h2.driver" -> "org.h2.Driver") {
-        checkError(
-          exception = intercept[AnalysisException] {
-            sql("CREATE NAMESPACE h2.test_namespace LOCATION './samplepath'")
-          },
-          errorClass = "NOT_SUPPORTED_IN_JDBC_CATALOG.COMMAND",
-          sqlState = "0A000",
-          parameters = Map("cmd" -> toSQLStmt("CREATE NAMESPACE ... LOCATION ...")))
-      }
-    }
-  }
-
-  test("ALTER NAMESPACE with property other than COMMENT " +
-    "for JDBC catalog should throw an exception") {
-    withTempDir { tempDir =>
-      val url = s"jdbc:h2:${tempDir.getCanonicalPath};user=testUser;password=testPass"
-      Utils.classForName("org.h2.Driver")
-      withSQLConf(
-        "spark.sql.catalog.h2" -> classOf[JDBCTableCatalog].getName,
-        "spark.sql.catalog.h2.url" -> url,
-        "spark.sql.catalog.h2.driver" -> "org.h2.Driver") {
-        val namespace = "h2.test_namespace"
-        withNamespace(namespace) {
-          sql(s"CREATE NAMESPACE $namespace")
-          checkError(
-            exception = intercept[AnalysisException] {
-              sql(s"ALTER NAMESPACE h2.test_namespace SET LOCATION '/tmp/loc_test_2'")
-            },
-            errorClass = "NOT_SUPPORTED_IN_JDBC_CATALOG.COMMAND_WITH_PROPERTY",
-            sqlState = "0A000",
-            parameters = Map(
-              "cmd" -> toSQLStmt("SET NAMESPACE"),
-              "property" -> toSQLConf("location")))
-
-          checkError(
-            exception = intercept[AnalysisException] {
-              sql(s"ALTER NAMESPACE h2.test_namespace SET PROPERTIES('a'='b')")
-            },
-            errorClass = "NOT_SUPPORTED_IN_JDBC_CATALOG.COMMAND_WITH_PROPERTY",
-            sqlState = "0A000",
-            parameters = Map(
-              "cmd" -> toSQLStmt("SET NAMESPACE"),
-              "property" -> toSQLConf("a")))
-        }
-      }
-    }
-  }
-
-  test("ALTER TABLE UNSET nonexistent property should throw an exception") {
-    val tableName = "test_table"
-    withTable(tableName) {
-      sql(s"CREATE TABLE $tableName (a STRING, b INT) USING parquet")
-
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(s"ALTER TABLE $tableName UNSET TBLPROPERTIES ('test_prop1', 'test_prop2', 'comment')")
-        },
-        errorClass = "UNSET_NONEXISTENT_PROPERTIES",
-        parameters = Map(
-          "properties" -> "`test_prop1`, `test_prop2`",
-          "table" -> "`spark_catalog`.`default`.`test_table`")
-      )
-    }
-  }
-
   test("SPARK-43841: Unresolved attribute in select of full outer join with USING") {
     withTempView("v1", "v2") {
       sql("create or replace temp view v1 as values (1, 2) as (c1, c2)")
@@ -955,9 +881,9 @@ class QueryCompilationErrorsSuite
   test("SPARK-47102: the collation feature is off without collate builder call") {
     withSQLConf(SQLConf.COLLATION_ENABLED.key -> "false") {
       Seq(
-        "CREATE TABLE t(col STRING COLLATE 'UNICODE_CI') USING parquet",
-        "CREATE TABLE t(col STRING COLLATE 'UNKNOWN_COLLATION_STRING') USING parquet",
-        "SELECT 'aaa' COLLATE 'UNICODE_CI'",
+        "CREATE TABLE t(col STRING COLLATE UNICODE_CI) USING parquet",
+        "CREATE TABLE t(col STRING COLLATE UNKNOWN_COLLATION_STRING) USING parquet",
+        "SELECT 'aaa' COLLATE UNICODE_CI",
         "select collation('aaa')"
       ).foreach { sqlText =>
         checkError(

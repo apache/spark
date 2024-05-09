@@ -116,7 +116,7 @@ object SparkException {
   def require(
       requirement: Boolean,
       errorClass: String,
-      messageParameters: Map[String, String]): Unit = {
+      messageParameters: => Map[String, String]): Unit = {
     if (!requirement) {
       throw new SparkIllegalArgumentException(errorClass, messageParameters)
     }
@@ -450,6 +450,35 @@ private[spark] class SparkRuntimeException private(
     cause: Throwable = null,
     context: Array[QueryContext] = Array.empty,
     summary: String = "") = {
+    this(
+      SparkThrowableHelper.getMessage(errorClass, messageParameters, summary),
+      Option(cause),
+      Option(errorClass),
+      messageParameters,
+      context
+    )
+  }
+
+  override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
+
+  override def getErrorClass: String = errorClass.orNull
+  override def getQueryContext: Array[QueryContext] = context
+}
+
+private[spark] class SparkPythonException private(
+    message: String,
+    cause: Option[Throwable],
+    errorClass: Option[String],
+    messageParameters: Map[String, String],
+    context: Array[QueryContext])
+  extends RuntimeException(message, cause.orNull) with SparkThrowable {
+
+  def this(
+      errorClass: String,
+      messageParameters: Map[String, String],
+      cause: Throwable = null,
+      context: Array[QueryContext] = Array.empty,
+      summary: String = "") = {
     this(
       SparkThrowableHelper.getMessage(errorClass, messageParameters, summary),
       Option(cause),

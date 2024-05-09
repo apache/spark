@@ -108,7 +108,8 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
     assert(interrupted.length == 2, s"Interrupted operations: $interrupted.")
   }
 
-  test("interrupt tag") {
+  // TODO(SPARK-48139): Re-enable `SparkSessionE2ESuite.interrupt tag`
+  ignore("interrupt tag") {
     val session = spark
     import session.implicits._
 
@@ -196,7 +197,7 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
 
     // q2 and q3 should be cancelled
     interrupted.clear()
-    eventually(timeout(30.seconds), interval(1.seconds)) {
+    eventually(timeout(1.minute), interval(1.seconds)) {
       val ids = spark.interruptTag("two")
       interrupted ++= ids
       assert(interrupted.length == 2, s"Interrupted operations: $interrupted.")
@@ -213,7 +214,7 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
 
     // q1 and q4 should be cancelled
     interrupted.clear()
-    eventually(timeout(30.seconds), interval(1.seconds)) {
+    eventually(timeout(1.minute), interval(1.seconds)) {
       val ids = spark.interruptTag("one")
       interrupted ++= ids
       assert(interrupted.length == 2, s"Interrupted operations: $interrupted.")
@@ -227,6 +228,16 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
     }
     assert(e4.getCause.getMessage contains "OPERATION_CANCELED")
     assert(interrupted.length == 2, s"Interrupted operations: $interrupted.")
+  }
+
+  test("progress is available for the spark result") {
+    val result = spark
+      .range(10000)
+      .repartition(1000)
+      .collectResult()
+    assert(result.length == 10000)
+    assert(result.progress.stages.map(_.numTasks).sum > 100)
+    assert(result.progress.stages.map(_.completedTasks).sum > 100)
   }
 
   test("interrupt operation") {

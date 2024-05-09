@@ -528,7 +528,7 @@ FROM range(1, 11) i, false, false, LocalTempView, true
          +- Window [sum(id#xL) windowspecdefinition(id#xL ASC NULLS FIRST, specifiedwindowframe(RowFrame, -1, 1)) AS sum_rows#xL], [id#xL ASC NULLS FIRST]
             +- Project [id#xL]
                +- SubqueryAlias i
-                  +- Range (1, 11, step=1, splits=None)
+                  +- Range (1, 11, step=1)
 
 
 -- !query
@@ -543,7 +543,7 @@ Project [id#xL, sum_rows#xL]
                +- Window [sum(id#xL) windowspecdefinition(id#xL ASC NULLS FIRST, specifiedwindowframe(RowFrame, -1, 1)) AS sum_rows#xL], [id#xL ASC NULLS FIRST]
                   +- Project [id#xL]
                      +- SubqueryAlias i
-                        +- Range (1, 11, step=1, splits=None)
+                        +- Range (1, 11, step=1)
 
 
 -- !query

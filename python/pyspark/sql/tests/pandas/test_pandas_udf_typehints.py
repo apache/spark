@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import sys
 import unittest
 from inspect import signature
 from typing import Union, Iterator, Tuple, cast, get_type_hints
@@ -114,7 +113,6 @@ class PandasUDFTypeHintsTests(ReusedSQLTestCase):
             infer_eval_type(signature(func), get_type_hints(func)), PandasUDFType.SCALAR_ITER
         )
 
-    @unittest.skipIf(sys.version_info < (3, 9), "Type hinting generics require Python 3.9.")
     def test_type_annotation_tuple_generics(self):
         def func(iter: Iterator[tuple[pd.DataFrame, pd.Series]]) -> Iterator[pd.DataFrame]:
             pass

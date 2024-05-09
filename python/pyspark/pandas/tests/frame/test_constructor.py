@@ -195,14 +195,14 @@ class FrameConstructorMixin:
         with ps.option_context("compute.ops_on_diff_frames", True):
             # test with ps.DataFrame and pd.Index
             self.assert_eq(
-                ps.DataFrame(data=psdf, index=pd.Index([2, 3, 4, 5, 6])),
-                pd.DataFrame(data=pdf, index=pd.Index([2, 3, 4, 5, 6])),
+                ps.DataFrame(data=psdf, index=pd.Index([2, 3, 4, 5, 6])).sort_index(),
+                pd.DataFrame(data=pdf, index=pd.Index([2, 3, 4, 5, 6])).sort_index(),
             )
 
             # test with ps.DataFrame and ps.Index
             self.assert_eq(
-                ps.DataFrame(data=psdf, index=ps.Index([2, 3, 4, 5, 6])),
-                pd.DataFrame(data=pdf, index=pd.Index([2, 3, 4, 5, 6])),
+                ps.DataFrame(data=psdf, index=ps.Index([2, 3, 4, 5, 6])).sort_index(),
+                pd.DataFrame(data=pdf, index=pd.Index([2, 3, 4, 5, 6])).sort_index(),
             )
 
         # test String Index
@@ -269,11 +269,11 @@ class FrameConstructorMixin:
             ps.DataFrame(
                 data=pdf,
                 index=pd.DatetimeIndex(["2022-08-31", "2022-09-02", "2022-09-03", "2022-09-05"]),
-            ),
+            ).sort_index(),
             pd.DataFrame(
                 data=pdf,
                 index=pd.DatetimeIndex(["2022-08-31", "2022-09-02", "2022-09-03", "2022-09-05"]),
-            ),
+            ).sort_index(),
         )
 
         # test with pd.DataFrame and ps.DatetimeIndex
@@ -281,11 +281,11 @@ class FrameConstructorMixin:
             ps.DataFrame(
                 data=pdf,
                 index=ps.DatetimeIndex(["2022-08-31", "2022-09-02", "2022-09-03", "2022-09-05"]),
-            ),
+            ).sort_index(),
             pd.DataFrame(
                 data=pdf,
                 index=pd.DatetimeIndex(["2022-08-31", "2022-09-02", "2022-09-03", "2022-09-05"]),
-            ),
+            ).sort_index(),
         )
 
         with ps.option_context("compute.ops_on_diff_frames", True):
@@ -296,13 +296,13 @@ class FrameConstructorMixin:
                     index=pd.DatetimeIndex(
                         ["2022-08-31", "2022-09-02", "2022-09-03", "2022-09-05"]
                     ),
-                ),
+                ).sort_index(),
                 pd.DataFrame(
                     data=pdf,
                     index=pd.DatetimeIndex(
                         ["2022-08-31", "2022-09-02", "2022-09-03", "2022-09-05"]
                     ),
-                ),
+                ).sort_index(),
             )
 
             # test with ps.DataFrame and ps.DatetimeIndex
@@ -312,13 +312,13 @@ class FrameConstructorMixin:
                     index=ps.DatetimeIndex(
                         ["2022-08-31", "2022-09-02", "2022-09-03", "2022-09-05"]
                     ),
-                ),
+                ).sort_index(),
                 pd.DataFrame(
                     data=pdf,
                     index=pd.DatetimeIndex(
                         ["2022-08-31", "2022-09-02", "2022-09-03", "2022-09-05"]
                     ),
-                ),
+                ).sort_index(),
             )
 
         # test MultiIndex

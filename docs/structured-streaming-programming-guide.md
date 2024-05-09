@@ -2969,7 +2969,11 @@ streamingDF.writeStream.foreachBatch { (batchDF: DataFrame, batchId: Long) =>
   batchId provided to the function as way to deduplicate the output and get an exactly-once guarantee.
 - `foreachBatch` does not work with the continuous processing mode as it fundamentally relies on the
   micro-batch execution of a streaming query. If you write data in the continuous mode, use `foreach` instead.
-
+- If `foreachBatch` is used with stateful streaming queries and multiple DataFrame actions are performed
+  on the same DataFrame (such as `df.count()` followed by `df.collect()`), the query will be evaluated multiple times leading to
+  the state being reloaded multiple times within the same batch resulting in degraded performance. In this case,
+  it's highly recommended for users to call `persist` and `unpersist` on the DataFrame,
+  within the `foreachBatch` UDF (user-defined function) to avoid recomputation.
 
 ###### Foreach
 If `foreachBatch` is not an option (for example, corresponding batch data writer does not exist, or

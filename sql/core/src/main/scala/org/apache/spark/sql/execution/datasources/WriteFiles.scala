@@ -58,6 +58,14 @@ case class WriteFiles(
     copy(child = newChild)
 }
 
+trait WriteFilesExecBase extends UnaryExecNode {
+  override def output: Seq[Attribute] = Seq.empty
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    throw SparkException.internalError(s"$nodeName does not support doExecute")
+  }
+}
+
 /**
  * Responsible for writing files.
  */
@@ -67,9 +75,7 @@ case class WriteFilesExec(
     partitionColumns: Seq[Attribute],
     bucketSpec: Option[BucketSpec],
     options: Map[String, String],
-    staticPartitions: TablePartitionSpec) extends UnaryExecNode {
-  override def output: Seq[Attribute] = Seq.empty
-
+    staticPartitions: TablePartitionSpec) extends WriteFilesExecBase {
   override protected def doExecuteWrite(
       writeFilesSpec: WriteFilesSpec): RDD[WriterCommitMessage] = {
     val rdd = child.execute()
@@ -103,10 +109,6 @@ case class WriteFilesExec(
 
       Iterator(ret)
     }
-  }
-
-  override protected def doExecute(): RDD[InternalRow] = {
-    throw SparkException.internalError(s"$nodeName does not support doExecute")
   }
 
   override protected def stringArgs: Iterator[Any] = Iterator(child)

@@ -36,7 +36,8 @@ import org.roaringbitmap.RoaringBitmap
 import org.apache.spark.{MapOutputTracker, SparkException, TaskContext}
 import org.apache.spark.MapOutputTracker.SHUFFLE_PUSH_MAP_ID
 import org.apache.spark.errors.SparkCoreErrors
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.shuffle._
 import org.apache.spark.network.shuffle.checksum.{Cause, ShuffleChecksumHelper}
@@ -248,7 +249,7 @@ final class ShuffleBlockFetcherIterator(
     }
     shuffleFilesSet.foreach { file =>
       if (!file.delete()) {
-        logWarning("Failed to cleanup shuffle fetch temp file " + file.path())
+        logWarning(log"Failed to cleanup shuffle fetch temp file ${MDC(PATH, file.path())}")
       }
     }
   }
@@ -313,7 +314,8 @@ final class ShuffleBlockFetcherIterator(
 
       override def onBlockFetchFailure(blockId: String, e: Throwable): Unit = {
         ShuffleBlockFetcherIterator.this.synchronized {
-          logError(s"Failed to get block(s) from ${req.address.host}:${req.address.port}", e)
+          logError(log"Failed to get block(s) from " +
+            log"${MDC(HOST, req.address.host)}:${MDC(PORT, req.address.port)}", e)
           e match {
             // SPARK-27991: Catch the Netty OOM and set the flag `isNettyOOMOnShuffle` (shared among
             // tasks) to true as early as possible. The pending fetch requests won't be sent
@@ -585,7 +587,8 @@ final class ShuffleBlockFetcherIterator(
             // don't log the exception stack trace to avoid confusing users.
             // See: SPARK-28340
             case ce: ClosedByInterruptException =>
-              logError("Error occurred while fetching local blocks, " + ce.getMessage)
+              logError(
+                log"Error occurred while fetching local blocks, ${MDC(ERROR, ce.getMessage)}")
             case ex: Exception => logError("Error occurred while fetching local blocks", ex)
           }
           results.put(FailureFetchResult(blockId, mapIndex, blockManager.blockManagerId, e))
@@ -843,8 +846,10 @@ final class ShuffleBlockFetcherIterator(
             // uses are shared by the UnsafeShuffleWriter (both writers use DiskBlockObjectWriter
             // which returns a zero-size from commitAndGet() in case no records were written
             // since the last call.
-            val msg = s"Received a zero-size buffer for block $blockId from $address " +
-              s"(expectedApproxSize = $size, isNetworkReqDone=$isNetworkReqDone)"
+            val msg = log"Received a zero-size buffer for block ${MDC(BLOCK_ID, blockId)} " +
+              log"from ${MDC(URI, address)} " +
+              log"(expectedApproxSize = ${MDC(NUM_BYTES, size)}, " +
+              log"isNetworkReqDone=${MDC(IS_NETWORK_REQUEST_DONE, isNetworkReqDone)})"
             if (blockId.isShuffleChunk) {
               // Zero-size block may come from nodes with hardware failures, For shuffle chunks,
               // the original shuffle blocks that belong to that zero-size shuffle chunk is
@@ -856,7 +861,7 @@ final class ShuffleBlockFetcherIterator(
               result = null
               null
             } else {
-              throwFetchFailedException(blockId, mapIndex, address, new IOException(msg))
+              throwFetchFailedException(blockId, mapIndex, address, new IOException(msg.message))
             }
           } else {
             try {
@@ -874,8 +879,8 @@ final class ShuffleBlockFetcherIterator(
                 assert(buf.isInstanceOf[FileSegmentManagedBuffer])
                 e match {
                   case ce: ClosedByInterruptException =>
-                    logError("Failed to create input stream from local block, " +
-                      ce.getMessage)
+                    lazy val error = MDC(ERROR, ce.getMessage)
+                    logError(log"Failed to create input stream from local block, $error")
                   case e: IOException =>
                     logError("Failed to create input stream from local block", e)
                 }
@@ -942,7 +947,8 @@ final class ShuffleBlockFetcherIterator(
                   }
                 } else {
                   // It's the first time this block is detected corrupted
-                  logWarning(s"got an corrupted block $blockId from $address, fetch again", e)
+                  logWarning(log"got an corrupted block ${MDC(BLOCK_ID, blockId)} " +
+                    log"from ${MDC(URI, address)}, fetch again", e)
                   corruptedBlocks += blockId
                   fetchRequests += FetchRequest(
                     address, Array(FetchBlockInfo(blockId, size, mapIndex)))
@@ -964,9 +970,10 @@ final class ShuffleBlockFetcherIterator(
         case FailureFetchResult(blockId, mapIndex, address, e) =>
           var errorMsg: String = null
           if (e.isInstanceOf[OutOfDirectMemoryError]) {
-            errorMsg = s"Block $blockId fetch failed after $maxAttemptsOnNettyOOM " +
-              s"retries due to Netty OOM"
-            logError(errorMsg)
+            val logMessage = log"Block ${MDC(BLOCK_ID, blockId)} fetch failed after " +
+              log"${MDC(MAX_ATTEMPTS, maxAttemptsOnNettyOOM)} retries due to Netty OOM"
+            logError(logMessage)
+            errorMsg = logMessage.message
           }
           throwFetchFailedException(blockId, mapIndex, address, e, Some(errorMsg))
 
@@ -1029,8 +1036,8 @@ final class ShuffleBlockFetcherIterator(
                 // If we see an exception with reading push-merged-local index file, we fallback
                 // to fetch the original blocks. We do not report block fetch failure
                 // and will continue with the remaining local block read.
-                logWarning(s"Error occurred while reading push-merged-local index, " +
-                  s"prepare to fetch the original blocks", e)
+                logWarning("Error occurred while reading push-merged-local index, " +
+                  "prepare to fetch the original blocks", e)
                 pushBasedFetchHelper.initiateFallbackFetchForPushMergedBlock(
                   shuffleBlockId, pushBasedFetchHelper.localShuffleMergerBlockMgrId)
             }
@@ -1138,10 +1145,11 @@ final class ShuffleBlockFetcherIterator(
         diagnosisResponse
       case shuffleBlockChunk: ShuffleBlockChunkId =>
         // TODO SPARK-36284 Add shuffle checksum support for push-based shuffle
-        val diagnosisResponse = s"BlockChunk $shuffleBlockChunk is corrupted but corruption " +
+        logWarning(log"BlockChunk ${MDC(SHUFFLE_BLOCK_INFO, shuffleBlockChunk)} " +
+          log"is corrupted but corruption diagnosis is skipped due to lack of shuffle " +
+          log"checksum support for push-based shuffle.")
+        s"BlockChunk $shuffleBlockChunk is corrupted but corruption " +
           s"diagnosis is skipped due to lack of shuffle checksum support for push-based shuffle."
-        logWarning(diagnosisResponse)
-        diagnosisResponse
       case unexpected: BlockId =>
         throw SparkException.internalError(
           s"Unexpected type of BlockId, $unexpected", category = "STORAGE")

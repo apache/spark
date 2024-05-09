@@ -19,9 +19,6 @@ import sys
 from collections.abc import Iterator
 from typing import cast, overload, Any, Callable, List, Optional, TYPE_CHECKING, Union
 
-from py4j.java_gateway import java_import, JavaObject
-
-from pyspark.sql.column import _to_seq
 from pyspark.sql.readwriter import OptionUtils, to_str
 from pyspark.sql.streaming.query import StreamingQuery
 from pyspark.sql.types import Row, StructType
@@ -34,6 +31,7 @@ from pyspark.errors import (
 )
 
 if TYPE_CHECKING:
+    from py4j.java_gateway import JavaObject
     from pyspark.sql.session import SparkSession
     from pyspark.sql._typing import SupportsProcess, OptionalPrimitiveType
     from pyspark.sql.dataframe import DataFrame
@@ -77,7 +75,7 @@ class DataStreamReader(OptionUtils):
         self._jreader = spark._jsparkSession.readStream()
         self._spark = spark
 
-    def _df(self, jdf: JavaObject) -> "DataFrame":
+    def _df(self, jdf: "JavaObject") -> "DataFrame":
         from pyspark.sql.dataframe import DataFrame
 
         return DataFrame(jdf, self._spark)
@@ -908,7 +906,7 @@ class DataStreamWriter:
         self._spark = df.sparkSession
         self._jwrite = df._jdf.writeStream()
 
-    def _sq(self, jsq: JavaObject) -> StreamingQuery:
+    def _sq(self, jsq: "JavaObject") -> StreamingQuery:
         return StreamingQuery(jsq)
 
     def outputMode(self, outputMode: str) -> "DataStreamWriter":
@@ -1118,6 +1116,8 @@ class DataStreamWriter:
         +...---------+-----+
         ...
         """
+        from pyspark.sql.classic.column import _to_seq
+
         if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
             cols = cols[0]
         self._jwrite = self._jwrite.partitionBy(_to_seq(self._spark._sc, cols))
@@ -1489,7 +1489,7 @@ class DataStreamWriter:
         >>> q.stop()
         """
 
-        from pyspark.rdd import _wrap_function
+        from pyspark.core.rdd import _wrap_function
         from pyspark.serializers import CPickleSerializer, AutoBatchedSerializer
 
         func = self._construct_foreach_function(f)
@@ -1541,7 +1541,7 @@ class DataStreamWriter:
         >>> q.stop()
         >>> # if in Spark Connect, my_value = -1, else my_value = 100
         """
-
+        from py4j.java_gateway import java_import
         from pyspark.java_gateway import ensure_callback_server_started
 
         gw = self._spark._sc._gateway

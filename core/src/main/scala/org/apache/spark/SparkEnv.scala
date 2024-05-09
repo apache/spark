@@ -32,7 +32,8 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.python.{PythonWorker, PythonWorkerFactory}
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.executor.ExecutorBackend
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.config._
 import org.apache.spark.memory.{MemoryManager, UnifiedMemoryManager}
 import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
@@ -130,7 +131,8 @@ class SparkEnv (
             Utils.deleteRecursively(new File(path))
           } catch {
             case e: Exception =>
-              logWarning(s"Exception while deleting Spark temp dir: $path", e)
+              logWarning(log"Exception while deleting Spark temp dir: " +
+                log"${MDC(LogKeys.PATH, path)}", e)
           }
         case None => // We just need to delete tmp dir created by driver, so do nothing on executor
       }
@@ -141,20 +143,39 @@ class SparkEnv (
       pythonExec: String,
       workerModule: String,
       daemonModule: String,
-      envVars: Map[String, String]): (PythonWorker, Option[Long]) = {
+      envVars: Map[String, String],
+      useDaemon: Boolean): (PythonWorker, Option[Int]) = {
     synchronized {
       val key = PythonWorkersKey(pythonExec, workerModule, daemonModule, envVars)
-      pythonWorkers.getOrElseUpdate(key,
-        new PythonWorkerFactory(pythonExec, workerModule, daemonModule, envVars)).create()
+      val workerFactory = pythonWorkers.getOrElseUpdate(key, new PythonWorkerFactory(
+          pythonExec, workerModule, daemonModule, envVars, useDaemon))
+      if (workerFactory.useDaemonEnabled != useDaemon) {
+        throw SparkException.internalError("PythonWorkerFactory is already created with " +
+          s"useDaemon = ${workerFactory.useDaemonEnabled}, but now is requested with " +
+          s"useDaemon = $useDaemon. This is not allowed to change after the PythonWorkerFactory " +
+          s"is created given the same key: $key.")
+      }
+      workerFactory.create()
     }
   }
 
   private[spark] def createPythonWorker(
       pythonExec: String,
       workerModule: String,
-      envVars: Map[String, String]): (PythonWorker, Option[Long]) = {
+      envVars: Map[String, String],
+      useDaemon: Boolean): (PythonWorker, Option[Int]) = {
     createPythonWorker(
-      pythonExec, workerModule, PythonWorkerFactory.defaultDaemonModule, envVars)
+      pythonExec, workerModule, PythonWorkerFactory.defaultDaemonModule, envVars, useDaemon)
+  }
+
+  private[spark] def createPythonWorker(
+      pythonExec: String,
+      workerModule: String,
+      daemonModule: String,
+      envVars: Map[String, String]): (PythonWorker, Option[Int]) = {
+    val useDaemon = conf.get(Python.PYTHON_USE_DAEMON)
+    createPythonWorker(
+      pythonExec, workerModule, daemonModule, envVars, useDaemon)
   }
 
   private[spark] def destroyPythonWorker(

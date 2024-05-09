@@ -233,7 +233,7 @@ private object DateTimeFormatterHelper {
               }
               rest = suffix
             case _ => throw new SparkIllegalArgumentException(
-              errorClass = "_LEGACY_ERROR_TEMP_3256",
+              errorClass = "INVALID_DATETIME_PATTERN",
               messageParameters = Map("pattern" -> pattern))
           }
         }
@@ -313,19 +313,21 @@ private object DateTimeFormatterHelper {
         if (index % 2 == 0) {
           for (c <- patternPart if weekBasedLetters.contains(c)) {
             throw new SparkIllegalArgumentException(
-              errorClass = "_LEGACY_ERROR_TEMP_3257",
+              errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_WEEK_BASED_PATTERN",
               messageParameters = Map("c" -> c.toString))
           }
           for (c <- patternPart if unsupportedLetters.contains(c) ||
             (isParsing && unsupportedLettersForParsing.contains(c))) {
             throw new SparkIllegalArgumentException(
-              errorClass = "_LEGACY_ERROR_TEMP_3258",
-              messageParameters = Map("c" -> c.toString))
+              errorClass = "INVALID_DATETIME_PATTERN.ILLEGAL_CHARACTER",
+              messageParameters = Map(
+                "c" -> c.toString,
+                "pattern" -> pattern))
           }
           for (style <- unsupportedPatternLengths if patternPart.contains(style)) {
             throw new SparkIllegalArgumentException(
-              errorClass = "_LEGACY_ERROR_TEMP_3259",
-              messageParameters = Map("style" -> style.head.toString))
+              errorClass = "INVALID_DATETIME_PATTERN.LENGTH",
+              messageParameters = Map("pattern" -> style))
           }
           // In DateTimeFormatter, 'u' supports negative years. We substitute 'y' to 'u' here for
           // keeping the support in Spark 3.0. If parse failed in Spark 3.0, fall back to 'y'.

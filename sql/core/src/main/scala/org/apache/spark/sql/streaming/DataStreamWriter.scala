@@ -40,6 +40,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Utils, FileDataSourceV2}
+import org.apache.spark.sql.execution.datasources.v2.python.PythonDataSourceV2
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -394,6 +395,10 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
           Some(df.schema)
         } else {
           None
+        }
+        provider match {
+          case p: PythonDataSourceV2 => p.setShortName(source)
+          case _ =>
         }
         val table = DataSourceV2Utils.getTableFromProvider(
           provider, dsOptions, userSpecifiedSchema = outputSchema)

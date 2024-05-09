@@ -36,6 +36,12 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0001", ctx)
   }
 
+  def parserStackOverflow(parserRuleContext: ParserRuleContext): Throwable = {
+    throw new ParseException(
+      errorClass = "FAILED_TO_PARSE_TOO_COMPLEX",
+      ctx = parserRuleContext)
+  }
+
   def insertOverwriteDirectoryUnsupportedError(): Throwable = {
     SparkException.internalError("INSERT OVERWRITE DIRECTORY is not supported.")
   }
@@ -446,7 +452,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       messageParameters = Map.empty)
   }
 
-  def invalidIdentifierError(ident: String, ctx: ErrorIdentContext): Throwable = {
+  def invalidIdentifierError(ident: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_IDENTIFIER",
       messageParameters = Map("ident" -> ident),

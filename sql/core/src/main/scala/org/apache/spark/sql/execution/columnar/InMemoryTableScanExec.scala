@@ -21,6 +21,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
+import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.columnar.CachedBatch
 import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan, WholeStageCodegenExec}
@@ -28,11 +29,32 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
+/**
+ * Common trait for all InMemoryTableScans implementations to facilitate pattern matching.
+ */
+trait InMemoryTableScanLike extends LeafExecNode {
+
+  /**
+   * Returns whether the cache buffer is loaded
+   */
+  def isMaterialized: Boolean
+
+  /**
+   * Returns the actual cached RDD without filters and serialization of row/columnar.
+   */
+  def baseCacheRDD(): RDD[CachedBatch]
+
+  /**
+   * Returns the runtime statistics after materialization.
+   */
+  def runtimeStatistics: Statistics
+}
+
 case class InMemoryTableScanExec(
     attributes: Seq[Attribute],
     predicates: Seq[Expression],
     @transient relation: InMemoryRelation)
-  extends LeafExecNode {
+  extends InMemoryTableScanLike {
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -176,13 +198,18 @@ case class InMemoryTableScanExec(
     columnarInputRDD
   }
 
-  def isMaterialized: Boolean = relation.cacheBuilder.isCachedColumnBuffersLoaded
+  override def isMaterialized: Boolean = relation.cacheBuilder.isCachedColumnBuffersLoaded
 
   /**
    * This method is only used by AQE which executes the actually cached RDD that without filter and
    * serialization of row/columnar.
    */
-  def baseCacheRDD(): RDD[CachedBatch] = {
+  override def baseCacheRDD(): RDD[CachedBatch] = {
     relation.cacheBuilder.cachedColumnBuffers
   }
+
+  /**
+   * Returns the runtime statistics after shuffle materialization.
+   */
+  override def runtimeStatistics: Statistics = relation.computeStats()
 }

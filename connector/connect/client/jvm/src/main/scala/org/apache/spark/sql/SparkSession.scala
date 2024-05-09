@@ -28,7 +28,7 @@ import com.google.common.cache.{CacheBuilder, CacheLoader}
 import io.grpc.ClientInterceptor
 import org.apache.arrow.memory.RootAllocator
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.internal.Logging
@@ -482,29 +482,21 @@ class SparkSession private[sql] (
     }
   }
 
-  private[sql] def newDataFrame(f: proto.Relation.Builder => Unit): DataFrame = {
+  @Since("4.0.0")
+  @DeveloperApi
+  def newDataFrame(f: proto.Relation.Builder => Unit): DataFrame = {
     newDataset(UnboundRowEncoder)(f)
   }
 
-  private[sql] def newDataset[T](encoder: AgnosticEncoder[T])(
+  @Since("4.0.0")
+  @DeveloperApi
+  def newDataset[T](encoder: AgnosticEncoder[T])(
       f: proto.Relation.Builder => Unit): Dataset[T] = {
     val builder = proto.Relation.newBuilder()
     f(builder)
     builder.getCommonBuilder.setPlanId(planIdGenerator.getAndIncrement())
     val plan = proto.Plan.newBuilder().setRoot(builder).build()
     new Dataset[T](this, plan, encoder)
-  }
-
-  @DeveloperApi
-  def newDataFrame(extension: com.google.protobuf.Any): DataFrame = {
-    newDataset(extension, UnboundRowEncoder)
-  }
-
-  @DeveloperApi
-  def newDataset[T](
-      extension: com.google.protobuf.Any,
-      encoder: AgnosticEncoder[T]): Dataset[T] = {
-    newDataset(encoder)(_.setExtension(extension))
   }
 
   private[sql] def newCommand[T](f: proto.Command.Builder => Unit): proto.Command = {
@@ -553,30 +545,17 @@ class SparkSession private[sql] (
     client.execute(plan).foreach(_ => ())
   }
 
-  private[sql] def execute(command: proto.Command): Seq[ExecutePlanResponse] = {
+  @Since("4.0.0")
+  @DeveloperApi
+  def execute(command: proto.Command): Seq[ExecutePlanResponse] = {
     val plan = proto.Plan.newBuilder().setCommand(command).build()
-    // .toSeq forces that the iterator is consumed and closed
-    client.execute(plan).toSeq
+    // .toSeq forces that the iterator is consumed and closed. On top, ignore all
+    // progress messages.
+    client.execute(plan).filter(!_.hasExecutionProgress).toSeq
   }
 
   private[sql] def registerUdf(udf: proto.CommonInlineUserDefinedFunction): Unit = {
     val command = proto.Command.newBuilder().setRegisterFunction(udf).build()
-    execute(command)
-  }
-
-  @DeveloperApi
-  @deprecated("Use execute(Array[Byte]) instead", "4.0.0")
-  def execute(extension: com.google.protobuf.Any): Unit = {
-    val command = proto.Command.newBuilder().setExtension(extension).build()
-    execute(command)
-  }
-
-  @DeveloperApi
-  def execute(extension: Array[Byte]): Unit = {
-    val command = proto.Command
-      .newBuilder()
-      .setExtension(com.google.protobuf.Any.parseFrom(extension))
-      .build()
     execute(command)
   }
 

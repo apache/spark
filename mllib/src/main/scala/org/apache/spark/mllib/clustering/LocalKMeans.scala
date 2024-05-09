@@ -19,7 +19,8 @@ package org.apache.spark.mllib.clustering
 
 import scala.util.Random
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.NUM_ITERATIONS
 import org.apache.spark.mllib.linalg.BLAS.{axpy, scal}
 import org.apache.spark.mllib.linalg.Vectors
 
@@ -112,9 +113,10 @@ private[mllib] object LocalKMeans extends Logging {
     }
 
     if (iteration == maxIterations) {
-      logInfo(s"Local KMeans++ reached the max number of iterations: $maxIterations.")
+      logInfo(log"Local KMeans++ reached the max number of " +
+        log"iterations: ${MDC(NUM_ITERATIONS, maxIterations)}.")
     } else {
-      logInfo(s"Local KMeans++ converged in $iteration iterations.")
+      logInfo(log"Local KMeans++ converged in ${MDC(NUM_ITERATIONS, iteration)} iterations.")
     }
 
     centers

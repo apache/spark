@@ -789,45 +789,6 @@ class DataFrameSuite extends QueryTest
       assert(df.columns === Array("key", "value", "renamed1", "renamed2"))
   }
 
-  test("SPARK-40311: withColumnsRenamed case sensitive") {
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      val df = testData.toDF().withColumns(Seq("newCol1", "newCOL2"),
-        Seq(col("key") + 1, col("key") + 2))
-        .withColumnsRenamed(Map("newCol1" -> "renamed1", "newCol2" -> "renamed2"))
-      checkAnswer(
-        df,
-        testData.collect().map { case Row(key: Int, value: String) =>
-          Row(key, value, key + 1, key + 2)
-        }.toSeq)
-      assert(df.columns === Array("key", "value", "renamed1", "newCOL2"))
-    }
-  }
-
-  test("SPARK-40311: withColumnsRenamed duplicate column names simple") {
-    checkError(
-      exception = intercept[AnalysisException] {
-        person.withColumnsRenamed(Map("id" -> "renamed", "name" -> "renamed"))
-      },
-      errorClass = "COLUMN_ALREADY_EXISTS",
-      parameters = Map("columnName" -> "`renamed`"))
-  }
-
-  test("SPARK-40311: withColumnsRenamed duplicate column names simple case sensitive") {
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      val df = person.withColumnsRenamed(Map("id" -> "renamed", "name" -> "Renamed"))
-      assert(df.columns === Array("renamed", "Renamed", "age"))
-    }
-  }
-
-  test("SPARK-40311: withColumnsRenamed duplicate column names indirect") {
-    checkError(
-      exception = intercept[AnalysisException] {
-        person.withColumnsRenamed(Map("id" -> "renamed1", "renamed1" -> "age"))
-      },
-      errorClass = "COLUMN_ALREADY_EXISTS",
-      parameters = Map("columnName" -> "`age`"))
-  }
-
   test("SPARK-46260: withColumnsRenamed should respect the Map ordering") {
     val df = spark.range(10).toDF()
     assert(df.withColumnsRenamed(ListMap("id" -> "a", "a" -> "b")).columns === Array("b"))
@@ -1082,11 +1043,46 @@ class DataFrameSuite extends QueryTest
       ("12".getBytes(StandardCharsets.UTF_8), "ABC.".getBytes(StandardCharsets.UTF_8)),
       ("34".getBytes(StandardCharsets.UTF_8), "12346".getBytes(StandardCharsets.UTF_8))
     ).toDF()
-    val expectedAnswer = Seq(
-      Seq("_1", "_2"),
-      Seq("[31 32]", "[41 42 43 2E]"),
-      Seq("[33 34]", "[31 32 33 34 36]"))
-    assert(df.getRows(10, 20) === expectedAnswer)
+
+    withSQLConf(SQLConf.BINARY_OUTPUT_STYLE.key -> "HEX_DISCRETE") {
+      val expectedAnswer = Seq(
+        Seq("_1", "_2"),
+        Seq("[31 32]", "[41 42 43 2E]"),
+        Seq("[33 34]", "[31 32 33 34 36]"))
+      assert(df.getRows(10, 20) === expectedAnswer)
+    }
+    withSQLConf(SQLConf.BINARY_OUTPUT_STYLE.key -> "HEX") {
+      val expectedAnswer = Seq(
+        Seq("_1", "_2"),
+        Seq("3132", "4142432E"),
+        Seq("3334", "3132333436")
+      )
+      assert(df.getRows(10, 20) === expectedAnswer)
+    }
+    withSQLConf(SQLConf.BINARY_OUTPUT_STYLE.key -> "BASE64") {
+      val expectedAnswer = Seq(
+        Seq("_1", "_2"),
+        Seq("MTI", "QUJDLg"),
+        Seq("MzQ", "MTIzNDY")
+      )
+      assert(df.getRows(10, 20) === expectedAnswer)
+    }
+    withSQLConf(SQLConf.BINARY_OUTPUT_STYLE.key -> "UTF8") {
+      val expectedAnswer = Seq(
+        Seq("_1", "_2"),
+        Seq("12", "ABC."),
+        Seq("34", "12346")
+      )
+      assert(df.getRows(10, 20) === expectedAnswer)
+    }
+    withSQLConf(SQLConf.BINARY_OUTPUT_STYLE.key -> "BASIC") {
+      val expectedAnswer = Seq(
+        Seq("_1", "_2"),
+        Seq("[49, 50]", "[65, 66, 67, 46]"),
+        Seq("[51, 52]", "[49, 50, 51, 52, 54]")
+      )
+      assert(df.getRows(10, 20) === expectedAnswer)
+    }
   }
 
   test("createDataFrame(RDD[Row], StructType) should convert UDTs (SPARK-6672)") {

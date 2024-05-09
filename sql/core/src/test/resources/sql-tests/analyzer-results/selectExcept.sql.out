@@ -414,7 +414,7 @@ Project [concat_ws(,, cast(c1#x as string), cast(c2#x as string), cast(c3#x as a
 -- !query
 SELECT (*) FROM v1
 -- !query analysis
-Project [named_struct(c1, c1#x, c2, c2#x, c3, c3#x, c4, c4#x, c5, c5#x) AS named_struct(c1, c1, c2, c2, c3, c3, c4, c4, c5, c5)#x]
+Project [c1#x, c2#x, c3#x, c4#x, c5#x]
 +- SubqueryAlias v1
    +- View (`v1`, [c1#x, c2#x, c3#x, c4#x, c5#x])
       +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x, cast(c3#x as void) AS c3#x, cast(c4#x as int) AS c4#x, cast(c5#x as int) AS c5#x]
@@ -529,32 +529,3 @@ Project [x#x]
          +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x, cast(c3#x as void) AS c3#x, cast(c4#x as int) AS c4#x, cast(c5#x as int) AS c5#x]
             +- SubqueryAlias T
                +- LocalRelation [c1#x, c2#x, c3#x, c4#x, c5#x]
-
-
--- !query
-SET spark.sql.legacy.ignoreParenthesesAroundStar = true
--- !query analysis
-SetCommand (spark.sql.legacy.ignoreParenthesesAroundStar,Some(true))
-
-
--- !query
-SELECT (*) FROM v1
--- !query analysis
-Project [c1#x, c2#x, c3#x, c4#x, c5#x]
-+- SubqueryAlias v1
-   +- View (`v1`, [c1#x, c2#x, c3#x, c4#x, c5#x])
-      +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x, cast(c3#x as void) AS c3#x, cast(c4#x as int) AS c4#x, cast(c5#x as int) AS c5#x]
-         +- SubqueryAlias T
-            +- LocalRelation [c1#x, c2#x, c3#x, c4#x, c5#x]
-
-
--- !query
-SET spark.sql.legacy.ignoreParenthesesAroundStar = false
--- !query analysis
-SetCommand (spark.sql.legacy.ignoreParenthesesAroundStar,Some(false))
-
-
--- !query
-DROP VIEW v1
--- !query analysis
-DropTempViewCommand v1

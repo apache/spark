@@ -31,7 +31,8 @@ import com.google.common.cache.CacheBuilder
 
 import org.apache.spark.{MapOutputTrackerMaster, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.RDD_CACHE_VISIBILITY_TRACKING_ENABLED
 import org.apache.spark.network.shuffle.{ExternalBlockStoreClient, RemoteBlockPushResolver}
 import org.apache.spark.rpc.{IsolatedThreadSafeRpcEndpoint, RpcCallContext, RpcEndpointRef, RpcEnv}
@@ -313,8 +314,9 @@ class BlockManagerMasterEndpoint(
       defaultValue: T): PartialFunction[Throwable, T] = {
     case e: IOException =>
       if (!SparkContext.getActive.map(_.isStopped).getOrElse(true)) {
-        logWarning(s"Error trying to remove $blockType $blockId" +
-          s" from block manager $bmId", e)
+        logWarning(log"Error trying to remove ${MDC(BLOCK_TYPE, blockType)} " +
+          log"${MDC(BLOCK_ID, blockId)}" +
+          log" from block manager ${MDC(BLOCK_MANAGER_ID, bmId)}", e)
       }
       defaultValue
 
@@ -323,16 +325,18 @@ class BlockManagerMasterEndpoint(
       val isAlive = try {
         driverEndpoint.askSync[Boolean](CoarseGrainedClusterMessages.IsExecutorAlive(executorId))
       } catch {
-        // ignore the non-fatal error from driverEndpoint since the caller doesn't really
-        // care about the return result of removing blocks. And so we could avoid breaking
+        // Ignore the non-fatal error from driverEndpoint since the caller doesn't really
+        // care about the return result of removing blocks. That way we avoid breaking
         // down the whole application.
         case NonFatal(e) =>
-          logError(s"Fail to know the executor $executorId is alive or not.", e)
+          logError(log"Cannot determine whether executor " +
+            log"${MDC(EXECUTOR_ID, executorId)} is alive or not.", e)
           false
       }
       if (!isAlive) {
-        logWarning(s"Error trying to remove $blockType $blockId. " +
-          s"The executor $executorId may have been lost.", t)
+        logWarning(log"Error trying to remove ${MDC(BLOCK_TYPE, blockType)} " +
+          log"${MDC(BLOCK_ID, blockId)}. " +
+          log"The executor ${MDC(EXECUTOR_ID, executorId)} may have been lost.", t)
         defaultValue
       } else {
         throw t
@@ -514,7 +518,7 @@ class BlockManagerMasterEndpoint(
       // etc.) as replication doesn't make much sense in that context.
       if (locations.isEmpty) {
         blockLocations.remove(blockId)
-        logWarning(s"No more replicas available for $blockId !")
+        logWarning(log"No more replicas available for ${MDC(BLOCK_ID, blockId)}!")
       } else if (proactivelyReplicate && (blockId.isRDD || blockId.isInstanceOf[TestBlockId])) {
         // As a heuristic, assume single executor failure to find out the number of replicas that
         // existed before failure
@@ -697,8 +701,9 @@ class BlockManagerMasterEndpoint(
       blockManagerIdByExecutor.get(id.executorId) match {
         case Some(oldId) =>
           // A block manager of the same executor already exists, so remove it (assumed dead)
-          logError("Got two different block manager registrations on same executor - "
-              + s" will replace old one $oldId with new one $id")
+          logError(log"Got two different block manager registrations on same executor - "
+              + log" will replace old one ${MDC(OLD_BLOCK_MANAGER_ID, oldId)} " +
+            log"with new one ${MDC(BLOCK_MANAGER_ID, id)}")
           removeExecutor(id.executorId)
         case None =>
       }

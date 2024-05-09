@@ -36,7 +36,8 @@ import org.apache.hive.common.util.HiveVersionInfo
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.execution.command.DDLUtils
@@ -150,6 +151,16 @@ private[spark] object HiveUtils extends Logging {
         "to process inserting into partitioned ORC/Parquet tables created by using the HiveSQL " +
         "syntax.")
       .version("3.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val CONVERT_INSERTING_UNPARTITIONED_TABLE =
+    buildConf("spark.sql.hive.convertInsertingUnpartitionedTable")
+      .doc("When set to true, and `spark.sql.hive.convertMetastoreParquet` or " +
+        "`spark.sql.hive.convertMetastoreOrc` is true, the built-in ORC/Parquet writer is used" +
+        "to process inserting into unpartitioned ORC/Parquet tables created by using the HiveSQL " +
+        "syntax.")
+      .version("4.0.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -286,7 +297,8 @@ private[spark] object HiveUtils extends Logging {
   protected[hive] def newClientForExecution(
       conf: SparkConf,
       hadoopConf: Configuration): HiveClientImpl = {
-    logInfo(s"Initializing execution hive, version $builtinHiveVersion")
+    logInfo(log"Initializing execution hive, version " +
+      log"${MDC(LogKeys.HIVE_METASTORE_VERSION, builtinHiveVersion)}")
     val loader = new IsolatedClientLoader(
       version = IsolatedClientLoader.hiveVersion(builtinHiveVersion),
       sparkConf = conf,
@@ -320,7 +332,7 @@ private[spark] object HiveUtils extends Logging {
       if (file.getName == "*") {
         val files = file.getParentFile.listFiles()
         if (files == null) {
-          logWarning(s"Hive jar path '${file.getPath}' does not exist.")
+          logWarning(log"Hive jar path '${MDC(LogKeys.PATH, file.getPath)}' does not exist.")
           Nil
         } else {
           files.filter(_.getName.toLowerCase(Locale.ROOT).endsWith(".jar")).map(_.toURI.toURL)
@@ -329,6 +341,12 @@ private[spark] object HiveUtils extends Logging {
       } else {
         file.toURI.toURL :: Nil
       }
+    }
+
+    def logInitWithPath(jars: Seq[URL]): Unit = {
+      logInfo(log"Initializing HiveMetastoreConnection version " +
+        log"${MDC(LogKeys.HIVE_METASTORE_VERSION, hiveMetastoreVersion)} using paths: " +
+        log"${MDC(LogKeys.PATH, jars.mkString(", "))}")
     }
 
     val isolatedLoader = if (hiveMetastoreJars == "builtin") {
@@ -341,7 +359,8 @@ private[spark] object HiveUtils extends Logging {
       }
 
       logInfo(
-        s"Initializing HiveMetastoreConnection version $hiveMetastoreVersion using Spark classes.")
+        log"Initializing HiveMetastoreConnection version " +
+          log"${MDC(LogKeys.HIVE_METASTORE_VERSION, hiveMetastoreVersion)} using Spark classes.")
       new IsolatedClientLoader(
         version = metaVersion,
         sparkConf = conf,
@@ -354,7 +373,8 @@ private[spark] object HiveUtils extends Logging {
     } else if (hiveMetastoreJars == "maven") {
       // TODO: Support for loading the jars from an already downloaded location.
       logInfo(
-        s"Initializing HiveMetastoreConnection version $hiveMetastoreVersion using maven.")
+        log"Initializing HiveMetastoreConnection version " +
+          log"${MDC(LogKeys.HIVE_METASTORE_VERSION, hiveMetastoreVersion)} using maven.")
       IsolatedClientLoader.forVersion(
         hiveMetastoreVersion = hiveMetastoreVersion,
         hadoopVersion = VersionInfo.getVersion,
@@ -380,9 +400,7 @@ private[spark] object HiveUtils extends Logging {
               ).map(_.toUri.toURL)
           }
 
-      logInfo(
-        s"Initializing HiveMetastoreConnection version $hiveMetastoreVersion " +
-          s"using path: ${jars.mkString(";")}")
+      logInitWithPath(jars)
       new IsolatedClientLoader(
         version = metaVersion,
         sparkConf = conf,
@@ -401,9 +419,7 @@ private[spark] object HiveUtils extends Logging {
             addLocalHiveJars(new File(path))
           }
 
-      logInfo(
-        s"Initializing HiveMetastoreConnection version $hiveMetastoreVersion " +
-          s"using ${jars.mkString(":")}")
+      logInitWithPath(jars.toSeq)
       new IsolatedClientLoader(
         version = metaVersion,
         sparkConf = conf,
@@ -433,7 +449,7 @@ private[spark] object HiveUtils extends Logging {
       }
     }
     propMap.put(WAREHOUSE_PATH.key, localMetastore.toURI.toString)
-    propMap.put(HiveConf.ConfVars.METASTORECONNECTURLKEY.varname,
+    propMap.put("javax.jdo.option.ConnectionURL",
       s"jdbc:derby:${withInMemoryMode};databaseName=${localMetastore.getAbsolutePath};create=true")
     propMap.put("datanucleus.rdbms.datastoreAdapterClassName",
       "org.datanucleus.store.rdbms.adapter.DerbyAdapter")
@@ -454,10 +470,10 @@ private[spark] object HiveUtils extends Logging {
     // Because execution Hive should always connects to an embedded derby metastore.
     // We have to remove the value of hive.metastore.uris. So, the execution Hive client connects
     // to the actual embedded derby metastore instead of the remote metastore.
-    // You can search HiveConf.ConfVars.METASTOREURIS in the code of HiveConf (in Hive's repo).
+    // You can search hive.metastore.uris in the code of HiveConf (in Hive's repo).
     // Then, you will find that the local metastore mode is only set to true when
     // hive.metastore.uris is not set.
-    propMap.put(ConfVars.METASTOREURIS.varname, "")
+    propMap.put("hive.metastore.uris", "")
 
     // The execution client will generate garbage events, therefore the listeners that are generated
     // for the execution clients are useless. In order to not output garbage, we don't generate

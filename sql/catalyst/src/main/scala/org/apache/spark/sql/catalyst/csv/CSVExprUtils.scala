@@ -68,8 +68,9 @@ object CSVExprUtils {
   @throws[SparkIllegalArgumentException]
   def toChar(str: String): Char = {
     (str: Seq[Char]) match {
-      case Seq() => throw new SparkIllegalArgumentException("_LEGACY_ERROR_TEMP_3247")
-      case Seq('\\') => throw new SparkIllegalArgumentException("_LEGACY_ERROR_TEMP_3248")
+      case Seq() => throw new SparkIllegalArgumentException("INVALID_DELIMITER_VALUE.EMPTY_STRING")
+      case Seq('\\') =>
+        throw new SparkIllegalArgumentException("INVALID_DELIMITER_VALUE.SINGLE_BACKSLASH")
       case Seq(c) => c
       case Seq('\\', 't') => '\t'
       case Seq('\\', 'r') => '\r'
@@ -82,10 +83,14 @@ object CSVExprUtils {
       case _ if str == "\u0000" => '\u0000'
       case Seq('\\', _) =>
         throw new SparkIllegalArgumentException(
-          errorClass = "_LEGACY_ERROR_TEMP_3236", messageParameters = Map("str" -> str))
+          errorClass =
+            "INVALID_DELIMITER_VALUE.UNSUPPORTED_SPECIAL_CHARACTER",
+            messageParameters = Map("str" -> str))
       case _ =>
         throw new SparkIllegalArgumentException(
-          errorClass = "_LEGACY_ERROR_TEMP_3237", messageParameters = Map("str" -> str))
+          errorClass =
+            "INVALID_DELIMITER_VALUE.DELIMITER_LONGER_THAN_EXPECTED",
+            messageParameters = Map("str" -> str))
     }
   }
 
