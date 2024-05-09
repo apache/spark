@@ -730,7 +730,8 @@ class DataTypeSuite extends SparkFunSuite {
         MapType(StringType(UNICODE_COLLATION), StringType(UNICODE_COLLATION))) :: Nil)
 
     val mapWithKeyInNameInSchema = StructType(
-      StructField("mapField.key",
+      StructField("name.key", StringType) ::
+      StructField("name",
         MapType(StringType(UNICODE_COLLATION), StringType(UNICODE_COLLATION))) :: Nil)
 
     val arrayInMapInNestedSchema = StructType(
