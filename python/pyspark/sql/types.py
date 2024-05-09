@@ -1239,12 +1239,7 @@ class StructType(DataType):
         return {"type": self.typeName(), "fields": [f.jsonValue() for f in self]}
 
     @classmethod
-    def fromJson(
-        cls,
-        json: Dict[str, Any],
-        fieldPath: str = "",
-        collationsMap: Optional[Dict[str, str]] = None,
-    ) -> "StructType":
+    def fromJson(cls, json: Dict[str, Any]) -> "StructType":
         """
         Constructs :class:`StructType` from a schema defined in JSON format.
 
@@ -1831,13 +1826,10 @@ def _parse_datatype_json_value(
         if tpe in _all_complex_types:
             complex_type = _all_complex_types[tpe]
             if complex_type is StructType:
-                return complex_type.fromJson(json_value)
-            elif complex_type in [ArrayType, MapType]:
-                return complex_type.fromJson(json_value, fieldPath, collationsMap)
-            raise PySparkValueError(
-                error_class="UNSUPPORTED_DATA_TYPE",
-                message_parameters={"data_type": str(tpe)},
-            )
+                return StructType.fromJson(json_value)
+
+            map_or_array_type: Union[ArrayType, MapType] = complex_type
+            return map_or_array_type.fromJson(json_value, fieldPath, collationsMap)
         elif tpe == "udt":
             return UserDefinedType.fromJson(json_value)
         else:
