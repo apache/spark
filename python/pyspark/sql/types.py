@@ -1828,7 +1828,7 @@ def _parse_datatype_json_value(
             if complex_type is StructType:
                 return StructType.fromJson(json_value)
 
-            map_or_array_type: Union[ArrayType, MapType] = complex_type
+            map_or_array_type: Union[type[ArrayType], type[MapType]] = complex_type
             return map_or_array_type.fromJson(json_value, fieldPath, collationsMap)
         elif tpe == "udt":
             return UserDefinedType.fromJson(json_value)
