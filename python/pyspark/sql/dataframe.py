@@ -6214,6 +6214,7 @@ class DataFrame:
         """
         ...
 
+    @dispatch_df_method
     def toArrowTable(self) -> "pa.Table":
         """
         Returns the contents of this :class:`DataFrame` as PyArrow ``pyarrow.Table``.
