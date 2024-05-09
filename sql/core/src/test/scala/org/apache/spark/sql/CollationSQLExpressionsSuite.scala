@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.text.SimpleDateFormat
+
 import scala.collection.immutable.Seq
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkRuntimeException}
@@ -306,6 +308,55 @@ class CollationSQLExpressionsSuite
         val testQuery = sql(query)
         checkAnswer(testQuery, Row(t.result))
         val dataType = StringType(t.collationName)
+        assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      }
+    })
+  }
+
+  test("Support CsvToStructs hash expression with collation") {
+    case class CsvToStructsTestCase(
+     input: String,
+     collationName: String,
+     schema: String,
+     options: String,
+     result: Row,
+     structFields: Seq[StructField]
+    )
+
+    val testCases = Seq(
+      CsvToStructsTestCase("1", "UTF8_BINARY", "'a INT'", "",
+        Row(1), Seq(
+          StructField("a", IntegerType, nullable = true)
+        )),
+      CsvToStructsTestCase("true, 0.8", "UTF8_BINARY_LCASE", "'A BOOLEAN, B DOUBLE'", "",
+        Row(true, 0.8), Seq(
+          StructField("A", BooleanType, nullable = true),
+          StructField("B", DoubleType, nullable = true)
+        )),
+      CsvToStructsTestCase("\"Spark\"", "UNICODE", "'a STRING'", "",
+        Row("Spark"), Seq(
+          StructField("a", StringType("UNICODE"), nullable = true)
+        )),
+      CsvToStructsTestCase("26/08/2015", "UTF8_BINARY", "'time Timestamp'",
+        ", map('timestampFormat', 'dd/MM/yyyy')", Row(
+          new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.S").parse("2015-08-26 00:00:00.0")
+        ), Seq(
+          StructField("time", TimestampType, nullable = true)
+        ))
+    )
+
+    // Supported collations
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |select from_csv('${t.input}', ${t.schema} ${t.options})
+           |""".stripMargin
+      // Result
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        val queryResult = testQuery.collect().head
+        checkAnswer(testQuery, Row(t.result))
+        val dataType = StructType(t.structFields)
         assert(testQuery.schema.fields.head.dataType.sameType(dataType))
       }
     })
