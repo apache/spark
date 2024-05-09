@@ -107,6 +107,22 @@ class VersionUtils:
             )
 
 
+class LogUtils:
+    """
+    Utils for querying structured Spark logs with Spark SQL.
+    """
+
+    LOG_SCHEMA = (
+        "ts TIMESTAMP, "
+        "level STRING, "
+        "msg STRING, "
+        "context map<STRING, STRING>, "
+        "exception STRUCT<class STRING, msg STRING, "
+        "stacktrace ARRAY<STRUCT<class STRING, method STRING, file STRING,line STRING>>>,"
+        "logger STRING"
+    )
+
+
 def fail_on_stopiteration(f: Callable) -> Callable:
     """
     Wraps the input function to fail on 'StopIteration' by raising a 'RuntimeError'
@@ -746,6 +762,9 @@ def is_remote_only() -> bool:
     False
     """
     global _is_remote_only
+
+    if "SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ:
+        return True
 
     if _is_remote_only is not None:
         return _is_remote_only

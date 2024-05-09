@@ -26,7 +26,7 @@ import org.apache.spark.util.Utils
 
 class OracleDatabaseOnDocker extends DatabaseOnDocker with Logging {
   lazy override val imageName =
-    sys.env.getOrElse("ORACLE_DOCKER_IMAGE_NAME", "gvenzl/oracle-free:23.3-slim")
+    sys.env.getOrElse("ORACLE_DOCKER_IMAGE_NAME", "gvenzl/oracle-free:23.4-slim")
   val oracle_password = "Th1s1sThe0racle#Pass"
   override val env = Map(
     "ORACLE_PWD" -> oracle_password, // oracle images uses this

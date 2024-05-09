@@ -28,7 +28,8 @@ import jakarta.servlet.{DispatcherType, Filter, FilterChain, FilterConfig, Servl
 import jakarta.servlet.http.{HttpServletRequest, HttpServletResponse}
 import org.eclipse.jetty.servlet.FilterHolder
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.Clock
@@ -197,7 +198,7 @@ private[history] class ApplicationCache(
       new CacheEntry(loadedUI, completed)
     } catch {
       case e: Exception =>
-        logWarning(s"Failed to initialize application UI for $application", e)
+        logWarning(log"Failed to initialize application UI for ${MDC(APP_ID, application)}", e)
         operations.detachSparkUI(appId, attemptId, loadedUI.ui)
         throw e
     }

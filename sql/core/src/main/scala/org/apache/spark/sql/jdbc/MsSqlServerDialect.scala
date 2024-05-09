@@ -86,9 +86,13 @@ private case class MsSqlServerDialect() extends JdbcDialect {
       // We shouldn't propagate these queries to MsSqlServer
       expr match {
         case e: Predicate => e.name() match {
-          case "=" | "<>" | "<=>" | "<" | "<=" | ">" | ">="
-              if e.children().exists(_.isInstanceOf[Predicate]) =>
-            super.visitUnexpectedExpr(expr)
+          case "=" | "<>" | "<=>" | "<" | "<=" | ">" | ">=" =>
+            val Array(l, r) = e.children().map {
+              case p: Predicate => s"CASE WHEN ${inputToSQL(p)} THEN 1 ELSE 0 END"
+              case o => inputToSQL(o)
+            }
+            visitBinaryComparison(e.name(), l, r)
+          case "CASE_WHEN" => visitCaseWhen(expressionsToStringArray(e.children())) + " = 1"
           case _ => super.build(expr)
         }
         case _ => super.build(expr)
@@ -111,8 +115,11 @@ private case class MsSqlServerDialect() extends JdbcDialect {
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
     sqlType match {
       case _ if typeName.contains("datetimeoffset") =>
-        // String is recommend by Microsoft SQL Server for datetimeoffset types in non-MS clients
-        Option(StringType)
+        if (SQLConf.get.legacyMsSqlServerDatetimeOffsetMappingEnabled) {
+          Some(StringType)
+        } else {
+          Some(TimestampType)
+        }
       case java.sql.Types.SMALLINT | java.sql.Types.TINYINT
           if !SQLConf.get.legacyMsSqlServerNumericMappingEnabled =>
         // Data range of TINYINT is 0-255 so it needs to be stored in ShortType.

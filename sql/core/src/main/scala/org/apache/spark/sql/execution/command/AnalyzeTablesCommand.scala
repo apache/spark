@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.internal.LogKey.{DATABASE_NAME, ERROR, TABLE_NAME}
+import org.apache.spark.internal.LogKeys.{DATABASE_NAME, ERROR, TABLE_NAME}
 import org.apache.spark.internal.MDC
 import org.apache.spark.sql.{Row, SparkSession}
 

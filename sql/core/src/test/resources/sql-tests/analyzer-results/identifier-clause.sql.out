@@ -198,7 +198,7 @@ Project [abs(c1#x) AS abs(c1)#x]
 SELECT * FROM IDENTIFIER('ra' || 'nge')(0, 1)
 -- !query analysis
 Project [id#xL]
-+- Range (0, 1, step=1, splits=None)
++- Range (0, 1, step=1)
 
 
 -- !query

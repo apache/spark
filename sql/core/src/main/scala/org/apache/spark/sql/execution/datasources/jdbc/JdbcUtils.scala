@@ -33,7 +33,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{DEFAULT_ISOLATION_LEVEL, ISOLATION_LEVEL}
+import org.apache.spark.internal.LogKeys.{DEFAULT_ISOLATION_LEVEL, ISOLATION_LEVEL}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.{DecimalPrecision, Resolver}

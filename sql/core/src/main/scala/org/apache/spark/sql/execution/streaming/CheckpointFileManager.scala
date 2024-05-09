@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.local.{LocalFs, RawLocalFs}
 import org.apache.hadoop.fs.permission.FsPermission
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{PATH, TEMP_PATH}
+import org.apache.spark.internal.LogKeys.{FINAL_PATH, PATH, TEMP_PATH}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.RenameHelperMethods
 import org.apache.spark.sql.internal.SQLConf
@@ -144,7 +144,8 @@ object CheckpointFileManager extends Logging {
       this(fm, path, generateTempPath(path), overwrite)
     }
 
-    logInfo(s"Writing atomically to $finalPath using temp file $tempPath")
+    logInfo(log"Writing atomically to ${MDC(FINAL_PATH, finalPath)} using temp file " +
+      log"${MDC(TEMP_PATH, tempPath)}")
     @volatile private var terminated = false
 
     override def close(): Unit = synchronized {
@@ -166,7 +167,8 @@ object CheckpointFileManager extends Logging {
             s"But $finalPath does not exist.")
         }
 
-        logInfo(s"Renamed temp file $tempPath to $finalPath")
+        logInfo(log"Renamed temp file ${MDC(TEMP_PATH, tempPath)} to " +
+          log"${MDC(FINAL_PATH, finalPath)}")
       } finally {
         terminated = true
       }

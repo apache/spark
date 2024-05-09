@@ -23,7 +23,7 @@ import breeze.linalg.{Vector => BV}
 
 import org.apache.spark.graphx._
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.NUM_ITERATIONS
+import org.apache.spark.internal.LogKeys.NUM_ITERATIONS
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 
 /**

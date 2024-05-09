@@ -78,8 +78,16 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
   /**
    * A mutable map for holding auxiliary information of this tree node. It will be carried over
    * when this node is copied via `makeCopy`, or transformed via `transformUp`/`transformDown`.
+   * We lazily evaluate the `tags` since the default size of a `mutable.Map` is nonzero. This
+   * will reduce unnecessary memory pressure.
    */
-  private val tags: mutable.Map[TreeNodeTag[_], Any] = mutable.Map.empty
+  private[this] var _tags: mutable.Map[TreeNodeTag[_], Any] = null
+  private def tags: mutable.Map[TreeNodeTag[_], Any] = {
+    if (_tags eq null) {
+      _tags = mutable.Map.empty
+    }
+    _tags
+  }
 
   /**
    * Default tree pattern [[BitSet] for a [[TreeNode]].
@@ -147,11 +155,13 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
     ineffectiveRules.get(ruleId.id)
   }
 
+  def isTagsEmpty: Boolean = (_tags eq null) || _tags.isEmpty
+
   def copyTagsFrom(other: BaseType): Unit = {
     // SPARK-32753: it only makes sense to copy tags to a new node
     // but it's too expensive to detect other cases likes node removal
     // so we make a compromise here to copy tags to node with no tags
-    if (tags.isEmpty) {
+    if (isTagsEmpty && !other.isTagsEmpty) {
       tags ++= other.tags
     }
   }
@@ -161,11 +171,17 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
   }
 
   def getTagValue[T](tag: TreeNodeTag[T]): Option[T] = {
-    tags.get(tag).map(_.asInstanceOf[T])
+    if (isTagsEmpty) {
+      None
+    } else {
+      tags.get(tag).map(_.asInstanceOf[T])
+    }
   }
 
   def unsetTagValue[T](tag: TreeNodeTag[T]): Unit = {
-    tags -= tag
+    if (!isTagsEmpty) {
+      tags -= tag
+    }
   }
 
   /**

@@ -6633,6 +6633,17 @@ object functions {
   }
 
   /**
+   * Parses a JSON string and constructs a Variant value. Returns null if the input string is not
+   * a valid JSON value.
+   *
+   * @param json a string column that contains JSON data.
+   *
+   * @group variant_funcs
+   * @since 4.0.0
+   */
+  def try_parse_json(json: Column): Column = Column.fn("try_parse_json", json)
+
+  /**
    * Parses a JSON string and constructs a Variant value.
    *
    * @param json

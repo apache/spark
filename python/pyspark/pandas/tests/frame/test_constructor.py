@@ -269,11 +269,11 @@ class FrameConstructorMixin:
             ps.DataFrame(
                 data=pdf,
                 index=pd.DatetimeIndex(["2022-08-31", "2022-09-02", "2022-09-03", "2022-09-05"]),
-            ),
+            ).sort_index(),
             pd.DataFrame(
                 data=pdf,
                 index=pd.DatetimeIndex(["2022-08-31", "2022-09-02", "2022-09-03", "2022-09-05"]),
-            ),
+            ).sort_index(),
         )
 
         # test with pd.DataFrame and ps.DatetimeIndex
@@ -281,11 +281,11 @@ class FrameConstructorMixin:
             ps.DataFrame(
                 data=pdf,
                 index=ps.DatetimeIndex(["2022-08-31", "2022-09-02", "2022-09-03", "2022-09-05"]),
-            ),
+            ).sort_index(),
             pd.DataFrame(
                 data=pdf,
                 index=pd.DatetimeIndex(["2022-08-31", "2022-09-02", "2022-09-03", "2022-09-05"]),
-            ),
+            ).sort_index(),
         )
 
         with ps.option_context("compute.ops_on_diff_frames", True):
@@ -296,13 +296,13 @@ class FrameConstructorMixin:
                     index=pd.DatetimeIndex(
                         ["2022-08-31", "2022-09-02", "2022-09-03", "2022-09-05"]
                     ),
-                ),
+                ).sort_index(),
                 pd.DataFrame(
                     data=pdf,
                     index=pd.DatetimeIndex(
                         ["2022-08-31", "2022-09-02", "2022-09-03", "2022-09-05"]
                     ),
-                ),
+                ).sort_index(),
             )
 
             # test with ps.DataFrame and ps.DatetimeIndex
@@ -312,13 +312,13 @@ class FrameConstructorMixin:
                     index=ps.DatetimeIndex(
                         ["2022-08-31", "2022-09-02", "2022-09-03", "2022-09-05"]
                     ),
-                ),
+                ).sort_index(),
                 pd.DataFrame(
                     data=pdf,
                     index=pd.DatetimeIndex(
                         ["2022-08-31", "2022-09-02", "2022-09-03", "2022-09-05"]
                     ),
-                ),
+                ).sort_index(),
             )
 
         # test MultiIndex
