@@ -17,7 +17,6 @@
 package org.apache.spark.sql.execution.benchmark
 
 import scala.concurrent.duration._
-import scala.util.Random
 
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.sql.catalyst.expressions.Literal
@@ -279,28 +278,44 @@ object CollationBenchmark extends CollationBenchmarkBase {
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    Seq(2000L, 4000L, 8000L, 16000L).foreach { n =>
+    Seq(6000L, 12000L).foreach { n =>
       var bm = makeBenchmarkMode(collationTypes,
         generateSeqInput2(n), (m, b) => m.eval(b), "treemap", None, true)
       bm = makeBenchmarkMode(
-        collationTypes.filter(_ != "UTF8_BINARY"),
+        collationTypes.filter(_ != "UTF8_BINARY").filter(_ != "UNICODE"),
         generateSeqInput2(n), (m, b) => m.eval2(b), "hashmap", Some(bm))
       bm = makeBenchmarkMode(
-        collationTypes.filter(_ != "UTF8_BINARY"),
+        collationTypes.filter(_ != "UTF8_BINARY").filter(_ != "UNICODE"),
         generateSeqInput2(n), (m, b) => m.eval3(b), "mapreduce", Some(bm))
-      Seq(0.02, 0.04, 0.08).foreach { percent =>
+      Seq(0.05, 0.1).foreach { percent =>
         val inputs = generateSeqInput2(n).splitAt((n * percent).intValue())
-        val input = (
-          inputs._1.map(_.toString.split("_").head).map(UTF8String.fromString) ++
-          inputs._2).sortBy(_ => Random.nextInt())
+        val part1 = inputs._1.map(_.toString.split("_").head).map(UTF8String.fromString)
+        val inputRaw = (
+          part1 ++
+          inputs._2)
+        // scalastyle:off println
+        println(s"${inputRaw.slice(0, 1000)}")
+        val input = inputRaw.sortBy(_.hashCode())
+        println(s"${input.slice(0, 1000)}")
+
+        part1.groupBy(_.toLowerCase()).filter {
+          case (value, value1) => value1.size > 1
+        }.foreach { case (k, v) =>
+          println(s"$k (CI) -> ${v.size}")
+        }
+        // scalastyle:on println
+        val numInGroup = part1.groupBy(_.toLowerCase())
+          .values.filter(_.size > 1).map(_.size).fold(0)(_ + _)
+        val percentInGroup = numInGroup.toDouble / n.toDouble
         bm = makeBenchmarkMode(
-          collationTypes, input, (m, b) => m.eval(b), "treemap", Some(bm), false)
+          collationTypes.filter(_ != "UNICODE"), input,
+          (m, b) => m.eval(b), s"treemap ${percentInGroup}%", Some(bm), false)
         bm = makeBenchmarkMode(
-          collationTypes.filter(_ != "UTF8_BINARY"),
-          input, (m, b) => m.eval2(b), "hashmap", Some(bm))
+          collationTypes.filter(_ != "UTF8_BINARY") .filter(_ != "UNICODE"),
+          input, (m, b) => m.eval2(b), s"hashmap ${percentInGroup}%", Some(bm))
         bm = makeBenchmarkMode(
-          collationTypes.filter(_ != "UTF8_BINARY"),
-          input, (m, b) => m.eval3(b), "mapreduce", Some(bm))
+          collationTypes.filter(_ != "UTF8_BINARY") .filter(_ != "UNICODE"),
+          input, (m, b) => m.eval3(b), s"mapreduce ${percentInGroup}%", Some(bm))
       }
       bm.run()
     }
