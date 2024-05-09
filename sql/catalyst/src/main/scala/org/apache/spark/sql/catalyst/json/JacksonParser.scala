@@ -24,8 +24,9 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.core._
-
+import org.apache.hadoop.fs.PositionedReadable
 import org.apache.spark.SparkUpgradeException
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions._
@@ -275,30 +276,50 @@ class JacksonParser(
           }
       }
 
-    case StringType =>
-      (parser: JsonParser) => parseJsonToken[UTF8String](parser, dataType) {
+    case StringType => (parser: JsonParser) => {
+      val includeSourceInLocation = JsonParser.Feature.INCLUDE_SOURCE_IN_LOCATION
+      val originalMask = if (includeSourceInLocation.enabledIn(parser.getFeatureMask)) {
+        1
+      } else {
+        0
+      }
+      parser.overrideStdFeatures(includeSourceInLocation.getMask, includeSourceInLocation.getMask)
+      val result = parseJsonToken[UTF8String](parser, dataType) {
         case VALUE_STRING =>
           UTF8String.fromString(parser.getText)
 
         case other =>
           // Note that it always tries to convert the data as string without the case of failure.
-          val startLocation = parser.getTokenLocation
+          val startLocation = parser.currentTokenLocation()
+          def skipAhead(): Unit = {
+            other match {
+              case START_OBJECT =>
+                parser.skipChildren()
+              case START_ARRAY =>
+                parser.skipChildren()
+              case _ =>
+              // Do nothing in this case; we've already read the token
+            }
+          }
+
+          // PositionedReadable
           startLocation.contentReference().getRawContent match {
             case byteArray: Array[Byte] if exactStringParsing =>
-               other match {
-                case START_OBJECT =>
-                  parser.skipChildren()
-                case START_ARRAY =>
-                  parser.skipChildren()
-                case _ =>
-                   // Do nothing in this case; we've already read the token
-              }
+              skipAhead()
               val endLocation = parser.currentLocation.getByteOffset
 
               UTF8String.fromBytes(
                 byteArray,
                 startLocation.getByteOffset.toInt,
                 endLocation.toInt - (startLocation.getByteOffset.toInt))
+            case positionedReadable: PositionedReadable if exactStringParsing =>
+              skipAhead()
+              val endLocation = parser.currentLocation.getByteOffset
+
+              val size = endLocation.toInt - (startLocation.getByteOffset.toInt)
+              val buffer = new Array[Byte](size)
+              positionedReadable.read(startLocation.getByteOffset, buffer, 0, size)
+              UTF8String.fromBytes(buffer, 0, size)
             case _ =>
               val writer = new ByteArrayOutputStream()
               Utils.tryWithResource(factory.createGenerator(writer, JsonEncoding.UTF8)) {
@@ -306,7 +327,10 @@ class JacksonParser(
               }
               UTF8String.fromBytes(writer.toByteArray)
           }
-      }
+        }
+      parser.overrideStdFeatures(includeSourceInLocation.getMask, originalMask)
+      result
+    }
 
     case TimestampType =>
       (parser: JsonParser) => parseJsonToken[java.lang.Long](parser, dataType) {
