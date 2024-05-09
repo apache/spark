@@ -1151,6 +1151,23 @@ class CollationSQLExpressionsSuite
     })
   }
 
+  test("Support InputFileName expression with collation") {
+    // Supported collations
+    Seq("UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI").foreach(collationName => {
+      val query =
+        s"""
+           |select input_file_name()
+           |""".stripMargin
+      // Result
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collationName) {
+        val testQuery = sql(query)
+        checkAnswer(testQuery, Row(""))
+        val dataType = StringType(collationName)
+        assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      }
+    })
+  }
+
   // TODO: Add more tests for other SQL expressions
 
 }
