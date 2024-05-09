@@ -42,16 +42,16 @@ You can install it using pip or conda from the conda-forge channel. See PyArrow
 Conversion to Arrow Table
 -------------------------
 
-You can call :meth:`DataFrame.toArrowTable` to convert a Spark DataFrame to a PyArrow Table.
+You can call :meth:`DataFrame.toArrow` to convert a Spark DataFrame to a PyArrow Table.
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/arrow.py
     :language: python
     :lines: 37-49
     :dedent: 4
 
-Note that :meth:`DataFrame.toArrowTable` results in the collection of all records in the DataFrame
-to the driver program and should be done on a small subset of the data. Not all Spark data types
-are currently supported and an error can be raised if a column has an unsupported type.
+Note that :meth:`DataFrame.toArrow` results in the collection of all records in the DataFrame to
+the driver program and should be done on a small subset of the data. Not all Spark data types are
+currently supported and an error can be raised if a column has an unsupported type.
 
 Enabling for Conversion to/from Pandas
 --------------------------------------
@@ -438,7 +438,7 @@ Setting Arrow ``self_destruct`` for memory savings
 Since Spark 3.2, the Spark configuration ``spark.sql.execution.arrow.pyspark.selfDestruct.enabled``
 can be used to enable PyArrow's ``self_destruct`` feature, which can save memory when creating a
 Pandas DataFrame via ``toPandas`` by freeing Arrow-allocated memory while building the Pandas
-DataFrame. This option can also save memory when creating a PyArrow Table via ``toArrowTable``.
+DataFrame. This option can also save memory when creating a PyArrow Table via ``toArrow``.
 This option is experimental. When used with ``toPandas``, some operations may fail on the resulting
 Pandas DataFrame due to immutable backing arrays. Typically, you would see the error
 ``ValueError: buffer source array is read-only``. Newer versions of Pandas may fix these errors by

@@ -41,7 +41,7 @@ def dataframe_to_arrow_table_example(spark: SparkSession) -> None:
     df = spark.range(100).drop("id").withColumns({"0": rand(), "1": rand(), "2": rand()})
 
     # Convert the Spark DataFrame to a PyArrow Table
-    table = df.select("*").toArrowTable()  # type: ignore
+    table = df.select("*").toArrow()  # type: ignore
 
     print(table.schema)
     # 0: double not null

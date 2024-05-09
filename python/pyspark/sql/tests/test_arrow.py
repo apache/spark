@@ -371,7 +371,7 @@ class ArrowTestsMixin:
     def test_arrow_round_trip(self):
         t_in = self.create_arrow_table()
         df = self.spark.createDataFrame(self.data, schema=self.schema)
-        t_out = df.toArrowTable()
+        t_out = df.toArrow()
         self.assertTrue(t_out.equals(t_in))
 
     def test_pandas_self_destruct(self):

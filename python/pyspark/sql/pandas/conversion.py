@@ -225,7 +225,7 @@ class PandasConversionMixin:
         else:
             return pdf
 
-    def toArrowTable(self) -> "pa.Table":
+    def toArrow(self) -> "pa.Table":
         from pyspark.sql.dataframe import DataFrame
 
         assert isinstance(self, DataFrame)

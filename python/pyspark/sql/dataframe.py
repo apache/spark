@@ -1200,7 +1200,7 @@ class DataFrame:
         DataFrame.take : Returns the first `n` rows.
         DataFrame.head : Returns the first `n` rows.
         DataFrame.toPandas : Returns the data as a pandas DataFrame.
-        DataFrame.toArrowTable : Returns the data as a PyArrow Table.
+        DataFrame.toArrow : Returns the data as a PyArrow Table.
 
         Notes
         -----
@@ -6215,7 +6215,7 @@ class DataFrame:
         ...
 
     @dispatch_df_method
-    def toArrowTable(self) -> "pa.Table":
+    def toArrow(self) -> "pa.Table":
         """
         Returns the contents of this :class:`DataFrame` as PyArrow ``pyarrow.Table``.
 
@@ -6232,7 +6232,7 @@ class DataFrame:
 
         Examples
         --------
-        >>> df.toArrowTable()  # doctest: +SKIP
+        >>> df.toArrow()  # doctest: +SKIP
         pyarrow.Table
         age: int64
         name: string

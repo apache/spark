@@ -109,7 +109,7 @@ DataFrame
     DataFrame.tail
     DataFrame.take
     DataFrame.to
-    DataFrame.toArrowTable
+    DataFrame.toArrow
     DataFrame.toDF
     DataFrame.toJSON
     DataFrame.toLocalIterator

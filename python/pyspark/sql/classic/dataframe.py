@@ -1825,8 +1825,8 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     ) -> ParentDataFrame:
         return PandasMapOpsMixin.mapInArrow(self, func, schema, barrier, profile)
 
-    def toArrowTable(self) -> "pa.Table":
-        return PandasConversionMixin.toArrowTable(self)
+    def toArrow(self) -> "pa.Table":
+        return PandasConversionMixin.toArrow(self)
 
     def toPandas(self) -> "PandasDataFrameLike":
         return PandasConversionMixin.toPandas(self)
