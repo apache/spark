@@ -723,10 +723,14 @@ class DataTypeSuite extends SparkFunSuite {
       StructField("nested", simpleStruct) :: Nil)
 
     val arrayInSchema = StructType(
-      StructField("array", ArrayType(StringType(UNICODE_COLLATION))) :: Nil)
+      StructField("arrayField", ArrayType(StringType(UNICODE_COLLATION))) :: Nil)
 
     val mapInSchema = StructType(
-      StructField("map",
+      StructField("mapField",
+        MapType(StringType(UNICODE_COLLATION), StringType(UNICODE_COLLATION))) :: Nil)
+
+    val mapWithKeyInNameInSchema = StructType(
+      StructField("mapField.key",
         MapType(StringType(UNICODE_COLLATION), StringType(UNICODE_COLLATION))) :: Nil)
 
     val arrayInMapInNestedSchema = StructType(
@@ -740,12 +744,12 @@ class DataTypeSuite extends SparkFunSuite {
           ArrayType(ArrayType(StringType(UNICODE_COLLATION)))))) :: Nil)
 
     val schemaWithMultipleFields = StructType(
-      simpleStruct.fields ++ nestedStruct.fields ++ arrayInSchema.fields ++
-      mapInSchema.fields ++ arrayInMapInNestedSchema.fields ++ nestedArrayInMap.fields)
+      simpleStruct.fields ++ nestedStruct.fields ++ arrayInSchema.fields ++ mapInSchema.fields ++
+        mapWithKeyInNameInSchema ++ arrayInMapInNestedSchema.fields ++ nestedArrayInMap.fields)
 
     Seq(
-      simpleStruct, nestedStruct, arrayInSchema, mapInSchema, nestedArrayInMap,
-      arrayInMapInNestedSchema, schemaWithMultipleFields)
+      simpleStruct, nestedStruct, arrayInSchema, mapInSchema, mapWithKeyInNameInSchema,
+      nestedArrayInMap, arrayInMapInNestedSchema, schemaWithMultipleFields)
       .foreach { schema =>
         val json = schema.json
         val parsed = DataType.fromJson(json)
