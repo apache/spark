@@ -32,7 +32,7 @@ case class With(child: Expression, defs: Seq[CommonExpressionDef])
   // reference to a common expression defined in that scope (note that it can contain another With
   // expression with a common expression ref of the inner With). This is to prevent the creation of
   // a dangling CommonExpressionRef after rewriting it in RewriteWithExpression.
-  assert(!With.containsUnsupportedAggExpr(this))
+  assert(!With.childContainsUnsupportedAggExpr(this))
 
   override val nodePatterns: Seq[TreePattern] = Seq(WITH_EXPRESSION)
   override def dataType: DataType = child.dataType
@@ -96,22 +96,17 @@ object With {
     With(replaced(commonExprRefs), commonExprDefs)
   }
 
-  private def containsUnsupportedRef(
-    expr: Expression,
-    commonExprIds: Set[CommonExpressionId]
-  ): Boolean = {
-    expr match {
-      case _ if !expr.containsPattern(COMMON_EXPR_REF) => false
-      case w: With => containsUnsupportedAggExpr(w)
-      case r: CommonExpressionRef => commonExprIds.contains(r.id)
-      case _ => expr.children.exists(containsUnsupportedRef(_, commonExprIds))
-    }
-  }
-
-  private[sql] def containsUnsupportedAggExpr(withExpr: With): Boolean = {
+  private[sql] def childContainsUnsupportedAggExpr(withExpr: With): Boolean = {
     lazy val commonExprIds = withExpr.defs.map(_.id).toSet
     withExpr.child.exists {
-      case agg: AggregateExpression => containsUnsupportedRef(agg, commonExprIds)
+      case agg: AggregateExpression =>
+        // Check that the aggregate expression does not contain a reference to a common expression
+        // in the outer With expression (it is ok if it contains a common expression reference
+        // within another nested With expression).
+        agg.exists {
+          case r: CommonExpressionRef => commonExprIds.contains(r.id)
+          case _ => false
+        }
       case _ => false
     }
   }
