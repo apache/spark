@@ -3215,19 +3215,11 @@ private[spark] class PythonRunnerProcessWrapper(
                 error.write(buf, 0, len)
                 error.flush()
               }
-              if (in.available() > 0) {
-                len = in.read(buf)
-              } else {
-                len = 0
-              }
+              len = in.read(buf)
             }
             lock.writeLock().unlock()
             if (len != -1) {
-              if (in.available() > 0) {
-                len = in.read(buf)
-              } else {
-                len = 0
-              }
+              len = in.read(buf)
             }
           }
         } {}
