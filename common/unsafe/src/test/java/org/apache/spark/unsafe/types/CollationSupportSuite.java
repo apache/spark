@@ -102,20 +102,22 @@ public class CollationSupportSuite {
     assertContains("äbćδe", "ÄbćδE", "UNICODE_CI", true);
     assertContains("äbćδe", "ÄBcΔÉ", "UNICODE_CI", false);
     // Case-variable character length
-    assertContains("abİo12", "i̇o", "UNICODE_CI", true);
-    assertContains("abi̇o12", "İo", "UNICODE_CI", true);
-    assertContains("the İodine", "the i̇odine", "UTF8_BINARY_LCASE", true);
-    assertContains("the i̇odine", "the İodine", "UTF8_BINARY_LCASE", true);
-    assertContains("The İodiNe", " i̇oDin", "UTF8_BINARY_LCASE", true);
-    assertContains("İodiNe", "i̇oDine", "UTF8_BINARY_LCASE", true);
-    assertContains("İodiNe", " i̇oDin", "UTF8_BINARY_LCASE", false);
-    // Characters with the same binary lowercase representation
-    assertContains("The Kelvin.", "Kelvin", "UTF8_BINARY_LCASE", true);
-    assertContains("The Kelvin.", "Kelvin", "UTF8_BINARY_LCASE", true);
-    assertContains("The KKelvin.", "KKelvin", "UTF8_BINARY_LCASE", true);
-    assertContains("2 Kelvin.", "2 Kelvin", "UTF8_BINARY_LCASE", true);
-    assertContains("2 Kelvin.", "2 Kelvin", "UTF8_BINARY_LCASE", true);
-    assertContains("The KKelvin.", "KKelvin,", "UTF8_BINARY_LCASE", false);
+    assertContains("adi̇os", "io", "UNICODE_CI", false);
+    assertContains("adi̇os", "Io", "UNICODE_CI", false);
+    assertContains("adi̇os", "i̇o", "UNICODE_CI", true);
+    assertContains("adi̇os", "İo", "UNICODE_CI", true);
+    assertContains("adİos", "io", "UNICODE_CI", false);
+    assertContains("adİos", "Io", "UNICODE_CI", false);
+    assertContains("adİos", "i̇o", "UNICODE_CI", true);
+    assertContains("adİos", "İo", "UNICODE_CI", true);
+    assertContains("adi̇os", "io", "UTF8_BINARY_LCASE", false);
+    assertContains("adi̇os", "Io", "UTF8_BINARY_LCASE", false);
+    assertContains("adi̇os", "i̇o", "UTF8_BINARY_LCASE", true);
+    assertContains("adi̇os", "İo", "UTF8_BINARY_LCASE", false); // note: different from UNICODE_CI
+    assertContains("adİos", "io", "UTF8_BINARY_LCASE", false);
+    assertContains("adİos", "Io", "UTF8_BINARY_LCASE", false);
+    assertContains("adİos", "i̇o", "UTF8_BINARY_LCASE", false); // note: different from UNICODE_CI
+    assertContains("adİos", "İo", "UTF8_BINARY_LCASE", true);
   }
 
   private void assertStartsWith(
@@ -191,13 +193,6 @@ public class CollationSupportSuite {
     assertStartsWith("ab世De", "AB世dE", "UNICODE_CI", true);
     assertStartsWith("äbćδe", "ÄbćδE", "UNICODE_CI", true);
     assertStartsWith("äbćδe", "ÄBcΔÉ", "UNICODE_CI", false);
-    // Case-variable character length
-    assertStartsWith("İonic", "i̇o", "UNICODE_CI", true);
-    assertStartsWith("i̇onic", "İo", "UNICODE_CI", true);
-    assertStartsWith("the İodine", "the i̇odine", "UTF8_BINARY_LCASE", true);
-    assertStartsWith("the i̇odine", "the İodine", "UTF8_BINARY_LCASE", true);
-    assertStartsWith("İodiNe", "i̇oDin", "UTF8_BINARY_LCASE", true);
-    assertStartsWith("The İodiNe", "i̇oDin", "UTF8_BINARY_LCASE", false);
     // Characters with the same binary lowercase representation
     assertStartsWith("Kelvin.", "Kelvin", "UTF8_BINARY_LCASE", true);
     assertStartsWith("Kelvin.", "Kelvin", "UTF8_BINARY_LCASE", true);
@@ -205,6 +200,23 @@ public class CollationSupportSuite {
     assertStartsWith("2 Kelvin.", "2 Kelvin", "UTF8_BINARY_LCASE", true);
     assertStartsWith("2 Kelvin.", "2 Kelvin", "UTF8_BINARY_LCASE", true);
     assertStartsWith("KKelvin.", "KKelvin,", "UTF8_BINARY_LCASE", false);
+    // Case-variable character length
+    assertStartsWith("i̇onic", "io", "UNICODE_CI", false);
+    assertStartsWith("i̇onic", "Io", "UNICODE_CI", false);
+    assertStartsWith("i̇onic", "i̇o", "UNICODE_CI", true);
+    assertStartsWith("i̇onic", "İo", "UNICODE_CI", true);
+    assertStartsWith("İonic", "io", "UNICODE_CI", false);
+    assertStartsWith("İonic", "Io", "UNICODE_CI", false);
+    assertStartsWith("İonic", "i̇o", "UNICODE_CI", true);
+    assertStartsWith("İonic", "İo", "UNICODE_CI", true);
+    assertStartsWith("i̇onic", "io", "UTF8_BINARY_LCASE", false);
+    assertStartsWith("i̇onic", "Io", "UTF8_BINARY_LCASE", false);
+    assertStartsWith("i̇onic", "i̇o", "UTF8_BINARY_LCASE", true);
+    assertStartsWith("i̇onic", "İo", "UTF8_BINARY_LCASE", false); // note: different from UNICODE_CI
+    assertStartsWith("İonic", "io", "UTF8_BINARY_LCASE", false);
+    assertStartsWith("İonic", "Io", "UTF8_BINARY_LCASE", false);
+    assertStartsWith("İonic", "i̇o", "UTF8_BINARY_LCASE", false); // note: different from UNICODE_CI
+    assertStartsWith("İonic", "İo", "UTF8_BINARY_LCASE", true);
   }
 
   private void assertEndsWith(String pattern, String suffix, String collationName, boolean expected)
@@ -279,13 +291,6 @@ public class CollationSupportSuite {
     assertEndsWith("ab世De", "AB世dE", "UNICODE_CI", true);
     assertEndsWith("äbćδe", "ÄbćδE", "UNICODE_CI", true);
     assertEndsWith("äbćδe", "ÄBcΔÉ", "UNICODE_CI", false);
-    // Case-variable character length
-    assertEndsWith("The İo", "i̇o", "UNICODE_CI", true);
-    assertEndsWith("The i̇o", "İo", "UNICODE_CI", true);
-    assertEndsWith("the İodine", "the i̇odine", "UTF8_BINARY_LCASE", true);
-    assertEndsWith("the i̇odine", "the İodine", "UTF8_BINARY_LCASE", true);
-    assertEndsWith("The İodiNe", "i̇oDine", "UTF8_BINARY_LCASE", true);
-    assertEndsWith("The İodiNe", "i̇oDin", "UTF8_BINARY_LCASE", false);
     // Characters with the same binary lowercase representation
     assertEndsWith("The Kelvin", "Kelvin", "UTF8_BINARY_LCASE", true);
     assertEndsWith("The Kelvin", "Kelvin", "UTF8_BINARY_LCASE", true);
@@ -293,6 +298,23 @@ public class CollationSupportSuite {
     assertEndsWith("The 2 Kelvin", "2 Kelvin", "UTF8_BINARY_LCASE", true);
     assertEndsWith("The 2 Kelvin", "2 Kelvin", "UTF8_BINARY_LCASE", true);
     assertEndsWith("The KKelvin", "KKelvin,", "UTF8_BINARY_LCASE", false);
+    // Case-variable character length
+    assertEndsWith("the i̇o", "io", "UNICODE_CI", false);
+    assertEndsWith("the i̇o", "Io", "UNICODE_CI", false);
+    assertEndsWith("the i̇o", "i̇o", "UNICODE_CI", true);
+    assertEndsWith("the i̇o", "İo", "UNICODE_CI", true);
+    assertEndsWith("the İo", "io", "UNICODE_CI", false);
+    assertEndsWith("the İo", "Io", "UNICODE_CI", false);
+    assertEndsWith("the İo", "i̇o", "UNICODE_CI", true);
+    assertEndsWith("the İo", "İo", "UNICODE_CI", true);
+    assertEndsWith("the i̇o", "io", "UTF8_BINARY_LCASE", false);
+    assertEndsWith("the i̇o", "Io", "UTF8_BINARY_LCASE", false);
+    assertEndsWith("the i̇o", "i̇o", "UTF8_BINARY_LCASE", true);
+    assertEndsWith("the i̇o", "İo", "UTF8_BINARY_LCASE", false); // note: different from UNICODE_CI
+    assertEndsWith("the İo", "io", "UTF8_BINARY_LCASE", false);
+    assertEndsWith("the İo", "Io", "UTF8_BINARY_LCASE", false);
+    assertEndsWith("the İo", "i̇o", "UTF8_BINARY_LCASE", false); // note: different from UNICODE_CI
+    assertEndsWith("the İo", "İo", "UTF8_BINARY_LCASE", true);
   }
 
   private void assertStringSplitSQL(String str, String delimiter, String collationName,

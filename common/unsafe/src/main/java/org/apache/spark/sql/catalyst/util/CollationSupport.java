@@ -126,7 +126,19 @@ public final class CollationSupport {
       return l.contains(r);
     }
     public static boolean execLowercase(final UTF8String l, final UTF8String r) {
-      return l.containsInLowerCase(r);
+      if (r.numBytes() == 0) return true;
+      if (l.numChars() < r.numChars()) return false;
+      int lenHaystack = l.numChars(), lenNeedle = r.numChars();
+      final UTF8String firstLower = r.substring(0, 1).toLowerCase();
+      final UTF8String needle = r.toLowerCase();
+      for (var i = 0; i <= (lenHaystack - lenNeedle); i++) {
+        if (l.substring(i, i + 1).toLowerCase().equals(firstLower)) {
+          if (CollationAwareUTF8String.lowercaseMatchAt(l, needle, i, lenNeedle)) {
+            return true;
+          }
+        }
+      }
+      return false;
     }
     public static boolean execICU(final UTF8String l, final UTF8String r,
         final int collationId) {
@@ -164,7 +176,9 @@ public final class CollationSupport {
       return l.startsWith(r);
     }
     public static boolean execLowercase(final UTF8String l, final UTF8String r) {
-      return l.startsWithInLowerCase(r);
+      if (r.numBytes() == 0) return true;
+      if (l.numChars() < r.numChars()) return false;
+      return CollationAwareUTF8String.lowercaseMatchAt(l, r.toLowerCase(), 0, r.numChars());
     }
     public static boolean execICU(final UTF8String l, final UTF8String r,
         final int collationId) {
@@ -201,7 +215,10 @@ public final class CollationSupport {
       return l.endsWith(r);
     }
     public static boolean execLowercase(final UTF8String l, final UTF8String r) {
-      return l.endsWithInLowerCase(r);
+      if (r.numBytes() == 0) return true;
+      if (l.numChars() < r.numChars()) return false;
+      return CollationAwareUTF8String.lowercaseMatchAt(l, r.toLowerCase(),
+        l.numChars() - r.numChars(), r.numChars());
     }
     public static boolean execICU(final UTF8String l, final UTF8String r,
         final int collationId) {
@@ -571,6 +588,14 @@ public final class CollationSupport {
    */
 
   private static class CollationAwareUTF8String {
+
+    private static boolean lowercaseMatchAt(final UTF8String l, final UTF8String r,
+        int pos, int len) {
+      if (len + pos > l.numChars() || pos < 0) {
+        return false;
+      }
+      return l.substring(pos, pos + len).toLowerCase().equals(r);
+    }
 
     private static UTF8String replace(final UTF8String src, final UTF8String search,
         final UTF8String replace, final int collationId) {
