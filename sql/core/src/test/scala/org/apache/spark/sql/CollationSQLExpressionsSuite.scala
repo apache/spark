@@ -658,6 +658,40 @@ class CollationSQLExpressionsSuite
     })
   }
 
+  test("Support SchemaOfJson json expression with collation") {
+    case class SchemaOfJsonTestCase(
+     input: String,
+     collationName: String,
+     result: Row
+    )
+
+    val testCases = Seq(
+      SchemaOfJsonTestCase("'[{\"col\":0}]'",
+        "UTF8_BINARY", Row("ARRAY<STRUCT<col: BIGINT>>")),
+      SchemaOfJsonTestCase("'[{\"col\":01}]', map('allowNumericLeadingZeros', 'true')",
+        "UTF8_BINARY_LCASE", Row("ARRAY<STRUCT<col: BIGINT>>")),
+      SchemaOfJsonTestCase("'[]'",
+        "UNICODE", Row("ARRAY<STRING>")),
+      SchemaOfJsonTestCase("''",
+        "UNICODE_CI", Row("STRING"))
+    )
+
+    // Supported collations
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |SELECT schema_of_json(${t.input})
+           |""".stripMargin
+      // Result & data type
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        checkAnswer(testQuery, t.result)
+        val dataType = StringType(t.collationName)
+        assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      }
+    })
+  }
+
   test("Support StringToMap expression with collation") {
     // Supported collations
     case class StringToMapTestCase[R](t: String, p: String, k: String, c: String, result: R)
