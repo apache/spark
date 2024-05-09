@@ -19,10 +19,7 @@ from pyspark.sql.tests.pandas.test_pandas_udf import PandasUDFTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class PandasUDFParityTests(
-    PandasUDFTestsMixin,
-    ReusedConnectTestCase,
-):
+class PandasUDFParityTests(PandasUDFTestsMixin, ReusedConnectTestCase):
     pass
 
 
