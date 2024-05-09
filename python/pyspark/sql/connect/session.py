@@ -286,15 +286,15 @@ class SparkSession:
             cls._active_session.session = session
 
     @classmethod
-    def getActiveSession(cls) -> Optional["SparkSession"]:
-        s = getattr(cls._active_session, "session", None)
+    def _getDefaultSession(cls) -> Optional["SparkSession"]:
+        s = cls._default_session
         if s is not None and not s.is_stopped:
             return s
         return None
 
     @classmethod
-    def _getDefaultSession(cls) -> Optional["SparkSession"]:
-        s = cls._default_session
+    def getActiveSession(cls) -> Optional["SparkSession"]:
+        s = getattr(cls._active_session, "session", None)
         if s is not None and not s.is_stopped:
             return s
         return None
