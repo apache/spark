@@ -514,6 +514,7 @@ object LogKeys {
   case object RECORDS extends LogKey
   case object REDACTED_STATEMENT extends LogKey
   case object REDUCE_ID extends LogKey
+  case object REGISTERED_EXECUTOR_FILE extends LogKey
   case object RELATION_NAME extends LogKey
   case object RELATION_OUTPUT extends LogKey
   case object RELATIVE_TOLERANCE extends LogKey
@@ -565,6 +566,9 @@ object LogKeys {
   case object SHUFFLE_DB_BACKEND_NAME extends LogKey
   case object SHUFFLE_ID extends LogKey
   case object SHUFFLE_MERGE_ID extends LogKey
+  case object SHUFFLE_MERGE_RECOVERY_FILE_NAME extends LogKey
+  case object SHUFFLE_SERVICE_CONF_OVERLAY_URL extends LogKey
+  case object SHUFFLE_SERVICE_METRICS_NAMESPACE extends LogKey
   case object SHUFFLE_SERVICE_NAME extends LogKey
   case object SIGNAL extends LogKey
   case object SIZE extends LogKey
