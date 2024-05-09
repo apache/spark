@@ -25,8 +25,9 @@ import org.apache.thrift.transport.TSaslClientTransport;
 import org.apache.thrift.transport.TSaslServerTransport;
 import org.apache.thrift.transport.TSocket;
 import org.apache.thrift.transport.TTransport;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import org.apache.spark.internal.Logger;
+import org.apache.spark.internal.LoggerFactory;
 
 /**
  * This class is responsible for setting the ipAddress for operations executed via HiveServer2.
@@ -38,7 +39,7 @@ import org.slf4j.LoggerFactory;
  */
 public class TSetIpAddressProcessor<I extends Iface> extends TCLIService.Processor<Iface> {
 
-  private static final Logger LOGGER = LoggerFactory.getLogger(TSetIpAddressProcessor.class.getName());
+  private static final Logger LOGGER = LoggerFactory.getLogger(TSetIpAddressProcessor.class);
 
   public TSetIpAddressProcessor(Iface iface) {
     super(iface);
