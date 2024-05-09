@@ -25,7 +25,7 @@ from pyspark.sql.functions import count, lit
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class TestListener(StreamingQueryListener):
+class TestListenerSpark(StreamingQueryListener):
     def onQueryStarted(self, event):
         e = pyspark.cloudpickle.dumps(event)
         df = self.spark.createDataFrame(data=[(e,)])
@@ -47,7 +47,7 @@ class TestListener(StreamingQueryListener):
 
 class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTestCase):
     def test_listener_events(self):
-        test_listener = TestListener()
+        test_listener = TestListenerSpark()
 
         try:
             self.spark.streams.addListener(test_listener)
