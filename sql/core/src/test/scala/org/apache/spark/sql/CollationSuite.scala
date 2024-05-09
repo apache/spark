@@ -19,9 +19,10 @@ package org.apache.spark.sql
 
 import scala.jdk.CollectionConverters.MapHasAsJava
 
-import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2ProviderWithCustomSchema}
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable}
@@ -853,19 +854,22 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
   test("SPARK-47972: Cast expression limitation for collations") {
     checkError(
-      exception = intercept[SparkUnsupportedOperationException]
+      exception = intercept[ParseException]
         (sql("SELECT cast(1 as string collate unicode)")),
       errorClass = "UNSUPPORTED_DATATYPE",
       parameters = Map(
-        "typeName" -> toSQLType(StringType("UNICODE")))
+        "typeName" -> toSQLType(StringType("UNICODE"))),
+      context =
+        ExpectedContext(fragment = s"cast(1 as string collate unicode)", start = 7, stop = 39)
     )
 
     checkError(
-      exception = intercept[SparkUnsupportedOperationException]
+      exception = intercept[ParseException]
         (sql("SELECT 'A' :: string collate unicode")),
       errorClass = "UNSUPPORTED_DATATYPE",
       parameters = Map(
-        "typeName" -> toSQLType(StringType("UNICODE")))
+        "typeName" -> toSQLType(StringType("UNICODE"))),
+      context = ExpectedContext(fragment = s"'A' :: string collate unicode", start = 7, stop = 35)
     )
 
     checkAnswer(sql(s"SELECT cast(1 as string)"), Seq(Row("1")))

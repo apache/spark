@@ -50,7 +50,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, con
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors, QueryParsingErrors}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLStmt
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LEGACY_BANG_EQUALS_NOT
@@ -2243,8 +2243,8 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
         if (typeCtx.start.getType == STRING) {
           typeCtx.children.asScala.toSeq match {
             case Seq(_, cctx: CollateClauseContext) =>
-              throw QueryExecutionErrors.unsupportedDataTypeError(
-                StringType(cctx.collationName.getText))
+              throw QueryParsingErrors.dataTypeUnsupportedError(
+                StringType(cctx.collationName.getText).typeName, context)
             case _ =>
           }
         }
@@ -2275,8 +2275,8 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
         if (typeCtx.start.getType == STRING) {
           typeCtx.children.asScala.toSeq match {
             case Seq(_, cctx: CollateClauseContext) =>
-              throw QueryExecutionErrors.unsupportedDataTypeError(
-                StringType(cctx.collationName.getText))
+              throw QueryParsingErrors.dataTypeUnsupportedError(
+                StringType(cctx.collationName.getText).typeName, context)
             case _ =>
           }
         }
