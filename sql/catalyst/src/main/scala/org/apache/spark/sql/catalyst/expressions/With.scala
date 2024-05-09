@@ -101,8 +101,8 @@ object With {
     withExpr.child.exists {
       case agg: AggregateExpression =>
         // Check that the aggregate expression does not contain a reference to a common expression
-        // in the outer With expression (it is ok if it contains a common expression reference
-        // within another nested With expression).
+        // in the outer With expression (it is ok if it contains a reference to a common expression
+        // for a nested With expression).
         agg.exists {
           case r: CommonExpressionRef => commonExprIds.contains(r.id)
           case _ => false
