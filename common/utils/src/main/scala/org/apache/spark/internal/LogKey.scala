@@ -339,6 +339,7 @@ object LogKeys {
   case object METHOD_NAME extends LogKey
   case object METHOD_PARAMETER_TYPES extends LogKey
   case object METRICS_JSON extends LogKey
+  case object METRIC_NAME extends LogKey
   case object MIN_COMPACTION_BATCH_ID extends LogKey
   case object MIN_FREQUENT_PATTERN_COUNT extends LogKey
   case object MIN_POINT_PER_CLUSTER extends LogKey
