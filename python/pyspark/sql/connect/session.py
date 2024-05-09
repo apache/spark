@@ -238,7 +238,7 @@ class SparkSession:
             with SparkSession._lock:
                 session = SparkSession.getActiveSession()
                 if session is None:
-                    session = SparkSession._getDefaultSession()
+                    session = SparkSession._get_default_session()
                     if session is None:
                         session = self.create()
                 self._apply_options(session)
@@ -286,7 +286,7 @@ class SparkSession:
             cls._active_session.session = session
 
     @classmethod
-    def _getDefaultSession(cls) -> Optional["SparkSession"]:
+    def _get_default_session(cls) -> Optional["SparkSession"]:
         s = cls._default_session
         if s is not None and not s.is_stopped:
             return s
@@ -325,7 +325,7 @@ class SparkSession:
     def active(cls) -> "SparkSession":
         session = cls.getActiveSession()
         if session is None:
-            session = cls._getDefaultSession()
+            session = cls._get_default_session()
             if session is None:
                 raise PySparkRuntimeError(
                     error_class="NO_ACTIVE_OR_DEFAULT_SESSION",
