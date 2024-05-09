@@ -276,8 +276,7 @@ class JacksonParser(
           }
       }
 
-<<<<<<< HEAD
-    case StringType => (parser: JsonParser) => {
+    case _: StringType => (parser: JsonParser) => {
       val includeSourceInLocation = JsonParser.Feature.INCLUDE_SOURCE_IN_LOCATION
       val originalMask = if (includeSourceInLocation.enabledIn(parser.getFeatureMask)) {
         1
@@ -286,10 +285,6 @@ class JacksonParser(
       }
       parser.overrideStdFeatures(includeSourceInLocation.getMask, includeSourceInLocation.getMask)
       val result = parseJsonToken[UTF8String](parser, dataType) {
-=======
-    case _: StringType =>
-      (parser: JsonParser) => parseJsonToken[UTF8String](parser, dataType) {
->>>>>>> e1fb1d7e063af7e8eb6e992c800902aff6e19e15
         case VALUE_STRING =>
           UTF8String.fromString(parser.getText)
 
