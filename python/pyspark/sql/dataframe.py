@@ -44,6 +44,7 @@ from pyspark.sql.utils import dispatch_df_method
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
+    import pyarrow as pa
     from pyspark.core.context import SparkContext
     from pyspark.core.rdd import RDD
     from pyspark._typing import PrimitiveType
