@@ -49,8 +49,11 @@ import org.apache.hive.service.rpc.thrift.TProtocolVersion;
 import org.apache.hive.service.rpc.thrift.TRowSet;
 import org.apache.hive.service.rpc.thrift.TTableSchema;
 import org.apache.hive.service.server.HiveServer2;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import org.apache.spark.internal.Logger;
+import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 
 /**
  * CLIService.
@@ -99,8 +102,9 @@ public class CLIService extends CompositeService implements ICLIService {
       String principal = hiveConf.getVar(ConfVars.HIVE_SERVER2_SPNEGO_PRINCIPAL);
       String keyTabFile = hiveConf.getVar(ConfVars.HIVE_SERVER2_SPNEGO_KEYTAB);
       if (principal.isEmpty() || keyTabFile.isEmpty()) {
-        LOG.info("SPNego httpUGI not created, spNegoPrincipal: " + principal +
-            ", ketabFile: " + keyTabFile);
+        LOG.info("SPNego httpUGI not created, spNegoPrincipal: {}, keytabFile: {}",
+          MDC.of(LogKeys.PRINCIPAL$.MODULE$, principal),
+          MDC.of(LogKeys.KEYTAB_FILE$.MODULE$, keyTabFile));
       } else {
         try {
           this.httpUGI = HiveAuthFactory.loginFromSpnegoKeytabAndReturnUGI(hiveConf);
@@ -457,7 +461,8 @@ public class CLIService extends CompositeService implements ICLIService {
         LOG.trace(opHandle + ": The background operation was cancelled", e);
       } catch (ExecutionException e) {
         // The background operation thread was aborted
-        LOG.warn(opHandle + ": The background operation was aborted", e);
+        LOG.warn("{}: The background operation was aborted", e,
+          MDC.of(LogKeys.OPERATION_HANDLE$.MODULE$, opHandle));
       } catch (InterruptedException e) {
         // No op, this thread was interrupted
         // In this case, the call might return sooner than long polling timeout
@@ -551,7 +556,7 @@ public class CLIService extends CompositeService implements ICLIService {
       String owner, String renewer) throws HiveSQLException {
     String delegationToken = sessionManager.getSession(sessionHandle)
         .getDelegationToken(authFactory, owner, renewer);
-    LOG.info(sessionHandle  + ": getDelegationToken()");
+    LOG.info("{}: getDelegationToken()", MDC.of(LogKeys.SESSION_HANDLE$.MODULE$, sessionHandle));
     return delegationToken;
   }
 
@@ -559,14 +564,14 @@ public class CLIService extends CompositeService implements ICLIService {
   public void cancelDelegationToken(SessionHandle sessionHandle, HiveAuthFactory authFactory,
       String tokenStr) throws HiveSQLException {
     sessionManager.getSession(sessionHandle).cancelDelegationToken(authFactory, tokenStr);
-    LOG.info(sessionHandle  + ": cancelDelegationToken()");
+    LOG.info("{}: cancelDelegationToken()", MDC.of(LogKeys.SESSION_HANDLE$.MODULE$, sessionHandle));
   }
 
   @Override
   public void renewDelegationToken(SessionHandle sessionHandle, HiveAuthFactory authFactory,
       String tokenStr) throws HiveSQLException {
     sessionManager.getSession(sessionHandle).renewDelegationToken(authFactory, tokenStr);
-    LOG.info(sessionHandle  + ": renewDelegationToken()");
+    LOG.info("{}: renewDelegationToken()", MDC.of(LogKeys.SESSION_HANDLE$.MODULE$, sessionHandle));
   }
 
   @Override
