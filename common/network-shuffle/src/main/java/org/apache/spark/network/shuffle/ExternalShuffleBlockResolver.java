@@ -221,7 +221,7 @@ public class ExternalShuffleBlockResolver {
   public void applicationRemoved(String appId, boolean cleanupLocalDirs) {
     logger.info("Application {} removed, cleanupLocalDirs = {}",
       MDC.of(LogKeys.APP_ID$.MODULE$, appId),
-      MDC.of(LogKeys.EXECUTOR_LOCAL_DIRS$.MODULE$, cleanupLocalDirs));
+      MDC.of(LogKeys.LOCAL_DIRS$.MODULE$, cleanupLocalDirs));
     Iterator<Map.Entry<AppExecId, ExecutorShuffleInfo>> it = executors.entrySet().iterator();
     while (it.hasNext()) {
       Map.Entry<AppExecId, ExecutorShuffleInfo> entry = it.next();
