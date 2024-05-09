@@ -102,6 +102,9 @@ public class CollationSupportSuite {
     assertContains("äbćδe", "ÄbćδE", "UNICODE_CI", true);
     assertContains("äbćδe", "ÄBcΔÉ", "UNICODE_CI", false);
     // Case-variable character length
+    assertContains("i̇", "i", "UNICODE_CI", false);
+    assertContains("i̇", "İ", "UNICODE_CI", true);
+    assertContains("İ", "i", "UNICODE_CI", false);
     assertContains("adi̇os", "io", "UNICODE_CI", false);
     assertContains("adi̇os", "Io", "UNICODE_CI", false);
     assertContains("adi̇os", "i̇o", "UNICODE_CI", true);
@@ -110,6 +113,9 @@ public class CollationSupportSuite {
     assertContains("adİos", "Io", "UNICODE_CI", false);
     assertContains("adİos", "i̇o", "UNICODE_CI", true);
     assertContains("adİos", "İo", "UNICODE_CI", true);
+    assertContains("i̇", "i", "UTF8_BINARY_LCASE", true); // note: different from UNICODE_CI
+    assertContains("i̇", "İ", "UTF8_BINARY_LCASE", false); // note: different from UNICODE_CI
+    assertContains("İ", "i", "UTF8_BINARY_LCASE", false);
     assertContains("adi̇os", "io", "UTF8_BINARY_LCASE", false);
     assertContains("adi̇os", "Io", "UTF8_BINARY_LCASE", false);
     assertContains("adi̇os", "i̇o", "UTF8_BINARY_LCASE", true);
@@ -201,6 +207,9 @@ public class CollationSupportSuite {
     assertStartsWith("2 Kelvin.", "2 Kelvin", "UTF8_BINARY_LCASE", true);
     assertStartsWith("KKelvin.", "KKelvin,", "UTF8_BINARY_LCASE", false);
     // Case-variable character length
+    assertStartsWith("i̇", "i", "UNICODE_CI", false);
+    assertStartsWith("i̇", "İ", "UNICODE_CI", true);
+    assertStartsWith("İ", "i", "UNICODE_CI", false);
     assertStartsWith("i̇onic", "io", "UNICODE_CI", false);
     assertStartsWith("i̇onic", "Io", "UNICODE_CI", false);
     assertStartsWith("i̇onic", "i̇o", "UNICODE_CI", true);
@@ -209,6 +218,9 @@ public class CollationSupportSuite {
     assertStartsWith("İonic", "Io", "UNICODE_CI", false);
     assertStartsWith("İonic", "i̇o", "UNICODE_CI", true);
     assertStartsWith("İonic", "İo", "UNICODE_CI", true);
+    assertStartsWith("i̇", "i", "UTF8_BINARY_LCASE", true); // note: different from UNICODE_CI
+    assertStartsWith("i̇", "İ", "UTF8_BINARY_LCASE", false); // note: different from UNICODE_CI
+    assertStartsWith("İ", "i", "UTF8_BINARY_LCASE", false);
     assertStartsWith("i̇onic", "io", "UTF8_BINARY_LCASE", false);
     assertStartsWith("i̇onic", "Io", "UTF8_BINARY_LCASE", false);
     assertStartsWith("i̇onic", "i̇o", "UTF8_BINARY_LCASE", true);
@@ -299,6 +311,9 @@ public class CollationSupportSuite {
     assertEndsWith("The 2 Kelvin", "2 Kelvin", "UTF8_BINARY_LCASE", true);
     assertEndsWith("The KKelvin", "KKelvin,", "UTF8_BINARY_LCASE", false);
     // Case-variable character length
+    assertEndsWith("i̇", "i", "UNICODE_CI", false);
+    assertEndsWith("i̇", "İ", "UNICODE_CI", true);
+    assertEndsWith("İ", "i", "UNICODE_CI", false);
     assertEndsWith("the i̇o", "io", "UNICODE_CI", false);
     assertEndsWith("the i̇o", "Io", "UNICODE_CI", false);
     assertEndsWith("the i̇o", "i̇o", "UNICODE_CI", true);
@@ -307,6 +322,9 @@ public class CollationSupportSuite {
     assertEndsWith("the İo", "Io", "UNICODE_CI", false);
     assertEndsWith("the İo", "i̇o", "UNICODE_CI", true);
     assertEndsWith("the İo", "İo", "UNICODE_CI", true);
+    assertEndsWith("i̇", "i", "UTF8_BINARY_LCASE", false);
+    assertEndsWith("i̇", "İ", "UTF8_BINARY_LCASE", false); // note: different from UNICODE_CI
+    assertEndsWith("İ", "i", "UTF8_BINARY_LCASE", false);
     assertEndsWith("the i̇o", "io", "UTF8_BINARY_LCASE", false);
     assertEndsWith("the i̇o", "Io", "UTF8_BINARY_LCASE", false);
     assertEndsWith("the i̇o", "i̇o", "UTF8_BINARY_LCASE", true);
