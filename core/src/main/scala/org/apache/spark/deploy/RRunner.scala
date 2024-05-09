@@ -107,7 +107,7 @@ object RRunner {
         sparkRBackend.close()
       }
       if (returnCode != 0) {
-        throw new SparkUserAppException(returnCode)
+        throw SparkUserAppException(returnCode)
       }
     } else {
       val errorMessage = s"SparkR backend did not initialize in $backendTimeout seconds"
