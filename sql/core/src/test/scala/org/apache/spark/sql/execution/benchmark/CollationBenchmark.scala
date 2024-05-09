@@ -17,6 +17,7 @@
 package org.apache.spark.sql.execution.benchmark
 
 import scala.concurrent.duration._
+import scala.util.Random
 
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.sql.catalyst.expressions.Literal
@@ -25,6 +26,7 @@ import org.apache.spark.sql.catalyst.util.{CollationFactory, CollationSupport}
 import org.apache.spark.sql.types.{IntegerType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.collection.OpenHashMap
+
 
 abstract class CollationBenchmarkBase extends BenchmarkBase {
   protected val collationTypes: Seq[String] =
@@ -195,13 +197,15 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
       value: Seq[UTF8String],
       whichImpl: (Mode, OpenHashMap[AnyRef, Long]) => Any = (m, b) => m.eval(b),
       nameOfImpl: String = "treemap",
-      benchmarkMaybe: Option[Benchmark] = None): Benchmark = {
+      benchmarkMaybe: Option[Benchmark] = None,
+      addNumericalCase: Boolean = false): Benchmark = {
     val benchmark = benchmarkMaybe.getOrElse(new Benchmark(
       s"collation unit benchmarks - mode - ${value.size} elements",
       value.size,
       warmupTime = 10.seconds,
       output = output))
-    addCasesToBenchmarkMode(benchmark, collationTypes, value, whichImpl, nameOfImpl)
+    addCasesToBenchmarkMode(
+      benchmark, collationTypes, value, whichImpl, nameOfImpl, addNumericalCase)
 
     benchmark
   }
@@ -211,7 +215,8 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
       collationTypes: Seq[String],
       value: Seq[UTF8String],
       whichImpl: (Mode, OpenHashMap[AnyRef, Long]) => Any,
-      nameOfImpl: String) = {
+      nameOfImpl: String,
+      addNumericalCase: Boolean) = {
     collationTypes.foreach { collationType => {
       benchmark.addCase(s"$collationType - mode (${nameOfImpl}) - ${value.size} elements") { _ =>
         val modeDefaultCollation = Mode(child =
@@ -221,19 +226,20 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
           buffer.update(v.toString + s"_${i.toString}", (i % 1000).toLong)
         }
         whichImpl(modeDefaultCollation, buffer)
-
       }
     }
     }
 
-    benchmark.addCase(s"Numerical Type - mode (${nameOfImpl}) - ${value.size} elements") { _ =>
-      val modeIntType = Mode(child = Literal.create(1, IntegerType))
-      val buffer = new OpenHashMap[AnyRef, Long](value.size)
-      value.zipWithIndex.foreach {
-        case (v: UTF8String, i: Int) =>
-          buffer.update(i.asInstanceOf[AnyRef], (i % 1000).toLong)
+    if (addNumericalCase) {
+      benchmark.addCase(s"Numerical Type - mode (N/A) - ${value.size} elements") { _ =>
+        val modeIntType = Mode(child = Literal.create(1, IntegerType))
+        val buffer = new OpenHashMap[AnyRef, Long](value.size)
+        value.zipWithIndex.foreach {
+          case (v: UTF8String, i: Int) =>
+            buffer.update(i.asInstanceOf[AnyRef], (i % 1000).toLong)
+        }
+        modeIntType.eval(buffer)
       }
-      modeIntType.eval(buffer)
     }
     benchmark
   }
@@ -262,13 +268,40 @@ object CollationBenchmark extends CollationBenchmarkBase {
     val inputLong: Seq[UTF8String] = (0L until n).map(i => input(i.toInt % input.size))
     inputLong
   }
+  def generateSeqInput2(n: Long): Seq[UTF8String] = {
+    val input = Seq("ABC", "ABC", "aBC", "aBC", "abc", "abc", "DEF", "DEF", "def", "def",
+      "GHI", "ghi", "JKL", "jkl", "MNO", "mno", "PQR", "pqr", "STU", "stu", "VWX", "vwx",
+      "ABC", "ABC", "aBC", "aBC", "abc", "abc", "DEF", "DEF", "def", "def", "GHI", "ghi",
+      "JKL", "jkl", "MNO", "mno", "PQR", "pqr", "STU", "stu", "VWX", "vwx", "YZ")
+    val inputLong: Seq[String] = (0L until n).map(i => input(i.toInt % input.size))
+    inputLong.zipWithIndex.map { case (s, i) => s + "_" + i.toString }
+      .map(UTF8String.fromString)
+  }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    val inputs = generateSeqInput(10000L)
-    Seq(2000L, 4000L, 8000L, 16000L, 40000L).foreach { n =>
-      var bm = makeBenchmarkMode(collationTypes, generateSeqInput(n))
-      bm = makeBenchmarkMode(collationTypes, generateSeqInput(n), (m, b) => m.eval2(b), "hashmap", Some(bm))
-      bm = makeBenchmarkMode(collationTypes, generateSeqInput(n), (m, b) => m.eval3(b), "mapreduce", Some(bm))
+    Seq(2000L, 4000L, 8000L, 16000L).foreach { n =>
+      var bm = makeBenchmarkMode(collationTypes,
+        generateSeqInput2(n), (m, b) => m.eval(b), "treemap", None, true)
+      bm = makeBenchmarkMode(
+        collationTypes.filter(_ != "UTF8_BINARY"),
+        generateSeqInput2(n), (m, b) => m.eval2(b), "hashmap", Some(bm))
+      bm = makeBenchmarkMode(
+        collationTypes.filter(_ != "UTF8_BINARY"),
+        generateSeqInput2(n), (m, b) => m.eval3(b), "mapreduce", Some(bm))
+      Seq(0.02, 0.04, 0.08).foreach { percent =>
+        val inputs = generateSeqInput2(n).splitAt((n * percent).intValue())
+        val input = (
+          inputs._1.map(_.toString.split("_").head).map(UTF8String.fromString) ++
+          inputs._2).sortBy(_ => Random.nextInt())
+        bm = makeBenchmarkMode(
+          collationTypes, input, (m, b) => m.eval(b), "treemap", Some(bm), false)
+        bm = makeBenchmarkMode(
+          collationTypes.filter(_ != "UTF8_BINARY"),
+          input, (m, b) => m.eval2(b), "hashmap", Some(bm))
+        bm = makeBenchmarkMode(
+          collationTypes.filter(_ != "UTF8_BINARY"),
+          input, (m, b) => m.eval3(b), "mapreduce", Some(bm))
+      }
       bm.run()
     }
 //    benchmarkUTFStringEquals(collationTypes, inputs)
