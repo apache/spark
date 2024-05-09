@@ -83,7 +83,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
   // given table, the cache's storage level is returned.
   private def invalidateTableCache(r: ResolvedTable)(): Option[StorageLevel] = {
     val v2Relation = DataSourceV2Relation.create(r.table, Some(r.catalog), Some(r.identifier))
-    val cache = session.sharedState.cacheManager.lookupCachedData(v2Relation)
+    val cache = session.sharedState.cacheManager.lookupCachedData(session, v2Relation)
     session.sharedState.cacheManager.uncacheQuery(session, v2Relation, cascade = true)
     if (cache.isDefined) {
       val cacheLevel = cache.get.cachedRepresentation.cacheBuilder.storageLevel

@@ -33,8 +33,8 @@ import org.apache.hive.service.Service.STATE
 import org.apache.hive.service.auth.HiveAuthFactory
 import org.apache.hive.service.cli._
 import org.apache.hive.service.server.HiveServer2
-import org.slf4j.Logger
 
+import org.apache.spark.internal.Logger
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.util.SQLKeywordUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors

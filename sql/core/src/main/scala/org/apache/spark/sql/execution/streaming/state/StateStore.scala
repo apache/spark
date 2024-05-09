@@ -584,7 +584,21 @@ object StateStore extends Logging {
     }
 
     def stop(): Unit = {
-      threadPool.shutdown()
+      logInfo("Shutting down MaintenanceThreadPool")
+      threadPool.shutdown() // Disable new tasks from being submitted
+
+      // Wait a while for existing tasks to terminate
+      if (!threadPool.awaitTermination(5 * 60, TimeUnit.SECONDS)) {
+        logWarning(
+          s"MaintenanceThreadPool is not able to be terminated within 300 seconds," +
+            " forcefully shutting down now.")
+        threadPool.shutdownNow() // Cancel currently executing tasks
+
+        // Wait a while for tasks to respond to being cancelled
+        if (!threadPool.awaitTermination(60, TimeUnit.SECONDS)) {
+          logError("MaintenanceThreadPool did not terminate")
+        }
+      }
     }
   }
 

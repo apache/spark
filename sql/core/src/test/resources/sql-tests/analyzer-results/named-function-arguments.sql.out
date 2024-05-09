@@ -194,7 +194,7 @@ CREATE OR REPLACE TEMPORARY VIEW v AS SELECT id FROM range(0, 8)
 -- !query analysis
 CreateViewCommand `v`, SELECT id FROM range(0, 8), false, true, LocalTempView, true
    +- Project [id#xL]
-      +- Range (0, 8, step=1, splits=None)
+      +- Range (0, 8, step=1)
 
 
 -- !query
@@ -205,7 +205,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_TABLE_ARGUMENT",
   "sqlState" : "0A000",
   "messageParameters" : {
-    "treeNode" : "'Generate explode(table-argument#x []), false\n:  +- SubqueryAlias v\n:     +- View (`v`, [id#xL])\n:        +- Project [cast(id#xL as bigint) AS id#xL]\n:           +- Project [id#xL]\n:              +- Range (0, 8, step=1, splits=None)\n+- OneRowRelation\n"
+    "treeNode" : "'Generate explode(table-argument#x []), false\n:  +- SubqueryAlias v\n:     +- View (`v`, [id#xL])\n:        +- Project [cast(id#xL as bigint) AS id#xL]\n:           +- Project [id#xL]\n:              +- Range (0, 8, step=1)\n+- OneRowRelation\n"
   },
   "queryContext" : [ {
     "objectType" : "",

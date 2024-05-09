@@ -275,7 +275,7 @@ class JacksonParser(
           }
       }
 
-    case StringType =>
+    case _: StringType =>
       (parser: JsonParser) => parseJsonToken[UTF8String](parser, dataType) {
         case VALUE_STRING =>
           UTF8String.fromString(parser.getText)

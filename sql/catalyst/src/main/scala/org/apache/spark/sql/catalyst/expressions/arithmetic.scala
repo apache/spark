@@ -452,9 +452,8 @@ case class Add(
     copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    // TODO: do not reorder consecutive `Add`s with different `evalMode`
     val reorderResult = buildCanonicalizedPlan(
-      { case Add(l, r, _) => Seq(l, r) },
+      { case Add(l, r, em) if em == evalMode => Seq(l, r) },
       { case (l: Expression, r: Expression) => Add(l, r, evalMode)},
       Some(evalMode)
     )
@@ -608,10 +607,9 @@ case class Multiply(
     newLeft: Expression, newRight: Expression): Multiply = copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    // TODO: do not reorder consecutive `Multiply`s with different `evalMode`
     buildCanonicalizedPlan(
-      { case Multiply(l, r, _) => Seq(l, r) },
-      { case (l: Expression, r: Expression) => Multiply(l, r, evalMode)},
+      { case Multiply(l, r, em) if em == evalMode => Seq(l, r) },
+      { case (l: Expression, r: Expression) => Multiply(l, r, evalMode) },
       Some(evalMode)
     )
   }
