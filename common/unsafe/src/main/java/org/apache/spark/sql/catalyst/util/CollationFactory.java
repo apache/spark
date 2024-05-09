@@ -283,4 +283,5 @@ public final class CollationFactory {
       return UTF8String.fromBytes(collationKey.toByteArray());
     }
   }
+
 }
