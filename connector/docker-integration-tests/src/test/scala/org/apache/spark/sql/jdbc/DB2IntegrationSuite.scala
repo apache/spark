@@ -21,8 +21,6 @@ import java.math.BigDecimal
 import java.sql.{Connection, Date, Timestamp}
 import java.util.Properties
 
-import org.scalatest.time.SpanSugar._
-
 import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.internal.SQLConf
@@ -40,8 +38,6 @@ import org.apache.spark.tags.DockerTest
 @DockerTest
 class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
   override val db = new DB2DatabaseOnDocker
-
-  override val connectionTimeout = timeout(3.minutes)
 
   override def dataPreparation(conn: Connection): Unit = {
     conn.prepareStatement("CREATE TABLE tbl (x INTEGER, y VARCHAR(8))").executeUpdate()
