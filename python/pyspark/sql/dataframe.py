@@ -6227,6 +6227,8 @@ class DataFrame:
         This method should only be used if the resulting PyArrow ``pyarrow.Table`` is
         expected to be small, as all the data is loaded into the driver's memory.
 
+        This API is a developer API.
+
         Examples
         --------
         >>> df.toArrowTable()  # doctest: +SKIP
