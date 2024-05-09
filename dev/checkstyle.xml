@@ -199,6 +199,8 @@
         <module name="IllegalImport">
             <property name="illegalPkgs" value="org.apache.log4j" />
             <property name="illegalPkgs" value="org.apache.commons.lang" />
+            <property name="illegalClasses" value="org.slf4j.Logger" />
+            <property name="illegalClasses" value="org.slf4j.LoggerFactory" />
         </module>
     </module>
 </module>

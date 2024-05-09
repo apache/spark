@@ -29,8 +29,10 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import org.iq80.leveldb.DBIterator;
+// checkstyle.off: IllegalImport
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+// checkstyle.on: IllegalImport
 
 class LevelDBIterator<T> implements KVStoreIterator<T> {
 
