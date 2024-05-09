@@ -503,7 +503,7 @@ private[spark] object Utils
       fileOverwrite: Boolean): Unit = {
     val tempFile = File.createTempFile("fetchFileTemp", null,
       new File(destFile.getParentFile.getAbsolutePath))
-    logInfo(log"Fetching ${MDC(URL, url)} to ${MDC(FILE_ABSOLUTE_PATH, tempFile)}")
+    logInfo(log"Fetching ${MDC(LogKeys.URL, url)} to ${MDC(FILE_ABSOLUTE_PATH, tempFile)}")
 
     try {
       val out = new FileOutputStream(tempFile)
@@ -545,7 +545,8 @@ private[spark] object Utils
       if (!filesEqualRecursive(sourceFile, destFile)) {
         if (fileOverwrite) {
           logInfo(
-            log"File ${MDC(DESTINATION_PATH, destFile)} exists and does not match contents of ${MDC(LogKeys.URL, url)}, replacing it with ${MDC(LogKeys.URL2, url)}"
+            log"File ${MDC(DESTINATION_PATH, destFile)} exists and does not match contents of" +
+              log" ${MDC(LogKeys.URL, url)}, replacing it with ${MDC(LogKeys.URL2, url)}"
           )
           if (!destFile.delete()) {
             throw new SparkException(
