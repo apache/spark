@@ -3899,22 +3899,22 @@ abstract class JsonSuite
           }
         }
       }
-//      extractData(
-//        """{"data": {"white":    "space"}}""",
-//        expectedInexactData = Seq("""{"white":"space"}"""),
-//        expectedExactData = Seq("""{"white":    "space"}""")
-//      )
-//      extractData(
-//        """{"data": ["white",    "space"]}""",
-//        expectedInexactData = Seq("""["white","space"]"""),
-//        expectedExactData = Seq("""["white",    "space"]""")
-//      )
-//      val granularFloat = "-999.99999999999999999999999999999999995"
-//      extractData(
-//        s"""{"data": {"v": ${granularFloat}}}""",
-//        expectedInexactData = Seq("""{"v":-1000.0}"""),
-//        expectedExactData = Seq(s"""{"v": ${granularFloat}}""")
-//      )
+      extractData(
+        """{"data": {"white":    "space"}}""",
+        expectedInexactData = Seq("""{"white":"space"}"""),
+        expectedExactData = Seq("""{"white":    "space"}""")
+      )
+      extractData(
+        """{"data": ["white",    "space"]}""",
+        expectedInexactData = Seq("""["white","space"]"""),
+        expectedExactData = Seq("""["white",    "space"]""")
+      )
+      val granularFloat = "-999.99999999999999999999999999999999995"
+      extractData(
+        s"""{"data": {"v": ${granularFloat}}}""",
+        expectedInexactData = Seq("""{"v":-1000.0}"""),
+        expectedExactData = Seq(s"""{"v": ${granularFloat}}""")
+      )
       extractData(
         s"""{"data": {"white":\n"space"}}""",
         expectedInexactData = Seq("""{"white":"space"}"""),

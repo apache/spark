@@ -25,8 +25,8 @@ import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.core._
 import org.apache.hadoop.fs.PositionedReadable
-import org.apache.spark.SparkUpgradeException
 
+import org.apache.spark.SparkUpgradeException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions._
@@ -277,6 +277,7 @@ class JacksonParser(
       }
 
     case _: StringType => (parser: JsonParser) => {
+      // This must be enabled if we will retrieve the bytes directly from the raw content:
       val includeSourceInLocation = JsonParser.Feature.INCLUDE_SOURCE_IN_LOCATION
       val originalMask = if (includeSourceInLocation.enabledIn(parser.getFeatureMask)) {
         1
@@ -328,6 +329,7 @@ class JacksonParser(
               UTF8String.fromBytes(writer.toByteArray)
           }
         }
+      // Reset back to the original configuration:
       parser.overrideStdFeatures(includeSourceInLocation.getMask, originalMask)
       result
     }
