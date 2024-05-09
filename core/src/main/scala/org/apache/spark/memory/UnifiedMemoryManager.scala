@@ -18,9 +18,8 @@
 package org.apache.spark.memory
 
 import org.apache.spark.{SparkConf, SparkIllegalArgumentException}
-import org.apache.spark.internal.MDC
+import org.apache.spark.internal.{config, MDC}
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Tests._
 import org.apache.spark.storage.BlockId
 

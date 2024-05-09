@@ -147,7 +147,8 @@ private[spark] object PythonUtils extends Logging {
       def formatOutput(output: String): String = {
         output.replaceAll("\\s+", ", ")
       }
-      listOfPackages.foreach(x => logInfo(log"List of Python packages :- ${MDC(PYTHON_PACKAGES, formatOutput(x))}"))
+      listOfPackages.foreach(x => logInfo(log"List of Python packages :-" +
+        log" ${MDC(PYTHON_PACKAGES, formatOutput(x))}"))
     }
   }
 
