@@ -688,13 +688,15 @@ private[deploy] class Master(
       workerWebUiUrl: String,
       masterAddress: RpcAddress,
       resources: Map[String, ResourceInformation]): Unit = {
-    logInfo(log"Registering worker ${MDC(LogKeys.WORKER_HOST, workerHost)}:${MDC(LogKeys.WORKER_PORT, workerPort)} with %d cores, %s RAM".format(
-      cores, Utils.megabytesToString(memory)))
+    logInfo(log"Registering worker" +
+      log" ${MDC(LogKeys.WORKER_HOST, workerHost)}:${MDC(LogKeys.WORKER_PORT, workerPort)}" +
+      log" with ${MDC(LogKeys.NUM_CORES, cores)} cores," +
+      log" ${MDC(LogKeys.MEMORY_SIZE, Utils.megabytesToString(memory))} RAM")
     if (state == RecoveryState.STANDBY) {
       workerRef.send(MasterInStandby)
     } else if (idToWorker.contains(id)) {
       if (idToWorker(id).state == WorkerState.UNKNOWN) {
-        logInfo("Worker has been re-registered: " + id)
+        logInfo(log"Worker has been re-registered: ${MDC(LogKeys.WORKER_ID, id)}")
         idToWorker(id).state = WorkerState.ALIVE
       }
       workerRef.send(RegisteredWorker(self, masterWebUiUrl, masterAddress, true))
@@ -993,7 +995,8 @@ private[deploy] class Master(
   }
 
   private def launchExecutor(worker: WorkerInfo, exec: ExecutorDesc): Unit = {
-    logInfo("Launching executor " + exec.fullId + " on worker " + worker.id)
+    logInfo(log"Launching executor ${MDC(LogKeys.EXECUTOR_ID, exec.fullId)}" +
+      log" on worker ${MDC(LogKeys.WORKER_ID, worker.id)}")
     worker.addExecutor(exec)
     worker.endpoint.send(LaunchExecutor(masterUrl, exec.application.id, exec.id,
       exec.rpId, exec.application.desc, exec.cores, exec.memory, exec.resources))
@@ -1018,7 +1021,8 @@ private[deploy] class Master(
         // The old worker must thus be dead, so we will remove it and accept the new worker.
         removeWorker(oldWorker, "Worker replaced by a new worker with same address")
       } else {
-        logInfo("Attempted to re-register worker at same address: " + workerAddress)
+        logInfo(log"Attempted to re-register worker at same address:" +
+          log" ${MDC(LogKeys.RPC_ADDRESS, workerAddress)}")
         return false
       }
     }
@@ -1045,7 +1049,8 @@ private[deploy] class Master(
       .values
 
     val workersToRemoveHostPorts = workersToRemove.map(_.hostPort)
-    logInfo(log"Decommissioning the workers with host:ports ${MDC(LogKeys.HOST_PORT, workersToRemoveHostPorts)}")
+    logInfo(log"Decommissioning the workers with host:ports" +
+      log" ${MDC(LogKeys.HOST_PORT, workersToRemoveHostPorts)}")
 
     // The workers are removed async to avoid blocking the receive loop for the entire batch
     self.send(DecommissionWorkers(workersToRemove.map(_.id).toSeq))
@@ -1056,7 +1061,8 @@ private[deploy] class Master(
 
   private def decommissionWorker(worker: WorkerInfo): Unit = {
     if (worker.state != WorkerState.DECOMMISSIONED) {
-      logInfo("Decommissioning worker %s on %s:%d".format(worker.id, worker.host, worker.port))
+      logInfo(log"Decommissioning worker ${MDC(LogKeys.WORKER_ID, worker.id)}" +
+        log" on ${MDC(LogKeys.WORKER_HOST, worker.host)}:${MDC(LogKeys.WORKER_PORT, worker.port)}")
       worker.setState(WorkerState.DECOMMISSIONED)
       for (exec <- worker.executors.values) {
         logInfo("Telling app of decommission executors")
@@ -1080,13 +1086,14 @@ private[deploy] class Master(
   }
 
   private def removeWorker(worker: WorkerInfo, msg: String): Unit = {
-    logInfo("Removing worker " + worker.id + " on " + worker.host + ":" + worker.port)
+    logInfo(log"Removing worker ${MDC(LogKeys.WORKER_ID, worker.id)} on" +
+      log" ${MDC(LogKeys.WORKER_HOST, worker.host)}:${MDC(LogKeys.WORKER_PORT, worker.port)}")
     worker.setState(WorkerState.DEAD)
     idToWorker -= worker.id
     addressToWorker -= worker.endpoint.address
 
     for (exec <- worker.executors.values) {
-      logInfo("Telling app of lost executor: " + exec.id)
+      logInfo(log"Telling app of lost executor: ${MDC(LogKeys.EXECUTOR_ID, exec.id)}")
       exec.application.driver.send(ExecutorUpdated(
         exec.id, ExecutorState.LOST, Some(s"worker lost: $msg"), None, Some(worker.host)))
       exec.state = ExecutorState.LOST
@@ -1142,7 +1149,8 @@ private[deploy] class Master(
   private[master] def registerApplication(app: ApplicationInfo): Unit = {
     val appAddress = app.driver.address
     if (addressToApp.contains(appAddress)) {
-      logInfo("Attempted to re-register application at same address: " + appAddress)
+      logInfo(log"Attempted to re-register application at same" +
+        log" address: ${MDC(LogKeys.RPC_ADDRESS, appAddress)}")
       return
     }
 
@@ -1160,7 +1168,7 @@ private[deploy] class Master(
 
   def removeApplication(app: ApplicationInfo, state: ApplicationState.Value): Unit = {
     if (apps.contains(app)) {
-      logInfo("Removing app " + app.id)
+      logInfo(log"Removing app ${MDC(LogKeys.APP_ID, app.id)}")
       apps -= app
       idToApp -= app.id
       endpointToApp -= app.driver
@@ -1329,7 +1337,7 @@ private[deploy] class Master(
   }
 
   private def launchDriver(worker: WorkerInfo, driver: DriverInfo): Unit = {
-    logInfo("Launching driver " + driver.id + " on worker " + worker.id)
+    logInfo(log"Launching driver ${MDC(LogKeys.DRIVER_ID, driver.id)} on worker ${MDC(LogKeys.WORKER_ID, worker.id)}")
     worker.addDriver(driver)
     driver.worker = Some(worker)
     worker.endpoint.send(LaunchDriver(driver.id, driver.desc, driver.resources))

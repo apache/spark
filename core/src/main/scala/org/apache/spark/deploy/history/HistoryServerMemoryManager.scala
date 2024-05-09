@@ -60,7 +60,7 @@ private class HistoryServerMemoryManager(
     }
     currentUsage.addAndGet(memoryUsage)
     logInfo(log"Leasing ${MDC(NUM_BYTES, Utils.bytesToString(memoryUsage))} memory usage for " +
-      log"app $appId / $attemptId")
+      log"app ${MDC(APP_ID, appId)} / ${MDC(APP_ATTEMPT_ID, attemptId)}")
   }
 
   def release(appId: String, attemptId: Option[String]): Unit = {
