@@ -1825,11 +1825,11 @@ def _parse_datatype_json_value(
         tpe = json_value["type"]
         if tpe in _all_complex_types:
             complex_type = _all_complex_types[tpe]
-            if complex_type is StructType:
-                return StructType.fromJson(json_value)
-            else:
-                assert complex_type is ArrayType or complex_type is MapType
-                return complex_type.fromJson(json_value, fieldPath, collationsMap)
+            if complex_type is ArrayType:
+                return ArrayType.fromJson(json_value, fieldPath, collationsMap)
+            elif complex_type is MapType:
+                return MapType.fromJson(json_value, fieldPath, collationsMap)
+            return complex_type.fromJson(json_value)
         elif tpe == "udt":
             return UserDefinedType.fromJson(json_value)
         else:
