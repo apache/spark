@@ -21,9 +21,9 @@ import java.util.Locale
 
 import org.apache.spark.internal.LogKeys.OPTIONS
 import org.apache.spark.internal.MDC
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.LocalTempView
+import org.apache.spark.sql.catalyst.analysis.{LocalTempView, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
@@ -34,7 +34,6 @@ import org.apache.spark.storage.StorageLevel
 trait BaseCacheTableExec extends LeafV2CommandExec {
   def relationName: String
   def planToCache: LogicalPlan
-  def dataFrameForCachedPlan: DataFrame
   def isLazy: Boolean
   def options: Map[String, String]
 
@@ -49,15 +48,12 @@ trait BaseCacheTableExec extends LeafV2CommandExec {
       logWarning(log"Invalid options: ${MDC(OPTIONS, withoutStorageLevel.mkString(", "))}")
     }
 
-    session.sharedState.cacheManager.cacheQuery(
-      session,
-      planToCache,
-      Some(relationName),
-      storageLevel)
+    val df = Dataset.ofRows(session, planToCache)
+    session.sharedState.cacheManager.cacheQuery(df, Some(relationName), storageLevel)
 
     if (!isLazy) {
       // Performs eager caching.
-      dataFrameForCachedPlan.count()
+      df.count()
     }
 
     Seq.empty
@@ -74,10 +70,6 @@ case class CacheTableExec(
   override lazy val relationName: String = multipartIdentifier.quoted
 
   override lazy val planToCache: LogicalPlan = relation
-
-  override lazy val dataFrameForCachedPlan: DataFrame = {
-    Dataset.ofRows(session, planToCache)
-  }
 }
 
 case class CacheTableAsSelectExec(
@@ -89,7 +81,10 @@ case class CacheTableAsSelectExec(
     referredTempFunctions: Seq[String]) extends BaseCacheTableExec {
   override lazy val relationName: String = tempViewName
 
-  override lazy val planToCache: LogicalPlan = {
+  override def planToCache: LogicalPlan = UnresolvedRelation(Seq(tempViewName))
+
+  override def run(): Seq[InternalRow] = {
+    // CACHE TABLE AS TABLE creates a temp view and caches the temp view.
     CreateViewCommand(
       name = TableIdentifier(tempViewName),
       userSpecifiedColumns = Nil,
@@ -103,12 +98,7 @@ case class CacheTableAsSelectExec(
       isAnalyzed = true,
       referredTempFunctions = referredTempFunctions
     ).run(session)
-
-    dataFrameForCachedPlan.logicalPlan
-  }
-
-  override lazy val dataFrameForCachedPlan: DataFrame = {
-    session.table(tempViewName)
+    super.run()
   }
 }
 

@@ -777,10 +777,19 @@ class RocksDB(
       .keys.filter(checkInternalColumnFamilies(_)).size
     val numExternalColFamilies = colFamilyNameToHandleMap.keys.size - numInternalColFamilies
 
+    // if bounded memory usage is enabled, we share the block cache across all state providers
+    // running on the same node and account the usage to this single cache. In this case, its not
+    // possible to provide partition level or query level memory usage.
+    val memoryUsage = if (conf.boundedMemoryUsage) {
+      0L
+    } else {
+      readerMemUsage + memTableMemUsage + blockCacheUsage
+    }
+
     RocksDBMetrics(
       numKeysOnLoadedVersion,
       numKeysOnWritingVersion,
-      readerMemUsage + memTableMemUsage + blockCacheUsage,
+      memoryUsage,
       pinnedBlocksMemUsage,
       totalSSTFilesBytes,
       nativeOpsLatencyMicros,

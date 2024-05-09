@@ -813,7 +813,7 @@ class DataFrame(ParentDataFrame):
         if withReplacement is None:
             withReplacement = False
 
-        seed = int(seed) if seed is not None else None
+        seed = int(seed) if seed is not None else random.randint(0, sys.maxsize)
 
         return DataFrame(
             plan.Sample(
@@ -1767,6 +1767,10 @@ class DataFrame(ParentDataFrame):
         table, schema = self._session.client.to_table(query, self._plan.observations)
         assert table is not None
         return (table, schema)
+
+    def toArrow(self) -> "pa.Table":
+        table, _ = self._to_table()
+        return table
 
     def toPandas(self) -> "PandasDataFrameLike":
         query = self._plan.to_proto(self._session.client)
