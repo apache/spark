@@ -169,7 +169,7 @@ This is the same dummy streaming reader that generate 2 rows every batch impleme
             """
             return {"offset": 0}
 
-        def read(self, start: dict) -> ():
+        def read(self, start: dict) -> (Iterator[Tuple], dict):
             """
             Takes start offset as an input, return an iterator of tuples and the start offset of next read.
             """
@@ -177,7 +177,7 @@ This is the same dummy streaming reader that generate 2 rows every batch impleme
             it = iter([(i,) for i in range(start_idx, start_idx + 2)])
             return (it, {"offset": start_idx + 2})
 
-        def readBetweenOffsets(self, start: dict, end: dict):
+        def readBetweenOffsets(self, start: dict, end: dict) -> Iterator[Tuple]:
             """
             Takes start and end offset as input and read an iterator of data deterministically.
             This is called whe query replay batches during restart or after failure.
@@ -208,7 +208,7 @@ This is a streaming data writer that write the metadata information of each micr
            self.path = self.options.get("path")
            assert self.path is not None
 
-       def write(self, iterator):
+       def write(self, iterator) -> WriterCommitMessage:
            """
            Write the data and return the commit message of that partition
            """
