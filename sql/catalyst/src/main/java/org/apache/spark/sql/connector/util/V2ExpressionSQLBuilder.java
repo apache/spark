@@ -174,11 +174,10 @@ public class V2ExpressionSQLBuilder {
     String litString = literal.toString();
     if (literal.dataType() instanceof StringType) {
       return "'"
-              + StringUtils.replace(
-                      litString.substring(1, litString.length() - 1),
-              "'",
-              "''")
-              + "'";
+        + StringUtils.replace(litString.substring(1, litString.length() - 1),
+        "'",
+        "''")
+        + "'";
     }
     return litString;
   }
