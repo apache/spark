@@ -20,16 +20,15 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.annotation.tailrec
 import scala.util.control.NonFatal
 
-import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.{HASH_JOIN_KEYS, JOIN_CONDITION}
+import org.apache.spark.internal.LogKeys.JOIN_CONDITION
+import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractFiltersAndInnerJoins, ExtractSingleColumnNullAwareAntiJoin}
+import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractFiltersAndInnerJoins}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
@@ -287,7 +286,7 @@ case object BuildRight extends BuildSide
 
 case object BuildLeft extends BuildSide
 
-trait JoinSelectionHelper extends Logging {
+trait JoinSelectionHelper {
 
   def getBroadcastBuildSide(
       join: Join,
