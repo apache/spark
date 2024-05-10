@@ -501,11 +501,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
     case TimestampType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
-        val t = dialect.getDatabaseCalendar match {
-          case Some(cal) => rs.getTimestamp(pos + 1, cal)
-          case None => rs.getTimestamp(pos + 1)
-        }
-
+        val t = rs.getTimestamp(pos + 1, dialect.getDatabaseCalendar.get)
         if (t != null) {
           row.setLong(pos, fromJavaTimestamp(dialect.convertJavaTimestampToTimestamp(t)))
         } else {
@@ -670,21 +666,12 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case TimestampType =>
       if (conf.datetimeJava8ApiEnabled) {
         (stmt: PreparedStatement, row: Row, pos: Int) =>
-          dialect.getDatabaseCalendar match {
-            case Some(cal) =>
-              stmt.setTimestamp(
-                pos + 1, toJavaTimestamp(instantToMicros(row.getAs[Instant](pos))), cal)
-            case None =>
-              stmt.setTimestamp(pos + 1, toJavaTimestamp(instantToMicros(row.getAs[Instant](pos))))
-          }
+          stmt.setTimestamp(pos + 1, toJavaTimestamp(instantToMicros(row.getAs[Instant](pos))),
+            dialect.getDatabaseCalendar.get)
       } else {
         (stmt: PreparedStatement, row: Row, pos: Int) =>
-          dialect.getDatabaseCalendar match {
-            case Some(cal) =>
-              stmt.setTimestamp(pos + 1, row.getAs[java.sql.Timestamp](pos), cal)
-            case None =>
-              stmt.setTimestamp(pos + 1, row.getAs[java.sql.Timestamp](pos))
-          }
+          stmt.setTimestamp(pos + 1, row.getAs[java.sql.Timestamp](pos),
+            dialect.getDatabaseCalendar.get)
       }
 
     case TimestampNTZType =>

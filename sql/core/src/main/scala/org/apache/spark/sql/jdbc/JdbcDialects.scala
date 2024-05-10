@@ -20,14 +20,13 @@ package org.apache.spark.sql.jdbc
 import java.sql.{Connection, Date, Driver, ResultSetMetaData, Statement, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime}
 import java.util
-import java.util.{Calendar, ServiceLoader}
+import java.util.{Calendar, ServiceLoader, TimeZone}
 import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.ArrayBuilder
 import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
-
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
@@ -222,7 +221,13 @@ abstract class JdbcDialect extends Serializable with Logging {
    * @return
    */
   @Since("3.5.0")
-  def getDatabaseCalendar: Option[Calendar] = None
+  def getDatabaseCalendar: Option[Calendar] = {
+    if (SQLConf.get.useLocalSessionCalendar) {
+      Some(Calendar.getInstance(TimeZone.getTimeZone(SQLConf.get.sessionLocalTimeZone)))
+    } else {
+      None
+    }
+  }
 
   /**
    * Returns a factory for creating connections to the given JDBC URL.
