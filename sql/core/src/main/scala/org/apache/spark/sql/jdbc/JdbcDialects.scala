@@ -27,6 +27,7 @@ import scala.collection.mutable.ArrayBuilder
 import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
+
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
