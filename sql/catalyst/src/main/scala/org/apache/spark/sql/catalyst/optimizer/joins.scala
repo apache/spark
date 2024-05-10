@@ -396,10 +396,8 @@ trait JoinSelectionHelper extends Logging {
   }
 
   def canPlanAsBroadcastHashJoin(join: Join, conf: SQLConf): Boolean = {
-    getBroadcastBuildSide(join.left, join.right, join.joinType,
-      join.hint, hintOnly = true, conf).isDefined ||
-      getBroadcastBuildSide(join.left, join.right, join.joinType,
-        join.hint, hintOnly = false, conf).isDefined
+    getBroadcastBuildSide(join, hintOnly = true, conf).isDefined ||
+      getBroadcastBuildSide(join, hintOnly = false, conf).isDefined
   }
 
   def canPruneLeft(joinType: JoinType): Boolean = joinType match {
