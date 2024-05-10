@@ -812,7 +812,7 @@ class CollationStringExpressionsSuite
     }
   }
 
-  test("Support mode for string expression with collation2 ") {
+  test("Support mode for string expression with collation - Advanced Test") {
     case class ModeTestCase[R](collationId: String, bufferValues: Map[String, Long], result: R)
     val testCases = Seq(
       ModeTestCase("utf8_binary", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
