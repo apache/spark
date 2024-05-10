@@ -313,7 +313,7 @@ class CollationSQLExpressionsSuite
     })
   }
 
-  test("Support CsvToStructs hash expression with collation") {
+  test("Support CsvToStructs csv expression with collation") {
     case class CsvToStructsTestCase(
      input: String,
      collationName: String,
@@ -357,6 +357,69 @@ class CollationSQLExpressionsSuite
         val queryResult = testQuery.collect().head
         checkAnswer(testQuery, Row(t.result))
         val dataType = StructType(t.structFields)
+        assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      }
+    })
+  }
+
+  test("Support SchemaOfCsv csv expression with collation") {
+    case class SchemaOfCsvTestCase(
+      input: String,
+      collationName: String,
+      result: String
+    )
+
+    val testCases = Seq(
+      SchemaOfCsvTestCase("1", "UTF8_BINARY", "STRUCT<_c0: INT>"),
+      SchemaOfCsvTestCase("true,0.8", "UTF8_BINARY_LCASE",
+        "STRUCT<_c0: BOOLEAN, _c1: DOUBLE>"),
+      SchemaOfCsvTestCase("2015-08-26", "UNICODE", "STRUCT<_c0: DATE>"),
+      SchemaOfCsvTestCase("abc", "UNICODE_CI",
+        "STRUCT<_c0: STRING>")
+    )
+
+    // Supported collations
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |select schema_of_csv('${t.input}')
+           |""".stripMargin
+      // Result
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        checkAnswer(testQuery, Row(t.result))
+        val dataType = StringType(t.collationName)
+        assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      }
+    })
+  }
+
+  test("Support StructsToCsv csv expression with collation") {
+    case class StructsToCsvTestCase(
+     input: String,
+     collationName: String,
+     result: String
+    )
+
+    val testCases = Seq(
+      StructsToCsvTestCase("named_struct('a', 1, 'b', 2)", "UTF8_BINARY", "1,2"),
+      StructsToCsvTestCase("named_struct('A', true, 'B', 2.0)", "UTF8_BINARY_LCASE", "true,2.0"),
+      StructsToCsvTestCase("named_struct()", "UNICODE", null),
+      StructsToCsvTestCase("named_struct('time', to_timestamp('2015-08-26'))", "UNICODE_CI",
+        "2015-08-26T00:00:00.000-07:00")
+    )
+
+    // Supported collations
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |select to_csv(${t.input})
+           |""".stripMargin
+      // Result
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        checkAnswer(testQuery, Row(t.result))
+        val dataType = StringType(t.collationName)
         assert(testQuery.schema.fields.head.dataType.sameType(dataType))
       }
     })
