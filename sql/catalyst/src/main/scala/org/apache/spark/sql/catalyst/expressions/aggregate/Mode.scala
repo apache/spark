@@ -73,23 +73,20 @@ case class Mode(
     }
     buffer
   }
-  private def impl3(buff: OpenHashMap[AnyRef, Long]) = {
-    val modeMap = buff.toSeq.groupMapReduce {
-      case (key: String, _) =>
-        CollationFactory.getCollationKey(UTF8String.fromString(key), collationId)
-      case (key: UTF8String, _) =>
-        CollationFactory.getCollationKey(key, collationId)
-      case (key, _) => key
-    }(x => x)((x, y) => (x._1, x._2 + y._2)).values
-    modeMap
-  }
 
   override def eval(buff: OpenHashMap[AnyRef, Long]): Any = {
     if (buff.isEmpty) {
       return null
     }
     val buffer = if (isCollatedString(child)) {
-      impl3(buff)
+      val modeMap = buff.toSeq.groupMapReduce {
+        case (key: String, _) =>
+          CollationFactory.getCollationKey(UTF8String.fromString(key), collationId)
+        case (key: UTF8String, _) =>
+          CollationFactory.getCollationKey(key, collationId)
+        case (key, _) => key
+      }(x => x)((x, y) => (x._1, x._2 + y._2)).values
+      modeMap
     } else {
       buff
     }
