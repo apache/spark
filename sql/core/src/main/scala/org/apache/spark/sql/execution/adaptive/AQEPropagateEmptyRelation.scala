@@ -82,6 +82,11 @@ object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
     case _ => false
   }
 
+  override protected def canPropagate(plan: LogicalPlan): Boolean = plan match {
+    case LogicalQueryStage(_, _: BroadcastQueryStageExec) => false
+    case _ => true
+  }
+
   override protected def applyInternal(p: LogicalPlan): LogicalPlan = p.transformUpWithPruning(
     // LOCAL_RELATION and TRUE_OR_FALSE_LITERAL pattern are matched at
     // `PropagateEmptyRelationBase.commonApplyFunc`
