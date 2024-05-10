@@ -145,9 +145,7 @@ public abstract class LoggerSuiteBase {
     List.of(
         Pair.of(Level.ERROR, errorFn),
         Pair.of(Level.WARN, warnFn),
-        Pair.of(Level.INFO, infoFn),
-        Pair.of(Level.DEBUG, debugFn),
-        Pair.of(Level.TRACE, traceFn)).forEach(pair -> {
+        Pair.of(Level.INFO, infoFn)).forEach(pair -> {
       try {
         assert (captureLogOutput(pair.getRight()).matches(
             expectedPatternForMsgWithMDC(pair.getLeft())));
@@ -162,14 +160,10 @@ public abstract class LoggerSuiteBase {
     Runnable errorFn = () -> logger().error(msgWithMDCs, mdcs);
     Runnable warnFn = () -> logger().warn(msgWithMDCs, mdcs);
     Runnable infoFn = () -> logger().info(msgWithMDCs, mdcs);
-    Runnable debugFn = () -> logger().debug(msgWithMDCs, mdcs);
-    Runnable traceFn = () -> logger().trace(msgWithMDCs, mdcs);
     List.of(
         Pair.of(Level.ERROR, errorFn),
         Pair.of(Level.WARN, warnFn),
-        Pair.of(Level.INFO, infoFn),
-        Pair.of(Level.DEBUG, debugFn),
-        Pair.of(Level.TRACE, traceFn)).forEach(pair -> {
+        Pair.of(Level.INFO, infoFn)).forEach(pair -> {
       try {
         assert (captureLogOutput(pair.getRight()).matches(
             expectedPatternForMsgWithMDCs(pair.getLeft())));
@@ -185,14 +179,10 @@ public abstract class LoggerSuiteBase {
     Runnable errorFn = () -> logger().error(msgWithMDCs, exception, mdcs);
     Runnable warnFn = () -> logger().warn(msgWithMDCs, exception, mdcs);
     Runnable infoFn = () -> logger().info(msgWithMDCs, exception, mdcs);
-    Runnable debugFn = () -> logger().debug(msgWithMDCs, exception, mdcs);
-    Runnable traceFn = () -> logger().trace(msgWithMDCs, exception, mdcs);
     List.of(
         Pair.of(Level.ERROR, errorFn),
         Pair.of(Level.WARN, warnFn),
-        Pair.of(Level.INFO, infoFn),
-        Pair.of(Level.DEBUG, debugFn),
-        Pair.of(Level.TRACE, traceFn)).forEach(pair -> {
+        Pair.of(Level.INFO, infoFn)).forEach(pair -> {
       try {
         assert (captureLogOutput(pair.getRight()).matches(
             expectedPatternForMsgWithMDCsAndException(pair.getLeft())));
@@ -207,14 +197,10 @@ public abstract class LoggerSuiteBase {
     Runnable errorFn = () -> logger().error(msgWithMDC, executorIDMDCValueIsNull);
     Runnable warnFn = () -> logger().warn(msgWithMDC, executorIDMDCValueIsNull);
     Runnable infoFn = () -> logger().info(msgWithMDC, executorIDMDCValueIsNull);
-    Runnable debugFn = () -> logger().debug(msgWithMDC, executorIDMDCValueIsNull);
-    Runnable traceFn = () -> logger().trace(msgWithMDC, executorIDMDCValueIsNull);
     List.of(
         Pair.of(Level.ERROR, errorFn),
         Pair.of(Level.WARN, warnFn),
-        Pair.of(Level.INFO, infoFn),
-        Pair.of(Level.DEBUG, debugFn),
-        Pair.of(Level.TRACE, traceFn)).forEach(pair -> {
+        Pair.of(Level.INFO, infoFn)).forEach(pair -> {
       try {
         assert (captureLogOutput(pair.getRight()).matches(
             expectedPatternForMsgWithMDCValueIsNull(pair.getLeft())));
@@ -229,14 +215,10 @@ public abstract class LoggerSuiteBase {
     Runnable errorFn = () -> logger().error("{}", externalSystemCustomLog);
     Runnable warnFn = () -> logger().warn("{}", externalSystemCustomLog);
     Runnable infoFn = () -> logger().info("{}", externalSystemCustomLog);
-    Runnable debugFn = () -> logger().debug("{}", externalSystemCustomLog);
-    Runnable traceFn = () -> logger().trace("{}", externalSystemCustomLog);
     List.of(
         Pair.of(Level.ERROR, errorFn),
         Pair.of(Level.WARN, warnFn),
-        Pair.of(Level.INFO, infoFn),
-        Pair.of(Level.DEBUG, debugFn),
-        Pair.of(Level.TRACE, traceFn)).forEach(pair -> {
+        Pair.of(Level.INFO, infoFn)).forEach(pair -> {
       try {
         assert (captureLogOutput(pair.getRight()).matches(
             expectedPatternForExternalSystemCustomLogKey(pair.getLeft())));

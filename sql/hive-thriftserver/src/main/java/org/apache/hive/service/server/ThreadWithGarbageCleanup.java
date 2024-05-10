@@ -22,8 +22,9 @@ import java.util.Map;
 
 import org.apache.hadoop.hive.metastore.HiveMetaStore;
 import org.apache.hadoop.hive.metastore.RawStore;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import org.apache.spark.internal.Logger;
+import org.apache.spark.internal.LoggerFactory;
 
 /**
  * A HiveServer2 thread used to construct new server threads.

@@ -434,6 +434,7 @@ message ExecutePlanResponse {
     string name = 1;
     repeated Expression.Literal values = 2;
     repeated string keys = 3;
+    int64 plan_id = 4;
   }
 
   message ResultComplete {

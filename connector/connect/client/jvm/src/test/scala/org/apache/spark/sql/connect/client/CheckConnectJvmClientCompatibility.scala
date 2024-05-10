@@ -196,9 +196,6 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.COL_POS_KEY"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.DATASET_ID_KEY"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.curId"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.observe"),
-      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Observation"),
-      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Observation$"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.ObservationListener"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.ObservationListener$"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.queryExecution"),
@@ -357,6 +354,15 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters
         .exclude[MissingClassProblem](
           "org.apache.spark.sql.expressions.SparkConnectClosureCleaner$"),
+
+      // Column
+      // developer API
+      ProblemFilters.exclude[IncompatibleMethTypeProblem](
+        "org.apache.spark.sql.Column.apply"
+      ),
+      ProblemFilters.exclude[IncompatibleResultTypeProblem](
+        "org.apache.spark.sql.Column.expr"
+      ),
 
       // Dataset
       ProblemFilters.exclude[DirectMissingMethodProblem](

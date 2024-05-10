@@ -69,10 +69,20 @@ private[spark] class SparkSubmit extends Logging {
 
   def doSubmit(args: Array[String]): Unit = {
     val appArgs = parseArguments(args)
+    val sparkConf = appArgs.toSparkConf()
+
     // For interpreters, structured logging is disabled by default to avoid generating mixed
     // plain text and structured logs on the same console.
     if (isShell(appArgs.primaryResource) || isSqlShell(appArgs.mainClass)) {
       Logging.disableStructuredLogging()
+    } else {
+      // For non-shell applications, enable structured logging if it's not explicitly disabled
+      // via the configuration `spark.log.structuredLogging.enabled`.
+      if (sparkConf.getBoolean(STRUCTURED_LOGGING_ENABLED.key, defaultValue = true)) {
+        Logging.enableStructuredLogging()
+      } else {
+        Logging.disableStructuredLogging()
+      }
     }
     // Initialize logging if it hasn't been done yet. Keep track of whether logging needs to
     // be reset before the application starts.
@@ -82,9 +92,9 @@ private[spark] class SparkSubmit extends Logging {
       logInfo(appArgs.toString)
     }
     appArgs.action match {
-      case SparkSubmitAction.SUBMIT => submit(appArgs, uninitLog)
-      case SparkSubmitAction.KILL => kill(appArgs)
-      case SparkSubmitAction.REQUEST_STATUS => requestStatus(appArgs)
+      case SparkSubmitAction.SUBMIT => submit(appArgs, uninitLog, sparkConf)
+      case SparkSubmitAction.KILL => kill(appArgs, sparkConf)
+      case SparkSubmitAction.REQUEST_STATUS => requestStatus(appArgs, sparkConf)
       case SparkSubmitAction.PRINT_VERSION => printVersion()
     }
   }
@@ -96,12 +106,11 @@ private[spark] class SparkSubmit extends Logging {
   /**
    * Kill an existing submission.
    */
-  private def kill(args: SparkSubmitArguments): Unit = {
+  private def kill(args: SparkSubmitArguments, sparkConf: SparkConf): Unit = {
     if (RestSubmissionClient.supportsRestClient(args.master)) {
       new RestSubmissionClient(args.master)
         .killSubmission(args.submissionToKill)
     } else {
-      val sparkConf = args.toSparkConf()
       sparkConf.set("spark.master", args.master)
       SparkSubmitUtils
         .getSubmitOperations(args.master)
@@ -112,12 +121,11 @@ private[spark] class SparkSubmit extends Logging {
   /**
    * Request the status of an existing submission.
    */
-  private def requestStatus(args: SparkSubmitArguments): Unit = {
+  private def requestStatus(args: SparkSubmitArguments, sparkConf: SparkConf): Unit = {
     if (RestSubmissionClient.supportsRestClient(args.master)) {
       new RestSubmissionClient(args.master)
         .requestSubmissionStatus(args.submissionToRequestStatusFor)
     } else {
-      val sparkConf = args.toSparkConf()
       sparkConf.set("spark.master", args.master)
       SparkSubmitUtils
         .getSubmitOperations(args.master)
@@ -148,7 +156,7 @@ private[spark] class SparkSubmit extends Logging {
    * in a doAs when --proxy-user is specified.
    */
   @tailrec
-  private def submit(args: SparkSubmitArguments, uninitLog: Boolean): Unit = {
+  private def submit(args: SparkSubmitArguments, uninitLog: Boolean, sparkConf: SparkConf): Unit = {
 
     def doRunMain(): Unit = {
       if (args.proxyUser != null) {
@@ -157,7 +165,7 @@ private[spark] class SparkSubmit extends Logging {
         // is done in client mode.
         val isKubernetesClusterModeDriver = args.master.startsWith("k8s") &&
           "client".equals(args.deployMode) &&
-          args.toSparkConf().getBoolean("spark.kubernetes.submitInDriver", false)
+          sparkConf.getBoolean("spark.kubernetes.submitInDriver", false)
         if (isKubernetesClusterModeDriver) {
           logInfo("Running driver with proxy user. Cluster manager: Kubernetes")
           SparkHadoopUtil.get.runAsSparkUser(() => runMain(args, uninitLog))
@@ -204,7 +212,7 @@ private[spark] class SparkSubmit extends Logging {
           logWarning(log"Master endpoint ${MDC(LogKeys.MASTER_URL, args.master)} " +
             log"was not a REST server. Falling back to legacy submission gateway instead.")
           args.useRest = false
-          submit(args, false)
+          submit(args, false, sparkConf)
       }
     // In all other modes, just run the main class as prepared
     } else {
@@ -234,11 +242,6 @@ private[spark] class SparkSubmit extends Logging {
     val childClasspath = new ArrayBuffer[String]()
     val sparkConf = args.toSparkConf()
     if (sparkConf.contains("spark.local.connect")) sparkConf.remove("spark.remote")
-    if (sparkConf.getBoolean(STRUCTURED_LOGGING_ENABLED.key, defaultValue = true)) {
-      Logging.enableStructuredLogging()
-    } else {
-      Logging.disableStructuredLogging()
-    }
     var childMainClass = ""
 
     // Set the cluster manager

@@ -18,7 +18,7 @@ package org.apache.hive.service;
 
 import java.io.IOException;
 
-import org.slf4j.Logger;
+import org.apache.spark.internal.Logger;
 
 public class ServiceUtils {
 
