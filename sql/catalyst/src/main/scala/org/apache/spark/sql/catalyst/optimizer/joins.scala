@@ -20,15 +20,16 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.annotation.tailrec
 import scala.util.control.NonFatal
 
-import org.apache.spark.internal.LogKeys.JOIN_CONDITION
-import org.apache.spark.internal.MDC
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{HASH_JOIN_KEYS, JOIN_CONDITION}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractFiltersAndInnerJoins}
+import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractFiltersAndInnerJoins, ExtractSingleColumnNullAwareAntiJoin}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
@@ -286,7 +287,7 @@ case object BuildRight extends BuildSide
 
 case object BuildLeft extends BuildSide
 
-trait JoinSelectionHelper {
+trait JoinSelectionHelper extends Logging {
 
   def getBroadcastBuildSide(
       join: Join,
@@ -394,9 +395,32 @@ trait JoinSelectionHelper {
     }
   }
 
-  def canPlanAsBroadcastHashJoin(join: Join, conf: SQLConf): Boolean = {
-    getBroadcastBuildSide(join, hintOnly = true, conf).isDefined ||
-      getBroadcastBuildSide(join, hintOnly = false, conf).isDefined
+  protected def hashJoinSupported
+      (leftKeys: Seq[Expression], rightKeys: Seq[Expression]): Boolean = {
+    val result = leftKeys.concat(rightKeys).forall(e => UnsafeRowUtils.isBinaryStable(e.dataType))
+    if (!result) {
+      val keysNotSupportingHashJoin = leftKeys.concat(rightKeys).filterNot(
+        e => UnsafeRowUtils.isBinaryStable(e.dataType))
+      logWarning(log"Hash based joins are not supported due to joining on keys that don't " +
+        log"support binary equality. Keys not supporting hash joins: " +
+        log"${
+          MDC(HASH_JOIN_KEYS, keysNotSupportingHashJoin.map(
+            e => e.toString + " due to DataType: " + e.dataType.typeName).mkString(", "))
+        }")
+    }
+    result
+  }
+
+  def canPlanAsBroadcastHashJoin(join: Join, conf: SQLConf): Boolean = join match {
+    case ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _, _, _, _) =>
+      val hashJoinSupport = hashJoinSupported(leftKeys, rightKeys)
+      val noShufflePlannedBefore =
+        !hashJoinSupport || getShuffleHashJoinBuildSide(join, hintOnly = true, conf).isEmpty
+      getBroadcastBuildSide(join, hintOnly = true, conf).isDefined ||
+        (noShufflePlannedBefore &&
+          getBroadcastBuildSide(join, hintOnly = false, conf).isDefined)
+    case ExtractSingleColumnNullAwareAntiJoin(_, _) => true
+    case _ => false
   }
 
   def canPruneLeft(joinType: JoinType): Boolean = joinType match {

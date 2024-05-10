@@ -20,8 +20,6 @@ package org.apache.spark.sql.execution
 import java.util.Locale
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
-import org.apache.spark.internal.LogKeys.HASH_JOIN_KEYS
-import org.apache.spark.internal.MDC
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{execution, AnalysisException, Strategy}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -33,7 +31,6 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.{InternalOutputModes, StreamingRelationV2}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.aggregate.AggUtils
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
@@ -206,20 +203,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         hintErrorHandler.joinHintNotSupported(hint.leftHint.orElse(hint.rightHint).get,
           "no equi-join keys")
       }
-    }
-
-    private def hashJoinSupported
-        (leftKeys: Seq[Expression], rightKeys: Seq[Expression]): Boolean = {
-      val result = leftKeys.concat(rightKeys).forall(e => UnsafeRowUtils.isBinaryStable(e.dataType))
-      if (!result) {
-        val keysNotSupportingHashJoin = leftKeys.concat(rightKeys).filterNot(
-          e => UnsafeRowUtils.isBinaryStable(e.dataType))
-        logWarning(log"Hash based joins are not supported due to joining on keys that don't " +
-          log"support binary equality. Keys not supporting hash joins: " +
-          log"${MDC(HASH_JOIN_KEYS, keysNotSupportingHashJoin.map(
-            e => e.toString + " due to DataType: " + e.dataType.typeName).mkString(", "))}")
-      }
-      result
     }
 
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
