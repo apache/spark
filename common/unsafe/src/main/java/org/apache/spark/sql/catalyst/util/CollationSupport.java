@@ -118,8 +118,7 @@ public final class CollationSupport {
       return l.contains(r);
     }
     public static boolean execLowercase(final UTF8String l, final UTF8String r) {
-      if (r.numChars() == 0) return true;
-      if (l.numChars() < r.numChars()) return false;
+      if (r.numBytes() == 0) return true;
       return CollationAwareUTF8String.lowercaseIndexOf(l, r, 0) >= 0;
     }
     public static boolean execICU(final UTF8String l, final UTF8String r,
@@ -159,8 +158,7 @@ public final class CollationSupport {
     }
     public static boolean execLowercase(final UTF8String l, final UTF8String r) {
       if (r.numBytes() == 0) return true;
-      if (l.numChars() < r.numChars()) return false;
-      return CollationAwareUTF8String.lowercaseMatchAt(l, r.toLowerCase(), 0, r.numChars());
+      return CollationAwareUTF8String.lowercaseMatchFrom(l, r.toLowerCase(), 0);
     }
     public static boolean execICU(final UTF8String l, final UTF8String r,
         final int collationId) {
@@ -198,9 +196,7 @@ public final class CollationSupport {
     }
     public static boolean execLowercase(final UTF8String l, final UTF8String r) {
       if (r.numBytes() == 0) return true;
-      if (l.numChars() < r.numChars()) return false;
-      return CollationAwareUTF8String.lowercaseMatchAt(l, r.toLowerCase(),
-        l.numChars() - r.numChars(), r.numChars());
+      return CollationAwareUTF8String.lowercaseMatchUntil(l, r.toLowerCase(), l.numChars());
     }
     public static boolean execICU(final UTF8String l, final UTF8String r,
         final int collationId) {

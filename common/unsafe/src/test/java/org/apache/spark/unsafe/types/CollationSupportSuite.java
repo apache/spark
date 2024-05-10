@@ -103,6 +103,7 @@ public class CollationSupportSuite {
     assertContains("äbćδe", "ÄBcΔÉ", "UNICODE_CI", false);
     // Case-variable character length
     assertContains("i̇", "i", "UNICODE_CI", false);
+    assertContains("i̇", "̇", "UNICODE_CI", false);
     assertContains("i̇", "İ", "UNICODE_CI", true);
     assertContains("İ", "i", "UNICODE_CI", false);
     assertContains("adi̇os", "io", "UNICODE_CI", false);
@@ -113,16 +114,17 @@ public class CollationSupportSuite {
     assertContains("adİos", "Io", "UNICODE_CI", false);
     assertContains("adİos", "i̇o", "UNICODE_CI", true);
     assertContains("adİos", "İo", "UNICODE_CI", true);
-    assertContains("i̇", "i", "UTF8_BINARY_LCASE", true); // note: different from UNICODE_CI
-    assertContains("i̇", "İ", "UTF8_BINARY_LCASE", false); // note: different from UNICODE_CI
+    assertContains("i̇", "i", "UTF8_BINARY_LCASE", true); // different from UNICODE_CI
+    assertContains("i̇", "̇", "UTF8_BINARY_LCASE", true); // different from UNICODE_CI
+    assertContains("i̇", "İ", "UTF8_BINARY_LCASE", true);
     assertContains("İ", "i", "UTF8_BINARY_LCASE", false);
     assertContains("adi̇os", "io", "UTF8_BINARY_LCASE", false);
     assertContains("adi̇os", "Io", "UTF8_BINARY_LCASE", false);
     assertContains("adi̇os", "i̇o", "UTF8_BINARY_LCASE", true);
-    assertContains("adi̇os", "İo", "UTF8_BINARY_LCASE", false); // note: different from UNICODE_CI
+    assertContains("adi̇os", "İo", "UTF8_BINARY_LCASE", true);
     assertContains("adİos", "io", "UTF8_BINARY_LCASE", false);
     assertContains("adİos", "Io", "UTF8_BINARY_LCASE", false);
-    assertContains("adİos", "i̇o", "UTF8_BINARY_LCASE", false); // note: different from UNICODE_CI
+    assertContains("adİos", "i̇o", "UTF8_BINARY_LCASE", true);
     assertContains("adİos", "İo", "UTF8_BINARY_LCASE", true);
   }
 
@@ -210,6 +212,10 @@ public class CollationSupportSuite {
     assertStartsWith("i̇", "i", "UNICODE_CI", false);
     assertStartsWith("i̇", "İ", "UNICODE_CI", true);
     assertStartsWith("İ", "i", "UNICODE_CI", false);
+    assertStartsWith("İİİ", "i̇i̇", "UNICODE_CI", true);
+    assertStartsWith("İİİ", "i̇i", "UNICODE_CI", false);
+    assertStartsWith("İi̇İ", "i̇İ", "UNICODE_CI", true);
+    assertStartsWith("i̇İi̇i̇", "İi̇İi", "UNICODE_CI", false);
     assertStartsWith("i̇onic", "io", "UNICODE_CI", false);
     assertStartsWith("i̇onic", "Io", "UNICODE_CI", false);
     assertStartsWith("i̇onic", "i̇o", "UNICODE_CI", true);
@@ -218,16 +224,20 @@ public class CollationSupportSuite {
     assertStartsWith("İonic", "Io", "UNICODE_CI", false);
     assertStartsWith("İonic", "i̇o", "UNICODE_CI", true);
     assertStartsWith("İonic", "İo", "UNICODE_CI", true);
-    assertStartsWith("i̇", "i", "UTF8_BINARY_LCASE", true); // note: different from UNICODE_CI
-    assertStartsWith("i̇", "İ", "UTF8_BINARY_LCASE", false); // note: different from UNICODE_CI
+    assertStartsWith("i̇", "i", "UTF8_BINARY_LCASE", true); // different from UNICODE_CI
+    assertStartsWith("i̇", "İ", "UTF8_BINARY_LCASE", true);
     assertStartsWith("İ", "i", "UTF8_BINARY_LCASE", false);
+    assertStartsWith("İİİ", "i̇i̇", "UTF8_BINARY_LCASE", true);
+    assertStartsWith("İİİ", "i̇i", "UTF8_BINARY_LCASE", false);
+    assertStartsWith("İi̇İ", "i̇İ", "UTF8_BINARY_LCASE", true);
+    assertStartsWith("i̇İi̇i̇", "İi̇İi", "UTF8_BINARY_LCASE", true); // different from UNICODE_CI
     assertStartsWith("i̇onic", "io", "UTF8_BINARY_LCASE", false);
     assertStartsWith("i̇onic", "Io", "UTF8_BINARY_LCASE", false);
     assertStartsWith("i̇onic", "i̇o", "UTF8_BINARY_LCASE", true);
-    assertStartsWith("i̇onic", "İo", "UTF8_BINARY_LCASE", false); // note: different from UNICODE_CI
+    assertStartsWith("i̇onic", "İo", "UTF8_BINARY_LCASE", true);
     assertStartsWith("İonic", "io", "UTF8_BINARY_LCASE", false);
     assertStartsWith("İonic", "Io", "UTF8_BINARY_LCASE", false);
-    assertStartsWith("İonic", "i̇o", "UTF8_BINARY_LCASE", false); // note: different from UNICODE_CI
+    assertStartsWith("İonic", "i̇o", "UTF8_BINARY_LCASE", true);
     assertStartsWith("İonic", "İo", "UTF8_BINARY_LCASE", true);
   }
 
@@ -311,9 +321,13 @@ public class CollationSupportSuite {
     assertEndsWith("The 2 Kelvin", "2 Kelvin", "UTF8_BINARY_LCASE", true);
     assertEndsWith("The KKelvin", "KKelvin,", "UTF8_BINARY_LCASE", false);
     // Case-variable character length
-    assertEndsWith("i̇", "i", "UNICODE_CI", false);
+    assertEndsWith("i̇", "̇", "UNICODE_CI", false);
     assertEndsWith("i̇", "İ", "UNICODE_CI", true);
     assertEndsWith("İ", "i", "UNICODE_CI", false);
+    assertEndsWith("İİİ", "i̇i̇", "UNICODE_CI", true);
+    assertEndsWith("İİİ", "ii̇", "UNICODE_CI", false);
+    assertEndsWith("İi̇İ", "İi̇", "UNICODE_CI", true);
+    assertEndsWith("i̇İi̇i̇", "̇İi̇İ", "UNICODE_CI", false);
     assertEndsWith("the i̇o", "io", "UNICODE_CI", false);
     assertEndsWith("the i̇o", "Io", "UNICODE_CI", false);
     assertEndsWith("the i̇o", "i̇o", "UNICODE_CI", true);
@@ -322,16 +336,20 @@ public class CollationSupportSuite {
     assertEndsWith("the İo", "Io", "UNICODE_CI", false);
     assertEndsWith("the İo", "i̇o", "UNICODE_CI", true);
     assertEndsWith("the İo", "İo", "UNICODE_CI", true);
-    assertEndsWith("i̇", "i", "UTF8_BINARY_LCASE", false);
-    assertEndsWith("i̇", "İ", "UTF8_BINARY_LCASE", false); // note: different from UNICODE_CI
+    assertEndsWith("i̇", "̇", "UTF8_BINARY_LCASE", true); // different from UNICODE_CI
+    assertEndsWith("i̇", "İ", "UTF8_BINARY_LCASE", true);
     assertEndsWith("İ", "i", "UTF8_BINARY_LCASE", false);
+    assertEndsWith("İİİ", "i̇i̇", "UTF8_BINARY_LCASE", true);
+    assertEndsWith("İİİ", "ii̇", "UTF8_BINARY_LCASE", false);
+    assertEndsWith("İi̇İ", "İi̇", "UTF8_BINARY_LCASE", true);
+    assertEndsWith("i̇İi̇i̇", "̇İi̇İ", "UTF8_BINARY_LCASE", true); // different from UNICODE_CI
     assertEndsWith("the i̇o", "io", "UTF8_BINARY_LCASE", false);
     assertEndsWith("the i̇o", "Io", "UTF8_BINARY_LCASE", false);
     assertEndsWith("the i̇o", "i̇o", "UTF8_BINARY_LCASE", true);
-    assertEndsWith("the i̇o", "İo", "UTF8_BINARY_LCASE", false); // note: different from UNICODE_CI
+    assertEndsWith("the i̇o", "İo", "UTF8_BINARY_LCASE", true);
     assertEndsWith("the İo", "io", "UTF8_BINARY_LCASE", false);
     assertEndsWith("the İo", "Io", "UTF8_BINARY_LCASE", false);
-    assertEndsWith("the İo", "i̇o", "UTF8_BINARY_LCASE", false); // note: different from UNICODE_CI
+    assertEndsWith("the İo", "i̇o", "UTF8_BINARY_LCASE", true);
     assertEndsWith("the İo", "İo", "UTF8_BINARY_LCASE", true);
   }
 
@@ -750,21 +768,23 @@ public class CollationSupportSuite {
     assertLocate("大千", "大千世界大千世界", 1, "UNICODE_CI", 1);
     // Case-variable character length
     assertLocate("̇", "i̇", 1, "UTF8_BINARY", 2);
-    assertLocate("̇", "İ", 1, "UTF8_BINARY_LCASE", 0); // note: different from UTF8_BINARY
+    assertLocate("̇", "İ", 1, "UTF8_BINARY_LCASE", 0); // different from UTF8_BINARY
     assertLocate("i", "i̇", 1, "UNICODE_CI", 0);
+    assertLocate("̇", "i̇", 1, "UNICODE_CI", 0);
     assertLocate("i̇", "i", 1, "UNICODE_CI", 0);
     assertLocate("İ", "i̇", 1, "UNICODE_CI", 1);
     assertLocate("İ", "i", 1, "UNICODE_CI", 0);
-    assertLocate("i", "i̇", 1, "UTF8_BINARY_LCASE", 1); // note: different from UNICODE_CI
+    assertLocate("i", "i̇", 1, "UTF8_BINARY_LCASE", 1); // different from UNICODE_CI
+    assertLocate("̇", "i̇", 1, "UTF8_BINARY_LCASE", 2); // different from UNICODE_CI
     assertLocate("i̇", "i", 1, "UTF8_BINARY_LCASE", 0);
-    assertLocate("İ", "i̇", 1, "UTF8_BINARY_LCASE", 0); // note: different from UNICODE_CI
+    assertLocate("İ", "i̇", 1, "UTF8_BINARY_LCASE", 1);
     assertLocate("İ", "i", 1, "UTF8_BINARY_LCASE", 0);
     assertLocate("i̇o", "İo世界大千世界", 1, "UNICODE_CI", 1);
     assertLocate("i̇o", "大千İo世界大千世界", 1, "UNICODE_CI", 3);
     assertLocate("i̇o", "世界İo大千世界大千İo", 4, "UNICODE_CI", 11);
     assertLocate("İo", "i̇o世界大千世界", 1, "UNICODE_CI", 1);
     assertLocate("İo", "大千i̇o世界大千世界", 1, "UNICODE_CI", 3);
-    assertLocate("İo", "世界i̇o大千世界大千i̇o", 4, "UNICODE_CI", 12); // 12 instead of 11
+    assertLocate("İo", "世界i̇o大千世界大千i̇o", 4, "UNICODE_CI", 12);
   }
 
   private void assertSubstringIndex(String string, String delimiter, Integer count,

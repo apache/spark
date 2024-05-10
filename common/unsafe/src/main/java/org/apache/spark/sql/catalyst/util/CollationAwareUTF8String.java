@@ -35,12 +35,24 @@ import java.util.Map;
  */
 public class CollationAwareUTF8String {
 
-  public static boolean lowercaseMatchAt(final UTF8String l, final UTF8String r,
-      int pos, int len) {
-    if (len + pos > l.numChars() || pos < 0) {
-      return false;
+  public static boolean lowercaseMatchFrom(final UTF8String l, final UTF8String r, int pos) {
+    if (pos < 0) return false;
+    for (int len = 0; len <= l.numChars() - pos; len++) {
+      if (l.substring(pos, pos + len).toLowerCase().equals(r)) {
+        return true;
+      }
     }
-    return l.substring(pos, pos + len).toLowerCase().equals(r);
+    return false;
+  }
+
+  public static boolean lowercaseMatchUntil(final UTF8String l, final UTF8String r, int pos) {
+    if (pos > l.numChars()) return false;
+    for (int len = 1; len <= pos; len++) {
+      if (l.substring(pos - len, pos).toLowerCase().equals(r)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   public static UTF8String replace(final UTF8String src, final UTF8String search,
@@ -196,13 +208,10 @@ public class CollationAwareUTF8String {
       final int start) {
     if (pattern.numChars() == 0) return 0;
     int lenHaystack = target.numChars(), lenNeedle = pattern.numChars();
-    final UTF8String firstLower = pattern.substring(0, 1).toLowerCase();
     final UTF8String needle = pattern.toLowerCase();
     for (int i = start; i <= (lenHaystack - lenNeedle); i++) {
-      if (target.substring(i, i + 1).toLowerCase().equals(firstLower)) {
-        if (CollationAwareUTF8String.lowercaseMatchAt(target, needle, i, lenNeedle)) {
-          return i;
-        }
+      if (CollationAwareUTF8String.lowercaseMatchFrom(target, needle, i)) {
+        return i;
       }
     }
     return -1;
