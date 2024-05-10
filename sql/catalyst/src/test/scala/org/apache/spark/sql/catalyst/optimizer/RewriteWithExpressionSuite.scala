@@ -353,7 +353,7 @@ class RewriteWithExpressionSuite extends PlanTest {
     )
   }
 
-  test("aggregate functions in child of WITH expression is not supported") {
+  test("aggregate functions in child of WITH expression with ref is not supported") {
     val a = testRelation.output.head
     intercept[java.lang.AssertionError] {
       val expr = With(a - 1) { case Seq(ref) =>
@@ -365,5 +365,30 @@ class RewriteWithExpressionSuite extends PlanTest {
       )
       Optimizer.execute(plan)
     }
+  }
+
+  test("WITH expression nested in aggregate function") {
+    val a = testRelation.output.head
+    val expr = With(a + 1) { case Seq(ref) =>
+      ref * ref
+    }
+    val nestedExpr = With(a - 1) { case Seq(ref) =>
+      ref * max(expr) + ref
+    }
+    val plan = testRelation.groupBy(a)(nestedExpr.as("col")).analyze
+    val commonExpr1Id = expr.defs.head.id.id
+    val commonExpr1Name = s"_common_expr_$commonExpr1Id"
+    val commonExpr2Id = nestedExpr.defs.head.id.id
+    val commonExpr2Name = s"_common_expr_$commonExpr2Id"
+    val aggExprName = "_aggregateexpression"
+    comparePlans(
+      Optimizer.execute(plan),
+      testRelation
+        .select(testRelation.output :+ (a + 1).as(commonExpr1Name): _*)
+        .groupBy(a)(a, max($"$commonExpr1Name" * $"$commonExpr1Name").as(aggExprName))
+        .select($"a", $"$aggExprName", (a - 1).as(commonExpr2Name))
+        .select(($"$commonExpr2Name" * $"$aggExprName" + $"$commonExpr2Name").as("col"))
+        .analyze
+    )
   }
 }

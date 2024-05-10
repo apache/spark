@@ -1339,7 +1339,7 @@
     ],
     "sqlState" : "54001"
   },
-  "FIELDS_ALREADY_EXISTS" : {
+  "FIELD_ALREADY_EXISTS" : {
     "message" : [
       "Cannot <op> column, because <fieldNames> already exists in <struct>."
     ],
