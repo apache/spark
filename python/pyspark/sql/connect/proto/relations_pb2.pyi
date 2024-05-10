@@ -1865,7 +1865,10 @@ class Sample(google.protobuf.message.Message):
     with_replacement: builtins.bool
     """(Optional) Whether to sample with replacement."""
     seed: builtins.int
-    """(Optional) The random seed."""
+    """(Required) The random seed.
+    This filed is required to avoid generate mutable dataframes (see SPARK-48184 for details),
+    however, still keep it 'optional' here for backward compatibility.
+    """
     deterministic_order: builtins.bool
     """(Required) Explicitly sort the underlying plan to make the ordering deterministic or cache it.
     This flag is true when invoking `dataframe.randomSplit` to randomly splits DataFrame with the
@@ -2545,7 +2548,10 @@ class StatSampleBy(google.protobuf.message.Message):
         If a stratum is not specified, we treat its fraction as zero.
         """
     seed: builtins.int
-    """(Optional) The random seed."""
+    """(Required) The random seed.
+    This filed is required to avoid generate mutable dataframes (see SPARK-48184 for details),
+    however, still keep it 'optional' here for backward compatibility.
+    """
     def __init__(
         self,
         *,

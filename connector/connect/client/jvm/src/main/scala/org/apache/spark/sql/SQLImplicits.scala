@@ -149,6 +149,7 @@ abstract class SQLImplicits private[sql] (session: SparkSession) extends LowPrio
    * @deprecated
    *   use [[newSequenceEncoder]]
    */
+  @deprecated("Use newSequenceEncoder instead", "2.2.0")
   val newIntSeqEncoder: Encoder[Seq[Int]] = newSeqEncoder(PrimitiveIntEncoder)
 
   /**
@@ -156,6 +157,7 @@ abstract class SQLImplicits private[sql] (session: SparkSession) extends LowPrio
    * @deprecated
    *   use [[newSequenceEncoder]]
    */
+  @deprecated("Use newSequenceEncoder instead", "2.2.0")
   val newLongSeqEncoder: Encoder[Seq[Long]] = newSeqEncoder(PrimitiveLongEncoder)
 
   /**
@@ -163,6 +165,7 @@ abstract class SQLImplicits private[sql] (session: SparkSession) extends LowPrio
    * @deprecated
    *   use [[newSequenceEncoder]]
    */
+  @deprecated("Use newSequenceEncoder instead", "2.2.0")
   val newDoubleSeqEncoder: Encoder[Seq[Double]] = newSeqEncoder(PrimitiveDoubleEncoder)
 
   /**
@@ -170,6 +173,7 @@ abstract class SQLImplicits private[sql] (session: SparkSession) extends LowPrio
    * @deprecated
    *   use [[newSequenceEncoder]]
    */
+  @deprecated("Use newSequenceEncoder instead", "2.2.0")
   val newFloatSeqEncoder: Encoder[Seq[Float]] = newSeqEncoder(PrimitiveFloatEncoder)
 
   /**
@@ -177,6 +181,7 @@ abstract class SQLImplicits private[sql] (session: SparkSession) extends LowPrio
    * @deprecated
    *   use [[newSequenceEncoder]]
    */
+  @deprecated("Use newSequenceEncoder instead", "2.2.0")
   val newByteSeqEncoder: Encoder[Seq[Byte]] = newSeqEncoder(PrimitiveByteEncoder)
 
   /**
@@ -184,6 +189,7 @@ abstract class SQLImplicits private[sql] (session: SparkSession) extends LowPrio
    * @deprecated
    *   use [[newSequenceEncoder]]
    */
+  @deprecated("Use newSequenceEncoder instead", "2.2.0")
   val newShortSeqEncoder: Encoder[Seq[Short]] = newSeqEncoder(PrimitiveShortEncoder)
 
   /**
@@ -191,6 +197,7 @@ abstract class SQLImplicits private[sql] (session: SparkSession) extends LowPrio
    * @deprecated
    *   use [[newSequenceEncoder]]
    */
+  @deprecated("Use newSequenceEncoder instead", "2.2.0")
   val newBooleanSeqEncoder: Encoder[Seq[Boolean]] = newSeqEncoder(PrimitiveBooleanEncoder)
 
   /**
@@ -198,6 +205,7 @@ abstract class SQLImplicits private[sql] (session: SparkSession) extends LowPrio
    * @deprecated
    *   use [[newSequenceEncoder]]
    */
+  @deprecated("Use newSequenceEncoder instead", "2.2.0")
   val newStringSeqEncoder: Encoder[Seq[String]] = newSeqEncoder(StringEncoder)
 
   /**
@@ -205,6 +213,7 @@ abstract class SQLImplicits private[sql] (session: SparkSession) extends LowPrio
    * @deprecated
    *   use [[newSequenceEncoder]]
    */
+  @deprecated("Use newSequenceEncoder instead", "2.2.0")
   def newProductSeqEncoder[A <: Product: TypeTag]: Encoder[Seq[A]] =
     newSeqEncoder(ScalaReflection.encoderFor[A])
 
