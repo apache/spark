@@ -39,6 +39,20 @@ is installed and available on all cluster nodes.
 You can install it using pip or conda from the conda-forge channel. See PyArrow
 `installation <https://arrow.apache.org/docs/python/install.html>`_ for details.
 
+Conversion to Arrow Table
+-------------------------
+
+You can call :meth:`DataFrame.toArrow` to convert a Spark DataFrame to a PyArrow Table.
+
+.. literalinclude:: ../../../../../examples/src/main/python/sql/arrow.py
+    :language: python
+    :lines: 37-49
+    :dedent: 4
+
+Note that :meth:`DataFrame.toArrow` results in the collection of all records in the DataFrame to
+the driver program and should be done on a small subset of the data. Not all Spark data types are
+currently supported and an error can be raised if a column has an unsupported type.
+
 Enabling for Conversion to/from Pandas
 --------------------------------------
 
@@ -53,7 +67,7 @@ This can be controlled by ``spark.sql.execution.arrow.pyspark.fallback.enabled``
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/arrow.py
     :language: python
-    :lines: 37-52
+    :lines: 53-68
     :dedent: 4
 
 Using the above optimizations with Arrow will produce the same results as when Arrow is not
@@ -90,7 +104,7 @@ specify the type hints of ``pandas.Series`` and ``pandas.DataFrame`` as below:
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/arrow.py
     :language: python
-    :lines: 56-80
+    :lines: 72-96
     :dedent: 4
 
 In the following sections, it describes the combinations of the supported type hints. For simplicity,
@@ -113,7 +127,7 @@ The following example shows how to create this Pandas UDF that computes the prod
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/arrow.py
     :language: python
-    :lines: 84-114
+    :lines: 100-130
     :dedent: 4
 
 For detailed usage, please see :func:`pandas_udf`.
@@ -152,7 +166,7 @@ The following example shows how to create this Pandas UDF:
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/arrow.py
     :language: python
-    :lines: 118-140
+    :lines: 134-156
     :dedent: 4
 
 For detailed usage, please see :func:`pandas_udf`.
@@ -174,7 +188,7 @@ The following example shows how to create this Pandas UDF:
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/arrow.py
     :language: python
-    :lines: 144-167
+    :lines: 160-183
     :dedent: 4
 
 For detailed usage, please see :func:`pandas_udf`.
@@ -205,7 +219,7 @@ and window operations:
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/arrow.py
     :language: python
-    :lines: 171-212
+    :lines: 187-228
     :dedent: 4
 
 .. currentmodule:: pyspark.sql.functions
@@ -270,7 +284,7 @@ in the group.
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/arrow.py
     :language: python
-    :lines: 216-234
+    :lines: 232-250
     :dedent: 4
 
 For detailed usage, please see  please see :meth:`GroupedData.applyInPandas`
@@ -288,7 +302,7 @@ The following example shows how to use :meth:`DataFrame.mapInPandas`:
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/arrow.py
     :language: python
-    :lines: 238-249
+    :lines: 254-265
     :dedent: 4
 
 For detailed usage, please see :meth:`DataFrame.mapInPandas`.
@@ -327,7 +341,7 @@ The following example shows how to use ``DataFrame.groupby().cogroup().applyInPa
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/arrow.py
     :language: python
-    :lines: 253-275
+    :lines: 269-291
     :dedent: 4
 
 
@@ -349,7 +363,7 @@ Here's an example that demonstrates the usage of both a default, pickled Python 
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/arrow.py
     :language: python
-    :lines: 279-297
+    :lines: 295-313
     :dedent: 4
 
 Compared to the default, pickled Python UDFs, Arrow Python UDFs provide a more coherent type coercion mechanism. UDF
@@ -421,9 +435,12 @@ be verified by the user.
 Setting Arrow ``self_destruct`` for memory savings
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Since Spark 3.2, the Spark configuration ``spark.sql.execution.arrow.pyspark.selfDestruct.enabled`` can be used to enable PyArrow's ``self_destruct`` feature, which can save memory when creating a Pandas DataFrame via ``toPandas`` by freeing Arrow-allocated memory while building the Pandas DataFrame.
-This option is experimental, and some operations may fail on the resulting Pandas DataFrame due to immutable backing arrays.
-Typically, you would see the error ``ValueError: buffer source array is read-only``.
-Newer versions of Pandas may fix these errors by improving support for such cases.
-You can work around this error by copying the column(s) beforehand.
-Additionally, this conversion may be slower because it is single-threaded.
+Since Spark 3.2, the Spark configuration ``spark.sql.execution.arrow.pyspark.selfDestruct.enabled``
+can be used to enable PyArrow's ``self_destruct`` feature, which can save memory when creating a
+Pandas DataFrame via ``toPandas`` by freeing Arrow-allocated memory while building the Pandas
+DataFrame. This option can also save memory when creating a PyArrow Table via ``toArrow``.
+This option is experimental. When used with ``toPandas``, some operations may fail on the resulting
+Pandas DataFrame due to immutable backing arrays. Typically, you would see the error
+``ValueError: buffer source array is read-only``. Newer versions of Pandas may fix these errors by
+improving support for such cases. You can work around this error by copying the column(s)
+beforehand. Additionally, this conversion may be slower because it is single-threaded.

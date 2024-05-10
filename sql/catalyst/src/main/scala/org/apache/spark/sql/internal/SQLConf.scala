@@ -4222,6 +4222,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_DB2_TIMESTAMP_MAPPING_ENABLED =
+    buildConf("spark.sql.legacy.db2.numericMapping.enabled")
+      .internal()
+      .doc("When true, SMALLINT maps to IntegerType in DB2; otherwise, ShortType" )
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val CSV_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.csv.filterPushdown.enabled")
     .doc("When true, enable filter pushdown to CSV datasource.")
     .version("3.0.0")
@@ -4246,6 +4254,15 @@ object SQLConf {
       .doc("When set to true, enables partial results for structs, maps, and arrays in JSON " +
         "when one or more fields do not match the schema")
       .version("3.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val JSON_EXACT_STRING_PARSING =
+    buildConf("spark.sql.json.enableExactStringParsing")
+      .internal()
+      .doc("When set to true, string columns extracted from JSON objects will be extracted " +
+        "exactly as they appear in the input string, with no changes")
+      .version("4.0.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -5338,6 +5355,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyOracleTimestampMappingEnabled: Boolean =
     getConf(LEGACY_ORACLE_TIMESTAMP_MAPPING_ENABLED)
+
+  def legacyDB2numericMappingEnabled: Boolean =
+    getConf(LEGACY_DB2_TIMESTAMP_MAPPING_ENABLED)
 
   override def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = {
     LegacyBehaviorPolicy.withName(getConf(SQLConf.LEGACY_TIME_PARSER_POLICY))

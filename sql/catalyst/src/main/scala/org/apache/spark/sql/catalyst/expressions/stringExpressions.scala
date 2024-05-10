@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UPPER_OR_LO
 import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, CollationSupport, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.{AbstractArrayType, StringTypeAnyCollation}
+import org.apache.spark.sql.internal.types.{AbstractArrayType, StringTypeAnyCollation, StringTypeBinaryLcase}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.array.ByteArrayMethods
@@ -1020,8 +1020,10 @@ trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
   protected def direction: String
 
   override def children: Seq[Expression] = srcStr +: trimStr.toSeq
-  override def dataType: DataType = StringType
-  override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(StringType)
+  override def dataType: DataType = srcStr.dataType
+  override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(StringTypeBinaryLcase)
+
+  final lazy val collationId: Int = srcStr.dataType.asInstanceOf[StringType].collationId
 
   override def nullable: Boolean = children.exists(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
@@ -1040,13 +1042,19 @@ trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
     }
   }
 
-  protected val trimMethod: String
-
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val evals = children.map(_.genCode(ctx))
-    val srcString = evals(0)
+    val srcString = evals.head
 
     if (evals.length == 1) {
+      val stringTrimCode: String = this match {
+        case _: StringTrim =>
+          CollationSupport.StringTrim.genCode(srcString.value, collationId)
+        case _: StringTrimLeft =>
+          CollationSupport.StringTrimLeft.genCode(srcString.value, collationId)
+        case _: StringTrimRight =>
+          CollationSupport.StringTrimRight.genCode(srcString.value, collationId)
+      }
       ev.copy(code = code"""
          |${srcString.code}
          |boolean ${ev.isNull} = false;
@@ -1054,10 +1062,18 @@ trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
          |if (${srcString.isNull}) {
          |  ${ev.isNull} = true;
          |} else {
-         |  ${ev.value} = ${srcString.value}.$trimMethod();
+         |  ${ev.value} = $stringTrimCode;
          |}""".stripMargin)
     } else {
       val trimString = evals(1)
+      val stringTrimCode: String = this match {
+        case _: StringTrim =>
+          CollationSupport.StringTrim.genCode(srcString.value, trimString.value, collationId)
+        case _: StringTrimLeft =>
+          CollationSupport.StringTrimLeft.genCode(srcString.value, trimString.value, collationId)
+        case _: StringTrimRight =>
+          CollationSupport.StringTrimRight.genCode(srcString.value, trimString.value, collationId)
+      }
       ev.copy(code = code"""
          |${srcString.code}
          |boolean ${ev.isNull} = false;
@@ -1069,7 +1085,7 @@ trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
          |  if (${trimString.isNull}) {
          |    ${ev.isNull} = true;
          |  } else {
-         |    ${ev.value} = ${srcString.value}.$trimMethod(${trimString.value});
+         |    ${ev.value} = $stringTrimCode;
          |  }
          |}""".stripMargin)
     }
@@ -1162,12 +1178,11 @@ case class StringTrim(srcStr: Expression, trimStr: Option[Expression] = None)
 
   override protected def direction: String = "BOTH"
 
-  override def doEval(srcString: UTF8String): UTF8String = srcString.trim()
+  override def doEval(srcString: UTF8String): UTF8String =
+    CollationSupport.StringTrim.exec(srcString, collationId)
 
   override def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String =
-    srcString.trim(trimString)
-
-  override val trimMethod: String = "trim"
+    CollationSupport.StringTrim.exec(srcString, trimString, collationId)
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     copy(
@@ -1270,12 +1285,11 @@ case class StringTrimLeft(srcStr: Expression, trimStr: Option[Expression] = None
 
   override protected def direction: String = "LEADING"
 
-  override def doEval(srcString: UTF8String): UTF8String = srcString.trimLeft()
+  override def doEval(srcString: UTF8String): UTF8String =
+    CollationSupport.StringTrimLeft.exec(srcString, collationId)
 
   override def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String =
-    srcString.trimLeft(trimString)
-
-  override val trimMethod: String = "trimLeft"
+    CollationSupport.StringTrimLeft.exec(srcString, trimString, collationId)
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): StringTrimLeft =
@@ -1331,12 +1345,11 @@ case class StringTrimRight(srcStr: Expression, trimStr: Option[Expression] = Non
 
   override protected def direction: String = "TRAILING"
 
-  override def doEval(srcString: UTF8String): UTF8String = srcString.trimRight()
+  override def doEval(srcString: UTF8String): UTF8String =
+    CollationSupport.StringTrimRight.exec(srcString, collationId)
 
   override def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String =
-    srcString.trimRight(trimString)
-
-  override val trimMethod: String = "trimRight"
+    CollationSupport.StringTrimRight.exec(srcString, trimString, collationId)
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): StringTrimRight =
