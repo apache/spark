@@ -16,11 +16,13 @@
  */
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.expressions.{CreateArray, CreateNamedStruct, JsonToStructs, Literal, StructsToJson}
+import org.apache.spark.sql.catalyst.expressions.{Cast, CreateArray, CreateNamedStruct, JsonToStructs, Literal, StructsToJson}
 import org.apache.spark.sql.catalyst.expressions.variant.ParseJson
 import org.apache.spark.sql.execution.WholeStageCodegenExec
+import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.VariantType
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.vectorized.ColumnarArray
 import org.apache.spark.types.variant.VariantBuilder
 import org.apache.spark.unsafe.types.VariantVal
 
@@ -248,6 +250,33 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
         Seq.fill(3)(Row("STRUCT<a: ARRAY<VARIANT>>")))
       checkAnswer(sql("select schema_of_variant_agg(parse_json(json)) from v group by id % 4"),
         Seq.fill(3)(Row("STRUCT<a: ARRAY<STRING>>")) ++ Seq(Row("STRUCT<a: ARRAY<BIGINT>>")))
+    }
+  }
+
+  test("cast to variant with ColumnarArray input") {
+    val dataVector = new OnHeapColumnVector(4, LongType)
+    dataVector.appendNull()
+    dataVector.appendLong(123)
+    dataVector.appendNull()
+    dataVector.appendLong(456)
+    val array = new ColumnarArray(dataVector, 0, 4)
+    val variant = Cast(Literal(array, ArrayType(LongType)), VariantType).eval()
+    assert(variant.toString == "[null,123,null,456]")
+    dataVector.close()
+  }
+
+  test("cast to variant with scan input") {
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      val input = Seq(Row(Array(1, null), Map("k1" -> null, "k2" -> false), Row(null, "str")))
+      val schema = StructType.fromDDL(
+        "a array<int>, m map<string, boolean>, s struct<f1 string, f2 string>")
+      spark.createDataFrame(spark.sparkContext.parallelize(input), schema).write.parquet(path)
+      val df = spark.read.parquet(path).selectExpr(
+        s"cast(cast(a as variant) as ${schema(0).dataType.sql})",
+        s"cast(cast(m as variant) as ${schema(1).dataType.sql})",
+        s"cast(cast(s as variant) as ${schema(2).dataType.sql})")
+      checkAnswer(df, input)
     }
   }
 }

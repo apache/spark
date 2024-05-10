@@ -467,7 +467,9 @@ message Sample {
   // (Optional) Whether to sample with replacement.
   optional bool with_replacement = 4;
 
-  // (Optional) The random seed.
+  // (Required) The random seed.
+  // This filed is required to avoid generate mutable dataframes (see SPARK-48184 for details),
+  // however, still keep it 'optional' here for backward compatibility.
   optional int64 seed = 5;
 
   // (Required) Explicitly sort the underlying plan to make the ordering deterministic or cache it.
@@ -687,7 +689,9 @@ message StatSampleBy {
   // If a stratum is not specified, we treat its fraction as zero.
   repeated Fraction fractions = 3;
 
-  // (Optional) The random seed.
+  // (Required) The random seed.
+  // This filed is required to avoid generate mutable dataframes (see SPARK-48184 for details),
+  // however, still keep it 'optional' here for backward compatibility.
   optional int64 seed = 5;
 
   message Fraction {
