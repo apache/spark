@@ -793,9 +793,9 @@ private[spark] class ApplicationMaster(
 
     override def onStart(): Unit = {
       driver.send(RegisterClusterManager(self))
-      // if deployment mode for yarn Application is client
+      // if deployment mode for yarn Application is managed client
       // then send the AM Log Info to spark driver
-      if (!isClusterMode) {
+      if (!isClusterMode && !sparkConf.get(YARN_UNMANAGED_AM)) {
         val hostPort = YarnContainerInfoHelper.getNodeManagerHttpAddress(None)
         val yarnAMID = "yarn-am"
         val info = new MiscellaneousProcessDetails(hostPort,
