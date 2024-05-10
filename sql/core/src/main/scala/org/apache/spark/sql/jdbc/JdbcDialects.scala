@@ -221,14 +221,9 @@ abstract class JdbcDialect extends Serializable with Logging {
    * in [[JdbcUtils]] will be hit and calendar won't be used.
    * @return
    */
-  @Since("3.5.0")
-  def getDatabaseCalendar: Option[Calendar] = {
-    if (SQLConf.get.useLocalSessionCalendar) {
-      Some(Calendar.getInstance(TimeZone.getTimeZone(SQLConf.get.sessionLocalTimeZone)))
-    } else {
-      None
-    }
-  }
+  @Since("4.0.0")
+  def getDatabaseCalendar: Option[Calendar] =
+    Some(Calendar.getInstance(TimeZone.getTimeZone(SQLConf.get.sessionLocalTimeZone)))
 
   /**
    * Returns a factory for creating connections to the given JDBC URL.

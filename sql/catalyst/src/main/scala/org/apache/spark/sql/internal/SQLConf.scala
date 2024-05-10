@@ -4050,7 +4050,7 @@ object SQLConf {
       "to the spark local session time zone. Since these two can differ, if this " +
       "configuration property is set to true, rs.getTimestamp and rs.setTimestamp " +
       "API calls will use calendar with spark local session time zone as the second argument")
-    .version("3.5.0")
+    .version("4.0.0")
     .booleanConf
     .createWithDefault(true)
 
