@@ -911,6 +911,128 @@ class CollationSQLExpressionsSuite
     assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
   }
 
+  test("Support XmlToStructs xml expression with collation") {
+    case class XmlToStructsTestCase(
+     input: String,
+     collationName: String,
+     schema: String,
+     options: String,
+     result: Row,
+     structFields: Seq[StructField]
+    )
+
+    val testCases = Seq(
+      XmlToStructsTestCase("<p><a>1</a></p>", "UTF8_BINARY", "'a INT'", "",
+        Row(1), Seq(
+          StructField("a", IntegerType, nullable = true)
+        )),
+      XmlToStructsTestCase("<p><A>true</A><B>0.8</B></p>", "UTF8_BINARY_LCASE",
+        "'A BOOLEAN, B DOUBLE'", "", Row(true, 0.8), Seq(
+          StructField("A", BooleanType, nullable = true),
+          StructField("B", DoubleType, nullable = true)
+        )),
+      XmlToStructsTestCase("<p><s>Spark</s></p>", "UNICODE", "'s STRING'", "",
+        Row("Spark"), Seq(
+          StructField("s", StringType("UNICODE"), nullable = true)
+        )),
+      XmlToStructsTestCase("<p><time>26/08/2015</time></p>", "UNICODE_CI", "'time Timestamp'",
+        ", map('timestampFormat', 'dd/MM/yyyy')", Row(
+          new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.S").parse("2015-08-26 00:00:00.0")
+        ), Seq(
+          StructField("time", TimestampType, nullable = true)
+        ))
+    )
+
+    // Supported collations
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |select from_xml('${t.input}', ${t.schema} ${t.options})
+           |""".stripMargin
+      // Result
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        checkAnswer(testQuery, Row(t.result))
+        val dataType = StructType(t.structFields)
+        assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      }
+    })
+  }
+
+  test("Support SchemaOfXml xml expression with collation") {
+    case class SchemaOfXmlTestCase(
+     input: String,
+     collationName: String,
+     result: String
+    )
+
+    val testCases = Seq(
+      SchemaOfXmlTestCase("<p><a>1</a></p>", "UTF8_BINARY", "STRUCT<a: BIGINT>"),
+      SchemaOfXmlTestCase("<p><A>true</A><B>0.8</B></p>", "UTF8_BINARY_LCASE",
+        "STRUCT<A: BOOLEAN, B: DOUBLE>"),
+      SchemaOfXmlTestCase("<p></p>", "UNICODE", "STRUCT<>"),
+      SchemaOfXmlTestCase("<p><A>1</A><A>2</A><A>3</A></p>", "UNICODE_CI",
+        "STRUCT<A: ARRAY<BIGINT>>")
+    )
+
+    // Supported collations
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |select schema_of_xml('${t.input}')
+           |""".stripMargin
+      // Result
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        checkAnswer(testQuery, Row(t.result))
+        val dataType = StringType(t.collationName)
+        assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      }
+    })
+  }
+
+  test("Support StructsToXml xml expression with collation") {
+    case class StructsToXmlTestCase(
+      input: String,
+      collationName: String,
+      result: String
+    )
+
+    val testCases = Seq(
+      StructsToXmlTestCase("named_struct('a', 1, 'b', 2)", "UTF8_BINARY",
+        s"""<ROW>
+           |    <a>1</a>
+           |    <b>2</b>
+           |</ROW>""".stripMargin),
+      StructsToXmlTestCase("named_struct('A', true, 'B', 2.0)", "UTF8_BINARY_LCASE",
+        s"""<ROW>
+           |    <A>true</A>
+           |    <B>2.0</B>
+           |</ROW>""".stripMargin),
+      StructsToXmlTestCase("named_struct()", "UNICODE",
+        "<ROW/>"),
+      StructsToXmlTestCase("named_struct('time', to_timestamp('2015-08-26'))", "UNICODE_CI",
+        s"""<ROW>
+           |    <time>2015-08-26T00:00:00.000-07:00</time>
+           |</ROW>""".stripMargin)
+    )
+
+    // Supported collations
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |select to_xml(${t.input})
+           |""".stripMargin
+      // Result
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        checkAnswer(testQuery, Row(t.result))
+        val dataType = StringType(t.collationName)
+        assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      }
+    })
+  }
+
   test("Support ParseJson & TryParseJson variant expressions with collation") {
     case class ParseJsonTestCase(
       input: String,
