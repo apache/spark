@@ -86,6 +86,7 @@ object LogKeys {
   case object CLASS_NAME extends LogKey
   case object CLASS_PATH extends LogKey
   case object CLAUSES extends LogKey
+  case object CLEANUP_LOCAL_DIRS extends LogKey
   case object CLUSTER_CENTROIDS extends LogKey
   case object CLUSTER_ID extends LogKey
   case object CLUSTER_LABEL extends LogKey

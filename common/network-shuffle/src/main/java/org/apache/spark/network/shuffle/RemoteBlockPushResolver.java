@@ -411,7 +411,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   public void applicationRemoved(String appId, boolean cleanupLocalDirs) {
     logger.info("Application {} removed, cleanupLocalDirs = {}",
       MDC.of(LogKeys.APP_ID$.MODULE$, appId),
-      MDC.of(LogKeys.LOCAL_DIRS$.MODULE$, cleanupLocalDirs));
+      MDC.of(LogKeys.CLEANUP_LOCAL_DIRS$.MODULE$, cleanupLocalDirs));
     // Cleanup the DB within critical section to gain the consistency between
     // DB and in-memory hashmap.
     AtomicReference<AppShuffleInfo> ref = new AtomicReference<>(null);
