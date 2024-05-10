@@ -439,6 +439,26 @@ class GroupedApplyInPandasTestsMixin:
                 pandas_udf(lambda: 1, StructType([StructField("d", DoubleType())]))
             )
 
+    def test_wrong_args_in_apply_func(self):
+        df1 = self.spark.range(11)
+        df2 = self.spark.range(22)
+
+        with self.assertRaisesRegex(PySparkValueError, "INVALID_PANDAS_UDF"):
+            df1.groupby("id").applyInPandas(lambda: 1, StructType([StructField("d", DoubleType())]))
+
+        with self.assertRaisesRegex(PySparkValueError, "INVALID_PANDAS_UDF"):
+            df1.groupby("id").applyInArrow(lambda: 1, StructType([StructField("d", DoubleType())]))
+
+        with self.assertRaisesRegex(PySparkValueError, "INVALID_PANDAS_UDF"):
+            df1.groupby("id").cogroup(df2.groupby("id")).applyInPandas(
+                lambda: 1, StructType([StructField("d", DoubleType())])
+            )
+
+        with self.assertRaisesRegex(PySparkValueError, "INVALID_PANDAS_UDF"):
+            df1.groupby("id").cogroup(df2.groupby("id")).applyInArrow(
+                lambda: 1, StructType([StructField("d", DoubleType())])
+            )
+
     def test_unsupported_types(self):
         with self.quiet():
             self.check_unsupported_types()
