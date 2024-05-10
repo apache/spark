@@ -395,7 +395,7 @@ SELECT 1 FROM range(10) HAVING true
 -- !query analysis
 Filter cast(true as boolean)
 +- Aggregate [1 AS 1#x]
-   +- Range (0, 10, step=1, splits=None)
+   +- Range (0, 10, step=1)
 
 
 -- !query
@@ -404,7 +404,7 @@ SELECT 1 FROM range(10) HAVING MAX(id) > 0
 Project [1#x]
 +- Filter (max(id#xL)#xL > cast(0 as bigint))
    +- Aggregate [1 AS 1#x, max(id#xL) AS max(id#xL)#xL]
-      +- Range (0, 10, step=1, splits=None)
+      +- Range (0, 10, step=1)
 
 
 -- !query
@@ -435,7 +435,7 @@ SELECT 1 FROM range(10) HAVING true
 -- !query analysis
 Filter cast(true as boolean)
 +- Project [1 AS 1#x]
-   +- Range (0, 10, step=1, splits=None)
+   +- Range (0, 10, step=1)
 
 
 -- !query
@@ -464,7 +464,7 @@ SELECT id FROM range(10) HAVING id > 0
 -- !query analysis
 Filter (id#xL > cast(0 as bigint))
 +- Project [id#xL]
-   +- Range (0, 10, step=1, splits=None)
+   +- Range (0, 10, step=1)
 
 
 -- !query

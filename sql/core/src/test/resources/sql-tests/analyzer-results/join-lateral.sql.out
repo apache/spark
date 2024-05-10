@@ -2315,7 +2315,7 @@ SELECT * FROM t1, LATERAL RANGE(3)
 -- !query analysis
 Project [c1#x, c2#x, id#xL]
 +- LateralJoin lateral-subquery#x [], Inner
-   :  +- Range (0, 3, step=1, splits=None)
+   :  +- Range (0, 3, step=1)
    +- SubqueryAlias spark_catalog.default.t1
       +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
          +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]

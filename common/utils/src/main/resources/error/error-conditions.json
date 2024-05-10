@@ -125,6 +125,12 @@
     ],
     "sqlState" : "428FR"
   },
+  "CANNOT_ASSIGN_EVENT_TIME_COLUMN_WITHOUT_WATERMARK" : {
+    "message" : [
+      "Watermark needs to be defined to reassign event time column. Failed to find watermark definition in the streaming query."
+    ],
+    "sqlState" : "42611"
+  },
   "CANNOT_CAST_DATATYPE" : {
     "message" : [
       "Cannot cast <sourceType> to <targetType>."
@@ -1041,7 +1047,7 @@
   },
   "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT" : {
     "message" : [
-      "Call to function <functionName> is invalid because it includes multiple argument assignments to the same parameter name <parameterName>."
+      "Call to routine <functionName> is invalid because it includes multiple argument assignments to the same parameter name <parameterName>."
     ],
     "subClass" : {
       "BOTH_POSITIONAL_AND_NAMED" : {
@@ -1056,6 +1062,14 @@
       }
     },
     "sqlState" : "4274K"
+  },
+  "EMITTING_ROWS_OLDER_THAN_WATERMARK_NOT_ALLOWED" : {
+    "message" : [
+      "Previous node emitted a row with eventTime=<emittedRowEventTime> which is older than current_watermark_value=<currentWatermark>",
+      "This can lead to correctness issues in the stateful operators downstream in the execution pipeline.",
+      "Please correct the operator logic to emit rows after current global watermark value."
+    ],
+    "sqlState" : "42815"
   },
   "EMPTY_JSON_FIELD_VALUE" : {
     "message" : [
@@ -1325,7 +1339,7 @@
     ],
     "sqlState" : "54001"
   },
-  "FIELDS_ALREADY_EXISTS" : {
+  "FIELD_ALREADY_EXISTS" : {
     "message" : [
       "Cannot <op> column, because <fieldNames> already exists in <struct>."
     ],
@@ -3490,16 +3504,16 @@
   },
   "ROUTINE_ALREADY_EXISTS" : {
     "message" : [
-      "Cannot create the function <routineName> because it already exists.",
-      "Choose a different name, drop or replace the existing function, or add the IF NOT EXISTS clause to tolerate a pre-existing function."
+      "Cannot create the routine <routineName> because it already exists.",
+      "Choose a different name, drop or replace the existing routine, or add the IF NOT EXISTS clause to tolerate a pre-existing routine."
     ],
     "sqlState" : "42723"
   },
   "ROUTINE_NOT_FOUND" : {
     "message" : [
-      "The function <routineName> cannot be found. Verify the spelling and correctness of the schema and catalog.",
+      "The routine <routineName> cannot be found. Verify the spelling and correctness of the schema and catalog.",
       "If you did not qualify the name with a schema and catalog, verify the current_schema() output, or qualify the name with the correct schema and catalog.",
-      "To tolerate the error on drop use DROP FUNCTION IF EXISTS."
+      "To tolerate the error on drop use DROP ... IF EXISTS."
     ],
     "sqlState" : "42883"
   },
@@ -4079,7 +4093,7 @@
   },
   "UNRESOLVED_ROUTINE" : {
     "message" : [
-      "Cannot resolve function <routineName> on search path <searchPath>."
+      "Cannot resolve routine <routineName> on search path <searchPath>."
     ],
     "sqlState" : "42883"
   },

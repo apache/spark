@@ -28,7 +28,8 @@ import scala.util.Try
 
 import org.apache.spark.{SparkConf, SparkException, SparkUserAppException}
 import org.apache.spark.deploy.SparkSubmitAction._
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.DYN_ALLOCATION_ENABLED
 import org.apache.spark.launcher.SparkSubmitArgumentsParser
 import org.apache.spark.network.util.JavaUtils
@@ -142,7 +143,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     sparkProperties.keys.foreach { k =>
       if (!k.startsWith("spark.")) {
         sparkProperties -= k
-        logWarning(s"Ignoring non-Spark config property: $k")
+        logWarning(log"Ignoring non-Spark config property: ${MDC(CONFIG, k)}")
       }
     }
   }

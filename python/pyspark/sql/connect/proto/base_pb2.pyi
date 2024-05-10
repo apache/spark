@@ -1406,6 +1406,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         NAME_FIELD_NUMBER: builtins.int
         VALUES_FIELD_NUMBER: builtins.int
         KEYS_FIELD_NUMBER: builtins.int
+        PLAN_ID_FIELD_NUMBER: builtins.int
         name: builtins.str
         @property
         def values(
@@ -1417,6 +1418,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         def keys(
             self,
         ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+        plan_id: builtins.int
         def __init__(
             self,
             *,
@@ -1426,11 +1428,12 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             ]
             | None = ...,
             keys: collections.abc.Iterable[builtins.str] | None = ...,
+            plan_id: builtins.int = ...,
         ) -> None: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "keys", b"keys", "name", b"name", "values", b"values"
+                "keys", b"keys", "name", b"name", "plan_id", b"plan_id", "values", b"values"
             ],
         ) -> None: ...
 

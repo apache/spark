@@ -33,7 +33,7 @@ import org.apache.spark.deploy.master.MasterMessages._
 import org.apache.spark.deploy.master.ui.MasterWebUI
 import org.apache.spark.deploy.rest.StandaloneRestServer
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.{APP_DESC, APP_ID, EXECUTOR_ID, RETRY_COUNT}
+import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Deploy._
 import org.apache.spark.internal.config.Deploy.WorkerSelectionPolicy._
@@ -314,12 +314,13 @@ private[deploy] class Master(
           workerInfo.lastHeartbeat = System.currentTimeMillis()
         case None =>
           if (workers.map(_.id).contains(workerId)) {
-            logWarning(s"Got heartbeat from unregistered worker $workerId." +
-              " Asking it to re-register.")
+            logWarning(log"Got heartbeat from unregistered worker " +
+              log"${MDC(LogKeys.WORKER_ID, workerId)}. Asking it to re-register.")
             worker.send(ReconnectWorker(masterUrl))
           } else {
-            logWarning(s"Got heartbeat from unregistered worker $workerId." +
-              " This worker was never registered, so ignoring the heartbeat.")
+            logWarning(log"Got heartbeat from unregistered worker " +
+              log"${MDC(LogKeys.WORKER_ID, workerId)}. " +
+              log"This worker was never registered, so ignoring the heartbeat.")
           }
       }
 
@@ -329,7 +330,7 @@ private[deploy] class Master(
           logInfo("Application has been re-registered: " + appId)
           app.state = ApplicationState.WAITING
         case None =>
-          logWarning("Master change ack from unknown app: " + appId)
+          logWarning(log"Master change ack from unknown app: ${MDC(LogKeys.APP_ID, appId)}")
       }
 
       if (canCompleteRecovery) { completeRecovery() }
@@ -363,7 +364,7 @@ private[deploy] class Master(
             }
           }
         case None =>
-          logWarning("Scheduler state from unknown worker: " + workerId)
+          logWarning(log"Scheduler state from unknown worker: ${MDC(LogKeys.WORKER_ID, workerId)}")
       }
 
       if (canCompleteRecovery) { completeRecovery() }
@@ -389,7 +390,7 @@ private[deploy] class Master(
             }
           }
         case None =>
-          logWarning("Worker state from unknown worker: " + workerId)
+          logWarning(log"Worker state from unknown worker: ${MDC(LogKeys.WORKER_ID, workerId)}")
       }
 
     case UnregisterApplication(applicationId) =>
@@ -449,7 +450,8 @@ private[deploy] class Master(
             context.reply(KillDriverResponse(self, driverId, success = true, msg))
           case None =>
             val msg = s"Driver $driverId has already finished or does not exist"
-            logWarning(msg)
+            logWarning(log"Driver ${MDC(LogKeys.DRIVER_ID, driverId)} " +
+              log"has already finished or does not exist")
             context.reply(KillDriverResponse(self, driverId, success = false, msg))
         }
       }
@@ -566,16 +568,17 @@ private[deploy] class Master(
               && maxExecutorRetries >= 0) { // < 0 disables this application-killing path
               val execs = appInfo.executors.values
               if (!execs.exists(_.state == ExecutorState.RUNNING)) {
-                logError(log"Application ${MDC(APP_DESC, appInfo.desc.name)} " +
-                  log"with ID ${MDC(APP_ID, appInfo.id)} " +
-                  log"failed ${MDC(RETRY_COUNT, appInfo.retryCount)} times; removing it")
+                logError(log"Application ${MDC(LogKeys.APP_DESC, appInfo.desc.name)} " +
+                  log"with ID ${MDC(LogKeys.APP_ID, appInfo.id)} " +
+                  log"failed ${MDC(LogKeys.RETRY_COUNT, appInfo.retryCount)} times; removing it")
                 removeApplication(appInfo, ApplicationState.FAILED)
               }
             }
           }
           schedule()
         case None =>
-          logWarning(s"Got status update for unknown executor $appId/$execId")
+          logWarning(log"Got status update for unknown executor ${MDC(LogKeys.APP_ID, appId)}" +
+            log"/${MDC(LogKeys.EXECUTOR_ID, execId)}")
       }
       context.reply(true)
   }
@@ -649,13 +652,15 @@ private[deploy] class Master(
 
     // Reschedule drivers which were not claimed by any workers
     drivers.filter(_.worker.isEmpty).foreach { d =>
-      logWarning(s"Driver ${d.id} was not found after master recovery")
+      logWarning(log"Driver ${MDC(LogKeys.DRIVER_ID, d.id)} " +
+        log"was not found after master recovery")
       if (d.desc.supervise) {
-        logWarning(s"Re-launching ${d.id}")
+        logWarning(log"Re-launching ${MDC(LogKeys.DRIVER_ID, d.id)}")
         relaunchDriver(d)
       } else {
         removeDriver(d.id, DriverState.ERROR, None)
-        logWarning(s"Did not re-launch ${d.id} because it was not supervised")
+        logWarning(log"Did not re-launch " +
+          log"${MDC(LogKeys.DRIVER_ID, d.id)} because it was not supervised")
       }
     }
 
@@ -696,8 +701,8 @@ private[deploy] class Master(
         schedule()
       } else {
         val workerAddress = worker.endpoint.address
-        logWarning("Worker registration failed. Attempted to re-register worker at same " +
-          "address: " + workerAddress)
+        logWarning(log"Worker registration failed. Attempted to re-register worker at same " +
+          log"address: ${MDC(LogKeys.WORKER_URL, workerAddress)}")
         workerRef.send(RegisterWorkerFailed("Attempted to re-register worker at same address: "
           + workerAddress))
       }
@@ -833,12 +838,13 @@ private[deploy] class Master(
             case CORES_FREE_DESC => aliveWorkers.sortBy(w => (w.coresFree, w.id)).reverse
             case MEMORY_FREE_ASC => aliveWorkers.sortBy(w => (w.memoryFree, w.id))
             case MEMORY_FREE_DESC => aliveWorkers.sortBy(w => (w.memoryFree, w.id)).reverse
-            case WORKER_ID => aliveWorkers.sortBy(_.id)
+            case WorkerSelectionPolicy.WORKER_ID => aliveWorkers.sortBy(_.id)
           }
           val appMayHang = waitingApps.length == 1 &&
             waitingApps.head.executors.isEmpty && usableWorkers.isEmpty
           if (appMayHang) {
-            logWarning(s"App ${app.id} requires more resource than any of Workers could have.")
+            logWarning(log"App ${MDC(LogKeys.APP_ID, app.id)} requires more resource " +
+              log"than any of Workers could have.")
           }
           val assignedCores =
             scheduleExecutorsOnWorkers(app, rpId, resourceDesc, usableWorkers, spreadOutApps)
@@ -953,7 +959,8 @@ private[deploy] class Master(
           curPos = (curPos + 1) % numWorkersAlive
         }
         if (!launched && isClusterIdle) {
-          logWarning(s"Driver ${driver.id} requires more resource than any of Workers could have.")
+          logWarning(log"Driver ${MDC(LogKeys.DRIVER_ID, driver.id)} " +
+            log"requires more resource than any of Workers could have.")
         }
       }
     } else {
@@ -967,8 +974,8 @@ private[deploy] class Master(
               launchDriver(worker, driver)
               waitingDrivers -= driver
             case _ =>
-              logWarning(
-                s"Driver ${driver.id} requires more resource than any of Workers could have.")
+              logWarning(log"Driver ${MDC(LogKeys.DRIVER_ID, driver.id)} " +
+                log"requires more resource than any of Workers could have.")
           }
         }
       }
@@ -1057,8 +1064,9 @@ private[deploy] class Master(
       // On recovery do not add a decommissioned executor
       persistenceEngine.removeWorker(worker)
     } else {
-      logWarning("Skipping decommissioning worker %s on %s:%d as worker is already decommissioned".
-        format(worker.id, worker.host, worker.port))
+      logWarning(log"Skipping decommissioning worker ${MDC(LogKeys.WORKER_ID, worker.id)} " +
+        log"on ${MDC(LogKeys.WORKER_HOST, worker.host)}:" +
+        log"${MDC(LogKeys.WORKER_PORT, worker.port)} as worker is already decommissioned")
     }
   }
 
@@ -1194,8 +1202,9 @@ private[deploy] class Master(
         schedule()
         true
       case None =>
-        logWarning(s"Unknown application $appId requested executors:" +
-          s" ${resourceProfileToTotalExecs}.")
+        logWarning(log"Unknown application " +
+          log"${MDC(LogKeys.APP_ID, appId)} requested executors:" +
+          log" ${MDC(LogKeys.RESOURCE_PROFILE_TO_TOTAL_EXECS, resourceProfileToTotalExecs)}.")
         false
     }
   }
@@ -1220,13 +1229,15 @@ private[deploy] class Master(
           killExecutor(desc)
         }
         if (unknown.nonEmpty) {
-          logWarning(s"Application $appId attempted to kill non-existent executors: "
-            + unknown.mkString(", "))
+          logWarning(log"Application ${MDC(LogKeys.APP_ID, appId)} attempted to kill " +
+            log"non-existent executors: " +
+            log"${MDC(LogKeys.EXECUTOR_IDS, unknown.mkString(", "))}")
         }
         schedule()
         true
       case None =>
-        logWarning(s"Unregistered application $appId requested us to kill executors!")
+        logWarning(log"Unregistered application ${MDC(LogKeys.APP_ID, appId)} " +
+          log"requested us to kill executors!")
         false
     }
   }
@@ -1245,7 +1256,8 @@ private[deploy] class Master(
       } catch {
         case e: NumberFormatException =>
           // scalastyle:off line.size.limit
-          logError(log"Encountered executor with a non-integer ID: ${MDC(EXECUTOR_ID, executorId)}. Ignoring")
+          logError(log"Encountered executor with a non-integer ID: " +
+            log"${MDC(LogKeys.EXECUTOR_ID, executorId)}. Ignoring")
           // scalastyle:on
           None
       }
@@ -1280,8 +1292,8 @@ private[deploy] class Master(
     for (worker <- toRemove) {
       if (worker.state != WorkerState.DEAD) {
         val workerTimeoutSecs = TimeUnit.MILLISECONDS.toSeconds(workerTimeoutMs)
-        logWarning("Removing %s because we got no heartbeat in %d seconds".format(
-          worker.id, workerTimeoutSecs))
+        logWarning(log"Removing ${MDC(LogKeys.WORKER_ID, worker.id)} because we got no heartbeat " +
+          log"in ${MDC(LogKeys.TIME_UNITS, workerTimeoutMs)} ms")
         removeWorker(worker, s"Not receiving heartbeat for $workerTimeoutSecs seconds")
       } else {
         if (worker.lastHeartbeat < currentTime - ((reaperIterations + 1) * workerTimeoutMs)) {
@@ -1331,7 +1343,7 @@ private[deploy] class Master(
         driver.worker.foreach(w => w.removeDriver(driver))
         schedule()
       case None =>
-        logWarning(s"Asked to remove unknown driver: $driverId")
+        logWarning(log"Asked to remove unknown driver: ${MDC(LogKeys.DRIVER_ID, driverId)}")
     }
   }
 }

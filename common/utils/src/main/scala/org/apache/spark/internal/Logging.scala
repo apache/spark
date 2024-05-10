@@ -39,6 +39,10 @@ case class MDC(key: LogKey, value: Any) {
     "the class of value cannot be MessageWithContext")
 }
 
+object MDC {
+  def of(key: LogKey, value: Any): MDC = MDC(key, value)
+}
+
 /**
  * Wrapper class for log messages that include a logging context.
  * This is used as the return type of the string interpolator `LogStringContext`.

@@ -339,8 +339,7 @@ private[sql] trait SQLTestUtilsBase
     val tableIdent = spark.sessionState.sqlParser.parseTableIdentifier(tableName)
     val cascade = !spark.sessionState.catalog.isTempView(tableIdent)
     spark.sharedState.cacheManager.uncacheQuery(
-      spark,
-      spark.table(tableName).logicalPlan,
+      spark.table(tableName),
       cascade = cascade,
       blocking = true)
   }

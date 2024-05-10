@@ -27,7 +27,8 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.PATH
+import org.apache.spark.internal.LogKeys
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.{SCHEDULER_ALLOCATION_FILE, SCHEDULER_MODE}
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.util.Utils
@@ -154,9 +155,12 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, sc: SparkContext
 
     val xmlSchedulingMode =
       (poolNode \ SCHEDULING_MODE_PROPERTY).text.trim.toUpperCase(Locale.ROOT)
-    val warningMessage = s"Unsupported schedulingMode: $xmlSchedulingMode found in " +
-      s"Fair Scheduler configuration file: $fileName, using " +
-      s"the default schedulingMode: $defaultValue for pool: $poolName"
+    val warningMessage = log"Unsupported schedulingMode: " +
+      log"${MDC(XML_SCHEDULING_MODE, xmlSchedulingMode)} found in " +
+      log"Fair Scheduler configuration file: ${MDC(FILE_NAME, fileName)}, using " +
+      log"the default schedulingMode: " +
+      log"${MDC(LogKeys.DEFAULT_SCHEDULING_MODE, defaultValue)} for pool: " +
+      log"${MDC(POOL_NAME, poolName)}"
     try {
       if (SchedulingMode.withName(xmlSchedulingMode) != SchedulingMode.NONE) {
         SchedulingMode.withName(xmlSchedulingMode)
@@ -165,7 +169,7 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, sc: SparkContext
         defaultValue
       }
     } catch {
-      case e: NoSuchElementException =>
+      case _: NoSuchElementException =>
         logWarning(warningMessage)
         defaultValue
     }
@@ -182,10 +186,12 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, sc: SparkContext
     try {
       data.toInt
     } catch {
-      case e: NumberFormatException =>
-        logWarning(s"Error while loading fair scheduler configuration from $fileName: " +
-          s"$propertyName is blank or invalid: $data, using the default $propertyName: " +
-          s"$defaultValue for pool: $poolName")
+      case _: NumberFormatException =>
+        logWarning(log"Error while loading fair scheduler configuration from " +
+          log"${MDC(FILE_NAME, fileName)}: " +
+          log"${MDC(PROPERTY_NAME, propertyName)} is blank or invalid: ${MDC(DATA, data)}, " +
+          log"using the default ${MDC(DEFAULT_NAME, propertyName)}: " +
+          log"${MDC(DEFAULT_VALUE, defaultValue)} for pool: ${MDC(POOL_NAME, poolName)}")
         defaultValue
     }
   }
@@ -203,11 +209,15 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, sc: SparkContext
       parentPool = new Pool(poolName, DEFAULT_SCHEDULING_MODE,
         DEFAULT_MINIMUM_SHARE, DEFAULT_WEIGHT)
       rootPool.addSchedulable(parentPool)
-      logWarning(s"A job was submitted with scheduler pool $poolName, which has not been " +
-        "configured. This can happen when the file that pools are read from isn't set, or " +
-        s"when that file doesn't contain $poolName. Created $poolName with default " +
-        s"configuration (schedulingMode: $DEFAULT_SCHEDULING_MODE, " +
-        s"minShare: $DEFAULT_MINIMUM_SHARE, weight: $DEFAULT_WEIGHT)")
+      logWarning(log"A job was submitted with scheduler pool " +
+        log"${MDC(SCHEDULER_POOL_NAME, poolName)}, which has not been " +
+        log"configured. This can happen when the file that pools are read from isn't set, or " +
+        log"when that file doesn't contain ${MDC(POOL_NAME, poolName)}. " +
+        log"Created ${MDC(CREATED_POOL_NAME, poolName)} with default " +
+        log"configuration (schedulingMode: " +
+        log"${MDC(LogKeys.DEFAULT_SCHEDULING_MODE, DEFAULT_SCHEDULING_MODE)}, " +
+        log"minShare: ${MDC(MIN_SHARE, DEFAULT_MINIMUM_SHARE)}, " +
+        log"weight: ${MDC(WEIGHT, DEFAULT_WEIGHT)}")
     }
     parentPool.addSchedulable(manager)
     logInfo("Added task set " + manager.name + " tasks to pool " + poolName)
