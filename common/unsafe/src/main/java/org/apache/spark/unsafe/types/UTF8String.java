@@ -164,10 +164,13 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     this.numBytes = numBytes;
   }
 
-  private static void moveAddress(UTF8String s, Object base, long offset, int numBytes) {
-    s.base = base;
-    s.offset = offset;
-    s.numBytes = numBytes;
+  /**
+   * Changes UTF8String's base, offset i numBytes to point to new byte array.
+   */
+  public void moveAddress(UTF8String baseString, long offsetMove, int numBytes) {
+    this.base = baseString.base;
+    this.offset = baseString.offset + offsetMove;
+    this.numBytes = numBytes;
   }
 
   // for serialization
@@ -1630,11 +1633,17 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return CollationFactory.fetchCollation(collationId).equalsFunction.apply(this, other);
   }
 
-  private interface SubstringEquals {
+  /**
+   * Interface for comparing two UTF8String substrings of denoted length and position.
+   */
+  public interface SubstringEquals {
     boolean equals(UTF8String left, UTF8String right, int posLeft, int posRight,
       int lenLeft, int lenRight);
   }
 
+  /**
+   * Implementation of SubstringEquals interface by simple byte to byte comparing of substrings.
+   */
   private static class ByteSubstringEquals implements SubstringEquals {
     @Override
     public boolean equals(UTF8String left, UTF8String right, int posLeft, int posRight,
@@ -1649,26 +1658,6 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   private static final ByteSubstringEquals byteSubstringEquals = new ByteSubstringEquals();
 
-  private static class CollationSubstringEquals implements SubstringEquals {
-    private final int collationId;
-    private final UTF8String left, right;
-
-    CollationSubstringEquals(int collationId) {
-      this.collationId = collationId;
-      this.left = new UTF8String();
-      this.right = new UTF8String();
-    }
-
-    @Override
-    public boolean equals(UTF8String left, UTF8String right, int posLeft, int posRight,
-      int lenLeft, int lenRight) {
-      moveAddress(this.left, left.base, left.offset + posLeft, lenLeft);
-      moveAddress(this.right, right.base, right.offset + posRight, lenRight);
-      return CollationFactory.fetchCollation(collationId).equalsFunction
-        .apply(this.left, this.right);
-    }
-  }
-
   /**
    * Levenshtein distance is a metric for measuring the distance of two strings. The distance is
    * defined by the minimum number of single-character edits (i.e. insertions, deletions or
@@ -1678,14 +1667,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return levenshteinDistance(other, byteSubstringEquals);
   }
 
-  public int collationAwareLevenshteinDistance(UTF8String other, int collationId) {
-    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
-      return levenshteinDistance(other, byteSubstringEquals);
-    }
-    return levenshteinDistance(other, new CollationSubstringEquals(collationId));
-  }
-
-  private int levenshteinDistance(UTF8String other, SubstringEquals comparator) {
+  public int levenshteinDistance(UTF8String other, SubstringEquals comparator) {
     // Implementation adopted from
     // org.apache.commons.text.similarity.LevenshteinDistance.unlimitedCompare
 
@@ -1744,14 +1726,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return levenshteinDistance(other, threshold, byteSubstringEquals);
   }
 
-  public int collationAwareLevenshteinDistance(UTF8String other, int threshold, int collationId) {
-    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
-      return levenshteinDistance(other, threshold, byteSubstringEquals);
-    }
-    return levenshteinDistance(other, threshold, new CollationSubstringEquals(collationId));
-  }
-
-  private int levenshteinDistance(UTF8String other, int threshold,
+  public int levenshteinDistance(UTF8String other, int threshold,
     SubstringEquals substringEquals) {
     // Implementation adopted from
     // org.apache.commons.text.similarity.LevenshteinDistance.limitedCompare

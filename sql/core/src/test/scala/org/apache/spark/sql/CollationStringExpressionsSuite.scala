@@ -18,7 +18,6 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.catalyst.expressions.{Levenshtein, Literal}
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -802,16 +801,6 @@ class CollationStringExpressionsSuite
   }
 
   test("Levenshtein expressions with collation") {
-    def prepareLevenshtein(
-        left: String,
-        right: String,
-        collation: String): Levenshtein = {
-      val collationId = CollationFactory.collationNameToId(collation)
-      val leftLit = Literal.create(left, StringType(collationId))
-      val rightLit = Literal.create(right, StringType(collationId))
-      Levenshtein(leftLit, rightLit)
-    }
-
     case class LevenshteinTestCase[R](l: String, r: String, c: String, result: R)
     Seq(
       LevenshteinTestCase("", "", "UTF8_BINARY", 0),
@@ -828,25 +817,16 @@ class CollationStringExpressionsSuite
       LevenshteinTestCase("sOmeThINg", "SOMETHING", "UNICODE", 5),
       LevenshteinTestCase("sOmeThINg", "SOMETHING", "UNICODE_CI", 0)
     ).foreach(c => {
-      val query = s"SELECT levenshtein(collate('${c.l}', '${c.c}'), collate('${c.r}', '${c.c}'))"
-      // Result & data type
-      checkAnswer(sql(query), Row(c.result))
-      assert(sql(query).schema.fields.head.dataType.sameType(IntegerType))
+      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY") {
+        val query = s"SELECT levenshtein(collate('${c.l}', '${c.c}'), collate('${c.r}', '${c.c}'))"
+        // Result & data type
+        checkAnswer(sql(query), Row(c.result))
+        assert(sql(query).schema.fields.head.dataType.sameType(IntegerType))
+      }
     })
   }
 
   test("Levenshtein expression with collation and threshold") {
-    def prepareLevenshtein(
-        left: String,
-        right: String,
-        collation: String,
-        threshold: Int): Levenshtein = {
-      val collationId = CollationFactory.collationNameToId(collation)
-      val leftLit = Literal.create(left, StringType(collationId))
-      val rightLit = Literal.create(right, StringType(collationId))
-      Levenshtein(leftLit, rightLit, Some(Literal.create(threshold)))
-    }
-
     case class LevenshteinThresholdTestCase(l: String, r: String, c: String, t: Int, result: Int)
     Seq(
       LevenshteinThresholdTestCase("", "", "UTF8_BINARY", 0, 0),

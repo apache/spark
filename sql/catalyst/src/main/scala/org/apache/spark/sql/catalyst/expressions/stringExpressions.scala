@@ -2210,7 +2210,7 @@ case class Levenshtein(
     threshold: Option[Expression] = None)
   extends Expression
   with ImplicitCastInputTypes
-  with NullIntolerant {
+  with NullIntolerant{
 
   def this(left: Expression, right: Expression, threshold: Expression) =
     this(left, right, Option(threshold))
@@ -2261,10 +2261,10 @@ case class Levenshtein(
     val thresholdEval = threshold.map(_.eval(input))
     thresholdEval match {
       case Some(v) =>
-        leftEval.asInstanceOf[UTF8String].collationAwareLevenshteinDistance(
+        CollationSupport.Levenshtein.execWithThreshold(leftEval.asInstanceOf[UTF8String],
           rightEval.asInstanceOf[UTF8String], v.asInstanceOf[Int], collationId)
       case _ =>
-        leftEval.asInstanceOf[UTF8String].collationAwareLevenshteinDistance(
+        CollationSupport.Levenshtein.exec(leftEval.asInstanceOf[UTF8String],
           rightEval.asInstanceOf[UTF8String], collationId)
     }
   }
@@ -2283,8 +2283,8 @@ case class Levenshtein(
     val leftGen = children.head.genCode(ctx)
     val rightGen = children(1).genCode(ctx)
     val thresholdGen = thresholdExpr.genCode(ctx)
-    val resultCode = s"${ev.value} = ${leftGen.value}.collationAwareLevenshteinDistance(" +
-      s"${rightGen.value}, ${thresholdGen.value}, $collationId);"
+    val resultCode = s"${ev.value} = CollationSupport.Levenshtein.execWithThreshold(" +
+      s"${leftGen.value}, ${rightGen.value}, ${thresholdGen.value}, ${collationId});"
     if (nullable) {
       val nullSafeEval =
         leftGen.code.toString + ctx.nullSafeExec(children.head.nullable, leftGen.isNull) {
@@ -2314,8 +2314,8 @@ case class Levenshtein(
   private def genCodeWithoutThreshold(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val leftGen = children.head.genCode(ctx)
     val rightGen = children(1).genCode(ctx)
-    val resultCode = s"${ev.value} = ${leftGen.value}.collationAwareLevenshteinDistance(" +
-      s"${rightGen.value}, $collationId);"
+    val resultCode = s"${ev.value} = CollationSupport.Levenshtein.exec(" +
+      s"${leftGen.value}, ${rightGen.value}, ${collationId});"
     if (nullable) {
       val nullSafeEval =
         leftGen.code.toString + ctx.nullSafeExec(children.head.nullable, leftGen.isNull) {
