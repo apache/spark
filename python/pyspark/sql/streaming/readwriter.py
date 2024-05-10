@@ -553,8 +553,8 @@ class DataStreamReader(OptionUtils):
 
         Parameters
         ----------
-        path : str or list
-            string, or list of strings, for input path(s).
+        path : str
+            string for input path.
 
         Other Parameters
         ----------------
@@ -641,8 +641,8 @@ class DataStreamReader(OptionUtils):
 
         Parameters
         ----------
-        path : str or list
-            string, or list of strings, for input path(s).
+        path : str
+            string for input path.
         schema : :class:`pyspark.sql.types.StructType` or str, optional
             an optional :class:`pyspark.sql.types.StructType` for the input schema
             or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
