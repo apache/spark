@@ -126,19 +126,9 @@ public final class CollationSupport {
       return l.contains(r);
     }
     public static boolean execLowercase(final UTF8String l, final UTF8String r) {
-      if (r.numBytes() == 0) return true;
+      if (r.numChars() == 0) return true;
       if (l.numChars() < r.numChars()) return false;
-      int lenHaystack = l.numChars(), lenNeedle = r.numChars();
-      final UTF8String firstLower = r.substring(0, 1).toLowerCase();
-      final UTF8String needle = r.toLowerCase();
-      for (var i = 0; i <= (lenHaystack - lenNeedle); i++) {
-        if (l.substring(i, i + 1).toLowerCase().equals(firstLower)) {
-          if (CollationAwareUTF8String.lowercaseMatchAt(l, needle, i, lenNeedle)) {
-            return true;
-          }
-        }
-      }
-      return false;
+      return CollationAwareUTF8String.lowercaseIndexOf(l, r, 0) >= 0;
     }
     public static boolean execICU(final UTF8String l, final UTF8String r,
         final int collationId) {
@@ -379,7 +369,7 @@ public final class CollationSupport {
       return string.indexOf(substring, 0);
     }
     public static int execLowercase(final UTF8String string, final UTF8String substring) {
-      return string.toLowerCase().indexOf(substring.toLowerCase(), 0);
+      return CollationAwareUTF8String.lowercaseIndexOf(string, substring, 0);
     }
     public static int execICU(final UTF8String string, final UTF8String substring,
         final int collationId) {
@@ -455,7 +445,7 @@ public final class CollationSupport {
     }
     public static int execLowercase(final UTF8String string, final UTF8String substring,
         final int start) {
-      return string.toLowerCase().indexOf(substring.toLowerCase(), start);
+      return CollationAwareUTF8String.lowercaseIndexOf(string, substring, start);
     }
     public static int execICU(final UTF8String string, final UTF8String substring, final int start,
                               final int collationId) {
@@ -744,6 +734,22 @@ public final class CollationSupport {
       }
 
       return 0;
+    }
+
+    private static int lowercaseIndexOf(final UTF8String target, final UTF8String pattern,
+        final int start) {
+      if (pattern.numChars() == 0) return 0;
+      int lenHaystack = target.numChars(), lenNeedle = pattern.numChars();
+      final UTF8String firstLower = pattern.substring(0, 1).toLowerCase();
+      final UTF8String needle = pattern.toLowerCase();
+      for (int i = start; i <= (lenHaystack - lenNeedle); i++) {
+        if (target.substring(i, i + 1).toLowerCase().equals(firstLower)) {
+          if (CollationAwareUTF8String.lowercaseMatchAt(target, needle, i, lenNeedle)) {
+            return i;
+          }
+        }
+      }
+      return -1;
     }
 
     private static int indexOf(final UTF8String target, final UTF8String pattern,

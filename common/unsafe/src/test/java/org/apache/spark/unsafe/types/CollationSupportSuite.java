@@ -749,6 +749,16 @@ public class CollationSupportSuite {
     assertLocate("大千", "test大千世界大千世界", 9, "UNICODE_CI", 9);
     assertLocate("大千", "大千世界大千世界", 1, "UNICODE_CI", 1);
     // Case-variable character length
+    assertLocate("̇", "i̇", 1, "UTF8_BINARY", 2);
+    assertLocate("̇", "İ", 1, "UTF8_BINARY_LCASE", 0); // note: different from UTF8_BINARY
+    assertLocate("i", "i̇", 1, "UNICODE_CI", 0);
+    assertLocate("i̇", "i", 1, "UNICODE_CI", 0);
+    assertLocate("İ", "i̇", 1, "UNICODE_CI", 1);
+    assertLocate("İ", "i", 1, "UNICODE_CI", 0);
+    assertLocate("i", "i̇", 1, "UTF8_BINARY_LCASE", 1); // note: different from UNICODE_CI
+    assertLocate("i̇", "i", 1, "UTF8_BINARY_LCASE", 0);
+    assertLocate("İ", "i̇", 1, "UTF8_BINARY_LCASE", 0); // note: different from UNICODE_CI
+    assertLocate("İ", "i", 1, "UTF8_BINARY_LCASE", 0);
     assertLocate("i̇o", "İo世界大千世界", 1, "UNICODE_CI", 1);
     assertLocate("i̇o", "大千İo世界大千世界", 1, "UNICODE_CI", 3);
     assertLocate("i̇o", "世界İo大千世界大千İo", 4, "UNICODE_CI", 11);
