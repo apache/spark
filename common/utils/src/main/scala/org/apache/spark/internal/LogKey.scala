@@ -318,13 +318,13 @@ object LogKeys {
   case object MAX_CACHE_UNTIL_LAST_PRODUCED_SIZE extends LogKey
   case object MAX_CAPACITY extends LogKey
   case object MAX_CATEGORIES extends LogKey
-  case object MAX_CHUNKS_BEING_TRANSFERRED extends LogKey
   case object MAX_EXECUTOR_FAILURES extends LogKey
   case object MAX_FILE_VERSION extends LogKey
   case object MAX_JVM_METHOD_PARAMS_LENGTH extends LogKey
   case object MAX_LOG_NUM_POLICY extends LogKey
   case object MAX_MEMORY_SIZE extends LogKey
   case object MAX_METHOD_CODE_SIZE extends LogKey
+  case object MAX_NUM_CHUNKS extends LogKey
   case object MAX_NUM_PARTITIONS extends LogKey
   case object MAX_NUM_ROWS_IN_MEMORY_BUFFER extends LogKey
   case object MAX_SIZE extends LogKey
@@ -374,7 +374,7 @@ object LogKeys {
   case object NUM_BYTES_MAX extends LogKey
   case object NUM_BYTES_TO_WARN extends LogKey
   case object NUM_BYTES_USED extends LogKey
-  case object NUM_CHUNKS_BEING_TRANSFERRED extends LogKey
+  case object NUM_CHUNKS extends LogKey
   case object NUM_CLASSES extends LogKey
   case object NUM_COLUMNS extends LogKey
   case object NUM_CONCURRENT_WRITER extends LogKey
@@ -387,7 +387,6 @@ object LogKeys {
   case object NUM_EXECUTOR_CORES extends LogKey
   case object NUM_EXECUTOR_CORES_REMAINING extends LogKey
   case object NUM_EXECUTOR_CORES_TOTAL extends LogKey
-  case object NUM_EXECUTOR_LOCAL_DIRS extends LogKey
   case object NUM_FAILURES extends LogKey
   case object NUM_FEATURES extends LogKey
   case object NUM_FILES extends LogKey
@@ -399,6 +398,7 @@ object LogKeys {
   case object NUM_ITERATIONS extends LogKey
   case object NUM_LEFT_PARTITION_VALUES extends LogKey
   case object NUM_LOADED_ENTRIES extends LogKey
+  case object NUM_LOCAL_DIRS extends LogKey
   case object NUM_LOCAL_FREQUENT_PATTERN extends LogKey
   case object NUM_META_FILES extends LogKey
   case object NUM_PARTITIONS extends LogKey
@@ -566,7 +566,7 @@ object LogKeys {
   case object SHUFFLE_DB_BACKEND_NAME extends LogKey
   case object SHUFFLE_ID extends LogKey
   case object SHUFFLE_MERGE_ID extends LogKey
-  case object SHUFFLE_MERGE_RECOVERY_FILE_NAME extends LogKey
+  case object SHUFFLE_MERGE_RECOVERY_FILE extends LogKey
   case object SHUFFLE_SERVICE_CONF_OVERLAY_URL extends LogKey
   case object SHUFFLE_SERVICE_METRICS_NAMESPACE extends LogKey
   case object SHUFFLE_SERVICE_NAME extends LogKey

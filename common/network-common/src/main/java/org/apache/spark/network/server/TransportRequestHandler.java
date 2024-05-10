@@ -131,8 +131,8 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
       long chunksBeingTransferred = streamManager.chunksBeingTransferred();
       if (chunksBeingTransferred >= maxChunksBeingTransferred) {
         logger.warn("The number of chunks being transferred {} is above {}, close the connection.",
-          MDC.of(LogKeys.NUM_CHUNKS_BEING_TRANSFERRED$.MODULE$, chunksBeingTransferred),
-          MDC.of(LogKeys.MAX_CHUNKS_BEING_TRANSFERRED$.MODULE$, maxChunksBeingTransferred));
+          MDC.of(LogKeys.NUM_CHUNKS$.MODULE$, chunksBeingTransferred),
+          MDC.of(LogKeys.MAX_NUM_CHUNKS$.MODULE$, maxChunksBeingTransferred));
         channel.close();
         return;
       }

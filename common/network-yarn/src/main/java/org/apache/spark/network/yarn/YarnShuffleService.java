@@ -576,7 +576,7 @@ public class YarnShuffleService extends AuxiliaryService {
           } catch (Exception e) {
             // Fail to move recovery file to new path, just continue on with new DB location
             logger.error("Failed to move recovery file {} to the path {}", e,
-              MDC.of(LogKeys.SHUFFLE_MERGE_RECOVERY_FILE_NAME$.MODULE$, dbName),
+              MDC.of(LogKeys.SHUFFLE_MERGE_RECOVERY_FILE$.MODULE$, dbName),
               MDC.of(LogKeys.PATH$.MODULE$, _recoveryPath.toString()));
           }
         }

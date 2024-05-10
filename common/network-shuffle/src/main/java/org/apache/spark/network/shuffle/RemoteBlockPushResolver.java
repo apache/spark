@@ -992,11 +992,11 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       logger.warn("There are still {} tasks not completed in mergedShuffleCleaner " +
         "after {} ms.",
          MDC.of(LogKeys.COUNT$.MODULE$, unfinishedTasks.size()),
-         MDC.of(LogKeys.TIME$.MODULE$, cleanerShutdownTimeout * 1000L));
+         MDC.of(LogKeys.TIMEOUT$.MODULE$, cleanerShutdownTimeout * 1000L));
       // Wait a while for tasks to respond to being cancelled
       if (!mergedShuffleCleaner.awaitTermination(cleanerShutdownTimeout, TimeUnit.SECONDS)) {
         logger.warn("mergedShuffleCleaner did not terminate in {} ms.",
-          MDC.of(LogKeys.TIME$.MODULE$, cleanerShutdownTimeout * 1000L));
+          MDC.of(LogKeys.TIMEOUT$.MODULE$, cleanerShutdownTimeout * 1000L));
       }
     } catch (InterruptedException ignored) {
       Thread.currentThread().interrupt();
