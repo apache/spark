@@ -181,7 +181,6 @@
     <scalafmt.skip>true</scalafmt.skip>
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
     <scalafmt.changedOnly>true</scalafmt.changedOnly>
-    <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
     <fasterxml.jackson.version>2.19.0</fasterxml.jackson.version>
     <fasterxml.jackson.databind.version>2.19.0</fasterxml.jackson.databind.version>
     <ws.xmlschema.version>2.3.1</ws.xmlschema.version>
@@ -1622,19 +1621,6 @@
             <artifactId>logback-core</artifactId>
           </exclusion>
         </exclusions>
-      </dependency>
-      <!-- Hive 2.3 need this to init Hive's FunctionRegistry -->
-      <dependency>
-        <groupId>org.codehaus.jackson</groupId>
-        <artifactId>jackson-core-asl</artifactId>
-        <version>${codehaus.jackson.version}</version>
-        <scope>${hive.jackson.scope}</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.codehaus.jackson</groupId>
-        <artifactId>jackson-mapper-asl</artifactId>
-        <version>${codehaus.jackson.version}</version>
-        <scope>${hive.jackson.scope}</scope>
       </dependency>
       <dependency>
         <groupId>${hive.group}</groupId>
