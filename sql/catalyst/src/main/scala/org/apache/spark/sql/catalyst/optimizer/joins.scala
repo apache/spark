@@ -395,32 +395,11 @@ trait JoinSelectionHelper extends Logging {
     }
   }
 
-  protected def hashJoinSupported
-      (leftKeys: Seq[Expression], rightKeys: Seq[Expression]): Boolean = {
-    val result = leftKeys.concat(rightKeys).forall(e => UnsafeRowUtils.isBinaryStable(e.dataType))
-    if (!result) {
-      val keysNotSupportingHashJoin = leftKeys.concat(rightKeys).filterNot(
-        e => UnsafeRowUtils.isBinaryStable(e.dataType))
-      logWarning(log"Hash based joins are not supported due to joining on keys that don't " +
-        log"support binary equality. Keys not supporting hash joins: " +
-        log"${
-          MDC(HASH_JOIN_KEYS, keysNotSupportingHashJoin.map(
-            e => e.toString + " due to DataType: " + e.dataType.typeName).mkString(", "))
-        }")
-    }
-    result
-  }
-
-  def canPlanAsBroadcastHashJoin(join: Join, conf: SQLConf): Boolean = join match {
-    case ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _, _, _, _) =>
-      val hashJoinSupport = hashJoinSupported(leftKeys, rightKeys)
-      val noShufflePlannedBefore =
-        !hashJoinSupport || getShuffleHashJoinBuildSide(join, hintOnly = true, conf).isEmpty
-      getBroadcastBuildSide(join, hintOnly = true, conf).isDefined ||
-        (noShufflePlannedBefore &&
-          getBroadcastBuildSide(join, hintOnly = false, conf).isDefined)
-    case ExtractSingleColumnNullAwareAntiJoin(_, _) => true
-    case _ => false
+  def canPlanAsBroadcastHashJoin(join: Join, conf: SQLConf): Boolean = {
+    getBroadcastBuildSide(join.left, join.right, join.joinType,
+      join.hint, hintOnly = true, conf).isDefined ||
+      getBroadcastBuildSide(join.left, join.right, join.joinType,
+        join.hint, hintOnly = false, conf).isDefined
   }
 
   def canPruneLeft(joinType: JoinType): Boolean = joinType match {
