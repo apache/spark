@@ -55,8 +55,11 @@ import org.ietf.jgss.GSSException;
 import org.ietf.jgss.GSSManager;
 import org.ietf.jgss.GSSName;
 import org.ietf.jgss.Oid;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import org.apache.spark.internal.Logger;
+import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 
 /**
  *
@@ -66,7 +69,7 @@ import org.slf4j.LoggerFactory;
 public class ThriftHttpServlet extends TServlet {
 
   private static final long serialVersionUID = 1L;
-  public static final Logger LOG = LoggerFactory.getLogger(ThriftHttpServlet.class.getName());
+  public static final Logger LOG = LoggerFactory.getLogger(ThriftHttpServlet.class);
   private final String authType;
   private final UserGroupInformation serviceUGI;
   private final UserGroupInformation httpUGI;
@@ -174,7 +177,8 @@ public class ThriftHttpServlet extends TServlet {
         } else {
           response.addCookie(hs2Cookie);
         }
-        LOG.info("Cookie added for clientUserName " + clientUserName);
+        LOG.info("Cookie added for clientUserName {}",
+          MDC.of(LogKeys.USER_NAME$.MODULE$, clientUserName));
       }
       super.doPost(request, response);
     }
@@ -228,7 +232,7 @@ public class ThriftHttpServlet extends TServlet {
         String userName = HttpAuthUtils.getUserNameFromCookieToken(currValue);
 
         if (userName == null) {
-          LOG.warn("Invalid cookie token " + currValue);
+          LOG.warn("Invalid cookie token {}", MDC.of(LogKeys.TOKEN$.MODULE$, currValue));
           continue;
         }
         //We have found a valid cookie in the client request.

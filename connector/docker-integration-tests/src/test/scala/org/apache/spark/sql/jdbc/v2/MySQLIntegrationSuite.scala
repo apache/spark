@@ -19,8 +19,6 @@ package org.apache.spark.sql.jdbc.v2
 
 import java.sql.{Connection, SQLFeatureNotSupportedException}
 
-import org.scalatest.time.SpanSugar._
-
 import org.apache.spark.{SparkConf, SparkSQLFeatureNotSupportedException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
@@ -67,8 +65,6 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
     .set("spark.sql.catalog.mysql.pushDownAggregate", "true")
     .set("spark.sql.catalog.mysql.pushDownLimit", "true")
     .set("spark.sql.catalog.mysql.pushDownOffset", "true")
-
-  override val connectionTimeout = timeout(7.minutes)
 
   private var mySQLVersion = -1
 

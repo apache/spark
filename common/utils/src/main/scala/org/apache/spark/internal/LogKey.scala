@@ -230,6 +230,7 @@ object LogKeys {
   case object FROM_TIME extends LogKey
   case object FUNCTION_NAME extends LogKey
   case object FUNCTION_PARAMETER extends LogKey
+  case object GLOBAL_INIT_FILE extends LogKey
   case object GLOBAL_WATERMARK extends LogKey
   case object GROUP_BY_EXPRS extends LogKey
   case object GROUP_ID extends LogKey
@@ -275,6 +276,7 @@ object LogKeys {
   case object KAFKA_RECORDS_PULLED_COUNT extends LogKey
   case object KEY extends LogKey
   case object KEYTAB extends LogKey
+  case object KEYTAB_FILE extends LogKey
   case object LABEL_COLUMN extends LogKey
   case object LARGEST_CLUSTER_INDEX extends LogKey
   case object LAST_ACCESS_TIME extends LogKey
@@ -290,6 +292,7 @@ object LogKeys {
   case object LOADED_VERSION extends LogKey
   case object LOAD_FACTOR extends LogKey
   case object LOAD_TIME extends LogKey
+  case object LOCAL_SCRATCH_DIR extends LogKey
   case object LOCATION extends LogKey
   case object LOGICAL_PLAN_COLUMNS extends LogKey
   case object LOGICAL_PLAN_LEAVES extends LogKey
@@ -411,6 +414,8 @@ object LogKeys {
   case object OLD_GENERATION_GC extends LogKey
   case object OLD_VALUE extends LogKey
   case object OPEN_COST_IN_BYTES extends LogKey
+  case object OPERATION_HANDLE extends LogKey
+  case object OPERATION_HANDLE_IDENTIFIER extends LogKey
   case object OPTIMIZED_PLAN_COLUMNS extends LogKey
   case object OPTIMIZER_CLASS_NAME extends LogKey
   case object OPTIONS extends LogKey
@@ -458,6 +463,7 @@ object LogKeys {
   case object PROCESSING_TIME extends LogKey
   case object PRODUCER_ID extends LogKey
   case object PROPERTY_NAME extends LogKey
+  case object PROTOCOL_VERSION extends LogKey
   case object PROVIDER extends LogKey
   case object PUSHED_FILTERS extends LogKey
   case object PVC_METADATA_NAME extends LogKey
@@ -523,9 +529,11 @@ object LogKeys {
   case object SERVER_NAME extends LogKey
   case object SERVICE_NAME extends LogKey
   case object SERVLET_CONTEXT_HANDLER_PATH extends LogKey
+  case object SESSION_HANDLE extends LogKey
   case object SESSION_HOLD_INFO extends LogKey
   case object SESSION_ID extends LogKey
   case object SESSION_KEY extends LogKey
+  case object SET_CLIENT_INFO_REQUEST extends LogKey
   case object SHARD_ID extends LogKey
   case object SHELL_COMMAND extends LogKey
   case object SHUFFLE_BLOCK_INFO extends LogKey
@@ -578,6 +586,7 @@ object LogKeys {
   case object SUBSAMPLING_RATE extends LogKey
   case object SUB_QUERY extends LogKey
   case object TABLE_NAME extends LogKey
+  case object TABLE_TYPE extends LogKey
   case object TABLE_TYPES extends LogKey
   case object TARGET_NUM_EXECUTOR extends LogKey
   case object TARGET_NUM_EXECUTOR_DELTA extends LogKey
@@ -595,6 +604,9 @@ object LogKeys {
   case object THREAD extends LogKey
   case object THREAD_ID extends LogKey
   case object THREAD_NAME extends LogKey
+  case object THREAD_POOL_KEEPALIVE_TIME extends LogKey
+  case object THREAD_POOL_SIZE extends LogKey
+  case object THREAD_POOL_WAIT_QUEUE_SIZE extends LogKey
   case object TID extends LogKey
   case object TIME extends LogKey
   case object TIMEOUT extends LogKey
@@ -602,6 +614,7 @@ object LogKeys {
   case object TIMESTAMP extends LogKey
   case object TIME_UNITS extends LogKey
   case object TIP extends LogKey
+  case object TOKEN extends LogKey
   case object TOKEN_KIND extends LogKey
   case object TOKEN_REGEX extends LogKey
   case object TOPIC extends LogKey

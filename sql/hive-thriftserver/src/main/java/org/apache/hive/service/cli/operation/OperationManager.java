@@ -40,8 +40,11 @@ import org.apache.hive.service.cli.session.HiveSession;
 import org.apache.hive.service.rpc.thrift.TRowSet;
 import org.apache.hive.service.rpc.thrift.TTableSchema;
 import org.apache.logging.log4j.core.Appender;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import org.apache.spark.internal.Logger;
+import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 
 /**
  * OperationManager.
@@ -289,7 +292,8 @@ public class OperationManager extends AbstractService {
     for (OperationHandle handle : handles) {
       Operation operation = removeTimedOutOperation(handle);
       if (operation != null) {
-        LOG.warn("Operation " + handle + " is timed-out and will be closed");
+        LOG.warn("Operation {} is timed-out and will be closed",
+          MDC.of(LogKeys.OPERATION_HANDLE$.MODULE$, handle));
         removed.add(operation);
       }
     }

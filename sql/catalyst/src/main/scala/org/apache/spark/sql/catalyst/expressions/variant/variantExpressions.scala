@@ -37,6 +37,8 @@ import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.types.StringTypeAnyCollation
 import org.apache.spark.sql.types._
 import org.apache.spark.types.variant._
 import org.apache.spark.types.variant.VariantUtil.Type
@@ -61,7 +63,7 @@ case class ParseJson(child: Expression, failOnError: Boolean = true)
     inputTypes :+ BooleanType,
     returnNullable = !failOnError)
 
-  override def inputTypes: Seq[AbstractDataType] = StringType :: Nil
+  override def inputTypes: Seq[AbstractDataType] = StringTypeAnyCollation :: Nil
 
   override def dataType: DataType = VariantType
 
@@ -199,7 +201,7 @@ case class VariantGet(
 
   final override def nodePatternsInternal(): Seq[TreePattern] = Seq(VARIANT_GET)
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(VariantType, StringType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(VariantType, StringTypeAnyCollation)
 
   override def prettyName: String = if (failOnError) "variant_get" else "try_variant_get"
 
@@ -260,7 +262,7 @@ case object VariantGet {
         VariantType =>
       true
     case ArrayType(elementType, _) => checkDataType(elementType)
-    case MapType(StringType, valueType, _) => checkDataType(valueType)
+    case MapType(_: StringType, valueType, _) => checkDataType(valueType)
     case StructType(fields) => fields.forall(f => checkDataType(f.dataType))
     case _ => false
   }
@@ -334,7 +336,8 @@ case object VariantGet {
             }
           case Type.BOOLEAN => Literal(v.getBoolean, BooleanType)
           case Type.LONG => Literal(v.getLong, LongType)
-          case Type.STRING => Literal(UTF8String.fromString(v.getString), StringType)
+          case Type.STRING => Literal(UTF8String.fromString(v.getString),
+            SQLConf.get.defaultStringType)
           case Type.DOUBLE => Literal(v.getDouble, DoubleType)
           case Type.DECIMAL =>
             val d = Decimal(v.getDecimal)
@@ -387,7 +390,7 @@ case object VariantGet {
         } else {
           invalidCast()
         }
-      case MapType(StringType, valueType, _) =>
+      case MapType(_: StringType, valueType, _) =>
         if (variantType == Type.OBJECT) {
           val size = v.objectSize()
           val keyArray = new Array[Any](size)
@@ -568,7 +571,7 @@ case class VariantExplode(child: Expression) extends UnaryExpression with Genera
   override def elementSchema: StructType = {
     new StructType()
       .add("pos", IntegerType, nullable = false)
-      .add("key", StringType, nullable = true)
+      .add("key", SQLConf.get.defaultStringType, nullable = true)
       .add("value", VariantType, nullable = false)
   }
 }
@@ -625,7 +628,7 @@ case class SchemaOfVariant(child: Expression)
     with ExpectsInputTypes {
   override lazy val replacement: Expression = StaticInvoke(
     SchemaOfVariant.getClass,
-    StringType,
+    SQLConf.get.defaultStringType,
     "schemaOfVariant",
     Seq(child),
     inputTypes,
@@ -633,7 +636,7 @@ case class SchemaOfVariant(child: Expression)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(VariantType)
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def prettyName: String = "schema_of_variant"
 
@@ -676,7 +679,7 @@ object SchemaOfVariant {
     case Type.NULL => NullType
     case Type.BOOLEAN => BooleanType
     case Type.LONG => LongType
-    case Type.STRING => StringType
+    case Type.STRING => SQLConf.get.defaultStringType
     case Type.DOUBLE => DoubleType
     case Type.DECIMAL =>
       val d = v.getDecimal
@@ -722,7 +725,7 @@ case class SchemaOfVariantAgg(
 
   override def inputTypes: Seq[AbstractDataType] = Seq(VariantType)
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def nullable: Boolean = false
 

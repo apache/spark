@@ -32,7 +32,7 @@ license: |
 - Since Spark 4.0, `spark.sql.hive.metastore` drops the support of Hive prior to 2.0.0 as they require JDK 8 that Spark does not support anymore. Users should migrate to higher versions.
 - Since Spark 4.0, `spark.sql.parquet.compression.codec` drops the support of codec name `lz4raw`, please use `lz4_raw` instead.
 - Since Spark 4.0, when overflowing during casting timestamp to byte/short/int under non-ansi mode, Spark will return null instead a wrapping value.
-- Since Spark 4.0, the `encode()` and `decode()` functions support only the following charsets 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16'. To restore the previous behavior when the function accepts charsets of the current JDK used by Spark, set `spark.sql.legacy.javaCharsets` to `true`.
+- Since Spark 4.0, the `encode()` and `decode()` functions support only the following charsets 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16', 'UTF-32'. To restore the previous behavior when the function accepts charsets of the current JDK used by Spark, set `spark.sql.legacy.javaCharsets` to `true`.
 - Since Spark 4.0, the legacy datetime rebasing SQL configs with the prefix `spark.sql.legacy` are removed. To restore the previous behavior, use the following configs:
   - `spark.sql.parquet.int96RebaseModeInWrite` instead of `spark.sql.legacy.parquet.int96RebaseModeInWrite`
   - `spark.sql.parquet.datetimeRebaseModeInWrite` instead of `spark.sql.legacy.parquet.datetimeRebaseModeInWrite`
@@ -50,6 +50,7 @@ license: |
 - Since Spark 4.0, Oracle JDBC datasource will write TimestampType as TIMESTAMP WITH LOCAL TIME ZONE, while in Spark 3.5 and previous, write as TIMESTAMP. To restore the previous behavior, set `spark.sql.legacy.oracle.timestampMapping.enabled` to `true`.
 - Since Spark 4.0, MsSQL Server JDBC datasource will read TINYINT as ShortType, while in Spark 3.5 and previous, read as IntegerType. To restore the previous behavior, set `spark.sql.legacy.mssqlserver.numericMapping.enabled` to `true`.
 - Since Spark 4.0, MsSQL Server JDBC datasource will read DATETIMEOFFSET as TimestampType, while in Spark 3.5 and previous, read as StringType. To restore the previous behavior, set `spark.sql.legacy.mssqlserver.datetimeoffsetMapping.enabled` to `true`.
+- Since Spark 4.0, DB2 JDBC datasource will read SMALLINT as ShortType, while in Spark 3.5 and previous, it was read as IntegerType. To restore the previous behavior, set `spark.sql.legacy.db2.numericMapping.enabled` to `true`.
 - Since Spark 4.0, The default value for `spark.sql.legacy.ctePrecedencePolicy` has been changed from `EXCEPTION` to `CORRECTED`. Instead of raising an error, inner CTE definitions take precedence over outer definitions.
 - Since Spark 4.0, The default value for `spark.sql.legacy.timeParserPolicy` has been changed from `EXCEPTION` to `CORRECTED`. Instead of raising an `INCONSISTENT_BEHAVIOR_CROSS_VERSION` error, `CANNOT_PARSE_TIMESTAMP` will be raised if ANSI mode is enable. `NULL` will be returned if ANSI mode is disabled. See [Datetime Patterns for Formatting and Parsing](sql-ref-datetime-pattern.html).
 - Since Spark 4.0, A bug falsely allowing `!` instead of `NOT` when `!` is not a prefix operator has been fixed. Clauses such as `expr ! IN (...)`, `expr ! BETWEEN ...`, or `col ! NULL` now raise syntax errors. To restore the previous behavior, set `spark.sql.legacy.bangEqualsNot` to `true`. 
@@ -1067,7 +1068,7 @@ Python UDF registration is unchanged.
 Spark SQL is designed to be compatible with the Hive Metastore, SerDes and UDFs.
 Currently, Hive SerDes and UDFs are based on built-in Hive,
 and Spark SQL can be connected to different versions of Hive Metastore
-(from 0.12.0 to 2.3.9 and 3.0.0 to 3.1.3. Also see [Interacting with Different Versions of Hive Metastore](sql-data-sources-hive-tables.html#interacting-with-different-versions-of-hive-metastore)).
+(from 2.0.0 to 2.3.10 and 3.0.0 to 3.1.3. Also see [Interacting with Different Versions of Hive Metastore](sql-data-sources-hive-tables.html#interacting-with-different-versions-of-hive-metastore)).
 
 #### Deploying in Existing Hive Warehouses
 {:.no_toc}
