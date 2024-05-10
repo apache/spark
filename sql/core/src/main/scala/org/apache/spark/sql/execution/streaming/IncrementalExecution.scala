@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.{LocalLimitExec, QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
+import org.apache.spark.sql.execution.{LocalLimitExec, QueryExecution, SerializeFromObjectExec, SparkPlan, SparkPlanner, UnaryExecNode}
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, MergingSessionsExec, ObjectHashAggregateExec, SortAggregateExec, UpdatingSessionsExec}
 import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
@@ -346,6 +346,28 @@ class IncrementalExecution(
           eventTimeWatermarkForLateEvents = inputWatermarkForLateEvents(m.stateInfo.get),
           eventTimeWatermarkForEviction = inputWatermarkForEviction(m.stateInfo.get)
         )
+
+      // UpdateEventTimeColumnExec is used to tag the eventTime column, and validate
+      // emitted rows adhere to watermark in the output of transformWithState.
+      // Hence, this node shares the same watermark value as TransformWithStateExec.
+      // However, given that UpdateEventTimeColumnExec does not store any state, it
+      // does not have any StateInfo. We simply use the StateInfo of transformWithStateExec
+      // to propagate watermark to both UpdateEventTimeColumnExec and transformWithStateExec.
+      case UpdateEventTimeColumnExec(eventTime, delay, None,
+        SerializeFromObjectExec(serializer,
+        t: TransformWithStateExec)) if t.stateInfo.isDefined =>
+
+        val stateInfo = t.stateInfo.get
+        val iwLateEvents = inputWatermarkForLateEvents(stateInfo)
+        val iwEviction = inputWatermarkForEviction(stateInfo)
+
+        UpdateEventTimeColumnExec(eventTime, delay, iwLateEvents,
+          SerializeFromObjectExec(serializer,
+            t.copy(
+              eventTimeWatermarkForLateEvents = iwLateEvents,
+              eventTimeWatermarkForEviction = iwEviction)
+          ))
+
 
       case t: TransformWithStateExec if t.stateInfo.isDefined =>
         t.copy(

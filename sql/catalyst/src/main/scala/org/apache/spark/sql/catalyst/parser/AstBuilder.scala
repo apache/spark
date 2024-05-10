@@ -1638,6 +1638,20 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       }
       partitionByExpressions = p.partition.asScala.map(expression).toSeq
       orderByExpressions = p.sortItem.asScala.map(visitSortItem).toSeq
+      def invalidPartitionOrOrderingExpression(clause: String): String = {
+        "The table function call includes a table argument with an invalid " +
+          s"partitioning/ordering specification: the $clause clause included multiple " +
+          "expressions without parentheses surrounding them; please add parentheses around " +
+          "these expressions and then retry the query again"
+      }
+      validate(
+        Option(p.invalidMultiPartitionExpression).isEmpty,
+        message = invalidPartitionOrOrderingExpression("PARTITION BY"),
+        ctx = p.invalidMultiPartitionExpression)
+      validate(
+        Option(p.invalidMultiSortItem).isEmpty,
+        message = invalidPartitionOrOrderingExpression("ORDER BY"),
+        ctx = p.invalidMultiSortItem)
     }
     validate(
       !(withSinglePartition && partitionByExpressions.nonEmpty),

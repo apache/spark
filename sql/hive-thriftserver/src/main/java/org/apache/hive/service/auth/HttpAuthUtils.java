@@ -39,8 +39,11 @@ import org.ietf.jgss.GSSContext;
 import org.ietf.jgss.GSSManager;
 import org.ietf.jgss.GSSName;
 import org.ietf.jgss.Oid;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import org.apache.spark.internal.Logger;
+import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 
 /**
  * Utility functions for HTTP mode authentication.
@@ -109,7 +112,8 @@ public final class HttpAuthUtils {
     Map<String, String> map = splitCookieToken(tokenStr);
 
     if (!map.keySet().equals(COOKIE_ATTRIBUTES)) {
-      LOG.error("Invalid token with missing attributes " + tokenStr);
+      LOG.error("Invalid token with missing attributes {}",
+        MDC.of(LogKeys.TOKEN$.MODULE$, tokenStr));
       return null;
     }
     return map.get(COOKIE_CLIENT_USER_NAME);
@@ -129,7 +133,7 @@ public final class HttpAuthUtils {
       String part = st.nextToken();
       int separator = part.indexOf(COOKIE_KEY_VALUE_SEPARATOR);
       if (separator == -1) {
-        LOG.error("Invalid token string " + tokenStr);
+        LOG.error("Invalid token string {}", MDC.of(LogKeys.TOKEN$.MODULE$, tokenStr));
         return null;
       }
       String key = part.substring(0, separator);
