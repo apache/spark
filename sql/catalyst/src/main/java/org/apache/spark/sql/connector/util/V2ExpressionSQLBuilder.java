@@ -171,15 +171,7 @@ public class V2ExpressionSQLBuilder {
   }
 
   protected String visitLiteral(Literal<?> literal) {
-    String litString = literal.toString();
-    if (literal.dataType() instanceof StringType) {
-      return "'"
-        + StringUtils.replace(litString.substring(1, litString.length() - 1),
-        "'",
-        "''")
-        + "'";
-    }
-    return litString;
+    return literal.toString();
   }
 
   protected String visitNamedReference(NamedReference namedRef) {
