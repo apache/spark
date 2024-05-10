@@ -59,13 +59,12 @@ package object client {
         "org.pentaho:pentaho-aggdesigner-algorithm"))
 
     // Since HIVE-23980, calcite-core included in Hive package jar.
-    case object v2_3 extends HiveVersion("2.3.9",
+    case object v2_3 extends HiveVersion("2.3.10",
       exclusions = Seq("org.apache.calcite:calcite-core",
         "org.apache.calcite:calcite-druid",
         "org.apache.calcite.avatica:avatica",
-        "com.fasterxml.jackson.core:*",
         "org.apache.curator:*",
-        "org.pentaho:pentaho-aggdesigner-algorithm",
+        "net.hydromatic:aggdesigner-algorithm",
         "org.apache.hive:hive-vector-code-gen"))
 
     // Since Hive 3.0, HookUtils uses org.apache.logging.log4j.util.Strings

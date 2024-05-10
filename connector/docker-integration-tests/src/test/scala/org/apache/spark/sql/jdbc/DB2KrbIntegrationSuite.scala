@@ -24,7 +24,6 @@ import javax.security.auth.login.Configuration
 import com.github.dockerjava.api.model.{AccessMode, Bind, ContainerConfig, HostConfig, Volume}
 import org.apache.hadoop.security.{SecurityUtil, UserGroupInformation}
 import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod.KERBEROS
-import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.execution.datasources.jdbc.connection.{DB2ConnectionProvider, SecureConnectionProvider}
@@ -67,8 +66,6 @@ class DB2KrbIntegrationSuite extends DockerKrbJDBCIntegrationSuite {
       hostConfigBuilder.withBinds(hostConfigBuilder.getBinds :+ newBind: _*)
     }
   }
-
-  override val connectionTimeout = timeout(3.minutes)
 
   override protected def setAuthentication(keytabFile: String, principal: String): Unit = {
     val config = new SecureConnectionProvider.JDBCConfiguration(
