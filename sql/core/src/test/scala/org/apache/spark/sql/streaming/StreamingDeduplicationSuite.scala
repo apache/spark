@@ -20,8 +20,8 @@ package org.apache.spark.sql.streaming
 import java.io.File
 
 import org.apache.commons.io.FileUtils
-import org.apache.spark.SparkUnsupportedOperationException
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution.streaming.MemoryStream
@@ -502,8 +502,10 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
       AddData(inputData, "a" -> 2), // Dropped
       CheckLastBatch(),
       assertNumStateRows(total = 1, updated = 0, droppedByWatermark = 0),
+      // scalastyle:off
       AddData(inputData, "ä" -> 1),
       CheckLastBatch("ä" -> 1),
+      // scalastyle:on
       assertNumStateRows(total = 2, updated = 1, droppedByWatermark = 0)
     )
   }

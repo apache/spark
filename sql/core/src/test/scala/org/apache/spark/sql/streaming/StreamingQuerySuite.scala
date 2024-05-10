@@ -53,7 +53,6 @@ import org.apache.spark.sql.streaming.util.{BlockingSource, MockSourceProvider, 
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.tags.SlowSQLTest
 
-//noinspection ScalaStyle
 @SlowSQLTest
 class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging with MockitoSugar {
 
@@ -1382,12 +1381,14 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       testStream(filteredDf)(
         StartStream(triggerClock = clock, trigger = Trigger.ProcessingTime(100)),
         Execute { _ =>
-          spark.createDataFrame(Seq("aaa" -> 1, "AAA" -> 2, "bbb" -> 3, "aa" -> 4)).toDF("key", "value_stream")
-            .write.format("parquet").mode(SaveMode.Append).saveAsTable("parquet_streaming_tbl")
+          spark.createDataFrame(Seq("aaa" -> 1, "AAA" -> 2, "bbb" -> 3, "aa" -> 4))
+            .toDF("key", "value_stream")
+            .write.format("parquet").mode(SaveMode.Append)
+            .saveAsTable("parquet_streaming_tbl")
         },
         AdvanceManualClock(150),
         waitUntilBatchProcessed(clock),
-        CheckLastBatch(("aaa", 1), ("AAA", 2)),
+        CheckLastBatch(("aaa", 1), ("AAA", 2))
       )
     }
   }
