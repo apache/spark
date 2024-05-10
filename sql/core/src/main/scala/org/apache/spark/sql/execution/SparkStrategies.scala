@@ -248,8 +248,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         val hashJoinSupport = hashJoinSupported(leftKeys, rightKeys)
         def createBroadcastHashJoin(onlyLookingAtHint: Boolean) = {
           if (hashJoinSupport) {
-            val buildSide = getBroadcastBuildSide(
-              left, right, joinType, hint, onlyLookingAtHint, conf)
+            val buildSide = getBroadcastBuildSide(j, onlyLookingAtHint, conf)
             checkHintBuildSide(onlyLookingAtHint, buildSide, joinType, hint, true)
             buildSide.map {
               buildSide =>
@@ -269,8 +268,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
         def createShuffleHashJoin(onlyLookingAtHint: Boolean) = {
           if (hashJoinSupport) {
-            val buildSide = getShuffleHashJoinBuildSide(
-              left, right, joinType, hint, onlyLookingAtHint, conf)
+            val buildSide = getShuffleHashJoinBuildSide(j, onlyLookingAtHint, conf)
             checkHintBuildSide(onlyLookingAtHint, buildSide, joinType, hint, false)
             buildSide.map {
               buildSide =>

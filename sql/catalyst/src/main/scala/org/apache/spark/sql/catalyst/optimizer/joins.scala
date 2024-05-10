@@ -289,58 +289,52 @@ case object BuildLeft extends BuildSide
 trait JoinSelectionHelper {
 
   def getBroadcastBuildSide(
-      left: LogicalPlan,
-      right: LogicalPlan,
-      joinType: JoinType,
-      hint: JoinHint,
+      join: Join,
       hintOnly: Boolean,
       conf: SQLConf): Option[BuildSide] = {
     val buildLeft = if (hintOnly) {
-      hintToBroadcastLeft(hint)
+      hintToBroadcastLeft(join.hint)
     } else {
-      canBroadcastBySize(left, conf) && !hintToNotBroadcastLeft(hint)
+      canBroadcastBySize(join.left, conf) && !hintToNotBroadcastLeft(join.hint)
     }
     val buildRight = if (hintOnly) {
-      hintToBroadcastRight(hint)
+      hintToBroadcastRight(join.hint)
     } else {
-      canBroadcastBySize(right, conf) && !hintToNotBroadcastRight(hint)
+      canBroadcastBySize(join.right, conf) && !hintToNotBroadcastRight(join.hint)
     }
     getBuildSide(
-      canBuildBroadcastLeft(joinType) && buildLeft,
-      canBuildBroadcastRight(joinType) && buildRight,
-      left,
-      right
+      canBuildBroadcastLeft(join.joinType) && buildLeft,
+      canBuildBroadcastRight(join.joinType) && buildRight,
+      join.left,
+      join.right
     )
   }
 
   def getShuffleHashJoinBuildSide(
-      left: LogicalPlan,
-      right: LogicalPlan,
-      joinType: JoinType,
-      hint: JoinHint,
+      join: Join,
       hintOnly: Boolean,
       conf: SQLConf): Option[BuildSide] = {
     val buildLeft = if (hintOnly) {
-      hintToShuffleHashJoinLeft(hint)
+      hintToShuffleHashJoinLeft(join.hint)
     } else {
-      hintToPreferShuffleHashJoinLeft(hint) ||
-        (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(left, conf) &&
-          muchSmaller(left, right, conf)) ||
+      hintToPreferShuffleHashJoinLeft(join.hint) ||
+        (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(join.left, conf) &&
+          muchSmaller(join.left, join.right, conf)) ||
         forceApplyShuffledHashJoin(conf)
     }
     val buildRight = if (hintOnly) {
-      hintToShuffleHashJoinRight(hint)
+      hintToShuffleHashJoinRight(join.hint)
     } else {
-      hintToPreferShuffleHashJoinRight(hint) ||
-        (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(right, conf) &&
-          muchSmaller(right, left, conf)) ||
+      hintToPreferShuffleHashJoinRight(join.hint) ||
+        (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(join.right, conf) &&
+          muchSmaller(join.right, join.left, conf)) ||
         forceApplyShuffledHashJoin(conf)
     }
     getBuildSide(
-      canBuildShuffledHashJoinLeft(joinType) && buildLeft,
-      canBuildShuffledHashJoinRight(joinType) && buildRight,
-      left,
-      right
+      canBuildShuffledHashJoinLeft(join.joinType) && buildLeft,
+      canBuildShuffledHashJoinRight(join.joinType) && buildRight,
+      join.left,
+      join.right
     )
   }
 
@@ -401,10 +395,8 @@ trait JoinSelectionHelper {
   }
 
   def canPlanAsBroadcastHashJoin(join: Join, conf: SQLConf): Boolean = {
-    getBroadcastBuildSide(join.left, join.right, join.joinType,
-      join.hint, hintOnly = true, conf).isDefined ||
-      getBroadcastBuildSide(join.left, join.right, join.joinType,
-        join.hint, hintOnly = false, conf).isDefined
+    getBroadcastBuildSide(join, hintOnly = true, conf).isDefined ||
+      getBroadcastBuildSide(join, hintOnly = false, conf).isDefined
   }
 
   def canPruneLeft(joinType: JoinType): Boolean = joinType match {
