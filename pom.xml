@@ -192,6 +192,8 @@
     <commons-codec.version>1.17.0</commons-codec.version>
     <commons-compress.version>1.26.1</commons-compress.version>
     <commons-io.version>2.16.1</commons-io.version>
+    <!-- To support Hive UDF jars built by Hive 2.3.9 and below -->
+    <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
     <commons-lang3.version>3.14.0</commons-lang3.version>
     <!-- org.apache.commons/commons-pool2/-->
@@ -611,6 +613,11 @@
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-text</artifactId>
         <version>1.12.0</version>
+      </dependency>
+      <dependency>
+        <groupId>commons-lang</groupId>
+        <artifactId>commons-lang</artifactId>
+        <version>${commons-lang2.version}</version>
       </dependency>
       <dependency>
         <groupId>commons-io</groupId>
@@ -2893,6 +2900,12 @@
         <artifactId>hive-storage-api</artifactId>
         <version>${hive.storage.version}</version>
         <scope>${hive.storage.scope}</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>commons-lang</groupId>
+            <artifactId>commons-lang</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>commons-cli</groupId>
