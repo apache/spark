@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import scala.collection.mutable.TreeMap
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, UnresolvedWithinGroup}
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Descending, Expression, ExpressionDescription, ImplicitCastInputTypes, SortOrder}
@@ -75,28 +73,23 @@ case class Mode(
     }
     buffer
   }
+  private def impl3(buff: OpenHashMap[AnyRef, Long]) = {
+    val modeMap = buff.toSeq.groupMapReduce {
+      case (key: String, _) =>
+        CollationFactory.getCollationKey(UTF8String.fromString(key), collationId)
+      case (key: UTF8String, _) =>
+        CollationFactory.getCollationKey(key, collationId)
+      case (key, _) => key
+    }(x => x)((x, y) => (x._1, x._2 + y._2)).values
+    modeMap
+  }
 
   override def eval(buff: OpenHashMap[AnyRef, Long]): Any = {
     if (buff.isEmpty) {
       return null
     }
     val buffer = if (isCollatedString(child)) {
-      val modeMap = buff.foldLeft(
-        new TreeMap[org.apache.spark.unsafe.types.UTF8String, Long]()(Ordering.comparatorToOrdering(
-          CollationFactory.fetchCollation(collationId).comparator
-          )))
-      {
-        case (map, (key: String, count)) =>
-          map(org.apache.spark.unsafe.types.UTF8String.fromString(key)) =
-            map.getOrElse(org.apache.spark.unsafe.types.UTF8String.fromString(key), 0L) + count
-          map
-        case (map, (key: UTF8String, count)) =>
-          map(key) = map.getOrElse(key, 0L) + count
-          map
-        case (_, _) =>
-          throw new IllegalArgumentException("Mode expects non-null string type.")
-      }
-      modeMap
+      impl3(buff)
     } else {
       buff
     }
