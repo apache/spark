@@ -206,6 +206,9 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
   test("broadcastable join with shuffle join hint") {
     spark.sharedState.cacheManager.clearCache()
     sql("CACHE TABLE testData")
+    // Make sure it's planned as broadcast join without the hint.
+    assertJoin("SELECT * FROM testData JOIN testData2 ON key = a",
+      classOf[BroadcastHashJoinExec])
     assertJoin("SELECT /*+ SHUFFLE_HASH(testData) */ * FROM testData JOIN testData2 ON key = a",
       classOf[ShuffledHashJoinExec])
   }
