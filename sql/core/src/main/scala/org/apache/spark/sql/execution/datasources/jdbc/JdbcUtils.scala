@@ -22,7 +22,6 @@ import java.nio.charset.StandardCharsets
 import java.sql.{Connection, Date, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime}
 import java.util
-import java.util.{Calendar, TimeZone}
 import java.util.concurrent.TimeUnit
 
 import scala.annotation.tailrec
@@ -500,8 +499,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       }
 
     case TimestampType =>
-      val calendar = if (conf.useLocalSessionCalendar) {
-        dialect.getDatabaseCalendar.get
+      val calendar = if (!conf.useNullCalendar) {
+        dialect.getDatabaseCalendar.orNull
       } else {
         null
       }
@@ -670,8 +669,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
         stmt.setBytes(pos + 1, row.getAs[Array[Byte]](pos))
 
     case TimestampType =>
-      val calendar = if (conf.useLocalSessionCalendar) {
-        dialect.getDatabaseCalendar.get
+      val calendar = if (!conf.useNullCalendar) {
+        dialect.getDatabaseCalendar.orNull
       } else {
         null
       }

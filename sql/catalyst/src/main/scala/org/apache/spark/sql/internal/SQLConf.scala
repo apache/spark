@@ -4044,15 +4044,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val USE_LOCAL_SESSION_CALENDAR = buildConf("spark.sql.jdbc.useLocalSessionCalendar")
-    .doc("When retrieving timestamp NTZ columns from JDBC data source, user will see the " +
-      "values as they where shown in data source only if the JVM time zone is equal " +
-      "to the spark local session time zone. Since these two can differ, if this " +
-      "configuration property is set to true, rs.getTimestamp and rs.setTimestamp " +
-      "API calls will use calendar with spark local session time zone as the second argument")
+  val USE_NULL_CALENDAR = buildConf("spark.sql.legacy.jdbc.useNullCalendar")
+    .doc("When reading timestamp NTZ columns from JDBC data source, user will see the " +
+      "values as they were shown in data source only if the JVM time zone is equal " +
+      "to the spark local session time zone. Since these two can differ, local session " +
+      "timezone calendar is used in rs.getTimestamp and rs.setTimestamp API calls. " +
+      "If this configuration is set to false then null calendar will be used")
+    .internal()
     .version("4.0.0")
     .booleanConf
-    .createWithDefault(true)
+    .createWithDefault(false)
 
   val UI_EXPLAIN_MODE = buildConf("spark.sql.ui.explainMode")
     .doc("Configures the query explain mode used in the Spark SQL UI. The value can be 'simple', " +
@@ -5727,7 +5728,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
       TimestampNTZType
   }
 
-  def useLocalSessionCalendar: Boolean = getConf(USE_LOCAL_SESSION_CALENDAR)
+  def useNullCalendar: Boolean = getConf(USE_NULL_CALENDAR)
 
   def nestedSchemaPruningEnabled: Boolean = getConf(NESTED_SCHEMA_PRUNING_ENABLED)
 
