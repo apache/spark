@@ -120,7 +120,7 @@ abstract class LogicalPlan
       resolve(field.name :: Nil, resolver).map {
         case a: AttributeReference =>
           // Keep the metadata in given schema.
-          a.copy(metadata = field.metadata)(exprId = a.exprId, qualifier = a.qualifier)
+          a.withMetadata(field.metadata)
         case _ => throw QueryExecutionErrors.resolveCannotHandleNestedSchema(this)
       }.getOrElse {
         throw QueryCompilationErrors.cannotResolveAttributeError(
