@@ -17,7 +17,7 @@
 
 package org.apache.spark.storage
 
-import java.io.{BufferedOutputStream, Closeable, File, FileOutputStream, IOException, OutputStream}
+import java.io.{BufferedOutputStream, File, FileOutputStream, IOException, OutputStream}
 import java.nio.channels.{ClosedByInterruptException, FileChannel}
 import java.nio.file.Files
 import java.util.zip.Checksum
@@ -177,15 +177,17 @@ private[spark] class DiskBlockObjectWriter(
     try {
       if (streamOpen) {
         Utils.tryWithSafeFinally {
-          objOut = closeIfNonNull(objOut)
+          if (null != objOut) objOut.close()
           bs = null
         } {
-          bs = closeIfNonNull(bs)
+          objOut = null
+          if (null != bs) bs.close()
+          bs = null
         }
       }
     } catch {
       case e: IOException =>
-        logError(log"Exception occurred while closing the output stream" +
+        logInfo(log"Exception occurred while closing the output stream" +
           log"${MDC(ERROR, e.getMessage)}")
     } finally {
       if (initialized) {
@@ -204,14 +206,6 @@ private[spark] class DiskBlockObjectWriter(
         }
       }
     }
-  }
-
-
-  private def closeIfNonNull[T <: Closeable](closeable: T): T = {
-    if (closeable != null) {
-      closeable.close()
-    }
-    null.asInstanceOf[T]
   }
 
   /**
