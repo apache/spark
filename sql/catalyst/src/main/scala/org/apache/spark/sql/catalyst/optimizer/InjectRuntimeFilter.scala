@@ -152,7 +152,15 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
         } else if (right.output.exists(_.semanticEquals(targetKey))) {
           extract(right, AttributeSet.empty, hasHitFilter = false, hasHitSelectiveFilter = false,
             currentPlan = right, targetKey = targetKey).orElse {
-            // We can also extract from the left side if the join keys are transitive.
+            // We can also extract from the left side if the join keys are transitive, and
+            // the left side always produces a superset output of join right keys.
+            // Let's look at an example
+            //     left table: 1, 2, 3
+            //     right table, 3, 4
+            //     right outer join output: (3, 3), (null, 4)
+            //     right key output: 3, 4
+            // Any join side always produce a superset output of its corresponding
+            // join keys, but for transitive join keys we need to check the join type.
             if (canPruneRight(joinType)) {
               rkeys.zip(lkeys).find(_._1.semanticEquals(targetKey)).map(_._2)
                 .flatMap { newTargetKey =>
