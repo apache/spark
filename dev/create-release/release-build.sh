@@ -348,11 +348,7 @@ if [[ "$1" == "package" ]]; then
   fi
 
   declare -A BINARY_PKGS_EXTRA
-  if [[ -z "$SKIP_SPARK_R" ]]; then
-    BINARY_PKGS_EXTRA["hadoop3"]="withpip,withr"
-  else
-    BINARY_PKGS_EXTRA["hadoop3"]="withpip"
-  fi
+  BINARY_PKGS_EXTRA["hadoop3"]="withpip,withr"
 
   # This is dead code as Scala 2.12 is no longer supported, but we keep it as a template for
   # adding new Scala version support in the future. This secondary Scala version only has one
@@ -388,9 +384,7 @@ if [[ "$1" == "package" ]]; then
     echo "Copying release tarballs"
     cp spark-* "svn-spark/${DEST_DIR_NAME}-bin/"
     cp pyspark-* "svn-spark/${DEST_DIR_NAME}-bin/"
-    if [[ -z "$SKIP_SPARK_R" ]]; then
-      cp SparkR_* "svn-spark/${DEST_DIR_NAME}-bin/"
-    fi
+    cp SparkR_* "svn-spark/${DEST_DIR_NAME}-bin/"
     svn add "svn-spark/${DEST_DIR_NAME}-bin"
 
     cd svn-spark
