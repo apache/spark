@@ -164,6 +164,12 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  private def findTopLevelUnion(plan: SparkPlan): Seq[UnionExec] = {
+    collect(plan) {
+      case l: UnionExec => l
+    }
+  }
+
   private def findReusedExchange(plan: SparkPlan): Seq[ReusedExchangeExec] = {
     collectWithSubqueries(plan) {
       case ShuffleQueryStageExec(_, e: ReusedExchangeExec, _) => e
@@ -2769,6 +2775,30 @@ class AdaptiveQueryExecSuite
         """.stripMargin
       )
       assert(findTopLevelBroadcastNestedLoopJoin(adaptivePlan).size == 1)
+    }
+  }
+
+  test("SPARK-48155: AQEPropagateEmptyRelation check remained child for join") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      val (_, adaptivePlan) = runAdaptiveAndVerifyResult(
+        """
+          |SELECT /*+ BROADCAST(t3) */ t3.b, count(t3.a) FROM testData2 t1
+          |INNER JOIN (
+          |  SELECT * FROM testData2
+          |  WHERE b = 0
+          |  UNION ALL
+          |  SELECT * FROM testData2
+          |  WHErE b != 0
+          |) t2
+          |ON t1.b = t2.b AND t1.a = 0
+          |RIGHT OUTER JOIN testData2 t3
+          |ON t1.a > t3.a
+          |GROUP BY t3.b
+        """.stripMargin
+      )
+      assert(findTopLevelBroadcastNestedLoopJoin(adaptivePlan).size == 1)
+      assert(findTopLevelUnion(adaptivePlan).size == 0)
     }
   }
 
