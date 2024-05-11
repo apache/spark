@@ -407,8 +407,6 @@ if [[ "$1" == "docs" ]]; then
     cp "$SELF/Gemfile.lock" .
     cp -r "$SELF/.bundle" .
   fi
-  # Python 3.8 support is dropped, use Python 3.9 to build docs.
-  alias python=python3.9
   bundle install
   PRODUCTION=1 RELEASE_VERSION="$SPARK_VERSION" bundle exec jekyll build
   cd ..
@@ -430,7 +428,6 @@ if [[ "$1" == "docs" ]]; then
   fi
 
   mv "spark/docs/_site" docs/
-  unalias python
   exit 0
 fi
 
