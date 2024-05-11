@@ -496,7 +496,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |Usage: spark-submit --kill [submission ID] --master [spark://...]
         |Usage: spark-submit --status [submission ID] --master [spark://...]
         |Usage: spark-submit run-example [options] example-class [example args]""".stripMargin)
-    logInfo(log"${MDC(COMMAND, command)}")
+    logInfo(command)
 
     val mem_mb = Utils.DEFAULT_DRIVER_MEM_MB
     logInfo(
