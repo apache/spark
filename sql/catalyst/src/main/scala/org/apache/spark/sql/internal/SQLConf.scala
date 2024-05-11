@@ -1342,6 +1342,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val HIVE_METASTORE_PARTITION_PRUNING_VARCHAR =
+    buildConf("spark.sql.hive.metastorePartitionPruningVarchar")
+      .doc("When true, predicates of char and varchar type will also be pushed down into " +
+        "the Hive Metastore.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val HIVE_MANAGE_FILESOURCE_PARTITIONS =
     buildConf("spark.sql.hive.manageFilesourcePartitions")
       .doc("When true, enable metastore partition management for file source tables as well. " +
@@ -5274,6 +5282,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def metastorePartitionPruningFastFallback: Boolean =
     getConf(HIVE_METASTORE_PARTITION_PRUNING_FAST_FALLBACK)
+
+  def metastorePartitionPruningVarchar: Boolean = getConf(HIVE_METASTORE_PARTITION_PRUNING_VARCHAR)
 
   def manageFilesourcePartitions: Boolean = getConf(HIVE_MANAGE_FILESOURCE_PARTITIONS)
 

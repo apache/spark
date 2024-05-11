@@ -86,10 +86,6 @@ class FiltersSuite extends SparkFunSuite with PlanTest {
     InSet(a("strcol", StringType), Set("1", "2").map(s => UTF8String.fromString(s))) :: Nil,
     "(strcol = \"1\" or strcol = \"2\")")
 
-  filterTest("skip varchar",
-    (Literal("") === a("varchar", StringType)) :: Nil,
-    "")
-
   filterTest("SPARK-19912 String literals should be escaped for Hive metastore partition pruning",
     (a("stringcol", StringType) === Literal("p1\" and q=\"q1")) ::
       (Literal("p2\" and q=\"q2") === a("stringcol", StringType)) :: Nil,
@@ -247,6 +243,21 @@ class FiltersSuite extends SparkFunSuite with PlanTest {
         Literal(Date.valueOf("2020-01-01")).eval(), Literal(Date.valueOf("2021-01-01")).eval()))
       val dateConverted = shim.convertFilters(testTable, Seq(dateFilter))
       assert(dateConverted == "(p = \"2020-01-01\" or p = \"2021-01-01\")")
+    }
+  }
+
+
+  test("SPARK-48243: Support push down char and varchar to Hive metastore") {
+    withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING_VARCHAR.key -> "false") {
+      val varcharFilter = Literal("") === a("varchar", StringType)
+      val varcharConverted = shim.convertFilters(testTable, Seq(varcharFilter))
+      assert (varcharConverted == "")
+    }
+
+    withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING_VARCHAR.key -> "true") {
+      val varcharFilter = Literal("") === a("varchar", StringType)
+      val varcharConverted = shim.convertFilters(testTable, Seq(varcharFilter))
+      assert (varcharConverted == "\"\" = varchar")
     }
   }
 
