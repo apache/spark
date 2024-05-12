@@ -1088,7 +1088,7 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
       case Project(l1, limit @ LocalLimit(_, p2 @ Project(l2, _))) if isRenaming(l1, l2) =>
         val newProjectList = buildCleanedProjectList(l1, l2)
         limit.copy(child = p2.copy(projectList = newProjectList))
-      case Project(l1, r @ Repartition(_, _, p @ Project(l2, _))) if isRenaming(l1, l2) =>
+      case Project(l1, r @ Repartition(_, _, p @ Project(l2, _), _)) if isRenaming(l1, l2) =>
         r.copy(child = p.copy(projectList = buildCleanedProjectList(l1, p.projectList)))
       case Project(l1, s @ Sample(_, _, _, _, p2 @ Project(l2, _))) if isRenaming(l1, l2) =>
         s.copy(child = p2.copy(projectList = buildCleanedProjectList(l1, p2.projectList)))
@@ -1272,8 +1272,10 @@ object CollapseRepartition extends Rule[LogicalPlan] {
     //   enables the shuffle. Returns the child node if the last numPartitions is bigger;
     //   otherwise, keep unchanged.
     // 2) In the other cases, returns the top node with the child's child
-    case r @ Repartition(_, _, child: RepartitionOperation) => (r.shuffle, child.shuffle) match {
-      case (false, true) => if (r.numPartitions >= child.numPartitions) child else r
+    case r @ Repartition(_, _, child: RepartitionOperation, coalescer) =>
+      (r.shuffle, child.shuffle) match {
+      case (false, true) =>
+        if (coalescer.isEmpty && r.numPartitions >= child.numPartitions) child else r
       case _ => r.copy(child = child.child)
     }
     // Case 2: When a RepartitionByExpression has a child of global Sort, Repartition or

@@ -19,13 +19,11 @@ package org.apache.spark.sql.execution
 
 import java.util.concurrent.{Future => JFuture}
 import java.util.concurrent.TimeUnit._
-
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.Duration
-
 import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, SparkException, TaskContext}
-import org.apache.spark.rdd.{EmptyRDD, PartitionwiseSampledRDD, RDD}
+import org.apache.spark.rdd.{EmptyRDD, PartitionCoalescer, PartitionwiseSampledRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
@@ -727,8 +725,17 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
  * you see ShuffleExchange. This will add a shuffle step, but means the
  * current upstream partitions will be executed in parallel (per whatever
  * the current partitioning is).
+ *
+ * If you want to define how to coalesce partitions, you can set a custom strategy
+ * to coalesce partitions in `coalescer`.
+ *
+ * @param numPartitions Number of partitions this coalescer tries to reduce partitions into
+ * @param child the SparkPlan
+ * @param coalescer Optional coalescer that an user specifies
  */
-case class CoalesceExec(numPartitions: Int, child: SparkPlan) extends UnaryExecNode {
+case class CoalesceExec(numPartitions: Int,
+                        child: SparkPlan,
+                        coalescer: Option[PartitionCoalescer]) extends UnaryExecNode {
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = {
@@ -743,7 +750,7 @@ case class CoalesceExec(numPartitions: Int, child: SparkPlan) extends UnaryExecN
       // `SinglePartition`.
       new CoalesceExec.EmptyRDDWithPartitions(sparkContext, numPartitions)
     } else {
-      rdd.coalesce(numPartitions, shuffle = false)
+      rdd.coalesce(numPartitions, shuffle = false, coalescer)
     }
   }
 

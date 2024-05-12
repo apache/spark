@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.rdd.PartitionCoalescer
 import org.apache.spark.sql.catalyst.{AliasIdentifier, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedUnaryNode}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
@@ -1841,9 +1842,14 @@ abstract class RepartitionOperation extends UnaryNode {
  * asked for `coalesce` or `repartition`. [[RepartitionByExpression]] is used when the consumer
  * of the output requires some specific ordering or distribution of the data.
  */
-case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
+case class Repartition(numPartitions: Int,
+                       shuffle: Boolean,
+                       child: LogicalPlan,
+                       coalescer: Option[PartitionCoalescer] = None)
   extends RepartitionOperation {
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
+  require(!shuffle || coalescer.isEmpty,
+    "Custom coalescer is not allowed for repartition(shuffle=true)")
 
   override def partitioning: Partitioning = {
     require(shuffle, "Partitioning can only be used in shuffle.")
