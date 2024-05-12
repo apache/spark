@@ -187,7 +187,7 @@ case class TryRemainder(left: Expression, right: Expression, replacement: Expres
       > SELECT _FUNC_(interval 2 year, interval 1 year);
        1-0
   """,
-  since = "3.3.0",
+  since = "4.0.0",
   group = "math_funcs")
 case class TrySubtract(left: Expression, right: Expression, replacement: Expression)
   extends RuntimeReplaceable with InheritAnalysisRules {

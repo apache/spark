@@ -710,6 +710,12 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
   test("try_remainder") {
     val df = Seq((10, 3), (5, 5), (5, 0)).toDF("birth", "age")
     checkAnswer(df.selectExpr("try_remainder(birth, age)"), Seq(Row(1), Row(0), Row(null)))
+
+    val dfDecimal = Seq(
+      (BigDecimal(10), BigDecimal(3)),
+      (BigDecimal(5), BigDecimal(5)),
+      (BigDecimal(5), BigDecimal(0))).toDF("birth", "age")
+    checkAnswer(dfDecimal.selectExpr("try_remainder(birth, age)"), Seq(Row(1), Row(0), Row(null)))
   }
 
   test("try_element_at") {
