@@ -613,7 +613,7 @@ class JacksonParser(
         // JSON parser currently doesn't support partial results for corrupted records.
         // For such records, all fields other than the field configured by
         // `columnNameOfCorruptRecord` are set to `null`.
-        throw BadRecordException(() => recordLiteral(record), () => Array.empty, e)
+        throw BadRecordException(() => recordLiteral(record), cause = () => e)
       case e: CharConversionException if options.encoding.isEmpty =>
         val msg =
           """JSON parser cannot handle a character in its input.
@@ -621,18 +621,17 @@ class JacksonParser(
             |""".stripMargin + e.getMessage
         val wrappedCharException = new CharConversionException(msg)
         wrappedCharException.initCause(e)
-        throw BadRecordException(() => recordLiteral(record), () => Array.empty,
-          wrappedCharException)
+        throw BadRecordException(() => recordLiteral(record), cause = () => wrappedCharException)
       case PartialResultException(row, cause) =>
         throw BadRecordException(
           record = () => recordLiteral(record),
           partialResults = () => Array(row),
-          convertCauseForPartialResult(cause))
+          cause = () => convertCauseForPartialResult(cause))
       case PartialResultArrayException(rows, cause) =>
         throw BadRecordException(
           record = () => recordLiteral(record),
           partialResults = () => rows,
-          cause)
+          cause = () => cause)
       // These exceptions should never be thrown outside of JacksonParser.
       // They are used for the control flow in the parser. We add them here for completeness
       // since they also indicate a bad record.
@@ -640,12 +639,12 @@ class JacksonParser(
         throw BadRecordException(
           record = () => recordLiteral(record),
           partialResults = () => Array(InternalRow(arrayData)),
-          convertCauseForPartialResult(cause))
+          cause = () => convertCauseForPartialResult(cause))
       case PartialMapDataResultException(mapData, cause) =>
         throw BadRecordException(
           record = () => recordLiteral(record),
           partialResults = () => Array(InternalRow(mapData)),
-          convertCauseForPartialResult(cause))
+          cause = () => convertCauseForPartialResult(cause))
     }
   }
 }

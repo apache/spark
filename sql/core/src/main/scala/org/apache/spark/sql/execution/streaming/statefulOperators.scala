@@ -359,7 +359,7 @@ object WatermarkSupport {
     if (optionalWatermarkExpression.isEmpty || optionalWatermarkMs.isEmpty) return None
 
     val watermarkAttribute = optionalWatermarkExpression.get
-    // If we are evicting based on a window, use the end of the window.  Otherwise just
+    // If we are evicting based on a window, use the end of the window. Otherwise just
     // use the attribute itself.
     val evictionExpression =
       if (watermarkAttribute.dataType.isInstanceOf[StructType]) {

@@ -1026,7 +1026,6 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
 
 
 if __name__ == "__main__":
-    import os
     import unittest
     from pyspark.sql.tests.connect.test_connect_column import *  # noqa: F401
 
