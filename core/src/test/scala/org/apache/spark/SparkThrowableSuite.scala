@@ -143,7 +143,7 @@ class SparkThrowableSuite extends SparkFunSuite {
 
   test("Message invariants") {
     val messageSeq = errorReader.errorInfoMap.values.toSeq.flatMap { i =>
-      Seq(i.message) ++ i.subClass.getOrElse(Map.empty).values.toSeq.map(_.message)
+      Seq(i.message) ++ i.subCondition.getOrElse(Map.empty).values.toSeq.map(_.message)
     }
     messageSeq.foreach { message =>
       message.foreach { msg =>
@@ -180,7 +180,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     val allowedChars = "[A-Z0-9_]*"
     errorReader.errorInfoMap.foreach { e =>
       assert(e._1.matches(allowedChars), s"Error class: ${e._1} is invalid")
-      e._2.subClass.map { s =>
+      e._2.subCondition.map { s =>
         s.keys.foreach { k =>
           assert(k.matches(allowedChars), s"Error sub-class: $k is invalid")
         }
@@ -353,7 +353,7 @@ class SparkThrowableSuite extends SparkFunSuite {
         |  } ]
         |}""".stripMargin)
       // scalastyle:on line.size.limit
-    // STANDARD w/ errorSubClass but w/o queryContext
+    // STANDARD w/ errorSubCondition but w/o queryContext
     val e2 = new SparkIllegalArgumentException(
       errorClass = "UNSUPPORTED_SAVE_MODE.EXISTENT_PATH",
       messageParameters = Map("saveMode" -> "UNSUPPORTED_MODE"))
@@ -476,7 +476,7 @@ class SparkThrowableSuite extends SparkFunSuite {
           |    "message" : [
           |      "abc"
           |    ],
-          |    "subClass" : {
+          |    "subCondition" : {
           |      "BY.ZERO" : {
           |        "message" : [
           |          "def"

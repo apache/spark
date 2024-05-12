@@ -33,10 +33,10 @@ def load_error_conditions(path):
     for name, details in raw_error_conditions.items():
         if name.startswith("_LEGACY_ERROR") or name.startswith("INTERNAL_ERROR"):
             continue
-        if "subClass" in details:
-            for sub_name in details["subClass"]:
-                details["subClass"][sub_name]["message"] = (
-                    assemble_message(details["subClass"][sub_name]["message"])
+        if "subCondition" in details:
+            for sub_name in details["subCondition"]:
+                details["subCondition"][sub_name]["message"] = (
+                    assemble_message(details["subCondition"][sub_name]["message"])
                 )
         details["message"] = assemble_message(details["message"])
         error_conditions[name] = details
@@ -84,8 +84,8 @@ def generate_doc_rows(condition_name, condition_details):
         )
     ]
     sub_condition_rows = []
-    if "subClass" in condition_details:
-        for sub_condition_name in sorted(condition_details["subClass"]):
+    if "subCondition" in condition_details:
+        for sub_condition_name in sorted(condition_details["subCondition"]):
             sub_condition_rows.append(
                 """
                 <tr id="{anchor}">
@@ -105,7 +105,7 @@ def generate_doc_rows(condition_name, condition_details):
                     anchor=anchor_name(condition_name, sub_condition_name),
                     # See comment above for explanation of `<wbr />`.
                     sub_condition_name=sub_condition_name.replace("_", "<wbr />_"),
-                    message=condition_details["subClass"][sub_condition_name]["message"],
+                    message=condition_details["subCondition"][sub_condition_name]["message"],
                 )
             )
     doc_rows = condition_row + sub_condition_rows

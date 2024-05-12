@@ -80,7 +80,7 @@
     "message" : [
       "Invalid as-of join."
     ],
-    "subClass" : {
+    "subCondition" : {
       "TOLERANCE_IS_NON_NEGATIVE" : {
         "message" : [
           "The input argument `tolerance` must be non-negative."
@@ -165,7 +165,7 @@
     "message" : [
       "Failed to create data source table <tableName>:"
     ],
-    "subClass" : {
+    "subCondition" : {
       "EXTERNAL_METADATA_UNSUPPORTED" : {
         "message" : [
           "provider '<provider>' does not support external metadata but a schema is provided. Please remove the schema when creating the table."
@@ -202,7 +202,7 @@
     "message" : [
       "An error occurred during loading state."
     ],
-    "subClass" : {
+    "subCondition" : {
       "CANNOT_READ_CHECKPOINT" : {
         "message" : [
           "Cannot read RocksDB checkpoint metadata. Expected <expectedVersion>, but found <actualVersion>."
@@ -350,7 +350,7 @@
     "message" : [
       "Cannot update <table> field <fieldName> type:"
     ],
-    "subClass" : {
+    "subCondition" : {
       "ARRAY_TYPE" : {
         "message" : [
           "Update the element by updating <fieldName>.element."
@@ -390,7 +390,7 @@
     "message" : [
       "Error writing state store files for provider <providerClass>."
     ],
-    "subClass" : {
+    "subCondition" : {
       "CANNOT_COMMIT" : {
         "message" : [
           "Cannot perform commit during state checkpoint."
@@ -447,7 +447,7 @@
     "message" : [
       "The codec <codecName> is not available."
     ],
-    "subClass" : {
+    "subCondition" : {
       "WITH_AVAILABLE_CODECS_SUGGESTION" : {
         "message" : [
           "Available codecs are <availableCodecs>."
@@ -477,7 +477,7 @@
     "message" : [
       "Could not determine which collation to use for string functions and operators."
     ],
-    "subClass" : {
+    "subCondition" : {
       "EXPLICIT" : {
         "message" : [
           "Error occurred due to the mismatch between explicit collations: <explicitTypes>. Decide on a single explicit collation and remove others."
@@ -495,7 +495,7 @@
     "message" : [
       "Can't create array with <numberOfElements> elements which exceeding the array size limit <maxRoundedArrayLength>,"
     ],
-    "subClass" : {
+    "subCondition" : {
       "FUNCTION" : {
         "message" : [
           "unsuccessful try to create arrays in the function <functionName>."
@@ -550,7 +550,7 @@
     "message" : [
       "Cannot process input data types for the expression: <expression>."
     ],
-    "subClass" : {
+    "subCondition" : {
       "MISMATCHED_TYPES" : {
         "message" : [
           "All input types must be the same except nullable, containsNull, valueContainsNull flags, but found the input types <inputTypes>."
@@ -581,7 +581,7 @@
     "message" : [
       "Generic Spark Connect error."
     ],
-    "subClass" : {
+    "subCondition" : {
       "INTERCEPTOR_CTOR_MISSING" : {
         "message" : [
           "Cannot instantiate GRPC interceptor because <cls> is missing a default constructor without arguments."
@@ -632,7 +632,7 @@
     "message" : [
       "Cannot create view <viewName>, the reason is"
     ],
-    "subClass" : {
+    "subCondition" : {
       "NOT_ENOUGH_DATA_COLUMNS" : {
         "message" : [
           "not enough data columns:",
@@ -654,7 +654,7 @@
     "message" : [
       "Cannot resolve <sqlExpr> due to data type mismatch:"
     ],
-    "subClass" : {
+    "subCondition" : {
       "ARRAY_FUNCTION_DIFF_TYPES" : {
         "message" : [
           "Input to <functionName> should have been <dataType> followed by a value with same element type, but it's [<leftType>, <rightType>]."
@@ -1049,7 +1049,7 @@
     "message" : [
       "Call to routine <functionName> is invalid because it includes multiple argument assignments to the same parameter name <parameterName>."
     ],
-    "subClass" : {
+    "subCondition" : {
       "BOTH_POSITIONAL_AND_NAMED" : {
         "message" : [
           "A positional argument and named argument both referred to the same parameter. Please remove the named argument referring to this parameter."
@@ -1131,7 +1131,7 @@
     "message" : [
       "'<operation>' expects a table but <viewName> is a view."
     ],
-    "subClass" : {
+    "subCondition" : {
       "NO_ALTERNATIVE" : {
         "message" : [
           ""
@@ -1149,7 +1149,7 @@
     "message" : [
       "The table <tableName> does not support <operation>."
     ],
-    "subClass" : {
+    "subCondition" : {
       "NO_ALTERNATIVE" : {
         "message" : [
           ""
@@ -1197,7 +1197,7 @@
     "message" : [
       "Failed JDBC <url> on the operation:"
     ],
-    "subClass" : {
+    "subCondition" : {
       "ALTER_TABLE" : {
         "message" : [
           "Alter the table <tableName>."
@@ -1281,7 +1281,7 @@
     "message" : [
       "Encountered error while reading file <path>."
     ],
-    "subClass" : {
+    "subCondition" : {
       "CANNOT_READ_FILE_FOOTER" : {
         "message" : [
           "Could not read footer. Please ensure that the file is in either ORC or Parquet format.",
@@ -1463,7 +1463,7 @@
     "message" : [
       "Illegal value provided to the State Store"
     ],
-    "subClass" : {
+    "subCondition" : {
       "EMPTY_LIST_VALUE" : {
         "message" : [
           "Cannot write empty list values to State Store for StateName <stateName>."
@@ -1499,7 +1499,7 @@
     "message" : [
       "Cannot write incompatible data for the table <tableName>:"
     ],
-    "subClass" : {
+    "subCondition" : {
       "AMBIGUOUS_COLUMN_NAME" : {
         "message" : [
           "Ambiguous column name in the input data <colName>."
@@ -1570,7 +1570,7 @@
     "message" : [
       "Incomplete complex type:"
     ],
-    "subClass" : {
+    "subCondition" : {
       "ARRAY" : {
         "message" : [
           "The definition of \"ARRAY\" type is incomplete. You must provide an element type. For example: \"ARRAY<elementType>\"."
@@ -1593,7 +1593,7 @@
     "message" : [
       "You may get a different result due to the upgrading to"
     ],
-    "subClass" : {
+    "subCondition" : {
       "DATETIME_PATTERN_RECOGNITION" : {
         "message" : [
           "Spark >= 3.0:",
@@ -1665,7 +1665,7 @@
     "message" : [
       "Cannot write to <tableName>, the reason is"
     ],
-    "subClass" : {
+    "subCondition" : {
       "NOT_ENOUGH_DATA_COLUMNS" : {
         "message" : [
           "not enough data columns:",
@@ -1696,7 +1696,7 @@
     "message" : [
       "Can't find table property:"
     ],
-    "subClass" : {
+    "subCondition" : {
       "MISSING_KEY" : {
         "message" : [
           "<key>."
@@ -1738,7 +1738,7 @@
     "message" : [
       "An object in the metadata catalog has been corrupted:"
     ],
-    "subClass" : {
+    "subCondition" : {
       "SQL_CONFIG" : {
         "message" : [
           "Corrupted view SQL configs in catalog."
@@ -1812,7 +1812,7 @@
     "message" : [
       "The FILTER expression <filterExpr> in an aggregate function is invalid."
     ],
-    "subClass" : {
+    "subCondition" : {
       "CONTAINS_AGGREGATE" : {
         "message" : [
           "Expected a FILTER expression without an aggregation, but found <aggExpr>."
@@ -1858,7 +1858,7 @@
     "message" : [
       "The boundary <boundary> is invalid: <invalidValue>."
     ],
-    "subClass" : {
+    "subCondition" : {
       "END" : {
         "message" : [
           "Expected the value is '0', '<longMaxValue>', '[<intMinValue>, <intMaxValue>]'."
@@ -1906,7 +1906,7 @@
     "message" : [
       "The value '<confValue>' in the config \"<confName>\" is invalid."
     ],
-    "subClass" : {
+    "subCondition" : {
       "DEFAULT_COLLATION" : {
         "message" : [
           "Cannot resolve the given default collation. Did you mean '<proposal>'?"
@@ -1924,7 +1924,7 @@
     "message" : [
       "The cursor is invalid."
     ],
-    "subClass" : {
+    "subCondition" : {
       "DISCONNECTED" : {
         "message" : [
           "The cursor has been disconnected by the server."
@@ -1952,7 +1952,7 @@
     "message" : [
       "Unrecognized datetime pattern: <pattern>."
     ],
-    "subClass" : {
+    "subCondition" : {
       "ILLEGAL_CHARACTER" : {
         "message" : [
           "Illegal pattern character found in datetime pattern: <c>. Please provide legal character."
@@ -1970,7 +1970,7 @@
     "message" : [
       "Failed to execute <statement> command because the destination column or variable <colName> has a DEFAULT value <defaultValue>,"
     ],
-    "subClass" : {
+    "subCondition" : {
       "DATA_TYPE" : {
         "message" : [
           "which requires <expectedType> type, but the statement provided a value of incompatible <actualType> type."
@@ -1998,7 +1998,7 @@
     "message" : [
       "Invalid value for delimiter."
     ],
-    "subClass" : {
+    "subCondition" : {
       "DELIMITER_LONGER_THAN_EXPECTED" : {
         "message" : [
           "Delimiter cannot be more than one character: <str>."
@@ -2088,7 +2088,7 @@
     "message" : [
       "The format is invalid: <format>."
     ],
-    "subClass" : {
+    "subCondition" : {
       "CONT_THOUSANDS_SEPS" : {
         "message" : [
           "Thousands separators (, or G) must have digits in between them in the number format."
@@ -2157,7 +2157,7 @@
     "message" : [
       "The handle <handle> is invalid."
     ],
-    "subClass" : {
+    "subCondition" : {
       "FORMAT" : {
         "message" : [
           "Handle must be an UUID string of the format '00112233-4455-6677-8899-aabbccddeeff'"
@@ -2215,7 +2215,7 @@
     "message" : [
       "Invalid inline table."
     ],
-    "subClass" : {
+    "subCondition" : {
       "CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE" : {
         "message" : [
           "Cannot evaluate the expression <expr> in inline table definition."
@@ -2243,7 +2243,7 @@
     "message" : [
       "Error parsing '<input>' to interval. Please ensure that the value provided is in a valid format for defining an interval. You can reference the documentation for the correct format."
     ],
-    "subClass" : {
+    "subCondition" : {
       "ARITHMETIC_EXCEPTION" : {
         "message" : [
           "Uncaught arithmetic exception while parsing '<input>'."
@@ -2311,7 +2311,7 @@
     "message" : [
       "Invalid inverse distribution function <funcName>."
     ],
-    "subClass" : {
+    "subCondition" : {
       "DISTINCT_UNSUPPORTED" : {
         "message" : [
           "Cannot use DISTINCT with WITHIN GROUP."
@@ -2358,7 +2358,7 @@
     "message" : [
       "Invalid lambda function call."
     ],
-    "subClass" : {
+    "subCondition" : {
       "DUPLICATE_ARG_NAMES" : {
         "message" : [
           "The lambda function has duplicate arguments <args>. Please, consider to rename the argument names or set <caseSensitiveConfig> to \"true\"."
@@ -2387,7 +2387,7 @@
     "message" : [
       "The limit like expression <expr> is invalid."
     ],
-    "subClass" : {
+    "subCondition" : {
       "DATA_TYPE" : {
         "message" : [
           "The <name> expression must be integer type, but got <dataType>."
@@ -2427,7 +2427,7 @@
     "message" : [
       "Invalid observed metrics."
     ],
-    "subClass" : {
+    "subCondition" : {
       "AGGREGATE_EXPRESSION_WITH_DISTINCT_UNSUPPORTED" : {
         "message" : [
           "Aggregate expressions with DISTINCT are not allowed in observed metrics, but found: <expr>."
@@ -2470,7 +2470,7 @@
     "message" : [
       "Invalid options:"
     ],
-    "subClass" : {
+    "subCondition" : {
       "NON_MAP_FUNCTION" : {
         "message" : [
           "Must use the `map()` function for options."
@@ -2494,7 +2494,7 @@
     "message" : [
       "The value of parameter(s) <parameter> in <functionName> is invalid:"
     ],
-    "subClass" : {
+    "subCondition" : {
       "AES_CRYPTO_ERROR" : {
         "message" : [
           "detail message: <detailMessage>"
@@ -2573,7 +2573,7 @@
     "message" : [
       "The partition command is invalid."
     ],
-    "subClass" : {
+    "subCondition" : {
       "PARTITION_MANAGEMENT_IS_UNSUPPORTED" : {
         "message" : [
           "Table <name> does not support partition management."
@@ -2615,7 +2615,7 @@
     "message" : [
       "The input schema <inputSchema> is not a valid schema string."
     ],
-    "subClass" : {
+    "subCondition" : {
       "NON_STRING_LITERAL" : {
         "message" : [
           "The input expression must be string literal and not null."
@@ -2663,7 +2663,7 @@
     "message" : [
       "Invalid SQL syntax:"
     ],
-    "subClass" : {
+    "subCondition" : {
       "ANALYZE_TABLE_UNEXPECTED_NOSCAN" : {
         "message" : [
           "ANALYZE TABLE(S) ... COMPUTE STATISTICS ... <ctx> must be either NOSCAN or empty."
@@ -2784,7 +2784,7 @@
     "message" : [
       "Invalid subquery:"
     ],
-    "subClass" : {
+    "subCondition" : {
       "SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN" : {
         "message" : [
           "Scalar subquery must return only one column, but got <number>."
@@ -2809,7 +2809,7 @@
     "message" : [
       "The time travel timestamp expression <expr> is invalid."
     ],
-    "subClass" : {
+    "subCondition" : {
       "INPUT" : {
         "message" : [
           "Cannot be casted to the \"TIMESTAMP\" type."
@@ -2905,7 +2905,7 @@
     "message" : [
       "The requested write distribution is invalid."
     ],
-    "subClass" : {
+    "subCondition" : {
       "PARTITION_NUM_AND_SIZE" : {
         "message" : [
           "The partition number and advisory partition size can't be specified at the same time."
@@ -2971,7 +2971,7 @@
       "Malformed records are detected in record parsing: <badRecord>.",
       "Parse Mode: <failFastMode>. To process malformed records as null result, try setting the option 'mode' as 'PERMISSIVE'."
     ],
-    "subClass" : {
+    "subCondition" : {
       "CANNOT_PARSE_JSON_ARRAYS_AS_STRUCTS" : {
         "message" : [
           "Parsing JSON arrays as structs is forbidden."
@@ -3014,7 +3014,7 @@
     "message" : [
       "Resolved attribute(s) <missingAttributes> missing from <input> in operator <operator>."
     ],
-    "subClass" : {
+    "subCondition" : {
       "RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION" : {
         "message" : [
           "Attribute(s) with the same name appear in the operation: <operation>.",
@@ -3138,7 +3138,7 @@
     "message" : [
       "Not allowed in the FROM clause:"
     ],
-    "subClass" : {
+    "subCondition" : {
       "LATERAL_WITH_PIVOT" : {
         "message" : [
           "LATERAL together with PIVOT."
@@ -3161,7 +3161,7 @@
     "message" : [
       "The expression <expr> used for the routine or clause <name> must be a constant STRING which is NOT NULL."
     ],
-    "subClass" : {
+    "subCondition" : {
       "NOT_CONSTANT" : {
         "message" : [
           "To be considered constant the expression must not depend on any columns, contain a subquery, or invoke a non deterministic function such as rand()."
@@ -3190,7 +3190,7 @@
     "message" : [
       "Assigning a NULL is not allowed here."
     ],
-    "subClass" : {
+    "subCondition" : {
       "ARRAY_ELEMENT" : {
         "message" : [
           "The array <columnPath> is defined to contain only elements that are NOT NULL."
@@ -3226,7 +3226,7 @@
     "message" : [
       "Not supported command in JDBC catalog:"
     ],
-    "subClass" : {
+    "subCondition" : {
       "COMMAND" : {
         "message" : [
           "<cmd>"
@@ -3310,7 +3310,7 @@
     "message" : [
       ""
     ],
-    "subClass" : {
+    "subCondition" : {
       "WITHOUT_SUGGESTION" : {
         "message" : [
           "The <roundedValue> rounded half up from <originalValue> cannot be represented as Decimal(<precision>, <scale>)."
@@ -3755,7 +3755,7 @@
     "message" : [
       "Invalid value for source option '<optionName>':"
     ],
-    "subClass" : {
+    "subCondition" : {
       "IS_EMPTY" : {
         "message" : [
           "cannot be empty."
@@ -3835,7 +3835,7 @@
     "message" : [
       "Support of the clause or keyword: <clause> has been discontinued in this context."
     ],
-    "subClass" : {
+    "subCondition" : {
       "BANG_EQUALS_NOT" : {
         "message" : [
           "The '!' keyword is only supported as an alias for the prefix operator 'NOT'.",
@@ -4041,7 +4041,7 @@
     "message" : [
       "A column, variable, or function parameter with name <objectName> cannot be resolved."
     ],
-    "subClass" : {
+    "subCondition" : {
       "WITHOUT_SUGGESTION" : {
         "message" : [
           ""
@@ -4059,7 +4059,7 @@
     "message" : [
       "A field with name <fieldName> cannot be resolved with the struct-type column <columnPath>."
     ],
-    "subClass" : {
+    "subCondition" : {
       "WITHOUT_SUGGESTION" : {
         "message" : [
           ""
@@ -4077,7 +4077,7 @@
     "message" : [
       "Cannot resolve column <objectName> as a map key. If the key is a string literal, add the single quotes '' around it."
     ],
-    "subClass" : {
+    "subCondition" : {
       "WITHOUT_SUGGESTION" : {
         "message" : [
           ""
@@ -4119,7 +4119,7 @@
     "message" : [
       "Don't support add file."
     ],
-    "subClass" : {
+    "subCondition" : {
       "DIRECTORY" : {
         "message" : [
           "The file <path> is a directory, consider to set \"spark.sql.legacy.addSingleFileInAddFile\" to \"false\"."
@@ -4143,7 +4143,7 @@
     "message" : [
       "Cannot call the method \"<methodName>\" of the class \"<className>\"."
     ],
-    "subClass" : {
+    "subCondition" : {
       "FIELD_INDEX" : {
         "message" : [
           "The row shall have a schema to get an index of the field <fieldName>."
@@ -4168,7 +4168,7 @@
     "message" : [
       "Collation <collationName> is not supported for:"
     ],
-    "subClass" : {
+    "subCondition" : {
       "FOR_FUNCTION" : {
         "message" : [
           "function <functionName>. Please try to use a different collation."
@@ -4205,7 +4205,7 @@
     "message" : [
       "DEFAULT column values is not supported."
     ],
-    "subClass" : {
+    "subCondition" : {
       "WITHOUT_SUGGESTION" : {
         "message" : [
           ""
@@ -4223,7 +4223,7 @@
     "message" : [
       "The deserializer is not supported:"
     ],
-    "subClass" : {
+    "subCondition" : {
       "DATA_TYPE_MISMATCH" : {
         "message" : [
           "need a(n) <desiredType> field but got <dataType>."
@@ -4269,7 +4269,7 @@
     "message" : [
       "The feature is not supported:"
     ],
-    "subClass" : {
+    "subCondition" : {
       "AES_MODE" : {
         "message" : [
           "AES-<mode> with the padding <padding> by the <functionName> function."
@@ -4522,7 +4522,7 @@
     "message" : [
       "The generator is not supported:"
     ],
-    "subClass" : {
+    "subCondition" : {
       "MULTI_GENERATOR" : {
         "message" : [
           "only one generator allowed per SELECT clause but found <num>: <generators>."
@@ -4556,7 +4556,7 @@
     "message" : [
       "Can't insert into the target."
     ],
-    "subClass" : {
+    "subCondition" : {
       "MULTI_PATH" : {
         "message" : [
           "Can only write data to relations with a single path but given paths are <paths>."
@@ -4589,7 +4589,7 @@
     "message" : [
       "MERGE operation contains unsupported <condName> condition."
     ],
-    "subClass" : {
+    "subCondition" : {
       "AGGREGATE" : {
         "message" : [
           "Aggregates are not allowed: <cond>."
@@ -4612,7 +4612,7 @@
     "message" : [
       "Can't overwrite the target that is also being read from."
     ],
-    "subClass" : {
+    "subCondition" : {
       "PATH" : {
         "message" : [
           "The target path is <path>."
@@ -4630,7 +4630,7 @@
     "message" : [
       "The save mode <saveMode> is not supported for:"
     ],
-    "subClass" : {
+    "subCondition" : {
       "EXISTENT_PATH" : {
         "message" : [
           "an existent path."
@@ -4648,7 +4648,7 @@
     "message" : [
       "Unsupported subquery expression:"
     ],
-    "subClass" : {
+    "subCondition" : {
       "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED" : {
         "message" : [
           "Accessing outer query column is not allowed in this location:",
@@ -4847,7 +4847,7 @@
     "message" : [
       "The <functionName> requires <expectedNum> parameters but the actual number is <actualNum>."
     ],
-    "subClass" : {
+    "subCondition" : {
       "WITHOUT_SUGGESTION" : {
         "message" : [
           "Please, refer to '<docroot>/sql-ref-functions.html' for a fix."

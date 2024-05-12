@@ -31,7 +31,7 @@
       "If you don't want your streaming query to fail on such cases, set the source option failOnDataLoss to false.",
       "Reason:"
     ],
-    "subClass" : {
+    "subCondition" : {
       "ADDED_PARTITION_DOES_NOT_START_FROM_OFFSET_ZERO" : {
         "message" : [
           "Added partition <topicPartition> starts from <startOffset> instead of 0."
