@@ -89,7 +89,7 @@ object KafkaExceptions {
       groupId: String,
       cause: Throwable): KafkaIllegalStateException = {
     new KafkaIllegalStateException(
-      errorClass = "KAFKA_DATA_LOSS.COULD_NOT_READ_OFFSET_RANGE",
+      errorCondition = "KAFKA_DATA_LOSS.COULD_NOT_READ_OFFSET_RANGE",
       messageParameters = Map(
         "startOffset" -> startOffset.toString,
         "endOffset" -> endOffset.toString,
@@ -103,7 +103,7 @@ object KafkaExceptions {
       offset: Long,
       fetchedOffset: Long): KafkaIllegalStateException = {
     new KafkaIllegalStateException(
-      errorClass = "KAFKA_DATA_LOSS.START_OFFSET_RESET",
+      errorCondition = "KAFKA_DATA_LOSS.START_OFFSET_RESET",
       messageParameters = Map(
         "topicPartition" -> topicPartition.toString,
         "offset" -> offset.toString,
@@ -113,7 +113,7 @@ object KafkaExceptions {
   def initialOffsetNotFoundForPartitions(
       partitions: Set[TopicPartition]): KafkaIllegalStateException = {
     new KafkaIllegalStateException(
-      errorClass = "KAFKA_DATA_LOSS.INITIAL_OFFSET_NOT_FOUND_FOR_PARTITIONS",
+      errorCondition = "KAFKA_DATA_LOSS.INITIAL_OFFSET_NOT_FOUND_FOR_PARTITIONS",
       messageParameters = Map("partitions" -> partitions.toString))
   }
 
@@ -121,7 +121,7 @@ object KafkaExceptions {
       topicPartition: TopicPartition,
       startOffset: Long): KafkaIllegalStateException = {
     new KafkaIllegalStateException(
-      errorClass = "KAFKA_DATA_LOSS.ADDED_PARTITION_DOES_NOT_START_FROM_OFFSET_ZERO",
+      errorCondition = "KAFKA_DATA_LOSS.ADDED_PARTITION_DOES_NOT_START_FROM_OFFSET_ZERO",
       messageParameters =
         Map("topicPartition" -> topicPartition.toString, "startOffset" -> startOffset.toString))
   }
@@ -132,11 +132,11 @@ object KafkaExceptions {
     groupIdConfigName match {
       case Some(config) =>
         new KafkaIllegalStateException(
-          errorClass = "KAFKA_DATA_LOSS.PARTITIONS_DELETED_AND_GROUP_ID_CONFIG_PRESENT",
+          errorCondition = "KAFKA_DATA_LOSS.PARTITIONS_DELETED_AND_GROUP_ID_CONFIG_PRESENT",
           messageParameters = Map("partitions" -> partitions.toString, "groupIdConfig" -> config))
       case None =>
         new KafkaIllegalStateException(
-          errorClass = "KAFKA_DATA_LOSS.PARTITIONS_DELETED",
+          errorCondition = "KAFKA_DATA_LOSS.PARTITIONS_DELETED",
           messageParameters = Map("partitions" -> partitions.toString))
     }
   }
@@ -146,7 +146,7 @@ object KafkaExceptions {
       prevOffset: Long,
       newOffset: Long): KafkaIllegalStateException = {
     new KafkaIllegalStateException(
-      errorClass = "KAFKA_DATA_LOSS.PARTITION_OFFSET_CHANGED",
+      errorCondition = "KAFKA_DATA_LOSS.PARTITION_OFFSET_CHANGED",
       messageParameters = Map(
         "topicPartition" -> topicPartition.toString,
         "prevOffset" -> prevOffset.toString,
@@ -158,18 +158,18 @@ object KafkaExceptions {
  * Illegal state exception thrown with an error class.
  */
 private[kafka010] class KafkaIllegalStateException(
-    errorClass: String,
+    errorCondition: String,
     messageParameters: Map[String, String],
     cause: Throwable = null)
   extends IllegalStateException(
     KafkaExceptionsHelper.errorConditionsJsonReader.getErrorMessage(
-      errorClass, messageParameters), cause)
+      errorCondition, messageParameters), cause)
   with SparkThrowable {
 
   override def getSqlState: String =
-    KafkaExceptionsHelper.errorConditionsJsonReader.getSqlState(errorClass)
+    KafkaExceptionsHelper.errorConditionsJsonReader.getSqlState(errorCondition)
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
-  override def getErrorClass: String = errorClass
+  override def getErrorClass: String = errorCondition
 }
