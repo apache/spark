@@ -26,7 +26,6 @@ import java.util.*;
 
 import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
-import org.apache.spark.rdd.DefaultPartitionCoalescer;
 import org.junit.jupiter.api.*;
 
 import org.apache.spark.api.java.function.MapFunction;
