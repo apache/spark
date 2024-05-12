@@ -440,7 +440,8 @@ class SparkThrowableSuite extends SparkFunSuite {
           |  }
           |}
           |""".stripMargin, StandardCharsets.UTF_8)
-      val reader = new ErrorConditionsJsonReader(Seq(errorJsonFilePath.toUri.toURL, json.toURI.toURL))
+      val reader = new ErrorConditionsJsonReader(
+        Seq(errorJsonFilePath.toUri.toURL, json.toURI.toURL))
       assert(reader.getErrorMessage("DIVIDE_BY_ZERO", Map.empty) == "abc")
     }
   }
