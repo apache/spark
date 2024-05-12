@@ -406,7 +406,7 @@ private[spark] class ExecutorAllocationManager(
 
       if (removeTime == NOT_SET) {
         removeTime = currentTime
-        timedOutExecs
+        Seq.empty[(String, Int)]
       }
       else if (removeTime < currentTime && timedOutExecs.nonEmpty) {
         val deallocationLimit = Math.ceil(timedOutExecs.size * executorDeallocationRatio).toInt
@@ -715,6 +715,11 @@ private[spark] class ExecutorAllocationManager(
     override def toString: String = s"Stage $stageId (Attempt $stageAttemptId)"
   }
 
+  private case class StageDetails(jobId: Int, stageId: Int, numTasks: Int, resourceProfileId: Int) {
+    override def toString: String = s"StageDetails(id: $stageId, jobId: $jobId," +
+      s" numTasks: $numTasks, rpId: $resourceProfileId)"
+  }
+
   /**
    * A listener that notifies the given allocation manager of when to add and remove executors.
    *
@@ -756,21 +761,34 @@ private[spark] class ExecutorAllocationManager(
     // to track total no. of tasks in each stage of a micro-batch (streaming use case)
     // this will help in requesting resources by counting pending tasks in job,
     // rather than counting pending tasks in a stage.
-    private val stageIdToNumTasks = new mutable.HashMap[Int, Int]
+    private val pendingStagesToStageDetails = new mutable.HashMap[Int, StageDetails]
 
     override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
       if (streamingDRAFeatureEnabled) {
-        jobStart.stageInfos.foreach {stageInfo =>
-          stageIdToNumTasks(stageInfo.stageId) = stageInfo.numTasks
+        allocationManager.synchronized {
+          jobStart.stageInfos.foreach {stageInfo =>
+            pendingStagesToStageDetails(stageInfo.stageId) = StageDetails(
+              jobStart.jobId,
+              stageInfo.stageId,
+              stageInfo.numTasks,
+              stageInfo.resourceProfileId
+            )
+          }
+          logDebug(s"added Job: ${jobStart.jobId} stages details to: $pendingStagesToStageDetails")
         }
-        logDebug(s"added stages $stageIdToNumTasks to the Job ${jobStart.jobId}")
       }
     }
 
     override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
       if (streamingDRAFeatureEnabled) {
-        stageIdToNumTasks.clear()
-        logDebug(s"cleared all stages of the Job ${jobEnd.jobId}")
+        allocationManager.synchronized {
+          val pendingStagesOfTheJob = pendingStagesToStageDetails.values.filter(
+            stageDetails => stageDetails.jobId == jobEnd.jobId).map(_.stageId).toSeq
+          pendingStagesToStageDetails --= pendingStagesOfTheJob
+          logDebug(s"cleared all pending stages: $pendingStagesOfTheJob of the " +
+            s"completed Job: ${jobEnd.jobId}. Remaining pendingStagesToStageDetails:" +
+            s" $pendingStagesToStageDetails")
+        }
       }
     }
 
@@ -808,7 +826,7 @@ private[spark] class ExecutorAllocationManager(
         updateExecutorPlacementHints()
 
         if (streamingDRAFeatureEnabled) {
-          stageIdToNumTasks -= stageId
+          pendingStagesToStageDetails -= stageId
           logDebug(s"removed current stage $stageId from pending tasks of the job")
         }
 
@@ -985,7 +1003,12 @@ private[spark] class ExecutorAllocationManager(
       }
     }
 
-    def pendingTasksFromOtherStagesOfTheJob: Int = stageIdToNumTasks.values.sum
+    def pendingTasksFromOtherStagesOfTheJob: Int =
+      pendingStagesToStageDetails.values.map(_.numTasks).sum
+
+
+    def pendingTasksFromOtherStagesOfTheJob(rpId: Int): Int =
+      pendingStagesToStageDetails.values.filter(_.resourceProfileId == rpId).map(_.numTasks).sum
 
     def hasPendingTasksFromOtherStagesOfTheJob: Boolean =
       pendingTasksFromOtherStagesOfTheJob > 0
@@ -1000,7 +1023,8 @@ private[spark] class ExecutorAllocationManager(
      */
     def pendingTasksPerResourceProfile(rpId: Int): Int = {
       val attempts = resourceProfileIdToStageAttempt.getOrElse(rpId, Set.empty).toSeq
-      attempts.map(attempt => getPendingTaskSum(attempt)).sum + pendingTasksFromOtherStagesOfTheJob
+      (attempts.map(attempt => getPendingTaskSum(attempt)).sum +
+        pendingTasksFromOtherStagesOfTheJob(rpId))
     }
 
     def hasPendingRegularTasks: Boolean = {
