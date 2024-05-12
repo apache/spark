@@ -3830,7 +3830,8 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def coalesce(numPartitions: Int,
-               userDefinedCoalescer: Option[PartitionCoalescer]): Dataset[T] = withTypedPlan {
+               userDefinedCoalescer: Option[PartitionCoalescer] = None):
+  Dataset[T] = withTypedPlan {
     Repartition(numPartitions, shuffle = false, logicalPlan, userDefinedCoalescer)
   }
 

@@ -1331,8 +1331,17 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
  * Took this class out of the test suite to prevent "Task not serializable" exceptions.
  */
 class SizeBasedCoalescer(val maxSize: Int) extends PartitionCoalescer with Serializable {
+
+  def getPartitions(parent: RDD[_]): Array[Partition] = {
+    parent.asInstanceOf[HadoopRDD[Any, Any]].getPartitions
+  }
+
+  def getPartitionSize(partition: Partition): Long = {
+    partition.asInstanceOf[HadoopPartition].inputSplit.value.getLength
+  }
+
   override def coalesce(maxPartitions: Int, parent: RDD[_]): Array[PartitionGroup] = {
-    val partitions: Array[Partition] = parent.asInstanceOf[HadoopRDD[Any, Any]].getPartitions
+    val partitions: Array[Partition] = getPartitions(parent)
     val groups = ArrayBuffer[PartitionGroup]()
     var currentGroup = new PartitionGroup()
     var currentSum = 0L
@@ -1341,8 +1350,8 @@ class SizeBasedCoalescer(val maxSize: Int) extends PartitionCoalescer with Seria
 
     // sort partitions based on the size of the corresponding input splits
     partitions.sortWith((partition1, partition2) => {
-      val partition1Size = partition1.asInstanceOf[HadoopPartition].inputSplit.value.getLength
-      val partition2Size = partition2.asInstanceOf[HadoopPartition].inputSplit.value.getLength
+      val partition1Size = getPartitionSize(partition1)
+      val partition2Size = getPartitionSize(partition2)
       partition1Size < partition2Size
     })
 

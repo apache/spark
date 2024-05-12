@@ -19,19 +19,17 @@ package org.apache.spark.sql
 
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
-
 import scala.collection.immutable.HashSet
 import scala.reflect.ClassTag
 import scala.util.Random
-
 import org.apache.hadoop.fs.{Path, PathFilter}
 import org.scalatest.Assertions._
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.TableDrivenPropertyChecks._
-
-import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkUnsupportedOperationException, TaskContext}
+import org.apache.spark.{Partition, SparkConf, SparkException, SparkRuntimeException, SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.TestUtils.withListener
 import org.apache.spark.internal.config.MAX_RESULT_SIZE
+import org.apache.spark.rdd.{CoalescedRDDPartition, RDD, SizeBasedCoalescer}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, ScroogeLikeExample}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoders, ExpressionEncoder, OuterScopes}
@@ -42,6 +40,7 @@ import org.apache.spark.sql.catalyst.trees.DataFrameQueryContext
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SQLExecution}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.datasources.FilePartition
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.expressions.UserDefinedFunction
@@ -187,6 +186,39 @@ class DatasetSuite extends QueryTest
     checkDatasetUnorderly(
       ds.coalesce(1),
       data: _*)
+  }
+
+  test("SPARK-19426: custom coalesce") {
+    withTempPath { path =>
+      val maxSplitSize = 512
+      val testData = (1 to 1000).map(i => ClassData(i.toString, i))
+      testData.toDS().repartition(50).write.format("csv").save(path.toString)
+
+      withSQLConf(
+        SQLConf.FILES_MAX_PARTITION_BYTES.key -> (maxSplitSize / 3).toString,
+        SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "0"
+      ) {
+        val ds = spark.read.format("csv")
+          .schema("a STRING, b INT")
+          .load(path.toString)
+          .as[ClassData]
+
+        val coalescedDataSet =
+          ds.coalesce(4, Some(new DatasetSizeBasedPartitionCoalescer(maxSplitSize)))
+
+        assert(coalescedDataSet.rdd.partitions.length <= 50)
+
+        val expectedPartitionCount = ds.rdd.partitions.size
+        val totalPartitionCount = coalescedDataSet.rdd.partitions.map { p1 =>
+          val splitSizes = p1.asInstanceOf[CoalescedRDDPartition].parents.map { p2 =>
+            p2.asInstanceOf[FilePartition].files.map(_.length).sum
+          }
+          assert(splitSizes.sum <= maxSplitSize)
+          splitSizes.size
+        }.sum
+        assert(totalPartitionCount === expectedPartitionCount)
+      }
+    }
   }
 
   test("as tuple") {
@@ -2893,3 +2925,14 @@ case class SaveModeArrayCase(modes: Array[SaveMode])
 
 case class K1(a: Long)
 case class K2(a: Long, b: Long)
+
+class DatasetSizeBasedPartitionCoalescer(maxSize: Int) extends SizeBasedCoalescer(maxSize) {
+
+  override def getPartitions(parent: RDD[_]): Array[Partition] = {
+    parent.firstParent.partitions
+  }
+
+  override def getPartitionSize(partition: Partition): Long = {
+    partition.asInstanceOf[FilePartition].files.map(x => x.length - x.start).sum
+  }
+}

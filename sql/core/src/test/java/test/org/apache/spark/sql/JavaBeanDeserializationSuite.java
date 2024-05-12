@@ -26,6 +26,7 @@ import java.util.*;
 
 import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
+import org.apache.spark.rdd.DefaultPartitionCoalescer;
 import org.junit.jupiter.api.*;
 
 import org.apache.spark.api.java.function.MapFunction;
@@ -39,6 +40,7 @@ import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.StructType;
 
 import org.apache.spark.sql.test.TestSparkSession;
+import scala.Option;
 import scala.Tuple2;
 
 public class JavaBeanDeserializationSuite implements Serializable {
@@ -565,7 +567,7 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
     Dataset<Item> ds = spark.createDataFrame(items, Item.class)
             .as(encoder)
-            .coalesce(1);
+            .coalesce(1, Option.empty());
 
     MapFunction<Item, String> mf = new MapFunction<Item, String>() {
       @Override

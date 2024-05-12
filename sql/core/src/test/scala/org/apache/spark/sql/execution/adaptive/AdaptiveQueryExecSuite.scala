@@ -3032,7 +3032,7 @@ private object TestProblematicCoalesceStrategy extends Strategy {
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = {
     plan match {
       case org.apache.spark.sql.catalyst.plans.logical.Repartition(
-      numPartitions, false, child) =>
+      numPartitions, false, child, _) =>
         TestProblematicCoalesceExec(numPartitions, planLater(child)) :: Nil
       case _ => Nil
     }

@@ -159,7 +159,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
       .collectFirst { case r: Repartition => r }.get match {
       case Repartition(
         1, true, SubqueryAlias(
-          _, _: LocalRelation)) =>
+          _, _: LocalRelation), _) =>
       case other =>
         failure(other)
     }
@@ -188,7 +188,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
       case Sort(
         _, false, Repartition(
           1, true, SubqueryAlias(
-            _, _: LocalRelation))) =>
+            _, _: LocalRelation), _)) =>
       case other =>
         failure(other)
     }
@@ -217,7 +217,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         |ORDER BY 1, 2
         |""".stripMargin).queryExecution.analyzed
     plan.collectFirst { case r: Repartition => r } match {
-      case Some(Repartition(1, true, _)) =>
+      case Some(Repartition(1, true, _, _)) =>
       case _ =>
         failure(plan)
     }
@@ -235,7 +235,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         |ORDER BY 1, 2
         |""".stripMargin).queryExecution.analyzed
     plan.collectFirst { case r: Repartition => r } match {
-      case Some(Repartition(1, true, _)) =>
+      case Some(Repartition(1, true, _, _)) =>
       case _ =>
         failure(plan)
     }
