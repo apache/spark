@@ -19,13 +19,16 @@ package org.apache.spark.sql
 
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
+
 import scala.collection.immutable.HashSet
 import scala.reflect.ClassTag
 import scala.util.Random
+
 import org.apache.hadoop.fs.{Path, PathFilter}
 import org.scalatest.Assertions._
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.TableDrivenPropertyChecks._
+
 import org.apache.spark.{Partition, SparkConf, SparkException, SparkRuntimeException, SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.TestUtils.withListener
 import org.apache.spark.internal.config.MAX_RESULT_SIZE
