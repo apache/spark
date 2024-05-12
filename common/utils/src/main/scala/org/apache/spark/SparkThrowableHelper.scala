@@ -31,7 +31,7 @@ private[spark] object ErrorMessageFormat extends Enumeration {
  * construct error messages.
  */
 private[spark] object SparkThrowableHelper {
-  val errorReader = new ErrorClassesJsonReader(
+  val errorReader = new ErrorConditionsJsonReader(
     // Note that though we call them "error classes" here, the proper name is "error conditions",
     // hence why the name of the JSON file is different. We will address this inconsistency as part
     // of this ticket: https://issues.apache.org/jira/browse/SPARK-47429

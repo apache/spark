@@ -53,7 +53,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     // of this ticket: https://issues.apache.org/jira/browse/SPARK-47429
     "common", "utils", "src", "main", "resources", "error", "error-conditions.json")
 
-  private val errorReader = new ErrorClassesJsonReader(Seq(errorJsonFilePath.toUri.toURL))
+  private val errorReader = new ErrorConditionsJsonReader(Seq(errorJsonFilePath.toUri.toURL))
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -440,7 +440,7 @@ class SparkThrowableSuite extends SparkFunSuite {
           |  }
           |}
           |""".stripMargin, StandardCharsets.UTF_8)
-      val reader = new ErrorClassesJsonReader(Seq(errorJsonFilePath.toUri.toURL, json.toURI.toURL))
+      val reader = new ErrorConditionsJsonReader(Seq(errorJsonFilePath.toUri.toURL, json.toURI.toURL))
       assert(reader.getErrorMessage("DIVIDE_BY_ZERO", Map.empty) == "abc")
     }
   }
@@ -459,7 +459,7 @@ class SparkThrowableSuite extends SparkFunSuite {
           |}
           |""".stripMargin, StandardCharsets.UTF_8)
       val e = intercept[SparkException] {
-        new ErrorClassesJsonReader(Seq(errorJsonFilePath.toUri.toURL, json.toURI.toURL))
+        new ErrorConditionsJsonReader(Seq(errorJsonFilePath.toUri.toURL, json.toURI.toURL))
       }
       assert(e.getErrorClass === "INTERNAL_ERROR")
       assert(e.getMessage.contains("DIVIDE.BY_ZERO"))
@@ -485,7 +485,7 @@ class SparkThrowableSuite extends SparkFunSuite {
           |}
           |""".stripMargin, StandardCharsets.UTF_8)
       val e = intercept[SparkException] {
-        new ErrorClassesJsonReader(Seq(errorJsonFilePath.toUri.toURL, json.toURI.toURL))
+        new ErrorConditionsJsonReader(Seq(errorJsonFilePath.toUri.toURL, json.toURI.toURL))
       }
       assert(e.getErrorClass === "INTERNAL_ERROR")
       assert(e.getMessage.contains("BY.ZERO"))

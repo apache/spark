@@ -36,12 +36,12 @@ import org.apache.spark.annotation.DeveloperApi
  * Please read common/utils/src/main/resources/error/README.md for more details.
  */
 @DeveloperApi
-class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
+class ErrorConditionsJsonReader(jsonFileURLs: Seq[URL]) {
   assert(jsonFileURLs.nonEmpty)
 
   // Exposed for testing
   private[spark] val errorInfoMap =
-    jsonFileURLs.map(ErrorClassesJsonReader.readAsMap).reduce(_ ++ _)
+    jsonFileURLs.map(ErrorConditionsJsonReader.readAsMap).reduce(_ ++ _)
 
   def getErrorMessage(errorClass: String, messageParameters: Map[String, String]): String = {
     val messageTemplate = getMessageTemplate(errorClass)
@@ -49,7 +49,7 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
     sub.setEnableUndefinedVariableException(true)
     sub.setDisableSubstitutionInValues(true)
     try {
-      sub.replace(ErrorClassesJsonReader.TEMPLATE_REGEX.replaceAllIn(
+      sub.replace(ErrorConditionsJsonReader.TEMPLATE_REGEX.replaceAllIn(
         messageTemplate, "\\$\\{$1\\}"))
     } catch {
       case _: IllegalArgumentException => throw SparkException.internalError(
@@ -60,7 +60,7 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
 
   def getMessageParameters(errorClass: String): Seq[String] = {
     val messageTemplate = getMessageTemplate(errorClass)
-    val matches = ErrorClassesJsonReader.TEMPLATE_REGEX.findAllIn(messageTemplate).toSeq
+    val matches = ErrorConditionsJsonReader.TEMPLATE_REGEX.findAllIn(messageTemplate).toSeq
     matches.map(m => m.stripSuffix(">").stripPrefix("<"))
   }
 
@@ -105,7 +105,7 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
   }
 }
 
-private object ErrorClassesJsonReader {
+private object ErrorConditionsJsonReader {
   private val TEMPLATE_REGEX = "<([a-zA-Z0-9_-]+)>".r
 
   private val mapper: JsonMapper = JsonMapper.builder()

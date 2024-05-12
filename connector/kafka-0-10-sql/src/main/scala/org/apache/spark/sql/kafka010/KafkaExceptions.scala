@@ -21,14 +21,11 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.kafka.common.TopicPartition
 
-import org.apache.spark.{ErrorClassesJsonReader, SparkException, SparkThrowable}
+import org.apache.spark.{ErrorConditionsJsonReader, SparkException, SparkThrowable}
 
 private object KafkaExceptionsHelper {
-  val errorClassesJsonReader: ErrorClassesJsonReader =
-    new ErrorClassesJsonReader(
-      // Note that though we call them "error classes" here, the proper name is "error conditions",
-      // hence why the name of the JSON file is different. We will address this inconsistency as
-      // part of this ticket: https://issues.apache.org/jira/browse/SPARK-47429
+  val errorConditionsJsonReader: ErrorConditionsJsonReader =
+    new ErrorConditionsJsonReader(
       Seq(getClass.getClassLoader.getResource("error/kafka-error-conditions.json")))
 }
 
@@ -36,7 +33,7 @@ object KafkaExceptions {
   def mismatchedTopicPartitionsBetweenEndOffsetAndPrefetched(
       tpsForPrefetched: Set[TopicPartition],
       tpsForEndOffset: Set[TopicPartition]): SparkException = {
-    val errMsg = KafkaExceptionsHelper.errorClassesJsonReader.getErrorMessage(
+    val errMsg = KafkaExceptionsHelper.errorConditionsJsonReader.getErrorMessage(
       "MISMATCHED_TOPIC_PARTITIONS_BETWEEN_END_OFFSET_AND_PREFETCHED",
       Map(
         "tpsForPrefetched" -> tpsForPrefetched.toString(),
@@ -49,7 +46,7 @@ object KafkaExceptions {
   def endOffsetHasGreaterOffsetForTopicPartitionThanPrefetched(
       prefetchedOffset: Map[TopicPartition, Long],
       endOffset: Map[TopicPartition, Long]): SparkException = {
-    val errMsg = KafkaExceptionsHelper.errorClassesJsonReader.getErrorMessage(
+    val errMsg = KafkaExceptionsHelper.errorConditionsJsonReader.getErrorMessage(
       "END_OFFSET_HAS_GREATER_OFFSET_FOR_TOPIC_PARTITION_THAN_PREFETCHED",
       Map(
         "prefetchedOffset" -> prefetchedOffset.toString(),
@@ -62,7 +59,7 @@ object KafkaExceptions {
   def lostTopicPartitionsInEndOffsetWithTriggerAvailableNow(
       tpsForLatestOffset: Set[TopicPartition],
       tpsForEndOffset: Set[TopicPartition]): SparkException = {
-    val errMsg = KafkaExceptionsHelper.errorClassesJsonReader.getErrorMessage(
+    val errMsg = KafkaExceptionsHelper.errorConditionsJsonReader.getErrorMessage(
       "LOST_TOPIC_PARTITIONS_IN_END_OFFSET_WITH_TRIGGER_AVAILABLENOW",
       Map(
         "tpsForLatestOffset" -> tpsForLatestOffset.toString(),
@@ -75,7 +72,7 @@ object KafkaExceptions {
   def endOffsetHasGreaterOffsetForTopicPartitionThanLatestWithTriggerAvailableNow(
       latestOffset: Map[TopicPartition, Long],
       endOffset: Map[TopicPartition, Long]): SparkException = {
-    val errMsg = KafkaExceptionsHelper.errorClassesJsonReader.getErrorMessage(
+    val errMsg = KafkaExceptionsHelper.errorConditionsJsonReader.getErrorMessage(
       "END_OFFSET_HAS_GREATER_OFFSET_FOR_TOPIC_PARTITION_THAN_LATEST_WITH_TRIGGER_AVAILABLENOW",
       Map(
         "latestOffset" -> latestOffset.toString(),
@@ -165,12 +162,12 @@ private[kafka010] class KafkaIllegalStateException(
     messageParameters: Map[String, String],
     cause: Throwable = null)
   extends IllegalStateException(
-    KafkaExceptionsHelper.errorClassesJsonReader.getErrorMessage(
+    KafkaExceptionsHelper.errorConditionsJsonReader.getErrorMessage(
       errorClass, messageParameters), cause)
   with SparkThrowable {
 
   override def getSqlState: String =
-    KafkaExceptionsHelper.errorClassesJsonReader.getSqlState(errorClass)
+    KafkaExceptionsHelper.errorConditionsJsonReader.getSqlState(errorClass)
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 

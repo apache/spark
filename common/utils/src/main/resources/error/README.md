@@ -39,7 +39,7 @@ The terms error class, state, and condition come from the SQL standard.
 
 Unfortunately, we have historically used the term "error class" inconsistently to refer both to a proper error class like `42` and also to an error condition like `DATATYPE_MISSING_SIZE`.
 
-Fixing this will require renaming `SparkException.errorClass` to `SparkException.errorCondition` and making similar changes to `ErrorClassesJsonReader` and other parts of the codebase. We will address this in [SPARK-47429]. Until that is complete, we will have to live with the fact that a string like `DATATYPE_MISSING_SIZE` is called an "error condition" in our user-facing documentation but an "error class" in the code.
+Fixing this will require renaming `SparkException.errorClass` to `SparkException.errorCondition` and making similar changes to other parts of the codebase. We will address this in [SPARK-47429]. Until that is complete, we will have to live with the fact that a string like `DATATYPE_MISSING_SIZE` is called an "error condition" in our user-facing documentation but an "error class" in the code.
 
 For more details, please see [SPARK-46810].
 
