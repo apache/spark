@@ -71,8 +71,9 @@ object CollationTypeCasts extends TypeCoercionRule {
       val Seq(newStr, newPad) = collateToSingleType(Seq(str, pad))
       stringPadExpr.withNewChildren(Seq(newStr, len, newPad))
 
-    case lev: Levenshtein =>
-      lev.withNewChildren(collateToSingleType(Seq(lev.left, lev.right)) ++ lev.threshold)
+    case levExpr: Levenshtein =>
+      levExpr.withNewChildren(collateToSingleType(
+        Seq(levExpr.left, levExpr.right)) ++ levExpr.threshold)
 
     case otherExpr @ (
       _: In | _: InSubquery | _: CreateArray | _: ArrayJoin | _: Concat | _: Greatest | _: Least |

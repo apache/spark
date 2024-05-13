@@ -993,6 +993,106 @@ public class CollationSupportSuite {
     assertStringTrimRight("UNICODE", "Ëaaaẞ", "Ëẞ", "Ëaaa");
   }
 
+  private void assertLevenshtein(
+          String collation,
+          String leftString,
+          String rightString,
+          Integer threshold,
+          Integer expectedValue
+  ) throws SparkException {
+    int collationId = CollationFactory.collationNameToId(collation);
+    int result;
+
+    if (threshold == null){
+      result = CollationSupport.Levenshtein.exec(UTF8String.fromString(leftString), UTF8String.fromString(rightString), collationId);
+    }
+    else{
+      result = CollationSupport.Levenshtein.execWithThreshold(UTF8String.fromString(leftString), UTF8String.fromString(rightString), threshold, collationId);
+    }
+
+    assertEquals(expectedValue, result);
+  }
+
+  @Test
+  public void testLevensthein() throws SparkException {
+    // Levenshtein tests without threshold value set
+    //
+    assertLevenshtein("UTF8_BINARY", "", "", null, 0);
+    assertLevenshtein("UTF8_BINARY", "A", "", null, 1);
+    assertLevenshtein("UTF8_BINARY", "A", "A", null, 0);
+    assertLevenshtein("UTF8_BINARY", "A", "a", null, 1);
+    assertLevenshtein("UTF8_BINARY", "aaa", "aaa", null, 0);
+    assertLevenshtein("UTF8_BINARY", "Xü", "xü", null, 1);
+    assertLevenshtein("UTF8_BINARY", "", "random", null, 6);
+    assertLevenshtein("UTF8_BINARY", "Xü", "Xü", null, 0);
+    assertLevenshtein("UTF8_BINARY", "Ëaaaẞ", "ËAAAẞ", null, 3);
+    assertLevenshtein("UTF8_BINARY", "asda", "adA", null, 2);
+
+    assertLevenshtein("UTF8_BINARY_LCASE", "", "", null, 0);
+    assertLevenshtein("UTF8_BINARY_LCASE", "A", "", null, 1);
+    assertLevenshtein("UTF8_BINARY_LCASE", "A", "A", null, 0);
+    assertLevenshtein("UTF8_BINARY_LCASE", "A", "a", null, 0);
+    assertLevenshtein("UTF8_BINARY_LCASE", "aaa", "aAA", null, 0);
+    assertLevenshtein("UTF8_BINARY_LCASE", "Xü", "xü", null, 0);
+    assertLevenshtein("UTF8_BINARY_LCASE", "", "random", null, 6);
+    assertLevenshtein("UTF8_BINARY_LCASE", "Xü", "Xü", null, 0);
+    assertLevenshtein("UTF8_BINARY_LCASE", "Ëaaaẞ", "ËAAAẞ", null, 0);
+    assertLevenshtein("UTF8_BINARY_LCASE", "asda", "adA", null, 1);
+
+    assertLevenshtein("UNICODE", "", "", null, 0);
+    assertLevenshtein("UNICODE", "A", "", null, 1);
+    assertLevenshtein("UNICODE", "A", "A", null, 0);
+    assertLevenshtein("UNICODE", "A", "a", null, 1);
+    assertLevenshtein("UNICODE", "aaa", "aaa", null, 0);
+    assertLevenshtein("UNICODE", "Xü", "xü", null, 1);
+    assertLevenshtein("UNICODE", "", "random", null, 6);
+    assertLevenshtein("UNICODE", "Xü", "Xü", null, 0);
+    assertLevenshtein("UNICODE", "Ëaaaẞ", "ËAAAẞ", null, 3);
+    assertLevenshtein("UNICODE", "asda", "adA", null, 2);
+
+
+    // Levenshtein tests with threshold value set
+    //
+    assertLevenshtein("UTF8_BINARY", "", "", 2, 0);
+    assertLevenshtein("UTF8_BINARY", "A", "", 2, 1);
+    assertLevenshtein("UTF8_BINARY", "A", "A", 2, 0);
+    assertLevenshtein("UTF8_BINARY", "A", "a", 10, 1);
+    assertLevenshtein("UTF8_BINARY", "aaa", "aaa", 1, 0);
+    assertLevenshtein("UTF8_BINARY", "Xü", "xü", 2, 1);
+    assertLevenshtein("UTF8_BINARY", "", "random", 10, 6);
+    assertLevenshtein("UTF8_BINARY", "", "random", 5, -1);
+    assertLevenshtein("UTF8_BINARY", "Xü", "Xü", 2, 0);
+    assertLevenshtein("UTF8_BINARY", "Ëaaaẞ", "ËAAAẞ", 3, 3);
+    assertLevenshtein("UTF8_BINARY", "asda", "adA", 1, -1);
+
+    assertLevenshtein("UTF8_BINARY_LCASE", "", "", 2, 0);
+    assertLevenshtein("UTF8_BINARY_LCASE", "A", "", 2, 1);
+    assertLevenshtein("UTF8_BINARY_LCASE", "A", "A", 2, 0);
+    assertLevenshtein("UTF8_BINARY_LCASE", "A", "a", 2, 0);
+    assertLevenshtein("UTF8_BINARY_LCASE", "aaa", "aAA", 2, 0);
+    assertLevenshtein("UTF8_BINARY_LCASE", "Xü", "xü", 2, 0);
+    assertLevenshtein("UTF8_BINARY_LCASE", "", "random", 3, -1);
+    assertLevenshtein("UTF8_BINARY_LCASE", "", "random", 6, 6);
+    assertLevenshtein("UTF8_BINARY_LCASE", "Xü", "Xü", 2, 0);
+    assertLevenshtein("UTF8_BINARY_LCASE", "Ëaaaẞ", "ËAAAẞ", 3, 0);
+    assertLevenshtein("UTF8_BINARY_LCASE", "asda", "adA", 1, 1);
+
+    assertLevenshtein("UNICODE", "", "", 2, 0);
+    assertLevenshtein("UNICODE", "A", "", 2, 1);
+    assertLevenshtein("UNICODE", "A", "A", 2, 0);
+    assertLevenshtein("UNICODE", "A", "a", 2, 1);
+    assertLevenshtein("UNICODE", "aaa", "aaa", 2, 0);
+    assertLevenshtein("UNICODE", "Xü", "xü", 2, 1);
+    assertLevenshtein("UNICODE", "", "random", 3, -1);
+    assertLevenshtein("UNICODE", "", "random", 10, 6);
+    assertLevenshtein("UNICODE", "Xü", "Xü", 2, 0);
+    assertLevenshtein("UNICODE", "Ëaaaẞ", "ËAAAẞ", 3, 3);
+    assertLevenshtein("UNICODE", "Ëaaaẞ", "ËAAAẞ", 2, -1);
+    assertLevenshtein("UNICODE", "asda", "adA", 2, 2);
+
+    assertLevenshtein("UNICODE", "asda", "asda", -1 , -1);
+  }
+
   // TODO: Test more collation-aware string expressions.
 
   /**

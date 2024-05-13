@@ -725,7 +725,7 @@ public final class CollationSupport {
   /**
    * Utility class for collation aware Levenshtein function.
    */
-  public static class Levenshtein{
+  public static class Levenshtein {
 
     /**
      * Implementation of SubstringEquals interface for collation aware comparison of two substrings.
@@ -750,26 +750,42 @@ public final class CollationSupport {
       }
     }
 
-    public static Integer exec(final UTF8String left, final UTF8String right, final int collationId){
+    public static Integer exec(final UTF8String left, final UTF8String right, final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
 
-      if (collation.supportsBinaryEquality){
-        return left.levenshteinDistance(right);
+      if (collation.supportsBinaryEquality) {
+        return execBinary(left, right);
       }
-      else{
-        return left.levenshteinDistance(right, new CollationSubstringEquals(collationId));
+      else {
+        return execNonBinary(left, right, collationId);
       }
     }
 
-    public static Integer execWithThreshold(final UTF8String left, final UTF8String right, final int threshold, final int collationId){
+    public static Integer execWithThreshold(final UTF8String left, final UTF8String right, final int threshold, final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
 
-      if (collation.supportsBinaryEquality){
-        return left.levenshteinDistance(right, threshold);
+      if (collation.supportsBinaryEquality) {
+        return execBinaryWithThreshold(left, right, threshold);
       }
       else{
-        return left.levenshteinDistance(right, threshold, new CollationSubstringEquals(collationId));
+        return execNonBinaryWithThreshold(left, right, threshold, collationId);
       }
+    }
+
+    private static Integer execBinary(final UTF8String left, final UTF8String right){
+      return left.levenshteinDistance(right);
+    }
+
+    private static Integer execNonBinary(final UTF8String left, final UTF8String right, final int collationId){
+      return left.levenshteinDistance(right, new CollationSubstringEquals(collationId));
+    }
+
+    private static Integer execBinaryWithThreshold(final UTF8String left, final UTF8String right, final int threshold){
+      return left.levenshteinDistance(right, threshold);
+    }
+
+    private static Integer execNonBinaryWithThreshold(final UTF8String left, final UTF8String right, final int threshold, final int collationId){
+      return left.levenshteinDistance(right, threshold, new CollationSubstringEquals(collationId));
     }
 
     public static String genCode(final UTF8String left, final UTF8String right, final int collationId){
