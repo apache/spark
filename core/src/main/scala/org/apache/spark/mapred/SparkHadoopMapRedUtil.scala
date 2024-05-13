@@ -43,7 +43,7 @@ object SparkHadoopMapRedUtil extends Logging {
       mrTaskContext: MapReduceTaskAttemptContext,
       jobId: Int,
       splitId: Int,
-      disableCommitCoordination: Boolean = false): Unit = {
+      disableCommitCoordination: Boolean): Unit = {
 
     val mrTaskAttemptID = mrTaskContext.getTaskAttemptID
 
@@ -96,5 +96,13 @@ object SparkHadoopMapRedUtil extends Logging {
       // Some other attempt committed the output, so we do nothing and signal success
       logInfo(s"No need to commit output of task because needsTaskCommit=false: $mrTaskAttemptID")
     }
+  }
+
+  def commitTask(
+      committer: MapReduceOutputCommitter,
+      mrTaskContext: MapReduceTaskAttemptContext,
+      jobId: Int,
+      splitId: Int): Unit = {
+    commitTask(committer, mrTaskContext, jobId, splitId, disableCommitCoordination = false)
   }
 }
