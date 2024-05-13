@@ -14,30 +14,3 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-package org.apache.spark.sql.connector.catalog;
-
-import org.apache.spark.annotation.Evolving;
-
-/**
- * Identifies an object in a catalog.
- *
- * @since 3.0.0
- */
-@Evolving
-public interface Identifier {
-
-  static Identifier of(String[] namespace, String name) {
-    return new IdentifierImpl(namespace, name);
-  }
-
-  /**
-   * @return the namespace in the catalog
-   */
-  String[] namespace();
-
-  /**
-   * @return the object name
-   */
-  String name();
-}
