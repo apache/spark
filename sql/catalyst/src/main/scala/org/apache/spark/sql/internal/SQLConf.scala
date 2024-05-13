@@ -4611,6 +4611,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_INFER_MAP_STRUCT_TYPE_FROM_FIRST_ITEM =
+    buildConf("spark.sql.pyspark.legacy.inferMapTypeFromFirstPair.enabled")
+      .internal()
+      .doc("PySpark's SparkSession.createDataFrame infers the key/value types of a map from all " +
+        "paris in the map by default. If this config is set to true, it restores the legacy " +
+        "behavior of only inferring the type from the first pair.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_USE_V1_COMMAND =
     buildConf("spark.sql.legacy.useV1Command")
       .internal()
@@ -5813,6 +5823,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyInferArrayTypeFromFirstElement: Boolean = getConf(
     SQLConf.LEGACY_INFER_ARRAY_TYPE_FROM_FIRST_ELEMENT)
+
+  def legacyInferMapStructTypeFromFirstItem: Boolean = getConf(
+    SQLConf.LEGACY_INFER_MAP_STRUCT_TYPE_FROM_FIRST_ITEM)
 
   def parquetFieldIdReadEnabled: Boolean = getConf(SQLConf.PARQUET_FIELD_ID_READ_ENABLED)
 

@@ -410,6 +410,57 @@ class TypesTestsMixin:
                 df = self.spark.createDataFrame(data)
                 self.assertEqual(Row(f1=[Row(payment=200.5), Row(payment=None)]), df.first())
 
+    def test_infer_map_merge_pair_types_with_rdd(self):
+        # SPARK-48247: Test inferring map pair type from all values in array
+        MapRow = Row("f1", "f2")
+
+        data = [MapRow({"a": 1, "b": None}, {"a": None, "b": 1})]
+
+        rdd = self.sc.parallelize(data)
+        df = self.spark.createDataFrame(rdd)
+        self.assertEqual(Row(f1={"a": 1, "b": None}, f2={"a": None, "b": 1}), df.first())
+
+    def test_infer_map_pair_type_empty_rdd(self):
+        # SPARK-48247: Test inferring map pair type from all rows
+        MapRow = Row("f1")
+
+        data = [MapRow({}), MapRow({"a": None}), MapRow({"a": 1})]
+
+        rdd = self.sc.parallelize(data)
+        df = self.spark.createDataFrame(rdd)
+        rows = df.collect()
+        self.assertEqual(Row(f1={}), rows[0])
+        self.assertEqual(Row(f1={"a": None}), rows[1])
+        self.assertEqual(Row(f1={"a": 1}), rows[2])
+
+    def test_infer_map_pair_type_empty(self):
+        # SPARK-48247: Test inferring map pair type from all rows
+        MapRow = Row("f1")
+
+        data = [MapRow({}), MapRow({"a": None}), MapRow({"a": 1})]
+
+        df = self.spark.createDataFrame(data)
+        rows = df.collect()
+        self.assertEqual(Row(f1={}), rows[0])
+        self.assertEqual(Row(f1={"a": None}), rows[1])
+        self.assertEqual(Row(f1={"a": 1}), rows[2])
+
+    def test_infer_map_pair_type_with_nested_maps(self):
+        # SPARK-48247: Test inferring nested map
+        NestedRow = Row("f1", "f2")
+
+        data = [
+            NestedRow({"payment": 200.5, "name": "A"}, {"outer": {"payment": 200.5, "name": "A"}})
+        ]
+        df = self.spark.createDataFrame(data)
+        self.assertEqual(
+            Row(
+                f1={"payment": "200.5", "name": "A"},
+                f2={"outer": {"payment": "200.5", "name": "A"}},
+            ),
+            df.first(),
+        )
+
     def test_create_dataframe_from_dict_respects_schema(self):
         df = self.spark.createDataFrame([{"a": 1}], ["b"])
         self.assertEqual(df.columns, ["b"])
