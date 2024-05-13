@@ -117,12 +117,12 @@
       <scope>${hive.shims.scope}</scope>
     </dependency>
     <dependency>
-      <groupId>org.apache.hive</groupId>
+      <groupId>${hive.group}</groupId>
       <artifactId>hive-llap-common</artifactId>
       <scope>${hive.llap.scope}</scope>
     </dependency>
     <dependency>
-      <groupId>org.apache.hive</groupId>
+      <groupId>${hive.group}</groupId>
       <artifactId>hive-llap-client</artifactId>
       <scope>${hive.llap.scope}</scope>
     </dependency>
