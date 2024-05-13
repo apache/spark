@@ -805,8 +805,12 @@ public final class CollationSupport {
       return left.levenshteinDistance(right, threshold, new CollationSubstringEquals(collationId));
     }
 
-    public static String genCode(final UTF8String left, final UTF8String right, final int collationId) {
-      return String.format("CollationSupport.Levenshtein.exec(%s, %s, %d)", left, right, collationId);
+    public static String genCode(
+        final UTF8String left,
+        final UTF8String right,
+        final int collationId) {
+      return String.format("CollationSupport.Levenshtein.exec" +
+              "(%s, %s, %d)", left, right, collationId);
     }
 
     public static String genCodeWithTreshold(
