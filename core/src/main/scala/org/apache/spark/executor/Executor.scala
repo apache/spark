@@ -290,7 +290,7 @@ private[spark] class Executor(
    */
   private val METRICS_POLLING_INTERVAL_MS = conf.get(EXECUTOR_METRICS_POLLING_INTERVAL)
 
-  private val pollOnHeartbeat = if (METRICS_POLLING_INTERVAL_MS > 0) false else true
+  private val pollOnHeartbeat = METRICS_POLLING_INTERVAL_MS <= 0
 
   // Poller for the memory metrics. Visible for testing.
   private[executor] val metricsPoller = new ExecutorMetricsPoller(

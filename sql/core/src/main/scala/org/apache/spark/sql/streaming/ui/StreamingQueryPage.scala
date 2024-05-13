@@ -85,7 +85,7 @@ private[ui] class StreamingQueryPage(parent: StreamingQueryTab)
   private def queryTable(data: Seq[StreamingQueryUIData], request: HttpServletRequest,
       tableTag: String): Seq[Node] = {
 
-    val isActive = if (tableTag.contains("active")) true else false
+    val isActive = tableTag.contains("active")
     val page = Option(request.getParameter(s"$tableTag.page")).map(_.toInt).getOrElse(1)
 
     try {

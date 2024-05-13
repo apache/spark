@@ -77,7 +77,7 @@ class InMemoryColumnarQuerySuite extends QueryTest
       StructField(s"col$index", dataType, nullability)
     })
     val rdd = spark.sparkContext.parallelize((1 to 10).map(i => Row(
-      if (nullability && i % 3 == 0) null else if (i % 2 == 0) true else false,
+      if (nullability && i % 3 == 0) null else i % 2 == 0,
       if (nullability && i % 3 == 0) null else i.toByte,
       if (nullability && i % 3 == 0) null else i.toShort,
       if (nullability && i % 3 == 0) null else i.toInt,

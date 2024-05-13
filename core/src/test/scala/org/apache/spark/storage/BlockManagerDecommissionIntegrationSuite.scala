@@ -73,8 +73,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
           System.currentTimeMillis() - startTime < 6000) {
           Thread.sleep(300)
         }
-        val blockManagerDecommissionStatus =
-          if (SparkEnv.get.blockManager.decommissioner.isEmpty) false else true
+        val blockManagerDecommissionStatus = SparkEnv.get.blockManager.decommissioner.isDefined
         Iterator.single(blockManagerDecommissionStatus)
       }.collect().toImmutableArraySeq
       assert(decommissionStatus.forall(_ == isEnabled))
