@@ -195,7 +195,7 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
       value: Seq[UTF8String]): Unit = {
     val benchmark = new Benchmark(
       s"collation unit benchmarks - mode - ${value.size} elements",
-      value.size * 10,
+      value.size,
       warmupTime = 10.seconds,
       output = output)
     collationTypes.foreach { collationType => {
@@ -242,15 +242,35 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
  */
 object CollationBenchmark extends CollationBenchmarkBase {
 
-  override def generateSeqInput(n: Long): Seq[UTF8String] = {
-    val input = Seq("ABC", "ABC", "aBC", "aBC", "abc", "abc", "DEF", "DEF", "def", "def",
-      "GHI", "ghi", "JKL", "jkl", "MNO", "mno", "PQR", "pqr", "STU", "stu", "VWX", "vwx",
-      "ABC", "ABC", "aBC", "aBC", "abc", "abc", "DEF", "DEF", "def", "def", "GHI", "ghi",
-      "JKL", "jkl", "MNO", "mno", "PQR", "pqr", "STU", "stu", "VWX", "vwx", "YZ")
-      .map(UTF8String.fromString)
-    val inputLong: Seq[UTF8String] = (0L until n).map(i => input(i.toInt % input.size))
-    inputLong
+  private val baseInputStrings = Seq("ABC", "ABC", "aBC", "aBC", "abc",
+    "abc", "DEF", "DEF", "def", "def",
+    "GHI", "ghi", "JKL", "jkl", "MNO", "mno", "PQR", "pqr", "STU", "stu", "VWX", "vwx",
+    "ABC", "ABC", "aBC", "aBC", "abc", "abc", "DEF", "DEF", "def", "def", "GHI", "ghi",
+    "JKL", "jkl", "MNO", "mno", "PQR", "pqr", "STU", "stu", "VWX", "vwx", "YZ")
+
+
+  /*
+    * Generate input strings for the benchmark. The input strings are a sequence of base strings
+    * repeated n / input.size times.
+   */
+  private def generateBaseInputStrings(n: Long): Seq[UTF8String] = {
+    val input = baseInputStrings.map(UTF8String.fromString)
+    (0L until n).map(i => input(i.toInt % input.size))
   }
+
+  /*
+  Lowercase and some repeated strings to test the performance of the collation functions.
+   */
+  def generateBaseInputStringswithUniqueGroupNumber(n: Long): Seq[UTF8String] = {
+    (0 to n / baseInputStrings.size).flatMap(k => baseInputStrings.map(
+      x => UTF8String.fromString(x + "_" + k)))
+      .flatMap(
+        x => Seq(x, x.repeat(4), x.repeat(8))) // Variable Lengths...
+      .sortBy(f => f.reverse().hashCode()) // Shuffle the input
+  }
+
+  override def generateSeqInput(n: Long): Seq[UTF8String] =
+    generateBaseInputStrings(n)
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val inputs = generateSeqInput(10000L)
@@ -260,9 +280,9 @@ object CollationBenchmark extends CollationBenchmarkBase {
     benchmarkContains(collationTypes, inputs)
     benchmarkStartsWith(collationTypes, inputs)
     benchmarkEndsWith(collationTypes, inputs)
-    benchmarkMode(collationTypes, inputs)
-    benchmarkMode(collationTypes, generateSeqInput(5000L))
-    benchmarkMode(collationTypes, generateSeqInput(2500L))
+    benchmarkMode(collationTypes, generateBaseInputStringswithUniqueGroupNumber(10000L))
+    benchmarkMode(collationTypes, generateBaseInputStringswithUniqueGroupNumber(5000L))
+    benchmarkMode(collationTypes, generateBaseInputStringswithUniqueGroupNumber(2500L))
   }
 }
 
