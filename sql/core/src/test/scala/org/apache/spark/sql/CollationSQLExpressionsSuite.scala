@@ -434,6 +434,50 @@ class CollationSQLExpressionsSuite
     })
   }
 
+  test("Support XPath expressions with collation") {
+    case class XPathTestCase(
+      xml: String,
+      xpath: String,
+      functionName: String,
+      collationName: String,
+      result: Any,
+      resultType: DataType
+    )
+
+    val testCases = Seq(
+      XPathTestCase("<a><b>1</b></a>", "a/b",
+        "xpath_boolean", "UTF8_BINARY", true, BooleanType),
+      XPathTestCase("<A><B>1</B><B>2</B></A>", "sum(A/B)",
+        "xpath_short", "UTF8_BINARY", 3, ShortType),
+      XPathTestCase("<a><b>3</b><b>4</b></a>", "sum(a/b)",
+        "xpath_int", "UTF8_BINARY_LCASE", 7, IntegerType),
+      XPathTestCase("<A><B>5</B><B>6</B></A>", "sum(A/B)",
+        "xpath_long", "UTF8_BINARY_LCASE", 11, LongType),
+      XPathTestCase("<a><b>7</b><b>8</b></a>", "sum(a/b)",
+        "xpath_float", "UNICODE", 15.0, FloatType),
+      XPathTestCase("<A><B>9</B><B>0</B></A>", "sum(A/B)",
+        "xpath_double", "UNICODE", 9.0, DoubleType),
+      XPathTestCase("<a><b>b</b><c>cc</c></a>", "a/c",
+        "xpath_string", "UNICODE_CI", "cc", StringType("UNICODE_CI")),
+      XPathTestCase("<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>", "a/b/text()",
+        "xpath", "UNICODE_CI", Array("b1", "b2", "b3"), ArrayType(StringType("UNICODE_CI")))
+    )
+
+    // Supported collations
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |select ${t.functionName}('${t.xml}', '${t.xpath}')
+           |""".stripMargin
+      // Result & data type
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        checkAnswer(testQuery, Row(t.result))
+        assert(testQuery.schema.fields.head.dataType.sameType(t.resultType))
+      }
+    })
+  }
+
   test("Support StringSpace expression with collation") {
     case class StringSpaceTestCase(
       input: Int,
