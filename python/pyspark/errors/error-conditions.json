@@ -357,6 +357,11 @@
       "All items in `<arg_name>` should be in <allowed_types>, got <item_type>."
     ]
   },
+  "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS" : {
+    "message" : [
+      "Collations can only be applied to string types, but the JSON data type is <jsonType>."
+    ]
+  },
   "INVALID_MULTIPLE_ARGUMENT_CONDITIONS": {
     "message": [
       "[{arg_names}] cannot be <condition>."

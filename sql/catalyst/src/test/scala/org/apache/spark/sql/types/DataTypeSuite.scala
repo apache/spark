@@ -766,7 +766,7 @@ class DataTypeSuite extends SparkFunSuite {
          |  "fields": [
          |    {
          |      "name": "c1",
-         |      "type": "int",
+         |      "type": "integer",
          |      "nullable": true,
          |      "metadata": {
          |        "${DataType.COLLATIONS_METADATA_KEY}": {
@@ -783,7 +783,7 @@ class DataTypeSuite extends SparkFunSuite {
         DataType.fromJson(json)
       },
       errorClass = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
-      parameters = Map("jsonType" -> "int")
+      parameters = Map("jsonType" -> "integer")
     )
   }
 
@@ -798,7 +798,7 @@ class DataTypeSuite extends SparkFunSuite {
          |      "type": {
          |        "type": "map",
          |        "keyType": "string",
-         |        "valueType": "int",
+         |        "valueType": "integer",
          |        "valueContainsNull": true
          |      },
          |      "nullable": true,
@@ -817,7 +817,7 @@ class DataTypeSuite extends SparkFunSuite {
         DataType.fromJson(json)
       },
       errorClass = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
-      parameters = Map("jsonType" -> "int")
+      parameters = Map("jsonType" -> "integer")
     )
   }
 }

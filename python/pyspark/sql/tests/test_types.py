@@ -620,6 +620,58 @@ class TypesTestsMixin:
             assert schema == python_datatype
             assert schema == _parse_datatype_json_string(schema.json())
 
+    def test_schema_with_collations_on_non_string_types(self):
+        from pyspark.sql.types import _parse_datatype_json_string, _COLLATIONS_METADATA_KEY
+
+        collations_on_int_col_json = f"""
+        {{
+          "type": "struct",
+          "fields": [
+            {{
+              "name": "c1",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {{
+                "{_COLLATIONS_METADATA_KEY}": {{
+                  "c1": "icu.UNICODE"
+                }}
+              }}
+            }}
+          ]
+        }}
+        """
+
+        collations_in_map_json = f"""
+        {{
+          "type": "struct",
+          "fields": [
+            {{
+              "name": "mapField",
+              "type": {{
+                "type": "map",
+                "keyType": "string",
+                "valueType": "integer",
+                "valueContainsNull": true
+              }},
+              "nullable": true,
+              "metadata": {{
+                "{_COLLATIONS_METADATA_KEY}": {{
+                  "mapField.value": "icu.UNICODE"
+                }}
+              }}
+            }}
+          ]
+        }}
+        """
+
+        self.assertRaises(
+            PySparkTypeError, lambda: _parse_datatype_json_string(collations_on_int_col_json)
+        )
+
+        self.assertRaises(
+            PySparkTypeError, lambda: _parse_datatype_json_string(collations_in_map_json)
+        )
+
     def test_udt(self):
         from pyspark.sql.types import _parse_datatype_json_string, _infer_type, _make_type_verifier
 

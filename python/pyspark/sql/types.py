@@ -278,11 +278,10 @@ class StringType(AtomicType):
         return "icu"
 
     def simpleString(self) -> str:
-        return (
-            "string"
-            if self.isUTF8BinaryCollation()
-            else "string collate " + self.collationIdToName(self.collationId)
-        )
+        if self.isUTF8BinaryCollation():
+            return "string"
+
+        return f"string collate ${self.collationIdToName(self.collationId)}"
 
     # Due to backwards compatibility all string types are serialized in json as
     # regular strings and the collation info is written to struct field metadata
@@ -1799,6 +1798,7 @@ def _parse_datatype_json_value(
     if not isinstance(json_value, dict):
         if json_value in _all_atomic_types.keys():
             if collationsMap is not None and fieldPath in collationsMap:
+                _assert_valid_type_for_collation(json_value)
                 collationName = collationsMap[fieldPath].split(".")[1]
                 return StringType(collationName)
             return _all_atomic_types[json_value]()
@@ -1855,12 +1855,21 @@ def _parse_datatype_json_value(
 
 
 def _parse_type_with_collation(
-    json_value: Dict[str, Any], fieldPath: str, collationsMap: Optional[Dict[str, str]]
+    json_value: Union[dict, str], fieldPath: str, collationsMap: Optional[Dict[str, str]]
 ) -> DataType:
     if collationsMap and fieldPath in collationsMap:
+        _assert_valid_type_for_collation(json_value)
         collationName = collationsMap[fieldPath].split(".")[1]
         return StringType(collationName)
     return _parse_datatype_json_value(json_value, fieldPath, collationsMap)
+
+
+def _assert_valid_type_for_collation(fieldType: Union[dict, str]) -> None:
+    if fieldType != "string":
+        raise PySparkTypeError(
+            error_class="INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
+            message_parameters={"jsonType": fieldType},
+        )
 
 
 # Mapping Python types to Spark SQL DataType
