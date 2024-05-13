@@ -468,7 +468,7 @@ message Sample {
   optional bool with_replacement = 4;
 
   // (Required) The random seed.
-  // This filed is required to avoid generate mutable dataframes (see SPARK-48184 for details),
+  // This field is required to avoid generating mutable dataframes (see SPARK-48184 for details),
   // however, still keep it 'optional' here for backward compatibility.
   optional int64 seed = 5;
 
@@ -690,7 +690,7 @@ message StatSampleBy {
   repeated Fraction fractions = 3;
 
   // (Required) The random seed.
-  // This filed is required to avoid generate mutable dataframes (see SPARK-48184 for details),
+  // This field is required to avoid generating mutable dataframes (see SPARK-48184 for details),
   // however, still keep it 'optional' here for backward compatibility.
   optional int64 seed = 5;
 
