@@ -749,7 +749,6 @@ class SparkConversionMixin:
         Create a DataFrame from a given pyarrow.Table by slicing it into partitions then
         sending to the JVM to parallelize.
         """
-        # TODO: what to do about timezone? do we need it? it's unused here.
         from pyspark.sql import SparkSession
         from pyspark.sql.dataframe import DataFrame
 
@@ -786,8 +785,31 @@ class SparkConversionMixin:
                 message_parameters={"data_type": str(schema)},
             )
         else:
-            # TODO: coerce timestamps?
-            schema = from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
+            prefer_timestamp_ntz = is_timestamp_ntz_preferred()
+            schema = from_arrow_schema(table.schema, prefer_timestamp_ntz=prefer_timestamp_ntz)
+
+        # Interpret timezone-naive timestamp columns in the Spark session timezone
+        # and convert all timestamp columns to UTC
+        timestamp_indices = [
+            i for i, field in enumerate(schema.fields) if field.dataType == TimestampType()
+        ]
+        if timestamp_indices:
+            import pyarrow as pa
+            import pyarrow.compute as pc
+
+            for index in timestamp_indices:
+                if table.schema.types[index].tz is None:
+                    table = table.set_column(
+                        i=index,
+                        field_=table.schema.names[index],
+                        column=pc.assume_timezone(table[index], timezone),
+                    )
+                table = table.cast(
+                    table.schema.set(
+                        i=index,
+                        field=pa.field(table.schema.names[index], pa.timestamp("us", tz="UTC")),
+                    )
+                )
 
         # Chunk the Arrow Table into RecordBatches
         chunk_size = self._jconf.arrowMaxRecordsPerBatch()
