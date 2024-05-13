@@ -74,6 +74,7 @@ object CollationTypeCasts extends TypeCoercionRule {
       val Seq(newStr, newPad) = collateToSingleType(Seq(str, pad))
       stringPadExpr.withNewChildren(Seq(newStr, len, newPad))
 
+
     case concatExprs @ (_: Concat | _: ConcatWs) =>
       val newChildren = collateToSingleType(concatExprs.children, failOnIndeterminate = false)
       concatExprs.withNewChildren(newChildren)
