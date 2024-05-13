@@ -1621,6 +1621,13 @@ class TypesTestsMixin:
                 StringType("UTF8_BINARY_LCASE"),
             )
 
+    def test_infer_array_element_type_with_struct(self):
+        # SPARK-48248: Nested array to respect legacy conf of inferArrayTypeFromFirstElement
+        with self.sql_conf(
+            {"spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled": True}
+        ):
+            self.assertEqual([[1, None]], self.spark.createDataFrame([[[[1, "a"]]]]).first()[0])
+
 
 class DataTypeTests(unittest.TestCase):
     # regression test for SPARK-6055
