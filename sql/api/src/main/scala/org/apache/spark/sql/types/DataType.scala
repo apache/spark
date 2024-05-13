@@ -212,7 +212,9 @@ object DataType {
       collationsMap: Map[String, String] = Map.empty): DataType = json match {
     case JString(name) =>
       collationsMap.get(fieldPath) match {
-        case Some(collation) => stringTypeWithCollation(collation)
+        case Some(collation) =>
+          assertValidTypeForCollations(name)
+          stringTypeWithCollation(collation)
         case _ => nameToType(name)
       }
 
@@ -296,9 +298,19 @@ object DataType {
       json: JValue,
       path: String,
       collationsMap: Map[String, String]): DataType = {
-    collationsMap.get(path) match {
-      case Some(collation) => stringTypeWithCollation(collation)
+    (json, collationsMap.get(path)) match {
+      case (JString(fieldType), Some(collation)) =>
+        assertValidTypeForCollations(fieldType)
+        stringTypeWithCollation(collation)
       case _ => parseDataType(json, path, collationsMap)
+    }
+  }
+
+  private def assertValidTypeForCollations(fieldType: String): Unit = {
+    if (fieldType != "string") {
+      throw new SparkIllegalArgumentException(
+        errorClass = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
+        messageParameters = Map("jsonType" -> fieldType))
     }
   }
 

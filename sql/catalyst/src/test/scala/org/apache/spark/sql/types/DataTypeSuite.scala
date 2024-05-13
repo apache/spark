@@ -28,7 +28,7 @@ import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, yearM
 
 class DataTypeSuite extends SparkFunSuite {
 
-  private val UNICODE_COLLATION = CollationFactory.collationNameToId("UNICODE")
+  private val UNICODE_COLLATION_ID = CollationFactory.collationNameToId("UNICODE")
 
   test("construct an ArrayType") {
     val array = ArrayType(StringType)
@@ -717,32 +717,32 @@ class DataTypeSuite extends SparkFunSuite {
 
   test("schema with collation should not change during ser/de") {
     val simpleStruct = StructType(
-      StructField("c1", StringType(UNICODE_COLLATION)) :: Nil)
+      StructField("c1", StringType(UNICODE_COLLATION_ID)) :: Nil)
 
     val nestedStruct = StructType(
       StructField("nested", simpleStruct) :: Nil)
 
     val arrayInSchema = StructType(
-      StructField("arrayField", ArrayType(StringType(UNICODE_COLLATION))) :: Nil)
+      StructField("arrayField", ArrayType(StringType(UNICODE_COLLATION_ID))) :: Nil)
 
     val mapInSchema = StructType(
       StructField("mapField",
-        MapType(StringType(UNICODE_COLLATION), StringType(UNICODE_COLLATION))) :: Nil)
+        MapType(StringType(UNICODE_COLLATION_ID), StringType(UNICODE_COLLATION_ID))) :: Nil)
 
     val mapWithKeyInNameInSchema = StructType(
       StructField("name.key", StringType) ::
       StructField("name",
-        MapType(StringType(UNICODE_COLLATION), StringType(UNICODE_COLLATION))) :: Nil)
+        MapType(StringType(UNICODE_COLLATION_ID), StringType(UNICODE_COLLATION_ID))) :: Nil)
 
     val arrayInMapInNestedSchema = StructType(
       StructField("arrInMap",
-        MapType(StringType(UNICODE_COLLATION),
-        ArrayType(StringType(UNICODE_COLLATION)))) :: Nil)
+        MapType(StringType(UNICODE_COLLATION_ID),
+        ArrayType(StringType(UNICODE_COLLATION_ID)))) :: Nil)
 
     val nestedArrayInMap = StructType(
       StructField("nestedArrayInMap",
-        ArrayType(MapType(StringType(UNICODE_COLLATION),
-          ArrayType(ArrayType(StringType(UNICODE_COLLATION)))))) :: Nil)
+        ArrayType(MapType(StringType(UNICODE_COLLATION_ID),
+          ArrayType(ArrayType(StringType(UNICODE_COLLATION_ID)))))) :: Nil)
 
     val schemaWithMultipleFields = StructType(
       simpleStruct.fields ++ nestedStruct.fields ++ arrayInSchema.fields ++ mapInSchema.fields ++
@@ -756,5 +756,68 @@ class DataTypeSuite extends SparkFunSuite {
         val parsed = DataType.fromJson(json)
         assert(parsed === schema)
       }
+  }
+
+  test("non string field has collation metadata") {
+    val json =
+      s"""
+         |{
+         |  "type": "struct",
+         |  "fields": [
+         |    {
+         |      "name": "c1",
+         |      "type": "int",
+         |      "nullable": true,
+         |      "metadata": {
+         |        "${DataType.COLLATIONS_METADATA_KEY}": {
+         |          "c1": "icu.UNICODE"
+         |        }
+         |      }
+         |    }
+         |  ]
+         |}
+         |""".stripMargin
+
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        DataType.fromJson(json)
+      },
+      errorClass = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
+      parameters = Map("jsonType" -> "int")
+    )
+  }
+
+  test("non string field in map has collation metadata") {
+    val json =
+      s"""
+         |{
+         |  "type": "struct",
+         |  "fields": [
+         |    {
+         |      "name": "mapField",
+         |      "type": {
+         |        "type": "map",
+         |        "keyType": "string",
+         |        "valueType": "int",
+         |        "valueContainsNull": true
+         |      },
+         |      "nullable": true,
+         |      "metadata": {
+         |        "${DataType.COLLATIONS_METADATA_KEY}": {
+         |          "mapField.value": "icu.UNICODE"
+         |        }
+         |      }
+         |    }
+         |  ]
+         |}
+         |""".stripMargin
+
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        DataType.fromJson(json)
+      },
+      errorClass = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
+      parameters = Map("jsonType" -> "int")
+    )
   }
 }

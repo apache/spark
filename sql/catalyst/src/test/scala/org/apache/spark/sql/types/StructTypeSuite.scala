@@ -789,4 +789,30 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     assert(
       mapper.readTree(mapWithNestedArray.json) == mapper.readTree(expectedJson))
   }
+
+  test("non string field has collation metadata") {
+    val simpleStruct = StructType(
+      StructField("c1", StringType(UNICODE_COLLATION)) :: Nil)
+
+    val expectedJson =
+      s"""
+         |{
+         |  "type": "struct",
+         |  "fields": [
+         |    {
+         |      "name": "c1",
+         |      "type": "int",
+         |      "nullable": true,
+         |      "metadata": {
+         |        "${DataType.COLLATIONS_METADATA_KEY}": {
+         |          "c1": "icu.$UNICODE_COLLATION"
+         |        }
+         |      }
+         |    }
+         |  ]
+         |}
+         |""".stripMargin
+
+    assert(mapper.readTree(simpleStruct.json) == mapper.readTree(expectedJson))
+  }
 }

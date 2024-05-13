@@ -284,6 +284,8 @@ class StringType(AtomicType):
             else "string collate " + self.collationIdToName(self.collationId)
         )
 
+    # Due to backwards compatibility all string types are serialized in json as
+    # regular strings and the collation info is written to struct field metadata
     def jsonValue(self) -> str:
         return "string"
 
@@ -710,7 +712,9 @@ class ArrayType(DataType):
         fieldPath: str = "",
         collationsMap: Optional[Dict[str, str]] = None,
     ) -> "ArrayType":
-        elementType = _parse_type_with_collation(json["elementType"], fieldPath + ".element", collationsMap)
+        elementType = _parse_type_with_collation(
+            json["elementType"], fieldPath + ".element", collationsMap
+        )
         return ArrayType(elementType, json["containsNull"])
 
     def needConversion(self) -> bool:
@@ -834,7 +838,9 @@ class MapType(DataType):
         collationsMap: Optional[Dict[str, str]] = None,
     ) -> "MapType":
         keyType = _parse_type_with_collation(json["keyType"], fieldPath + ".key", collationsMap)
-        valueType = _parse_type_with_collation(json["valueType"], fieldPath + ".value", collationsMap)
+        valueType = _parse_type_with_collation(
+            json["valueType"], fieldPath + ".value", collationsMap
+        )
         return MapType(
             keyType,
             valueType,
