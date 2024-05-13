@@ -39,7 +39,6 @@ import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.StructType;
 
 import org.apache.spark.sql.test.TestSparkSession;
-import scala.Option;
 import scala.Tuple2;
 
 public class JavaBeanDeserializationSuite implements Serializable {
@@ -566,7 +565,7 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
     Dataset<Item> ds = spark.createDataFrame(items, Item.class)
             .as(encoder)
-            .coalesce(1, Option.empty());
+            .coalesce(1);
 
     MapFunction<Item, String> mf = new MapFunction<Item, String>() {
       @Override

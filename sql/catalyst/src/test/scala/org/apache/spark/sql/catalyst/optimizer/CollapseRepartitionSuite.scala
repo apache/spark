@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.rdd.SizeBasedCoalescer
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.plans.PlanTest
@@ -104,6 +105,33 @@ class CollapseRepartitionSuite extends PlanTest {
 
     comparePlans(optimized1, correctAnswer)
     comparePlans(optimized2, correctAnswer)
+  }
+
+  test("SPARK-19426: coalesce partitions with custom coalescer") {
+    val coalescer = new DatasetSizeBasedPartitionCoalescer(20)
+
+    val query1 = testRelation
+      .repartition(10)
+      .coalesce(20, Option(coalescer))
+
+    val optimized1 = Optimize.execute(query1.analyze)
+    val correctAnswer1 = testRelation
+      .repartition(10)
+      .coalesce(20, Option(coalescer))
+      .analyze
+
+    comparePlans(optimized1, correctAnswer1)
+
+    val query2 = testRelation
+      .repartition(30)
+      .coalesce(20, Option(coalescer))
+
+    val optimized2 = Optimize.execute(query2.analyze)
+    val correctAnswer2 = testRelation
+      .repartition(30)
+      .coalesce(20, Option(coalescer))
+      .analyze
+    comparePlans(optimized2, correctAnswer2)
   }
 
   test("distribute above repartition") {
@@ -222,4 +250,6 @@ class CollapseRepartitionSuite extends PlanTest {
       comparePlans(optimized, expected)
     }
   }
+
+  class DatasetSizeBasedPartitionCoalescer(maxSize: Int) extends SizeBasedCoalescer(maxSize) {}
 }

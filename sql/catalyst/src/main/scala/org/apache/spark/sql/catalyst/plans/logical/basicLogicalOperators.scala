@@ -1841,6 +1841,13 @@ abstract class RepartitionOperation extends UnaryNode {
  * [[RepartitionByExpression]] as this method is called directly by DataFrame's, because the user
  * asked for `coalesce` or `repartition`. [[RepartitionByExpression]] is used when the consumer
  * of the output requires some specific ordering or distribution of the data.
+ * If `shuffle` = false (`coalesce` cases), this logical plan can have an user-specified strategy
+ * to coalesce input partitions.
+ *
+ * @param numPartitions How many partitions to use in the output RDD
+ * @param shuffle Whether to shuffle when repartitioning
+ * @param child the LogicalPlan
+ * @param coalescer Optional coalescer that an user specifies
  */
 case class Repartition(numPartitions: Int,
                        shuffle: Boolean,
