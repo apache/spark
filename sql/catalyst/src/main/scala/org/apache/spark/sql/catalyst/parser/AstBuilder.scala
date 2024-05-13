@@ -2237,17 +2237,11 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   override def visitCast(ctx: CastContext): Expression = withOrigin(ctx) {
     val rawDataType = typedVisit[DataType](ctx.dataType())
     val dataType = CharVarcharUtils.replaceCharVarcharWithStringForCast(rawDataType)
-    ctx.dataType() match {
-      case context: PrimitiveDataTypeContext =>
-        val typeCtx = context.`type`()
-        if (typeCtx.start.getType == STRING) {
-          typeCtx.children.asScala.toSeq match {
-            case Seq(_, cctx: CollateClauseContext) =>
-              throw QueryParsingErrors.dataTypeUnsupportedError(
-                StringType(cctx.collationName.getText).typeName, context)
-            case _ =>
-          }
-        }
+    dataType match {
+      case stringType: StringType if !stringType.createdAsNonCollated =>
+        throw QueryParsingErrors.dataTypeUnsupportedError(
+          dataType.typeName,
+          ctx.dataType().asInstanceOf[PrimitiveDataTypeContext])
       case _ =>
     }
     ctx.name.getType match {
@@ -2269,17 +2263,11 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   override def visitCastByColon(ctx: CastByColonContext): Expression = withOrigin(ctx) {
     val rawDataType = typedVisit[DataType](ctx.dataType())
     val dataType = CharVarcharUtils.replaceCharVarcharWithStringForCast(rawDataType)
-    ctx.dataType() match {
-      case context: PrimitiveDataTypeContext =>
-        val typeCtx = context.`type`()
-        if (typeCtx.start.getType == STRING) {
-          typeCtx.children.asScala.toSeq match {
-            case Seq(_, cctx: CollateClauseContext) =>
-              throw QueryParsingErrors.dataTypeUnsupportedError(
-                StringType(cctx.collationName.getText).typeName, context)
-            case _ =>
-          }
-        }
+    dataType match {
+      case stringType: StringType if !stringType.createdAsNonCollated =>
+        throw QueryParsingErrors.dataTypeUnsupportedError(
+          dataType.typeName,
+          ctx.dataType().asInstanceOf[PrimitiveDataTypeContext])
       case _ =>
     }
     val cast = Cast(expression(ctx.primaryExpression), dataType)
