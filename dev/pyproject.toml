@@ -31,4 +31,4 @@ required-version = "23.9.1"
 line-length = 100
 target-version = ['py38']
 include = '\.pyi?$'
-extend-exclude = 'cloudpickle|error_classes.py'
+extend-exclude = 'cloudpickle'
