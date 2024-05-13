@@ -27,8 +27,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, GlobFilter, Path}
 
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{CURRENT_PATH, ELAPSED_TIME, NEW_PATH, NUM_FILES}
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
@@ -126,8 +125,9 @@ class FileStreamSource(
   }
   seenFiles.purge()
 
-  logInfo(s"maxFilesPerBatch = $maxFilesPerBatch, " +
-    s"maxBytesPerBatch = $maxBytesPerBatch, maxFileAgeMs = $maxFileAgeMs")
+  logInfo(log"maxFilesPerBatch = ${MDC(LogKeys.NUM_FILES, maxFilesPerBatch)}, " +
+    log"maxBytesPerBatch = ${MDC(LogKeys.NUM_BYTES, maxBytesPerBatch)}, " +
+    log"maxFileAgeMs = ${MDC(LogKeys.TIME_UNITS, maxFileAgeMs)}")
 
   private var unreadFiles: Seq[NewFileEntry] = _
 
@@ -251,7 +251,8 @@ class FileStreamSource(
         FileEntry(path = p.urlEncoded, timestamp = timestamp, batchId = metadataLogCurrentOffset)
       }.toArray
       if (metadataLog.add(metadataLogCurrentOffset, fileEntries)) {
-        logInfo(s"Log offset set to $metadataLogCurrentOffset with ${batchFiles.size} new files")
+        logInfo(log"Log offset set to ${MDC(LogKeys.LOG_OFFSET, metadataLogCurrentOffset)} " +
+          log"with ${MDC(LogKeys.NUM_FILES, batchFiles.size)} new files")
       } else {
         throw new IllegalStateException("Concurrent update to the log. Multiple streaming jobs " +
           s"detected for $metadataLogCurrentOffset")
@@ -291,7 +292,9 @@ class FileStreamSource(
 
     assert(startOffset <= endOffset)
     val files = metadataLog.get(Some(startOffset + 1), Some(endOffset)).flatMap(_._2)
-    logInfo(s"Processing ${files.length} files from ${startOffset + 1}:$endOffset")
+    logInfo(log"Processing ${MDC(LogKeys.NUM_FILES, files.length)} files from " +
+      log"${MDC(LogKeys.FILE_START_OFFSET, startOffset + 1)}:" +
+      log"${MDC(LogKeys.FILE_END_OFFSET, endOffset)}")
     logTrace(s"Files are:\n\t" + files.mkString("\n\t"))
     val newDataSource =
       DataSource(
@@ -381,8 +384,8 @@ class FileStreamSource(
     val listingTimeMs = NANOSECONDS.toMillis(endTime - startTime)
     if (listingTimeMs > 2000) {
       // Output a warning when listing files uses more than 2 seconds.
-      logWarning(log"Listed ${MDC(NUM_FILES, files.size)} file(s) in " +
-        log"${MDC(ELAPSED_TIME, listingTimeMs)} ms")
+      logWarning(log"Listed ${MDC(LogKeys.NUM_FILES, files.size)} file(s) in " +
+        log"${MDC(LogKeys.ELAPSED_TIME, listingTimeMs)} ms")
     } else {
       logTrace(s"Listed ${files.size} file(s) in $listingTimeMs ms")
     }
@@ -630,13 +633,13 @@ object FileStreamSource {
 
         logDebug(s"Archiving completed file $curPath to $newPath")
         if (!fileSystem.rename(curPath, newPath)) {
-          logWarning(log"Fail to move ${MDC(CURRENT_PATH, curPath)} to " +
-            log"${MDC(NEW_PATH, newPath)} / skip moving file.")
+          logWarning(log"Fail to move ${MDC(LogKeys.CURRENT_PATH, curPath)} to " +
+            log"${MDC(LogKeys.NEW_PATH, newPath)} / skip moving file.")
         }
       } catch {
         case NonFatal(e) =>
-          logWarning(log"Fail to move ${MDC(CURRENT_PATH, curPath)} to " +
-            log"${MDC(NEW_PATH, newPath)} / skip moving file.", e)
+          logWarning(log"Fail to move ${MDC(LogKeys.CURRENT_PATH, curPath)} to " +
+            log"${MDC(LogKeys.NEW_PATH, newPath)} / skip moving file.", e)
       }
     }
   }
@@ -650,12 +653,14 @@ object FileStreamSource {
         logDebug(s"Removing completed file $curPath")
 
         if (!fileSystem.delete(curPath, false)) {
-          logWarning(log"Failed to remove ${MDC(CURRENT_PATH, curPath)} / skip removing file.")
+          logWarning(
+            log"Failed to remove ${MDC(LogKeys.CURRENT_PATH, curPath)} / skip removing file.")
         }
       } catch {
         case NonFatal(e) =>
           // Log to error but swallow exception to avoid process being stopped
-          logWarning(log"Fail to remove ${MDC(CURRENT_PATH, curPath)} / skip removing file.", e)
+          logWarning(
+            log"Fail to remove ${MDC(LogKeys.CURRENT_PATH, curPath)} / skip removing file.", e)
       }
     }
   }

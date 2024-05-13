@@ -38,28 +38,30 @@ case class RelationWrapper(cls: Class[_], outputAttrIds: Seq[Long])
 object DeduplicateRelations extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     val newPlan = renewDuplicatedRelations(mutable.HashSet.empty, plan)._1
-    if (newPlan.find(p => p.resolved && p.missingInput.nonEmpty).isDefined) {
-      // Wait for `ResolveMissingReferences` to resolve missing attributes first
-      return newPlan
-    }
+
+    // Wait for `ResolveMissingReferences` to resolve missing attributes first
+    def noMissingInput(p: LogicalPlan) = !p.exists(_.missingInput.nonEmpty)
+
     newPlan.resolveOperatorsUpWithPruning(
       _.containsAnyPattern(JOIN, LATERAL_JOIN, AS_OF_JOIN, INTERSECT, EXCEPT, UNION, COMMAND),
       ruleId) {
       case p: LogicalPlan if !p.childrenResolved => p
       // To resolve duplicate expression IDs for Join.
-      case j @ Join(left, right, _, _, _) if !j.duplicateResolved =>
+      case j @ Join(left, right, _, _, _) if !j.duplicateResolved && noMissingInput(right) =>
         j.copy(right = dedupRight(left, right))
       // Resolve duplicate output for LateralJoin.
-      case j @ LateralJoin(left, right, _, _) if right.resolved && !j.duplicateResolved =>
+      case j @ LateralJoin(left, right, _, _)
+          if right.resolved && !j.duplicateResolved && noMissingInput(right.plan) =>
         j.copy(right = right.withNewPlan(dedupRight(left, right.plan)))
       // Resolve duplicate output for AsOfJoin.
-      case j @ AsOfJoin(left, right, _, _, _, _, _) if !j.duplicateResolved =>
+      case j @ AsOfJoin(left, right, _, _, _, _, _)
+          if !j.duplicateResolved && noMissingInput(right) =>
         j.copy(right = dedupRight(left, right))
       // intersect/except will be rewritten to join at the beginning of optimizer. Here we need to
       // deduplicate the right side plan, so that we won't produce an invalid self-join later.
-      case i @ Intersect(left, right, _) if !i.duplicateResolved =>
+      case i @ Intersect(left, right, _) if !i.duplicateResolved && noMissingInput(right) =>
         i.copy(right = dedupRight(left, right))
-      case e @ Except(left, right, _) if !e.duplicateResolved =>
+      case e @ Except(left, right, _) if !e.duplicateResolved && noMissingInput(right) =>
         e.copy(right = dedupRight(left, right))
       // Only after we finish by-name resolution for Union
       case u: Union if !u.byName && !u.duplicateResolved =>
@@ -77,7 +79,8 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
           }
         }
         u.copy(children = newChildren)
-      case merge: MergeIntoTable if !merge.duplicateResolved =>
+      case merge: MergeIntoTable
+          if !merge.duplicateResolved && noMissingInput(merge.sourceTable) =>
         merge.copy(sourceTable = dedupRight(merge.targetTable, merge.sourceTable))
     }
   }

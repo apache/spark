@@ -22,6 +22,7 @@ Upgrading PySpark
 Upgrading from PySpark 3.5 to 4.0
 ---------------------------------
 
+* In Spark 4.0, Python 3.8 support was dropped in PySpark.
 * In Spark 4.0, the minimum supported version for Pandas has been raised from 1.0.5 to 2.0.0 in PySpark.
 * In Spark 4.0, the minimum supported version for Numpy has been raised from 1.15 to 1.21 in PySpark.
 * In Spark 4.0, the minimum supported version for PyArrow has been raised from 4.0.0 to 10.0.0 in PySpark.

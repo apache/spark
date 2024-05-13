@@ -22,7 +22,7 @@ import javax.annotation.Nullable
 import scala.annotation.tailrec
 
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.{hasStringType, haveSameType}
-import org.apache.spark.sql.catalyst.expressions.{ArrayJoin, BinaryExpression, CaseWhen, Cast, Coalesce, Collate, Concat, ConcatWs, CreateArray, Elt, Expression, Greatest, If, In, InSubquery, Least, Literal, Overlay, RegExpReplace, StringLPad, StringRPad}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -48,6 +48,15 @@ object CollationTypeCasts extends TypeCoercionRule {
           caseWhenExpr.elseValue.map(e => castStringType(e, outputStringType).getOrElse(e))
         CaseWhen(newBranches, newElseValue)
 
+    case stringLocate: StringLocate =>
+      stringLocate.withNewChildren(collateToSingleType(
+        Seq(stringLocate.first, stringLocate.second)) :+ stringLocate.third)
+
+    case substringIndex: SubstringIndex =>
+      substringIndex.withNewChildren(
+        collateToSingleType(
+          Seq(substringIndex.first, substringIndex.second)) :+ substringIndex.third)
+
     case eltExpr: Elt =>
       eltExpr.withNewChildren(eltExpr.children.head +: collateToSingleType(eltExpr.children.tail))
 
@@ -71,7 +80,8 @@ object CollationTypeCasts extends TypeCoercionRule {
 
     case otherExpr @ (
       _: In | _: InSubquery | _: CreateArray | _: ArrayJoin | _: Greatest | _: Least |
-      _: Coalesce | _: BinaryExpression) =>
+      _: Coalesce | _: BinaryExpression | _: Mask | _: StringReplace |
+      _: StringTranslate | _: StringTrim | _: StringTrimLeft | _: StringTrimRight) =>
       val newChildren = collateToSingleType(otherExpr.children)
       otherExpr.withNewChildren(newChildren)
   }

@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit
 import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.TIMEOUT
+import org.apache.spark.internal.LogKeys.TIMEOUT
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{Checkpoint, CheckpointWriter, StreamingConf, Time}
 import org.apache.spark.streaming.api.python.PythonDStream

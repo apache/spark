@@ -22,8 +22,6 @@ import java.sql.{Connection, Date, Timestamp}
 import java.time.{Duration, Period}
 import java.util.{Properties, TimeZone}
 
-import org.scalatest.time.SpanSugar._
-
 import org.apache.spark.sql.{DataFrame, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
@@ -67,8 +65,6 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
   import testImplicits._
 
   override val db = new OracleDatabaseOnDocker
-
-  override val connectionTimeout = timeout(7.minutes)
 
   private val rsOfTsWithTimezone = Seq(
     Row(BigDecimal.valueOf(1), new Timestamp(944046000000L)),

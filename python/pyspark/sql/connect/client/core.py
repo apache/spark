@@ -1763,6 +1763,9 @@ class SparkConnectClient(object):
                     info = error_details_pb2.ErrorInfo()
                     d.Unpack(info)
 
+                    if info.metadata["errorClass"] == "INVALID_HANDLE.SESSION_CHANGED":
+                        self._closed = True
+
                     raise convert_exception(
                         info,
                         status.message,
@@ -1826,6 +1829,7 @@ class SparkConnectClient(object):
                 response.server_side_session_id
                 and response.server_side_session_id != self._server_session_id
             ):
+                self._closed = True
                 raise PySparkAssertionError(
                     "Received incorrect server side session identifier for request. "
                     "Please create a new Spark Session to reconnect. ("

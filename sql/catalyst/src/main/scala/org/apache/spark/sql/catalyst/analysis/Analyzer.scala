@@ -325,11 +325,13 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       RewriteDeleteFromTable ::
       RewriteUpdateTable ::
       RewriteMergeIntoTable ::
+      MoveParameterizedQueriesDown ::
       BindParameters ::
       typeCoercionRules() ++
       Seq(
         ResolveWithCTE,
         ExtractDistributedSequenceID) ++
+      Seq(ResolveUpdateEventTimeWatermarkColumn) ++
       extendedResolutionRules : _*),
     Batch("Remove TempResolvedColumn", Once, RemoveTempResolvedColumn),
     Batch("Post-Hoc Resolution", Once,
@@ -339,11 +341,11 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       new ResolveHints.RemoveAllHints),
     Batch("Nondeterministic", Once,
       PullOutNondeterministic),
+    Batch("UpdateNullability", Once,
+      UpdateAttributeNullability),
     Batch("UDF", Once,
       HandleNullInputsForUDF,
       ResolveEncodersInUDF),
-    Batch("UpdateNullability", Once,
-      UpdateAttributeNullability),
     Batch("Subquery", Once,
       UpdateOuterReferences),
     Batch("Cleanup", fixedPoint,
@@ -4002,6 +4004,8 @@ object EliminateEventTimeWatermark extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
     _.containsPattern(EVENT_TIME_WATERMARK)) {
     case EventTimeWatermark(_, _, child) if child.resolved && !child.isStreaming => child
+    case UpdateEventTimeWatermarkColumn(_, _, child) if child.resolved && !child.isStreaming =>
+      child
   }
 }
 

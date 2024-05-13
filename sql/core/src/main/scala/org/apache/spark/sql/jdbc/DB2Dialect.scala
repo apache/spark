@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.Expression
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 private case class DB2Dialect() extends JdbcDialect {
@@ -86,6 +87,8 @@ private case class DB2Dialect() extends JdbcDialect {
       typeName: String,
       size: Int,
       md: MetadataBuilder): Option[DataType] = sqlType match {
+    case Types.SMALLINT if !SQLConf.get.legacyDB2numericMappingEnabled =>
+      Option(ShortType)
     case Types.REAL => Option(FloatType)
     case Types.OTHER =>
       typeName match {

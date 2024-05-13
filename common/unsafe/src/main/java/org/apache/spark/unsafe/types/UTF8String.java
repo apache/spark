@@ -224,7 +224,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Returns the number of bytes for a code point with the first byte as `b`
    * @param b The first byte of a code point
    */
-  private static int numBytesForFirstByte(final byte b) {
+  public static int numBytesForFirstByte(final byte b) {
     final int offset = b & 0xFF;
     byte numBytes = bytesOfCodePointInUTF8[offset];
     return (numBytes == 0) ? 1: numBytes; // Skip the first byte disallowed in UTF-8
@@ -382,7 +382,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   /**
    * Returns the byte at position `i`.
    */
-  private byte getByte(int i) {
+  public byte getByte(int i) {
     return Platform.getByte(base, offset + i);
   }
 
@@ -646,7 +646,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * @param end the end position of the current UTF8String in bytes.
    * @return a new UTF8String in the position of [start, end] of current UTF8String bytes.
    */
-  private UTF8String copyUTF8String(int start, int end) {
+  public UTF8String copyUTF8String(int start, int end) {
     int len = end - start + 1;
     byte[] newBytes = new byte[len];
     copyMemory(base, offset + start, newBytes, BYTE_ARRAY_OFFSET, len);
@@ -926,10 +926,34 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return -1;
   }
 
+  public int charPosToByte(int charPos) {
+    if (charPos < 0) {
+      return -1;
+    }
+
+    int i = 0;
+    int c = 0;
+    while (i < numBytes && c < charPos) {
+      i += numBytesForFirstByte(getByte(i));
+      c += 1;
+    }
+    return i;
+  }
+
+  public int bytePosToChar(int bytePos) {
+    int i = 0;
+    int c = 0;
+    while (i < numBytes && i < bytePos) {
+      i += numBytesForFirstByte(getByte(i));
+      c += 1;
+    }
+    return c;
+  }
+
   /**
    * Find the `str` from left to right.
    */
-  private int find(UTF8String str, int start) {
+  public int find(UTF8String str, int start) {
     assert (str.numBytes > 0);
     while (start <= numBytes - str.numBytes) {
       if (ByteArrayMethods.arrayEquals(base, offset + start, str.base, str.offset, str.numBytes)) {
@@ -943,7 +967,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   /**
    * Find the `str` from right to left.
    */
-  private int rfind(UTF8String str, int start) {
+  public int rfind(UTF8String str, int start) {
     assert (str.numBytes > 0);
     while (start >= 0) {
       if (ByteArrayMethods.arrayEquals(base, offset + start, str.base, str.offset, str.numBytes)) {

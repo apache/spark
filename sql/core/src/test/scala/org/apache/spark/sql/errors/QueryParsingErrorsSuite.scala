@@ -32,6 +32,22 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
     intercept[ParseException](sql(sqlText).collect())
   }
 
+  test("PARSE_STACK_OVERFLOW_ERROR: Stack overflow hit") {
+    val query = (1 to 20000).map(x => "SELECT 1 as a").mkString(" UNION ALL ")
+    val e = intercept[ParseException] {
+      spark.sql(query)
+    }
+    checkError(
+      exception = parseException(query),
+      errorClass = "FAILED_TO_PARSE_TOO_COMPLEX",
+      parameters = Map(),
+      context = ExpectedContext(
+        query,
+        start = 0,
+        stop = query.length - 1)
+    )
+  }
+
   test("EXEC_IMMEDIATE_DUPLICATE_ARGUMENT_ALIASES: duplicate aliases provided in using statement") {
     val query = "EXECUTE IMMEDIATE 'SELECT 1707 WHERE ? = 1' USING 1 as first" +
       ", 2 as first, 3 as second, 4 as second, 5 as third"

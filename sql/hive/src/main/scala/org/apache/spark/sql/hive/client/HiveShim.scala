@@ -38,7 +38,7 @@ import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde.serdeConstants
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{CONFIG, CONFIG2, CONFIG3}
+import org.apache.spark.internal.LogKeys.{CONFIG, CONFIG2, CONFIG3}
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.NoSuchPermanentFunctionException

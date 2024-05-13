@@ -838,9 +838,11 @@ tableArgumentPartitioning
     : ((WITH SINGLE PARTITION)
         | ((PARTITION | DISTRIBUTE) BY
             (((LEFT_PAREN partition+=expression (COMMA partition+=expression)* RIGHT_PAREN))
+            | (expression (COMMA invalidMultiPartitionExpression=expression)+)
             | partition+=expression)))
       ((ORDER | SORT) BY
         (((LEFT_PAREN sortItem (COMMA sortItem)* RIGHT_PAREN)
+        | (sortItem (COMMA invalidMultiSortItem=sortItem)+)
         | sortItem)))?
     ;
 
@@ -1829,8 +1831,6 @@ nonReserved
     | PARTITION
     | PARTITIONED
     | PARTITIONS
-    | PERCENTILE_CONT
-    | PERCENTILE_DISC
     | PERCENTLIT
     | PIVOT
     | PLACING

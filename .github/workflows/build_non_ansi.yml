@@ -17,11 +17,11 @@
 # under the License.
 #
 
-name: "Build / NON-ANSI (master, Hadoop 3, JDK 17, Scala 2.13)"
+name: "Build / Non-ANSI (master, Hadoop 3, JDK 17, Scala 2.13)"
 
 on:
   schedule:
-    - cron: '0 1,13 * * *'
+    - cron: '0 1 * * *'
 
 jobs:
   run-build:
@@ -41,8 +41,10 @@ jobs:
       jobs: >-
         {
           "build": "true",
+          "docs": "true",
           "pyspark": "true",
           "sparkr": "true",
           "tpcds-1g": "true",
-          "docker-integration-tests": "true"
+          "docker-integration-tests": "true",
+          "yarn": "true"
         }

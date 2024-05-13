@@ -16,11 +16,13 @@
  */
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.expressions.{CreateArray, CreateNamedStruct, JsonToStructs, Literal, StructsToJson}
+import org.apache.spark.sql.catalyst.expressions.{Cast, CreateArray, CreateNamedStruct, JsonToStructs, Literal, StructsToJson}
 import org.apache.spark.sql.catalyst.expressions.variant.ParseJson
 import org.apache.spark.sql.execution.WholeStageCodegenExec
+import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.VariantType
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.vectorized.ColumnarArray
 import org.apache.spark.types.variant.VariantBuilder
 import org.apache.spark.unsafe.types.VariantVal
 
@@ -88,6 +90,41 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     check("[0.0, 1.00, 1.10, 1.23]", "[0,1,1.1,1.23]")
   }
 
+  test("try_parse_json/to_json round-trip") {
+    def check(input: String, output: String = "INPUT IS OUTPUT"): Unit = {
+      val df = Seq(input).toDF("v")
+      val variantDF = df.selectExpr("to_json(try_parse_json(v)) as v").select(Column("v"))
+      val expected = if (output != "INPUT IS OUTPUT") output else input
+      checkAnswer(variantDF, Seq(Row(expected)))
+    }
+
+    check("null")
+    check("true")
+    check("false")
+    check("-1")
+    check("1.0E10")
+    check("\"\"")
+    check("\"" + ("a" * 63) + "\"")
+    check("\"" + ("b" * 64) + "\"")
+    // scalastyle:off nonascii
+    check("\"" + ("你好，世界" * 20) + "\"")
+    // scalastyle:on nonascii
+    check("[]")
+    check("{}")
+    // scalastyle:off nonascii
+    check(
+      "[null, true,   false,-1, 1e10, \"\\uD83D\\uDE05\", [ ], { } ]",
+      "[null,true,false,-1,1.0E10,\"😅\",[],{}]"
+    )
+    // scalastyle:on nonascii
+    check("[0.0, 1.00, 1.10, 1.23]", "[0,1,1.1,1.23]")
+    // Places where parse_json should fail and therefore, try_parse_json should return null
+    check("{1:2}", null)
+    check("{\"a\":1", null)
+    check("{\"a\":[a,b,c]}", null)
+    check("\"" + "a" * (16 * 1024 * 1024) + "\"", null)
+  }
+
   test("to_json with nested variant") {
     val df = Seq(1).toDF("v")
     val variantDF1 = df.select(
@@ -122,6 +159,7 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     check("null", "VOID")
     check("1", "BIGINT")
     check("1.0", "DECIMAL(1,0)")
+    check("0.01", "DECIMAL(2,2)")
     check("1E0", "DOUBLE")
     check("true", "BOOLEAN")
     check("\"2000-01-01\"", "STRING")
@@ -212,6 +250,33 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
         Seq.fill(3)(Row("STRUCT<a: ARRAY<VARIANT>>")))
       checkAnswer(sql("select schema_of_variant_agg(parse_json(json)) from v group by id % 4"),
         Seq.fill(3)(Row("STRUCT<a: ARRAY<STRING>>")) ++ Seq(Row("STRUCT<a: ARRAY<BIGINT>>")))
+    }
+  }
+
+  test("cast to variant with ColumnarArray input") {
+    val dataVector = new OnHeapColumnVector(4, LongType)
+    dataVector.appendNull()
+    dataVector.appendLong(123)
+    dataVector.appendNull()
+    dataVector.appendLong(456)
+    val array = new ColumnarArray(dataVector, 0, 4)
+    val variant = Cast(Literal(array, ArrayType(LongType)), VariantType).eval()
+    assert(variant.toString == "[null,123,null,456]")
+    dataVector.close()
+  }
+
+  test("cast to variant with scan input") {
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      val input = Seq(Row(Array(1, null), Map("k1" -> null, "k2" -> false), Row(null, "str")))
+      val schema = StructType.fromDDL(
+        "a array<int>, m map<string, boolean>, s struct<f1 string, f2 string>")
+      spark.createDataFrame(spark.sparkContext.parallelize(input), schema).write.parquet(path)
+      val df = spark.read.parquet(path).selectExpr(
+        s"cast(cast(a as variant) as ${schema(0).dataType.sql})",
+        s"cast(cast(m as variant) as ${schema(1).dataType.sql})",
+        s"cast(cast(s as variant) as ${schema(2).dataType.sql})")
+      checkAnswer(df, input)
     }
   }
 }

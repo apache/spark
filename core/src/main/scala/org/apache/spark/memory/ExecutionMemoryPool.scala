@@ -21,7 +21,8 @@ import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 
 /**
  * Implements policies and bookkeeping for sharing an adjustable-sized pool of memory between tasks.
@@ -153,8 +154,9 @@ private[memory] class ExecutionMemoryPool(
     val curMem = memoryForTask.getOrElse(taskAttemptId, 0L)
     val memoryToFree = if (curMem < numBytes) {
       logWarning(
-        s"Internal error: release called on $numBytes bytes but task only has $curMem bytes " +
-          s"of memory from the $poolName pool")
+        log"Internal error: release called on ${MDC(NUM_BYTES, numBytes)} " +
+          log"bytes but task only has ${MDC(CURRENT_MEMORY_BYTES, curMem)} bytes " +
+          log"of memory from the ${MDC(MEMORY_POOL_NAME, poolName)} pool")
       curMem
     } else {
       numBytes
