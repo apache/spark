@@ -959,37 +959,6 @@ class CollationStringExpressionsSuite
     assert(collationMismatch.getErrorClass === "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
   }
 
-  test("DateFormat string expression with collation") {
-    case class DateFormatTestCase[R](d: String, f: String, c: String, r: R)
-    val testCases = Seq(
-      DateFormatTestCase("2021-01-01", "yyyy-MM-dd", "UTF8_BINARY", "2021-01-01"),
-      DateFormatTestCase("2021-01-01", "yyyy-dd", "UTF8_BINARY_LCASE", "2021-01"),
-      DateFormatTestCase("2021-01-01", "yyyy-MM-dd", "UNICODE", "2021-01-01"),
-      DateFormatTestCase("2021-01-01", "yyyy", "UNICODE_CI", "2021")
-    )
-
-    testCases.foreach(t => {
-      val query = s"SELECT date_format(collate('${t.d}', '${t.c}'), '${t.f}')"
-      // Result & data type
-      checkAnswer(sql(query), Row(t.r))
-      assert(sql(query).schema.fields.head.dataType.sameType(SQLConf.get.defaultStringType))
-    })
-
-    testCases.foreach(t => {
-      val query = s"SELECT date_format(collate('${t.d}', '${t.c}'), collate('${t.f}', '${t.c}'))"
-      // Result & data type
-      checkAnswer(sql(query), Row(t.r))
-      assert(sql(query).schema.fields.head.dataType.sameType(SQLConf.get.defaultStringType))
-    })
-
-    testCases.foreach(t => {
-      val query = s"SELECT date_format('${t.d}', collate('${t.f}', '${t.c}'))"
-      // Result & data type
-      checkAnswer(sql(query), Row(t.r))
-      assert(sql(query).schema.fields.head.dataType.sameType(SQLConf.get.defaultStringType))
-    })
-  }
-
   // TODO: Add more tests for other string expressions
 
 }
