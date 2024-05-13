@@ -1003,10 +1003,9 @@ public class CollationSupportSuite {
     int collationId = CollationFactory.collationNameToId(collation);
     int result;
 
-    if (threshold == null){
+    if (threshold == null) {
       result = CollationSupport.Levenshtein.exec(UTF8String.fromString(leftString), UTF8String.fromString(rightString), collationId);
-    }
-    else{
+    } else {
       result = CollationSupport.Levenshtein.execWithThreshold(UTF8String.fromString(leftString), UTF8String.fromString(rightString), threshold, collationId);
     }
 

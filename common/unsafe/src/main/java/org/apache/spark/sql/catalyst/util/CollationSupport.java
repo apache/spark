@@ -755,8 +755,7 @@ public final class CollationSupport {
 
       if (collation.supportsBinaryEquality) {
         return execBinary(left, right);
-      }
-      else {
+      } else {
         return execNonBinary(left, right, collationId);
       }
     }
@@ -766,33 +765,32 @@ public final class CollationSupport {
 
       if (collation.supportsBinaryEquality) {
         return execBinaryWithThreshold(left, right, threshold);
-      }
-      else{
+      } else {
         return execNonBinaryWithThreshold(left, right, threshold, collationId);
       }
     }
 
-    private static Integer execBinary(final UTF8String left, final UTF8String right){
+    private static Integer execBinary(final UTF8String left, final UTF8String right) {
       return left.levenshteinDistance(right);
     }
 
-    private static Integer execNonBinary(final UTF8String left, final UTF8String right, final int collationId){
+    private static Integer execNonBinary(final UTF8String left, final UTF8String right, final int collationId) {
       return left.levenshteinDistance(right, new CollationSubstringEquals(collationId));
     }
 
-    private static Integer execBinaryWithThreshold(final UTF8String left, final UTF8String right, final int threshold){
+    private static Integer execBinaryWithThreshold(final UTF8String left, final UTF8String right, final int threshold) {
       return left.levenshteinDistance(right, threshold);
     }
 
-    private static Integer execNonBinaryWithThreshold(final UTF8String left, final UTF8String right, final int threshold, final int collationId){
+    private static Integer execNonBinaryWithThreshold(final UTF8String left, final UTF8String right, final int threshold, final int collationId) {
       return left.levenshteinDistance(right, threshold, new CollationSubstringEquals(collationId));
     }
 
-    public static String genCode(final UTF8String left, final UTF8String right, final int collationId){
+    public static String genCode(final UTF8String left, final UTF8String right, final int collationId) {
       return String.format("CollationSupport.Levenshtein.exec(%s, %s, %d)", left, right, collationId);
     }
 
-    public static String genCodeWithTreshold(final UTF8String left, final UTF8String right, final int threshold, final int collationId){
+    public static String genCodeWithTreshold(final UTF8String left, final UTF8String right, final int threshold, final int collationId) {
       return String.format("CollationSupport.Levenshtein.execWithThreshold(%s, %s, %d, %d)", left, right, threshold, collationId);
     }
   }
