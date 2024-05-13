@@ -40,7 +40,23 @@ case class With(child: Expression, defs: Seq[CommonExpressionDef])
   override def children: Seq[Expression] = child +: defs
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): Expression = {
-    copy(child = newChildren.head, defs = newChildren.tail.map(_.asInstanceOf[CommonExpressionDef]))
+    val newDefs = newChildren.tail.map(_.asInstanceOf[CommonExpressionDef])
+    // If any `CommonExpressionDef` has been updated (data type or nullability), also update its
+    // `CommonExpressionRef` in the `child`.
+    val newChild = newDefs.filter(_.resolved).foldLeft(newChildren.head) { (result, newDef) =>
+      defs.find(_.id == newDef.id).map { oldDef =>
+        if (newDef.dataType != oldDef.dataType || newDef.nullable != oldDef.nullable) {
+          val newRef = new CommonExpressionRef(newDef)
+          result.transform {
+            case oldRef: CommonExpressionRef if oldRef.id == newRef.id =>
+              newRef
+          }
+        } else {
+          result
+        }
+      }.getOrElse(result)
+    }
+    copy(child = newChild, defs = newDefs)
   }
 
   /**
