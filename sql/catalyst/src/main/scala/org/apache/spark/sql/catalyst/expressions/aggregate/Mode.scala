@@ -102,14 +102,6 @@ case class Mode(
     }.getOrElse(buffer.maxBy(_._2))._1
   }
 
-  private def isCollatedString(child: Expression): Boolean = {
-    child.dataType match {
-      case s: StringType if s.collationId != CollationFactory.UTF8_BINARY_COLLATION_ID => true
-      // maybe use supportsBinaryEquality or something else
-      case _ => false
-    }
-  }
-
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): Mode =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
