@@ -359,6 +359,184 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     assert(scan.schema.names.sameElements(Seq(col)))
   }
 
+  test("SPARK-48172: Test CONTAINS") {
+    // this one should map to contains
+    val df1 = spark.sql(
+      s"""
+         |SELECT * FROM $catalogName.pattern_testing_table
+         |WHERE contains(pattern_testing_col, 'quote\\'')""".stripMargin)
+    df1.explain("formatted")
+
+    checkAnswer(df1, Row("special_character_quote'_present"))
+
+    val df2 = spark.sql(
+      s"""SELECT * FROM $catalogName.pattern_testing_table
+         |WHERE contains(pattern_testing_col, 'percent%')""".stripMargin)
+    checkAnswer(df2, Row("special_character_percent%_present"))
+
+    val df3 = spark.
+      sql(
+        s"""SELECT * FROM $catalogName.pattern_testing_table
+           |WHERE contains(pattern_testing_col, 'underscore_')""".stripMargin)
+    checkAnswer(df3, Row("special_character_underscore_present"))
+
+    val df4 = spark.
+      sql(
+        s"""SELECT * FROM $catalogName.pattern_testing_table
+           |WHERE contains(pattern_testing_col, 'character')
+           |ORDER BY pattern_testing_col""".stripMargin)
+    checkAnswer(df4, Seq(
+      Row("special_character_percent%_present"),
+      Row("special_character_percent_not_present"),
+      Row("special_character_quote'_present"),
+      Row("special_character_quote_not_present"),
+      Row("special_character_underscore_present"),
+      Row("special_character_underscorenot_present")))
+  }
+
+  test("SPARK-48172: Test ENDSWITH") {
+    val df1 = spark.sql(
+      s"""SELECT * FROM $catalogName.pattern_testing_table
+         |WHERE endswith(pattern_testing_col, 'quote\\'_present')""".stripMargin)
+    checkAnswer(df1, Row("special_character_quote'_present"))
+    val df2 = spark.sql(
+      s"""SELECT * FROM $catalogName.pattern_testing_table
+         |WHERE endswith(pattern_testing_col, 'percent%_present')""".stripMargin)
+    checkAnswer(df2, Row("special_character_percent%_present"))
+    val df3 = spark.
+      sql(
+        s"""SELECT * FROM $catalogName.pattern_testing_table
+           |WHERE endswith(pattern_testing_col, 'underscore_present')""".stripMargin)
+    checkAnswer(df3, Row("special_character_underscore_present"))
+    val df4 = spark.
+      sql(
+        s"""SELECT * FROM $catalogName.pattern_testing_table
+           |WHERE endswith(pattern_testing_col, 'present')
+           |ORDER BY pattern_testing_col""".stripMargin)
+    checkAnswer(df4, Seq(
+      Row("special_character_percent%_present"),
+      Row("special_character_percent_not_present"),
+      Row("special_character_quote'_present"),
+      Row("special_character_quote_not_present"),
+      Row("special_character_underscore_present"),
+      Row("special_character_underscorenot_present")))
+  }
+
+  test("SPARK-48172: Test STARTSWITH") {
+    val df1 = spark.sql(
+      s"""SELECT * FROM $catalogName.pattern_testing_table
+         |WHERE startswith(pattern_testing_col, 'special_character_quote\\'')""".stripMargin)
+    checkAnswer(df1, Row("special_character_quote'_present"))
+    val df2 = spark.sql(
+      s"""SELECT * FROM $catalogName.pattern_testing_table
+         |WHERE startswith(pattern_testing_col, 'special_character_percent%')""".stripMargin)
+    checkAnswer(df2, Row("special_character_percent%_present"))
+    val df3 = spark.
+      sql(
+        s"""SELECT * FROM $catalogName.pattern_testing_table
+           |WHERE startswith(pattern_testing_col, 'special_character_underscore_')""".stripMargin)
+    checkAnswer(df3, Row("special_character_underscore_present"))
+    val df4 = spark.
+      sql(
+        s"""SELECT * FROM $catalogName.pattern_testing_table
+           |WHERE startswith(pattern_testing_col, 'special_character')
+           |ORDER BY pattern_testing_col""".stripMargin)
+    checkAnswer(df4, Seq(
+      Row("special_character_percent%_present"),
+      Row("special_character_percent_not_present"),
+      Row("special_character_quote'_present"),
+      Row("special_character_quote_not_present"),
+      Row("special_character_underscore_present"),
+      Row("special_character_underscorenot_present")))
+  }
+
+  test("SPARK-48172: Test LIKE") {
+    // this one should map to contains
+    val df1 = spark.sql(
+      s"""SELECT * FROM $catalogName.pattern_testing_table
+         |WHERE pattern_testing_col LIKE '%quote\\'%'""".stripMargin)
+
+    checkAnswer(df1, Row("special_character_quote'_present"))
+
+    val df2 = spark.sql(
+      s"""SELECT * FROM $catalogName.pattern_testing_table
+         |WHERE pattern_testing_col LIKE '%percent\\%%'""".stripMargin)
+    checkAnswer(df2, Row("special_character_percent%_present"))
+
+    val df3 = spark.
+      sql(
+        s"""SELECT * FROM $catalogName.pattern_testing_table
+           |WHERE pattern_testing_col LIKE '%underscore\\_%'""".stripMargin)
+    checkAnswer(df3, Row("special_character_underscore_present"))
+
+    val df4 = spark.
+      sql(
+        s"""SELECT * FROM $catalogName.pattern_testing_table
+           |WHERE pattern_testing_col LIKE '%character%'
+           |ORDER BY pattern_testing_col""".stripMargin)
+    checkAnswer(df4, Seq(
+      Row("special_character_percent%_present"),
+      Row("special_character_percent_not_present"),
+      Row("special_character_quote'_present"),
+      Row("special_character_quote_not_present"),
+      Row("special_character_underscore_present"),
+      Row("special_character_underscorenot_present")))
+
+    // map to startsWith
+    // this one should map to contains
+    val df5 = spark.sql(
+      s"""SELECT * FROM $catalogName.pattern_testing_table
+         |WHERE pattern_testing_col LIKE 'special_character_quote\\'%'""".stripMargin)
+    checkAnswer(df5, Row("special_character_quote'_present"))
+    val df6 = spark.sql(
+      s"""SELECT * FROM $catalogName.pattern_testing_table
+         |WHERE pattern_testing_col LIKE 'special_character_percent\\%%'""".stripMargin)
+    checkAnswer(df6, Row("special_character_percent%_present"))
+    val df7 = spark.
+      sql(
+        s"""SELECT * FROM $catalogName.pattern_testing_table
+           |WHERE pattern_testing_col LIKE 'special_character_underscore\\_%'""".stripMargin)
+    checkAnswer(df7, Row("special_character_underscore_present"))
+    val df8 = spark.
+      sql(
+        s"""SELECT * FROM $catalogName.pattern_testing_table
+           |WHERE pattern_testing_col LIKE 'special_character%'
+           |ORDER BY pattern_testing_col""".stripMargin)
+    checkAnswer(df8, Seq(
+      Row("special_character_percent%_present"),
+      Row("special_character_percent_not_present"),
+      Row("special_character_quote'_present"),
+      Row("special_character_quote_not_present"),
+      Row("special_character_underscore_present"),
+      Row("special_character_underscorenot_present")))
+    // map to endsWith
+    // this one should map to contains
+    val df9 = spark.sql(
+      s"""SELECT * FROM $catalogName.pattern_testing_table
+         |WHERE pattern_testing_col LIKE '%quote\\'_present'""".stripMargin)
+    checkAnswer(df9, Row("special_character_quote'_present"))
+    val df10 = spark.sql(
+      s"""SELECT * FROM $catalogName.pattern_testing_table
+         |WHERE pattern_testing_col LIKE '%percent\\%_present'""".stripMargin)
+    checkAnswer(df10, Row("special_character_percent%_present"))
+    val df11 = spark.
+      sql(
+        s"""SELECT * FROM $catalogName.pattern_testing_table
+           |WHERE pattern_testing_col LIKE '%underscore\\_present'""".stripMargin)
+    checkAnswer(df11, Row("special_character_underscore_present"))
+    val df12 = spark.
+      sql(
+        s"""SELECT * FROM $catalogName.pattern_testing_table
+           |WHERE pattern_testing_col LIKE '%present' ORDER BY pattern_testing_col""".stripMargin)
+    checkAnswer(df12, Seq(
+      Row("special_character_percent%_present"),
+      Row("special_character_percent_not_present"),
+      Row("special_character_quote'_present"),
+      Row("special_character_quote_not_present"),
+      Row("special_character_underscore_present"),
+      Row("special_character_underscorenot_present")))
+  }
+
   test("SPARK-37038: Test TABLESAMPLE") {
     if (supportsTableSample) {
       withTable(s"$catalogName.new_table") {
