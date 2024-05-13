@@ -39,6 +39,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
   private val s = StructType.fromDDL("a INT, b STRING")
 
   private val UNICODE_COLLATION = "UNICODE"
+  private val UTF8_BINARY_LCASE_COLLATION = "UTF8_BINARY_LCASE"
   private val mapper = new ObjectMapper()
 
   test("lookup a single missing field should output existing fields") {
@@ -627,7 +628,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
          |      "nullable": true,
          |      "metadata": {
          |        "${DataType.COLLATIONS_METADATA_KEY}": {
-         |          "c1": "$UNICODE_COLLATION"
+         |          "c1": "icu.$UNICODE_COLLATION"
          |        }
          |      }
          |    }
@@ -641,7 +642,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
   test("nested struct with collations to json") {
     val nestedStruct = StructType(
       StructField("nested", StructType(
-        StructField("c1", StringType(UNICODE_COLLATION)) :: Nil)) :: Nil)
+        StructField("c1", StringType(UTF8_BINARY_LCASE_COLLATION)) :: Nil)) :: Nil)
 
     val expectedJson =
       s"""
@@ -659,7 +660,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
          |            "nullable": true,
          |            "metadata": {
          |              "${DataType.COLLATIONS_METADATA_KEY}": {
-         |                "c1": "$UNICODE_COLLATION"
+         |                "c1": "spark.$UTF8_BINARY_LCASE_COLLATION"
          |              }
          |            }
          |          }
@@ -694,7 +695,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
          |      "nullable": true,
          |      "metadata": {
          |        "${DataType.COLLATIONS_METADATA_KEY}": {
-         |          "arrayField.element": "$UNICODE_COLLATION"
+         |          "arrayField.element": "icu.$UNICODE_COLLATION"
          |        }
          |      }
          |    }
@@ -726,8 +727,8 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
          |      "nullable": true,
          |      "metadata": {
          |        "${DataType.COLLATIONS_METADATA_KEY}": {
-         |          "mapField.key": "$UNICODE_COLLATION",
-         |          "mapField.value": "$UNICODE_COLLATION"
+         |          "mapField.key": "icu.$UNICODE_COLLATION",
+         |          "mapField.value": "icu.$UNICODE_COLLATION"
          |        }
          |      }
          |    }
@@ -776,8 +777,8 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
          |      "nullable": true,
          |      "metadata": {
          |        "${DataType.COLLATIONS_METADATA_KEY}": {
-         |          "column.element.key": "$UNICODE_COLLATION",
-         |          "column.element.value.element.element.element": "$UNICODE_COLLATION"
+         |          "column.element.key": "icu.$UNICODE_COLLATION",
+         |          "column.element.value.element.element.element": "icu.$UNICODE_COLLATION"
          |        }
          |      }
          |    }

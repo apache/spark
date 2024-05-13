@@ -310,7 +310,11 @@ object DataType {
     collationsJsonOpt match {
       case Some(JObject(fields)) =>
         fields.collect {
-          case (name, JString(collation)) => name -> collation
+          case (fieldPath, JString(collation)) =>
+            collation.split("\\.", 2) match {
+              case Array(_: String, collationName: String) =>
+                fieldPath -> collationName
+            }
         }.toMap
 
       case _ => Map.empty

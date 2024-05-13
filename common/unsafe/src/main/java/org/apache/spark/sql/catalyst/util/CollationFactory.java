@@ -36,11 +36,42 @@ import org.apache.spark.unsafe.types.UTF8String;
  * Provides functionality to the UTF8String object which respects defined collation settings.
  */
 public final class CollationFactory {
+
+  public static class CollationIdentifier {
+    public final String provider;
+    public final String name;
+    public final String version;
+
+    public CollationIdentifier(String provider, String collationName, String version) {
+      this.provider = provider;
+      this.name = collationName;
+      this.version = version;
+    }
+
+    public static CollationIdentifier fromString(String identifier) {
+      String[] parts = identifier.split("\\.", 3);
+      return new CollationIdentifier(parts[0], parts[1], parts[2]);
+    }
+
+    @Override
+    public String toString() {
+      return String.format("%s.%s.%s", provider, name, version);
+    }
+
+    /**
+     * Returns
+     */
+    public String versionLess() {
+      return String.format("%s.%s", provider, name);
+    }
+  }
+
   /**
    * Entry encapsulating all information about a collation.
    */
   public static class Collation {
     public final String collationName;
+    public final String provider;
     public final Collator collator;
     public final Comparator<UTF8String> comparator;
 
@@ -97,6 +128,7 @@ public final class CollationFactory {
         boolean supportsBinaryOrdering,
         boolean supportsLowercaseEquality) {
       this.collationName = collationName;
+      this.provider = collator == null ? "spark" : "icu";
       this.collator = collator;
       this.comparator = comparator;
       this.version = version;
@@ -136,6 +168,11 @@ public final class CollationFactory {
         supportsBinaryEquality,
         supportsBinaryOrdering,
         supportsLowercaseEquality);
+    }
+
+    /** Returns the collation identifier*/
+    public CollationIdentifier identifier() {
+      return new CollationIdentifier(provider, collationName, version);
     }
   }
 

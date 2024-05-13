@@ -271,6 +271,12 @@ class StringType(AtomicType):
     def collationNameToId(cls, collationName: str) -> int:
         return StringType.collationNames.index(collationName)
 
+    @classmethod
+    def collationProvider(cls, collationName: str) -> str:
+        if collationName.startswith("UTF8"):
+            return "spark"
+        return "icu"
+
     def simpleString(self) -> str:
         return (
             "string"
@@ -952,11 +958,11 @@ class StructField(DataType):
                 processDataType(dt.keyType, fieldPath + ".key")
                 processDataType(dt.valueType, fieldPath + ".value")
             elif isinstance(dt, StringType) and self._isCollatedString(dt):
-                collationMetadata[fieldPath] = self.collationName(dt)
+                collationMetadata[fieldPath] = self.schemaCollationValue(dt)
 
         def processDataType(dt: DataType, fieldPath: str) -> None:
             if self._isCollatedString(dt):
-                collationMetadata[fieldPath] = self.collationName(dt)
+                collationMetadata[fieldPath] = self.schemaCollationValue(dt)
             else:
                 visitRecursively(dt, fieldPath)
 
@@ -970,9 +976,11 @@ class StructField(DataType):
     def _isCollatedString(self, dt: DataType) -> bool:
         return isinstance(dt, StringType) and not dt.isUTF8BinaryCollation()
 
-    def collationName(self, dt: DataType) -> str:
+    def schemaCollationValue(self, dt: DataType) -> str:
         assert isinstance(dt, StringType)
-        return StringType.collationIdToName(dt.collationId)
+        collationName = StringType.collationIdToName(dt.collationId)
+        provider = StringType.collationProvider(collationName)
+        return f"{provider}.{collationName}"
 
     def needConversion(self) -> bool:
         return self.dataType.needConversion()
@@ -1785,7 +1793,8 @@ def _parse_datatype_json_value(
     if not isinstance(json_value, dict):
         if json_value in _all_atomic_types.keys():
             if collationsMap is not None and fieldPath in collationsMap:
-                return StringType(collationsMap[fieldPath])
+                collationName = collationsMap[fieldPath].split(".")[1]
+                return StringType(collationName)
             return _all_atomic_types[json_value]()
         elif json_value == "decimal":
             return DecimalType()
@@ -1843,7 +1852,8 @@ def _resolve_type(
     json_value: Dict[str, Any], fieldPath: str, collationsMap: Optional[Dict[str, str]]
 ) -> DataType:
     if collationsMap and fieldPath in collationsMap:
-        return StringType(collationsMap[fieldPath])
+        collationName = collationsMap[fieldPath].split(".")[1]
+        return StringType(collationName)
     return _parse_datatype_json_value(json_value, fieldPath, collationsMap)
 
 

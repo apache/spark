@@ -93,14 +93,14 @@ case class StructField(
         processDataType(mt.valueType, path + ".value")
 
       case st: StringType if isCollatedString(st) =>
-        fieldToCollationMap(path) = collationName(st)
+        fieldToCollationMap(path) = schemaCollationValue(st)
 
       case _ =>
     }
 
     def processDataType(dt: DataType, path: String): Unit = {
       if (isCollatedString(dt)) {
-        fieldToCollationMap(path) = collationName(dt)
+        fieldToCollationMap(path) = schemaCollationValue(dt)
       } else {
         visitRecursively(dt, path)
       }
@@ -115,11 +115,10 @@ case class StructField(
     case _ => false
   }
 
-  private def collationName(dt: DataType): String = dt match {
+  private def schemaCollationValue(dt: DataType): String = dt match {
     case st: StringType =>
-      CollationFactory
-        .fetchCollation(st.collationId)
-        .collationName
+      val collation = CollationFactory.fetchCollation(st.collationId)
+      collation.identifier().versionLess()
   }
 
   /**
