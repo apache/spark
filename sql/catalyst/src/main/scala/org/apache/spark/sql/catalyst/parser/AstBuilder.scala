@@ -2236,14 +2236,14 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    */
   override def visitCast(ctx: CastContext): Expression = withOrigin(ctx) {
     val rawDataType = typedVisit[DataType](ctx.dataType())
-    val dataType = CharVarcharUtils.replaceCharVarcharWithStringForCast(rawDataType)
-    dataType match {
+    rawDataType match {
       case stringType: StringType if !stringType.createdAsNonCollated =>
         throw QueryParsingErrors.dataTypeUnsupportedError(
-          dataType.typeName,
+          stringType.typeName,
           ctx.dataType().asInstanceOf[PrimitiveDataTypeContext])
       case _ =>
     }
+    val dataType = CharVarcharUtils.replaceCharVarcharWithStringForCast(rawDataType)
     ctx.name.getType match {
       case SqlBaseParser.CAST =>
         val cast = Cast(expression(ctx.expression), dataType)
@@ -2262,14 +2262,14 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    */
   override def visitCastByColon(ctx: CastByColonContext): Expression = withOrigin(ctx) {
     val rawDataType = typedVisit[DataType](ctx.dataType())
-    val dataType = CharVarcharUtils.replaceCharVarcharWithStringForCast(rawDataType)
-    dataType match {
+    rawDataType match {
       case stringType: StringType if !stringType.createdAsNonCollated =>
         throw QueryParsingErrors.dataTypeUnsupportedError(
-          dataType.typeName,
+          stringType.typeName,
           ctx.dataType().asInstanceOf[PrimitiveDataTypeContext])
       case _ =>
     }
+    val dataType = CharVarcharUtils.replaceCharVarcharWithStringForCast(rawDataType)
     val cast = Cast(expression(ctx.primaryExpression), dataType)
     cast.setTagValue(Cast.USER_SPECIFIED_CAST, ())
     cast
