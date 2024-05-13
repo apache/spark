@@ -276,8 +276,14 @@ class HadoopMapReduceCommitProtocol(
   override def commitTask(taskContext: TaskAttemptContext): TaskCommitMessage = {
     val attemptId = taskContext.getTaskAttemptID
     logTrace(s"Commit task ${attemptId}")
+    val disableCommitCoordination =
+      taskContext.getConfiguration.get("spark.test.disableCommitCoordination") == "true"
     SparkHadoopMapRedUtil.commitTask(
-      committer, taskContext, attemptId.getJobID.getId, attemptId.getTaskID.getId)
+      committer,
+      taskContext,
+      attemptId.getJobID.getId,
+      attemptId.getTaskID.getId,
+      disableCommitCoordination)
     new TaskCommitMessage(addedAbsPathFiles.toMap -> partitionPaths.toSet)
   }
 

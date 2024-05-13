@@ -42,7 +42,8 @@ object SparkHadoopMapRedUtil extends Logging {
       committer: MapReduceOutputCommitter,
       mrTaskContext: MapReduceTaskAttemptContext,
       jobId: Int,
-      splitId: Int): Unit = {
+      splitId: Int,
+      disableCommitCoordination: Boolean = false): Unit = {
 
     val mrTaskAttemptID = mrTaskContext.getTaskAttemptID
 
@@ -71,7 +72,7 @@ object SparkHadoopMapRedUtil extends Logging {
         sparkConf.getBoolean("spark.hadoop.outputCommitCoordination.enabled", defaultValue = true)
       }
 
-      if (shouldCoordinateWithDriver) {
+      if (shouldCoordinateWithDriver && !disableCommitCoordination) {
         val outputCommitCoordinator = SparkEnv.get.outputCommitCoordinator
         val ctx = TaskContext.get()
         val canCommit = outputCommitCoordinator.canCommit(ctx.stageId(), ctx.stageAttemptNumber(),

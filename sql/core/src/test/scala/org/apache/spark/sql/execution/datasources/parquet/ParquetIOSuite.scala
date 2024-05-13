@@ -1207,8 +1207,10 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   }
 
   test("SPARK-7837 Do not close output writer twice when commitTask() fails") {
-    withSQLConf(SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
-        classOf[SQLHadoopMapReduceCommitProtocol].getCanonicalName) {
+    withSQLConf(
+      SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
+        classOf[SQLHadoopMapReduceCommitProtocol].getCanonicalName,
+      "spark.test.disableCommitCoordination" -> "true") {
       // Using a output committer that always fail when committing a task, so that both
       // `commitTask()` and `abortTask()` are invoked.
       val extraOptions = Map[String, String](
