@@ -203,27 +203,14 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
         val modeDefaultCollation = Mode(child =
           Literal.create("some_column_name", StringType(collationType)))
         val buffer = new OpenHashMap[AnyRef, Long](value.size)
-        value.zipWithIndex.sliding(2000, 2000).foreach(slide => {
-          slide.foreach { case (v: UTF8String, i: Int) =>
-            buffer.update(v.toString + s"_${i.toString}", (i % 1000).toLong)
-          }
+        value.foreach(v => {
+            buffer.update(v.toString, (v.hashCode() % 1000).toLong)
+          })
           modeDefaultCollation.eval(buffer)
-        })
+        }
       }
     }
-    }
 
-    benchmark.addCase(s"Numerical Type - mode - ${value.size} elements") { _ =>
-      val modeIntType = Mode(child = Literal.create(1, IntegerType))
-      val buffer = new OpenHashMap[AnyRef, Long](value.size)
-      value.zipWithIndex.sliding(2000, 2000).foreach(slide => {
-        slide.foreach {
-          case (_, i: Int) =>
-            buffer.update(i.asInstanceOf[AnyRef], (i % 1000).toLong)
-        }
-        modeIntType.eval(buffer)
-      })
-    }
     benchmark.run()
   }
 }
