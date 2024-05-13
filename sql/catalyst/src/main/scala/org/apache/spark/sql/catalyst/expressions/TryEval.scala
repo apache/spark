@@ -147,7 +147,7 @@ case class TryDivide(left: Expression, right: Expression, replacement: Expressio
       > SELECT _FUNC_(1, 0);
        NULL
   """,
-  since = "3.2.0",
+  since = "4.0.0",
   group = "math_funcs")
 // scalastyle:on line.size.limit
 case class TryRemainder(left: Expression, right: Expression, replacement: Expression)
@@ -187,7 +187,7 @@ case class TryRemainder(left: Expression, right: Expression, replacement: Expres
       > SELECT _FUNC_(interval 2 year, interval 1 year);
        1-0
   """,
-  since = "4.0.0",
+  since = "3.3.0",
   group = "math_funcs")
 case class TrySubtract(left: Expression, right: Expression, replacement: Expression)
   extends RuntimeReplaceable with InheritAnalysisRules {
