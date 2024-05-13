@@ -64,4 +64,6 @@
               files="src/main/java/org/apache/spark/sql/api/java/*"/>
     <suppress checks="IllegalImport"
               files="src/test/java/org/apache/spark/sql/hive/test/Complex.java"/>
+    <suppress checks="SimplifyBooleanExpression"
+      files="src/test/java/org/apache/spark/sql/hive/test/Complex.java" />
 </suppressions>

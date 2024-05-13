@@ -210,7 +210,7 @@ public class ExpressionImplUtils {
 
         // If the cipher mode supports additional authenticated data and it is provided, update it
         if (aad != null && aad.length != 0) {
-          if (cipherMode.supportsAad != true) {
+          if (!cipherMode.supportsAad) {
             throw QueryExecutionErrors.aesUnsupportedAad(mode);
           }
           cipher.updateAAD(aad);
@@ -231,7 +231,7 @@ public class ExpressionImplUtils {
           AlgorithmParameterSpec algSpec = getParamSpec(cipherMode, input);
           cipher.init(opmode, secretKey, algSpec);
           if (aad != null && aad.length != 0) {
-            if (cipherMode.supportsAad != true) {
+            if (!cipherMode.supportsAad) {
               throw QueryExecutionErrors.aesUnsupportedAad(mode);
             }
             cipher.updateAAD(aad);

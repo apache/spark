@@ -71,7 +71,7 @@ public class TestStatefulProcessorWithInitialState
       }
 
       testState.clear();
-      assert(testState.exists() == false);
+      assert(!testState.exists());
 
       result.add(sb.toString());
     }

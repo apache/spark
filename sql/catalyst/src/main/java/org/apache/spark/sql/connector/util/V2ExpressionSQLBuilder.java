@@ -284,7 +284,7 @@ public class V2ExpressionSQLBuilder {
 
   protected String visitInverseDistributionFunction(
       String funcName, boolean isDistinct, String[] inputs, String[] orderingWithinGroups) {
-    assert(isDistinct == false);
+    assert(!isDistinct);
     String withinGroup =
       joinArrayToString(orderingWithinGroups, ", ", "WITHIN GROUP (ORDER BY ", ")");
     String functionCall = joinArrayToString(inputs, ", ", funcName + "(", ")");

@@ -200,5 +200,7 @@
             <property name="illegalPkgs" value="org.apache.log4j" />
             <property name="illegalPkgs" value="org.apache.commons.lang" />
         </module>
+        <module name="SimplifyBooleanExpression" />
+        <module name="SimplifyBooleanReturn" />
     </module>
 </module>
