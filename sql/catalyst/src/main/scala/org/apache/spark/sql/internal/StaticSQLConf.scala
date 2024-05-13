@@ -278,4 +278,12 @@ object StaticSQLConf {
       .version("3.1.0")
       .stringConf
       .createWithDefault("")
+
+  val DEFAULT_MODE = buildStaticConf("spark.sql.pyspark.pandas.defaultMode")
+    .doc("When set to true, set_option and reset_option will all be ignored, and only default" +
+      "values are used in Pandas API on Spark. This reduces communication overhead between " +
+      "Python process and JVM.")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(false)
 }

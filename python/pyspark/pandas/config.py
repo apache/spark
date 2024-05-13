@@ -23,7 +23,7 @@ import json
 from typing import Any, Callable, Dict, Iterator, List, Tuple, Union
 
 from pyspark._globals import _NoValue, _NoValueType
-from pyspark.pandas.utils import default_session
+from pyspark.pandas.utils import default_session, get_default_mode
 
 
 __all__ = ["get_option", "set_option", "reset_option", "options", "option_context"]
@@ -374,8 +374,10 @@ def get_option(key: str, default: Union[Any, _NoValueType] = _NoValue) -> Any:
         default = _options_dict[key].default
     _options_dict[key].validate(default)
     spark_session = default_session()
-
-    return json.loads(spark_session.conf.get(_key_format(key), default=json.dumps(default)))
+    if get_default_mode():
+        return json.dumps(default)
+    else:
+        return json.loads(spark_session.conf.get(_key_format(key), default=json.dumps(default)))
 
 
 def set_option(key: str, value: Any) -> None:
@@ -396,8 +398,8 @@ def set_option(key: str, value: Any) -> None:
     _check_option(key)
     _options_dict[key].validate(value)
     spark_session = default_session()
-
-    spark_session.conf.set(_key_format(key), json.dumps(value))
+    if not get_default_mode():
+        spark_session.conf.set(_key_format(key), json.dumps(value))
 
 
 def reset_option(key: str) -> None:
@@ -416,7 +418,9 @@ def reset_option(key: str) -> None:
     None
     """
     _check_option(key)
-    default_session().conf.unset(_key_format(key))
+    spark_session = default_session()
+    if not get_default_mode():
+        spark_session.conf.unset(_key_format(key))
 
 
 @contextmanager
