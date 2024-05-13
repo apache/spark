@@ -14,7 +14,7 @@ CreateViewCommand `int4_tbl`, select * from values
   (-123456),
   (2147483647),
   (-2147483647)
-  as int4_tbl(f1), false, false, LocalTempView, true
+  as int4_tbl(f1), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [f1#x]
       +- SubqueryAlias int4_tbl
          +- LocalRelation [f1#x]
@@ -29,7 +29,7 @@ CREATE OR REPLACE TEMPORARY VIEW bitwise_test AS SELECT * FROM VALUES
 CreateViewCommand `bitwise_test`, SELECT * FROM VALUES
   (1, 1, 1, 1L),
   (3, 3, 3, null),
-  (7, 7, 7, 3L) AS bitwise_test(b1, b2, b3, b4), false, true, LocalTempView, true
+  (7, 7, 7, 3L) AS bitwise_test(b1, b2, b3, b4), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [b1#x, b2#x, b3#x, b4#xL]
       +- SubqueryAlias bitwise_test
          +- LocalRelation [b1#x, b2#x, b3#x, b4#xL]
@@ -123,7 +123,7 @@ CREATE OR REPLACE TEMPORARY VIEW bool_test AS SELECT * FROM VALUES
 CreateViewCommand `bool_test`, SELECT * FROM VALUES
   (TRUE, null, FALSE, null),
   (FALSE, TRUE, null, null),
-  (null, TRUE, FALSE, null) AS bool_test(b1, b2, b3, b4), false, true, LocalTempView, true
+  (null, TRUE, FALSE, null) AS bool_test(b1, b2, b3, b4), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [b1#x, b2#x, b3#x, b4#x]
       +- SubqueryAlias bool_test
          +- LocalRelation [b1#x, b2#x, b3#x, b4#x]

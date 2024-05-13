@@ -14,7 +14,7 @@ DropTableCommand `spark_catalog`.`default`.`t2`, true, true, false
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW t1 AS VALUES (0, 1), (1, 2) t(c1, c2)
 -- !query analysis
-CreateViewCommand `t1`, VALUES (0, 1), (1, 2) t(c1, c2), false, true, LocalTempView, true
+CreateViewCommand `t1`, VALUES (0, 1), (1, 2) t(c1, c2), false, true, LocalTempView, UNSUPPORTED, true
    +- SubqueryAlias t
       +- LocalRelation [c1#x, c2#x]
 
@@ -22,7 +22,7 @@ CreateViewCommand `t1`, VALUES (0, 1), (1, 2) t(c1, c2), false, true, LocalTempV
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW t2 AS VALUES (0, 1), (1, 2), (1, 3) t(partition_col, input)
 -- !query analysis
-CreateViewCommand `t2`, VALUES (0, 1), (1, 2), (1, 3) t(partition_col, input), false, true, LocalTempView, true
+CreateViewCommand `t2`, VALUES (0, 1), (1, 2), (1, 3) t(partition_col, input), false, true, LocalTempView, UNSUPPORTED, true
    +- SubqueryAlias t
       +- LocalRelation [partition_col#x, input#x]
 

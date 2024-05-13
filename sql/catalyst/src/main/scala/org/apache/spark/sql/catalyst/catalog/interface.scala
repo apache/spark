@@ -36,7 +36,7 @@ import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CurrentUserContext, FunctionIdentifier, InternalRow, SQLConfHelper, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, Resolver, UnresolvedLeafNode}
+import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, Resolver, SchemaBinding, SchemaCompensation, SchemaEvolution, SchemaTypeEvolution, SchemaUnsupported, UnresolvedLeafNode, ViewSchemaMode}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast, ExprId, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -402,6 +402,25 @@ case class CatalogTable(
   }
 
   /**
+   * Return the schema binding mode. Defaults to SchemaCompensation if not a view or an older
+   * version, unless the viewSchemaBindingMode config is set to DISABLED
+   */
+  def viewSchemaMode: ViewSchemaMode = {
+    if (SQLConf.get.viewSchemaBindingMode == "DISABLED") {
+      SchemaUnsupported
+    } else {
+      val schemaMode = properties.getOrElse(VIEW_SCHEMA_MODE, SchemaCompensation.toString)
+      schemaMode match {
+        case SchemaBinding.toString => SchemaBinding
+        case SchemaEvolution.toString => SchemaEvolution
+        case SchemaTypeEvolution.toString => SchemaTypeEvolution
+        case SchemaCompensation.toString => SchemaCompensation
+        case other => throw SparkException.internalError("Unexpected ViewSchemaMode")
+      }
+    }
+  }
+
+  /**
    * Return temporary view names the current view was referred. should be empty if the
    * CatalogTable is not a Temporary View or created by older versions of Spark(before 3.1.0).
    */
@@ -491,6 +510,9 @@ case class CatalogTable(
     if (tableType == CatalogTableType.VIEW) {
       viewText.foreach(map.put("View Text", _))
       viewOriginalText.foreach(map.put("View Original Text", _))
+      if (SQLConf.get.viewSchemaBindingMode != "DISABLED") {
+        map.put("View Schema Mode", viewSchemaMode.toString)
+      }
       if (viewCatalogAndNamespace.nonEmpty) {
         import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
         map.put("View Catalog and Namespace", viewCatalogAndNamespace.quoted)
@@ -562,6 +584,8 @@ object CatalogTable {
   val VIEW_REFERRED_TEMP_VIEW_NAMES = VIEW_PREFIX + "referredTempViewNames"
   val VIEW_REFERRED_TEMP_FUNCTION_NAMES = VIEW_PREFIX + "referredTempFunctionsNames"
   val VIEW_REFERRED_TEMP_VARIABLE_NAMES = VIEW_PREFIX + "referredTempVariablesNames"
+
+  val VIEW_SCHEMA_MODE = VIEW_PREFIX + "schemaMode"
 
   val VIEW_STORING_ANALYZED_PLAN = VIEW_PREFIX + "storingAnalyzedPlan"
 
