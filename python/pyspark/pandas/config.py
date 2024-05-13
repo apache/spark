@@ -18,6 +18,7 @@
 """
 Infrastructure of options for pandas-on-Spark.
 """
+import warnings
 from contextlib import contextmanager
 import json
 from typing import Any, Callable, Dict, Iterator, List, Tuple, Union
@@ -400,6 +401,10 @@ def set_option(key: str, value: Any) -> None:
     spark_session = default_session()
     if not get_default_mode():
         spark_session.conf.set(_key_format(key), json.dumps(value))
+    warnings.warn(
+        "As the static conf `spark.sql.pyspark.pandas.defaultMode` is set to True, "
+        "`set_option` is ignored and only default values are used."
+    )
 
 
 def reset_option(key: str) -> None:
@@ -421,6 +426,10 @@ def reset_option(key: str) -> None:
     spark_session = default_session()
     if not get_default_mode():
         spark_session.conf.unset(_key_format(key))
+    warnings.warn(
+        "As the static conf `spark.sql.pyspark.pandas.defaultMode` is set to True, "
+        "`set_option` is ignored and only default values are used."
+    )
 
 
 @contextmanager
