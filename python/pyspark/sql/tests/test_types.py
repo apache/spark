@@ -618,6 +618,7 @@ class TypesTestsMixin:
             scala_datatype = self.spark._jsparkSession.parseDataType(schema.json())
             python_datatype = _parse_datatype_json_string(scala_datatype.json())
             assert schema == python_datatype
+            assert schema == _parse_datatype_json_string(schema.json())
 
     def test_udt(self):
         from pyspark.sql.types import _parse_datatype_json_string, _infer_type, _make_type_verifier
