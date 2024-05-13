@@ -1004,9 +1004,11 @@ public class CollationSupportSuite {
     int result;
 
     if (threshold == null) {
-      result = CollationSupport.Levenshtein.exec(UTF8String.fromString(leftString), UTF8String.fromString(rightString), collationId);
+      result = CollationSupport.Levenshtein.exec(UTF8String.fromString(leftString),
+              UTF8String.fromString(rightString), collationId);
     } else {
-      result = CollationSupport.Levenshtein.execWithThreshold(UTF8String.fromString(leftString), UTF8String.fromString(rightString), threshold, collationId);
+      result = CollationSupport.Levenshtein.execWithThreshold(UTF8String.fromString(leftString),
+              UTF8String.fromString(rightString), threshold, collationId);
     }
 
     assertEquals(expectedValue, result);
