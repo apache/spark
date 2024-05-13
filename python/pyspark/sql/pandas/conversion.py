@@ -487,7 +487,7 @@ class SparkConversionMixin:
                                 else:
                                     return (
                                         pd.Timestamp(value)
-                                        .tz_localize(timezone, ambiguous=False)
+                                        .tz_localize(timezone, ambiguous=False)  # type: ignore
                                         .tz_convert(_get_local_timezone())
                                         .tz_localize(None)
                                         .to_pydatetime()
