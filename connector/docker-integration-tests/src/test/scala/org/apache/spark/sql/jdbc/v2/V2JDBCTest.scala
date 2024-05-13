@@ -397,6 +397,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     assert(rows4(3).getString(0) === "special_character_quote_not_present")
     assert(rows4(4).getString(0) === "special_character_underscore_present")
     assert(rows4(5).getString(0) === "special_character_underscorenot_present")
+  }
 
   test("SPARK-48172: Test ENDSWITH") {
     val df1 = spark.sql(
