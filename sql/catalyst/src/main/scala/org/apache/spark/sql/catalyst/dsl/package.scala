@@ -19,7 +19,9 @@ package org.apache.spark.sql.catalyst
 
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
+
 import scala.language.implicitConversions
+
 import org.apache.spark.api.java.function.FilterFunction
 import org.apache.spark.rdd.PartitionCoalescer
 import org.apache.spark.sql.Encoder
