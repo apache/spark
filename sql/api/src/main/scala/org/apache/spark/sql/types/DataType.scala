@@ -220,7 +220,7 @@ object DataType {
     ("containsNull", JBool(n)),
     ("elementType", t: JValue),
     ("type", JString("array"))) =>
-      val elementType = resolveType(t, fieldPath + ".element", collationsMap)
+      val elementType = parseDataTypeWithCollation(t, fieldPath + ".element", collationsMap)
       ArrayType(elementType, n)
 
     case JSortedObject(
@@ -228,8 +228,8 @@ object DataType {
     ("type", JString("map")),
     ("valueContainsNull", JBool(n)),
     ("valueType", v: JValue)) =>
-      val keyType = resolveType(k, fieldPath + ".key", collationsMap)
-      val valueType = resolveType(v, fieldPath + ".value", collationsMap)
+      val keyType = parseDataTypeWithCollation(k, fieldPath + ".key", collationsMap)
+      val valueType = parseDataTypeWithCollation(v, fieldPath + ".value", collationsMap)
       MapType(keyType, valueType, n)
 
     case JSortedObject(
@@ -292,7 +292,7 @@ object DataType {
    * Checks if the current field is in the collation map, and if it is it returns
    * a StringType with the given collation. Otherwise, it further parses its type.
    */
-  private def resolveType(
+  private def parseDataTypeWithCollation(
       json: JValue,
       path: String,
       collationsMap: Map[String, String]): DataType = {

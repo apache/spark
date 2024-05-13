@@ -81,7 +81,7 @@ case class StructField(
   }
 
   /** Map of field path to collation name. */
-  private lazy val collationMetadata: mutable.Map[String, String] = {
+  private lazy val collationMetadata: Map[String, String] = {
     val fieldToCollationMap = mutable.Map[String, String]()
 
     def visitRecursively(dt: DataType, path: String): Unit = dt match {
@@ -107,7 +107,7 @@ case class StructField(
     }
 
     visitRecursively(dataType, name)
-    fieldToCollationMap
+    fieldToCollationMap.toMap
   }
 
   private def isCollatedString(dt: DataType): Boolean = dt match {
@@ -119,6 +119,8 @@ case class StructField(
     case st: StringType =>
       val collation = CollationFactory.fetchCollation(st.collationId)
       collation.identifier().versionLess()
+    case _ =>
+      throw new IllegalStateException(s"Unexpected data type $dt")
   }
 
   /**

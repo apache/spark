@@ -710,7 +710,7 @@ class ArrayType(DataType):
         fieldPath: str = "",
         collationsMap: Optional[Dict[str, str]] = None,
     ) -> "ArrayType":
-        elementType = _resolve_type(json["elementType"], fieldPath + ".element", collationsMap)
+        elementType = _parse_type_with_collation(json["elementType"], fieldPath + ".element", collationsMap)
         return ArrayType(elementType, json["containsNull"])
 
     def needConversion(self) -> bool:
@@ -833,8 +833,8 @@ class MapType(DataType):
         fieldPath: str = "",
         collationsMap: Optional[Dict[str, str]] = None,
     ) -> "MapType":
-        keyType = _resolve_type(json["keyType"], fieldPath + ".key", collationsMap)
-        valueType = _resolve_type(json["valueType"], fieldPath + ".value", collationsMap)
+        keyType = _parse_type_with_collation(json["keyType"], fieldPath + ".key", collationsMap)
+        valueType = _parse_type_with_collation(json["valueType"], fieldPath + ".value", collationsMap)
         return MapType(
             keyType,
             valueType,
@@ -1848,7 +1848,7 @@ def _parse_datatype_json_value(
             )
 
 
-def _resolve_type(
+def _parse_type_with_collation(
     json_value: Dict[str, Any], fieldPath: str, collationsMap: Optional[Dict[str, str]]
 ) -> DataType:
     if collationsMap and fieldPath in collationsMap:

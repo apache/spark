@@ -570,7 +570,7 @@ class TypesTestsMixin:
             ]
         )
 
-        array_in_map_in_nested_schema = StructType(
+        array_in_map = StructType(
             [
                 StructField(
                     "arrInMap",
@@ -600,7 +600,7 @@ class TypesTestsMixin:
             + nested_struct.fields
             + array_in_schema.fields
             + map_in_schema.fields
-            + array_in_map_in_nested_schema.fields
+            + array_in_map.fields
             + nested_array_in_map.fields
         )
 
@@ -610,7 +610,7 @@ class TypesTestsMixin:
             array_in_schema,
             map_in_schema,
             nested_array_in_map,
-            array_in_map_in_nested_schema,
+            array_in_map,
             schema_with_multiple_fields,
         ]
 
