@@ -75,7 +75,7 @@ lexer grammar SqlBaseLexer;
     complex_type_level_counter++;
   }
   public void decComplexTypeLevelCounter() {
-    complex_type_level_counter++;
+    if (complex_type_level_counter > 0) complex_type_level_counter++;
   }
   public boolean isShiftRightOperator() {
     return complex_type_level_counter ==0 ? true : false;

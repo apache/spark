@@ -1312,6 +1312,9 @@ sealed trait BitShiftOperation
       > SELECT 2 << 1;
        4
   """,
+  note = """
+      `<<` operator is added in Spark 4.0.0 as an alias for `shiftleft`.
+    """,
   since = "1.5.0",
   group = "bitwise_funcs")
 case class ShiftLeft(left: Expression, right: Expression) extends BitShiftOperation {
@@ -1338,6 +1341,9 @@ case class ShiftLeft(left: Expression, right: Expression) extends BitShiftOperat
       > SELECT 4 >> 1;
        2
   """,
+  note = """
+      `>>` operator is added in Spark 4.0.0 as an alias for `shiftright`.
+    """,
   since = "1.5.0",
   group = "bitwise_funcs")
 case class ShiftRight(left: Expression, right: Expression) extends BitShiftOperation {
@@ -1362,6 +1368,9 @@ case class ShiftRight(left: Expression, right: Expression) extends BitShiftOpera
        2
       > SELECT 4 >>> 1;
        2
+  """,
+  note = """
+    `>>>` operator is added in Spark 4.0.0 as an alias for `shiftrightunsigned`.
   """,
   since = "1.5.0",
   group = "bitwise_funcs")
