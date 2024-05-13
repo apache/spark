@@ -18,8 +18,8 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.catalyst.expressions.aggregate.Mode
 import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, Literal, StringTrim, StringTrimLeft, StringTrimRight}
+import org.apache.spark.sql.catalyst.expressions.aggregate.Mode
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -880,7 +880,7 @@ class CollationStringExpressionsSuite
       assert(myMode.eval(buffer).toString.toLowerCase() == t.result.toLowerCase())
     })
   }
-   
+
   test("StringTrim* functions - unit tests for both paths (codegen and eval)") {
     // Without trimString param.
     checkEvaluation(StringTrim(Literal.create( "  asd  ", StringType("UTF8_BINARY"))), "asd")

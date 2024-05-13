@@ -22,7 +22,7 @@ import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.expressions.aggregate.Mode
 import org.apache.spark.sql.catalyst.util.{CollationFactory, CollationSupport}
-import org.apache.spark.sql.types.{IntegerType, StringType}
+import org.apache.spark.sql.types.StringType
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.collection.OpenHashMap
 
@@ -249,7 +249,7 @@ object CollationBenchmark extends CollationBenchmarkBase {
   Lowercase and some repeated strings to test the performance of the collation functions.
    */
   def generateBaseInputStringswithUniqueGroupNumber(n: Long): Seq[UTF8String] = {
-    (0 to n / baseInputStrings.size).flatMap(k => baseInputStrings.map(
+    (0 to n.toInt / baseInputStrings.size).flatMap(k => baseInputStrings.map(
       x => UTF8String.fromString(x + "_" + k)))
       .flatMap(
         x => Seq(x, x.repeat(4), x.repeat(8))) // Variable Lengths...
