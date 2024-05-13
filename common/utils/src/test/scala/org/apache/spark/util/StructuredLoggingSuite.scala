@@ -147,7 +147,7 @@ trait LoggingSuiteBase
   }
 
   private val externalSystemCustomLog =
-    log"${MDC(CUSTOM_LOG_KEY, "External system custom log message.")}"
+    log"${MDC(CustomLogKeys.CUSTOM_LOG_KEY, "External system custom log message.")}"
   test("Logging with external system custom LogKey") {
     Seq(
       (Level.ERROR, () => logError(externalSystemCustomLog)),
@@ -306,5 +306,7 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
   }
 }
 
-// External system custom LogKey must be `extends LogKey`
-case object CUSTOM_LOG_KEY extends LogKey
+object CustomLogKeys {
+  // External system custom LogKey must be `extends LogKey`
+  case object CUSTOM_LOG_KEY extends LogKey
+}

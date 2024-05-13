@@ -17,12 +17,6 @@
 
 package org.apache.spark.sql.util;
 
-import org.apache.spark.SparkIllegalArgumentException;
-import org.apache.spark.SparkUnsupportedOperationException;
-import org.apache.spark.annotation.Experimental;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -30,6 +24,14 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+
+import org.apache.spark.annotation.Experimental;
+import org.apache.spark.internal.Logger;
+import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
+import org.apache.spark.SparkIllegalArgumentException;
+import org.apache.spark.SparkUnsupportedOperationException;
 
 /**
  * Case-insensitive map of string keys to string values.
@@ -59,8 +61,8 @@ public class CaseInsensitiveStringMap implements Map<String, String> {
     for (Map.Entry<String, String> entry : originalMap.entrySet()) {
       String key = toLowerCase(entry.getKey());
       if (delegate.containsKey(key)) {
-        logger.warn("Converting duplicated key " + entry.getKey() +
-                " into CaseInsensitiveStringMap.");
+        logger.warn("Converting duplicated key {} into CaseInsensitiveStringMap.",
+          MDC.of(LogKeys.KEY$.MODULE$, entry.getKey()));
       }
       delegate.put(key, entry.getValue());
     }

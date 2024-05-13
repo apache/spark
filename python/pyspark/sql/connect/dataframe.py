@@ -83,6 +83,7 @@ from pyspark.sql.connect.expressions import (
 )
 from pyspark.sql.connect.functions import builtin as F
 from pyspark.sql.pandas.types import from_arrow_schema
+from pyspark.sql.pandas.functions import _validate_pandas_udf  # type: ignore[attr-defined]
 
 
 if TYPE_CHECKING:
@@ -442,8 +443,6 @@ class DataFrame(ParentDataFrame):
                 plan.Deduplicate(child=self._plan, column_names=subset, within_watermark=True),
                 session=self._session,
             )
-
-    drop_duplicates_within_watermark = dropDuplicatesWithinWatermark
 
     def distinct(self) -> ParentDataFrame:
         return DataFrame(
@@ -815,7 +814,7 @@ class DataFrame(ParentDataFrame):
         if withReplacement is None:
             withReplacement = False
 
-        seed = int(seed) if seed is not None else None
+        seed = int(seed) if seed is not None else random.randint(0, sys.maxsize)
 
         return DataFrame(
             plan.Sample(
@@ -1770,6 +1769,10 @@ class DataFrame(ParentDataFrame):
         assert table is not None
         return (table, schema)
 
+    def toArrow(self) -> "pa.Table":
+        table, _ = self._to_table()
+        return table
+
     def toPandas(self) -> "PandasDataFrameLike":
         query = self._plan.to_proto(self._session.client)
         return self._session.client.to_pandas(query, self._plan.observations)
@@ -1995,6 +1998,7 @@ class DataFrame(ParentDataFrame):
     ) -> ParentDataFrame:
         from pyspark.sql.connect.udf import UserDefinedFunction
 
+        _validate_pandas_udf(func, evalType)
         udf_obj = UserDefinedFunction(
             func,
             returnType=schema,

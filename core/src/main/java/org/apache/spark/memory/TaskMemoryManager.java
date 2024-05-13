@@ -29,9 +29,11 @@ import java.util.Map;
 import java.util.TreeMap;
 
 import com.google.common.annotations.VisibleForTesting;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import org.apache.spark.internal.Logger;
+import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.util.Utils;
 
@@ -244,10 +246,12 @@ public class TaskMemoryManager {
       }
     } catch (ClosedByInterruptException e) {
       // This called by user to kill a task (e.g: speculative task).
-      logger.error("error while calling spill() on " + consumerToSpill, e);
+      logger.error("error while calling spill() on {}", e,
+        MDC.of(LogKeys.MEMORY_CONSUMER$.MODULE$, consumerToSpill));
       throw new RuntimeException(e.getMessage());
     } catch (IOException e) {
-      logger.error("error while calling spill() on " + consumerToSpill, e);
+      logger.error("error while calling spill() on {}", e,
+        MDC.of(LogKeys.MEMORY_CONSUMER$.MODULE$, consumerToSpill));
       // checkstyle.off: RegexpSinglelineJava
       throw new SparkOutOfMemoryError("error while calling spill() on " + consumerToSpill + " : "
         + e.getMessage());
@@ -270,24 +274,29 @@ public class TaskMemoryManager {
    * Dump the memory usage of all consumers.
    */
   public void showMemoryUsage() {
-    logger.info("Memory used in task " + taskAttemptId);
+    logger.info("Memory used in task {}",
+      MDC.of(LogKeys.TASK_ATTEMPT_ID$.MODULE$, taskAttemptId));
     synchronized (this) {
       long memoryAccountedForByConsumers = 0;
       for (MemoryConsumer c: consumers) {
         long totalMemUsage = c.getUsed();
         memoryAccountedForByConsumers += totalMemUsage;
         if (totalMemUsage > 0) {
-          logger.info("Acquired by " + c + ": " + Utils.bytesToString(totalMemUsage));
+          logger.info("Acquired by {}: {}",
+            MDC.of(LogKeys.MEMORY_CONSUMER$.MODULE$, c),
+            MDC.of(LogKeys.MEMORY_SIZE$.MODULE$, Utils.bytesToString(totalMemUsage)));
         }
       }
       long memoryNotAccountedFor =
         memoryManager.getExecutionMemoryUsageForTask(taskAttemptId) - memoryAccountedForByConsumers;
       logger.info(
         "{} bytes of memory were used by task {} but are not associated with specific consumers",
-        memoryNotAccountedFor, taskAttemptId);
+        MDC.of(LogKeys.MEMORY_SIZE$.MODULE$, memoryNotAccountedFor),
+        MDC.of(LogKeys.TASK_ATTEMPT_ID$.MODULE$, taskAttemptId));
       logger.info(
         "{} bytes of memory are used for execution and {} bytes of memory are used for storage",
-        memoryManager.executionMemoryUsed(), memoryManager.storageMemoryUsed());
+        MDC.of(LogKeys.EXECUTION_MEMORY_SIZE$.MODULE$, memoryManager.executionMemoryUsed()),
+        MDC.of(LogKeys.STORAGE_MEMORY_SIZE$.MODULE$,  memoryManager.storageMemoryUsed()));
     }
   }
 
@@ -333,7 +342,8 @@ public class TaskMemoryManager {
     try {
       page = memoryManager.tungstenMemoryAllocator().allocate(acquired);
     } catch (OutOfMemoryError e) {
-      logger.warn("Failed to allocate a page ({} bytes), try again.", acquired);
+      logger.warn("Failed to allocate a page ({} bytes), try again.",
+        MDC.of(LogKeys.PAGE_SIZE$.MODULE$, acquired));
       // there is no enough memory actually, it means the actual free memory is smaller than
       // MemoryManager thought, we should keep the acquired memory.
       synchronized (this) {

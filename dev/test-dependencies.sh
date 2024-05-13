@@ -31,7 +31,7 @@ export LC_ALL=C
 # NOTE: These should match those in the release publishing script, and be kept in sync with
 #   dev/create-release/release-build.sh
 HADOOP_MODULE_PROFILES="-Phive-thriftserver -Pkubernetes -Pyarn -Phive \
-    -Pspark-ganglia-lgpl -Pkinesis-asl -Phadoop-cloud"
+    -Pspark-ganglia-lgpl -Pkinesis-asl -Phadoop-cloud -Pjvm-profiler"
 MVN="build/mvn"
 HADOOP_HIVE_PROFILES=(
     hadoop-3-hive-2.3
@@ -139,5 +139,9 @@ for HADOOP_HIVE_PROFILE in "${HADOOP_HIVE_PROFILES[@]}"; do
     exit 1
   fi
 done
+
+if [[ -d "$FWDIR/dev/pr-deps" ]]; then
+  rm -rf "$FWDIR/dev/pr-deps"
+fi
 
 exit 0

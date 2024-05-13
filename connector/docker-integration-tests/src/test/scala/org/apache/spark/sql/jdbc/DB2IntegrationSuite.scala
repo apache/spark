@@ -21,10 +21,9 @@ import java.math.BigDecimal
 import java.sql.{Connection, Date, Timestamp}
 import java.util.Properties
 
-import org.scalatest.time.SpanSugar._
-
 import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, ByteType, ShortType, StructType}
 import org.apache.spark.tags.DockerTest
 
@@ -39,8 +38,6 @@ import org.apache.spark.tags.DockerTest
 @DockerTest
 class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
   override val db = new DB2DatabaseOnDocker
-
-  override val connectionTimeout = timeout(3.minutes)
 
   override def dataPreparation(conn: Connection): Unit = {
     conn.prepareStatement("CREATE TABLE tbl (x INTEGER, y VARCHAR(8))").executeUpdate()
@@ -77,32 +74,44 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
   }
 
   test("Numeric types") {
-    val df = sqlContext.read.jdbc(jdbcUrl, "numbers", new Properties)
-    val rows = df.collect()
-    assert(rows.length == 1)
-    val types = rows(0).toSeq.map(x => x.getClass.toString)
-    assert(types.length == 10)
-    assert(types(0).equals("class java.lang.Integer"))
-    assert(types(1).equals("class java.lang.Integer"))
-    assert(types(2).equals("class java.lang.Long"))
-    assert(types(3).equals("class java.math.BigDecimal"))
-    assert(types(4).equals("class java.lang.Double"))
-    assert(types(5).equals("class java.lang.Double"))
-    assert(types(6).equals("class java.lang.Float"))
-    assert(types(7).equals("class java.math.BigDecimal"))
-    assert(types(8).equals("class java.math.BigDecimal"))
-    assert(types(9).equals("class java.math.BigDecimal"))
-    assert(rows(0).getInt(0) == 17)
-    assert(rows(0).getInt(1) == 77777)
-    assert(rows(0).getLong(2) == 922337203685477580L)
-    val bd = new BigDecimal("123456745.56789012345000000000")
-    assert(rows(0).getAs[BigDecimal](3).equals(bd))
-    assert(rows(0).getDouble(4) == 42.75)
-    assert(rows(0).getDouble(5) == 5.4E-70)
-    assert(rows(0).getFloat(6) == 3.4028234663852886e+38)
-    assert(rows(0).getDecimal(7) == new BigDecimal("4.299900000000000000"))
-    assert(rows(0).getDecimal(8) == new BigDecimal("99999999999999990000.000000000000000000"))
-    assert(rows(0).getDecimal(9) == new BigDecimal("1234567891234567.123456789123456789"))
+    Seq(true, false).foreach { legacy =>
+      withSQLConf(SQLConf.LEGACY_DB2_TIMESTAMP_MAPPING_ENABLED.key -> legacy.toString) {
+        val df = sqlContext.read.jdbc(jdbcUrl, "numbers", new Properties)
+        val rows = df.collect()
+        assert(rows.length == 1)
+        val types = rows(0).toSeq.map(x => x.getClass.toString)
+        assert(types.length == 10)
+        if (legacy) {
+          assert(types(0).equals("class java.lang.Integer"))
+        } else {
+          assert(types(0).equals("class java.lang.Short"))
+        }
+        assert(types(1).equals("class java.lang.Integer"))
+        assert(types(2).equals("class java.lang.Long"))
+        assert(types(3).equals("class java.math.BigDecimal"))
+        assert(types(4).equals("class java.lang.Double"))
+        assert(types(5).equals("class java.lang.Double"))
+        assert(types(6).equals("class java.lang.Float"))
+        assert(types(7).equals("class java.math.BigDecimal"))
+        assert(types(8).equals("class java.math.BigDecimal"))
+        assert(types(9).equals("class java.math.BigDecimal"))
+        if (legacy) {
+          assert(rows(0).getInt(0) == 17)
+        } else {
+          assert(rows(0).getShort(0) == 17)
+        }
+        assert(rows(0).getInt(1) == 77777)
+        assert(rows(0).getLong(2) == 922337203685477580L)
+        val bd = new BigDecimal("123456745.56789012345000000000")
+        assert(rows(0).getAs[BigDecimal](3).equals(bd))
+        assert(rows(0).getDouble(4) == 42.75)
+        assert(rows(0).getDouble(5) == 5.4E-70)
+        assert(rows(0).getFloat(6) == 3.4028234663852886e+38)
+        assert(rows(0).getDecimal(7) == new BigDecimal("4.299900000000000000"))
+        assert(rows(0).getDecimal(8) == new BigDecimal("99999999999999990000.000000000000000000"))
+        assert(rows(0).getDecimal(9) == new BigDecimal("1234567891234567.123456789123456789"))
+      }
+    }
   }
 
   test("Date types") {
@@ -154,8 +163,8 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
       new StructType().add("c1", ShortType).add("b", ByteType).add("c3", BooleanType))
     df4.write.jdbc(jdbcUrl, "otherscopy", new Properties)
     val rows = sqlContext.read.jdbc(jdbcUrl, "otherscopy", new Properties).collect()
-    assert(rows(0).getInt(0) == 1)
-    assert(rows(0).getInt(1) == 20)
+    assert(rows(0).getShort(0) == 1)
+    assert(rows(0).getShort(1) == 20)
     assert(rows(0).getString(2) == "1")
   }
 

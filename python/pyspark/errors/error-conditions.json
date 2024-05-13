@@ -482,6 +482,11 @@
       "<arg1> and <arg2> should be of the same length, got <arg1_length> and <arg2_length>."
     ]
   },
+  "MALFORMED_VARIANT" : {
+    "message" : [
+      "Variant binary is malformed. Please check the data source is valid."
+    ]
+  },
   "MASTER_URL_NOT_SET": {
     "message": [
       "A master URL must be set in your configuration."

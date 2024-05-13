@@ -42,7 +42,7 @@ import org.apache.spark._
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.internal.{config, Logging, MDC}
-import org.apache.spark.internal.LogKeys.{BLOCK_ID, COUNT, SLEEP_TIME}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.{Network, RDD_CACHE_VISIBILITY_TRACKING_ENABLED, Tests}
 import org.apache.spark.memory.{MemoryManager, MemoryMode}
 import org.apache.spark.metrics.source.Source
@@ -423,7 +423,7 @@ private[spark] class BlockManager(
             saveSerializedValuesToMemoryStore(readToByteBuffer())
           }
           if (!putSucceeded && level.useDisk) {
-            logWarning(s"Persisting block $blockId to disk instead.")
+            logWarning(log"Persisting block ${MDC(BLOCK_ID, blockId)} to disk instead.")
             saveToDiskStore()
           }
         } else if (level.useDisk) {
@@ -1214,14 +1214,16 @@ private[spark] class BlockManager(
             // Give up trying anymore locations. Either we've tried all of the original locations,
             // or we've refreshed the list of locations from the master, and have still
             // hit failures after trying locations from the refreshed list.
-            logWarning(s"Failed to fetch remote block $blockId " +
-              s"from [${locations.mkString(", ")}] after $totalFailureCount fetch failures. " +
-              s"Most recent failure cause:", e)
+            logWarning(log"Failed to fetch remote block ${MDC(BLOCK_ID, blockId)} " +
+              log"from [${MDC(BLOCK_MANAGER_IDS, locations.mkString(", "))}] " +
+              log"after ${MDC(NUM_FAILURES, totalFailureCount)} fetch failures. " +
+              log"Most recent failure cause:", e)
             return None
           }
 
-          logWarning(s"Failed to fetch remote block $blockId " +
-            s"from $loc (failed attempt $runningFailureCount)", e)
+          logWarning(log"Failed to fetch remote block ${MDC(BLOCK_ID, blockId)} " +
+            log"from ${MDC(BLOCK_MANAGER_ID, loc)} " +
+            log"(failed attempt ${MDC(NUM_FAILURES, runningFailureCount)}", e)
 
           // If there is a large number of executors then locations list can contain a
           // large number of stale entries causing a large number of retries that may
@@ -1335,7 +1337,8 @@ private[spark] class BlockManager(
     // SPARK-27666. When a task completes, Spark automatically releases all the blocks locked
     // by this task. We should not release any locks for a task that is already completed.
     if (taskContext.isDefined && taskContext.get.isCompleted()) {
-      logWarning(s"Task ${taskAttemptId.get} already completed, not releasing lock for $blockId")
+      logWarning(log"Task ${MDC(TASK_ATTEMPT_ID, taskAttemptId.get)} " +
+        log"already completed, not releasing lock for ${MDC(BLOCK_ID, blockId)}")
     } else {
       blockInfoManager.unlock(blockId, taskAttemptId)
     }
@@ -1544,7 +1547,8 @@ private[spark] class BlockManager(
       if (blockInfoManager.lockNewBlockForWriting(blockId, newInfo, keepReadLock)) {
         newInfo
       } else {
-        logWarning(s"Block $blockId already exists on this machine; not re-adding it")
+        logWarning(log"Block ${MDC(BLOCK_ID, blockId)} " +
+          log"already exists on this machine; not re-adding it")
         return None
       }
     }
@@ -1562,7 +1566,7 @@ private[spark] class BlockManager(
           blockInfoManager.unlock(blockId)
         }
       } else {
-        logWarning(s"Putting block $blockId failed")
+        logWarning(log"Putting block ${MDC(BLOCK_ID, blockId)} failed")
         removeBlockInternal(blockId, tellMaster = false)
       }
       res
@@ -1570,7 +1574,8 @@ private[spark] class BlockManager(
       // Since removeBlockInternal may throw exception,
       // we should print exception first to show root cause.
       case NonFatal(e) =>
-        logWarning(s"Putting block $blockId failed due to exception $e.")
+        logWarning(log"Putting block ${MDC(BLOCK_ID, blockId)} " +
+          log"failed due to exception ${MDC(ERROR, e)}.")
         throw e
     } finally {
       // This cleanup is performed in a finally block rather than a `catch` to avoid having to
@@ -1631,7 +1636,7 @@ private[spark] class BlockManager(
             case Left(iter) =>
               // Not enough space to unroll this block; drop to disk if applicable
               if (level.useDisk) {
-                logWarning(s"Persisting block $blockId to disk instead.")
+                logWarning(log"Persisting block ${MDC(BLOCK_ID, blockId)} to disk instead.")
                 diskStore.put(blockId) { channel =>
                   val out = Channels.newOutputStream(channel)
                   serializerManager.dataSerializeStream(blockId, out, iter)(classTag)
@@ -1648,7 +1653,7 @@ private[spark] class BlockManager(
             case Left(partiallySerializedValues) =>
               // Not enough space to unroll this block; drop to disk if applicable
               if (level.useDisk) {
-                logWarning(s"Persisting block $blockId to disk instead.")
+                logWarning(log"Persisting block ${MDC(BLOCK_ID, blockId)} to disk instead.")
                 diskStore.put(blockId) { channel =>
                   val out = Channels.newOutputStream(channel)
                   partiallySerializedValues.finishWritingToStream(out)
@@ -1904,7 +1909,9 @@ private[spark] class BlockManager(
           throw e
         // Everything else we may retry
         case NonFatal(e) =>
-          logWarning(s"Failed to replicate $blockId to $peer, failure #$numFailures", e)
+          logWarning(log"Failed to replicate ${MDC(BLOCK_ID, blockId)} " +
+            log"to ${MDC(PEER, peer)}, " +
+            log"failure #${MDC(NUM_FAILURES, numFailures)}", e)
           peersFailedToReplicateTo += peer
           // we have a failed replication, so we get the list of peers again
           // we don't want peers we have already replicated to and the ones that
@@ -1925,8 +1932,9 @@ private[spark] class BlockManager(
     logDebug(s"Replicating $blockId of ${data.size} bytes to " +
       s"${peersReplicatedTo.size} peer(s) took ${(System.nanoTime - startTime) / 1e6} ms")
     if (peersReplicatedTo.size < numPeersToReplicateTo) {
-      logWarning(s"Block $blockId replicated to only " +
-        s"${peersReplicatedTo.size} peer(s) instead of $numPeersToReplicateTo peers")
+      logWarning(log"Block ${MDC(BLOCK_ID, blockId)} replicated to only " +
+        log"${MDC(NUM_PEERS_REPLICATED_TO, peersReplicatedTo.size)} peer(s) " +
+        log"instead of ${MDC(NUM_PEERS_TO_REPLICATE_TO, numPeersToReplicateTo)} peers")
       return false
     }
 
@@ -1999,7 +2007,8 @@ private[spark] class BlockManager(
     if (blockIsRemoved) {
       blockIsUpdated = true
     } else {
-      logWarning(s"Block $blockId could not be dropped from memory as it does not exist")
+      logWarning(log"Block ${MDC(BLOCK_ID, blockId)} " +
+        log"could not be dropped from memory as it does not exist")
     }
 
     val status = getCurrentBlockStatus(blockId, info)
@@ -2083,7 +2092,8 @@ private[spark] class BlockManager(
     blockInfoManager.lockForWriting(blockId) match {
       case None =>
         // The block has already been removed; do nothing.
-        logWarning(s"Asked to remove block $blockId, which does not exist")
+        logWarning(log"Asked to remove block ${MDC(BLOCK_ID, blockId)}, " +
+          log"which does not exist")
       case Some(info) =>
         removeBlockInternal(blockId, tellMaster = tellMaster && info.tellMaster)
         addUpdatedBlockStatusToTaskMetrics(blockId, BlockStatus.empty)
@@ -2106,7 +2116,8 @@ private[spark] class BlockManager(
       val removedFromMemory = memoryStore.remove(blockId)
       val removedFromDisk = diskStore.remove(blockId)
       if (!removedFromMemory && !removedFromDisk) {
-        logWarning(s"Block $blockId could not be removed as it was not found on disk or in memory")
+        logWarning(log"Block ${MDC(BLOCK_ID, blockId)} " +
+          log"could not be removed as it was not found on disk or in memory")
       }
 
       blockInfoManager.removeBlock(blockId)
@@ -2118,7 +2129,7 @@ private[spark] class BlockManager(
       }
     } finally {
       if (!hasRemoveBlock) {
-        logWarning(s"Block $blockId was not removed normally.")
+        logWarning(log"Block ${MDC(BLOCK_ID, blockId)} was not removed normally.")
         blockInfoManager.removeBlock(blockId)
       }
     }

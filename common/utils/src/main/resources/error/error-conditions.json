@@ -125,6 +125,12 @@
     ],
     "sqlState" : "428FR"
   },
+  "CANNOT_ASSIGN_EVENT_TIME_COLUMN_WITHOUT_WATERMARK" : {
+    "message" : [
+      "Watermark needs to be defined to reassign event time column. Failed to find watermark definition in the streaming query."
+    ],
+    "sqlState" : "42611"
+  },
   "CANNOT_CAST_DATATYPE" : {
     "message" : [
       "Cannot cast <sourceType> to <targetType>."
@@ -1057,6 +1063,14 @@
     },
     "sqlState" : "4274K"
   },
+  "EMITTING_ROWS_OLDER_THAN_WATERMARK_NOT_ALLOWED" : {
+    "message" : [
+      "Previous node emitted a row with eventTime=<emittedRowEventTime> which is older than current_watermark_value=<currentWatermark>",
+      "This can lead to correctness issues in the stateful operators downstream in the execution pipeline.",
+      "Please correct the operator logic to emit rows after current global watermark value."
+    ],
+    "sqlState" : "42815"
+  },
   "EMPTY_JSON_FIELD_VALUE" : {
     "message" : [
       "Failed to parse an empty string for data type <dataType>."
@@ -1325,7 +1339,7 @@
     ],
     "sqlState" : "54001"
   },
-  "FIELDS_ALREADY_EXISTS" : {
+  "FIELD_ALREADY_EXISTS" : {
     "message" : [
       "Cannot <op> column, because <fieldNames> already exists in <struct>."
     ],

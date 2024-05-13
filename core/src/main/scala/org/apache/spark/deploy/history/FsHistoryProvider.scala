@@ -38,7 +38,8 @@ import org.apache.hadoop.security.AccessControlException
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.PATH
+import org.apache.spark.internal.LogKeys
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.Status._
@@ -569,12 +570,13 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
                 case _: FileNotFoundException => false
                 case _: NoSuchElementException => false
                 case NonFatal(e) =>
-                  logWarning(s"Error while reading new log ${reader.rootPath}", e)
+                  logWarning(log"Error while reading new log " +
+                    log"${MDC(PATH, reader.rootPath)}", e)
                   false
               }
 
             case NonFatal(e) =>
-              logWarning(s"Error while filtering log ${reader.rootPath}", e)
+              logWarning(log"Error while filtering log ${MDC(PATH, reader.rootPath)}", e)
               false
           }
         }
@@ -729,7 +731,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         throw e
       case e: AccessControlException =>
         // We don't have read permissions on the log file
-        logWarning(s"Unable to read log $rootPath", e)
+        logWarning(log"Unable to read log ${MDC(PATH, rootPath)}", e)
         markInaccessible(rootPath)
         // SPARK-28157 We should remove this inaccessible entry from the KVStore
         // to handle permission-only changes with the same file sizes later.
@@ -744,8 +746,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           // Do nothing, the application completed during processing, the final event log file
           // will be processed by next around.
         } else {
-          logWarning(s"In-progress event log file does not exist: ${reader.rootPath}, " +
-            s"neither does the final event log file: $finalFilePath.")
+          logWarning(log"In-progress event log file does not exist: " +
+            log"${MDC(PATH, reader.rootPath)}, " +
+            log"neither does the final event log file: ${MDC(FINAL_PATH, finalFilePath)}.")
         }
       case e: Exception =>
         logError("Exception while merging application listings", e)
@@ -919,7 +922,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       case e: InterruptedException =>
         throw e
       case e: AccessControlException =>
-        logWarning(s"Insufficient permission while compacting log for $rootPath", e)
+        logWarning(log"Insufficient permission while compacting log for ${MDC(PATH, rootPath)}", e)
       case e: Exception =>
         logError(log"Exception while compacting log for ${MDC(PATH, rootPath)}", e)
     } finally {
@@ -1011,7 +1014,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         }
       }
       if (count > 0) {
-        logWarning(s"Fail to clean up according to MAX_LOG_NUM policy ($maxNum).")
+        logWarning(log"Fail to clean up according to MAX_LOG_NUM policy " +
+          log"(${MDC(MAX_LOG_NUM_POLICY, maxNum)}).")
       }
     }
 
@@ -1275,8 +1279,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         case _: IOException if !retried =>
           // compaction may touch the file(s) which app rebuild wants to read
           // compaction wouldn't run in short interval, so try again...
-          logWarning(s"Exception occurred while rebuilding log path ${attempt.logPath} - " +
-            "trying again...")
+          logWarning(log"Exception occurred while rebuilding log path " +
+            log"${MDC(PATH, attempt.logPath)} - " +
+            log"trying again...")
           store.close()
           memoryManager.release(appId, attempt.info.attemptId)
           retried = true
@@ -1303,7 +1308,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           memoryManager.release(appId, attempt.info.attemptId)
         }
         override def onSwitchToDiskStoreFail(e: Exception): Unit = {
-          logWarning(s"Failed to switch to diskStore for app $appId / ${attempt.info.attemptId}", e)
+          logWarning(log"Failed to switch to diskStore for app ${MDC(APP_ID, appId)} / " +
+            log"${MDC(LogKeys.APP_ATTEMPT_ID, attempt.info.attemptId)}", e)
           diskStore.close()
           lease.rollback()
         }
@@ -1343,7 +1349,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         case _: IOException if !retried =>
           // compaction may touch the file(s) which app rebuild wants to read
           // compaction wouldn't run in short interval, so try again...
-          logWarning(s"Exception occurred while rebuilding app $appId - trying again...")
+          logWarning(log"Exception occurred while rebuilding app ${MDC(APP_ID, appId)} - " +
+            log"trying again...")
           lease.rollback()
           retried = true
 
