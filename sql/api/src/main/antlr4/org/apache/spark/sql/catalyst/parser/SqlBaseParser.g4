@@ -40,8 +40,6 @@ options { tokenVocab = SqlBaseLexer; }
    * When true, double quoted literals are identifiers rather than STRINGs.
    */
   public boolean double_quoted_identifiers = false;
-
-  public boolean parsing_complex_type = false;
 }
 
 singleStatement

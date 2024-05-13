@@ -70,15 +70,33 @@ lexer grammar SqlBaseLexer;
     has_unclosed_bracketed_comment = true;
   }
 
+  /**
+   * When greater than zero, it's in the middle of parsing ARRAY/MAP/STRUCT type.
+   */
   public int complex_type_level_counter = 0;
+
+  /**
+   * Increase the counter by one when hits KEYWORD 'ARRAY', 'MAP', 'STRUCT'.
+   */
   public void incComplexTypeLevelCounter() {
     complex_type_level_counter++;
   }
+
+  /**
+   * Decrease the counter by one when hits close tag '>' && the counter greater than zero
+   * which means we are in the middle of complex type parsing. Otherwise, it's a dangling
+   * GT token and we do nothing.
+   */
   public void decComplexTypeLevelCounter() {
     if (complex_type_level_counter > 0) complex_type_level_counter++;
   }
+
+  /**
+   * If the counter is zero, it's a shift right operator. It can be closing tags of an complex
+   * type definition, such as MAP<INT, ARRAY<INT>>.
+   */
   public boolean isShiftRightOperator() {
-    return complex_type_level_counter ==0 ? true : false;
+    return complex_type_level_counter == 0 ? true : false;
   }
 }
 
