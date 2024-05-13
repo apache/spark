@@ -283,7 +283,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long, serializedO
             val startTimeNs = System.nanoTime()
             val blocks = readBlocks()
             logInfo(log"Reading broadcast variable ${MDC(BROADCAST_ID, id)}" +
-              log" took ${MDC(TOTAL_TIME, Utils.getUsedTimeNs(startTimeNs))} ms")
+              log" took ${MDC(TOTAL_TIME, Utils.getUsedTimeNs(startTimeNs))}")
 
             try {
               val obj = TorrentBroadcast.unBlockifyObject[T](
