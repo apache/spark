@@ -281,7 +281,7 @@ class StringType(AtomicType):
         return (
             "string"
             if self.isUTF8BinaryCollation()
-            else "string collate" + self.collationIdToName(self.collationId)
+            else "string collate " + self.collationIdToName(self.collationId)
         )
 
     def jsonValue(self) -> str:
