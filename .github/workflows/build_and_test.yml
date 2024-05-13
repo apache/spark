@@ -702,6 +702,8 @@ jobs:
     - name: Dependencies test
       run: ./dev/test-dependencies.sh
     - name: MIMA test
+      env:
+        SKIP_LOCAL_M2: true
       run: ./dev/mima
     - name: Scala linter
       run: ./dev/lint-scala
