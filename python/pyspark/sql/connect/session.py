@@ -73,6 +73,7 @@ from pyspark.sql.pandas.types import (
     to_arrow_schema,
     to_arrow_type,
     _deduplicate_field_names,
+    from_arrow_schema,
     from_arrow_type,
 )
 from pyspark.sql.profiler import Profile
@@ -413,7 +414,7 @@ class SparkSession:
 
     def createDataFrame(
         self,
-        data: Union["pd.DataFrame", "np.ndarray", Iterable[Any]],
+        data: Union["pd.DataFrame", "np.ndarray", "pa.Table", Iterable[Any]],
         schema: Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]] = None,
         samplingRatio: Optional[float] = None,
         verifySchema: Optional[bool] = None,
@@ -477,35 +478,40 @@ class SparkSession:
 
         _table: Optional[pa.Table] = None
 
-        if isinstance(data, pd.DataFrame):
+        if isinstance(data, pd.DataFrame) or isinstance(data, pa.Table):
             # Logic was borrowed from `_create_from_pandas_with_arrow` in
             # `pyspark.sql.pandas.conversion.py`. Should ideally deduplicate the logics.
 
             # If no schema supplied by user then get the names of columns only
             if schema is None:
-                _cols = [str(x) if not isinstance(x, str) else x for x in data.columns]
-                infer_pandas_dict_as_map = (
-                    str(self.conf.get("spark.sql.execution.pandas.inferPandasDictAsMap")).lower()
-                    == "true"
-                )
-                if infer_pandas_dict_as_map:
-                    struct = StructType()
-                    pa_schema = pa.Schema.from_pandas(data)
-                    spark_type: Union[MapType, DataType]
-                    for field in pa_schema:
-                        field_type = field.type
-                        if isinstance(field_type, pa.StructType):
-                            if len(field_type) == 0:
-                                raise PySparkValueError(
-                                    error_class="CANNOT_INFER_EMPTY_SCHEMA",
-                                    message_parameters={},
-                                )
-                            arrow_type = field_type.field(0).type
-                            spark_type = MapType(StringType(), from_arrow_type(arrow_type))
-                        else:
-                            spark_type = from_arrow_type(field_type)
-                        struct.add(field.name, spark_type, nullable=field.nullable)
-                    schema = struct
+                if isinstance(data, pd.DataFrame):
+                    _cols = [str(x) if not isinstance(x, str) else x for x in data.columns]
+                    infer_pandas_dict_as_map = (
+                        str(
+                            self.conf.get("spark.sql.execution.pandas.inferPandasDictAsMap")
+                        ).lower()
+                        == "true"
+                    )
+                    if infer_pandas_dict_as_map:
+                        struct = StructType()
+                        pa_schema = pa.Schema.from_pandas(data)
+                        spark_type: Union[MapType, DataType]
+                        for field in pa_schema:
+                            field_type = field.type
+                            if isinstance(field_type, pa.StructType):
+                                if len(field_type) == 0:
+                                    raise PySparkValueError(
+                                        error_class="CANNOT_INFER_EMPTY_SCHEMA",
+                                        message_parameters={},
+                                    )
+                                arrow_type = field_type.field(0).type
+                                spark_type = MapType(StringType(), from_arrow_type(arrow_type))
+                            else:
+                                spark_type = from_arrow_type(field_type)
+                            struct.add(field.name, spark_type, nullable=field.nullable)
+                        schema = struct
+                elif isinstance(data, pa.Table):
+                    schema = from_arrow_schema(data.schema, prefer_timestamp_ntz=True)
             elif isinstance(schema, (list, tuple)) and cast(int, _num_cols) < len(data.columns):
                 assert isinstance(_cols, list)
                 _cols.extend([f"_{i + 1}" for i in range(cast(int, _num_cols), len(data.columns))])
@@ -526,7 +532,7 @@ class SparkSession:
                     error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW",
                     message_parameters={"data_type": str(schema)},
                 )
-            else:
+            elif isinstance(data, pd.DataFrame):
                 # Any timestamps must be coerced to be compatible with Spark
                 spark_types = [
                     TimestampType()
@@ -544,16 +550,19 @@ class SparkSession:
 
             ser = ArrowStreamPandasSerializer(cast(str, timezone), safecheck == "true")
 
-            _table = pa.Table.from_batches(
-                [
-                    ser._create_batch(
-                        [
-                            (c, at, st)
-                            for (_, c), at, st in zip(data.items(), arrow_types, spark_types)
-                        ]
-                    )
-                ]
-            )
+            if isinstance(data, pd.DataFrame):
+                _table = pa.Table.from_batches(
+                    [
+                        ser._create_batch(
+                            [
+                                (c, at, st)
+                                for (_, c), at, st in zip(data.items(), arrow_types, spark_types)
+                            ]
+                        )
+                    ]
+                )
+            else:
+                _table = data
 
             if isinstance(schema, StructType):
                 assert arrow_schema is not None

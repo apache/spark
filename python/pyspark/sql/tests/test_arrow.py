@@ -181,7 +181,6 @@ class ArrowTestsMixin:
 
     def create_arrow_table(self):
         import pyarrow as pa
-        import pyarrow.compute as pc
 
         data_dict = {}
         for j, name in enumerate(self.schema.names):
@@ -199,13 +198,6 @@ class ArrowTestsMixin:
             pa.field("6_decimal_t", pa.decimal128(38, 18)),
         )
         t = t.cast(new_schema)
-        # convert timestamp to local timezone
-        timezone = self.spark.conf.get("spark.sql.session.timeZone")
-        t = t.set_column(
-            t.schema.get_field_index("8_timestamp_t"),
-            "8_timestamp_t",
-            pc.assume_timezone(t["8_timestamp_t"], timezone),
-        )
         return t
 
     @property
@@ -369,9 +361,28 @@ class ArrowTestsMixin:
         assert_frame_equal(pdf_arrow, pdf)
 
     def test_arrow_round_trip(self):
+        import pyarrow.compute as pc
+
         t_in = self.create_arrow_table()
+
+        # Convert timezone-naive local timestamp column in input table to UTC
+        # to enable comparison to UTC timestamp column in output table
+        timezone = self.spark.conf.get("spark.sql.session.timeZone")
+        t_in = t_in.set_column(
+            t_in.schema.get_field_index("8_timestamp_t"),
+            "8_timestamp_t",
+            pc.assume_timezone(t_in["8_timestamp_t"], timezone),
+        )
+        t_in = t_in.cast(
+            t_in.schema.set(
+                t_in.schema.get_field_index("8_timestamp_t"),
+                pa.field("8_timestamp_t", pa.timestamp("us", tz="UTC")),
+            )
+        )
+
         df = self.spark.createDataFrame(self.data, schema=self.schema)
         t_out = df.toArrow()
+
         self.assertTrue(t_out.equals(t_in))
 
     def test_pandas_self_destruct(self):
@@ -436,6 +447,13 @@ class ArrowTestsMixin:
 
         with self.assertRaisesRegex(Exception, "My error"):
             df.toPandas()
+
+    def test_createDataFrame_arrow_pandas(self):
+        table = self.create_arrow_table()
+        pdf = self.create_pandas_data_frame()
+        df_arrow = self.spark.createDataFrame(table)
+        df_pandas = self.spark.createDataFrame(pdf)
+        self.assertEqual(df_arrow.collect(), df_pandas.collect())
 
     def _createDataFrame_toggle(self, data, schema=None):
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):

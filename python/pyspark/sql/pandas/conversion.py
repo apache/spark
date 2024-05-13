@@ -21,6 +21,7 @@ from typing import (
     List,
     Optional,
     Union,
+    cast,
     no_type_check,
     overload,
     TYPE_CHECKING,
@@ -56,8 +57,8 @@ if TYPE_CHECKING:
 
 class PandasConversionMixin:
     """
-    Mix-in for the conversion from Spark to pandas. Currently, only :class:`DataFrame`
-    can use this class.
+    Mix-in for the conversion from Spark to pandas and PyArrow. Currently, only
+    :class:`DataFrame` can use this class.
     """
 
     def toPandas(self) -> "PandasDataFrameLike":
@@ -236,7 +237,7 @@ class PandasConversionMixin:
         from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 
         require_minimum_pyarrow_version()
-        to_arrow_schema(self.schema)
+        schema = to_arrow_schema(self.schema)
 
         import pyarrow as pa
 
@@ -244,7 +245,7 @@ class PandasConversionMixin:
         batches = self._collect_as_arrow(
             split_batches=self_destruct, empty_list_if_zero_records=False
         )
-        table = pa.Table.from_batches(batches)
+        table = pa.Table.from_batches(batches).cast(schema)
         # Ensure only the table has a reference to the batches, so that
         # self_destruct (if enabled) is effective
         del batches
@@ -320,6 +321,7 @@ class PandasConversionMixin:
             return [batches[i] for i in batch_order]
         else:
             from pyspark.sql.pandas.types import to_arrow_schema
+            import pyarrow as pa
 
             schema = to_arrow_schema(self.schema)
             empty_arrays = [pa.array([], type=field.type) for field in schema]
@@ -328,8 +330,8 @@ class PandasConversionMixin:
 
 class SparkConversionMixin:
     """
-    Min-in for the conversion from pandas to Spark. Currently, only :class:`SparkSession`
-    can use this class.
+    Min-in for the conversion from pandas and PyArrow to Spark. Currently, only
+    :class:`SparkSession` can use this class.
     """
 
     _jsparkSession: "JavaObject"
@@ -342,6 +344,12 @@ class SparkConversionMixin:
 
     @overload
     def createDataFrame(
+        self, data: "pa.Table", samplingRatio: Optional[float] = ...
+    ) -> "DataFrame":
+        ...
+
+    @overload
+    def createDataFrame(
         self,
         data: "PandasDataFrameLike",
         schema: Union[StructType, str],
@@ -349,9 +357,18 @@ class SparkConversionMixin:
     ) -> "DataFrame":
         ...
 
+    @overload
+    def createDataFrame(
+        self,
+        data: "pa.Table",
+        schema: Union[StructType, str],
+        verifySchema: bool = ...,
+    ) -> "DataFrame":
+        ...
+
     def createDataFrame(  # type: ignore[misc]
         self,
-        data: "PandasDataFrameLike",
+        data: Union["PandasDataFrameLike", "pa.Table"],
         schema: Optional[Union[StructType, List[str]]] = None,
         samplingRatio: Optional[float] = None,
         verifySchema: bool = True,
@@ -360,42 +377,56 @@ class SparkConversionMixin:
 
         assert isinstance(self, SparkSession)
 
-        from pyspark.sql.pandas.utils import require_minimum_pandas_version
-
-        require_minimum_pandas_version()
-
         timezone = self._jconf.sessionLocalTimeZone()
 
-        # If no schema supplied by user then get the names of columns only
-        if schema is None:
-            schema = [str(x) if not isinstance(x, str) else x for x in data.columns]
+        if type(data).__name__ == "Table":
+            # `data` is a PyArrow Table
+            from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 
-        if self._jconf.arrowPySparkEnabled() and len(data) > 0:
-            try:
-                return self._create_from_pandas_with_arrow(data, schema, timezone)
-            except Exception as e:
-                if self._jconf.arrowPySparkFallbackEnabled():
-                    msg = (
-                        "createDataFrame attempted Arrow optimization because "
-                        "'spark.sql.execution.arrow.pyspark.enabled' is set to true; however, "
-                        "failed by the reason below:\n  %s\n"
-                        "Attempting non-optimization as "
-                        "'spark.sql.execution.arrow.pyspark.fallback.enabled' is set to "
-                        "true." % str(e)
-                    )
-                    warn(msg)
-                else:
-                    msg = (
-                        "createDataFrame attempted Arrow optimization because "
-                        "'spark.sql.execution.arrow.pyspark.enabled' is set to true, but has "
-                        "reached the error below and will not continue because automatic "
-                        "fallback with 'spark.sql.execution.arrow.pyspark.fallback.enabled' "
-                        "has been set to false.\n  %s" % str(e)
-                    )
-                    warn(msg)
-                    raise
-        converted_data = self._convert_from_pandas(data, schema, timezone)
-        return self._create_dataframe(converted_data, schema, samplingRatio, verifySchema)
+            require_minimum_pyarrow_version()
+
+            # If no schema supplied by user then get the names of columns only
+            if schema is None:
+                schema = data.schema.names
+
+            return self._create_from_arrow_table(data, schema, timezone)
+
+        else:
+            # `data` is a PandasDataFrameLike object
+            from pyspark.sql.pandas.utils import require_minimum_pandas_version
+
+            require_minimum_pandas_version()
+
+            # If no schema supplied by user then get the names of columns only
+            if schema is None:
+                schema = [str(x) if not isinstance(x, str) else x for x in data.columns]
+
+            if self._jconf.arrowPySparkEnabled() and len(data) > 0:
+                try:
+                    return self._create_from_pandas_with_arrow(data, schema, timezone)
+                except Exception as e:
+                    if self._jconf.arrowPySparkFallbackEnabled():
+                        msg = (
+                            "createDataFrame attempted Arrow optimization because "
+                            "'spark.sql.execution.arrow.pyspark.enabled' is set to true; however, "
+                            "failed by the reason below:\n  %s\n"
+                            "Attempting non-optimization as "
+                            "'spark.sql.execution.arrow.pyspark.fallback.enabled' is set to "
+                            "true." % str(e)
+                        )
+                        warn(msg)
+                    else:
+                        msg = (
+                            "createDataFrame attempted Arrow optimization because "
+                            "'spark.sql.execution.arrow.pyspark.enabled' is set to true, but has "
+                            "reached the error below and will not continue because automatic "
+                            "fallback with 'spark.sql.execution.arrow.pyspark.fallback.enabled' "
+                            "has been set to false.\n  %s" % str(e)
+                        )
+                        warn(msg)
+                        raise
+            converted_data = self._convert_from_pandas(data, schema, timezone)
+            return self._create_dataframe(converted_data, schema, samplingRatio, verifySchema)
 
     def _convert_from_pandas(
         self, pdf: "PandasDataFrameLike", schema: Union[StructType, str, List[str]], timezone: str
@@ -694,6 +725,77 @@ class SparkConversionMixin:
 
         safecheck = self._jconf.arrowSafeTypeConversion()
         ser = ArrowStreamPandasSerializer(timezone, safecheck)
+
+        @no_type_check
+        def reader_func(temp_filename):
+            return self._jvm.PythonSQLUtils.readArrowStreamFromFile(temp_filename)
+
+        @no_type_check
+        def create_iter_server():
+            return self._jvm.ArrowIteratorServer()
+
+        # Create Spark DataFrame from Arrow stream file, using one batch per partition
+        jiter = self._sc._serialize_to_jvm(arrow_data, ser, reader_func, create_iter_server)
+        assert self._jvm is not None
+        jdf = self._jvm.PythonSQLUtils.toDataFrame(jiter, schema.json(), jsparkSession)
+        df = DataFrame(jdf, self)
+        df._schema = schema
+        return df
+
+    def _create_from_arrow_table(
+        self, table: "pa.Table", schema: Union[StructType, List[str]], timezone: str
+    ) -> "DataFrame":
+        """
+        Create a DataFrame from a given pyarrow.Table by slicing it into partitions then
+        sending to the JVM to parallelize.
+        """
+        # TODO: what to do about timezone? do we need it? it's unused here.
+        from pyspark.sql import SparkSession
+        from pyspark.sql.dataframe import DataFrame
+
+        assert isinstance(self, SparkSession)
+
+        from pyspark.sql.pandas.serializers import ArrowStreamSerializer
+        from pyspark.sql.pandas.types import (
+            from_arrow_type,
+            from_arrow_schema,
+            _deduplicate_field_names,
+        )
+        from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
+
+        require_minimum_pyarrow_version()
+
+        # Create the Spark schema from list of names passed in with Arrow types
+        if isinstance(schema, (list, tuple)):
+            arrow_schema = table.schema
+            prefer_timestamp_ntz = is_timestamp_ntz_preferred()
+            struct = StructType()
+            for name, field in zip(schema, arrow_schema):
+                struct.add(
+                    name,
+                    from_arrow_type(field.type, prefer_timestamp_ntz),
+                    nullable=field.nullable,
+                )
+            schema = struct
+
+        if isinstance(schema, StructType):
+            schema = cast(StructType, _deduplicate_field_names(schema))
+        elif isinstance(schema, DataType):
+            raise PySparkTypeError(
+                error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW",
+                message_parameters={"data_type": str(schema)},
+            )
+        else:
+            # TODO: coerce timestamps?
+            schema = from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
+
+        # Chunk the Arrow Table into RecordBatches
+        chunk_size = self._jconf.arrowMaxRecordsPerBatch()
+        arrow_data = table.to_batches(max_chunksize=chunk_size)
+
+        jsparkSession = self._jsparkSession
+
+        ser = ArrowStreamSerializer()
 
         @no_type_check
         def reader_func(temp_filename):
