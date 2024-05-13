@@ -210,8 +210,8 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
           assert(row.getDouble(6) == 1.23456788103168E14) // float(24) has 7-digits precision
           assert(row.getDouble(7) == 1.23456788103168E14) // real = float(24)
         } else {
-          assert(row.getFloat(6) == 1.23456788103168E14) // float(24) has 7-digits precision
-          assert(row.getFloat(7) == 1.23456788103168E14) // real = float(24)
+          assert(row.getFloat(6) == 1.23456788103168E14)  // float(24) has 7-digits precision
+          assert(row.getFloat(7) == 1.23456788103168E14)  // real = float(24)
         }
         assert(row.getAs[BigDecimal](8).equals(new BigDecimal("123.00")))
         assert(row.getAs[BigDecimal](9).equals(new BigDecimal("12345.12000")))
