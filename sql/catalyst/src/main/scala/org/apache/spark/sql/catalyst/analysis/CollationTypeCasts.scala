@@ -125,9 +125,6 @@ object CollationTypeCasts extends TypeCoercionRule {
   def getOutputCollation(expr: Seq[Expression]): StringType = {
     val explicitTypes = expr.filter {
         case _: Collate => true
-        case cast: Cast if cast.getTagValue(Cast.USER_SPECIFIED_CAST).isDefined =>
-          cast.dataType.isInstanceOf[StringType] &&
-          !cast.dataType.asInstanceOf[StringType].createdAsNonCollated
         case _ => false
       }
       .map(_.dataType.asInstanceOf[StringType].collationId)
@@ -146,6 +143,8 @@ object CollationTypeCasts extends TypeCoercionRule {
       case 0 =>
         val implicitTypes = expr.filter {
             case Literal(_, _: StringType) => false
+            case cast: Cast if cast.getTagValue(Cast.USER_SPECIFIED_CAST).isDefined =>
+              !cast.dataType.asInstanceOf[StringType].createdAsNonCollated
             case cast: Cast if cast.getTagValue(Cast.USER_SPECIFIED_CAST).isEmpty =>
               cast.child.dataType.isInstanceOf[StringType]
             case _ => true
