@@ -69,6 +69,17 @@ lexer grammar SqlBaseLexer;
   public void markUnclosedComment() {
     has_unclosed_bracketed_comment = true;
   }
+
+  public int complex_type_level_counter = 0;
+  public void incComplexTypeLevelCounter() {
+    complex_type_level_counter++;
+  }
+  public void decComplexTypeLevelCounter() {
+    complex_type_level_counter++;
+  }
+  public boolean isShiftRightOperator() {
+    return complex_type_level_counter ==0 ? true : false;
+  }
 }
 
 SEMICOLON: ';';
@@ -100,7 +111,7 @@ ANTI: 'ANTI';
 ANY: 'ANY';
 ANY_VALUE: 'ANY_VALUE';
 ARCHIVE: 'ARCHIVE';
-ARRAY: 'ARRAY';
+ARRAY: 'ARRAY' {incComplexTypeLevelCounter();};
 AS: 'AS';
 ASC: 'ASC';
 AT: 'AT';
@@ -257,7 +268,7 @@ LOCKS: 'LOCKS';
 LOGICAL: 'LOGICAL';
 LONG: 'LONG';
 MACRO: 'MACRO';
-MAP: 'MAP';
+MAP: 'MAP' {incComplexTypeLevelCounter();};
 MATCHED: 'MATCHED';
 MERGE: 'MERGE';
 MICROSECOND: 'MICROSECOND';
@@ -360,7 +371,7 @@ STATISTICS: 'STATISTICS';
 STORED: 'STORED';
 STRATIFY: 'STRATIFY';
 STRING: 'STRING';
-STRUCT: 'STRUCT';
+STRUCT: 'STRUCT' {incComplexTypeLevelCounter();};
 SUBSTR: 'SUBSTR';
 SUBSTRING: 'SUBSTRING';
 SYNC: 'SYNC';
@@ -437,8 +448,11 @@ NEQ : '<>';
 NEQJ: '!=';
 LT  : '<';
 LTE : '<=' | '!>';
-GT  : '>';
+GT  : '>' {decComplexTypeLevelCounter();};
 GTE : '>=' | '!<';
+SHIFT_LEFT: '<<';
+SHIFT_RIGHT: '>>' {isShiftRightOperator()}?;
+SHIFT_RIGHT_UNSIGNED: '>>>' {isShiftRightOperator()}?;
 
 PLUS: '+';
 MINUS: '-';

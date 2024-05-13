@@ -327,3 +327,80 @@ SELECT 20181117 >>> 2
 -- !query analysis
 Project [(20181117 >>> 2) AS (20181117 >>> 2)#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT 20181117 > > 2
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'>'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+SELECT 20181117 < < 2
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'<'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+SELECT 20181117 > >> 2
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'>'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+SELECT 20181117 >> 2
+-- !query analysis
+Project [(20181117 >> 2) AS (20181117 >> 2)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT 20181117 <<< 2
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'<'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+SELECT 20181117 >>>> 2
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'>'",
+    "hint" : ""
+  }
+}

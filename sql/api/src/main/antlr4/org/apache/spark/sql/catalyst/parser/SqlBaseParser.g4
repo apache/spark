@@ -40,6 +40,8 @@ options { tokenVocab = SqlBaseLexer; }
    * When true, double quoted literals are identifiers rather than STRINGs.
    */
   public boolean double_quoted_identifiers = false;
+
+  public boolean parsing_complex_type = false;
 }
 
 singleStatement
@@ -981,14 +983,14 @@ valueExpression
     | left=valueExpression operator=AMPERSAND right=valueExpression                          #arithmeticBinary
     | left=valueExpression operator=HAT right=valueExpression                                #arithmeticBinary
     | left=valueExpression operator=PIPE right=valueExpression                               #arithmeticBinary
-    | left=valueExpression shiftOperator right=valueExpression                              #shiftExpression
     | left=valueExpression comparisonOperator right=valueExpression                          #comparison
+    | left=valueExpression shiftOperator right=valueExpression                               #shiftExpression
     ;
 
 shiftOperator
-    : LT LT
-    | GT GT
-    | GT GT GT
+    : SHIFT_LEFT
+    | SHIFT_RIGHT
+    | SHIFT_RIGHT_UNSIGNED
     ;
 
 datetimeUnit
