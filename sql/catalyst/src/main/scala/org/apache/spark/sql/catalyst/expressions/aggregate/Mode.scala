@@ -74,12 +74,12 @@ case class Mode(
     buffer
   }
 
-  override def eval(buff: OpenHashMap[AnyRef, Long]): Any = {
-    if (buff.isEmpty) {
+  override def eval(buffer: OpenHashMap[AnyRef, Long]): Any = {
+    if (buffer.isEmpty) {
       return null
     }
-    val buffer = if (!CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
-      val modeMap = buff.toSeq.groupMapReduce {
+    val buffer2 = if (!CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
+      val modeMap = buffer.toSeq.groupMapReduce {
         case (key: String, _) =>
           CollationFactory.getCollationKey(UTF8String.fromString(key), collationId)
         case (key: UTF8String, _) =>
@@ -88,7 +88,7 @@ case class Mode(
       }(x => x)((x, y) => (x._1, x._2 + y._2)).values
       modeMap
     } else {
-      buff
+      buffer
     }
 
     reverseOpt.map { reverse =>
@@ -98,8 +98,8 @@ case class Mode(
         PhysicalDataType.ordering(child.dataType).asInstanceOf[Ordering[AnyRef]]
       }
       val ordering = Ordering.Tuple2(Ordering.Long, defaultKeyOrdering)
-      buffer.maxBy { case (key, count) => (count, key) }(ordering)
-    }.getOrElse(buffer.maxBy(_._2))._1
+      buffer2.maxBy { case (key, count) => (count, key) }(ordering)
+    }.getOrElse(buffer2.maxBy(_._2))._1
   }
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): Mode =
