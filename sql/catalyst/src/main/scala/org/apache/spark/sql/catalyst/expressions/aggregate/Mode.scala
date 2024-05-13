@@ -76,12 +76,12 @@ case class Mode(
     buffer
   }
 
-  override def eval(buff: OpenHashMap[AnyRef, Long]): Any = {
-    if (buff.isEmpty) {
+  override def eval(buffer: OpenHashMap[AnyRef, Long]): Any = {
+    if (buffer.isEmpty) {
       return null
     }
-    val buffer = if (isCollatedString(child)) {
-      val modeMap = buff.foldLeft(
+    val buffer2 = if (!CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
+      val modeMap = buffer.foldLeft(
         new TreeMap[org.apache.spark.unsafe.types.UTF8String, Long]()(Ordering.comparatorToOrdering(
           CollationFactory.fetchCollation(collationId).comparator
           )))
@@ -98,7 +98,7 @@ case class Mode(
       }
       modeMap
     } else {
-      buff
+      buffer
     }
 
     reverseOpt.map { reverse =>
@@ -108,16 +108,8 @@ case class Mode(
         PhysicalDataType.ordering(child.dataType).asInstanceOf[Ordering[AnyRef]]
       }
       val ordering = Ordering.Tuple2(Ordering.Long, defaultKeyOrdering)
-      buffer.maxBy { case (key, count) => (count, key) }(ordering)
-    }.getOrElse(buffer.maxBy(_._2))._1
-  }
-
-  private def isCollatedString(child: Expression): Boolean = {
-    child.dataType match {
-      case s: StringType if s.collationId != CollationFactory.UTF8_BINARY_COLLATION_ID => true
-      // maybe use supportsBinaryEquality or something else
-      case _ => false
-    }
+      buffer2.maxBy { case (key, count) => (count, key) }(ordering)
+    }.getOrElse(buffer2.maxBy(_._2))._1
   }
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): Mode =
