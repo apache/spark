@@ -18,7 +18,7 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Dict, Optional, cast, Iterable, TYPE_CHECKING, List
 
-from pyspark.errors.utils import ErrorClassesReader
+from pyspark.errors.utils import ErrorConditionsReader
 from pickle import PicklingError
 
 if TYPE_CHECKING:
@@ -39,7 +39,7 @@ class PySparkException(Exception):
     ):
         if query_contexts is None:
             query_contexts = []
-        self._error_reader = ErrorClassesReader()
+        self._error_reader = ErrorConditionsReader()
 
         if message is None:
             self._message = self._error_reader.get_error_message(

@@ -20,38 +20,45 @@ import json
 import unittest
 
 from pyspark.errors import PySparkValueError
-from pyspark.errors.error_classes import ERROR_CLASSES_JSON
-from pyspark.errors.utils import ErrorClassesReader
+from pyspark.errors.error_classes import ERROR_CONDITIONS_JSON
+from pyspark.errors.utils import ErrorConditionsReader
 
 
 class ErrorsTest(unittest.TestCase):
-    def test_error_classes_sorted(self):
-        # Test error classes is sorted alphabetically
-        error_reader = ErrorClassesReader()
-        error_class_names = list(error_reader.error_info_map.keys())
-        for i in range(len(error_class_names) - 1):
+    def test_error_conditions_sorted(self):
+        """
+        Make sure the error conditions are sorted alphabetically.
+        """
+        error_reader = ErrorConditionsReader()
+        error_condition_names = list(error_reader.error_info_map.keys())
+        for i in range(len(error_condition_names) - 1):
             self.assertTrue(
-                error_class_names[i] < error_class_names[i + 1],
-                f"Error class [{error_class_names[i]}] should place "
-                f"after [{error_class_names[i + 1]}]."
+                error_condition_names[i] < error_condition_names[i + 1],
+                f"Error condition [{error_condition_names[i]}] should place "
+                f"after [{error_condition_names[i + 1]}]."
                 "\n\nRun 'cd $SPARK_HOME; bin/pyspark' and "
                 "'from pyspark.errors.exceptions import _write_self; _write_self()' "
                 "to automatically sort them.",
             )
 
-    def test_error_classes_duplicated(self):
-        # Test error classes is not duplicated
+    def test_error_conditions_duplicated(self):
+        """
+        Make sure no error condition is duplicated.
+        """
+
         def detect_duplication(pairs):
-            error_classes_json = {}
+            error_conditions_json = {}
             for name, message in pairs:
-                self.assertTrue(name not in error_classes_json, f"Duplicate error class: {name}")
-                error_classes_json[name] = message
-            return error_classes_json
+                self.assertTrue(
+                    name not in error_conditions_json, f"Duplicate error condition: {name}"
+                )
+                error_conditions_json[name] = message
+            return error_conditions_json
 
-        json.loads(ERROR_CLASSES_JSON, object_pairs_hook=detect_duplication)
+        json.loads(ERROR_CONDITIONS_JSON, object_pairs_hook=detect_duplication)
 
-    def test_invalid_error_class(self):
-        with self.assertRaisesRegex(ValueError, "Cannot find main error class"):
+    def test_invalid_error_condition(self):
+        with self.assertRaisesRegex(ValueError, "Cannot find main error condition"):
             PySparkValueError(error_class="invalid", message_parameters={})
 
 

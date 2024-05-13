@@ -1,15 +1,15 @@
 import re
 
-from pyspark.errors.error_classes import ERROR_CLASSES_MAP
+from pyspark.errors.error_classes import ERROR_CONDITIONS_MAP
 
 
 def generate_errors_doc(output_rst_file_path: str) -> None:
     """
-    Generates a reStructuredText (RST) documentation file for PySpark error classes.
+    Generates a reStructuredText (RST) documentation file for PySpark error conditions.
 
-    This function fetches error classes defined in `pyspark.errors.error_classes`
+    This function fetches error conditions defined in `pyspark.errors.error_classes`
     and writes them into an RST file. The generated RST file provides an overview
-    of common, named error classes returned by PySpark.
+    of common, named error conditions returned by PySpark.
 
     Parameters
     ----------
@@ -37,19 +37,22 @@ def generate_errors_doc(output_rst_file_path: str) -> None:
     specific language governing permissions and limitations
     under the License.
 
-========================
-Error classes in PySpark
-========================
+===========================
+Error conditions in PySpark
+===========================
 
-This is a list of common, named error classes returned by PySpark which are defined at `error-conditions.json <https://github.com/apache/spark/blob/master/python/pyspark/errors/error-conditions.json>`_.
+This is a list of common, named error conditions returned by PySpark which are defined at
+`error-conditions.json <https://github.com/apache/spark/blob/master/python/pyspark/errors/error-conditions.json>`_.
 
-When writing PySpark errors, developers must use an error class from the list. If an appropriate error class is not available, add a new one into the list. For more information, please refer to `Contributing Error and Exception <contributing.rst#contributing-error-and-exception>`_.
+When writing PySpark errors, developers must use an error condition from the list. If an appropriate
+error condition is not available, add a new one into the list. For more information, please refer to
+`Contributing Error and Exception <contributing.rst#contributing-error-and-exception>`_.
 """  # noqa
     with open(output_rst_file_path, "w") as f:
         f.write(header + "\n\n")
-        for error_key, error_details in ERROR_CLASSES_MAP.items():
+        for error_key, error_details in ERROR_CONDITIONS_MAP.items():
             f.write(error_key + "\n")
-            # The length of the error class name and underline must be the same
+            # The length of the error condition name and underline must be the same
             # to satisfy the RST format.
             f.write("-" * len(error_key) + "\n\n")
             messages = error_details["message"]
@@ -57,6 +60,6 @@ When writing PySpark errors, developers must use an error class from the list. I
                 # Escape parentheses with a backslash when they follow a backtick.
                 message = re.sub(r"`(\()", r"`\\\1", message)
                 f.write(message + "\n")
-            # Add 2 new lines between the descriptions of each error class
+            # Add 2 new lines between the descriptions of each error condition
             # to improve the readability of the generated RST file.
             f.write("\n\n")

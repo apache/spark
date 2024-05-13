@@ -20,7 +20,7 @@ import functools
 import inspect
 import os
 from typing import Any, Callable, Dict, Match, TypeVar, Type, TYPE_CHECKING
-from pyspark.errors.error_classes import ERROR_CLASSES_MAP
+from pyspark.errors.error_classes import ERROR_CONDITIONS_MAP
 
 
 if TYPE_CHECKING:
@@ -30,23 +30,23 @@ if TYPE_CHECKING:
 T = TypeVar("T")
 
 
-class ErrorClassesReader:
+class ErrorConditionsReader:
     """
     A reader to load error information from error-conditions.json.
     """
 
     def __init__(self) -> None:
-        self.error_info_map = ERROR_CLASSES_MAP
+        self.error_info_map = ERROR_CONDITIONS_MAP
 
-    def get_error_message(self, error_class: str, message_parameters: Dict[str, str]) -> str:
+    def get_error_message(self, error_condition: str, message_parameters: Dict[str, str]) -> str:
         """
         Returns the completed error message by applying message parameters to the message template.
         """
-        message_template = self.get_message_template(error_class)
+        message_template = self.get_message_template(error_condition)
         # Verify message parameters.
         message_parameters_from_template = re.findall("<([a-zA-Z0-9_-]+)>", message_template)
         assert set(message_parameters_from_template) == set(message_parameters), (
-            f"Undefined error message parameter for error class: {error_class}. "
+            f"Undefined error message parameter for error condition: {error_condition}. "
             f"Parameters: {message_parameters}"
         )
 
@@ -58,36 +58,38 @@ class ErrorClassesReader:
 
         return message_template.format(**message_parameters)
 
-    def get_message_template(self, error_class: str) -> str:
+    def get_message_template(self, error_condition: str) -> str:
         """
-        Returns the message template for corresponding error class from error-conditions.json.
+        Returns the message template for the corresponding error condition from
+        error-conditions.json.
 
-        For example,
-        when given `error_class` is "EXAMPLE_ERROR_CLASS",
-        and corresponding error class in error-conditions.json looks like the below:
+        For example, say `error_condition` is "EXAMPLE_ERROR_CONDITION", and the corresponding
+        error condition in error-conditions.json looks like this:
 
         .. code-block:: python
 
-            "EXAMPLE_ERROR_CLASS" : {
+            "EXAMPLE_ERROR_CONDITION" : {
               "message" : [
                 "Problem <A> because of <B>."
               ]
             }
 
         In this case, this function returns:
-        "Problem <A> because of <B>."
 
-        For sub error class, when given `error_class` is "EXAMPLE_ERROR_CLASS.SUB_ERROR_CLASS",
-        and corresponding error class in error-conditions.json looks like the below:
+            "Problem <A> because of <B>."
+
+        For an error sub-condition, say `error_condition` is
+        "EXAMPLE_ERROR_CONDITION.ERROR_SUB_CONDITION", and the corresponding error condition in
+        error-conditions.json looks like this:
 
         .. code-block:: python
 
-            "EXAMPLE_ERROR_CLASS" : {
+            "EXAMPLE_ERROR_CONDITION" : {
               "message" : [
                 "Problem <A> because of <B>."
               ],
-              "sub_class" : {
-                "SUB_ERROR_CLASS" : {
+              "sub_condition" : {
+                "ERROR_SUB_CONDITION" : {
                   "message" : [
                     "Do <C> to fix the problem."
                   ]
@@ -96,35 +98,40 @@ class ErrorClassesReader:
             }
 
         In this case, this function returns:
-        "Problem <A> because <B>. Do <C> to fix the problem."
+
+            "Problem <A> because <B>. Do <C> to fix the problem."
         """
-        error_classes = error_class.split(".")
-        len_error_classes = len(error_classes)
-        assert len_error_classes in (1, 2)
+        error_conditions = error_condition.split(".")
+        len_error_conditions = len(error_conditions)
+        assert len_error_conditions in (1, 2)
 
-        # Generate message template for main error class.
-        main_error_class = error_classes[0]
-        if main_error_class in self.error_info_map:
-            main_error_class_info_map = self.error_info_map[main_error_class]
+        # Generate message template for main error condition.
+        main_error_condition = error_conditions[0]
+        if main_error_condition in self.error_info_map:
+            main_error_condition_info_map = self.error_info_map[main_error_condition]
         else:
-            raise ValueError(f"Cannot find main error class '{main_error_class}'")
+            raise ValueError(f"Cannot find main error condition '{main_error_condition}'")
 
-        main_message_template = "\n".join(main_error_class_info_map["message"])
+        main_message_template = "\n".join(main_error_condition_info_map["message"])
 
-        has_sub_class = len_error_classes == 2
+        has_sub_condition = len_error_conditions == 2
 
-        if not has_sub_class:
+        if not has_sub_condition:
             message_template = main_message_template
         else:
-            # Generate message template for sub error class if exists.
-            sub_error_class = error_classes[1]
-            main_error_class_subclass_info_map = main_error_class_info_map["sub_class"]
-            if sub_error_class in main_error_class_subclass_info_map:
-                sub_error_class_info_map = main_error_class_subclass_info_map[sub_error_class]
+            # Generate message template for error sub-condition if exists.
+            error_sub_condition = error_conditions[1]
+            main_error_condition_subcondition_info_map = main_error_condition_info_map[
+                "sub_condition"
+            ]
+            if error_sub_condition in main_error_condition_subcondition_info_map:
+                error_sub_condition_info_map = main_error_condition_subcondition_info_map[
+                    error_sub_condition
+                ]
             else:
-                raise ValueError(f"Cannot find sub error class '{sub_error_class}'")
+                raise ValueError(f"Cannot find error sub-condition '{error_sub_condition}'")
 
-            sub_message_template = "\n".join(sub_error_class_info_map["message"])
+            sub_message_template = "\n".join(error_sub_condition_info_map["message"])
             message_template = main_message_template + " " + sub_message_template
 
         return message_template

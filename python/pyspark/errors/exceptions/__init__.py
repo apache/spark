@@ -25,7 +25,7 @@ def _write_self() -> None:
 
     with open(ERRORS_DIR / "error-conditions.json", "w") as f:
         json.dump(
-            error_classes.ERROR_CLASSES_MAP,
+            error_classes.ERROR_CONDITIONS_MAP,
             f,
             sort_keys=True,
             indent=2,
