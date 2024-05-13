@@ -240,19 +240,19 @@ Contributing Error and Exception
 
 .. currentmodule:: pyspark.errors
 
-To throw a standardized user-facing error or exception, developers should specify the error class and message parameters rather than an arbitrary error message.
+To throw a standardized user-facing error or exception, developers should specify the error condition and message parameters rather than an arbitrary error message.
 
 
 Usage
 ~~~~~
 
-1. Check if an appropriate error class already exists in `Error classes in PySpark <errors.rst#error-classes-in-pyspark>`_.
-   If true, use the error class and skip to step 3.
-2. Add a new class to `error-conditions.json <https://github.com/apache/spark/blob/master/python/pyspark/errors/error-conditions.json>`_; keep in mind the invariants below.
+1. Check if an appropriate error condition already exists in `Error conditions in PySpark <errors.rst#error-conditions-in-pyspark>`_.
+   If true, use the error condition and skip to step 3.
+2. Add a new condition to `error-conditions.json <https://github.com/apache/spark/blob/master/python/pyspark/errors/error-conditions.json>`_; keep in mind the invariants below.
 3. Check if the exception type already extends `PySparkException`.
    If true, skip to step 5.
 4. Mix `PySparkException` into the exception.
-5. Throw the exception with the error class and message parameters.
+5. Throw the exception with the error condition and message parameters.
 
 
 **Before**
@@ -285,7 +285,7 @@ Throw with arbitrary error message:
       def getMessageParameters(self) -> Optional[Dict[str, str]]:
           return super().getMessageParameters()
 
-Throw with error class and message parameters:
+Throw with error condition and message parameters:
 
 .. code-block:: python
 
@@ -295,7 +295,7 @@ Throw with error class and message parameters:
 Access fields
 ~~~~~~~~~~~~~
 
-To access error fields, catch exceptions that extend :class:`PySparkException`  and access to error class with :func:`PySparkException.getErrorClass`.
+To access error fields, catch exceptions that extend :class:`PySparkException`  and access to error condition with :func:`PySparkException.getErrorClass`.
 
 .. code-block:: python
 
@@ -309,11 +309,11 @@ To access error fields, catch exceptions that extend :class:`PySparkException`  
 Fields
 ~~~~~~
 
-**Error class**
+**Error condition**
 
-Error classes are a succinct, human-readable representation of the error category.
+Error conditions are a succinct, human-readable representation of the error category.
 
-An uncategorized errors can be assigned to a legacy error class with the prefix `_LEGACY_ERROR_TEMP_` and an unused sequential number, for instance `_LEGACY_ERROR_TEMP_0053`.
+An uncategorized error can be assigned to a legacy error condition with the prefix `_LEGACY_ERROR_TEMP_` and an unused sequential number, for instance `_LEGACY_ERROR_TEMP_0053`.
 
 Invariants:
 
