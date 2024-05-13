@@ -1866,7 +1866,7 @@ class Sample(google.protobuf.message.Message):
     """(Optional) Whether to sample with replacement."""
     seed: builtins.int
     """(Required) The random seed.
-    This filed is required to avoid generate mutable dataframes (see SPARK-48184 for details),
+    This field is required to avoid generating mutable dataframes (see SPARK-48184 for details),
     however, still keep it 'optional' here for backward compatibility.
     """
     deterministic_order: builtins.bool
@@ -2549,7 +2549,7 @@ class StatSampleBy(google.protobuf.message.Message):
         """
     seed: builtins.int
     """(Required) The random seed.
-    This filed is required to avoid generate mutable dataframes (see SPARK-48184 for details),
+    This field is required to avoid generating mutable dataframes (see SPARK-48184 for details),
     however, still keep it 'optional' here for backward compatibility.
     """
     def __init__(

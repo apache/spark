@@ -30,11 +30,12 @@ import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.connector.expressions.{FieldReference, RewritableTransform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.execution.command.ViewHelper.generateViewProperties
 import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.InsertableRelation
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.sql.util.PartitioningUtils.normalizePartitionSpec
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.ArrayImplicits._
@@ -619,4 +620,66 @@ object CollationCheck extends (LogicalPlan => Unit) {
 
   private def isCollationExpression(expression: Expression): Boolean =
     expression.isInstanceOf[Collation] || expression.isInstanceOf[Collate]
+}
+
+
+/**
+ * This rule checks for references to views WITH SCHEMA [TYPE] EVOLUTION and synchronizes the
+ * catalog if evolution was detected.
+ * It does so by walking the resolved plan looking for View operators for persisted views.
+ */
+object ViewSyncSchemaToMetaStore extends (LogicalPlan => Unit) {
+  def apply(plan: LogicalPlan): Unit = {
+    plan.foreach {
+      case View(metaData, false, viewQuery)
+        if (metaData.viewSchemaMode == SchemaTypeEvolution ||
+          metaData.viewSchemaMode == SchemaEvolution) =>
+        val viewSchemaMode = metaData.viewSchemaMode
+        val viewFields = metaData.schema.fields
+        val viewQueryFields = viewQuery.schema.fields
+        val session = SparkSession.getActiveSession.get
+        val redoSignature =
+          viewSchemaMode == SchemaEvolution && viewFields.length != viewQueryFields.length
+        val fieldNames = viewQuery.schema.fieldNames
+
+        val redo = redoSignature || viewFields.zipWithIndex.exists { case (field, index) =>
+          val planField = viewQueryFields(index)
+          (field.dataType != planField.dataType ||
+            field.nullable != planField.nullable ||
+            (viewSchemaMode == SchemaEvolution && (
+              field.getComment() != planField.getComment() ||
+              field.name != planField.name)))
+        }
+
+        if (redo) {
+          val newProperties = if (viewSchemaMode == SchemaEvolution) {
+            generateViewProperties(
+              metaData.properties,
+              session,
+              fieldNames,
+              fieldNames,
+              metaData.viewSchemaMode)
+          } else {
+            metaData.properties
+          }
+          val newSchema = if (viewSchemaMode == SchemaTypeEvolution) {
+            val newFields = viewQuery.schema.map {
+              case StructField(name, dataType, nullable, _) =>
+                StructField(name, dataType, nullable,
+                  viewFields.find(_.name == name).get.metadata)
+            }
+            StructType(newFields)
+          } else {
+            viewQuery.schema
+          }
+          SchemaUtils.checkColumnNameDuplication(fieldNames.toImmutableArraySeq,
+            session.sessionState.conf.resolver)
+          val updatedViewMeta = metaData.copy(
+            properties = newProperties,
+            schema = newSchema)
+          session.sessionState.catalog.alterTable(updatedViewMeta)
+        }
+      case _ => // OK
+    }
+  }
 }
