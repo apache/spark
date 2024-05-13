@@ -307,6 +307,17 @@ class ArrowTestsMixin:
                 pdf = df.toPandas()
             assert_frame_equal(origin, pdf)
 
+    def test_create_data_frame_to_arrow_timestamp_ntz(self):
+        with self.sql_conf({"spark.sql.session.timeZone": "America/Los_Angeles"}):
+            origin = pa.table({"a": [datetime.datetime(2012, 2, 2, 2, 2, 2)]})
+            df = self.spark.createDataFrame(
+                origin, schema=StructType([StructField("a", TimestampNTZType(), True)])
+            )
+            df.selectExpr("assert_true('2012-02-02 02:02:02' == CAST(a AS STRING))").collect()
+
+            t = df.toArrow()
+            self.assertTrue(origin.equals(t))
+
     def test_create_data_frame_to_pandas_day_time_internal(self):
         for arrow_enabled in [True, False]:
             with self.subTest(arrow_enabled=arrow_enabled):
@@ -353,6 +364,21 @@ class ArrowTestsMixin:
                         pdf_la_corrected[field.name], timezone
                     )
             assert_frame_equal(pdf_ny, pdf_la_corrected)
+
+    def test_toArrow_keep_utc_timezone(self):
+        df = self.spark.createDataFrame(self.data, schema=self.schema)
+
+        timezone = "America/Los_Angeles"
+        with self.sql_conf({"spark.sql.session.timeZone": timezone}):
+            t_la = df.toArrow()
+
+        timezone = "America/New_York"
+        with self.sql_conf({"spark.sql.session.timeZone": timezone}):
+            t_ny = df.toArrow()
+
+            self.assertTrue(t_ny.equals(t_la))
+            self.assertEqual(t_la["8_timestamp_t"].type.tz, "UTC")
+            self.assertEqual(t_ny["8_timestamp_t"].type.tz, "UTC")
 
     def test_pandas_round_trip(self):
         pdf = self.create_pandas_data_frame()
@@ -468,12 +494,12 @@ class ArrowTestsMixin:
         df_no_arrow, df_arrow = self._createDataFrame_toggle(pdf, schema=self.schema)
         self.assertEqual(df_no_arrow.collect(), df_arrow.collect())
 
-    def test_createDataFrame_respect_session_timezone(self):
+    def test_createDataFrame_pandas_respect_session_timezone(self):
         for arrow_enabled in [True, False]:
             with self.subTest(arrow_enabled=arrow_enabled):
-                self.check_createDataFrame_respect_session_timezone(arrow_enabled)
+                self.check_createDataFrame_pandas_respect_session_timezone(arrow_enabled)
 
-    def check_createDataFrame_respect_session_timezone(self, arrow_enabled):
+    def check_createDataFrame_pandas_respect_session_timezone(self, arrow_enabled):
         from datetime import timedelta
 
         pdf = self.create_pandas_data_frame()
@@ -487,6 +513,34 @@ class ArrowTestsMixin:
         with self.sql_conf({"spark.sql.session.timeZone": timezone}):
             with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrow_enabled}):
                 df_ny = self.spark.createDataFrame(pdf, schema=self.schema)
+            result_ny = df_ny.collect()
+
+            self.assertNotEqual(result_ny, result_la)
+
+            # Correct result_la by adjusting 3 hours difference between Los Angeles and New York
+            result_la_corrected = [
+                Row(
+                    **{
+                        k: v - timedelta(hours=3) if k == "8_timestamp_t" else v
+                        for k, v in row.asDict().items()
+                    }
+                )
+                for row in result_la
+            ]
+            self.assertEqual(result_ny, result_la_corrected)
+
+    def test_createDataFrame_arrow_respect_session_timezone(self):
+        from datetime import timedelta
+
+        t = self.create_arrow_table()
+        timezone = "America/Los_Angeles"
+        with self.sql_conf({"spark.sql.session.timeZone": timezone}):
+            df_la = self.spark.createDataFrame(t, schema=self.schema)
+            result_la = df_la.collect()
+
+        timezone = "America/New_York"
+        with self.sql_conf({"spark.sql.session.timeZone": timezone}):
+            df_ny = self.spark.createDataFrame(t, schema=self.schema)
             result_ny = df_ny.collect()
 
             self.assertNotEqual(result_ny, result_la)
