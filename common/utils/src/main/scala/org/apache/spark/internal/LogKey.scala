@@ -301,7 +301,6 @@ object LogKeys {
   case object LOADED_VERSION extends LogKey
   case object LOAD_FACTOR extends LogKey
   case object LOAD_TIME extends LogKey
-  case object LOCAL_DIRS extends LogKey
   case object LOCAL_SCRATCH_DIR extends LogKey
   case object LOCATION extends LogKey
   case object LOGICAL_PLAN_COLUMNS extends LogKey

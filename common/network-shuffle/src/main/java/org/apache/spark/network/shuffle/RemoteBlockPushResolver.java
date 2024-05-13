@@ -2042,7 +2042,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       this.subDirsPerLocalDir = subDirsPerLocalDir;
       if (logger.isInfoEnabled()) {
         logger.info("Updated active local dirs {} and sub dirs {} for application {}",
-          MDC.of(LogKeys.LOCAL_DIRS$.MODULE$, Arrays.toString(activeLocalDirs)),
+          MDC.of(LogKeys.PATHS$.MODULE$, Arrays.toString(activeLocalDirs)),
           MDC.of(LogKeys.NUM_SUB_DIRS$.MODULE$, subDirsPerLocalDir),
           MDC.of(LogKeys.APP_ID$.MODULE$, appId));
       }
