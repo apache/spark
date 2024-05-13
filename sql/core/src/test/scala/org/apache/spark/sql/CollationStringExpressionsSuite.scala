@@ -976,12 +976,10 @@ class CollationStringExpressionsSuite
       LevenshteinTestCase("sOmeThINg", "SOMETHING", "UNICODE", 5),
       LevenshteinTestCase("sOmeThINg", "SOMETHING", "UNICODE_CI", 0)
     ).foreach(c => {
-      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY") {
-        val query = s"SELECT levenshtein(collate('${c.l}', '${c.c}'), collate('${c.r}', '${c.c}'))"
-        // Result & data type
-        checkAnswer(sql(query), Row(c.result))
-        assert(sql(query).schema.fields.head.dataType.sameType(IntegerType))
-      }
+      val query = s"SELECT levenshtein(collate('${c.l}', '${c.c}'), collate('${c.r}', '${c.c}'))"
+      // Result & data type
+      checkAnswer(sql(query), Row(c.result))
+      assert(sql(query).schema.fields.head.dataType.sameType(IntegerType))
     })
   }
 
