@@ -1551,7 +1551,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
 }
 
 // Parquet IO test suite with output commit coordination disabled.
-// This suite is a separate file to avoid race condition of failure events
+// This test suite is separated ParquetIOSuite to avoid race condition of failure events
 // from `OutputCommitCoordination` and `TaskSetManager`.
 class ParquetIOWithoutOutputCommitCoordinationSuite
     extends QueryTest with ParquetTest with SharedSparkSession {
