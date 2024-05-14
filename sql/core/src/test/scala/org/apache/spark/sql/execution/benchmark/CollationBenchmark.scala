@@ -268,8 +268,6 @@ object CollationBenchmark extends CollationBenchmarkBase {
     benchmarkStartsWith(collationTypes, inputs)
     benchmarkEndsWith(collationTypes, inputs)
     benchmarkMode(collationTypes, generateBaseInputStringswithUniqueGroupNumber(10000L))
-    benchmarkMode(collationTypes, generateBaseInputStringswithUniqueGroupNumber(5000L))
-    benchmarkMode(collationTypes, generateBaseInputStringswithUniqueGroupNumber(2500L))
   }
 }
 

@@ -60,22 +60,3 @@ UTF8_BINARY_LCASE - mode - 30105 elements                      6              6 
 UNICODE - mode - 30105 elements                                3              3           0         11.6          86.0       2.3X
 UTF8_BINARY - mode - 30105 elements                            3              3           0         11.6          85.9       2.3X
 UNICODE_CI - mode - 30105 elements                            12             12           1          2.6         382.9       0.5X
-
-OpenJDK 64-Bit Server VM 21.0.3+9-LTS on Linux 6.5.0-1018-azure
-AMD EPYC 7763 64-Core Processor
-collation unit benchmarks - mode - 15120 elements:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
----------------------------------------------------------------------------------------------------------------------------------
-UTF8_BINARY_LCASE - mode - 15120 elements                      3              3           0          5.3         187.8       1.0X
-UNICODE - mode - 15120 elements                                1              1           0         12.4          80.6       2.3X
-UTF8_BINARY - mode - 15120 elements                            1              1           0         12.4          80.9       2.3X
-UNICODE_CI - mode - 15120 elements                             5              6           0          2.8         357.8       0.5X
-
-OpenJDK 64-Bit Server VM 21.0.3+9-LTS on Linux 6.5.0-1018-azure
-AMD EPYC 7763 64-Core Processor
-collation unit benchmarks - mode - 7560 elements:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
---------------------------------------------------------------------------------------------------------------------------------
-UTF8_BINARY_LCASE - mode - 7560 elements                      1              1           0          5.6         179.2       1.0X
-UNICODE - mode - 7560 elements                                1              1           0         13.1          76.3       2.3X
-UTF8_BINARY - mode - 7560 elements                            1              1           0         13.1          76.4       2.3X
-UNICODE_CI - mode - 7560 elements                             3              3           0          2.9         345.1       0.5X
-
