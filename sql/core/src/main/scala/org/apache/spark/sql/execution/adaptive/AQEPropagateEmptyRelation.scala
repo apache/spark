@@ -82,7 +82,7 @@ object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
     case _ => false
   }
 
-  override protected def canPropagate(plan: LogicalPlan): Boolean = plan match {
+  override protected def canExecuteWithJoin(plan: LogicalPlan): Boolean = plan match {
     case LogicalQueryStage(_, _: BroadcastQueryStageExec) => false
     case _ => true
   }
