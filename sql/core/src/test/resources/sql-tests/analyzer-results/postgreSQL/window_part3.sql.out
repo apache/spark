@@ -2,7 +2,7 @@
 -- !query
 CREATE TEMPORARY VIEW tenk2 AS SELECT * FROM tenk1
 -- !query analysis
-CreateViewCommand `tenk2`, SELECT * FROM tenk1, false, false, LocalTempView, true
+CreateViewCommand `tenk2`, SELECT * FROM tenk1, false, false, LocalTempView, UNSUPPORTED, true
    +- Project [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x]
       +- SubqueryAlias spark_catalog.default.tenk1
          +- Relation spark_catalog.default.tenk1[unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x] parquet

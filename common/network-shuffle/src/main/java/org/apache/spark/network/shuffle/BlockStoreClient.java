@@ -26,9 +26,11 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 import com.codahale.metrics.MetricSet;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import org.apache.spark.internal.Logger;
+import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
@@ -170,16 +172,16 @@ public abstract class BlockStoreClient implements Closeable {
             hostLocalDirsCompletable.complete(
               ((LocalDirsForExecutors) msgObj).getLocalDirsByExec());
           } catch (Throwable t) {
-            logger.warn("Error while trying to get the host local dirs for " +
-              Arrays.toString(getLocalDirsMessage.execIds), t.getCause());
+            logger.warn("Error while trying to get the host local dirs for {}", t.getCause(),
+              MDC.of(LogKeys.EXECUTOR_IDS$.MODULE$, Arrays.toString(getLocalDirsMessage.execIds)));
             hostLocalDirsCompletable.completeExceptionally(t);
           }
         }
 
         @Override
         public void onFailure(Throwable t) {
-          logger.warn("Error while trying to get the host local dirs for " +
-            Arrays.toString(getLocalDirsMessage.execIds), t.getCause());
+          logger.warn("Error while trying to get the host local dirs for {}", t.getCause(),
+            MDC.of(LogKeys.EXECUTOR_IDS$.MODULE$, Arrays.toString(getLocalDirsMessage.execIds)));
           hostLocalDirsCompletable.completeExceptionally(t);
         }
       });

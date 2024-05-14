@@ -366,7 +366,7 @@ class TypesTestsMixin:
         df = self.spark.createDataFrame(rdd)
         self.assertEqual(Row(f1=[1, None], f2=[None, 2]), df.first())
 
-    def test_infer_array_element_type_empty(self):
+    def test_infer_array_element_type_empty_rdd(self):
         # SPARK-39168: Test inferring array element type from all rows
         ArrayRow = Row("f1")
 
@@ -378,6 +378,12 @@ class TypesTestsMixin:
         self.assertEqual(Row(f1=[]), rows[0])
         self.assertEqual(Row(f1=[None]), rows[1])
         self.assertEqual(Row(f1=[1]), rows[2])
+
+    def test_infer_array_element_type_empty(self):
+        # SPARK-39168: Test inferring array element type from all rows
+        ArrayRow = Row("f1")
+
+        data = [ArrayRow([]), ArrayRow([None]), ArrayRow([1])]
 
         df = self.spark.createDataFrame(data)
         rows = df.collect()
@@ -391,12 +397,6 @@ class TypesTestsMixin:
 
         with self.sql_conf({"spark.sql.pyspark.inferNestedDictAsStruct.enabled": True}):
             data = [NestedRow([{"payment": 200.5}, {"name": "A"}])]
-
-            nestedRdd = self.sc.parallelize(data)
-            df = self.spark.createDataFrame(nestedRdd)
-            self.assertEqual(
-                Row(f1=[Row(payment=200.5, name=None), Row(payment=None, name="A")]), df.first()
-            )
 
             df = self.spark.createDataFrame(data)
             self.assertEqual(
@@ -1626,7 +1626,10 @@ class TypesTestsMixin:
         with self.sql_conf(
             {"spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled": True}
         ):
-            self.assertEqual([[1, None]], self.spark.createDataFrame([[[[1, "a"]]]]).first()[0])
+            self.assertEqual(
+                ArrayType(ArrayType(LongType())),
+                self.spark.createDataFrame([[[[1, 1.0]]]]).schema.fields[0].dataType,
+            )
 
 
 class DataTypeTests(unittest.TestCase):

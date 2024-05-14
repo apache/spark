@@ -23,6 +23,7 @@ AUTHORIZATION	true
 BETWEEN	false
 BIGINT	false
 BINARY	false
+BINDING	false
 BOOLEAN	false
 BOTH	true
 BUCKET	false
@@ -52,6 +53,7 @@ COMMENT	false
 COMMIT	false
 COMPACT	false
 COMPACTIONS	false
+COMPENSATION	false
 COMPUTE	false
 CONCATENATE	false
 CONSTRAINT	true
