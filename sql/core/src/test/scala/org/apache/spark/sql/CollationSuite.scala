@@ -21,7 +21,9 @@ import scala.collection.immutable.Seq
 import scala.jdk.CollectionConverters.MapHasAsJava
 
 import org.apache.spark.SparkException
+
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
+import org.apache.spark.sql.catalyst.expressions.{Collation, EmptyRow, ExpectsInputTypes, Expression, ExpressionEvalHelper, Literal}
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2ProviderWithCustomSchema}
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable}
@@ -32,9 +34,11 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SqlApiConf
-import org.apache.spark.sql.types.{MapType, StringType, StructField, StructType}
+import org.apache.spark.sql.internal.types.StringTypeAnyCollation
+import org.apache.spark.sql.types.{AbstractDataType, IntegerType, MapType, StringType, StructField, StructType, TypeCollection}
 
-class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
+class CollationSuite extends DatasourceV2SQLBase
+  with AdaptiveSparkPlanHelper with ExpressionEvalHelper {
   protected val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
 
   private val collationPreservingSources = Seq("parquet")
@@ -980,5 +984,139 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         sql(s"SELECT c, i, nth_value(i, 2) OVER (PARTITION BY c ORDER BY i) FROM $t2")
       checkAnswer(dfNonBinary, dfBinary)
     }
+  }
+
+  test("expression walk") {
+    val funInfos = spark.sessionState.functionRegistry.listFunction().map { funcId =>
+      spark.sessionState.catalog.lookupFunctionInfo(funcId)
+    }.toArray
+
+    // noinspection ScalaStyle
+    println("Found total of " + funInfos.size + " functions")
+    // 449
+
+    val expr = funInfos.find(fi => fi.getName.contains("collation")).get
+    // noinspection ScalaStyle
+    println(expr.getClassName)
+
+    // noinspection ScalaStyle
+    val cl = Class.forName(expr.getClassName)
+    // noinspection ScalaStyle
+    // cl.getMethods.foreach(println)
+
+    // noinspection ScalaStyle
+    println("Constructors:")
+    // noinspection ScalaStyle
+    cl.getConstructors.foreach(println)
+
+    // Got this guy:
+    // public org.apache.spark.sql.catalyst.expressions.Collation(
+    //  org.apache.spark.sql.catalyst.expressions.Expression)
+
+    val lit = Literal.create("dummy string")
+    val coll = cl.getConstructors.head.newInstance(lit).asInstanceOf[Collation]
+
+    // noinspection ScalaStyle
+    println(coll)
+
+    // filter only functions that accept string as input
+    assert(coll.dataType === StringType(0))
+
+    // check if there is a replacement.
+    checkEvaluation(coll.replacement, "UTF8_BINARY")
+
+    // --------- substring ----------
+    val exprSubstr = funInfos.find(fi => fi.getName.contains("substring")).get
+    // noinspection ScalaStyle
+    println(exprSubstr.getClassName)
+
+    // noinspection ScalaStyle
+    val clSubstr = Class.forName(exprSubstr.getClassName)
+    // noinspection ScalaStyle
+    // cl.getMethods.foreach(println)
+
+    // noinspection ScalaStyle
+    println("Constructors for substr:")
+    // noinspection ScalaStyle
+    clSubstr.getConstructors.foreach(println)
+
+    val headConstructor = clSubstr.getConstructors.head
+    val paramCount = headConstructor.getParameterCount
+    val args = Array.fill(paramCount)(lit)
+
+    val substrExpr = headConstructor.newInstance(args: _*).asInstanceOf[Expression]
+
+    assert(substrExpr.isInstanceOf[ExpectsInputTypes])
+    val inputTypes = substrExpr.asInstanceOf[ExpectsInputTypes].inputTypes
+    // noinspection ScalaStyle
+    println("Input types for Substring:")
+    // noinspection ScalaStyle
+    inputTypes.foreach(println)
+
+    sealed trait CollationType
+    case object Utf8Binary extends CollationType
+    case object Utf8BinaryLcase extends CollationType
+
+    def generateData(
+        types: Seq[AbstractDataType], collationType: CollationType): Seq[Expression] = {
+      types.map {
+        // TODO: Try to force string type here...
+        case TypeCollection(typeCollection) =>
+          val strTypes =
+            typeCollection.filter(dt => dt.isInstanceOf[StringType] ||
+              dt == StringTypeAnyCollation)
+          if (strTypes.isEmpty) {
+            // Take any
+            generateData(typeCollection, collationType).head
+          } else {
+            generateData(strTypes, collationType).head
+          }
+        case _: StringType | StringTypeAnyCollation =>
+          collationType match {
+            case Utf8Binary =>
+              Literal.create("dummy string", StringType("UTF8_BINARY"))
+            case Utf8BinaryLcase =>
+              Literal.create("DuMmY sTrInG", StringType("UTF8_BINARY_LCASE"))
+          }
+        case IntegerType => Literal(1)
+      }
+    }
+
+    val inputDataUtf8Binary = generateData(inputTypes, Utf8Binary)
+    val instanceUtf8Binary =
+      headConstructor.newInstance(inputDataUtf8Binary: _*).asInstanceOf[Expression]
+    val resUtf8Binary = instanceUtf8Binary.eval(EmptyRow)
+
+    val inputDataLcase = generateData(inputTypes, Utf8BinaryLcase)
+    val instanceLcase = headConstructor.newInstance(inputDataLcase: _*).asInstanceOf[Expression]
+    val resUtf8Lcase = instanceLcase.eval(EmptyRow)
+    // noinspection ScalaStyle
+    println("final result (binary/lcase):")
+    // noinspection ScalaStyle
+    println(resUtf8Binary)
+    // noinspection ScalaStyle
+    println(resUtf8Lcase)
+    // checkEvaluation(instance, "dummy string")
+    // one of args in typecollection...
+
+    // substrExpr.inputTypes
+    // there are two constructors:
+    // Substring(Expression, Expression, Expression)
+    // Substring(Expression, Expression)
+
+    // Got this guy:
+    // public org.apache.spark.sql.catalyst.expressions.Collation(
+    //  org.apache.spark.sql.catalyst.expressions.Expression)
+
+    // val coll = cl.getConstructors.head.newInstance(lit).asInstanceOf[Collation]
+
+    // noinspection ScalaStyle
+    // println(coll)
+
+    // filter only functions that accept string as input
+    // assert(coll.dataType === StringType(0))
+
+    // check if there is a replacement.
+    // checkEvaluation(coll.replacement, "UTF8_BINARY")
   }
 }
