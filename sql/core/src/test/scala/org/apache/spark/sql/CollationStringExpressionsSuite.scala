@@ -837,6 +837,57 @@ class CollationStringExpressionsSuite
     })
   }
 
+  test("Support mode for string expression w/ collation - Unicode planes") {
+    val unicodeChars = Seq(
+      "\uD834\uDD1E", // 𝄞 (U+1D11E)
+      "\uD83D\uDE00", // 😀 (U+1F600)
+      "\uD83D\uDE02", // 😂 (U+1F602)
+      "\u0061", // a (U+0061)
+      "\u0062", // b (U+0062)
+      "\u005A", // Z (U+005A)
+      "\u0FB2\u0F71", // ྲ (U+0FB2 U+0F71)
+      "\u0FB3\u0F71", // ླ (U+0FB3 U+0F71)
+      "\u0FB2\u0F71\u0F72", // ྲྲ (U+0FB2 U+0F71 U+0F72)
+      "\u0FB2\u0F73", // ྲླ (U+0FB2 U+0F73)
+      "\u0FB2\u0F71\u0F74", // ྲྴ (U+0FB2 U+0F71 U+0F74)
+      "\u0FB2\u0F75", // ྲྵ (U+0FB2 U+0F75)
+      "\u0FB3\u0F71\u0F72", // ླྲ (U+0FB3 U+0F71 U+0F72)
+      "\u0FB3\u0F73", // ླླ (U+0FB3 U+0F73)
+      "\u0FB3\u0F71\u0F74", // ླྴ (U+0FB3 U+0F71 U+0F74)
+      "\u0FB3\u0F75", // ླྵ (U+0FB3 U+0F75)
+      "\uDC00", // U+DC00 is a low surrogate
+      "\u2F9AF", // 2F9AF ; [.FB80.0020.0002][.C561.0000.0000] # CJK COMPATIBILITY IDEOGRAPH-2F9AF
+      "\u2F9B2", // 2F9B2 ; [.FB80.0020.0002][.C56B.0000.0000] # CJK COMPATIBILITY IDEOGRAPH-2F9B2
+      "\u2F9BF", // 2F9BF ; [.FB80.0020.0002][.C5D7.0000.0000] # CJK COMPATIBILITY IDEOGRAPH-2F9BF
+      "\u2F9C2", // 2F9C2 ; [.FB80.0020.0002][.C5F9.0000.0000] # CJK COMPATIBILITY IDEOGRAPH-2F9C2
+      "\uD800\uDC00", // 𐀀 (U+10000)
+      "\uD87E\uDC00" // 𣸀 (U+2F800)
+     )
+
+    case class ModeTestCase[R](collationId: String, bufferValues: Map[String, Long], result: R)
+    unicodeChars.sliding(2, 1).foreach(x => {
+      val testCases = Seq(
+        ModeTestCase("utf8_binary", x.map(y => (y, 1L)).toMap, x.head),
+        ModeTestCase("unicode", x.map(y => (y, 1L)).toMap, x.head)
+      )
+      testCases.foreach(t => {
+        val valuesToAdd = t.bufferValues.map { case (elt, numRepeats) =>
+          (0L to numRepeats).map(_ => s"('$elt')").mkString(",")
+        }.mkString(",")
+
+        withTable("t") {
+          sql("CREATE TABLE t(i STRING) USING parquet")
+          sql("INSERT INTO t VALUES " + valuesToAdd)
+          val query = s"SELECT mode(collate(i, '${t.collationId}')) FROM t"
+          checkAnswer(sql(query), Row(t.result))
+          assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.collationId)))
+
+        }
+      })
+    })
+
+  }
+
   test("Support Mode.eval(buffer)") {
     case class ModeTestCase[R](
         collationId: String,
