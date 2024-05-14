@@ -20,7 +20,7 @@ import json
 import unittest
 
 from pyspark.errors import PySparkValueError
-from pyspark.errors.error_classes import ERROR_CONDITIONS_JSON
+from pyspark.errors.error_conditions import ERROR_CONDITIONS_JSON
 from pyspark.errors.utils import ErrorConditionsReader
 
 

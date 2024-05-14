@@ -1,13 +1,13 @@
 import re
 
-from pyspark.errors.error_classes import ERROR_CONDITIONS_MAP
+from pyspark.errors.error_conditions import ERROR_CONDITIONS_MAP
 
 
 def generate_errors_doc(output_rst_file_path: str) -> None:
     """
     Generates a reStructuredText (RST) documentation file for PySpark error conditions.
 
-    This function fetches error conditions defined in `pyspark.errors.error_classes`
+    This function fetches error conditions defined in `pyspark.errors.error_conditions`
     and writes them into an RST file. The generated RST file provides an overview
     of common, named error conditions returned by PySpark.
 

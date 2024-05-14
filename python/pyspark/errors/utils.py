@@ -20,7 +20,7 @@ import functools
 import inspect
 import os
 from typing import Any, Callable, Dict, Match, TypeVar, Type, TYPE_CHECKING
-from pyspark.errors.error_classes import ERROR_CONDITIONS_MAP
+from pyspark.errors.error_conditions import ERROR_CONDITIONS_MAP
 
 
 if TYPE_CHECKING:
