@@ -91,8 +91,8 @@ object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
   // Project
   //   +- LogicalQueryStage(_, BroadcastQueryStage)
   // Then after LogicalQueryStageStrategy, will only remain BroadcastQueryStage after project,
-  // the plan can execute.
-  override protected def canExecuteWithJoin(plan: LogicalPlan): Boolean = plan match {
+  // the plan can't execute.
+  override protected def canExecuteWithoutJoin(plan: LogicalPlan): Boolean = plan match {
     case LogicalQueryStage(_, _: BroadcastQueryStageExec) => false
     case _ => true
   }
