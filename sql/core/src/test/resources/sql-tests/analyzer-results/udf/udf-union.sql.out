@@ -2,7 +2,7 @@
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW t1 AS VALUES (1, 'a'), (2, 'b') tbl(c1, c2)
 -- !query analysis
-CreateViewCommand `t1`, VALUES (1, 'a'), (2, 'b') tbl(c1, c2), false, true, LocalTempView, true
+CreateViewCommand `t1`, VALUES (1, 'a'), (2, 'b') tbl(c1, c2), false, true, LocalTempView, UNSUPPORTED, true
    +- SubqueryAlias tbl
       +- LocalRelation [c1#x, c2#x]
 
@@ -10,7 +10,7 @@ CreateViewCommand `t1`, VALUES (1, 'a'), (2, 'b') tbl(c1, c2), false, true, Loca
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW t2 AS VALUES (1.0, 1), (2.0, 4) tbl(c1, c2)
 -- !query analysis
-CreateViewCommand `t2`, VALUES (1.0, 1), (2.0, 4) tbl(c1, c2), false, true, LocalTempView, true
+CreateViewCommand `t2`, VALUES (1.0, 1), (2.0, 4) tbl(c1, c2), false, true, LocalTempView, UNSUPPORTED, true
    +- SubqueryAlias tbl
       +- LocalRelation [c1#x, c2#x]
 
@@ -97,7 +97,7 @@ Project [cast(udf(cast(cast(udf(cast(a#xL as string)) as bigint) as string)) as 
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW p1 AS VALUES 1 T(col)
 -- !query analysis
-CreateViewCommand `p1`, VALUES 1 T(col), false, true, LocalTempView, true
+CreateViewCommand `p1`, VALUES 1 T(col), false, true, LocalTempView, UNSUPPORTED, true
    +- SubqueryAlias T
       +- LocalRelation [col#x]
 
@@ -105,7 +105,7 @@ CreateViewCommand `p1`, VALUES 1 T(col), false, true, LocalTempView, true
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW p2 AS VALUES 1 T(col)
 -- !query analysis
-CreateViewCommand `p2`, VALUES 1 T(col), false, true, LocalTempView, true
+CreateViewCommand `p2`, VALUES 1 T(col), false, true, LocalTempView, UNSUPPORTED, true
    +- SubqueryAlias T
       +- LocalRelation [col#x]
 
@@ -113,7 +113,7 @@ CreateViewCommand `p2`, VALUES 1 T(col), false, true, LocalTempView, true
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW p3 AS VALUES 1 T(col)
 -- !query analysis
-CreateViewCommand `p3`, VALUES 1 T(col), false, true, LocalTempView, true
+CreateViewCommand `p3`, VALUES 1 T(col), false, true, LocalTempView, UNSUPPORTED, true
    +- SubqueryAlias T
       +- LocalRelation [col#x]
 

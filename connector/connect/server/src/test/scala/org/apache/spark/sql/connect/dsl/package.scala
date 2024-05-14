@@ -513,6 +513,25 @@ package object dsl {
         freqItems(cols.toArray, support)
 
       def freqItems(cols: Seq[String]): Relation = freqItems(cols, 0.01)
+
+      def sampleBy(col: String, fractions: Map[Any, Double], seed: Long): Relation = {
+        Relation
+          .newBuilder()
+          .setSampleBy(
+            StatSampleBy
+              .newBuilder()
+              .setInput(logicalPlan)
+              .addAllFractions(fractions.toSeq.map { case (k, v) =>
+                StatSampleBy.Fraction
+                  .newBuilder()
+                  .setStratum(toLiteralProto(k))
+                  .setFraction(v)
+                  .build()
+              }.asJava)
+              .setSeed(seed)
+              .build())
+          .build()
+      }
     }
 
     def select(exprs: Expression*): Relation = {
@@ -587,6 +606,10 @@ package object dsl {
           .build()
       }
 
+      def filter(condition: Expression): Relation = {
+        where(condition)
+      }
+
       def deduplicate(colNames: Seq[String]): Relation =
         Relation
           .newBuilder()
@@ -639,6 +662,10 @@ package object dsl {
 
       def join(otherPlan: Relation, joinType: JoinType, usingColumns: Seq[String]): Relation = {
         join(otherPlan, joinType, usingColumns, None)
+      }
+
+      def crossJoin(otherPlan: Relation): Relation = {
+        join(otherPlan, JoinType.JOIN_TYPE_CROSS, Seq(), None)
       }
 
       private def join(

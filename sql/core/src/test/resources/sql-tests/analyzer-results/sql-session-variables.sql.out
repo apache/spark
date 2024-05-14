@@ -2060,7 +2060,7 @@ WithCTE
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW v AS SELECT var1 AS c1
 -- !query analysis
-CreateViewCommand `v`, SELECT var1 AS c1, false, true, LocalTempView, true
+CreateViewCommand `v`, SELECT var1 AS c1, false, true, LocalTempView, UNSUPPORTED, true
    +- Project [variablereference(system.session.var1=1) AS c1#x]
       +- OneRowRelation
 

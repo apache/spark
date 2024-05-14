@@ -143,6 +143,7 @@ Mathematical Functions
     try_add
     try_divide
     try_multiply
+    try_remainder
     try_subtract
     unhex
     width_bucket

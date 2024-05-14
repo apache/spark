@@ -49,9 +49,8 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import org.apache.spark.internal.Logger;
+import org.apache.spark.internal.LoggerFactory;
 import org.apache.spark.network.util.JavaUtils;
 
 public class SSLFactory {
@@ -136,7 +135,7 @@ public class SSLFactory {
           try {
             manager.destroy();
           } catch (InterruptedException ex) {
-            logger.info("Interrupted while destroying trust manager: " + ex.toString(), ex);
+            logger.info("Interrupted while destroying trust manager: ", ex);
           }
         }
       }
