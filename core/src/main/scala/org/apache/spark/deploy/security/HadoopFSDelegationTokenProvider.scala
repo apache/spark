@@ -121,7 +121,7 @@ private[deploy] class HadoopFSDelegationTokenProvider
         Utils.tryLogNonFatalError { fs.addDelegationTokens("", creds) }
       } else {
         logInfo(log"getting token for: ${MDC(FILE_SYSTEM, fs)} with" +
-          log" renewer ${MDC(TOKEN_RE_NEWER, renewer)}")
+          log" renewer ${MDC(TOKEN_RENEWER, renewer)}")
         Utils.tryLogNonFatalError { fs.addDelegationTokens(renewer, creds) }
       }
     }

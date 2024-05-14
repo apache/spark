@@ -634,7 +634,7 @@ object LogKeys {
   case object TOKEN extends LogKey
   case object TOKEN_KIND extends LogKey
   case object TOKEN_REGEX extends LogKey
-  case object TOKEN_RE_NEWER extends LogKey
+  case object TOKEN_RENEWER extends LogKey
   case object TOPIC extends LogKey
   case object TOPIC_PARTITION extends LogKey
   case object TOPIC_PARTITIONS extends LogKey
