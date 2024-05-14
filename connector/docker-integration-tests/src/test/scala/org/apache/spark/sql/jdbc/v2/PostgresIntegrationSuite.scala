@@ -61,7 +61,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
         " bonus double precision)").executeUpdate()
     connection.prepareStatement(
       s"""CREATE TABLE pattern_testing_table (
-         |pattern_testing_col LONGTEXT
+         |pattern_testing_col VARCHAR(100)
          |)
                    """.stripMargin
     ).executeUpdate()
