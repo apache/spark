@@ -33,12 +33,16 @@ private[spark] object StatsdSink {
   val STATSD_KEY_UNIT = "unit"
   val STATSD_KEY_PREFIX = "prefix"
   val STATSD_KEY_REGEX = "regex"
+  val STATSD_KEY_PROTOCOL = "protocol"
+  val STATSD_KEY_CONN_TIMEOUT = "connTimeoutMs"
 
   val STATSD_DEFAULT_HOST = "127.0.0.1"
   val STATSD_DEFAULT_PORT = "8125"
   val STATSD_DEFAULT_PERIOD = "10"
   val STATSD_DEFAULT_UNIT = "SECONDS"
   val STATSD_DEFAULT_PREFIX = ""
+  val STATSD_DEFAULT_PROTOCOL = "udp"
+  val STATSD_DEFAULT_CONN_TIMEOUT = "1000"
 }
 
 private[spark] class StatsdSink(
@@ -54,6 +58,10 @@ private[spark] class StatsdSink(
       property.getProperty(STATSD_KEY_UNIT, STATSD_DEFAULT_UNIT).toUpperCase(Locale.ROOT))
 
   val prefix = property.getProperty(STATSD_KEY_PREFIX, STATSD_DEFAULT_PREFIX)
+  val protocol = property.getProperty(STATSD_KEY_PROTOCOL, STATSD_DEFAULT_PROTOCOL)
+    .toUpperCase(Locale.ROOT)
+  val connTimeoutMs = property.getProperty(STATSD_KEY_CONN_TIMEOUT,
+    STATSD_DEFAULT_CONN_TIMEOUT).toInt
 
   val filter = Option(property.getProperty(STATSD_KEY_REGEX)) match {
     case Some(pattern) => new MetricFilter() {
@@ -66,7 +74,7 @@ private[spark] class StatsdSink(
 
   MetricsSystem.checkMinimalPollingPeriod(pollUnit, pollPeriod)
 
-  val reporter = new StatsdReporter(registry, host, port, prefix, filter)
+  val reporter = new StatsdReporter(registry, host, port, prefix, filter, protocol, connTimeoutMs)
 
   override def start(): Unit = {
     reporter.start(pollPeriod, pollUnit)

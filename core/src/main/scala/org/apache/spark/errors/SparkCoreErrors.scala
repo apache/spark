@@ -447,6 +447,13 @@ private[spark] object SparkCoreErrors {
     )
   }
 
+  def statsdSinkInvalidProtocolErr(invalidProtocol: String): Throwable = {
+    new SparkException(
+      errorClass = "STATSD_SINK_INVALID_PROTOCOL",
+      messageParameters = Map("protocol" -> invalidProtocol),
+      cause = null)
+  }
+
   def graphiteSinkInvalidProtocolError(invalidProtocol: String): Throwable = {
     new SparkException(
       errorClass = "GRAPHITE_SINK_INVALID_PROTOCOL",

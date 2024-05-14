@@ -17,8 +17,8 @@
 
 package org.apache.spark.metrics.sink
 
-import java.io.IOException
-import java.net.{DatagramPacket, DatagramSocket, InetSocketAddress}
+import java.io.{DataOutputStream, IOException}
+import java.net.{DatagramPacket, DatagramSocket, InetSocketAddress, Socket}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.SortedMap
 import java.util.concurrent.TimeUnit
@@ -29,6 +29,7 @@ import scala.util.{Failure, Success, Try}
 import com.codahale.metrics._
 import org.apache.hadoop.net.NetUtils
 
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 
 /**
@@ -48,6 +49,8 @@ private[spark] class StatsdReporter(
     port: Int = 8125,
     prefix: String = "",
     filter: MetricFilter = MetricFilter.ALL,
+    protocol: String = "UDP",
+    connTimeoutMs: Int = 1000,
     rateUnit: TimeUnit = TimeUnit.SECONDS,
     durationUnit: TimeUnit = TimeUnit.MILLISECONDS)
   extends ScheduledReporter(registry, "statsd-reporter", filter, rateUnit, durationUnit)
@@ -64,14 +67,13 @@ private[spark] class StatsdReporter(
       histograms: SortedMap[String, Histogram],
       meters: SortedMap[String, Meter],
       timers: SortedMap[String, Timer]): Unit =
-    Try(new DatagramSocket) match {
-      case Failure(ioe: IOException) => logWarning("StatsD datagram socket construction failed",
+    Try(DataSender.get(host, port, protocol, connTimeoutMs)) match {
+      case Failure(ioe: IOException) => logWarning("StatsD socket construction failed",
         NetUtils.wrapException(host, port, NetUtils.getHostname(), 0, ioe))
-      case Failure(e) => logWarning("StatsD datagram socket construction failed", e)
+      case Failure(e) => logWarning("StatsD socket construction failed", e)
       case Success(s) =>
-        implicit val socket = s
-        val localAddress = Try(socket.getLocalAddress).map(_.getHostAddress).getOrElse(null)
-        val localPort = socket.getLocalPort
+        implicit val sender: DataSender = s
+        val (localAddress, localPort) = sender.localHostPort
         Try {
           gauges.entrySet.asScala.foreach(e => reportGauge(e.getKey, e.getValue))
           counters.entrySet.asScala.foreach(e => reportCounter(e.getKey, e.getValue))
@@ -84,7 +86,7 @@ private[spark] class StatsdReporter(
               address.getHostString, address.getPort, localAddress, localPort, ioe))
           case e: Throwable => logDebug(s"Unable to send packets to StatsD at '$host:$port'", e)
         }
-        Try(socket.close()) recover {
+        Try(sender.close()) recover {
           case ioe: IOException =>
             logDebug("Error when close socket to StatsD", NetUtils.wrapException(
               address.getHostString, address.getPort, localAddress, localPort, ioe))
@@ -92,14 +94,14 @@ private[spark] class StatsdReporter(
         }
     }
 
-  private def reportGauge(name: String, gauge: Gauge[_])(implicit socket: DatagramSocket): Unit =
+  private def reportGauge(name: String, gauge: Gauge[_])(implicit socket: DataSender): Unit =
     formatAny(gauge.getValue).foreach(v => send(fullName(name), v, GAUGE))
 
-  private def reportCounter(name: String, counter: Counter)(implicit socket: DatagramSocket): Unit =
+  private def reportCounter(name: String, counter: Counter)(implicit socket: DataSender): Unit =
     send(fullName(name), format(counter.getCount), COUNTER)
 
   private def reportHistogram(name: String, histogram: Histogram)
-      (implicit socket: DatagramSocket): Unit = {
+      (implicit socket: DataSender): Unit = {
     val snapshot = histogram.getSnapshot
     send(fullName(name, "count"), format(histogram.getCount), GAUGE)
     send(fullName(name, "max"), format(snapshot.getMax), TIMER)
@@ -114,7 +116,7 @@ private[spark] class StatsdReporter(
     send(fullName(name, "p999"), format(snapshot.get999thPercentile), TIMER)
   }
 
-  private def reportMetered(name: String, meter: Metered)(implicit socket: DatagramSocket): Unit = {
+  private def reportMetered(name: String, meter: Metered)(implicit socket: DataSender): Unit = {
     send(fullName(name, "count"), format(meter.getCount), GAUGE)
     send(fullName(name, "m1_rate"), format(convertRate(meter.getOneMinuteRate)), TIMER)
     send(fullName(name, "m5_rate"), format(convertRate(meter.getFiveMinuteRate)), TIMER)
@@ -122,7 +124,7 @@ private[spark] class StatsdReporter(
     send(fullName(name, "mean_rate"), format(convertRate(meter.getMeanRate)), TIMER)
   }
 
-  private def reportTimer(name: String, timer: Timer)(implicit socket: DatagramSocket): Unit = {
+  private def reportTimer(name: String, timer: Timer)(implicit socket: DataSender): Unit = {
     val snapshot = timer.getSnapshot
     send(fullName(name, "max"), format(convertDuration(snapshot.getMax.toDouble)), TIMER)
     send(fullName(name, "mean"), format(convertDuration(snapshot.getMean)), TIMER)
@@ -139,10 +141,9 @@ private[spark] class StatsdReporter(
   }
 
   private def send(name: String, value: String, metricType: String)
-      (implicit socket: DatagramSocket): Unit = {
-    val bytes = sanitize(s"$name:$value|$metricType").getBytes(UTF_8)
-    val packet = new DatagramPacket(bytes, bytes.length, address)
-    socket.send(packet)
+      (implicit socket: DataSender): Unit = {
+    val metricStr = sanitize(s"$name:$value|$metricType")
+    socket.send(metricStr)
   }
 
   private def fullName(names: String*): String = MetricRegistry.name(prefix, names : _*)
@@ -159,5 +160,75 @@ private[spark] class StatsdReporter(
       case n: Number => Some(v.toString)
       case _ => None
     }
+}
+
+private trait DataSender {
+  def start(): DataSender
+  def localHostPort: (String, Int)
+  def send(data: String): Unit
+  def close(): Unit
+}
+
+private class UDPDataSender(
+  val host: String,
+  val port: Int) extends DataSender {
+  private val socket = new DatagramSocket
+  private val address = new InetSocketAddress(host, port)
+
+  override def start(): DataSender = {
+    this
+  }
+
+  override def localHostPort: (String, Int) = {
+    (Try(socket.getLocalAddress).map(_.getHostAddress).getOrElse(null), socket.getLocalPort)
+  }
+
+  override def send(data: String): Unit = {
+    val bytes = data.getBytes(UTF_8)
+    val packet = new DatagramPacket(bytes, bytes.length, address)
+    socket.send(packet)
+  }
+
+  override def close(): Unit = {
+    socket.close()
+  }
+}
+
+private class TCPDataSender(
+  val host: String,
+  val port: Int,
+  val connTimeoutMs: Int) extends DataSender {
+  private val socket = new Socket
+  private var dataOut: Option[DataOutputStream] = None
+
+  override def start(): DataSender = {
+    socket.connect(new InetSocketAddress(host, port), connTimeoutMs)
+    dataOut = Some(new DataOutputStream(socket.getOutputStream))
+    this
+  }
+
+  override def localHostPort: (String, Int) = {
+    (Try(socket.getLocalAddress).map(_.getHostAddress).getOrElse(null), socket.getLocalPort)
+  }
+
+  override def send(data: String): Unit = {
+    val bytes = (data + "\n").getBytes(UTF_8)
+    dataOut.foreach(_.write(bytes))
+  }
+
+  override def close(): Unit = {
+    dataOut.foreach(_.close())
+  }
+}
+
+private object DataSender {
+  def get(host: String, port: Int, protocol: String, connTimeoutMs: Int): DataSender = {
+    val ds = protocol match {
+      case "TCP" => new TCPDataSender(host, port, connTimeoutMs)
+      case "UDP" => new UDPDataSender(host, port)
+      case p => throw SparkCoreErrors.statsdSinkInvalidProtocolErr(p)
+    }
+    ds.start()
+  }
 }
 
