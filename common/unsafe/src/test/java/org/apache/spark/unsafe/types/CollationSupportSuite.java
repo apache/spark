@@ -101,6 +101,13 @@ public class CollationSupportSuite {
     assertContains("ab世De", "AB世dE", "UNICODE_CI", true);
     assertContains("äbćδe", "ÄbćδE", "UNICODE_CI", true);
     assertContains("äbćδe", "ÄBcΔÉ", "UNICODE_CI", false);
+    // Characters with the same binary lowercase representation
+    assertContains("The Kelvin.", "Kelvin", "UTF8_BINARY_LCASE", true);
+    assertContains("The Kelvin.", "Kelvin", "UTF8_BINARY_LCASE", true);
+    assertContains("The KKelvin.", "KKelvin", "UTF8_BINARY_LCASE", true);
+    assertContains("2 Kelvin.", "2 Kelvin", "UTF8_BINARY_LCASE", true);
+    assertContains("2 Kelvin.", "2 Kelvin", "UTF8_BINARY_LCASE", true);
+    assertContains("The KKelvin.", "KKelvin,", "UTF8_BINARY_LCASE", false);
     // Case-variable character length
     assertContains("i̇", "i", "UNICODE_CI", false);
     assertContains("i̇", "\u0307", "UNICODE_CI", false);
