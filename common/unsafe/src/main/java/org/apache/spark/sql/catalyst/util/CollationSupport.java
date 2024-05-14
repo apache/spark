@@ -746,7 +746,7 @@ public final class CollationSupport {
         this.left.moveAddress(left, posLeft, lenLeft);
         this.right.moveAddress(right, posRight, lenRight);
         return CollationFactory.fetchCollation(collationId).equalsFunction
-                .apply(this.left, this.right);
+          .apply(this.left, this.right);
       }
     }
 
@@ -810,7 +810,7 @@ public final class CollationSupport {
         final UTF8String right,
         final int collationId) {
       return String.format("CollationSupport.Levenshtein.exec" +
-              "(%s, %s, %d)", left, right, collationId);
+        "(%s, %s, %d)", left, right, collationId);
     }
 
     public static String genCodeWithTreshold(
@@ -819,7 +819,7 @@ public final class CollationSupport {
         final int threshold,
         final int collationId) {
       return String.format("CollationSupport.Levenshtein.execWithThreshold" +
-              "(%s, %s, %d, %d)", left, right, threshold, collationId);
+        "(%s, %s, %d, %d)", left, right, threshold, collationId);
     }
   }
 

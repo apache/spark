@@ -994,21 +994,21 @@ public class CollationSupportSuite {
   }
 
   private void assertLevenshtein(
-          String collation,
-          String leftString,
-          String rightString,
-          Integer threshold,
-          Integer expectedValue
+      String collation,
+      String leftString,
+      String rightString,
+      Integer threshold,
+      Integer expectedValue
   ) throws SparkException {
     int collationId = CollationFactory.collationNameToId(collation);
     int result;
 
     if (threshold == null) {
       result = CollationSupport.Levenshtein.exec(UTF8String.fromString(leftString),
-              UTF8String.fromString(rightString), collationId);
+        UTF8String.fromString(rightString), collationId);
     } else {
       result = CollationSupport.Levenshtein.execWithThreshold(UTF8String.fromString(leftString),
-              UTF8String.fromString(rightString), threshold, collationId);
+        UTF8String.fromString(rightString), threshold, collationId);
     }
 
     assertEquals(expectedValue, result);
