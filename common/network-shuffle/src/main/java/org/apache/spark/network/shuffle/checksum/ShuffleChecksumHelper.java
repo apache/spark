@@ -25,9 +25,11 @@ import java.util.zip.CheckedInputStream;
 import java.util.zip.Checksum;
 
 import com.google.common.io.ByteStreams;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import org.apache.spark.internal.Logger;
+import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.annotation.Private;
 import org.apache.spark.network.buffer.ManagedBuffer;
 
@@ -149,7 +151,8 @@ public class ShuffleChecksumHelper {
       cause = Cause.UNSUPPORTED_CHECKSUM_ALGORITHM;
     } catch (FileNotFoundException e) {
       // Even if checksum is enabled, a checksum file may not exist if error throws during writing.
-      logger.warn("Checksum file " + checksumFile.getName() + " doesn't exit");
+      logger.warn("Checksum file {} doesn't exit",
+        MDC.of(LogKeys.PATH$.MODULE$, checksumFile.getName()));
       cause = Cause.UNKNOWN_ISSUE;
     } catch (Exception e) {
       logger.warn("Unable to diagnose shuffle block corruption", e);
@@ -162,7 +165,9 @@ public class ShuffleChecksumHelper {
         checksumByReader, checksumByWriter, checksumByReCalculation);
     } else {
       logger.info("Shuffle corruption diagnosis took {} ms, checksum file {}, cause {}",
-        duration, checksumFile.getAbsolutePath(), cause);
+        MDC.of(LogKeys.TIME$.MODULE$, duration),
+        MDC.of(LogKeys.PATH$.MODULE$, checksumFile.getAbsolutePath()),
+        MDC.of(LogKeys.REASON$.MODULE$, cause));
     }
     return cause;
   }

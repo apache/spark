@@ -24,9 +24,11 @@ import java.util.Objects;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
 import org.rocksdb.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import org.apache.spark.internal.Logger;
+import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.network.shuffledb.StoreVersion;
 
 /**
@@ -65,7 +67,7 @@ public class RocksDBProvider {
           tmpDb = RocksDB.open(dbOptions, dbFile.toString());
         } catch (RocksDBException e) {
           if (e.getStatus().getCode() == Status.Code.NotFound) {
-            logger.info("Creating state database at " + dbFile);
+            logger.info("Creating state database at {}", MDC.of(LogKeys.PATH$.MODULE$, dbFile));
             dbOptions.setCreateIfMissing(true);
             try {
               tmpDb = RocksDB.open(dbOptions, dbFile.toString());
@@ -76,16 +78,16 @@ public class RocksDBProvider {
             // the RocksDB file seems to be corrupt somehow.  Let's just blow it away and create
             // a new one, so we can keep processing new apps
             logger.error("error opening rocksdb file {}. Creating new file, will not be able to " +
-              "recover state for existing applications", dbFile, e);
+              "recover state for existing applications", e, MDC.of(LogKeys.PATH$.MODULE$, dbFile));
             if (dbFile.isDirectory()) {
               for (File f : Objects.requireNonNull(dbFile.listFiles())) {
                 if (!f.delete()) {
-                  logger.warn("error deleting {}", f.getPath());
+                  logger.warn("error deleting {}", MDC.of(LogKeys.PATH$.MODULE$, f.getPath()));
                 }
               }
             }
             if (!dbFile.delete()) {
-              logger.warn("error deleting {}", dbFile.getPath());
+              logger.warn("error deleting {}", MDC.of(LogKeys.PATH$.MODULE$, dbFile.getPath()));
             }
             dbOptions.setCreateIfMissing(true);
             try {
