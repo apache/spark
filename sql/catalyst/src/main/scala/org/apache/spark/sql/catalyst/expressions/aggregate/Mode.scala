@@ -78,7 +78,8 @@ case class Mode(
     if (buffer.isEmpty) {
       return null
     }
-    val collationAwareBuffer = if (!CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
+    val collationAwareBuffer =
+      if (!CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
       val modeMap = buffer.toSeq.groupMapReduce {
         case (key: String, _) =>
           CollationFactory.getCollationKey(UTF8String.fromString(key), collationId)
@@ -98,8 +99,8 @@ case class Mode(
         PhysicalDataType.ordering(child.dataType).asInstanceOf[Ordering[AnyRef]]
       }
       val ordering = Ordering.Tuple2(Ordering.Long, defaultKeyOrdering)
-      buffer2.maxBy { case (key, count) => (count, key) }(ordering)
-    }.getOrElse(buffer2.maxBy(_._2))._1
+      collationAwareBuffer.maxBy { case (key, count) => (count, key) }(ordering)
+    }.getOrElse(collationAwareBuffer.maxBy(_._2))._1
   }
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): Mode =
