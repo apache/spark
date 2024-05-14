@@ -1736,3 +1736,152 @@ The Spark Catalyst data types below are not supported with suitable SQL Server t
 - NullType
 - ObjectType
 - VariantType
+
+### Mapping Spark SQL Data Types from DB2
+
+The below table describes the data type conversions from DB2 data types to Spark SQL Data Types,
+when reading data from a DB2 table using the built-in jdbc data source with the [IBM Data Server Driver For JDBC and SQLJ](https://mvnrepository.com/artifact/com.ibm.db2/jcc)
+as the activated JDBC Driver.
+
+
+<table>
+  <thead>
+    <tr>
+      <th><b>DB2 Data Type</b></th>
+      <th><b>Spark SQL Data Type</b></th>
+      <th><b>Remarks</b></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>BOOLEAN</td>
+      <td>BinaryType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>SMALLINT</td>
+      <td>ShortType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>INTEGER</td>
+      <td>IntegerType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>BIGINT</td>
+      <td>LongType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>REAL</td>
+      <td>FloatType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>DOUBLE, FLOAT</td>
+      <td>DoubleType</td>
+      <td>FLOAT is double precision floating-point in db2</td>
+    </tr>
+    <tr>
+      <td>DECIMAL, NUMERIC, DECFLOAT</td>
+      <td>DecimalType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>DATE</td>
+      <td>DateType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>TIMESTAMP, TIMESTAMP WITHOUT TIME ZONE</td>
+      <td>TimestampType</td>
+      <td>(Default)preferTimestampNTZ=false or spark.sql.timestampType=TIMESTAMP_LTZ</td>
+    </tr>
+    <tr>
+      <td>TIMESTAMP, TIMESTAMP WITHOUT TIME ZONE</td>
+      <td>TimestampNTZType</td>
+      <td>preferTimestampNTZ=true or spark.sql.timestampType=TIMESTAMP_NTZ</td>
+    </tr>
+    <tr>
+      <td>TIMESTAMP WITH TIME ZONE</td>
+      <td>TimestampType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>TIME</td>
+      <td>TimestampType</td>
+      <td>(Default)preferTimestampNTZ=false or spark.sql.timestampType=TIMESTAMP_LTZ</td>
+    </tr>
+    <tr>
+      <td>TIME</td>
+      <td>TimestampNTZType</td>
+      <td>preferTimestampNTZ=true or spark.sql.timestampType=TIMESTAMP_NTZ</td>
+    </tr>
+    <tr>
+      <td>CHAR(n)</td>
+      <td>CharType(n)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>VARCHAR(n)</td>
+      <td>VarcharType(n)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>CHAR(n) FOR BIT DATA</td>
+      <td>BinaryType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>VARCHAR(n) FOR BIT DATA</td>
+      <td>BinaryType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>BINARY(n)</td>
+      <td>BinaryType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>VARBINARY(n)</td>
+      <td>BinaryType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>CLOB(n)</td>
+      <td>StringType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>DBCLOB(n)</td>
+      <td>StringType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>BLOB(n)</td>
+      <td>BinaryType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>GRAPHIC(n)</td>
+      <td>StringType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>VARGRAPHIC(n)</td>
+      <td>StringType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>XML</td>
+      <td>StringType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>ROWID</td>
+      <td>StringType</td>
+      <td></td>
+    </tr>
+  </tbody>
+</table>
