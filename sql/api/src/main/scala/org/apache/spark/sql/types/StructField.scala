@@ -118,7 +118,7 @@ case class StructField(
   private def schemaCollationValue(dt: DataType): String = dt match {
     case st: StringType =>
       val collation = CollationFactory.fetchCollation(st.collationId)
-      collation.identifier().versionLess()
+      collation.identifier().valueWithoutVersion()
     case _ =>
       throw new IllegalStateException(s"Unexpected data type $dt")
   }

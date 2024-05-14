@@ -1865,7 +1865,7 @@ def _parse_type_with_collation(
 
 
 def _assert_valid_type_for_collation(fieldType: Union[dict, str]) -> None:
-    if fieldType != "string":
+    if isinstance(fieldType, str) and fieldType != "string":
         raise PySparkTypeError(
             error_class="INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
             message_parameters={"jsonType": fieldType},

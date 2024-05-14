@@ -37,6 +37,9 @@ import org.apache.spark.unsafe.types.UTF8String;
  */
 public final class CollationFactory {
 
+  /**
+   * Identifier for single a collation.
+   */
   public static class CollationIdentifier {
     public final String provider;
     public final String name;
@@ -59,9 +62,9 @@ public final class CollationFactory {
     }
 
     /**
-     * Returns
+     * Returns the identifier's string value without the version.
      */
-    public String versionLess() {
+    public String valueWithoutVersion() {
       return String.format("%s.%s", provider, name);
     }
   }
