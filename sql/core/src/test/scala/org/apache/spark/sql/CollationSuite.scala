@@ -989,6 +989,20 @@ class CollationSuite extends DatasourceV2SQLBase
   }
 
   test("expression walk") {
+    // This test does following:
+    // 1) Take all expressions
+    // 2) filter out ones that have at least one argument of string type
+    // 3) Use reflection to create an instance of the expression using first constructor
+    //    (test other as well).
+    // 4) Check if the expression is of type ExpectsInputTypes (should make this a bit broader)
+    // 5) Run eval against literals with strings under:
+    //    a) UTF8_BINARY, "dummy string" as input.
+    //    b) UTF8_BINARY_LCASE, "DuMmY sTrInG" as input.
+    // 6) Check if both expressions throw an exception.
+    // 7) If no exception, check if the result is the same.
+    // 8) There is a list of allowed expressions that can differ (e.g. hex)
+    //
+    // We currently capture 75/449 expressions. We could do better.
     val funInfos = spark.sessionState.functionRegistry.listFunction().map { funcId =>
       spark.sessionState.catalog.lookupFunctionInfo(funcId)
     }.filter(funInfo => {
