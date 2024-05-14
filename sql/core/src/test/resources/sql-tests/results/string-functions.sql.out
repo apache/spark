@@ -894,6 +894,14 @@ abc
 
 
 -- !query
+select decode(encode('大千世界', 'utf-32'), 'utf-32')
+-- !query schema
+struct<decode(encode(大千世界, utf-32), utf-32):string>
+-- !query output
+大千世界
+
+
+-- !query
 select decode(1, 1, 'Southlake')
 -- !query schema
 struct<decode(1, 1, Southlake):string>

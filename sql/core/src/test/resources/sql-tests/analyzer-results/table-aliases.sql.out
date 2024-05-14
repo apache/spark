@@ -2,7 +2,7 @@
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW testData AS SELECT * FROM VALUES (1, 1), (1, 2), (2, 1) AS testData(a, b)
 -- !query analysis
-CreateViewCommand `testData`, SELECT * FROM VALUES (1, 1), (1, 2), (2, 1) AS testData(a, b), false, true, LocalTempView, true
+CreateViewCommand `testData`, SELECT * FROM VALUES (1, 1), (1, 2), (2, 1) AS testData(a, b), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [a#x, b#x]
       +- SubqueryAlias testData
          +- LocalRelation [a#x, b#x]
@@ -158,7 +158,7 @@ Project [col1#x, col2#x]
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW src1 AS SELECT * FROM VALUES (1, "a"), (2, "b"), (3, "c") AS src1(id, v1)
 -- !query analysis
-CreateViewCommand `src1`, SELECT * FROM VALUES (1, "a"), (2, "b"), (3, "c") AS src1(id, v1), false, true, LocalTempView, true
+CreateViewCommand `src1`, SELECT * FROM VALUES (1, "a"), (2, "b"), (3, "c") AS src1(id, v1), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [id#x, v1#x]
       +- SubqueryAlias src1
          +- LocalRelation [id#x, v1#x]
@@ -167,7 +167,7 @@ CreateViewCommand `src1`, SELECT * FROM VALUES (1, "a"), (2, "b"), (3, "c") AS s
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW src2 AS SELECT * FROM VALUES (2, 1.0), (3, 3.2), (1, 8.5) AS src2(id, v2)
 -- !query analysis
-CreateViewCommand `src2`, SELECT * FROM VALUES (2, 1.0), (3, 3.2), (1, 8.5) AS src2(id, v2), false, true, LocalTempView, true
+CreateViewCommand `src2`, SELECT * FROM VALUES (2, 1.0), (3, 3.2), (1, 8.5) AS src2(id, v2), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [id#x, v2#x]
       +- SubqueryAlias src2
          +- LocalRelation [id#x, v2#x]

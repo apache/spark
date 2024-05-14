@@ -25,9 +25,11 @@ import com.google.common.base.Throwables;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import org.apache.spark.internal.Logger;
+import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.sasl.SecretKeyHolder;
@@ -91,7 +93,7 @@ class AuthRpcHandler extends AbstractAuthRpcHandler {
     } catch (RuntimeException e) {
       if (conf.saslFallback()) {
         LOG.warn("Failed to parse new auth challenge, reverting to SASL for client {}.",
-          channel.remoteAddress());
+          MDC.of(LogKeys.HOST_PORT$.MODULE$, channel.remoteAddress()));
         saslHandler = new SaslRpcHandler(conf, channel, null, secretKeyHolder);
         message.position(position);
         message.limit(limit);

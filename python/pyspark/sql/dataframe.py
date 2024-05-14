@@ -44,6 +44,7 @@ from pyspark.sql.utils import dispatch_df_method
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
+    import pyarrow as pa
     from pyspark.core.context import SparkContext
     from pyspark.core.rdd import RDD
     from pyspark._typing import PrimitiveType
@@ -1200,6 +1201,7 @@ class DataFrame:
         DataFrame.take : Returns the first `n` rows.
         DataFrame.head : Returns the first `n` rows.
         DataFrame.toPandas : Returns the data as a pandas DataFrame.
+        DataFrame.toArrow : Returns the data as a PyArrow Table.
 
         Notes
         -----
@@ -6210,6 +6212,34 @@ class DataFrame:
         --------
         pyspark.sql.functions.pandas_udf
         pyspark.sql.DataFrame.mapInPandas
+        """
+        ...
+
+    @dispatch_df_method
+    def toArrow(self) -> "pa.Table":
+        """
+        Returns the contents of this :class:`DataFrame` as PyArrow ``pyarrow.Table``.
+
+        This is only available if PyArrow is installed and available.
+
+        .. versionadded:: 4.0.0
+
+        Notes
+        -----
+        This method should only be used if the resulting PyArrow ``pyarrow.Table`` is
+        expected to be small, as all the data is loaded into the driver's memory.
+
+        This API is a developer API.
+
+        Examples
+        --------
+        >>> df.toArrow()  # doctest: +SKIP
+        pyarrow.Table
+        age: int64
+        name: string
+        ----
+        age: [[2,5]]
+        name: [["Alice","Bob"]]
         """
         ...
 
