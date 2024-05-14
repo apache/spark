@@ -89,7 +89,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   lazy val defaultSparkProperties: HashMap[String, String] = {
     val defaultProperties = new HashMap[String, String]()
     if (verbose) {
-      logInfo(log"Using properties file: ${MDC(PROPERTY_FILE, propertiesFile)}")
+      logInfo(log"Using properties file: ${MDC(PATH, propertiesFile)}")
     }
     Option(propertiesFile).foreach { filename =>
       val properties = Utils.getPropertiesFromFile(filename)
@@ -99,7 +99,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       // Property files may contain sensitive information, so redact before printing
       if (verbose) {
         Utils.redact(properties).foreach { case (k, v) =>
-          logInfo(log"Adding default property: ${MDC(PROPERTY_NAME, k)}=${MDC(VALUE, v)}")
+          logInfo(log"Adding default property: ${MDC(KEY, k)}=${MDC(VALUE, v)}")
         }
       }
     }

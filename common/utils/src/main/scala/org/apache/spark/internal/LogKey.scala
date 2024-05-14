@@ -81,6 +81,7 @@ object LogKeys {
   case object CLASS_LOADER extends LogKey
   case object CLASS_NAME extends LogKey
   case object CLASS_PATH extends LogKey
+  case object CLASS_PATHS extends LogKey
   case object CLAUSES extends LogKey
   case object CLUSTER_CENTROIDS extends LogKey
   case object CLUSTER_ID extends LogKey
@@ -474,7 +475,6 @@ object LogKeys {
   case object PROCESS extends LogKey
   case object PROCESSING_TIME extends LogKey
   case object PRODUCER_ID extends LogKey
-  case object PROPERTY_FILE extends LogKey
   case object PROPERTY_NAME extends LogKey
   case object PROVIDER extends LogKey
   case object PUSHED_FILTERS extends LogKey

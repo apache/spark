@@ -964,7 +964,7 @@ private[spark] class SparkSubmit extends Logging {
       // sysProps may contain sensitive information, so redact before printing
       logInfo(log"Spark config:\n" +
       log"${MDC(LogKeys.CONFIG, Utils.redact(sparkConf.getAll.toMap).sorted.mkString("\n"))}")
-      logInfo(log"Classpath elements:\n${MDC(LogKeys.CLASS_PATH, childClasspath.mkString("\n"))}")
+      logInfo(log"Classpath elements:\n${MDC(LogKeys.CLASS_PATHS, childClasspath.mkString("\n"))}")
       logInfo("\n")
     }
     assert(!(args.deployMode == "cluster" && args.proxyUser != null && childClasspath.nonEmpty) ||
