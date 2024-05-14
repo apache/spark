@@ -1091,6 +1091,19 @@ public class CollationSupportSuite {
     assertLevenshtein("UNICODE", "Ëaaaẞ", "ËAAAẞ", 2, -1);
     assertLevenshtein("UNICODE", "asda", "adA", 2, 2);
 
+    assertLevenshtein("UNICODE_CI", "", "", 2, 0);
+    assertLevenshtein("UNICODE_CI", "A", "", 2, 1);
+    assertLevenshtein("UNICODE_CI", "A", "A", 2, 0);
+    assertLevenshtein("UNICODE_CI", "A", "a", 2, 0);
+    assertLevenshtein("UNICODE_CI", "aaa", "aaa", 2, 0);
+    assertLevenshtein("UNICODE_CI", "Xü", "xü", 2, 0);
+    assertLevenshtein("UNICODE_CI", "", "random", 3, -1);
+    assertLevenshtein("UNICODE_CI", "", "random", 10, 6);
+    assertLevenshtein("UNICODE_CI", "Xü", "Xü", 2, 0);
+    assertLevenshtein("UNICODE_CI", "Ëaaaẞ", "ËAAAẞ", 3, 0);
+    assertLevenshtein("UNICODE_CI", "Ëaaaẞ", "ËAAAẞ", -1, -1);
+    assertLevenshtein("UNICODE_CI", "asda", "adA", 2, 1);
+
     assertLevenshtein("UNICODE", "asda", "asda", -1 , -1);
   }
 
