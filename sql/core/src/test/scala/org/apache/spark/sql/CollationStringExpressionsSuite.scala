@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkConf
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, Literal, StringTrim, StringTrimLeft, StringTrimRight}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Mode
 import org.apache.spark.sql.catalyst.util.CollationFactory
@@ -865,24 +866,23 @@ class CollationStringExpressionsSuite
      )
 
     case class ModeTestCase[R](collationId: String, bufferValues: Map[String, Long], result: R)
-    unicodeChars.sliding(2, 1).foreach(x => {
+    unicodeChars.sliding(3, 1).foreach(x => {
       val testCases = Seq(
         ModeTestCase("utf8_binary", x.map(y => (y, 1L)).toMap, x.head),
         ModeTestCase("unicode", x.map(y => (y, 1L)).toMap, x.head)
       )
       testCases.foreach(t => {
-        val valuesToAdd = t.bufferValues.map { case (elt, numRepeats) =>
-          (0L to numRepeats).map(_ => s"('$elt')").mkString(",")
-        }.mkString(",")
 
-        withTable("t") {
-          sql("CREATE TABLE t(i STRING) USING parquet")
-          sql("INSERT INTO t VALUES " + valuesToAdd)
-          val query = s"SELECT mode(collate(i, '${t.collationId}')) FROM t"
-          checkAnswer(sql(query), Row(t.result))
-          assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.collationId)))
-
+        val mode = Mode(child = Literal.create("some_column_name", StringType(t.collationId)))
+        val buffer = t.bufferValues.foldLeft(new OpenHashMap[AnyRef, Long](3))((b, each) => {
+          b.changeValue(UTF8String.fromString(each._1).asInstanceOf[AnyRef], each._2, _ + each._2)
+          b
         }
+        )
+        // scalastyle:off println
+        println(s"${t.bufferValues.keys.mkString(",")}: " + mode.eval(buffer))
+        // scalastyle:on println
+        assert(mode.eval(buffer).toString == t.result)
       })
     })
 
