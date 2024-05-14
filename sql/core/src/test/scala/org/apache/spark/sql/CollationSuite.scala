@@ -36,6 +36,8 @@ import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoi
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.internal.types.StringTypeAnyCollation
 import org.apache.spark.sql.types.{AbstractDataType, IntegerType, MapType, StringType, StructField, StructType, TypeCollection}
+import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.Utils
 
 class CollationSuite extends DatasourceV2SQLBase
   with AdaptiveSparkPlanHelper with ExpressionEvalHelper {
@@ -989,11 +991,58 @@ class CollationSuite extends DatasourceV2SQLBase
   test("expression walk") {
     val funInfos = spark.sessionState.functionRegistry.listFunction().map { funcId =>
       spark.sessionState.catalog.lookupFunctionInfo(funcId)
-    }.toArray
+    }.filter(funInfo => {
+      // make sure that there is a constructor.
+      val cl = Utils.classForName(funInfo.getClassName)
+      !cl.getConstructors.isEmpty
+    }).filter(funInfo => {
+      val className = funInfo.getClassName
+      // noinspection ScalaStyle
+      println("checking - " + className)
+      val cl = Utils.classForName(funInfo.getClassName)
+      // dummy instance
+      // Take first constructor.
+      val headConstructor = cl.getConstructors.head
+
+      val paramCount = headConstructor.getParameterCount
+      val allExpressions = headConstructor.getParameters.map(p => p.getType)
+        .forall(p => p.isAssignableFrom(classOf[Expression]))
+
+      if (!allExpressions) {
+        false
+      } else {
+        val args = Array.fill(paramCount)(Literal.create(1))
+        // Find all expressions that have string as input
+        try {
+          val expr = headConstructor.newInstance(args: _*)
+          expr match {
+            case types: ExpectsInputTypes =>
+              val inputTypes = types.inputTypes
+              // check if this is a collection...
+              inputTypes.exists {
+                case _: StringType | StringTypeAnyCollation => true
+                case TypeCollection(typeCollection) =>
+                  typeCollection.exists {
+                    case _: StringType | StringTypeAnyCollation => true
+                    case _ => false
+                  }
+                case _ => false
+              }
+            case _ =>
+              // Check other expressions here...
+              false
+          }
+        } catch {
+              // TODO: Try to get rid of this...
+          case _: Throwable =>
+            false
+        }
+      }
+    }).toArray
 
     // noinspection ScalaStyle
     println("Found total of " + funInfos.size + " functions")
-    // 449
+    // 63/449
 
     val expr = funInfos.find(fi => fi.getName.contains("collation")).get
     // noinspection ScalaStyle
@@ -1096,27 +1145,14 @@ class CollationSuite extends DatasourceV2SQLBase
     println(resUtf8Binary)
     // noinspection ScalaStyle
     println(resUtf8Lcase)
-    // checkEvaluation(instance, "dummy string")
-    // one of args in typecollection...
 
-    // substrExpr.inputTypes
-    // there are two constructors:
-    // Substring(Expression, Expression, Expression)
-    // Substring(Expression, Expression)
+    // Get string out of it.
+    val dt = instanceLcase.dataType
+    assert(dt.isInstanceOf[StringType])
+    assert(resUtf8Binary.isInstanceOf[UTF8String])
+    assert(resUtf8Lcase.isInstanceOf[UTF8String])
 
-    // Got this guy:
-    // public org.apache.spark.sql.catalyst.expressions.Collation(
-    //  org.apache.spark.sql.catalyst.expressions.Expression)
-
-    // val coll = cl.getConstructors.head.newInstance(lit).asInstanceOf[Collation]
-
-    // noinspection ScalaStyle
-    // println(coll)
-
-    // filter only functions that accept string as input
-    // assert(coll.dataType === StringType(0))
-
-    // check if there is a replacement.
-    // checkEvaluation(coll.replacement, "UTF8_BINARY")
+    assert(resUtf8Binary.asInstanceOf[UTF8String].toLowerCase.binaryEquals(
+      resUtf8Lcase.asInstanceOf[UTF8String].toLowerCase))
   }
 }
