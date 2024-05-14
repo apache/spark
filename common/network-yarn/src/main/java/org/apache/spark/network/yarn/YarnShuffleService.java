@@ -53,9 +53,11 @@ import org.apache.spark.network.shuffledb.DBIterator;
 import org.apache.spark.network.shuffledb.StoreVersion;
 import org.apache.spark.network.util.DBProvider;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import org.apache.spark.internal.Logger;
+import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.crypto.AuthServerBootstrap;
 import org.apache.spark.network.sasl.ShuffleSecretManager;
@@ -237,7 +239,7 @@ public class YarnShuffleService extends AuxiliaryService {
         .getResource(SHUFFLE_SERVICE_CONF_OVERLAY_RESOURCE_NAME);
     if (confOverlayUrl != null) {
       logger.info("Initializing Spark YARN shuffle service with configuration overlay from {}",
-          confOverlayUrl);
+        MDC.of(LogKeys.SHUFFLE_SERVICE_CONF_OVERLAY_URL$.MODULE$, confOverlayUrl));
       _conf.addResource(confOverlayUrl);
     }
 
@@ -262,7 +264,8 @@ public class YarnShuffleService extends AuxiliaryService {
         DBBackend.ROCKSDB.name());
       dbBackend = DBBackend.byName(dbBackendName);
       logger.info("Use {} as the implementation of {}",
-        dbBackend, Constants.SHUFFLE_SERVICE_DB_BACKEND);
+        MDC.of(LogKeys.SHUFFLE_DB_BACKEND_NAME$.MODULE$, dbBackend),
+        MDC.of(LogKeys.SHUFFLE_DB_BACKEND_KEY$.MODULE$, Constants.SHUFFLE_SERVICE_DB_BACKEND));
     }
 
     try {
@@ -326,11 +329,12 @@ public class YarnShuffleService extends AuxiliaryService {
           "PushBasedShuffleMergeManager", "Metrics on the push-based shuffle merge manager",
           mergeManagerMetrics);
       logger.info("Registered metrics with Hadoop's DefaultMetricsSystem using namespace '{}'",
-          metricsNamespace);
+        MDC.of(LogKeys.SHUFFLE_SERVICE_METRICS_NAMESPACE$.MODULE$, metricsNamespace));
 
-      logger.info("Started YARN shuffle service for Spark on port {}. " +
-        "Authentication is {}.  Registered executor file is {}", port, authEnabledString,
-        registeredExecutorFile);
+      logger.info("Started YARN shuffle service for Spark on port {}. Authentication is {}. " +
+        "Registered executor file is {}", MDC.of(LogKeys.PORT$.MODULE$, port),
+        MDC.of(LogKeys.AUTH_ENABLED$.MODULE$, authEnabledString),
+        MDC.of(LogKeys.REGISTERED_EXECUTOR_FILE$.MODULE$, registeredExecutorFile));
     } catch (Exception e) {
       if (stopOnFailure) {
         throw e;
@@ -363,7 +367,8 @@ public class YarnShuffleService extends AuxiliaryService {
       return mergeManagerSubClazz.getConstructor(TransportConf.class, File.class)
         .newInstance(conf, mergeManagerFile);
     } catch (Exception e) {
-      defaultLogger.error("Unable to create an instance of {}", mergeManagerImplClassName);
+      defaultLogger.error("Unable to create an instance of {}",
+        MDC.of(LogKeys.CLASS_NAME$.MODULE$, mergeManagerImplClassName));
       return new NoOpMergedShuffleFileManager(conf, mergeManagerFile);
     }
   }
@@ -426,7 +431,8 @@ public class YarnShuffleService extends AuxiliaryService {
         Object metadataStorageVal = metaInfo.get(SPARK_SHUFFLE_SERVER_RECOVERY_DISABLED);
         if (metadataStorageVal != null && (Boolean) metadataStorageVal) {
           AppsWithRecoveryDisabled.disableRecoveryOfApp(appId);
-          logger.info("Disabling metadata persistence for application {}", appId);
+          logger.info("Disabling metadata persistence for application {}",
+            MDC.of(LogKeys.APP_ID$.MODULE$, appId));
         }
       } catch (IOException ioe) {
         logger.warn("Unable to parse application data for service: " + payload);
@@ -449,7 +455,8 @@ public class YarnShuffleService extends AuxiliaryService {
         secretManager.registerApp(appId, shuffleSecret);
       }
     } catch (Exception e) {
-      logger.error("Exception when initializing application {}", appId, e);
+      logger.error("Exception when initializing application {}", e,
+        MDC.of(LogKeys.APP_ID$.MODULE$, appId));
     }
   }
 
@@ -463,14 +470,16 @@ public class YarnShuffleService extends AuxiliaryService {
           try {
             db.delete(dbAppKey(fullId));
           } catch (IOException e) {
-            logger.error("Error deleting {} from executor state db", appId, e);
+            logger.error("Error deleting {} from executor state db", e,
+              MDC.of(LogKeys.APP_ID$.MODULE$, appId));
           }
         }
         secretManager.unregisterApp(appId);
       }
       blockHandler.applicationRemoved(appId, false /* clean up local dirs */);
     } catch (Exception e) {
-      logger.error("Exception when stopping application {}", appId, e);
+      logger.error("Exception when stopping application {}", e,
+        MDC.of(LogKeys.APP_ID$.MODULE$, appId));
     } finally {
       AppsWithRecoveryDisabled.removeApp(appId);
     }
@@ -479,13 +488,13 @@ public class YarnShuffleService extends AuxiliaryService {
   @Override
   public void initializeContainer(ContainerInitializationContext context) {
     ContainerId containerId = context.getContainerId();
-    logger.info("Initializing container {}", containerId);
+    logger.info("Initializing container {}", MDC.of(LogKeys.CONTAINER_ID$.MODULE$, containerId));
   }
 
   @Override
   public void stopContainer(ContainerTerminationContext context) {
     ContainerId containerId = context.getContainerId();
-    logger.info("Stopping container {}", containerId);
+    logger.info("Stopping container {}", MDC.of(LogKeys.CONTAINER_ID$.MODULE$, containerId));
   }
 
   /**
@@ -566,8 +575,9 @@ public class YarnShuffleService extends AuxiliaryService {
             fs.rename(copyFrom, newLoc);
           } catch (Exception e) {
             // Fail to move recovery file to new path, just continue on with new DB location
-            logger.error("Failed to move recovery file {} to the path {}",
-              dbName, _recoveryPath.toString(), e);
+            logger.error("Failed to move recovery file {} to the path {}", e,
+              MDC.of(LogKeys.SHUFFLE_MERGE_RECOVERY_FILE$.MODULE$, dbName),
+              MDC.of(LogKeys.PATH$.MODULE$, _recoveryPath.toString()));
           }
         }
         return new File(newLoc.toUri().getPath());

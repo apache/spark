@@ -117,10 +117,11 @@ private[deploy] class HadoopFSDelegationTokenProvider
     filesystems.foreach { fs =>
       if (fsToExclude.contains(fs.getUri.getHost)) {
         // YARN RM skips renewing token with empty renewer
-        logInfo(s"getting token for: $fs with empty renewer to skip renewal")
+        logInfo(log"getting token for: ${MDC(FILE_SYSTEM, fs)} with empty renewer to skip renewal")
         Utils.tryLogNonFatalError { fs.addDelegationTokens("", creds) }
       } else {
-        logInfo(s"getting token for: $fs with renewer $renewer")
+        logInfo(log"getting token for: ${MDC(FILE_SYSTEM, fs)} with" +
+          log" renewer ${MDC(TOKEN_RENEWER, renewer)}")
         Utils.tryLogNonFatalError { fs.addDelegationTokens(renewer, creds) }
       }
     }
@@ -147,7 +148,8 @@ private[deploy] class HadoopFSDelegationTokenProvider
         val identifier = token.decodeIdentifier().asInstanceOf[AbstractDelegationTokenIdentifier]
         val tokenKind = token.getKind.toString
         val interval = newExpiration - getIssueDate(tokenKind, identifier)
-        logInfo(s"Renewal interval is $interval for token $tokenKind")
+        logInfo(log"Renewal interval is ${MDC(TOTAL_TIME, interval)} for" +
+          log" token ${MDC(TOKEN_KIND, tokenKind)}")
         interval
       }.toOption
     }

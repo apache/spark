@@ -138,16 +138,19 @@ private[spark] object FileAppender extends Logging {
     def createTimeBasedAppender(): FileAppender = {
       val validatedParams: Option[(Long, String)] = rollingInterval match {
         case "daily" =>
-          logInfo(s"Rolling executor logs enabled for $file with daily rolling")
+          logInfo(log"Rolling executor logs enabled for ${MDC(FILE_NAME, file)} with daily rolling")
           Some((24 * 60 * 60 * 1000L, "--yyyy-MM-dd"))
         case "hourly" =>
-          logInfo(s"Rolling executor logs enabled for $file with hourly rolling")
+          logInfo(log"Rolling executor logs enabled for ${MDC(FILE_NAME, file)}" +
+            log" with hourly rolling")
           Some((60 * 60 * 1000L, "--yyyy-MM-dd--HH"))
         case "minutely" =>
-          logInfo(s"Rolling executor logs enabled for $file with rolling every minute")
+          logInfo(log"Rolling executor logs enabled for ${MDC(FILE_NAME, file)}" +
+            log" with rolling every minute")
           Some((60 * 1000L, "--yyyy-MM-dd--HH-mm"))
         case IntParam(seconds) =>
-          logInfo(s"Rolling executor logs enabled for $file with rolling $seconds seconds")
+          logInfo(log"Rolling executor logs enabled for ${MDC(FILE_NAME, file)}" +
+            log" with rolling ${MDC(TIME_UNITS, seconds)} seconds")
           Some((seconds * 1000L, "--yyyy-MM-dd--HH-mm-ss"))
         case _ =>
           logWarning(log"Illegal interval for rolling executor logs [" +
@@ -168,7 +171,8 @@ private[spark] object FileAppender extends Logging {
     def createSizeBasedAppender(): FileAppender = {
       rollingSizeBytes match {
         case IntParam(bytes) =>
-          logInfo(s"Rolling executor logs enabled for $file with rolling every $bytes bytes")
+          logInfo(log"Rolling executor logs enabled for ${MDC(FILE_NAME, file)}" +
+            log" with rolling every ${MDC(NUM_BYTES, bytes)} bytes")
           new RollingFileAppender(
             inputStream, file, new SizeBasedRollingPolicy(bytes), conf, closeStreams = closeStreams)
         case _ =>

@@ -638,7 +638,7 @@ def try_divide(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     |                                          4 months|
     +--------------------------------------------------+
 
-    Example 3: Exception druing division, resulting in NULL when ANSI mode is on
+    Example 3: Exception during division, resulting in NULL when ANSI mode is on
 
     >>> import pyspark.sql.functions as sf
     >>> origin = spark.conf.get("spark.sql.ansi.enabled")
@@ -655,6 +655,56 @@ def try_divide(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     +-----------------+
     """
     return _invoke_function_over_columns("try_divide", left, right)
+
+
+@_try_remote_functions
+def try_remainder(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    """
+    Returns the remainder after `dividend`/`divisor`.  Its result is
+    always null if `divisor` is 0.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    left : :class:`~pyspark.sql.Column` or str
+        dividend
+    right : :class:`~pyspark.sql.Column` or str
+        divisor
+
+    Examples
+    --------
+    Example 1: Integer divided by Integer.
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [(6000, 15), (3, 2), (1234, 0)], ["a", "b"]
+    ... ).select(sf.try_remainder("a", "b")).show()
+    +-------------------+
+    |try_remainder(a, b)|
+    +-------------------+
+    |                  0|
+    |                  1|
+    |               NULL|
+    +-------------------+
+
+    Example 2: Exception during division, resulting in NULL when ANSI mode is on
+
+    >>> import pyspark.sql.functions as sf
+    >>> origin = spark.conf.get("spark.sql.ansi.enabled")
+    >>> spark.conf.set("spark.sql.ansi.enabled", "true")
+    >>> try:
+    ...     df = spark.range(1)
+    ...     df.select(sf.try_remainder(df.id, sf.lit(0))).show()
+    ... finally:
+    ...     spark.conf.set("spark.sql.ansi.enabled", origin)
+    +--------------------+
+    |try_remainder(id, 0)|
+    +--------------------+
+    |                NULL|
+    +--------------------+
+    """
+    return _invoke_function_over_columns("try_remainder", left, right)
 
 
 @_try_remote_functions

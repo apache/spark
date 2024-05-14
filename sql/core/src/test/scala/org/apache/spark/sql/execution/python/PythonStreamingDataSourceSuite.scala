@@ -299,7 +299,7 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
       val checkpointDir = new File(path, "checkpoint")
       val outputDir = new File(path, "output")
       val df = spark.readStream.format(dataSourceName).load()
-      var lastBatch = 0
+      var lastBatchId = 0
       // Restart streaming query multiple times to verify exactly once guarantee.
       for (i <- 1 to 5) {
 
@@ -323,11 +323,15 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
         }
         q.stop()
         q.awaitTermination()
-        lastBatch = q.lastProgress.batchId.toInt
+        lastBatchId = q.lastProgress.batchId.toInt
       }
-      assert(lastBatch > 20)
+      assert(lastBatchId > 20)
+      val rowCount = spark.read.format("json").load(outputDir.getAbsolutePath).count()
+      // There may be one uncommitted batch that is not recorded in query progress.
+      // The number of batch can be lastBatchId + 1 or lastBatchId + 2.
+      assert(rowCount == 2 * (lastBatchId + 1) || rowCount == 2 * (lastBatchId + 2))
       checkAnswer(spark.read.format("json").load(outputDir.getAbsolutePath),
-        (0 to  2 * lastBatch + 1).map(Row(_)))
+        (0 until rowCount.toInt).map(Row(_)))
     }
   }
 
