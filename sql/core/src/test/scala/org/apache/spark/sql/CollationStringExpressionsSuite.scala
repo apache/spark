@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, Literal,
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, DataType, IntegerType, StringType}
 
 // scalastyle:off nonascii
 class CollationStringExpressionsSuite
