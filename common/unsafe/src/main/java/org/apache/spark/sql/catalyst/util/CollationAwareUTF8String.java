@@ -35,20 +35,30 @@ import java.util.Map;
  */
 public class CollationAwareUTF8String {
 
-  public static boolean lowercaseMatchFrom(final UTF8String l, final UTF8String r, int pos) {
-    if (pos < 0) return false;
-    for (int len = 0; len <= l.numChars() - pos; len++) {
-      if (l.substring(pos, pos + len).toLowerCase().equals(r)) {
+  public static boolean lowercaseMatchFrom(
+      final UTF8String target,
+      final UTF8String lowercasePattern,
+      int startPos) {
+    // To avoid the overhead of calling .toLowerCase() multiple times on the same pattern string,
+    // this method assumes that the pattern string is already lowercased prior to method call.
+    assert startPos >= 0;
+    for (int len = 0; len <= target.numChars() - startPos; ++len) {
+      if (target.substring(startPos, startPos + len).toLowerCase().equals(lowercasePattern)) {
         return true;
       }
     }
     return false;
   }
 
-  public static boolean lowercaseMatchUntil(final UTF8String l, final UTF8String r, int pos) {
-    if (pos > l.numChars()) return false;
-    for (int len = 1; len <= pos; len++) {
-      if (l.substring(pos - len, pos).toLowerCase().equals(r)) {
+  public static boolean lowercaseMatchUntil(
+          final UTF8String target,
+          final UTF8String lowercasePattern,
+          int endPos) {
+    // To avoid the overhead of calling .toLowerCase() multiple times on the same pattern string,
+    // this method assumes that the pattern string is already lowercased prior to method call.
+    assert endPos <= target.numChars();
+    for (int len = 0; len <= endPos; ++len) {
+      if (target.substring(endPos - len, endPos).toLowerCase().equals(lowercasePattern)) {
         return true;
       }
     }
@@ -209,7 +219,7 @@ public class CollationAwareUTF8String {
     if (pattern.numChars() == 0) return 0;
     int lenHaystack = target.numChars(), lenNeedle = pattern.numChars();
     final UTF8String needle = pattern.toLowerCase();
-    for (int i = start; i <= (lenHaystack - lenNeedle); i++) {
+    for (int i = start; i <= (lenHaystack - lenNeedle); ++i) {
       if (CollationAwareUTF8String.lowercaseMatchFrom(target, needle, i)) {
         return i;
       }
