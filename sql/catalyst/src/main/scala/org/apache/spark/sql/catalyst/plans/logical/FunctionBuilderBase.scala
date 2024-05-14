@@ -70,6 +70,8 @@ trait FunctionBuilderBase[T] {
   }
 
   def build(funcName: String, expressions: Seq[Expression]): T
+
+  def supportsLambda: Boolean = false
 }
 
 object NamedParametersSupport {

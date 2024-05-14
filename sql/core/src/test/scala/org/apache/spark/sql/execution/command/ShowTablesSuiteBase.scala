@@ -351,6 +351,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
              |Created By: <created by>
              |Type: VIEW
              |View Text: SELECT id FROM $catalog.$namespace.$table
+             |View Schema Mode: COMPENSATION
              |View Catalog and Namespace: spark_catalog.default
              |View Query Output Columns: [id]
              |Schema: root
@@ -377,6 +378,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
              |Created By: <created by>
              |Type: VIEW
              |View Text: SELECT id FROM $catalog.$namespace.$table
+             |View Schema Mode: COMPENSATION
              |View Catalog and Namespace: spark_catalog.default
              |View Query Output Columns: [id]
              |Schema: root
@@ -394,6 +396,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
              |Created By: <created by>
              |Type: VIEW
              |View Text: SELECT id FROM $catalog.$namespace.$table
+             |View Schema Mode: COMPENSATION
              |View Catalog and Namespace: spark_catalog.default
              |View Query Output Columns: [id]
              |Schema: root

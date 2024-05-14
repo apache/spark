@@ -1569,6 +1569,19 @@ _INTERVAL_DAYTIME = re.compile(r"interval (day|hour|minute|second)( to (day|hour
 _INTERVAL_YEARMONTH = re.compile(r"interval (year|month)( to (year|month))?")
 
 
+def _drop_metadata(d: Union[DataType, StructField]) -> Union[DataType, StructField]:
+    assert isinstance(d, (DataType, StructField))
+    if isinstance(d, StructField):
+        return StructField(d.name, _drop_metadata(d.dataType), d.nullable, None)
+    elif isinstance(d, StructType):
+        return StructType([cast(StructField, _drop_metadata(f)) for f in d.fields])
+    elif isinstance(d, ArrayType):
+        return ArrayType(_drop_metadata(d.elementType), d.containsNull)
+    elif isinstance(d, MapType):
+        return MapType(_drop_metadata(d.keyType), _drop_metadata(d.valueType), d.valueContainsNull)
+    return d
+
+
 def _parse_datatype_string(s: str) -> DataType:
     """
     Parses the given data type string to a :class:`DataType`. The data type string format equals
@@ -1938,13 +1951,27 @@ def _infer_type(
         if len(obj) > 0:
             if infer_array_from_first_element:
                 return ArrayType(
-                    _infer_type(obj[0], infer_dict_as_struct, prefer_timestamp_ntz), True
+                    _infer_type(
+                        obj[0],
+                        infer_dict_as_struct,
+                        infer_array_from_first_element,
+                        prefer_timestamp_ntz,
+                    ),
+                    True,
                 )
             else:
                 return ArrayType(
                     reduce(
                         _merge_type,
-                        (_infer_type(v, infer_dict_as_struct, prefer_timestamp_ntz) for v in obj),
+                        (
+                            _infer_type(
+                                v,
+                                infer_dict_as_struct,
+                                infer_array_from_first_element,
+                                prefer_timestamp_ntz,
+                            )
+                            for v in obj
+                        ),
                     ),
                     True,
                 )

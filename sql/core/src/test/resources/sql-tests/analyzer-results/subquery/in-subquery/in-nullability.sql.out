@@ -2,7 +2,7 @@
 -- !query
 create temp view t0 as select 1 as a_nonnullable
 -- !query analysis
-CreateViewCommand `t0`, select 1 as a_nonnullable, false, false, LocalTempView, true
+CreateViewCommand `t0`, select 1 as a_nonnullable, false, false, LocalTempView, UNSUPPORTED, true
    +- Project [1 AS a_nonnullable#x]
       +- OneRowRelation
 
@@ -10,7 +10,7 @@ CreateViewCommand `t0`, select 1 as a_nonnullable, false, false, LocalTempView, 
 -- !query
 create temp view t1 as select cast(null as int) as b_nullable
 -- !query analysis
-CreateViewCommand `t1`, select cast(null as int) as b_nullable, false, false, LocalTempView, true
+CreateViewCommand `t1`, select cast(null as int) as b_nullable, false, false, LocalTempView, UNSUPPORTED, true
    +- Project [cast(null as int) AS b_nullable#x]
       +- OneRowRelation
 
@@ -18,7 +18,7 @@ CreateViewCommand `t1`, select cast(null as int) as b_nullable, false, false, Lo
 -- !query
 create temp view t2 as select 2 as c
 -- !query analysis
-CreateViewCommand `t2`, select 2 as c, false, false, LocalTempView, true
+CreateViewCommand `t2`, select 2 as c, false, false, LocalTempView, UNSUPPORTED, true
    +- Project [2 AS c#x]
       +- OneRowRelation
 
