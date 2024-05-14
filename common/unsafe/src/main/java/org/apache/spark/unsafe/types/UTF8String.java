@@ -901,7 +901,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    */
   public int indexOf(UTF8String v, int start) {
     if (v.numBytes() == 0) {
-      return 0;
+      return start;
     }
 
     // locate to the start position.
