@@ -1305,7 +1305,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     val df5 = spark.table("h2.test.address").filter($"email".startsWith("abc_'%"))
     checkFiltersRemoved(df5)
     checkPushedInfo(df5,
-      raw"PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE 'abc\_\'\%%' ESCAPE '\']")
+      raw"PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE 'abc\_''\%%' ESCAPE '\']")
     checkAnswer(df5, Seq(Row("abc_'%def@gmail.com")))
 
     val df6 = spark.table("h2.test.address").filter($"email".endsWith("_def@gmail.com"))
@@ -1336,7 +1336,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     val df10 = spark.table("h2.test.address").filter($"email".endsWith("_'%def@gmail.com"))
     checkFiltersRemoved(df10)
     checkPushedInfo(df10,
-      raw"PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE '%\_\'\%def@gmail.com' ESCAPE '\']")
+      raw"PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE '%\_''\%def@gmail.com' ESCAPE '\']")
     checkAnswer(df10, Seq(Row("abc_'%def@gmail.com")))
 
     val df11 = spark.table("h2.test.address").filter($"email".contains("c_d"))
@@ -1364,7 +1364,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     val df15 = spark.table("h2.test.address").filter($"email".contains("c_'%d"))
     checkFiltersRemoved(df15)
     checkPushedInfo(df15,
-      raw"PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE '%c\_\'\%d%' ESCAPE '\']")
+      raw"PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE '%c\_''\%d%' ESCAPE '\']")
     checkAnswer(df15, Seq(Row("abc_'%def@gmail.com")))
   }
 
