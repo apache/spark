@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.catalyst.util.{CollationFactory, GenericArrayData}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, ArrayType, BooleanType, DataType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.collection.OpenHashMap
 
