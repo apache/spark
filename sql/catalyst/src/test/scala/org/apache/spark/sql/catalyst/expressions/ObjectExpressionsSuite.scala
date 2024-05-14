@@ -590,7 +590,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     def kvSerializerFor(enc: AgnosticEncoder[_])(inputObject: Expression): Expression = enc match {
       case AgnosticEncoders.BoxedIntEncoder =>
         Invoke(inputObject, "intValue", IntegerType)
-      case AgnosticEncoders.StringEncoder =>
+      case _: AgnosticEncoders.StringEncoder =>
         StaticInvoke(
           classOf[UTF8String],
           StringType,

@@ -482,4 +482,15 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     val data = Row(mutable.ArraySeq.make(Array(Row("key", "value".getBytes))))
     val row = encoder.createSerializer()(data)
   }
+
+  test("SPARK-48271: support char/varchar") {
+    val schema = new StructType().add("c1", CharType(10)).add("c2", VarcharType(10))
+    val encoder = ExpressionEncoder(schema).resolveAndBind()
+    val row = toRow(encoder, Row("a", "b"))
+    assert(row.getString(0) === "a")
+    assert(row.getString(1) === "b")
+    val readback = fromRow(encoder, row)
+    assert(readback.getString(0) === "a")
+    assert(readback.getString(1) === "b")
+  }
 }

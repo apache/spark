@@ -123,7 +123,7 @@ object ArrowDeserializers {
         new Deserializer[Any] {
           def get(i: Int): Any = null
         }
-      case (StringEncoder, v: FieldVector) =>
+      case (_: StringEncoder, v: FieldVector) =>
         new LeafFieldDeserializer[String](encoder, v, timeZoneId) {
           override def value(i: Int): String = reader.getString(i)
         }

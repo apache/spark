@@ -258,7 +258,7 @@ object DeserializerBuildHelper {
         "withName",
         createDeserializerForString(path, returnNullable = false) :: Nil,
         returnNullable = false)
-    case StringEncoder =>
+    case _: StringEncoder =>
       createDeserializerForString(path, returnNullable = false)
     case _: ScalaDecimalEncoder =>
       createDeserializerForScalaBigDecimal(path, returnNullable = false)

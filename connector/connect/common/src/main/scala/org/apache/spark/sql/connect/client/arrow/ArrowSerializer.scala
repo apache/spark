@@ -259,7 +259,7 @@ object ArrowSerializer {
         new FieldSerializer[Unit, NullVector](v) {
           override def set(index: Int, value: Unit): Unit = vector.setNull(index)
         }
-      case (StringEncoder, v: VarCharVector) =>
+      case (_: StringEncoder, v: VarCharVector) =>
         new FieldSerializer[String, VarCharVector](v) {
           override def set(index: Int, value: String): Unit = setString(v, index, value)
         }
