@@ -20,12 +20,16 @@ package org.apache.spark.internal;
 public class LoggerFactory {
 
   public static Logger getLogger(String name) {
+    // checkstyle.off: RegexpSinglelineJava
     org.slf4j.Logger slf4jLogger = org.slf4j.LoggerFactory.getLogger(name);
+    // checkstyle.on: RegexpSinglelineJava
     return new Logger(slf4jLogger);
   }
 
   public static Logger getLogger(Class<?> clazz) {
+    // checkstyle.off: RegexpSinglelineJava
     org.slf4j.Logger slf4jLogger = org.slf4j.LoggerFactory.getLogger(clazz);
+    // checkstyle.on: RegexpSinglelineJava
     return new Logger(slf4jLogger);
   }
 }

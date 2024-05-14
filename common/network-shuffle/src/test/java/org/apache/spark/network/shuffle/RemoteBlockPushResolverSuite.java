@@ -47,10 +47,10 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.roaringbitmap.RoaringBitmap;
-// checkstyle.off: IllegalImport
+// checkstyle.off: RegexpSinglelineJava
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-// checkstyle.on: IllegalImport
+// checkstyle.on: RegexpSinglelineJava
 
 import static org.junit.jupiter.api.Assertions.*;
 

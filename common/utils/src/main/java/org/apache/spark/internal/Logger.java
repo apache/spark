@@ -28,11 +28,13 @@ import org.apache.logging.log4j.message.ParameterizedMessageFactory;
 public class Logger {
 
   private static final MessageFactory MESSAGE_FACTORY = ParameterizedMessageFactory.INSTANCE;
+  // checkstyle.off: RegexpSinglelineJava
   private final org.slf4j.Logger slf4jLogger;
 
   Logger(org.slf4j.Logger slf4jLogger) {
     this.slf4jLogger = slf4jLogger;
   }
+  // checkstyle.on: RegexpSinglelineJava
 
   public boolean isErrorEnabled() {
     return slf4jLogger.isErrorEnabled();
@@ -194,7 +196,9 @@ public class Logger {
     }
   }
 
+  // checkstyle.off: RegexpSinglelineJava
   public org.slf4j.Logger getSlf4jLogger() {
     return slf4jLogger;
   }
+  // checkstyle.on: RegexpSinglelineJava
 }
