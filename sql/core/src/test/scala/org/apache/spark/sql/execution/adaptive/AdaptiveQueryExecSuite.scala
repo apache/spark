@@ -2781,6 +2781,11 @@ class AdaptiveQueryExecSuite
   test("SPARK-48155: AQEPropagateEmptyRelation check remained child for join") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      // Before SPARK-48155, since the AQE will call ValidateSparkPlan,
+      // all AQE optimize rule won't work and return the origin plan.
+      // After SPARK-48155, Spark avoid invalid propagate of empty relation.
+      // Then the UNION first child empty relation can be propagate correctly
+      // and the JOIN won't be propagated since will generated a invalid plan.
       val (_, adaptivePlan) = runAdaptiveAndVerifyResult(
         """
           |SELECT /*+ BROADCAST(t3) */ t3.b, count(t3.a) FROM testData2 t1

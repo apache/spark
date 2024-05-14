@@ -82,6 +82,16 @@ object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
     case _ => false
   }
 
+  // In AQE, query stage will be wrapped with LogicalQueryStage, if it's child is
+  // BroadcastQueryStage and join other side is empty relation like the follow plan:
+  // Join
+  //   :- LocalTableScan <empty>, [a#23]
+  //   +- LogicalQueryStage(_, BroadcastQueryStage)
+  // After AQEPropagateEmptyRelation, the plan will be
+  // Project
+  //   +- LogicalQueryStage(_, BroadcastQueryStage)
+  // Then after LogicalQueryStageStrategy, will only remain BroadcastQueryStage after project,
+  // the plan can execute.
   override protected def canExecuteWithJoin(plan: LogicalPlan): Boolean = plan match {
     case LogicalQueryStage(_, _: BroadcastQueryStageExec) => false
     case _ => true
