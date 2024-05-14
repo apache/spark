@@ -1589,12 +1589,8 @@ class ParquetIOWithoutOutputCommitCoordinationSuite
             .coalesce(1)
           df.write.partitionBy("a").options(extraOptions).parquet(dir.getCanonicalPath)
         }
-        if (m2.getErrorClass != null) {
-          assert(m2.getErrorClass == "TASK_WRITE_FAILED")
-          assert(m2.getCause.getMessage.contains("Intentional exception for testing purposes"))
-        } else {
-          assert(m2.getMessage.contains("TASK_WRITE_FAILED"))
-        }
+        assert(m2.getErrorClass == "TASK_WRITE_FAILED")
+        assert(m2.getCause.getMessage.contains("Intentional exception for testing purposes"))
       }
     }
   }

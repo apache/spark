@@ -219,7 +219,7 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
         if (sc.executorMemory <= memThreshold) {
           logWarning(log"${MDC(LogKeys.CLASS_NAME, thisClassName)}.save() was called, " +
             log"but it may fail because of too little executor memory " +
-            log"(${MDC(LogKeys.EXECUTION_MEMORY_SIZE, sc.executorMemory)}m). If failure occurs, " +
+            log"(${MDC(LogKeys.EXECUTOR_MEMORY_SIZE, sc.executorMemory)}m). If failure occurs, " +
             log"try setting executor-memory ${MDC(LogKeys.MEMORY_THRESHOLD_SIZE, memThreshold)}m " +
             log"(or larger).")
         }
