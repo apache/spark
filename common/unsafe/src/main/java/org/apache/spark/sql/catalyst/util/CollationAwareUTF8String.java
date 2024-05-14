@@ -35,12 +35,21 @@ import java.util.Map;
  */
 public class CollationAwareUTF8String {
 
+  /**
+   * Returns whether the target string starts with the specified prefix,
+   * with respect to the UTF8_BINARY_LCASE collation. The method assumes
+   * that the prefix is already lowercased prior to method call to avoid the
+   * overhead of calling .toLowerCase() multiple times on the same prefix string.
+   *
+   * @param target the string to be searched in
+   * @param lowercasePattern the string to be searched for
+   * @param startPos the start position for searching (in the target string)
+   * @return whether the target string starts with the specified prefix in UTF8_BINARY_LCASE
+   */
   public static boolean lowercaseMatchFrom(
       final UTF8String target,
       final UTF8String lowercasePattern,
       int startPos) {
-    // To avoid the overhead of calling .toLowerCase() multiple times on the same pattern string,
-    // this method assumes that the pattern string is already lowercased prior to method call.
     assert startPos >= 0;
     for (int len = 0; len <= target.numChars() - startPos; ++len) {
       if (target.substring(startPos, startPos + len).toLowerCase().equals(lowercasePattern)) {
@@ -50,6 +59,17 @@ public class CollationAwareUTF8String {
     return false;
   }
 
+  /**
+   * Returns whether the target string ends with the specified suffix,
+   * with respect to the UTF8_BINARY_LCASE collation. The method assumes
+   * that the suffix is already lowercased prior to method call to avoid the
+   * overhead of calling .toLowerCase() multiple times on the same suffix string.
+   *
+   * @param target the string to be searched in
+   * @param lowercasePattern the string to be searched for
+   * @param endPos the end position for searching (in the target string)
+   * @return whether the target string ends with the specified suffix in UTF8_BINARY_LCASE
+   */
   public static boolean lowercaseMatchUntil(
           final UTF8String target,
           final UTF8String lowercasePattern,
@@ -214,6 +234,16 @@ public class CollationAwareUTF8String {
     return 0;
   }
 
+  /**
+   * Returns the position of the first occurrence of the pattern string
+   * in the target string from the specified position (0-based index),
+   * with respect to the UTF8_BINARY_LCASE collation.
+   *
+   * @param target the string to be searched in
+   * @param pattern the string to be searched for
+   * @param start the start position for searching (in the target string)
+   * @return the position of the first occurrence of pattern in target, if not found, -1 returned.
+   */
   public static int lowercaseIndexOf(final UTF8String target, final UTF8String pattern,
       final int start) {
     if (pattern.numChars() == 0) return 0;
