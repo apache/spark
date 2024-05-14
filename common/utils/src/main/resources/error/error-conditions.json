@@ -1339,6 +1339,12 @@
     ],
     "sqlState" : "54001"
   },
+  "FEATURE_NOT_ENABLED" : {
+    "message" : [
+      "The feature <featureName> is not enabled. Consider setting the config <configKey> to <configValue> to enable this capability."
+    ],
+    "sqlState" : "56038"
+  },
   "FIELD_ALREADY_EXISTS" : {
     "message" : [
       "Cannot <op> column, because <fieldNames> already exists in <struct>."
@@ -4493,6 +4499,11 @@
       "TABLE_OPERATION" : {
         "message" : [
           "Table <tableName> does not support <operation>. Please check the current catalog and namespace to make sure the qualified table name is expected, and also check the catalog implementation which is configured by \"spark.sql.catalog\"."
+        ]
+      },
+      "TEMPORARY_VIEW_WITH_SCHEMA_BINDING_MODE" : {
+        "message" : [
+          "Temporary views cannot be created with the WITH SCHEMA clause. Recreate the temporary view when the underlying schema changes, or use a persisted view."
         ]
       },
       "TIME_TRAVEL" : {

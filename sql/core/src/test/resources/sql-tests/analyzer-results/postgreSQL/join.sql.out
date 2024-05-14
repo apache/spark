@@ -12,7 +12,7 @@ CreateViewCommand `INT2_TBL`, [(f1,None)], VALUES
   (smallint(trim('  1234 '))),
   (smallint(trim('    -1234'))),
   (smallint('32767')),
-  (smallint('-32767')), false, true, LocalTempView, true
+  (smallint('-32767')), false, true, LocalTempView, UNSUPPORTED, true
    +- LocalRelation [col1#x]
 
 
@@ -23,7 +23,7 @@ CREATE OR REPLACE TEMPORARY VIEW INT4_TBL AS SELECT * FROM
 -- !query analysis
 CreateViewCommand `INT4_TBL`, SELECT * FROM
   (VALUES (0), (123456), (-123456), (2147483647), (-2147483647))
-  AS v(f1), false, true, LocalTempView, true
+  AS v(f1), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [f1#x]
       +- SubqueryAlias v
          +- Project [col1#x AS f1#x]
@@ -47,7 +47,7 @@ CreateViewCommand `INT8_TBL`, SELECT * FROM
     (4567890123456789, 123),
     (4567890123456789, 4567890123456789),
     (4567890123456789, -4567890123456789))
-  AS v(q1, q2), false, true, LocalTempView, true
+  AS v(q1, q2), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [q1#xL, q2#xL]
       +- SubqueryAlias v
          +- Project [col1#xL AS q1#xL, col2#xL AS q2#xL]
@@ -63,7 +63,7 @@ CREATE OR REPLACE TEMPORARY VIEW FLOAT8_TBL AS SELECT * FROM
 CreateViewCommand `FLOAT8_TBL`, SELECT * FROM
   (VALUES (0.0), (1004.30), (-34.84),
     (cast('1.2345678901234e+200' as double)), (cast('1.2345678901234e-200' as double)))
-  AS v(f1), false, true, LocalTempView, true
+  AS v(f1), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [f1#x]
       +- SubqueryAlias v
          +- Project [col1#x AS f1#x]
@@ -77,7 +77,7 @@ CREATE OR REPLACE TEMPORARY VIEW TEXT_TBL AS SELECT * FROM
 -- !query analysis
 CreateViewCommand `TEXT_TBL`, SELECT * FROM
   (VALUES ('doh!'), ('hi de ho neighbor'))
-  AS v(f1), false, true, LocalTempView, true
+  AS v(f1), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [f1#x]
       +- SubqueryAlias v
          +- Project [col1#x AS f1#x]
@@ -87,7 +87,7 @@ CreateViewCommand `TEXT_TBL`, SELECT * FROM
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW tenk2 AS SELECT * FROM tenk1
 -- !query analysis
-CreateViewCommand `tenk2`, SELECT * FROM tenk1, false, true, LocalTempView, true
+CreateViewCommand `tenk2`, SELECT * FROM tenk1, false, true, LocalTempView, UNSUPPORTED, true
    +- Project [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x]
       +- SubqueryAlias spark_catalog.default.tenk1
          +- Relation spark_catalog.default.tenk1[unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x] parquet
@@ -1001,7 +1001,7 @@ create or replace temporary view x as select * from
 -- !query analysis
 CreateViewCommand `x`, select * from
   (values (1,11), (2,22), (3,null), (4,44), (5,null))
-  as v(x1, x2), false, true, LocalTempView, true
+  as v(x1, x2), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [x1#x, x2#x]
       +- SubqueryAlias v
          +- Project [col1#x AS x1#x, col2#x AS x2#x]
@@ -1015,7 +1015,7 @@ create or replace temporary view y as select * from
 -- !query analysis
 CreateViewCommand `y`, select * from
   (values (1,111), (2,222), (3,333), (4,null))
-  as v(y1, y2), false, true, LocalTempView, true
+  as v(y1, y2), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [y1#x, y2#x]
       +- SubqueryAlias v
          +- Project [col1#x AS y1#x, col2#x AS y2#x]
@@ -1625,7 +1625,7 @@ create or replace temporary view tt1 as select * from
 -- !query analysis
 CreateViewCommand `tt1`, select * from
   (values (1, 11), (2, NULL))
-  as v(tt1_id, joincol), false, true, LocalTempView, true
+  as v(tt1_id, joincol), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [tt1_id#x, joincol#x]
       +- SubqueryAlias v
          +- Project [col1#x AS tt1_id#x, col2#x AS joincol#x]
@@ -1639,7 +1639,7 @@ create or replace temporary view tt2 as select * from
 -- !query analysis
 CreateViewCommand `tt2`, select * from
   (values (21, 11), (22, 11))
-  as v(tt2_id, joincol), false, true, LocalTempView, true
+  as v(tt2_id, joincol), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [tt2_id#x, joincol#x]
       +- SubqueryAlias v
          +- Project [col1#x AS tt2_id#x, col2#x AS joincol#x]
@@ -1710,7 +1710,7 @@ create or replace temporary view tt3 as select * from
 -- !query analysis
 CreateViewCommand `tt3`, select * from
   (SELECT cast(x.id as int), repeat('xyzzy', 100) FROM range(1,10001) x)
-  as v(f1, f2), false, true, LocalTempView, true
+  as v(f1, f2), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [f1#x, f2#x]
       +- SubqueryAlias v
          +- Project [id#x AS f1#x, repeat(xyzzy, 100)#x AS f2#x]
@@ -1726,7 +1726,7 @@ create or replace temporary view tt4 as select * from
 -- !query analysis
 CreateViewCommand `tt4`, select * from
   (values (0), (1), (9999))
-  as v(f1), false, true, LocalTempView, true
+  as v(f1), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [f1#x]
       +- SubqueryAlias v
          +- Project [col1#x AS f1#x]
@@ -1787,7 +1787,7 @@ create or replace temporary view tt5 as select * from
 -- !query analysis
 CreateViewCommand `tt5`, select * from
   (values (1, 10), (1, 11))
-  as v(f1, f2), false, true, LocalTempView, true
+  as v(f1, f2), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [f1#x, f2#x]
       +- SubqueryAlias v
          +- Project [col1#x AS f1#x, col2#x AS f2#x]
@@ -1801,7 +1801,7 @@ create or replace temporary view tt6 as select * from
 -- !query analysis
 CreateViewCommand `tt6`, select * from
   (values (1, 9), (1, 2), (2, 9))
-  as v(f1, f2), false, true, LocalTempView, true
+  as v(f1, f2), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [f1#x, f2#x]
       +- SubqueryAlias v
          +- Project [col1#x AS f1#x, col2#x AS f2#x]
@@ -1837,7 +1837,7 @@ create or replace temporary view xx as select * from
 -- !query analysis
 CreateViewCommand `xx`, select * from
   (values (1), (2), (3))
-  as v(pkxx), false, true, LocalTempView, true
+  as v(pkxx), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [pkxx#x]
       +- SubqueryAlias v
          +- Project [col1#x AS pkxx#x]
@@ -1851,7 +1851,7 @@ create or replace temporary view yy as select * from
 -- !query analysis
 CreateViewCommand `yy`, select * from
   (values (101, 1), (201, 2), (301, NULL))
-  as v(pkyy, pkxx), false, true, LocalTempView, true
+  as v(pkyy, pkxx), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [pkyy#x, pkxx#x]
       +- SubqueryAlias v
          +- Project [col1#x AS pkyy#x, col2#x AS pkxx#x]
@@ -1912,7 +1912,7 @@ create or replace temporary view zt1 as select * from
 -- !query analysis
 CreateViewCommand `zt1`, select * from
   (values (53))
-  as v(f1), false, true, LocalTempView, true
+  as v(f1), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [f1#x]
       +- SubqueryAlias v
          +- Project [col1#x AS f1#x]
@@ -1926,7 +1926,7 @@ create or replace temporary view zt2 as select * from
 -- !query analysis
 CreateViewCommand `zt2`, select * from
   (values (53))
-  as v(f2), false, true, LocalTempView, true
+  as v(f2), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [f2#x]
       +- SubqueryAlias v
          +- Project [col1#x AS f2#x]
@@ -1971,7 +1971,7 @@ Project [f2#x, f3#x, f1#x]
 -- !query
 create temp view zv1 as select *,'dummy' AS junk from zt1
 -- !query analysis
-CreateViewCommand `zv1`, select *,'dummy' AS junk from zt1, false, false, LocalTempView, true
+CreateViewCommand `zv1`, select *,'dummy' AS junk from zt1, false, false, LocalTempView, UNSUPPORTED, true
    +- Project [f1#x, dummy AS junk#x]
       +- SubqueryAlias zt1
          +- View (`zt1`, [f1#x])
@@ -2146,7 +2146,7 @@ create or replace temporary view a as select * from
 -- !query analysis
 CreateViewCommand `a`, select * from
   (values ('p'), ('q'))
-  as v(code), false, true, LocalTempView, true
+  as v(code), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [code#x]
       +- SubqueryAlias v
          +- Project [col1#x AS code#x]
@@ -2160,7 +2160,7 @@ create or replace temporary view b as select * from
 -- !query analysis
 CreateViewCommand `b`, select * from
   (values ('p', 1), ('p', 2))
-  as v(a, num), false, true, LocalTempView, true
+  as v(a, num), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [a#x, num#x]
       +- SubqueryAlias v
          +- Project [col1#x AS a#x, col2#x AS num#x]
@@ -2174,7 +2174,7 @@ create or replace temporary view c as select * from
 -- !query analysis
 CreateViewCommand `c`, select * from
   (values ('A', 'p'), ('B', 'q'), ('C', null))
-  as v(name, a), false, true, LocalTempView, true
+  as v(name, a), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [name#x, a#x]
       +- SubqueryAlias v
          +- Project [col1#x AS name#x, col2#x AS a#x]
@@ -2346,7 +2346,7 @@ create or replace temporary view nt1 as select * from
 -- !query analysis
 CreateViewCommand `nt1`, select * from
   (values(1,true,true), (2,true,false), (3,false,false))
-  as v(id, a1, a2), false, true, LocalTempView, true
+  as v(id, a1, a2), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [id#x, a1#x, a2#x]
       +- SubqueryAlias v
          +- Project [col1#x AS id#x, col2#x AS a1#x, col3#x AS a2#x]
@@ -2360,7 +2360,7 @@ create or replace temporary view nt2 as select * from
 -- !query analysis
 CreateViewCommand `nt2`, select * from
   (values(1,1,true,true), (2,2,true,false), (3,3,false,false))
-  as v(id, nt1_id, b1, b2), false, true, LocalTempView, true
+  as v(id, nt1_id, b1, b2), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [id#x, nt1_id#x, b1#x, b2#x]
       +- SubqueryAlias v
          +- Project [col1#x AS id#x, col2#x AS nt1_id#x, col3#x AS b1#x, col4#x AS b2#x]
@@ -2374,7 +2374,7 @@ create or replace temporary view nt3 as select * from
 -- !query analysis
 CreateViewCommand `nt3`, select * from
   (values(1,1,true), (2,2,false), (3,3,true))
-  as v(id, nt2_id, c1), false, true, LocalTempView, true
+  as v(id, nt2_id, c1), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [id#x, nt2_id#x, c1#x]
       +- SubqueryAlias v
          +- Project [col1#x AS id#x, col2#x AS nt2_id#x, col3#x AS c1#x]
@@ -3050,7 +3050,7 @@ create or replace temporary view parent as select * from
 -- !query analysis
 CreateViewCommand `parent`, select * from
   (values (1, 10), (2, 20), (3, 30))
-  as v(k, pd), false, true, LocalTempView, true
+  as v(k, pd), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, pd#x]
       +- SubqueryAlias v
          +- Project [col1#x AS k#x, col2#x AS pd#x]
@@ -3064,7 +3064,7 @@ create or replace temporary view child as select * from
 -- !query analysis
 CreateViewCommand `child`, select * from
   (values (1, 100), (4, 400))
-  as v(k, cd), false, true, LocalTempView, true
+  as v(k, cd), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, cd#x]
       +- SubqueryAlias v
          +- Project [col1#x AS k#x, col2#x AS cd#x]
@@ -3189,7 +3189,7 @@ create or replace temporary view a as select * from
 -- !query analysis
 CreateViewCommand `a`, select * from
   (values (0), (1))
-  as v(id), false, true, LocalTempView, true
+  as v(id), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [id#x]
       +- SubqueryAlias v
          +- Project [col1#x AS id#x]
@@ -3203,7 +3203,7 @@ create or replace temporary view b as select * from
 -- !query analysis
 CreateViewCommand `b`, select * from
   (values (0, 0), (1, NULL))
-  as v(id, a_id), false, true, LocalTempView, true
+  as v(id, a_id), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [id#x, a_id#x]
       +- SubqueryAlias v
          +- Project [col1#x AS id#x, col2#x AS a_id#x]
@@ -3261,7 +3261,7 @@ create or replace temporary view innertab as select * from
 -- !query analysis
 CreateViewCommand `innertab`, select * from
   (values (123L, 42L))
-  as v(id, dat1), false, true, LocalTempView, true
+  as v(id, dat1), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [id#xL, dat1#xL]
       +- SubqueryAlias v
          +- Project [col1#xL AS id#xL, col2#xL AS dat1#xL]

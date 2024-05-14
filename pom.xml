@@ -133,9 +133,6 @@
     <hive.classifier>core</hive.classifier>
     <!-- Version used in Maven Hive dependency -->
     <hive.version>2.3.10</hive.version>
-    <hive23.version>2.3.10</hive23.version>
-    <!-- Version used for internal directory structure -->
-    <hive.version.short>2.3</hive.version.short>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
     <kafka.version>3.7.0</kafka.version>
     <!-- After 10.17.1.0, the minimum required version is JDK19 -->
@@ -2112,7 +2109,6 @@
             <groupId>commons-logging</groupId>
             <artifactId>commons-logging</artifactId>
           </exclusion>
-          <!-- Begin of Hive 2.3 exclusion -->
           <!--
             ORC is needed, but the version should be consistent with the `sql/core` ORC data source.
             Looks like this is safe, please see the major changes from ORC 1.3.3 to 1.5.4:
@@ -2122,12 +2118,11 @@
             <groupId>org.apache.orc</groupId>
             <artifactId>orc-core</artifactId>
           </exclusion>
-          <!-- jetty-all conflict with jetty 9.4.12.v20180830 -->
+          <!-- jetty-all conflict with Spark's built-in Jetty version -->
           <exclusion>
             <groupId>org.eclipse.jetty.aggregate</groupId>
             <artifactId>jetty-all</artifactId>
           </exclusion>
-          <!-- org.apache.logging.log4j:* conflict with log4j 1.2.17 -->
           <exclusion>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>*</artifactId>
@@ -2139,10 +2134,9 @@
           </exclusion>
           <!-- hive-storage-api is needed and must be explicitly included later -->
           <exclusion>
-            <groupId>org.apache.hive</groupId>
+            <groupId>${hive.group}</groupId>
             <artifactId>hive-storage-api</artifactId>
           </exclusion>
-          <!-- End of Hive 2.3 exclusion -->
         </exclusions>
       </dependency>
 
@@ -2261,7 +2255,6 @@
             <groupId>org.json</groupId>
             <artifactId>json</artifactId>
           </exclusion>
-          <!-- Begin of Hive 2.3 exclusion -->
           <!-- Do not need Tez -->
           <exclusion>
             <groupId>${hive.group}</groupId>
@@ -2276,7 +2269,6 @@
             <groupId>org.apache.calcite.avatica</groupId>
             <artifactId>avatica</artifactId>
           </exclusion>
-          <!-- org.apache.logging.log4j:* conflict with log4j 1.2.17 -->
           <exclusion>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>*</artifactId>
@@ -2297,7 +2289,6 @@
             <groupId>net.hydromatic</groupId>
             <artifactId>aggdesigner-algorithm</artifactId>
           </exclusion>
-          <!-- End of Hive 2.3 exclusion -->
         </exclusions>
       </dependency>
       <dependency>
@@ -2410,7 +2401,6 @@
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-log4j12</artifactId>
           </exclusion>
-          <!-- Begin of Hive 2.3 exclusion -->
           <!-- Hive removes the HBase Metastore; see HIVE-17234 -->
           <exclusion>
             <groupId>org.apache.hbase</groupId>
@@ -2420,7 +2410,6 @@
             <groupId>co.cask.tephra</groupId>
             <artifactId>*</artifactId>
           </exclusion>
-          <!-- End of Hive 2.3 exclusion -->
         </exclusions>
       </dependency>
 
@@ -2478,12 +2467,14 @@
             <groupId>org.codehaus.groovy</groupId>
             <artifactId>groovy-all</artifactId>
           </exclusion>
-          <!-- Begin of Hive 2.3 exclusion -->
           <exclusion>
             <groupId>${hive.group}</groupId>
             <artifactId>hive-service-rpc</artifactId>
           </exclusion>
-          <!-- parquet-hadoop-bundle:1.8.1 conflict with 1.13.1 -->
+          <!--
+            Parquet is needed, but the version should be consistent with
+            the `sql/core` Parquet data source.
+            -->
           <exclusion>
             <groupId>org.apache.parquet</groupId>
             <artifactId>parquet-hadoop-bundle</artifactId>
@@ -2497,7 +2488,6 @@
             <groupId>tomcat</groupId>
             <artifactId>jasper-runtime</artifactId>
           </exclusion>
-          <!-- End of Hive 2.3 exclusion -->
         </exclusions>
       </dependency>
 
@@ -2574,30 +2564,28 @@
             <groupId>org.codehaus.groovy</groupId>
             <artifactId>groovy-all</artifactId>
           </exclusion>
-          <!-- Begin of Hive 2.3 exclusion -->
           <!-- Exclude log4j-slf4j-impl, otherwise throw NCDFE when starting spark-shell -->
           <exclusion>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-slf4j-impl</artifactId>
           </exclusion>
-          <!-- End of Hive 2.3 exclusion -->
         </exclusions>
       </dependency>
 
       <!-- hive-llap-common is needed when registering UDFs in Hive 2.3.
          We add it here, otherwise -Phive-provided won't work. -->
       <dependency>
-        <groupId>org.apache.hive</groupId>
+        <groupId>${hive.group}</groupId>
         <artifactId>hive-llap-common</artifactId>
-        <version>${hive23.version}</version>
+        <version>${hive.version}</version>
         <scope>${hive.deps.scope}</scope>
         <exclusions>
           <exclusion>
-            <groupId>org.apache.hive</groupId>
+            <groupId>${hive.group}</groupId>
             <artifactId>hive-common</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>org.apache.hive</groupId>
+            <groupId>${hive.group}</groupId>
             <artifactId>hive-serde</artifactId>
           </exclusion>
           <exclusion>
@@ -2608,21 +2596,21 @@
       </dependency>
       <!-- hive-llap-client is needed when run MapReduce test in Hive 2.3. -->
       <dependency>
-        <groupId>org.apache.hive</groupId>
+        <groupId>${hive.group}</groupId>
         <artifactId>hive-llap-client</artifactId>
-        <version>${hive23.version}</version>
+        <version>${hive.version}</version>
         <scope>test</scope>
         <exclusions>
           <exclusion>
-            <groupId>org.apache.hive</groupId>
+            <groupId>${hive.group}</groupId>
             <artifactId>hive-common</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>org.apache.hive</groupId>
+            <groupId>${hive.group}</groupId>
             <artifactId>hive-serde</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>org.apache.hive</groupId>
+            <groupId>${hive.group}</groupId>
             <artifactId>hive-llap-common</artifactId>
           </exclusion>
           <exclusion>
@@ -2683,7 +2671,7 @@
             <artifactId>hadoop-client-api</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>org.apache.hive</groupId>
+            <groupId>${hive.group}</groupId>
             <artifactId>hive-storage-api</artifactId>
           </exclusion>
         </exclusions>
@@ -2713,7 +2701,7 @@
             <artifactId>orc-core</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>org.apache.hive</groupId>
+            <groupId>${hive.group}</groupId>
             <artifactId>hive-storage-api</artifactId>
           </exclusion>
           <exclusion>
@@ -2902,7 +2890,7 @@
         <version>2.9.1</version>
       </dependency>
       <dependency>
-        <groupId>org.apache.hive</groupId>
+        <groupId>${hive.group}</groupId>
         <artifactId>hive-storage-api</artifactId>
         <version>${hive.storage.version}</version>
         <scope>${hive.storage.scope}</scope>

@@ -4572,7 +4572,7 @@
         "usedBy": ["Spark"]
     },
     "42K0E": {
-        "description": "An expression is not valid in teh context it is used",
+        "description": "An expression is not valid in the context it is used",
         "origin": "Spark",
         "standard": "N",
         "usedBy": ["Spark"]

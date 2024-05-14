@@ -156,6 +156,7 @@ statement
         VIEW (IF errorCapturingNot EXISTS)? identifierReference
         identifierCommentList?
         (commentSpec |
+         schemaBinding |
          (PARTITIONED ON identifierList) |
          (TBLPROPERTIES propertyList))*
         AS query                                                       #createView
@@ -163,6 +164,7 @@ statement
         tableIdentifier (LEFT_PAREN colTypeList RIGHT_PAREN)? tableProvider
         (OPTIONS propertyList)?                                        #createTempViewUsing
     | ALTER VIEW identifierReference AS? query                         #alterViewQuery
+    | ALTER VIEW identifierReference schemaBinding                     #alterViewSchemaBinding
     | CREATE (OR REPLACE)? TEMPORARY? FUNCTION (IF errorCapturingNot EXISTS)?
         identifierReference AS className=stringLit
         (USING resource (COMMA resource)*)?                            #createFunction
@@ -340,6 +342,10 @@ skewSpec
 
 locationSpec
     : LOCATION stringLit
+    ;
+
+schemaBinding
+    : WITH SCHEMA (BINDING | COMPENSATION | EVOLUTION | TYPE EVOLUTION)
     ;
 
 commentSpec
@@ -1350,6 +1356,7 @@ ansiNonReserved
     | BIGINT
     | BINARY
     | BINARY_HEX
+    | BINDING
     | BOOLEAN
     | BUCKET
     | BUCKETS
@@ -1372,6 +1379,7 @@ ansiNonReserved
     | COMMIT
     | COMPACT
     | COMPACTIONS
+    | COMPENSATION
     | COMPUTE
     | CONCATENATE
     | COST
@@ -1650,6 +1658,7 @@ nonReserved
     | BIGINT
     | BINARY
     | BINARY_HEX
+    | BINDING
     | BOOLEAN
     | BOTH
     | BUCKET
@@ -1679,6 +1688,7 @@ nonReserved
     | COMMIT
     | COMPACT
     | COMPACTIONS
+    | COMPENSATION
     | COMPUTE
     | CONCATENATE
     | CONSTRAINT
