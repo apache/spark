@@ -101,6 +101,7 @@ class Command(google.protobuf.message.Message):
     STREAMING_QUERY_LISTENER_BUS_COMMAND_FIELD_NUMBER: builtins.int
     REGISTER_DATA_SOURCE_FIELD_NUMBER: builtins.int
     CREATE_RESOURCE_PROFILE_COMMAND_FIELD_NUMBER: builtins.int
+    REMOVE_CACHED_REMOTE_RELATION_COMMAND_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     @property
     def register_function(
@@ -135,6 +136,10 @@ class Command(google.protobuf.message.Message):
     @property
     def create_resource_profile_command(self) -> global___CreateResourceProfileCommand: ...
     @property
+    def remove_cached_remote_relation_command(
+        self,
+    ) -> global___RemoveCachedRemoteRelationCommand: ...
+    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """This field is used to mark extensions to the protocol. When plugins generate arbitrary
         Commands they can add them here. During the planning the correct resolution is done.
@@ -159,6 +164,8 @@ class Command(google.protobuf.message.Message):
         register_data_source: pyspark.sql.connect.proto.relations_pb2.CommonInlineUserDefinedDataSource
         | None = ...,
         create_resource_profile_command: global___CreateResourceProfileCommand | None = ...,
+        remove_cached_remote_relation_command: global___RemoveCachedRemoteRelationCommand
+        | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
     def HasField(
@@ -180,6 +187,8 @@ class Command(google.protobuf.message.Message):
             b"register_function",
             "register_table_function",
             b"register_table_function",
+            "remove_cached_remote_relation_command",
+            b"remove_cached_remote_relation_command",
             "sql_command",
             b"sql_command",
             "streaming_query_command",
@@ -215,6 +224,8 @@ class Command(google.protobuf.message.Message):
             b"register_function",
             "register_table_function",
             b"register_table_function",
+            "remove_cached_remote_relation_command",
+            b"remove_cached_remote_relation_command",
             "sql_command",
             b"sql_command",
             "streaming_query_command",
@@ -248,6 +259,7 @@ class Command(google.protobuf.message.Message):
             "streaming_query_listener_bus_command",
             "register_data_source",
             "create_resource_profile_command",
+            "remove_cached_remote_relation_command",
             "extension",
         ]
         | None
@@ -2119,3 +2131,26 @@ class CreateResourceProfileCommandResult(google.protobuf.message.Message):
     ) -> None: ...
 
 global___CreateResourceProfileCommandResult = CreateResourceProfileCommandResult
+
+class RemoveCachedRemoteRelationCommand(google.protobuf.message.Message):
+    """Command to remove `CashedRemoteRelation`"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RELATION_FIELD_NUMBER: builtins.int
+    @property
+    def relation(self) -> pyspark.sql.connect.proto.relations_pb2.CachedRemoteRelation:
+        """(Required) The remote to be related"""
+    def __init__(
+        self,
+        *,
+        relation: pyspark.sql.connect.proto.relations_pb2.CachedRemoteRelation | None = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["relation", b"relation"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["relation", b"relation"]
+    ) -> None: ...
+
+global___RemoveCachedRemoteRelationCommand = RemoveCachedRemoteRelationCommand

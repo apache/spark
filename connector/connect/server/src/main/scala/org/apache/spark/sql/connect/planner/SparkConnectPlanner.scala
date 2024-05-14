@@ -39,7 +39,7 @@ import org.apache.spark.connect.proto.Parse.ParseFormat
 import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.StreamingQueryInstance
 import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.SESSION_ID
+import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
 import org.apache.spark.ml.{functions => MLFunctions}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
 import org.apache.spark.sql.{Column, Dataset, Encoders, ForeachWriter, Observation, RelationalGroupedDataset, SparkSession}
@@ -2581,6 +2581,8 @@ class SparkConnectPlanner(
         handleCreateResourceProfileCommand(
           command.getCreateResourceProfileCommand,
           responseObserver)
+      case proto.Command.CommandTypeCase.REMOVE_CACHED_REMOTE_RELATION_COMMAND =>
+        handleRemoveCachedRemoteRelationCommand(command.getRemoveCachedRemoteRelationCommand)
 
       case _ => throw new UnsupportedOperationException(s"$command not supported.")
     }
@@ -3505,6 +3507,14 @@ class SparkConnectPlanner(
             .setProfileId(profile.id)
             .build())
         .build())
+  }
+
+  private def handleRemoveCachedRemoteRelationCommand(
+      removeCachedRemoteRelationCommand: proto.RemoveCachedRemoteRelationCommand): Unit = {
+    val dfId = removeCachedRemoteRelationCommand.getRelation.getRelationId
+    logInfo(log"Removing DataFrame with id ${MDC(DATAFRAME_ID, dfId)} from the cache")
+    sessionHolder.removeCachedDataFrame(dfId)
+    executeHolder.eventsManager.postFinished()
   }
 
   private val emptyLocalRelation = LocalRelation(
