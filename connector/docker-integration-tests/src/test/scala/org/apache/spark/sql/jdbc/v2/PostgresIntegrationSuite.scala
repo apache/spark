@@ -49,7 +49,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
     override def getJdbcUrl(ip: String, port: Int): String =
       s"jdbc:postgresql://$ip:$port/postgres?user=postgres&password=rootpass"
   }
-  override val url: String = db.getJdbcUrl(dockerIp, externalPort)
+  override def url: String = db.getJdbcUrl(dockerIp, externalPort)
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.postgresql", classOf[JDBCTableCatalog].getName)
     .set("spark.sql.catalog.postgresql.url", url)

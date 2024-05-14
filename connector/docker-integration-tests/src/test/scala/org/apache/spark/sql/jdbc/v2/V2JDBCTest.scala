@@ -43,7 +43,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
   import testImplicits._
   val catalogName: String
 
-  val url: String
+  protected def url: String
 
   val namespaceOpt: Option[String] = None
 

@@ -59,7 +59,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
 
   override val catalogName: String = "mysql"
   override val db = new MySQLDatabaseOnDocker
-  override val url: String = db.getJdbcUrl(dockerIp, externalPort)
+  override def url: String = db.getJdbcUrl(dockerIp, externalPort)
 
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.mysql", classOf[JDBCTableCatalog].getName)

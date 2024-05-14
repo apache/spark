@@ -74,7 +74,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
   override val catalogName: String = "oracle"
   override val namespaceOpt: Option[String] = Some("SYSTEM")
   override val db = new OracleDatabaseOnDocker
-  override val url: String = db.getJdbcUrl(dockerIp, externalPort)
+  override def url: String = db.getJdbcUrl(dockerIp, externalPort)
 
   override def defaultMetadata(dataType: DataType): Metadata = new MetadataBuilder()
     .putLong("scale", 0)

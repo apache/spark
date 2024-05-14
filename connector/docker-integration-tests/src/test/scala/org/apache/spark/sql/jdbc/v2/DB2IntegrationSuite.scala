@@ -51,7 +51,7 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
   override val catalogName: String = "db2"
   override val namespaceOpt: Option[String] = Some("DB2INST1")
   override val db = new DB2DatabaseOnDocker
-  override val url: String = db.getJdbcUrl(dockerIp, externalPort)
+  override def url: String = db.getJdbcUrl(dockerIp, externalPort)
 
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.db2", classOf[JDBCTableCatalog].getName)

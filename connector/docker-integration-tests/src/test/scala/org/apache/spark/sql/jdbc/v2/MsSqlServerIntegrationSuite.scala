@@ -59,7 +59,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
 
   override val catalogName: String = "mssql"
   override val db = new MsSQLServerDatabaseOnDocker
-  override val url: String = db.getJdbcUrl(dockerIp, externalPort)
+  override def url: String = db.getJdbcUrl(dockerIp, externalPort)
 
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.mssql", classOf[JDBCTableCatalog].getName)
