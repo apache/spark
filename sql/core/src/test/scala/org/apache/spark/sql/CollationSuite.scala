@@ -71,6 +71,13 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     assert(sql(s"select collate('aaa', 'utf8_binary_lcase')").schema(0).dataType == StringType(1))
   }
 
+  test("collate function syntax with default collation set") {
+    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UTF8_BINARY_LCASE") {
+      assert(sql(s"select collate('aaa', 'utf8_binary_lcase')").schema(0).dataType == StringType(1))
+      assert(sql(s"select collate('aaa', 'UNICODE')").schema(0).dataType == StringType(2))
+    }
+  }
+
   test("collate function syntax invalid arg count") {
     Seq("'aaa','a','b'", "'aaa'", "", "'aaa'").foreach(args => {
       val paramCount = if (args == "") 0 else args.split(',').length.toString
