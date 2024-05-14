@@ -45,8 +45,7 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
     "scan with aggregate push-down: REGR_INTERCEPT with DISTINCT",
     "scan with aggregate push-down: REGR_SLOPE with DISTINCT",
     "scan with aggregate push-down: REGR_R2 with DISTINCT",
-    "scan with aggregate push-down: REGR_SXY with DISTINCT",
-    "simple timestamps roundtrip")
+    "scan with aggregate push-down: REGR_SXY with DISTINCT")
 
   override val catalogName: String = "db2"
   override val namespaceOpt: Option[String] = Some("DB2INST1")

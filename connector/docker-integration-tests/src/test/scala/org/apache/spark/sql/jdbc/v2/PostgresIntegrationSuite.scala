@@ -36,8 +36,6 @@ import org.apache.spark.tags.DockerTest
  */
 @DockerTest
 class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
-  override def excluded: Seq[String] = Seq("simple timestamps roundtrip")
-
   override val catalogName: String = "postgresql"
   override val db = new DatabaseOnDocker {
     override val imageName = sys.env.getOrElse("POSTGRES_DOCKER_IMAGE_NAME", "postgres:16.2-alpine")
