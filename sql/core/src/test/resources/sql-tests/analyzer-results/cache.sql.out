@@ -2,7 +2,7 @@
 -- !query
 CREATE TEMPORARY VIEW t1 AS SELECT * FROM VALUES (0, 0), (1, 1), (2, 2) AS t(c1, c2)
 -- !query analysis
-CreateViewCommand `t1`, SELECT * FROM VALUES (0, 0), (1, 1), (2, 2) AS t(c1, c2), false, false, LocalTempView, true
+CreateViewCommand `t1`, SELECT * FROM VALUES (0, 0), (1, 1), (2, 2) AS t(c1, c2), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [c1#x, c2#x]
       +- SubqueryAlias t
          +- LocalRelation [c1#x, c2#x]
@@ -18,7 +18,7 @@ SELECT SUM(c3) s FROM v
 CreateViewCommand `t2`, WITH v as (
   SELECT c1 + c1 c3 FROM t1
 )
-SELECT SUM(c3) s FROM v, false, false, LocalTempView, true
+SELECT SUM(c3) s FROM v, false, false, LocalTempView, UNSUPPORTED, true
    +- WithCTE
       :- CTERelationDef xxxx, false
       :  +- SubqueryAlias v
