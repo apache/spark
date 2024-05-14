@@ -32,7 +32,7 @@ object ResolveIdentifierClause extends Rule[LogicalPlan] with AliasHelper with E
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
     _.containsAnyPattern(UNRESOLVED_IDENTIFIER)) {
     case p: PlanWithUnresolvedIdentifier if p.identifierExpr.resolved =>
-      p.planBuilder.apply(evalIdentifierExpr(p.identifierExpr))
+      SubstituteUnresolvedOrdinals(p.planBuilder.apply(evalIdentifierExpr(p.identifierExpr)))
     case other =>
       other.transformExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_IDENTIFIER)) {
         case e: ExpressionWithUnresolvedIdentifier if e.identifierExpr.resolved =>

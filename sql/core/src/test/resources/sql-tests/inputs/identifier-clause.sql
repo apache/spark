@@ -132,6 +132,15 @@ CREATE TEMPORARY FUNCTION IDENTIFIER('default.my' || 'DoubleAvg') AS 'test.org.a
 DROP TEMPORARY FUNCTION IDENTIFIER('default.my' || 'DoubleAvg');
 CREATE TEMPORARY VIEW IDENTIFIER('default.v')(c1) AS VALUES(1);
 
+-- SPARK-48273: Aggregation operation in statements using identifier clause for table name
+create temporary view identifier('v1') as (select my_col from (values (1), (2), (1) as (my_col)) group by 1);
+cache table identifier('t1') as (select my_col from (values (1), (2), (1) as (my_col)) group by 1);
+create table identifier('t2') as (select my_col from (values (1), (2), (1) as (my_col)) group by 1);
+insert into identifier('t2') select my_col from (values (3) as (my_col)) group by 1;
+drop view v1;
+drop table t1;
+drop table t2;
+
 -- Not supported
 SELECT row_number() OVER IDENTIFIER('x.win') FROM VALUES(1) AS T(c1) WINDOW win AS (ORDER BY c1);
 SELECT T1.c1 FROM VALUES(1) AS T1(c1) JOIN VALUES(1) AS T2(c1) USING (IDENTIFIER('c1'));
