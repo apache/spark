@@ -66,9 +66,6 @@ public class V2ExpressionSQLBuilder {
         case '%':
           builder.append("\\%");
           break;
-        case '\'':
-          builder.append("\\\'");
-          break;
         default:
           builder.append(c);
       }
