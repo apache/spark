@@ -874,6 +874,21 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
     checkAnswer(sql(s"SELECT cast(1 as string)"), Seq(Row("1")))
     checkAnswer(sql(s"SELECT cast('A' as string)"), Seq(Row("A")))
+
+    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
+      checkError(
+        exception = intercept[ParseException]
+          (sql("SELECT cast(1 as string collate unicode)")),
+        errorClass = "UNSUPPORTED_DATATYPE",
+        parameters = Map(
+          "typeName" -> toSQLType(StringType("UNICODE"))),
+        context =
+          ExpectedContext(fragment = s"cast(1 as string collate unicode)", start = 7, stop = 39)
+      )
+
+      checkAnswer(sql(s"SELECT cast(1 as string)"), Seq(Row("1")))
+      checkAnswer(sql(s"SELECT collation(cast(1 as string))"), Seq(Row("UNICODE")))
+    }
   }
 
   test("SPARK-47431: Default collation set to UNICODE, column type test") {
