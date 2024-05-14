@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql
 
+import java.text.SimpleDateFormat
+
+import scala.collection.immutable.Seq
+
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.expressions.aggregate.Mode
-
-import java.text.SimpleDateFormat
-import scala.collection.immutable.Seq
 import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.test.SharedSparkSession

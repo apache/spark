@@ -22,7 +22,7 @@ import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.expressions.aggregate.Mode
 import org.apache.spark.sql.catalyst.util.{CollationFactory, CollationSupport}
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{StringType, IntegerType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.collection.OpenHashMap
 
@@ -213,6 +213,32 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
 
     benchmark.run()
   }
+
+
+  def benchmarkMode2(
+      collationTypes: Seq[String],
+      value: Seq[UTF8String]): Unit = {
+    val benchmark = new Benchmark(
+      s"collation unit benchmarks - mode - ${value.size} elements",
+      value.size,
+      warmupTime = 10.seconds,
+      output = output)
+    collationTypes.foreach { collationType => {
+      benchmark.addCase(s"$collationType - mode - ${value.size} elements") { _ =>
+        val modeDefaultCollation = Mode(child =
+          Literal.create("some_column_name", StringType(collationType)))
+        val buffer = new OpenHashMap[AnyRef, Long](value.size)
+        value.zipWithIndex.sliding(2000, 2000).foreach(slide => {
+          slide.foreach { case (v: UTF8String, i: Int) =>
+            buffer.update(v.toString + s"_${i.toString}", (i % 1000).toLong)
+          }
+          modeDefaultCollation.eval(buffer)
+        })
+      }
+    }
+    }
+    benchmark.run()
+  }
 }
 
 /**
@@ -268,6 +294,7 @@ object CollationBenchmark extends CollationBenchmarkBase {
     benchmarkStartsWith(collationTypes, inputs)
     benchmarkEndsWith(collationTypes, inputs)
     benchmarkMode(collationTypes, generateBaseInputStringswithUniqueGroupNumber(10000L))
+    benchmarkMode2(collationTypes, generateSeqInput(30000L))
   }
 }
 
