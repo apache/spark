@@ -73,8 +73,9 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
   test("collate function syntax with default collation set") {
     withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UTF8_BINARY_LCASE") {
-      assert(sql(s"select collate('aaa', 'utf8_binary_lcase')").schema(0).dataType == StringType(1))
-      assert(sql(s"select collate('aaa', 'UNICODE')").schema(0).dataType == StringType(2))
+      assert(sql(s"select collate('aaa', 'utf8_binary_lcase')").schema(0).dataType ==
+        StringType("UTF8_BINARY_LCASE"))
+      assert(sql(s"select collate('aaa', 'UNICODE')").schema(0).dataType == StringType("UNICODE"))
     }
   }
 
