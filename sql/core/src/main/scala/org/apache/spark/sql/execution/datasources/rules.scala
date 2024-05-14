@@ -691,7 +691,7 @@ object IndeterminateCheck extends (LogicalPlan => Unit) {
         if (query.schema.exists(sf => sf.dataType == StringType(-1))) {
           throw QueryCompilationErrors.indeterminateCollationError()
         }
-      case CreateViewCommand(_, _, _, _, _, plan, _, _, _, _, _) if plan.resolved =>
+      case CreateViewCommand(_, _, _, _, _, plan, _, _, _, _, _, _) if plan.resolved =>
         if (plan.schema.exists(sf => sf.dataType == StringType(-1))) {
           throw QueryCompilationErrors.indeterminateCollationError()
         }
