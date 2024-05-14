@@ -413,7 +413,6 @@ public class GangliaReporter extends ScheduledReporter {
             return "";
         }
         return name.substring(0, i);
-
     }
 
     private String prefix(String name, String n) {

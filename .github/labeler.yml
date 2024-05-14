@@ -236,3 +236,10 @@ PROTOBUF:
      'connector/protobuf/**/*',
      'python/pyspark/sql/protobuf/**/*'
     ]
+
+TOOL:
+  - changed-files:
+    - any-glob-to-any-file: [
+     'connector/profiler/**/*',
+     'connector/spark-ganglia-lgpl/**/*'
+    ]
