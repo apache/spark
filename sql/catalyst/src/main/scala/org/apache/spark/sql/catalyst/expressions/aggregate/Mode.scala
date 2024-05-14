@@ -78,7 +78,7 @@ case class Mode(
     if (buffer.isEmpty) {
       return null
     }
-    val buffer2 = if (!CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
+    val collationAwareBuffer = if (!CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
       val modeMap = buffer.toSeq.groupMapReduce {
         case (key: String, _) =>
           CollationFactory.getCollationKey(UTF8String.fromString(key), collationId)
