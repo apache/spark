@@ -102,7 +102,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 CREATE TEMPORARY VIEW tempView1 AS VALUES (1, NAMED_STRUCT('col1', 'gamma', 'col2', 'delta')) AS T(id, st)
 -- !query analysis
-CreateViewCommand `tempView1`, VALUES (1, NAMED_STRUCT('col1', 'gamma', 'col2', 'delta')) AS T(id, st), false, false, LocalTempView, true
+CreateViewCommand `tempView1`, VALUES (1, NAMED_STRUCT('col1', 'gamma', 'col2', 'delta')) AS T(id, st), false, false, LocalTempView, UNSUPPORTED, true
    +- SubqueryAlias T
       +- LocalRelation [id#x, st#x]
 

@@ -225,6 +225,7 @@ abstract class BaseSessionStateBuilder(
         TableCapabilityCheck +:
         CommandCheck +:
         CollationCheck +:
+        ViewSyncSchemaToMetaStore +:
         customCheckRules
   }
 

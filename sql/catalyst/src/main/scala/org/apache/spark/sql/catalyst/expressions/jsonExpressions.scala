@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{JSON_TO_STRUCT, TreePatt
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.types.StringTypeAnyCollation
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 import org.apache.spark.util.Utils
@@ -132,8 +133,9 @@ case class GetJsonObject(json: Expression, path: Expression)
 
   override def left: Expression = json
   override def right: Expression = path
-  override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
-  override def dataType: DataType = StringType
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeAnyCollation, StringTypeAnyCollation)
+  override def dataType: DataType = SQLConf.get.defaultStringType
   override def nullable: Boolean = true
   override def prettyName: String = "get_json_object"
 
@@ -477,7 +479,7 @@ case class JsonTuple(children: Seq[Expression])
   @transient private lazy val constantFields: Int = foldableFieldNames.count(_ != null)
 
   override def elementSchema: StructType = StructType(fieldExpressions.zipWithIndex.map {
-    case (_, idx) => StructField(s"c$idx", StringType, nullable = true)
+    case (_, idx) => StructField(s"c$idx", children.head.dataType, nullable = true)
   })
 
   override def prettyName: String = "json_tuple"
@@ -487,7 +489,7 @@ case class JsonTuple(children: Seq[Expression])
       throw QueryCompilationErrors.wrongNumArgsError(
         toSQLId(prettyName), Seq("> 1"), children.length
       )
-    } else if (children.forall(child => StringType.acceptsType(child.dataType))) {
+    } else if (children.forall(child => StringTypeAnyCollation.acceptsType(child.dataType))) {
       TypeCheckResult.TypeCheckSuccess
     } else {
       DataTypeMismatch(
@@ -722,7 +724,7 @@ case class JsonToStructs(
       converter(parser.parse(json.asInstanceOf[UTF8String]))
   }
 
-  override def inputTypes: Seq[AbstractDataType] = StringType :: Nil
+  override def inputTypes: Seq[AbstractDataType] = StringTypeAnyCollation :: Nil
 
   override def sql: String = schema match {
     case _: MapType => "entries"
@@ -824,7 +826,7 @@ case class StructsToJson(
     }
   }
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def checkInputDataTypes(): TypeCheckResult = inputSchema match {
     case dt @ (_: StructType | _: MapType | _: ArrayType | _: VariantType) =>
@@ -873,7 +875,7 @@ case class SchemaOfJson(
       child = child,
       options = ExprUtils.convertToMapData(options))
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def nullable: Boolean = false
 
@@ -919,7 +921,8 @@ case class SchemaOfJson(
             .map(ArrayType(_, containsNull = at.containsNull))
             .getOrElse(ArrayType(StructType(Nil), containsNull = at.containsNull))
         case other: DataType =>
-          jsonInferSchema.canonicalizeType(other, jsonOptions).getOrElse(StringType)
+          jsonInferSchema.canonicalizeType(other, jsonOptions).getOrElse(
+            SQLConf.get.defaultStringType)
       }
     }
 
@@ -957,7 +960,7 @@ case class SchemaOfJson(
 case class LengthOfJsonArray(child: Expression) extends UnaryExpression
   with CodegenFallback with ExpectsInputTypes {
 
-  override def inputTypes: Seq[DataType] = Seq(StringType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
   override def dataType: DataType = IntegerType
   override def nullable: Boolean = true
   override def prettyName: String = "json_array_length"
@@ -1030,8 +1033,8 @@ case class LengthOfJsonArray(child: Expression) extends UnaryExpression
 case class JsonObjectKeys(child: Expression) extends UnaryExpression with CodegenFallback
   with ExpectsInputTypes {
 
-  override def inputTypes: Seq[DataType] = Seq(StringType)
-  override def dataType: DataType = ArrayType(StringType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
+  override def dataType: DataType = ArrayType(SQLConf.get.defaultStringType)
   override def nullable: Boolean = true
   override def prettyName: String = "json_object_keys"
 

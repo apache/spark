@@ -196,9 +196,6 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.COL_POS_KEY"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.DATASET_ID_KEY"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.curId"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.observe"),
-      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Observation"),
-      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Observation$"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.ObservationListener"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.ObservationListener$"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.queryExecution"),
@@ -451,8 +448,7 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.streaming.RemoteStreamingQuery$"),
       // Skip client side listener specific class
       ProblemFilters.exclude[MissingClassProblem](
-        "org.apache.spark.sql.streaming.StreamingQueryListenerBus"
-      ),
+        "org.apache.spark.sql.streaming.StreamingQueryListenerBus"),
 
       // Encoders are in the wrong JAR
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Encoders"),

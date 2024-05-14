@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql
 
+import java.text.SimpleDateFormat
+
 import scala.collection.immutable.Seq
 
-import org.apache.spark.SparkIllegalArgumentException
+import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -204,6 +206,109 @@ class CollationSQLExpressionsSuite
       withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
         val testQuery = sql(query)
         checkAnswer(testQuery, Row(t.result))
+      }
+    })
+  }
+
+  test("Support UrlEncode hash expression with collation") {
+    case class UrlEncodeTestCase(
+     input: String,
+     collationName: String,
+     result: String
+    )
+
+    val testCases = Seq(
+      UrlEncodeTestCase("https://spark.apache.org", "UTF8_BINARY",
+        "https%3A%2F%2Fspark.apache.org"),
+      UrlEncodeTestCase("https://spark.apache.org", "UTF8_BINARY_LCASE",
+        "https%3A%2F%2Fspark.apache.org"),
+      UrlEncodeTestCase("https://spark.apache.org", "UNICODE",
+        "https%3A%2F%2Fspark.apache.org"),
+      UrlEncodeTestCase("https://spark.apache.org", "UNICODE_CI",
+        "https%3A%2F%2Fspark.apache.org")
+    )
+
+    // Supported collations
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |select url_encode('${t.input}')
+           |""".stripMargin
+      // Result
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        checkAnswer(testQuery, Row(t.result))
+        val dataType = StringType(t.collationName)
+        assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      }
+    })
+  }
+
+  test("Support UrlDecode hash expression with collation") {
+    case class UrlDecodeTestCase(
+      input: String,
+      collationName: String,
+      result: String
+    )
+
+    val testCases = Seq(
+      UrlDecodeTestCase("https%3A%2F%2Fspark.apache.org", "UTF8_BINARY",
+        "https://spark.apache.org"),
+      UrlDecodeTestCase("https%3A%2F%2Fspark.apache.org", "UTF8_BINARY_LCASE",
+        "https://spark.apache.org"),
+      UrlDecodeTestCase("https%3A%2F%2Fspark.apache.org", "UNICODE",
+        "https://spark.apache.org"),
+      UrlDecodeTestCase("https%3A%2F%2Fspark.apache.org", "UNICODE_CI",
+        "https://spark.apache.org")
+    )
+
+    // Supported collations
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |select url_decode('${t.input}')
+           |""".stripMargin
+      // Result
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        checkAnswer(testQuery, Row(t.result))
+        val dataType = StringType(t.collationName)
+        assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      }
+    })
+  }
+
+  test("Support ParseUrl hash expression with collation") {
+    case class ParseUrlTestCase(
+      input: String,
+      collationName: String,
+      path: String,
+      result: String
+    )
+
+    val testCases = Seq(
+      ParseUrlTestCase("http://spark.apache.org/path?query=1", "UTF8_BINARY", "HOST",
+        "spark.apache.org"),
+      ParseUrlTestCase("http://spark.apache.org/path?query=2", "UTF8_BINARY_LCASE", "PATH",
+        "/path"),
+      ParseUrlTestCase("http://spark.apache.org/path?query=3", "UNICODE", "QUERY",
+        "query=3"),
+      ParseUrlTestCase("http://spark.apache.org/path?query=4", "UNICODE_CI", "PROTOCOL",
+        "http")
+    )
+
+    // Supported collations
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |select parse_url('${t.input}', '${t.path}')
+           |""".stripMargin
+      // Result
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        checkAnswer(testQuery, Row(t.result))
+        val dataType = StringType(t.collationName)
+        assert(testQuery.schema.fields.head.dataType.sameType(dataType))
       }
     })
   }
@@ -460,6 +565,238 @@ class CollationSQLExpressionsSuite
     })
   }
 
+  test("Support GetJsonObject json expression with collation") {
+    case class GetJsonObjectTestCase(
+      input: String,
+      path: String,
+      collationName: String,
+      result: String
+    )
+
+    val testCases = Seq(
+      GetJsonObjectTestCase("{\"a\":\"b\"}", "$.a", "UTF8_BINARY", "b"),
+      GetJsonObjectTestCase("{\"A\":\"1\"}", "$.A", "UTF8_BINARY_LCASE", "1"),
+      GetJsonObjectTestCase("{\"x\":true}", "$.x", "UNICODE", "true"),
+      GetJsonObjectTestCase("{\"X\":1}", "$.X", "UNICODE_CI", "1")
+    )
+
+    // Supported collations
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |SELECT get_json_object('${t.input}', '${t.path}')
+           |""".stripMargin
+      // Result & data type
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        checkAnswer(testQuery, Row(t.result))
+        val dataType = StringType(t.collationName)
+        assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      }
+    })
+  }
+
+  test("Support JsonTuple json expression with collation") {
+    case class JsonTupleTestCase(
+      input: String,
+      names: String,
+      collationName: String,
+      result: Row
+    )
+
+    val testCases = Seq(
+      JsonTupleTestCase("{\"a\":1, \"b\":2}", "'a', 'b'", "UTF8_BINARY",
+        Row("1", "2")),
+      JsonTupleTestCase("{\"A\":\"3\", \"B\":\"4\"}", "'A', 'B'", "UTF8_BINARY_LCASE",
+        Row("3", "4")),
+      JsonTupleTestCase("{\"x\":true, \"y\":false}", "'x', 'y'", "UNICODE",
+        Row("true", "false")),
+      JsonTupleTestCase("{\"X\":null, \"Y\":null}", "'X', 'Y'", "UNICODE_CI",
+        Row(null, null))
+    )
+
+    // Supported collations
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |SELECT json_tuple('${t.input}', ${t.names})
+           |""".stripMargin
+      // Result & data type
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        checkAnswer(testQuery, t.result)
+        val dataType = StringType(t.collationName)
+        assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      }
+    })
+  }
+
+  test("Support JsonToStructs json expression with collation") {
+    case class JsonToStructsTestCase(
+      input: String,
+      schema: String,
+      collationName: String,
+      result: Row
+    )
+
+    val testCases = Seq(
+      JsonToStructsTestCase("{\"a\":1, \"b\":2.0}", "a INT, b DOUBLE",
+        "UTF8_BINARY", Row(Row(1, 2.0))),
+      JsonToStructsTestCase("{\"A\":\"3\", \"B\":4}", "A STRING COLLATE UTF8_BINARY_LCASE, B INT",
+        "UTF8_BINARY_LCASE", Row(Row("3", 4))),
+      JsonToStructsTestCase("{\"x\":true, \"y\":null}", "x BOOLEAN, y VOID",
+        "UNICODE", Row(Row(true, null))),
+      JsonToStructsTestCase("{\"X\":null, \"Y\":false}", "X VOID, Y BOOLEAN",
+        "UNICODE_CI", Row(Row(null, false)))
+    )
+
+    // Supported collations
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |SELECT from_json('${t.input}', '${t.schema}')
+           |""".stripMargin
+      // Result & data type
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        checkAnswer(testQuery, t.result)
+        val dataType = StructType.fromDDL(t.schema)
+        assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      }
+    })
+  }
+
+  test("Support StructsToJson json expression with collation") {
+    case class StructsToJsonTestCase(
+      struct: String,
+      collationName: String,
+      result: Row
+    )
+
+    val testCases = Seq(
+      StructsToJsonTestCase("named_struct('a', 1, 'b', 2)",
+        "UTF8_BINARY", Row("{\"a\":1,\"b\":2}")),
+      StructsToJsonTestCase("array(named_struct('a', 1, 'b', 2))",
+        "UTF8_BINARY_LCASE", Row("[{\"a\":1,\"b\":2}]")),
+      StructsToJsonTestCase("map('a', named_struct('b', 1))",
+        "UNICODE", Row("{\"a\":{\"b\":1}}")),
+      StructsToJsonTestCase("array(map('a', 1))",
+        "UNICODE_CI", Row("[{\"a\":1}]"))
+    )
+
+    // Supported collations
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |SELECT to_json(${t.struct})
+           |""".stripMargin
+      // Result & data type
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        checkAnswer(testQuery, t.result)
+        val dataType = StringType(t.collationName)
+        assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      }
+    })
+  }
+
+  test("Support LengthOfJsonArray json expression with collation") {
+    case class LengthOfJsonArrayTestCase(
+      input: String,
+      collationName: String,
+      result: Row
+    )
+
+    val testCases = Seq(
+      LengthOfJsonArrayTestCase("'[1,2,3,4]'", "UTF8_BINARY", Row(4)),
+      LengthOfJsonArrayTestCase("'[1,2,3,{\"f1\":1,\"f2\":[5,6]},4]'", "UTF8_BINARY_LCASE", Row(5)),
+      LengthOfJsonArrayTestCase("'[1,2'", "UNICODE", Row(null)),
+      LengthOfJsonArrayTestCase("'['", "UNICODE_CI", Row(null))
+    )
+
+    // Supported collations
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |SELECT json_array_length(${t.input})
+           |""".stripMargin
+      // Result & data type
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        checkAnswer(testQuery, t.result)
+        assert(testQuery.schema.fields.head.dataType.sameType(IntegerType))
+      }
+    })
+  }
+
+  test("Support JsonObjectKeys json expression with collation") {
+    case class JsonObjectKeysJsonArrayTestCase(
+      input: String,
+      collationName: String,
+      result: Row
+    )
+
+    val testCases = Seq(
+      JsonObjectKeysJsonArrayTestCase("{}", "UTF8_BINARY",
+        Row(Seq())),
+      JsonObjectKeysJsonArrayTestCase("{\"k\":", "UTF8_BINARY_LCASE",
+        Row(null)),
+      JsonObjectKeysJsonArrayTestCase("{\"k1\": \"v1\"}", "UNICODE",
+        Row(Seq("k1"))),
+      JsonObjectKeysJsonArrayTestCase("{\"k1\":1,\"k2\":{\"k3\":3, \"k4\":4}}", "UNICODE_CI",
+        Row(Seq("k1", "k2")))
+    )
+
+    // Supported collations
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |SELECT json_object_keys('${t.input}')
+           |""".stripMargin
+      // Result & data type
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        checkAnswer(testQuery, t.result)
+        val dataType = ArrayType(StringType(t.collationName))
+        assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      }
+    })
+  }
+
+  test("Support SchemaOfJson json expression with collation") {
+    case class SchemaOfJsonTestCase(
+     input: String,
+     collationName: String,
+     result: Row
+    )
+
+    val testCases = Seq(
+      SchemaOfJsonTestCase("'[{\"col\":0}]'",
+        "UTF8_BINARY", Row("ARRAY<STRUCT<col: BIGINT>>")),
+      SchemaOfJsonTestCase("'[{\"col\":01}]', map('allowNumericLeadingZeros', 'true')",
+        "UTF8_BINARY_LCASE", Row("ARRAY<STRUCT<col: BIGINT>>")),
+      SchemaOfJsonTestCase("'[]'",
+        "UNICODE", Row("ARRAY<STRING>")),
+      SchemaOfJsonTestCase("''",
+        "UNICODE_CI", Row("STRING"))
+    )
+
+    // Supported collations
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |SELECT schema_of_json(${t.input})
+           |""".stripMargin
+      // Result & data type
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        checkAnswer(testQuery, t.result)
+        val dataType = StringType(t.collationName)
+        assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      }
+    })
+  }
+
   test("Support StringToMap expression with collation") {
     // Supported collations
     case class StringToMapTestCase[R](t: String, p: String, k: String, c: String, result: R)
@@ -523,6 +860,419 @@ class CollationSQLExpressionsSuite
       sql("SELECT mask(collate('ab-CD-12-@$','UNICODE'),collate('X','UNICODE_CI'),'x','0','#')")
     }
     assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+  }
+
+  test("Support XmlToStructs xml expression with collation") {
+    case class XmlToStructsTestCase(
+     input: String,
+     collationName: String,
+     schema: String,
+     options: String,
+     result: Row,
+     structFields: Seq[StructField]
+    )
+
+    val testCases = Seq(
+      XmlToStructsTestCase("<p><a>1</a></p>", "UTF8_BINARY", "'a INT'", "",
+        Row(1), Seq(
+          StructField("a", IntegerType, nullable = true)
+        )),
+      XmlToStructsTestCase("<p><A>true</A><B>0.8</B></p>", "UTF8_BINARY_LCASE",
+        "'A BOOLEAN, B DOUBLE'", "", Row(true, 0.8), Seq(
+          StructField("A", BooleanType, nullable = true),
+          StructField("B", DoubleType, nullable = true)
+        )),
+      XmlToStructsTestCase("<p><s>Spark</s></p>", "UNICODE", "'s STRING'", "",
+        Row("Spark"), Seq(
+          StructField("s", StringType("UNICODE"), nullable = true)
+        )),
+      XmlToStructsTestCase("<p><time>26/08/2015</time></p>", "UNICODE_CI", "'time Timestamp'",
+        ", map('timestampFormat', 'dd/MM/yyyy')", Row(
+          new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.S").parse("2015-08-26 00:00:00.0")
+        ), Seq(
+          StructField("time", TimestampType, nullable = true)
+        ))
+    )
+
+    // Supported collations
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |select from_xml('${t.input}', ${t.schema} ${t.options})
+           |""".stripMargin
+      // Result
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        checkAnswer(testQuery, Row(t.result))
+        val dataType = StructType(t.structFields)
+        assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      }
+    })
+  }
+
+  test("Support SchemaOfXml xml expression with collation") {
+    case class SchemaOfXmlTestCase(
+     input: String,
+     collationName: String,
+     result: String
+    )
+
+    val testCases = Seq(
+      SchemaOfXmlTestCase("<p><a>1</a></p>", "UTF8_BINARY", "STRUCT<a: BIGINT>"),
+      SchemaOfXmlTestCase("<p><A>true</A><B>0.8</B></p>", "UTF8_BINARY_LCASE",
+        "STRUCT<A: BOOLEAN, B: DOUBLE>"),
+      SchemaOfXmlTestCase("<p></p>", "UNICODE", "STRUCT<>"),
+      SchemaOfXmlTestCase("<p><A>1</A><A>2</A><A>3</A></p>", "UNICODE_CI",
+        "STRUCT<A: ARRAY<BIGINT>>")
+    )
+
+    // Supported collations
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |select schema_of_xml('${t.input}')
+           |""".stripMargin
+      // Result
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        checkAnswer(testQuery, Row(t.result))
+        val dataType = StringType(t.collationName)
+        assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      }
+    })
+  }
+
+  test("Support StructsToXml xml expression with collation") {
+    case class StructsToXmlTestCase(
+      input: String,
+      collationName: String,
+      result: String
+    )
+
+    val testCases = Seq(
+      StructsToXmlTestCase("named_struct('a', 1, 'b', 2)", "UTF8_BINARY",
+        s"""<ROW>
+           |    <a>1</a>
+           |    <b>2</b>
+           |</ROW>""".stripMargin),
+      StructsToXmlTestCase("named_struct('A', true, 'B', 2.0)", "UTF8_BINARY_LCASE",
+        s"""<ROW>
+           |    <A>true</A>
+           |    <B>2.0</B>
+           |</ROW>""".stripMargin),
+      StructsToXmlTestCase("named_struct()", "UNICODE",
+        "<ROW/>"),
+      StructsToXmlTestCase("named_struct('time', to_timestamp('2015-08-26'))", "UNICODE_CI",
+        s"""<ROW>
+           |    <time>2015-08-26T00:00:00.000-07:00</time>
+           |</ROW>""".stripMargin)
+    )
+
+    // Supported collations
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |select to_xml(${t.input})
+           |""".stripMargin
+      // Result
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        checkAnswer(testQuery, Row(t.result))
+        val dataType = StringType(t.collationName)
+        assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      }
+    })
+  }
+
+  test("Support ParseJson & TryParseJson variant expressions with collation") {
+    case class ParseJsonTestCase(
+      input: String,
+      collationName: String,
+      result: String
+    )
+
+    val testCases = Seq(
+      ParseJsonTestCase("{\"a\":1,\"b\":2}", "UTF8_BINARY", "{\"a\":1,\"b\":2}"),
+      ParseJsonTestCase("{\"A\":3,\"B\":4}", "UTF8_BINARY_LCASE", "{\"A\":3,\"B\":4}"),
+      ParseJsonTestCase("{\"c\":5,\"d\":6}", "UNICODE", "{\"c\":5,\"d\":6}"),
+      ParseJsonTestCase("{\"C\":7,\"D\":8}", "UNICODE_CI", "{\"C\":7,\"D\":8}")
+    )
+
+    // Supported collations (ParseJson)
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |SELECT parse_json('${t.input}')
+           |""".stripMargin
+      // Result & data type
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        val testResult = testQuery.collect().map(_.toString()).mkString("")
+        assert(testResult === "[" + t.result + "]") // can't use checkAnswer for Variant
+        assert(testQuery.schema.fields.head.dataType.sameType(VariantType))
+      }
+    })
+
+    // Supported collations (TryParseJson)
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |SELECT try_parse_json('${t.input}')
+           |""".stripMargin
+      // Result & data type
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        val testResult = testQuery.collect().map(_.toString()).mkString("")
+        assert(testResult === "[" + t.result + "]") // can't use checkAnswer for Variant
+        assert(testQuery.schema.fields.head.dataType.sameType(VariantType))
+      }
+    })
+  }
+
+  test("Handle invalid JSON for ParseJson variant expression with collation") {
+    // parse_json should throw an exception when the string is not valid JSON value
+    val json = "{\"a\":1,"
+    val query = s"SELECT parse_json('$json');"
+    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
+      val e = intercept[SparkException] {
+        val testQuery = sql(query)
+        testQuery.collect()
+      }
+      assert(e.getErrorClass === "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION")
+    }
+  }
+
+  test("Handle invalid JSON for TryParseJson variant expression with collation") {
+    // try_parse_json shouldn't throw an exception when the string is not valid JSON value
+    val json = "{\"a\":1,]"
+    val query = s"SELECT try_parse_json('$json');"
+    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
+      val testQuery = sql(query)
+      val testResult = testQuery.collect().map(_.toString()).mkString("")
+      assert(testResult === s"[null]")
+    }
+  }
+
+  test("Support IsVariantNull variant expressions with collation") {
+    case class IsVariantNullTestCase(
+      input: String,
+      collationName: String,
+      result: Boolean
+    )
+
+    val testCases = Seq(
+      IsVariantNullTestCase("'null'", "UTF8_BINARY", result = true),
+      IsVariantNullTestCase("'\"null\"'", "UTF8_BINARY_LCASE", result = false),
+      IsVariantNullTestCase("'13'", "UNICODE", result = false),
+      IsVariantNullTestCase("null", "UNICODE_CI", result = false)
+    )
+
+    // Supported collations
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |SELECT is_variant_null(parse_json(${t.input}))
+           |""".stripMargin
+      // Result & data type
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        checkAnswer(testQuery, Row(t.result))
+      }
+    })
+  }
+
+  test("Support VariantGet & TryVariantGet variant expressions with collation") {
+    case class VariantGetTestCase(
+      input: String,
+      path: String,
+      variantType: String,
+      collationName: String,
+      result: Any,
+      resultType: DataType
+    )
+
+    val testCases = Seq(
+      VariantGetTestCase("{\"a\": 1}", "$.a", "int", "UTF8_BINARY", 1, IntegerType),
+      VariantGetTestCase("{\"a\": 1}", "$.b", "int", "UTF8_BINARY_LCASE", null, IntegerType),
+      VariantGetTestCase("[1, \"2\"]", "$[1]", "string", "UNICODE", "2", StringType("UNICODE")),
+      VariantGetTestCase("[1, \"2\"]", "$[2]", "string", "UNICODE_CI", null,
+        StringType("UNICODE_CI"))
+    )
+
+    // Supported collations (VariantGet)
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |SELECT variant_get(parse_json('${t.input}'), '${t.path}', '${t.variantType}')
+           |""".stripMargin
+      // Result & data type
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        val testResult = testQuery.collect().map(_.toString()).mkString("")
+        assert(testResult === "[" + t.result + "]") // can't use checkAnswer for Variant
+        assert(testQuery.schema.fields.head.dataType.sameType(t.resultType))
+      }
+    })
+
+    // Supported collations (TryVariantGet)
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |SELECT try_variant_get(parse_json('${t.input}'), '${t.path}', '${t.variantType}')
+           |""".stripMargin
+      // Result & data type
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        val testResult = testQuery.collect().map(_.toString()).mkString("")
+        assert(testResult === "[" + t.result + "]") // can't use checkAnswer for Variant
+        assert(testQuery.schema.fields.head.dataType.sameType(t.resultType))
+      }
+    })
+  }
+
+  test("Handle invalid JSON for VariantGet variant expression with collation") {
+    // variant_get should throw an exception if the cast fails
+    val json = "[1, \"Spark\"]"
+    val query = s"SELECT variant_get(parse_json('$json'), '$$[1]', 'int');"
+    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
+      val e = intercept[SparkRuntimeException] {
+        val testQuery = sql(query)
+        testQuery.collect()
+      }
+      assert(e.getErrorClass === "INVALID_VARIANT_CAST")
+    }
+  }
+
+  test("Handle invalid JSON for TryVariantGet variant expression with collation") {
+    // try_variant_get shouldn't throw an exception if the cast fails
+    val json = "[1, \"Spark\"]"
+    val query = s"SELECT try_variant_get(parse_json('$json'), '$$[1]', 'int');"
+    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
+      val testQuery = sql(query)
+      val testResult = testQuery.collect().map(_.toString()).mkString("")
+      assert(testResult === s"[null]")
+    }
+  }
+
+  test("Support VariantExplode variant expressions with collation") {
+    case class VariantExplodeTestCase(
+     input: String,
+     collationName: String,
+     result: String,
+     resultType: Seq[StructField]
+    )
+
+    val testCases = Seq(
+      VariantExplodeTestCase("[\"hello\", \"world\"]", "UTF8_BINARY",
+          Row(0, "null", "\"hello\"").toString() + Row(1, "null", "\"world\"").toString(),
+          Seq[StructField](
+              StructField("pos", IntegerType, nullable = false),
+              StructField("key", StringType("UTF8_BINARY")),
+              StructField("value", VariantType, nullable = false)
+          )
+      ),
+      VariantExplodeTestCase("[\"Spark\", \"SQL\"]", "UTF8_BINARY_LCASE",
+        Row(0, "null", "\"Spark\"").toString() + Row(1, "null", "\"SQL\"").toString(),
+        Seq[StructField](
+          StructField("pos", IntegerType, nullable = false),
+          StructField("key", StringType("UTF8_BINARY_LCASE")),
+          StructField("value", VariantType, nullable = false)
+        )
+      ),
+      VariantExplodeTestCase("{\"a\": true, \"b\": 3.14}", "UNICODE",
+        Row(0, "a", "true").toString() + Row(1, "b", "3.14").toString(),
+        Seq[StructField](
+          StructField("pos", IntegerType, nullable = false),
+          StructField("key", StringType("UNICODE")),
+          StructField("value", VariantType, nullable = false)
+        )
+      ),
+      VariantExplodeTestCase("{\"A\": 9.99, \"B\": false}", "UNICODE_CI",
+        Row(0, "A", "9.99").toString() + Row(1, "B", "false").toString(),
+        Seq[StructField](
+          StructField("pos", IntegerType, nullable = false),
+          StructField("key", StringType("UNICODE_CI")),
+          StructField("value", VariantType, nullable = false)
+        )
+      )
+    )
+
+    // Supported collations
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |SELECT * from variant_explode(parse_json('${t.input}'))
+           |""".stripMargin
+      // Result & data type
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        val testResult = testQuery.collect().map(_.toString()).mkString("")
+        assert(testResult === t.result) // can't use checkAnswer for Variant
+        assert(testQuery.schema.fields.sameElements(t.resultType))
+      }
+    })
+  }
+
+  test("Support SchemaOfVariant variant expressions with collation") {
+    case class SchemaOfVariantTestCase(
+     input: String,
+     collationName: String,
+     result: String
+    )
+
+    val testCases = Seq(
+      SchemaOfVariantTestCase("null", "UTF8_BINARY", "VOID"),
+      SchemaOfVariantTestCase("[]", "UTF8_BINARY_LCASE", "ARRAY<VOID>"),
+      SchemaOfVariantTestCase("[{\"a\":true,\"b\":0}]", "UNICODE",
+        "ARRAY<STRUCT<a: BOOLEAN, b: BIGINT>>"),
+      SchemaOfVariantTestCase("[{\"A\":\"x\",\"B\":-1.00}]", "UNICODE_CI",
+        "ARRAY<STRUCT<A: STRING COLLATE UNICODE_CI, B: DECIMAL(1,0)>>")
+    )
+
+    // Supported collations
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |SELECT schema_of_variant(parse_json('${t.input}'))
+           |""".stripMargin
+      // Result & data type
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        checkAnswer(testQuery, Row(t.result))
+        assert(testQuery.schema.fields.head.dataType.sameType(StringType(t.collationName)))
+      }
+    })
+  }
+
+  test("Support SchemaOfVariantAgg variant expressions with collation") {
+    case class SchemaOfVariantAggTestCase(
+      input: String,
+      collationName: String,
+      result: String
+    )
+
+    val testCases = Seq(
+      SchemaOfVariantAggTestCase("('1'), ('2'), ('3')", "UTF8_BINARY", "BIGINT"),
+      SchemaOfVariantAggTestCase("('true'), ('false'), ('true')", "UTF8_BINARY_LCASE", "BOOLEAN"),
+      SchemaOfVariantAggTestCase("('{\"a\": 1}'), ('{\"b\": true}'), ('{\"c\": 1.23}')",
+        "UNICODE", "STRUCT<a: BIGINT, b: BOOLEAN, c: DECIMAL(3,2)>"),
+      SchemaOfVariantAggTestCase("('{\"A\": \"x\"}'), ('{\"B\": 9.99}'), ('{\"C\": 0}')",
+        "UNICODE_CI", "STRUCT<A: STRING COLLATE UNICODE_CI, B: DECIMAL(3,2), C: BIGINT>")
+    )
+
+    // Supported collations
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |SELECT schema_of_variant_agg(parse_json(j)) FROM VALUES ${t.input} AS tab(j)
+           |""".stripMargin
+      // Result & data type
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        checkAnswer(testQuery, Row(t.result))
+        assert(testQuery.schema.fields.head.dataType.sameType(StringType(t.collationName)))
+      }
+    })
   }
 
   // TODO: Add more tests for other SQL expressions

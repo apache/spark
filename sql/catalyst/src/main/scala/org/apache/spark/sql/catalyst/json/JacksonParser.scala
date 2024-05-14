@@ -24,6 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.core._
+import org.apache.hadoop.fs.PositionedReadable
 
 import org.apache.spark.SparkUpgradeException
 import org.apache.spark.internal.Logging
@@ -275,19 +276,63 @@ class JacksonParser(
           }
       }
 
-    case StringType =>
-      (parser: JsonParser) => parseJsonToken[UTF8String](parser, dataType) {
+    case _: StringType => (parser: JsonParser) => {
+      // This must be enabled if we will retrieve the bytes directly from the raw content:
+      val includeSourceInLocation = JsonParser.Feature.INCLUDE_SOURCE_IN_LOCATION
+      val originalMask = if (includeSourceInLocation.enabledIn(parser.getFeatureMask)) {
+        1
+      } else {
+        0
+      }
+      parser.overrideStdFeatures(includeSourceInLocation.getMask, includeSourceInLocation.getMask)
+      val result = parseJsonToken[UTF8String](parser, dataType) {
         case VALUE_STRING =>
           UTF8String.fromString(parser.getText)
 
-        case _ =>
+        case other =>
           // Note that it always tries to convert the data as string without the case of failure.
-          val writer = new ByteArrayOutputStream()
-          Utils.tryWithResource(factory.createGenerator(writer, JsonEncoding.UTF8)) {
-            generator => generator.copyCurrentStructure(parser)
+          val startLocation = parser.currentTokenLocation()
+          def skipAhead(): Unit = {
+            other match {
+              case START_OBJECT =>
+                parser.skipChildren()
+              case START_ARRAY =>
+                parser.skipChildren()
+              case _ =>
+              // Do nothing in this case; we've already read the token
+            }
           }
-          UTF8String.fromBytes(writer.toByteArray)
-      }
+
+          // PositionedReadable
+          startLocation.contentReference().getRawContent match {
+            case byteArray: Array[Byte] if exactStringParsing =>
+              skipAhead()
+              val endLocation = parser.currentLocation.getByteOffset
+
+              UTF8String.fromBytes(
+                byteArray,
+                startLocation.getByteOffset.toInt,
+                endLocation.toInt - (startLocation.getByteOffset.toInt))
+            case positionedReadable: PositionedReadable if exactStringParsing =>
+              skipAhead()
+              val endLocation = parser.currentLocation.getByteOffset
+
+              val size = endLocation.toInt - (startLocation.getByteOffset.toInt)
+              val buffer = new Array[Byte](size)
+              positionedReadable.read(startLocation.getByteOffset, buffer, 0, size)
+              UTF8String.fromBytes(buffer, 0, size)
+            case _ =>
+              val writer = new ByteArrayOutputStream()
+              Utils.tryWithResource(factory.createGenerator(writer, JsonEncoding.UTF8)) {
+                generator => generator.copyCurrentStructure(parser)
+              }
+              UTF8String.fromBytes(writer.toByteArray)
+          }
+        }
+      // Reset back to the original configuration:
+      parser.overrideStdFeatures(includeSourceInLocation.getMask, originalMask)
+      result
+    }
 
     case TimestampType =>
       (parser: JsonParser) => parseJsonToken[java.lang.Long](parser, dataType) {
@@ -428,6 +473,8 @@ class JacksonParser(
   }
 
   private val allowEmptyString = SQLConf.get.getConf(SQLConf.LEGACY_ALLOW_EMPTY_STRING_IN_JSON)
+
+  private val exactStringParsing = SQLConf.get.getConf(SQLConf.JSON_EXACT_STRING_PARSING)
 
   /**
    * This function throws an exception for failed conversion. For empty string on data types
@@ -613,7 +660,7 @@ class JacksonParser(
         // JSON parser currently doesn't support partial results for corrupted records.
         // For such records, all fields other than the field configured by
         // `columnNameOfCorruptRecord` are set to `null`.
-        throw BadRecordException(() => recordLiteral(record), cause = () => e)
+        throw BadRecordException(() => recordLiteral(record), () => Array.empty, e)
       case e: CharConversionException if options.encoding.isEmpty =>
         val msg =
           """JSON parser cannot handle a character in its input.
@@ -621,17 +668,18 @@ class JacksonParser(
             |""".stripMargin + e.getMessage
         val wrappedCharException = new CharConversionException(msg)
         wrappedCharException.initCause(e)
-        throw BadRecordException(() => recordLiteral(record), cause = () => wrappedCharException)
+        throw BadRecordException(() => recordLiteral(record), () => Array.empty,
+          wrappedCharException)
       case PartialResultException(row, cause) =>
         throw BadRecordException(
           record = () => recordLiteral(record),
           partialResults = () => Array(row),
-          cause = () => convertCauseForPartialResult(cause))
+          convertCauseForPartialResult(cause))
       case PartialResultArrayException(rows, cause) =>
         throw BadRecordException(
           record = () => recordLiteral(record),
           partialResults = () => rows,
-          cause = () => cause)
+          cause)
       // These exceptions should never be thrown outside of JacksonParser.
       // They are used for the control flow in the parser. We add them here for completeness
       // since they also indicate a bad record.
@@ -639,12 +687,12 @@ class JacksonParser(
         throw BadRecordException(
           record = () => recordLiteral(record),
           partialResults = () => Array(InternalRow(arrayData)),
-          cause = () => convertCauseForPartialResult(cause))
+          convertCauseForPartialResult(cause))
       case PartialMapDataResultException(mapData, cause) =>
         throw BadRecordException(
           record = () => recordLiteral(record),
           partialResults = () => Array(InternalRow(mapData)),
-          cause = () => convertCauseForPartialResult(cause))
+          convertCauseForPartialResult(cause))
     }
   }
 }

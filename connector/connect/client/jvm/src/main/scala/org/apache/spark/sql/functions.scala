@@ -1933,6 +1933,14 @@ object functions {
   def try_divide(left: Column, right: Column): Column = Column.fn("try_divide", left, right)
 
   /**
+   * Returns the remainder of `dividend``/``divisor`. Its result is always null if `divisor` is 0.
+   *
+   * @group math_funcs
+   * @since 4.0.0
+   */
+  def try_remainder(left: Column, right: Column): Column = Column.fn("try_remainder", left, right)
+
+  /**
    * Returns `left``*``right` and the result is null on overflow. The acceptable input types are
    * the same with the `*` operator.
    *

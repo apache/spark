@@ -233,8 +233,12 @@ class SparkSession private(
 
   /**
    * A collection of methods for registering user-defined data sources.
+   *
+   * @since 4.0.0
    */
-  private[sql] def dataSource: DataSourceRegistration = sessionState.dataSourceRegistration
+  @Experimental
+  @Unstable
+  def dataSource: DataSourceRegistration = sessionState.dataSourceRegistration
 
   /**
    * Returns a `StreamingQueryManager` that allows managing all the
