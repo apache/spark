@@ -54,14 +54,16 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
     "scan with aggregate push-down: REGR_R2 with DISTINCT",
     "scan with aggregate push-down: REGR_R2 without DISTINCT",
     "scan with aggregate push-down: REGR_SXY with DISTINCT",
-    "scan with aggregate push-down: REGR_SXY without DISTINCT")
+    "scan with aggregate push-down: REGR_SXY without DISTINCT",
+    "simple timestamps roundtrip")
 
   override val catalogName: String = "mysql"
   override val db = new MySQLDatabaseOnDocker
+  override val url: String = db.getJdbcUrl(dockerIp, externalPort)
 
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.mysql", classOf[JDBCTableCatalog].getName)
-    .set("spark.sql.catalog.mysql.url", db.getJdbcUrl(dockerIp, externalPort))
+    .set("spark.sql.catalog.mysql.url", url)
     .set("spark.sql.catalog.mysql.pushDownAggregate", "true")
     .set("spark.sql.catalog.mysql.pushDownLimit", "true")
     .set("spark.sql.catalog.mysql.pushDownOffset", "true")
@@ -142,6 +144,9 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
   override def supportListIndexes: Boolean = true
 
   override def indexOptions: String = "KEY_BLOCK_SIZE=10"
+
+  override protected val timestampNTZType: String = "DATETIME"
+  override protected val timestampTZType: String = "TIMESTAMP"
 
   test("SPARK-42943: Use LONGTEXT instead of TEXT for StringType for effective length") {
     val tableName = catalogName + ".t1"

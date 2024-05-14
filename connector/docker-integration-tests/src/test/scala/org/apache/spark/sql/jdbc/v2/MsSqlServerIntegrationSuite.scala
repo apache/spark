@@ -59,10 +59,11 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
 
   override val catalogName: String = "mssql"
   override val db = new MsSQLServerDatabaseOnDocker
+  override val url: String = db.getJdbcUrl(dockerIp, externalPort)
 
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.mssql", classOf[JDBCTableCatalog].getName)
-    .set("spark.sql.catalog.mssql.url", db.getJdbcUrl(dockerIp, externalPort))
+    .set("spark.sql.catalog.mssql.url", url)
     .set("spark.sql.catalog.mssql.pushDownAggregate", "true")
     .set("spark.sql.catalog.mssql.pushDownLimit", "true")
 
@@ -111,6 +112,9 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
       },
       errorClass = "_LEGACY_ERROR_TEMP_2271")
   }
+
+  override protected val timestampNTZType: String = "datetime"
+  override protected val timestampTZType: String = "datetimeoffset"
 
   test("SPARK-47440: SQLServer does not support boolean expression in binary comparison") {
     val df1 = sql("SELECT name FROM " +

@@ -45,15 +45,17 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
     "scan with aggregate push-down: REGR_INTERCEPT with DISTINCT",
     "scan with aggregate push-down: REGR_SLOPE with DISTINCT",
     "scan with aggregate push-down: REGR_R2 with DISTINCT",
-    "scan with aggregate push-down: REGR_SXY with DISTINCT")
+    "scan with aggregate push-down: REGR_SXY with DISTINCT",
+    "simple timestamps roundtrip")
 
   override val catalogName: String = "db2"
   override val namespaceOpt: Option[String] = Some("DB2INST1")
   override val db = new DB2DatabaseOnDocker
+  override val url: String = db.getJdbcUrl(dockerIp, externalPort)
 
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.db2", classOf[JDBCTableCatalog].getName)
-    .set("spark.sql.catalog.db2.url", db.getJdbcUrl(dockerIp, externalPort))
+    .set("spark.sql.catalog.db2.url", url)
     .set("spark.sql.catalog.db2.pushDownAggregate", "true")
     .set("spark.sql.catalog.db2.pushDownLimit", "true")
     .set("spark.sql.catalog.db2.pushDownOffset", "true")
@@ -102,4 +104,7 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
   }
 
   override def caseConvert(tableName: String): String = tableName.toUpperCase(Locale.ROOT)
+
+  override protected val timestampNTZType: String = "TIMESTAMP"
+  override protected val timestampTZType: String = "TIMESTAMP"
 }

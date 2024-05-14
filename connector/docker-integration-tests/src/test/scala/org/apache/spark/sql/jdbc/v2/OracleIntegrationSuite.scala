@@ -74,6 +74,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
   override val catalogName: String = "oracle"
   override val namespaceOpt: Option[String] = Some("SYSTEM")
   override val db = new OracleDatabaseOnDocker
+  override val url: String = db.getJdbcUrl(dockerIp, externalPort)
 
   override def defaultMetadata(dataType: DataType): Metadata = new MetadataBuilder()
     .putLong("scale", 0)
@@ -84,7 +85,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
 
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.oracle", classOf[JDBCTableCatalog].getName)
-    .set("spark.sql.catalog.oracle.url", db.getJdbcUrl(dockerIp, externalPort))
+    .set("spark.sql.catalog.oracle.url", url)
     .set("spark.sql.catalog.oracle.pushDownAggregate", "true")
     .set("spark.sql.catalog.oracle.pushDownLimit", "true")
     .set("spark.sql.catalog.oracle.pushDownOffset", "true")
@@ -124,6 +125,9 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
   }
 
   override def caseConvert(tableName: String): String = tableName.toUpperCase(Locale.ROOT)
+
+  override protected val timestampNTZType: String = "datetime"
+  override protected val timestampTZType: String = "datetimeoffset"
 
   test("SPARK-46478: Revert SPARK-43049 to use varchar(255) for string") {
     val tableName = catalogName + ".t1"
