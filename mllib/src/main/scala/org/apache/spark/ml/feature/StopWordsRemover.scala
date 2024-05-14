@@ -130,7 +130,7 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
     if (Locale.getAvailableLocales.contains(Locale.getDefault)) {
       Locale.getDefault
     } else {
-      logWarning(log"Default locale set was [${MDC(LogKeys.LOCALE, Locale.getDefault)}}]; " +
+      logWarning(log"Default locale set was [${MDC(LogKeys.LOCALE, Locale.getDefault)}]; " +
         log"however, it was not found in available locales in JVM, falling back to en_US locale. " +
         log"Set param `locale` in order to respect another locale.")
       Locale.US

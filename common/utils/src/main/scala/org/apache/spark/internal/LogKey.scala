@@ -329,7 +329,7 @@ object LogKeys {
   case object MAX_LOG_NUM_POLICY extends LogKey
   case object MAX_MEMORY_SIZE extends LogKey
   case object MAX_METHOD_CODE_SIZE extends LogKey
-  case object MAX_NUM_BINS_OF_STRATEGY extends LogKey
+  case object MAX_NUM_BINS extends LogKey
   case object MAX_NUM_CHUNKS extends LogKey
   case object MAX_NUM_PARTITIONS extends LogKey
   case object MAX_NUM_POSSIBLE_BINS extends LogKey
@@ -407,7 +407,7 @@ object LogKeys {
   case object NUM_FREQUENT_ITEMS extends LogKey
   case object NUM_INDEX_FILES extends LogKey
   case object NUM_ITERATIONS extends LogKey
-  case object NUM_LEADING_SINGULAR_VALUES_TO_KEEP extends LogKey
+  case object NUM_LEADING_SINGULAR_VALUES extends LogKey
   case object NUM_LEFT_PARTITION_VALUES extends LogKey
   case object NUM_LOADED_ENTRIES extends LogKey
   case object NUM_LOCAL_DIRS extends LogKey

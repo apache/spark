@@ -343,8 +343,7 @@ class RowMatrix @Since("1.0.0") (
     val computeMode = mode match {
       case "auto" =>
         if (k > 5000) {
-          logWarning(log"computing svd with " +
-            log"k=${MDC(LogKeys.NUM_LEADING_SINGULAR_VALUES_TO_KEEP, k)} and " +
+          logWarning(log"computing svd with k=${MDC(LogKeys.NUM_LEADING_SINGULAR_VALUES, k)} and " +
             log"n=${MDC(LogKeys.NUM_COLUMNS, n)}, please check necessity")
         }
 
@@ -398,7 +397,7 @@ class RowMatrix @Since("1.0.0") (
     // criterion specified by tol after max number of iterations.
     // Thus use i < min(k, sigmas.length) instead of i < k.
     if (sigmas.length < k) {
-      logWarning(log"Requested ${MDC(LogKeys.NUM_LEADING_SINGULAR_VALUES_TO_KEEP, k)} singular " +
+      logWarning(log"Requested ${MDC(LogKeys.NUM_LEADING_SINGULAR_VALUES, k)} singular " +
         log"values but only found ${MDC(LogKeys.SIGMAS_LENGTH, sigmas.length)} converged.")
     }
     while (i < math.min(k, sigmas.length) && sigmas(i) >= threshold) {
@@ -407,7 +406,7 @@ class RowMatrix @Since("1.0.0") (
     val sk = i
 
     if (sk < k) {
-      logWarning(log"Requested ${MDC(LogKeys.NUM_LEADING_SINGULAR_VALUES_TO_KEEP, k)} singular " +
+      logWarning(log"Requested ${MDC(LogKeys.NUM_LEADING_SINGULAR_VALUES, k)} singular " +
         log"values but only found ${MDC(LogKeys.COUNT, sk)} nonzeros.")
     }
 

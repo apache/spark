@@ -66,7 +66,7 @@ class MatrixFactorizationModel @Since("0.8.0") (
     require(features.first()._2.length == rank,
       s"$name feature dimension does not match the rank $rank.")
     if (features.partitioner.isEmpty) {
-      logWarning(log"${MDC(LogKeys.FEATURE_NAME, name)} name factor does not have a partitioner. " +
+      logWarning(log"${MDC(LogKeys.FEATURE_NAME, name)} factor does not have a partitioner. " +
         log"Prediction on individual records could be slow.")
     }
     if (features.getStorageLevel == StorageLevel.NONE) {

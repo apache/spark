@@ -135,7 +135,7 @@ private[spark] object DecisionTreeMetadata extends Logging {
     val maxPossibleBins = math.min(strategy.maxBins, numExamples).toInt
     if (maxPossibleBins < strategy.maxBins) {
       logWarning(log"DecisionTree reducing maxBins from " +
-        log"${MDC(LogKeys.MAX_NUM_BINS_OF_STRATEGY, strategy.maxBins)} to " +
+        log"${MDC(LogKeys.MAX_NUM_BINS, strategy.maxBins)} to " +
         log"${MDC(LogKeys.MAX_NUM_POSSIBLE_BINS, maxPossibleBins)} " +
         log"(= number of training instances)")
     }
