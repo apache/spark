@@ -1051,6 +1051,17 @@ public class CollationSupportSuite {
     assertLevenshtein("UNICODE", "Ëaaaẞ", "ËAAAẞ", null, 3);
     assertLevenshtein("UNICODE", "asda", "adA", null, 2);
 
+    assertLevenshtein("UNICODE_CI", "", "", null, 0);
+    assertLevenshtein("UNICODE_CI", "A", "", null, 1);
+    assertLevenshtein("UNICODE_CI", "A", "A", null, 0);
+    assertLevenshtein("UNICODE_CI", "A", "a", null, 0);
+    assertLevenshtein("UNICODE_CI", "aaa", "aaa", null, 0);
+    assertLevenshtein("UNICODE_CI", "Xü", "xü", null, 0);
+    assertLevenshtein("UNICODE_CI", "", "random", null, 6);
+    assertLevenshtein("UNICODE_CI", "Xü", "Xü", null, 0);
+    assertLevenshtein("UNICODE_CI", "Ëaaaẞ", "ËAAAẞ", null, 0);
+    assertLevenshtein("UNICODE_CI", "asda", "adA", null, 1);
+
 
     // Levenshtein tests with threshold value set
     //
@@ -1090,6 +1101,7 @@ public class CollationSupportSuite {
     assertLevenshtein("UNICODE", "Ëaaaẞ", "ËAAAẞ", 3, 3);
     assertLevenshtein("UNICODE", "Ëaaaẞ", "ËAAAẞ", 2, -1);
     assertLevenshtein("UNICODE", "asda", "adA", 2, 2);
+    assertLevenshtein("UNICODE", "asda", "asda", -1 , -1);
 
     assertLevenshtein("UNICODE_CI", "", "", 2, 0);
     assertLevenshtein("UNICODE_CI", "A", "", 2, 1);
@@ -1103,8 +1115,6 @@ public class CollationSupportSuite {
     assertLevenshtein("UNICODE_CI", "Ëaaaẞ", "ËAAAẞ", 3, 0);
     assertLevenshtein("UNICODE_CI", "Ëaaaẞ", "ËAAAẞ", -1, -1);
     assertLevenshtein("UNICODE_CI", "asda", "adA", 2, 1);
-
-    assertLevenshtein("UNICODE", "asda", "asda", -1 , -1);
   }
 
   // TODO: Test more collation-aware string expressions.
