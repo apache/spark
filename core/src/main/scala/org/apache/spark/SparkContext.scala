@@ -373,7 +373,8 @@ class SparkContext(config: SparkConf) extends Logging {
 
   private[spark] def cleaner: Option[ContextCleaner] = _cleaner
 
-  private[spark] var checkpointDir: Option[String] = conf.getOption(CHECKPOINT_DIR.key)
+  private[spark] var checkpointDir: Option[String] = None
+  conf.getOption(CHECKPOINT_DIR).foreach(setCheckpointDir)
 
   // Thread Local variable that can be used by users to pass information down the stack
   protected[spark] val localProperties = new InheritableThreadLocal[Properties] {
