@@ -23,7 +23,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-
+// checkstyle.off: AvoidEscapedUnicodeCharacters
 public class CollationSupportSuite {
 
   /**
@@ -1107,3 +1107,4 @@ public class CollationSupportSuite {
   // TODO: Test other collation-aware expressions.
 
 }
+// checkstyle.on: AvoidEscapedUnicodeCharacters
