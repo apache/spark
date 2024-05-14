@@ -316,17 +316,18 @@ class UnivocityParser(
       throw BadRecordException(
         () => getCurrentInput,
         () => Array.empty,
-        () => QueryExecutionErrors.malformedCSVRecordError(""))
+        LazyBadRecordCauseWrapper(() => QueryExecutionErrors.malformedCSVRecordError("")))
     }
 
     val currentInput = getCurrentInput
 
-    var badRecordException: Option[() => Throwable] = if (tokens.length != parsedSchema.length) {
+    var badRecordException: Option[Throwable] = if (tokens.length != parsedSchema.length) {
       // If the number of tokens doesn't match the schema, we should treat it as a malformed record.
       // However, we still have chance to parse some of the tokens. It continues to parses the
       // tokens normally and sets null when `ArrayIndexOutOfBoundsException` occurs for missing
       // tokens.
-      Some(() => QueryExecutionErrors.malformedCSVRecordError(currentInput.toString))
+      Some(LazyBadRecordCauseWrapper(
+        () => QueryExecutionErrors.malformedCSVRecordError(currentInput.toString)))
     } else None
     // When the length of the returned tokens is identical to the length of the parsed schema,
     // we just need to:
@@ -348,7 +349,7 @@ class UnivocityParser(
       } catch {
         case e: SparkUpgradeException => throw e
         case NonFatal(e) =>
-          badRecordException = badRecordException.orElse(Some(() => e))
+          badRecordException = badRecordException.orElse(Some(e))
           // Use the corresponding DEFAULT value associated with the column, if any.
           row.update(i, ResolveDefaultColumns.existenceDefaultValues(requiredSchema)(i))
       }

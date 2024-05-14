@@ -67,20 +67,29 @@ case class PartialResultArrayException(
   extends Exception(cause)
 
 /**
- * Exception thrown when the underlying parser meets a bad record and can't parse it. Used for
- * control flow between wrapper and underlying parser without overhead of creating a full exception.
+ * Exception thrown when the underlying parser met a bad record and can't parse it.
+ * The stacktrace is not collected for better performance, and thus, this exception should
+ * not be used in a user-facing context.
  * @param record a function to return the record that cause the parser to fail
  * @param partialResults a function that returns an row array, which is the partial results of
  *                      parsing this bad record.
- * @param cause a function to return the actual exception about why the record is bad and can't be
- *                      parsed.
+ * @param cause the actual exception about why the record is bad and can't be parsed. It's better
+ *                      to use `LazyBadRecordCauseWrapper` here to delay heavy cause construction
+ *                      until it's needed.
  */
 case class BadRecordException(
     @transient record: () => UTF8String,
     @transient partialResults: () => Array[InternalRow] = () => Array.empty[InternalRow],
-    @transient cause: () => Throwable)
-    extends Exception() {
+    cause: Throwable) extends Exception(cause) {
+  override def getStackTrace(): Array[StackTraceElement] = new Array[StackTraceElement](0)
+  override def fillInStackTrace(): Throwable = this
+}
 
+/**
+ * Exception to use as `BadRecordException` cause to delay heavy user-facing exception construction.
+ * Does not contain stacktrace and used only for control flow
+ */
+case class LazyBadRecordCauseWrapper(cause: () => Throwable) extends Exception() {
   override def getStackTrace(): Array[StackTraceElement] = new Array[StackTraceElement](0)
   override def fillInStackTrace(): Throwable = this
 }

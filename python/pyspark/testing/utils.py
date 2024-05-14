@@ -38,7 +38,7 @@ from itertools import zip_longest
 have_scipy = False
 have_numpy = False
 try:
-    import scipy.sparse  # noqa: F401
+    import scipy  # noqa: F401
 
     have_scipy = True
 except ImportError:

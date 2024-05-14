@@ -25,9 +25,10 @@ import com.google.common.base.Throwables;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import org.apache.spark.internal.Logger;
+import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.*;
@@ -130,7 +131,8 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
       long chunksBeingTransferred = streamManager.chunksBeingTransferred();
       if (chunksBeingTransferred >= maxChunksBeingTransferred) {
         logger.warn("The number of chunks being transferred {} is above {}, close the connection.",
-          chunksBeingTransferred, maxChunksBeingTransferred);
+          MDC.of(LogKeys.NUM_CHUNKS$.MODULE$, chunksBeingTransferred),
+          MDC.of(LogKeys.MAX_NUM_CHUNKS$.MODULE$, maxChunksBeingTransferred));
         channel.close();
         return;
       }
@@ -139,8 +141,9 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
     try {
       buf = streamManager.openStream(req.streamId);
     } catch (Exception e) {
-      logger.error(String.format(
-        "Error opening stream %s for request from %s", req.streamId, getRemoteAddress(channel)), e);
+      logger.error("Error opening stream {} for request from {}", e,
+        MDC.of(LogKeys.STREAM_ID$.MODULE$, req.streamId),
+        MDC.of(LogKeys.HOST_PORT$.MODULE$, getRemoteAddress(channel)));
       respond(new StreamFailure(req.streamId, Throwables.getStackTraceAsString(e)));
       return;
     }
@@ -172,7 +175,8 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
         }
       });
     } catch (Exception e) {
-      logger.error("Error while invoking RpcHandler#receive() on RPC id " + req.requestId, e);
+      logger.error("Error while invoking RpcHandler#receive() on RPC id {}", e,
+        MDC.of(LogKeys.REQUEST_ID$.MODULE$, req.requestId));
       respond(new RpcFailure(req.requestId, Throwables.getStackTraceAsString(e)));
     } finally {
       req.body().release();
@@ -257,7 +261,8 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
         respond(new RpcResponse(req.requestId,
           new NioManagedBuffer(blockPushNonFatalFailure.getResponse())));
       } else {
-        logger.error("Error while invoking RpcHandler#receive() on RPC id " + req.requestId, e);
+        logger.error("Error while invoking RpcHandler#receive() on RPC id {}", e,
+          MDC.of(LogKeys.REQUEST_ID$.MODULE$, req.requestId));
         respond(new RpcFailure(req.requestId, Throwables.getStackTraceAsString(e)));
       }
       // We choose to totally fail the channel, rather than trying to recover as we do in other
@@ -298,7 +303,9 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
       });
     } catch (Exception e) {
       logger.error("Error while invoking receiveMergeBlockMetaReq() for appId {} shuffleId {} "
-        + "reduceId {}", req.appId, req.shuffleId, req.appId, e);
+        + "reduceId {}", e, MDC.of(LogKeys.APP_ID$.MODULE$, req.appId),
+          MDC.of(LogKeys.SHUFFLE_ID$.MODULE$, req.shuffleId),
+          MDC.of(LogKeys.REDUCE_ID$.MODULE$, req.reduceId));
       respond(new RpcFailure(req.requestId, Throwables.getStackTraceAsString(e)));
     }
   }
@@ -313,8 +320,9 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
       if (future.isSuccess()) {
         logger.trace("Sent result {} to client {}", result, remoteAddress);
       } else {
-        logger.error(String.format("Error sending result %s to %s; closing connection",
-          result, remoteAddress), future.cause());
+        logger.error("Error sending result {} to {}; closing connection", future.cause(),
+          MDC.of(LogKeys.RESULT$.MODULE$, result),
+          MDC.of(LogKeys.HOST_PORT$.MODULE$, remoteAddress));
         channel.close();
       }
     });
