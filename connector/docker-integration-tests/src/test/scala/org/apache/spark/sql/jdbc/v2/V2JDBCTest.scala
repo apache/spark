@@ -542,14 +542,14 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         s"""SELECT * FROM $catalogName.pattern_testing_table
            |WHERE pattern_testing_col LIKE 'special_character%'
            |ORDER BY pattern_testing_col""".stripMargin)
-    val rows4 = df4.collect()
-    assert(rows4.length === 1)
-    assert(rows4(0).getString(0) === "special_character_percent%_present")
-    assert(rows4(1).getString(0) === "special_character_percent_not_present")
-    assert(rows4(2).getString(0) === "special_character_quote'_present")
-    assert(rows4(3).getString(0) === "special_character_quote_not_present")
-    assert(rows4(4).getString(0) === "special_character_underscore_present")
-    assert(rows4(5).getString(0) === "special_character_underscorenot_present")
+    val rows8 = df8.collect()
+    assert(rows8.length === 1)
+    assert(rows8(0).getString(0) === "special_character_percent%_present")
+    assert(rows8(1).getString(0) === "special_character_percent_not_present")
+    assert(rows8(2).getString(0) === "special_character_quote'_present")
+    assert(rows8(3).getString(0) === "special_character_quote_not_present")
+    assert(rows8(4).getString(0) === "special_character_underscore_present")
+    assert(rows8(5).getString(0) === "special_character_underscorenot_present")
     // map to endsWith
     // this one should map to contains
     val df9 = spark.sql(
