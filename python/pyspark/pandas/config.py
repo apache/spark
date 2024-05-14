@@ -376,7 +376,7 @@ def get_option(key: str, default: Union[Any, _NoValueType] = _NoValue) -> Any:
     _options_dict[key].validate(default)
     spark_session = default_session()
     if get_default_mode():
-        return json.dumps(default)
+        return default
     else:
         return json.loads(spark_session.conf.get(_key_format(key), default=json.dumps(default)))
 
@@ -401,10 +401,11 @@ def set_option(key: str, value: Any) -> None:
     spark_session = default_session()
     if not get_default_mode():
         spark_session.conf.set(_key_format(key), json.dumps(value))
-    warnings.warn(
-        "As the static conf `spark.sql.pyspark.pandas.defaultMode` is set to True, "
-        "`set_option` is ignored and only default values are used."
-    )
+    else:
+        warnings.warn(
+            "As the static conf `spark.sql.pyspark.pandas.defaultMode` is set to True, "
+            "`set_option` is ignored and only default values are used."
+        )
 
 
 def reset_option(key: str) -> None:
@@ -426,10 +427,11 @@ def reset_option(key: str) -> None:
     spark_session = default_session()
     if not get_default_mode():
         spark_session.conf.unset(_key_format(key))
-    warnings.warn(
-        "As the static conf `spark.sql.pyspark.pandas.defaultMode` is set to True, "
-        "`set_option` is ignored and only default values are used."
-    )
+    else:
+        warnings.warn(
+            "As the static conf `spark.sql.pyspark.pandas.defaultMode` is set to True, "
+            "`reset_option` is ignored and only default values are used."
+        )
 
 
 @contextmanager

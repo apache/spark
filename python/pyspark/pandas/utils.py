@@ -506,7 +506,9 @@ def default_session() -> SparkSession:
         )
     default_mode_value = get_default_mode()
     if default_mode_value is None:
-        default_mode_from_conf = spark.conf.get("spark.sql.pyspark.pandas.defaultMode") == "true"
+        default_mode_from_conf = (
+            spark.conf.get("spark.sql.pyspark.pandas.defaultMode", "false") == "true"
+        )
         set_default_mode(default_mode_from_conf)
 
     return spark
