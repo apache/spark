@@ -67,5 +67,6 @@ class JVMProfilerExecutorPlugin extends ExecutorPlugin with Logging {
     if (profiler != null) {
       profiler.stop()
     }
+
   }
 }
