@@ -248,7 +248,7 @@ case class XPathString(xml: Expression, path: Expression) extends XPathExtract {
 // scalastyle:on line.size.limit
 case class XPathList(xml: Expression, path: Expression) extends XPathExtract {
   override def prettyName: String = "xpath"
-  override def dataType: DataType = ArrayType(xml.dataType, containsNull = false)
+  override def dataType: DataType = ArrayType(SQLConf.get.defaultStringType, containsNull = false)
 
   override def nullSafeEval(xml: Any, path: Any): Any = {
     val nodeList = xpathUtil.evalNodeList(xml.asInstanceOf[UTF8String].toString, pathString)
