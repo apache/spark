@@ -23,7 +23,7 @@ import scala.jdk.CollectionConverters.MapHasAsJava
 import org.apache.spark.SparkException
 
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Collation, EmptyRow, ExpectsInputTypes, Expression, ExpressionEvalHelper, Literal}
+import org.apache.spark.sql.catalyst.expressions.{EmptyRow, ExpectsInputTypes, Expression, ExpressionEvalHelper, Literal}
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2ProviderWithCustomSchema}
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable}
@@ -34,8 +34,8 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SqlApiConf
-import org.apache.spark.sql.internal.types.StringTypeAnyCollation
-import org.apache.spark.sql.types.{AbstractDataType, IntegerType, MapType, StringType, StructField, StructType, TypeCollection}
+import org.apache.spark.sql.internal.types.{AbstractArrayType, StringTypeAnyCollation, StringTypeBinaryLcase}
+import org.apache.spark.sql.types.{AbstractDataType, ArrayType, IntegerType, MapType, StringType, StructField, StructType, TypeCollection}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -998,7 +998,7 @@ class CollationSuite extends DatasourceV2SQLBase
     }).filter(funInfo => {
       val className = funInfo.getClassName
       // noinspection ScalaStyle
-      println("checking - " + className)
+      // println("checking - " + className)
       val cl = Utils.classForName(funInfo.getClassName)
       // dummy instance
       // Take first constructor.
@@ -1020,10 +1020,10 @@ class CollationSuite extends DatasourceV2SQLBase
               val inputTypes = types.inputTypes
               // check if this is a collection...
               inputTypes.exists {
-                case _: StringType | StringTypeAnyCollation => true
+                case _: StringType | StringTypeAnyCollation | StringTypeBinaryLcase => true
                 case TypeCollection(typeCollection) =>
                   typeCollection.exists {
-                    case _: StringType | StringTypeAnyCollation => true
+                    case _: StringType | StringTypeAnyCollation | StringTypeBinaryLcase => true
                     case _ => false
                   }
                 case _ => false
@@ -1042,66 +1042,10 @@ class CollationSuite extends DatasourceV2SQLBase
 
     // noinspection ScalaStyle
     println("Found total of " + funInfos.size + " functions")
-    // 63/449
+    // 75/449
+    // We could capture more probably...
 
-    val expr = funInfos.find(fi => fi.getName.contains("collation")).get
-    // noinspection ScalaStyle
-    println(expr.getClassName)
-
-    // noinspection ScalaStyle
-    val cl = Class.forName(expr.getClassName)
-    // noinspection ScalaStyle
-    // cl.getMethods.foreach(println)
-
-    // noinspection ScalaStyle
-    println("Constructors:")
-    // noinspection ScalaStyle
-    cl.getConstructors.foreach(println)
-
-    // Got this guy:
-    // public org.apache.spark.sql.catalyst.expressions.Collation(
-    //  org.apache.spark.sql.catalyst.expressions.Expression)
-
-    val lit = Literal.create("dummy string")
-    val coll = cl.getConstructors.head.newInstance(lit).asInstanceOf[Collation]
-
-    // noinspection ScalaStyle
-    println(coll)
-
-    // filter only functions that accept string as input
-    assert(coll.dataType === StringType(0))
-
-    // check if there is a replacement.
-    checkEvaluation(coll.replacement, "UTF8_BINARY")
-
-    // --------- substring ----------
-    val exprSubstr = funInfos.find(fi => fi.getName.contains("substring")).get
-    // noinspection ScalaStyle
-    println(exprSubstr.getClassName)
-
-    // noinspection ScalaStyle
-    val clSubstr = Class.forName(exprSubstr.getClassName)
-    // noinspection ScalaStyle
-    // cl.getMethods.foreach(println)
-
-    // noinspection ScalaStyle
-    println("Constructors for substr:")
-    // noinspection ScalaStyle
-    clSubstr.getConstructors.foreach(println)
-
-    val headConstructor = clSubstr.getConstructors.head
-    val paramCount = headConstructor.getParameterCount
-    val args = Array.fill(paramCount)(lit)
-
-    val substrExpr = headConstructor.newInstance(args: _*).asInstanceOf[Expression]
-
-    assert(substrExpr.isInstanceOf[ExpectsInputTypes])
-    val inputTypes = substrExpr.asInstanceOf[ExpectsInputTypes].inputTypes
-    // noinspection ScalaStyle
-    println("Input types for Substring:")
-    // noinspection ScalaStyle
-    inputTypes.foreach(println)
-
+    // Helper methods for generating data.
     sealed trait CollationType
     case object Utf8Binary extends CollationType
     case object Utf8BinaryLcase extends CollationType
@@ -1109,7 +1053,6 @@ class CollationSuite extends DatasourceV2SQLBase
     def generateData(
         types: Seq[AbstractDataType], collationType: CollationType): Seq[Expression] = {
       types.map {
-        // TODO: Try to force string type here...
         case TypeCollection(typeCollection) =>
           val strTypes =
             typeCollection.filter(dt => dt.isInstanceOf[StringType] ||
@@ -1127,32 +1070,49 @@ class CollationSuite extends DatasourceV2SQLBase
             case Utf8BinaryLcase =>
               Literal.create("DuMmY sTrInG", StringType("UTF8_BINARY_LCASE"))
           }
+        // Try to make this a bit more random.
         case IntegerType => Literal(1)
+        case AbstractArrayType(elementType) =>
+          (elementType, collationType) match {
+            case (StringTypeAnyCollation, Utf8Binary) =>
+              Literal.create(Seq("dummy string"), ArrayType(StringType("UTF8_BINARY")))
+            case (StringTypeAnyCollation, Utf8BinaryLcase) =>
+              Literal.create(Seq("dUmmY sTriNg"), ArrayType(StringType("UTF8_BINARY_LCASE")))
+            case (_, _) => fail("unsupported type")
+          }
       }
     }
 
-    val inputDataUtf8Binary = generateData(inputTypes, Utf8Binary)
-    val instanceUtf8Binary =
-      headConstructor.newInstance(inputDataUtf8Binary: _*).asInstanceOf[Expression]
-    val resUtf8Binary = instanceUtf8Binary.eval(EmptyRow)
+    for (f <- funInfos) {
+      // noinspection ScalaStyle
+      println(f.getName)
 
-    val inputDataLcase = generateData(inputTypes, Utf8BinaryLcase)
-    val instanceLcase = headConstructor.newInstance(inputDataLcase: _*).asInstanceOf[Expression]
-    val resUtf8Lcase = instanceLcase.eval(EmptyRow)
-    // noinspection ScalaStyle
-    println("final result (binary/lcase):")
-    // noinspection ScalaStyle
-    println(resUtf8Binary)
-    // noinspection ScalaStyle
-    println(resUtf8Lcase)
+      val cl = Utils.classForName(f.getClassName)
+      val headConstructor = cl.getConstructors.head
+      val paramCount = headConstructor.getParameterCount
+      val args = Array.fill(paramCount)(Literal(1))
+      val expr = headConstructor.newInstance(args: _*).asInstanceOf[ExpectsInputTypes]
+      val inputTypes = expr.inputTypes
 
-    // Get string out of it.
-    val dt = instanceLcase.dataType
-    assert(dt.isInstanceOf[StringType])
-    assert(resUtf8Binary.isInstanceOf[UTF8String])
-    assert(resUtf8Lcase.isInstanceOf[UTF8String])
+      val inputDataUtf8Binary = generateData(inputTypes, Utf8Binary)
+      val instanceUtf8Binary =
+        headConstructor.newInstance(inputDataUtf8Binary: _*).asInstanceOf[Expression]
+      val resUtf8Binary = instanceUtf8Binary.eval(EmptyRow)
 
-    assert(resUtf8Binary.asInstanceOf[UTF8String].toLowerCase.binaryEquals(
-      resUtf8Lcase.asInstanceOf[UTF8String].toLowerCase))
+      val inputDataLcase = generateData(inputTypes, Utf8BinaryLcase)
+      val instanceLcase = headConstructor.newInstance(inputDataLcase: _*).asInstanceOf[Expression]
+      val resUtf8Lcase = instanceLcase.eval(EmptyRow)
+
+      val dt = instanceLcase.dataType
+
+      dt match {
+        case st: StringType =>
+          assert(resUtf8Binary.isInstanceOf[UTF8String])
+          assert(resUtf8Lcase.isInstanceOf[UTF8String])
+          assert(resUtf8Binary.asInstanceOf[UTF8String].toLowerCase.binaryEquals(
+            resUtf8Lcase.asInstanceOf[UTF8String].toLowerCase))
+        case _ => resUtf8Lcase === resUtf8Binary
+      }
+    }
   }
 }
