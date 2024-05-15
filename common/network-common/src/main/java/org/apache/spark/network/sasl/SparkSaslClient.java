@@ -31,8 +31,9 @@ import javax.security.sasl.SaslException;
 
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableMap;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import org.apache.spark.internal.Logger;
+import org.apache.spark.internal.LoggerFactory;
 
 import static org.apache.spark.network.sasl.SparkSaslServer.*;
 

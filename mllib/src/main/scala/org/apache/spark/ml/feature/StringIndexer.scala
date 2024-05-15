@@ -21,6 +21,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
+import org.apache.spark.internal.{LogKeys, MDC}
 import org.apache.spark.ml.{Estimator, Model, Transformer}
 import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param._
@@ -431,8 +432,8 @@ class StringIndexerModel (
       val labels = labelsArray(i)
 
       if (!dataset.schema.fieldNames.contains(inputColName)) {
-        logWarning(s"Input column ${inputColName} does not exist during transformation. " +
-          "Skip StringIndexerModel for this column.")
+        logWarning(log"Input column ${MDC(LogKeys.COLUMN_NAME, inputColName)} does not exist " +
+          log"during transformation. Skip StringIndexerModel for this column.")
         outputColNames(i) = null
       } else {
         val filteredLabels = getHandleInvalid match {

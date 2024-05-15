@@ -934,6 +934,13 @@ def try_divide(left: "ColumnOrName", right: "ColumnOrName") -> Column:
 try_divide.__doc__ = pysparkfuncs.try_divide.__doc__
 
 
+def try_remainder(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("try_remainder", left, right)
+
+
+try_remainder.__doc__ = pysparkfuncs.try_remainder.__doc__
+
+
 def try_multiply(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("try_multiply", left, right)
 
@@ -3388,6 +3395,13 @@ def timestamp_micros(col: "ColumnOrName") -> Column:
 
 
 timestamp_micros.__doc__ = pysparkfuncs.timestamp_micros.__doc__
+
+
+def timestamp_diff(unit: str, start: "ColumnOrName", end: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("timestampdiff", lit(unit), start, end)
+
+
+timestamp_diff.__doc__ = pysparkfuncs.timestamp_diff.__doc__
 
 
 def window(

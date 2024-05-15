@@ -80,7 +80,7 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
     val fa = log4jFileAppender()
     logger.addAppender(fa)
     fa.start()
-    logInfo(s"Added a local log appender at: $localLogFile")
+    logInfo(log"Added a local log appender at: ${MDC(FILE_NAME, localLogFile)}")
   }
 
   def startSync(hadoopConf: Configuration): Unit = {
@@ -145,7 +145,7 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
       threadpool = ThreadUtils.newDaemonSingleThreadScheduledExecutor("dfsSyncThread")
       threadpool.scheduleWithFixedDelay(this, UPLOAD_INTERVAL_IN_SECS, UPLOAD_INTERVAL_IN_SECS,
         TimeUnit.SECONDS)
-      logInfo(s"Started driver log file sync to: ${dfsLogFile}")
+      logInfo(log"Started driver log file sync to: ${MDC(PATH, dfsLogFile)}")
     }
 
     def run(): Unit = {

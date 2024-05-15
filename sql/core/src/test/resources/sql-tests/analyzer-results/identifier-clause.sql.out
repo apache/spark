@@ -394,7 +394,7 @@ DropTable true, false
 -- !query
 CREATE OR REPLACE VIEW IDENTIFIER('v')(c1) AS VALUES(1)
 -- !query analysis
-CreateViewCommand `spark_catalog`.`default`.`v`, [(c1,None)], VALUES(1), false, true, PersistedView, true
+CreateViewCommand `spark_catalog`.`default`.`v`, [(c1,None)], VALUES(1), false, true, PersistedView, COMPENSATION, true
    +- LocalRelation [col1#x]
 
 
@@ -424,7 +424,7 @@ DropTableCommand `spark_catalog`.`default`.`v`, false, true, false
 -- !query
 CREATE TEMPORARY VIEW IDENTIFIER('v')(c1) AS VALUES(1)
 -- !query analysis
-CreateViewCommand `v`, [(c1,None)], VALUES(1), false, false, LocalTempView, true
+CreateViewCommand `v`, [(c1,None)], VALUES(1), false, false, LocalTempView, UNSUPPORTED, true
    +- LocalRelation [col1#x]
 
 

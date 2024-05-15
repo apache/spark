@@ -38,9 +38,11 @@ import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.cache.Weigher;
 import com.google.common.collect.Maps;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import org.apache.spark.internal.Logger;
+import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.shuffle.checksum.Cause;
@@ -131,7 +133,8 @@ public class ExternalShuffleBlockResolver {
     db = DBProvider.initDB(dbBackend, this.registeredExecutorFile, CURRENT_VERSION, mapper);
     if (db != null) {
       logger.info("Use {} as the implementation of {}",
-        dbBackend, Constants.SHUFFLE_SERVICE_DB_BACKEND);
+        MDC.of(LogKeys.SHUFFLE_DB_BACKEND_NAME$.MODULE$, dbBackend),
+        MDC.of(LogKeys.SHUFFLE_DB_BACKEND_KEY$.MODULE$, Constants.SHUFFLE_SERVICE_DB_BACKEND));
       executors = reloadRegisteredExecutors(db);
     } else {
       executors = Maps.newConcurrentMap();
@@ -149,7 +152,9 @@ public class ExternalShuffleBlockResolver {
       String execId,
       ExecutorShuffleInfo executorInfo) {
     AppExecId fullId = new AppExecId(appId, execId);
-    logger.info("Registered executor {} with {}", fullId, executorInfo);
+    logger.info("Registered executor {} with {}",
+      MDC.of(LogKeys.APP_EXECUTOR_ID$.MODULE$, fullId),
+      MDC.of(LogKeys.EXECUTOR_SHUFFLE_INFO$.MODULE$, executorInfo));
     try {
       if (db != null && AppsWithRecoveryDisabled.isRecoveryEnabledForApp(appId)) {
         byte[] key = dbAppExecKey(fullId);
@@ -214,7 +219,9 @@ public class ExternalShuffleBlockResolver {
    * this method.
    */
   public void applicationRemoved(String appId, boolean cleanupLocalDirs) {
-    logger.info("Application {} removed, cleanupLocalDirs = {}", appId, cleanupLocalDirs);
+    logger.info("Application {} removed, cleanupLocalDirs = {}",
+      MDC.of(LogKeys.APP_ID$.MODULE$, appId),
+      MDC.of(LogKeys.CLEANUP_LOCAL_DIRS$.MODULE$, cleanupLocalDirs));
     Iterator<Map.Entry<AppExecId, ExecutorShuffleInfo>> it = executors.entrySet().iterator();
     while (it.hasNext()) {
       Map.Entry<AppExecId, ExecutorShuffleInfo> entry = it.next();
@@ -228,12 +235,15 @@ public class ExternalShuffleBlockResolver {
           try {
             db.delete(dbAppExecKey(fullId));
           } catch (IOException e) {
-            logger.error("Error deleting {} from executor state db", appId, e);
+            logger.error("Error deleting {} from executor state db", e,
+              MDC.of(LogKeys.APP_ID$.MODULE$, appId));
           }
         }
 
         if (cleanupLocalDirs) {
-          logger.info("Cleaning up executor {}'s {} local dirs", fullId, executor.localDirs.length);
+          logger.info("Cleaning up executor {}'s {} local dirs",
+            MDC.of(LogKeys.APP_EXECUTOR_ID$.MODULE$, fullId),
+            MDC.of(LogKeys.NUM_LOCAL_DIRS$.MODULE$, executor.localDirs.length));
 
           // Execute the actual deletion in a different thread, as it may take some time.
           directoryCleaner.execute(() -> deleteExecutorDirs(executor.localDirs));
@@ -248,15 +258,18 @@ public class ExternalShuffleBlockResolver {
    */
   public void executorRemoved(String executorId, String appId) {
     logger.info("Clean up non-shuffle and non-RDD files associated with the finished executor {}",
-      executorId);
+      MDC.of(LogKeys.EXECUTOR_ID$.MODULE$, executorId));
     AppExecId fullId = new AppExecId(appId, executorId);
     final ExecutorShuffleInfo executor = executors.get(fullId);
     if (executor == null) {
       // Executor not registered, skip clean up of the local directories.
-      logger.info("Executor is not registered (appId={}, execId={})", appId, executorId);
+      logger.info("Executor is not registered (appId={}, execId={})",
+        MDC.of(LogKeys.APP_ID$.MODULE$, appId),
+        MDC.of(LogKeys.EXECUTOR_ID$.MODULE$, executorId));
     } else {
       logger.info("Cleaning up non-shuffle and non-RDD files in executor {}'s {} local dirs",
-        fullId, executor.localDirs.length);
+        MDC.of(LogKeys.APP_EXECUTOR_ID$.MODULE$, fullId),
+        MDC.of(LogKeys.NUM_LOCAL_DIRS$.MODULE$, executor.localDirs.length));
 
       // Execute the actual deletion in a different thread, as it may take some time.
       directoryCleaner.execute(() -> deleteNonShuffleServiceServedFiles(executor.localDirs));
@@ -273,7 +286,8 @@ public class ExternalShuffleBlockResolver {
         JavaUtils.deleteRecursively(new File(localDir));
         logger.debug("Successfully cleaned up directory: {}", localDir);
       } catch (Exception e) {
-        logger.error("Failed to delete directory: " + localDir, e);
+        logger.error("Failed to delete directory: {}", e,
+          MDC.of(LogKeys.PATH$.MODULE$, localDir));
       }
     }
   }
@@ -295,8 +309,8 @@ public class ExternalShuffleBlockResolver {
         logger.debug("Successfully cleaned up files not served by shuffle service in directory: {}",
           localDir);
       } catch (Exception e) {
-        logger.error("Failed to delete files not served by shuffle service in directory: "
-          + localDir, e);
+        logger.error("Failed to delete files not served by shuffle service in directory: {}", e,
+          MDC.of(LogKeys.PATH$.MODULE$, localDir));
       }
     }
   }
@@ -368,7 +382,8 @@ public class ExternalShuffleBlockResolver {
       if (file.delete()) {
         numRemovedBlocks++;
       } else {
-        logger.warn("Failed to delete block: " + file.getAbsolutePath());
+        logger.warn("Failed to delete block: {}",
+          MDC.of(LogKeys.PATH$.MODULE$, file.getAbsolutePath()));
       }
     }
     return numRemovedBlocks;
@@ -472,7 +487,8 @@ public class ExternalShuffleBlockResolver {
             break;
           }
           AppExecId id = parseDbAppExecKey(key);
-          logger.info("Reloading registered executors: " +  id.toString());
+          logger.info("Reloading registered executors: {}",
+            MDC.of(LogKeys.APP_EXECUTOR_ID$.MODULE$, id));
           ExecutorShuffleInfo shuffleInfo =
             mapper.readValue(e.getValue(), ExecutorShuffleInfo.class);
           registeredExecutors.put(id, shuffleInfo);

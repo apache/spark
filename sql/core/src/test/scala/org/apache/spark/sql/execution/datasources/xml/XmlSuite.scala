@@ -77,6 +77,20 @@ class XmlSuite
   override def excluded: Seq[String] = Seq(
     s"Propagate Hadoop configs from $dataSourceFormat options to underlying file system")
 
+  private val baseOptions = Map("rowTag" -> "ROW")
+
+  private def readData(
+      xmlString: String,
+      schemaOpt: Option[StructType],
+      options: Map[String, String] = Map.empty): DataFrame = {
+    val ds = spark.createDataset(spark.sparkContext.parallelize(Seq(xmlString)))(Encoders.STRING)
+    if (schemaOpt.isDefined) {
+      spark.read.schema(schemaOpt.get).options(options).xml(ds)
+    } else {
+      spark.read.options(options).xml(ds)
+    }
+  }
+
   // Tests
 
   test("DSL test") {
@@ -3026,6 +3040,149 @@ class XmlSuite
         assert(XmlSuiteDebugFileSystem.maxFiles() > 1)
       }
     }
+  }
+
+  /////////////////////////////////////
+  // Projection, sorting, filtering  //
+  /////////////////////////////////////
+  test("select with string xml object") {
+    val xmlString =
+      s"""
+         |<ROW>
+         |    <name>John</name>
+         |    <metadata><id>3</id></metadata>
+         |</ROW>
+         |""".stripMargin
+    val schema = new StructType()
+      .add("name", StringType)
+      .add("metadata", StringType)
+    val df = readData(xmlString, Some(schema), baseOptions)
+    checkAnswer(df.select("name"), Seq(Row("John")))
+  }
+
+  test("select with duplicate field name in string xml object") {
+    val xmlString =
+      s"""
+         |<ROW>
+         |    <a><b>c</b></a>
+         |    <b>d</b>
+         |</ROW>
+         |""".stripMargin
+    val schema = new StructType()
+      .add("a", StringType)
+      .add("b", StringType)
+    val df = readData(xmlString, Some(schema), baseOptions)
+    val dfWithSchemaInference = readData(xmlString, None, baseOptions)
+    Seq(df, dfWithSchemaInference).foreach { df =>
+      checkAnswer(df.select("b"), Seq(Row("d")))
+    }
+  }
+
+  test("select nested struct objects") {
+    val xmlString =
+      s"""
+         |<ROW>
+         |    <struct>
+         |        <innerStruct>
+         |            <field1>1</field1>
+         |            <field2>2</field2>
+         |        </innerStruct>
+         |    </struct>
+         |</ROW>
+         |""".stripMargin
+    val schema = new StructType()
+      .add(
+        "struct",
+        new StructType()
+          .add("innerStruct", new StructType().add("field1", LongType).add("field2", LongType))
+      )
+    val df = readData(xmlString, Some(schema), baseOptions)
+    val dfWithSchemaInference = readData(xmlString, None, baseOptions)
+    Seq(df, dfWithSchemaInference).foreach { df =>
+      checkAnswer(df.select("struct"), Seq(Row(Row(Row(1, 2)))))
+      checkAnswer(df.select("struct.innerStruct"), Seq(Row(Row(1, 2))))
+    }
+  }
+
+  test("select a struct of lists") {
+    val xmlString =
+      s"""
+         |<ROW>
+         |    <struct>
+         |        <array><field>1</field></array>
+         |        <array><field>2</field></array>
+         |        <array><field>3</field></array>
+         |    </struct>
+         |</ROW>
+         |""".stripMargin
+    val schema = new StructType()
+      .add(
+        "struct",
+        new StructType()
+          .add("array", ArrayType(StructType(StructField("field", LongType) :: Nil))))
+
+    val df = readData(xmlString, Some(schema), baseOptions)
+    val dfWithSchemaInference = readData(xmlString, None, baseOptions)
+    Seq(df, dfWithSchemaInference).foreach { df =>
+      checkAnswer(df.select("struct"), Seq(Row(Row(Array(Row(1), Row(2), Row(3))))))
+      checkAnswer(df.select("struct.array"), Seq(Row(Array(Row(1), Row(2), Row(3)))))
+    }
+  }
+
+  test("select complex objects") {
+    val xmlString =
+      s"""
+         |<ROW>
+         |    1
+         |    <struct1>
+         |        value2
+         |        <struct2>
+         |            3
+         |            <array1>
+         |                value4
+         |                <struct3>
+         |                    5
+         |                    <array2>1<!--First comment--> <!--Second comment--></array2>
+         |                    value6
+         |                    <array2>2</array2>
+         |                    7
+         |                </struct3>
+         |                value8
+         |                <string>string</string>
+         |                9
+         |            </array1>
+         |            value10
+         |            <array1>
+         |                <struct3><!--First comment--> <!--Second comment-->
+         |                    <array2>3</array2>
+         |                    11
+         |                    <array2>4</array2><!--First comment--> <!--Second comment-->
+         |                </struct3>
+         |                <string>string</string>
+         |                value12
+         |            </array1>
+         |            13
+         |            <int>3</int>
+         |            value14
+         |        </struct2>
+         |        15
+         |    </struct1>
+         |     <!--First comment-->
+         |    value16
+         |     <!--Second comment-->
+         |</ROW>
+         |""".stripMargin
+    val df = readData(xmlString, None, baseOptions ++ Map("valueTag" -> "VALUE"))
+    checkAnswer(df.select("struct1.VALUE"), Seq(Row(Seq("value2", "15"))))
+    checkAnswer(df.select("struct1.struct2.array1"), Seq(Row(Seq(
+      Row(Seq("value4", "value8", "9"), "string", Row(Seq("5", "value6", "7"), Seq(1, 2))),
+      Row(Seq("value12"), "string", Row(Seq("11"), Seq(3, 4)))
+    ))))
+    checkAnswer(df.select("struct1.struct2.array1.struct3"), Seq(Row(Seq(
+      Row(Seq("5", "value6", "7"), Seq(1, 2)),
+      Row(Seq("11"), Seq(3, 4))
+    ))))
+    checkAnswer(df.select("struct1.struct2.array1.string"), Seq(Row(Seq("string", "string"))))
   }
 }
 
