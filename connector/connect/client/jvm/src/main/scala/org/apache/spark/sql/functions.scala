@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.PrimitiveLongEnco
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter._
 import org.apache.spark.sql.connect.common.UdfUtils
 import org.apache.spark.sql.errors.DataTypeErrors
-import org.apache.spark.sql.expressions.{Aggregator, ScalarUserDefinedFunction, UserDefinedAggregationFunction, UserDefinedFunction}
+import org.apache.spark.sql.expressions.{Aggregator, ScalarUserDefinedFunction, UserDefinedFunction}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.types.DataType.parseTypeWithFallback
 import org.apache.spark.util.SparkClassUtils
@@ -8149,7 +8149,11 @@ object functions {
   def udaf[IN, BUF, OUT](
       agg: Aggregator[IN, BUF, OUT],
       inputEncoder: Encoder[IN]): UserDefinedFunction = {
-    UserDefinedAggregationFunction(agg, encoderFor(inputEncoder))
+    ScalarUserDefinedFunction(
+      agg,
+      Seq(encoderFor(inputEncoder)),
+      encoderFor(agg.outputEncoder),
+      aggregate = true)
   }
 
   /**

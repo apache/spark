@@ -354,7 +354,6 @@ message CommonInlineUserDefinedFunction {
     PythonUDF python_udf = 4;
     ScalarScalaUDF scalar_scala_udf = 5;
     JavaUDF java_udf = 6;
-    ScalaUDAF scala_udaf = 7;
   }
 }
 
@@ -378,15 +377,8 @@ message ScalarScalaUDF {
   DataType outputType = 3;
   // (Required) True if the UDF can return null value
   bool nullable = 4;
-}
-
-message ScalaUDAF {
-  // (Required) Serialized JVM object of the Aggregator instance, including buffer and output encoders
-  bytes payload = 1;
-  // (Required) Input type of the UDAF
-  DataType inputType = 2;
-  // (Required) True if the UDAF can return null value
-  bool nullable = 3;
+  // (Required) Indicate if the UDF is an aggregate function
+  bool aggregate = 5;
 }
 
 message JavaUDF {

@@ -57,7 +57,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, CoGroup, Coll
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
-import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdafPacket, UdfPacket}
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.{ExecuteHolder, SessionHolder, SparkConnectService}
@@ -73,7 +73,7 @@ import org.apache.spark.sql.execution.python.{PythonForeachWriter, UserDefinedPy
 import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.execution.streaming.GroupStateImpl.groupStateTimeoutFromString
 import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
-import org.apache.spark.sql.expressions.{Aggregator, ReduceAggregator, SparkUserDefinedFunction, UserDefinedAggregator}
+import org.apache.spark.sql.expressions.{Aggregator, ReduceAggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
 import org.apache.spark.sql.internal.{CatalogImpl, TypedAggUtils}
 import org.apache.spark.sql.protobuf.{CatalystDataToProtobuf, ProtobufDataToCatalyst}
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StreamingQuery, StreamingQueryListener, StreamingQueryProgress, Trigger}
@@ -1599,9 +1599,6 @@ class SparkConnectPlanner(
         transformPythonFuncExpression(fun)
       case proto.CommonInlineUserDefinedFunction.FunctionCase.SCALAR_SCALA_UDF =>
         transformScalarScalaUDF(fun)
-      case proto.CommonInlineUserDefinedFunction.FunctionCase.SCALA_UDAF =>
-        transformScalaUdafFunction(fun)
-          .scalaAggregator(fun.getArgumentsList.asScala.map(transformExpression).toSeq)
       case _ =>
         throw InvalidPlanInput(
           s"Function with ID: ${fun.getFunctionCase.getNumber} is not supported")
@@ -1631,10 +1628,6 @@ class SparkConnectPlanner(
 
   private def unpackUdf(fun: proto.CommonInlineUserDefinedFunction): UdfPacket = {
     unpackUdfPayload[UdfPacket](fun.getScalarScalaUdf.getPayload.toByteArray)
-  }
-
-  private def unpackUdaf(fun: proto.CommonInlineUserDefinedFunction): UdafPacket = {
-    unpackUdfPayload[UdafPacket](fun.getScalaUdaf.getPayload.toByteArray)
   }
 
   private def unpackForeachWriter(fun: proto.ScalarScalaUDF): ForeachWriterPacket = {
@@ -1671,44 +1664,48 @@ class SparkConnectPlanner(
    * @return
    *   ScalaUDF.
    */
-  private def transformScalarScalaUDF(fun: proto.CommonInlineUserDefinedFunction): ScalaUDF = {
+  private def transformScalarScalaUDF(fun: proto.CommonInlineUserDefinedFunction): Expression = {
     val udf = fun.getScalarScalaUdf
     val udfPacket = unpackUdf(fun)
-    ScalaUDF(
-      function = udfPacket.function,
-      dataType = transformDataType(udf.getOutputType),
-      children = fun.getArgumentsList.asScala.map(transformExpression).toSeq,
-      inputEncoders = udfPacket.inputEncoders.map(e => Try(ExpressionEncoder(e)).toOption),
-      outputEncoder = Option(ExpressionEncoder(udfPacket.outputEncoder)),
-      udfName = Option(fun.getFunctionName),
-      nullable = udf.getNullable,
-      udfDeterministic = fun.getDeterministic)
+    if (udf.getAggregate) {
+      transformScalarScalaFunction(fun)
+        .asInstanceOf[UserDefinedAggregator[Any, Any, Any]]
+        .scalaAggregator(fun.getArgumentsList.asScala.map(transformExpression).toSeq)
+    } else {
+      ScalaUDF(
+        function = udfPacket.function,
+        dataType = transformDataType(udf.getOutputType),
+        children = fun.getArgumentsList.asScala.map(transformExpression).toSeq,
+        inputEncoders = udfPacket.inputEncoders.map(e => Try(ExpressionEncoder(e)).toOption),
+        outputEncoder = Option(ExpressionEncoder(udfPacket.outputEncoder)),
+        udfName = Option(fun.getFunctionName),
+        nullable = udf.getNullable,
+        udfDeterministic = fun.getDeterministic)
+    }
   }
 
   private def transformScalarScalaFunction(
-      fun: proto.CommonInlineUserDefinedFunction): SparkUserDefinedFunction = {
+      fun: proto.CommonInlineUserDefinedFunction): UserDefinedFunction = {
     val udf = fun.getScalarScalaUdf
     val udfPacket = unpackUdf(fun)
-    SparkUserDefinedFunction(
-      f = udfPacket.function,
-      dataType = transformDataType(udf.getOutputType),
-      inputEncoders = udfPacket.inputEncoders.map(e => Try(ExpressionEncoder(e)).toOption),
-      outputEncoder = Option(ExpressionEncoder(udfPacket.outputEncoder)),
-      name = Option(fun.getFunctionName),
-      nullable = udf.getNullable,
-      deterministic = fun.getDeterministic)
-  }
-
-  private def transformScalaUdafFunction(
-      fun: proto.CommonInlineUserDefinedFunction): UserDefinedAggregator[_, _, _] = {
-    val udaf = fun.getScalaUdaf
-    val udafPacket = unpackUdaf(fun)
-    UserDefinedAggregator(
-      aggregator = udafPacket.aggregator.asInstanceOf[Aggregator[Any, Any, Any]],
-      inputEncoder = ExpressionEncoder(udafPacket.inputEncoder),
-      name = Option(fun.getFunctionName),
-      nullable = udaf.getNullable,
-      deterministic = fun.getDeterministic)
+    if (udf.getAggregate) {
+      assert(udfPacket.inputEncoders.size == 1, "UDAF should have exactly one input encoder")
+      UserDefinedAggregator(
+        aggregator = udfPacket.function.asInstanceOf[Aggregator[Any, Any, Any]],
+        inputEncoder = ExpressionEncoder(udfPacket.inputEncoders.head),
+        name = Option(fun.getFunctionName),
+        nullable = udf.getNullable,
+        deterministic = fun.getDeterministic)
+    } else {
+      SparkUserDefinedFunction(
+        f = udfPacket.function,
+        dataType = transformDataType(udf.getOutputType),
+        inputEncoders = udfPacket.inputEncoders.map(e => Try(ExpressionEncoder(e)).toOption),
+        outputEncoder = Option(ExpressionEncoder(udfPacket.outputEncoder)),
+        name = Option(fun.getFunctionName),
+        nullable = udf.getNullable,
+        deterministic = fun.getDeterministic)
+    }
   }
 
   /**
@@ -2795,8 +2792,6 @@ class SparkConnectPlanner(
         handleRegisterJavaUDF(fun)
       case proto.CommonInlineUserDefinedFunction.FunctionCase.SCALAR_SCALA_UDF =>
         handleRegisterScalarScalaUDF(fun)
-      case proto.CommonInlineUserDefinedFunction.FunctionCase.SCALA_UDAF =>
-        handleRegisterScalaUDAF(fun)
       case _ =>
         throw InvalidPlanInput(
           s"Function with ID: ${fun.getFunctionCase.getNumber} is not supported")
@@ -2876,11 +2871,6 @@ class SparkConnectPlanner(
   private def handleRegisterScalarScalaUDF(fun: proto.CommonInlineUserDefinedFunction): Unit = {
     val udf = transformScalarScalaFunction(fun)
     session.udf.register(fun.getFunctionName, udf)
-  }
-
-  private def handleRegisterScalaUDAF(fun: proto.CommonInlineUserDefinedFunction): Unit = {
-    val udaf = transformScalaUdafFunction(fun)
-    session.udf.register(fun.getFunctionName, udaf)
   }
 
   private def handleCommandPlugin(extension: ProtoAny): Unit = {

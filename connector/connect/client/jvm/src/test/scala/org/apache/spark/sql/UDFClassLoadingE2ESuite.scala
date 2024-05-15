@@ -45,7 +45,8 @@ class UDFClassLoadingE2ESuite extends RemoteSparkSession {
       outputType = ProtoDataTypes.IntegerType,
       name = Some("dummyUdf"),
       nullable = true,
-      deterministic = true)
+      deterministic = true,
+      aggregate = false)
     session.registerUdf(udf.toProto)
   }
 
