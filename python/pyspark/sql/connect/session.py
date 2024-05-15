@@ -577,7 +577,7 @@ class SparkSession:
 
         if isinstance(schema, StructType) and isinstance(data, pa.Table):
             (timezone,) = self._client.get_configs("spark.sql.session.timeZone")
-            _table = _check_arrow_table_timestamps_localize(_table, schema, timezone)
+            _table = _check_arrow_table_timestamps_localize(_table, schema, True, timezone)
             _table = _table.cast(to_arrow_schema(schema))
 
         if isinstance(schema, StructType) and isinstance(data, (pd.DataFrame, pa.Table)):

@@ -790,7 +790,7 @@ class SparkConversionMixin:
             prefer_timestamp_ntz = is_timestamp_ntz_preferred()
             schema = from_arrow_schema(table.schema, prefer_timestamp_ntz=prefer_timestamp_ntz)
 
-        table = _check_arrow_table_timestamps_localize(table, schema, timezone)
+        table = _check_arrow_table_timestamps_localize(table, schema, True, timezone)
         table = table.cast(to_arrow_schema(schema))
 
         # Chunk the Arrow Table into RecordBatches

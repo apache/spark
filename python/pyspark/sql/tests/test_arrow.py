@@ -677,6 +677,17 @@ class ArrowTestsMixin:
         self.spark.createDataFrame(pdf, schema=self.schema)
         self.assertTrue(pdf.equals(pdf_copy))
 
+    def test_createDataFrame_arrow_truncate_timestamp(self):
+        t_in = pa.Table.from_arrays(
+            [pa.array([1234567890123456789], type=pa.timestamp("ns", tz="UTC"))], names=["ts"]
+        )
+        df = self.spark.createDataFrame(t_in, schema=self.schema)
+        t_out = df.toArrow()
+        expected = pa.Table.from_arrays(
+            [pa.array([1234567890123456], type=pa.timestamp("us", tz="UTC"))], names=["ts"]
+        )
+        self.assertTrue(t_out.equals(expected))
+
     def test_schema_conversion_roundtrip(self):
         from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
 

@@ -278,17 +278,20 @@ def _get_local_timezone() -> str:
 
 
 def _check_arrow_table_timestamps_localize(
-    table: "pa.Table", schema: StructType, timezone: Optional[str] = None
+    table: "pa.Table", schema: StructType, truncate: bool = True, timezone: Optional[str] = None
 ) -> "pa.Table":
     """
     Convert timestamps in a PyArrow Table to timezone-naive in the specified timezone if the
-    corresponding Spark data type is TimestampType in the specified Spark schema is TimestampType.
+    corresponding Spark data type is TimestampType in the specified Spark schema is TimestampType,
+    and optionally truncate nanosecond timestamps to microseconds.
 
     Parameters
     ----------
     table : :class:`pyarrow.Table`
     schema : :class:`StructType`
         The Spark schema corresponding to the schema of the Arrow Table.
+    truncate : bool, default True
+        Whether to truncate nanosecond timestamps to microseconds (default True).
     timezone : str, optional
         The timezone to convert from. If there is a timestamp type, it's required.
 
@@ -302,7 +305,7 @@ def _check_arrow_table_timestamps_localize(
 
     return pa.Table.from_arrays(
         [
-            _check_arrow_array_timestamps_localize(a, f.dataType, timezone)
+            _check_arrow_array_timestamps_localize(a, f.dataType, truncate, timezone)
             for a, f in zip(table.columns, schema.fields)
         ],
         schema=table.schema,
@@ -310,11 +313,14 @@ def _check_arrow_table_timestamps_localize(
 
 
 def _check_arrow_array_timestamps_localize(
-    a: Union["pa.Array", "pa.ChunkedArray"], dt: DataType, timezone: Optional[str] = None
+    a: Union["pa.Array", "pa.ChunkedArray"],
+    dt: DataType,
+    truncate: bool = True,
+    timezone: Optional[str] = None,
 ) -> Union["pa.Array", "pa.ChunkedArray"]:
     """
     Convert Arrow timestamps to timezone-naive in the specified timezone if the specified Spark
-    data type is TimestampType.
+    data type is TimestampType, and optionally truncate nanosecond timestamps to microseconds.
 
     This function works on Arrow Arrays and  ChunkedArrays, and it recurses to convert nested
     timestamps.
@@ -324,6 +330,8 @@ def _check_arrow_array_timestamps_localize(
     a : :class:`pyarrow.Array` or :class:`pyarrow.ChunkedArray`
     dt : :class:`DataType`
         The Spark data type corresponding to the Arrow Array to be converted.
+    truncate : bool, default True
+        Whether to truncate nanosecond timestamps to microseconds (default True).
     timezone : str, optional
         The timezone to convert from. If there is a timestamp type, it's required.
 
@@ -334,6 +342,9 @@ def _check_arrow_array_timestamps_localize(
     import pyarrow.types as types
     import pyarrow as pa
     import pyarrow.compute as pc
+
+    if types.is_timestamp(a.type) and truncate and a.type.unit == "ns":
+        a = pc.floor_temporal(a, unit="microsecond")
 
     if types.is_timestamp(a.type) and a.type.tz is None and type(dt) == TimestampType:
         assert timezone is not None
@@ -346,7 +357,8 @@ def _check_arrow_array_timestamps_localize(
             a = a.combine_chunks()
         at: ArrayType = cast(ArrayType, dt)
         return pa.ListArray.from_arrays(
-            a.offsets, _check_arrow_array_timestamps_localize(a.values, at.elementType, timezone)
+            a.offsets,
+            _check_arrow_array_timestamps_localize(a.values, at.elementType, truncate, timezone),
         )
     elif types.is_map(a.type):
         if isinstance(a, pa.ChunkedArray):
@@ -354,8 +366,8 @@ def _check_arrow_array_timestamps_localize(
         mt: MapType = cast(MapType, dt)
         return pa.MapArray.from_arrays(
             a.offsets,
-            _check_arrow_array_timestamps_localize(a.keys, mt.keyType, timezone),
-            _check_arrow_array_timestamps_localize(a.items, mt.valueType, timezone),
+            _check_arrow_array_timestamps_localize(a.keys, mt.keyType, truncate, timezone),
+            _check_arrow_array_timestamps_localize(a.items, mt.valueType, truncate, timezone),
         )
     elif types.is_struct(a.type):
         if isinstance(a, pa.ChunkedArray):
@@ -365,7 +377,9 @@ def _check_arrow_array_timestamps_localize(
 
         return pa.StructArray.from_arrays(
             [
-                _check_arrow_array_timestamps_localize(a.field(i), st.fields[i].dataType, timezone)
+                _check_arrow_array_timestamps_localize(
+                    a.field(i), st.fields[i].dataType, truncate, timezone
+                )
                 for i in range(len(a.type))
             ],
             [a.type[i].name for i in range(len(a.type))],
@@ -374,7 +388,7 @@ def _check_arrow_array_timestamps_localize(
         if isinstance(a, pa.ChunkedArray):
             a = a.combine_chunks()
         return pa.DictionaryArray.from_arrays(
-            _check_arrow_array_timestamps_localize(a.dictionary, dt, timezone), a.indices
+            _check_arrow_array_timestamps_localize(a.dictionary, dt, truncate, timezone), a.indices
         )
     else:
         return a
