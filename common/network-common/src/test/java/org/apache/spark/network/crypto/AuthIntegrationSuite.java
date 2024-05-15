@@ -160,33 +160,6 @@ public class AuthIntegrationSuite {
   }
 
   @Test
-  public void testCorruptedGcmMessageDecryption() throws Exception {
-    ctx = new AuthTestCtx(new RpcHandler() {
-      @Override
-      public void receive(
-              TransportClient client,
-              ByteBuffer message,
-              RpcResponseCallback callback) {
-        String messageString = JavaUtils.bytesToString(message);
-        assertEquals("Ping", messageString);
-        callback.onFailure(new RuntimeException("Junk"));
-      }
-
-      @Override
-      public StreamManager getStreamManager() {
-        return null;
-      }
-    }, "AES/GCM/NoPadding");
-    ctx.createServer("secret");
-    ctx.createClient("secret");
-
-    Exception e = assertThrows(Exception.class,
-            () -> ctx.client.sendRpcSync(JavaUtils.stringToBytes("Ping"), 5000));
-    assertTrue(ctx.authRpcHandler.isAuthenticated());
-    assertTrue(e.getMessage().contains("javax.crypto.AEADBadTagException: Tag mismatch!"));
-  }
-
-  @Test
   public void testValidMergedBlockMetaReqHandler() throws Exception {
     ctx = new AuthTestCtx();
     ctx.createServer("secret");

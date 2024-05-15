@@ -30,6 +30,7 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 import io.netty.channel.FileRegion;
+import org.apache.spark.network.crypto.GcmTransportCipher.ByteBufferWriteableChannel;
 import org.apache.spark.network.util.ByteArrayWritableChannel;
 import org.apache.spark.network.util.ConfigProvider;
 import org.apache.spark.network.util.MapConfigProvider;
@@ -278,46 +279,57 @@ public class AuthEngineSuite {
   @Test
   public void testGcmEncryptedMessage() throws Exception {
     TransportConf gcmConf = getConf(2, false);
-
     try (AuthEngine client = new AuthEngine("appId", "secret", gcmConf);
          AuthEngine server = new AuthEngine("appId", "secret", gcmConf)) {
       AuthMessage clientChallenge = client.challenge();
       AuthMessage serverResponse = server.response(clientChallenge);
       client.deriveSessionCipher(clientChallenge, serverResponse);
-
       TransportCipher clientCipher = server.sessionCipher();
+      // Verify that it derives a GcmTransportCipher
       assert (clientCipher instanceof GcmTransportCipher);
-
       GcmTransportCipher gcmTransportCipher = (GcmTransportCipher) clientCipher;
       GcmTransportCipher.EncryptionHandler encryptionHandler =
               gcmTransportCipher.getEncryptionHandler();
       GcmTransportCipher.DecryptionHandler decryptionHandler =
               gcmTransportCipher.getDecryptionHandler();
-      byte[] data = new byte[1024 * 32];
+      // Allocating 1.5x the buffer size to test multiple segments and a fractional segment.
+      int plaintextSegmentSize = GcmTransportCipher.CIPHERTEXT_BUFFER_SIZE - 16;
+      byte[] data = new byte[plaintextSegmentSize + (plaintextSegmentSize / 2)];
       // Just writing some bytes.
       data[0] = 'a';
-      data[512] = 'b';
-      data[1024 * 16] = 'c';
+      data[data.length / 2] = 'b';
+      data[data.length - 10] = 'c';
       ByteBuf buf = Unpooled.wrappedBuffer(data);
 
       // Mock the context and capture the arguments passed to it
       ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
       ChannelPromise promise = mock(ChannelPromise.class);
-      ArgumentCaptor<ByteBuf> captorWrappedEncrypted =
-              ArgumentCaptor.forClass(ByteBuf.class);
+      ArgumentCaptor<GcmTransportCipher.GcmEncryptedMessage> captorWrappedEncrypted =
+              ArgumentCaptor.forClass(GcmTransportCipher.GcmEncryptedMessage.class);
       encryptionHandler.write(ctx, buf, promise);
       verify(ctx).write(captorWrappedEncrypted.capture(), eq(promise));
-      ByteBuf encrypted = captorWrappedEncrypted.getValue();
 
-      ArgumentCaptor<ByteBuf> captorPlaintext =
-              ArgumentCaptor.forClass(ByteBuf.class);
-      decryptionHandler.channelRead(ctx, encrypted);
-      verify(ctx).fireChannelRead(captorPlaintext.capture());
-      ByteBuf plaintext = captorPlaintext.getValue();
-      assert(plaintext.readableBytes() == 1024 * 32);
-      assert(plaintext.getByte(0) == 'a');
-      assert(plaintext.getByte(512) == 'b');
-      assert(plaintext.getByte(1024 * 16) == 'c');
+      // Get the encrypted value and pass it to the decryption handler
+      GcmTransportCipher.GcmEncryptedMessage encrypted =
+              captorWrappedEncrypted.getValue();
+      ByteBuffer ciphertextBuffer =
+              ByteBuffer.allocate((int) encrypted.count());
+      ByteBufferWriteableChannel channel =
+              new ByteBufferWriteableChannel(ciphertextBuffer);
+      encrypted.transferTo(channel, 0);
+      ciphertextBuffer.flip();
+      ByteBuf ciphertext = Unpooled.wrappedBuffer(ciphertextBuffer);
+
+      // Capture the decrypted values and verify them
+      ArgumentCaptor<ByteBuf> captorPlaintext = ArgumentCaptor.forClass(ByteBuf.class);
+      decryptionHandler.channelRead(ctx, ciphertext);
+      verify(ctx, times(2))
+              .fireChannelRead(captorPlaintext.capture());
+      ByteBuf lastPlaintextSegment = captorPlaintext.getValue();
+      assertEquals(plaintextSegmentSize/2,
+              lastPlaintextSegment.readableBytes());
+      assertEquals('c',
+              lastPlaintextSegment.getByte((plaintextSegmentSize/2) - 10));
     }
   }
 
@@ -346,15 +358,25 @@ public class AuthEngineSuite {
       // Mock the context and capture the arguments passed to it
       ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
       ChannelPromise promise = mock(ChannelPromise.class);
-      ArgumentCaptor<ByteBuf> captorWrappedEncrypted = ArgumentCaptor.forClass(ByteBuf.class);
+      ArgumentCaptor<GcmTransportCipher.GcmEncryptedMessage> captorWrappedEncrypted =
+              ArgumentCaptor.forClass(GcmTransportCipher.GcmEncryptedMessage.class);
       encryptionHandler.write(ctx, buf, promise);
       verify(ctx).write(captorWrappedEncrypted.capture(), eq(promise));
-      ByteBuf encrypted = captorWrappedEncrypted.getValue();
 
-      byte b = encrypted.getByte(100);
+      GcmTransportCipher.GcmEncryptedMessage encrypted =
+              captorWrappedEncrypted.getValue();
+      ByteBuffer ciphertextBuffer =
+              ByteBuffer.allocate((int) encrypted.count());
+      ByteBufferWriteableChannel channel =
+              new ByteBufferWriteableChannel(ciphertextBuffer);
+      encrypted.transferTo(channel, 0);
+      ciphertextBuffer.flip();
+      ByteBuf ciphertext = Unpooled.wrappedBuffer(ciphertextBuffer);
+
+      byte b = ciphertext.getByte(100);
       // Inverting the bits of the 100th bit
-      encrypted.setByte(100, ~b & 0xFF);
-      assertThrows(AEADBadTagException.class, () -> decryptionHandler.channelRead(ctx, encrypted));
+      ciphertext.setByte(100, ~b & 0xFF);
+      assertThrows(AEADBadTagException.class, () -> decryptionHandler.channelRead(ctx, ciphertext));
     }
   }
 
