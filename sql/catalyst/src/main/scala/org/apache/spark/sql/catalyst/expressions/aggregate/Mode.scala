@@ -23,8 +23,10 @@ import org.apache.spark.sql.catalyst.expressions.{Ascending, Descending, Express
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.apache.spark.sql.catalyst.util.{CollationFactory, GenericArrayData}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, ArrayType, BooleanType, DataType}
+import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, ArrayType, BooleanType, DataType, StringType}
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.collection.OpenHashMap
 
 case class Mode(
@@ -40,6 +42,8 @@ case class Mode(
   def this(child: Expression, reverse: Boolean) = {
     this(child, 0, 0, Some(reverse))
   }
+
+  final lazy val collationId: Int = child.dataType.asInstanceOf[StringType].collationId
 
   // Returns null for empty inputs
   override def nullable: Boolean = true
@@ -74,7 +78,19 @@ case class Mode(
     if (buffer.isEmpty) {
       return null
     }
-
+    val collationAwareBuffer =
+      if (!CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
+        val modeMap = buffer.toSeq.groupMapReduce {
+          case (key: String, _) =>
+            CollationFactory.getCollationKey(UTF8String.fromString(key), collationId)
+          case (key: UTF8String, _) =>
+            CollationFactory.getCollationKey(key, collationId)
+          case (key, _) => key
+        }(x => x)((x, y) => (x._1, x._2 + y._2)).values
+        modeMap
+      } else {
+        buffer
+      }
     reverseOpt.map { reverse =>
       val defaultKeyOrdering = if (reverse) {
         PhysicalDataType.ordering(child.dataType).asInstanceOf[Ordering[AnyRef]].reverse
@@ -82,8 +98,8 @@ case class Mode(
         PhysicalDataType.ordering(child.dataType).asInstanceOf[Ordering[AnyRef]]
       }
       val ordering = Ordering.Tuple2(Ordering.Long, defaultKeyOrdering)
-      buffer.maxBy { case (key, count) => (count, key) }(ordering)
-    }.getOrElse(buffer.maxBy(_._2))._1
+      collationAwareBuffer.maxBy { case (key, count) => (count, key) }(ordering)
+    }.getOrElse(collationAwareBuffer.maxBy(_._2))._1
   }
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): Mode =
