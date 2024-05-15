@@ -426,7 +426,7 @@ public class CollationAwareUTF8String {
   }
 
   public static UTF8String lowercaseSubStringIndex(final UTF8String string,
-                                                   final UTF8String delimiter, int count) {
+      final UTF8String delimiter, int count) {
     if (delimiter.numBytes() == 0 || count == 0) {
       return UTF8String.EMPTY_UTF8;
     }
@@ -470,7 +470,7 @@ public class CollationAwareUTF8String {
       int size = string.numBytes() - delimiter.numBytes() - idx;
       byte[] bytes = new byte[size];
       copyMemory(string.getBaseObject(), string.getBaseOffset() + idx + delimiter.numBytes(),
-              bytes, BYTE_ARRAY_OFFSET, size);
+        bytes, BYTE_ARRAY_OFFSET, size);
       return UTF8String.fromBytes(bytes);
     }
   }
