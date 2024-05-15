@@ -5753,6 +5753,16 @@ object functions {
   }
 
   /**
+   * Adds the specified number of units to the given timestamp.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def timestamp_add(unit: String, quantity: Column, ts: Column): Column = withExpr {
+    TimestampAdd(unit, quantity.expr, ts.expr)
+  }
+
+  /**
    * Parses the `timestamp` expression with the `format` expression
    * to a timestamp without time zone. Returns null with invalid input.
    *

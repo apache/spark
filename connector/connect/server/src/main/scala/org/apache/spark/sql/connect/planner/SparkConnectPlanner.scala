@@ -1830,6 +1830,11 @@ class SparkConnectPlanner(
         val unit = extractString(children(0), "unit")
         Some(TimestampDiff(unit, children(1), children(2)))
 
+      case "timestampadd" if fun.getArgumentsCount == 3 =>
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
+        val unit = extractString(children(0), "unit")
+        Some(TimestampAdd(unit, children(1), children(2)))
+
       case "window" if Seq(2, 3, 4).contains(fun.getArgumentsCount) =>
         val children = fun.getArgumentsList.asScala.map(transformExpression)
         val timeCol = children.head
