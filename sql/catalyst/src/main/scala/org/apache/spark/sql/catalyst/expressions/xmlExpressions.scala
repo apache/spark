@@ -187,9 +187,6 @@ case class SchemaOfXml(
   private lazy val xmlOptions = new XmlOptions(options, "UTC")
 
   @transient
-  private lazy val xmlFactory = xmlOptions.buildXmlFactory()
-
-  @transient
   private lazy val xmlInferSchema = {
     if (xmlOptions.parseMode == DropMalformedMode) {
       throw QueryCompilationErrors.parseModeUnsupportedError("schema_of_xml", xmlOptions.parseMode)

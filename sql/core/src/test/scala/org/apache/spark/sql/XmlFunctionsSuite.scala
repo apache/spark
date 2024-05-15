@@ -55,7 +55,7 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
     val options = Map("rowTag" -> "foo").asJava
 
     checkAnswer(
-      df.select(from_xml($"value", schema)),
+      df.select(from_xml($"value", schema, options)),
       Row(Row(1)) :: Nil)
   }
 
