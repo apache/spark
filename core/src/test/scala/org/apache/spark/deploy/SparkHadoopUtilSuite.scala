@@ -17,9 +17,14 @@
 
 package org.apache.spark.deploy
 
+import java.io.{File, FileNotFoundException, IOException}
 import java.net.InetAddress
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.mock
+import org.mockito.Mockito.when
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil.{SET_TO_DEFAULT_VALUES, SOURCE_SPARK_HADOOP, SOURCE_SPARK_HIVE}
@@ -28,8 +33,8 @@ import org.apache.spark.internal.config.BUFFER_SIZE
 class SparkHadoopUtilSuite extends SparkFunSuite {
 
   /**
-   * Verify that spark.hadoop options are propagated, and that
-   * the default s3a options are set as expected.
+   * Verify that spark.hadoop options are propagated, and that the default s3a options are set as
+   * expected.
    */
   test("appendSparkHadoopConfigs with propagation and defaults") {
     val sc = new SparkConf()
@@ -37,7 +42,10 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
     sc.set("spark.hadoop.orc.filterPushdown", "true")
     new SparkHadoopUtil().appendSparkHadoopConfigs(sc, hadoopConf)
     assertConfigMatches(hadoopConf, "orc.filterPushdown", "true", SOURCE_SPARK_HADOOP)
-    assertConfigMatches(hadoopConf, "fs.s3a.downgrade.syncable.exceptions", "true",
+    assertConfigMatches(
+      hadoopConf,
+      "fs.s3a.downgrade.syncable.exceptions",
+      "true",
       SET_TO_DEFAULT_VALUES)
   }
 
@@ -76,8 +84,12 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
 
   test("SPARK-40640: aws credentials from environment variables") {
     val hadoopConf = new Configuration(false)
-    SparkHadoopUtil.appendS3CredentialsFromEnvironment(hadoopConf,
-      "endpoint", "access-key", "secret-key", "session-token")
+    SparkHadoopUtil.appendS3CredentialsFromEnvironment(
+      hadoopConf,
+      "endpoint",
+      "access-key",
+      "secret-key",
+      "session-token")
     val source = "Set by Spark on " + InetAddress.getLocalHost + " from "
     assertConfigMatches(hadoopConf, "fs.s3a.endpoint", "endpoint", source)
     assertConfigMatches(hadoopConf, "fs.s3a.access.key", "access-key", source)
@@ -88,14 +100,17 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
   test("SPARK-19739: S3 session token propagation requires access and secret keys") {
     val hadoopConf = new Configuration(false)
     SparkHadoopUtil.appendS3CredentialsFromEnvironment(
-      hadoopConf, null, null, null, "session-token")
+      hadoopConf,
+      null,
+      null,
+      null,
+      "session-token")
     assertConfigValue(hadoopConf, "fs.s3a.session.token", null)
   }
 
   test("SPARK-45404: aws endpoint propagation requires access and secret keys") {
     val hadoopConf = new Configuration(false)
-    SparkHadoopUtil.appendS3CredentialsFromEnvironment(
-      hadoopConf, "endpoint", null, null, null)
+    SparkHadoopUtil.appendS3CredentialsFromEnvironment(hadoopConf, "endpoint", null, null, null)
     assertConfigValue(hadoopConf, "fs.s3a.endpoint", null)
   }
 
@@ -151,28 +166,118 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
     assert(target2 == "wwwyyyzzz")
   }
 
+  test(
+    "SPARK-47008: fs.listStatus SHOULD NOT throw FileNotFoundException in " +
+      "listLeafStatuses if fs.hasPathCapability is TRUE to support S3 Express One Zone Storage") {
+    withTempDir { dir =>
+      val rootPath = s"${dir.getCanonicalPath}"
+      val path = s"${dir.getCanonicalPath}/dir"
+      val path1 = s"${dir.getCanonicalPath}/dir/dir1"
+      val path2 = s"${dir.getCanonicalPath}/dir/dir2"
+      val file1Dir1 = s"${path1}/file1"
+      val file2Dir1 = s"${path1}/file2"
+      val file1Dir2 = s"${path2}/file1"
+      val file2Dir2 = s"${path2}/file2"
+
+      // Function to generate files
+      def generateFile(path: String, isDirectory: Boolean): Unit = {
+        val file = new File(path)
+        if (isDirectory) file.mkdir()
+        else file.createNewFile()
+      }
+
+      // List to generate files
+      val filesToGenerate = LazyList((file1Dir1), (file2Dir1), (file1Dir2), (file2Dir2))
+
+      // List to generate directories
+      val directoriesToGenerate = LazyList((path), (path1), (path2))
+
+      directoriesToGenerate.foreach { case (path) =>
+        generateFile(path, isDirectory = true)
+      }
+
+      filesToGenerate.foreach { case (path) =>
+        generateFile(path, isDirectory = false)
+      }
+
+      val conf = new Configuration
+      val fs = {
+        val hdfsPath = new Path(path)
+        hdfsPath.getFileSystem(conf)
+      }
+
+      val mockFileSystem: FileSystem = mock(classOf[FileSystem])
+
+      val dirStatuses = fs.listStatus(new Path(path))
+      val dir1Statuses = fs.listStatus(new Path(path1))
+      val directories = fs.listStatus(new Path(path)).filter(_.isDirectory)
+      val leavesDir1 = fs.listStatus(new Path(path1)).filter(_.isFile)
+      val leavesDir2 = fs.listStatus(new Path(path2)).filter(_.isFile)
+      val baseDirStatus = fs.listStatus(new Path(rootPath)).partition(_.isDirectory)._1.head
+
+      // Set up mock for successful operation
+      when(mockFileSystem.hasPathCapability(any(), any())).thenReturn(true)
+
+      when(mockFileSystem.listStatus(directories.head.getPath)) // ../dir/dir2
+        .thenThrow(new FileNotFoundException())
+
+      when(mockFileSystem.listStatus(directories.tail.head.getPath)) // ../dir/dir1
+        .thenReturn(dir1Statuses)
+
+      when(mockFileSystem.listStatus(baseDirStatus.getPath)).thenReturn(dirStatuses)
+
+      val leafStatuses = {
+        new SparkHadoopUtil().listLeafStatuses(mockFileSystem, baseDirStatus)
+      }
+
+      // Result should include files from the // ../dir/dir1 only
+      assertResult(leavesDir1)(leafStatuses)
+      assert(leavesDir2.toSeq != leafStatuses)
+
+      // Total number of the files is 4, but files in the ../dir/dir2 will be ignored
+      assertResult(2)(leafStatuses.size)
+
+      when(mockFileSystem.hasPathCapability(any(), any())).thenReturn(false)
+
+      assertThrows[FileNotFoundException] {
+        new SparkHadoopUtil().listLeafStatuses(mockFileSystem, baseDirStatus)
+      }
+
+      when(mockFileSystem.hasPathCapability(any(), any())).thenThrow(new IOException())
+
+      assertThrows[IOException] {
+        new SparkHadoopUtil().listLeafStatuses(mockFileSystem, baseDirStatus)
+      }
+    }
+  }
+
   /**
    * Assert that a hadoop configuration option has the expected value.
-   * @param hadoopConf configuration to query
-   * @param key key to look up
-   * @param expected expected value.
+   * @param hadoopConf
+   *   configuration to query
+   * @param key
+   *   key to look up
+   * @param expected
+   *   expected value.
    */
   private def assertConfigValue(
       hadoopConf: Configuration,
       key: String,
       expected: String): Unit = {
-    assert(hadoopConf.get(key) === expected,
-      s"Mismatch in expected value of $key")
+    assert(hadoopConf.get(key) === expected, s"Mismatch in expected value of $key")
   }
 
   /**
-   * Assert that a hadoop configuration option has the expected value
-   * and has the expected source.
+   * Assert that a hadoop configuration option has the expected value and has the expected source.
    *
-   * @param hadoopConf configuration to query
-   * @param key        key to look up
-   * @param expected   expected value.
-   * @param expectedSource string required to be in the property source string
+   * @param hadoopConf
+   *   configuration to query
+   * @param key
+   *   key to look up
+   * @param expected
+   *   expected value.
+   * @param expectedSource
+   *   string required to be in the property source string
    */
   private def assertConfigMatches(
       hadoopConf: Configuration,
@@ -185,9 +290,12 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
 
   /**
    * Assert that a source of a configuration matches a specific string.
-   * @param hadoopConf hadoop configuration
-   * @param key key to probe
-   * @param expectedSource expected source
+   * @param hadoopConf
+   *   hadoop configuration
+   * @param key
+   *   key to probe
+   * @param expectedSource
+   *   expected source
    */
   private def assertConfigSourceContains(
       hadoopConf: Configuration,
@@ -197,7 +305,8 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
     // get the source list
     val origin = SparkHadoopUtil.propertySources(hadoopConf, key)
     assert(origin.nonEmpty, s"Sources are missing for '$key' with value '$v'")
-    assert(origin.contains(expectedSource),
+    assert(
+      origin.contains(expectedSource),
       s"Expected source $key with value $v: and source $origin to contain $expectedSource")
   }
 }
