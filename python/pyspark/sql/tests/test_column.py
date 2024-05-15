@@ -19,7 +19,7 @@
 from itertools import chain
 from pyspark.sql import Column, Row
 from pyspark.sql import functions as sf
-from pyspark.sql.types import StructType, StructField, LongType
+from pyspark.sql.types import StructType, StructField, IntegerType, LongType
 from pyspark.errors import AnalysisException, PySparkTypeError, PySparkValueError
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
@@ -227,6 +227,17 @@ class ColumnTestsMixin:
             error_class="ONLY_ALLOWED_FOR_SINGLE_COLUMN",
             message_parameters={"arg_name": "metadata"},
         )
+
+    def test_cast_str_representation(self):
+        self.assertEqual(str(sf.col("a").cast("int")), "Column<'CAST(a AS INT)'>")
+        self.assertEqual(str(sf.col("a").cast("INT")), "Column<'CAST(a AS INT)'>")
+        self.assertEqual(str(sf.col("a").cast(IntegerType())), "Column<'CAST(a AS INT)'>")
+        self.assertEqual(str(sf.col("a").cast(LongType())), "Column<'CAST(a AS BIGINT)'>")
+
+        self.assertEqual(str(sf.col("a").try_cast("int")), "Column<'TRY_CAST(a AS INT)'>")
+        self.assertEqual(str(sf.col("a").try_cast("INT")), "Column<'TRY_CAST(a AS INT)'>")
+        self.assertEqual(str(sf.col("a").try_cast(IntegerType())), "Column<'TRY_CAST(a AS INT)'>")
+        self.assertEqual(str(sf.col("a").try_cast(LongType())), "Column<'TRY_CAST(a AS BIGINT)'>")
 
     def test_cast_negative(self):
         with self.assertRaises(PySparkTypeError) as pe:
