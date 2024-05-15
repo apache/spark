@@ -126,8 +126,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
 
   override def caseConvert(tableName: String): String = tableName.toUpperCase(Locale.ROOT)
 
-  override protected val timestampNTZType: String = "datetime"
-  override protected val timestampTZType: String = "datetimeoffset"
+  override protected val timestampNTZType: String = "TIMESTAMP WITH LOCAL TIME ZONE"
 
   test("SPARK-46478: Revert SPARK-43049 to use varchar(255) for string") {
     val tableName = catalogName + ".t1"
