@@ -1368,7 +1368,6 @@ class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
     PYTHON_UDF_FIELD_NUMBER: builtins.int
     SCALAR_SCALA_UDF_FIELD_NUMBER: builtins.int
     JAVA_UDF_FIELD_NUMBER: builtins.int
-    SCALA_UDAF_FIELD_NUMBER: builtins.int
     function_name: builtins.str
     """(Required) Name of the user-defined function."""
     deterministic: builtins.bool
@@ -1384,8 +1383,6 @@ class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
     def scalar_scala_udf(self) -> global___ScalarScalaUDF: ...
     @property
     def java_udf(self) -> global___JavaUDF: ...
-    @property
-    def scala_udaf(self) -> global___ScalaUDAF: ...
     def __init__(
         self,
         *,
@@ -1395,7 +1392,6 @@ class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
         python_udf: global___PythonUDF | None = ...,
         scalar_scala_udf: global___ScalarScalaUDF | None = ...,
         java_udf: global___JavaUDF | None = ...,
-        scala_udaf: global___ScalaUDAF | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -1406,8 +1402,6 @@ class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
             b"java_udf",
             "python_udf",
             b"python_udf",
-            "scala_udaf",
-            b"scala_udaf",
             "scalar_scala_udf",
             b"scalar_scala_udf",
         ],
@@ -1427,17 +1421,13 @@ class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
             b"java_udf",
             "python_udf",
             b"python_udf",
-            "scala_udaf",
-            b"scala_udaf",
             "scalar_scala_udf",
             b"scalar_scala_udf",
         ],
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["function", b"function"]
-    ) -> (
-        typing_extensions.Literal["python_udf", "scalar_scala_udf", "java_udf", "scala_udaf"] | None
-    ): ...
+    ) -> typing_extensions.Literal["python_udf", "scalar_scala_udf", "java_udf"] | None: ...
 
 global___CommonInlineUserDefinedFunction = CommonInlineUserDefinedFunction
 
@@ -1491,6 +1481,7 @@ class ScalarScalaUDF(google.protobuf.message.Message):
     INPUTTYPES_FIELD_NUMBER: builtins.int
     OUTPUTTYPE_FIELD_NUMBER: builtins.int
     NULLABLE_FIELD_NUMBER: builtins.int
+    AGGREGATE_FIELD_NUMBER: builtins.int
     payload: builtins.bytes
     """(Required) Serialized JVM object containing UDF definition, input encoders and output encoder"""
     @property
@@ -1505,6 +1496,8 @@ class ScalarScalaUDF(google.protobuf.message.Message):
         """(Required) Output type of the UDF"""
     nullable: builtins.bool
     """(Required) True if the UDF can return null value"""
+    aggregate: builtins.bool
+    """(Required) Indicate if the UDF is an aggregate function"""
     def __init__(
         self,
         *,
@@ -1513,6 +1506,7 @@ class ScalarScalaUDF(google.protobuf.message.Message):
         | None = ...,
         outputType: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
         nullable: builtins.bool = ...,
+        aggregate: builtins.bool = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["outputType", b"outputType"]
@@ -1520,6 +1514,8 @@ class ScalarScalaUDF(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "aggregate",
+            b"aggregate",
             "inputTypes",
             b"inputTypes",
             "nullable",
@@ -1532,38 +1528,6 @@ class ScalarScalaUDF(google.protobuf.message.Message):
     ) -> None: ...
 
 global___ScalarScalaUDF = ScalarScalaUDF
-
-class ScalaUDAF(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-    PAYLOAD_FIELD_NUMBER: builtins.int
-    INPUTTYPE_FIELD_NUMBER: builtins.int
-    NULLABLE_FIELD_NUMBER: builtins.int
-    payload: builtins.bytes
-    """(Required) Serialized JVM object of the Aggregator instance, including buffer and output encoders"""
-    @property
-    def inputType(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
-        """(Required) Input type of the UDAF"""
-    nullable: builtins.bool
-    """(Required) True if the UDAF can return null value"""
-    def __init__(
-        self,
-        *,
-        payload: builtins.bytes = ...,
-        inputType: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
-        nullable: builtins.bool = ...,
-    ) -> None: ...
-    def HasField(
-        self, field_name: typing_extensions.Literal["inputType", b"inputType"]
-    ) -> builtins.bool: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "inputType", b"inputType", "nullable", b"nullable", "payload", b"payload"
-        ],
-    ) -> None: ...
-
-global___ScalaUDAF = ScalaUDAF
 
 class JavaUDF(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
