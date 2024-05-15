@@ -24,7 +24,7 @@ Project [col#x]
 -- !query
 CREATE TEMPORARY VIEW cte_view AS WITH s AS (SELECT 42 AS col) SELECT * FROM s
 -- !query analysis
-CreateViewCommand `cte_view`, WITH s AS (SELECT 42 AS col) SELECT * FROM s, false, false, LocalTempView, true
+CreateViewCommand `cte_view`, WITH s AS (SELECT 42 AS col) SELECT * FROM s, false, false, LocalTempView, UNSUPPORTED, true
    +- WithCTE
       :- CTERelationDef xxxx, false
       :  +- SubqueryAlias s

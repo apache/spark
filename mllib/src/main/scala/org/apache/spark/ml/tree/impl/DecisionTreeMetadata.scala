@@ -20,7 +20,7 @@ package org.apache.spark.ml.tree.impl
 import scala.collection.mutable
 import scala.util.Try
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.tree.TreeEnsembleParams
 import org.apache.spark.mllib.tree.configuration.Algo._
@@ -134,8 +134,10 @@ private[spark] object DecisionTreeMetadata extends Logging {
 
     val maxPossibleBins = math.min(strategy.maxBins, numExamples).toInt
     if (maxPossibleBins < strategy.maxBins) {
-      logWarning(s"DecisionTree reducing maxBins from ${strategy.maxBins} to $maxPossibleBins" +
-        s" (= number of training instances)")
+      logWarning(log"DecisionTree reducing maxBins from " +
+        log"${MDC(LogKeys.MAX_NUM_BINS, strategy.maxBins)} to " +
+        log"${MDC(LogKeys.MAX_NUM_POSSIBLE_BINS, maxPossibleBins)} " +
+        log"(= number of training instances)")
     }
 
     // We check the number of bins here against maxPossibleBins.

@@ -143,6 +143,7 @@ Mathematical Functions
     try_add
     try_divide
     try_multiply
+    try_remainder
     try_subtract
     unhex
     width_bucket
@@ -280,6 +281,7 @@ Date and Timestamp Functions
     quarter
     second
     session_window
+    timestamp_diff
     timestamp_micros
     timestamp_millis
     timestamp_seconds

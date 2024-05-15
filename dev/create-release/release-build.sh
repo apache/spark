@@ -80,6 +80,9 @@ done
 export LC_ALL=C.UTF-8
 export LANG=C.UTF-8
 
+export PYSPARK_PYTHON=/usr/local/bin/python
+export PYSPARK_DRIVER_PYTHON=/usr/local/bin/python
+
 # Commit ref to checkout when building
 GIT_REF=${GIT_REF:-master}
 

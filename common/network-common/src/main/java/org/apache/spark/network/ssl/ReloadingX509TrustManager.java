@@ -30,9 +30,8 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import com.google.common.annotations.VisibleForTesting;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import org.apache.spark.internal.Logger;
+import org.apache.spark.internal.LoggerFactory;
 
 /**
  * A {@link TrustManager} implementation that reloads its configuration when
@@ -211,13 +210,13 @@ public final class ReloadingX509TrustManager
             this.reloadCount += 1;
           } catch (Exception ex) {
             logger.warn(
-              "Could not load truststore (keep using existing one) : " + ex.toString(),
+              "Could not load truststore (keep using existing one) : ",
               ex
             );
           }
         }
       } catch (IOException ex) {
-       logger.warn("Could not check whether truststore needs reloading: " + ex.toString(), ex);
+       logger.warn("Could not check whether truststore needs reloading: ", ex);
       }
       needsReloadCheckCounts++;
     }

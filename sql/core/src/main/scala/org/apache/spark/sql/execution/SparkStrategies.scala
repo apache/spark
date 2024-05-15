@@ -20,8 +20,6 @@ package org.apache.spark.sql.execution
 import java.util.Locale
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
-import org.apache.spark.internal.LogKeys.HASH_JOIN_KEYS
-import org.apache.spark.internal.MDC
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{execution, AnalysisException, Strategy}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -33,7 +31,6 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.{InternalOutputModes, StreamingRelationV2}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.aggregate.AggUtils
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
@@ -250,8 +247,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         val hashJoinSupport = hashJoinSupported(leftKeys, rightKeys)
         def createBroadcastHashJoin(onlyLookingAtHint: Boolean) = {
           if (hashJoinSupport) {
-            val buildSide = getBroadcastBuildSide(
-              left, right, joinType, hint, onlyLookingAtHint, conf)
+            val buildSide = getBroadcastBuildSide(j, onlyLookingAtHint, conf)
             checkHintBuildSide(onlyLookingAtHint, buildSide, joinType, hint, true)
             buildSide.map {
               buildSide =>
@@ -271,8 +267,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
         def createShuffleHashJoin(onlyLookingAtHint: Boolean) = {
           if (hashJoinSupport) {
-            val buildSide = getShuffleHashJoinBuildSide(
-              left, right, joinType, hint, onlyLookingAtHint, conf)
+            val buildSide = getShuffleHashJoinBuildSide(j, onlyLookingAtHint, conf)
             checkHintBuildSide(onlyLookingAtHint, buildSide, joinType, hint, false)
             buildSide.map {
               buildSide =>

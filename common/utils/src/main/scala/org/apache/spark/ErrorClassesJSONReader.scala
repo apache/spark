@@ -52,9 +52,10 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
       sub.replace(ErrorClassesJsonReader.TEMPLATE_REGEX.replaceAllIn(
         messageTemplate, "\\$\\{$1\\}"))
     } catch {
-      case _: IllegalArgumentException => throw SparkException.internalError(
-        s"Undefined error message parameter for error class: '$errorClass'. " +
-          s"Parameters: $messageParameters")
+      case i: IllegalArgumentException => throw SparkException.internalError(
+        s"Undefined error message parameter for error class: '$errorClass', " +
+          s"MessageTemplate: $messageTemplate, " +
+          s"Parameters: $messageParameters", i)
     }
   }
 
