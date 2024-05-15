@@ -213,7 +213,7 @@ object DataType {
     case JString(name) =>
       collationsMap.get(fieldPath) match {
         case Some(collation) =>
-          assertValidTypeForCollations(name)
+          assertValidTypeForCollations(fieldPath, name, collationsMap)
           stringTypeWithCollation(collation)
         case _ => nameToType(name)
       }
@@ -222,6 +222,7 @@ object DataType {
     ("containsNull", JBool(n)),
     ("elementType", t: JValue),
     ("type", JString("array"))) =>
+      assertValidTypeForCollations(fieldPath, "array", collationsMap)
       val elementType = parseDataTypeWithCollation(t, fieldPath + ".element", collationsMap)
       ArrayType(elementType, n)
 
@@ -230,6 +231,7 @@ object DataType {
     ("type", JString("map")),
     ("valueContainsNull", JBool(n)),
     ("valueType", v: JValue)) =>
+      assertValidTypeForCollations(fieldPath, "map", collationsMap)
       val keyType = parseDataTypeWithCollation(k, fieldPath + ".key", collationsMap)
       val valueType = parseDataTypeWithCollation(v, fieldPath + ".value", collationsMap)
       MapType(keyType, valueType, n)
@@ -300,14 +302,17 @@ object DataType {
       collationsMap: Map[String, String]): DataType = {
     (json, collationsMap.get(path)) match {
       case (JString(fieldType), Some(collation)) =>
-        assertValidTypeForCollations(fieldType)
+        assertValidTypeForCollations(path, fieldType, collationsMap)
         stringTypeWithCollation(collation)
       case _ => parseDataType(json, path, collationsMap)
     }
   }
 
-  private def assertValidTypeForCollations(fieldType: String): Unit = {
-    if (fieldType != "string") {
+  private def assertValidTypeForCollations(
+      fieldPath: String,
+      fieldType: String,
+      collationMap: Map[String, String]): Unit = {
+    if (collationMap.contains(fieldPath) && fieldType != "string") {
       throw new SparkIllegalArgumentException(
         errorClass = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
         messageParameters = Map("jsonType" -> fieldType))

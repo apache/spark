@@ -1810,7 +1810,7 @@ def _parse_datatype_json_value(
     if not isinstance(json_value, dict):
         if json_value in _all_atomic_types.keys():
             if collationsMap is not None and fieldPath in collationsMap:
-                _assert_valid_type_for_collation(json_value)
+                _assert_valid_type_for_collation(fieldPath, json_value, collationsMap)
                 collation_name = collationsMap[fieldPath]
                 return StringType(collation_name)
             return _all_atomic_types[json_value]()
@@ -1851,6 +1851,9 @@ def _parse_datatype_json_value(
     else:
         tpe = json_value["type"]
         if tpe in _all_complex_types:
+            if collationsMap is not None and fieldPath in collationsMap:
+                _assert_valid_type_for_collation(fieldPath, tpe, collationsMap)
+
             complex_type = _all_complex_types[tpe]
             if complex_type is ArrayType:
                 return ArrayType.fromJson(json_value, fieldPath, collationsMap)
@@ -1870,14 +1873,16 @@ def _parse_type_with_collation(
     json_value: Union[dict, str], fieldPath: str, collationsMap: Optional[Dict[str, str]]
 ) -> DataType:
     if collationsMap and fieldPath in collationsMap:
-        _assert_valid_type_for_collation(json_value)
+        _assert_valid_type_for_collation(fieldPath, json_value, collationsMap)
         collation_name = collationsMap[fieldPath]
         return StringType(collation_name)
     return _parse_datatype_json_value(json_value, fieldPath, collationsMap)
 
 
-def _assert_valid_type_for_collation(fieldType: Any) -> None:
-    if not isinstance(fieldType, str) or fieldType != "string":
+def _assert_valid_type_for_collation(
+    fieldPath: str, fieldType: Any, collationMap: Dict[str, str]
+) -> None:
+    if fieldPath in collationMap and fieldType != "string":
         raise PySparkTypeError(
             error_class="INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
             message_parameters={"jsonType": fieldType},

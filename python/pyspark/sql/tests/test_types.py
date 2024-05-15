@@ -570,6 +570,24 @@ class TypesTestsMixin:
             ]
         )
 
+        nested_map = StructType(
+            [
+                StructField(
+                    "nested",
+                    StructType(
+                        [
+                            StructField(
+                                "mapField",
+                                MapType(
+                                    StringType(unicode_collation), StringType(unicode_collation)
+                                ),
+                            )
+                        ]
+                    ),
+                )
+            ]
+        )
+
         array_in_map = StructType(
             [
                 StructField(
@@ -600,6 +618,7 @@ class TypesTestsMixin:
             + nested_struct.fields
             + array_in_schema.fields
             + map_in_schema.fields
+            + nested_map.fields
             + array_in_map.fields
             + nested_array_in_map_value.fields
         )
@@ -609,6 +628,7 @@ class TypesTestsMixin:
             nested_struct,
             array_in_schema,
             map_in_schema,
+            nested_map,
             nested_array_in_map_value,
             array_in_map,
             schema_with_multiple_fields,
@@ -641,24 +661,78 @@ class TypesTestsMixin:
         }}
         """
 
-        collations_in_map_json = f"""
+        collations_in_array_element_json = f"""
         {{
           "type": "struct",
           "fields": [
             {{
-              "name": "mapField",
+              "name": "arrayField",
               "type": {{
-                "type": "map",
-                "keyType": "string",
-                "valueType": "integer",
-                "valueContainsNull": true
+                  "type": "array",
+                  "elementType": "integer",
+                  "containsNull": true
               }},
               "nullable": true,
               "metadata": {{
                 "{_COLLATIONS_METADATA_KEY}": {{
-                  "mapField.value": "icu.UNICODE"
+                  "arrayField.element": "icu.UNICODE"
                 }}
               }}
+            }}
+          ]
+        }}
+        """
+
+        collations_on_array_json = f"""
+        {{
+          "type": "struct",
+          "fields": [
+            {{
+              "name": "arrayField",
+              "type": {{
+                  "type": "array",
+                  "elementType": "integer",
+                  "containsNull": true
+              }},
+              "nullable": true,
+              "metadata": {{
+                "{_COLLATIONS_METADATA_KEY}": {{
+                  "arrayField": "icu.UNICODE"
+                }}
+              }}
+            }}
+          ]
+        }}
+        """
+
+        collations_in_nested_map_json = f"""
+        {{
+          "type": "struct",
+          "fields": [
+            {{
+              "name": "nested",
+              "type": {{
+                "type": "struct",
+                "fields": [
+                  {{
+                    "name": "mapField",
+                    "type": {{
+                      "type": "map",
+                      "keyType": "string",
+                      "valueType": "integer",
+                      "valueContainsNull": true
+                    }},
+                    "nullable": true,
+                    "metadata": {{
+                      "{_COLLATIONS_METADATA_KEY}": {{
+                        "mapField.value": "icu.UNICODE"
+                      }}
+                    }}
+                  }}
+                ]
+              }},
+              "nullable": true,
+              "metadata": {{}}
             }}
           ]
         }}
@@ -669,7 +743,15 @@ class TypesTestsMixin:
         )
 
         self.assertRaises(
-            PySparkTypeError, lambda: _parse_datatype_json_string(collations_in_map_json)
+            PySparkTypeError, lambda: _parse_datatype_json_string(collations_in_array_element_json)
+        )
+
+        self.assertRaises(
+            PySparkTypeError, lambda: _parse_datatype_json_string(collations_on_array_json)
+        )
+
+        self.assertRaises(
+            PySparkTypeError, lambda: _parse_datatype_json_string(collations_in_nested_map_json)
         )
 
     def test_schema_with_bad_collations_provider(self):

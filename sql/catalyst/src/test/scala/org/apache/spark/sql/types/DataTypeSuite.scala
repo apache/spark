@@ -795,7 +795,7 @@ class DataTypeSuite extends SparkFunSuite {
     )
   }
 
-  test("non string field in map has collation metadata") {
+  test("non string field in map key has collation metadata") {
     val json =
       s"""
          |{
@@ -826,6 +826,40 @@ class DataTypeSuite extends SparkFunSuite {
       },
       errorClass = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
       parameters = Map("jsonType" -> "integer")
+    )
+  }
+
+  test("map field has collation metadata") {
+    val json =
+      s"""
+         |{
+         |  "type": "struct",
+         |  "fields": [
+         |    {
+         |      "name": "mapField",
+         |      "type": {
+         |        "type": "map",
+         |        "keyType": "string",
+         |        "valueType": "integer",
+         |        "valueContainsNull": true
+         |      },
+         |      "nullable": true,
+         |      "metadata": {
+         |        "${DataType.COLLATIONS_METADATA_KEY}": {
+         |          "mapField": "icu.UNICODE"
+         |        }
+         |      }
+         |    }
+         |  ]
+         |}
+         |""".stripMargin
+
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        DataType.fromJson(json)
+      },
+      errorClass = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
+      parameters = Map("jsonType" -> "map")
     )
   }
 
