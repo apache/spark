@@ -68,7 +68,7 @@ case class PartialResultArrayException(
 
 /**
  * Exception thrown when the underlying parser met a bad record and can't parse it.
- * The stacktrace is not collected for better preformance, and thus, this exception should
+ * The stacktrace is not collected for better performance, and thus, this exception should
  * not be used in a user-facing context.
  * @param record a function to return the record that cause the parser to fail
  * @param partialResults a function that returns an row array, which is the partial results of

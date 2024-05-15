@@ -2,7 +2,7 @@
 -- !query
 create temporary view date_view as select '2011-11-11' date_str, '1' int_str
 -- !query analysis
-CreateViewCommand `date_view`, select '2011-11-11' date_str, '1' int_str, false, false, LocalTempView, true
+CreateViewCommand `date_view`, select '2011-11-11' date_str, '1' int_str, false, false, LocalTempView, UNSUPPORTED, true
    +- Project [2011-11-11 AS date_str#x, 1 AS int_str#x]
       +- OneRowRelation
 

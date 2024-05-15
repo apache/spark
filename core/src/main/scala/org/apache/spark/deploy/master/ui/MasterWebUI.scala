@@ -24,7 +24,8 @@ import jakarta.servlet.http.{HttpServlet, HttpServletRequest, HttpServletRespons
 import org.apache.spark.deploy.DeployMessages.{DecommissionWorkersOnHosts, MasterStateResponse, RequestMasterState}
 import org.apache.spark.deploy.Utils.addRenderLogHandler
 import org.apache.spark.deploy.master.Master
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{HOST_NAMES, NUM_REMOVED_WORKERS}
 import org.apache.spark.internal.config.DECOMMISSION_ENABLED
 import org.apache.spark.internal.config.UI.MASTER_UI_DECOMMISSION_ALLOW_MODE
 import org.apache.spark.internal.config.UI.UI_KILL_ENABLED
@@ -78,7 +79,8 @@ class MasterWebUI(
           } else {
             val removedWorkers = masterEndpointRef.askSync[Integer](
               DecommissionWorkersOnHosts(hostnames))
-            logInfo(s"Decommissioning of hosts $hostnames decommissioned $removedWorkers workers")
+            logInfo(log"Decommissioning of hosts ${MDC(HOST_NAMES, hostnames)}" +
+              log" decommissioned ${MDC(NUM_REMOVED_WORKERS, removedWorkers)} workers")
             if (removedWorkers > 0) {
               resp.setStatus(HttpServletResponse.SC_OK)
             } else if (removedWorkers == 0) {

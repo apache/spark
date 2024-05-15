@@ -22,6 +22,7 @@ import java.sql.{Connection, Date, Timestamp}
 import java.util.Properties
 
 import org.apache.spark.sql.{Row, SaveMode}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, ByteType, ShortType, StructType}
@@ -61,6 +62,20 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
       .executeUpdate()
     conn.prepareStatement("INSERT INTO strings VALUES ('the', 'quick', 'brown', BLOB('fox'),"
       + "'<cinfo cid=\"10\"><name>Kathy</name></cinfo>')").executeUpdate()
+
+    conn.prepareStatement("CREATE TABLE booleans (a BOOLEAN)").executeUpdate()
+    conn.prepareStatement("INSERT INTO booleans VALUES (true)").executeUpdate()
+    // VARGRAPHIC
+    conn.prepareStatement("CREATE TABLE graphics (a GRAPHIC(16), b VARGRAPHIC(16))")
+      .executeUpdate()
+    conn.prepareStatement("INSERT INTO graphics VALUES ('a', 'b')").executeUpdate()
+    // CHAR(n) FOR BIT DATA
+    conn.prepareStatement("CREATE TABLE binarys (" +
+      "a CHAR(10) FOR BIT DATA, b VARCHAR(10) FOR BIT DATA, c BINARY(10), d VARBINARY(10))")
+      .executeUpdate()
+    conn.prepareStatement("INSERT INTO binarys VALUES (" +
+        "'ABC', 'ABC', BINARY('ABC', 10), VARBINARY('ABC', 10))")
+      .executeUpdate()
   }
 
   test("Basic test") {
@@ -232,5 +247,27 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
       .collect()
 
     assert(actual === expected)
+  }
+
+  test("SPARK-48269: boolean type") {
+    val df = sqlContext.read.jdbc(jdbcUrl, "booleans", new Properties)
+    checkAnswer(df, Row(true))
+  }
+
+  test("SPARK-48269: GRAPHIC types") {
+    val df = sqlContext.read.jdbc(jdbcUrl, "graphics", new Properties)
+    checkAnswer(df, Row("a".padTo(16, ' '), "b"))
+    // the padding happens in the source not because of reading as char type
+    assert(!df.schema.exists {
+      _.metadata.contains(CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY) })
+  }
+
+  test("SPARK-48269: binary types") {
+    val df = sqlContext.read.jdbc(jdbcUrl, "binarys", new Properties)
+    checkAnswer(df, Row(
+      "ABC".padTo(10, ' ').getBytes,
+      "ABC".getBytes,
+      "ABC".getBytes ++ Array.fill(7)(0),
+      "ABC".getBytes))
   }
 }

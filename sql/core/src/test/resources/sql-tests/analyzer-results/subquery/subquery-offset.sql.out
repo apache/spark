@@ -139,7 +139,7 @@ CreateViewCommand `EMP`, SELECT * FROM VALUES
   (600, "emp 6 - no dept", date "2001-01-01", 400.00D, 100),
   (700, "emp 7", date "2010-01-01", 400.00D, 100),
   (800, "emp 8", date "2016-01-01", 150.00D, 70)
-AS EMP(id, emp_name, hiredate, salary, dept_id), false, false, LocalTempView, true
+AS EMP(id, emp_name, hiredate, salary, dept_id), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
       +- SubqueryAlias EMP
          +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -162,7 +162,7 @@ CreateViewCommand `DEPT`, SELECT * FROM VALUES
   (40, "dept 4 - unassigned", "OR"),
   (50, "dept 5 - unassigned", "NJ"),
   (70, "dept 7", "FL")
-AS DEPT(dept_id, dept_name, state), false, false, LocalTempView, true
+AS DEPT(dept_id, dept_name, state), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [dept_id#x, dept_name#x, state#x]
       +- SubqueryAlias DEPT
          +- LocalRelation [dept_id#x, dept_name#x, state#x]
