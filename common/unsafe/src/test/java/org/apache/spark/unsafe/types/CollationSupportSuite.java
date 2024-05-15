@@ -577,8 +577,8 @@ public class CollationSupportSuite {
     assertStringInstr("abi̇oİo", "İo", "UNICODE_CI", 3);
     assertStringInstr("ai̇oxXİo", "Xx", "UNICODE_CI", 5);
     assertStringInstr("aİoi̇oxx", "XX", "UNICODE_CI", 7);
-    assertStringInstr("i̇", "i", "UTF8_BINARY_LCASE", 1); // different from UNICODE_CI
-    assertStringInstr("i̇", "\u0307", "UTF8_BINARY_LCASE", 2); // different from UNICODE_CI
+    assertStringInstr("i̇", "i", "UTF8_BINARY_LCASE", 1); // != UNICODE_CI
+    assertStringInstr("i̇", "\u0307", "UTF8_BINARY_LCASE", 2); // != UNICODE_CI
     assertStringInstr("i̇", "İ", "UTF8_BINARY_LCASE", 1);
     assertStringInstr("İ", "i", "UTF8_BINARY_LCASE", 0);
     assertStringInstr("İoi̇o12", "i̇o", "UTF8_BINARY_LCASE", 1);
@@ -828,8 +828,8 @@ public class CollationSupportSuite {
     assertSubstringIndex("ai̇bi̇oİo12İoi̇o", "i̇o", 3, "UNICODE_CI", "ai̇bi̇oİo12");
     assertSubstringIndex("ai̇bİoi̇o12i̇oİo", "İo", 3, "UNICODE_CI", "ai̇bİoi̇o12");
     assertSubstringIndex("ai̇bİoi̇o12i̇oİo", "i̇o", 3, "UNICODE_CI", "ai̇bİoi̇o12");
-    assertSubstringIndex("abi̇12", "i", 1, "UTF8_BINARY_LCASE", "ab");
-    assertSubstringIndex("abi̇12", "\u0307", 1, "UTF8_BINARY_LCASE", "abi");
+    assertSubstringIndex("abi̇12", "i", 1, "UTF8_BINARY_LCASE", "ab"); // != UNICODE_CI
+    assertSubstringIndex("abi̇12", "\u0307", 1, "UTF8_BINARY_LCASE", "abi"); // != UNICODE_CI
     assertSubstringIndex("abi̇12", "İ", 1, "UTF8_BINARY_LCASE", "ab");
     assertSubstringIndex("abİ12", "i", 1, "UTF8_BINARY_LCASE", "abİ12");
     assertSubstringIndex("ai̇bi̇oİo12İoi̇o", "İo", -4, "UTF8_BINARY_LCASE", "İo12İoi̇o");
