@@ -28,8 +28,8 @@ import javax.annotation.concurrent.GuardedBy;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
 import org.apache.spark.util.ThreadUtils;
@@ -45,7 +45,7 @@ import org.apache.spark.util.ThreadUtils;
  */
 public class ReadAheadInputStream extends InputStream {
 
-  private static final Logger logger = LoggerFactory.getLogger(ReadAheadInputStream.class);
+  private static final SparkLogger logger = SparkLoggerFactory.getLogger(ReadAheadInputStream.class);
 
   private ReentrantLock stateChangeLock = new ReentrantLock();
 

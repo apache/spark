@@ -17,15 +17,15 @@
 
 package org.apache.spark.internal;
 
-public class LoggerFactory {
+public class SparkLoggerFactory {
 
-  public static Logger getLogger(String name) {
+  public static SparkLogger getLogger(String name) {
     org.slf4j.Logger slf4jLogger = org.slf4j.LoggerFactory.getLogger(name);
-    return new Logger(slf4jLogger);
+    return new SparkLogger(slf4jLogger);
   }
 
-  public static Logger getLogger(Class<?> clazz) {
+  public static SparkLogger getLogger(Class<?> clazz) {
     org.slf4j.Logger slf4jLogger = org.slf4j.LoggerFactory.getLogger(clazz);
-    return new Logger(slf4jLogger);
+    return new SparkLogger(slf4jLogger);
   }
 }
