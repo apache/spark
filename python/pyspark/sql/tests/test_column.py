@@ -255,6 +255,11 @@ class ColumnTestsMixin:
     def test_isinstance_dataframe(self):
         self.assertIsInstance(self.spark.range(1).id, Column)
 
+    def test_expr_str_representation(self):
+        expression = sf.expr("foo")
+        when_cond = sf.when(expression, sf.lit(None))
+        self.assertEqual(str(when_cond), "Column<'CASE WHEN foo THEN NULL END'>")
+
 
 class ColumnTests(ColumnTestsMixin, ReusedSQLTestCase):
     pass
