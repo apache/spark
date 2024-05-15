@@ -1627,17 +1627,17 @@ class SparkConnectPlanner(
   }
 
   private def unpackUdf(fun: proto.CommonInlineUserDefinedFunction): UdfPacket = {
-    unpackUdfPayload[UdfPacket](fun.getScalarScalaUdf.getPayload.toByteArray)
+    unpackScalarScalaUDF[UdfPacket](fun.getScalarScalaUdf)
   }
 
   private def unpackForeachWriter(fun: proto.ScalarScalaUDF): ForeachWriterPacket = {
-    unpackUdfPayload[ForeachWriterPacket](fun.getPayload.toByteArray)
+    unpackScalarScalaUDF[ForeachWriterPacket](fun)
   }
 
-  private def unpackUdfPayload[T](getByteArray: () => Array[Byte]): T = {
+  private def unpackScalarScalaUDF[T](fun: proto.ScalarScalaUDF): T = {
     try {
       logDebug(s"Unpack using class loader: ${Utils.getContextOrSparkClassLoader}")
-      Utils.deserialize[T](getByteArray(), Utils.getContextOrSparkClassLoader)
+      Utils.deserialize[T](fun.getPayload.toByteArray, Utils.getContextOrSparkClassLoader)
     } catch {
       case t: Throwable =>
         Throwables.getRootCause(t) match {
@@ -1664,7 +1664,8 @@ class SparkConnectPlanner(
    * @return
    *   ScalaUDF.
    */
-  private def transformScalarScalaUDF(fun: proto.CommonInlineUserDefinedFunction): Expression = {
+  private def transformScalarScalaUDF(
+      fun: proto.CommonInlineUserDefinedFunction): NonSQLExpression = {
     val udf = fun.getScalarScalaUdf
     val udfPacket = unpackUdf(fun)
     if (udf.getAggregate) {
