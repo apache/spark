@@ -284,4 +284,15 @@ public final class CollationFactory {
     }
   }
 
+  public static byte[] getCollationKeyBytes(UTF8String input, int collationId) {
+    Collation collation = fetchCollation(collationId);
+    if (collation.supportsBinaryEquality) {
+      return input.getBytes();
+    } else if (collation.supportsLowercaseEquality) {
+      return input.toLowerCase().getBytes();
+    } else {
+      return collation.collator.getCollationKey(input.toString()).toByteArray();
+    }
+  }
+
 }

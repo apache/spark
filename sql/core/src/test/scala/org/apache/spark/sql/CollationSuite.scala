@@ -20,8 +20,8 @@ package org.apache.spark.sql
 import scala.jdk.CollectionConverters.MapHasAsJava
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, InternalRow}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2ProviderWithCustomSchema}
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable}
@@ -30,9 +30,10 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec}
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.{MapType, StringType, StructField, StructType}
+import org.apache.spark.unsafe.types.UTF8String
 
 class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   protected val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
@@ -774,19 +775,19 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       case _: BroadcastHashJoinExec => ()
     }.nonEmpty)
 
-    // Even with hint broadcast, hash join is not used for non-binary collated strings.
+    // Hash join is also used for non-binary collated strings.
     assert(collectFirst(
       df1.hint("broadcast").join(df1, df1("col_non_binary") === df1("col_non_binary"))
         .queryExecution.executedPlan) {
       case _: BroadcastHashJoinExec => ()
-    }.isEmpty)
+    }.nonEmpty)
 
-    // Instead they will default to sort merge join.
+    // Merge join will not be used for non-binary collated strings.
     assert(collectFirst(
       df1.hint("broadcast").join(df1, df1("col_non_binary") === df1("col_non_binary"))
         .queryExecution.executedPlan) {
       case _: SortMergeJoinExec => ()
-    }.nonEmpty)
+    }.isEmpty)
   }
 
   test("Generated column expressions using collations - errors out") {
@@ -1039,6 +1040,106 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         sql(s"SELECT c, i, nth_value(i, 2) OVER (PARTITION BY c ORDER BY i) FROM $t2")
       checkAnswer(dfNonBinary, dfBinary)
     }
+  }
+
+  test("CollationKey generates correct collation key for string") {
+    val testCases = Seq(
+      ("", "UTF8_BINARY", UTF8String.fromString("").getBytes),
+      ("aa", "UTF8_BINARY", UTF8String.fromString("aa").getBytes),
+      ("AA", "UTF8_BINARY", UTF8String.fromString("AA").getBytes),
+      ("aA", "UTF8_BINARY", UTF8String.fromString("aA").getBytes),
+      ("", "UTF8_BINARY_LCASE", UTF8String.fromString("").getBytes),
+      ("aa", "UTF8_BINARY_LCASE", UTF8String.fromString("aa").getBytes),
+      ("AA", "UTF8_BINARY_LCASE", UTF8String.fromString("aa").getBytes),
+      ("aA", "UTF8_BINARY_LCASE", UTF8String.fromString("aa").getBytes),
+      ("", "UNICODE", UTF8String.fromString("").getBytes),
+      ("aa", "UNICODE", UTF8String.fromString("aa").getBytes),
+      ("AA", "UNICODE", UTF8String.fromString("AA").getBytes),
+      ("aA", "UNICODE", UTF8String.fromString("aA").getBytes),
+      ("", "UNICODE_CI", Array[Byte](1, 0)),
+      ("aa", "UNICODE_CI", Array[Byte](42, 42, 1, 6, 0)),
+      ("AA", "UNICODE_CI", Array[Byte](42, 42, 1, 6, 0)),
+      ("aA", "UNICODE_CI", Array[Byte](42, 42, 1, 6, 0))
+    )
+    for ((input, collation, expected) <- testCases) {
+      val collationId: Int = CollationFactory.collationNameToId(collation)
+      val attrRef: AttributeReference = AttributeReference("attr", StringType(collationId))()
+      // generate CollationKey for the input string
+      val collationKey: CollationKey = CollationKey(attrRef)
+      assert(collationKey.resolved)
+      val str: UTF8String = UTF8String.fromString(input)
+      assert(collationKey.nullSafeEval(str) === expected)
+    }
+  }
+
+  test("CollationKey generates correct collation key for string using codegen") {
+    val testCases = Seq(
+      ("", "UTF8_BINARY", ""),
+      ("aa", "UTF8_BINARY", "6161"),
+      ("AA", "UTF8_BINARY", "4141"),
+      ("aA", "UTF8_BINARY", "4161"),
+      ("", "UTF8_BINARY_LCASE", ""),
+      ("aa", "UTF8_BINARY_LCASE", "6161"),
+      ("AA", "UTF8_BINARY_LCASE", "6161"),
+      ("aA", "UTF8_BINARY_LCASE", "6161"),
+      ("", "UNICODE", ""),
+      ("aa", "UNICODE", "6161"),
+      ("AA", "UNICODE", "4141"),
+      ("aA", "UNICODE", "4161"),
+      ("", "UNICODE_CI", "1"),
+      ("aa", "UNICODE_CI", "6012a2a"),
+      ("AA", "UNICODE_CI", "6012a2a"),
+      ("aA", "UNICODE_CI", "6012a2a")
+    )
+    for ((input, collation, expected) <- testCases) {
+      val collationId: Int = CollationFactory.collationNameToId(collation)
+      val attrRef: AttributeReference = AttributeReference("attr", StringType(collationId))()
+      // generate CollationKey for the input string
+      val collationKey: CollationKey = CollationKey(attrRef)
+      val str: UTF8String = UTF8String.fromString(input)
+      val boundExpr = BindReferences.bindReference(collationKey, Seq(attrRef))
+      val ev = UnsafeProjection.create(Array(boundExpr).toIndexedSeq)
+      val strProj = ev.apply(InternalRow(str))
+      assert(strProj.toString.split(',').last.startsWith(expected))
+    }
+  }
+
+  test("hash join should respect collation for strings") {
+    val t1 = "T_1"
+    val t2 = "T_2"
+
+    case class HashJoinTestCase[R](collation: String, result: R)
+    val testCases = Seq(
+      HashJoinTestCase("UTF8_BINARY", Seq(Row("aa", 1, "aa", 2))),
+      HashJoinTestCase("UTF8_BINARY_LCASE", Seq(Row("aa", 1, "AA", 2), Row("aa", 1, "aa", 2))),
+      HashJoinTestCase("UNICODE", Seq(Row("aa", 1, "aa", 2))),
+      HashJoinTestCase("UNICODE_CI", Seq(Row("aa", 1, "AA", 2), Row("aa", 1, "aa", 2)))
+    )
+
+    testCases.foreach(t => {
+      withTable(t1, t2) {
+        sql(s"CREATE TABLE $t1 (x STRING COLLATE ${t.collation}, i int) USING PARQUET")
+        sql(s"INSERT INTO $t1 VALUES ('aa', 1)")
+
+        sql(s"CREATE TABLE $t2 (y STRING COLLATE ${t.collation}, j int) USING PARQUET")
+        sql(s"INSERT INTO $t2 VALUES ('AA', 2), ('aa', 2)")
+
+        val df = sql(s"SELECT * FROM $t1 JOIN $t2 ON $t1.x = $t2.y")
+        checkAnswer(df, t.result)
+
+        // confirm that hash join is used instead of sort merge join
+        assert(
+          collectFirst(df.queryExecution.executedPlan) {
+            case _: HashJoin => ()
+          }.nonEmpty
+        )
+        assert(
+          collectFirst(df.queryExecution.executedPlan) {
+            case _: ShuffledJoin => ()
+          }.isEmpty
+        )
+      }
+    })
   }
 
   test("hll sketch aggregate should respect collation") {

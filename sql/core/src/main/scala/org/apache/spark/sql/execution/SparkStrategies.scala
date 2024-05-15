@@ -45,6 +45,7 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.MemoryPlan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.types.{BinaryType, StringType}
 
 /**
  * Converts a logical plan into zero or more SparkPlans.  This API is exposed for experimenting
@@ -210,7 +211,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
     private def hashJoinSupported
         (leftKeys: Seq[Expression], rightKeys: Seq[Expression]): Boolean = {
-      val result = leftKeys.concat(rightKeys).forall(e => UnsafeRowUtils.isBinaryStable(e.dataType))
+      var result = leftKeys.concat(rightKeys).forall(e => e.dataType.isInstanceOf[StringType])
+      result |= leftKeys.concat(rightKeys).forall(e => e.dataType.isInstanceOf[BinaryType])
       if (!result) {
         val keysNotSupportingHashJoin = leftKeys.concat(rightKeys).filterNot(
           e => UnsafeRowUtils.isBinaryStable(e.dataType))
