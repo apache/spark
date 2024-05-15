@@ -128,8 +128,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
 
   override protected val timestampNTZType: String = "TIMESTAMP WITH LOCAL TIME ZONE"
 
-  override protected def prepareTimestampTable(catalogName: String,
-      tableName: String, insert: Boolean = true): Unit = {
+  override protected def prepareTimestampTable(tableName: String, insert: Boolean = true): Unit = {
     withConnection { conn =>
       conn.prepareStatement(
         s"""CREATE TABLE $tableName
