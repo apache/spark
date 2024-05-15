@@ -23,7 +23,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-
+// checkstyle.off: AvoidEscapedUnicodeCharacters
 public class CollationSupportSuite {
 
   /**
@@ -567,8 +567,26 @@ public class CollationSupportSuite {
     assertStringInstr("aaads", "dS", "UNICODE_CI", 4);
     assertStringInstr("test大千世界X大千世界", "界y", "UNICODE_CI", 0);
     assertStringInstr("test大千世界X大千世界", "界x", "UNICODE_CI", 8);
-    assertStringInstr("abİo12", "i̇o", "UNICODE_CI", 3);
-    assertStringInstr("abi̇o12", "İo", "UNICODE_CI", 3);
+    assertStringInstr("i̇", "i", "UNICODE_CI", 0);
+    assertStringInstr("i̇", "\u0307", "UNICODE_CI", 0);
+    assertStringInstr("i̇", "İ", "UNICODE_CI", 1);
+    assertStringInstr("İ", "i", "UNICODE_CI", 0);
+    assertStringInstr("İoi̇o12", "i̇o", "UNICODE_CI", 1);
+    assertStringInstr("i̇oİo12", "İo", "UNICODE_CI", 1);
+    assertStringInstr("abİoi̇o", "i̇o", "UNICODE_CI", 3);
+    assertStringInstr("abi̇oİo", "İo", "UNICODE_CI", 3);
+    assertStringInstr("ai̇oxXİo", "Xx", "UNICODE_CI", 5);
+    assertStringInstr("aİoi̇oxx", "XX", "UNICODE_CI", 7);
+    assertStringInstr("i̇", "i", "UTF8_BINARY_LCASE", 1); // different from UNICODE_CI
+    assertStringInstr("i̇", "\u0307", "UTF8_BINARY_LCASE", 2); // different from UNICODE_CI
+    assertStringInstr("i̇", "İ", "UTF8_BINARY_LCASE", 1);
+    assertStringInstr("İ", "i", "UTF8_BINARY_LCASE", 0);
+    assertStringInstr("İoi̇o12", "i̇o", "UTF8_BINARY_LCASE", 1);
+    assertStringInstr("i̇oİo12", "İo", "UTF8_BINARY_LCASE", 1);
+    assertStringInstr("abİoi̇o", "i̇o", "UTF8_BINARY_LCASE", 3);
+    assertStringInstr("abi̇oİo", "İo", "UTF8_BINARY_LCASE", 3);
+    assertStringInstr("ai̇oxXİo", "Xx", "UTF8_BINARY_LCASE", 5);
+    assertStringInstr("aİoi̇oxx", "XX", "UTF8_BINARY_LCASE", 7);
   }
 
   private void assertFindInSet(String word, String set, String collationName,
@@ -798,6 +816,30 @@ public class CollationSupportSuite {
     assertSubstringIndex("ai̇bi̇oİo12İoi̇o", "i̇o", -4, "UNICODE_CI", "İo12İoi̇o");
     assertSubstringIndex("ai̇bİoi̇o12i̇oİo", "İo", -4, "UNICODE_CI", "i̇o12i̇oİo");
     assertSubstringIndex("ai̇bİoi̇o12i̇oİo", "i̇o", -4, "UNICODE_CI", "i̇o12i̇oİo");
+    assertSubstringIndex("abi̇12", "i", 1, "UNICODE_CI", "abi̇12");
+    assertSubstringIndex("abi̇12", "\u0307", 1, "UNICODE_CI", "abi̇12");
+    assertSubstringIndex("abi̇12", "İ", 1, "UNICODE_CI", "ab");
+    assertSubstringIndex("abİ12", "i", 1, "UNICODE_CI", "abİ12");
+    assertSubstringIndex("ai̇bi̇oİo12İoi̇o", "İo", -4, "UNICODE_CI", "İo12İoi̇o");
+    assertSubstringIndex("ai̇bi̇oİo12İoi̇o", "i̇o", -4, "UNICODE_CI", "İo12İoi̇o");
+    assertSubstringIndex("ai̇bİoi̇o12i̇oİo", "İo", -4, "UNICODE_CI", "i̇o12i̇oİo");
+    assertSubstringIndex("ai̇bİoi̇o12i̇oİo", "i̇o", -4, "UNICODE_CI", "i̇o12i̇oİo");
+    assertSubstringIndex("ai̇bi̇oİo12İoi̇o", "İo", 3, "UNICODE_CI", "ai̇bi̇oİo12");
+    assertSubstringIndex("ai̇bi̇oİo12İoi̇o", "i̇o", 3, "UNICODE_CI", "ai̇bi̇oİo12");
+    assertSubstringIndex("ai̇bİoi̇o12i̇oİo", "İo", 3, "UNICODE_CI", "ai̇bİoi̇o12");
+    assertSubstringIndex("ai̇bİoi̇o12i̇oİo", "i̇o", 3, "UNICODE_CI", "ai̇bİoi̇o12");
+    assertSubstringIndex("abi̇12", "i", 1, "UTF8_BINARY_LCASE", "ab");
+    assertSubstringIndex("abi̇12", "\u0307", 1, "UTF8_BINARY_LCASE", "abi");
+    assertSubstringIndex("abi̇12", "İ", 1, "UTF8_BINARY_LCASE", "ab");
+    assertSubstringIndex("abİ12", "i", 1, "UTF8_BINARY_LCASE", "abİ12");
+    assertSubstringIndex("ai̇bi̇oİo12İoi̇o", "İo", -4, "UTF8_BINARY_LCASE", "İo12İoi̇o");
+    assertSubstringIndex("ai̇bi̇oİo12İoi̇o", "i̇o", -4, "UTF8_BINARY_LCASE", "İo12İoi̇o");
+    assertSubstringIndex("ai̇bİoi̇o12i̇oİo", "İo", -4, "UTF8_BINARY_LCASE", "i̇o12i̇oİo");
+    assertSubstringIndex("ai̇bİoi̇o12i̇oİo", "i̇o", -4, "UTF8_BINARY_LCASE", "i̇o12i̇oİo");
+    assertSubstringIndex("ai̇bi̇oİo12İoi̇o", "İo", 3, "UTF8_BINARY_LCASE", "ai̇bi̇oİo12");
+    assertSubstringIndex("ai̇bi̇oİo12İoi̇o", "i̇o", 3, "UTF8_BINARY_LCASE", "ai̇bi̇oİo12");
+    assertSubstringIndex("ai̇bİoi̇o12i̇oİo", "İo", 3, "UTF8_BINARY_LCASE", "ai̇bİoi̇o12");
+    assertSubstringIndex("ai̇bİoi̇o12i̇oİo", "i̇o", 3, "UTF8_BINARY_LCASE", "ai̇bİoi̇o12");
   }
 
   private void assertStringTrim(
@@ -1008,3 +1050,4 @@ public class CollationSupportSuite {
   // TODO: Test other collation-aware expressions.
 
 }
+// checkstyle.on: AvoidEscapedUnicodeCharacters
