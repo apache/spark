@@ -363,7 +363,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     val df1 = spark.sql(
       s"""
          |SELECT * FROM $catalogName.pattern_testing_table
-         |WHERE contains(pattern_testing_col, 'quote''')""".stripMargin)
+         |WHERE contains(pattern_testing_col, 'quote\\'')""".stripMargin)
     df1.explain("formatted")
     val rows1 = df1.collect()
     assert(rows1.length === 1)
@@ -402,7 +402,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
   test("SPARK-48172: Test ENDSWITH") {
     val df1 = spark.sql(
       s"""SELECT * FROM $catalogName.pattern_testing_table
-         |WHERE endswith(pattern_testing_col, 'quote''_present')""".stripMargin)
+         |WHERE endswith(pattern_testing_col, 'quote\\'_present')""".stripMargin)
     val rows1 = df1.collect()
     assert(rows1.length === 1)
     assert(rows1(0).getString(0) === "special_character_quote'_present")
@@ -440,7 +440,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
   test("SPARK-48172: Test STARTSWITH") {
     val df1 = spark.sql(
       s"""SELECT * FROM $catalogName.pattern_testing_table
-         |WHERE startswith(pattern_testing_col, 'special_character_quote''')""".stripMargin)
+         |WHERE startswith(pattern_testing_col, 'special_character_quote\\'')""".stripMargin)
     val rows1 = df1.collect()
     assert(rows1.length === 1)
     assert(rows1(0).getString(0) === "special_character_quote'_present")
@@ -479,7 +479,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     // this one should map to contains
     val df1 = spark.sql(
       s"""SELECT * FROM $catalogName.pattern_testing_table
-         |WHERE pattern_testing_col LIKE '%quote''%'""".stripMargin)
+         |WHERE pattern_testing_col LIKE '%quote\\'%'""".stripMargin)
     val rows1 = df1.collect()
     assert(rows1.length === 1)
     assert(rows1(0).getString(0) === "special_character_quote'_present")
@@ -517,7 +517,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     // this one should map to contains
     val df5 = spark.sql(
       s"""SELECT * FROM $catalogName.pattern_testing_table
-         |WHERE pattern_testing_col LIKE 'special_character_quote''%'""".stripMargin)
+         |WHERE pattern_testing_col LIKE 'special_character_quote\\'%'""".stripMargin)
     val rows5 = df5.collect()
     assert(rows5.length === 1)
     assert(rows5(0).getString(0) === "special_character_quote'_present")
@@ -554,7 +554,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     // this one should map to contains
     val df9 = spark.sql(
       s"""SELECT * FROM $catalogName.pattern_testing_table
-         |WHERE pattern_testing_col LIKE '%quote''_present'""".stripMargin)
+         |WHERE pattern_testing_col LIKE '%quote\\'_present'""".stripMargin)
     val rows9 = df9.collect()
     assert(rows9.length === 1)
     assert(rows9(0).getString(0) === "special_character_quote'_present")
