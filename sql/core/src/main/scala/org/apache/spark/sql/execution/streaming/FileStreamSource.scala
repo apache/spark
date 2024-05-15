@@ -181,7 +181,8 @@ class FileStreamSource(
 
     // Obey user's setting to limit the number of files in this batch trigger.
     val (batchFiles, unselectedFiles) = limit match {
-      case files: ReadMaxFiles if !sourceOptions.latestFirst =>
+      case files: ReadMaxFiles
+          if !sourceOptions.latestFirst && allFilesForTriggerAvailableNow == null =>
         // we can cache and reuse remaining fetched list of files in further batches
         val (bFiles, usFiles) = newFiles.splitAt(files.maxFiles())
         if (usFiles.size < files.maxFiles() * DISCARD_UNSEEN_INPUT_RATIO) {
@@ -198,7 +199,8 @@ class FileStreamSource(
         // implies "sourceOptions.latestFirst = true" which we want to refresh the list per batch
         (newFiles.take(files.maxFiles()), null)
 
-      case files: ReadMaxBytes if !sourceOptions.latestFirst =>
+      case files: ReadMaxBytes
+          if !sourceOptions.latestFirst && allFilesForTriggerAvailableNow == null =>
         // we can cache and reuse remaining fetched list of files in further batches
         val (FilesSplit(bFiles, _), FilesSplit(usFiles, rSize)) =
           takeFilesUntilMax(newFiles, files.maxBytes())
