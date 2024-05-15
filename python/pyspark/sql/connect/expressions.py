@@ -455,7 +455,10 @@ class LiteralExpression(Expression):
         return expr
 
     def __repr__(self) -> str:
-        return f"{self._value}"
+        if self._value is None:
+            return "NULL"
+        else:
+            return f"{self._value}"
 
 
 class ColumnReference(Expression):
@@ -536,6 +539,7 @@ class SQLExpression(Expression):
 
     def __init__(self, expr: str) -> None:
         super().__init__()
+        assert isinstance(expr, str)
         self._expr: str = expr
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
@@ -546,6 +550,9 @@ class SQLExpression(Expression):
 
     def __eq__(self, other: Any) -> bool:
         return other is not None and isinstance(other, SQLExpression) and other._expr == self._expr
+
+    def __repr__(self) -> str:
+        return self._expr
 
 
 class SortOrder(Expression):

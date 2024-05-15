@@ -34,6 +34,7 @@ if should_test_connect:
     from pyspark.sql.connect.plan import WriteOperation, Read
     from pyspark.sql.connect.readwriter import DataFrameReader
     from pyspark.sql.connect.expressions import LiteralExpression
+    from pyspark.sql.connect import functions as F
     from pyspark.sql.connect.functions import col, lit, max, min, sum
     from pyspark.sql.connect.types import pyspark_types_to_proto_types
     from pyspark.sql.types import (
@@ -1058,6 +1059,11 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
             )
 
             LiteralExpression._to_value(proto_lit, DoubleType)
+
+    def test_expr_str_representation(self):
+        expression = F.expr("foo")
+        when_cond = F.when(expression, F.lit(None))
+        self.assertEqual(str(when_cond), "Column<'CASE WHEN foo THEN NULL END'>")
 
 
 if __name__ == "__main__":
