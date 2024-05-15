@@ -35,9 +35,11 @@ import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import org.apache.spark.internal.Logger;
+import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.protocol.*;
@@ -364,11 +366,13 @@ public class TransportClient implements Closeable {
               getRemoteAddress(channel), timeTaken);
         }
       } else {
-        String errorMsg = String.format("Failed to send RPC %s to %s: %s", requestId,
-            getRemoteAddress(channel), future.cause());
-        logger.error(errorMsg, future.cause());
+        logger.error("Failed to send RPC {} to {}", future.cause(),
+            MDC.of(LogKeys.REQUEST_ID$.MODULE$, requestId),
+            MDC.of(LogKeys.HOST_PORT$.MODULE$, getRemoteAddress(channel)));
         channel.close();
         try {
+          String errorMsg = String.format("Failed to send RPC %s to %s: %s", requestId,
+            getRemoteAddress(channel), future.cause());
           handleFailure(errorMsg, future.cause());
         } catch (Exception e) {
           logger.error("Uncaught exception in RPC response callback handler!", e);

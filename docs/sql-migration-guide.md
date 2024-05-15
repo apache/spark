@@ -54,6 +54,7 @@ license: |
 - Since Spark 4.0, The default value for `spark.sql.legacy.ctePrecedencePolicy` has been changed from `EXCEPTION` to `CORRECTED`. Instead of raising an error, inner CTE definitions take precedence over outer definitions.
 - Since Spark 4.0, The default value for `spark.sql.legacy.timeParserPolicy` has been changed from `EXCEPTION` to `CORRECTED`. Instead of raising an `INCONSISTENT_BEHAVIOR_CROSS_VERSION` error, `CANNOT_PARSE_TIMESTAMP` will be raised if ANSI mode is enable. `NULL` will be returned if ANSI mode is disabled. See [Datetime Patterns for Formatting and Parsing](sql-ref-datetime-pattern.html).
 - Since Spark 4.0, A bug falsely allowing `!` instead of `NOT` when `!` is not a prefix operator has been fixed. Clauses such as `expr ! IN (...)`, `expr ! BETWEEN ...`, or `col ! NULL` now raise syntax errors. To restore the previous behavior, set `spark.sql.legacy.bangEqualsNot` to `true`. 
+- Since Spark 4.0, Views allow control over how they react to underlying query changes. By default views tolerate column type changes in the query and compensate with casts. To restore the previous behavior, allowing up-casts only, set `spark.sql.viewSchemaBindingMode` to `DISABLED`. This disables the feature and also disallows the `WITH SCHEMA` clause.
 
 ## Upgrading from Spark SQL 3.5.1 to 3.5.2
 
