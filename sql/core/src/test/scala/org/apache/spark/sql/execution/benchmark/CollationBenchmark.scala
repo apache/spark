@@ -195,17 +195,17 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
       value: Seq[UTF8String]): Unit = {
     val benchmark = new Benchmark(
       s"collation unit benchmarks - mode - ${value.size} elements",
-      value.size,
+      value.size * 10,
       warmupTime = 10.seconds,
       output = output)
     collationTypes.foreach { collationType => {
+      val buffer = new OpenHashMap[AnyRef, Long](value.size)
+      value.foreach(v => {
+        buffer.update(v.toString, (v.hashCode() % 1000).toLong)
+      })
+      val modeDefaultCollation = Mode(child =
+        Literal.create("some_column_name", StringType(collationType)))
       benchmark.addCase(s"$collationType - mode - ${value.size} elements") { _ =>
-        val modeDefaultCollation = Mode(child =
-          Literal.create("some_column_name", StringType(collationType)))
-        val buffer = new OpenHashMap[AnyRef, Long](value.size)
-        value.foreach(v => {
-          buffer.update(v.toString, (v.hashCode() % 1000).toLong)
-        })
         modeDefaultCollation.eval(buffer)
       }
     }
@@ -234,7 +234,6 @@ object CollationBenchmark extends CollationBenchmarkBase {
     "GHI", "ghi", "JKL", "jkl", "MNO", "mno", "PQR", "pqr", "STU", "stu", "VWX", "vwx",
     "ABC", "ABC", "aBC", "aBC", "abc", "abc", "DEF", "DEF", "def", "def", "GHI", "ghi",
     "JKL", "jkl", "MNO", "mno", "PQR", "pqr", "STU", "stu", "VWX", "vwx", "YZ")
-
 
   /*
     * Generate input strings for the benchmark. The input strings are a sequence of base strings
