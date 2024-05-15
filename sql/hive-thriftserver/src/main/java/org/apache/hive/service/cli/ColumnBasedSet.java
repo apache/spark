@@ -31,8 +31,8 @@ import org.apache.thrift.protocol.TCompactProtocol;
 import org.apache.thrift.protocol.TProtocol;
 import org.apache.thrift.transport.TIOStreamTransport;
 
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
 
@@ -47,7 +47,7 @@ public class ColumnBasedSet implements RowSet {
   private final List<ColumnBuffer> columns;
   private byte[] blob;
   private boolean isBlobBased = false;
-  public static final Logger LOG = LoggerFactory.getLogger(ColumnBasedSet.class);
+  public static final SparkLogger LOG = SparkLoggerFactory.getLogger(ColumnBasedSet.class);
 
   public ColumnBasedSet(TableSchema schema) {
     descriptors = schema.toTypeDescriptors();
