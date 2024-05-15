@@ -762,23 +762,43 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
         prepareTimestampTable(catalogName, tableName)
 
-        val dfBeforeInsert = sql(s"SELECT * FROM $catalogName.$tableName")
+        val dfBeforeInsert = sql(s"SELECT * FROM $catalogAndNamespace.$tableName")
         val outputBeforeInsert = dfBeforeInsert.showString(20, 20)
 
         assert(outputBeforeInsert.contains("2022-03-03 02:00:00|2022-03-02 18:00:00"))
         assert(outputBeforeInsert.contains("2022-03-02 02:00:00|2022-03-01 16:00:00"))
         assert(outputBeforeInsert.contains("2022-03-01 02:00:00|2022-02-28 15:00:00"))
+        assert(dfBeforeInsert.collect().length == 3)
 
         prepareTimestampTable(catalogName, tempTableName, false)
 
-        sql(s"INSERT INTO $catalogName.$tempTableName SELECT * FROM $catalogName.$tableName")
+        sql(
+          s"""INSERT INTO $catalogAndNamespace.$tempTableName
+             |SELECT * FROM $catalogAndNamespace.$tableName""".stripMargin)
 
-        val dfAfterInsert = sql(s"SELECT * FROM $catalogName.$tableName")
+        val dfAfterInsert = sql(s"SELECT * FROM $catalogAndNamespace.$tableName")
         val outputAfterInsert = dfAfterInsert.showString(20, 20)
 
         assert(outputAfterInsert.contains("2022-03-03 02:00:00|2022-03-02 18:00:00"))
         assert(outputAfterInsert.contains("2022-03-02 02:00:00|2022-03-01 16:00:00"))
         assert(outputAfterInsert.contains("2022-03-01 02:00:00|2022-02-28 15:00:00"))
+        assert(dfAfterInsert.collect().length == 3)
+
+        val filteredNTZDf = sql(
+          s"""SELECT * FROM $catalogAndNamespace.$tableName
+             |WHERE timestampntz = '2022-03-03 02:00:00'""".stripMargin)
+
+        val outputAfterFilterNTZ = filteredNTZDf.showString(20, 20)
+        assert(outputAfterFilterNTZ.contains("2022-03-03 02:00:00|2022-03-02 18:00:00"))
+        assert(filteredNTZDf.collect().length == 1)
+
+        val filteredTZDf = sql(
+          s"""SELECT * FROM $catalogAndNamespace.$tableName
+             |WHERE timestamptz = '2022-03-02 18:00:00'""".stripMargin)
+
+        val outputAfterFilterTZ = filteredNTZDf.showString(20, 20)
+        assert(outputAfterFilterTZ.contains("2022-03-03 02:00:00|2022-03-02 18:00:00"))
+        assert(filteredTZDf.collect().length == 1)
       }
     }
 
@@ -789,23 +809,43 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
         prepareTimestampTable(catalogName, tableName)
 
-        val dfBeforeInsert = sql(s"SELECT * FROM $catalogName.$tableName")
+        val dfBeforeInsert = sql(s"SELECT * FROM $catalogAndNamespace.$tableName")
         val outputBeforeInsert = dfBeforeInsert.showString(20, 20)
 
         assert(outputBeforeInsert.contains("2022-03-03 02:00:00|2022-03-03 02:00:00"))
         assert(outputBeforeInsert.contains("2022-03-02 02:00:00|2022-03-02 00:00:00"))
         assert(outputBeforeInsert.contains("2022-03-01 02:00:00|2022-02-28 23:00:00"))
+        assert(dfBeforeInsert.collect().length == 3)
 
         prepareTimestampTable(catalogName, tempTableName, false)
 
-        sql(s"INSERT INTO $catalogName.$tempTableName SELECT * FROM $catalogName.$tableName")
+        sql(
+          s"""INSERT INTO $catalogAndNamespace.$tempTableName
+             | SELECT * FROM $catalogAndNamespace.$tableName""".stripMargin)
 
-        val dfAfterInsert = sql(s"SELECT * FROM $catalogName.$tableName")
+        val dfAfterInsert = sql(s"SELECT * FROM $catalogAndNamespace.$tableName")
         val outputAfterInsert = dfAfterInsert.showString(20, 20)
 
         assert(outputAfterInsert.contains("2022-03-03 02:00:00|2022-03-03 02:00:00"))
         assert(outputAfterInsert.contains("2022-03-02 02:00:00|2022-03-02 00:00:00"))
         assert(outputAfterInsert.contains("2022-03-01 02:00:00|2022-02-28 23:00:00"))
+        assert(dfAfterInsert.collect().length == 3)
+
+        val filteredNTZDf = sql(
+          s"""SELECT * FROM $catalogAndNamespace.$tableName
+             |WHERE timestampntz = '2022-03-03 02:00:00'""".stripMargin)
+
+        val outputAfterFilterNTZ = filteredNTZDf.showString(20, 20)
+        assert(outputAfterFilterNTZ.contains("2022-03-03 02:00:00|2022-03-03 02:00:00"))
+        assert(filteredNTZDf.collect().length == 1)
+
+        val filteredTZDf = sql(
+          s"""SELECT * FROM $catalogAndNamespace.$tableName
+             |WHERE timestamptz = '2022-03-03 02:00:00'""".stripMargin)
+
+        val outputAfterFilterTZ = filteredNTZDf.showString(20, 20)
+        assert(outputAfterFilterTZ.contains("2022-03-03 02:00:00|2022-03-03 02:00:00"))
+        assert(filteredTZDf.collect().length == 1)
       }
     }
 
@@ -817,23 +857,43 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
           prepareTimestampTable(catalogName, tableName)
 
-          val dfBeforeInsert = sql(s"SELECT * FROM $catalogName.$tableName")
+          val dfBeforeInsert = sql(s"SELECT * FROM $catalogAndNamespace.$tableName")
           val outputBeforeInsert = dfBeforeInsert.showString(20, 20)
 
           assert(outputBeforeInsert.contains("2022-03-03 02:00:00|2022-03-02 18:00:00"))
           assert(outputBeforeInsert.contains("2022-03-02 02:00:00|2022-03-01 16:00:00"))
           assert(outputBeforeInsert.contains("2022-03-01 02:00:00|2022-02-28 15:00:00"))
+          assert(dfBeforeInsert.collect().length == 3)
 
           prepareTimestampTable(catalogName, tempTableName, false)
 
-          sql(s"INSERT INTO $catalogName.$tempTableName SELECT * FROM $catalogName.$tableName")
+          sql(
+            s"""INSERT INTO $catalogAndNamespace.$tempTableName
+               | SELECT * FROM $catalogAndNamespace.$tableName""".stripMargin)
 
-          val dfAfterInsert = sql(s"SELECT * FROM $catalogName.$tableName")
+          val dfAfterInsert = sql(s"SELECT * FROM $catalogAndNamespace.$tableName")
           val outputAfterInsert = dfAfterInsert.showString(20, 20)
 
           assert(outputAfterInsert.contains("2022-03-03 02:00:00|2022-03-02 18:00:00"))
           assert(outputAfterInsert.contains("2022-03-02 02:00:00|2022-03-01 16:00:00"))
           assert(outputAfterInsert.contains("2022-03-01 02:00:00|2022-02-28 15:00:00"))
+          assert(dfAfterInsert.collect().length == 3)
+
+          val filteredNTZDf = sql(
+            s"""SELECT * FROM $catalogName.$tableName
+               |WHERE timestampntz = '2022-03-03 02:00:00'""".stripMargin)
+
+          val outputAfterFilterNTZ = filteredNTZDf.showString(20, 20)
+          assert(outputAfterFilterNTZ.contains("2022-03-03 02:00:00|2022-03-02 18:00:00"))
+          assert(filteredNTZDf.collect().length == 1)
+
+          val filteredTZDf = sql(
+            s"""SELECT * FROM $catalogAndNamespace.$tableName
+               |WHERE timestamptz = '2022-03-02 18:00:00'""".stripMargin)
+
+          val outputAfterFilterTZ = filteredNTZDf.showString(20, 20)
+          assert(outputAfterFilterTZ.contains("2022-03-03 02:00:00|2022-03-02 18:00:00"))
+          assert(filteredTZDf.collect().length == 1)
         }
       }
     }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.SQLException
+import java.sql.{Connection, SQLException}
 import java.util.Locale
 
 import scala.util.control.NonFatal
@@ -145,6 +145,13 @@ private case class MsSqlServerDialect() extends JdbcDialect {
   }
 
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
+
+  override def beforeFetch(connection: Connection, properties: Map[String, String]): Unit = {
+    if (!SQLConf.get.useNullCalendar) {
+      connection.prepareStatement(
+        s"ALTER SESSION SET time_zone='${SQLConf.get.sessionLocalTimeZone}'").executeUpdate()
+    }
+  }
 
   // scalastyle:off line.size.limit
   // See https://docs.microsoft.com/en-us/sql/relational-databases/system-stored-procedures/sp-rename-transact-sql?view=sql-server-ver15

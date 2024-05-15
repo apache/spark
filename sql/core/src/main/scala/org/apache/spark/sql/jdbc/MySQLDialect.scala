@@ -33,6 +33,7 @@ import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NamedReference, NullOrdering, SortDirection}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 private case class MySQLDialect() extends JdbcDialect with SQLConfHelper {
@@ -233,6 +234,13 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper {
   }
 
   override def getDatabaseCalendar: Option[Calendar] = None
+
+  override def beforeFetch(connection: Connection, properties: Map[String, String]): Unit = {
+    if (!SQLConf.get.useNullCalendar) {
+      connection.prepareStatement(
+        s"SET time_zone = '${SQLConf.get.sessionLocalTimeZone}'").executeUpdate()
+    }
+  }
 
   override def getSchemaCommentQuery(schema: String, comment: String): String = {
     throw QueryExecutionErrors.unsupportedCommentNamespaceError(schema)

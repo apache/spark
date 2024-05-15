@@ -28,12 +28,13 @@ import org.apache.spark.internal.LogKeys.COLUMN_NAME
 import org.apache.spark.internal.MDC
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NonEmptyNamespaceException, NoSuchIndexException}
+import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException, NonEmptyNamespaceException}
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
@@ -192,6 +193,11 @@ private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
     //
     if (properties.getOrElse(JDBCOptions.JDBC_BATCH_FETCH_SIZE, "0").toInt > 0) {
       connection.setAutoCommit(false)
+    }
+
+    if (!SQLConf.get.useNullCalendar) {
+      connection.prepareStatement(
+        s"SET TIME ZONE '${SQLConf.get.sessionLocalTimeZone}'").executeUpdate()
     }
   }
 
