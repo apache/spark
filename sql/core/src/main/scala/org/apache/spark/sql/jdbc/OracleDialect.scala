@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Date, Timestamp, Types}
+import java.sql.{Connection, Date, Timestamp, Types}
 import java.util.Locale
 
 import scala.util.control.NonFatal
@@ -26,6 +26,7 @@ import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.connector.expressions.Expression
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.OracleDialect._
 import org.apache.spark.sql.types._
 
@@ -155,6 +156,13 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper {
     cascade match {
       case Some(true) => s"TRUNCATE TABLE $table CASCADE"
       case _ => s"TRUNCATE TABLE $table"
+    }
+  }
+
+  override def beforeFetch(connection: Connection, properties: Map[String, String]): Unit = {
+    if (!SQLConf.get.useNullCalendar) {
+      connection.prepareStatement(
+        s"ALTER SESSION SET time_zone='${SQLConf.get.sessionLocalTimeZone}'").executeUpdate()
     }
   }
 

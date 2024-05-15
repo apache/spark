@@ -28,7 +28,7 @@ import org.apache.spark.internal.LogKeys.COLUMN_NAME
 import org.apache.spark.internal.MDC
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException, NonEmptyNamespaceException}
+import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NonEmptyNamespaceException, NoSuchIndexException}
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.errors.QueryCompilationErrors

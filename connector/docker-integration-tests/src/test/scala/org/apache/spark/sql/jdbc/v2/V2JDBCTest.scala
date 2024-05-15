@@ -898,4 +898,75 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       }
     }
   }
+
+  test("simple timestamps pushdown") {
+    withSQLConf(("spark.sql.session.timeZone", "America/Los_Angeles")) {
+      withTable(s"$catalogName.timestamps") {
+        val tableName = "timestamps"
+        prepareTimestampTable(catalogName, tableName)
+
+        val filteredNTZDf = sql(
+          s"""SELECT * FROM $catalogAndNamespace.$tableName
+             |WHERE timestampntz = '2022-03-03 02:00:00'""".stripMargin)
+
+        val outputAfterFilterNTZ = filteredNTZDf.showString(20, 20)
+        assert(outputAfterFilterNTZ.contains("2022-03-03 02:00:00|2022-03-02 18:00:00"))
+        assert(filteredNTZDf.collect().length == 1)
+
+        val filteredTZDf = sql(
+          s"""SELECT * FROM $catalogAndNamespace.$tableName
+             |WHERE timestamptz = '2022-03-02 18:00:00'""".stripMargin)
+
+        val outputAfterFilterTZ = filteredNTZDf.showString(20, 20)
+        assert(outputAfterFilterTZ.contains("2022-03-03 02:00:00|2022-03-02 18:00:00"))
+        assert(filteredTZDf.collect().length == 1)
+      }
+    }
+
+    withSQLConf(("spark.sql.session.timeZone", "GMT")) {
+      withTable(s"$catalogName.timestamps") {
+        val tableName = "timestamps"
+
+        val filteredNTZDf = sql(
+          s"""SELECT * FROM $catalogAndNamespace.$tableName
+             |WHERE timestampntz = '2022-03-03 02:00:00'""".stripMargin)
+
+        val outputAfterFilterNTZ = filteredNTZDf.showString(20, 20)
+        assert(outputAfterFilterNTZ.contains("2022-03-03 02:00:00|2022-03-03 02:00:00"))
+        assert(filteredNTZDf.collect().length == 1)
+
+        val filteredTZDf = sql(
+          s"""SELECT * FROM $catalogAndNamespace.$tableName
+             |WHERE timestamptz = '2022-03-03 02:00:00'""".stripMargin)
+
+        val outputAfterFilterTZ = filteredNTZDf.showString(20, 20)
+        assert(outputAfterFilterTZ.contains("2022-03-03 02:00:00|2022-03-03 02:00:00"))
+        assert(filteredTZDf.collect().length == 1)
+      }
+    }
+
+    withDefaultTimeZone(ZoneId.of("GMT-2")) {
+      withSQLConf(("spark.sql.session.timeZone", "America/Los_Angeles")) {
+        withTable(s"$catalogName.timestamps") {
+          val tableName = "timestamps"
+
+          val filteredNTZDf = sql(
+            s"""SELECT * FROM $catalogName.$tableName
+               |WHERE timestampntz = '2022-03-03 02:00:00'""".stripMargin)
+
+          val outputAfterFilterNTZ = filteredNTZDf.showString(20, 20)
+          assert(outputAfterFilterNTZ.contains("2022-03-03 02:00:00|2022-03-02 18:00:00"))
+          assert(filteredNTZDf.collect().length == 1)
+
+          val filteredTZDf = sql(
+            s"""SELECT * FROM $catalogAndNamespace.$tableName
+               |WHERE timestamptz = '2022-03-02 18:00:00'""".stripMargin)
+
+          val outputAfterFilterTZ = filteredNTZDf.showString(20, 20)
+          assert(outputAfterFilterTZ.contains("2022-03-03 02:00:00|2022-03-02 18:00:00"))
+          assert(filteredTZDf.collect().length == 1)
+        }
+      }
+    }
+  }
 }
