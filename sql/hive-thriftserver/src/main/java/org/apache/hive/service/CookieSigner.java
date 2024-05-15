@@ -22,8 +22,8 @@ import java.security.NoSuchAlgorithmException;
 
 import org.apache.commons.codec.binary.Base64;
 
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 
 /**
  * The cookie signer generates a signature based on SHA digest
@@ -34,7 +34,7 @@ public class CookieSigner {
   private static final String SIGNATURE = "&s=";
   private static final String SHA_STRING = "SHA-256";
   private byte[] secretBytes;
-  private static final Logger LOG = LoggerFactory.getLogger(CookieSigner.class);
+  private static final SparkLogger LOG = SparkLoggerFactory.getLogger(CookieSigner.class);
 
   /**
    * Constructor

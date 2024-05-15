@@ -25,8 +25,8 @@ import com.google.common.base.Throwables;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
 import org.apache.spark.network.buffer.ManagedBuffer;
@@ -46,7 +46,8 @@ import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
  */
 public class TransportRequestHandler extends MessageHandler<RequestMessage> {
 
-  private static final Logger logger = LoggerFactory.getLogger(TransportRequestHandler.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(TransportRequestHandler.class);
 
   /** The Netty channel that this handler is associated with. */
   private final Channel channel;

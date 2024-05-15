@@ -29,8 +29,8 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.Uninterruptibles;
 
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
 import org.apache.spark.network.buffer.ManagedBuffer;
@@ -70,7 +70,8 @@ public class RetryingBlockTransferor {
   private static final ExecutorService executorService = Executors.newCachedThreadPool(
     NettyUtils.createThreadFactory("Block Transfer Retry"));
 
-  private static final Logger logger = LoggerFactory.getLogger(RetryingBlockTransferor.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(RetryingBlockTransferor.class);
 
   /** Used to initiate new Block transfer on our remaining blocks. */
   private final BlockTransferStarter transferStarter;

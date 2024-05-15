@@ -25,12 +25,12 @@ import org.apache.logging.log4j.CloseableThreadContext;
 import org.apache.logging.log4j.message.MessageFactory;
 import org.apache.logging.log4j.message.ParameterizedMessageFactory;
 
-public class Logger {
+public class SparkLogger {
 
   private static final MessageFactory MESSAGE_FACTORY = ParameterizedMessageFactory.INSTANCE;
   private final org.slf4j.Logger slf4jLogger;
 
-  Logger(org.slf4j.Logger slf4jLogger) {
+  SparkLogger(org.slf4j.Logger slf4jLogger) {
     this.slf4jLogger = slf4jLogger;
   }
 

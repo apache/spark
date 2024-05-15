@@ -27,8 +27,8 @@ import org.fusesource.leveldbjni.internal.NativeDB;
 import org.iq80.leveldb.DB;
 import org.iq80.leveldb.Options;
 
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
 import org.apache.spark.network.shuffledb.StoreVersion;
@@ -37,7 +37,7 @@ import org.apache.spark.network.shuffledb.StoreVersion;
  * LevelDB utility class available in the network package.
  */
 public class LevelDBProvider {
-  private static final Logger logger = LoggerFactory.getLogger(LevelDBProvider.class);
+  private static final SparkLogger logger = SparkLoggerFactory.getLogger(LevelDBProvider.class);
 
   public static DB initLevelDB(File dbFile, StoreVersion version, ObjectMapper mapper) throws
       IOException {
@@ -101,7 +101,7 @@ public class LevelDBProvider {
   }
 
   private static class LevelDBLogger implements org.iq80.leveldb.Logger {
-    private static final Logger LOG = LoggerFactory.getLogger(LevelDBLogger.class);
+    private static final SparkLogger LOG = SparkLoggerFactory.getLogger(LevelDBLogger.class);
 
     @Override
     public void log(String message) {
