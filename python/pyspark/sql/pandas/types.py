@@ -60,8 +60,28 @@ if TYPE_CHECKING:
     from pyspark.sql.pandas._typing import SeriesLike as PandasSeriesLike
 
 
-def to_arrow_type(dt: DataType) -> "pa.DataType":
-    """Convert Spark data type to pyarrow type"""
+def to_arrow_type(
+    dt: DataType,
+    timestamp_utc: bool = True,
+) -> "pa.DataType":
+    """
+    Convert Spark data type to PyArrow type
+
+    Parameters
+    ----------
+    dt : :class:`DataType`
+        The Spark data type.
+    timestamp_utc : bool, default True
+        If True (the default), :class:`TimestampType` is converted to a timezone-aware
+        :class:`pyarrow.TimestampType` with UTC as the timezone. If False, :class:`TimestampType`
+        is converted to a timezone-naive :class:`pyarrow.TimestampType`. The JVM expects
+        timezone-aware timestamps to be in UTC. Always keep this set to True except in special
+        cases, such as when this function is used in a test.
+
+    Returns
+    -------
+    :class:`pyarrow.DataType`
+    """
     import pyarrow as pa
 
     if type(dt) == BooleanType:
@@ -86,30 +106,38 @@ def to_arrow_type(dt: DataType) -> "pa.DataType":
         arrow_type = pa.binary()
     elif type(dt) == DateType:
         arrow_type = pa.date32()
-    elif type(dt) == TimestampType:
+    elif type(dt) == TimestampType and timestamp_utc:
         # Timestamps should be in UTC, JVM Arrow timestamps require a timezone to be read
         arrow_type = pa.timestamp("us", tz="UTC")
+    elif type(dt) == TimestampType:
+        arrow_type = pa.timestamp("us", tz=None)
     elif type(dt) == TimestampNTZType:
         arrow_type = pa.timestamp("us", tz=None)
     elif type(dt) == DayTimeIntervalType:
         arrow_type = pa.duration("us")
     elif type(dt) == ArrayType:
-        field = pa.field("element", to_arrow_type(dt.elementType), nullable=dt.containsNull)
+        field = pa.field(
+            "element", to_arrow_type(dt.elementType, timestamp_utc), nullable=dt.containsNull
+        )
         arrow_type = pa.list_(field)
     elif type(dt) == MapType:
-        key_field = pa.field("key", to_arrow_type(dt.keyType), nullable=False)
-        value_field = pa.field("value", to_arrow_type(dt.valueType), nullable=dt.valueContainsNull)
+        key_field = pa.field("key", to_arrow_type(dt.keyType, timestamp_utc), nullable=False)
+        value_field = pa.field(
+            "value", to_arrow_type(dt.valueType, timestamp_utc), nullable=dt.valueContainsNull
+        )
         arrow_type = pa.map_(key_field, value_field)
     elif type(dt) == StructType:
         fields = [
-            pa.field(field.name, to_arrow_type(field.dataType), nullable=field.nullable)
+            pa.field(
+                field.name, to_arrow_type(field.dataType, timestamp_utc), nullable=field.nullable
+            )
             for field in dt
         ]
         arrow_type = pa.struct(fields)
     elif type(dt) == NullType:
         arrow_type = pa.null()
     elif isinstance(dt, UserDefinedType):
-        arrow_type = to_arrow_type(dt.sqlType())
+        arrow_type = to_arrow_type(dt.sqlType(), timestamp_utc)
     elif type(dt) == VariantType:
         fields = [
             pa.field("value", pa.binary(), nullable=False),
@@ -124,12 +152,29 @@ def to_arrow_type(dt: DataType) -> "pa.DataType":
     return arrow_type
 
 
-def to_arrow_schema(schema: StructType) -> "pa.Schema":
-    """Convert a schema from Spark to Arrow"""
+def to_arrow_schema(schema: StructType, timestamp_utc: bool = True) -> "pa.Schema":
+    """
+    Convert a schema from Spark to Arrow
+
+    Parameters
+    ----------
+    schema : :class:`StructType`
+        The Spark schema.
+    timestamp_utc : bool, default True
+        If True (the default), :class:`TimestampType` is converted to a timezone-aware
+        :class:`pyarrow.TimestampType` with UTC as the timezone. If False, :class:`TimestampType`
+        is converted to a timezone-naive :class:`pyarrow.TimestampType`. The JVM expects
+        timezone-aware timestamps to be in UTC. Always keep this set to True except in special
+        cases, such as when this function is used in a test
+
+    Returns
+    -------
+    :class:`pyarrow.Schema`
+    """
     import pyarrow as pa
 
     fields = [
-        pa.field(field.name, to_arrow_type(field.dataType), nullable=field.nullable)
+        pa.field(field.name, to_arrow_type(field.dataType, timestamp_utc), nullable=field.nullable)
         for field in schema
     ]
     return pa.schema(fields)
@@ -230,6 +275,109 @@ def _get_local_timezone() -> str:
     import os
 
     return os.environ.get("TZ", "dateutil/:")
+
+
+def _check_arrow_table_timestamps_localize(
+    table: "pa.Table", schema: StructType, timezone: Optional[str] = None
+) -> "pa.Table":
+    """
+    Convert timestamps in a PyArrow Table to timezone-naive in the specified timezone if the
+    corresponding Spark data type is TimestampType in the specified Spark schema is TimestampType.
+
+    Parameters
+    ----------
+    table : :class:`pyarrow.Table`
+    schema : :class:`StructType`
+        The Spark schema corresponding to the schema of the Arrow Table.
+    timezone : str, optional
+        The timezone to convert from. If there is a timestamp type, it's required.
+
+    Returns
+    -------
+    :class:`pyarrow.Table`
+    """
+    import pyarrow as pa
+
+    assert len(table.schema) == len(schema.fields)
+
+    return pa.Table.from_arrays(
+        [
+            _check_arrow_array_timestamps_localize(a, f.dataType, timezone)
+            for a, f in zip(table.columns, schema.fields)
+        ],
+        schema=table.schema,
+    )
+
+
+def _check_arrow_array_timestamps_localize(
+    a: Union["pa.Array", "pa.ChunkedArray"], dt: DataType, timezone: Optional[str] = None
+) -> Union["pa.Array", "pa.ChunkedArray"]:
+    """
+    Convert Arrow timestamps to timezone-naive in the specified timezone if the specified Spark
+    data type is TimestampType.
+
+    This function works on Arrow Arrays and  ChunkedArrays, and it recurses to convert nested
+    timestamps.
+
+    Parameters
+    ----------
+    a : :class:`pyarrow.Array` or :class:`pyarrow.ChunkedArray`
+    dt : :class:`DataType`
+        The Spark data type corresponding to the Arrow Array to be converted.
+    timezone : str, optional
+        The timezone to convert from. If there is a timestamp type, it's required.
+
+    Returns
+    -------
+    :class:`pyarrow.Array` or :class:`pyarrow.ChunkedArray`
+    """
+    import pyarrow.types as types
+    import pyarrow as pa
+    import pyarrow.compute as pc
+
+    if types.is_timestamp(a.type) and a.type.tz is None and type(dt) == TimestampType:
+        assert timezone is not None
+
+        # Only localize timestamps that will become Spark TimestampType columns.
+        # Do not localize timestamps that will become Spark TimestampNTZType columns.
+        return pc.assume_timezone(a, timezone)
+    elif types.is_list(a.type):
+        if isinstance(a, pa.ChunkedArray):
+            a = a.combine_chunks()
+        at: ArrayType = cast(ArrayType, dt)
+        return pa.ListArray.from_arrays(
+            a.offsets, _check_arrow_array_timestamps_localize(a.values, at.elementType, timezone)
+        )
+    elif types.is_map(a.type):
+        if isinstance(a, pa.ChunkedArray):
+            a = a.combine_chunks()
+        mt: MapType = cast(MapType, dt)
+        return pa.MapArray.from_arrays(
+            a.offsets,
+            _check_arrow_array_timestamps_localize(a.keys, mt.keyType, timezone),
+            _check_arrow_array_timestamps_localize(a.items, mt.valueType, timezone),
+        )
+    elif types.is_struct(a.type):
+        if isinstance(a, pa.ChunkedArray):
+            a = a.combine_chunks()
+        st: StructType = cast(StructType, dt)
+        assert len(a.type) == len(st.fields)
+
+        return pa.StructArray.from_arrays(
+            [
+                _check_arrow_array_timestamps_localize(a.field(i), st.fields[i].dataType, timezone)
+                for i in range(len(a.type))
+            ],
+            [a.type[i].name for i in range(len(a.type))],
+        )
+    elif types.is_dictionary(a.type):
+        if isinstance(a, pa.ChunkedArray):
+            a = a.combine_chunks()
+        return pa.DictionaryArray.from_arrays(
+            _check_arrow_array_timestamps_localize(a.dictionary, dt, timezone), a.indices
+        )
+    else:
+        return a
 
 
 def _check_series_localize_timestamps(s: "PandasSeriesLike", timezone: str) -> "PandasSeriesLike":

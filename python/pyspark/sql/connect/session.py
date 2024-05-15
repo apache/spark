@@ -75,6 +75,7 @@ from pyspark.sql.pandas.types import (
     _deduplicate_field_names,
     from_arrow_schema,
     from_arrow_type,
+    _check_arrow_table_timestamps_localize,
 )
 from pyspark.sql.profiler import Profile
 from pyspark.sql.session import classproperty, SparkSession as PySparkSession
@@ -480,6 +481,7 @@ class SparkSession:
                 )
 
         _table: Optional[pa.Table] = None
+        timezone: Optional[str] = None
 
         if schema is None and isinstance(data, pd.DataFrame):
             # Logic was borrowed from `_create_from_pandas_with_arrow` in
@@ -573,37 +575,14 @@ class SparkSession:
         elif isinstance(data, pa.Table):
             _table = data
 
-            # Interpret timezone-naive timestamp columns in the Spark session timezone
-            # and convert all timestamp columns to UTC
-            timestamp_indices = [
-                i
-                for i, field in enumerate(schema.fields)  # type: ignore[union-attr]
-                if field.dataType == TimestampType()
-            ]
-            if timestamp_indices:
-                import pyarrow.compute as pc
-
-                (timezone,) = self._client.get_configs("spark.sql.session.timeZone")
-
-                for index in timestamp_indices:
-                    if _table.schema.types[index].tz is None:
-                        _table = _table.set_column(
-                            i=index,
-                            field_=_table.schema.names[index],
-                            column=pc.assume_timezone(_table[index], timezone),
-                        )
-                    _table = _table.cast(
-                        _table.schema.set(
-                            i=index,
-                            field=pa.field(
-                                _table.schema.names[index], pa.timestamp("us", tz="UTC")
-                            ),
-                        )
-                    )
+        if isinstance(schema, StructType) and isinstance(data, pa.Table):
+            (timezone,) = self._client.get_configs("spark.sql.session.timeZone")
+            _table = _check_arrow_table_timestamps_localize(_table, schema, timezone)
+            _table = _table.cast(to_arrow_schema(schema))
 
         if isinstance(schema, StructType) and isinstance(data, (pd.DataFrame, pa.Table)):
             assert arrow_schema is not None
-            _table = _table.rename_columns(  # type: ignore[union-attr]
+            _table = _table.rename_columns(  # type: ignore[union-attr] # noqa: F821,F841
                 cast(StructType, _deduplicate_field_names(schema)).names
             ).cast(arrow_schema)
 

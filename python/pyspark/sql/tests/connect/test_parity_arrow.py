@@ -66,11 +66,32 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase, PandasOnSparkTest
     def test_create_data_frame_to_pandas_timestamp_ntz(self):
         self.check_create_data_frame_to_pandas_timestamp_ntz(True)
 
+    def test_create_data_frame_to_arrow_timestamp_ntz(self):
+        super().test_create_data_frame_to_arrow_timestamp_ntz()
+
     def test_create_data_frame_to_pandas_day_time_internal(self):
         self.check_create_data_frame_to_pandas_day_time_internal(True)
 
+    def test_createDataFrame_pandas_respect_session_timezone(self):
+        self.check_createDataFrame_pandas_respect_session_timezone(True)
+
+    def test_createDataFrame_arrow_respect_session_timezone(self):
+        super().test_createDataFrame_arrow_respect_session_timezone()
+
     def test_toPandas_respect_session_timezone(self):
         self.check_toPandas_respect_session_timezone(True)
+
+    def test_toArrow_keep_utc_timezone(self):
+        super().test_toArrow_keep_utc_timezone()
+
+    def test_createDataFrame_arrow_pandas(self):
+        super().test_createDataFrame_arrow_pandas()
+
+    def test_pandas_round_trip(self):
+        super().test_pandas_round_trip()
+
+    def test_arrow_round_trip(self):
+        super().test_arrow_round_trip()
 
     def test_toPandas_with_array_type(self):
         self.check_toPandas_with_array_type(True)
@@ -107,11 +128,20 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase, PandasOnSparkTest
     def test_createDataFrame_duplicate_field_names(self):
         self.check_createDataFrame_duplicate_field_names(True)
 
+    def test_toPandas_empty_rows(self):
+        self.check_toPandas_empty_rows(True)
+
+    def test_toArrow_empty_rows(self):
+        super().test_toArrow_empty_rows()
+
     def test_toPandas_empty_columns(self):
         self.check_toPandas_empty_columns(True)
 
-    def test_createDataFrame_nested_timestamp(self):
-        self.check_createDataFrame_nested_timestamp(True)
+    def test_toArrow_empty_columns(self):
+        super().test_toArrow_empty_columns()
+
+    def test_createDataFrame_pandas_nested_timestamp(self):
+        self.check_createDataFrame_pandas_nested_timestamp(True)
 
     def test_toPandas_nested_timestamp(self):
         self.check_toPandas_nested_timestamp(True)

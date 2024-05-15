@@ -758,7 +758,9 @@ class SparkConversionMixin:
         from pyspark.sql.pandas.types import (
             from_arrow_type,
             from_arrow_schema,
+            to_arrow_schema,
             _deduplicate_field_names,
+            _check_arrow_table_timestamps_localize,
         )
         from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 
@@ -788,28 +790,8 @@ class SparkConversionMixin:
             prefer_timestamp_ntz = is_timestamp_ntz_preferred()
             schema = from_arrow_schema(table.schema, prefer_timestamp_ntz=prefer_timestamp_ntz)
 
-        # Interpret timezone-naive timestamp columns in the Spark session timezone
-        # and convert all timestamp columns to UTC
-        timestamp_indices = [
-            i for i, field in enumerate(schema.fields) if field.dataType == TimestampType()
-        ]
-        if timestamp_indices:
-            import pyarrow as pa
-            import pyarrow.compute as pc
-
-            for index in timestamp_indices:
-                if table.schema.types[index].tz is None:
-                    table = table.set_column(
-                        i=index,
-                        field_=table.schema.names[index],
-                        column=pc.assume_timezone(table[index], timezone),
-                    )
-                table = table.cast(
-                    table.schema.set(
-                        i=index,
-                        field=pa.field(table.schema.names[index], pa.timestamp("us", tz="UTC")),
-                    )
-                )
+        table = _check_arrow_table_timestamps_localize(table, schema, timezone)
+        table = table.cast(to_arrow_schema(schema))
 
         # Chunk the Arrow Table into RecordBatches
         chunk_size = self._jconf.arrowMaxRecordsPerBatch()
