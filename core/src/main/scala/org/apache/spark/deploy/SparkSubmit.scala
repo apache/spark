@@ -142,12 +142,14 @@ private[spark] class SparkSubmit extends Logging {
    /___/ .__/\_,_/_/ /_/\_\   version %s
       /_/
                         """.format(SPARK_VERSION))
-    logInfo("Using Scala %s, %s, %s".format(
-      Properties.versionString, Properties.javaVmName, Properties.javaVersion))
-    logInfo(s"Branch $SPARK_BRANCH")
-    logInfo(s"Compiled by user $SPARK_BUILD_USER on $SPARK_BUILD_DATE")
-    logInfo(s"Revision $SPARK_REVISION")
-    logInfo(s"Url $SPARK_REPO_URL")
+    logInfo(log"Using Scala ${MDC(LogKeys.SCALA_VERSION, Properties.versionString)}," +
+      log" ${MDC(LogKeys.JAVA_VM_NAME, Properties.javaVmName)}," +
+      log" ${MDC(LogKeys.JAVA_VERSION, Properties.javaVersion)}")
+    logInfo(log"Branch ${MDC(LogKeys.SPARK_BRANCH, SPARK_BRANCH)}")
+    logInfo(log"Compiled by user ${MDC(LogKeys.SPARK_BUILD_USER, SPARK_BUILD_USER)} on" +
+      log" ${MDC(LogKeys.SPARK_BUILD_DATE, SPARK_BUILD_DATE)}")
+    logInfo(log"Revision ${MDC(LogKeys.SPARK_REVISION, SPARK_REVISION)}")
+    logInfo(log"Url ${MDC(LogKeys.SPARK_REPO_URL, SPARK_REPO_URL)}")
     logInfo("Type --help for more information.")
   }
 
@@ -438,7 +440,9 @@ private[spark] class SparkSubmit extends Logging {
                 workingDirectory,
                 if (resolvedUri.getFragment != null) resolvedUri.getFragment else source.getName)
                 .getCanonicalFile
-              logInfo(s"Files $resolvedUri from $source to $dest")
+              logInfo(log"Files ${MDC(LogKeys.URI, resolvedUri)}" +
+                log" from ${MDC(LogKeys.SOURCE_PATH, source)}" +
+                log" to ${MDC(LogKeys.DESTINATION_PATH, dest)}")
               Utils.deleteRecursively(dest)
               if (isArchive) {
                 Utils.unpack(source, dest)
@@ -921,7 +925,7 @@ private[spark] class SparkSubmit extends Logging {
   private def setRMPrincipal(sparkConf: SparkConf): Unit = {
     val shortUserName = UserGroupInformation.getCurrentUser.getShortUserName
     val key = s"spark.hadoop.${YarnConfiguration.RM_PRINCIPAL}"
-    logInfo(s"Setting ${key} to ${shortUserName}")
+    logInfo(log"Setting ${MDC(LogKeys.KEY, key)} to ${MDC(LogKeys.SHORT_USER_NAME, shortUserName)}")
     sparkConf.set(key, shortUserName)
   }
 
@@ -958,11 +962,12 @@ private[spark] class SparkSubmit extends Logging {
     }
 
     if (args.verbose) {
-      logInfo(s"Main class:\n$childMainClass")
-      logInfo(s"Arguments:\n${childArgs.mkString("\n")}")
+      logInfo(log"Main class:\n${MDC(LogKeys.CLASS_NAME, childMainClass)}")
+      logInfo(log"Arguments:\n${MDC(LogKeys.ARGS, childArgs.mkString("\n"))}")
       // sysProps may contain sensitive information, so redact before printing
-      logInfo(s"Spark config:\n${Utils.redact(sparkConf.getAll.toMap).sorted.mkString("\n")}")
-      logInfo(s"Classpath elements:\n${childClasspath.mkString("\n")}")
+      logInfo(log"Spark config:\n" +
+      log"${MDC(LogKeys.CONFIG, Utils.redact(sparkConf.getAll.toMap).sorted.mkString("\n"))}")
+      logInfo(log"Classpath elements:\n${MDC(LogKeys.CLASS_PATHS, childClasspath.mkString("\n"))}")
       logInfo("\n")
     }
     assert(!(args.deployMode == "cluster" && args.proxyUser != null && childClasspath.nonEmpty) ||
@@ -982,10 +987,10 @@ private[spark] class SparkSubmit extends Logging {
       case e: ClassNotFoundException =>
         logError(log"Failed to load class ${MDC(LogKeys.CLASS_NAME, childMainClass)}.")
         if (childMainClass.contains("thriftserver")) {
-          logInfo(s"Failed to load main class $childMainClass.")
+          logInfo(log"Failed to load main class ${MDC(LogKeys.CLASS_NAME, childMainClass)}.")
           logInfo("You need to build Spark with -Phive and -Phive-thriftserver.")
         } else if (childMainClass.contains("org.apache.spark.sql.connect")) {
-          logInfo(s"Failed to load main class $childMainClass.")
+          logInfo(log"Failed to load main class ${MDC(LogKeys.CLASS_NAME, childMainClass)}.")
           // TODO(SPARK-42375): Should point out the user-facing page here instead.
           logInfo("You need to specify Spark Connect jars with --jars or --packages.")
         }
@@ -993,7 +998,7 @@ private[spark] class SparkSubmit extends Logging {
       case e: NoClassDefFoundError =>
         logError(log"Failed to load ${MDC(LogKeys.CLASS_NAME, childMainClass)}", e)
         if (e.getMessage.contains("org/apache/hadoop/hive")) {
-          logInfo(s"Failed to load hive class.")
+          logInfo("Failed to load hive class.")
           logInfo("You need to build Spark with -Phive and -Phive-thriftserver.")
         }
         throw new SparkUserAppException(CLASS_NOT_FOUND_EXIT_STATUS)
