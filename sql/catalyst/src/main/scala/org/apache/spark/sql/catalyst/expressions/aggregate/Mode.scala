@@ -266,7 +266,7 @@ case class PandasMode(
       val (key, count) = iter.next()
       if (maxCount < count) {
         modes.clear()
-        modes.append(key)
+        modes. append(key)
         maxCount = count
       } else if (maxCount == count) {
         modes.append(key)
