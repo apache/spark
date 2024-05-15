@@ -543,7 +543,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
            |WHERE pattern_testing_col LIKE 'special_character%'
            |ORDER BY pattern_testing_col""".stripMargin)
     val rows8 = df8.collect()
-    assert(rows8.length === 1)
+    assert(rows8.length === 6)
     assert(rows8(0).getString(0) === "special_character_percent%_present")
     assert(rows8(1).getString(0) === "special_character_percent_not_present")
     assert(rows8(2).getString(0) === "special_character_quote'_present")
