@@ -99,8 +99,9 @@ public class CollationAwareUTF8String {
       final UTF8String lowercasePattern,
       int startPos) {
     for (int i = startPos; i <= target.numChars(); ++i) {
-      if (lowercaseMatchFrom(target, lowercasePattern, i))
+      if (lowercaseMatchFrom(target, lowercasePattern, i)) {
         return i;
+      }
     }
     return MATCH_NOT_FOUND;
   }
@@ -163,8 +164,9 @@ public class CollationAwareUTF8String {
       final UTF8String lowercasePattern,
       int endPos) {
     for (int i = endPos; i >= 0; --i) {
-      if (lowercaseMatchUntil(target, lowercasePattern, i))
+      if (lowercaseMatchUntil(target, lowercasePattern, i)) {
         return i;
+      }
     }
     return MATCH_NOT_FOUND;
   }
