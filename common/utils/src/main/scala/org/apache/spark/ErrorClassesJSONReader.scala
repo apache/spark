@@ -53,7 +53,8 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
         messageTemplate, "\\$\\{$1\\}"))
     } catch {
       case _: IllegalArgumentException => throw SparkException.internalError(
-        s"Undefined error message parameter for error class: '$errorClass'. " +
+        s"Undefined error message parameter for error class: '$errorClass', " +
+          s"MessageTemplate: $messageTemplate, " +
           s"Parameters: $messageParameters")
     }
   }
