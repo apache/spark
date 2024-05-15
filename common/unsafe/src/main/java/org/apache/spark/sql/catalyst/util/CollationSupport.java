@@ -354,7 +354,7 @@ public final class CollationSupport {
       return string.indexOf(substring, 0);
     }
     public static int execLowercase(final UTF8String string, final UTF8String substring) {
-      return CollationAwareUTF8String.lowercaseIndexOf(string, substring, 0);
+      return string.toLowerCase().indexOf(substring.toLowerCase(), 0);
     }
     public static int execICU(final UTF8String string, final UTF8String substring,
         final int collationId) {
