@@ -47,7 +47,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
   val namespaceOpt: Option[String] = None
 
-  private def withConnection[T](f: Connection => T): T = {
+  def withConnection[T](f: Connection => T): T = {
     val conn = DriverManager.getConnection(url, new Properties())
     try {
       f(conn)
