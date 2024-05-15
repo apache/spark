@@ -1387,6 +1387,12 @@
     ],
     "sqlState" : "56038"
   },
+  "STATSD_SINK_INVALID_PROTOCOL" : {
+    "message" : [
+      "Invalid StatsD protocol: <protocol>."
+    ],
+    "sqlState" : "KD000"
+  },
   "GRAPHITE_SINK_INVALID_PROTOCOL" : {
     "message" : [
       "Invalid Graphite protocol: <protocol>."

@@ -29,8 +29,8 @@ import scala.util.{Failure, Success, Try}
 import com.codahale.metrics._
 import org.apache.hadoop.net.NetUtils
 
-import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
+import org.apache.spark.metrics.sink.DataSenderType.{DataSenderType, TCP, UDP}
 
 /**
  * @see <a href="https://github.com/etsy/statsd/blob/master/docs/metric_types.md">
@@ -49,7 +49,7 @@ private[spark] class StatsdReporter(
     port: Int = 8125,
     prefix: String = "",
     filter: MetricFilter = MetricFilter.ALL,
-    protocol: String = "UDP",
+    protocol: DataSenderType = UDP,
     connTimeoutMs: Int = 1000,
     rateUnit: TimeUnit = TimeUnit.SECONDS,
     durationUnit: TimeUnit = TimeUnit.MILLISECONDS)
@@ -221,12 +221,16 @@ private class TCPDataSender(
   }
 }
 
+private[spark] object DataSenderType extends Enumeration {
+  type DataSenderType = Value
+  val UDP, TCP = Value
+}
+
 private object DataSender {
-  def get(host: String, port: Int, protocol: String, connTimeoutMs: Int): DataSender = {
+  def get(host: String, port: Int, protocol: DataSenderType, connTimeoutMs: Int): DataSender = {
     val ds = protocol match {
-      case "TCP" => new TCPDataSender(host, port, connTimeoutMs)
-      case "UDP" => new UDPDataSender(host, port)
-      case p => throw SparkCoreErrors.statsdSinkInvalidProtocolErr(p)
+      case TCP => new TCPDataSender(host, port, connTimeoutMs)
+      case UDP => new UDPDataSender(host, port)
     }
     ds.start()
   }

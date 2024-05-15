@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit
 
 import com.codahale.metrics.{Metric, MetricFilter, MetricRegistry}
 
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.PREFIX
 import org.apache.spark.metrics.MetricsSystem
@@ -58,8 +59,14 @@ private[spark] class StatsdSink(
       property.getProperty(STATSD_KEY_UNIT, STATSD_DEFAULT_UNIT).toUpperCase(Locale.ROOT))
 
   val prefix = property.getProperty(STATSD_KEY_PREFIX, STATSD_DEFAULT_PREFIX)
-  val protocol = property.getProperty(STATSD_KEY_PROTOCOL, STATSD_DEFAULT_PROTOCOL)
-    .toUpperCase(Locale.ROOT)
+  val protocol = {
+    val proto = property.getProperty(STATSD_KEY_PROTOCOL, STATSD_DEFAULT_PROTOCOL)
+    proto.toUpperCase(Locale.ROOT) match {
+      case "UDP" => DataSenderType.UDP
+      case "TCP" => DataSenderType.TCP
+      case _ => throw SparkCoreErrors.statsdSinkInvalidProtocolErr(proto)
+    }
+  }
   val connTimeoutMs = property.getProperty(STATSD_KEY_CONN_TIMEOUT,
     STATSD_DEFAULT_CONN_TIMEOUT).toInt
 
