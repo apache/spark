@@ -281,6 +281,7 @@ Date and Timestamp Functions
     quarter
     second
     session_window
+    timestamp_diff
     timestamp_micros
     timestamp_millis
     timestamp_seconds
