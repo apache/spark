@@ -71,6 +71,12 @@
 
     <module name="NewlineAtEndOfFile"/>
 
+    <module name="Header">
+        <property name="charset" value="UTF-8" />
+        <property name="headerFile" value="dev/java-file-header" />
+        <property name="fileExtensions" value="java" />
+    </module>
+
     <module name="TreeWalker">
         <!--
         If you wish to turn off checking for a section of code, you can put a comment in the source
