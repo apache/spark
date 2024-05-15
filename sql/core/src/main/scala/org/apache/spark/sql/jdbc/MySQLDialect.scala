@@ -19,7 +19,7 @@ package org.apache.spark.sql.jdbc
 
 import java.sql.{Connection, SQLException, Types}
 import java.util
-import java.util.Locale
+import java.util.{Calendar, Locale}
 
 import scala.collection.mutable.ArrayBuilder
 import scala.util.control.NonFatal
@@ -231,6 +231,8 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper {
     case TimestampNTZType => Option(JdbcType("DATETIME", java.sql.Types.TIMESTAMP))
     case _ => JdbcUtils.getCommonJDBCType(dt)
   }
+
+  override def getDatabaseCalendar: Option[Calendar] = None
 
   override def getSchemaCommentQuery(schema: String, comment: String): String = {
     throw QueryExecutionErrors.unsupportedCommentNamespaceError(schema)

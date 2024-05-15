@@ -54,7 +54,8 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
     "scan with aggregate push-down: REGR_R2 with DISTINCT",
     "scan with aggregate push-down: REGR_R2 without DISTINCT",
     "scan with aggregate push-down: REGR_SXY with DISTINCT",
-    "scan with aggregate push-down: REGR_SXY without DISTINCT")
+    "scan with aggregate push-down: REGR_SXY without DISTINCT",
+    "simple timestamps roundtrip")
 
   override val catalogName: String = "mysql"
   override val db = new MySQLDatabaseOnDocker
