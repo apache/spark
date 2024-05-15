@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{BinaryType, StringType}
 import org.apache.spark.util.Utils
 
 /**
@@ -397,7 +398,8 @@ trait JoinSelectionHelper extends Logging {
 
   protected def hashJoinSupported
       (leftKeys: Seq[Expression], rightKeys: Seq[Expression]): Boolean = {
-    val result = leftKeys.concat(rightKeys).forall(e => UnsafeRowUtils.isBinaryStable(e.dataType))
+    var result = leftKeys.concat(rightKeys).forall(e => e.dataType.isInstanceOf[StringType])
+    result |= leftKeys.concat(rightKeys).forall(e => e.dataType.isInstanceOf[BinaryType])
     if (!result) {
       val keysNotSupportingHashJoin = leftKeys.concat(rightKeys).filterNot(
         e => UnsafeRowUtils.isBinaryStable(e.dataType))

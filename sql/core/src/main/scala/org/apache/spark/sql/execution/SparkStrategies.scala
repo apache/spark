@@ -42,7 +42,6 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.MemoryPlan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.types.{BinaryType, StringType}
 
 /**
  * Converts a logical plan into zero or more SparkPlans.  This API is exposed for experimenting
@@ -204,21 +203,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         hintErrorHandler.joinHintNotSupported(hint.leftHint.orElse(hint.rightHint).get,
           "no equi-join keys")
       }
-    }
-
-    private def hashJoinSupported
-        (leftKeys: Seq[Expression], rightKeys: Seq[Expression]): Boolean = {
-      var result = leftKeys.concat(rightKeys).forall(e => e.dataType.isInstanceOf[StringType])
-      result |= leftKeys.concat(rightKeys).forall(e => e.dataType.isInstanceOf[BinaryType])
-      if (!result) {
-        val keysNotSupportingHashJoin = leftKeys.concat(rightKeys).filterNot(
-          e => UnsafeRowUtils.isBinaryStable(e.dataType))
-        logWarning(log"Hash based joins are not supported due to joining on keys that don't " +
-          log"support binary equality. Keys not supporting hash joins: " +
-          log"${MDC(HASH_JOIN_KEYS, keysNotSupportingHashJoin.map(
-            e => e.toString + " due to DataType: " + e.dataType.typeName).mkString(", "))}")
-      }
-      result
     }
 
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
