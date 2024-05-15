@@ -21,7 +21,7 @@ import scala.jdk.CollectionConverters.MapHasAsJava
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.{EmptyRow, ExpectsInputTypes, Expression, ExpressionEvalHelper, Literal}
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2ProviderWithCustomSchema}
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable}
@@ -32,9 +32,13 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SqlApiConf
-import org.apache.spark.sql.types.{MapType, StringType, StructField, StructType}
+import org.apache.spark.sql.internal.types.{AbstractArrayType, StringTypeAnyCollation, StringTypeBinaryLcase}
+import org.apache.spark.sql.types.{AbstractDataType, ArrayType, IntegerType, LongType, MapType, NumericType, StringType, StructField, StructType, TimestampType, TypeCollection}
+import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.Utils
 
-class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
+class CollationSuite extends DatasourceV2SQLBase
+  with AdaptiveSparkPlanHelper with ExpressionEvalHelper {
   protected val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
 
   private val collationPreservingSources = Seq("parquet")
@@ -976,6 +980,194 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
            |select $tableLeft.s.fld from $tableLeft
            |join $tableRight on $tableLeft.s = $tableRight.s
            |""".stripMargin), Seq(Row("aaa")))
+    }
+  }
+
+  test("SPARK-48280: Expression Walker for Testing") {
+    // This test does following:
+    // 1) Take all expressions
+    // 2) filter out ones that have at least one argument of string type
+    // 3) Use reflection to create an instance of the expression using first constructor
+    //    (test other as well).
+    // 4) Check if the expression is of type ExpectsInputTypes (should make this a bit broader)
+    // 5) Run eval against literals with strings under:
+    //    a) UTF8_BINARY, "dummy string" as input.
+    //    b) UTF8_BINARY_LCASE, "DuMmY sTrInG" as input.
+    // 6) Check if both expressions throw an exception.
+    // 7) If no exception, check if the result is the same.
+    // 8) There is a list of allowed expressions that can differ (e.g. hex)
+    //
+    // We currently capture 75/449 expressions. We could do better.
+    val funInfos = spark.sessionState.functionRegistry.listFunction().map { funcId =>
+      spark.sessionState.catalog.lookupFunctionInfo(funcId)
+    }.filter(funInfo => {
+      // make sure that there is a constructor.
+      val cl = Utils.classForName(funInfo.getClassName)
+      !cl.getConstructors.isEmpty
+    }).filter(funInfo => {
+      val className = funInfo.getClassName
+      // noinspection ScalaStyle
+      // println("checking - " + className)
+      val cl = Utils.classForName(funInfo.getClassName)
+      // dummy instance
+      // Take first constructor.
+      val headConstructor = cl.getConstructors.head
+
+      val paramCount = headConstructor.getParameterCount
+      val allExpressions = headConstructor.getParameters.map(p => p.getType)
+        .forall(p => p.isAssignableFrom(classOf[Expression]))
+
+      if (!allExpressions) {
+        false
+      } else {
+        val args = Array.fill(paramCount)(Literal.create(1))
+        // Find all expressions that have string as input
+        try {
+          val expr = headConstructor.newInstance(args: _*)
+          expr match {
+            case types: ExpectsInputTypes =>
+              val inputTypes = types.inputTypes
+              // check if this is a collection...
+              inputTypes.exists {
+                case _: StringType | StringTypeAnyCollation | StringTypeBinaryLcase => true
+                case TypeCollection(typeCollection) =>
+                  typeCollection.exists {
+                    case _: StringType | StringTypeAnyCollation | StringTypeBinaryLcase => true
+                    case _ => false
+                  }
+                case _ => false
+              }
+            case _ =>
+              // Check other expressions here...
+              false
+          }
+        } catch {
+          // TODO: Try to get rid of this...
+          case _: Throwable =>
+            false
+        }
+      }
+    }).toArray
+
+    // noinspection ScalaStyle
+    println("Found total of " + funInfos.size + " functions")
+    // 75/449
+    // We could capture more probably...
+
+    // Helper methods for generating data.
+    sealed trait CollationType
+    case object Utf8Binary extends CollationType
+    case object Utf8BinaryLcase extends CollationType
+
+    // TODO: There is probably some nicer way to do this...
+    def generateData(
+        types: Seq[AbstractDataType],
+        collationType: CollationType): Seq[Expression] = {
+      types.map {
+        case TypeCollection(typeCollection) =>
+          val strTypes =
+            typeCollection.filter(dt => dt.isInstanceOf[StringType] ||
+              dt == StringTypeAnyCollation)
+          if (strTypes.isEmpty) {
+            // Take any
+            generateData(typeCollection, collationType).head
+          } else {
+            generateData(strTypes, collationType).head
+          }
+        case _: StringType | StringTypeAnyCollation =>
+          collationType match {
+            case Utf8Binary =>
+              Literal.create("dummy string", StringType("UTF8_BINARY"))
+            case Utf8BinaryLcase =>
+              Literal.create("DuMmY sTrInG", StringType("UTF8_BINARY_LCASE"))
+          }
+        // Try to make this a bit more random.
+        case IntegerType | NumericType => Literal(1)
+        case TimestampType | LongType => Literal(1L)
+        case AbstractArrayType(elementType) =>
+          (elementType, collationType) match {
+            case (StringTypeAnyCollation, Utf8Binary) =>
+              Literal.create(Seq("dummy string"), ArrayType(StringType("UTF8_BINARY")))
+            case (StringTypeAnyCollation, Utf8BinaryLcase) =>
+              Literal.create(Seq("dUmmY sTriNg"), ArrayType(StringType("UTF8_BINARY_LCASE")))
+            case (_, _) => fail("unsupported type")
+          }
+      }
+    }
+
+    val toSkip = List(
+      "next_day", // TODO: Add support/debug these.
+      "regexp_replace",
+      "trunc",
+      "aes_encrypt", // this is probably fine?
+      "convert_timezone",
+      "substring", // TODO: this is test issue
+      "aes_decrypt",
+      "str_to_map",
+      "get_json_object",
+      "make_timestamp",
+      "overlay",
+      "hex", // this is fine
+    )
+
+    for (f <- funInfos.filter(f => !toSkip.contains(f.getName))) {
+      // noinspection ScalaStyle
+      println(f.getName)
+
+      val cl = Utils.classForName(f.getClassName)
+      val headConstructor = cl.getConstructors.head
+      val paramCount = headConstructor.getParameterCount
+      val args = Array.fill(paramCount)(Literal(1))
+      val expr = headConstructor.newInstance(args: _*).asInstanceOf[ExpectsInputTypes]
+      val inputTypes = expr.inputTypes
+
+      val inputDataUtf8Binary = generateData(inputTypes, Utf8Binary)
+      val instanceUtf8Binary =
+        headConstructor.newInstance(inputDataUtf8Binary: _*).asInstanceOf[Expression]
+
+      val inputDataLcase = generateData(inputTypes, Utf8BinaryLcase)
+      val instanceLcase = headConstructor.newInstance(inputDataLcase: _*).asInstanceOf[Expression]
+
+      val exceptionUtfBinary = {
+        try {
+          instanceUtf8Binary.eval(EmptyRow)
+          None
+        } catch {
+          case e: Throwable => Some(e)
+        }
+      }
+
+      val exceptionLcase = {
+        try {
+          instanceLcase.eval(EmptyRow)
+          None
+        } catch {
+          case e: Throwable => Some(e)
+        }
+      }
+
+      // if exception, assert that both cases have exception.
+      // TODO: check if exception is the same.
+      assert(exceptionUtfBinary.isDefined == exceptionLcase.isDefined)
+
+      // no exception - check result.
+      if (exceptionUtfBinary.isEmpty) {
+        val resUtf8Binary = instanceUtf8Binary.eval(EmptyRow)
+        val resUtf8Lcase = instanceLcase.eval(EmptyRow)
+
+        val dt = instanceLcase.dataType
+
+        dt match {
+          case st: StringType =>
+            assert(resUtf8Binary.isInstanceOf[UTF8String])
+            assert(resUtf8Lcase.isInstanceOf[UTF8String])
+            // scalastyle:off caselocale
+            assert(resUtf8Binary.asInstanceOf[UTF8String].toLowerCase.binaryEquals(
+              resUtf8Lcase.asInstanceOf[UTF8String].toLowerCase))
+            // scalastyle:on caselocale
+          case _ => resUtf8Lcase === resUtf8Binary
+        }
+      }
     }
   }
 
