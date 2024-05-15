@@ -44,7 +44,8 @@ import org.apache.spark.network.shuffle.protocol.PushBlockStream;
  * @since 3.1.0
  */
 public class OneForOneBlockPusher {
-  private static final SparkLogger logger = SparkLoggerFactory.getLogger(OneForOneBlockPusher.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(OneForOneBlockPusher.class);
   private static final ErrorHandler PUSH_ERROR_HANDLER = new ErrorHandler.BlockPushErrorHandler();
   public static final String SHUFFLE_PUSH_BLOCK_PREFIX = "shufflePush";
 

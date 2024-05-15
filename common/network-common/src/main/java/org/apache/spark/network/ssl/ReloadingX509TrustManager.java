@@ -45,7 +45,8 @@ import org.apache.spark.internal.SparkLoggerFactory;
 public final class ReloadingX509TrustManager
         implements X509TrustManager, Runnable {
 
-  private static final SparkLogger logger = SparkLoggerFactory.getLogger(ReloadingX509TrustManager.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(ReloadingX509TrustManager.class);
 
   private final String type;
   private final File file;

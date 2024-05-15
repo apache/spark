@@ -98,7 +98,8 @@ import org.apache.spark.network.util.TransportConf;
 public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
   private static final Cleaner CLEANER = Cleaner.create();
-  private static final SparkLogger logger = SparkLoggerFactory.getLogger(RemoteBlockPushResolver.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(RemoteBlockPushResolver.class);
 
   public static final String MERGED_SHUFFLE_FILE_NAME_PREFIX = "shuffleMerged";
   public static final String SHUFFLE_META_DELIMITER = ":";

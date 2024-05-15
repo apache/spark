@@ -26,7 +26,8 @@ import org.apache.spark.internal.SparkLoggerFactory;
 
 public class StructuredLoggerSuite extends LoggerSuiteBase {
 
-  private static final SparkLogger LOGGER = SparkLoggerFactory.getLogger(StructuredLoggerSuite.class);
+  private static final SparkLogger LOGGER =
+    SparkLoggerFactory.getLogger(StructuredLoggerSuite.class);
 
   private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
   private String compactAndToRegexPattern(Level level, String json) {

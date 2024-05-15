@@ -48,7 +48,8 @@ import org.apache.spark.unsafe.memory.MemoryBlock;
  *
  */
 public abstract class RowBasedKeyValueBatch extends MemoryConsumer implements Closeable {
-  protected static final SparkLogger logger = SparkLoggerFactory.getLogger(RowBasedKeyValueBatch.class);
+  protected static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(RowBasedKeyValueBatch.class);
 
   private static final int DEFAULT_CAPACITY = 1 << 16;
 

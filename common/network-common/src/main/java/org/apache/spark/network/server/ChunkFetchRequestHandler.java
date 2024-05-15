@@ -51,7 +51,8 @@ import static org.apache.spark.network.util.NettyUtils.*;
  * registering executors, or waiting for response for an OpenBlocks messages.
  */
 public class ChunkFetchRequestHandler extends SimpleChannelInboundHandler<ChunkFetchRequest> {
-  private static final SparkLogger logger = SparkLoggerFactory.getLogger(ChunkFetchRequestHandler.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(ChunkFetchRequestHandler.class);
 
   private final TransportClient client;
   private final StreamManager streamManager;

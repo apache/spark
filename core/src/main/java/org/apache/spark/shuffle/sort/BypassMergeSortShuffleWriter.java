@@ -83,7 +83,8 @@ final class BypassMergeSortShuffleWriter<K, V>
   extends ShuffleWriter<K, V>
   implements ShuffleChecksumSupport {
 
-  private static final SparkLogger logger = SparkLoggerFactory.getLogger(BypassMergeSortShuffleWriter.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(BypassMergeSortShuffleWriter.class);
 
   private final int fileBufferSize;
   private final boolean transferToEnabled;

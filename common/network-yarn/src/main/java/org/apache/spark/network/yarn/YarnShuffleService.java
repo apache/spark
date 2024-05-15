@@ -102,7 +102,8 @@ import org.apache.spark.network.yarn.util.HadoopConfigProvider;
  * This {@code classpath} configuration is only supported on YARN versions &gt;= 2.9.0.
  */
 public class YarnShuffleService extends AuxiliaryService {
-  private static final SparkLogger defaultSparkLogger = SparkLoggerFactory.getLogger(YarnShuffleService.class);
+  private static final SparkLogger defaultSparkLogger =
+    SparkLoggerFactory.getLogger(YarnShuffleService.class);
   private SparkLogger logger = defaultSparkLogger;
 
   // Port on which the shuffle server listens for fetch requests

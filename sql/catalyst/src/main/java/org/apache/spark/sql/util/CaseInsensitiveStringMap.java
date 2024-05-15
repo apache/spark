@@ -45,7 +45,8 @@ import org.apache.spark.SparkUnsupportedOperationException;
  */
 @Experimental
 public class CaseInsensitiveStringMap implements Map<String, String> {
-  private static final SparkLogger logger = SparkLoggerFactory.getLogger(CaseInsensitiveStringMap.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(CaseInsensitiveStringMap.class);
 
   public static CaseInsensitiveStringMap empty() {
     return new CaseInsensitiveStringMap(new HashMap<>(0));

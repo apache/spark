@@ -64,7 +64,8 @@ import org.apache.spark.network.util.TransportConf;
  * from Spark's IndexShuffleBlockResolver.
  */
 public class ExternalShuffleBlockResolver {
-  private static final SparkLogger logger = SparkLoggerFactory.getLogger(ExternalShuffleBlockResolver.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(ExternalShuffleBlockResolver.class);
 
   private static final ObjectMapper mapper = new ObjectMapper();
 

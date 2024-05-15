@@ -52,7 +52,8 @@ import org.apache.spark.util.Utils;
  */
 public final class UnsafeExternalSorter extends MemoryConsumer {
 
-  private static final SparkLogger logger = SparkLoggerFactory.getLogger(UnsafeExternalSorter.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(UnsafeExternalSorter.class);
 
   @Nullable
   private final PrefixComparator prefixComparator;

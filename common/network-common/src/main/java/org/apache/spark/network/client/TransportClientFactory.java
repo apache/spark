@@ -79,7 +79,8 @@ public class TransportClientFactory implements Closeable {
     }
   }
 
-  private static final SparkLogger logger = SparkLoggerFactory.getLogger(TransportClientFactory.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(TransportClientFactory.class);
 
   private final TransportContext context;
   private final TransportConf conf;

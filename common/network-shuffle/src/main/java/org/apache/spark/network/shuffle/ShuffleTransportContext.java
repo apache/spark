@@ -51,7 +51,8 @@ import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
  * are processed in the separate handlers.
  * */
 public class ShuffleTransportContext extends TransportContext {
-  private static final SparkLogger logger = SparkLoggerFactory.getLogger(ShuffleTransportContext.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(ShuffleTransportContext.class);
   private static final ShuffleMessageDecoder SHUFFLE_DECODER =
       new ShuffleMessageDecoder(MessageDecoder.INSTANCE);
   private final EventLoopGroup finalizeWorkers;

@@ -67,7 +67,8 @@ import org.apache.spark.network.util.TransportConf;
  */
 public class ExternalBlockHandler extends RpcHandler
     implements RpcHandler.MergedBlockMetaReqHandler {
-  private static final SparkLogger logger = SparkLoggerFactory.getLogger(ExternalBlockHandler.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(ExternalBlockHandler.class);
   private static final String SHUFFLE_MERGER_IDENTIFIER = "shuffle-push-merger";
   private static final String SHUFFLE_BLOCK_ID = "shuffle";
   private static final String SHUFFLE_CHUNK_ID = "shuffleChunk";

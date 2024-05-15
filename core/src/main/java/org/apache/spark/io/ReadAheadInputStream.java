@@ -45,7 +45,8 @@ import org.apache.spark.util.ThreadUtils;
  */
 public class ReadAheadInputStream extends InputStream {
 
-  private static final SparkLogger logger = SparkLoggerFactory.getLogger(ReadAheadInputStream.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(ReadAheadInputStream.class);
 
   private ReentrantLock stateChangeLock = new ReentrantLock();
 

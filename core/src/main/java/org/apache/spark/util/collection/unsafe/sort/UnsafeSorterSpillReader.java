@@ -38,7 +38,8 @@ import java.io.*;
  * of the file format).
  */
 public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implements Closeable {
-  private static final SparkLogger logger = SparkLoggerFactory.getLogger(UnsafeSorterSpillReader.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(UnsafeSorterSpillReader.class);
   public static final int MAX_BUFFER_SIZE_BYTES = 16777216; // 16 mb
 
   private InputStream in;

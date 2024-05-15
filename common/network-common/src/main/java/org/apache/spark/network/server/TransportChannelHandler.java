@@ -53,7 +53,8 @@ import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
  * timeout if the client is continuously sending but getting no responses, for simplicity.
  */
 public class TransportChannelHandler extends SimpleChannelInboundHandler<Message> {
-  private static final SparkLogger logger = SparkLoggerFactory.getLogger(TransportChannelHandler.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(TransportChannelHandler.class);
 
   private final TransportClient client;
   private final TransportResponseHandler responseHandler;

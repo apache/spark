@@ -31,7 +31,8 @@ import org.apache.spark.network.util.JavaUtils;
  * A class that manages shuffle secret used by the external shuffle service.
  */
 public class ShuffleSecretManager implements SecretKeyHolder {
-  private static final SparkLogger logger = SparkLoggerFactory.getLogger(ShuffleSecretManager.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(ShuffleSecretManager.class);
 
   private final ConcurrentHashMap<String, String> shuffleSecretMap;
 

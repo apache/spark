@@ -70,7 +70,8 @@ public class RetryingBlockTransferor {
   private static final ExecutorService executorService = Executors.newCachedThreadPool(
     NettyUtils.createThreadFactory("Block Transfer Retry"));
 
-  private static final SparkLogger logger = SparkLoggerFactory.getLogger(RetryingBlockTransferor.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(RetryingBlockTransferor.class);
 
   /** Used to initiate new Block transfer on our remaining blocks. */
   private final BlockTransferStarter transferStarter;

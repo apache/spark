@@ -72,7 +72,8 @@ import org.apache.spark.util.Utils;
  */
 final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleChecksumSupport {
 
-  private static final SparkLogger logger = SparkLoggerFactory.getLogger(ShuffleExternalSorter.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(ShuffleExternalSorter.class);
 
   @VisibleForTesting
   static final int DISK_WRITE_BUFFER_SIZE = 1024 * 1024;

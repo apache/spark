@@ -53,7 +53,8 @@ import org.apache.spark.network.util.TransportConf;
  * {@link org.apache.spark.network.server.OneForOneStreamManager} on the server side.
  */
 public class OneForOneBlockFetcher {
-  private static final SparkLogger logger = SparkLoggerFactory.getLogger(OneForOneBlockFetcher.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(OneForOneBlockFetcher.class);
   private static final String SHUFFLE_BLOCK_PREFIX = "shuffle_";
   private static final String SHUFFLE_CHUNK_PREFIX = "shuffleChunk_";
   private static final String SHUFFLE_BLOCK_SPLIT = "shuffle";
