@@ -33,7 +33,7 @@ import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAg
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.internal.types.{AbstractArrayType, StringTypeAnyCollation, StringTypeBinaryLcase}
-import org.apache.spark.sql.types.{AbstractDataType, ArrayType, IntegerType, LongType, MapType, NumericType, StringType, StructField, StructType, TimestampType, TypeCollection}
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -1007,7 +1007,7 @@ class CollationSuite extends DatasourceV2SQLBase
     }).filter(funInfo => {
       val className = funInfo.getClassName
       // noinspection ScalaStyle
-      // println("checking - " + className)
+      println("checking - " + className)
       val cl = Utils.classForName(funInfo.getClassName)
       // dummy instance
       // Take first constructor.
@@ -1018,6 +1018,8 @@ class CollationSuite extends DatasourceV2SQLBase
         .forall(p => p.isAssignableFrom(classOf[Expression]))
 
       if (!allExpressions) {
+        // noinspection ScalaStyle
+        println("NotAll")
         false
       } else {
         val args = Array.fill(paramCount)(Literal.create(1))
@@ -1039,11 +1041,15 @@ class CollationSuite extends DatasourceV2SQLBase
               }
             case _ =>
               // Check other expressions here...
+              // noinspection ScalaStyle
+              println("NotExpects")
               false
           }
         } catch {
           // TODO: Try to get rid of this...
           case _: Throwable =>
+            // noinspection ScalaStyle
+            println("ErrorsOut")
             false
         }
       }
@@ -1067,14 +1073,14 @@ class CollationSuite extends DatasourceV2SQLBase
         case TypeCollection(typeCollection) =>
           val strTypes =
             typeCollection.filter(dt => dt.isInstanceOf[StringType] ||
-              dt == StringTypeAnyCollation)
+              dt == StringTypeAnyCollation || dt == StringTypeBinaryLcase)
           if (strTypes.isEmpty) {
             // Take any
             generateData(typeCollection, collationType).head
           } else {
             generateData(strTypes, collationType).head
           }
-        case _: StringType | StringTypeAnyCollation =>
+        case _: StringType | StringTypeAnyCollation | StringTypeBinaryLcase =>
           collationType match {
             case Utf8Binary =>
               Literal.create("dummy string", StringType("UTF8_BINARY"))
@@ -1083,7 +1089,10 @@ class CollationSuite extends DatasourceV2SQLBase
           }
         // Try to make this a bit more random.
         case IntegerType | NumericType => Literal(1)
-        case TimestampType | LongType => Literal(1L)
+        case LongType => Literal(1L)
+        case _: DecimalType => Literal(new Decimal)
+        case BinaryType => Literal(new Array[Byte](5))
+        case dt if dt.isInstanceOf[DatetimeType] => Literal(1L)
         case AbstractArrayType(elementType) =>
           (elementType, collationType) match {
             case (StringTypeAnyCollation, Utf8Binary) =>
@@ -1097,16 +1106,7 @@ class CollationSuite extends DatasourceV2SQLBase
 
     val toSkip = List(
       "next_day", // TODO: Add support/debug these.
-      "regexp_replace",
-      "trunc",
-      "aes_encrypt", // this is probably fine?
-      "convert_timezone",
-      "substring", // TODO: this is test issue
-      "aes_decrypt",
-      "str_to_map",
       "get_json_object",
-      "make_timestamp",
-      "overlay",
       "hex", // this is fine
     )
 
@@ -1121,11 +1121,11 @@ class CollationSuite extends DatasourceV2SQLBase
       val expr = headConstructor.newInstance(args: _*).asInstanceOf[ExpectsInputTypes]
       val inputTypes = expr.inputTypes
 
-      val inputDataUtf8Binary = generateData(inputTypes, Utf8Binary)
+      val inputDataUtf8Binary = generateData(inputTypes.take(paramCount), Utf8Binary)
       val instanceUtf8Binary =
         headConstructor.newInstance(inputDataUtf8Binary: _*).asInstanceOf[Expression]
 
-      val inputDataLcase = generateData(inputTypes, Utf8BinaryLcase)
+      val inputDataLcase = generateData(inputTypes.take(paramCount), Utf8BinaryLcase)
       val instanceLcase = headConstructor.newInstance(inputDataLcase: _*).asInstanceOf[Expression]
 
       val exceptionUtfBinary = {
