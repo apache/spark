@@ -51,21 +51,6 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
     supportedFunctions.contains(funcName)
 
   class MySQLSQLBuilder extends JDBCSQLBuilder {
-    override def visitStartsWith(l: String, r: String): String = {
-      val value = r.substring(1, r.length() - 1)
-      s"$l LIKE '${escapeSpecialCharsForLikePattern(value)}%' ESCAPE '\\\\'"
-    }
-
-    override def visitEndsWith(l: String, r: String): String = {
-      val value = r.substring(1, r.length() - 1)
-      s"$l LIKE '%${escapeSpecialCharsForLikePattern(value)}' ESCAPE '\\\\'"
-    }
-
-    override def visitContains(l: String, r: String): String = {
-      val value = r.substring(1, r.length() - 1)
-      s"$l LIKE '%${escapeSpecialCharsForLikePattern(value)}%' ESCAPE '\\\\'"
-    }
-
     override def visitAggregateFunction(
         funcName: String, isDistinct: Boolean, inputs: Array[String]): String =
       if (isDistinct && distinctUnsupportedAggregateFunctions.contains(funcName)) {
