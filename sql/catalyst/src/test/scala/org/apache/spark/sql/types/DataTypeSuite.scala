@@ -722,6 +722,13 @@ class DataTypeSuite extends SparkFunSuite {
     val nestedStruct = StructType(
       StructField("nested", simpleStruct) :: Nil)
 
+    val caseInsensitiveNames = StructType(
+      StructField("c1", StringType(UNICODE_COLLATION_ID)) ::
+      StructField("C1", StringType(UNICODE_COLLATION_ID)) :: Nil)
+
+    val specialCharsInName = StructType(
+      StructField("c1.*23?", StringType(UNICODE_COLLATION_ID)) :: Nil)
+
     val arrayInSchema = StructType(
       StructField("arrayField", ArrayType(StringType(UNICODE_COLLATION_ID))) :: Nil)
 
@@ -749,8 +756,9 @@ class DataTypeSuite extends SparkFunSuite {
         mapWithKeyInNameInSchema ++ arrayInMapInNestedSchema.fields ++ nestedArrayInMap.fields)
 
     Seq(
-      simpleStruct, nestedStruct, arrayInSchema, mapInSchema, mapWithKeyInNameInSchema,
-      nestedArrayInMap, arrayInMapInNestedSchema, schemaWithMultipleFields)
+      simpleStruct, caseInsensitiveNames, specialCharsInName, nestedStruct, arrayInSchema,
+      mapInSchema, mapWithKeyInNameInSchema, nestedArrayInMap, arrayInMapInNestedSchema,
+      schemaWithMultipleFields)
       .foreach { schema =>
         val json = schema.json
         val parsed = DataType.fromJson(json)
@@ -818,6 +826,35 @@ class DataTypeSuite extends SparkFunSuite {
       },
       errorClass = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
       parameters = Map("jsonType" -> "integer")
+    )
+  }
+
+  test("non existing collation provider") {
+    val json =
+      s"""
+         |{
+         |  "type": "struct",
+         |  "fields": [
+         |    {
+         |      "name": "c1",
+         |      "type": "string",
+         |      "nullable": true,
+         |      "metadata": {
+         |        "${DataType.COLLATIONS_METADATA_KEY}": {
+         |          "c1": "badProvider.UNICODE"
+         |        }
+         |      }
+         |    }
+         |  ]
+         |}
+         |""".stripMargin
+
+    checkError(
+      exception = intercept[SparkException] {
+        DataType.fromJson(json)
+      },
+      errorClass = "COLLATION_INVALID_PROVIDER",
+      parameters = Map("provider" -> "badProvider", "supportedProviders" -> "SPARK, ICU")
     )
   }
 }

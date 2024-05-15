@@ -52,19 +52,31 @@ public final class CollationFactory {
     }
 
     public static CollationIdentifier fromString(String identifier) {
+      long numDots = identifier.chars().filter(ch -> ch == '.').count();
+      assert(numDots > 0);
+
+      if (numDots == 1) {
+        String[] parts = identifier.split("\\.", 2);
+        return new CollationIdentifier(parts[0], parts[1], null);
+      }
+
       String[] parts = identifier.split("\\.", 3);
       return new CollationIdentifier(parts[0], parts[1], parts[2]);
     }
 
     @Override
     public String toString() {
-      return String.format("%s.%s.%s", provider, name, version);
+      if (version != null) {
+        return String.format("%s.%s.%s", provider, name, version);
+      }
+
+      return toStringWithoutVersion();
     }
 
     /**
      * Returns the identifier's string value without the version.
      */
-    public String valueWithoutVersion() {
+    public String toStringWithoutVersion() {
       return String.format("%s.%s", provider, name);
     }
   }
@@ -123,6 +135,7 @@ public final class CollationFactory {
 
     public Collation(
         String collationName,
+        String provider,
         Collator collator,
         Comparator<UTF8String> comparator,
         String version,
@@ -131,7 +144,7 @@ public final class CollationFactory {
         boolean supportsBinaryOrdering,
         boolean supportsLowercaseEquality) {
       this.collationName = collationName;
-      this.provider = collator == null ? "spark" : "icu";
+      this.provider = provider;
       this.collator = collator;
       this.comparator = comparator;
       this.version = version;
@@ -145,6 +158,8 @@ public final class CollationFactory {
       // No Collation can simultaneously support binary equality and lowercase equality
       assert(!supportsBinaryEquality || !supportsLowercaseEquality);
 
+      assert(SUPPORTED_PROVIDERS.contains(provider) || provider == null);
+
       if (supportsBinaryEquality) {
         this.equalsFunction = UTF8String::equals;
       } else {
@@ -157,6 +172,7 @@ public final class CollationFactory {
      */
     public Collation(
         String collationName,
+        String provider,
         Collator collator,
         String version,
         boolean supportsBinaryEquality,
@@ -164,6 +180,7 @@ public final class CollationFactory {
         boolean supportsLowercaseEquality) {
       this(
         collationName,
+        provider,
         collator,
         (s1, s2) -> collator.compare(s1.toString(), s2.toString()),
         version,
@@ -173,7 +190,7 @@ public final class CollationFactory {
         supportsLowercaseEquality);
     }
 
-    /** Returns the collation identifier*/
+    /** Returns the collation identifier. */
     public CollationIdentifier identifier() {
       return new CollationIdentifier(provider, collationName, version);
     }
@@ -185,12 +202,17 @@ public final class CollationFactory {
   public static final int UTF8_BINARY_COLLATION_ID = 0;
   public static final int UTF8_BINARY_LCASE_COLLATION_ID = 1;
 
+  public static final String PROVIDER_SPARK = "SPARK";
+  public static final String PROVIDER_ICU = "ICU";
+  public static final List<String> SUPPORTED_PROVIDERS = List.of(PROVIDER_SPARK, PROVIDER_ICU);
+
   static {
     // Binary comparison. This is the default collation.
     // No custom comparators will be used for this collation.
     // Instead, we rely on byte for byte comparison.
     collationTable[0] = new Collation(
       "UTF8_BINARY",
+      PROVIDER_SPARK,
       null,
       UTF8String::binaryCompare,
       "1.0",
@@ -203,6 +225,7 @@ public final class CollationFactory {
     // TODO: Do in place comparisons instead of creating new strings.
     collationTable[1] = new Collation(
       "UTF8_BINARY_LCASE",
+      PROVIDER_SPARK,
       null,
       UTF8String::compareLowerCase,
       "1.0",
@@ -213,13 +236,13 @@ public final class CollationFactory {
 
     // UNICODE case sensitive comparison (ROOT locale, in ICU).
     collationTable[2] = new Collation(
-      "UNICODE", Collator.getInstance(ULocale.ROOT), "153.120.0.0", true, false, false);
+      "UNICODE", PROVIDER_ICU, Collator.getInstance(ULocale.ROOT), "153.120.0.0", true, false, false);
     collationTable[2].collator.setStrength(Collator.TERTIARY);
     collationTable[2].collator.freeze();
 
     // UNICODE case-insensitive comparison (ROOT locale, in ICU + Secondary strength).
     collationTable[3] = new Collation(
-      "UNICODE_CI", Collator.getInstance(ULocale.ROOT), "153.120.0.0", false, false, false);
+      "UNICODE_CI", PROVIDER_ICU, Collator.getInstance(ULocale.ROOT), "153.120.0.0", false, false, false);
     collationTable[3].collator.setStrength(Collator.SECONDARY);
     collationTable[3].collator.freeze();
 
@@ -300,6 +323,18 @@ public final class CollationFactory {
 
       throw new SparkException(
         "COLLATION_INVALID_NAME", SparkException.constructMessageParams(params), null);
+    }
+  }
+
+  public static void assertValidProvider(String provider) throws SparkException {
+    if (!SUPPORTED_PROVIDERS.contains(provider.toUpperCase())) {
+      Map<String, String> params = Map.of(
+        "provider", provider,
+        "supportedProviders", String.join(", ", SUPPORTED_PROVIDERS)
+      );
+
+      throw new SparkException(
+        "COLLATION_INVALID_PROVIDER", SparkException.constructMessageParams(params), null);
     }
   }
 

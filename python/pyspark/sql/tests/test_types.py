@@ -581,7 +581,7 @@ class TypesTestsMixin:
             ]
         )
 
-        nested_array_in_map = StructType(
+        nested_array_in_map_value = StructType(
             [
                 StructField(
                     "nestedArrayInMap",
@@ -601,7 +601,7 @@ class TypesTestsMixin:
             + array_in_schema.fields
             + map_in_schema.fields
             + array_in_map.fields
-            + nested_array_in_map.fields
+            + nested_array_in_map_value.fields
         )
 
         schemas = [
@@ -609,7 +609,7 @@ class TypesTestsMixin:
             nested_struct,
             array_in_schema,
             map_in_schema,
-            nested_array_in_map,
+            nested_array_in_map_value,
             array_in_map,
             schema_with_multiple_fields,
         ]
@@ -671,6 +671,29 @@ class TypesTestsMixin:
         self.assertRaises(
             PySparkTypeError, lambda: _parse_datatype_json_string(collations_in_map_json)
         )
+
+    def test_schema_with_bad_collations_provider(self):
+        from pyspark.sql.types import _parse_datatype_json_string, _COLLATIONS_METADATA_KEY
+
+        schema_json = f"""
+        {{
+          "type": "struct",
+          "fields": [
+            {{
+              "name": "c1",
+              "type": "string",
+              "nullable": "true",
+              "metadata": {{
+                "{_COLLATIONS_METADATA_KEY}": {{
+                  "c1": "badProvider.UNICODE"
+                }}
+              }}
+            }}
+          ]
+        }}
+        """
+
+        self.assertRaises(PySparkValueError, lambda: _parse_datatype_json_string(schema_json))
 
     def test_udt(self):
         from pyspark.sql.types import _parse_datatype_json_string, _infer_type, _make_type_verifier

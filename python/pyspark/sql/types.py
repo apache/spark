@@ -255,6 +255,9 @@ class StringType(AtomicType):
     """
 
     collationNames = ["UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI"]
+    providerSpark = "SPARK"
+    providerICU = "ICU"
+    providers = [providerSpark, providerICU]
 
     def __init__(self, collation: Optional[str] = None):
         self.collationId = 0 if collation is None else self.collationNameToId(collation)
@@ -273,9 +276,10 @@ class StringType(AtomicType):
 
     @classmethod
     def collationProvider(cls, collationName: str) -> str:
+        # TODO: do this properly like on the scala side
         if collationName.startswith("UTF8"):
-            return "spark"
-        return "icu"
+            return StringType.providerSpark
+        return StringType.providerICU
 
     def simpleString(self) -> str:
         if self.isUTF8BinaryCollation():
@@ -283,8 +287,9 @@ class StringType(AtomicType):
 
         return f"string collate ${self.collationIdToName(self.collationId)}"
 
-    # Due to backwards compatibility all string types are serialized in json as
-    # regular strings and the collation info is written to struct field metadata
+    # For backwards compatibility and compatibility with other readers all string types
+    # are serialized in json as regular strings and the collation info is written to
+    # struct field metadata
     def jsonValue(self) -> str:
         return "string"
 
@@ -708,8 +713,8 @@ class ArrayType(DataType):
     def fromJson(
         cls,
         json: Dict[str, Any],
-        fieldPath: str = "",
-        collationsMap: Optional[Dict[str, str]] = None,
+        fieldPath: str,
+        collationsMap: Dict[str, str],
     ) -> "ArrayType":
         elementType = _parse_type_with_collation(
             json["elementType"], fieldPath + ".element", collationsMap
@@ -833,8 +838,8 @@ class MapType(DataType):
     def fromJson(
         cls,
         json: Dict[str, Any],
-        fieldPath: str = "",
-        collationsMap: Optional[Dict[str, str]] = None,
+        fieldPath,
+        collationsMap: Dict[str, str],
     ) -> "MapType":
         keyType = _parse_type_with_collation(json["keyType"], fieldPath + ".key", collationsMap)
         valueType = _parse_type_with_collation(
@@ -905,7 +910,6 @@ class StructField(DataType):
         self.dataType = dataType
         self.nullable = nullable
         self.metadata = metadata or {}
-        self._collationMetadata: Optional[Dict[str, str]] = None
 
     def simpleString(self) -> str:
         return "%s:%s" % (self.name, self.dataType.simpleString())
@@ -913,21 +917,12 @@ class StructField(DataType):
     def __repr__(self) -> str:
         return "StructField('%s', %s, %s)" % (self.name, self.dataType, str(self.nullable))
 
-    def __eq__(self, other: Any) -> bool:
-        # since collationMetadata is lazy evaluated we should not use it in equality check
-        return (
-            isinstance(other, self.__class__)
-            and self.name == other.name
-            and self.dataType == other.dataType
-            and self.nullable == other.nullable
-            and self.metadata == other.metadata
-        )
-
     def jsonValue(self) -> Dict[str, Any]:
+        collationMetadata = self.getCollationMetadata()
         metadata = (
             self.metadata
-            if not self.collationMetadata
-            else {**self.metadata, _COLLATIONS_METADATA_KEY: self.collationMetadata}
+            if not collationMetadata
+            else {**self.metadata, _COLLATIONS_METADATA_KEY: collationMetadata}
         )
 
         return {
@@ -943,6 +938,13 @@ class StructField(DataType):
         collationsMap = {}
         if metadata and _COLLATIONS_METADATA_KEY in metadata:
             collationsMap = metadata[_COLLATIONS_METADATA_KEY]
+            for key, value in collationsMap.items():
+                nameParts = value.split(".")
+                assert len(nameParts) == 2
+                provider, name = nameParts[0], nameParts[1]
+                _assert_valid_collation_provider(provider)
+                collationsMap[key] = name
+
             metadata = {
                 key: value for key, value in metadata.items() if key != _COLLATIONS_METADATA_KEY
             }
@@ -954,8 +956,21 @@ class StructField(DataType):
             metadata,
         )
 
-    @property
-    def collationMetadata(self) -> Dict[str, str]:
+    def getCollationsMap(self, metadata: Dict[str, str]) -> Dict[str, str]:
+        if not metadata or _COLLATIONS_METADATA_KEY not in metadata:
+            return {}
+
+        collationsMap: Dict[str, str] = {}
+        for key, value in metadata[_COLLATIONS_METADATA_KEY].items():
+            nameParts = value.split(".")
+            assert len(nameParts) == 2
+            provider, name = nameParts[0], nameParts[1]
+            _assert_valid_collation_provider(provider)
+            collationsMap[key] = name
+
+        return collationsMap
+
+    def getCollationMetadata(self) -> Dict[str, str]:
         def visitRecursively(dt: DataType, fieldPath: str) -> None:
             if isinstance(dt, ArrayType):
                 processDataType(dt.elementType, fieldPath + ".element")
@@ -971,12 +986,9 @@ class StructField(DataType):
             else:
                 visitRecursively(dt, fieldPath)
 
-        if self._collationMetadata is None:
-            collationMetadata: Dict[str, str] = {}
-            visitRecursively(self.dataType, self.name)
-            self._collationMetadata = collationMetadata
-
-        return self._collationMetadata
+        collationMetadata: Dict[str, str] = {}
+        visitRecursively(self.dataType, self.name)
+        return collationMetadata
 
     def _isCollatedString(self, dt: DataType) -> bool:
         return isinstance(dt, StringType) and not dt.isUTF8BinaryCollation()
@@ -1799,8 +1811,8 @@ def _parse_datatype_json_value(
         if json_value in _all_atomic_types.keys():
             if collationsMap is not None and fieldPath in collationsMap:
                 _assert_valid_type_for_collation(json_value)
-                collationName = collationsMap[fieldPath].split(".")[1]
-                return StringType(collationName)
+                collation_name = collationsMap[fieldPath]
+                return StringType(collation_name)
             return _all_atomic_types[json_value]()
         elif json_value == "decimal":
             return DecimalType()
@@ -1859,16 +1871,27 @@ def _parse_type_with_collation(
 ) -> DataType:
     if collationsMap and fieldPath in collationsMap:
         _assert_valid_type_for_collation(json_value)
-        collationName = collationsMap[fieldPath].split(".")[1]
-        return StringType(collationName)
+        collation_name = collationsMap[fieldPath]
+        return StringType(collation_name)
     return _parse_datatype_json_value(json_value, fieldPath, collationsMap)
 
 
-def _assert_valid_type_for_collation(fieldType: Union[dict, str]) -> None:
+def _assert_valid_type_for_collation(fieldType: Any) -> None:
     if not isinstance(fieldType, str) or fieldType != "string":
         raise PySparkTypeError(
             error_class="INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
             message_parameters={"jsonType": fieldType},
+        )
+
+
+def _assert_valid_collation_provider(provider: str) -> None:
+    if provider.upper() not in StringType.providers:
+        raise PySparkValueError(
+            error_class="COLLATION_INVALID_PROVIDER",
+            message_parameters={
+                "provider": provider,
+                "supportedProviders": ", ".join(StringType.providers),
+            },
         )
 
 

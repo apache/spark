@@ -467,6 +467,12 @@
     ],
     "sqlState" : "42704"
   },
+  "COLLATION_INVALID_PROVIDER" : {
+    "message" : [
+      "The value <provider> does not represent a correct collation provider. Supported providers are: [<supportedProviders>]."
+    ],
+    "sqlState" : "42704"
+  },
   "COLLATION_MISMATCH" : {
     "message" : [
       "Could not determine which collation to use for string functions and operators."

@@ -324,7 +324,8 @@ object DataType {
         fields.collect {
           case (fieldPath, JString(collation)) =>
             collation.split("\\.", 2) match {
-              case Array(_: String, collationName: String) =>
+              case Array(provider: String, collationName: String) =>
+                CollationFactory.assertValidProvider(provider)
                 fieldPath -> collationName
             }
         }.toMap
@@ -333,8 +334,8 @@ object DataType {
     }
   }
 
-  private def stringTypeWithCollation(collation: String): StringType = {
-    StringType(CollationFactory.collationNameToId(collation))
+  private def stringTypeWithCollation(collationName: String): StringType = {
+    StringType(CollationFactory.collationNameToId(collationName))
   }
 
   protected[types] def buildFormattedString(

@@ -63,8 +63,9 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
     if (isUTF8BinaryCollation) "string"
     else s"string collate ${CollationFactory.fetchCollation(collationId).collationName}"
 
-  // Due to backwards compatibility all string types are serialized in json as
-  // regular strings and the collation info is written to struct field metadata
+  // Due to backwards compatibility and compatibility with other readers
+  // all string types are serialized in json as regular strings and
+  // the collation information is written to struct field metadata
   override def jsonValue: JValue = JString("string")
 
   override def equals(obj: Any): Boolean =
