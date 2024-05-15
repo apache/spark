@@ -737,21 +737,21 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
   protected def prepareTimestampTable(catalogName: String,
       tableName: String, insert: Boolean = true): Unit = {
-      withConnection { conn =>
+    withConnection { conn =>
+      conn.prepareStatement(
+        s"""CREATE TABLE $tableName
+           |(timestampntz $timestampNTZType, timestamptz $timestampTZType)
+           |""".stripMargin).executeUpdate()
+      if (insert) {
         conn.prepareStatement(
-          s"""CREATE TABLE $tableName
-             |(timestampntz $timestampNTZType, timestamptz $timestampTZType)
+          s"""
+             |insert into $tableName VALUES
+             |('2022-03-03 02:00:00', '2022-03-03 02:00:00+00:00'),
+             |('2022-03-02 02:00:00', '2022-03-02 02:00:00+02:00'),
+             |('2022-03-01 02:00:00', '2022-03-01 02:00:00+03:00');
              |""".stripMargin).executeUpdate()
-        if (insert) {
-          conn.prepareStatement(
-            s"""
-               |insert into $tableName VALUES
-               |('2022-03-03 02:00:00', '2022-03-03 02:00:00+00:00'),
-               |('2022-03-02 02:00:00', '2022-03-02 02:00:00+02:00'),
-               |('2022-03-01 02:00:00', '2022-03-01 02:00:00+03:00');
-               |""".stripMargin).executeUpdate()
-        }
       }
+    }
   }
 
   test("simple timestamps roundtrip") {
