@@ -2305,6 +2305,10 @@ class PlanGenerationTestSuite
     fn.timestamp_micros(fn.col("x"))
   }
 
+  temporalFunctionTest("timestamp_diff") {
+    fn.timestamp_diff("year", fn.col("t"), fn.col("t"))
+  }
+
   // Array of Long
   // Array of Long
   // Array of Array of Long

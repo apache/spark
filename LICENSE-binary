@@ -436,6 +436,7 @@ com.esotericsoftware:reflectasm
 org.codehaus.janino:commons-compiler
 org.codehaus.janino:janino
 jline:jline
+org.jodd:jodd-core
 com.github.wendykierp:JTransforms
 pl.edu.icm:JLargeArrays
 
