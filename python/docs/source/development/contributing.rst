@@ -279,8 +279,8 @@ Throw with arbitrary error message:
 .. code-block:: python
 
   class PySparkTestError(PySparkException):
-      def __init__(self, error_class: str, message_parameters: Dict[str, str]):
-          super().__init__(error_class=error_class, message_parameters=message_parameters)
+      def __init__(self, error_condition: str, message_parameters: Dict[str, str]):
+          super().__init__(error_condition=error_condition, message_parameters=message_parameters)
   
       def getMessageParameters(self) -> Optional[Dict[str, str]]:
           return super().getMessageParameters()
@@ -295,14 +295,14 @@ Throw with error condition and message parameters:
 Access fields
 ~~~~~~~~~~~~~
 
-To access error fields, catch exceptions that extend :class:`PySparkException`  and access to error condition with :func:`PySparkException.getErrorClass`.
+To access error fields, catch exceptions that extend :class:`PySparkException`  and access to error condition with :func:`PySparkException.getErrorCondition`.
 
 .. code-block:: python
 
   try:
       ...
   except PySparkException as pe:
-      if pe.getErrorClass() == "PROBLEM_BECAUSE":
+      if pe.getErrorCondition() == "PROBLEM_BECAUSE":
           ...
 
 

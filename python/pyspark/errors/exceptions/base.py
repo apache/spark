@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import warnings
 from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Dict, Optional, cast, Iterable, TYPE_CHECKING, List
@@ -34,27 +35,36 @@ class PySparkException(Exception):
         self,
         message: Optional[str] = None,
         error_class: Optional[str] = None,
+        error_condition: Optional[str] = None,
         message_parameters: Optional[Dict[str, str]] = None,
         query_contexts: Optional[List["QueryContext"]] = None,
     ):
+        if error_class and error_condition:
+            raise PySparkValueError(
+                "Can't provide both `error_class` and `error_condition`. Use `error_condition`."
+            )
+        if error_class:
+            warnings.warn("Use `error_condition` instead.", DeprecationWarning)
+            error_condition = error_class
+
         if query_contexts is None:
             query_contexts = []
         self._error_reader = ErrorConditionsReader()
 
         if message is None:
             self._message = self._error_reader.get_error_message(
-                cast(str, error_class), cast(Dict[str, str], message_parameters)
+                cast(str, error_condition), cast(Dict[str, str], message_parameters)
             )
         else:
             self._message = message
 
-        self._error_class = error_class
+        self._error_condition = error_condition
         self._message_parameters = message_parameters
         self._query_contexts = query_contexts
 
     def getErrorClass(self) -> Optional[str]:
         """
-        Returns an error class as a string.
+        Returns an error condition as a string.
 
         .. versionadded:: 3.4.0
 
@@ -65,11 +75,27 @@ class PySparkException(Exception):
         :meth:`PySparkException.getQueryContext`
         :meth:`PySparkException.getSqlState`
         """
-        return self._error_class
+        warnings.warn("Use `getErrorCondition` instead.", DeprecationWarning)
+        return self._error_condition
+
+    def getErrorCondition(self) -> Optional[str]:
+        """
+        Returns an error condition as a string.
+
+        .. versionadded:: 4.0.0
+
+        See Also
+        --------
+        :meth:`PySparkException.getMessage`
+        :meth:`PySparkException.getMessageParameters`
+        :meth:`PySparkException.getQueryContext`
+        :meth:`PySparkException.getSqlState`
+        """
+        return self._error_condition
 
     def getMessageParameters(self) -> Optional[Dict[str, str]]:
         """
-        Returns a message parameters as a dictionary.
+        Returns message parameters as a dictionary.
 
         .. versionadded:: 3.4.0
 
@@ -168,31 +194,31 @@ class IllegalArgumentException(PySparkException):
 
 class ArithmeticException(PySparkException):
     """
-    Arithmetic exception thrown from Spark with an error class.
+    Arithmetic exception thrown from Spark with an error condition.
     """
 
 
 class UnsupportedOperationException(PySparkException):
     """
-    Unsupported operation exception thrown from Spark with an error class.
+    Unsupported operation exception thrown from Spark with an error condition.
     """
 
 
 class ArrayIndexOutOfBoundsException(PySparkException):
     """
-    Array index out of bounds exception thrown from Spark with an error class.
+    Array index out of bounds exception thrown from Spark with an error condition.
     """
 
 
 class DateTimeException(PySparkException):
     """
-    Datetime exception thrown from Spark with an error class.
+    Datetime exception thrown from Spark with an error condition.
     """
 
 
 class NumberFormatException(IllegalArgumentException):
     """
-    Number format exception thrown from Spark with an error class.
+    Number format exception thrown from Spark with an error condition.
     """
 
 
@@ -216,7 +242,7 @@ class PythonException(PySparkException):
 
 class SparkRuntimeException(PySparkException):
     """
-    Runtime exception thrown from Spark with an error class.
+    Runtime exception thrown from Spark with an error condition.
     """
 
 
@@ -240,59 +266,71 @@ class UnknownException(PySparkException):
 
 class PySparkValueError(PySparkException, ValueError):
     """
-    Wrapper class for ValueError to support error classes.
+    Wrapper class for ValueError to support error conditions.
     """
 
 
 class PySparkTypeError(PySparkException, TypeError):
     """
-    Wrapper class for TypeError to support error classes.
+    Wrapper class for TypeError to support error conditions.
     """
 
 
 class PySparkIndexError(PySparkException, IndexError):
     """
-    Wrapper class for IndexError to support error classes.
+    Wrapper class for IndexError to support error conditions.
     """
 
 
 class PySparkAttributeError(PySparkException, AttributeError):
     """
-    Wrapper class for AttributeError to support error classes.
+    Wrapper class for AttributeError to support error conditions.
     """
 
 
 class PySparkRuntimeError(PySparkException, RuntimeError):
     """
-    Wrapper class for RuntimeError to support error classes.
+    Wrapper class for RuntimeError to support error conditions.
     """
 
 
 class PySparkAssertionError(PySparkException, AssertionError):
     """
-    Wrapper class for AssertionError to support error classes.
+    Wrapper class for AssertionError to support error conditions.
     """
 
     def __init__(
         self,
         message: Optional[str] = None,
         error_class: Optional[str] = None,
+        error_condition: Optional[str] = None,
         message_parameters: Optional[Dict[str, str]] = None,
         data: Optional[Iterable["Row"]] = None,
     ):
-        super().__init__(message, error_class, message_parameters)
+        if error_class and error_condition:
+            raise PySparkValueError(
+                "Can't provide both `error_class` and `error_condition`. Use `error_condition`."
+            )
+        if error_class:
+            warnings.warn("Use `error_condition` instead.", DeprecationWarning)
+            error_condition = error_class
+        super().__init__(
+            message,
+            error_condition=error_condition,
+            message_parameters=message_parameters,
+        )
         self.data = data
 
 
 class PySparkNotImplementedError(PySparkException, NotImplementedError):
     """
-    Wrapper class for NotImplementedError to support error classes.
+    Wrapper class for NotImplementedError to support error conditions.
     """
 
 
 class PySparkPicklingError(PySparkException, PicklingError):
     """
-    Wrapper class for pickle.PicklingError to support error classes.
+    Wrapper class for pickle.PicklingError to support error conditions.
     """
 
 
@@ -305,13 +343,13 @@ class RetriesExceeded(PySparkException):
 
 class PySparkKeyError(PySparkException, KeyError):
     """
-    Wrapper class for KeyError to support error classes.
+    Wrapper class for KeyError to support error conditions.
     """
 
 
 class PySparkImportError(PySparkException, ImportError):
     """
-    Wrapper class for ImportError to support error classes.
+    Wrapper class for ImportError to support error conditions.
     """
 
 
