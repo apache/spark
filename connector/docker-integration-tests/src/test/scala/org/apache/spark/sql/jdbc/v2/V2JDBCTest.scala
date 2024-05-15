@@ -362,7 +362,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
   test("SPARK-48172: Test CONTAINS") {
     val df1 = spark.sql(
       s"""
-         |SELECT * FROM $catalogName.pattern_testing_table
+         |SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
          |WHERE contains(pattern_testing_col, 'quote\\'')""".stripMargin)
     df1.explain("formatted")
     val rows1 = df1.collect()
@@ -370,7 +370,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     assert(rows1(0).getString(0) === "special_character_quote'_present")
 
     val df2 = spark.sql(
-      s"""SELECT * FROM $catalogName.pattern_testing_table
+      s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
          |WHERE contains(pattern_testing_col, 'percent%')""".stripMargin)
     val rows2 = df2.collect()
     assert(rows2.length === 1)
@@ -378,7 +378,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
     val df3 = spark.
       sql(
-        s"""SELECT * FROM $catalogName.pattern_testing_table
+        s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
            |WHERE contains(pattern_testing_col, 'underscore_')""".stripMargin)
     val rows3 = df3.collect()
     assert(rows3.length === 1)
@@ -386,7 +386,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
     val df4 = spark.
       sql(
-        s"""SELECT * FROM $catalogName.pattern_testing_table
+        s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
            |WHERE contains(pattern_testing_col, 'character')
            |ORDER BY pattern_testing_col""".stripMargin)
     val rows4 = df4.collect()
@@ -401,14 +401,14 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
   test("SPARK-48172: Test ENDSWITH") {
     val df1 = spark.sql(
-      s"""SELECT * FROM $catalogAndNamespace.pattern_testing_table
+      s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
          |WHERE endswith(pattern_testing_col, 'quote\\'_present')""".stripMargin)
     val rows1 = df1.collect()
     assert(rows1.length === 1)
     assert(rows1(0).getString(0) === "special_character_quote'_present")
 
     val df2 = spark.sql(
-      s"""SELECT * FROM $catalogAndNamespace.pattern_testing_table
+      s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
          |WHERE endswith(pattern_testing_col, 'percent%_present')""".stripMargin)
     val rows2 = df2.collect()
     assert(rows2.length === 1)
@@ -416,7 +416,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
     val df3 = spark.
       sql(
-        s"""SELECT * FROM $catalogAndNamespace.pattern_testing_table
+        s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
            |WHERE endswith(pattern_testing_col, 'underscore_present')""".stripMargin)
     val rows3 = df3.collect()
     assert(rows3.length === 1)
@@ -424,7 +424,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
     val df4 = spark.
       sql(
-        s"""SELECT * FROM $catalogAndNamespace.pattern_testing_table
+        s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
            |WHERE endswith(pattern_testing_col, 'present')
            |ORDER BY pattern_testing_col""".stripMargin)
     val rows4 = df4.collect()
@@ -439,14 +439,14 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
   test("SPARK-48172: Test STARTSWITH") {
     val df1 = spark.sql(
-      s"""SELECT * FROM $catalogAndNamespace.pattern_testing_table
+      s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
          |WHERE startswith(pattern_testing_col, 'special_character_quote\\'')""".stripMargin)
     val rows1 = df1.collect()
     assert(rows1.length === 1)
     assert(rows1(0).getString(0) === "special_character_quote'_present")
 
     val df2 = spark.sql(
-      s"""SELECT * FROM $catalogAndNamespace.pattern_testing_table
+      s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
          |WHERE startswith(pattern_testing_col, 'special_character_percent%')""".stripMargin)
     val rows2 = df2.collect()
     assert(rows2.length === 1)
@@ -454,7 +454,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
     val df3 = spark.
       sql(
-        s"""SELECT * FROM $catalogAndNamespace.pattern_testing_table
+        s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
            |WHERE startswith(pattern_testing_col, 'special_character_underscore_')""".stripMargin)
     val rows3 = df3.collect()
     assert(rows3.length === 1)
@@ -462,7 +462,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
     val df4 = spark.
       sql(
-        s"""SELECT * FROM $catalogAndNamespace.pattern_testing_table
+        s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
            |WHERE startswith(pattern_testing_col, 'special_character')
            |ORDER BY pattern_testing_col""".stripMargin)
     val rows4 = df4.collect()
@@ -478,14 +478,14 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
   test("SPARK-48172: Test LIKE") {
     // this one should map to contains
     val df1 = spark.sql(
-      s"""SELECT * FROM $catalogAndNamespace.pattern_testing_table
+      s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
          |WHERE pattern_testing_col LIKE '%quote\\'%'""".stripMargin)
     val rows1 = df1.collect()
     assert(rows1.length === 1)
     assert(rows1(0).getString(0) === "special_character_quote'_present")
 
     val df2 = spark.sql(
-      s"""SELECT * FROM $catalogAndNamespace.pattern_testing_table
+      s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
          |WHERE pattern_testing_col LIKE '%percent\\%%'""".stripMargin)
     val rows2 = df2.collect()
     assert(rows2.length === 1)
@@ -493,7 +493,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
     val df3 = spark.
       sql(
-        s"""SELECT * FROM $catalogAndNamespace.pattern_testing_table
+        s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
            |WHERE pattern_testing_col LIKE '%underscore\\_%'""".stripMargin)
     val rows3 = df3.collect()
     assert(rows3.length === 1)
@@ -501,7 +501,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
     val df4 = spark.
       sql(
-        s"""SELECT * FROM $catalogAndNamespace.pattern_testing_table
+        s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
            |WHERE pattern_testing_col LIKE '%character%'
            |ORDER BY pattern_testing_col""".stripMargin)
     val rows4 = df4.collect()
@@ -516,14 +516,14 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     // map to startsWith
     // this one should map to contains
     val df5 = spark.sql(
-      s"""SELECT * FROM $catalogAndNamespace.pattern_testing_table
+      s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
          |WHERE pattern_testing_col LIKE 'special_character_quote\\'%'""".stripMargin)
     val rows5 = df5.collect()
     assert(rows5.length === 1)
     assert(rows5(0).getString(0) === "special_character_quote'_present")
 
     val df6 = spark.sql(
-      s"""SELECT * FROM $catalogAndNamespace.pattern_testing_table
+      s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
          |WHERE pattern_testing_col LIKE 'special_character_percent\\%%'""".stripMargin)
     val rows6 = df6.collect()
     assert(rows6.length === 1)
@@ -531,7 +531,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
     val df7 = spark.
       sql(
-        s"""SELECT * FROM $catalogAndNamespace.pattern_testing_table
+        s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
            |WHERE pattern_testing_col LIKE 'special_character_underscore\\_%'""".stripMargin)
     val rows7 = df7.collect()
     assert(rows7.length === 1)
@@ -539,7 +539,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
     val df8 = spark.
       sql(
-        s"""SELECT * FROM $catalogAndNamespace.pattern_testing_table
+        s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
            |WHERE pattern_testing_col LIKE 'special_character%'
            |ORDER BY pattern_testing_col""".stripMargin)
     val rows8 = df8.collect()
@@ -553,14 +553,14 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     // map to endsWith
     // this one should map to contains
     val df9 = spark.sql(
-      s"""SELECT * FROM $catalogAndNamespace.pattern_testing_table
+      s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
          |WHERE pattern_testing_col LIKE '%quote\\'_present'""".stripMargin)
     val rows9 = df9.collect()
     assert(rows9.length === 1)
     assert(rows9(0).getString(0) === "special_character_quote'_present")
 
     val df10 = spark.sql(
-      s"""SELECT * FROM $catalogAndNamespace.pattern_testing_table
+      s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
          |WHERE pattern_testing_col LIKE '%percent\\%_present'""".stripMargin)
     val rows10 = df10.collect()
     assert(rows10.length === 1)
@@ -568,7 +568,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
     val df11 = spark.
       sql(
-        s"""SELECT * FROM $catalogAndNamespace.pattern_testing_table
+        s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
            |WHERE pattern_testing_col LIKE '%underscore\\_present'""".stripMargin)
     val rows11 = df11.collect()
     assert(rows11.length === 1)
@@ -576,7 +576,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
     val df12 = spark.
       sql(
-        s"""SELECT * FROM $catalogAndNamespace.pattern_testing_table
+        s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
            |WHERE pattern_testing_col LIKE '%present' ORDER BY pattern_testing_col""".stripMargin)
     val rows12 = df12.collect()
     assert(rows12.length === 6)
