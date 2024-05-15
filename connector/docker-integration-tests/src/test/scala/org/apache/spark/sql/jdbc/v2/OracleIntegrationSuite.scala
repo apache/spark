@@ -83,6 +83,12 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
     connection.prepareStatement(
       "CREATE TABLE employee (dept NUMBER(32), name VARCHAR2(32), salary NUMBER(20, 2)," +
         " bonus BINARY_DOUBLE)").executeUpdate()
+    connection.prepareStatement(
+      s"""CREATE TABLE pattern_testing_table (
+         |pattern_testing_col VARCHAR(50)
+         |)
+                   """.stripMargin
+    ).executeUpdate()
   }
 
   override def testUpdateColumnType(tbl: String): Unit = {
