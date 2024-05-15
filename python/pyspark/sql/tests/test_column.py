@@ -207,6 +207,13 @@ class ColumnTestsMixin:
 
         self.assertTrue("e" not in result["a2"]["d"] and "f" in result["a2"]["d"])
 
+    def test_expr_str_representation(self):
+        from pyspark.sql import functions as sf
+
+        expression = sf.expr("foo")
+        when_cond = sf.when(expression, sf.lit(None))
+        self.assertEqual(str(when_cond), "Column<'CASE WHEN foo THEN NULL END'>")
+
 
 class ColumnTests(ColumnTestsMixin, ReusedSQLTestCase):
     pass
