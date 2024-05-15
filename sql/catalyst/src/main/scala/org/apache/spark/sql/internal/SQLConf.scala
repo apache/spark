@@ -3815,7 +3815,7 @@ object SQLConf {
     .checkValues((1 to 9).toSet + Deflater.DEFAULT_COMPRESSION)
     .createOptional
 
-  val AVRO_XZ_LEVEL = buildConf("spark.sql.avro.zx.level")
+  val AVRO_XZ_LEVEL = buildConf("spark.sql.avro.xz.level")
     .doc("Compression level for the xz codec used in writing of AVRO files. " +
       "Valid value must be in the range of from 1 to 9 inclusive " +
       "The default value is 6.")
