@@ -8,7 +8,7 @@ create temporary view courseEarnings as select * from values
 CreateViewCommand `courseEarnings`, select * from values
   ("dotNET", 15000, 48000, 22500),
   ("Java", 20000, 30000, NULL)
-  as courseEarnings(course, `2012`, `2013`, `2014`), false, false, LocalTempView, true
+  as courseEarnings(course, `2012`, `2013`, `2014`), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [course#x, 2012#x, 2013#x, 2014#x]
       +- SubqueryAlias courseEarnings
          +- LocalRelation [course#x, 2012#x, 2013#x, 2014#x]
@@ -73,7 +73,7 @@ create temporary view courseEarningsAndSales as select * from values
 CreateViewCommand `courseEarningsAndSales`, select * from values
   ("dotNET", 15000, NULL, 48000, 1, 22500, 1),
   ("Java", 20000, 1, 30000, 2, NULL, NULL)
-  as courseEarningsAndSales(course, earnings2012, sales2012, earnings2013, sales2013, earnings2014, sales2014), false, false, LocalTempView, true
+  as courseEarningsAndSales(course, earnings2012, sales2012, earnings2013, sales2013, earnings2014, sales2014), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [course#x, earnings2012#x, sales2012#x, earnings2013#x, sales2013#x, earnings2014#x, sales2014#x]
       +- SubqueryAlias courseEarningsAndSales
          +- LocalRelation [course#x, earnings2012#x, sales2012#x, earnings2013#x, sales2013#x, earnings2014#x, sales2014#x]

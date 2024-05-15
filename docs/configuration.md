@@ -91,7 +91,7 @@ Then, you can supply configuration values at runtime:
 ```sh
 ./bin/spark-submit \
   --name "My app" \
-  --master local[4] \
+  --master "local[4]" \
   --conf spark.eventLog.enabled=false \
   --conf "spark.executor.extraJavaOptions=-XX:+PrintGCDetails -XX:+PrintGCTimeStamps" \
   myApp.jar
@@ -3750,7 +3750,7 @@ Also, you can modify or add configurations at runtime:
 {% highlight bash %}
 ./bin/spark-submit \
   --name "My app" \
-  --master local[4] \
+  --master "local[4]" \
   --conf spark.eventLog.enabled=false \
   --conf "spark.executor.extraJavaOptions=-XX:+PrintGCDetails -XX:+PrintGCTimeStamps" \
   --conf spark.hadoop.abc.def=xyz \

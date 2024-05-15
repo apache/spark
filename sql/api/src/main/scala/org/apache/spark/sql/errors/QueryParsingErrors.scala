@@ -546,6 +546,12 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0052", ctx)
   }
 
+  def temporaryViewWithSchemaBindingMode(ctx: StatementContext): Throwable = {
+    new ParseException(errorClass = "UNSUPPORTED_FEATURE.TEMPORARY_VIEW_WITH_SCHEMA_BINDING_MODE",
+      messageParameters = Map.empty,
+      ctx)
+  }
+
   def parameterMarkerNotAllowed(statement: String, origin: Origin): Throwable = {
     new ParseException(
       command = origin.sqlText,

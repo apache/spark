@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.util.{MapData, RandomUUIDGenerator}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.errors.QueryExecutionErrors.raiseError
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.types.StringTypeAnyCollation
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -84,7 +85,7 @@ case class RaiseError(errorClass: Expression, errorParms: Expression, dataType: 
   override def foldable: Boolean = false
   override def nullable: Boolean = true
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringType, MapType(StringType, StringType))
+    Seq(StringTypeAnyCollation, MapType(StringType, StringType))
 
   override def left: Expression = errorClass
   override def right: Expression = errorParms
@@ -251,7 +252,7 @@ case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Non
 
   override def nullable: Boolean = false
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def stateful: Boolean = true
 
@@ -292,7 +293,7 @@ case class SparkVersion() extends LeafExpression with RuntimeReplaceable {
 
   override lazy val replacement: Expression = StaticInvoke(
     classOf[ExpressionImplUtils],
-    StringType,
+    SQLConf.get.defaultStringType,
     "getSparkVersion",
     returnNullable = false)
 }
@@ -311,7 +312,7 @@ case class SparkVersion() extends LeafExpression with RuntimeReplaceable {
 case class TypeOf(child: Expression) extends UnaryExpression {
   override def nullable: Boolean = false
   override def foldable: Boolean = true
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
   override def eval(input: InternalRow): Any = UTF8String.fromString(child.dataType.catalogString)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -412,7 +413,8 @@ case class AesEncrypt(
   override def prettyName: String = "aes_encrypt"
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(BinaryType, BinaryType, StringType, StringType, BinaryType, BinaryType)
+    Seq(BinaryType, BinaryType, StringTypeAnyCollation, StringTypeAnyCollation,
+      BinaryType, BinaryType)
 
   override def children: Seq[Expression] = Seq(input, key, mode, padding, iv, aad)
 
@@ -485,7 +487,7 @@ case class AesDecrypt(
     this(input, key, Literal("GCM"))
 
   override def inputTypes: Seq[AbstractDataType] = {
-    Seq(BinaryType, BinaryType, StringType, StringType, BinaryType)
+    Seq(BinaryType, BinaryType, StringTypeAnyCollation, StringTypeAnyCollation, BinaryType)
   }
 
   override def prettyName: String = "aes_decrypt"

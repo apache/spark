@@ -341,7 +341,7 @@ case object VariantGet {
           case Type.DOUBLE => Literal(v.getDouble, DoubleType)
           case Type.DECIMAL =>
             val d = Decimal(v.getDecimal)
-            Literal(Decimal(v.getDecimal), DecimalType(d.precision, d.scale))
+            Literal(d, DecimalType(d.precision, d.scale))
           case Type.DATE => Literal(v.getLong.toInt, DateType)
           case Type.TIMESTAMP => Literal(v.getLong, TimestampType)
           case Type.TIMESTAMP_NTZ => Literal(v.getLong, TimestampNTZType)
@@ -682,9 +682,8 @@ object SchemaOfVariant {
     case Type.STRING => SQLConf.get.defaultStringType
     case Type.DOUBLE => DoubleType
     case Type.DECIMAL =>
-      val d = v.getDecimal
-      // Spark doesn't allow `DecimalType` to have `precision < scale`.
-      DecimalType(d.precision().max(d.scale()), d.scale())
+      val d = Decimal(v.getDecimal)
+      DecimalType(d.precision, d.scale)
     case Type.DATE => DateType
     case Type.TIMESTAMP => TimestampType
     case Type.TIMESTAMP_NTZ => TimestampNTZType

@@ -65,6 +65,8 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
   private def nullValueProjectList(plan: LogicalPlan): Seq[NamedExpression] =
     plan.output.map{ a => Alias(cast(Literal(null), a.dataType), a.name)(a.exprId) }
 
+  protected def canExecuteWithoutJoin(plan: LogicalPlan): Boolean = true
+
   protected def commonApplyFunc: PartialFunction[LogicalPlan, LogicalPlan] = {
     case p: Union if p.children.exists(isEmpty) =>
       val newChildren = p.children.filterNot(isEmpty)
@@ -111,18 +113,19 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
           case LeftSemi if isRightEmpty | isFalseCondition => empty(p)
           case LeftAnti if isRightEmpty | isFalseCondition => p.left
           case FullOuter if isLeftEmpty && isRightEmpty => empty(p)
-          case LeftOuter | FullOuter if isRightEmpty =>
+          case LeftOuter | FullOuter if isRightEmpty && canExecuteWithoutJoin(p.left) =>
             Project(p.left.output ++ nullValueProjectList(p.right), p.left)
           case RightOuter if isRightEmpty => empty(p)
-          case RightOuter | FullOuter if isLeftEmpty =>
+          case RightOuter | FullOuter if isLeftEmpty && canExecuteWithoutJoin(p.right) =>
             Project(nullValueProjectList(p.left) ++ p.right.output, p.right)
-          case LeftOuter if isFalseCondition =>
+          case LeftOuter if isFalseCondition && canExecuteWithoutJoin(p.left) =>
             Project(p.left.output ++ nullValueProjectList(p.right), p.left)
-          case RightOuter if isFalseCondition =>
+          case RightOuter if isFalseCondition && canExecuteWithoutJoin(p.right) =>
             Project(nullValueProjectList(p.left) ++ p.right.output, p.right)
           case _ => p
         }
-      } else if (joinType == LeftSemi && conditionOpt.isEmpty && nonEmpty(p.right)) {
+      } else if (joinType == LeftSemi && conditionOpt.isEmpty &&
+        nonEmpty(p.right) && canExecuteWithoutJoin(p.left)) {
         p.left
       } else if (joinType == LeftAnti && conditionOpt.isEmpty && nonEmpty(p.right)) {
         empty(p)

@@ -233,7 +233,11 @@ class SparkSession private(
 
   /**
    * A collection of methods for registering user-defined data sources.
+   *
+   * @since 4.0.0
    */
+  @Experimental
+  @Unstable
   def dataSource: DataSourceRegistration = sessionState.dataSourceRegistration
 
   /**

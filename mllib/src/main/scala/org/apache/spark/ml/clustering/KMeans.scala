@@ -451,8 +451,8 @@ class KMeans @Since("1.5.0") (
 
   private def trainWithBlock(dataset: Dataset[_], instr: Instrumentation) = {
     if (dataset.storageLevel != StorageLevel.NONE) {
-      instr.logWarning(s"Input vectors will be blockified to blocks, and " +
-        s"then cached during training. Be careful of double caching!")
+      instr.logWarning("Input vectors will be blockified to blocks, and " +
+        "then cached during training. Be careful of double caching!")
     }
 
     val initStartTime = System.currentTimeMillis

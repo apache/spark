@@ -107,7 +107,7 @@ abstract class EventLogFileWriter(
         .getOrElse(dstream)
       val bstream = new BufferedOutputStream(cstream, outputBufferSize)
       fileSystem.setPermission(path, EventLogFileWriter.LOG_FILE_PERMISSIONS)
-      logInfo(s"Logging events to $path")
+      logInfo(log"Logging events to ${MDC(PATH, path)}")
       writer = Some(fnSetupWriter(bstream))
     } catch {
       case e: Exception =>

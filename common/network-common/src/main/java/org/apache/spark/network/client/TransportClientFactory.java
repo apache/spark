@@ -42,9 +42,11 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import org.apache.spark.internal.Logger;
+import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.server.TransportChannelHandler;
 import org.apache.spark.network.util.*;
@@ -188,7 +190,9 @@ public class TransportClientFactory implements Closeable {
     final String resolvMsg = resolvedAddress.isUnresolved() ? "failed" : "succeed";
     if (hostResolveTimeMs > 2000) {
       logger.warn("DNS resolution {} for {} took {} ms",
-          resolvMsg, resolvedAddress, hostResolveTimeMs);
+        MDC.of(LogKeys.STATUS$.MODULE$, resolvMsg),
+        MDC.of(LogKeys.HOST_PORT$.MODULE$, resolvedAddress),
+        MDC.of(LogKeys.TIME$.MODULE$, hostResolveTimeMs));
     } else {
       logger.trace("DNS resolution {} for {} took {} ms",
           resolvMsg, resolvedAddress, hostResolveTimeMs);
@@ -202,7 +206,8 @@ public class TransportClientFactory implements Closeable {
           logger.trace("Returning cached connection to {}: {}", resolvedAddress, cachedClient);
           return cachedClient;
         } else {
-          logger.info("Found inactive connection to {}, creating a new one.", resolvedAddress);
+          logger.info("Found inactive connection to {}, creating a new one.",
+            MDC.of(LogKeys.HOST_PORT$.MODULE$, resolvedAddress));
         }
       }
       // If this connection should fast fail when last connection failed in last fast fail time
@@ -305,8 +310,8 @@ public class TransportClientFactory implements Closeable {
             if (handshakeFuture.isSuccess()) {
               logger.debug("{} successfully completed TLS handshake to ", address);
             } else {
-              logger.info(
-                "failed to complete TLS handshake to " + address, handshakeFuture.cause());
+              logger.info("failed to complete TLS handshake to {}", handshakeFuture.cause(),
+                MDC.of(LogKeys.HOST_PORT$.MODULE$, address));
               cf.channel().close();
             }
           }
@@ -331,14 +336,17 @@ public class TransportClientFactory implements Closeable {
       }
     } catch (Exception e) { // catch non-RuntimeExceptions too as bootstrap may be written in Scala
       long bootstrapTimeMs = (System.nanoTime() - preBootstrap) / 1000000;
-      logger.error("Exception while bootstrapping client after " + bootstrapTimeMs + " ms", e);
+      logger.error("Exception while bootstrapping client after {} ms", e,
+        MDC.of(LogKeys.BOOTSTRAP_TIME$.MODULE$, bootstrapTimeMs));
       client.close();
       throw Throwables.propagate(e);
     }
     long postBootstrap = System.nanoTime();
 
     logger.info("Successfully created connection to {} after {} ms ({} ms spent in bootstraps)",
-      address, (postBootstrap - preConnect) / 1000000, (postBootstrap - preBootstrap) / 1000000);
+      MDC.of(LogKeys.HOST_PORT$.MODULE$, address),
+      MDC.of(LogKeys.ELAPSED_TIME$.MODULE$, (postBootstrap - preConnect) / 1000000),
+      MDC.of(LogKeys.BOOTSTRAP_TIME$.MODULE$, (postBootstrap - preBootstrap) / 1000000));
 
     return client;
   }
