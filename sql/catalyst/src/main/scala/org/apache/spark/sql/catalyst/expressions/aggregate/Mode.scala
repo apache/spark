@@ -18,13 +18,14 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, UnresolvedWithinGroup}
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult, UnresolvedWithinGroup}
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Descending, Expression, ExpressionDescription, ImplicitCastInputTypes, SortOrder}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
-import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.apache.spark.sql.catalyst.util.{CollationFactory, GenericArrayData, UnsafeRowUtils}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, ArrayType, BooleanType, DataType}
+import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, ArrayType, BooleanType, DataType, StringType}
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.collection.OpenHashMap
 
 case class Mode(
@@ -47,6 +48,21 @@ case class Mode(
   override def dataType: DataType = child.dataType
 
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val defaultCheck = super.checkInputDataTypes()
+    if (defaultCheck.isFailure) {
+      defaultCheck
+    } else if (UnsafeRowUtils.isBinaryStable(child.dataType) ||
+      child.dataType.isInstanceOf[StringType]) {
+      defaultCheck
+    } else {
+      TypeCheckResult.TypeCheckFailure(
+        "The input to the function 'mode' was a complex type with non-binary collated fields," +
+          " which are currently not supported by 'mode'."
+      )
+    }
+  }
 
   override def prettyName: String = "mode"
 
@@ -74,7 +90,20 @@ case class Mode(
     if (buffer.isEmpty) {
       return null
     }
-
+    val collationAwareBuffer = child.dataType match {
+      case c: StringType if
+        !CollationFactory.fetchCollation(c.collationId).supportsBinaryEquality =>
+        val collationId = c.collationId
+        val modeMap = buffer.toSeq.groupMapReduce {
+          case (key: String, _) =>
+            CollationFactory.getCollationKey(UTF8String.fromString(key), collationId)
+          case (key: UTF8String, _) =>
+            CollationFactory.getCollationKey(key, collationId)
+          case (key, _) => key
+        }(x => x)((x, y) => (x._1, x._2 + y._2)).values
+        modeMap
+      case _ => buffer
+    }
     reverseOpt.map { reverse =>
       val defaultKeyOrdering = if (reverse) {
         PhysicalDataType.ordering(child.dataType).asInstanceOf[Ordering[AnyRef]].reverse
@@ -82,8 +111,8 @@ case class Mode(
         PhysicalDataType.ordering(child.dataType).asInstanceOf[Ordering[AnyRef]]
       }
       val ordering = Ordering.Tuple2(Ordering.Long, defaultKeyOrdering)
-      buffer.maxBy { case (key, count) => (count, key) }(ordering)
-    }.getOrElse(buffer.maxBy(_._2))._1
+      collationAwareBuffer.maxBy { case (key, count) => (count, key) }(ordering)
+    }.getOrElse(collationAwareBuffer.maxBy(_._2))._1
   }
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): Mode =
