@@ -41,7 +41,8 @@ class PySparkException(Exception):
     ):
         if error_class and error_condition:
             raise PySparkValueError(
-                "Can't provide both `error_class` and `error_condition`. Use `error_condition`."
+                "Can't provide both `error_class` and `error_condition`. `error_class` is "
+                "deprecated. Use `error_condition` instead."
             )
         if error_class:
             warnings.warn("Use `error_condition` instead.", DeprecationWarning)
