@@ -33,6 +33,7 @@ from pyspark.sql import (
     Window,
 )
 from pyspark.sql.types import (  # noqa: F401
+    _drop_metadata,
     BooleanType,
     DataType,
     LongType,
@@ -761,14 +762,8 @@ class InternalFrame:
                 # in a few tests when using Spark Connect. However, the function works properly.
                 # Therefore, we temporarily perform Spark Connect tests by excluding metadata
                 # until the issue is resolved.
-                def remove_metadata(struct_field: StructField) -> StructField:
-                    new_struct_field = StructField(
-                        struct_field.name, struct_field.dataType, struct_field.nullable
-                    )
-                    return new_struct_field
-
                 assert all(
-                    remove_metadata(index_field.struct_field) == remove_metadata(struct_field)
+                    _drop_metadata(index_field.struct_field) == _drop_metadata(struct_field)
                     for index_field, struct_field in zip(index_fields, struct_fields)
                 ), (index_fields, struct_fields)
             else:
@@ -795,14 +790,8 @@ class InternalFrame:
                 # in a few tests when using Spark Connect. However, the function works properly.
                 # Therefore, we temporarily perform Spark Connect tests by excluding metadata
                 # until the issue is resolved.
-                def remove_metadata(struct_field: StructField) -> StructField:
-                    new_struct_field = StructField(
-                        struct_field.name, struct_field.dataType, struct_field.nullable
-                    )
-                    return new_struct_field
-
                 assert all(
-                    remove_metadata(data_field.struct_field) == remove_metadata(struct_field)
+                    _drop_metadata(data_field.struct_field) == _drop_metadata(struct_field)
                     for data_field, struct_field in zip(data_fields, struct_fields)
                 ), (data_fields, struct_fields)
             else:

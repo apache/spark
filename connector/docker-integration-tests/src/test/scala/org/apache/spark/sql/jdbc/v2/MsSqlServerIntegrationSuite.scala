@@ -19,8 +19,6 @@ package org.apache.spark.sql.jdbc.v2
 
 import java.sql.Connection
 
-import org.scalatest.time.SpanSugar._
-
 import org.apache.spark.{SparkConf, SparkSQLFeatureNotSupportedException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
@@ -67,8 +65,6 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
     .set("spark.sql.catalog.mssql.url", db.getJdbcUrl(dockerIp, externalPort))
     .set("spark.sql.catalog.mssql.pushDownAggregate", "true")
     .set("spark.sql.catalog.mssql.pushDownLimit", "true")
-
-  override val connectionTimeout = timeout(7.minutes)
 
   override def tablePreparation(connection: Connection): Unit = {
     connection.prepareStatement(

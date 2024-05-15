@@ -38,15 +38,18 @@ import org.apache.hive.service.cli.session.HiveSession;
 import org.apache.hive.service.rpc.thrift.TProtocolVersion;
 import org.apache.hive.service.rpc.thrift.TRowSet;
 import org.apache.hive.service.rpc.thrift.TTableSchema;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import org.apache.spark.internal.Logger;
+import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 
 public abstract class Operation {
   protected final HiveSession parentSession;
   private OperationState state = OperationState.INITIALIZED;
   private final OperationHandle opHandle;
   private HiveConf configuration;
-  public static final Logger LOG = LoggerFactory.getLogger(Operation.class.getName());
+  public static final Logger LOG = LoggerFactory.getLogger(Operation.class);
   public static final FetchOrientation DEFAULT_FETCH_ORIENTATION = FetchOrientation.FETCH_NEXT;
   public static final long DEFAULT_FETCH_MAX_ROWS = 100;
   protected boolean hasResultSet;
@@ -208,8 +211,8 @@ public abstract class Operation {
       // create log file
       try {
         if (operationLogFile.exists()) {
-          LOG.warn("The operation log file should not exist, but it is already there: " +
-              operationLogFile.getAbsolutePath());
+          LOG.warn("The operation log file should not exist, but it is already there: {}",
+            MDC.of(LogKeys.PATH$.MODULE$, operationLogFile.getAbsolutePath()));
           operationLogFile.delete();
         }
         if (!operationLogFile.createNewFile()) {
@@ -217,13 +220,15 @@ public abstract class Operation {
           // If it can be read/written, keep its contents and use it.
           if (!operationLogFile.canRead() || !operationLogFile.canWrite()) {
             LOG.warn("The already existed operation log file cannot be recreated, " +
-                "and it cannot be read or written: " + operationLogFile.getAbsolutePath());
+              "and it cannot be read or written: {}",
+              MDC.of(LogKeys.PATH$.MODULE$, operationLogFile.getAbsolutePath()));
             isOperationLogEnabled = false;
             return;
           }
         }
       } catch (Exception e) {
-        LOG.warn("Unable to create operation log file: " + operationLogFile.getAbsolutePath(), e);
+        LOG.warn("Unable to create operation log file: {}", e,
+          MDC.of(LogKeys.PATH$.MODULE$, operationLogFile.getAbsolutePath()));
         isOperationLogEnabled = false;
         return;
       }
@@ -232,8 +237,8 @@ public abstract class Operation {
       try {
         operationLog = new OperationLog(opHandle.toString(), operationLogFile, parentSession.getHiveConf());
       } catch (FileNotFoundException e) {
-        LOG.warn("Unable to instantiate OperationLog object for operation: " +
-            opHandle, e);
+        LOG.warn("Unable to instantiate OperationLog object for operation: {}", e,
+          MDC.of(LogKeys.OPERATION_HANDLE$.MODULE$, opHandle));
         isOperationLogEnabled = false;
         return;
       }
@@ -283,8 +288,9 @@ public abstract class Operation {
   protected void cleanupOperationLog() {
     if (isOperationLogEnabled) {
       if (operationLog == null) {
-        LOG.error("Operation [ " + opHandle.getHandleIdentifier() + " ] "
-          + "logging is enabled, but its OperationLog object cannot be found.");
+        LOG.error("Operation [ {} ] logging is enabled, " +
+          "but its OperationLog object cannot be found.",
+          MDC.of(LogKeys.OPERATION_HANDLE_IDENTIFIER$.MODULE$, opHandle.getHandleIdentifier()));
       } else {
         operationLog.close();
       }

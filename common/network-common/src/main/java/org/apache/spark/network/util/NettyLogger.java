@@ -25,8 +25,9 @@ import io.netty.buffer.ByteBufHolder;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.logging.LoggingHandler;
 import io.netty.handler.logging.LogLevel;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import org.apache.spark.internal.Logger;
+import org.apache.spark.internal.LoggerFactory;
 
 public class NettyLogger {
   private static final Logger logger = LoggerFactory.getLogger(NettyLogger.class);

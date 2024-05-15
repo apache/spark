@@ -18,8 +18,11 @@
 package org.apache.hive.service;
 
 import org.apache.hadoop.hive.conf.HiveConf;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import org.apache.spark.internal.Logger;
+import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 
 /**
  * ServiceOperations.
@@ -129,9 +132,8 @@ public final class ServiceOperations {
     try {
       stop(service);
     } catch (Exception e) {
-      LOG.warn("When stopping the service " + service.getName()
-                   + " : " + e,
-               e);
+      LOG.warn("When stopping the service {}", e,
+        MDC.of(LogKeys.SERVICE_NAME$.MODULE$, service.getName()));
       return e;
     }
     return null;

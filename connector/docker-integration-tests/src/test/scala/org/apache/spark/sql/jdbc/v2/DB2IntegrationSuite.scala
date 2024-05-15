@@ -20,8 +20,6 @@ package org.apache.spark.sql.jdbc.v2
 import java.sql.Connection
 import java.util.Locale
 
-import org.scalatest.time.SpanSugar._
-
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
@@ -52,7 +50,6 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
   override val catalogName: String = "db2"
   override val namespaceOpt: Option[String] = Some("DB2INST1")
   override val db = new DB2DatabaseOnDocker
-  override val connectionTimeout = timeout(3.minutes)
 
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.db2", classOf[JDBCTableCatalog].getName)

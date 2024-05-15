@@ -10,7 +10,7 @@ CreateViewCommand `ilike_any_table`, SELECT * FROM (VALUES
   ('Google', '%Oo%'),
   ('FaceBook', '%oO%'),
   ('linkedIn', '%IN'))
-  as t1(company, pat), false, true, LocalTempView, true
+  as t1(company, pat), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [company#x, pat#x]
       +- SubqueryAlias t1
          +- Project [col1#x AS company#x, col2#x AS pat#x]

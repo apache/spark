@@ -143,13 +143,24 @@ package object config {
 
   private[spark] val STRUCTURED_LOGGING_ENABLED =
     ConfigBuilder("spark.log.structuredLogging.enabled")
-      .doc("When true, the default log4j output format is structured JSON lines, and there will " +
-        "be Mapped Diagnostic Context (MDC) from Spark added to the logs. This is useful for log " +
-        "aggregation and analysis tools. When false, the default log4j output will be plain " +
-        "text and no MDC from Spark will be set.")
+      .doc("When true, Spark logs are output as structured JSON lines with added Spark " +
+        "Mapped Diagnostic Context (MDC), facilitating easier integration with log aggregation " +
+        "and analysis tools. When false, logs are plain text without MDC. This configuration " +
+        "does not apply to interactive environments such as spark-shell, spark-sql, and " +
+        "PySpark shell.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(true)
+
+  private[spark] val LEGACY_TASK_NAME_MDC_ENABLED =
+    ConfigBuilder("spark.log.legacyTaskNameMdc.enabled")
+      .doc("When true, the MDC (Mapped Diagnostic Context) key `mdc.taskName` will be set in the " +
+        "log output, which is the behavior of Spark version 3.1 through Spark 3.5 releases. " +
+        "When false, the logging framework will use `task_name` as the MDC key, " +
+        "aligning it with the naming convention of newer MDC keys introduced in Spark 4.0 release.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
 
   private[spark] val DRIVER_LOG_LOCAL_DIR =
     ConfigBuilder("spark.driver.log.localDir")

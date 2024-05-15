@@ -61,6 +61,17 @@ CREATE [ OR REPLACE ] [ [ GLOBAL ] TEMPORARY ] VIEW [ IF NOT EXISTS ] view_ident
     * `[ ( column_name [ COMMENT column_comment ], ... ) ]` to specify column-level comments.
     * `[ COMMENT view_comment ]` to specify view-level comments.
     * `[ TBLPROPERTIES ( property_name = property_value [ , ... ] ) ]` to add metadata key-value pairs.
+    * `[ WITH SCHEMA { BINDING | COMPENSATION | [ TYPE ] EVOLUTION } ]` to specify how the view reacts to schema changes
+
+      This clause is not supported for `TEMPORARY` views.
+
+      * **BINDING** - The view can tolerate only type changes in the underlying schema requiring safe up-casts.
+      * **COMPENSATION** - The view can tolerate type changes in the underlying schema requiring casts. Runtime casting errors may occur.
+      * **TYPE EVOLUTION** - The view will adapt to any type changes in the underlying schema.
+      * **EVOLUTION** - For views defined without a column lists any schema changes are adapted by the view, including, for queries with `SELECT *` dropped or added columns.
+        If the view is defined with a column list, the clause is interpreted as `TYPE EVOLUTION`.
+      
+      The default is `WITH SCHEMA COMPENSATION`.
 
 * **query**
   A [SELECT](sql-ref-syntax-qry-select.html) statement that constructs the view from base tables or other views.
@@ -80,6 +91,10 @@ CREATE GLOBAL TEMPORARY VIEW IF NOT EXISTS subscribed_movies
     AS SELECT mo.member_id, mb.full_name, mo.movie_title
         FROM movies AS mo INNER JOIN members AS mb 
         ON mo.member_id = mb.id;
+
+-- Create a view filtering the `orders` table which will adjust to schema changes in `orders`.
+CREATE OR REPLACE VIEW open_orders WITH SCHEMA EVOLUTION
+    AS SELECT * FROM orders WHERE status = 'open';
 ```
 
 ### Related Statements

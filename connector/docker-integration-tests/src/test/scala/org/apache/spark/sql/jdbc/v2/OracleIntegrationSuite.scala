@@ -20,8 +20,6 @@ package org.apache.spark.sql.jdbc.v2
 import java.sql.Connection
 import java.util.Locale
 
-import org.scalatest.time.SpanSugar._
-
 import org.apache.spark.{SparkConf, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY
@@ -90,8 +88,6 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
     .set("spark.sql.catalog.oracle.pushDownAggregate", "true")
     .set("spark.sql.catalog.oracle.pushDownLimit", "true")
     .set("spark.sql.catalog.oracle.pushDownOffset", "true")
-
-  override val connectionTimeout = timeout(7.minutes)
 
   override def tablePreparation(connection: Connection): Unit = {
     connection.prepareStatement(

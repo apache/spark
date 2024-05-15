@@ -107,7 +107,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $catalogName.alt_table ADD COLUMNS (C3 DOUBLE)")
         },
-        errorClass = "FIELDS_ALREADY_EXISTS",
+        errorClass = "FIELD_ALREADY_EXISTS",
         parameters = Map(
           "op" -> "add",
           "fieldNames" -> "`C3`",
@@ -179,7 +179,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $catalogName.alt_table RENAME COLUMN ID1 TO ID2")
         },
-        errorClass = "FIELDS_ALREADY_EXISTS",
+        errorClass = "FIELD_ALREADY_EXISTS",
         parameters = Map(
           "op" -> "rename",
           "fieldNames" -> "`ID2`",

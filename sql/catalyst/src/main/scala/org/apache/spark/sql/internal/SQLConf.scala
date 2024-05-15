@@ -1700,6 +1700,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val VIEW_SCHEMA_BINDING_MODE = buildConf("spark.sql.viewSchemaBindingMode")
+    .doc("Set to DISABLE to disable the WITH SCHEMA clause for view DDL and suppress the line in " +
+      " DESCRIBE EXTENDED. The default, and only other value, is COMPENSATION. Views without " +
+      " WITH SCHEMA clause are defaulted to WITH SCHEMA COMPENSATION.")
+    .version("4.0.0")
+    .stringConf
+    .transform(_.toUpperCase(Locale.ROOT))
+    .checkValues(Set("COMPENSATION", "DISABLED"))
+    .createWithDefault("COMPENSATION")
+
   // The output committer class used by data sources. The specified class needs to be a
   // subclass of org.apache.hadoop.mapreduce.OutputCommitter.
   val OUTPUT_COMMITTER_CLASS = buildConf("spark.sql.sources.outputCommitterClass")
@@ -4222,6 +4232,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_DB2_TIMESTAMP_MAPPING_ENABLED =
+    buildConf("spark.sql.legacy.db2.numericMapping.enabled")
+      .internal()
+      .doc("When true, SMALLINT maps to IntegerType in DB2; otherwise, ShortType" )
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val CSV_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.csv.filterPushdown.enabled")
     .doc("When true, enable filter pushdown to CSV datasource.")
     .version("3.0.0")
@@ -4246,6 +4264,15 @@ object SQLConf {
       .doc("When set to true, enables partial results for structs, maps, and arrays in JSON " +
         "when one or more fields do not match the schema")
       .version("3.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val JSON_EXACT_STRING_PARSING =
+    buildConf("spark.sql.json.enableExactStringParsing")
+      .internal()
+      .doc("When set to true, string columns extracted from JSON objects will be extracted " +
+        "exactly as they appear in the input string, with no changes")
+      .version("4.0.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -4591,6 +4618,16 @@ object SQLConf {
         "values in the array by default. If this config is set to true, it restores the legacy " +
         "behavior of only inferring the type from the first array element.")
       .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_INFER_MAP_STRUCT_TYPE_FROM_FIRST_ITEM =
+    buildConf("spark.sql.pyspark.legacy.inferMapTypeFromFirstPair.enabled")
+      .internal()
+      .doc("PySpark's SparkSession.createDataFrame infers the key/value types of a map from all " +
+        "paris in the map by default. If this config is set to true, it restores the legacy " +
+        "behavior of only inferring the type from the first non-null pair.")
+      .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -5339,6 +5376,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyOracleTimestampMappingEnabled: Boolean =
     getConf(LEGACY_ORACLE_TIMESTAMP_MAPPING_ENABLED)
 
+  def legacyDB2numericMappingEnabled: Boolean =
+    getConf(LEGACY_DB2_TIMESTAMP_MAPPING_ENABLED)
+
   override def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = {
     LegacyBehaviorPolicy.withName(getConf(SQLConf.LEGACY_TIME_PARSER_POLICY))
   }
@@ -5483,6 +5523,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def groupByOrdinal: Boolean = getConf(GROUP_BY_ORDINAL)
 
   def groupByAliases: Boolean = getConf(GROUP_BY_ALIASES)
+
+  def viewSchemaBindingMode: String = getConf(VIEW_SCHEMA_BINDING_MODE)
 
   def defaultCacheStorageLevel: StorageLevel =
     StorageLevel.fromString(getConf(DEFAULT_CACHE_STORAGE_LEVEL))
@@ -5793,6 +5835,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyInferArrayTypeFromFirstElement: Boolean = getConf(
     SQLConf.LEGACY_INFER_ARRAY_TYPE_FROM_FIRST_ELEMENT)
+
+  def legacyInferMapStructTypeFromFirstItem: Boolean = getConf(
+    SQLConf.LEGACY_INFER_MAP_STRUCT_TYPE_FROM_FIRST_ITEM)
 
   def parquetFieldIdReadEnabled: Boolean = getConf(SQLConf.PARQUET_FIELD_ID_READ_ENABLED)
 
