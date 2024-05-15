@@ -231,11 +231,6 @@ public class V2ExpressionSQLBuilder {
     return l + " " + name + " " + r;
   }
 
-  @Deprecated
-  protected String visitCast(String l, DataType dataType) {
-    return "CAST(" + l + " AS " + dataType.typeName() + ")";
-  }
-
   protected String visitCast(String expr, DataType exprDataType, DataType targetDataType) {
     return "CAST(" + expr + " AS " + targetDataType.typeName() + ")";
   }

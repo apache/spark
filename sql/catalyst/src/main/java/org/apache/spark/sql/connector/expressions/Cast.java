@@ -42,8 +42,7 @@ public class Cast extends ExpressionWithToString {
 
   @Deprecated
   public Cast(Expression expression, DataType dataType) {
-    this.expression = expression;
-    this.dataType = dataType;
+    this(expression, null, dataType);
   }
 
   public Cast(Expression expression, DataType expressionDataType, DataType targetDataType) {
