@@ -21,7 +21,7 @@ import java.io.CharArrayWriter
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.util.{ArrayData, DropMalformedMode, FailFastMode, FailureSafeParser, GenericArrayData, PermissiveMode}
 import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.catalyst.xml.{StaxXmlGenerator, StaxXmlParser, ValidatorUtil, XmlInferSchema, XmlOptions}
@@ -58,7 +58,6 @@ case class XmlToStructs(
     timeZoneId: Option[String] = None)
   extends UnaryExpression
   with TimeZoneAwareExpression
-  with CodegenFallback
   with ExpectsInputTypes
   with NullIntolerant
   with QueryErrorsBase {
@@ -104,7 +103,7 @@ case class XmlToStructs(
     if (mode != PermissiveMode && mode != FailFastMode) {
       throw QueryCompilationErrors.parseModeUnsupportedError("from_xml", mode)
     }
-    val (parserSchema, actualSchema) = nullableSchema match {
+    val (parserSchema, _) = nullableSchema match {
       case s: StructType =>
         ExprUtils.verifyColumnNameOfCorruptRecord(s, parsedOptions.columnNameOfCorruptRecord)
         (s, StructType(s.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord)))
@@ -139,6 +138,11 @@ case class XmlToStructs(
     case _ =>
       val str = xml.asInstanceOf[UTF8String].toString
       converter(parser.parse(str))
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val expr = ctx.addReferenceObj("this", this)
+    defineCodeGen(ctx, ev, input => s"(InternalRow) $expr.nullSafeEval($input)")
   }
 
   override def inputTypes: Seq[AbstractDataType] = StringTypeAnyCollation :: Nil

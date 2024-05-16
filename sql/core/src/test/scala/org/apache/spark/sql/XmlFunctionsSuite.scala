@@ -22,6 +22,7 @@ import java.util.Locale
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -37,6 +38,17 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.select(from_xml($"value", schema)),
       Row(Row(1)) :: Nil)
+  }
+
+  test("SPARK-48300: from_xml - Codegen Support") {
+    withTempView("XmlToStructsTable") {
+      val dataDF = Seq("""<ROW><a>1</a></ROW>""").toDF("value")
+      dataDF.createOrReplaceTempView("XmlToStructsTable")
+      val df = sql("SELECT from_xml(value, 'a INT') FROM XmlToStructsTable")
+      val plan = df.queryExecution.executedPlan
+      assert(plan.isInstanceOf[WholeStageCodegenExec])
+      checkAnswer(df, Row(Row(1)) :: Nil)
+    }
   }
 
   test("from_xml with option (timestampFormat)") {
