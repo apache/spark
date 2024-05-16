@@ -2940,20 +2940,20 @@ case class Extract(field: Expression, source: Expression, replacement: Expressio
 object Extract {
   def createExpr(funcName: String, field: Expression, source: Expression): Expression = {
     // both string and null literals are allowed.
-    field.dataType match {
-      case _: StringType | NullType if (field.foldable) =>
-        val fieldStr = field.eval().asInstanceOf[UTF8String]
-        if (fieldStr == null) {
-          Literal(null, DoubleType)
-        } else {
-          source.dataType match {
-            case _: AnsiIntervalType | CalendarIntervalType =>
-              ExtractIntervalPart.parseExtractField(fieldStr.toString, source)
-            case _ =>
-              DatePart.parseExtractField(fieldStr.toString, source)
-          }
+    if ((field.dataType.isInstanceOf[StringType] || field.dataType == NullType) && field.foldable) {
+      val fieldStr = field.eval().asInstanceOf[UTF8String]
+      if (fieldStr == null) {
+        Literal(null, DoubleType)
+      } else {
+        source.dataType match {
+          case _: AnsiIntervalType | CalendarIntervalType =>
+            ExtractIntervalPart.parseExtractField(fieldStr.toString, source)
+          case _ =>
+            DatePart.parseExtractField(fieldStr.toString, source)
         }
-      case _ => throw QueryCompilationErrors.nonFoldableArgumentError(funcName, "field", StringType)
+      }
+    } else {
+      throw QueryCompilationErrors.nonFoldableArgumentError(funcName, "field", StringType)
     }
   }
 }

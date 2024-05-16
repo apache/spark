@@ -1635,10 +1635,7 @@ class CollationSQLExpressionsSuite
   test("CurrentTimeZone expression with collation") {
     // Supported collations
     Seq("UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI").foreach(collationName => {
-      val query =
-        s"""
-          |select current_timezone()
-          |""".stripMargin
+      val query = "select current_timezone()"
       // Result
       withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collationName) {
         val testQuery = sql(query)
@@ -1651,10 +1648,7 @@ class CollationSQLExpressionsSuite
   test("DayName expression with collation") {
     // Supported collations
     Seq("UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI").foreach(collationName => {
-      val query =
-        s"""
-          |select dayname(current_date())
-          |""".stripMargin
+      val query = "select dayname(current_date())"
       // Result
       withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collationName) {
         val testQuery = sql(query)
