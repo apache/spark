@@ -359,6 +359,12 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     assert(scan.schema.names.sameElements(Seq(col)))
   }
 
+  test("column pruning with unsupported filter") {
+    val df = sql(s"SELECT url_decode(name) FROM $catalogAndNamespace." +
+      s"${caseConvert("employee")}")
+    checkColumnPruned(df, "name")
+  }
+
   test("SPARK-37038: Test TABLESAMPLE") {
     if (supportsTableSample) {
       withTable(s"$catalogName.new_table") {
