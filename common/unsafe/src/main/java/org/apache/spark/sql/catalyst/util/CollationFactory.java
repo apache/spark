@@ -158,7 +158,7 @@ public final class CollationFactory {
       // No Collation can simultaneously support binary equality and lowercase equality
       assert(!supportsBinaryEquality || !supportsLowercaseEquality);
 
-      assert(SUPPORTED_PROVIDERS.contains(provider) || provider == null);
+      assert(SUPPORTED_PROVIDERS.contains(provider));
 
       if (supportsBinaryEquality) {
         this.equalsFunction = UTF8String::equals;

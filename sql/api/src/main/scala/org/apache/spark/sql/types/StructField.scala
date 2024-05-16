@@ -23,6 +23,7 @@ import org.json4s.{JObject, JString}
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.util.{CollationFactory, QuotingUtils, StringConcat}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumnsUtils.{CURRENT_DEFAULT_COLUMN_METADATA_KEY, EXISTS_DEFAULT_COLUMN_METADATA_KEY}
@@ -120,7 +121,7 @@ case class StructField(
       val collation = CollationFactory.fetchCollation(st.collationId)
       collation.identifier().toStringWithoutVersion()
     case _ =>
-      throw new IllegalStateException(s"Unexpected data type $dt")
+      throw SparkException.internalError(s"Unexpected data type $dt")
   }
 
   /**

@@ -223,7 +223,7 @@ object DataType {
     ("elementType", t: JValue),
     ("type", JString("array"))) =>
       assertValidTypeForCollations(fieldPath, "array", collationsMap)
-      val elementType = parseDataTypeWithCollation(t, fieldPath + ".element", collationsMap)
+      val elementType = parseDataType(t, fieldPath + ".element", collationsMap)
       ArrayType(elementType, n)
 
     case JSortedObject(
@@ -232,13 +232,14 @@ object DataType {
     ("valueContainsNull", JBool(n)),
     ("valueType", v: JValue)) =>
       assertValidTypeForCollations(fieldPath, "map", collationsMap)
-      val keyType = parseDataTypeWithCollation(k, fieldPath + ".key", collationsMap)
-      val valueType = parseDataTypeWithCollation(v, fieldPath + ".value", collationsMap)
+      val keyType = parseDataType(k, fieldPath + ".key", collationsMap)
+      val valueType = parseDataType(v, fieldPath + ".value", collationsMap)
       MapType(keyType, valueType, n)
 
     case JSortedObject(
     ("fields", JArray(fields)),
     ("type", JString("struct"))) =>
+      assertValidTypeForCollations(fieldPath, "struct", collationsMap)
       StructType(fields.map(parseStructField))
 
     // Scala/Java UDT
@@ -290,22 +291,6 @@ object DataType {
     case other => throw new SparkIllegalArgumentException(
       errorClass = "_LEGACY_ERROR_TEMP_3250",
       messageParameters = Map("other" -> compact(render(other))))
-  }
-
-  /**
-   * Checks if the current field is in the collation map, and if it is it returns
-   * a StringType with the given collation. Otherwise, it further parses its type.
-   */
-  private def parseDataTypeWithCollation(
-      json: JValue,
-      path: String,
-      collationsMap: Map[String, String]): DataType = {
-    (json, collationsMap.get(path)) match {
-      case (JString(fieldType), Some(collation)) =>
-        assertValidTypeForCollations(path, fieldType, collationsMap)
-        stringTypeWithCollation(collation)
-      case _ => parseDataType(json, path, collationsMap)
-    }
   }
 
   private def assertValidTypeForCollations(

@@ -716,7 +716,7 @@ class ArrayType(DataType):
         fieldPath: str,
         collationsMap: Optional[Dict[str, str]],
     ) -> "ArrayType":
-        elementType = _parse_type_with_collation(
+        elementType = _parse_datatype_json_value(
             json["elementType"], fieldPath + ".element", collationsMap
         )
         return ArrayType(elementType, json["containsNull"])
@@ -841,8 +841,8 @@ class MapType(DataType):
         fieldPath: str,
         collationsMap: Optional[Dict[str, str]],
     ) -> "MapType":
-        keyType = _parse_type_with_collation(json["keyType"], fieldPath + ".key", collationsMap)
-        valueType = _parse_type_with_collation(
+        keyType = _parse_datatype_json_value(json["keyType"], fieldPath + ".key", collationsMap)
+        valueType = _parse_datatype_json_value(
             json["valueType"], fieldPath + ".value", collationsMap
         )
         return MapType(
@@ -1869,16 +1869,6 @@ def _parse_datatype_json_value(
                 error_class="UNSUPPORTED_DATA_TYPE",
                 message_parameters={"data_type": str(tpe)},
             )
-
-
-def _parse_type_with_collation(
-    json_value: Union[dict, str], fieldPath: str, collationsMap: Optional[Dict[str, str]]
-) -> DataType:
-    if collationsMap and fieldPath in collationsMap:
-        _assert_valid_type_for_collation(fieldPath, json_value, collationsMap)
-        collation_name = collationsMap[fieldPath]
-        return StringType(collation_name)
-    return _parse_datatype_json_value(json_value, fieldPath, collationsMap)
 
 
 def _assert_valid_type_for_collation(
