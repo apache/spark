@@ -384,4 +384,57 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       assert(fetchCollation(collationId).collationName == "UTF8_BINARY")
     })
   }
+
+  test("repeated specifiers in collation name") {
+    Seq(
+      "UTF8_BINARY_LCASE_LCASE",
+      "UNICODE_CS_CS",
+      "UNICODE_CI_CI",
+      "UNICODE_CI_CS",
+      "UNICODE_CS_CI",
+      "UNICODE_AS_AS",
+      "UNICODE_AI_AI",
+      "UNICODE_AS_AI",
+      "UNICODE_AI_AS",
+      "UNICODE_AS_CS_AI",
+      "UNICODE_CS_AI_CI",
+      "UNICODE_CS_AS_CI_AI"
+    ).foreach(collationName => {
+      val error = intercept[SparkException] {
+        fetchCollation(collationName)
+      }
+
+      assert(error.getErrorClass === "COLLATION_INVALID_NAME")
+      assert(error.getMessageParameters.asScala === Map("collationName" -> collationName))
+    })
+  }
+
+  test("basic ICU collator checks") {
+    Seq(
+      CollationTestCase("UNICODE_CI", "a", "A", true),
+      CollationTestCase("UNICODE_CI", "a", "å", false),
+      CollationTestCase("UNICODE_CI", "a", "Å", false),
+      CollationTestCase("UNICODE_AI", "a", "A", false),
+      CollationTestCase("UNICODE_AI", "a", "å", true),
+      CollationTestCase("UNICODE_AI", "a", "Å", false),
+      CollationTestCase("UNICODE_CI_AI", "a", "A", true),
+      CollationTestCase("UNICODE_CI_AI", "a", "å", true),
+      CollationTestCase("UNICODE_CI_AI", "a", "Å", true)
+    ).foreach(testCase => {
+      val collation = fetchCollation(testCase.collationName)
+      assert(collation.equalsFunction(toUTF8(testCase.s1), toUTF8(testCase.s2)) ==
+        testCase.expectedResult)
+    })
+    Seq(
+      CollationTestCase("en", "a", "A", -1),
+      CollationTestCase("en_CI", "a", "A", 0),
+      CollationTestCase("en_AI", "a", "å", 0),
+      CollationTestCase("sv", "Kypper", "Köpfe", -1),
+      CollationTestCase("de", "Kypper", "Köpfe", 1)
+    ).foreach(testCase => {
+      val collation = fetchCollation(testCase.collationName)
+      val result = collation.comparator.compare(toUTF8(testCase.s1), toUTF8(testCase.s2))
+      assert(Integer.signum(result) == testCase.expectedResult)
+    })
+  }
 }

@@ -153,6 +153,16 @@ public final class CollationFactory {
      * bit 15-14: zeroes, reserved for punctuation sensitivity
      * bit 13-12: zeroes, reserved for first letter preference
      * bit 11-0:  locale id as specified in `ICULocaleToId` mapping
+     * ---
+     * Some illustrative examples of collation name to id mapping:
+     * - UTF8_BINARY       -> 0
+     * - UTF8_BINARY_LCASE -> 1
+     * - UNICODE           -> 0x20000000
+     * - UNICODE_AI        -> 0x20010000
+     * - UNICODE_CI        -> 0x20020000
+     * - UNICODE_CI_AI     -> 0x20030000
+     * - af                -> 0x20000001
+     * - af_CI_AI          -> 0x20030001
      */
     private abstract static class CollationSpec {
 
@@ -296,10 +306,18 @@ public final class CollationFactory {
       private static final int ACCENT_SENSITIVITY_OFFSET = 16;
       private static final int ACCENT_SENSITIVITY_MASK = 0b1;
 
+      // Array of locale names, each locale id corresponds to the index in this array
       private static final String[] ICULocaleNames;
+
+      // Mapping of locale names to corresponding `ULocale` instance
       private static final Map<String, ULocale> ICULocaleMap = new HashMap<>();
+
+      // Used to parse user input collation names which are converted to uppercase
       private static final Map<String, String> ICULocaleMapUppercase = new HashMap<>();
+
+      // Reverse mapping of `ICULocaleNames`
       private static final Map<String, Integer> ICULocaleToId = new HashMap<>();
+
       private static final String ICU_COLLATOR_VERSION = "153.120.0.0";
 
       static {
@@ -321,12 +339,14 @@ public final class CollationFactory {
               builder.append(country);
             }
             String localeName = builder.toString();
+            // locale names are unique
             assert (!ICULocaleMap.containsKey(localeName));
             ICULocaleMap.put(localeName, locale);
           }
         }
         for (String localeName : ICULocaleMap.keySet()) {
           String localeUppercase = localeName.toUpperCase();
+          // locale names are unique case-insensitively
           assert (!ICULocaleMapUppercase.containsKey(localeUppercase));
           ICULocaleMapUppercase.put(localeUppercase, localeName);
         }
@@ -334,7 +354,7 @@ public final class CollationFactory {
         Arrays.sort(ICULocaleNames);
         // maximum number of locale ids as defined by binary layout
         assert (ICULocaleNames.length <= (1 << 12));
-        for (int i = 0; i < ICULocaleNames.length; i++) {
+        for (int i = 0; i < ICULocaleNames.length; ++i) {
           ICULocaleToId.put(ICULocaleNames[i], i);
         }
       }
@@ -366,6 +386,9 @@ public final class CollationFactory {
 
       private static int collationNameToId(
           String originalName, String collationName) throws SparkException {
+        // search for the longest locale match because specifiers are designed to be different from
+        // script tag and country code, meaning the only valid locale name match can be
+        // the longest one
         int lastPos = -1;
         for (int i = 1; i <= collationName.length(); i++) {
           String localeName = collationName.substring(0, i);
@@ -379,6 +402,7 @@ public final class CollationFactory {
           String locale = collationName.substring(0, lastPos);
           int collationId = ICULocaleToId.get(ICULocaleMapUppercase.get(locale));
 
+          // try all combinations of AS/AI and CS/CI
           CaseSensitivity caseSensitivity;
           AccentSensitivity accentSensitivity;
           if (collationName.equals(locale) ||
