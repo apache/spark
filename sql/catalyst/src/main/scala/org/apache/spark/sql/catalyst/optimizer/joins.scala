@@ -398,8 +398,11 @@ trait JoinSelectionHelper extends Logging {
 
   protected def hashJoinSupported
       (leftKeys: Seq[Expression], rightKeys: Seq[Expression]): Boolean = {
-    var result = leftKeys.concat(rightKeys).forall(e => e.dataType.isInstanceOf[StringType])
-    result |= leftKeys.concat(rightKeys).forall(e => e.dataType.isInstanceOf[BinaryType])
+    def hasStableCollationKey(e: Expression): Boolean =
+      e.dataType.isInstanceOf[StringType] || e.dataType.isInstanceOf[BinaryType]
+    def isHashJoinSupported(e: Expression): Boolean = UnsafeRowUtils.isBinaryStable(e.dataType) ||
+      hasStableCollationKey(e)
+    val result = leftKeys.concat(rightKeys).forall(e => isHashJoinSupported(e))
     if (!result) {
       val keysNotSupportingHashJoin = leftKeys.concat(rightKeys).filterNot(
         e => UnsafeRowUtils.isBinaryStable(e.dataType))

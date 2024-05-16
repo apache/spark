@@ -1114,7 +1114,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("hash join should respect collation for strings") {
+  test("hash join should be used for collated strings") {
     val t1 = "T_1"
     val t2 = "T_2"
 
