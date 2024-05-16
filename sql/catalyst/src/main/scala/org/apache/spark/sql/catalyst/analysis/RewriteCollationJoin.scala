@@ -31,29 +31,25 @@ object RewriteCollationJoin extends Rule[LogicalPlan] {
           (l.dataType, r.dataType) match {
             case (st: StringType, _: StringType) =>
               val collation = CollationFactory.fetchCollation(st.collationId)
-              if (collation.supportsBinaryEquality) {
-                condition
-              } else if (collation.supportsLowercaseEquality) {
+              if (collation.supportsLowercaseEquality) {
                 EqualTo(Lower(l), Lower(r))
               } else {
                 EqualTo(CollationKey(l), CollationKey(r))
               }
             case _ =>
-              condition
+              EqualTo(l, r)
           }
         case EqualNullSafe(l: AttributeReference, r: AttributeReference) =>
           (l.dataType, r.dataType) match {
             case (st: StringType, _: StringType) =>
               val collation = CollationFactory.fetchCollation(st.collationId)
-              if (collation.supportsBinaryEquality) {
-                condition
-              } else if (collation.supportsLowercaseEquality) {
+              if (collation.supportsLowercaseEquality) {
                 EqualNullSafe(Lower(l), Lower(r))
               } else {
                 EqualNullSafe(CollationKey(l), CollationKey(r))
               }
             case _ =>
-              condition
+              EqualNullSafe(l, r)
           }
       }
       if (!newCondition.fastEquals(condition)) {

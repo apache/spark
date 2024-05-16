@@ -1152,6 +1152,53 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     })
   }
 
+  test("rewrite with collationkey shouldn't disrupt multiple join conditions") {
+    val t1 = "T_1"
+    val t2 = "T_2"
+
+    case class HashMultiJoinTestCase[R](
+      type1: String,
+      type2: String,
+      data1: String,
+      data2: String,
+      result: R
+    )
+    val testCases = Seq(
+      HashMultiJoinTestCase("STRING COLLATE UTF8_BINARY", "INT",
+        "'a', 0, 1", "'a', 0, 1", Row("a", 0, 1, "a", 0, 1)),
+      HashMultiJoinTestCase("STRING COLLATE UTF8_BINARY", "STRING COLLATE UTF8_BINARY",
+        "'a', 'a', 1", "'a', 'a', 1", Row("a", "a", 1, "a", "a", 1)),
+      HashMultiJoinTestCase("STRING COLLATE UTF8_BINARY", "STRING COLLATE UTF8_BINARY_LCASE",
+        "'a', 'a', 1", "'a', 'A', 1", Row("a", "a", 1, "a", "A", 1)),
+      HashMultiJoinTestCase("STRING COLLATE UTF8_BINARY_LCASE", "STRING COLLATE UNICODE_CI",
+        "'a', 'a', 1", "'A', 'A', 1", Row("a", "a", 1, "A", "A", 1))
+    )
+
+    testCases.foreach(t => {
+      withTable(t1, t2) {
+        sql(s"CREATE TABLE $t1 (x ${t.type1}, y ${t.type2}, i int) USING PARQUET")
+        sql(s"INSERT INTO $t1 VALUES (${t.data1})")
+        sql(s"CREATE TABLE $t2 (x ${t.type1}, y ${t.type2}, i int) USING PARQUET")
+        sql(s"INSERT INTO $t2 VALUES (${t.data2})")
+
+        val df = sql(s"SELECT * FROM $t1 JOIN $t2 ON $t1.x = $t2.x AND $t1.y = $t2.y")
+        checkAnswer(df, t.result)
+
+        // confirm that hash join is used instead of sort merge join
+        assert(
+          collectFirst(df.queryExecution.executedPlan) {
+            case _: HashJoin => ()
+          }.nonEmpty
+        )
+        assert(
+          collectFirst(df.queryExecution.executedPlan) {
+            case _: ShuffledJoin => ()
+          }.isEmpty
+        )
+      }
+    })
+  }
+
   test("hll sketch aggregate should respect collation") {
     case class HllSketchAggTestCase[R](c: String, result: R)
     val testCases = Seq(
