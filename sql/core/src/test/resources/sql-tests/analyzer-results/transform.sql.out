@@ -1035,3 +1035,14 @@ ScriptTransformation cat, [a#x, b#x], ScriptInputOutputSchema(List(),List(),None
                         +- Project [a#x, b#x]
                            +- SubqueryAlias complex_trans
                               +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT TRANSFORM (a, b)
+  USING 'cat' AS (a CHAR(10), b VARCHAR(10))
+FROM VALUES('apache', 'spark') t(a, b)
+-- !query analysis
+ScriptTransformation cat, [a#x, b#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false)
++- Project [a#x, b#x]
+   +- SubqueryAlias t
+      +- LocalRelation [a#x, b#x]
