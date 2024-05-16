@@ -1568,6 +1568,18 @@ class ArrowTestsMixin:
         with self.assertRaises(Exception):
             self.spark.createDataFrame(t)
 
+    def test_createDataFrame_arrow_fixed_size_binary(self):
+        a = pa.array(["a"] * 5, type=pa.binary(1))
+        t = pa.table([a], ["fsb"])
+        df = self.spark.createDataFrame(t)
+        self.assertIsInstance(df.schema["fsb"].dataType, BinaryType)
+
+    def test_createDataFrame_arrow_fixed_size_list(self):
+        a = pa.array([[-1, 3]] * 5, type=pa.list_(pa.int32(), 2))
+        t = pa.table([a], ["fsl"])
+        df = self.spark.createDataFrame(t)
+        self.assertIsInstance(df.schema["fsl"].dataType, ArrayType)
+
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,

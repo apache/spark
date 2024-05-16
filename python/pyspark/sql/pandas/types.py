@@ -207,6 +207,8 @@ def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> Da
         spark_type = StringType()
     elif types.is_binary(at):
         spark_type = BinaryType()
+    elif types.is_fixed_size_binary(at):
+        spark_type = BinaryType()
     elif types.is_large_binary(at):
         spark_type = BinaryType()
     elif types.is_date32(at):
@@ -218,6 +220,8 @@ def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> Da
     elif types.is_duration(at):
         spark_type = DayTimeIntervalType()
     elif types.is_list(at):
+        spark_type = ArrayType(from_arrow_type(at.value_type, prefer_timestamp_ntz))
+    elif types.is_fixed_size_list(at):
         spark_type = ArrayType(from_arrow_type(at.value_type, prefer_timestamp_ntz))
     elif types.is_large_list(at):
         spark_type = ArrayType(from_arrow_type(at.value_type, prefer_timestamp_ntz))
