@@ -42,7 +42,10 @@ case class Mode(
     this(child, 0, 0, Some(reverse))
   }
 
-  final lazy val collationId: Int = child.dataType.asInstanceOf[StringType].collationId
+  final lazy val collationId: Int = child.dataType match {
+    case c: StringType => c.collationId
+    case _ => CollationFactory.UTF8_BINARY_COLLATION_ID
+  }
 
   // Returns null for empty inputs
   override def nullable: Boolean = true

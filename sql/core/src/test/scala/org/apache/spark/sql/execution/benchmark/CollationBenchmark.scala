@@ -206,7 +206,9 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
       val modeDefaultCollation = Mode(child =
         Literal.create("some_column_name", StringType(collationType)))
       benchmark.addCase(s"$collationType - mode - ${value.size} elements") { _ =>
-        modeDefaultCollation.eval(buffer)
+        (0 to 10) foreach { _ =>
+          modeDefaultCollation.eval(buffer)
+        }
       }
     }
     }
