@@ -129,7 +129,9 @@ class FileStreamSource(
     log"maxBytesPerBatch = ${MDC(LogKeys.NUM_BYTES, maxBytesPerBatch)}, " +
     log"maxFileAgeMs = ${MDC(LogKeys.TIME_UNITS, maxFileAgeMs)}")
 
-  private var unreadFiles: Seq[NewFileEntry] = _
+
+  // Visible for testing
+  private[sql] var unreadFiles: Seq[NewFileEntry] = _
 
   /**
    * Split files into a selected/unselected pair according to a total size threshold.
@@ -438,8 +440,8 @@ object FileStreamSource {
     def sparkPath: SparkPath = SparkPath.fromUrlString(path)
   }
 
-  /** Newly fetched files metadata holder. */
-  private case class NewFileEntry(path: SparkPath, size: Long, timestamp: Long)
+  /** Newly fetched files metadata holder. Visible for testing. */
+  private[sql] case class NewFileEntry(path: SparkPath, size: Long, timestamp: Long)
 
   private case class FilesSplit(files: Seq[NewFileEntry], size: BigInt)
 
