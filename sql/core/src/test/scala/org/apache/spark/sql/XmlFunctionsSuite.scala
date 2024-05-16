@@ -384,7 +384,7 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("to_xml - Codegen Support") {
+  test("SPARK-48296: to_xml - Codegen Support") {
     withTempView("StructsToXmlTable") {
       val schema = StructType(StructField("a", IntegerType, nullable = false) :: Nil)
       val dataDF = spark.createDataFrame(Seq(Row(1)).asJava, schema).withColumn("a", struct($"a"))
