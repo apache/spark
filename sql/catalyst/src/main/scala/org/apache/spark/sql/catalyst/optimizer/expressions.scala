@@ -591,6 +591,17 @@ object SimplifyConditionals extends Rule[LogicalPlan] {
       case If(cond, FalseLiteral, falseValue)
           if cond.deterministic && falseValue.semanticEquals(cond) =>
         if (cond.nullable) Not(cond) else FalseLiteral
+      case If(IsNull(cond), Literal.FalseLiteral, falseValue)
+          if cond.deterministic =>
+        if (cond.nullable) And(IsNotNull(cond), falseValue) else falseValue
+      case If(IsNull(cond), IsNotNull(trueValue), falseValue)
+          if cond.deterministic && cond.semanticEquals(trueValue) =>
+        if (cond.nullable) And(IsNotNull(cond), falseValue) else falseValue
+      case If(IsNull(cond), IsNull(when), falseValue)
+          if cond.deterministic && cond.semanticEquals(when) =>
+        if (cond.nullable) Or(IsNull(cond), falseValue) else falseValue
+      case If(IsNull(cond), Literal.TrueLiteral, falseValue) =>
+        if (cond.nullable) Or(IsNull(cond), falseValue) else falseValue
 
       case CaseWhen(Seq((cond, TrueLiteral)), Some(FalseLiteral)) =>
         if (cond.nullable) EqualNullSafe(cond, TrueLiteral) else cond
@@ -601,6 +612,17 @@ object SimplifyConditionals extends Rule[LogicalPlan] {
       case CaseWhen(Seq((cond, FalseLiteral)), Some(elseValue))
           if cond.deterministic && elseValue.semanticEquals(cond) =>
         if (cond.nullable) Not(cond) else FalseLiteral
+      case CaseWhen(Seq((IsNull(cond), Literal.FalseLiteral)), Some(elseValue))
+          if cond.deterministic =>
+        if (cond.nullable) And(IsNotNull(cond), elseValue) else elseValue
+      case CaseWhen(Seq((IsNull(cond), IsNotNull(trueValue))), Some(elseValue))
+          if cond.deterministic && cond.semanticEquals(trueValue) =>
+        if (cond.nullable) And(IsNotNull(cond), elseValue) else elseValue
+      case CaseWhen(Seq((IsNull(cond), IsNull(when))), Some(elseValue))
+          if cond.deterministic && cond.semanticEquals(when) =>
+        if (cond.nullable) Or(IsNull(cond), elseValue) else elseValue
+      case CaseWhen(Seq((IsNull(cond), Literal.TrueLiteral)), Some(elseValue)) =>
+        if (cond.nullable) Or(IsNull(cond), elseValue) else elseValue
 
       case e @ CaseWhen(branches, elseValue) if branches.exists(x => falseOrNullLiteral(x._1)) =>
         // If there are branches that are always false, remove them.
