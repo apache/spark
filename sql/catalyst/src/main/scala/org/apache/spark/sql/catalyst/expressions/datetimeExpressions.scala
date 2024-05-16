@@ -23,8 +23,8 @@ import java.time.format.DateTimeParseException
 import java.util.Locale
 
 import org.apache.commons.text.StringEscapeUtils
-import org.apache.spark.{SparkDateTimeException, SparkIllegalArgumentException}
 
+import org.apache.spark.{SparkDateTimeException, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry}
 import org.apache.spark.sql.catalyst.expressions.codegen._
