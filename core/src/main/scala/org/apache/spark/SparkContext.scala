@@ -374,7 +374,6 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] def cleaner: Option[ContextCleaner] = _cleaner
 
   private[spark] var checkpointDir: Option[String] = None
-  config.getOption(CHECKPOINT_DIR.key).foreach(setCheckpointDir)
 
   // Thread Local variable that can be used by users to pass information down the stack
   protected[spark] val localProperties = new InheritableThreadLocal[Properties] {
@@ -601,6 +600,8 @@ class SparkContext(config: SparkConf) extends Logging {
       _conf.get(SPARK_LOG_LEVEL)
         .foreach(logLevel => _schedulerBackend.updateExecutorsLogLevel(logLevel))
     }
+
+    _conf.get(CHECKPOINT_DIR).foreach(setCheckpointDir)
 
     val _executorMetricsSource =
       if (_conf.get(METRICS_EXECUTORMETRICS_SOURCE_ENABLED)) {
