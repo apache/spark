@@ -139,7 +139,7 @@ In the table above, all the `CAST`s with new syntax are marked as red <span styl
 ```sql
 -- Examples of explicit casting
 
--- `spark.sql.ansi.enabled=true`
+-- `spark.sql.ansi.enabled=true` (This is a default behaviour)
 SELECT CAST('a' AS INT);
 org.apache.spark.SparkNumberFormatException: [CAST_INVALID_INPUT] The value 'a' of the type "STRING" cannot be cast to "INT" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 == SQL(line 1, position 8) ==
@@ -153,7 +153,7 @@ SELECT CAST(DATE'2020-01-01' AS INT);
 org.apache.spark.sql.AnalysisException: cannot resolve 'CAST(DATE '2020-01-01' AS INT)' due to data type mismatch: cannot cast date to int.
 To convert values from date to int, you can use function UNIX_DATE instead.
 
--- `spark.sql.ansi.enabled=false` (This is a default behaviour)
+-- `spark.sql.ansi.enabled=false`
 SELECT CAST('a' AS INT);
 +--------------+
 |CAST(a AS INT)|
@@ -396,7 +396,7 @@ By default, `spark.sql.ansi.enforceReservedKeywords` is false.
 
 Below is a list of all the keywords in Spark SQL.
 
-|Keyword|Spark SQL<br/>ANSI Mode|Spark SQL<br/>Default Mode|SQL-2016|
+|Keyword|Spark SQL<br/>ANSI Mode|Spark SQL<br/>NonANSI Mode|SQL-2016|
 |--|----------------------|-------------------------|--------|
 |ADD|non-reserved|non-reserved|non-reserved|
 |AFTER|non-reserved|non-reserved|non-reserved|
