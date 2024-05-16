@@ -374,6 +374,7 @@ def _check_arrow_array_timestamps_localize(
         )
     if types.is_map(a.type):
         mt: MapType = cast(MapType, dt)
+        # TODO(SPARK-48302): Do not replace nulls in MapArray with empty lists
         return pa.MapArray.from_arrays(
             a.offsets,
             _check_arrow_array_timestamps_localize(a.keys, mt.keyType, truncate, timezone),
