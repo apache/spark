@@ -47,6 +47,14 @@ class TypesParityTests(TypesTestsMixin, ReusedConnectTestCase):
         super().test_infer_array_merge_element_types_with_rdd()
 
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
+    def test_infer_map_pair_type_empty_rdd(self):
+        super().test_infer_map_pair_type_empty_rdd()
+
+    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
+    def test_infer_map_merge_pair_types_with_rdd(self):
+        super().test_infer_map_merge_pair_types_with_rdd()
+
+    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_infer_binary_type(self):
         super().test_infer_binary_type()
 

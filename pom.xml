@@ -138,7 +138,7 @@
     <!-- After 10.17.1.0, the minimum required version is JDK19 -->
     <derby.version>10.16.1.1</derby.version>
     <parquet.version>1.13.1</parquet.version>
-    <orc.version>2.0.0</orc.version>
+    <orc.version>2.0.1</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
     <jetty.version>11.0.20</jetty.version>
     <jakartaservlet.version>5.0.0</jakartaservlet.version>
@@ -169,7 +169,7 @@
     <!-- managed up from 3.2.1 for SPARK-11652 -->
     <commons.collections.version>3.2.2</commons.collections.version>
     <commons.collections4.version>4.4</commons.collections4.version>
-    <scala.version>2.13.13</scala.version>
+    <scala.version>2.13.14</scala.version>
     <scala.binary.version>2.13</scala.binary.version>
     <scalatest-maven-plugin.version>2.2.0</scalatest-maven-plugin.version>
     <scala-maven-plugin.version>4.8.1</scala-maven-plugin.version>
@@ -226,7 +226,7 @@
     and ./python/packaging/connect/setup.py too.
     -->
     <arrow.version>16.0.0</arrow.version>
-    <ammonite.version>3.0.0-M1</ammonite.version>
+    <ammonite.version>3.0.0-M2</ammonite.version>
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
@@ -2980,6 +2980,14 @@
                     <maxJdkVersion>${java.version}</maxJdkVersion>
                     <ignoredScopes>test</ignoredScopes>
                     <ignoredScopes>provided</ignoredScopes>
+                    <ignoreClasses>
+                      <!--
+                        The package `org.jline.terminal.impl.ffm.*` contains some class files
+                        that are not compatible with JDK17 (only JDK21 is supported).
+                        However, it will not cause problems for use. See: https://github.com/scala/bug/issues/12994
+                      -->
+                      <ignoreClass>org.jline.terminal.impl.ffm.*</ignoreClass>
+                    </ignoreClasses>
                   </enforceBytecodeVersion>
                 </rules>
               </configuration>

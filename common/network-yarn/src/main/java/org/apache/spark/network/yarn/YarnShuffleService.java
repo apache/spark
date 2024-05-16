@@ -54,8 +54,8 @@ import org.apache.spark.network.shuffledb.StoreVersion;
 import org.apache.spark.network.util.DBProvider;
 
 
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
 import org.apache.spark.network.TransportContext;
@@ -102,8 +102,9 @@ import org.apache.spark.network.yarn.util.HadoopConfigProvider;
  * This {@code classpath} configuration is only supported on YARN versions &gt;= 2.9.0.
  */
 public class YarnShuffleService extends AuxiliaryService {
-  private static final Logger defaultLogger = LoggerFactory.getLogger(YarnShuffleService.class);
-  private Logger logger = defaultLogger;
+  private static final SparkLogger defaultSparkLogger =
+    SparkLoggerFactory.getLogger(YarnShuffleService.class);
+  private SparkLogger logger = defaultSparkLogger;
 
   // Port on which the shuffle server listens for fetch requests
   private static final String SPARK_SHUFFLE_SERVICE_PORT_KEY = "spark.shuffle.service.port";
@@ -246,7 +247,7 @@ public class YarnShuffleService extends AuxiliaryService {
     String logsNamespace = _conf.get(SPARK_SHUFFLE_SERVICE_LOGS_NAMESPACE_KEY, "");
     if (!logsNamespace.isEmpty()) {
       String className = YarnShuffleService.class.getName();
-      logger = LoggerFactory.getLogger(className + "." + logsNamespace);
+      logger = SparkLoggerFactory.getLogger(className + "." + logsNamespace);
     }
 
     super.serviceInit(_conf);
@@ -367,7 +368,7 @@ public class YarnShuffleService extends AuxiliaryService {
       return mergeManagerSubClazz.getConstructor(TransportConf.class, File.class)
         .newInstance(conf, mergeManagerFile);
     } catch (Exception e) {
-      defaultLogger.error("Unable to create an instance of {}",
+      defaultSparkLogger.error("Unable to create an instance of {}",
         MDC.of(LogKeys.CLASS_NAME$.MODULE$, mergeManagerImplClassName));
       return new NoOpMergedShuffleFileManager(conf, mergeManagerFile);
     }

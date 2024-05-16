@@ -43,8 +43,8 @@ import io.netty.handler.ssl.SslHandler;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
 import org.apache.spark.network.TransportContext;
@@ -79,7 +79,8 @@ public class TransportClientFactory implements Closeable {
     }
   }
 
-  private static final Logger logger = LoggerFactory.getLogger(TransportClientFactory.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(TransportClientFactory.class);
 
   private final TransportContext context;
   private final TransportConf conf;
@@ -171,8 +172,10 @@ public class TransportClientFactory implements Closeable {
       // this code was able to update things.
       TransportChannelHandler handler = cachedClient.getChannel().pipeline()
         .get(TransportChannelHandler.class);
-      synchronized (handler) {
-        handler.getResponseHandler().updateTimeOfLastRequest();
+      if (handler != null) {
+        synchronized (handler) {
+          handler.getResponseHandler().updateTimeOfLastRequest();
+        }
       }
 
       if (cachedClient.isActive()) {

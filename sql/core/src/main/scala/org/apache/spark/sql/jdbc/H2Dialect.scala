@@ -259,13 +259,6 @@ private[sql] case class H2Dialect() extends JdbcDialect {
   }
 
   class H2SQLBuilder extends JDBCSQLBuilder {
-    override def escapeSpecialCharsForLikePattern(str: String): String = {
-      str.map {
-        case '_' => "\\_"
-        case '%' => "\\%"
-        case c => c.toString
-      }.mkString
-    }
 
     override def visitAggregateFunction(
         funcName: String, isDistinct: Boolean, inputs: Array[String]): String =

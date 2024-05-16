@@ -27,8 +27,8 @@ import java.util.concurrent.CompletableFuture;
 
 import com.codahale.metrics.MetricSet;
 
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
 import org.apache.spark.network.buffer.ManagedBuffer;
@@ -44,7 +44,7 @@ import org.apache.spark.network.util.TransportConf;
  * or external service.
  */
 public abstract class BlockStoreClient implements Closeable {
-  protected final Logger logger = LoggerFactory.getLogger(this.getClass());
+  protected final SparkLogger logger = SparkLoggerFactory.getLogger(this.getClass());
 
   protected volatile TransportClientFactory clientFactory;
   protected String appId;

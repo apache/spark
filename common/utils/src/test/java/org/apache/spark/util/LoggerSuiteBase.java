@@ -26,13 +26,13 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.Level;
 import org.junit.jupiter.api.Test;
 
-import org.apache.spark.internal.Logger;
+import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
 
 public abstract class LoggerSuiteBase {
 
-  abstract Logger logger();
+  abstract SparkLogger logger();
   abstract String className();
   abstract String logFilePath();
 

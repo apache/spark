@@ -388,10 +388,12 @@ class SparkSession:
         (
             infer_dict_as_struct,
             infer_array_from_first_element,
+            infer_map_from_first_pair,
             prefer_timestamp_ntz,
         ) = self._client.get_configs(
             "spark.sql.pyspark.inferNestedDictAsStruct.enabled",
             "spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled",
+            "spark.sql.pyspark.legacy.inferMapTypeFromFirstPair.enabled",
             "spark.sql.timestampType",
         )
         return reduce(
@@ -402,6 +404,7 @@ class SparkSession:
                     names,
                     infer_dict_as_struct=(infer_dict_as_struct == "true"),
                     infer_array_from_first_element=(infer_array_from_first_element == "true"),
+                    infer_map_from_first_pair=(infer_map_from_first_pair == "true"),
                     prefer_timestamp_ntz=(prefer_timestamp_ntz == "TIMESTAMP_NTZ"),
                 )
                 for row in data

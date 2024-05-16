@@ -4207,6 +4207,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_DATA_TYPE_FOR_ENCODER" : {
+    "message" : [
+      "Cannot create encoder for <dataType>. Please use a different output data type for your UDF or DataFrame."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_DEFAULT_VALUE" : {
     "message" : [
       "DEFAULT column values is not supported."
