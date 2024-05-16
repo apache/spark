@@ -288,7 +288,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
         stop = 27))
   }
 
-  test("INVALID_SQL_SYNTAX.CREATE_FUNC_WITH_IF_NOT_EXISTS_AND_REPLACE: " +
+  test("INVALID_SQL_SYNTAX.CREATE_ROUTINE_WITH_IF_NOT_EXISTS_AND_REPLACE: " +
     "Create function with both if not exists and replace") {
     val sqlText =
       """CREATE OR REPLACE FUNCTION IF NOT EXISTS func1 as
@@ -297,7 +297,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
 
     checkError(
       exception = parseException(sqlText),
-      errorClass = "INVALID_SQL_SYNTAX.CREATE_FUNC_WITH_IF_NOT_EXISTS_AND_REPLACE",
+      errorClass = "INVALID_SQL_SYNTAX.CREATE_ROUTINE_WITH_IF_NOT_EXISTS_AND_REPLACE",
       sqlState = "42000",
       context = ExpectedContext(
         fragment = sqlText,
