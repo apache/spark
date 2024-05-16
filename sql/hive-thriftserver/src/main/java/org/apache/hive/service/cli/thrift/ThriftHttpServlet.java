@@ -56,8 +56,8 @@ import org.ietf.jgss.GSSManager;
 import org.ietf.jgss.GSSName;
 import org.ietf.jgss.Oid;
 
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
 
@@ -69,7 +69,7 @@ import org.apache.spark.internal.MDC;
 public class ThriftHttpServlet extends TServlet {
 
   private static final long serialVersionUID = 1L;
-  public static final Logger LOG = LoggerFactory.getLogger(ThriftHttpServlet.class);
+  public static final SparkLogger LOG = SparkLoggerFactory.getLogger(ThriftHttpServlet.class);
   private final String authType;
   private final UserGroupInformation serviceUGI;
   private final UserGroupInformation httpUGI;

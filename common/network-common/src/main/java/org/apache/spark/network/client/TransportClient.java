@@ -36,8 +36,8 @@ import io.netty.util.concurrent.GenericFutureListener;
 import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
 
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
 import org.apache.spark.network.buffer.ManagedBuffer;
@@ -73,7 +73,7 @@ import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
  * Concurrency: thread safe and can be called from multiple threads.
  */
 public class TransportClient implements Closeable {
-  private static final Logger logger = LoggerFactory.getLogger(TransportClient.class);
+  private static final SparkLogger logger = SparkLoggerFactory.getLogger(TransportClient.class);
 
   private final Channel channel;
   private final TransportResponseHandler handler;

@@ -65,8 +65,8 @@ import com.google.common.primitives.Longs;
 
 import org.roaringbitmap.RoaringBitmap;
 
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
 import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
@@ -98,7 +98,8 @@ import org.apache.spark.network.util.TransportConf;
 public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
   private static final Cleaner CLEANER = Cleaner.create();
-  private static final Logger logger = LoggerFactory.getLogger(RemoteBlockPushResolver.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(RemoteBlockPushResolver.class);
 
   public static final String MERGED_SHUFFLE_FILE_NAME_PREFIX = "shuffleMerged";
   public static final String SHUFFLE_META_DELIMITER = ":";

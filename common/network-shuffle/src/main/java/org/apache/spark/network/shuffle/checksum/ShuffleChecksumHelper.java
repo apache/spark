@@ -26,8 +26,8 @@ import java.util.zip.Checksum;
 
 import com.google.common.io.ByteStreams;
 
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
 import org.apache.spark.annotation.Private;
@@ -38,8 +38,8 @@ import org.apache.spark.network.buffer.ManagedBuffer;
  */
 @Private
 public class ShuffleChecksumHelper {
-  private static final Logger logger =
-    LoggerFactory.getLogger(ShuffleChecksumHelper.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(ShuffleChecksumHelper.class);
 
   public static final int CHECKSUM_CALCULATION_BUFFER = 8192;
   public static final Checksum[] EMPTY_CHECKSUM = new Checksum[0];
