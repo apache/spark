@@ -1796,6 +1796,15 @@ Apart from these, the following properties are also available, and may be useful
   <td>0.6.0</td>
 </tr>
 <tr>
+  <td><code>spark.checkpoint.dir</code></td>
+  <td>(none)</td>
+  <td>
+    Set the default directory for checkpointing. It can be overwritten by
+    SparkContext.setCheckpointDir.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
   <td><code>spark.checkpoint.compress</code></td>
   <td>false</td>
   <td>
