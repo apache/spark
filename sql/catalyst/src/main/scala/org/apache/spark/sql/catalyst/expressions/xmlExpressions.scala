@@ -16,15 +16,15 @@
  */
 package org.apache.spark.sql.catalyst.expressions
 
-import java.io.CharArrayWriter
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, CodegenFallback, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
+import org.apache.spark.sql.catalyst.expressions.xml.StructsToXmlEvaluator
 import org.apache.spark.sql.catalyst.util.{ArrayData, DropMalformedMode, FailFastMode, FailureSafeParser, GenericArrayData, PermissiveMode}
 import org.apache.spark.sql.catalyst.util.TypeUtils._
-import org.apache.spark.sql.catalyst.xml.{StaxXmlGenerator, StaxXmlParser, ValidatorUtil, XmlInferSchema, XmlOptions}
+import org.apache.spark.sql.catalyst.xml.{StaxXmlParser, ValidatorUtil, XmlInferSchema, XmlOptions}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeAnyCollation
@@ -263,7 +263,6 @@ case class StructsToXml(
     timeZoneId: Option[String] = None)
   extends UnaryExpression
   with TimeZoneAwareExpression
-  with CodegenFallback
   with ExpectsInputTypes
   with NullIntolerant {
   override def nullable: Boolean = true
@@ -295,35 +294,17 @@ case class StructsToXml(
   }
 
   @transient
-  lazy val writer = new CharArrayWriter()
-
-  @transient
-  lazy val inputSchema: StructType = child.dataType.asInstanceOf[StructType]
-
-  @transient
-  lazy val gen = new StaxXmlGenerator(
-    inputSchema, writer, new XmlOptions(options, timeZoneId.get), false)
-
-  // This converts rows to the XML output according to the given schema.
-  @transient
-  lazy val converter: Any => UTF8String = {
-    def getAndReset(): UTF8String = {
-      gen.flush()
-      val xmlString = writer.toString
-      writer.reset()
-      UTF8String.fromString(xmlString)
-    }
-    (row: Any) =>
-      gen.write(row.asInstanceOf[InternalRow])
-      getAndReset()
-  }
+  private lazy val evaluator = new StructsToXmlEvaluator(
+    child.dataType.asInstanceOf[StructType], options, timeZoneId)
 
   override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
-  override def nullSafeEval(value: Any): Any = converter(value)
+  override def nullSafeEval(value: Any): Any = {
+    UTF8String.fromString(evaluator.evaluate(value))
+  }
 
   override def inputTypes: Seq[AbstractDataType] = StructType :: Nil
 
@@ -331,4 +312,22 @@ case class StructsToXml(
 
   override protected def withNewChildInternal(newChild: Expression): StructsToXml =
     copy(child = newChild)
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val refEvaluator = ctx.addReferenceObj("evaluator", evaluator)
+    val eval = child.genCode(ctx)
+    val resultType = CodeGenerator.boxedType(dataType)
+    val resultTerm = ctx.freshName("result")
+    ev.copy(code =
+      code"""
+         |${eval.code}
+         |$resultType $resultTerm = UTF8String.fromString($refEvaluator.evaluate(${eval.value}));
+         |boolean ${ev.isNull} = $resultTerm == null;
+         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+         |if (!${ev.isNull}) {
+         |  ${ev.value} = $resultTerm;
+         |}
+         |""".stripMargin
+    )
+  }
 }
