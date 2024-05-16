@@ -1542,6 +1542,32 @@ class ArrowTestsMixin:
             pdf = pd.DataFrame({"a": [123]})
             assert_frame_equal(pdf, self.spark.createDataFrame(pdf).toPandas())
 
+    def test_createDataFrame_arrow_large_string(self):
+        a = pa.array(["a"] * 5, type=pa.large_string())
+        t = pa.table([a], ["ls"])
+        df = self.spark.createDataFrame(t)
+        self.assertIsInstance(df.schema["ls"].dataType, StringType)
+
+    def test_createDataFrame_arrow_large_binary(self):
+        a = pa.array(["a"] * 5, type=pa.large_binary())
+        t = pa.table([a], ["lb"])
+        df = self.spark.createDataFrame(t)
+        self.assertIsInstance(df.schema["lb"].dataType, BinaryType)
+
+    def test_createDataFrame_arrow_large_list(self):
+        a = pa.array([[-1, 3]] * 5, type=pa.large_list(pa.int32()))
+        t = pa.table([a], ["ll"])
+        df = self.spark.createDataFrame(t)
+        self.assertIsInstance(df.schema["ll"].dataType, ArrayType)
+
+    def test_createDataFrame_arrow_large_list_int64_offset(self):
+        a = pa.LargeListArray.from_arrays(
+            [0, 2**31], pa.NullArray.from_buffers(pa.null(), 2**31, [None])
+        )
+        t = pa.table([a], ["ll"])
+        with self.assertRaises(Exception):
+            self.spark.createDataFrame(t)
+
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,

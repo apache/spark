@@ -217,6 +217,18 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase, PandasOnSparkTest
     def test_createDataFrame_arrow_with_names(self):
         super().test_createDataFrame_arrow_with_names()
 
+    def test_createDataFrame_arrow_large_string(self):
+        super().test_createDataFrame_arrow_large_string()
+
+    def test_createDataFrame_arrow_large_binary(self):
+        super().test_createDataFrame_arrow_large_binary()
+
+    def test_createDataFrame_arrow_large_list(self):
+        super().test_createDataFrame_arrow_large_list()
+
+    def test_createDataFrame_arrow_large_list_int64_offset(self):
+        super().test_createDataFrame_arrow_large_list_int64_offset()
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.test_parity_arrow import *  # noqa: F401
