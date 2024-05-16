@@ -343,6 +343,14 @@ def _check_arrow_array_timestamps_localize(
     import pyarrow as pa
     import pyarrow.compute as pc
 
+    if isinstance(a, pa.ChunkedArray) and (types.is_nested(a.type) or types.is_dictionary(a.type)):
+        return pa.chunked_array(
+            [
+                _check_arrow_array_timestamps_localize(chunk, dt, truncate, timezone)
+                for chunk in a.iterchunks()
+            ]
+        )
+
     if types.is_timestamp(a.type) and truncate and a.type.unit == "ns":
         a = pc.floor_temporal(a, unit="microsecond")
 
@@ -352,26 +360,20 @@ def _check_arrow_array_timestamps_localize(
         # Only localize timestamps that will become Spark TimestampType columns.
         # Do not localize timestamps that will become Spark TimestampNTZType columns.
         return pc.assume_timezone(a, timezone)
-    elif types.is_list(a.type):
-        if isinstance(a, pa.ChunkedArray):
-            a = a.combine_chunks()
+    if types.is_list(a.type):
         at: ArrayType = cast(ArrayType, dt)
         return pa.ListArray.from_arrays(
             a.offsets,
             _check_arrow_array_timestamps_localize(a.values, at.elementType, truncate, timezone),
         )
-    elif types.is_map(a.type):
-        if isinstance(a, pa.ChunkedArray):
-            a = a.combine_chunks()
+    if types.is_map(a.type):
         mt: MapType = cast(MapType, dt)
         return pa.MapArray.from_arrays(
             a.offsets,
             _check_arrow_array_timestamps_localize(a.keys, mt.keyType, truncate, timezone),
             _check_arrow_array_timestamps_localize(a.items, mt.valueType, truncate, timezone),
         )
-    elif types.is_struct(a.type):
-        if isinstance(a, pa.ChunkedArray):
-            a = a.combine_chunks()
+    if types.is_struct(a.type):
         st: StructType = cast(StructType, dt)
         assert len(a.type) == len(st.fields)
 
@@ -384,14 +386,12 @@ def _check_arrow_array_timestamps_localize(
             ],
             [a.type[i].name for i in range(len(a.type))],
         )
-    elif types.is_dictionary(a.type):
-        if isinstance(a, pa.ChunkedArray):
-            a = a.combine_chunks()
+    if types.is_dictionary(a.type):
         return pa.DictionaryArray.from_arrays(
-            _check_arrow_array_timestamps_localize(a.dictionary, dt, truncate, timezone), a.indices
+            a.indices,
+            _check_arrow_array_timestamps_localize(a.dictionary, dt, truncate, timezone),
         )
-    else:
-        return a
+    return a
 
 
 def _check_series_localize_timestamps(s: "PandasSeriesLike", timezone: str) -> "PandasSeriesLike":

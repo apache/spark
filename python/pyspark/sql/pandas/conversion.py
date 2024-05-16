@@ -768,6 +768,7 @@ class SparkConversionMixin:
 
         # Create the Spark schema from list of names passed in with Arrow types
         if isinstance(schema, (list, tuple)):
+            table = table.rename_columns(schema)
             arrow_schema = table.schema
             prefer_timestamp_ntz = is_timestamp_ntz_preferred()
             struct = StructType()
