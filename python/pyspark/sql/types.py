@@ -963,7 +963,7 @@ class StructField(DataType):
         collationMetadata: Dict[str, str] = metadata[_COLLATIONS_METADATA_KEY]
         collationsMap: Dict[str, str] = {}
 
-        for key, value in collationMetadata:
+        for key, value in collationMetadata.items():
             nameParts = value.split(".")
             assert len(nameParts) == 2
             provider, name = nameParts[0], nameParts[1]
@@ -1861,7 +1861,7 @@ def _parse_datatype_json_value(
                 return ArrayType.fromJson(json_value, fieldPath, collationsMap)
             elif complex_type is MapType:
                 return MapType.fromJson(json_value, fieldPath, collationsMap)
-            return complex_type.fromJson(json_value)
+            return StructType.fromJson(json_value)
         elif tpe == "udt":
             return UserDefinedType.fromJson(json_value)
         else:
