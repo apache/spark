@@ -37,11 +37,19 @@ This example demonstrates creating a simple data source to generate synthetic da
 
 Start by creating a new subclass of :class:`DataSource` with the source name, schema.
 
-In order to read from the data source in a batch query, reader() method need to be defined.
+In order to be used as source or sink in batch or streaming query, corresponding method of DataSource needs to be implemented.
 
-In order to read from the data source in a streaming query, streamReader() or simpleStreamReader() method need to be defined.
+Method that needs to be implemented for a capability:
 
-In order to write to the data source in a streaming query, streamWriter() method need to be defined.
++------------+----------------------+------------------+
+|            |       source         |      sink        |
++============+======================+==================+
+|   batch    |      reader()        |     writer()     |
++------------+----------------------+------------------+
+|            |   streamReader()     |                  |
+| streaming  |         or           |  streamWriter()  |
+|            | simpleStreamReader() |                  |
++------------+----------------------|------------------|
 
 .. code-block:: python
 
@@ -219,7 +227,6 @@ This is a streaming data writer that write the metadata information of each micr
            for row in iterator:
                cnt += 1
            return SimpleCommitMessage(partition_id=partition_id, count=cnt)
-
 
        def commit(self, messages, batchId) -> None:
            """
