@@ -24,7 +24,8 @@ import org.apache.spark.internal.SparkLoggerFactory;
 
 public class PatternSparkLoggerSuite extends SparkLoggerSuiteBase {
 
-  private static final SparkLogger LOGGER = SparkLoggerFactory.getLogger(PatternSparkLoggerSuite.class);
+  private static final SparkLogger LOGGER =
+    SparkLoggerFactory.getLogger(PatternSparkLoggerSuite.class);
 
   private String toRegexPattern(Level level, String msg) {
     return msg
