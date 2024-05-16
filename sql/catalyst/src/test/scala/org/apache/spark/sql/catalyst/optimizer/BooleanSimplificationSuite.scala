@@ -286,6 +286,26 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper {
     checkCondition(!$"f" || $"e", testRelationWithData.where(!$"f" || $"e").analyze)
   }
 
+  test("simplify (x && IsNull(x)) and (IsNull(x) && x)") {
+    checkCondition($"b" && IsNull($"b"), EqualNullSafe($"b", Literal(null, BooleanType)))
+    checkCondition(IsNull($"b") && $"b", EqualNullSafe($"b", Literal(null, BooleanType)))
+  }
+
+  test("simplify (x && IsNotNull(x)) and (IsNotNull(x) && x)") {
+    checkCondition($"b" && IsNotNull($"b"), EqualNullSafe($"b", Literal(true, BooleanType)))
+    checkCondition(IsNotNull($"b") && $"b", EqualNullSafe($"b", Literal(true, BooleanType)))
+  }
+
+  test("simplify (x || IsNull(x)) and (IsNull(x) || x)") {
+    checkCondition($"b" || IsNull($"b"), EqualNullSafe($"b", Literal(false, BooleanType)))
+    checkCondition(IsNull($"b") || $"b", EqualNullSafe($"b", Literal(false, BooleanType)))
+  }
+
+  test("simplify (x || IsNotNull(x)) and (IsNotNull(x) || x)") {
+    checkCondition($"b" || IsNotNull($"b"), EqualNullSafe($"b", Literal(null, BooleanType)))
+    checkCondition(IsNotNull($"b") || $"b", EqualNullSafe($"b", Literal(null, BooleanType)))
+  }
+
   test("simplify NOT(IsNull(x)) and NOT(IsNotNull(x))") {
     checkCondition(Not(IsNotNull($"b")), IsNull($"b"))
     checkCondition(Not(IsNull($"b")), IsNotNull($"b"))

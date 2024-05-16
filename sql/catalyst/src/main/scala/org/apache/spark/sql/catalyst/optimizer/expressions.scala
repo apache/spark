@@ -351,6 +351,28 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
       case a And b if a.semanticEquals(b) => a
       case a Or b if a.semanticEquals(b) => a
 
+      case a And IsNull(b) if a.semanticEquals(b) =>
+        if (a.nullable) EqualNullSafe(a, Literal.create(null, a.dataType)) else FalseLiteral
+      case IsNull(a) And b if a.semanticEquals(b) =>
+        if (a.nullable) EqualNullSafe(a, Literal.create(null, a.dataType)) else FalseLiteral
+      case a And IsNotNull(b) if a.semanticEquals(b) => EqualNullSafe(a, TrueLiteral)
+      case IsNotNull(a) And b if a.semanticEquals(b) => EqualNullSafe(a, TrueLiteral)
+
+      case a Or IsNull(b) if a.semanticEquals(b) => Not(EqualNullSafe(a, FalseLiteral))
+      case IsNull(a) Or b if a.semanticEquals(b) => Not(EqualNullSafe(a, FalseLiteral))
+      case a Or IsNotNull(b) if a.semanticEquals(b) =>
+        if (a.nullable) {
+          Not(EqualNullSafe(a, Literal.create(null, a.dataType)))
+        } else {
+          TrueLiteral
+        }
+      case IsNotNull(a) Or b if a.semanticEquals(b) =>
+        if (a.nullable) {
+          Not(EqualNullSafe(a, Literal.create(null, a.dataType)))
+        } else {
+          TrueLiteral
+        }
+
       // The following optimizations are applicable only when the operands are not nullable,
       // since the three-value logic of AND and OR are different in NULL handling.
       // See the chart:
@@ -560,15 +582,25 @@ object SimplifyConditionals extends Rule[LogicalPlan] {
         if (cond.nullable) Not(EqualNullSafe(cond, TrueLiteral)) else Not(cond)
       case If(cond, trueValue, falseValue)
         if cond.deterministic && trueValue.semanticEquals(falseValue) => trueValue
+      case If(cond, trueValue, falseValue)
+        if cond.deterministic && trueValue.semanticEquals(cond) => Or(cond, falseValue)
       case If(cond, l @ Literal(null, _), FalseLiteral) if !cond.nullable => And(cond, l)
       case If(cond, l @ Literal(null, _), TrueLiteral) if !cond.nullable => Or(Not(cond), l)
       case If(cond, FalseLiteral, l @ Literal(null, _)) if !cond.nullable => And(Not(cond), l)
       case If(cond, TrueLiteral, l @ Literal(null, _)) if !cond.nullable => Or(cond, l)
+      case If(cond, FalseLiteral, falseValue)
+          if cond.deterministic && falseValue.semanticEquals(cond) =>
+        if (cond.nullable) Not(cond) else FalseLiteral
 
       case CaseWhen(Seq((cond, TrueLiteral)), Some(FalseLiteral)) =>
         if (cond.nullable) EqualNullSafe(cond, TrueLiteral) else cond
       case CaseWhen(Seq((cond, FalseLiteral)), Some(TrueLiteral)) =>
         if (cond.nullable) Not(EqualNullSafe(cond, TrueLiteral)) else Not(cond)
+      case CaseWhen(Seq((cond, ifValue)), Some(elseValue))
+        if cond.deterministic && ifValue.semanticEquals(cond) => Or(cond, elseValue)
+      case CaseWhen(Seq((cond, FalseLiteral)), Some(elseValue))
+          if cond.deterministic && elseValue.semanticEquals(cond) =>
+        if (cond.nullable) Not(cond) else FalseLiteral
 
       case e @ CaseWhen(branches, elseValue) if branches.exists(x => falseOrNullLiteral(x._1)) =>
         // If there are branches that are always false, remove them.
