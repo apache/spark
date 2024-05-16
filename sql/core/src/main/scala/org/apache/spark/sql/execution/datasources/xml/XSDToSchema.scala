@@ -17,7 +17,6 @@
 package org.apache.spark.sql.execution.datasources.xml
 
 import java.io.StringReader
-import java.nio.charset.StandardCharsets
 
 import scala.jdk.CollectionConverters._
 
@@ -49,7 +48,7 @@ object XSDToSchema extends Logging{
     val in = ValidatorUtil.openSchemaFile(xsdPath)
     val xmlSchemaCollection = new XmlSchemaCollection()
     xmlSchemaCollection.setBaseUri(xsdPath.toString)
-    val xmlSchema = xmlSchemaCollection.read(new InputStreamReader(in, StandardCharsets.UTF_8))
+    val xmlSchema = xmlSchemaCollection.read(new InputStreamReader(in))
     getStructType(xmlSchema)
   }
 
