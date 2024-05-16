@@ -85,6 +85,7 @@ class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)
       }
     }
 
+    // TODO migrate to org.apache.spark.deploy.yarn.YarnAMIpFilter
     // Add Yarn proxy filter specific configurations to the recovered SparkConf
     val filter = "org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter"
     val filterPrefix = s"spark.$filter.param."
