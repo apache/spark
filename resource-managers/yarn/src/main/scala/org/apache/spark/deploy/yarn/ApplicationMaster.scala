@@ -27,8 +27,8 @@ import scala.collection.mutable.HashMap
 import scala.concurrent.Promise
 import scala.concurrent.duration.Duration
 import scala.util.control.NonFatal
-
 import org.apache.commons.lang3.{StringUtils => ComStrUtils}
+
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.util.StringUtils
@@ -38,7 +38,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.exceptions.ApplicationAttemptNotFoundException
 import org.apache.hadoop.yarn.util.Records
 
-import org.apache.spark._
+import org.apache.spark.{SparkStopAMRetryException, _}
 import org.apache.spark.deploy.{ExecutorFailureTracker, SparkHadoopUtil}
 import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
@@ -245,7 +245,7 @@ private[spark] class ApplicationMaster(
 
           if (!unregistered) {
             // we only want to unregister if we don't want the RM to retry
-            if (isLastAttempt) {
+            if (isLastAttempt || exitCode == ApplicationMaster.EXIT_STOP_AM_RETYR) {
               cleanupStagingDir(stagingDirFs, stagingDirPath)
               unregister(finalStatus, finalMsg)
             } else if (finalStatus == FinalApplicationStatus.SUCCEEDED) {
@@ -746,6 +746,11 @@ private[spark] class ApplicationMaster(
             e.getCause match {
               case _: InterruptedException =>
                 // Reporter thread can interrupt to stop user class
+              case stopAmRetry: SparkStopAMRetryException =>
+                finish(FinalApplicationStatus.FAILED,
+                  ApplicationMaster.EXIT_STOP_AM_RETYR,
+                  "User class threw exception: "
+                    + StringUtils.stringifyException(stopAmRetry.getCause))
               case SparkUserAppException(exitCode) =>
                 val msg = log"User application exited with status " +
                   log"${MDC(EXIT_CODE, exitCode)}"
@@ -882,6 +887,7 @@ object ApplicationMaster extends Logging {
   private val EXIT_EXCEPTION_USER_CLASS = 15
   private val EXIT_EARLY = 16
   private val EXIT_DISCONNECTED = 17
+  private val EXIT_STOP_AM_RETYR = 18
 
   private var master: ApplicationMaster = _
 
