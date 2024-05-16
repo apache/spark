@@ -714,7 +714,7 @@ class ArrayType(DataType):
         cls,
         json: Dict[str, Any],
         fieldPath: str,
-        collationsMap: Dict[str, str],
+        collationsMap: Optional[Dict[str, str]],
     ) -> "ArrayType":
         elementType = _parse_type_with_collation(
             json["elementType"], fieldPath + ".element", collationsMap
@@ -838,8 +838,8 @@ class MapType(DataType):
     def fromJson(
         cls,
         json: Dict[str, Any],
-        fieldPath,
-        collationsMap: Dict[str, str],
+        fieldPath: str,
+        collationsMap: Optional[Dict[str, str]],
     ) -> "MapType":
         keyType = _parse_type_with_collation(json["keyType"], fieldPath + ".key", collationsMap)
         valueType = _parse_type_with_collation(
@@ -956,12 +956,14 @@ class StructField(DataType):
             metadata,
         )
 
-    def getCollationsMap(self, metadata: Dict[str, str]) -> Dict[str, str]:
+    def getCollationsMap(self, metadata: Dict[str, Any]) -> Dict[str, str]:
         if not metadata or _COLLATIONS_METADATA_KEY not in metadata:
             return {}
 
+        collationMetadata: Dict[str, str] = metadata[_COLLATIONS_METADATA_KEY]
         collationsMap: Dict[str, str] = {}
-        for key, value in metadata[_COLLATIONS_METADATA_KEY].items():
+
+        for key, value in collationMetadata:
             nameParts = value.split(".")
             assert len(nameParts) == 2
             provider, name = nameParts[0], nameParts[1]
