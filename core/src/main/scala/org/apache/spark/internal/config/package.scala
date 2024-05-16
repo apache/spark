@@ -1320,8 +1320,7 @@ package object config {
   private[spark] val CHECKPOINT_DIR =
     ConfigBuilder("spark.checkpoint.dir")
       .doc(
-        "Equivalent with SparkContext.setCheckpointDir. If set, the path becomes" +
-          "the default directory for checkpointing. It can be overwritten by" +
+          "Set the default directory for checkpointing. It can be overwritten by " +
           "SparkContext.setCheckpointDir.")
       .version("4.0.0")
       .stringConf

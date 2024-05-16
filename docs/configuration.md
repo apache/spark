@@ -1799,8 +1799,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.checkpoint.dir</code></td>
   <td>(none)</td>
   <td>
-    Equivalent with SparkContext.setCheckpointDir. If set, the path becomes
-    the default directory for checkpointing. It can be overwritten by
+    Set the default directory for checkpointing. It can be overwritten by
     SparkContext.setCheckpointDir.
   </td>
   <td>4.0.0</td>
