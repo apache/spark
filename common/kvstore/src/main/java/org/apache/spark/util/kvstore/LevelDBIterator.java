@@ -30,8 +30,8 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import org.iq80.leveldb.DBIterator;
 
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 
 class LevelDBIterator<T> implements KVStoreIterator<T> {
 
@@ -303,7 +303,7 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
   }
 
   static class ResourceCleaner implements Runnable {
-    private static final Logger LOG = LoggerFactory.getLogger(ResourceCleaner.class);
+    private static final SparkLogger LOG = SparkLoggerFactory.getLogger(ResourceCleaner.class);
 
     private final DBIterator dbIterator;
 
