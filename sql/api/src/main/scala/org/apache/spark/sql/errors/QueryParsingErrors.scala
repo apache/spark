@@ -546,6 +546,12 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0052", ctx)
   }
 
+  def temporaryViewWithSchemaBindingMode(ctx: StatementContext): Throwable = {
+    new ParseException(errorClass = "UNSUPPORTED_FEATURE.TEMPORARY_VIEW_WITH_SCHEMA_BINDING_MODE",
+      messageParameters = Map.empty,
+      ctx)
+  }
+
   def parameterMarkerNotAllowed(statement: String, origin: Origin): Throwable = {
     new ParseException(
       command = origin.sqlText,
@@ -570,7 +576,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
 
   def createFuncWithBothIfNotExistsAndReplaceError(ctx: CreateFunctionContext): Throwable = {
     new ParseException(
-      errorClass = "INVALID_SQL_SYNTAX.CREATE_FUNC_WITH_IF_NOT_EXISTS_AND_REPLACE",
+      errorClass = "INVALID_SQL_SYNTAX.CREATE_ROUTINE_WITH_IF_NOT_EXISTS_AND_REPLACE",
       ctx)
   }
 

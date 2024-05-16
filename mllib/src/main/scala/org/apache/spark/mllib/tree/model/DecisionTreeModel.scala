@@ -26,7 +26,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.tree.configuration.{Algo, FeatureType}
 import org.apache.spark.mllib.tree.configuration.Algo._
@@ -209,15 +209,19 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
           .map(Utils.memoryStringToMb)
           .getOrElse(Utils.DEFAULT_DRIVER_MEM_MB)
         if (driverMemory <= memThreshold) {
-          logWarning(s"$thisClassName.save() was called, but it may fail because of too little" +
-            s" driver memory (${driverMemory}m)." +
-            s"  If failure occurs, try setting driver-memory ${memThreshold}m (or larger).")
+          logWarning(log"${MDC(LogKeys.CLASS_NAME, thisClassName)}.save() was called, " +
+            log"but it may fail because of too little driver memory " +
+            log"(${MDC(LogKeys.DRIVER_MEMORY_SIZE, driverMemory)}m). If failure occurs, " +
+            log"try setting driver-memory ${MDC(LogKeys.MEMORY_THRESHOLD_SIZE, memThreshold)}m " +
+            log"(or larger).")
         }
       } else {
         if (sc.executorMemory <= memThreshold) {
-          logWarning(s"$thisClassName.save() was called, but it may fail because of too little" +
-            s" executor memory (${sc.executorMemory}m)." +
-            s"  If failure occurs try setting executor-memory ${memThreshold}m (or larger).")
+          logWarning(log"${MDC(LogKeys.CLASS_NAME, thisClassName)}.save() was called, " +
+            log"but it may fail because of too little executor memory " +
+            log"(${MDC(LogKeys.EXECUTOR_MEMORY_SIZE, sc.executorMemory)}m). If failure occurs, " +
+            log"try setting executor-memory ${MDC(LogKeys.MEMORY_THRESHOLD_SIZE, memThreshold)}m " +
+            log"(or larger).")
         }
       }
 

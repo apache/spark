@@ -23,17 +23,19 @@ import java.io.IOException;
 import java.util.LinkedList;
 import java.util.zip.Checksum;
 
-import org.apache.spark.SparkException;
 import scala.Tuple2;
 
 import com.google.common.annotations.VisibleForTesting;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import org.apache.spark.SparkConf;
+import org.apache.spark.SparkException;
 import org.apache.spark.TaskContext;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.internal.config.package$;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.memory.MemoryConsumer;
 import org.apache.spark.memory.SparkOutOfMemoryError;
 import org.apache.spark.memory.TaskMemoryManager;
@@ -70,7 +72,8 @@ import org.apache.spark.util.Utils;
  */
 final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleChecksumSupport {
 
-  private static final Logger logger = LoggerFactory.getLogger(ShuffleExternalSorter.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(ShuffleExternalSorter.class);
 
   @VisibleForTesting
   static final int DISK_WRITE_BUFFER_SIZE = 1024 * 1024;
@@ -159,11 +162,11 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
     if (!isFinalFile) {
       logger.info(
         "Task {} on Thread {} spilling sort data of {} to disk ({} {} so far)",
-        taskContext.taskAttemptId(),
-        Thread.currentThread().getId(),
-        Utils.bytesToString(getMemoryUsage()),
-        spills.size(),
-        spills.size() != 1 ? " times" : " time");
+        MDC.of(LogKeys.TASK_ATTEMPT_ID$.MODULE$, taskContext.taskAttemptId()),
+        MDC.of(LogKeys.THREAD_ID$.MODULE$, Thread.currentThread().getId()),
+        MDC.of(LogKeys.MEMORY_SIZE$.MODULE$, Utils.bytesToString(getMemoryUsage())),
+        MDC.of(LogKeys.NUM_SPILL_INFOS$.MODULE$, spills.size()),
+        MDC.of(LogKeys.SPILL_TIMES$.MODULE$, spills.size() != 1 ? "times" : "time"));
     }
 
     // This call performs the actual sort.
@@ -349,7 +352,8 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
     }
     for (SpillInfo spill : spills) {
       if (spill.file.exists() && !spill.file.delete()) {
-        logger.error("Unable to delete spill file {}", spill.file.getPath());
+        logger.error("Unable to delete spill file {}",
+          MDC.of(LogKeys.PATH$.MODULE$, spill.file.getPath()));
       }
     }
   }
@@ -416,8 +420,8 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
     // for tests
     assert(inMemSorter != null);
     if (inMemSorter.numRecords() >= numElementsForSpillThreshold) {
-      logger.info("Spilling data because number of spilledRecords crossed the threshold " +
-        numElementsForSpillThreshold);
+      logger.info("Spilling data because number of spilledRecords crossed the threshold {}" +
+        MDC.of(LogKeys.NUM_ELEMENTS_SPILL_THRESHOLD$.MODULE$, numElementsForSpillThreshold));
       spill();
     }
 

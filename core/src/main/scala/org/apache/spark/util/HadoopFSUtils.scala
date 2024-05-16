@@ -87,7 +87,7 @@ private[spark] object HadoopFSUtils extends Logging {
       path: Path,
       hadoopConf: Configuration,
       filter: PathFilter): Seq[(Path, Seq[FileStatus])] = {
-    logInfo(s"Listing $path with listFiles API")
+    logInfo(log"Listing ${MDC(PATH, path)} with listFiles API")
     try {
       val prefixLength = path.toString.length
       val remoteIter = path.getFileSystem(hadoopConf).listFiles(path, true)
@@ -134,8 +134,9 @@ private[spark] object HadoopFSUtils extends Logging {
       }
     }
 
-    logInfo(s"Listing leaf files and directories in parallel under ${paths.length} paths." +
-      s" The first several paths are: ${paths.take(10).mkString(", ")}.")
+    logInfo(log"Listing leaf files and directories in parallel under" +
+      log"${MDC(NUM_PATHS, paths.length)} paths." +
+      log" The first several paths are: ${MDC(PATHS, paths.take(10).mkString(", "))}.")
     HiveCatalogMetrics.incrementParallelListingJobCount(1)
 
     val serializableConfiguration = new SerializableConfiguration(hadoopConf)

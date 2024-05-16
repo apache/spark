@@ -21,11 +21,13 @@ import java.io.File
 
 import org.apache.commons.io.FileUtils
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.StringType
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
 
@@ -482,6 +484,52 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
 
       AddData(inputData, ("a", 5, "a"), ("b", 2, "b"), ("c", 9, "c")),
       CheckLastBatch(("c", 9, "c"))
+    )
+  }
+
+  test("collation aware deduplication") {
+    val inputData = MemoryStream[(String, Int)]
+    val result = inputData.toDF()
+      .select(col("_1")
+        .try_cast(StringType("UNICODE")).as("str"),
+        col("_2").as("int"))
+      .dropDuplicates("str")
+
+    testStream(result, Append)(
+      AddData(inputData, "a" -> 1),
+      CheckLastBatch("a" -> 1),
+      assertNumStateRows(total = 1, updated = 1, droppedByWatermark = 0),
+      AddData(inputData, "a" -> 2), // Dropped
+      CheckLastBatch(),
+      assertNumStateRows(total = 1, updated = 0, droppedByWatermark = 0),
+      // scalastyle:off
+      AddData(inputData, "ä" -> 1),
+      CheckLastBatch("ä" -> 1),
+      // scalastyle:on
+      assertNumStateRows(total = 2, updated = 1, droppedByWatermark = 0)
+    )
+  }
+
+  test("non-binary collation aware deduplication not supported") {
+    val inputData = MemoryStream[(String)]
+    val result = inputData.toDF()
+      .select(col("value")
+        .try_cast(StringType("UTF8_BINARY_LCASE")).as("str"))
+      .dropDuplicates("str")
+
+    val ex = intercept[StreamingQueryException] {
+      testStream(result, Append)(
+        AddData(inputData, "a"),
+        CheckLastBatch("a"))
+    }
+
+    checkError(
+      ex.getCause.asInstanceOf[SparkUnsupportedOperationException],
+      errorClass = "STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY",
+      parameters = Map(
+        "schema" -> ".+\"type\":\"string collate UTF8_BINARY_LCASE\".+"
+      ),
+      matchPVals = true
     )
   }
 }

@@ -1671,6 +1671,19 @@ _INTERVAL_YEARMONTH = re.compile(r"interval (year|month)( to (year|month))?")
 _COLLATIONS_METADATA_KEY = "__COLLATIONS"
 
 
+def _drop_metadata(d: Union[DataType, StructField]) -> Union[DataType, StructField]:
+    assert isinstance(d, (DataType, StructField))
+    if isinstance(d, StructField):
+        return StructField(d.name, _drop_metadata(d.dataType), d.nullable, None)
+    elif isinstance(d, StructType):
+        return StructType([cast(StructField, _drop_metadata(f)) for f in d.fields])
+    elif isinstance(d, ArrayType):
+        return ArrayType(_drop_metadata(d.elementType), d.containsNull)
+    elif isinstance(d, MapType):
+        return MapType(_drop_metadata(d.keyType), _drop_metadata(d.valueType), d.valueContainsNull)
+    return d
+
+
 def _parse_datatype_string(s: str) -> DataType:
     """
     Parses the given data type string to a :class:`DataType`. The data type string format equals
@@ -2011,6 +2024,7 @@ def _infer_type(
     obj: Any,
     infer_dict_as_struct: bool = False,
     infer_array_from_first_element: bool = False,
+    infer_map_from_first_pair: bool = False,
     prefer_timestamp_ntz: bool = False,
 ) -> DataType:
     """Infer the DataType from obj"""
@@ -2046,12 +2060,13 @@ def _infer_type(
                             value,
                             infer_dict_as_struct,
                             infer_array_from_first_element,
+                            infer_map_from_first_pair,
                             prefer_timestamp_ntz,
                         ),
                         True,
                     )
             return struct
-        else:
+        elif infer_map_from_first_pair:
             for key, value in obj.items():
                 if key is not None and value is not None:
                     return MapType(
@@ -2059,28 +2074,72 @@ def _infer_type(
                             key,
                             infer_dict_as_struct,
                             infer_array_from_first_element,
+                            infer_map_from_first_pair,
                             prefer_timestamp_ntz,
                         ),
                         _infer_type(
                             value,
                             infer_dict_as_struct,
                             infer_array_from_first_element,
+                            infer_map_from_first_pair,
                             prefer_timestamp_ntz,
                         ),
                         True,
                     )
             return MapType(NullType(), NullType(), True)
+        else:
+            key_type: DataType = NullType()
+            value_type: DataType = NullType()
+            for key, value in obj.items():
+                if key is not None:
+                    key_type = _merge_type(
+                        key_type,
+                        _infer_type(
+                            key,
+                            infer_dict_as_struct,
+                            infer_array_from_first_element,
+                            infer_map_from_first_pair,
+                            prefer_timestamp_ntz,
+                        ),
+                    )
+                if value is not None:
+                    value_type = _merge_type(
+                        value_type,
+                        _infer_type(
+                            value,
+                            infer_dict_as_struct,
+                            infer_array_from_first_element,
+                            infer_map_from_first_pair,
+                            prefer_timestamp_ntz,
+                        ),
+                    )
+
+            return MapType(key_type, value_type, True)
     elif isinstance(obj, list):
         if len(obj) > 0:
             if infer_array_from_first_element:
                 return ArrayType(
-                    _infer_type(obj[0], infer_dict_as_struct, prefer_timestamp_ntz), True
+                    _infer_type(
+                        obj[0],
+                        infer_dict_as_struct,
+                        infer_array_from_first_element,
+                        prefer_timestamp_ntz,
+                    ),
+                    True,
                 )
             else:
                 return ArrayType(
                     reduce(
                         _merge_type,
-                        (_infer_type(v, infer_dict_as_struct, prefer_timestamp_ntz) for v in obj),
+                        (
+                            _infer_type(
+                                v,
+                                infer_dict_as_struct,
+                                infer_array_from_first_element,
+                                prefer_timestamp_ntz,
+                            )
+                            for v in obj
+                        ),
                     ),
                     True,
                 )
@@ -2112,6 +2171,7 @@ def _infer_schema(
     names: Optional[List[str]] = None,
     infer_dict_as_struct: bool = False,
     infer_array_from_first_element: bool = False,
+    infer_map_from_first_pair: bool = False,
     prefer_timestamp_ntz: bool = False,
 ) -> StructType:
     """Infer the schema from dict/namedtuple/object"""
@@ -2150,6 +2210,7 @@ def _infer_schema(
                         v,
                         infer_dict_as_struct,
                         infer_array_from_first_element,
+                        infer_map_from_first_pair,
                         prefer_timestamp_ntz,
                     ),
                     True,

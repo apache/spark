@@ -3865,6 +3865,64 @@ abstract class JsonSuite
       }
     }
   }
+
+  test("SPARK-48148: values are unchanged when read as string") {
+    withTempPath { path =>
+      def extractData(
+          jsonString: String,
+          expectedInexactData: Seq[String],
+          expectedExactData: Seq[String],
+          multiLine: Boolean = false): Unit = {
+        Seq(jsonString).toDF()
+          .repartition(1)
+          .write
+          .mode("overwrite")
+          .text(path.getAbsolutePath)
+
+        withClue("Exact string parsing") {
+          withSQLConf(SQLConf.JSON_EXACT_STRING_PARSING.key -> "true") {
+            val df = spark.read
+              .schema("data STRING")
+              .option("multiLine", multiLine.toString)
+              .json(path.getAbsolutePath)
+            checkAnswer(df, expectedExactData.map(d => Row(d)))
+          }
+        }
+
+        withClue("Inexact string parsing") {
+          withSQLConf(SQLConf.JSON_EXACT_STRING_PARSING.key -> "false") {
+            val df = spark.read
+              .schema("data STRING")
+              .option("multiLine", multiLine.toString)
+              .json(path.getAbsolutePath)
+            checkAnswer(df, expectedInexactData.map(d => Row(d)))
+          }
+        }
+      }
+      extractData(
+        """{"data": {"white":    "space"}}""",
+        expectedInexactData = Seq("""{"white":"space"}"""),
+        expectedExactData = Seq("""{"white":    "space"}""")
+      )
+      extractData(
+        """{"data": ["white",    "space"]}""",
+        expectedInexactData = Seq("""["white","space"]"""),
+        expectedExactData = Seq("""["white",    "space"]""")
+      )
+      val granularFloat = "-999.99999999999999999999999999999999995"
+      extractData(
+        s"""{"data": {"v": ${granularFloat}}}""",
+        expectedInexactData = Seq("""{"v":-1000.0}"""),
+        expectedExactData = Seq(s"""{"v": ${granularFloat}}""")
+      )
+      extractData(
+        s"""{"data": {"white":\n"space"}}""",
+        expectedInexactData = Seq("""{"white":"space"}"""),
+        expectedExactData = Seq(s"""{"white":\n"space"}"""),
+        multiLine = true
+      )
+    }
+  }
 }
 
 class JsonV1Suite extends JsonSuite {

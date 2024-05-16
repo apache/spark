@@ -64,4 +64,8 @@
               files="src/main/java/org/apache/spark/sql/api/java/*"/>
     <suppress checks="IllegalImport"
               files="src/test/java/org/apache/spark/sql/hive/test/Complex.java"/>
+    <suppress checks="Header"
+      files="src/main/java/org/apache/spark/network/util/LimitedInputStream.java" />
+    <suppress checks="Header"
+      files="src/test/java/org/apache/spark/util/collection/TestTimSort.java" />
 </suppressions>

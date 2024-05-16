@@ -125,6 +125,12 @@
     ],
     "sqlState" : "428FR"
   },
+  "CANNOT_ASSIGN_EVENT_TIME_COLUMN_WITHOUT_WATERMARK" : {
+    "message" : [
+      "Watermark needs to be defined to reassign event time column. Failed to find watermark definition in the streaming query."
+    ],
+    "sqlState" : "42611"
+  },
   "CANNOT_CAST_DATATYPE" : {
     "message" : [
       "Cannot cast <sourceType> to <targetType>."
@@ -1063,6 +1069,14 @@
     },
     "sqlState" : "4274K"
   },
+  "EMITTING_ROWS_OLDER_THAN_WATERMARK_NOT_ALLOWED" : {
+    "message" : [
+      "Previous node emitted a row with eventTime=<emittedRowEventTime> which is older than current_watermark_value=<currentWatermark>",
+      "This can lead to correctness issues in the stateful operators downstream in the execution pipeline.",
+      "Please correct the operator logic to emit rows after current global watermark value."
+    ],
+    "sqlState" : "42815"
+  },
   "EMPTY_JSON_FIELD_VALUE" : {
     "message" : [
       "Failed to parse an empty string for data type <dataType>."
@@ -1331,7 +1345,13 @@
     ],
     "sqlState" : "54001"
   },
-  "FIELDS_ALREADY_EXISTS" : {
+  "FEATURE_NOT_ENABLED" : {
+    "message" : [
+      "The feature <featureName> is not enabled. Consider setting the config <configKey> to <configValue> to enable this capability."
+    ],
+    "sqlState" : "56038"
+  },
+  "FIELD_ALREADY_EXISTS" : {
     "message" : [
       "Cannot <op> column, because <fieldNames> already exists in <struct>."
     ],
@@ -2667,9 +2687,9 @@
           "ANALYZE TABLE(S) ... COMPUTE STATISTICS ... <ctx> must be either NOSCAN or empty."
         ]
       },
-      "CREATE_FUNC_WITH_IF_NOT_EXISTS_AND_REPLACE" : {
+      "CREATE_ROUTINE_WITH_IF_NOT_EXISTS_AND_REPLACE" : {
         "message" : [
-          "CREATE FUNCTION with both IF NOT EXISTS and REPLACE is not allowed."
+          "CREATE PROCEDURE or CREATE FUNCTION with both IF NOT EXISTS and REPLACE is not allowed."
         ]
       },
       "CREATE_TEMP_FUNC_WITH_DATABASE" : {
@@ -4199,6 +4219,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_DATA_TYPE_FOR_ENCODER" : {
+    "message" : [
+      "Cannot create encoder for <dataType>. Please use a different output data type for your UDF or DataFrame."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_DEFAULT_VALUE" : {
     "message" : [
       "DEFAULT column values is not supported."
@@ -4491,6 +4517,11 @@
       "TABLE_OPERATION" : {
         "message" : [
           "Table <tableName> does not support <operation>. Please check the current catalog and namespace to make sure the qualified table name is expected, and also check the catalog implementation which is configured by \"spark.sql.catalog\"."
+        ]
+      },
+      "TEMPORARY_VIEW_WITH_SCHEMA_BINDING_MODE" : {
+        "message" : [
+          "Temporary views cannot be created with the WITH SCHEMA clause. Recreate the temporary view when the underlying schema changes, or use a persisted view."
         ]
       },
       "TIME_TRAVEL" : {

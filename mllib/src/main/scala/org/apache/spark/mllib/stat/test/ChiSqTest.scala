@@ -20,7 +20,7 @@ package org.apache.spark.mllib.stat.test
 import org.apache.commons.math3.distribution.ChiSquaredDistribution
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
@@ -221,8 +221,9 @@ private[spark] object ChiSqTest extends Logging {
     }
     val size = observed.size
     if (size > 1000) {
-      logWarning("Chi-squared approximation may not be accurate due to low expected frequencies "
-        + s" as a result of a large number of categories: $size.")
+      logWarning(log"Chi-squared approximation may not be accurate due to low expected " +
+        log"frequencies as a result of a large number of categories: " +
+        log"${MDC(LogKeys.NUM_CATEGORIES, size)}.")
     }
     val obsArr = observed.toArray
     val expArr = if (expected.size == 0) Array.tabulate(size)(_ => 1.0 / size) else expected.toArray

@@ -131,6 +131,7 @@ select encode(scol, ecol) from values('hello', 'Windows-xxx') as t(scol, ecol);
 select decode();
 select decode(encode('abc', 'utf-8'));
 select decode(encode('abc', 'utf-8'), 'utf-8');
+select decode(encode('大千世界', 'utf-32'), 'utf-32');
 select decode(1, 1, 'Southlake');
 select decode(2, 1, 'Southlake');
 select decode(2, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle', 'Non domestic');

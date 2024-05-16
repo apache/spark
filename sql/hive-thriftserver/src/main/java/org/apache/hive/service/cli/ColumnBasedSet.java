@@ -30,8 +30,11 @@ import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TCompactProtocol;
 import org.apache.thrift.protocol.TProtocol;
 import org.apache.thrift.transport.TIOStreamTransport;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 
 /**
  * ColumnBasedSet.
@@ -44,7 +47,7 @@ public class ColumnBasedSet implements RowSet {
   private final List<ColumnBuffer> columns;
   private byte[] blob;
   private boolean isBlobBased = false;
-  public static final Logger LOG = LoggerFactory.getLogger(ColumnBasedSet.class);
+  public static final SparkLogger LOG = SparkLoggerFactory.getLogger(ColumnBasedSet.class);
 
   public ColumnBasedSet(TableSchema schema) {
     descriptors = schema.toTypeDescriptors();
@@ -68,7 +71,7 @@ public class ColumnBasedSet implements RowSet {
         try {
           tvalue.read(protocol);
         } catch (TException e) {
-          LOG.error(e.getMessage(), e);
+          LOG.error("{}", e, MDC.of(LogKeys.ERROR$.MODULE$, e.getMessage()));
           throw new TException("Error reading column value from the row set blob", e);
         }
         columns.add(new ColumnBuffer(tvalue));

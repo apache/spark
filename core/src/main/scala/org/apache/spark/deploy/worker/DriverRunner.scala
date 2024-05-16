@@ -92,7 +92,7 @@ private[deploy] class DriverRunner(
         var shutdownHook: AnyRef = null
         try {
           shutdownHook = ShutdownHookManager.addShutdownHook { () =>
-            logInfo(s"Worker shutting down, killing driver $driverId")
+            logInfo(log"Worker shutting down, killing driver ${MDC(DRIVER_ID, driverId)}")
             kill()
           }
 
@@ -159,7 +159,8 @@ private[deploy] class DriverRunner(
     val jarFileName = new URI(driverDesc.jarUrl).getPath.split("/").last
     val localJarFile = new File(driverDir, jarFileName)
     if (!localJarFile.exists()) { // May already exist if running multiple workers on one node
-      logInfo(s"Copying user jar ${driverDesc.jarUrl} to $localJarFile")
+      logInfo(log"Copying user jar ${MDC(JAR_URL, driverDesc.jarUrl)}" +
+        log" to ${MDC(FILE_NAME, localJarFile)}")
       Utils.fetchFile(
         driverDesc.jarUrl,
         driverDir,
@@ -233,7 +234,7 @@ private[deploy] class DriverRunner(
     val redactedCommand = Utils.redactCommandLineArgs(conf, command.command)
       .mkString("\"", "\" \"", "\"")
     while (keepTrying) {
-      logInfo("Launch Command: " + redactedCommand)
+      logInfo(log"Launch Command: ${MDC(COMMAND, redactedCommand)}")
 
       synchronized {
         if (killed) { return exitCode }
@@ -250,7 +251,8 @@ private[deploy] class DriverRunner(
         if (clock.getTimeMillis() - processStart > successfulRunDuration * 1000L) {
           waitSeconds = 1
         }
-        logInfo(s"Command exited with status $exitCode, re-launching after $waitSeconds s.")
+        logInfo(log"Command exited with status ${MDC(EXIT_CODE, exitCode)}," +
+          log" re-launching after ${MDC(TIME_UNITS, waitSeconds)} s.")
         sleeper.sleep(waitSeconds)
         waitSeconds = waitSeconds * 2 // exponential back-off
       }

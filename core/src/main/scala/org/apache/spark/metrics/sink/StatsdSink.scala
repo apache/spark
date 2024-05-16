@@ -22,7 +22,8 @@ import java.util.concurrent.TimeUnit
 
 import com.codahale.metrics.{Metric, MetricFilter, MetricRegistry}
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.PREFIX
 import org.apache.spark.metrics.MetricsSystem
 
 private[spark] object StatsdSink {
@@ -69,7 +70,7 @@ private[spark] class StatsdSink(
 
   override def start(): Unit = {
     reporter.start(pollPeriod, pollUnit)
-    logInfo(s"StatsdSink started with prefix: '$prefix'")
+    logInfo(log"StatsdSink started with prefix: '${MDC(PREFIX, prefix)}'")
   }
 
   override def stop(): Unit = {
