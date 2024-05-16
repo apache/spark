@@ -744,7 +744,8 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
     val projectList = metadata.schema.map { field =>
       Cast(
         GetViewColumnByNameAndOrdinal(metadata.identifier.toString, field.name, 0, 1, None),
-        field.dataType).as(field.name)
+        field.dataType,
+        ansiEnabled = true).as(field.name)
     }
     Project(projectList, CatalystSqlParser.parsePlan(metadata.viewText.get))
   }
