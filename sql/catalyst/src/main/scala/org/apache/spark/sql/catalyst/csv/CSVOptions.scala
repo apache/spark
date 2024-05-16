@@ -149,7 +149,12 @@ class CSVOptions(
     parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, defaultTimeZoneId))
 
   // A language tag in IETF BCP 47 format
-  val locale: Locale = parameters.get(LOCALE).map(Locale.forLanguageTag).getOrElse(Locale.US)
+  val locale: Locale = try {
+    parameters.get(LOCALE).map(Locale.forLanguageTag).getOrElse(Locale.US)
+  } catch {
+    case _: NullPointerException =>
+      throw QueryCompilationErrors.localeIsNull()
+  }
 
   /**
    * Infer columns with all valid date entries as date type (otherwise inferred as string or

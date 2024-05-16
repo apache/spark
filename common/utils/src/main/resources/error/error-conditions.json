@@ -2417,6 +2417,12 @@
     },
     "sqlState" : "42K0E"
   },
+  "INVALID_LOCALE" : {
+    "message" : [
+      "The locale cannot be null"
+    ],
+    "sqlState" : "42616"
+  },
   "INVALID_NON_DETERMINISTIC_EXPRESSIONS" : {
     "message" : [
       "The operator expects a deterministic expression, but the actual expression is <sqlExprs>."
