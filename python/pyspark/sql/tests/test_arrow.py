@@ -374,6 +374,16 @@ class ArrowTestsMixin:
             pdf = df.toPandas()
         assert_frame_equal(origin, pdf)
 
+    def test_create_data_frame_to_arrow_day_time_internal(self):
+        origin = pa.table({"a": [datetime.timedelta(microseconds=123)]})
+        df = self.spark.createDataFrame(origin)
+        df.select(
+            assert_true(lit("INTERVAL '0 00:00:00.000123' DAY TO SECOND") == df.a.cast("string"))
+        ).collect()
+
+        t = df.toArrow()
+        self.assertTrue(origin.equals(t))
+
     def test_toPandas_respect_session_timezone(self):
         for arrow_enabled in [True, False]:
             with self.subTest(arrow_enabled=arrow_enabled):
@@ -596,18 +606,18 @@ class ArrowTestsMixin:
             ]
             self.assertEqual(result_ny, result_la_corrected)
 
-    def test_createDataFrame_with_schema(self):
+    def test_createDataFrame_pandas_with_schema(self):
         pdf = self.create_pandas_data_frame()
         df = self.spark.createDataFrame(pdf, schema=self.schema)
         self.assertEqual(self.schema, df.schema)
         pdf_arrow = df.toPandas()
         assert_frame_equal(pdf_arrow, pdf)
 
-    def test_createDataFrame_with_incorrect_schema(self):
+    def test_createDataFrame_pandas_with_incorrect_schema(self):
         with self.quiet():
-            self.check_createDataFrame_with_incorrect_schema()
+            self.check_createDataFrame_pandas_with_incorrect_schema()
 
-    def check_createDataFrame_with_incorrect_schema(self):
+    def check_createDataFrame_pandas_with_incorrect_schema(self):
         pdf = self.create_pandas_data_frame()
         fields = list(self.schema)
         fields[5], fields[6] = fields[6], fields[5]  # swap decimal with date
@@ -631,7 +641,15 @@ class ArrowTestsMixin:
             self.assertEqual(len(exception.args), 1)
             self.assertRegex(exception.args[0], "[D|d]ecimal.*got.*date")
 
-    def test_createDataFrame_with_names(self):
+    def test_createDataFrame_arrow_with_incorrect_schema(self):
+        t = self.create_arrow_table()
+        fields = list(self.schema)
+        fields[5], fields[6] = fields[6], fields[5]  # swap decimal with date
+        wrong_schema = StructType(fields)
+        with self.assertRaises(Exception):
+            self.spark.createDataFrame(t, schema=wrong_schema)
+
+    def test_createDataFrame_pandas_with_names(self):
         pdf = self.create_pandas_data_frame()
         new_names = list(map(str, range(len(self.schema.fieldNames()))))
         # Test that schema as a list of column names gets applied
@@ -641,12 +659,31 @@ class ArrowTestsMixin:
         df = self.spark.createDataFrame(pdf, schema=tuple(new_names))
         self.assertEqual(df.schema.fieldNames(), new_names)
 
-    def test_createDataFrame_column_name_encoding(self):
+    def test_createDataFrame_arrow_with_names(self):
+        t = self.create_arrow_table()
+        new_names = list(map(str, range(len(self.schema.fieldNames()))))
+        # Test that schema as a list of column names gets applied
+        df = self.spark.createDataFrame(t, schema=list(new_names))
+        self.assertEqual(df.schema.fieldNames(), new_names)
+        # Test that schema as tuple of column names gets applied
+        df = self.spark.createDataFrame(t, schema=tuple(new_names))
+        self.assertEqual(df.schema.fieldNames(), new_names)
+
+    def test_createDataFrame_pandas_column_name_encoding(self):
         pdf = pd.DataFrame({"a": [1]})
         columns = self.spark.createDataFrame(pdf).columns
         self.assertTrue(isinstance(columns[0], str))
         self.assertEqual(columns[0], "a")
         columns = self.spark.createDataFrame(pdf, ["b"]).columns
+        self.assertTrue(isinstance(columns[0], str))
+        self.assertEqual(columns[0], "b")
+
+    def test_createDataFrame_arrow_column_name_encoding(self):
+        t = pa.table({"a": [1]})
+        columns = self.spark.createDataFrame(t).columns
+        self.assertTrue(isinstance(columns[0], str))
+        self.assertEqual(columns[0], "a")
+        columns = self.spark.createDataFrame(t, ["b"]).columns
         self.assertTrue(isinstance(columns[0], str))
         self.assertEqual(columns[0], "b")
 
@@ -681,7 +718,7 @@ class ArrowTestsMixin:
         t_in = pa.Table.from_arrays(
             [pa.array([1234567890123456789], type=pa.timestamp("ns", tz="UTC"))], names=["ts"]
         )
-        df = self.spark.createDataFrame(t_in, schema=self.schema)
+        df = self.spark.createDataFrame(t_in)
         t_out = df.toArrow()
         expected = pa.Table.from_arrays(
             [pa.array([1234567890123456], type=pa.timestamp("us", tz="UTC"))], names=["ts"]
@@ -722,17 +759,26 @@ class ArrowTestsMixin:
             ):
                 self.spark.createDataFrame(np.array(0))
 
-    def test_createDataFrame_with_array_type(self):
+    def test_createDataFrame_pandas_with_array_type(self):
         for arrow_enabled in [True, False]:
             with self.subTest(arrow_enabled=arrow_enabled):
-                self.check_createDataFrame_with_array_type(arrow_enabled)
+                self.check_createDataFrame_pandas_with_array_type(arrow_enabled)
 
-    def check_createDataFrame_with_array_type(self, arrow_enabled):
+    def check_createDataFrame_pandas_with_array_type(self, arrow_enabled):
         pdf = pd.DataFrame({"a": [[1, 2], [3, 4]], "b": [["x", "y"], ["y", "z"]]})
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrow_enabled}):
             df = self.spark.createDataFrame(pdf)
         result = df.collect()
         expected = [tuple(list(e) for e in rec) for rec in pdf.to_records(index=False)]
+        for r in range(len(expected)):
+            for e in range(len(expected[r])):
+                self.assertTrue(expected[r][e] == result[r][e])
+
+    def test_createDataFrame_arrow_with_array_type(self):
+        t = pa.table({"a": [[1, 2], [3, 4]], "b": [["x", "y"], ["y", "z"]]})
+        df = self.spark.createDataFrame(t)
+        result = df.collect()
+        expected = [tuple(list(e) for e in rec) for rec in t.to_pandas().to_records(index=False)]
         for r in range(len(expected)):
             for e in range(len(expected[r])):
                 self.assertTrue(expected[r][e] == result[r][e])
@@ -754,13 +800,25 @@ class ArrowTestsMixin:
             for e in range(len(expected[r])):
                 self.assertTrue(expected[r][e] == result[r][e])
 
-    def test_createDataFrame_with_map_type(self):
+    def test_toArrow_with_array_type(self):
+        expected = [([1, 2], ["x", "y"]), ([3, 4], ["y", "z"])]
+        array_schema = StructType(
+            [StructField("a", ArrayType(IntegerType())), StructField("b", ArrayType(StringType()))]
+        )
+        df = self.spark.createDataFrame(expected, schema=array_schema)
+        t = df.toArrow()
+        result = [tuple(list(e) for e in rec) for rec in t.to_pandas().to_records(index=False)]
+        for r in range(len(expected)):
+            for e in range(len(expected[r])):
+                self.assertTrue(expected[r][e] == result[r][e])
+
+    def test_createDataFrame_pandas_with_map_type(self):
         with self.quiet():
             for arrow_enabled in [True, False]:
                 with self.subTest(arrow_enabled=arrow_enabled):
-                    self.check_createDataFrame_with_map_type(arrow_enabled)
+                    self.check_createDataFrame_pandas_with_map_type(arrow_enabled)
 
-    def check_createDataFrame_with_map_type(self, arrow_enabled):
+    def check_createDataFrame_pandas_with_map_type(self, arrow_enabled):
         map_data = [{"a": 1}, {"b": 2, "c": 3}, {}, None, {"d": None}]
 
         pdf = pd.DataFrame({"id": [0, 1, 2, 3, 4], "m": map_data})
@@ -778,12 +836,33 @@ class ArrowTestsMixin:
                         i, m = row
                         self.assertEqual(m, map_data[i])
 
-    def test_createDataFrame_with_struct_type(self):
+    def test_createDataFrame_arrow_with_map_type(self):
+        map_data = [{"a": 1}, {"b": 2, "c": 3}, {}, {}, {"d": None}]
+
+        t = pa.table(
+            {"id": [0, 1, 2, 3, 4], "m": map_data},
+            schema=pa.schema([("id", pa.int64()), ("m", pa.map_(pa.string(), pa.int64()))]),
+        )
+        for schema in (
+            "id long, m map<string, long>",
+            StructType().add("id", LongType()).add("m", MapType(StringType(), LongType())),
+        ):
+            with self.subTest(schema=schema):
+                df = self.spark.createDataFrame(t, schema=schema)
+
+                result = df.collect()
+
+                for row in result:
+                    i, m = row
+                    m = {} if m is None else m
+                    self.assertEqual(m, map_data[i])
+
+    def test_createDataFrame_pandas_with_struct_type(self):
         for arrow_enabled in [True, False]:
             with self.subTest(arrow_enabled=arrow_enabled):
-                self.check_createDataFrame_with_struct_type(arrow_enabled)
+                self.check_createDataFrame_pandas_with_struct_type(arrow_enabled)
 
-    def check_createDataFrame_with_struct_type(self, arrow_enabled):
+    def check_createDataFrame_pandas_with_struct_type(self, arrow_enabled):
         pdf = pd.DataFrame(
             {"a": [Row(1, "a"), Row(2, "b")], "b": [{"s": 3, "t": "x"}, {"s": 4, "t": "y"}]}
         )
@@ -798,6 +877,35 @@ class ArrowTestsMixin:
                     df = self.spark.createDataFrame(pdf, schema)
                 result = df.collect()
                 expected = [(rec[0], Row(**rec[1])) for rec in pdf.to_records(index=False)]
+                for r in range(len(expected)):
+                    for e in range(len(expected[r])):
+                        self.assertTrue(
+                            expected[r][e] == result[r][e], f"{expected[r][e]} == {result[r][e]}"
+                        )
+
+    def test_createDataFrame_pandas_with_struct_type(self):
+        for arrow_enabled in [True, False]:
+            with self.subTest(arrow_enabled=arrow_enabled):
+                self.check_createDataFrame_pandas_with_struct_type(arrow_enabled)
+
+    def test_createDataFrame_arrow_with_struct_type(self):
+        t = pa.table(
+            {
+                "a": [{"x": 1, "y": "a"}, {"x": 2, "y": "b"}],
+                "b": [{"s": 3, "t": "x"}, {"s": 4, "t": "y"}],
+            },
+        )
+        for schema in (
+            StructType()
+            .add("a", StructType().add("x", LongType()).add("y", StringType()))
+            .add("b", StructType().add("s", LongType()).add("t", StringType())),
+        ):
+            with self.subTest(schema=schema):
+                df = self.spark.createDataFrame(t, schema)
+                result = df.collect()
+                expected = [
+                    (Row(**rec[0]), Row(**rec[1])) for rec in t.to_pandas().to_records(index=False)
+                ]
                 for r in range(len(expected)):
                     for e in range(len(expected[r])):
                         self.assertTrue(
@@ -847,6 +955,22 @@ class ArrowTestsMixin:
                 pdf = df.toPandas()
                 assert_frame_equal(origin, pdf)
 
+    def test_toArrow_with_map_type(self):
+        origin = pa.table(
+            {"id": [0, 1, 2, 3], "m": [{}, {"a": 1}, {"a": 1, "b": 2}, {"a": 1, "b": 2, "c": 3}]},
+            schema=pa.schema(
+                [pa.field("id", pa.int64()), pa.field("m", pa.map_(pa.string(), pa.int64()), True)]
+            ),
+        )
+        for schema in [
+            "id long, m map<string, long>",
+            StructType().add("id", LongType()).add("m", MapType(StringType(), LongType())),
+        ]:
+            df = self.spark.createDataFrame(origin, schema=schema)
+
+            t = df.toArrow()
+            self.assertTrue(origin.equals(t))
+
     def test_toPandas_with_map_type_nulls(self):
         with self.quiet():
             for arrow_enabled in [True, False]:
@@ -869,12 +993,28 @@ class ArrowTestsMixin:
                 pdf = df.toPandas()
                 assert_frame_equal(origin, pdf)
 
-    def test_createDataFrame_with_int_col_names(self):
+    @unittest.skip("SPARK-48302: Nulls are replaced with empty lists")
+    def test_toArrow_with_map_type_nulls(self, arrow_enabled):
+        origin = pa.table(
+            {"id": [0, 1, 2, 3, 4], "m": [{"a": 1}, {"b": 2, "c": 3}, {}, None, {"d": None}]},
+            schema=pa.schema(
+                [pa.field("id", pa.int64()), pa.field("m", pa.map_(pa.string(), pa.int64()), True)]
+            ),
+        )
+        for schema in [
+            "id long, m map<string, long>",
+            StructType().add("id", LongType()).add("m", MapType(StringType(), LongType())),
+        ]:
+            df = self.spark.createDataFrame(origin, schema=schema)
+            pdf = df.toArrow().to_pandas()
+            assert_frame_equal(origin.to_pandas(), pdf)
+
+    def test_createDataFrame_pandas_with_int_col_names(self):
         for arrow_enabled in [True, False]:
             with self.subTest(arrow_enabled=arrow_enabled):
-                self.check_createDataFrame_with_int_col_names(arrow_enabled)
+                self.check_createDataFrame_pandas_with_int_col_names(arrow_enabled)
 
-    def check_createDataFrame_with_int_col_names(self, arrow_enabled):
+    def check_createDataFrame_pandas_with_int_col_names(self, arrow_enabled):
         import numpy as np
 
         pdf = pd.DataFrame(np.random.rand(4, 2))
@@ -882,6 +1022,13 @@ class ArrowTestsMixin:
             df = self.spark.createDataFrame(pdf)
         pdf_col_names = [str(c) for c in pdf.columns]
         self.assertEqual(pdf_col_names, df.columns)
+
+    def test_createDataFrame_arrow_with_int_col_names(self):
+        import numpy as np
+
+        t = pa.table(pd.DataFrame(np.random.rand(4, 2)))
+        df = self.spark.createDataFrame(t)
+        self.assertEqual(t.schema.names, df.columns)
 
     # Regression test for SPARK-23314
     def test_timestamp_dst(self):
@@ -967,6 +1114,23 @@ class ArrowTestsMixin:
         self.assertIsInstance(arrow_first_category_element, str)
         self.assertIsInstance(spark_first_category_element, str)
 
+    def test_createDataFrame_with_dictionary_type(self):
+        import pyarrow.compute as pc
+
+        t = pa.table({"A": ["a", "b", "c", "a"]})
+        t = t.add_column(1, "B", pc.dictionary_encode(t["A"]))
+        category_first_element = sorted(t["B"].combine_chunks().dictionary.to_pylist())[0]
+
+        df = self.spark.createDataFrame(t)
+        type = df.dtypes[1][1]
+        result = df.toArrow()
+        result_first_category_element = result["B"][0].as_py()
+
+        # ensure original category elements are string
+        self.assertIsInstance(category_first_element, str)
+        self.assertEqual(type, "string")
+        self.assertIsInstance(result_first_category_element, str)
+
     def test_createDataFrame_with_float_index(self):
         # SPARK-32098: float index should not produce duplicated or truncated Spark DataFrame
         self.assertEqual(
@@ -1004,6 +1168,10 @@ class ArrowTestsMixin:
         ):
             with self.assertRaises(ArithmeticException):
                 self.spark.sql("select 1/0").toPandas()
+
+    def test_toArrow_error(self):
+        with self.assertRaises(ArithmeticException):
+            self.spark.sql("select 1/0").toArrow()
 
     def test_toPandas_duplicate_field_names(self):
         for arrow_enabled in [True, False]:
@@ -1058,6 +1226,28 @@ class ArrowTestsMixin:
                         else:
                             expected = pd.DataFrame.from_records(data, columns=schema.names)
                         assert_frame_equal(df.toPandas(), expected)
+
+    def test_toArrow_duplicate_field_names(self):
+        data = [Row(Row("a", 1), Row(2, 3, "b", 4, "c")), Row(Row("x", 6), Row(7, 8, "y", 9, "z"))]
+        schema = (
+            StructType()
+            .add("struct", StructType().add("x", StringType()).add("x", IntegerType()))
+            .add(
+                "struct",
+                StructType()
+                .add("a", IntegerType())
+                .add("x", IntegerType())
+                .add("x", StringType())
+                .add("y", IntegerType())
+                .add("y", StringType()),
+            )
+        )
+        df = self.spark.createDataFrame(data, schema=schema)
+
+        with self.assertRaisesRegex(
+            UnsupportedOperationException, "DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT"
+        ):
+            df.toArrow()
 
     def test_createDataFrame_duplicate_field_names(self):
         for arrow_enabled in [True, False]:

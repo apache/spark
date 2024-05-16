@@ -31,8 +31,17 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase, PandasOnSparkTest
     def test_createDataFrame_fallback_enabled(self):
         super().test_createDataFrame_fallback_enabled()
 
-    def test_createDataFrame_with_map_type(self):
-        self.check_createDataFrame_with_map_type(True)
+    def test_createDataFrame_pandas_with_map_type(self):
+        self.check_createDataFrame_pandas_with_map_type(True)
+
+    def test_createDataFrame_pandas_with_struct_type(self):
+        self.check_createDataFrame_pandas_with_struct_type(True)
+
+    def test_createDataFrame_arrow_with_struct_type(self):
+        super().test_createDataFrame_arrow_with_struct_type()
+
+    def test_createDataFrame_arrow_truncate_timestamp(self):
+        super().test_createDataFrame_arrow_truncate_timestamp()
 
     def test_createDataFrame_with_ndarray(self):
         self.check_createDataFrame_with_ndarray(True)
@@ -72,6 +81,9 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase, PandasOnSparkTest
     def test_create_data_frame_to_pandas_day_time_internal(self):
         self.check_create_data_frame_to_pandas_day_time_internal(True)
 
+    def test_create_data_frame_to_arrow_day_time_internal(self):
+        super().test_create_data_frame_to_arrow_day_time_internal()
+
     def test_createDataFrame_pandas_respect_session_timezone(self):
         self.check_createDataFrame_pandas_respect_session_timezone(True)
 
@@ -96,6 +108,9 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase, PandasOnSparkTest
     def test_toPandas_with_array_type(self):
         self.check_toPandas_with_array_type(True)
 
+    def test_toArrow_with_array_type(self):
+        super().test_toArrow_with_array_type()
+
     @unittest.skip("Spark Connect does not support fallback.")
     def test_toPandas_fallback_disabled(self):
         super().test_toPandas_fallback_disabled()
@@ -107,14 +122,30 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase, PandasOnSparkTest
     def test_toPandas_with_map_type(self):
         self.check_toPandas_with_map_type(True)
 
+    def test_toArrow_with_map_type(self):
+        super().test_toArrow_with_map_type()
+
     def test_toPandas_with_map_type_nulls(self):
         self.check_toPandas_with_map_type_nulls(True)
 
-    def test_createDataFrame_with_array_type(self):
-        self.check_createDataFrame_with_array_type(True)
+    @unittest.skip("SPARK-48302: Nulls are replaced with empty lists")
+    def test_toArrow_with_map_type_nulls(self):
+        super().test_toArrow_with_map_type_nulls()
 
-    def test_createDataFrame_with_int_col_names(self):
-        self.check_createDataFrame_with_int_col_names(True)
+    def test_createDataFrame_pandas_with_array_type(self):
+        self.check_createDataFrame_pandas_with_array_type(True)
+
+    def test_createDataFrame_arrow_with_array_type(self):
+        super().test_createDataFrame_arrow_with_array_type()
+
+    def test_createDataFrame_pandas_with_int_col_names(self):
+        self.check_createDataFrame_pandas_with_int_col_names(True)
+
+    def test_createDataFrame_arrow_with_int_col_names(self):
+        super().test_createDataFrame_arrow_with_int_col_names()
+
+    def test_createDataFrame_with_dictionary_type(self):
+        super().test_createDataFrame_with_dictionary_type()
 
     def test_timestamp_nat(self):
         self.check_timestamp_nat(True)
@@ -122,8 +153,15 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase, PandasOnSparkTest
     def test_toPandas_error(self):
         self.check_toPandas_error(True)
 
+    def test_toArrow_error(self):
+        super().test_toArrow_error()
+
     def test_toPandas_duplicate_field_names(self):
         self.check_toPandas_duplicate_field_names(True)
+
+    @unittest.skip("Error is handled by PyArrow not PySpark")
+    def test_toArrow_duplicate_field_names(self):
+        super().test_toArrow_duplicate_field_names()
 
     def test_createDataFrame_duplicate_field_names(self):
         self.check_createDataFrame_duplicate_field_names(True)
@@ -143,8 +181,14 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase, PandasOnSparkTest
     def test_createDataFrame_pandas_nested_timestamp(self):
         self.check_createDataFrame_pandas_nested_timestamp(True)
 
+    def test_createDataFrame_arrow_nested_timestamp(self):
+        super().test_createDataFrame_arrow_nested_timestamp()
+
     def test_toPandas_nested_timestamp(self):
         self.check_toPandas_nested_timestamp(True)
+
+    def test_toArrow_nested_timestamp(self):
+        super().test_toArrow_nested_timestamp()
 
     def test_toPandas_timestmap_tzinfo(self):
         self.check_toPandas_timestmap_tzinfo(True)
@@ -157,6 +201,21 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase, PandasOnSparkTest
 
     def test_create_dataframe_namedtuples(self):
         self.check_create_dataframe_namedtuples(True)
+
+    def test_createDataFrame_pandas_with_schema(self):
+        super().test_createDataFrame_pandas_with_schema()
+
+    def test_createDataFrame_pandas_with_incorrect_schema(self):
+        super().test_createDataFrame_pandas_with_incorrect_schema()
+
+    def test_createDataFrame_arrow_with_incorrect_schema(self):
+        super().test_createDataFrame_arrow_with_incorrect_schema()
+
+    def test_createDataFrame_pandas_with_names(self):
+        super().test_createDataFrame_pandas_with_names()
+
+    def test_createDataFrame_arrow_with_names(self):
+        super().test_createDataFrame_arrow_with_names()
 
 
 if __name__ == "__main__":
