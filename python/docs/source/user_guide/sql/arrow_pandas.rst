@@ -42,9 +42,9 @@ You can install it using pip or conda from the conda-forge channel. See PyArrow
 Conversion to/from Arrow Table
 ------------------------------
 
-In Spark 4.0.0 and higher, you can create a Spark DataFrame from a PyArrow Table with
-:meth:`SparkSession.createDataFrame`, and you can call :meth:`DataFrame.toArrow` to convert a Spark
-DataFrame to a PyArrow Table.
+From Spark 4.0, you can create a Spark DataFrame from a PyArrow Table with
+:meth:`SparkSession.createDataFrame`, and you can convert a Spark DataFrame to a PyArrow Table
+with :meth:`DataFrame.toArrow`.
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/arrow.py
     :language: python
@@ -52,8 +52,8 @@ DataFrame to a PyArrow Table.
     :dedent: 4
 
 Note that :meth:`DataFrame.toArrow` results in the collection of all records in the DataFrame to
-the driver program and should be done on a small subset of the data. Not all Spark data types are
-currently supported and an error can be raised if a column has an unsupported type.
+the driver program and should be done on a small subset of the data. Not all Spark and Arrow data
+types are currently supported and an error can be raised if a column has an unsupported type.
 
 Enabling for Conversion to/from Pandas
 --------------------------------------
@@ -417,7 +417,7 @@ zone, which removes the time zone and displays values as local time. This will o
 when calling :meth:`DataFrame.toPandas()` or ``pandas_udf`` with timestamp columns.
 
 When timestamp data is transferred from Spark to a PyArrow Table, it will remain in microsecond
-resolution with the UTC time zone. This will occur when calling :meth:`DataFrame.toArrow()` with
+resolution with the UTC time zone. This occurs when calling :meth:`DataFrame.toArrow()` with
 timestamp columns.
 
 When timestamp data is transferred from Pandas or PyArrow to Spark, it will be converted to UTC

@@ -328,7 +328,7 @@ def _check_arrow_array_timestamps_localize(
     Convert Arrow timestamps to timezone-naive in the specified timezone if the specified Spark
     data type is TimestampType, and optionally truncate nanosecond timestamps to microseconds.
 
-    This function works on Arrow Arrays and  ChunkedArrays, and it recurses to convert nested
+    This function works on Arrow Arrays and ChunkedArrays, and it recurses to convert nested
     timestamps.
 
     Parameters
