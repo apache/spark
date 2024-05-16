@@ -53,7 +53,7 @@ import org.apache.spark.tags.DockerTest
  *  $ export ORACLE_DOCKER_IMAGE_NAME=oracle/database:23.4.0-free
  *
  * This procedure has been validated with Oracle Database Free version 23.4.0,
- * and with Oracle Express Edition versions 18.4.0 and 21.3.0
+ * and with Oracle Express Edition versions 18.4.0 and 21.4.0
  */
 @DockerTest
 class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
