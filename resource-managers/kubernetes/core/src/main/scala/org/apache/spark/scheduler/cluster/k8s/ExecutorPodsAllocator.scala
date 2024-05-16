@@ -400,9 +400,9 @@ class ExecutorPodsAllocator(
           math.min(math.min(numMissingPodsForRpId, podAllocationSize), sharedSlotFromPendingPods)
         logInfo(log"Going to request ${MDC(LogKeys.COUNT, numExecutorsToAllocate)} executors from" +
           log" Kubernetes for ResourceProfile Id: ${MDC(LogKeys.RESOURCE_PROFILE_ID, rpId)}, " +
-          log"target: ${MDC(LogKeys.POD_TARGET_COUNT, targetNum)}, " +
-          log"known: ${MDC(LogKeys.POD_COUNT, podCountForRpId)}, sharedSlotFromPendingPods: " +
-          log"${MDC(LogKeys.POD_SHARED_SLOT_COUNT, sharedSlotFromPendingPods)}.")
+          log"target: ${MDC(LogKeys.NUM_POD_TARGET, targetNum)}, " +
+          log"known: ${MDC(LogKeys.NUM_POD, podCountForRpId)}, sharedSlotFromPendingPods: " +
+          log"${MDC(LogKeys.NUM_POD_SHARED_SLOT, sharedSlotFromPendingPods)}.")
         requestNewExecutors(numExecutorsToAllocate, applicationId, rpId, k8sKnownPVCNames)
       }
     }
