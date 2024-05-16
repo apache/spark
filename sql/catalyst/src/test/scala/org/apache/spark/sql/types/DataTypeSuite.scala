@@ -888,7 +888,7 @@ class DataTypeSuite extends SparkFunSuite {
         DataType.fromJson(json)
       },
       errorClass = "COLLATION_INVALID_PROVIDER",
-      parameters = Map("provider" -> "badProvider", "supportedProviders" -> "SPARK, ICU")
+      parameters = Map("provider" -> "badProvider", "supportedProviders" -> "spark, icu")
     )
   }
 }
