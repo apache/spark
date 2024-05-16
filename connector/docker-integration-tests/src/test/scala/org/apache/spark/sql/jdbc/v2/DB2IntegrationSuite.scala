@@ -107,5 +107,4 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
   override def caseConvert(tableName: String): String = tableName.toUpperCase(Locale.ROOT)
 
   override protected val timestampNTZType: String = "TIMESTAMP WITHOUT TIME ZONE"
-  override protected val timestampTZType: String = "TIMESTAMP"
 }

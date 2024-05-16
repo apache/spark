@@ -126,7 +126,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
 
   override def caseConvert(tableName: String): String = tableName.toUpperCase(Locale.ROOT)
 
-  override protected val timestampNTZType: String = "TIMESTAMP WITH LOCAL TIME ZONE"
+  override protected val timestampTZType: String = "TIMESTAMP WITH LOCAL TIME ZONE"
 
   override protected def prepareTimestampTable(tableName: String, insert: Boolean = true): Unit = {
     withConnection { conn =>
