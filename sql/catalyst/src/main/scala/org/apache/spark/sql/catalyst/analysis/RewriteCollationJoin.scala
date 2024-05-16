@@ -29,36 +29,38 @@ object RewriteCollationJoin extends Rule[LogicalPlan] {
       val newCondition = condition transform {
         case EqualTo(l: AttributeReference, r: AttributeReference) =>
           (l.dataType, r.dataType) match {
-            case (_: StringType, _: StringType) =>
-              val collationId = l.dataType.asInstanceOf[StringType].collationId
-              val collation = CollationFactory.fetchCollation(collationId)
+            case (st: StringType, _: StringType) =>
+              val collation = CollationFactory.fetchCollation(st.collationId)
               if (collation.supportsBinaryEquality) {
-                return plan
+                condition
               } else if (collation.supportsLowercaseEquality) {
                 EqualTo(Lower(l), Lower(r))
               } else {
                 EqualTo(CollationKey(l), CollationKey(r))
               }
             case _ =>
-              return plan
+              condition
           }
         case EqualNullSafe(l: AttributeReference, r: AttributeReference) =>
           (l.dataType, r.dataType) match {
-            case (_: StringType, _: StringType) =>
-              val collationId = l.dataType.asInstanceOf[StringType].collationId
-              val collation = CollationFactory.fetchCollation(collationId)
+            case (st: StringType, _: StringType) =>
+              val collation = CollationFactory.fetchCollation(st.collationId)
               if (collation.supportsBinaryEquality) {
-                return plan
+                condition
               } else if (collation.supportsLowercaseEquality) {
                 EqualNullSafe(Lower(l), Lower(r))
               } else {
                 EqualNullSafe(CollationKey(l), CollationKey(r))
               }
             case _ =>
-              return plan
+              condition
           }
       }
-      val newJoin = j.copy(condition = Some(newCondition))
-      (newJoin, j.output.zip(newJoin.output))
+      if (!newCondition.fastEquals(condition)) {
+        val newJoin = j.copy(condition = Some(newCondition))
+        (newJoin, j.output.zip(newJoin.output))
+      } else {
+        (j, j.output.zip(j.output))
+      }
   }
 }
