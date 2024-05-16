@@ -44,12 +44,12 @@ Method that needs to be implemented for a capability:
 +------------+----------------------+------------------+
 |            |       source         |      sink        |
 +============+======================+==================+
-|   batch    |      reader()        |     writer()     |
+| batch      | reader()             | writer()         |
 +------------+----------------------+------------------+
-|            |   streamReader()     |                  |
-| streaming  |         or           |  streamWriter()  |
+|            | streamReader()       |                  |
+| streaming  | or                   | streamWriter()   |
 |            | simpleStreamReader() |                  |
-+------------+----------------------|------------------|
++------------+----------------------+------------------+
 
 .. code-block:: python
 
