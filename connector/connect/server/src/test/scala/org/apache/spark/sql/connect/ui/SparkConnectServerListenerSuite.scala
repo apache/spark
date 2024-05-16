@@ -37,7 +37,7 @@ class SparkConnectServerListenerSuite
 
   private var kvstore: ElementTrackingStore = _
 
-  private val jobTag = ExecuteJobTag("sessionId", "userId", "operationId")
+  private val jobTag = ExecuteJobTag("userId", "sessionId", "operationId")
 
   after {
     if (kvstore != null) {
@@ -174,7 +174,7 @@ class SparkConnectServerListenerSuite
       SparkListenerJobStart(0, System.currentTimeMillis(), Nil, createProperties))
     listener.onOtherEvent(
       SparkListenerConnectSessionClosed("sessionId", "userId", System.currentTimeMillis()))
-    val exec = statusStore.getExecution(ExecuteJobTag("sessionId", "userId", "operationId"))
+    val exec = statusStore.getExecution(ExecuteJobTag("userId", "sessionId", "operationId"))
     assert(exec.isDefined)
     assert(exec.get.jobId === Seq("0"))
     assert(exec.get.sqlExecId === Set("0"))
@@ -190,7 +190,7 @@ class SparkConnectServerListenerSuite
     listener.onOtherEvent(SparkListenerConnectSessionClosed(unknownSession, "userId", 0))
     listener.onOtherEvent(
       SparkListenerConnectOperationStarted(
-        ExecuteJobTag("sessionId", "userId", "operationId"),
+        ExecuteJobTag("userId", "sessionId", "operationId"),
         "operationId",
         System.currentTimeMillis(),
         unknownSession,

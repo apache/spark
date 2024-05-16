@@ -37,72 +37,40 @@ import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.types.StringTypeAnyCollation
 import org.apache.spark.sql.types._
 import org.apache.spark.types.variant._
 import org.apache.spark.types.variant.VariantUtil.Type
 import org.apache.spark.unsafe.types._
 
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = "_FUNC_(jsonStr) - Parse a JSON string as an Variant value. Throw an exception when the string is not valid JSON value.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_('{"a":1,"b":0.8}');
-       {"a":1,"b":0.8}
-  """,
-  since = "4.0.0",
-  group = "variant_funcs"
-)
-// scalastyle:on line.size.limit
-case class ParseJson(child: Expression)
+
+/**
+ * The implementation for `parse_json` and `try_parse_json` expressions. Parse a JSON string as a
+ * Variant value.
+ * @param child The string value to parse as a variant.
+ * @param failOnError Controls whether the expression should throw an exception or return null if
+ *                    the string does not represent a valid JSON value.
+ */
+case class ParseJson(child: Expression, failOnError: Boolean = true)
   extends UnaryExpression with ExpectsInputTypes with RuntimeReplaceable {
 
   override lazy val replacement: Expression = StaticInvoke(
     VariantExpressionEvalUtils.getClass,
     VariantType,
     "parseJson",
-    Seq(child),
-    inputTypes,
-    returnNullable = false)
+    Seq(child, Literal(failOnError, BooleanType)),
+    inputTypes :+ BooleanType,
+    returnNullable = !failOnError)
 
-  override def inputTypes: Seq[AbstractDataType] = StringType :: Nil
+  override def inputTypes: Seq[AbstractDataType] = StringTypeAnyCollation :: Nil
 
   override def dataType: DataType = VariantType
 
-  override def prettyName: String = "parse_json"
+  override def prettyName: String = if (failOnError) "parse_json" else "try_parse_json"
 
   override protected def withNewChildInternal(newChild: Expression): ParseJson =
     copy(child = newChild)
-}
-
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = "_FUNC_(jsonStr) - Parse a JSON string as an Variant value. Returns null when the string is not valid JSON value.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_('{"a":1,"b":0.8}');
-       {"a":1,"b":0.8}
-  """,
-  since = "4.0.0",
-  group = "variant_funcs"
-)
-// scalastyle:on line.size.limit
-case class TryParseJson(expr: Expression, replacement: Expression)
-  extends RuntimeReplaceable with InheritAnalysisRules {
-  def this(child: Expression) = this(child, TryEval(ParseJson(child)))
-
-  override def parameters: Seq[Expression] = Seq(expr)
-
-  override def dataType: DataType = VariantType
-
-  override def prettyName: String = "try_parse_json"
-
-  override protected def withNewChildInternal(newChild: Expression): Expression =
-    copy(replacement = newChild)
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    ExpectsInputTypes.checkInputDataTypes(Seq(expr), Seq(StringType))
-  }
 }
 
 // scalastyle:off line.size.limit
@@ -233,7 +201,7 @@ case class VariantGet(
 
   final override def nodePatternsInternal(): Seq[TreePattern] = Seq(VARIANT_GET)
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(VariantType, StringType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(VariantType, StringTypeAnyCollation)
 
   override def prettyName: String = if (failOnError) "variant_get" else "try_variant_get"
 
@@ -294,7 +262,7 @@ case object VariantGet {
         VariantType =>
       true
     case ArrayType(elementType, _) => checkDataType(elementType)
-    case MapType(StringType, valueType, _) => checkDataType(valueType)
+    case MapType(_: StringType, valueType, _) => checkDataType(valueType)
     case StructType(fields) => fields.forall(f => checkDataType(f.dataType))
     case _ => false
   }
@@ -368,11 +336,12 @@ case object VariantGet {
             }
           case Type.BOOLEAN => Literal(v.getBoolean, BooleanType)
           case Type.LONG => Literal(v.getLong, LongType)
-          case Type.STRING => Literal(UTF8String.fromString(v.getString), StringType)
+          case Type.STRING => Literal(UTF8String.fromString(v.getString),
+            SQLConf.get.defaultStringType)
           case Type.DOUBLE => Literal(v.getDouble, DoubleType)
           case Type.DECIMAL =>
             val d = Decimal(v.getDecimal)
-            Literal(Decimal(v.getDecimal), DecimalType(d.precision, d.scale))
+            Literal(d, DecimalType(d.precision, d.scale))
           case Type.DATE => Literal(v.getLong.toInt, DateType)
           case Type.TIMESTAMP => Literal(v.getLong, TimestampType)
           case Type.TIMESTAMP_NTZ => Literal(v.getLong, TimestampNTZType)
@@ -421,7 +390,7 @@ case object VariantGet {
         } else {
           invalidCast()
         }
-      case MapType(StringType, valueType, _) =>
+      case MapType(_: StringType, valueType, _) =>
         if (variantType == Type.OBJECT) {
           val size = v.objectSize()
           val keyArray = new Array[Any](size)
@@ -454,6 +423,47 @@ case object VariantGet {
     }
   }
 }
+
+abstract class ParseJsonExpressionBuilderBase(failOnError: Boolean) extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    val numArgs = expressions.length
+    if (numArgs == 1) {
+      ParseJson(expressions.head, failOnError)
+    } else {
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(1), numArgs)
+    }
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(jsonStr) - Parse a JSON string as a Variant value. Throw an exception when the string is not valid JSON value.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('{"a":1,"b":0.8}');
+       {"a":1,"b":0.8}
+  """,
+  since = "4.0.0",
+  group = "variant_funcs"
+)
+// scalastyle:on line.size.limit
+object ParseJsonExpressionBuilder extends ParseJsonExpressionBuilderBase(true)
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(jsonStr) - Parse a JSON string as a Variant value. Return NULL when the string is not valid JSON value.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('{"a":1,"b":0.8}');
+       {"a":1,"b":0.8}
+      > SELECT _FUNC_('{"a":1,');
+       NULL
+  """,
+  since = "4.0.0",
+  group = "variant_funcs"
+)
+// scalastyle:on line.size.limit
+object TryParseJsonExpressionBuilder extends ParseJsonExpressionBuilderBase(false)
 
 abstract class VariantGetExpressionBuilderBase(failOnError: Boolean) extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
@@ -561,7 +571,7 @@ case class VariantExplode(child: Expression) extends UnaryExpression with Genera
   override def elementSchema: StructType = {
     new StructType()
       .add("pos", IntegerType, nullable = false)
-      .add("key", StringType, nullable = true)
+      .add("key", SQLConf.get.defaultStringType, nullable = true)
       .add("value", VariantType, nullable = false)
   }
 }
@@ -618,7 +628,7 @@ case class SchemaOfVariant(child: Expression)
     with ExpectsInputTypes {
   override lazy val replacement: Expression = StaticInvoke(
     SchemaOfVariant.getClass,
-    StringType,
+    SQLConf.get.defaultStringType,
     "schemaOfVariant",
     Seq(child),
     inputTypes,
@@ -626,7 +636,7 @@ case class SchemaOfVariant(child: Expression)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(VariantType)
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def prettyName: String = "schema_of_variant"
 
@@ -669,11 +679,11 @@ object SchemaOfVariant {
     case Type.NULL => NullType
     case Type.BOOLEAN => BooleanType
     case Type.LONG => LongType
-    case Type.STRING => StringType
+    case Type.STRING => SQLConf.get.defaultStringType
     case Type.DOUBLE => DoubleType
     case Type.DECIMAL =>
-      val d = v.getDecimal
-      DecimalType(d.precision(), d.scale())
+      val d = Decimal(v.getDecimal)
+      DecimalType(d.precision, d.scale)
     case Type.DATE => DateType
     case Type.TIMESTAMP => TimestampType
     case Type.TIMESTAMP_NTZ => TimestampNTZType
@@ -714,7 +724,7 @@ case class SchemaOfVariantAgg(
 
   override def inputTypes: Seq[AbstractDataType] = Seq(VariantType)
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def nullable: Boolean = false
 

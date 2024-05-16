@@ -32,7 +32,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{RETRY_COUNT, WRITE_AHEAD_LOG_INFO}
+import org.apache.spark.internal.LogKeys.{RETRY_COUNT, WRITE_AHEAD_LOG_INFO}
 import org.apache.spark.util.{CompletionIterator, ThreadUtils}
 import org.apache.spark.util.ArrayImplicits._
 

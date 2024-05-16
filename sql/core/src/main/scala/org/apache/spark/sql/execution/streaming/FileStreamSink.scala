@@ -24,7 +24,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{ERROR, PATH}
+import org.apache.spark.internal.LogKeys.{BATCH_ID, ERROR, PATH}
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.expressions._
@@ -146,7 +146,7 @@ class FileStreamSink(
 
   override def addBatch(batchId: Long, data: DataFrame): Unit = {
     if (batchId <= fileLog.getLatestBatchId().getOrElse(-1L)) {
-      logInfo(s"Skipping already committed batch $batchId")
+      logInfo(log"Skipping already committed batch ${MDC(BATCH_ID, batchId)}")
     } else {
       val committer = FileCommitProtocol.instantiate(
         className = sparkSession.sessionState.conf.streamingFileCommitProtocolClass,

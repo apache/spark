@@ -28,7 +28,7 @@ import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.SERVICE_NAME
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.security.HadoopDelegationTokenProvider
 import org.apache.spark.util.Utils
 
@@ -50,7 +50,7 @@ private[security] class HBaseDelegationTokenProvider
       logDebug("Attempting to fetch HBase security token.")
       val token = obtainToken.invoke(null, hbaseConf(hadoopConf))
         .asInstanceOf[Token[_ <: TokenIdentifier]]
-      logInfo(s"Get token from HBase: ${token.toString}")
+      logInfo(log"Get token from HBase: ${MDC(TOKEN, token.toString)}")
       creds.addToken(token.getService, token)
     } catch {
       case NonFatal(e) =>
@@ -94,7 +94,7 @@ private[security] class HBaseDelegationTokenProvider
       logDebug("Attempting to fetch HBase security token.")
       val token = obtainTokenMethod.invoke(null, hbaseConnection)
         .asInstanceOf[Token[_ <: TokenIdentifier]]
-      logInfo(s"Get token from HBase: ${token.toString}")
+      logInfo(log"Get token from HBase: ${MDC(TOKEN, token.toString)}")
       creds.addToken(token.getService, token)
     } catch {
       case NonFatal(e) =>

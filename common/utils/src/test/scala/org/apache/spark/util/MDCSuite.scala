@@ -22,7 +22,7 @@ import scala.jdk.CollectionConverters._
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{EXIT_CODE, OFFSET, RANGE}
+import org.apache.spark.internal.LogKeys.{EXIT_CODE, OFFSET, RANGE}
 
 class MDCSuite
     extends AnyFunSuite // scalastyle:ignore funsuite

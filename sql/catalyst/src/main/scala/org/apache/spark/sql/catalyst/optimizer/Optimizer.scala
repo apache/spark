@@ -20,15 +20,14 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.collection.mutable
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.LogKey._
-import org.apache.spark.internal.MDC
+import org.apache.spark.internal.{LogKeys, MDC}
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{RepartitionOperation, _}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -446,7 +445,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     val excludedRules = excludedRulesConf.filter { ruleName =>
       val nonExcludable = nonExcludableRules.contains(ruleName)
       if (nonExcludable) {
-        logWarning(log"Optimization rule '${MDC(RULE_NAME, ruleName)}' " +
+        logWarning(log"Optimization rule '${MDC(LogKeys.RULE_NAME, ruleName)}' " +
           log"was not excluded from the optimizer because this rule is a non-excludable rule.")
       }
       !nonExcludable
@@ -458,7 +457,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         val filteredRules = batch.rules.filter { rule =>
           val exclude = excludedRules.contains(rule.ruleName)
           if (exclude) {
-            logInfo(log"Optimization rule '${MDC(RULE_NAME, rule.ruleName)}' " +
+            logInfo(log"Optimization rule '${MDC(LogKeys.RULE_NAME, rule.ruleName)}' " +
               log"is excluded from the optimizer.")
           }
           !exclude
@@ -468,7 +467,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         } else if (filteredRules.nonEmpty) {
           Some(Batch(batch.name, batch.strategy, filteredRules: _*))
         } else {
-          logInfo(log"Optimization batch '${MDC(RULE_BATCH_NAME, batch.name)}' " +
+          logInfo(log"Optimization batch '${MDC(LogKeys.BATCH_NAME, batch.name)}' " +
             log"is excluded from the optimizer as all enclosed rules have been excluded.")
           None
         }
@@ -1769,6 +1768,10 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       val aliasMap = getAliasMap(project)
       project.copy(child = Filter(replaceAlias(condition, aliasMap), grandChild))
 
+    // We can push down deterministic predicate through Aggregate, including throwable predicate.
+    // If we can push down a filter through Aggregate, it means the filter only references the
+    // grouping keys or constants. The Aggregate operator can't reduce distinct values of grouping
+    // keys so the filter won't see any new data after push down.
     case filter @ Filter(condition, aggregate: Aggregate)
       if aggregate.aggregateExpressions.forall(_.deterministic)
         && aggregate.groupingExpressions.nonEmpty =>
@@ -1778,8 +1781,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       // attributes produced by the aggregate operator's child operator.
       val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
         val replaced = replaceAlias(cond, aliasMap)
-        cond.deterministic && !cond.throwable &&
-          cond.references.nonEmpty && replaced.references.subsetOf(aggregate.child.outputSet)
+        cond.deterministic && cond.references.nonEmpty &&
+          replaced.references.subsetOf(aggregate.child.outputSet)
       }
 
       if (pushDown.nonEmpty) {

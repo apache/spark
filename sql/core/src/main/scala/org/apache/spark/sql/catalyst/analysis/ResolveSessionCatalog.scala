@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.LogKey.CONFIG
+import org.apache.spark.internal.LogKeys.CONFIG
 import org.apache.spark.internal.MDC
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
@@ -381,8 +381,11 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case AlterViewAs(ResolvedViewIdentifier(ident), originalText, query) =>
       AlterViewAsCommand(ident, originalText, query)
 
+    case AlterViewSchemaBinding(ResolvedViewIdentifier(ident), viewSchemaMode) =>
+      AlterViewSchemaBindingCommand(ident, viewSchemaMode)
+
     case CreateView(ResolvedV1Identifier(ident), userSpecifiedColumns, comment,
-        properties, originalText, child, allowExisting, replace) =>
+        properties, originalText, child, allowExisting, replace, viewSchemaMode) =>
       CreateViewCommand(
         name = ident,
         userSpecifiedColumns = userSpecifiedColumns,
@@ -392,9 +395,10 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         plan = child,
         allowExisting = allowExisting,
         replace = replace,
-        viewType = PersistedView)
+        viewType = PersistedView,
+        viewSchemaMode = viewSchemaMode)
 
-    case CreateView(ResolvedIdentifier(catalog, _), _, _, _, _, _, _, _) =>
+    case CreateView(ResolvedIdentifier(catalog, _), _, _, _, _, _, _, _, _) =>
       throw QueryCompilationErrors.missingCatalogAbilityError(catalog, "views")
 
     case ShowViews(ns: ResolvedNamespace, pattern, output) =>

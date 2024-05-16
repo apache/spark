@@ -25,7 +25,7 @@ import org.apache.commons.io.IOUtils
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.{config, MDC}
-import org.apache.spark.internal.LogKey.PATH
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -118,7 +118,7 @@ private[spark] class RollingFileAppender(
     if (activeFile.exists) {
       if (!rolloverFileExist(rolloverFile)) {
         rotateFile(activeFile, rolloverFile)
-        logInfo(s"Rolled over $activeFile to $rolloverFile")
+        logInfo(log"Rolled over ${MDC(FILE_NAME, activeFile)} to ${MDC(FILE_NAME2, rolloverFile)}")
       } else {
         // In case the rollover file name clashes, make a unique file name.
         // The resultant file names are long and ugly, so this is used only
@@ -132,12 +132,13 @@ private[spark] class RollingFileAppender(
           i += 1
         } while (i < 10000 && rolloverFileExist(altRolloverFile))
 
-        logWarning(s"Rollover file $rolloverFile already exists, " +
-          s"rolled over $activeFile to file $altRolloverFile")
+        logWarning(log"Rollover file ${MDC(FILE_NAME, rolloverFile)} already exists, " +
+          log"rolled over ${MDC(FILE_NAME2, activeFile)} " +
+          log"to file ${MDC(FILE_NAME3, altRolloverFile)}")
         rotateFile(activeFile, altRolloverFile)
       }
     } else {
-      logWarning(s"File $activeFile does not exist")
+      logWarning(log"File ${MDC(FILE_NAME, activeFile)} does not exist")
     }
   }
 
@@ -152,7 +153,8 @@ private[spark] class RollingFileAppender(
       val filesToBeDeleted = rolledoverFiles.take(
         math.max(0, rolledoverFiles.length - maxRetainedFiles))
       filesToBeDeleted.foreach { file =>
-        logInfo(s"Deleting file executor log file ${file.getAbsolutePath}")
+        logInfo(log"Deleting file executor log file" +
+          log" ${MDC(FILE_ABSOLUTE_PATH, file.getAbsolutePath)}")
         file.delete()
       }
     } catch {

@@ -25,7 +25,8 @@ import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.ExecutorFailureTracker
 import org.apache.spark.deploy.yarn.config._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{FAILURES, HOST, NODES}
 import org.apache.spark.internal.config._
 import org.apache.spark.scheduler.HealthTracker
 
@@ -90,7 +91,8 @@ private[spark] class YarnAllocatorNodeHealthTracker(
   private def updateAllocationExcludedNodes(hostname: String): Unit = {
     val failuresOnHost = failureTracker.numFailuresOnHost(hostname)
     if (failuresOnHost > maxFailuresPerHost) {
-      logInfo(s"excluding $hostname as YARN allocation failed $failuresOnHost times")
+      logInfo(log"excluding ${MDC(HOST, hostname)} as YARN allocation failed " +
+        log"${MDC(FAILURES, failuresOnHost)} times")
       allocatorExcludedNodeList.put(
         hostname,
         failureTracker.clock.getTimeMillis() + excludeOnFailureTimeoutMillis)
@@ -125,10 +127,12 @@ private[spark] class YarnAllocatorNodeHealthTracker(
     val additions = (nodesToExclude -- currentExcludededYarnNodes).toList.sorted
     val removals = (currentExcludededYarnNodes -- nodesToExclude).toList.sorted
     if (additions.nonEmpty) {
-      logInfo(s"adding nodes to YARN application master's excluded node list: $additions")
+      logInfo(log"adding nodes to YARN application master's " +
+        log"excluded node list: ${MDC(NODES, additions)}")
     }
     if (removals.nonEmpty) {
-      logInfo(s"removing nodes from YARN application master's excluded node list: $removals")
+      logInfo(log"removing nodes from YARN application master's " +
+        log"excluded node list: ${MDC(NODES, removals)}")
     }
     if (additions.nonEmpty || removals.nonEmpty) {
       // Note YARNs api for excluding nodes is updateBlacklist.

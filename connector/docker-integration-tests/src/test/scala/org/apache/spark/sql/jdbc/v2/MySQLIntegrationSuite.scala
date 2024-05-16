@@ -19,8 +19,6 @@ package org.apache.spark.sql.jdbc.v2
 
 import java.sql.{Connection, SQLFeatureNotSupportedException}
 
-import org.scalatest.time.SpanSugar._
-
 import org.apache.spark.{SparkConf, SparkSQLFeatureNotSupportedException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
@@ -68,8 +66,6 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
     .set("spark.sql.catalog.mysql.pushDownLimit", "true")
     .set("spark.sql.catalog.mysql.pushDownOffset", "true")
 
-  override val connectionTimeout = timeout(7.minutes)
-
   private var mySQLVersion = -1
 
   override def tablePreparation(connection: Connection): Unit = {
@@ -77,6 +73,12 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
     connection.prepareStatement(
       "CREATE TABLE employee (dept INT, name VARCHAR(32), salary DECIMAL(20, 2)," +
         " bonus DOUBLE)").executeUpdate()
+    connection.prepareStatement(
+      s"""CREATE TABLE pattern_testing_table (
+         |pattern_testing_col LONGTEXT
+         |)
+                   """.stripMargin
+    ).executeUpdate()
   }
 
   override def testUpdateColumnType(tbl: String): Unit = {

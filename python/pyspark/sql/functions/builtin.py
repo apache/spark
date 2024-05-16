@@ -638,7 +638,7 @@ def try_divide(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     |                                          4 months|
     +--------------------------------------------------+
 
-    Example 3: Exception druing division, resulting in NULL when ANSI mode is on
+    Example 3: Exception during division, resulting in NULL when ANSI mode is on
 
     >>> import pyspark.sql.functions as sf
     >>> origin = spark.conf.get("spark.sql.ansi.enabled")
@@ -655,6 +655,56 @@ def try_divide(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     +-----------------+
     """
     return _invoke_function_over_columns("try_divide", left, right)
+
+
+@_try_remote_functions
+def try_remainder(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    """
+    Returns the remainder after `dividend`/`divisor`.  Its result is
+    always null if `divisor` is 0.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    left : :class:`~pyspark.sql.Column` or str
+        dividend
+    right : :class:`~pyspark.sql.Column` or str
+        divisor
+
+    Examples
+    --------
+    Example 1: Integer divided by Integer.
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [(6000, 15), (3, 2), (1234, 0)], ["a", "b"]
+    ... ).select(sf.try_remainder("a", "b")).show()
+    +-------------------+
+    |try_remainder(a, b)|
+    +-------------------+
+    |                  0|
+    |                  1|
+    |               NULL|
+    +-------------------+
+
+    Example 2: Exception during division, resulting in NULL when ANSI mode is on
+
+    >>> import pyspark.sql.functions as sf
+    >>> origin = spark.conf.get("spark.sql.ansi.enabled")
+    >>> spark.conf.set("spark.sql.ansi.enabled", "true")
+    >>> try:
+    ...     df = spark.range(1)
+    ...     df.select(sf.try_remainder(df.id, sf.lit(0))).show()
+    ... finally:
+    ...     spark.conf.set("spark.sql.ansi.enabled", origin)
+    +--------------------+
+    |try_remainder(id, 0)|
+    +--------------------+
+    |                NULL|
+    +--------------------+
+    """
+    return _invoke_function_over_columns("try_remainder", left, right)
 
 
 @_try_remote_functions
@@ -1275,7 +1325,7 @@ def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([
     ...     ("Consult", "Eva", 6), ("Finance", "Frank", 5),
-    ...     ("Finance", "George", 5), ("Consult", "Henry", 7)],
+    ...     ("Finance", "George", 9), ("Consult", "Henry", 7)],
     ...     schema=("department", "name", "years_in_dept"))
     >>> df.groupby("department").agg(
     ...     sf.max_by("name", "years_in_dept")
@@ -1356,7 +1406,7 @@ def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([
     ...     ("Consult", "Eva", 6), ("Finance", "Frank", 5),
-    ...     ("Finance", "George", 5), ("Consult", "Henry", 7)],
+    ...     ("Finance", "George", 9), ("Consult", "Henry", 7)],
     ...     schema=("department", "name", "years_in_dept"))
     >>> df.groupby("department").agg(
     ...     sf.min_by("name", "years_in_dept")
@@ -1365,7 +1415,7 @@ def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     |department|min_by(name, years_in_dept)|
     +----------+---------------------------+
     |   Consult|                        Eva|
-    |   Finance|                     George|
+    |   Finance|                      Frank|
     +----------+---------------------------+
     """
     return _invoke_function_over_columns("min_by", col, ord)
@@ -9352,6 +9402,66 @@ def timestamp_micros(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def timestamp_diff(unit: str, start: "ColumnOrName", end: "ColumnOrName") -> Column:
+    """
+    Gets the difference between the timestamps in the specified units by truncating
+    the fraction part.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    unit : str
+        This indicates the units of the difference between the given timestamps.
+        Supported options are (case insensitive): "YEAR", "QUARTER", "MONTH", "WEEK",
+        "DAY", "HOUR", "MINUTE", "SECOND", "MILLISECOND" and "MICROSECOND".
+    start : :class:`~pyspark.sql.Column` or str
+        A timestamp which the expression subtracts from `endTimestamp`.
+    end : :class:`~pyspark.sql.Column` or str
+        A timestamp from which the expression subtracts `startTimestamp`.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the difference between the timestamps.
+
+    Examples
+    --------
+    >>> import datetime
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [(datetime.datetime(2016, 3, 11, 9, 0, 7), datetime.datetime(2024, 4, 2, 9, 0, 7))],
+    ... ).toDF("start", "end")
+    >>> df.select(sf.timestamp_diff("year", "start", "end")).show()
+    +-------------------------------+
+    |timestampdiff(year, start, end)|
+    +-------------------------------+
+    |                              8|
+    +-------------------------------+
+    >>> df.select(sf.timestamp_diff("WEEK", "start", "end")).show()
+    +-------------------------------+
+    |timestampdiff(WEEK, start, end)|
+    +-------------------------------+
+    |                            420|
+    +-------------------------------+
+    >>> df.select(sf.timestamp_diff("day", "end", "start")).show()
+    +------------------------------+
+    |timestampdiff(day, end, start)|
+    +------------------------------+
+    |                         -2944|
+    +------------------------------+
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    return _invoke_function(
+        "timestamp_diff",
+        unit,
+        _to_java_column(start),
+        _to_java_column(end),
+    )
+
+
+@_try_remote_functions
 def window(
     timeColumn: "ColumnOrName",
     windowDuration: str,
@@ -15595,11 +15705,43 @@ def from_json(
 
 
 @_try_remote_functions
+def try_parse_json(
+    col: "ColumnOrName",
+) -> Column:
+    """
+    Parses a column containing a JSON string into a :class:`VariantType`. Returns None if a string
+    contains an invalid JSON value.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        a column or column name JSON formatted strings
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a new column of VariantType.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''}, {'json': '''{a : 1}'''} ])
+    >>> df.select(to_json(try_parse_json(df.json))).collect()
+    [Row(to_json(try_parse_json(json))='{"a":1}'), Row(to_json(try_parse_json(json))=None)]
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    return _invoke_function("try_parse_json", _to_java_column(col))
+
+
+@_try_remote_functions
 def parse_json(
     col: "ColumnOrName",
 ) -> Column:
     """
-    Parses a column containing a JSON string into a :class:`VariantType`.
+    Parses a column containing a JSON string into a :class:`VariantType`. Throws exception if a
+    string represents an invalid JSON value.
 
     .. versionadded:: 4.0.0
 

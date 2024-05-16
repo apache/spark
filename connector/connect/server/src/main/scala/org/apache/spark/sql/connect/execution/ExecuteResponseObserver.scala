@@ -27,7 +27,7 @@ import io.grpc.stub.StreamObserver
 import org.apache.spark.{SparkEnv, SparkSQLException}
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey
+import org.apache.spark.internal.LogKeys
 import org.apache.spark.sql.connect.config.Connect.CONNECT_EXECUTE_REATTACHABLE_OBSERVER_RETRY_BUFFER_SIZE
 import org.apache.spark.sql.connect.service.ExecuteHolder
 
@@ -245,13 +245,13 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
     removeResponsesUntilIndex(lastProducedIndex)
     // scalastyle:off line.size.limit
     logInfo(
-      log"Release all for opId=${MDC(LogKey.OP_ID, executeHolder.operationId)}. Execution stats: " +
-        log"total=${MDC(LogKey.TOTAL_SIZE, totalSize)} " +
-        log"autoRemoved=${MDC(LogKey.CACHE_AUTO_REMOVED_SIZE, autoRemovedSize)} " +
-        log"cachedUntilConsumed=${MDC(LogKey.CACHE_UNTIL_HIGHEST_CONSUMED_SIZE, cachedSizeUntilHighestConsumed)} " +
-        log"cachedUntilProduced=${MDC(LogKey.CACHE_UNTIL_LAST_PRODUCED_SIZE, cachedSizeUntilLastProduced)} " +
-        log"maxCachedUntilConsumed=${MDC(LogKey.MAX_CACHE_UNTIL_HIGHEST_CONSUMED_SIZE, cachedSizeUntilHighestConsumed.max)} " +
-        log"maxCachedUntilProduced=${MDC(LogKey.MAX_CACHE_UNTIL_LAST_PRODUCED_SIZE, cachedSizeUntilLastProduced.max)}")
+      log"Release all for opId=${MDC(LogKeys.OP_ID, executeHolder.operationId)}. Execution stats: " +
+        log"total=${MDC(LogKeys.TOTAL, totalSize)} " +
+        log"autoRemoved=${MDC(LogKeys.CACHE_AUTO_REMOVED_SIZE, autoRemovedSize)} " +
+        log"cachedUntilConsumed=${MDC(LogKeys.CACHE_UNTIL_HIGHEST_CONSUMED_SIZE, cachedSizeUntilHighestConsumed)} " +
+        log"cachedUntilProduced=${MDC(LogKeys.CACHE_UNTIL_LAST_PRODUCED_SIZE, cachedSizeUntilLastProduced)} " +
+        log"maxCachedUntilConsumed=${MDC(LogKeys.MAX_CACHE_UNTIL_HIGHEST_CONSUMED_SIZE, cachedSizeUntilHighestConsumed.max)} " +
+        log"maxCachedUntilProduced=${MDC(LogKeys.MAX_CACHE_UNTIL_LAST_PRODUCED_SIZE, cachedSizeUntilLastProduced.max)}")
     // scalastyle:on line.size.limit
   }
 

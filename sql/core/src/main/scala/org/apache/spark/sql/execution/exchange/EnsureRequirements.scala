@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.exchange
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.internal.{LogKeys, MDC}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
@@ -407,11 +408,13 @@ case class EnsureRequirements(
         val leftPartValues = leftSpec.partitioning.partitionValues
         val rightPartValues = rightSpec.partitioning.partitionValues
 
+        val numLeftPartValues = MDC(LogKeys.NUM_LEFT_PARTITION_VALUES, leftPartValues.size)
+        val numRightPartValues = MDC(LogKeys.NUM_RIGHT_PARTITION_VALUES, rightPartValues.size)
         logInfo(
-          s"""
-             |Left side # of partitions: ${leftPartValues.size}
-             |Right side # of partitions: ${rightPartValues.size}
-             |""".stripMargin)
+          log"""
+              |Left side # of partitions: $numLeftPartValues
+              |Right side # of partitions: $numRightPartValues
+              |""".stripMargin)
 
         // As partition keys are compatible, we can pick either left or right as partition
         // expressions
@@ -421,7 +424,8 @@ case class EnsureRequirements(
             .mergePartitions(leftSpec.partitioning, rightSpec.partitioning, partitionExprs)
             .map(v => (v, 1))
 
-        logInfo(s"After merging, there are ${mergedPartValues.size} partitions")
+        logInfo(log"After merging, there are " +
+          log"${MDC(LogKeys.NUM_PARTITIONS, mergedPartValues.size)} partitions")
 
         var replicateLeftSide = false
         var replicateRightSide = false
@@ -445,8 +449,8 @@ case class EnsureRequirements(
           val canReplicateRight = canReplicateRightSide(joinType)
 
           if (!canReplicateLeft && !canReplicateRight) {
-            logInfo("Skipping partially clustered distribution as it cannot be applied for " +
-                s"join type '$joinType'")
+            logInfo(log"Skipping partially clustered distribution as it cannot be applied for " +
+              log"join type '${MDC(LogKeys.JOIN_TYPE, joinType)}'")
           } else {
             val leftLink = left.logicalLink
             val rightLink = right.logicalLink
@@ -455,12 +459,16 @@ case class EnsureRequirements(
               leftLink.isDefined && rightLink.isDefined &&
                   leftLink.get.stats.sizeInBytes > 1 &&
                   rightLink.get.stats.sizeInBytes > 1) {
+              val leftLinkStatsSizeInBytes = MDC(LogKeys.LEFT_LOGICAL_PLAN_STATS_SIZE_IN_BYTES,
+                leftLink.get.stats.sizeInBytes)
+              val rightLinkStatsSizeInBytes = MDC(LogKeys.RIGHT_LOGICAL_PLAN_STATS_SIZE_IN_BYTES,
+                rightLink.get.stats.sizeInBytes)
               logInfo(
-                s"""
+                log"""
                    |Using plan statistics to determine which side of join to fully
                    |cluster partition values:
-                   |Left side size (in bytes): ${leftLink.get.stats.sizeInBytes}
-                   |Right side size (in bytes): ${rightLink.get.stats.sizeInBytes}
+                   |Left side size (in bytes): $leftLinkStatsSizeInBytes
+                   |Right side size (in bytes): $rightLinkStatsSizeInBytes
                    |""".stripMargin)
               leftLink.get.stats.sizeInBytes < rightLink.get.stats.sizeInBytes
             } else {
@@ -477,12 +485,14 @@ case class EnsureRequirements(
             // of partitions can be applied. For instance, replication should not be allowed for
             // the left-hand side of a right outer join.
             if (replicateLeftSide && !canReplicateLeft) {
-              logInfo("Left-hand side is picked but cannot be applied to join type " +
-                  s"'$joinType'. Skipping partially clustered distribution.")
+              logInfo(log"Left-hand side is picked but cannot be applied to join type " +
+                log"'${MDC(LogKeys.JOIN_TYPE, joinType)}'. Skipping partially clustered " +
+                log"distribution.")
               replicateLeftSide = false
             } else if (replicateRightSide && !canReplicateRight) {
-              logInfo("Right-hand side is picked but cannot be applied to join type " +
-                  s"'$joinType'. Skipping partially clustered distribution.")
+              logInfo(log"Right-hand side is picked but cannot be applied to join type " +
+                log"'${MDC(LogKeys.JOIN_TYPE, joinType)}'. Skipping partially clustered " +
+                log"distribution.")
               replicateRightSide = false
             } else {
               // In partially clustered distribution, we should use un-grouped partition values
@@ -499,8 +509,8 @@ case class EnsureRequirements(
                   InternalRowComparableWrapper(partVal, partitionExprs), numParts))
               }
 
-              logInfo("After applying partially clustered distribution, there are " +
-                  s"${mergedPartValues.map(_._2).sum} partitions.")
+              logInfo(log"After applying partially clustered distribution, there are " +
+                log"${MDC(LogKeys.NUM_PARTITIONS, mergedPartValues.map(_._2).sum)} partitions.")
               applyPartialClustering = true
             }
           }

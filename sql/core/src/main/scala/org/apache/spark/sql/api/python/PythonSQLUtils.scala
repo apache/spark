@@ -27,7 +27,7 @@ import net.razorvine.pickle.{Pickler, Unpickler}
 import org.apache.spark.SparkException
 import org.apache.spark.api.python.DechunkedInputStream
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.CLASS_LOADER
+import org.apache.spark.internal.LogKeys.CLASS_LOADER
 import org.apache.spark.security.SocketAuthServer
 import org.apache.spark.sql.{Column, DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
@@ -163,10 +163,6 @@ private[sql] object PythonSQLUtils extends Logging {
       case "SECOND" => Column(zero.copy(secs = e.expr))
       case _ => throw SparkException.internalError(s"Got the unexpected unit '$unit'.")
     }
-  }
-
-  def timestampDiff(unit: String, start: Column, end: Column): Column = {
-    Column(TimestampDiff(unit, start.expr, end.expr))
   }
 
   def pandasProduct(e: Column, ignoreNA: Boolean): Column = {

@@ -62,7 +62,7 @@ it as a Spark schema. As an example, you can specify the return type hint as bel
 Notice that the function ``pandas_div`` actually takes and outputs a pandas DataFrame instead of
 pandas-on-Spark :class:`DataFrame`. So, technically the correct types should be of pandas.
 
-With Python 3.8+, you can specify the type hints by using pandas instances as follows:
+With Python 3.9+, you can specify the type hints by using pandas instances as follows:
 
 .. code-block:: python
 

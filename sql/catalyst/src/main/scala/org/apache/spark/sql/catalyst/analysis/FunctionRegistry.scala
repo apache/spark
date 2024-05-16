@@ -25,7 +25,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.FUNCTION_NAME
+import org.apache.spark.internal.LogKeys.FUNCTION_NAME
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions._
@@ -451,6 +451,7 @@ object FunctionRegistry {
     // "try_*" function which always return Null instead of runtime error.
     expression[TryAdd]("try_add"),
     expression[TryDivide]("try_divide"),
+    expression[TryRemainder]("try_remainder"),
     expression[TrySubtract]("try_subtract"),
     expression[TryMultiply]("try_multiply"),
     expression[TryElementAt]("try_element_at"),
@@ -821,8 +822,8 @@ object FunctionRegistry {
     expression[JsonObjectKeys]("json_object_keys"),
 
     // Variant
-    expression[ParseJson]("parse_json"),
-    expression[TryParseJson]("try_parse_json"),
+    expressionBuilder("parse_json", ParseJsonExpressionBuilder),
+    expressionBuilder("try_parse_json", TryParseJsonExpressionBuilder),
     expression[IsVariantNull]("is_variant_null"),
     expressionBuilder("variant_get", VariantGetExpressionBuilder),
     expressionBuilder("try_variant_get", TryVariantGetExpressionBuilder),
@@ -955,7 +956,14 @@ object FunctionRegistry {
       since: Option[String] = None): (String, (ExpressionInfo, FunctionBuilder)) = {
     val info = FunctionRegistryBase.expressionInfo[T](name, since)
     val funcBuilder = (expressions: Seq[Expression]) => {
-      assert(expressions.forall(_.resolved), "function arguments must be resolved.")
+      val (lambdas, others) = expressions.partition(_.isInstanceOf[LambdaFunction])
+      if (lambdas.nonEmpty && !builder.supportsLambda) {
+        throw new AnalysisException(
+          errorClass = "INVALID_LAMBDA_FUNCTION_CALL.NON_HIGHER_ORDER_FUNCTION",
+          messageParameters = Map(
+            "class" -> builder.getClass.getCanonicalName))
+      }
+      assert(others.forall(_.resolved), "function arguments must be resolved.")
       val rearrangedExpressions = rearrangeExpressions(name, builder, expressions)
       val expr = builder.build(name, rearrangedExpressions)
       if (setAlias) expr.setTagValue(FUNC_ALIAS, name)

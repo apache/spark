@@ -125,6 +125,12 @@
     ],
     "sqlState" : "428FR"
   },
+  "CANNOT_ASSIGN_EVENT_TIME_COLUMN_WITHOUT_WATERMARK" : {
+    "message" : [
+      "Watermark needs to be defined to reassign event time column. Failed to find watermark definition in the streaming query."
+    ],
+    "sqlState" : "42611"
+  },
   "CANNOT_CAST_DATATYPE" : {
     "message" : [
       "Cannot cast <sourceType> to <targetType>."
@@ -1041,7 +1047,7 @@
   },
   "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT" : {
     "message" : [
-      "Call to function <functionName> is invalid because it includes multiple argument assignments to the same parameter name <parameterName>."
+      "Call to routine <functionName> is invalid because it includes multiple argument assignments to the same parameter name <parameterName>."
     ],
     "subClass" : {
       "BOTH_POSITIONAL_AND_NAMED" : {
@@ -1056,6 +1062,14 @@
       }
     },
     "sqlState" : "4274K"
+  },
+  "EMITTING_ROWS_OLDER_THAN_WATERMARK_NOT_ALLOWED" : {
+    "message" : [
+      "Previous node emitted a row with eventTime=<emittedRowEventTime> which is older than current_watermark_value=<currentWatermark>",
+      "This can lead to correctness issues in the stateful operators downstream in the execution pipeline.",
+      "Please correct the operator logic to emit rows after current global watermark value."
+    ],
+    "sqlState" : "42815"
   },
   "EMPTY_JSON_FIELD_VALUE" : {
     "message" : [
@@ -1318,7 +1332,20 @@
     ],
     "sqlState" : "2203G"
   },
-  "FIELDS_ALREADY_EXISTS" : {
+  "FAILED_TO_PARSE_TOO_COMPLEX" : {
+    "message" : [
+      "The statement, including potential SQL functions and referenced views, was too complex to parse.",
+      "To mitigate this error divide the statement into multiple, less complex chunks."
+    ],
+    "sqlState" : "54001"
+  },
+  "FEATURE_NOT_ENABLED" : {
+    "message" : [
+      "The feature <featureName> is not enabled. Consider setting the config <configKey> to <configValue> to enable this capability."
+    ],
+    "sqlState" : "56038"
+  },
+  "FIELD_ALREADY_EXISTS" : {
     "message" : [
       "Cannot <op> column, because <fieldNames> already exists in <struct>."
     ],
@@ -2648,9 +2675,9 @@
           "ANALYZE TABLE(S) ... COMPUTE STATISTICS ... <ctx> must be either NOSCAN or empty."
         ]
       },
-      "CREATE_FUNC_WITH_IF_NOT_EXISTS_AND_REPLACE" : {
+      "CREATE_ROUTINE_WITH_IF_NOT_EXISTS_AND_REPLACE" : {
         "message" : [
-          "CREATE FUNCTION with both IF NOT EXISTS and REPLACE is not allowed."
+          "CREATE PROCEDURE or CREATE FUNCTION with both IF NOT EXISTS and REPLACE is not allowed."
         ]
       },
       "CREATE_TEMP_FUNC_WITH_DATABASE" : {
@@ -3483,16 +3510,16 @@
   },
   "ROUTINE_ALREADY_EXISTS" : {
     "message" : [
-      "Cannot create the function <routineName> because it already exists.",
-      "Choose a different name, drop or replace the existing function, or add the IF NOT EXISTS clause to tolerate a pre-existing function."
+      "Cannot create the routine <routineName> because it already exists.",
+      "Choose a different name, drop or replace the existing routine, or add the IF NOT EXISTS clause to tolerate a pre-existing routine."
     ],
     "sqlState" : "42723"
   },
   "ROUTINE_NOT_FOUND" : {
     "message" : [
-      "The function <routineName> cannot be found. Verify the spelling and correctness of the schema and catalog.",
+      "The routine <routineName> cannot be found. Verify the spelling and correctness of the schema and catalog.",
       "If you did not qualify the name with a schema and catalog, verify the current_schema() output, or qualify the name with the correct schema and catalog.",
-      "To tolerate the error on drop use DROP FUNCTION IF EXISTS."
+      "To tolerate the error on drop use DROP ... IF EXISTS."
     ],
     "sqlState" : "42883"
   },
@@ -3779,6 +3806,12 @@
     ],
     "sqlState" : "42601"
   },
+  "STREAMING_PYTHON_RUNNER_INITIALIZATION_FAILURE" : {
+    "message" : [
+      "Streaming Runner initialization failed, returned <resFromPython>. Cause: <msg>"
+    ],
+    "sqlState" : "XXKST"
+  },
   "STREAMING_STATEFUL_OPERATOR_NOT_MATCH_IN_STATE_METADATA" : {
     "message" : [
       "Streaming stateful operator name does not match with the operator in state metadata. This likely to happen when user adds/removes/changes stateful operator of existing streaming query.",
@@ -3791,6 +3824,12 @@
       "Query [id = <id>, runId = <runId>] terminated with exception: <message>"
     ],
     "sqlState" : "XXKST"
+  },
+  "STRUCT_ARRAY_LENGTH_MISMATCH" : {
+    "message" : [
+      "Input row doesn't have expected number of values required by the schema. <expected> fields are required while <actual> values are provided."
+    ],
+    "sqlState" : "2201E"
   },
   "SUM_OF_LIMIT_AND_OFFSET_EXCEEDS_MAX_INT" : {
     "message" : [
@@ -4060,7 +4099,7 @@
   },
   "UNRESOLVED_ROUTINE" : {
     "message" : [
-      "Cannot resolve function <routineName> on search path <searchPath>."
+      "Cannot resolve routine <routineName> on search path <searchPath>."
     ],
     "sqlState" : "42883"
   },
@@ -4165,6 +4204,12 @@
   "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE" : {
     "message" : [
       "The <format> datasource doesn't support the column <columnName> of the type <columnType>."
+    ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_DATA_TYPE_FOR_ENCODER" : {
+    "message" : [
+      "Cannot create encoder for <dataType>. Please use a different output data type for your UDF or DataFrame."
     ],
     "sqlState" : "0A000"
   },
@@ -4460,6 +4505,11 @@
       "TABLE_OPERATION" : {
         "message" : [
           "Table <tableName> does not support <operation>. Please check the current catalog and namespace to make sure the qualified table name is expected, and also check the catalog implementation which is configured by \"spark.sql.catalog\"."
+        ]
+      },
+      "TEMPORARY_VIEW_WITH_SCHEMA_BINDING_MODE" : {
+        "message" : [
+          "Temporary views cannot be created with the WITH SCHEMA clause. Recreate the temporary view when the underlying schema changes, or use a persisted view."
         ]
       },
       "TIME_TRAVEL" : {
