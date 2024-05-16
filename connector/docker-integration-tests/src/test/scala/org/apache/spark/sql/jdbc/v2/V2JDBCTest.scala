@@ -877,6 +877,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     withSQLConf(("spark.sql.session.timeZone", "GMT")) {
       withTable(s"$catalogName.timestamps") {
         val tableName = "timestamps"
+        prepareTimestampTable(tableName)
 
         val filteredNTZDf = sql(
           s"""SELECT * FROM $catalogAndNamespace.$tableName
@@ -900,6 +901,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       withSQLConf(("spark.sql.session.timeZone", "America/Los_Angeles")) {
         withTable(s"$catalogName.timestamps") {
           val tableName = "timestamps"
+          prepareTimestampTable(tableName)
 
           val filteredNTZDf = sql(
             s"""SELECT * FROM $catalogName.$tableName

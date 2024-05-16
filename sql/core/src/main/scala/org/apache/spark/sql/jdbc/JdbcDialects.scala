@@ -371,7 +371,14 @@ abstract class JdbcDialect extends Serializable with Logging {
   @Since("2.3.0")
   def compileValue(value: Any): Any = value match {
     case stringValue: String => s"'${escapeSql(stringValue)}'"
-    case timestampValue: Timestamp => "'" + timestampValue + "'"
+    case timestampValue: Timestamp =>
+      if (!SQLConf.get.useNullCalendar) {
+        val timestampFormatter = TimestampFormatter.getFractionFormatter(
+          DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
+        s"'${timestampFormatter.format(timestampValue)}'"
+      } else {
+        "'" + timestampValue + "'"
+      }
     case timestampValue: LocalDateTime =>
       val timestampFormatter = TimestampFormatter.getFractionFormatter(
         DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))

@@ -69,7 +69,9 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
     "scan with aggregate push-down: REGR_INTERCEPT with DISTINCT",
     "scan with aggregate push-down: REGR_SLOPE with DISTINCT",
     "scan with aggregate push-down: REGR_R2 with DISTINCT",
-    "scan with aggregate push-down: REGR_SXY with DISTINCT")
+    "scan with aggregate push-down: REGR_SXY with DISTINCT",
+    "simple timestamps roundtrip",
+    "simple timestamps pushdown")
 
   override val catalogName: String = "oracle"
   override val namespaceOpt: Option[String] = Some("SYSTEM")
