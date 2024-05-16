@@ -145,4 +145,53 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
         |""".stripMargin)
     assert(df.collect().length == 2)
   }
+
+  test("simple timestamps pushdown for MSSQL") {
+    withSQLConf(("spark.sql.session.timeZone", "America/Los_Angeles")) {
+      withTable(s"$catalogName.timestamps") {
+        val tableName = "timestamps"
+        prepareTimestampTable(tableName)
+
+        val filteredNTZDf = sql(
+          s"""SELECT timestampntz FROM $catalogName.${caseConvert(tableName)}
+             |WHERE timestampntz = '2022-03-03 02:00:00'""".stripMargin)
+
+        val outputAfterFilterNTZ = filteredNTZDf.showString(20, 20)
+        assert(outputAfterFilterNTZ.contains("2022-03-03 02:00:00"))
+        assert(filteredNTZDf.collect().length == 1)
+      }
+    }
+
+    withSQLConf(("spark.sql.session.timeZone", "GMT")) {
+      withTable(s"$catalogName.timestamps") {
+        val tableName = "timestamps"
+        prepareTimestampTable(tableName)
+
+        val filteredNTZDf = sql(
+          s"""SELECT timestampntz FROM $catalogName.${caseConvert(tableName)}
+             |WHERE timestampntz = '2022-03-03 02:00:00'""".stripMargin)
+
+        val outputAfterFilterNTZ = filteredNTZDf.showString(20, 20)
+        assert(outputAfterFilterNTZ.contains("2022-03-03 02:00:00"))
+        assert(filteredNTZDf.collect().length == 1)
+      }
+    }
+
+    withDefaultTimeZone(ZoneId.of("GMT-2")) {
+      withSQLConf(("spark.sql.session.timeZone", "America/Los_Angeles")) {
+        withTable(s"$catalogName.timestamps") {
+          val tableName = "timestamps"
+          prepareTimestampTable(tableName)
+
+          val filteredNTZDf = sql(
+            s"""SELECT timestampntz FROM $catalogName.${caseConvert(tableName)}
+               |WHERE timestampntz = '2022-03-03 02:00:00'""".stripMargin)
+
+          val outputAfterFilterNTZ = filteredNTZDf.showString(20, 20)
+          assert(outputAfterFilterNTZ.contains("2022-03-03 02:00:00"))
+          assert(filteredNTZDf.collect().length == 1)
+        }
+      }
+    }
+  }
 }

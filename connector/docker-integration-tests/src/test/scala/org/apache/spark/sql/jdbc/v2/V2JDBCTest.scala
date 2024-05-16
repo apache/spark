@@ -761,7 +761,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
         prepareTimestampTable(tableName)
 
-        val dfBeforeInsert = sql(s"SELECT * FROM $catalogAndNamespace.$tableName")
+        val dfBeforeInsert = sql(s"SELECT * FROM $catalogName.${caseConvert(tableName)}")
         val outputBeforeInsert = dfBeforeInsert.showString(20, 20)
 
         assert(outputBeforeInsert.contains("2022-03-03 02:00:00|2022-03-02 18:00:00"))
@@ -772,10 +772,10 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         prepareTimestampTable(tempTableName, false)
 
         sql(
-          s"""INSERT INTO $catalogAndNamespace.$tempTableName
-             |SELECT * FROM $catalogAndNamespace.$tableName""".stripMargin)
+          s"""INSERT INTO $catalogName.${caseConvert(tempTableName)}
+             |SELECT * FROM $catalogName.${caseConvert(tableName)}""".stripMargin)
 
-        val dfAfterInsert = sql(s"SELECT * FROM $catalogAndNamespace.$tableName")
+        val dfAfterInsert = sql(s"SELECT * FROM $catalogName.${caseConvert(tempTableName)}")
         val outputAfterInsert = dfAfterInsert.showString(20, 20)
 
         assert(outputAfterInsert.contains("2022-03-03 02:00:00|2022-03-02 18:00:00"))
@@ -792,7 +792,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
         prepareTimestampTable(tableName)
 
-        val dfBeforeInsert = sql(s"SELECT * FROM $catalogAndNamespace.$tableName")
+        val dfBeforeInsert = sql(s"SELECT * FROM $catalogName.${caseConvert(tableName)}")
         val outputBeforeInsert = dfBeforeInsert.showString(20, 20)
 
         assert(outputBeforeInsert.contains("2022-03-03 02:00:00|2022-03-03 02:00:00"))
@@ -803,10 +803,10 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         prepareTimestampTable(tempTableName, false)
 
         sql(
-          s"""INSERT INTO $catalogAndNamespace.$tempTableName
-             | SELECT * FROM $catalogAndNamespace.$tableName""".stripMargin)
+          s"""INSERT INTO $catalogName.${caseConvert(tempTableName)}
+             | SELECT * FROM $catalogName.${caseConvert(tableName)}""".stripMargin)
 
-        val dfAfterInsert = sql(s"SELECT * FROM $catalogAndNamespace.$tableName")
+        val dfAfterInsert = sql(s"SELECT * FROM $catalogName.${caseConvert(tempTableName)}")
         val outputAfterInsert = dfAfterInsert.showString(20, 20)
 
         assert(outputAfterInsert.contains("2022-03-03 02:00:00|2022-03-03 02:00:00"))
@@ -824,7 +824,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
           prepareTimestampTable(tableName)
 
-          val dfBeforeInsert = sql(s"SELECT * FROM $catalogAndNamespace.$tableName")
+          val dfBeforeInsert = sql(s"SELECT * FROM $catalogName.${caseConvert(tableName)}")
           val outputBeforeInsert = dfBeforeInsert.showString(20, 20)
 
           assert(outputBeforeInsert.contains("2022-03-03 02:00:00|2022-03-02 18:00:00"))
@@ -835,10 +835,10 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
           prepareTimestampTable(tempTableName, false)
 
           sql(
-            s"""INSERT INTO $catalogAndNamespace.$tempTableName
-               | SELECT * FROM $catalogAndNamespace.$tableName""".stripMargin)
+            s"""INSERT INTO $catalogName.${caseConvert(tempTableName)}
+               | SELECT * FROM $catalogName.${caseConvert(tableName)}""".stripMargin)
 
-          val dfAfterInsert = sql(s"SELECT * FROM $catalogAndNamespace.$tableName")
+          val dfAfterInsert = sql(s"SELECT * FROM $catalogName.${caseConvert(tempTableName)}")
           val outputAfterInsert = dfAfterInsert.showString(20, 20)
 
           assert(outputAfterInsert.contains("2022-03-03 02:00:00|2022-03-02 18:00:00"))
@@ -857,7 +857,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         prepareTimestampTable(tableName)
 
         val filteredNTZDf = sql(
-          s"""SELECT * FROM $catalogAndNamespace.$tableName
+          s"""SELECT * FROM $catalogName.${caseConvert(tableName)}
              |WHERE timestampntz = '2022-03-03 02:00:00'""".stripMargin)
 
         val outputAfterFilterNTZ = filteredNTZDf.showString(20, 20)
@@ -865,7 +865,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         assert(filteredNTZDf.collect().length == 1)
 
         val filteredTZDf = sql(
-          s"""SELECT * FROM $catalogAndNamespace.$tableName
+          s"""SELECT * FROM $catalogName.${caseConvert(tableName)}
              |WHERE timestamptz = '2022-03-02 18:00:00'""".stripMargin)
 
         val outputAfterFilterTZ = filteredNTZDf.showString(20, 20)
@@ -880,7 +880,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         prepareTimestampTable(tableName)
 
         val filteredNTZDf = sql(
-          s"""SELECT * FROM $catalogAndNamespace.$tableName
+          s"""SELECT * FROM $catalogName.${caseConvert(tableName)}
              |WHERE timestampntz = '2022-03-03 02:00:00'""".stripMargin)
 
         val outputAfterFilterNTZ = filteredNTZDf.showString(20, 20)
@@ -888,7 +888,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         assert(filteredNTZDf.collect().length == 1)
 
         val filteredTZDf = sql(
-          s"""SELECT * FROM $catalogAndNamespace.$tableName
+          s"""SELECT * FROM $catalogName.${caseConvert(tableName)}
              |WHERE timestamptz = '2022-03-03 02:00:00'""".stripMargin)
 
         val outputAfterFilterTZ = filteredNTZDf.showString(20, 20)
@@ -904,7 +904,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
           prepareTimestampTable(tableName)
 
           val filteredNTZDf = sql(
-            s"""SELECT * FROM $catalogName.$tableName
+            s"""SELECT * FROM $catalogName.${caseConvert(tableName)}
                |WHERE timestampntz = '2022-03-03 02:00:00'""".stripMargin)
 
           val outputAfterFilterNTZ = filteredNTZDf.showString(20, 20)
@@ -912,7 +912,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
           assert(filteredNTZDf.collect().length == 1)
 
           val filteredTZDf = sql(
-            s"""SELECT * FROM $catalogAndNamespace.$tableName
+            s"""SELECT * FROM $catalogName.${caseConvert(tableName)}
                |WHERE timestamptz = '2022-03-02 18:00:00'""".stripMargin)
 
           val outputAfterFilterTZ = filteredNTZDf.showString(20, 20)
