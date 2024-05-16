@@ -35,7 +35,7 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper {
       BooleanSimplification, ConstantFolding, SimplifyConditionals) :: Nil
   }
 
-  private val relation = LocalRelation($"a".int, $"b".int, $"c".boolean)
+  private val relation = LocalRelation($"a".int, $"b".int, $"c".boolean, $"d".int.notNull)
 
   protected def assertEquivalent(e1: Expression, e2: Expression): Unit = {
     val correctAnswer = Project(Alias(e2, "out")() :: Nil, relation).analyze
@@ -292,5 +292,91 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper {
       CaseWhen((GreaterThan($"a", 1), Literal.create(1, IntegerType)) :: Nil,
         Some(Literal.create(null, IntegerType))),
       CaseWhen((GreaterThan($"a", 1), Literal.create(1, IntegerType)) :: Nil))
+  }
+
+  test("Simplify CaseWhen/If with equal condition and trueValue to Or") {
+    val cond = GreaterThan($"a", 1)
+    val nonDeterministicCond = GreaterThan($"a", Rand(1))
+    val elseValue = LessThan($"b", 2)
+
+    assertEquivalent(
+      CaseWhen((cond, cond) :: Nil, Some(elseValue)),
+      Or(cond, elseValue))
+
+    assertEquivalent(
+      CaseWhen((nonDeterministicCond, nonDeterministicCond) :: Nil, Some(elseValue)),
+      CaseWhen((nonDeterministicCond, nonDeterministicCond) :: Nil, Some(elseValue)))
+
+    assertEquivalent(
+      If(cond, cond, elseValue),
+      Or(cond, elseValue))
+
+    assertEquivalent(
+      If(nonDeterministicCond, nonDeterministicCond, elseValue),
+      If(nonDeterministicCond, nonDeterministicCond, elseValue))
+  }
+
+  test("Simplify always false CaseWhen/If") {
+    val cond = GreaterThan($"a", 1)
+    val nonNullableCond = GreaterThan($"d", 1)
+    val nonDeterministicCond = GreaterThan($"a", Rand(1))
+
+    assertEquivalent(
+      CaseWhen((cond, Literal.FalseLiteral) :: Nil, Some(cond)),
+      LessThanOrEqual($"a", 1))
+
+    assertEquivalent(
+      CaseWhen((nonNullableCond, Literal.FalseLiteral) :: Nil, Some(nonNullableCond)),
+      Literal.FalseLiteral)
+
+    assertEquivalent(
+      CaseWhen((nonDeterministicCond, Literal.FalseLiteral) :: Nil,
+        Some(nonDeterministicCond)),
+      CaseWhen((nonDeterministicCond, Literal.FalseLiteral) :: Nil,
+        Some(nonDeterministicCond)))
+
+    assertEquivalent(
+      If(cond, Literal.FalseLiteral, cond),
+      LessThanOrEqual($"a", 1))
+
+    assertEquivalent(
+      If(nonNullableCond, Literal.FalseLiteral, nonNullableCond),
+      Literal.FalseLiteral)
+
+    assertEquivalent(
+      If(nonDeterministicCond, Literal.FalseLiteral, nonDeterministicCond),
+      If(nonDeterministicCond, Literal.FalseLiteral, nonDeterministicCond))
+  }
+
+  test("Simplify CaseWhen/If IsNull") {
+    val cond = GreaterThan($"a", 1)
+    val nonNullableCond = GreaterThan($"d", 1)
+    val elseValue = LessThan($"b", 2)
+
+    assertEquivalent(
+      CaseWhen((IsNull(cond), IsNotNull(cond)) :: Nil, Some(elseValue)),
+      And(IsNotNull(cond), elseValue))
+    assertEquivalent(
+      CaseWhen((IsNull(nonNullableCond), IsNotNull(nonNullableCond)) :: Nil, Some(elseValue)),
+      elseValue)
+    assertEquivalent(
+      If(IsNull(cond), IsNotNull(cond), elseValue),
+      And(IsNotNull(cond), elseValue))
+    assertEquivalent(
+      If(IsNull(nonNullableCond), IsNotNull(nonNullableCond), elseValue),
+      elseValue)
+
+    assertEquivalent(
+      CaseWhen((IsNull(cond), Literal.TrueLiteral) :: Nil, Some(elseValue)),
+      Or(IsNull(cond), elseValue))
+    assertEquivalent(
+      CaseWhen((IsNull(nonNullableCond), Literal.TrueLiteral) :: Nil, Some(elseValue)),
+      elseValue)
+    assertEquivalent(
+      If(IsNull(cond), Literal.TrueLiteral, elseValue),
+      Or(IsNull(cond), elseValue))
+    assertEquivalent(
+      If(IsNull(nonNullableCond), Literal.TrueLiteral, elseValue),
+      elseValue)
   }
 }

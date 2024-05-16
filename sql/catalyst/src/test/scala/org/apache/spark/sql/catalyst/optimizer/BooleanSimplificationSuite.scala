@@ -287,23 +287,57 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper {
   }
 
   test("simplify (x && IsNull(x)) and (IsNull(x) && x)") {
-    checkCondition($"b" && IsNull($"b"), EqualNullSafe($"b", Literal(null, BooleanType)))
-    checkCondition(IsNull($"b") && $"b", EqualNullSafe($"b", Literal(null, BooleanType)))
+    checkCondition(($"b" > 2) && IsNull($"b" > 2), IsNull($"b" > 2))
+    checkCondition(IsNull($"b" > 2) && ($"b" > 2), IsNull($"b" > 2))
+  }
+
+  test("simplify not nullable (x && IsNull(x)) and (IsNull(x) && x)") {
+    checkConditionInNotNullableRelation(
+      ($"b" > 2) && IsNull($"b" > 2),
+      testNotNullableRelation
+    )
+    checkConditionInNotNullableRelation(
+      IsNull($"b" > 2) && ($"b" > 2),
+      testNotNullableRelation
+    )
   }
 
   test("simplify (x && IsNotNull(x)) and (IsNotNull(x) && x)") {
-    checkCondition($"b" && IsNotNull($"b"), EqualNullSafe($"b", Literal(true, BooleanType)))
-    checkCondition(IsNotNull($"b") && $"b", EqualNullSafe($"b", Literal(true, BooleanType)))
+    checkCondition(
+      ($"b" > 2) && IsNotNull($"b" > 2),
+      EqualNullSafe($"b" > 2, Literal(true, BooleanType))
+    )
+    checkCondition(
+      IsNotNull($"b" > 2) && ($"b" > 2),
+      EqualNullSafe($"b" > 2, Literal(true, BooleanType))
+    )
   }
 
   test("simplify (x || IsNull(x)) and (IsNull(x) || x)") {
-    checkCondition($"b" || IsNull($"b"), EqualNullSafe($"b", Literal(false, BooleanType)))
-    checkCondition(IsNull($"b") || $"b", EqualNullSafe($"b", Literal(false, BooleanType)))
+    checkCondition(
+      ($"b" > 2) || IsNull($"b" > 2),
+      Not(EqualNullSafe($"b" > 2, Literal(false, BooleanType)))
+    )
+    checkCondition(
+      IsNull($"b" > 2) || ($"b" > 2),
+      Not(EqualNullSafe($"b" > 2, Literal(false, BooleanType)))
+    )
   }
 
   test("simplify (x || IsNotNull(x)) and (IsNotNull(x) || x)") {
-    checkCondition($"b" || IsNotNull($"b"), EqualNullSafe($"b", Literal(null, BooleanType)))
-    checkCondition(IsNotNull($"b") || $"b", EqualNullSafe($"b", Literal(null, BooleanType)))
+    checkCondition(($"b" > 2) || IsNotNull($"b" > 2), IsNotNull($"b" > 2))
+    checkCondition(IsNotNull($"b" > 2) || ($"b" > 2), IsNotNull($"b" > 2))
+  }
+
+  test("simplify not nullable (x || IsNotNull(x)) and (IsNotNull(x) || x)") {
+    checkConditionInNotNullableRelation(
+      ($"b" > 2) || IsNotNull($"b" > 2),
+      testNotNullableRelationWithData
+    )
+    checkConditionInNotNullableRelation(
+      IsNotNull($"b" > 2) || ($"b" > 2),
+      testNotNullableRelationWithData
+    )
   }
 
   test("simplify NOT(IsNull(x)) and NOT(IsNotNull(x))") {
