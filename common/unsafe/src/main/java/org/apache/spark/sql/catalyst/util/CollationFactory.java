@@ -202,8 +202,8 @@ public final class CollationFactory {
   public static final int UTF8_BINARY_COLLATION_ID = 0;
   public static final int UTF8_BINARY_LCASE_COLLATION_ID = 1;
 
-  public static final String PROVIDER_SPARK = "SPARK";
-  public static final String PROVIDER_ICU = "ICU";
+  public static final String PROVIDER_SPARK = "spark";
+  public static final String PROVIDER_ICU = "icu";
   public static final List<String> SUPPORTED_PROVIDERS = List.of(PROVIDER_SPARK, PROVIDER_ICU);
 
   static {
@@ -236,13 +236,28 @@ public final class CollationFactory {
 
     // UNICODE case sensitive comparison (ROOT locale, in ICU).
     collationTable[2] = new Collation(
-      "UNICODE", PROVIDER_ICU, Collator.getInstance(ULocale.ROOT), "153.120.0.0", true, false, false);
+      "UNICODE",
+      PROVIDER_ICU,
+      Collator.getInstance(ULocale.ROOT),
+      "153.120.0.0",
+      true,
+      false,
+      false
+    );
+
     collationTable[2].collator.setStrength(Collator.TERTIARY);
     collationTable[2].collator.freeze();
 
     // UNICODE case-insensitive comparison (ROOT locale, in ICU + Secondary strength).
     collationTable[3] = new Collation(
-      "UNICODE_CI", PROVIDER_ICU, Collator.getInstance(ULocale.ROOT), "153.120.0.0", false, false, false);
+      "UNICODE_CI",
+      PROVIDER_ICU,
+      Collator.getInstance(ULocale.ROOT),
+      "153.120.0.0",
+      false,
+      false,
+      false
+    );
     collationTable[3].collator.setStrength(Collator.SECONDARY);
     collationTable[3].collator.freeze();
 
@@ -327,7 +342,7 @@ public final class CollationFactory {
   }
 
   public static void assertValidProvider(String provider) throws SparkException {
-    if (!SUPPORTED_PROVIDERS.contains(provider.toUpperCase())) {
+    if (!SUPPORTED_PROVIDERS.contains(provider.toLowerCase())) {
       Map<String, String> params = Map.of(
         "provider", provider,
         "supportedProviders", String.join(", ", SUPPORTED_PROVIDERS)

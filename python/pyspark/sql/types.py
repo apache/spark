@@ -255,8 +255,8 @@ class StringType(AtomicType):
     """
 
     collationNames = ["UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI"]
-    providerSpark = "SPARK"
-    providerICU = "ICU"
+    providerSpark = "spark"
+    providerICU = "icu"
     providers = [providerSpark, providerICU]
 
     def __init__(self, collation: Optional[str] = None):
@@ -1890,7 +1890,7 @@ def _assert_valid_type_for_collation(
 
 
 def _assert_valid_collation_provider(provider: str) -> None:
-    if provider.upper() not in StringType.providers:
+    if provider.lower() not in StringType.providers:
         raise PySparkValueError(
             error_class="COLLATION_INVALID_PROVIDER",
             message_parameters={
