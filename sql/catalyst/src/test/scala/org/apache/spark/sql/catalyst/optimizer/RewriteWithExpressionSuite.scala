@@ -440,7 +440,7 @@ class RewriteWithExpressionSuite extends PlanTest {
     }
   }
 
-  test("TempResolvedColumn in common expression") {
+  test("SPARK-48252: TempResolvedColumn in common expression") {
     val a = testRelation.output.head
     val tempResolved = TempResolvedColumn(a, Seq("a"))
     val expr = With(tempResolved) { case Seq(ref) =>
