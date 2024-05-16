@@ -33,21 +33,24 @@ import org.apache.spark.unsafe.types.UTF8String.{fromString => toUTF8}
 
 class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ignore funsuite
   test("collationId stability") {
-    assert(UTF8_BINARY_COLLATION_ID == 0)
-    assert(INDETERMINATE_COLLATION_ID == 1 << 30)
+    assert(INDETERMINATE_COLLATION_ID == -1)
 
+    assert(UTF8_BINARY_COLLATION_ID == 0)
     val utf8Binary = fetchCollation(UTF8_BINARY_COLLATION_ID)
     assert(utf8Binary.collationName == "UTF8_BINARY")
     assert(utf8Binary.supportsBinaryEquality)
 
+    assert(UTF8_BINARY_LCASE_COLLATION_ID == 1)
     val utf8BinaryLcase = fetchCollation(UTF8_BINARY_LCASE_COLLATION_ID)
     assert(utf8BinaryLcase.collationName == "UTF8_BINARY_LCASE")
     assert(!utf8BinaryLcase.supportsBinaryEquality)
 
+    assert(UNICODE_COLLATION_ID == (1 << 29))
     val unicode = fetchCollation(UNICODE_COLLATION_ID)
     assert(unicode.collationName == "UNICODE")
     assert(unicode.supportsBinaryEquality)
 
+    assert(UNICODE_CI_COLLATION_ID == ((1 << 29) | (1 << 17)))
     val unicodeCi = fetchCollation(UNICODE_CI_COLLATION_ID)
     assert(unicodeCi.collationName == "UNICODE_CI")
     assert(!unicodeCi.supportsBinaryEquality)
@@ -58,46 +61,27 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
     Seq(
       "UTF8_BINARY",
       "UTF8_BINARY_LCASE",
-      "UTF8_BINARY_UCASE",
       "UNICODE",
       "UNICODE_CI",
       "UNICODE_AI",
-      "UNICODE_CI_AI",
-      "UNICODE_LCASE",
-      "UNICODE_UCASE"
+      "UNICODE_CI_AI"
     ).foreach(collationName => {
       val col = fetchCollation(collationName)
       assert(col.collationName == collationName)
     })
     // collation name normalization
     Seq(
-      // UTF8_BINARY
-      ("UTF8_BINARY_CS", "UTF8_BINARY"),
-      ("UTF8_BINARY_AS", "UTF8_BINARY"),
-      ("UTF8_BINARY_CS_AS", "UTF8_BINARY"),
-      ("UTF8_BINARY_AS_CS", "UTF8_BINARY"),
-      ("UTF8_BINARY_LCASE_CS", "UTF8_BINARY_LCASE"),
-      ("UTF8_BINARY_CS_LCASE", "UTF8_BINARY_LCASE"),
-      ("UTF8_BINARY_LCASE_AS", "UTF8_BINARY_LCASE"),
-      ("UTF8_BINARY_AS_LCASE", "UTF8_BINARY_LCASE"),
-      ("UTF8_BINARY_CS_LCASE_AS", "UTF8_BINARY_LCASE"),
-      ("UTF8_BINARY_AS_CS_LCASE", "UTF8_BINARY_LCASE"),
       // ICU root locale
       ("UNICODE_CS", "UNICODE"),
       ("UNICODE_CS_AS", "UNICODE"),
       ("UNICODE_CI_AS", "UNICODE_CI"),
       ("UNICODE_AI_CS", "UNICODE_AI"),
       ("UNICODE_AI_CI", "UNICODE_CI_AI"),
-      ("UNICODE_LCASE_CS", "UNICODE_LCASE"),
-      ("UNICODE_LCASE_AS", "UNICODE_LCASE"),
-      ("UNICODE_LCASE_CI", "UNICODE_CI_LCASE"),
-      ("UNICODE_UCASE_CI", "UNICODE_CI_UCASE"),
-      ("UNICODE_AI_UCASE_CI", "UNICODE_CI_AI_UCASE"),
       // randomized case collation names
       ("utf8_binary", "UTF8_BINARY"),
       ("UtF8_binARy_LcasE", "UTF8_BINARY_LCASE"),
       ("unicode", "UNICODE"),
-      ("UnICoDe_lcase_cs_aI", "UNICODE_AI_LCASE")
+      ("UnICoDe_cs_aI", "UNICODE_AI")
     ).foreach{
       case (name, normalized) =>
         val col = fetchCollation(name)
@@ -107,6 +91,10 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
 
   test("fetch invalid UTF8_BINARY and ICU root locale collation names") {
     Seq(
+      "UTF8_BINARY_CS",
+      "UTF8_BINARY_AS",
+      "UTF8_BINARY_CS_AS",
+      "UTF8_BINARY_AS_CS",
       "UTF8_BINARY_CI",
       "UTF8_BINARY_AI",
       "UTF8_BINARY_CI_AI",
@@ -236,14 +224,11 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
     Seq(
       "UTF8_BINARY",
       "UTF8_BINARY_LCASE",
-      "UTF8_BINARY_UCASE",
       "UNICODE",
-      "UNICODE_LCASE",
-      "UNICODE_UCASE",
       "UNICODE_CI",
-      "UNICODE_AI_CI",
-      "UNICODE_AI_CI_LCASE",
-      "UNICODE_AI_CI_UCASE"
+      "UNICODE_AI",
+      "UNICODE_CI_AI",
+      "UNICODE_AI_CI"
     ).foreach(collationId => {
       val col1 = fetchCollation(collationId)
       val col2 = fetchCollation(collationId)
@@ -259,32 +244,24 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       "en_CI",
       "en_AS",
       "en_AI",
-      "en_LCASE",
-      "en_UCASE",
       // language + 3-letter country code
       "en_USA",
       "en_USA_CS",
       "en_USA_CI",
       "en_USA_AS",
       "en_USA_AI",
-      "en_USA_LCASE",
-      "en_USA_UCASE",
       // language + script code
       "sr_Cyrl",
       "sr_Cyrl_CS",
       "sr_Cyrl_CI",
       "sr_Cyrl_AS",
       "sr_Cyrl_AI",
-      "sr_Cyrl_LCASE",
-      "sr_Cyrl_UCASE",
       // language + script code + 3-letter country code
       "sr_Cyrl_SRB",
       "sr_Cyrl_SRB_CS",
       "sr_Cyrl_SRB_CI",
       "sr_Cyrl_SRB_AS",
-      "sr_Cyrl_SRB_AI",
-      "sr_Cyrl_SRB_LCASE",
-      "sr_Cyrl_SRB_UCASE"
+      "sr_Cyrl_SRB_AI"
     ).foreach(collationICU => {
       val col = fetchCollation(collationICU)
       assert(col.collator.getLocale(ULocale.VALID_LOCALE) != ULocale.ROOT)
@@ -298,6 +275,10 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       "en_AAA",
       "en_Something",
       "en_Something_USA",
+      "en_LCASE",
+      "en_UCASE",
+      "en_CI_LCASE",
+      "en_CI_UCASE",
       "en_CI_UNSPECIFIED",
       "en_USA_UNSPECIFIED",
       "en_USA_UNSPECIFIED_CI",
@@ -327,14 +308,14 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       ("en_CI", "en_CI"),
       ("en_AI", "en_AI"),
       ("en_AI_CI", "en_CI_AI"),
+      ("en_CI_AI", "en_CI_AI"),
+      ("en_CS_AI", "en_AI"),
+      ("en_AI_CS", "en_AI"),
+      ("en_CI_AS", "en_CI"),
+      ("en_AS_CI", "en_CI"),
       ("en_USA_AI_CI", "en_USA_CI_AI"),
-      ("en_USA_LCASE_AI_CI", "en_USA_CI_AI_LCASE"),
-      ("en_USA_LCASE_CI_AI", "en_USA_CI_AI_LCASE"),
-      ("en_USA_AI_LCASE_CI", "en_USA_CI_AI_LCASE"),
-      ("en_USA_CI_LCASE_AI", "en_USA_CI_AI_LCASE"),
       // randomized case
       ("EN_USA", "en_USA"),
-      ("eN_usA_ci_uCASe_aI", "en_USA_CI_AI_UCASE"),
       ("SR_CYRL", "sr_Cyrl"),
       ("sr_cyrl_srb", "sr_Cyrl_SRB"),
       ("sR_cYRl_sRb", "sr_Cyrl_SRB")
@@ -347,8 +328,21 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
 
   test("invalid collationId") {
     val badCollationIds = Seq(
-      -1, // user-defined collation range
-      1 << 31, // user-defined collation range
+      INDETERMINATE_COLLATION_ID, // indeterminate collation
+      1 << 30, // user-defined collation range
+      (1 << 30) | 1, // user-defined collation range
+      (1 << 30) | (1 << 29), // user-defined collation range
+      1 << 1, // utf8-binary mandatory zero bit 1 breach
+      1 << 2, // utf8-binary mandatory zero bit 2 breach
+      1 << 3, // utf8-binary mandatory zero bit 3 breach
+      1 << 4, // utf8-binary mandatory zero bit 4 breach
+      1 << 5, // utf8-binary mandatory zero bit 5 breach
+      1 << 6, // utf8-binary mandatory zero bit 6 breach
+      1 << 7, // utf8-binary mandatory zero bit 7 breach
+      1 << 8, // utf8-binary mandatory zero bit 8 breach
+      1 << 9, // utf8-binary mandatory zero bit 9 breach
+      1 << 10, // utf8-binary mandatory zero bit 10 breach
+      1 << 11, // utf8-binary mandatory zero bit 11 breach
       1 << 12, // utf8-binary mandatory zero bit 12 breach
       1 << 13, // utf8-binary mandatory zero bit 13 breach
       1 << 14, // utf8-binary mandatory zero bit 14 breach
@@ -362,29 +356,24 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       1 << 24, // utf8-binary mandatory zero bit 24 breach
       1 << 25, // utf8-binary mandatory zero bit 25 breach
       1 << 26, // utf8-binary mandatory zero bit 26 breach
+      1 << 27, // utf8-binary mandatory zero bit 27 breach
+      1 << 28, // utf8-binary mandatory zero bit 28 breach
       (1 << 29) | (1 << 12), // ICU mandatory zero bit 12 breach
       (1 << 29) | (1 << 13), // ICU mandatory zero bit 13 breach
       (1 << 29) | (1 << 14), // ICU mandatory zero bit 14 breach
       (1 << 29) | (1 << 15), // ICU mandatory zero bit 15 breach
-      (1 << 29) | (1 << 16), // ICU mandatory zero bit 16 breach
-      (1 << 29) | (1 << 17), // ICU mandatory zero bit 17 breach
       (1 << 29) | (1 << 18), // ICU mandatory zero bit 18 breach
       (1 << 29) | (1 << 19), // ICU mandatory zero bit 19 breach
       (1 << 29) | (1 << 20), // ICU mandatory zero bit 20 breach
+      (1 << 29) | (1 << 21), // ICU mandatory zero bit 21 breach
+      (1 << 29) | (1 << 22), // ICU mandatory zero bit 22 breach
       (1 << 29) | (1 << 23), // ICU mandatory zero bit 23 breach
       (1 << 29) | (1 << 24), // ICU mandatory zero bit 24 breach
       (1 << 29) | (1 << 25), // ICU mandatory zero bit 25 breach
       (1 << 29) | (1 << 26), // ICU mandatory zero bit 26 breach
-      123, // utf8-binary with non-zero locale id
-      (1 << 29) | (1 << 12), // ICU with invalid locale id
-      (1 << 29) | 0xFFFF, // ICU with invalid locale id
-      (1 << 23) | (1 << 22), // utf8-binary with invalid case conversion
-      (1 << 29) | (1 << 23) | (1 << 22), // ICU with invalid case conversion
-      1 << 27, // utf8-binary accent-insensitive
-      1 << 28, // utf8-binary case-insensitive
-      INDETERMINATE_COLLATION_ID, // indeterminate collation
-      1 << 30, // indeterminate collation
-      (1 << 30) | (1 << 29) // invalid implementation provider
+      (1 << 29) | (1 << 27), // ICU mandatory zero bit 27 breach
+      (1 << 29) | (1 << 28), // ICU mandatory zero bit 28 breach
+      (1 << 29) | 0xFFFF // ICU with invalid locale id
     )
     badCollationIds.foreach(collationId => {
       val e = intercept[SparkException](fetchCollationUnsafe(collationId))
