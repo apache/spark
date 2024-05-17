@@ -57,7 +57,7 @@ trait V2JDBCPushdownTest extends SharedSparkSession with DockerIntegrationFunSui
     )
 
     executeUpdate(
-      s"""CREATE TABLE "$schema"."${tablePrefix}_escape_test"
+      s"""CREATE TABLE "$schema"."${tablePrefix}_string_test"
          | (id INTEGER, st STRING, random_col INT);""".stripMargin
     )
 
@@ -85,7 +85,11 @@ trait V2JDBCPushdownTest extends SharedSparkSession with DockerIntegrationFunSui
       s"""INSERT INTO "$schema"."${tablePrefix}_with_nulls" VALUES (NULL, 'null')""")
 
     executeUpdate(
-      s"""INSERT INTO "$schema"."${tablePrefix}_escape_test" VALUES (0, 'ab''', 1000)""")
+      s"""INSERT INTO "$schema"."${tablePrefix}_string_test" VALUES (0, 'ab''', 1000)""")
+    executeUpdate(
+      s"""INSERT INTO "$schema"."${tablePrefix}_string_test" VALUES (0, 'FiRs''T', 1000)""")
+    executeUpdate(
+      s"""INSERT INTO "$schema"."${tablePrefix}_string_test" VALUES (0, 'sE Co nD', 1000)""")
 
     executeUpdate(s"""INSERT INTO "$schema"."$tablePrefix" VALUES (1, 'ab', 1000)""")
     executeUpdate(s"""INSERT INTO "$schema"."$tablePrefix" VALUES (2, 'aba', 900)""")
@@ -104,21 +108,21 @@ trait V2JDBCPushdownTest extends SharedSparkSession with DockerIntegrationFunSui
 
   protected def cleanData(): Unit = {
     executeUpdate(s"""DROP TABLE IF EXISTS "$schema"."$tablePrefix"""")
-    executeUpdate(s"""DROP TABLE IF EXISTS "$schema"."${tablePrefix}_escape_test"""")
+    executeUpdate(s"""DROP TABLE IF EXISTS "$schema"."${tablePrefix}_string_test"""")
     executeUpdate(s"""DROP TABLE IF EXISTS "$schema"."${tablePrefix}_with_nulls"""")
     executeUpdate(s"""DROP SCHEMA IF EXISTS "$schema"""")
   }
 
-  test("String escaping test") {
+  test("string escaping test") {
     val df = sql(
       s"SELECT 'ab\\'', st " +
-        s"FROM `$catalog`.`$schema`.`${tablePrefix}_escape_test` where st = 'ab\\''")
+        s"FROM `$catalog`.`$schema`.`${tablePrefix}_string_test` where st = 'ab\\''")
     checkAnswer(df, Row("ab'", "ab'"))
     assert(isFilterRemoved(df))
     commonAssertionOnDataFrame(df)
   }
 
-  test("boolean AND and OR predicate") {
+  test("boolean AND and OR predicate push down") {
     val df = sql(
       s"SELECT id FROM `$catalog`.`$schema`.`$tablePrefix` where (id > 1 AND id < 4) OR id = 7"
     )
@@ -127,7 +131,7 @@ trait V2JDBCPushdownTest extends SharedSparkSession with DockerIntegrationFunSui
     commonAssertionOnDataFrame(df)
   }
 
-  test("in predicate getting pushed down") {
+  test("in predicate push down") {
     // even mix types, we expect spark to insert casts
     val df =
       sql(s"SELECT * FROM `$catalog`.`$schema`.`${tablePrefix}_with_nulls` " +
@@ -148,7 +152,7 @@ trait V2JDBCPushdownTest extends SharedSparkSession with DockerIntegrationFunSui
     commonAssertionOnDataFrame(df2)
   }
 
-  test("case when in predicate and IIF") {
+  test("case when in predicate and IIF push down") {
       val df = sql(
         s"""SELECT id FROM `$catalog`.`$schema`.`$tablePrefix` WHERE
            |CASE WHEN id = 3 THEN 2 ELSE 3 END = 2""".stripMargin)
@@ -171,7 +175,7 @@ trait V2JDBCPushdownTest extends SharedSparkSession with DockerIntegrationFunSui
       commonAssertionOnDataFrame(df3)
   }
 
-  test("coalesce") {
+  test("coalesce predicate push down") {
     withSQLConf("spark.sql.ansi.enabled" -> "true") {
       val cases = Seq(
         "COALESCE(col1, col2) = 1" -> Seq(Row(1)),
@@ -190,7 +194,7 @@ trait V2JDBCPushdownTest extends SharedSparkSession with DockerIntegrationFunSui
     }
   }
 
-  test("unary minus") {
+  test("unary minus predicate push down") {
     withSQLConf("spark.sql.ansi.enabled" -> "true") {
       val df = sql(
         s"""SELECT id FROM `$catalog`.`$schema`.`$tablePrefix` WHERE
@@ -201,14 +205,14 @@ trait V2JDBCPushdownTest extends SharedSparkSession with DockerIntegrationFunSui
     }
   }
 
-  test("not predicate getting pushed down") {
+  test("not predicate push down") {
     val df = sql(s"SELECT id FROM `$catalog`.`$schema`.`$tablePrefix` where NOT id = 1")
     checkAnswer(df, (2 to 7).map(Row(_)))
     assert(isFilterRemoved(df))
     commonAssertionOnDataFrame(df)
   }
 
-  test("null predicate") {
+  test("null predicate push down") {
     val df =
       sql(s"SELECT * FROM `$catalog`.`$schema`.`${tablePrefix}_with_nulls` where id is NULL")
     checkAnswer(df, Row(null, "null"))
@@ -220,6 +224,36 @@ trait V2JDBCPushdownTest extends SharedSparkSession with DockerIntegrationFunSui
     checkAnswer(df2, Seq(Row(1), Row(2), Row(3)))
     assert(isFilterRemoved(df2))
     commonAssertionOnDataFrame(df2)
+  }
+
+  test("LOWER and UPPER predicate push down") {
+    val df = sql(
+      s"SELECT st " +
+        s"FROM `$catalog`.`$schema`.`${tablePrefix}_string_test` where lower(st) = 'firs\\'t'")
+    checkAnswer(df, Row("FiRs'T"))
+    assert(isFilterRemoved(df))
+    commonAssertionOnDataFrame(df)
+
+    val df2 = sql(
+      s"SELECT st " +
+        s"FROM `$catalog`.`$schema`.`${tablePrefix}_string_test` where upper(st) = 'FIRS\\'T'")
+    checkAnswer(df2, Row("FiRs'T"))
+    assert(isFilterRemoved(df2))
+    commonAssertionOnDataFrame(df2)
+
+    val df3 = sql(
+      s"SELECT st " +
+        s"FROM `$catalog`.`$schema`.`${tablePrefix}_string_test` where lower(st) = 'se co nd'")
+    checkAnswer(df3, Row("sE Co nD"))
+    assert(isFilterRemoved(df3))
+    commonAssertionOnDataFrame(df3)
+
+    val df4 = sql(
+      s"SELECT st " +
+        s"FROM `$catalog`.`$schema`.`${tablePrefix}_string_test` where upper(st) = 'SE CO ND'")
+    checkAnswer(df4, Row("sE Co nD"))
+    assert(isFilterRemoved(df4))
+    commonAssertionOnDataFrame(df4)
   }
 
 }

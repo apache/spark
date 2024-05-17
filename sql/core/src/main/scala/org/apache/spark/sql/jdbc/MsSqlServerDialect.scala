@@ -53,7 +53,7 @@ private case class MsSqlServerDialect() extends JdbcDialect {
   // scalastyle:on line.size.limit
   private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
     "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP")
-  private val supportedStringFunctions = Set("UPPER", "LOWER", "SUBSTRING", "TRANSLATE")
+  private val supportedStringFunctions = Set("UPPER", "LOWER", "TRANSLATE")
   private val supportedMathFunctions = Set("SIN", "COS", "ABS")
   private val supportedSqlFunctions = Set("COALESCE")
   private val supportedFunctions =
@@ -86,14 +86,6 @@ private case class MsSqlServerDialect() extends JdbcDialect {
       case "STDDEV_POP" => "STDEVP"
       case "STDDEV_SAMP" => "STDEV"
       case _ => super.dialectFunctionName(funcName)
-    }
-
-    override def visitSQLFunction(funcName: String, inputs: Array[String]): String
-    = funcName match {
-      case "SUBSTRING" if inputs.length < 3 =>
-        super.visitSQLFunction(funcName, inputs :+ inputs(0).length.toString)
-      case _ =>
-        super.visitSQLFunction(funcName, inputs)
     }
 
     override def build(expr: Expression): String = {

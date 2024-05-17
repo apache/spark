@@ -31,7 +31,7 @@ class MsSqlServerPushdownIntegrationSuite
     with V2JDBCPushdownTest {
 
   override def excluded: Seq[String] = Seq(
-    "case when in predicate and IIF")
+    "case when in predicate and IIF push down")
 
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.sqlserver", classOf[JDBCTableCatalog].getName)
@@ -65,7 +65,7 @@ class MsSqlServerPushdownIntegrationSuite
     )
 
     executeUpdate(
-      s"""CREATE TABLE "$schema"."${tablePrefix}_escape_test"
+      s"""CREATE TABLE "$schema"."${tablePrefix}_string_test"
          | (id INTEGER, st VARCHAR(MAX), random_col INT);""".stripMargin
     )
 
