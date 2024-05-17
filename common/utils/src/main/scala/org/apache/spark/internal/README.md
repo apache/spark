@@ -45,3 +45,52 @@ logger.error("Failed to abort the writer after failing to write map output.", e)
 ## Exceptions
 
 To ensure logs are compatible with Spark SQL and log analysis tools, avoid `Exception.printStackTrace()`. Use `logError`, `logWarning`, and `logInfo` methods from the `Logging` trait to log exceptions, maintaining structured and parsable logs.
+
+## External third-party ecosystem access
+
+* If you want to output logs in `scala code` through the structured log framework, you can define `custom LogKeys` as follows:
+
+```scala
+object CustomLogKeys {
+  // External third-party ecosystem `custom LogKey` must be `extends LogKey`
+  case object CUSTOM_LOG_KEY extends LogKey
+}
+```
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;and use it in `scala` code:
+
+```scala
+logInfo(log"${MDC(CustomLogKeys.CUSTOM_LOG_KEY, "key")}")
+```
+
+* If you want to output logs in `java code` through the structured log framework, you can define `custom LogKeys` as follows:
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;when your project does **not depend on `scala`**,
+```java
+class CustomLogKeys {
+  // External third-party ecosystem `custom LogKey` must be `implements LogKey`
+  public static class CUSTOM_LOG_KEY implements LogKey { }
+
+  // Singleton
+  public static final CUSTOM_LOG_KEY CUSTOM_LOG_KEY = new CUSTOM_LOG_KEY();
+}
+```
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;and use it in `java` code:
+```java
+import org.apache.spark.internal.MDC;
+
+logger.error("Unable to delete key {} for cache", MDC.of(CustomLogKeys.CUSTOM_LOG_KEY, "key"));
+```
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;when your project has **depended on `scala`**,
+```scala
+object CustomLogKeys {
+  // External third-party ecosystem `custom LogKey` must be `extends LogKey`
+  case object CUSTOM_LOG_KEY extends LogKey
+}
+```
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;and use it in `java` code:
+```java
+import org.apache.spark.internal.MDC;
+
+logger.error("Unable to delete key {} for cache", MDC.of(CustomLogKeys.CUSTOM_LOG_KEY$.MODULE$, "key"));
+```

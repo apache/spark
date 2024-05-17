@@ -87,4 +87,10 @@ public class PatternSparkLoggerSuite extends SparkLoggerSuiteBase {
   String expectedPatternForExternalSystemCustomLogKey(Level level) {
     return toRegexPattern(level, ".*<level> <className>: External system custom log message.\n");
   }
+
+  @Override
+  String expectedPatternForExternalSystemJavaCustomLogKey(Level level) {
+    return toRegexPattern(level,
+ ".*<level> <className>: External system custom log message.\n");
+  }
 }

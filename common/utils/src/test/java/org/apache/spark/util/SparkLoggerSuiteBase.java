@@ -24,11 +24,13 @@ import java.util.List;
 
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.Level;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.LogKey;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
+import org.apache.spark.internal.SparkLogger;
 
 public abstract class SparkLoggerSuiteBase {
 
@@ -69,6 +71,9 @@ public abstract class SparkLoggerSuiteBase {
   private final MDC externalSystemCustomLog =
     MDC.of(CustomLogKeys.CUSTOM_LOG_KEY$.MODULE$, "External system custom log message.");
 
+  private final MDC externalSystemJavaCustomLog =
+    MDC.of(JavaCustomLogKeys.CUSTOM_LOG_KEY, "External system custom log message.");
+
   // test for basic message (without any mdc)
   abstract String expectedPatternForBasicMsg(Level level);
 
@@ -90,6 +95,9 @@ public abstract class SparkLoggerSuiteBase {
   // test for external system custom LogKey
   abstract String expectedPatternForExternalSystemCustomLogKey(Level level);
 
+  // test for external system java custom LogKey
+  abstract String expectedPatternForExternalSystemJavaCustomLogKey(Level level);
+
   @Test
   public void testBasicMsgLogger() {
     Runnable errorFn = () -> logger().error(basicMsg());
@@ -104,8 +112,8 @@ public abstract class SparkLoggerSuiteBase {
         Pair.of(Level.DEBUG, debugFn),
         Pair.of(Level.TRACE, traceFn)).forEach(pair -> {
       try {
-        assert (captureLogOutput(pair.getRight()).matches(
-            expectedPatternForBasicMsg(pair.getLeft())));
+        Assertions.assertTrue(captureLogOutput(pair.getRight()).matches(
+          expectedPatternForBasicMsg(pair.getLeft())));
       } catch (IOException e) {
         throw new RuntimeException(e);
       }
@@ -127,8 +135,8 @@ public abstract class SparkLoggerSuiteBase {
         Pair.of(Level.DEBUG, debugFn),
         Pair.of(Level.TRACE, traceFn)).forEach(pair -> {
       try {
-        assert (captureLogOutput(pair.getRight()).matches(
-            expectedPatternForBasicMsgWithException(pair.getLeft())));
+        Assertions.assertTrue(captureLogOutput(pair.getRight()).matches(
+          expectedPatternForBasicMsgWithException(pair.getLeft())));
       } catch (IOException e) {
         throw new RuntimeException(e);
       }
@@ -140,15 +148,13 @@ public abstract class SparkLoggerSuiteBase {
     Runnable errorFn = () -> logger().error(msgWithMDC, executorIDMDC);
     Runnable warnFn = () -> logger().warn(msgWithMDC, executorIDMDC);
     Runnable infoFn = () -> logger().info(msgWithMDC, executorIDMDC);
-    Runnable debugFn = () -> logger().debug(msgWithMDC, executorIDMDC);
-    Runnable traceFn = () -> logger().trace(msgWithMDC, executorIDMDC);
     List.of(
         Pair.of(Level.ERROR, errorFn),
         Pair.of(Level.WARN, warnFn),
         Pair.of(Level.INFO, infoFn)).forEach(pair -> {
       try {
-        assert (captureLogOutput(pair.getRight()).matches(
-            expectedPatternForMsgWithMDC(pair.getLeft())));
+        Assertions.assertTrue(captureLogOutput(pair.getRight()).matches(
+          expectedPatternForMsgWithMDC(pair.getLeft())));
       } catch (IOException e) {
         throw new RuntimeException(e);
       }
@@ -165,8 +171,8 @@ public abstract class SparkLoggerSuiteBase {
         Pair.of(Level.WARN, warnFn),
         Pair.of(Level.INFO, infoFn)).forEach(pair -> {
       try {
-        assert (captureLogOutput(pair.getRight()).matches(
-            expectedPatternForMsgWithMDCs(pair.getLeft())));
+        Assertions.assertTrue(captureLogOutput(pair.getRight()).matches(
+          expectedPatternForMsgWithMDCs(pair.getLeft())));
       } catch (IOException e) {
         throw new RuntimeException(e);
       }
@@ -184,8 +190,8 @@ public abstract class SparkLoggerSuiteBase {
         Pair.of(Level.WARN, warnFn),
         Pair.of(Level.INFO, infoFn)).forEach(pair -> {
       try {
-        assert (captureLogOutput(pair.getRight()).matches(
-            expectedPatternForMsgWithMDCsAndException(pair.getLeft())));
+        Assertions.assertTrue(captureLogOutput(pair.getRight()).matches(
+          expectedPatternForMsgWithMDCsAndException(pair.getLeft())));
       } catch (IOException e) {
         throw new RuntimeException(e);
       }
@@ -202,8 +208,8 @@ public abstract class SparkLoggerSuiteBase {
         Pair.of(Level.WARN, warnFn),
         Pair.of(Level.INFO, infoFn)).forEach(pair -> {
       try {
-        assert (captureLogOutput(pair.getRight()).matches(
-            expectedPatternForMsgWithMDCValueIsNull(pair.getLeft())));
+        Assertions.assertTrue(captureLogOutput(pair.getRight()).matches(
+          expectedPatternForMsgWithMDCValueIsNull(pair.getLeft())));
       } catch (IOException e) {
         throw new RuntimeException(e);
       }
@@ -220,11 +226,37 @@ public abstract class SparkLoggerSuiteBase {
         Pair.of(Level.WARN, warnFn),
         Pair.of(Level.INFO, infoFn)).forEach(pair -> {
       try {
-        assert (captureLogOutput(pair.getRight()).matches(
-            expectedPatternForExternalSystemCustomLogKey(pair.getLeft())));
+        Assertions.assertTrue(captureLogOutput(pair.getRight()).matches(
+          expectedPatternForExternalSystemCustomLogKey(pair.getLeft())));
       } catch (IOException e) {
         throw new RuntimeException(e);
       }
     });
   }
+
+  @Test
+  public void testLoggerWithExternalSystemJavaCustomLogKey() {
+    Runnable errorFn = () -> logger().error("{}", externalSystemJavaCustomLog);
+    Runnable warnFn = () -> logger().warn("{}", externalSystemJavaCustomLog);
+    Runnable infoFn = () -> logger().info("{}", externalSystemJavaCustomLog);
+    List.of(
+        Pair.of(Level.ERROR, errorFn),
+        Pair.of(Level.WARN, warnFn),
+        Pair.of(Level.INFO, infoFn)).forEach(pair -> {
+      try {
+        Assertions.assertTrue(captureLogOutput(pair.getRight()).matches(
+          expectedPatternForExternalSystemJavaCustomLogKey(pair.getLeft())));
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+    });
+  }
+}
+
+class JavaCustomLogKeys {
+  // External third-party ecosystem `custom LogKey` must be `implements LogKey`
+  public static class CUSTOM_LOG_KEY implements LogKey { }
+
+  // Singleton
+  public static final CUSTOM_LOG_KEY CUSTOM_LOG_KEY = new CUSTOM_LOG_KEY();
 }
