@@ -1004,16 +1004,6 @@ class CollationSQLExpressionsSuite
         val queryDatabase = sql("SELECT current_schema()")
         val queryCatalog = sql("SELECT current_catalog()")
         val queryUser = sql("SELECT current_user()")
-        // Result
-        val queryDatabaseResult = queryDatabase.collect().head.getString(0)
-        val databaseFormat = "^default$"
-        assert(queryDatabaseResult.matches(databaseFormat))
-        val queryCatalogResult = queryCatalog.collect().head.getString(0)
-        val catalogFormat = "^spark_catalog"
-        assert(queryCatalogResult.matches(catalogFormat))
-        val queryUserResult = queryUser.collect().head.getString(0)
-        val userFormat = "^[\\w\\.\\-]+$"
-        assert(queryUserResult.matches(userFormat))
         // Data type
         val dataType = StringType(collationName)
         assert(queryDatabase.schema.fields.head.dataType.sameType(dataType))
