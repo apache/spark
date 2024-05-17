@@ -232,7 +232,7 @@ private[hive] class HiveClientImpl(
           caughtException = e
           logWarning(
             log"HiveClient got thrift exception, destroying client and retrying " +
-              log"${MDC(RETRY_COUNT, numTries)} times", e)
+              log"${MDC(NUM_RETRY, numTries)} times", e)
           clientLoader.cachedHive = null
           Thread.sleep(retryDelayMillis)
       }
