@@ -96,7 +96,7 @@ case class InlineCTE(
       case ref: CTERelationRef =>
         cteMap(ref.cteId) = cteMap(ref.cteId).withRefCountIncreased(1)
         outerCTEId.foreach { cteId =>
-          cteMap(cteId).recordOutgoingReference(ref.cteId)
+          cteMap(cteId).increaseOutgoingRefCount(ref.cteId, 1)
         }
 
       case _ =>
@@ -225,7 +225,7 @@ case class CTEReferenceInfo(
     copy(refCount = refCount - count)
   }
 
-  def recordOutgoingReference(id: Long): Unit = {
-    outgoingRefs(id) += 1
+  def increaseOutgoingRefCount(cteDefId: Long, count: Int): Unit = {
+    outgoingRefs(cteDefId) += count
   }
 }
