@@ -68,13 +68,11 @@ class UDTFParityTests(BaseUDTFTestsMixin, ReusedConnectTestCase):
     def test_udtf_with_analyze_using_accumulator(self):
         super().test_udtf_with_analyze_using_accumulator()
 
-    @unittest.skipIf(is_remote_only(), "pyspark-connect does not have SparkFiles")
     def test_udtf_with_analyze_using_archive(self):
-        super().test_udtf_with_analyze_using_archive()
+        super().check_udtf_with_analyze_using_archive(".")
 
-    @unittest.skipIf(is_remote_only(), "pyspark-connect does not have SparkFiles")
     def test_udtf_with_analyze_using_file(self):
-        super().test_udtf_with_analyze_using_file()
+        super().check_udtf_with_analyze_using_file(".")
 
     @unittest.skip("pyspark-connect can serialize SparkSession, but fails on executor")
     def test_udtf_access_spark_session(self):
