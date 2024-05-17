@@ -74,8 +74,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     }
   }
 
-  def writeArbitraryInfos(): Unit = {
-    children.foreach(_.writeArbitraryInfos())
+  def writeOperatorStateMetadata(): Unit = {
+    children.foreach(_.writeOperatorStateMetadata())
   }
 
   val id: Int = SparkPlan.newPlanId()
