@@ -29,14 +29,30 @@ import org.apache.spark.sql.types.DataType;
 @Evolving
 public class Cast extends ExpressionWithToString {
   private Expression expression;
+
+  /**
+   * Original data type of given expression
+   */
+  private DataType expressionDataType;
+
+  /**
+   * Target data type, i.e. data type in which expression will be cast
+   */
   private DataType dataType;
 
+  @Deprecated
   public Cast(Expression expression, DataType dataType) {
+    this(expression, null, dataType);
+  }
+
+  public Cast(Expression expression, DataType expressionDataType, DataType targetDataType) {
     this.expression = expression;
-    this.dataType = dataType;
+    this.expressionDataType = expressionDataType;
+    this.dataType = targetDataType;
   }
 
   public Expression expression() { return expression; }
+  public DataType expressionDataType() { return expressionDataType; }
   public DataType dataType() { return dataType; }
 
   @Override

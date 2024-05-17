@@ -22,9 +22,10 @@ import org.apache.logging.log4j.Level;
 import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
 
-public class PatternLoggerSuite extends LoggerSuiteBase {
+public class PatternSparkLoggerSuite extends SparkLoggerSuiteBase {
 
-  private static final SparkLogger LOGGER = SparkLoggerFactory.getLogger(PatternLoggerSuite.class);
+  private static final SparkLogger LOGGER =
+    SparkLoggerFactory.getLogger(PatternSparkLoggerSuite.class);
 
   private String toRegexPattern(Level level, String msg) {
     return msg
@@ -39,7 +40,7 @@ public class PatternLoggerSuite extends LoggerSuiteBase {
 
   @Override
   String className() {
-    return PatternLoggerSuite.class.getSimpleName();
+    return PatternSparkLoggerSuite.class.getSimpleName();
   }
 
   @Override

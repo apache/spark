@@ -43,6 +43,7 @@ from typing import (
     Type,
 )
 
+import copy
 import sys
 import random
 import pyarrow as pa
@@ -1787,7 +1788,7 @@ class DataFrame(ParentDataFrame):
         if self._cached_schema is None:
             query = self._plan.to_proto(self._session.client)
             self._cached_schema = self._session.client.schema(query)
-        return self._cached_schema
+        return copy.deepcopy(self._cached_schema)
 
     def isLocal(self) -> bool:
         query = self._plan.to_proto(self._session.client)

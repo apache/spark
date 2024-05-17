@@ -289,7 +289,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
 
   def nestedTypeMissingElementTypeError(
       dataType: String, ctx: PrimitiveDataTypeContext): Throwable = {
-    dataType match {
+    dataType.toUpperCase(Locale.ROOT) match {
       case "ARRAY" =>
         new ParseException(
           errorClass = "INCOMPLETE_TYPE_DEFINITION.ARRAY",
@@ -576,7 +576,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
 
   def createFuncWithBothIfNotExistsAndReplaceError(ctx: CreateFunctionContext): Throwable = {
     new ParseException(
-      errorClass = "INVALID_SQL_SYNTAX.CREATE_FUNC_WITH_IF_NOT_EXISTS_AND_REPLACE",
+      errorClass = "INVALID_SQL_SYNTAX.CREATE_ROUTINE_WITH_IF_NOT_EXISTS_AND_REPLACE",
       ctx)
   }
 

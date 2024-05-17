@@ -67,7 +67,7 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
     val options = Map("rowTag" -> "foo").asJava
 
     checkAnswer(
-      df.select(from_xml($"value", schema)),
+      df.select(from_xml($"value", schema, options)),
       Row(Row(1)) :: Nil)
   }
 
@@ -392,6 +392,22 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
       checkAnswer(
         df.select(from_xml($"value", schema, Map("mode" -> "PERMISSIVE").asJava)),
         Row(Row(null, null, badRec)) :: Row(Row(2, 12, null)) :: Nil)
+    }
+  }
+
+  test("SPARK-48296: to_xml - Codegen Support") {
+    withTempView("StructsToXmlTable") {
+      val schema = StructType(StructField("a", IntegerType, nullable = false) :: Nil)
+      val dataDF = spark.createDataFrame(Seq(Row(1)).asJava, schema).withColumn("a", struct($"a"))
+      dataDF.createOrReplaceTempView("StructsToXmlTable")
+      val df = sql("SELECT to_xml(a) FROM StructsToXmlTable")
+      val plan = df.queryExecution.executedPlan
+      assert(plan.isInstanceOf[WholeStageCodegenExec])
+      val expected =
+        s"""|<ROW>
+            |    <a>1</a>
+            |</ROW>""".stripMargin
+      checkAnswer(df, Seq(Row(expected)))
     }
   }
 

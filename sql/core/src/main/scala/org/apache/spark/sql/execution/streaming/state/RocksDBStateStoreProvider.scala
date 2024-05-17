@@ -165,7 +165,7 @@ private[sql] class RocksDBStateStoreProvider
         verify(state == UPDATING, "Cannot commit after already committed or aborted")
         val newVersion = rocksDB.commit()
         state = COMMITTED
-        logInfo(log"Committed ${MDC(VERSION_NUMBER, newVersion)} " +
+        logInfo(log"Committed ${MDC(VERSION_NUM, newVersion)} " +
           log"for ${MDC(STATE_STORE_ID, id)}")
         newVersion
       } catch {
@@ -176,7 +176,7 @@ private[sql] class RocksDBStateStoreProvider
 
     override def abort(): Unit = {
       verify(state == UPDATING || state == ABORTED, "Cannot abort after already committed")
-      logInfo(log"Aborting ${MDC(VERSION_NUMBER, version + 1)} " +
+      logInfo(log"Aborting ${MDC(VERSION_NUM, version + 1)} " +
         log"for ${MDC(STATE_STORE_ID, id)}")
       rocksDB.rollback()
       state = ABORTED
@@ -242,7 +242,7 @@ private[sql] class RocksDBStateStoreProvider
           stateStoreCustomMetrics)
       } else {
         logInfo(log"Failed to collect metrics for store_id=${MDC(STATE_STORE_ID, id)} " +
-          log"and version=${MDC(VERSION_NUMBER, version)}")
+          log"and version=${MDC(VERSION_NUM, version)}")
         StateStoreMetrics(0, 0, Map.empty)
       }
     }

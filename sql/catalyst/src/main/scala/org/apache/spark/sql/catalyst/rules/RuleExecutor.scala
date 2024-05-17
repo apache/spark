@@ -90,14 +90,16 @@ class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
   def logMetrics(metrics: QueryExecutionMetrics): Unit = {
     val totalTime = metrics.time / NANOS_PER_MILLIS.toDouble
     val totalTimeEffective = metrics.timeEffective / NANOS_PER_MILLIS.toDouble
+    // scalastyle:off line.size.limit
     val message: MessageWithContext =
       log"""
          |=== Metrics of Executed Rules ===
-         |Total number of runs: ${MDC(RULE_NUMBER_OF_RUNS, metrics.numRuns)}
+         |Total number of runs: ${MDC(NUM_RULE_OF_RUNS, metrics.numRuns)}
          |Total time: ${MDC(TOTAL_TIME, totalTime)} ms
-         |Total number of effective runs: ${MDC(RULE_NUMBER_OF_RUNS, metrics.numEffectiveRuns)}
+         |Total number of effective runs: ${MDC(NUM_EFFECTIVE_RULE_OF_RUNS, metrics.numEffectiveRuns)}
          |Total time of effective runs: ${MDC(TOTAL_EFFECTIVE_TIME, totalTimeEffective)} ms
       """.stripMargin
+    // scalastyle:on line.size.limit
 
     logBasedOnLevel(message)
   }
