@@ -269,6 +269,7 @@ abstract class ProgressContext(
       currentTriggerStartOffsets != null && currentTriggerEndOffsets != null &&
         currentTriggerLatestOffsets != null
     )
+    lastExecution.executedPlan.writeOperatorStateMetadata()
     currentTriggerEndTimestamp = triggerClock.getTimeMillis()
     val processingTimeMills = currentTriggerEndTimestamp - currentTriggerStartTimestamp
     assert(lastExecution != null, "executed batch should provide the information for execution.")
