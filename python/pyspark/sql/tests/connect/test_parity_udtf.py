@@ -25,7 +25,6 @@ if should_test_connect:
     sql.udtf.UserDefinedTableFunction = UserDefinedTableFunction
     from pyspark.sql.connect.functions import lit, udtf
 
-from pyspark.util import is_remote_only
 from pyspark.sql.tests.test_udtf import BaseUDTFTestsMixin, UDTFArrowTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.errors.exceptions.connect import SparkConnectGrpcException, PythonException
