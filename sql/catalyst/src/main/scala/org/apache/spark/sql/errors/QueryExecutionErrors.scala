@@ -2773,4 +2773,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       )
     )
   }
+
+  def localeIsNull(): Throwable = {
+    new SparkIllegalArgumentException(errorClass = "INVALID_LOCALE")
+  }
 }

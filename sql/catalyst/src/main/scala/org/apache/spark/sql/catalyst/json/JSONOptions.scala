@@ -27,7 +27,7 @@ import com.fasterxml.jackson.core.json.JsonReadFeature
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{DataSourceOptions, FileSourceOptions}
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 
 /**
@@ -111,7 +111,7 @@ class JSONOptions(
   val locale: Locale = parameters.get(LOCALE)
     .map {
       case null =>
-        throw QueryCompilationErrors.localeIsNull()
+        throw QueryExecutionErrors.localeIsNull()
       case value => Locale.forLanguageTag(value)
     }
     .getOrElse(Locale.US)

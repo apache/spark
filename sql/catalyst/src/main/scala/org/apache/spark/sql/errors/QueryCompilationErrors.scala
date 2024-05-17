@@ -4074,10 +4074,4 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map()
     )
   }
-
-  def localeIsNull(): Throwable = {
-    new AnalysisException(
-      errorClass = "INVALID_LOCALE",
-      messageParameters = Map.empty)
-  }
 }

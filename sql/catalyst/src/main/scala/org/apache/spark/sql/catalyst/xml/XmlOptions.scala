@@ -166,7 +166,7 @@ class XmlOptions(
   val locale: Locale = parameters.get(LOCALE)
     .map {
       case null =>
-        throw QueryCompilationErrors.localeIsNull()
+        throw QueryExecutionErrors.localeIsNull()
       case value => Locale.forLanguageTag(value)
     }
     .getOrElse(Locale.US)

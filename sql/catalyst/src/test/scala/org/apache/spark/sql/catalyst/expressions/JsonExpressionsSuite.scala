@@ -22,7 +22,7 @@ import java.util.{Calendar, Locale, TimeZone}
 
 import org.scalatest.exceptions.TestFailedException
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -916,12 +916,13 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     val sdf = new SimpleDateFormat(dateFormat, locale)
     val dateStr = sdf.format(date)
     val options = Map("dateFormat" -> dateFormat, "locale" -> null)
+    val expr = JsonToStructs(schema, options, Literal.create(dateStr), UTC_OPT)
+    val row = InternalRow(17836) // number of days from 1970-01-01
 
     checkError(
-      intercept[AnalysisException] {
-        JsonToStructs(schema, options, Literal.create(dateStr), UTC_OPT)
+      intercept[SparkIllegalArgumentException] {
+        expr.eval(row)
       },
-      errorClass = "INVALID_LOCALE"
-    )
+      errorClass = "INVALID_LOCALE")
   }
 }
