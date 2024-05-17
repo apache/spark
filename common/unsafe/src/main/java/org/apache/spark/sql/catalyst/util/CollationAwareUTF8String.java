@@ -72,7 +72,7 @@ public class CollationAwareUTF8String {
    * @param target the string to be searched in
    * @param lowercasePattern the string to be searched for
    * @param startPos the start position for searching (in the target string)
-   * @return length of the target substring that ends with the specified suffix in lowercase
+   * @return length of the target substring that ends with the specified prefix in lowercase
    */
   public static int lowercaseMatchLengthFrom(
       final UTF8String target,
@@ -91,7 +91,7 @@ public class CollationAwareUTF8String {
    * Returns the position of the first occurrence of the pattern string in the target string,
    * starting from the specified position (0-based index referring to character position in
    * UTF8String), with respect to the UTF8_BINARY_LCASE collation. The method assumes that the
-   * pattern string is already lowercased prior to call. If the prefix is not found,
+   * pattern string is already lowercased prior to call. If the pattern is not found,
    * MATCH_NOT_FOUND is returned.
    *
    * @param target the string to be searched in
@@ -162,7 +162,7 @@ public class CollationAwareUTF8String {
    * Returns the position of the last occurrence of the pattern string in the target string,
    * ending at the specified position (0-based index referring to character position in
    * UTF8String), with respect to the UTF8_BINARY_LCASE collation. The method assumes that the
-   * pattern string is already lowercased prior to call. If the suffix is not found,
+   * pattern string is already lowercased prior to call. If the pattern is not found,
    * MATCH_NOT_FOUND is returned.
    *
    * @param target the string to be searched in
@@ -333,13 +333,15 @@ public class CollationAwareUTF8String {
   }
 
   /**
-   * Returns the position of the first occurrence of the pattern string in the target string from
-   * the specified position (0-based index), with respect to the UTF8_BINARY_LCASE collation.
+   * Returns the position of the first occurrence of the pattern string in the target string,
+   * starting from the specified position (0-based index referring to character position in
+   * UTF8String), with respect to the UTF8_BINARY_LCASE collation. If the pattern is not found,
+   * MATCH_NOT_FOUND is returned.
    *
    * @param target the string to be searched in
    * @param pattern the string to be searched for
    * @param start the start position for searching (in the target string)
-   * @return the position of the first occurrence of pattern in target, if not found, -1 returned.
+   * @return the position of the first occurrence of pattern in target
    */
   public static int lowercaseIndexOf(final UTF8String target, final UTF8String pattern,
       final int start) {
