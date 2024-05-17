@@ -56,6 +56,7 @@ from pyspark.testing.sqlutils import (
 )
 from pyspark.errors import ArithmeticException, PySparkTypeError, UnsupportedOperationException
 from pyspark.util import is_remote_only
+from pyspark.loose_version import LooseVersion
 
 if have_pandas:
     import pandas as pd
@@ -1585,8 +1586,13 @@ class ArrowTestsMixin:
     def test_createDataFrame_arrow_fixed_size_list(self):
         a = pa.array([[-1, 3]] * 5, type=pa.list_(pa.int32(), 2))
         t = pa.table([a], ["fsl"])
-        df = self.spark.createDataFrame(t)
-        self.assertIsInstance(df.schema["fsl"].dataType, ArrayType)
+        if LooseVersion(pa.__version__) < LooseVersion("14.0.0"):
+            # PyArrow versions before 14.0.0 do not support casting FixedSizeListArray to ListArray
+            with self.assertRaises(PySparkTypeError):
+                df = self.spark.createDataFrame(t)
+        else:
+            df = self.spark.createDataFrame(t)
+            self.assertIsInstance(df.schema["fsl"].dataType, ArrayType)
 
 
 @unittest.skipIf(
