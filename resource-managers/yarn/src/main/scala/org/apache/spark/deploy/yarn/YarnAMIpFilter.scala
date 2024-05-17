@@ -29,7 +29,8 @@ import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.internal.Logging
 
-// This class is inspired by org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter
+// A functional equivalent rewrite of `org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter`,
+// refer to Hadoop 3.4.0
 class YarnAMIpFilter extends Filter with Logging {
 
   import YarnAMIpFilter._
