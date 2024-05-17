@@ -56,7 +56,7 @@ class MsSqlServerPushdownIntegrationSuite
 
     executeUpdate(
       s"""CREATE TABLE "$schema"."$tablePrefix"
-         | (id INTEGER, st VARCHAR(MAX), random_col INT);""".stripMargin
+         | (id INTEGER, st VARCHAR(MAX), num_col INT);""".stripMargin
     )
 
     executeUpdate(
@@ -66,7 +66,7 @@ class MsSqlServerPushdownIntegrationSuite
 
     executeUpdate(
       s"""CREATE TABLE "$schema"."${tablePrefix}_string_test"
-         | (id INTEGER, st VARCHAR(MAX), random_col INT);""".stripMargin
+         | (id INTEGER, st VARCHAR(MAX), num_col INT);""".stripMargin
     )
 
     executeUpdate(

@@ -363,6 +363,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     val df = sql(s"SELECT url_decode(name) FROM $catalogAndNamespace." +
       s"${caseConvert("employee")}")
     checkColumnPruned(df, "name")
+  }
 
   test("SPARK-48172: Test CONTAINS") {
     val df1 = spark.sql(

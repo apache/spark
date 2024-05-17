@@ -18,6 +18,7 @@
 package test.scala.org.apache.spark.sql.jdbc.v2
 
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.sql.jdbc.DockerIntegrationFunSuite
 import org.apache.spark.sql.test.SharedSparkSession
@@ -28,6 +29,12 @@ trait V2JDBCPushdownTest extends SharedSparkSession with DockerIntegrationFunSui
   protected def isFilterRemoved(df: DataFrame): Boolean = {
     df.queryExecution.sparkPlan.collectFirst {
       case f: FilterExec => f
+    }.isEmpty
+  }
+
+  protected def isAggregateRemoved(df: DataFrame): Boolean = {
+    df.queryExecution.optimizedPlan.collect {
+      case agg: Aggregate => agg
     }.isEmpty
   }
 
@@ -48,7 +55,7 @@ trait V2JDBCPushdownTest extends SharedSparkSession with DockerIntegrationFunSui
 
     executeUpdate(
       s"""CREATE TABLE "$schema"."$tablePrefix"
-         | (id INTEGER, st STRING, random_col INT);""".stripMargin
+         | (id INTEGER, st STRING, num_col INT);""".stripMargin
     )
 
     executeUpdate(
@@ -58,7 +65,7 @@ trait V2JDBCPushdownTest extends SharedSparkSession with DockerIntegrationFunSui
 
     executeUpdate(
       s"""CREATE TABLE "$schema"."${tablePrefix}_string_test"
-         | (id INTEGER, st STRING, random_col INT);""".stripMargin
+         | (id INTEGER, st STRING, num_col INT);""".stripMargin
     )
 
     executeUpdate(
@@ -99,9 +106,9 @@ trait V2JDBCPushdownTest extends SharedSparkSession with DockerIntegrationFunSui
       s"""INSERT INTO "$schema"."${tablePrefix}_string_test" VALUES (0, '   forth   ', 1000)""")
 
     executeUpdate(s"""INSERT INTO "$schema"."$tablePrefix" VALUES (1, 'ab', 1000)""")
-    executeUpdate(s"""INSERT INTO "$schema"."$tablePrefix" VALUES (2, 'aba', 900)""")
+    executeUpdate(s"""INSERT INTO "$schema"."$tablePrefix" VALUES (2, 'aba', NULL)""")
     executeUpdate(s"""INSERT INTO "$schema"."$tablePrefix" VALUES (3, 'abb', 800)""")
-    executeUpdate(s"""INSERT INTO "$schema"."$tablePrefix" VALUES (4, 'abc', 1100)""")
+    executeUpdate(s"""INSERT INTO "$schema"."$tablePrefix" VALUES (4, 'abc', NULL)""")
     executeUpdate(s"""INSERT INTO "$schema"."$tablePrefix" VALUES (5, 'abd', 1200)""")
     executeUpdate(s"""INSERT INTO "$schema"."$tablePrefix" VALUES (6, 'abe', 1250)""")
     executeUpdate(s"""INSERT INTO "$schema"."$tablePrefix" VALUES (7, 'abf', 1200)""")
@@ -279,7 +286,7 @@ trait V2JDBCPushdownTest extends SharedSparkSession with DockerIntegrationFunSui
   test("ABS predicate push down") {
     val df = sql(
       s"SELECT id " +
-        s"FROM `$catalog`.`$schema`.`$tablePrefix` where abs(random_col) = 1300")
+        s"FROM `$catalog`.`$schema`.`$tablePrefix` where abs(num_col) = 1300")
     checkAnswer(df, Row(8))
     assert(isFilterRemoved(df))
     commonAssertionOnDataFrame(df)
@@ -292,5 +299,21 @@ trait V2JDBCPushdownTest extends SharedSparkSession with DockerIntegrationFunSui
     checkAnswer(df, Row(1))
     assert(isFilterRemoved(df))
     commonAssertionOnDataFrame(df)
+  }
+
+  test("MAX AND MIN aggregate push down") {
+    val df = sql(
+      s"SELECT MAX(num_col) " +
+        s"FROM `$catalog`.`$schema`.`$tablePrefix`")
+    checkAnswer(df, Row(1250))
+    assert(isAggregateRemoved(df))
+    commonAssertionOnDataFrame(df)
+
+    val df2 = sql(
+      s"SELECT MIN(num_col) " +
+        s"FROM `$catalog`.`$schema`.`$tablePrefix`")
+    checkAnswer(df2, Row(-1300))
+    assert(isAggregateRemoved(df2))
+    commonAssertionOnDataFrame(df2)
   }
 }
