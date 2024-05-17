@@ -376,12 +376,8 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       (1 << 29) | 0xFFFF // ICU with invalid locale id
     )
     badCollationIds.foreach(collationId => {
-      val e = intercept[SparkException](fetchCollationUnsafe(collationId))
-      // user cannot specify collation ids directly so this is an internal error
-      assert(e.getErrorClass === "INTERNAL_ERROR")
-    })
-    badCollationIds.foreach(collationId => {
-      assert(fetchCollation(collationId).collationName == "UTF8_BINARY")
+      // assumptions about collation id will break and assert statement will fail
+      intercept[AssertionError](fetchCollation(collationId))
     })
   }
 

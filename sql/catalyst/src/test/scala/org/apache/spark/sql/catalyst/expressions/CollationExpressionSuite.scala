@@ -162,4 +162,32 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(ArrayExcept(left, right), out)
     }
   }
+
+  test("collation name normalization in collation expression") {
+    Seq(
+      ("en_USA", "en_USA"),
+      ("en_CS", "en"),
+      ("en_AS", "en"),
+      ("en_CS_AS", "en"),
+      ("en_AS_CS", "en"),
+      ("en_CI", "en_CI"),
+      ("en_AI", "en_AI"),
+      ("en_AI_CI", "en_CI_AI"),
+      ("en_CI_AI", "en_CI_AI"),
+      ("en_CS_AI", "en_AI"),
+      ("en_AI_CS", "en_AI"),
+      ("en_CI_AS", "en_CI"),
+      ("en_AS_CI", "en_CI"),
+      ("en_USA_AI_CI", "en_USA_CI_AI"),
+      // randomized case
+      ("EN_USA", "en_USA"),
+      ("SR_CYRL", "sr_Cyrl"),
+      ("sr_cyrl_srb", "sr_Cyrl_SRB"),
+      ("sR_cYRl_sRb", "sr_Cyrl_SRB")
+    ).foreach {
+      case (collation, normalized) =>
+        checkEvaluation(Collation(Literal.create("abc", StringType(collation))).replacement,
+          normalized)
+    }
+  }
 }
