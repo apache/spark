@@ -163,7 +163,12 @@ class XmlOptions(
       parameters.getOrElse(TIME_ZONE, defaultTimeZoneId)))
 
   // A language tag in IETF BCP 47 format
-  val locale: Locale = parameters.get(LOCALE).map(Locale.forLanguageTag).getOrElse(Locale.US)
+  val locale: Locale = parameters.get(LOCALE).map {
+    case null =>
+      throw QueryCompilationErrors.localeIsNull()
+    case value =>
+      Locale.forLanguageTag(value).getOrElse(Locale.US)
+  }
 
   val multiLine = parameters.get(MULTI_LINE).map(_.toBoolean).getOrElse(true)
   val charset = parameters.getOrElse(ENCODING,

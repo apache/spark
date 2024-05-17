@@ -906,4 +906,22 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
       "QUESTION"
     )
   }
+
+  test("SPARK-48315: null locale should not raise NPE") {
+    val langTag = "en-US"
+    val locale = Locale.forLanguageTag(langTag)
+    val date = new SimpleDateFormat("yyyy-MM-dd").parse("2018-11-05")
+    val schema = new StructType().add("d", DateType)
+    val dateFormat = "MMM yyyy"
+    val sdf = new SimpleDateFormat(dateFormat, locale)
+    val dateStr = sdf.format(date)
+    val options = Map("dateFormat" -> dateFormat, "locale" -> null)
+
+    checkError(
+      intercept[AnalysisException] {
+        JsonToStructs(schema, options, Literal.create(dateStr), UTC_OPT)
+      },
+      errorClass = "INVALID_LOCALE"
+    )
+  }
 }

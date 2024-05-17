@@ -27,7 +27,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{DataSourceOptions, FileSourceOptions}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumnsUtils.EXISTS_DEFAULT_COLUMN_METADATA_KEY
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types.StructType
 
@@ -149,11 +149,11 @@ class CSVOptions(
     parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, defaultTimeZoneId))
 
   // A language tag in IETF BCP 47 format
-  val locale: Locale = try {
-    parameters.get(LOCALE).map(Locale.forLanguageTag).getOrElse(Locale.US)
-  } catch {
-    case _: NullPointerException =>
+  val locale: Locale = parameters.get(LOCALE).map {
+    case null =>
       throw QueryCompilationErrors.localeIsNull()
+    case value =>
+      Locale.forLanguageTag(value).getOrElse(Locale.US)
   }
 
   /**
