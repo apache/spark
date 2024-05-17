@@ -768,37 +768,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     })
   }
 
-  test("hash based joins are also allowed for non-binary collated strings") {
-    val in = (('a' to 'z') ++ ('A' to 'Z')).map(_.toString * 3).map(e => Row.apply(e, e))
-
-    val schema = StructType(StructField(
-      "col_non_binary",
-      StringType(CollationFactory.collationNameToId("UTF8_BINARY_LCASE"))) ::
-      StructField("col_binary", StringType) :: Nil)
-    val df1 = spark.createDataFrame(sparkContext.parallelize(in), schema)
-
-    // Binary collations are allowed to use hash join.
-    val bJoin = df1.hint("broadcast").join(df1, df1("col_binary") === df1("col_binary"))
-    val binaryJoinPlan = bJoin.queryExecution.executedPlan
-    assert(collectFirst(binaryJoinPlan) {
-      case _: BroadcastHashJoinExec => ()
-    }.nonEmpty)
-
-    // Hash join is also used for non-binary collated strings.
-    val nbJoin = df1.hint("broadcast").join(df1, df1("col_non_binary") === df1("col_non_binary"))
-    val non_binaryJoinPlan = nbJoin.queryExecution.executedPlan
-    assert(collectFirst(non_binaryJoinPlan) {
-      case _: BroadcastHashJoinExec => ()
-    }.nonEmpty)
-    // This is possible because CollationKey is injected into the plan.
-    assert(non_binaryJoinPlan.toString().contains("collationkey"))
-
-    // Merge join will not be used for non-binary collated strings.
-    assert(collectFirst(non_binaryJoinPlan) {
-      case _: SortMergeJoinExec => ()
-    }.isEmpty)
-  }
-
   test("Generated column expressions using collations - errors out") {
     checkError(
       exception = intercept[AnalysisException] {
@@ -1074,17 +1043,26 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         val df = sql(s"SELECT * FROM $t1 JOIN $t2 ON $t1.x = $t2.y")
         checkAnswer(df, t.result)
 
+        val queryPlan = df.queryExecution.executedPlan
+
         // confirm that hash join is used instead of sort merge join
         assert(
-          collectFirst(df.queryExecution.executedPlan) {
+          collectFirst(queryPlan) {
             case _: HashJoin => ()
           }.nonEmpty
         )
         assert(
-          collectFirst(df.queryExecution.executedPlan) {
+          collectFirst(queryPlan) {
             case _: ShuffledJoin => ()
           }.isEmpty
         )
+
+        // if collation doesn't support binary equality, collation key should be injected
+        if (!CollationFactory.fetchCollation(t.collation).supportsBinaryEquality) {
+          assert(collectFirst(queryPlan) {
+            case b: BroadcastHashJoinExec => b.leftKeys.head
+          }.head.isInstanceOf[CollationKey])
+        }
       }
     })
   }
@@ -1121,14 +1099,16 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         val df = sql(s"SELECT * FROM $t1 JOIN $t2 ON $t1.x = $t2.x AND $t1.y = $t2.y")
         checkAnswer(df, t.result)
 
+        val queryPlan = df.queryExecution.executedPlan
+
         // confirm that hash join is used instead of sort merge join
         assert(
-          collectFirst(df.queryExecution.executedPlan) {
+          collectFirst(queryPlan) {
             case _: HashJoin => ()
           }.nonEmpty
         )
         assert(
-          collectFirst(df.queryExecution.executedPlan) {
+          collectFirst(queryPlan) {
             case _: ShuffledJoin => ()
           }.isEmpty
         )
