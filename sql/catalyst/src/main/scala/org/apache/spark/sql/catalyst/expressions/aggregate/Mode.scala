@@ -42,11 +42,6 @@ case class Mode(
     this(child, 0, 0, Some(reverse))
   }
 
-  final lazy val collationId: Int = child.dataType match {
-    case c: StringType => c.collationId
-    case _ => CollationFactory.UTF8_BINARY_COLLATION_ID
-  }
-
   // Returns null for empty inputs
   override def nullable: Boolean = true
 
@@ -80,8 +75,10 @@ case class Mode(
     if (buffer.isEmpty) {
       return null
     }
-    val collationAwareBuffer =
-      if (!CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
+    val collationAwareBuffer = child.dataType match {
+      case c: StringType if
+        !CollationFactory.fetchCollation(c.collationId).supportsBinaryEquality =>
+        val collationId = c.collationId
         val modeMap = buffer.toSeq.groupMapReduce {
           case (key: String, _) =>
             CollationFactory.getCollationKey(UTF8String.fromString(key), collationId)
@@ -90,9 +87,8 @@ case class Mode(
           case (key, _) => key
         }(x => x)((x, y) => (x._1, x._2 + y._2)).values
         modeMap
-      } else {
-        buffer
-      }
+      case _ => buffer
+    }
     reverseOpt.map { reverse =>
       val defaultKeyOrdering = if (reverse) {
         PhysicalDataType.ordering(child.dataType).asInstanceOf[Ordering[AnyRef]].reverse
