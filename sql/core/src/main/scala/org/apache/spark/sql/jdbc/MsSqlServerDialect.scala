@@ -53,7 +53,7 @@ private case class MsSqlServerDialect() extends JdbcDialect {
   // scalastyle:on line.size.limit
   private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
     "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP")
-  private val supportedStringFunctions = Set("UPPER", "LOWER", "TRANSLATE")
+  private val supportedStringFunctions = Set("UPPER", "LOWER", "TRANSLATE", "CHAR_LENGTH")
   private val supportedMathFunctions = Set("SIN", "COS", "ABS")
   private val supportedSqlFunctions = Set("COALESCE")
   private val supportedFunctions =
@@ -85,6 +85,7 @@ private case class MsSqlServerDialect() extends JdbcDialect {
       case "VAR_SAMP" => "VAR"
       case "STDDEV_POP" => "STDEVP"
       case "STDDEV_SAMP" => "STDEV"
+      case "CHAR_LENGTH" => "DATALENGTH"
       case _ => super.dialectFunctionName(funcName)
     }
 

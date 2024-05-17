@@ -90,6 +90,8 @@ trait V2JDBCPushdownTest extends SharedSparkSession with DockerIntegrationFunSui
       s"""INSERT INTO "$schema"."${tablePrefix}_string_test" VALUES (0, 'FiRs''T', 1000)""")
     executeUpdate(
       s"""INSERT INTO "$schema"."${tablePrefix}_string_test" VALUES (0, 'sE Co nD', 1000)""")
+    executeUpdate(
+      s"""INSERT INTO "$schema"."${tablePrefix}_string_test" VALUES (0, '   forth   ', 1000)""")
 
     executeUpdate(s"""INSERT INTO "$schema"."$tablePrefix" VALUES (1, 'ab', 1000)""")
     executeUpdate(s"""INSERT INTO "$schema"."$tablePrefix" VALUES (2, 'aba', 900)""")
@@ -98,6 +100,7 @@ trait V2JDBCPushdownTest extends SharedSparkSession with DockerIntegrationFunSui
     executeUpdate(s"""INSERT INTO "$schema"."$tablePrefix" VALUES (5, 'abd', 1200)""")
     executeUpdate(s"""INSERT INTO "$schema"."$tablePrefix" VALUES (6, 'abe', 1250)""")
     executeUpdate(s"""INSERT INTO "$schema"."$tablePrefix" VALUES (7, 'abf', 1200)""")
+    executeUpdate(s"""INSERT INTO "$schema"."$tablePrefix" VALUES (8, 'abg', -1300)""")
   }
 
   protected def checkAnswer(df: DataFrame, expectedAnswer: Seq[Row]): Unit =
@@ -207,7 +210,7 @@ trait V2JDBCPushdownTest extends SharedSparkSession with DockerIntegrationFunSui
 
   test("not predicate push down") {
     val df = sql(s"SELECT id FROM `$catalog`.`$schema`.`$tablePrefix` where NOT id = 1")
-    checkAnswer(df, (2 to 7).map(Row(_)))
+    checkAnswer(df, (2 to 8).map(Row(_)))
     assert(isFilterRemoved(df))
     commonAssertionOnDataFrame(df)
   }
@@ -254,6 +257,24 @@ trait V2JDBCPushdownTest extends SharedSparkSession with DockerIntegrationFunSui
     checkAnswer(df4, Row("sE Co nD"))
     assert(isFilterRemoved(df4))
     commonAssertionOnDataFrame(df4)
+  }
+
+  test("LENGTH predicate push down") {
+    val df = sql(
+      s"SELECT st " +
+        s"FROM `$catalog`.`$schema`.`${tablePrefix}_string_test` where length(st) = 11")
+    checkAnswer(df, Row("   forth   "))
+    assert(isFilterRemoved(df))
+    commonAssertionOnDataFrame(df)
+  }
+
+  test("ABS predicate push down") {
+    val df = sql(
+      s"SELECT id " +
+        s"FROM `$catalog`.`$schema`.`$tablePrefix` where abs(random_col) = 1300")
+    checkAnswer(df, Row(8))
+    assert(isFilterRemoved(df))
+    commonAssertionOnDataFrame(df)
   }
 
 }
