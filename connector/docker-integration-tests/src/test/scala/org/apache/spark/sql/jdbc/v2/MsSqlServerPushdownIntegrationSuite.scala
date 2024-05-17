@@ -73,6 +73,11 @@ class MsSqlServerPushdownIntegrationSuite
       s"""CREATE TABLE "$schema"."${tablePrefix}_with_nulls"
          | (id INTEGER, st VARCHAR(MAX));""".stripMargin
     )
+
+    executeUpdate(
+      s"""CREATE TABLE "$schema"."${tablePrefix}_numeric_test"
+         | (id INTEGER, dec DECIMAL(10, 2));""".stripMargin
+    )
   }
 
   /**

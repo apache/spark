@@ -65,6 +65,11 @@ trait V2JDBCPushdownTest extends SharedSparkSession with DockerIntegrationFunSui
       s"""CREATE TABLE "$schema"."${tablePrefix}_with_nulls"
          | (id INTEGER, st STRING);""".stripMargin
     )
+
+    executeUpdate(
+      s"""CREATE TABLE "$schema"."${tablePrefix}_numeric_test"
+         | (id INTEGER, dec DECIMAL(10, 2));""".stripMargin
+    )
   }
 
   protected def prepareData(): Unit = {
@@ -101,6 +106,9 @@ trait V2JDBCPushdownTest extends SharedSparkSession with DockerIntegrationFunSui
     executeUpdate(s"""INSERT INTO "$schema"."$tablePrefix" VALUES (6, 'abe', 1250)""")
     executeUpdate(s"""INSERT INTO "$schema"."$tablePrefix" VALUES (7, 'abf', 1200)""")
     executeUpdate(s"""INSERT INTO "$schema"."$tablePrefix" VALUES (8, 'abg', -1300)""")
+
+    executeUpdate(
+      s"""INSERT INTO "$schema"."${tablePrefix}_numeric_test" VALUES (1, 42.42)""")
   }
 
   protected def checkAnswer(df: DataFrame, expectedAnswer: Seq[Row]): Unit =
@@ -277,4 +285,12 @@ trait V2JDBCPushdownTest extends SharedSparkSession with DockerIntegrationFunSui
     commonAssertionOnDataFrame(df)
   }
 
+  test("FLOOR predicate push down") {
+    val df = sql(
+      s"SELECT id " +
+        s"FROM `$catalog`.`$schema`.`${tablePrefix}_numeric_test` where floor(dec) = 42")
+    checkAnswer(df, Row(1))
+    assert(isFilterRemoved(df))
+    commonAssertionOnDataFrame(df)
+  }
 }
