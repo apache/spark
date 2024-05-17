@@ -19,7 +19,9 @@ package org.apache.spark.sql.execution.streaming
 import java.util.UUID
 import java.util.concurrent.TimeUnit.NANOSECONDS
 
+import org.apache.spark.SparkContext
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -32,8 +34,64 @@ import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSch
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
-import org.apache.spark.util.{CompletionIterator, SerializableConfiguration, Utils}
+import org.apache.spark.util.{AccumulatorV2, CompletionIterator, SerializableConfiguration, Utils}
 
+class ColFamilyMetadata
+class ArbitraryInfo(value: String) extends AccumulatorV2[String, String] {
+
+  private var _value: String = value
+  /**
+   * Returns if this accumulator is zero value or not. e.g. for a counter accumulator, 0 is zero
+   * value; for a list accumulator, Nil is zero value.
+   */
+  override def isZero: Boolean = {
+    _value.isEmpty
+  }
+
+  /**
+   * Creates a new copy of this accumulator.
+   */
+  override def copy(): AccumulatorV2[String, String] = {
+    new ArbitraryInfo(_value)
+  }
+
+  /**
+   * Resets this accumulator, which is zero value. i.e. call `isZero` must
+   * return true.
+   */
+  override def reset(): Unit = {
+    _value = ""
+  }
+
+  /**
+   * Takes the inputs and accumulates.
+   */
+  override def add(v: String): Unit = {
+    _value = v
+  }
+
+  /**
+   * Merges another same-type accumulator into this one and update its state, i.e. this should be
+   * merge-in-place.
+   */
+  override def merge(other: AccumulatorV2[String, String]): Unit = {
+    _value = other.value
+  }
+
+  /**
+   * Defines the current value of this accumulator
+   */
+  override def value: String = _value
+}
+
+object ArbitraryInfo {
+
+  def create(sc: SparkContext, key: String, value: String): ArbitraryInfo = {
+    val arbInfo = new ArbitraryInfo(value)
+    arbInfo.register(sc, Some(key))
+    arbInfo
+  }
+}
 /**
  * Physical operator for executing `TransformWithState`
  *
@@ -73,9 +131,18 @@ case class TransformWithStateExec(
     initialStateDataAttrs: Seq[Attribute],
     initialStateDeserializer: Expression,
     initialState: SparkPlan)
-  extends BinaryExecNode with StateStoreWriter with WatermarkSupport with ObjectProducerExec {
+  extends BinaryExecNode
+    with StateStoreWriter
+    with WatermarkSupport
+    with ObjectProducerExec
+    with Logging {
 
   override def shortName: String = "transformWithStateExec"
+
+  val arbInfos: Map[String, ArbitraryInfo] = Map(
+    "arbInfo1" -> ArbitraryInfo.create(sparkContext, "key1", "value1"),
+    "arbInfo2" -> ArbitraryInfo.create(sparkContext, "key2", "value2")
+  )
 
   override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
     if (timeMode == ProcessingTime) {
@@ -338,6 +405,13 @@ case class TransformWithStateExec(
     )
   }
 
+  override def writeArbitraryInfos(): Unit = {
+    arbInfos.foreach(kv => {
+      val arbInfo = kv._2
+      logError(s"### arbInfo: ${kv._1} ${arbInfo.value}")
+    })
+  }
+
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
 
@@ -457,7 +531,7 @@ case class TransformWithStateExec(
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
     val processorHandle = new StatefulProcessorHandleImpl(
       store, getStateInfo.queryRunId, keyEncoder, timeMode,
-      isStreaming, batchTimestampMs, metrics)
+      isStreaming, batchTimestampMs, metrics, arbInfos)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
     statefulProcessor.setHandle(processorHandle)
     statefulProcessor.init(outputMode, timeMode)
@@ -471,7 +545,7 @@ case class TransformWithStateExec(
       initStateIterator: Iterator[InternalRow]):
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
     val processorHandle = new StatefulProcessorHandleImpl(store, getStateInfo.queryRunId,
-      keyEncoder, timeMode, isStreaming, batchTimestampMs, metrics)
+      keyEncoder, timeMode, isStreaming, batchTimestampMs, metrics, arbInfos)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
     statefulProcessor.setHandle(processorHandle)
     statefulProcessor.init(outputMode, timeMode)
