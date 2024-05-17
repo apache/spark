@@ -2677,7 +2677,7 @@
       },
       "CREATE_ROUTINE_WITH_IF_NOT_EXISTS_AND_REPLACE" : {
         "message" : [
-          "CREATE PROCEDURE or CREATE FUNCTION with both IF NOT EXISTS and REPLACE is not allowed."
+          "Cannot create a routine with both IF NOT EXISTS and REPLACE specified."
         ]
       },
       "CREATE_TEMP_FUNC_WITH_DATABASE" : {
