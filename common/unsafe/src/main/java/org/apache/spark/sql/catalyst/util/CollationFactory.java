@@ -41,9 +41,9 @@ public final class CollationFactory {
    * Identifier for single a collation.
    */
   public static class CollationIdentifier {
-    public final String provider;
-    public final String name;
-    public final String version;
+    private final String provider;
+    private final String name;
+    private final String version;
 
     public CollationIdentifier(String provider, String collationName, String version) {
       this.provider = provider;
@@ -64,20 +64,25 @@ public final class CollationFactory {
       return new CollationIdentifier(parts[0], parts[1], parts[2]);
     }
 
-    @Override
-    public String toString() {
-      if (version != null) {
-        return String.format("%s.%s.%s", provider, name, version);
-      }
-
-      return toStringWithoutVersion();
-    }
-
     /**
      * Returns the identifier's string value without the version.
+     * This is used for the table schema as the schema doesn't care about the version,
+     * only the statistics do.
      */
     public String toStringWithoutVersion() {
       return String.format("%s.%s", provider, name);
+    }
+
+    public String getProvider() {
+      return provider;
+    }
+
+    public String getName() {
+      return name;
+    }
+
+    public Optional<String> getVersion() {
+      return Optional.ofNullable(version);
     }
   }
 
