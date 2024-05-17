@@ -565,7 +565,10 @@ class HiveDDLSuite
       val basePath = new File(tmpDir.getCanonicalPath)
       val part1Path = new File(new File(basePath, "part10"), "part11")
       val part2Path = new File(new File(basePath, "part20"), "part21")
+      val part1NewPath = new File(new File(basePath, "ds=2008-04-08"), "hr=11")
+      val part2NewPath = new File(new File(basePath, "ds=2008-04-08"), "hr=12")
       val dirSet = part1Path :: part2Path :: Nil
+      val dirNewSet = part1NewPath :: part2NewPath :: Nil
 
       // Before data insertion, all the directory are empty
       assert(dirSet.forall(dir => dir.listFiles == null || dir.listFiles.isEmpty))
@@ -583,11 +586,13 @@ class HiveDDLSuite
              |PARTITION (ds='2008-04-08', hr=12) LOCATION '${part2Path.toURI}'
            """.stripMargin)
         assert(dirSet.forall(dir => dir.listFiles == null || dir.listFiles.isEmpty))
+        assert(dirNewSet.forall(dir => dir.listFiles == null || dir.listFiles.isEmpty))
 
         sql(s"INSERT OVERWRITE TABLE $tab partition (ds='2008-04-08', hr=11) SELECT 1, 'a'")
         sql(s"INSERT OVERWRITE TABLE $tab partition (ds='2008-04-08', hr=12) SELECT 2, 'b'")
         // add partition will not delete the data
-        assert(dirSet.forall(dir => dir.listFiles.nonEmpty))
+        assert(dirSet.forall(dir => dir.listFiles == null || dir.listFiles.isEmpty))
+        assert(dirNewSet.forall(dir => dir.listFiles.nonEmpty))
         checkAnswer(
           spark.table(tab),
           Row(1, "a", "2008-04-08", "11") :: Row(2, "b", "2008-04-08", "12") :: Nil
@@ -595,12 +600,12 @@ class HiveDDLSuite
 
         sql(s"ALTER TABLE $tab DROP PARTITION (ds='2008-04-08', hr=11)")
         // drop partition will delete the data
-        assert(part1Path.listFiles == null || part1Path.listFiles.isEmpty)
-        assert(part2Path.listFiles.nonEmpty)
+        assert(part1NewPath.listFiles == null || part1NewPath.listFiles.isEmpty)
+        assert(part2NewPath.listFiles.nonEmpty)
 
         sql(s"DROP TABLE $tab")
         // drop table will delete the data of the managed table
-        assert(dirSet.forall(dir => dir.listFiles == null || dir.listFiles.isEmpty))
+        assert(dirNewSet.forall(dir => dir.listFiles == null || dir.listFiles.isEmpty))
       }
     }
   }
