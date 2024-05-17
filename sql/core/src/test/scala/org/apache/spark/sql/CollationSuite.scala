@@ -21,7 +21,9 @@ import scala.jdk.CollectionConverters.MapHasAsJava
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.analysis.RewriteGroupByCollation
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, CollationKey, Literal}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LocalRelation}
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2ProviderWithCustomSchema}
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable}
@@ -29,7 +31,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec}
+import org.apache.spark.sql.execution.aggregate._
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.{MapType, StringType, StructField, StructType}
@@ -1049,6 +1051,70 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         sql(s"SELECT c, i, nth_value(i, 2) OVER (PARTITION BY c ORDER BY i) FROM $t2")
       checkAnswer(dfNonBinary, dfBinary)
     }
+  }
+
+  test("RewriteGroupByCollation rule rewrites Aggregate logical plan") {
+    val dataType = StringType(CollationFactory.collationNameToId("UNICODE_CI"))
+    val attrRef = AttributeReference("attr", dataType)()
+    // original logical plan should only contain one attribute in groupingExpressions
+    val originalPlan = Aggregate(Seq(attrRef), Seq(attrRef), LocalRelation(attrRef))
+    assert(originalPlan.groupingExpressions.size == 1)
+    assert(originalPlan.groupingExpressions.head.isInstanceOf[AttributeReference])
+    assert(originalPlan.groupingExpressions.head == attrRef)
+    // plan level rewrite should replace attr with CollationKey in Aggregate logical plan
+    val newPlan = RewriteGroupByCollation(originalPlan).asInstanceOf[Aggregate]
+    assert(newPlan.resolved)
+    assert(newPlan.groupingExpressions.size == 1)
+    assert(newPlan.groupingExpressions.head.isInstanceOf[CollationKey])
+    assert(newPlan.groupingExpressions.head.asInstanceOf[CollationKey].expr == attrRef)
+  }
+
+  test("RewriteGroupByCollation rule works for string") {
+    val dataType = StringType(CollationFactory.collationNameToId("UNICODE_CI"))
+    val schema = StructType(Seq(StructField("name", dataType)))
+    val data = Seq(Row("AA"), Row("aa"), Row("BB"))
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+    df.createOrReplaceTempView("tempTable")
+    val dfGroupBy = spark.sql("SELECT name, COUNT(*) FROM tempTable GROUP BY name")
+    // test RewriteGroupByCollation idempotence
+    val logicalPlan = dfGroupBy.queryExecution.analyzed
+    val newPlan = RewriteGroupByCollation(logicalPlan)
+    val newNewPlan = RewriteGroupByCollation(newPlan)
+    assert(newPlan == newNewPlan)
+    // get the query execution result
+    checkAnswer(dfGroupBy, Seq(Row("AA", 2), Row("BB", 1)))
+  }
+
+  test("hash aggregation should be used for collated strings") {
+    val t1 = "T_1"
+
+    case class HashAggregationTestCase[R](collation: String, result: R)
+    val testCases = Seq(
+      HashAggregationTestCase("UTF8_BINARY", Seq(Row("aa", 1), Row("AA", 1), Row("bb", 1))),
+      HashAggregationTestCase("UTF8_BINARY_LCASE", Seq(Row("aa", 2), Row("bb", 1))),
+//      HashJoinTestCase("UNICODE", Seq(Row("aa", 1, "aa", 2))),
+//      HashJoinTestCase("UNICODE_CI", Seq(Row("aa", 1, "AA", 2), Row("aa", 1, "aa", 2)))
+    )
+
+    testCases.foreach(t => {
+      withTable(t1) {
+        sql(s"CREATE TABLE $t1 (x STRING COLLATE ${t.collation}) USING PARQUET")
+        sql(s"INSERT INTO $t1 VALUES ('aa'), ('AA'), ('bb')")
+
+        val df = sql(s"SELECT x, COUNT(*) FROM $t1 GROUP BY x")
+        checkAnswer(df, t.result)
+
+        val queryPlan = df.queryExecution.executedPlan
+
+        // confirm that hash agg is used instead of sort merge agg
+        assert(collectFirst(queryPlan) {
+          case _: HashAggregateExec => ()
+        }.nonEmpty)
+        assert(collectFirst(queryPlan) {
+          case _: SortAggregateExec => ()
+        }.isEmpty)
+      }
+    })
   }
 
   test("hll sketch aggregate should respect collation") {

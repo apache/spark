@@ -296,6 +296,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       EliminateView,
       ReplaceExpressions,
       RewriteNonCorrelatedExists,
+      RewriteGroupByCollation,
       PullOutGroupingExpressions,
       ComputeCurrentTime,
       ReplaceCurrentLike(catalogManager),
