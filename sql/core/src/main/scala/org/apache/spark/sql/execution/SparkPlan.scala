@@ -96,6 +96,10 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    */
   def vectorTypes: Option[Seq[String]] = None
 
+  def writeOperatorStateMetadata(): Unit = {
+    children.foreach(_.writeOperatorStateMetadata())
+  }
+
   /** Overridden make copy also propagates sqlContext to copied plan. */
   override def makeCopy(newArgs: Array[AnyRef]): SparkPlan = {
     if (session != null) {

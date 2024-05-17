@@ -32,7 +32,38 @@ import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSch
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
-import org.apache.spark.util.{CompletionIterator, SerializableConfiguration, Utils}
+import org.apache.spark.util.{CollectionAccumulator, CompletionIterator, SerializableConfiguration, Utils}
+
+
+class OperatorStateMetadataV2(
+  val operatorInfoV2: OperatorInfoV2
+)
+
+class OperatorInfoV2(
+  val operatorId: String,
+  val operatorName: String,
+  val stateStoreMetadatas: Seq[StateStoreMetadataV2]
+)
+
+class StateStoreMetadataV2(
+  val storeName: String,
+  val numPartitions: String,
+  val colFamilyMetadatas: CollectionAccumulator[ColFamilyMetadata]
+) {
+  def getStoreName: String = storeName
+  def getNumPartitions: String = numPartitions
+  def getColFamilyMetadatas: CollectionAccumulator[ColFamilyMetadata] = colFamilyMetadatas
+
+  def addColFamilyMetadata(colFamilyMetadata: ColFamilyMetadata): Unit = {
+    colFamilyMetadatas.add(colFamilyMetadata)
+  }
+}
+
+class ColFamilyMetadata(
+  val colFamilyName: String,
+  val stateType: String,
+  val ttlEnabled: Boolean
+)
 
 /**
  * Physical operator for executing `TransformWithState`
@@ -76,6 +107,19 @@ case class TransformWithStateExec(
   extends BinaryExecNode with StateStoreWriter with WatermarkSupport with ObjectProducerExec {
 
   override def shortName: String = "transformWithStateExec"
+
+  private var operatorStateMetadataV2: OperatorStateMetadataV2 = null
+
+  override def writeOperatorStateMetadata(): Unit = {
+    operatorStateMetadataV2.operatorInfoV2.stateStoreMetadatas.foreach { stateStoreMetadata =>
+      stateStoreMetadata.getColFamilyMetadatas.value.forEach { colFamilyMetadata =>
+        logError(s"### ${colFamilyMetadata.colFamilyName}," +
+          s" ${colFamilyMetadata.stateType}," +
+          s" ${colFamilyMetadata.ttlEnabled}")
+      }
+    }
+    children.foreach(_.writeOperatorStateMetadata())
+  }
 
   override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
     if (timeMode == ProcessingTime) {
@@ -341,6 +385,22 @@ case class TransformWithStateExec(
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
 
+
+    val colFamilyMetadatas = sparkContext.collectionAccumulator[ColFamilyMetadata]
+    // Create OperatorStateMetadataV2
+    val stateStoreMetadataV2 = new StateStoreMetadataV2(
+      storeName = "store",
+      numPartitions = getStateInfo.numPartitions.toString,
+      colFamilyMetadatas = colFamilyMetadatas
+    )
+    val operatorInfoV2 = new OperatorInfoV2(
+      operatorId = getStateInfo.operatorId.toString,
+      operatorName = "TransformWithStateExec",
+      stateStoreMetadatas = Seq(stateStoreMetadataV2)
+    )
+
+    operatorStateMetadataV2 = new OperatorStateMetadataV2(operatorInfoV2)
+
     validateTimeMode()
 
     if (hasInitialState) {
@@ -455,9 +515,14 @@ case class TransformWithStateExec(
    */
   private def processData(store: StateStore, singleIterator: Iterator[InternalRow]):
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
+    val colFamilyMetadatas = operatorStateMetadataV2
+      .operatorInfoV2
+      .stateStoreMetadatas
+      .head
+      .colFamilyMetadatas
     val processorHandle = new StatefulProcessorHandleImpl(
       store, getStateInfo.queryRunId, keyEncoder, timeMode,
-      isStreaming, batchTimestampMs, metrics)
+      isStreaming, batchTimestampMs, metrics, colFamilyMetadatas = Some(colFamilyMetadatas))
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
     statefulProcessor.setHandle(processorHandle)
     statefulProcessor.init(outputMode, timeMode)
@@ -470,8 +535,14 @@ case class TransformWithStateExec(
       childDataIterator: Iterator[InternalRow],
       initStateIterator: Iterator[InternalRow]):
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
-    val processorHandle = new StatefulProcessorHandleImpl(store, getStateInfo.queryRunId,
-      keyEncoder, timeMode, isStreaming, batchTimestampMs, metrics)
+    val colFamilyMetadatas = operatorStateMetadataV2
+      .operatorInfoV2
+      .stateStoreMetadatas
+      .head
+      .colFamilyMetadatas
+    val processorHandle = new StatefulProcessorHandleImpl(
+      store, getStateInfo.queryRunId, keyEncoder, timeMode,
+      isStreaming, batchTimestampMs, metrics, colFamilyMetadatas = Some(colFamilyMetadatas))
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
     statefulProcessor.setHandle(processorHandle)
     statefulProcessor.init(outputMode, timeMode)
