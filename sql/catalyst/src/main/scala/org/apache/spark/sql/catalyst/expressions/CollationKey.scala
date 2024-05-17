@@ -40,15 +40,7 @@ case class CollationKey(expr: Expression) extends UnaryExpression with ExpectsIn
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val collation = CollationFactory.fetchCollation(collationId)
-    if (collation.supportsBinaryEquality) {
-      defineCodeGen(ctx, ev, c => s"$c.getBytes()")
-    } else if (collation.supportsLowercaseEquality) {
-      defineCodeGen(ctx, ev, c => s"$c.toLowerCase().getBytes()")
-    } else {
-      defineCodeGen(ctx, ev, c => s"CollationFactory.fetchCollation" +
-        s"($collationId).collator.getCollationKey($c.toString()).toByteArray()")
-    }
+    defineCodeGen(ctx, ev, c => s"CollationFactory.getCollationKeyBytes($c, $collationId)")
   }
 
   override protected def withNewChildInternal(newChild: Expression): Expression = {

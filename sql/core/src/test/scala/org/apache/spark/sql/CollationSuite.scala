@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import scala.jdk.CollectionConverters.MapHasAsJava
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, InternalRow}
+import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2ProviderWithCustomSchema}
@@ -33,7 +33,6 @@ import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAg
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.{MapType, StringType, StructField, StructType}
-import org.apache.spark.unsafe.types.UTF8String
 
 class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   protected val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
@@ -769,7 +768,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     })
   }
 
-  test("hash based joins not allowed for non-binary collated strings") {
+  test("hash based joins are also allowed for non-binary collated strings") {
     val in = (('a' to 'z') ++ ('A' to 'Z')).map(_.toString * 3).map(e => Row.apply(e, e))
 
     val schema = StructType(StructField(
@@ -779,23 +778,23 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     val df1 = spark.createDataFrame(sparkContext.parallelize(in), schema)
 
     // Binary collations are allowed to use hash join.
-    assert(collectFirst(
-      df1.hint("broadcast").join(df1, df1("col_binary") === df1("col_binary"))
-        .queryExecution.executedPlan) {
+    val bJoin = df1.hint("broadcast").join(df1, df1("col_binary") === df1("col_binary"))
+    val binaryJoinPlan = bJoin.queryExecution.executedPlan
+    assert(collectFirst(binaryJoinPlan) {
       case _: BroadcastHashJoinExec => ()
     }.nonEmpty)
 
     // Hash join is also used for non-binary collated strings.
-    assert(collectFirst(
-      df1.hint("broadcast").join(df1, df1("col_non_binary") === df1("col_non_binary"))
-        .queryExecution.executedPlan) {
+    val nbJoin = df1.hint("broadcast").join(df1, df1("col_non_binary") === df1("col_non_binary"))
+    val non_binaryJoinPlan = nbJoin.queryExecution.executedPlan
+    assert(collectFirst(non_binaryJoinPlan) {
       case _: BroadcastHashJoinExec => ()
     }.nonEmpty)
+    // This is possible because CollationKey is injected into the plan.
+    assert(non_binaryJoinPlan.toString().contains("collationkey"))
 
     // Merge join will not be used for non-binary collated strings.
-    assert(collectFirst(
-      df1.hint("broadcast").join(df1, df1("col_non_binary") === df1("col_non_binary"))
-        .queryExecution.executedPlan) {
+    assert(collectFirst(non_binaryJoinPlan) {
       case _: SortMergeJoinExec => ()
     }.isEmpty)
   }
@@ -1049,68 +1048,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       val dfBinary =
         sql(s"SELECT c, i, nth_value(i, 2) OVER (PARTITION BY c ORDER BY i) FROM $t2")
       checkAnswer(dfNonBinary, dfBinary)
-    }
-  }
-
-  test("CollationKey generates correct collation key for string") {
-    val testCases = Seq(
-      ("", "UTF8_BINARY", UTF8String.fromString("").getBytes),
-      ("aa", "UTF8_BINARY", UTF8String.fromString("aa").getBytes),
-      ("AA", "UTF8_BINARY", UTF8String.fromString("AA").getBytes),
-      ("aA", "UTF8_BINARY", UTF8String.fromString("aA").getBytes),
-      ("", "UTF8_BINARY_LCASE", UTF8String.fromString("").getBytes),
-      ("aa", "UTF8_BINARY_LCASE", UTF8String.fromString("aa").getBytes),
-      ("AA", "UTF8_BINARY_LCASE", UTF8String.fromString("aa").getBytes),
-      ("aA", "UTF8_BINARY_LCASE", UTF8String.fromString("aa").getBytes),
-      ("", "UNICODE", UTF8String.fromString("").getBytes),
-      ("aa", "UNICODE", UTF8String.fromString("aa").getBytes),
-      ("AA", "UNICODE", UTF8String.fromString("AA").getBytes),
-      ("aA", "UNICODE", UTF8String.fromString("aA").getBytes),
-      ("", "UNICODE_CI", Array[Byte](1, 0)),
-      ("aa", "UNICODE_CI", Array[Byte](42, 42, 1, 6, 0)),
-      ("AA", "UNICODE_CI", Array[Byte](42, 42, 1, 6, 0)),
-      ("aA", "UNICODE_CI", Array[Byte](42, 42, 1, 6, 0))
-    )
-    for ((input, collation, expected) <- testCases) {
-      val collationId: Int = CollationFactory.collationNameToId(collation)
-      val attrRef: AttributeReference = AttributeReference("attr", StringType(collationId))()
-      // generate CollationKey for the input string
-      val collationKey: CollationKey = CollationKey(attrRef)
-      assert(collationKey.resolved)
-      val str: UTF8String = UTF8String.fromString(input)
-      assert(collationKey.nullSafeEval(str) === expected)
-    }
-  }
-
-  test("CollationKey generates correct collation key for string using codegen") {
-    val testCases = Seq(
-      ("", "UTF8_BINARY", ""),
-      ("aa", "UTF8_BINARY", "6161"),
-      ("AA", "UTF8_BINARY", "4141"),
-      ("aA", "UTF8_BINARY", "4161"),
-      ("", "UTF8_BINARY_LCASE", ""),
-      ("aa", "UTF8_BINARY_LCASE", "6161"),
-      ("AA", "UTF8_BINARY_LCASE", "6161"),
-      ("aA", "UTF8_BINARY_LCASE", "6161"),
-      ("", "UNICODE", ""),
-      ("aa", "UNICODE", "6161"),
-      ("AA", "UNICODE", "4141"),
-      ("aA", "UNICODE", "4161"),
-      ("", "UNICODE_CI", "1"),
-      ("aa", "UNICODE_CI", "6012a2a"),
-      ("AA", "UNICODE_CI", "6012a2a"),
-      ("aA", "UNICODE_CI", "6012a2a")
-    )
-    for ((input, collation, expected) <- testCases) {
-      val collationId: Int = CollationFactory.collationNameToId(collation)
-      val attrRef: AttributeReference = AttributeReference("attr", StringType(collationId))()
-      // generate CollationKey for the input string
-      val collationKey: CollationKey = CollationKey(attrRef)
-      val str: UTF8String = UTF8String.fromString(input)
-      val boundExpr = BindReferences.bindReference(collationKey, Seq(attrRef))
-      val ev = UnsafeProjection.create(Array(boundExpr).toIndexedSeq)
-      val strProj = ev.apply(InternalRow(str))
-      assert(strProj.toString.split(',').last.startsWith(expected))
     }
   }
 
