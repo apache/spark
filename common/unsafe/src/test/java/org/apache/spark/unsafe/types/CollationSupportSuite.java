@@ -585,7 +585,9 @@ public class CollationSupportSuite {
     assertStringInstr("i̇oİo12", "İo", "UTF8_BINARY_LCASE", 1);
     assertStringInstr("abİoi̇o", "i̇o", "UTF8_BINARY_LCASE", 3);
     assertStringInstr("abi̇oİo", "İo", "UTF8_BINARY_LCASE", 3);
+    assertStringInstr("abI\u0307oi̇o", "İo", "UTF8_BINARY_LCASE", 3);
     assertStringInstr("ai̇oxXİo", "Xx", "UTF8_BINARY_LCASE", 5);
+    assertStringInstr("abİoi̇o", "\u0307o", "UTF8_BINARY_LCASE", 6);
     assertStringInstr("aİoi̇oxx", "XX", "UTF8_BINARY_LCASE", 7);
   }
 
@@ -836,10 +838,12 @@ public class CollationSupportSuite {
     assertSubstringIndex("ai̇bi̇oİo12İoi̇o", "i̇o", -4, "UTF8_BINARY_LCASE", "İo12İoi̇o");
     assertSubstringIndex("ai̇bİoi̇o12i̇oİo", "İo", -4, "UTF8_BINARY_LCASE", "i̇o12i̇oİo");
     assertSubstringIndex("ai̇bİoi̇o12i̇oİo", "i̇o", -4, "UTF8_BINARY_LCASE", "i̇o12i̇oİo");
+    assertSubstringIndex("bİoi̇o12i̇o", "\u0307oi", 1, "UTF8_BINARY_LCASE", "bİoi̇o12i̇o");
     assertSubstringIndex("ai̇bi̇oİo12İoi̇o", "İo", 3, "UTF8_BINARY_LCASE", "ai̇bi̇oİo12");
     assertSubstringIndex("ai̇bi̇oİo12İoi̇o", "i̇o", 3, "UTF8_BINARY_LCASE", "ai̇bi̇oİo12");
     assertSubstringIndex("ai̇bİoi̇o12i̇oİo", "İo", 3, "UTF8_BINARY_LCASE", "ai̇bİoi̇o12");
     assertSubstringIndex("ai̇bİoi̇o12i̇oİo", "i̇o", 3, "UTF8_BINARY_LCASE", "ai̇bİoi̇o12");
+    assertSubstringIndex("bİoi̇o12i̇o", "\u0307oi", 1, "UTF8_BINARY_LCASE", "bİoi̇o12i̇o");
   }
 
   private void assertStringTrim(
