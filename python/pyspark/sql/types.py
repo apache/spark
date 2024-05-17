@@ -1569,19 +1569,6 @@ _INTERVAL_DAYTIME = re.compile(r"interval (day|hour|minute|second)( to (day|hour
 _INTERVAL_YEARMONTH = re.compile(r"interval (year|month)( to (year|month))?")
 
 
-def _drop_metadata(d: Union[DataType, StructField]) -> Union[DataType, StructField]:
-    assert isinstance(d, (DataType, StructField))
-    if isinstance(d, StructField):
-        return StructField(d.name, _drop_metadata(d.dataType), d.nullable, None)
-    elif isinstance(d, StructType):
-        return StructType([cast(StructField, _drop_metadata(f)) for f in d.fields])
-    elif isinstance(d, ArrayType):
-        return ArrayType(_drop_metadata(d.elementType), d.containsNull)
-    elif isinstance(d, MapType):
-        return MapType(_drop_metadata(d.keyType), _drop_metadata(d.valueType), d.valueContainsNull)
-    return d
-
-
 def _parse_datatype_string(s: str) -> DataType:
     """
     Parses the given data type string to a :class:`DataType`. The data type string format equals
