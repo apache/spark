@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.state._
-import org.apache.spark.sql.streaming.{ListState, MapState, QueryInfo, StatefulProcessorHandle, TTLConfig, TimeMode, ValueState}
+import org.apache.spark.sql.streaming.{ListState, MapState, QueryInfo, StatefulProcessorHandle, TimeMode, TTLConfig, ValueState}
 import org.apache.spark.util.{CollectionAccumulator, Utils}
 
 /**
@@ -85,7 +85,7 @@ class StatefulProcessorHandleImpl(
     isStreaming: Boolean = true,
     batchTimestampMs: Option[Long] = None,
     metrics: Map[String, SQLMetric] = Map.empty,
-    colFamilyMetadatas: Option[CollectionAccumulator[ColFamilyMetadata]] = None)
+    colFamilyMetadatas: CollectionAccumulator[ColFamilyMetadata] = null)
   extends StatefulProcessorHandle with Logging {
   import StatefulProcessorHandleState._
 
@@ -131,8 +131,8 @@ class StatefulProcessorHandleImpl(
       valEncoder: Encoder[T]): ValueState[T] = {
     verifyStateVarOperations("get_value_state")
     incrementMetric("numValueStateVars")
-    if (colFamilyMetadatas.isDefined) {
-      colFamilyMetadatas.get.add(new ColFamilyMetadata(stateName, "VALUE", ttlEnabled = false))
+    if (colFamilyMetadatas != null) {
+      colFamilyMetadatas.add(new ColFamilyMetadata(stateName, "VALUE", ttlEnabled = false))
     }
     val resultState = new ValueStateImpl[T](store, stateName, keyEncoder, valEncoder)
     resultState
@@ -144,8 +144,8 @@ class StatefulProcessorHandleImpl(
       ttlConfig: TTLConfig): ValueState[T] = {
     verifyStateVarOperations("get_value_state")
     validateTTLConfig(ttlConfig, stateName)
-    if (colFamilyMetadatas.isDefined) {
-      colFamilyMetadatas.get.add(new ColFamilyMetadata(stateName, "VALUE", ttlEnabled = true))
+    if (colFamilyMetadatas != null) {
+      colFamilyMetadatas.add(new ColFamilyMetadata(stateName, "VALUE", ttlEnabled = true))
     }
     assert(batchTimestampMs.isDefined)
     val valueStateWithTTL = new ValueStateImplWithTTL[T](store, stateName,
@@ -247,8 +247,8 @@ class StatefulProcessorHandleImpl(
   override def getListState[T](stateName: String, valEncoder: Encoder[T]): ListState[T] = {
     verifyStateVarOperations("get_list_state")
     incrementMetric("numListStateVars")
-    if (colFamilyMetadatas.isDefined) {
-      colFamilyMetadatas.get.add(new ColFamilyMetadata(stateName, "LIST", ttlEnabled = false))
+    if (colFamilyMetadatas != null) {
+      colFamilyMetadatas.add(new ColFamilyMetadata(stateName, "LIST", ttlEnabled = false))
     }
     val resultState = new ListStateImpl[T](store, stateName, keyEncoder, valEncoder)
     resultState
@@ -276,8 +276,8 @@ class StatefulProcessorHandleImpl(
 
     verifyStateVarOperations("get_list_state")
     validateTTLConfig(ttlConfig, stateName)
-    if (colFamilyMetadatas.isDefined) {
-      colFamilyMetadatas.get.add(new ColFamilyMetadata(stateName, "LIST", ttlEnabled = true))
+    if (colFamilyMetadatas != null) {
+      colFamilyMetadatas.add(new ColFamilyMetadata(stateName, "LIST", ttlEnabled = true))
     }
     assert(batchTimestampMs.isDefined)
     val listStateWithTTL = new ListStateImplWithTTL[T](store, stateName,
@@ -306,8 +306,8 @@ class StatefulProcessorHandleImpl(
       ttlConfig: TTLConfig): MapState[K, V] = {
     verifyStateVarOperations("get_map_state")
     validateTTLConfig(ttlConfig, stateName)
-    if (colFamilyMetadatas.isDefined) {
-      colFamilyMetadatas.get.add(new ColFamilyMetadata(stateName, "MAP", ttlEnabled = true))
+    if (colFamilyMetadatas != null) {
+      colFamilyMetadatas.add(new ColFamilyMetadata(stateName, "MAP", ttlEnabled = true))
     }
     assert(batchTimestampMs.isDefined)
     val mapStateWithTTL = new MapStateImplWithTTL[K, V](store, stateName, keyEncoder, userKeyEnc,

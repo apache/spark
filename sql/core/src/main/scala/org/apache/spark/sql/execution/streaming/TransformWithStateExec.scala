@@ -522,7 +522,7 @@ case class TransformWithStateExec(
       .colFamilyMetadatas
     val processorHandle = new StatefulProcessorHandleImpl(
       store, getStateInfo.queryRunId, keyEncoder, timeMode,
-      isStreaming, batchTimestampMs, metrics, colFamilyMetadatas = Some(colFamilyMetadatas))
+      isStreaming, batchTimestampMs, metrics, colFamilyMetadatas = colFamilyMetadatas)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
     statefulProcessor.setHandle(processorHandle)
     statefulProcessor.init(outputMode, timeMode)
@@ -542,7 +542,7 @@ case class TransformWithStateExec(
       .colFamilyMetadatas
     val processorHandle = new StatefulProcessorHandleImpl(
       store, getStateInfo.queryRunId, keyEncoder, timeMode,
-      isStreaming, batchTimestampMs, metrics, colFamilyMetadatas = Some(colFamilyMetadatas))
+      isStreaming, batchTimestampMs, metrics, colFamilyMetadatas = colFamilyMetadatas)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
     statefulProcessor.setHandle(processorHandle)
     statefulProcessor.init(outputMode, timeMode)
