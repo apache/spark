@@ -40,7 +40,7 @@ class ColFamilyMetadata(
     val stateType: String,
     val ttlEnabled: Boolean) extends Serializable {
   override def toString(): String = {
-    s"colFamilyName: $colFamilyName, stateType: $stateType, ttlEnabled: $ttlEnabled"
+    s"(colFamilyName: $colFamilyName, stateType: $stateType, ttlEnabled: $ttlEnabled)"
   }
 }
 
@@ -476,9 +476,14 @@ case class TransformWithStateExec(
    */
   private def processData(store: StateStore, singleIterator: Iterator[InternalRow]):
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
+    val metadataAccumulator = if (store.id.partitionId == 0) {
+      colFamilyMetadataAccumulator
+    } else {
+      null
+    }
     val processorHandle = new StatefulProcessorHandleImpl(
       store, getStateInfo.queryRunId, keyEncoder, timeMode,
-      isStreaming, batchTimestampMs, metrics, colFamilyMetadataAccumulator)
+      isStreaming, batchTimestampMs, metrics, metadataAccumulator)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
     statefulProcessor.setHandle(processorHandle)
     statefulProcessor.init(outputMode, timeMode)
