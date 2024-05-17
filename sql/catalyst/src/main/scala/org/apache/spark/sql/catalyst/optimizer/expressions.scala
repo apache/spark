@@ -351,15 +351,23 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
       case a And b if a.semanticEquals(b) => a
       case a Or b if a.semanticEquals(b) => a
 
-      case a And IsNull(b) if a.semanticEquals(b) => if (a.nullable) IsNull(a) else FalseLiteral
-      case IsNull(a) And b if a.semanticEquals(b) => if (a.nullable) IsNull(a) else FalseLiteral
-      case a And IsNotNull(b) if a.semanticEquals(b) => EqualNullSafe(a, TrueLiteral)
-      case IsNotNull(a) And b if a.semanticEquals(b) => EqualNullSafe(a, TrueLiteral)
+      case a And IsNull(b) if a.semanticEquals(b) =>
+          if (a.nullable) IsNull(a) else Literal.FalseLiteral
+      case IsNull(a) And b if a.semanticEquals(b) =>
+          if (a.nullable) IsNull(a) else Literal.FalseLiteral
+      case a And IsNotNull(b) if a.semanticEquals(b) =>
+          if (a.nullable) EqualNullSafe(a, Literal.TrueLiteral) else a
+      case IsNotNull(a) And b if a.semanticEquals(b) =>
+          if (a.nullable) EqualNullSafe(a, Literal.TrueLiteral) else a
 
-      case a Or IsNull(b) if a.semanticEquals(b) => Not(EqualNullSafe(a, FalseLiteral))
-      case IsNull(a) Or b if a.semanticEquals(b) => Not(EqualNullSafe(a, FalseLiteral))
-      case a Or IsNotNull(b) if a.semanticEquals(b) => if (a.nullable) IsNotNull(a) else TrueLiteral
-      case IsNotNull(a) Or b if a.semanticEquals(b) => if (a.nullable) IsNotNull(a) else TrueLiteral
+      case a Or IsNull(b) if a.semanticEquals(b) =>
+          if (a.nullable) Not(EqualNullSafe(a, Literal.FalseLiteral)) else a
+      case IsNull(a) Or b if a.semanticEquals(b) =>
+          if (a.nullable) Not(EqualNullSafe(a, Literal.FalseLiteral)) else a
+      case a Or IsNotNull(b) if a.semanticEquals(b) =>
+          if (a.nullable) IsNotNull(a) else Literal.TrueLiteral
+      case IsNotNull(a) Or b if a.semanticEquals(b) =>
+          if (a.nullable) IsNotNull(a) else Literal.TrueLiteral
 
       // The following optimizations are applicable only when the operands are not nullable,
       // since the three-value logic of AND and OR are different in NULL handling.
@@ -568,43 +576,21 @@ object SimplifyConditionals extends Rule[LogicalPlan] {
         if (cond.nullable) EqualNullSafe(cond, TrueLiteral) else cond
       case If(cond, FalseLiteral, TrueLiteral) =>
         if (cond.nullable) Not(EqualNullSafe(cond, TrueLiteral)) else Not(cond)
-      case If(cond, trueValue, falseValue)
-        if cond.deterministic && trueValue.semanticEquals(falseValue) => trueValue
-      case If(cond, trueValue, falseValue)
-        if cond.deterministic && trueValue.semanticEquals(cond) => Or(cond, falseValue)
       case If(cond, l @ Literal(null, _), FalseLiteral) if !cond.nullable => And(cond, l)
       case If(cond, l @ Literal(null, _), TrueLiteral) if !cond.nullable => Or(Not(cond), l)
       case If(cond, FalseLiteral, l @ Literal(null, _)) if !cond.nullable => And(Not(cond), l)
       case If(cond, TrueLiteral, l @ Literal(null, _)) if !cond.nullable => Or(cond, l)
-      case If(cond, FalseLiteral, falseValue)
-          if cond.deterministic && falseValue.semanticEquals(cond) =>
-        if (cond.nullable) Not(cond) else FalseLiteral
-      case If(IsNull(cond), Literal.FalseLiteral, falseValue)
-          if cond.deterministic =>
-        if (cond.nullable) And(IsNotNull(cond), falseValue) else falseValue
-      case If(IsNull(cond), IsNotNull(trueValue), falseValue)
-          if cond.deterministic && cond.semanticEquals(trueValue) =>
-        if (cond.nullable) And(IsNotNull(cond), falseValue) else falseValue
-      case If(IsNull(cond), Literal.TrueLiteral, falseValue) =>
-        if (cond.nullable) Or(IsNull(cond), falseValue) else falseValue
+      case If(cond, Literal.FalseLiteral, falseValue)
+          if cond.deterministic && cond.semanticEquals(falseValue) =>
+        if (cond.nullable) And(cond, EqualTo(cond, Literal.FalseLiteral)) else Literal.FalseLiteral
 
       case CaseWhen(Seq((cond, TrueLiteral)), Some(FalseLiteral)) =>
         if (cond.nullable) EqualNullSafe(cond, TrueLiteral) else cond
       case CaseWhen(Seq((cond, FalseLiteral)), Some(TrueLiteral)) =>
         if (cond.nullable) Not(EqualNullSafe(cond, TrueLiteral)) else Not(cond)
-      case CaseWhen(Seq((cond, ifValue)), Some(elseValue))
-        if cond.deterministic && ifValue.semanticEquals(cond) => Or(cond, elseValue)
-      case CaseWhen(Seq((cond, FalseLiteral)), Some(elseValue))
-          if cond.deterministic && elseValue.semanticEquals(cond) =>
-        if (cond.nullable) Not(cond) else FalseLiteral
-      case CaseWhen(Seq((IsNull(cond), Literal.FalseLiteral)), Some(elseValue))
-          if cond.deterministic =>
-        if (cond.nullable) And(IsNotNull(cond), elseValue) else elseValue
-      case CaseWhen(Seq((IsNull(cond), IsNotNull(trueValue))), Some(elseValue))
-          if cond.deterministic && cond.semanticEquals(trueValue) =>
-        if (cond.nullable) And(IsNotNull(cond), elseValue) else elseValue
-      case CaseWhen(Seq((IsNull(cond), Literal.TrueLiteral)), Some(elseValue)) =>
-        if (cond.nullable) Or(IsNull(cond), elseValue) else elseValue
+      case CaseWhen(Seq((cond, FalseLiteral)), Some(otherwise))
+          if cond.deterministic && cond.semanticEquals(otherwise) =>
+        if (cond.nullable) And(cond, EqualTo(cond, FalseLiteral)) else FalseLiteral
 
       case e @ CaseWhen(branches, elseValue) if branches.exists(x => falseOrNullLiteral(x._1)) =>
         // If there are branches that are always false, remove them.
