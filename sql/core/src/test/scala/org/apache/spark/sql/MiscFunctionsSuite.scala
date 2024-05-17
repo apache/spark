@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.{SPARK_REVISION, SPARK_VERSION_SHORT}
 import org.apache.spark.sql.catalyst.expressions.Hex
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -278,12 +279,41 @@ class MiscFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("random") {
-     val df = Seq((1, 2)).toDF("a", "b")
+    val df = Seq((1, 2)).toDF("a", "b")
     assert(df.selectExpr("random()").collect() != null)
     assert(df.select(random()).collect() != null)
 
     assert(df.selectExpr("random(1)").collect() != null)
     assert(df.select(random(lit(1))).collect() != null)
+  }
+
+  test("SPARK-48324: hll_sketch_estimate - Codegen Support") {
+    val dataDF = Seq(1, 1, 2, 2, 3).toDF("a")
+    withTempPath { dir =>
+      dataDF.select(hll_sketch_agg(col("a")).as("col1")).write.parquet(dir.getCanonicalPath)
+      val df = spark.read.parquet(dir.getCanonicalPath)
+      val df1 = df.select(hll_sketch_estimate(col("col1")))
+      val df2 = df.selectExpr("hll_sketch_estimate(col1)")
+      checkAnswer(df1, Seq(Row(3)))
+      checkAnswer(df1, df2)
+      val plan = df1.queryExecution.executedPlan
+      assert(plan.isInstanceOf[WholeStageCodegenExec])
+    }
+  }
+
+  test("SPARK-48324: hll_union - Codegen Support") {
+    val dataDF = Seq((1, 4), (1, 4), (2, 5), (2, 5), (3, 6)).toDF("a", "b")
+    withTempPath { dir =>
+      dataDF.select(hll_sketch_agg(col("a")).as("col1"), hll_sketch_agg(col("b")).as("col2")).
+        write.parquet(dir.getCanonicalPath)
+      val df = spark.read.parquet(dir.getCanonicalPath)
+      val df1 = df.select(hll_sketch_estimate(hll_union(col("col1"), col("col2"))))
+      val df2 = df.selectExpr("hll_sketch_estimate(hll_union(col1, col2))")
+      checkAnswer(df1, Seq(Row(6)))
+      checkAnswer(df1, df2)
+      val plan = df1.queryExecution.executedPlan
+      assert(plan.isInstanceOf[WholeStageCodegenExec])
+    }
   }
 }
 

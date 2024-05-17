@@ -21,7 +21,7 @@ import org.apache.datasketches.common.SketchesArgumentException
 import org.apache.datasketches.hll.{HllSketch, TgtHllType, Union}
 import org.apache.datasketches.memory.Memory
 
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, BooleanType, DataType, LongType}
 
@@ -38,7 +38,6 @@ import org.apache.spark.sql.types.{AbstractDataType, BinaryType, BooleanType, Da
   since = "3.5.0")
 case class HllSketchEstimate(child: Expression)
   extends UnaryExpression
-    with CodegenFallback
     with ExpectsInputTypes
     with NullIntolerant {
 
@@ -60,6 +59,11 @@ case class HllSketchEstimate(child: Expression)
         throw QueryExecutionErrors.hllInvalidInputSketchBuffer(prettyName)
     }
   }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val expr = ctx.addReferenceObj("this", this)
+    defineCodeGen(ctx, ev, input => s"(Long) $expr.nullSafeEval($input)")
+  }
 }
 
 // scalastyle:off line.size.limit
@@ -79,7 +83,6 @@ case class HllSketchEstimate(child: Expression)
 // scalastyle:on line.size.limit
 case class HllUnion(first: Expression, second: Expression, third: Expression)
   extends TernaryExpression
-    with CodegenFallback
     with ExpectsInputTypes
     with NullIntolerant {
 
@@ -126,5 +129,11 @@ case class HllUnion(first: Expression, second: Expression, third: Expression)
     union.update(sketch1)
     union.update(sketch2)
     union.getResult(targetType).toUpdatableByteArray
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val expr = ctx.addReferenceObj("this", this)
+    defineCodeGen(ctx, ev, (input1, input2, input3) =>
+      s"(byte[]) $expr.nullSafeEval($input1, $input2, $input3)")
   }
 }
