@@ -17,15 +17,17 @@
 
 package org.apache.spark.internal;
 
-public class LoggerFactory {
+// checkstyle.off: RegexpSinglelineJava
+import org.slf4j.LoggerFactory;
+// checkstyle.on: RegexpSinglelineJava
 
-  public static Logger getLogger(String name) {
-    org.slf4j.Logger slf4jLogger = org.slf4j.LoggerFactory.getLogger(name);
-    return new Logger(slf4jLogger);
+public class SparkLoggerFactory {
+
+  public static SparkLogger getLogger(String name) {
+    return new SparkLogger(LoggerFactory.getLogger(name));
   }
 
-  public static Logger getLogger(Class<?> clazz) {
-    org.slf4j.Logger slf4jLogger = org.slf4j.LoggerFactory.getLogger(clazz);
-    return new Logger(slf4jLogger);
+  public static SparkLogger getLogger(Class<?> clazz) {
+    return new SparkLogger(LoggerFactory.getLogger(clazz));
   }
 }

@@ -30,8 +30,8 @@ import java.util.regex.Pattern;
 
 import org.apache.commons.lang3.SystemUtils;
 
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
 
@@ -40,7 +40,7 @@ import org.apache.spark.internal.MDC;
  * own Utils, just accessible within this package.
  */
 public class JavaUtils {
-  private static final Logger logger = LoggerFactory.getLogger(JavaUtils.class);
+  private static final SparkLogger logger = SparkLoggerFactory.getLogger(JavaUtils.class);
 
   /**
    * Define a default value for driver memory here since this value is referenced across the code

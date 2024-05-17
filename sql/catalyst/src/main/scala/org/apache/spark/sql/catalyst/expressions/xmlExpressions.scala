@@ -21,7 +21,7 @@ import java.io.CharArrayWriter
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.util.{ArrayData, DropMalformedMode, FailFastMode, FailureSafeParser, GenericArrayData, PermissiveMode}
 import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.catalyst.xml.{StaxXmlGenerator, StaxXmlParser, ValidatorUtil, XmlInferSchema, XmlOptions}
@@ -187,9 +187,6 @@ case class SchemaOfXml(
   private lazy val xmlOptions = new XmlOptions(options, "UTC")
 
   @transient
-  private lazy val xmlFactory = xmlOptions.buildXmlFactory()
-
-  @transient
   private lazy val xmlInferSchema = {
     if (xmlOptions.parseMode == DropMalformedMode) {
       throw QueryCompilationErrors.parseModeUnsupportedError("schema_of_xml", xmlOptions.parseMode)
@@ -266,7 +263,6 @@ case class StructsToXml(
     timeZoneId: Option[String] = None)
   extends UnaryExpression
   with TimeZoneAwareExpression
-  with CodegenFallback
   with ExpectsInputTypes
   with NullIntolerant {
   override def nullable: Boolean = true
@@ -327,6 +323,11 @@ case class StructsToXml(
     copy(timeZoneId = Option(timeZoneId))
 
   override def nullSafeEval(value: Any): Any = converter(value)
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val expr = ctx.addReferenceObj("this", this)
+    defineCodeGen(ctx, ev, input => s"(UTF8String) $expr.nullSafeEval($input)")
+  }
 
   override def inputTypes: Seq[AbstractDataType] = StructType :: Nil
 

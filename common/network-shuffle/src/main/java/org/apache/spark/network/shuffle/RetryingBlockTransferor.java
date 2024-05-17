@@ -29,8 +29,8 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.Uninterruptibles;
 
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
 import org.apache.spark.network.buffer.ManagedBuffer;
@@ -70,7 +70,8 @@ public class RetryingBlockTransferor {
   private static final ExecutorService executorService = Executors.newCachedThreadPool(
     NettyUtils.createThreadFactory("Block Transfer Retry"));
 
-  private static final Logger logger = LoggerFactory.getLogger(RetryingBlockTransferor.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(RetryingBlockTransferor.class);
 
   /** Used to initiate new Block transfer on our remaining blocks. */
   private final BlockTransferStarter transferStarter;
@@ -183,7 +184,7 @@ public class RetryingBlockTransferor {
         logger.error("Exception while beginning {} of {} outstanding blocks (after {} retries)", e,
           MDC.of(LogKeys.TRANSFER_TYPE$.MODULE$, listener.getTransferType()),
           MDC.of(LogKeys.NUM_BLOCK_IDS$.MODULE$, blockIdsToTransfer.length),
-          MDC.of(LogKeys.RETRY_COUNT$.MODULE$, numRetries));
+          MDC.of(LogKeys.NUM_RETRY$.MODULE$, numRetries));
       } else {
         logger.error("Exception while beginning {} of {} outstanding blocks", e,
           MDC.of(LogKeys.TRANSFER_TYPE$.MODULE$, listener.getTransferType()),
@@ -216,7 +217,7 @@ public class RetryingBlockTransferor {
 
     logger.info("Retrying {} ({}/{}) for {} outstanding blocks after {} ms",
       MDC.of(LogKeys.TRANSFER_TYPE$.MODULE$, listener.getTransferType()),
-      MDC.of(LogKeys.RETRY_COUNT$.MODULE$, retryCount),
+      MDC.of(LogKeys.NUM_RETRY$.MODULE$, retryCount),
       MDC.of(LogKeys.MAX_ATTEMPTS$.MODULE$, maxRetries),
       MDC.of(LogKeys.NUM_BLOCK_IDS$.MODULE$, outstandingBlocksIds.size()),
       MDC.of(LogKeys.RETRY_WAIT_TIME$.MODULE$, retryWaitTime));
@@ -312,7 +313,7 @@ public class RetryingBlockTransferor {
               logger.error("Failed to {} block {}, and will not retry ({} retries)", exception,
                 MDC.of(LogKeys.TRANSFER_TYPE$.MODULE$, listener.getTransferType()),
                 MDC.of(LogKeys.BLOCK_ID$.MODULE$, blockId),
-                MDC.of(LogKeys.RETRY_COUNT$.MODULE$,retryCount));
+                MDC.of(LogKeys.NUM_RETRY$.MODULE$,retryCount));
             } else {
               logger.debug(
                 String.format("Failed to %s block %s, and will not retry (%s retries)",

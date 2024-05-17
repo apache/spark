@@ -169,10 +169,10 @@
     <!-- managed up from 3.2.1 for SPARK-11652 -->
     <commons.collections.version>3.2.2</commons.collections.version>
     <commons.collections4.version>4.4</commons.collections4.version>
-    <scala.version>2.13.13</scala.version>
+    <scala.version>2.13.14</scala.version>
     <scala.binary.version>2.13</scala.binary.version>
     <scalatest-maven-plugin.version>2.2.0</scalatest-maven-plugin.version>
-    <scala-maven-plugin.version>4.8.1</scala-maven-plugin.version>
+    <scala-maven-plugin.version>4.9.1</scala-maven-plugin.version>
     <maven.scaladoc.skip>false</maven.scaladoc.skip>
     <versions-maven-plugin.version>2.16.2</versions-maven-plugin.version>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
@@ -213,7 +213,7 @@
     <commons-cli.version>1.6.0</commons-cli.version>
     <bouncycastle.version>1.78</bouncycastle.version>
     <tink.version>1.13.0</tink.version>
-    <datasketches.version>5.0.1</datasketches.version>
+    <datasketches.version>6.0.0</datasketches.version>
     <netty.version>4.1.109.Final</netty.version>
     <netty-tcnative.version>2.0.65.Final</netty-tcnative.version>
     <icu4j.version>72.1</icu4j.version>
@@ -226,7 +226,7 @@
     and ./python/packaging/connect/setup.py too.
     -->
     <arrow.version>16.0.0</arrow.version>
-    <ammonite.version>3.0.0-M1</ammonite.version>
+    <ammonite.version>3.0.0-M2</ammonite.version>
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
@@ -2980,6 +2980,14 @@
                     <maxJdkVersion>${java.version}</maxJdkVersion>
                     <ignoredScopes>test</ignoredScopes>
                     <ignoredScopes>provided</ignoredScopes>
+                    <ignoreClasses>
+                      <!--
+                        The package `org.jline.terminal.impl.ffm.*` contains some class files
+                        that are not compatible with JDK17 (only JDK21 is supported).
+                        However, it will not cause problems for use. See: https://github.com/scala/bug/issues/12994
+                      -->
+                      <ignoreClass>org.jline.terminal.impl.ffm.*</ignoreClass>
+                    </ignoreClasses>
                   </enforceBytecodeVersion>
                 </rules>
               </configuration>

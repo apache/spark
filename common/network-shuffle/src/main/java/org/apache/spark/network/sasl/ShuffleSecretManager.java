@@ -20,8 +20,8 @@ package org.apache.spark.network.sasl;
 import java.nio.ByteBuffer;
 import java.util.concurrent.ConcurrentHashMap;
 
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
 
@@ -31,7 +31,8 @@ import org.apache.spark.network.util.JavaUtils;
  * A class that manages shuffle secret used by the external shuffle service.
  */
 public class ShuffleSecretManager implements SecretKeyHolder {
-  private static final Logger logger = LoggerFactory.getLogger(ShuffleSecretManager.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(ShuffleSecretManager.class);
 
   private final ConcurrentHashMap<String, String> shuffleSecretMap;
 
