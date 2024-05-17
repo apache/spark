@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.streaming.{ListState, MapState, QueryInfo, StatefulProcessorHandle, TimeMode, TTLConfig, ValueState}
-import org.apache.spark.util.{CollectionAccumulator, Utils}
+import org.apache.spark.util.Utils
 
 /**
  * Object used to assign/retrieve/remove grouping key passed implicitly for various state
@@ -85,7 +85,7 @@ class StatefulProcessorHandleImpl(
     isStreaming: Boolean = true,
     batchTimestampMs: Option[Long] = None,
     metrics: Map[String, SQLMetric] = Map.empty,
-    colFamilyMetadatas: CollectionAccumulator[ColFamilyMetadata] = null)
+    colFamilyMetadatas: ColFamilyMetadataAccumulator = null)
   extends StatefulProcessorHandle with Logging {
   import StatefulProcessorHandleState._
 

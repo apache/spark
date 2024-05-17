@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming
 import java.util.UUID
 import java.util.concurrent.TimeUnit.NANOSECONDS
 
+import org.apache.spark.SparkContext
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -32,7 +33,7 @@ import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSch
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
-import org.apache.spark.util.{CollectionAccumulator, CompletionIterator, SerializableConfiguration, Utils}
+import org.apache.spark.util.{AccumulatorV2, CompletionIterator, SerializableConfiguration, Utils}
 
 
 class OperatorStateMetadataV2(
@@ -48,11 +49,12 @@ class OperatorInfoV2(
 class StateStoreMetadataV2(
   val storeName: String,
   val numPartitions: String,
-  val colFamilyMetadatas: CollectionAccumulator[ColFamilyMetadata]
+  val colFamilyMetadatas: ColFamilyMetadataAccumulator
 ) {
   def getStoreName: String = storeName
   def getNumPartitions: String = numPartitions
-  def getColFamilyMetadatas: CollectionAccumulator[ColFamilyMetadata] = colFamilyMetadatas
+
+  def getColFamilyMetadatas: ColFamilyMetadataAccumulator = colFamilyMetadatas
 
   def addColFamilyMetadata(colFamilyMetadata: ColFamilyMetadata): Unit = {
     colFamilyMetadatas.add(colFamilyMetadata)
@@ -63,8 +65,63 @@ class ColFamilyMetadata(
   val colFamilyName: String,
   val stateType: String,
   val ttlEnabled: Boolean
-)
+) {
+  override def toString: String = {
+    s"ColFamilyMetadata($colFamilyName, $stateType, $ttlEnabled)"
+  }
+}
 
+class ColFamilyMetadataAccumulator
+  extends AccumulatorV2[ColFamilyMetadata, String] {
+
+  private var _value: String = ""
+  /**
+   * Returns if this accumulator is zero value or not. e.g. for a counter accumulator, 0 is zero
+   * value; for a list accumulator, Nil is zero value.
+   */
+  override def isZero: Boolean = _value.isEmpty
+
+  /**
+   * Creates a new copy of this accumulator.
+   */
+  override def copy(): AccumulatorV2[ColFamilyMetadata, String] = {
+    val acc = new ColFamilyMetadataAccumulator
+    acc._value = _value
+    acc
+  }
+
+  /**
+   * Resets this accumulator, which is zero value. i.e. call `isZero` must
+   * return true.
+   */
+  override def reset(): Unit = _value = ""
+
+  /**
+   * Takes the inputs and accumulates.
+   */
+  override def add(v: ColFamilyMetadata): Unit = _value += v.toString
+
+  /**
+   * Merges another same-type accumulator into this one and update its state, i.e. this should be
+   * merge-in-place.
+   */
+  override def merge(other: AccumulatorV2[ColFamilyMetadata, String]): Unit = {
+    _value += other.value
+  }
+
+  /**
+   * Defines the current value of this accumulator
+   */
+  override def value: String = _value
+}
+
+object ColFamilyMetadataAccumulator {
+  def create(sc: SparkContext, name: String): ColFamilyMetadataAccumulator = {
+    val acc = new ColFamilyMetadataAccumulator
+    acc.register(sc, name = Some(name))
+    acc
+  }
+}
 /**
  * Physical operator for executing `TransformWithState`
  *
@@ -112,11 +169,7 @@ case class TransformWithStateExec(
 
   override def writeOperatorStateMetadata(): Unit = {
     operatorStateMetadataV2.operatorInfoV2.stateStoreMetadatas.foreach { stateStoreMetadata =>
-      stateStoreMetadata.getColFamilyMetadatas.value.forEach { colFamilyMetadata =>
-        logError(s"### ${colFamilyMetadata.colFamilyName}," +
-          s" ${colFamilyMetadata.stateType}," +
-          s" ${colFamilyMetadata.ttlEnabled}")
-      }
+      logError(s"### ${stateStoreMetadata.getColFamilyMetadatas.value}")
     }
     children.foreach(_.writeOperatorStateMetadata())
   }
@@ -386,7 +439,7 @@ case class TransformWithStateExec(
     metrics // force lazy init at driver
 
 
-    val colFamilyMetadatas = sparkContext.collectionAccumulator[ColFamilyMetadata]
+    val colFamilyMetadatas = ColFamilyMetadataAccumulator.create(sparkContext, "colFamilyMetadatas")
     // Create OperatorStateMetadataV2
     val stateStoreMetadataV2 = new StateStoreMetadataV2(
       storeName = "store",
