@@ -1557,7 +1557,7 @@ object SQLConf {
         "avoid shuffle if necessary.")
       .version("3.3.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val V2_BUCKETING_PUSH_PART_VALUES_ENABLED =
     buildConf("spark.sql.sources.v2.bucketing.pushPartValues.enabled")
@@ -1569,7 +1569,7 @@ object SQLConf {
         "side. This could help to eliminate unnecessary shuffles")
       .version("3.4.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED =
     buildConf("spark.sql.sources.v2.bucketing.partiallyClusteredDistribution.enabled")

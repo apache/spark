@@ -57,6 +57,7 @@ license: |
 - Since Spark 4.0, A bug falsely allowing `!` instead of `NOT` when `!` is not a prefix operator has been fixed. Clauses such as `expr ! IN (...)`, `expr ! BETWEEN ...`, or `col ! NULL` now raise syntax errors. To restore the previous behavior, set `spark.sql.legacy.bangEqualsNot` to `true`. 
 - Since Spark 4.0, By default views tolerate column type changes in the query and compensate with casts. To restore the previous behavior, allowing up-casts only, set `spark.sql.legacy.viewSchemaCompensation` to `false`.
 - Since Spark 4.0, Views allow control over how they react to underlying query changes. By default views tolerate column type changes in the query and compensate with casts. To disable thsi feature set `spark.sql.legacy.viewSchemaBindingMode` to `false`. This also removes the clause from `DESCRIBE EXTENDED` and `SHOW CREATE TABLE`.
+- Since Spark 4.0, The Storage-Partitioned Join feature flag `spark.sql.sources.v2.bucketing.enabled` and `spark.sql.sources.v2.bucketing.pushPartValues.enabled` is set to `true`. To restore the previous behavior, set `spark.sql.sources.v2.bucketing.enabled` and `spark.sql.sources.v2.bucketing.pushPartValues.enabled` to `false`.
 
 ## Upgrading from Spark SQL 3.5.1 to 3.5.2
 
