@@ -688,8 +688,6 @@ private[spark] object Utils
     if (!targetDir.exists() && !targetDir.mkdir()) {
       throw new IOException(s"Failed to create directory ${targetDir.getPath}")
     }
-    val fsHasPathCapability =
-      fs.hasPathCapability(path, SparkHadoopUtil.DIRECTORY_LISTING_INCONSISTENT)
     val dest = new File(targetDir, filename.getOrElse(path.getName))
     if (fs.getFileStatus(path).isFile) {
       val in = fs.open(path)
@@ -699,14 +697,14 @@ private[spark] object Utils
         in.close()
       }
     } else {
+      val fsHasPathCapability =
+        fs.hasPathCapability(path, SparkHadoopUtil.DIRECTORY_LISTING_INCONSISTENT)
       val listStatuses = Try {
         fs.listStatus(path)
       }
       listStatuses match {
         case Failure(e) =>
-          if (e.isInstanceOf[FileNotFoundException] && fsHasPathCapability) {
-            Seq.empty[FileStatus]
-          } else throw e
+          if (!e.isInstanceOf[FileNotFoundException] && !fsHasPathCapability) throw e
         case Success(ls) =>
           ls.foreach { fileStatus =>
             fetchHcfsFile(fileStatus.getPath, dest, fs, conf, hadoopConf, fileOverwrite)
