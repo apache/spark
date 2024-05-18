@@ -37,16 +37,15 @@ import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.deploy.yarn.YarnAMIpFilter.AmIpServletRequestWrapper
 
 // A port of org.apache.hadoop.yarn.server.webproxy.amfilter.TestAmFilter
-class YarnAMIpFilterSuite extends SparkFunSuite {
+class AmIpFilterSuite extends SparkFunSuite {
 
   private val proxyHost = "localhost"
   private val proxyUri = "http://bogus"
 
-  class TestYarnAMIpFilter extends YarnAMIpFilter {
-    override protected[spark] def getProxyAddresses: Set[String] = Set(proxyHost)
+  class TestAmIpFilter extends AmIpFilter {
+    override def getProxyAddresses: util.Set[String] = Set(proxyHost).asJava
   }
 
   class DummyFilterConfig (val map: util.Map[String, String]) extends FilterConfig {
@@ -78,10 +77,10 @@ class YarnAMIpFilterSuite extends SparkFunSuite {
     }
 
     val params = new util.HashMap[String, String]
-    params.put(YarnAMIpFilter.PROXY_HOST, proxyHost)
-    params.put(YarnAMIpFilter.PROXY_URI_BASE, proxyUri)
+    params.put(AmIpFilter.PROXY_HOST, proxyHost)
+    params.put(AmIpFilter.PROXY_URI_BASE, proxyUri)
     val conf = new DummyFilterConfig(params)
-    val filter = new TestYarnAMIpFilter
+    val filter = new TestAmIpFilter
     filter.init(conf)
     filter.doFilter(request, response, chain)
     assert(invoked.get)
@@ -129,9 +128,9 @@ class YarnAMIpFilterSuite extends SparkFunSuite {
       // invalid url
       val rm2Url = "host2:8088"
 
-      val filter = new TestYarnAMIpFilter
+      val filter = new TestAmIpFilter
       // make sure findRedirectUrl() go to HA branch
-      filter.proxyUriBases = Map(rm1 -> rm1Url, rm2 -> rm2Url)
+      filter.proxyUriBases = Map(rm1 -> rm1Url, rm2 -> rm2Url).asJava
       filter.rmUrls = Array[String](rm1, rm2)
 
       assert(filter.findRedirectUrl === rm1Url)
@@ -140,13 +139,13 @@ class YarnAMIpFilterSuite extends SparkFunSuite {
 
   test("testProxyUpdate") {
     var params = new util.HashMap[String, String]
-    params.put(YarnAMIpFilter.PROXY_HOSTS, proxyHost)
-    params.put(YarnAMIpFilter.PROXY_URI_BASES, proxyUri)
+    params.put(AmIpFilter.PROXY_HOSTS, proxyHost)
+    params.put(AmIpFilter.PROXY_URI_BASES, proxyUri)
 
     var conf = new DummyFilterConfig(params)
-    val filter = new YarnAMIpFilter
-    val updateInterval = TimeUnit.SECONDS.toNanos(1)
-    YarnAMIpFilter.setUpdateInterval(updateInterval)
+    val filter = new AmIpFilter
+    val updateInterval = TimeUnit.SECONDS.toMillis(1)
+    AmIpFilter.setUpdateInterval(updateInterval)
     filter.init(conf)
 
     // check that the configuration was applied
@@ -154,13 +153,13 @@ class YarnAMIpFilterSuite extends SparkFunSuite {
 
     // change proxy configurations
     params = new util.HashMap[String, String]
-    params.put(YarnAMIpFilter.PROXY_HOSTS, "unknownhost")
-    params.put(YarnAMIpFilter.PROXY_URI_BASES, proxyUri)
+    params.put(AmIpFilter.PROXY_HOSTS, "unknownhost")
+    params.put(AmIpFilter.PROXY_URI_BASES, proxyUri)
     conf = new DummyFilterConfig(params)
     filter.init(conf)
 
     // configurations shouldn't be updated now
-    assert(filter.getProxyAddresses.nonEmpty)
+    assert(!filter.getProxyAddresses.isEmpty)
     // waiting for configuration update
     eventually(timeout(5.seconds), interval(500.millis)) {
       assertThrows[ServletException] {
@@ -174,8 +173,8 @@ class YarnAMIpFilterSuite extends SparkFunSuite {
     var servletWrapper: AmIpServletRequestWrapper = null
 
     val params = new util.HashMap[String, String]
-    params.put(YarnAMIpFilter.PROXY_HOST, proxyHost)
-    params.put(YarnAMIpFilter.PROXY_URI_BASE, proxyUri)
+    params.put(AmIpFilter.PROXY_HOST, proxyHost)
+    params.put(AmIpFilter.PROXY_URI_BASE, proxyUri)
     val config = new DummyFilterConfig(params)
 
     // dummy filter
@@ -190,7 +189,7 @@ class YarnAMIpFilterSuite extends SparkFunSuite {
         }
       }
     }
-    val testFilter = new YarnAMIpFilter
+    val testFilter = new AmIpFilter
     testFilter.init(config)
 
     val response = new HttpServletResponseForTest
@@ -200,7 +199,7 @@ class YarnAMIpFilterSuite extends SparkFunSuite {
     val throws = intercept[ServletException] {
       testFilter.doFilter(failRequest, response, chain)
     }
-    assert(YarnAMIpFilter.E_HTTP_HTTPS_ONLY === throws.getMessage)
+    assert(ProxyUtils.E_HTTP_HTTPS_ONLY === throws.getMessage)
 
 
     // request with HttpServletRequest
@@ -211,14 +210,14 @@ class YarnAMIpFilterSuite extends SparkFunSuite {
     // address "redirect" is not in host list for non-proxy connection
     testFilter.doFilter(request, response, chain)
     assert(HttpURLConnection.HTTP_MOVED_TEMP === response.status)
-    var redirect = response.getHeader(YarnAMIpFilter.LOCATION)
+    var redirect = response.getHeader(ProxyUtils.LOCATION)
     assert("http://bogus/app/application_00_0" === redirect)
 
     // address "redirect" is not in host list for proxy connection
     when(request.getRequestURI).thenReturn("/proxy/application_00_0")
     testFilter.doFilter(request, response, chain)
     assert(HttpURLConnection.HTTP_MOVED_TEMP === response.status)
-    redirect = response.getHeader(YarnAMIpFilter.LOCATION)
+    redirect = response.getHeader(ProxyUtils.LOCATION)
     assert("http://bogus/proxy/redirect/application_00_0" === redirect)
 
     // check for query parameters
@@ -226,7 +225,7 @@ class YarnAMIpFilterSuite extends SparkFunSuite {
     when(request.getQueryString).thenReturn("id=0")
     testFilter.doFilter(request, response, chain)
     assert(HttpURLConnection.HTTP_MOVED_TEMP === response.status)
-    redirect = response.getHeader(YarnAMIpFilter.LOCATION)
+    redirect = response.getHeader(ProxyUtils.LOCATION)
     assert("http://bogus/proxy/redirect/application_00_0?id=0" === redirect)
 
     // "127.0.0.1" contains in host list. Without cookie
@@ -235,7 +234,7 @@ class YarnAMIpFilterSuite extends SparkFunSuite {
     assert(doFilterRequest.contains("HttpServletRequest"))
 
     // cookie added
-    val cookies = Array[Cookie](new Cookie(YarnAMIpFilter.PROXY_USER_COOKIE_NAME, "user"))
+    val cookies = Array[Cookie](new Cookie(AmIpFilter.PROXY_USER_COOKIE_NAME, "user"))
 
     when(request.getCookies).thenReturn(cookies)
     testFilter.doFilter(request, response, chain)
