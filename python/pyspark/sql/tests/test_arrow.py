@@ -1258,12 +1258,12 @@ class ArrowTestsMixin:
         ):
             df.toArrow()
 
-    def test_createDataFrame_duplicate_field_names(self):
+    def test_createDataFrame_pandas_duplicate_field_names(self):
         for arrow_enabled in [True, False]:
             with self.subTest(arrow_enabled=arrow_enabled):
-                self.check_createDataFrame_duplicate_field_names(arrow_enabled)
+                self.check_createDataFrame_pandas_duplicate_field_names(arrow_enabled)
 
-    def check_createDataFrame_duplicate_field_names(self, arrow_enabled):
+    def check_createDataFrame_pandas_duplicate_field_names(self, arrow_enabled):
         schema = (
             StructType()
             .add("struct", StructType().add("x", StringType()).add("x", IntegerType()))
