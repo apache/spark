@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.catalyst.util.{CollationFactory, GenericArrayData}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, ArrayType, BooleanType, DataType, StringType}
+import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, ArrayType, BooleanType, DataType, StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.collection.OpenHashMap
 
@@ -87,6 +87,7 @@ case class Mode(
           case (key, _) => key
         }(x => x)((x, y) => (x._1, x._2 + y._2)).values
         modeMap
+      case s: StructType => getBufferForStructType(buffer, s)
       case _ => buffer
     }
     reverseOpt.map { reverse =>
@@ -98,6 +99,30 @@ case class Mode(
       val ordering = Ordering.Tuple2(Ordering.Long, defaultKeyOrdering)
       collationAwareBuffer.maxBy { case (key, count) => (count, key) }(ordering)
     }.getOrElse(collationAwareBuffer.maxBy(_._2))._1
+  }
+
+  private def getBufferForStructType(
+      buffer: OpenHashMap[AnyRef, Long],
+      s: StructType): Iterable[(AnyRef, Long)] = {
+    val fIsNonBinaryString = s.fields.map(f => (f, f.dataType)).map {
+      case (f, t: StringType) if !t.supportsBinaryEquality => (f.name, true)
+      case (f, t) => (f.name, false)
+    }.toMap
+    val fCollationIDs = s.fields.collect {
+      case f if fIsNonBinaryString(f.name) =>
+        (f.name, f.dataType.asInstanceOf[StringType].collationId)
+    }.toMap
+
+    buffer.groupMapReduce {
+      case (key: InternalRow, count) =>
+        key.toSeq(s).zip(s.fields).map {
+          case (k: String, field) if fIsNonBinaryString(field.name) =>
+            CollationFactory.getCollationKey(UTF8String.fromString(k), fCollationIDs(field.name))
+          case (k: UTF8String, field) if fIsNonBinaryString(field.name) =>
+            CollationFactory.getCollationKey(k, fCollationIDs(field.name))
+          case (k, _) => k
+      }
+    }(x => x)((x, y) => (x._1, x._2 + y._2)).values
   }
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): Mode =

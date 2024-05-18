@@ -1429,10 +1429,11 @@ class CollationSQLExpressionsSuite
         (0L to numRepeats).map(_ => s"('$elt')").mkString(",")
       }.mkString(",")
 
-      withTable("t") {
-        sql("CREATE TABLE t(i STRING) USING parquet")
-        sql("INSERT INTO t VALUES " + valuesToAdd)
-        val query = s"SELECT mode(collate(i, '${t.collationId}')) FROM t"
+      val tableName = s"t_${t.collationId}_mode"
+      withTable(s"${tableName}") {
+        sql(s"CREATE TABLE ${tableName}(i STRING) USING parquet")
+        sql(s"INSERT INTO ${tableName} VALUES " + valuesToAdd)
+        val query = s"SELECT mode(collate(i, '${t.collationId}')) FROM ${tableName}"
         checkAnswer(sql(query), Row(t.result))
         assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.collationId)))
 
@@ -1487,24 +1488,22 @@ class CollationSQLExpressionsSuite
   test("Support mode for string expression with collated strings in struct") {
     case class ModeTestCase[R](collationId: String, bufferValues: Map[String, Long], result: R)
     val testCases = Seq(
-      ModeTestCase("utf8_binary", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "[a,1]"),
-      ModeTestCase("utf8_binary_lcase",
-        Map("a" -> 3L, "b" -> 2L, "B" -> 2L),
-        "[a,1]"), // TODO [b,1]
-      ModeTestCase("unicode_ci",
-        Map("a" -> 3L, "b" -> 2L, "B" -> 2L),
-        "[a,1]"), // TODO [b,1]
-      ModeTestCase("unicode", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "[a,1]")
+      ModeTestCase("utf8_binary", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
+      ModeTestCase("utf8_binary_lcase", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b"),
+      ModeTestCase("unicode", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
+      ModeTestCase("unicode_ci", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b")
     )
     testCases.foreach(t => {
       val valuesToAdd = t.bufferValues.map { case (elt, numRepeats) =>
         (0L to numRepeats).map(_ => s"named_struct('f1'," +
           s" collate('$elt', '${t.collationId}'), 'f2', 1)").mkString(",")
       }.mkString(",")
-      withTable("t") {
-        sql("CREATE TABLE t(i STRUCT<f1: STRING, f2: INT>) USING parquet")
-        sql("INSERT INTO t VALUES " + valuesToAdd)
-        val query = s"SELECT mode(i).cast('string') FROM t"
+
+      val tableName = s"t_${t.collationId}_mode_struct"
+      withTable(tableName) {
+        sql(s"CREATE TABLE ${tableName}(i STRUCT<f1: STRING COLLATE " + t.collationId + ", f2: INT>) USING parquet")
+        sql(s"INSERT INTO ${tableName} VALUES " + valuesToAdd)
+        val query = s"SELECT lower(mode(i).f1) FROM ${tableName}"
         checkAnswer(sql(query), Row(t.result))
       }
     })

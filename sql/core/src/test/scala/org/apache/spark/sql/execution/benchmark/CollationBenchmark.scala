@@ -215,6 +215,32 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
 
     benchmark.run()
   }
+
+  def benchmarkModeStruct(
+      collationTypes: Seq[String],
+      value: Seq[UTF8String]): Unit = {
+    val benchmark = new Benchmark(
+      s"collation unit benchmarks - mode [struct] - ${value.size} elements",
+      value.size * 10,
+      warmupTime = 10.seconds,
+      output = output)
+    collationTypes.foreach { collationType => {
+      val buffer = new OpenHashMap[AnyRef, Long](value.size)
+      value.foreach(v => {
+        buffer.update(v.toString, (v.hashCode() % 1000).toLong)
+      })
+      val modeDefaultCollation = Mode(child =
+        Literal.create("some_column_name", StringType(collationType)))
+      benchmark.addCase(s"$collationType - mode - ${value.size} elements") { _ =>
+        (0 to 10) foreach { _ =>
+          modeDefaultCollation.eval(buffer)
+        }
+      }
+    }
+    }
+
+    benchmark.run()
+  }
 }
 
 /**
