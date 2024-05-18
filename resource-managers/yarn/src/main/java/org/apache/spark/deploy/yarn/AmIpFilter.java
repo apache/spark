@@ -42,7 +42,7 @@ import java.util.concurrent.TimeUnit;
 //
 // Modification:
 // Migrate from javax.servlet to jakarta.servlet
-// Copy constant string definitions from AmFilterInitializer to strip external dependency
+// Copy constant string definitions to strip external dependency
 //  - RM_HA_URLS
 //  - PROXY_USER_COOKIE_NAME
 @Public
@@ -60,7 +60,7 @@ public class AmIpFilter implements Filter {
   private static final String PROXY_PATH = "/proxy";
   // RM_HA_URLS is defined in AmFilterInitializer in the original Hadoop code
   private static final String RM_HA_URLS = "RM_HA_URLS";
-  // WebAppProxyServlet is defined in AmFilterInitializer in the original Hadoop code
+  // WebAppProxyServlet is defined in WebAppProxyServlet in the original Hadoop code
   public static final String PROXY_USER_COOKIE_NAME = "proxy-user";
   //update the proxy IP list about every 5 min
   private static long updateInterval = TimeUnit.MINUTES.toMillis(5);
