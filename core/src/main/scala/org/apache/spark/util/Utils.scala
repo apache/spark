@@ -704,7 +704,10 @@ private[spark] object Utils
       }
       listStatuses match {
         case Failure(e) =>
-          if (!e.isInstanceOf[FileNotFoundException] && !fsHasPathCapability) throw e
+          if (e.isInstanceOf[FileNotFoundException] && fsHasPathCapability) {
+            logInfo("Ignoring missing directory %s".format(path))
+            logDebug("Directory missing %s".format(e))
+          } else throw e
         case Success(ls) =>
           ls.foreach { fileStatus =>
             fetchHcfsFile(fileStatus.getPath, dest, fs, conf, hadoopConf, fileOverwrite)
