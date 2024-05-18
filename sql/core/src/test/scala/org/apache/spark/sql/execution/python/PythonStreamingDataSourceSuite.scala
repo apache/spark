@@ -466,6 +466,42 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
     q.awaitTermination()
   }
 
+  // Verify that socket between python runner and JVM doesn't timeout with large trigger interval.
+  test("Read from test data stream source, trigger interval=20 seconds") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource
+         |$testDataStreamReaderScript
+         |
+         |class $dataSourceName(DataSource):
+         |    def schema(self) -> str:
+         |        return "id INT"
+         |    def streamReader(self, schema):
+         |        return TestDataStreamReader()
+         |""".stripMargin
+
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    assert(spark.sessionState.dataSourceManager.dataSourceExists(dataSourceName))
+    val df = spark.readStream.format(dataSourceName).load()
+
+    val stopSignal = new CountDownLatch(1)
+
+    val q = df.writeStream.foreachBatch((df: DataFrame, batchId: Long) => {
+      // checkAnswer may materialize the dataframe more than once
+      // Cache here to make sure the numInputRows metrics is consistent.
+      df.cache()
+      checkAnswer(df, Seq(Row(batchId * 2), Row(batchId * 2 + 1)))
+      if (batchId >= 2) stopSignal.countDown()
+    }).trigger(ProcessingTimeTrigger(20 * 1000)).start()
+    stopSignal.await()
+    assert(q.recentProgress.forall(_.numInputRows == 2))
+    q.stop()
+    q.awaitTermination()
+    assert(q.exception.isEmpty)
+  }
+
   test("Streaming data source read with custom partitions") {
     assume(shouldTestPandasUDFs)
     val dataSourceScript =
@@ -760,6 +796,36 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
         q.awaitTermination()
         assert(q.exception.isEmpty)
       }
+    }
+  }
+
+  // Verify that commit runner work correctly with large timeout interval.
+  test(s"data source stream write, trigger interval=20 seconds") {
+    assume(shouldTestPandasUDFs)
+    val dataSource =
+      createUserDefinedPythonDataSource(dataSourceName, simpleDataStreamWriterScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    val inputData = MemoryStream[Int](numPartitions = 3)
+    val df = inputData.toDF()
+    withTempDir { dir =>
+      val path = dir.getAbsolutePath
+      val checkpointDir = new File(path, "checkpoint")
+      checkpointDir.mkdir()
+      val outputDir = new File(path, "output")
+      outputDir.mkdir()
+      val q = df
+        .writeStream
+        .format(dataSourceName)
+        .option("checkpointLocation", checkpointDir.getAbsolutePath)
+        .trigger(ProcessingTimeTrigger(20 * 1000))
+        .start(outputDir.getAbsolutePath)
+      eventually(timeout(waitTimeout * 5)) {
+        inputData.addData(1 to 3)
+        assert(q.lastProgress.batchId >= 2)
+      }
+      q.stop()
+      q.awaitTermination()
+      assert(q.exception.isEmpty)
     }
   }
 

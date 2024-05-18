@@ -42,9 +42,6 @@ class PythonStreamingWrite(
       ds.getOrCreateDataSourceInPython(shortName, info.options(), Some(info.schema())).dataSource
     )
 
-  private lazy val pythonStreamingSinkCommitRunner =
-    new PythonStreamingSinkCommitRunner(createDataSourceFunc, info.schema(), isTruncate)
-
   override def createStreamingWriterFactory(
        physicalInfo: PhysicalWriteInfo): StreamingDataWriterFactory = {
     val writeInfo = ds.source.createWriteInfoInPython(
@@ -60,11 +57,23 @@ class PythonStreamingWrite(
   }
 
   override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
-    pythonStreamingSinkCommitRunner.commitOrAbort(messages, epochId, false)
+    new PythonStreamingSinkCommitRunner(
+      createDataSourceFunc,
+      info.schema(),
+      messages,
+      batchId = epochId,
+      overwrite = isTruncate,
+      abort = false).runInPython()
   }
 
   override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
-    pythonStreamingSinkCommitRunner.commitOrAbort(messages, epochId, true)
+    new PythonStreamingSinkCommitRunner(
+      createDataSourceFunc,
+      info.schema(),
+      messages,
+      batchId = epochId,
+      overwrite = isTruncate,
+      abort = true).runInPython()
   }
 }
 
