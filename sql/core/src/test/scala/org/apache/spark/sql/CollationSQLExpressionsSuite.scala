@@ -1501,7 +1501,8 @@ class CollationSQLExpressionsSuite
 
       val tableName = s"t_${t.collationId}_mode_struct"
       withTable(tableName) {
-        sql(s"CREATE TABLE ${tableName}(i STRUCT<f1: STRING COLLATE " + t.collationId + ", f2: INT>) USING parquet")
+        sql(s"CREATE TABLE ${tableName}(i STRUCT<f1: STRING COLLATE " +
+          t.collationId + ", f2: INT>) USING parquet")
         sql(s"INSERT INTO ${tableName} VALUES " + valuesToAdd)
         val query = s"SELECT lower(mode(i).f1) FROM ${tableName}"
         checkAnswer(sql(query), Row(t.result))

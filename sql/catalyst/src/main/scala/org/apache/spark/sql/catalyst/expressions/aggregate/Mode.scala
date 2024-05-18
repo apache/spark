@@ -90,6 +90,7 @@ case class Mode(
       case s: StructType => getBufferForStructType(buffer, s)
       case _ => buffer
     }
+    println(s"Buffer: ${buffer.size} => ${collationAwareBuffer.size}")
     reverseOpt.map { reverse =>
       val defaultKeyOrdering = if (reverse) {
         PhysicalDataType.ordering(child.dataType).asInstanceOf[Ordering[AnyRef]].reverse

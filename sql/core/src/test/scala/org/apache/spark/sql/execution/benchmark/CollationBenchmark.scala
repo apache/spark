@@ -19,10 +19,11 @@ package org.apache.spark.sql.execution.benchmark
 import scala.concurrent.duration._
 
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.expressions.aggregate.Mode
 import org.apache.spark.sql.catalyst.util.{CollationFactory, CollationSupport}
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.collection.OpenHashMap
 
@@ -203,11 +204,11 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
       value.foreach(v => {
         buffer.update(v.toString, (v.hashCode() % 1000).toLong)
       })
-      val modeDefaultCollation = Mode(child =
+      val modeCurrent = Mode(child =
         Literal.create("some_column_name", StringType(collationType)))
       benchmark.addCase(s"$collationType - mode - ${value.size} elements") { _ =>
         (0 to 10) foreach { _ =>
-          modeDefaultCollation.eval(buffer)
+          modeCurrent.eval(buffer)
         }
       }
     }
@@ -227,13 +228,19 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
     collationTypes.foreach { collationType => {
       val buffer = new OpenHashMap[AnyRef, Long](value.size)
       value.foreach(v => {
-        buffer.update(v.toString, (v.hashCode() % 1000).toLong)
+        buffer.update(InternalRow.fromSeq(
+          Seq(v.toString, UTF8String.fromString(v.toString), 3)),
+          (v.hashCode() % 1000).toLong)
       })
-      val modeDefaultCollation = Mode(child =
-        Literal.create("some_column_name", StringType(collationType)))
-      benchmark.addCase(s"$collationType - mode - ${value.size} elements") { _ =>
+      val st = StructType(Seq(
+        StructField("a", StringType(collationType)),
+        StructField("b", StringType(collationType)),
+        StructField("c", IntegerType)
+      ))
+      val modeCurrent = Mode(child = Literal.default(st))
+      benchmark.addCase(s"$collationType - mode struct - ${value.size} elements") { _ =>
         (0 to 10) foreach { _ =>
-          modeDefaultCollation.eval(buffer)
+          modeCurrent.eval(buffer)
         }
       }
     }
@@ -295,6 +302,7 @@ object CollationBenchmark extends CollationBenchmarkBase {
     benchmarkStartsWith(collationTypes, inputs)
     benchmarkEndsWith(collationTypes, inputs)
     benchmarkMode(collationTypes, generateBaseInputStringswithUniqueGroupNumber(10000L))
+    benchmarkModeStruct(collationTypes, generateBaseInputStringswithUniqueGroupNumber(10000L))
   }
 }
 
@@ -325,5 +333,6 @@ object CollationNonASCIIBenchmark extends CollationBenchmarkBase {
     benchmarkStartsWith(collationTypes, inputs)
     benchmarkEndsWith(collationTypes, inputs)
     benchmarkMode(collationTypes, inputs)
+    benchmarkModeStruct(collationTypes, inputs)
   }
 }
