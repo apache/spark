@@ -20,7 +20,7 @@ import sys
 from typing import IO
 
 from pyspark.accumulators import _accumulatorRegistry
-from pyspark.errors import PySparkAssertionError
+from pyspark.errors import PySparkAssertionError, PySparkRuntimeError
 from pyspark.serializers import (
     read_bool,
     read_int,
