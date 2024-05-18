@@ -217,8 +217,8 @@
     <netty.version>4.1.109.Final</netty.version>
     <netty-tcnative.version>2.0.65.Final</netty-tcnative.version>
     <icu4j.version>72.1</icu4j.version>
-    <junit-jupiter.version>5.9.3</junit-jupiter.version>
-    <junit-platform.version>1.9.3</junit-platform.version>
+    <junit-jupiter.version>5.10.2</junit-jupiter.version>
+    <junit-platform.version>1.10.2</junit-platform.version>
     <sbt-jupiter-interface.version>0.11.1</sbt-jupiter-interface.version>
     <!--
     If you are changing Arrow version specification, please check

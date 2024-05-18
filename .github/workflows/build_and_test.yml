@@ -103,6 +103,7 @@ jobs:
           precondition="
             {
               \"build\": \"$build\",
+              \"maven-build\": \"true\",
               \"pyspark\": \"$pyspark\",
               \"pyspark-pandas\": \"$pandas\",
               \"sparkr\": \"$sparkr\",
@@ -303,6 +304,62 @@ jobs:
       with:
         name: unit-tests-log-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
         path: "**/target/unit-tests.log"
+
+  maven-build:
+    needs: precondition
+    if: fromJson(needs.precondition.outputs.required).maven-build == 'true'
+    name: Java ${{ matrix.java }} build with Maven (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - java: 21
+            os: macos-14
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 180
+    steps:
+    - name: Checkout Spark repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        repository: apache/spark
+        ref: ${{ inputs.branch }}
+    - name: Sync the current branch with the latest in Apache Spark
+      if: github.repository != 'apache/spark'
+      run: |
+        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+    - name: Cache SBT and Maven
+      uses: actions/cache@v4
+      with:
+        path: |
+          build/apache-maven-*
+          build/*.jar
+          ~/.sbt
+        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        restore-keys: |
+          build-
+    - name: Cache Maven local repository
+      uses: actions/cache@v4
+      with:
+        path: ~/.m2/repository
+        key: java${{ matrix.java }}-maven-${{ hashFiles('**/pom.xml') }}
+        restore-keys: |
+          java${{ matrix.java }}-maven-
+    - name: Install Java ${{ matrix.java }}
+      uses: actions/setup-java@v4
+      with:
+        distribution: zulu
+        java-version: ${{ matrix.java }}
+    - name: Build with Maven
+      run: |
+        export MAVEN_OPTS="-Xss64m -Xmx2g -XX:ReservedCodeCacheSize=1g -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
+        export MAVEN_CLI_OPTS="--no-transfer-progress"
+        export JAVA_VERSION=${{ matrix.java }}
+        # It uses Maven's 'install' intentionally, see https://github.com/apache/spark/pull/26414.
+        ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Djava.version=${JAVA_VERSION/-ea} install
+        rm -rf ~/.m2/repository/org/apache/spark
 
   infra-image:
     name: "Base image build"
@@ -1169,3 +1226,10 @@ jobs:
           cd ui-test
           npm install --save-dev
           node --experimental-vm-modules node_modules/.bin/jest
+
+
+  maven-test:
+    name: "Run Maven Test"
+    permissions:
+      packages: write
+    uses: ./.github/workflows/maven_test.yml
