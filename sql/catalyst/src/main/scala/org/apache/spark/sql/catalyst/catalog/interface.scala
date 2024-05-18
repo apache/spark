@@ -403,7 +403,7 @@ case class CatalogTable(
 
   /**
    * Return the schema binding mode. Defaults to SchemaCompensation if not a view or an older
-   * version, unless the viewSchemaBindingMode config is set to DISABLED
+   * version, unless the viewSchemaBindingMode config is set to false
    */
   def viewSchemaMode: ViewSchemaMode = {
     if (!SQLConf.get.viewSchemaBindingEnabled) {

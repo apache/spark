@@ -172,7 +172,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`t`, false
 -- !query
 CREATE OR REPLACE VIEW v AS SELECT * FROM t
 -- !query analysis
-CreateViewCommand `spark_catalog`.`default`.`v`, SELECT * FROM t, false, true, PersistedView, COMPENSATION, true
+CreateViewCommand `spark_catalog`.`default`.`v`, SELECT * FROM t, false, true, PersistedView, BINDING, true
    +- Project [c1#x]
       +- SubqueryAlias spark_catalog.default.t
          +- Relation spark_catalog.default.t[c1#x] parquet

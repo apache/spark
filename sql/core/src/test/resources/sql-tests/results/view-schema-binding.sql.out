@@ -279,7 +279,7 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM t     	                    
 View Original Text  	SELECT * FROM t     	                    
-View Schema Mode    	COMPENSATION        	                    
+View Schema Mode    	BINDING             	                    
 View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[c1]
 

@@ -5024,7 +5024,11 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     if (ctx == null) {
       // No schema binding specified, return the session default
       if (conf.viewSchemaBindingEnabled) {
-        SchemaCompensation
+        if (conf.viewSchemaCompensation) {
+          SchemaCompensation
+        } else {
+          SchemaBinding
+        }
       } else {
         SchemaUnsupported
       }
@@ -5034,8 +5038,8 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
         throw new ParseException(
           errorClass = "FEATURE_NOT_ENABLED",
           messageParameters = Map("featureName" -> "VIEW ... WITH SCHEMA ...",
-            "configKey" -> "spark.sql.viewSchemaBindingMode",
-            "configValue" -> "COMPENSATION"),
+            "configKey" -> "spark.sql.legacy.viewSchemaBindingMode",
+            "configValue" -> "true"),
           ctx)
       }
     } else if (ctx.COMPENSATION != null) {
