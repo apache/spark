@@ -1,14 +1,11 @@
 -- This test suits check the spark.sql.viewSchemaBindingMode configuration.
 -- It can be DISABLED and COMPENSATION
 
--- Verify the default binding is COMPENSATION
-SET spark.sql.viewSchemaBindingMode;
-
--- Verify which values are allowed
-SET spark.sql.viewSchemaBindingMode = EVOLUTION;
+-- Verify the default binding is true
+SET spark.sql.legacy.viewSchemaBindingMode;
 
 -- 1. Test DISABLED mode.
-SET spark.sql.viewSchemaBindingMode = DISABLED;
+SET spark.sql.legacy.viewSchemaBindingMode = false;
 
 -- 1.a Attempts to use the SCHEMA BINDING clause fail with FEATURE_NOT_ENABLED
 CREATE OR REPLACE VIEW v WITH SCHEMA BINDING AS SELECT 1;
@@ -44,8 +41,9 @@ SELECT * FROM v;
 -- The view still describes as v(c1 INT);
 DESCRIBE EXTENDED v;
 
--- 2. Test COMPENSATION mode. In this mode Spark tolerates any supported CAST, not just up cast
-SET spark.sql.viewSchemaBindingMode = COMPENSATION;
+-- 2. Test true mode. In this mode Spark tolerates any supported CAST, not just up cast
+SET spark.sql.legacy.viewSchemaBindingMode = true;
+SET spark.sql.legacy.viewSchemaCompensation = true;
 
 -- To verify ANSI_MODE is enforced even if ANSI_MODE is turned off.
 SET spark.sql.ansi.enabled = false;

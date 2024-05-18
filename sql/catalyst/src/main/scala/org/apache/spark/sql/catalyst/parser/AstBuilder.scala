@@ -5023,12 +5023,12 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   override def visitSchemaBinding(ctx: SchemaBindingContext): ViewSchemaMode = {
     if (ctx == null) {
       // No schema binding specified, return the session default
-      if (conf.viewSchemaBindingMode == "COMPENSATION") {
+      if (conf.viewSchemaBindingEnabled) {
         SchemaCompensation
       } else {
         SchemaUnsupported
       }
-    } else if (conf.viewSchemaBindingMode == "DISABLED") {
+    } else if (!conf.viewSchemaBindingEnabled) {
       // If the feature is disabled, throw an exception
       withOrigin(ctx) {
         throw new ParseException(

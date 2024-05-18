@@ -1700,15 +1700,18 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val VIEW_SCHEMA_BINDING_MODE = buildConf("spark.sql.viewSchemaBindingMode")
-    .doc("Set to DISABLE to disable the WITH SCHEMA clause for view DDL and suppress the line in " +
-      " DESCRIBE EXTENDED. The default, and only other value, is COMPENSATION. Views without " +
-      " WITH SCHEMA clause are defaulted to WITH SCHEMA COMPENSATION.")
+  val VIEW_SCHEMA_BINDING_ENABLED = buildConf("spark.sql.legacy.viewSchemaBindingMode")
+    .doc("Set to false to disable the WITH SCHEMA clause for view DDL and suppress the line in " +
+      "DESCRIBE EXTENDED and SHOW CREATE TABLE.")
     .version("4.0.0")
-    .stringConf
-    .transform(_.toUpperCase(Locale.ROOT))
-    .checkValues(Set("COMPENSATION", "DISABLED"))
-    .createWithDefault("COMPENSATION")
+    .booleanConf
+    .createWithDefault(true)
+
+  val VIEW_SCHEMA_BINDING_DEFAULT = buildConf("spark.sql.legacy.viewSchemaCompensation")
+    .doc("Set to false to revert default of WITH SCHEMA COMPENSATION to WITH SCHEMA BINDING.")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(true)
 
   // The output committer class used by data sources. The specified class needs to be a
   // subclass of org.apache.hadoop.mapreduce.OutputCommitter.
@@ -5524,7 +5527,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def groupByAliases: Boolean = getConf(GROUP_BY_ALIASES)
 
-  def viewSchemaBindingMode: String = getConf(VIEW_SCHEMA_BINDING_MODE)
+  def viewSchemaBindingEnabled: Boolean = getConf(VIEW_SCHEMA_BINDING_ENABLED)
+
+  def viewSchemaBindingDefault: Boolean = getConf(VIEW_SCHEMA_BINDING_DEFAULT)
 
   def defaultCacheStorageLevel: StorageLevel =
     StorageLevel.fromString(getConf(DEFAULT_CACHE_STORAGE_LEVEL))
