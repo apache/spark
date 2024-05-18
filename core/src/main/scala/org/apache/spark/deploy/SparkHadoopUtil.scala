@@ -220,12 +220,9 @@ private[spark] class SparkHadoopUtil extends Logging {
    * given path points to a file, return a single-element collection containing [[FileStatus]] of
    * that file.
    */
-  @throws[FileNotFoundException](
-    "when the fs.listStatus throws FileNotFoundException and " +
-      "the value of fs.hasPathCapability is FALSE")
   def listLeafStatuses(fs: FileSystem, baseStatus: FileStatus): Seq[FileStatus] = {
     def recurse(status: FileStatus): Seq[FileStatus] = {
-      val fsHasPathCapability =
+      lazy val fsHasPathCapability =
         fs.hasPathCapability(status.getPath, SparkHadoopUtil.DIRECTORY_LISTING_INCONSISTENT)
       val statusResult = Try {
         fs.listStatus(status.getPath)
