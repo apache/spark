@@ -23,8 +23,8 @@ from pyspark.accumulators import _accumulatorRegistry
 from pyspark.errors import PySparkAssertionError
 from pyspark.serializers import (
     read_bool,
-    read_long,
     read_int,
+    read_long,
     write_int,
     SpecialLengths,
 )
@@ -48,10 +48,10 @@ from pyspark.worker_util import (
 
 def main(infile: IO, outfile: IO) -> None:
     """
-    Main method for committing or aborting a data source write operation.
+    Main method for committing or aborting a data source streaming write operation.
 
-    This process is invoked from the `UserDefinedPythonDataSourceCommitRunner.runInPython`
-    method in the BatchWrite implementation of the PythonTableProvider. It is
+    This process is invoked from the `PythonStreamingSinkCommitRunner.runInPython`
+    method in the StreamingWrite implementation of the PythonTableProvider. It is
     responsible for invoking either the `commit` or the `abort` method on a data source
     writer instance, given a list of commit messages.
     """
