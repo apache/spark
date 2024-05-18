@@ -42,7 +42,7 @@ import java.util.concurrent.TimeUnit;
 //
 // Modification:
 // Migrate from javax.servlet to jakarta.servlet
-// Copied constant string definitions from AmFilterInitializer to strip external dependency
+// Copy constant string definitions from AmFilterInitializer to strip external dependency
 //  - RM_HA_URLS
 //  - PROXY_USER_COOKIE_NAME
 @Public
