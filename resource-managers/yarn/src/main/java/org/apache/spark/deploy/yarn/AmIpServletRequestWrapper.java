@@ -24,6 +24,9 @@ import java.security.Principal;
 
 // This class is copied from Hadoop 3.4.0
 // org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpServletRequestWrapper
+//
+// Modification:
+// Migrate from javax.servlet to jakarta.servlet
 public class AmIpServletRequestWrapper extends HttpServletRequestWrapper {
   private final AmIpPrincipal principal;
 

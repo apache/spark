@@ -41,6 +41,7 @@ import java.util.concurrent.TimeUnit;
 // org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter
 //
 // Modification:
+// Migrate from javax.servlet to jakarta.servlet
 // Copied constant string definitions from AmFilterInitializer to strip external dependency
 //  - RM_HA_URLS
 //  - PROXY_USER_COOKIE_NAME

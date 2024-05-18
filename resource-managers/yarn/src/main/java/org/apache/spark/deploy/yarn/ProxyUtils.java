@@ -31,12 +31,13 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.EnumSet;
 
-/**
- * Class containing general purpose proxy utilities
- *
- * This class is copied from Hadoop 3.4.0
- * org.apache.hadoop.yarn.server.webproxy.ProxyUtils
- */
+// Class containing general purpose proxy utilities
+//
+// This class is copied from Hadoop 3.4.0
+// org.apache.hadoop.yarn.server.webproxy.ProxyUtils
+//
+// Modification:
+// Migrate from javax.servlet to jakarta.servlet
 public class ProxyUtils {
   private static final Logger LOG = LoggerFactory.getLogger(
       ProxyUtils.class);
