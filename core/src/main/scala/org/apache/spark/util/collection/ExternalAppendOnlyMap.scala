@@ -566,8 +566,9 @@ class ExternalAppendOnlyMap[K, V, C](
       if (hasSpilled) {
         false
       } else {
-        logInfo(s"Task ${context.taskAttemptId()} force spilling in-memory map to disk and " +
-          s"it will release ${org.apache.spark.util.Utils.bytesToString(getUsed())} memory")
+        logInfo(log"Task ${MDC(TASK_ATTEMPT_ID, context.taskAttemptId())} force spilling" +
+          log" in-memory map to disk and it will release " +
+          log"${MDC(NUM_BYTES, org.apache.spark.util.Utils.bytesToString(getUsed()))} memory")
         val nextUpstream = spillMemoryIteratorToDisk(upstream)
         assert(!upstream.hasNext)
         hasSpilled = true

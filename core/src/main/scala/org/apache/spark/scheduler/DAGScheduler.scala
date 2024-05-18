@@ -535,8 +535,9 @@ private[spark] class DAGScheduler(
     if (!mapOutputTracker.containsShuffle(shuffleDep.shuffleId)) {
       // Kind of ugly: need to register RDDs with the cache and map output tracker here
       // since we can't do it in the RDD constructor because # of partitions is unknown
-      logInfo(s"Registering RDD ${rdd.id} (${rdd.getCreationSite}) as input to " +
-        s"shuffle ${shuffleDep.shuffleId}")
+      logInfo(log"Registering RDD ${MDC(RDD_ID, rdd.id)}" +
+        log" (${MDC(RDD_CREATION_SITE, rdd.getCreationSite)}) as input to " +
+        log"shuffle ${MDC(SHUFFLE_ID, shuffleDep.shuffleId)}")
       mapOutputTracker.registerShuffle(shuffleDep.shuffleId, rdd.partitions.length,
         shuffleDep.partitioner.numPartitions)
     }
@@ -992,16 +993,18 @@ private[spark] class DAGScheduler(
       callSite: CallSite,
       resultHandler: (Int, U) => Unit,
       properties: Properties): Unit = {
-    val start = System.nanoTime
+    val start = System.currentTimeMillis()
     val waiter = submitJob(rdd, func, partitions, callSite, resultHandler, properties)
     ThreadUtils.awaitReady(waiter.completionFuture, Duration.Inf)
     waiter.completionFuture.value.get match {
       case scala.util.Success(_) =>
-        logInfo("Job %d finished: %s, took %f s".format
-          (waiter.jobId, callSite.shortForm, (System.nanoTime - start) / 1e9))
+        logInfo(log"Job ${MDC(JOB_ID, waiter.jobId)}" +
+          log" finished: ${MDC(CALL_SITE_SHORT_FORM, callSite.shortForm)}," +
+          log" took ${MDC(TOTAL_TIME, System.currentTimeMillis() - start)} ms")
       case scala.util.Failure(exception) =>
-        logInfo("Job %d failed: %s, took %f s".format
-          (waiter.jobId, callSite.shortForm, (System.nanoTime - start) / 1e9))
+        logInfo(log"Job ${MDC(JOB_ID, waiter.jobId)}" +
+          log" failed: ${MDC(CALL_SITE_SHORT_FORM, callSite.shortForm)}," +
+          log" took ${MDC(TOTAL_TIME, System.currentTimeMillis() - start)} ms")
         // SPARK-8644: Include user stack trace in exceptions coming from DAGScheduler.
         val callerStackTrace = Thread.currentThread().getStackTrace.tail
         exception.setStackTrace(exception.getStackTrace ++ callerStackTrace)
@@ -1097,7 +1100,7 @@ private[spark] class DAGScheduler(
    * Cancel a job that is running or waiting in the queue.
    */
   def cancelJob(jobId: Int, reason: Option[String]): Unit = {
-    logInfo("Asked to cancel job " + jobId)
+    logInfo(log"Asked to cancel job ${MDC(JOB_ID, jobId)}")
     eventProcessLoop.post(JobCancelled(jobId, reason))
   }
 
@@ -1106,7 +1109,8 @@ private[spark] class DAGScheduler(
    * @param cancelFutureJobs if true, future submitted jobs in this job group will be cancelled
    */
   def cancelJobGroup(groupId: String, cancelFutureJobs: Boolean = false): Unit = {
-    logInfo(s"Asked to cancel job group $groupId with cancelFutureJobs=$cancelFutureJobs")
+    logInfo(log"Asked to cancel job group ${MDC(GROUP_ID, groupId)}" +
+      log" with cancelFutureJobs=${MDC(CANCEL_FUTURE_JOBS, cancelFutureJobs)}")
     eventProcessLoop.post(JobGroupCancelled(groupId, cancelFutureJobs))
   }
 
@@ -1115,7 +1119,7 @@ private[spark] class DAGScheduler(
    */
   def cancelJobsWithTag(tag: String): Unit = {
     SparkContext.throwIfInvalidTag(tag)
-    logInfo(s"Asked to cancel jobs with tag $tag")
+    logInfo(log"Asked to cancel jobs with tag ${MDC(JOB_TAG, tag)}")
     eventProcessLoop.post(JobTagCancelled(tag))
   }
 
@@ -1209,7 +1213,7 @@ private[spark] class DAGScheduler(
     // If cancelFutureJobs is true, store the cancelled job group id into internal states.
     // When a job belonging to this job group is submitted, skip running it.
     if (cancelFutureJobs) {
-      logInfo(s"Add job group $groupId into cancelled job groups")
+      logInfo(log"Add job group ${MDC(GROUP_ID, groupId)} into cancelled job groups")
       cancelledJobGroups.add(groupId)
     }
 
@@ -1314,7 +1318,8 @@ private[spark] class DAGScheduler(
     if (jobGroupIdOpt.exists(cancelledJobGroups.contains(_))) {
       listener.jobFailed(
         SparkCoreErrors.sparkJobCancelledAsPartOfJobGroupError(jobId, jobGroupIdOpt.get))
-      logInfo(s"Skip running a job that belongs to the cancelled job group ${jobGroupIdOpt.get}.")
+      logInfo(log"Skip running a job that belongs to the cancelled" +
+        log" job group ${MDC(GROUP_ID, jobGroupIdOpt.get)}.")
       return
     }
 
@@ -1362,11 +1367,11 @@ private[spark] class DAGScheduler(
 
     val job = new ActiveJob(jobId, finalStage, callSite, listener, artifacts, properties)
     clearCacheLocs()
-    logInfo("Got job %s (%s) with %d output partitions".format(
-      job.jobId, callSite.shortForm, partitions.length))
-    logInfo("Final stage: " + finalStage + " (" + finalStage.name + ")")
-    logInfo("Parents of final stage: " + finalStage.parents)
-    logInfo("Missing parents: " + getMissingParentStages(finalStage))
+    logInfo(log"Got job ${MDC(JOB_ID, job.jobId)} (${MDC(CALL_SITE_SHORT_FORM, callSite.shortForm)})" +
+      log" with ${MDC(NUM_PARTITIONS, partitions.length)} output partitions")
+    logInfo(log"Final stage: ${MDC(STAGE, finalStage)} (${MDC(STAGE_NAME, finalStage.name)})")
+    logInfo(log"Parents of final stage: ${MDC(STAGE_PARENTS, finalStage.parents)}")
+    logInfo(log"Missing parents: ${MDC(STAGE_PARENTS, getMissingParentStages(finalStage))}")
 
     val jobSubmissionTime = clock.getTimeMillis()
     jobIdToActiveJob(jobId) = job
@@ -1403,11 +1408,11 @@ private[spark] class DAGScheduler(
 
     val job = new ActiveJob(jobId, finalStage, callSite, listener, artifacts, properties)
     clearCacheLocs()
-    logInfo("Got map stage job %s (%s) with %d output partitions".format(
-      jobId, callSite.shortForm, dependency.rdd.partitions.length))
-    logInfo("Final stage: " + finalStage + " (" + finalStage.name + ")")
-    logInfo("Parents of final stage: " + finalStage.parents)
-    logInfo("Missing parents: " + getMissingParentStages(finalStage))
+    logInfo(log"Got map stage job ${MDC(JOB_ID, jobId)} (${MDC(CALL_SITE_SHORT_FORM, callSite.shortForm)})" +
+      log" with ${MDC(NUM_PARTITIONS, dependency.rdd.partitions.length)} output partitions")
+    logInfo(log"Final stage: ${MDC(STAGE, finalStage)} (${MDC(STAGE_NAME, finalStage.name)})")
+    logInfo(log"Parents of final stage: ${MDC(STAGE_PARENTS, finalStage.parents)}")
+    logInfo(log"Missing parents: ${MDC(STAGE_PARENTS, getMissingParentStages(finalStage))}")
 
     val jobSubmissionTime = clock.getTimeMillis()
     jobIdToActiveJob(jobId) = job
@@ -1444,7 +1449,8 @@ private[spark] class DAGScheduler(
           val missing = getMissingParentStages(stage).sortBy(_.id)
           logDebug("missing: " + missing)
           if (missing.isEmpty) {
-            logInfo("Submitting " + stage + " (" + stage.rdd + "), which has no missing parents")
+            logInfo(log"Submitting ${MDC(STAGE, stage)} (${MDC(RDD_DESCRIPTION, stage.rdd)})," +
+              log" which has no missing parents")
             submitMissingTasks(stage, jobId.get)
           } else {
             for (parent <- missing) {
@@ -1681,8 +1687,9 @@ private[spark] class DAGScheduler(
     }
 
     if (tasks.nonEmpty) {
-      logInfo(s"Submitting ${tasks.size} missing tasks from $stage (${stage.rdd}) (first 15 " +
-        s"tasks are for partitions ${tasks.take(15).map(_.partitionId)})")
+      logInfo(log"Submitting ${MDC(NUM_TASKS, tasks.size)} missing tasks" +
+        log" from ${MDC(STAGE, stage)} (${MDC(RDD_DESCRIPTION, stage.rdd)}) (first 15 " +
+        log"tasks are for partitions ${MDC(PARTITION_IDS, tasks.take(15).map(_.partitionId))})")
       val shuffleId = stage match {
         case s: ShuffleMapStage => Some(s.shuffleDep.shuffleId)
         case _: ResultStage => None
@@ -1926,8 +1933,8 @@ private[spark] class DAGScheduler(
                     try {
                       // killAllTaskAttempts will fail if a SchedulerBackend does not implement
                       // killTask.
-                      logInfo(s"Job ${job.jobId} is finished. Cancelling potential speculative " +
-                        "or zombie tasks for this job")
+                      logInfo(log"Job ${MDC(JOB_ID, job.jobId)} is finished. Cancelling potential speculative " +
+                        log"or zombie tasks for this job")
                       // ResultStage is only used by this job. It's safe to kill speculative or
                       // zombie tasks in this stage.
                       taskScheduler.killAllTaskAttempts(
@@ -1954,7 +1961,7 @@ private[spark] class DAGScheduler(
                   }
                 }
               case None =>
-                logInfo("Ignoring result from " + rt + " because its job has finished")
+                logInfo(log"Ignoring result from ${MDC(TASK, rt)} because its job has finished")
             }
 
           case smt: ShuffleMapTask =>
@@ -1969,7 +1976,8 @@ private[spark] class DAGScheduler(
               logDebug("ShuffleMapTask finished on " + execId)
               if (executorFailureEpoch.contains(execId) &&
                 smt.epoch <= executorFailureEpoch(execId)) {
-                logInfo(s"Ignoring possibly bogus $smt completion from executor $execId")
+                logInfo(log"Ignoring possibly bogus ${MDC(TASK, smt)}" +
+                  log" completion from executor ${MDC(EXECUTOR_ID, execId)}")
               } else {
                 // The epoch of the task is acceptable (i.e., the task was launched after the most
                 // recent failure we're aware of for the executor), so mark the task's output as
@@ -1978,7 +1986,7 @@ private[spark] class DAGScheduler(
                   shuffleStage.shuffleDep.shuffleId, smt.partitionId, status)
               }
             } else {
-              logInfo(s"Ignoring $smt completion from an older attempt of indeterminate stage")
+              logInfo(log"Ignoring ${MDC(TASK, smt)} completion from an older attempt of indeterminate stage")
             }
 
             if (runningStages.contains(shuffleStage) && shuffleStage.pendingPartitions.isEmpty) {
@@ -1996,17 +2004,19 @@ private[spark] class DAGScheduler(
         val mapStage = shuffleIdToMapStage(shuffleId)
 
         if (failedStage.latestInfo.attemptNumber() != task.stageAttemptId) {
-          logInfo(s"Ignoring fetch failure from $task as it's from $failedStage attempt" +
-            s" ${task.stageAttemptId} and there is a more recent attempt for that stage " +
-            s"(attempt ${failedStage.latestInfo.attemptNumber()}) running")
+          logInfo(log"Ignoring fetch failure from ${MDC(TASK, task)} as it's from" +
+            log" ${MDC(STAGE, failedStage)} attempt ${MDC(STAGE_ATTEMPT_ID, task.stageAttemptId)}" +
+            log" and there is a more recent attempt for that stage " +
+            log"(attempt ${MDC(STAGE_ATTEMPT_NUMBER, failedStage.latestInfo.attemptNumber())}) running")
         } else {
           val ignoreStageFailure = ignoreDecommissionFetchFailure &&
             isExecutorDecommissioningOrDecommissioned(taskScheduler, bmAddress)
           if (ignoreStageFailure) {
-            logInfo(s"Ignoring fetch failure from $task of $failedStage attempt " +
-              s"${task.stageAttemptId} when count ${config.STAGE_MAX_CONSECUTIVE_ATTEMPTS.key} " +
-              s"as executor ${bmAddress.executorId} is decommissioned and " +
-              s" ${config.STAGE_IGNORE_DECOMMISSION_FETCH_FAILURE.key}=true")
+            logInfo(log"Ignoring fetch failure from ${MDC(TASK, task)} of ${MDC(STAGE, failedStage)}" +
+              log" attempt ${MDC(STAGE_ATTEMPT_ID, task.stageAttemptId)} when count" +
+              log" ${MDC(KEY, config.STAGE_MAX_CONSECUTIVE_ATTEMPTS.key)} as executor " +
+              log"${MDC(EXECUTOR_ID, bmAddress.executorId)} is decommissioned and " +
+              log" ${MDC(KEY2, config.STAGE_IGNORE_DECOMMISSION_FETCH_FAILURE.key)}=true")
           } else {
             failedStage.failedAttemptIds.add(task.stageAttemptId)
           }
@@ -2019,13 +2029,13 @@ private[spark] class DAGScheduler(
           // multiple tasks running concurrently on different executors). In that case, it is
           // possible the fetch failure has already been handled by the scheduler.
           if (runningStages.contains(failedStage)) {
-            logInfo(s"Marking $failedStage (${failedStage.name}) as failed " +
-              s"due to a fetch failure from $mapStage (${mapStage.name})")
+            logInfo(log"Marking ${MDC(STAGE, failedStage)} (${MDC(STAGE_NAME, failedStage.name)}) as failed " +
+              log"due to a fetch failure from ${MDC(STAGE2, mapStage)} (${MDC(STAGE_NAME2, mapStage.name)})")
             markStageAsFinished(failedStage, errorMessage = Some(failureMessage),
               willRetry = !shouldAbortStage)
           } else {
-            logDebug(s"Received fetch failure from $task, but it's from $failedStage which is no " +
-              "longer running")
+            logDebug(log"Received fetch failure from ${MDC(TASK, task)}," +
+              log" but it's from ${MDC(STAGE, failedStage)} which is no longer running")
           }
 
           if (mapStage.rdd.isBarrier()) {
@@ -2148,9 +2158,9 @@ private[spark] class DAGScheduler(
 
                   case _ =>
                 }
-                logInfo(s"The shuffle map stage $mapStage with indeterminate output was failed, " +
-                  s"we will roll back and rerun below stages which include itself and all its " +
-                  s"indeterminate child stages: $rollingBackStages")
+                logInfo(log"The shuffle map stage ${MDC(STAGE, mapStage)} with indeterminate output was failed," +
+                  log" we will roll back and rerun below stages which include itself and all its" +
+                  log" indeterminate child stages: ${MDC(STAGES, rollingBackStages)}")
               }
 
               // We expect one executor failure to trigger many FetchFailures in rapid succession,
@@ -2162,8 +2172,8 @@ private[spark] class DAGScheduler(
               // producing a resubmit for each failed stage makes debugging and logging a little
               // simpler while not producing an overwhelming number of scheduler events.
               logInfo(
-                s"Resubmitting $mapStage (${mapStage.name}) and " +
-                  s"$failedStage (${failedStage.name}) due to fetch failure"
+                log"Resubmitting ${MDC(STAGE, mapStage)} (${MDC(STAGE_NAME, mapStage.name)}) and " +
+                  log"${MDC(STAGE2, failedStage)} (${MDC(STAGE_NAME, failedStage.name)}) due to fetch failure"
               )
               messageScheduler.schedule(
                 new Runnable {
@@ -2223,12 +2233,12 @@ private[spark] class DAGScheduler(
         // Always fail the current stage and retry all the tasks when a barrier task fail.
         val failedStage = stageIdToStage(task.stageId)
         if (failedStage.latestInfo.attemptNumber() != task.stageAttemptId) {
-          logInfo(s"Ignoring task failure from $task as it's from $failedStage attempt" +
-            s" ${task.stageAttemptId} and there is a more recent attempt for that stage " +
-            s"(attempt ${failedStage.latestInfo.attemptNumber()}) running")
+          logInfo(log"Ignoring task failure from ${MDC(TASK, task)} as it's from ${MDC(STAGE, failedStage)} attempt" +
+            log" ${MDC(STAGE_ATTEMPT_ID, task.stageAttemptId)} and there is a more recent attempt for that stage " +
+            log"(attempt ${MDC(STAGE_ATTEMPT_NUMBER, failedStage.latestInfo.attemptNumber())}) running")
         } else {
-          logInfo(s"Marking $failedStage (${failedStage.name}) as failed due to a barrier task " +
-            "failed.")
+          logInfo(log"Marking ${MDC(STAGE, failedStage)} (${MDC(STAGE_NAME, failedStage.name)})" +
+            log"as failed due to a barrier task failed.")
           val message = s"Stage failed because barrier task $task finished unsuccessfully.\n" +
             failure.toErrorString
           try {
@@ -2283,8 +2293,8 @@ private[spark] class DAGScheduler(
             val noResubmitEnqueued = !failedStages.contains(failedStage)
             failedStages += failedStage
             if (noResubmitEnqueued) {
-              logInfo(s"Resubmitting $failedStage (${failedStage.name}) due to barrier stage " +
-                "failure.")
+              logInfo(log"Resubmitting ${MDC(STAGE, failedStage)} (${MDC(STAGE_NAME, failedStage.name)})" +
+                log"due to barrier stage failure.")
               messageScheduler.schedule(new Runnable {
                 override def run(): Unit = eventProcessLoop.post(ResubmitFailedStages)
               }, DAGScheduler.RESUBMIT_TIMEOUT, TimeUnit.MILLISECONDS)
@@ -2361,8 +2371,8 @@ private[spark] class DAGScheduler(
         // delay should be 0 and registerMergeResults should be true.
         assert(delay == 0 && registerMergeResults)
         if (task.getDelay(TimeUnit.NANOSECONDS) > 0 && task.cancel(false)) {
-          logInfo(s"$stage (${stage.name}) scheduled for finalizing shuffle merge immediately " +
-            s"after cancelling previously scheduled task.")
+          logInfo(log"${MDC(STAGE, stage)} (${MDC(STAGE_NAME, stage.name)}) scheduled for" +
+            log" finalizing shuffle merge immediately after cancelling previously scheduled task.")
           shuffleDep.setFinalizeTask(
             shuffleMergeFinalizeScheduler.schedule(
               new Runnable {
@@ -2373,13 +2383,14 @@ private[spark] class DAGScheduler(
             )
           )
         } else {
-          logInfo(s"$stage (${stage.name}) existing scheduled task for finalizing shuffle merge" +
-            s"would either be in-progress or finished. No need to schedule shuffle merge" +
-            s" finalization again.")
+          logInfo(log"${MDC(STAGE, stage)} (${MDC(STAGE_NAME, stage.name)}) existing scheduled task" +
+            log" for finalizing shuffle merge would either be in-progress or finished. No need to" +
+            log" schedule shuffle merge finalization again.")
         }
       case None =>
         // If no previous finalization task is scheduled, schedule the finalization task.
-        logInfo(s"$stage (${stage.name}) scheduled for finalizing shuffle merge in $delay s")
+        logInfo(log"${MDC(STAGE, stage)} (${MDC(STAGE_NAME, stage.name)}) scheduled for finalizing" +
+          log" shuffle merge in ${MDC(DELAY, delay)} s")
         shuffleDep.setFinalizeTask(
           shuffleMergeFinalizeScheduler.schedule(
             new Runnable {
@@ -2408,8 +2419,8 @@ private[spark] class DAGScheduler(
   private[scheduler] def finalizeShuffleMerge(
       stage: ShuffleMapStage,
       registerMergeResults: Boolean = true): Unit = {
-    logInfo(s"$stage (${stage.name}) finalizing the shuffle merge with registering merge " +
-      s"results set to $registerMergeResults")
+    logInfo(log"${MDC(STAGE, stage)} (${MDC(STAGE_NAME, stage.name)}) finalizing the shuffle merge" +
+      log" with registering merge results set to ${MDC(REGISTER_MERGE_RESULT, registerMergeResults)}")
     val shuffleId = stage.shuffleDep.shuffleId
     val shuffleMergeId = stage.shuffleDep.shuffleMergeId
     val numMergers = stage.shuffleDep.getMergerLocs.length
@@ -2479,8 +2490,8 @@ private[spark] class DAGScheduler(
       } catch {
         case _: TimeoutException =>
           timedOut = true
-          logInfo(s"Timed out on waiting for merge results from all " +
-            s"$numMergers mergers for shuffle $shuffleId")
+          logInfo(log"Timed out on waiting for merge results from all " +
+            log"${MDC(NUM_MERGERS, numMergers)} mergers for shuffle ${MDC(SHUFFLE_ID, shuffleId)}")
       } finally {
         if (timedOut || !registerMergeResults) {
           cancelFinalizeShuffleMergeFutures(scheduledFutures,
@@ -2511,9 +2522,9 @@ private[spark] class DAGScheduler(
   private def processShuffleMapStageCompletion(shuffleStage: ShuffleMapStage): Unit = {
     markStageAsFinished(shuffleStage)
     logInfo("looking for newly runnable stages")
-    logInfo("running: " + runningStages)
-    logInfo("waiting: " + waitingStages)
-    logInfo("failed: " + failedStages)
+    logInfo(log"running: ${MDC(STAGES, runningStages)}")
+    logInfo(log"waiting: ${MDC(STAGES, waitingStages)}")
+    logInfo(log"failed: ${MDC(STAGES, failedStages)}")
 
     // This call to increment the epoch may not be strictly necessary, but it is retained
     // for now in order to minimize the changes in behavior from an earlier version of the
@@ -2529,9 +2540,9 @@ private[spark] class DAGScheduler(
     if (!shuffleStage.isAvailable) {
       // Some tasks had failed; let's resubmit this shuffleStage.
       // TODO: Lower-level scheduler should also deal with this
-      logInfo("Resubmitting " + shuffleStage + " (" + shuffleStage.name +
-        ") because some of its tasks had failed: " +
-        shuffleStage.findMissingPartitions().mkString(", "))
+      logInfo(log"Resubmitting ${MDC(STAGE, shuffleStage)} (${MDC(STAGE_NAME, shuffleStage.name)})" +
+        log" because some of its tasks had failed:" +
+        log" ${MDC(PARTITION_IDS, shuffleStage.findMissingPartitions().mkString(", "))}")
       submitStage(shuffleStage)
     } else {
       markMapStageJobsAsFinished(shuffleStage)
@@ -2603,7 +2614,7 @@ private[spark] class DAGScheduler(
   }
 
   private def handleResubmittedFailure(task: Task[_], stage: Stage): Unit = {
-    logInfo(s"Resubmitted $task, so marking it as still running.")
+    logInfo(log"Resubmitted ${MDC(TASK, task)}, so marking it as still running.")
     stage match {
       case sms: ShuffleMapStage =>
         sms.pendingPartitions += task.partitionId
@@ -2679,7 +2690,7 @@ private[spark] class DAGScheduler(
     if (!isShuffleMerger &&
       (!executorFailureEpoch.contains(execId) || executorFailureEpoch(execId) < currentEpoch)) {
       executorFailureEpoch(execId) = currentEpoch
-      logInfo(s"Executor lost: $execId (epoch $currentEpoch)")
+      logInfo(log"Executor lost: ${MDC(EXECUTOR_ID, execId)} (epoch ${MDC(EPOCH, currentEpoch)})")
       if (pushBasedShuffleEnabled) {
         // Remove fetchFailed host in the shuffle push merger list for push based shuffle
         hostToUnregisterOutputs.foreach(
@@ -2703,10 +2714,10 @@ private[spark] class DAGScheduler(
       if (remove) {
         hostToUnregisterOutputs match {
           case Some(host) =>
-            logInfo(s"Shuffle files lost for host: $host (epoch $currentEpoch)")
+            logInfo(log"Shuffle files lost for host: ${MDC(HOST, host)} (epoch ${MDC(EPOCH, currentEpoch)})")
             mapOutputTracker.removeOutputsOnHost(host)
           case None =>
-            logInfo(s"Shuffle files lost for executor: $execId (epoch $currentEpoch)")
+            logInfo(log"Shuffle files lost for executor: ${MDC(EXECUTOR_ID, execId)} (epoch ${MDC(EPOCH, currentEpoch)})")
             mapOutputTracker.removeOutputsOnExecutor(execId)
         }
       }
@@ -2728,7 +2739,7 @@ private[spark] class DAGScheduler(
       workerId: String,
       host: String,
       message: String): Unit = {
-    logInfo("Shuffle files lost for worker %s on host %s".format(workerId, host))
+    logInfo(log"Shuffle files lost for worker ${MDC(WORKER_ID, workerId)} on host ${MDC(HOST, host)}")
     mapOutputTracker.removeOutputsOnHost(host)
     clearCacheLocs()
   }
@@ -2736,7 +2747,7 @@ private[spark] class DAGScheduler(
   private[scheduler] def handleExecutorAdded(execId: String, host: String): Unit = {
     // remove from executorFailureEpoch(execId) ?
     if (executorFailureEpoch.contains(execId)) {
-      logInfo("Host added was in lost list earlier: " + host)
+      logInfo(log"Host added was in lost list earlier: ${MDC(HOST, host)}")
       executorFailureEpoch -= execId
     }
     shuffleFileLostEpoch -= execId
@@ -2749,10 +2760,10 @@ private[spark] class DAGScheduler(
       }.foreach { case (_, stage: ShuffleMapStage) =>
         configureShufflePushMergerLocations(stage)
         if (stage.shuffleDep.getMergerLocs.nonEmpty) {
-          logInfo(s"Shuffle merge enabled adaptively for $stage with shuffle" +
-            s" ${stage.shuffleDep.shuffleId} and shuffle merge" +
-            s" ${stage.shuffleDep.shuffleMergeId} with ${stage.shuffleDep.getMergerLocs.size}" +
-            s" merger locations")
+          logInfo(log"Shuffle merge enabled adaptively for ${MDC(STAGE, stage)} with shuffle" +
+            log" ${MDC(SHUFFLE_ID, stage.shuffleDep.shuffleId)} and shuffle merge" +
+            log" ${MDC(SHUFFLE_MERGE_ID, stage.shuffleDep.shuffleMergeId)} with" +
+            log" ${MDC(NUM_MERGER_LOCATIONS, stage.shuffleDep.getMergerLocs.size)} merger locations")
         }
       }
     }
@@ -2772,7 +2783,7 @@ private[spark] class DAGScheduler(
           handleJobCancellation(jobId, Option(reasonStr))
         }
       case None =>
-        logInfo("No active jobs to kill for Stage " + stageId)
+        logInfo(log"No active jobs to kill for Stage ${MDC(STAGE_ID, stageId)}")
     }
   }
 
@@ -2795,11 +2806,11 @@ private[spark] class DAGScheduler(
       errorMessage: Option[String] = None,
       willRetry: Boolean = false): Unit = {
     val serviceTime = stage.latestInfo.submissionTime match {
-      case Some(t) => "%.03f".format((clock.getTimeMillis() - t) / 1000.0)
+      case Some(t) => (clock.getTimeMillis() - t).toString
       case _ => "Unknown"
     }
     if (errorMessage.isEmpty) {
-      logInfo("%s (%s) finished in %s s".format(stage, stage.name, serviceTime))
+      logInfo(log"${MDC(STAGE, stage)} (${MDC(STAGE_NAME, stage.name)}) finished in ${MDC(TOTAL_TIME, serviceTime)} ms")
       stage.latestInfo.completionTime = Some(clock.getTimeMillis())
 
       // Clear failure count for this stage, now that it's succeeded.
@@ -2809,7 +2820,8 @@ private[spark] class DAGScheduler(
       stage.clearFailures()
     } else {
       stage.latestInfo.stageFailed(errorMessage.get)
-      logInfo(s"$stage (${stage.name}) failed in $serviceTime s due to ${errorMessage.get}")
+      logInfo(log"${MDC(STAGE, stage)} (${MDC(STAGE_NAME, stage.name)}) failed in" +
+        log" ${MDC(TOTAL_TIME, serviceTime)} ms due to ${MDC(EXCEPTION, errorMessage.get)}")
     }
     updateStageInfoForPushBasedShuffle(stage)
     if (!willRetry) {
@@ -2855,7 +2867,7 @@ private[spark] class DAGScheduler(
       failJobAndIndependentStages(job, finalException)
     }
     if (dependentJobs.isEmpty) {
-      logInfo("Ignoring failure of " + failedStage + " because all jobs depending on it are done")
+      logInfo(log"Ignoring failure of ${MDC(STAGE, failedStage)} because all jobs depending on it are done")
     }
   }
 
