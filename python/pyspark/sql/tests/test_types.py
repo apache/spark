@@ -600,6 +600,234 @@ class TypesTestsMixin:
         self.assertEqual(df.count(), 1)
         self.assertEqual(df.head(), Row(name="[123]", income=120))
 
+    def test_schema_with_collations_json_ser_de(self):
+        from pyspark.sql.types import _parse_datatype_json_string
+
+        unicode_collation = "UNICODE"
+
+        simple_struct = StructType([StructField("c1", StringType(unicode_collation))])
+
+        nested_struct = StructType([StructField("nested", simple_struct)])
+
+        array_in_schema = StructType(
+            [StructField("array", ArrayType(StringType(unicode_collation)))]
+        )
+
+        map_in_schema = StructType(
+            [
+                StructField(
+                    "map", MapType(StringType(unicode_collation), StringType(unicode_collation))
+                )
+            ]
+        )
+
+        nested_map = StructType(
+            [
+                StructField(
+                    "nested",
+                    StructType(
+                        [
+                            StructField(
+                                "mapField",
+                                MapType(
+                                    StringType(unicode_collation), StringType(unicode_collation)
+                                ),
+                            )
+                        ]
+                    ),
+                )
+            ]
+        )
+
+        array_in_map = StructType(
+            [
+                StructField(
+                    "arrInMap",
+                    MapType(
+                        StringType(unicode_collation), ArrayType(StringType(unicode_collation))
+                    ),
+                )
+            ]
+        )
+
+        nested_array_in_map_value = StructType(
+            [
+                StructField(
+                    "nestedArrayInMap",
+                    ArrayType(
+                        MapType(
+                            StringType(unicode_collation),
+                            ArrayType(ArrayType(StringType(unicode_collation))),
+                        )
+                    ),
+                )
+            ]
+        )
+
+        schema_with_multiple_fields = StructType(
+            simple_struct.fields
+            + nested_struct.fields
+            + array_in_schema.fields
+            + map_in_schema.fields
+            + nested_map.fields
+            + array_in_map.fields
+            + nested_array_in_map_value.fields
+        )
+
+        schemas = [
+            simple_struct,
+            nested_struct,
+            array_in_schema,
+            map_in_schema,
+            nested_map,
+            nested_array_in_map_value,
+            array_in_map,
+            schema_with_multiple_fields,
+        ]
+
+        for schema in schemas:
+            scala_datatype = self.spark._jsparkSession.parseDataType(schema.json())
+            python_datatype = _parse_datatype_json_string(scala_datatype.json())
+            assert schema == python_datatype
+            assert schema == _parse_datatype_json_string(schema.json())
+
+    def test_schema_with_collations_on_non_string_types(self):
+        from pyspark.sql.types import _parse_datatype_json_string, _COLLATIONS_METADATA_KEY
+
+        collations_on_int_col_json = f"""
+        {{
+          "type": "struct",
+          "fields": [
+            {{
+              "name": "c1",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {{
+                "{_COLLATIONS_METADATA_KEY}": {{
+                  "c1": "icu.UNICODE"
+                }}
+              }}
+            }}
+          ]
+        }}
+        """
+
+        collations_in_array_element_json = f"""
+        {{
+          "type": "struct",
+          "fields": [
+            {{
+              "name": "arrayField",
+              "type": {{
+                  "type": "array",
+                  "elementType": "integer",
+                  "containsNull": true
+              }},
+              "nullable": true,
+              "metadata": {{
+                "{_COLLATIONS_METADATA_KEY}": {{
+                  "arrayField.element": "icu.UNICODE"
+                }}
+              }}
+            }}
+          ]
+        }}
+        """
+
+        collations_on_array_json = f"""
+        {{
+          "type": "struct",
+          "fields": [
+            {{
+              "name": "arrayField",
+              "type": {{
+                  "type": "array",
+                  "elementType": "integer",
+                  "containsNull": true
+              }},
+              "nullable": true,
+              "metadata": {{
+                "{_COLLATIONS_METADATA_KEY}": {{
+                  "arrayField": "icu.UNICODE"
+                }}
+              }}
+            }}
+          ]
+        }}
+        """
+
+        collations_in_nested_map_json = f"""
+        {{
+          "type": "struct",
+          "fields": [
+            {{
+              "name": "nested",
+              "type": {{
+                "type": "struct",
+                "fields": [
+                  {{
+                    "name": "mapField",
+                    "type": {{
+                      "type": "map",
+                      "keyType": "string",
+                      "valueType": "integer",
+                      "valueContainsNull": true
+                    }},
+                    "nullable": true,
+                    "metadata": {{
+                      "{_COLLATIONS_METADATA_KEY}": {{
+                        "mapField.value": "icu.UNICODE"
+                      }}
+                    }}
+                  }}
+                ]
+              }},
+              "nullable": true,
+              "metadata": {{}}
+            }}
+          ]
+        }}
+        """
+
+        self.assertRaises(
+            PySparkTypeError, lambda: _parse_datatype_json_string(collations_on_int_col_json)
+        )
+
+        self.assertRaises(
+            PySparkTypeError, lambda: _parse_datatype_json_string(collations_in_array_element_json)
+        )
+
+        self.assertRaises(
+            PySparkTypeError, lambda: _parse_datatype_json_string(collations_on_array_json)
+        )
+
+        self.assertRaises(
+            PySparkTypeError, lambda: _parse_datatype_json_string(collations_in_nested_map_json)
+        )
+
+    def test_schema_with_bad_collations_provider(self):
+        from pyspark.sql.types import _parse_datatype_json_string, _COLLATIONS_METADATA_KEY
+
+        schema_json = f"""
+        {{
+          "type": "struct",
+          "fields": [
+            {{
+              "name": "c1",
+              "type": "string",
+              "nullable": "true",
+              "metadata": {{
+                "{_COLLATIONS_METADATA_KEY}": {{
+                  "c1": "badProvider.UNICODE"
+                }}
+              }}
+            }}
+          ]
+        }}
+        """
+
+        self.assertRaises(PySparkValueError, lambda: _parse_datatype_json_string(schema_json))
+
     def test_udt(self):
         from pyspark.sql.types import _parse_datatype_json_string, _infer_type, _make_type_verifier
 
@@ -915,27 +1143,6 @@ class TypesTestsMixin:
                 self.assertEqual(t(), _parse_datatype_string(k))
         self.assertEqual(IntegerType(), _parse_datatype_string("int"))
         self.assertEqual(StringType(), _parse_datatype_string("string"))
-        self.assertEqual(StringType(), _parse_datatype_string("string collate UTF8_BINARY"))
-        self.assertEqual(StringType(), _parse_datatype_string("string COLLATE UTF8_BINARY"))
-        self.assertEqual(
-            StringType.fromCollationId(0), _parse_datatype_string("string COLLATE   UTF8_BINARY")
-        )
-        self.assertEqual(
-            StringType.fromCollationId(1),
-            _parse_datatype_string("string COLLATE UTF8_BINARY_LCASE"),
-        )
-        self.assertEqual(
-            StringType.fromCollationId(2), _parse_datatype_string("string COLLATE UNICODE")
-        )
-        self.assertEqual(
-            StringType.fromCollationId(2), _parse_datatype_string("string COLLATE `UNICODE`")
-        )
-        self.assertEqual(
-            StringType.fromCollationId(3), _parse_datatype_string("string COLLATE UNICODE_CI")
-        )
-        self.assertEqual(
-            StringType.fromCollationId(3), _parse_datatype_string("string COLLATE `UNICODE_CI`")
-        )
         self.assertEqual(CharType(1), _parse_datatype_string("char(1)"))
         self.assertEqual(CharType(10), _parse_datatype_string("char( 10   )"))
         self.assertEqual(CharType(11), _parse_datatype_string("char( 11)"))
