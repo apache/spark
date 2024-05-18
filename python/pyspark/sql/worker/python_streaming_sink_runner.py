@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
 import os
 import sys
 from typing import IO
@@ -56,12 +57,11 @@ def main(infile: IO, outfile: IO) -> None:
     """
     try:
         check_python_version(infile)
+        setup_spark_files(infile)
+        setup_broadcasts(infile)
 
         memory_limit_mb = int(os.environ.get("PYSPARK_PLANNER_MEMORY_MB", "-1"))
         setup_memory_limits(memory_limit_mb)
-
-        setup_spark_files(infile)
-        setup_broadcasts(infile)
 
         _accumulatorRegistry.clear()
 
@@ -127,11 +127,9 @@ def main(infile: IO, outfile: IO) -> None:
                 error_class="PYTHON_STREAMING_DATA_SOURCE_RUNTIME_ERROR",
                 message_parameters={"action": "commitOrAbort", "error": error_msg},
             )
-
     except BaseException as e:
         handle_worker_exception(e, outfile)
         sys.exit(-1)
-
     send_accumulator_updates(outfile)
 
     # check end of stream

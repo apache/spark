@@ -44,9 +44,9 @@ class PythonStreamingSinkCommitRunner(
   override val workerModule: String = "pyspark.sql.worker.python_streaming_sink_runner"
 
   override protected def writeToPython(dataOut: DataOutputStream, pickler: Pickler): Unit = {
-    // Send the user function to python process
+    // Send the user function to python process.
     PythonWorkerUtils.writePythonFunction(dataSourceCls, dataOut)
-    // Send the Python data source writer.
+    // Send the output schema.
     PythonWorkerUtils.writeUTF(schema.json, dataOut)
     dataOut.writeBoolean(overwrite)
 
@@ -72,7 +72,6 @@ class PythonStreamingSinkCommitRunner(
     val code = dataIn.readInt()
     if (code == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
-      println(msg)
       throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
         action = "Commit streaming sink", msg)
     }
