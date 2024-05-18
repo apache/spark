@@ -63,6 +63,7 @@ if TYPE_CHECKING:
 
 def to_arrow_type(
     dt: DataType,
+    error_on_duplicated_field_names_in_struct: bool = False,
     timestamp_utc: bool = True,
 ) -> "pa.DataType":
     """
@@ -72,12 +73,15 @@ def to_arrow_type(
     ----------
     dt : :class:`DataType`
         The Spark data type.
+    error_on_duplicated_field_names_in_struct: bool, default False
+        Whether to raise an exception when there are duplicated field names in a
+        :class:`pyspark.sql.types.StructType`. (default ``False``)
     timestamp_utc : bool, default True
-        If True (the default), :class:`TimestampType` is converted to a timezone-aware
-        :class:`pyarrow.TimestampType` with UTC as the timezone. If False, :class:`TimestampType`
-        is converted to a timezone-naive :class:`pyarrow.TimestampType`. The JVM expects
-        timezone-aware timestamps to be in UTC. Always keep this set to True except in special
-        cases, such as when this function is used in a test.
+        If ``True`` (the default), :class:`TimestampType` is converted to a timezone-aware
+        :class:`pyarrow.TimestampType` with UTC as the timezone. If ``False``,
+        :class:`TimestampType` is converted to a timezone-naive :class:`pyarrow.TimestampType`.
+        The JVM expects timezone-aware timestamps to be in UTC. Always keep this set to ``True``
+        except in special cases, such as when this function is used in a test.
 
     Returns
     -------
@@ -118,19 +122,37 @@ def to_arrow_type(
         arrow_type = pa.duration("us")
     elif type(dt) == ArrayType:
         field = pa.field(
-            "element", to_arrow_type(dt.elementType, timestamp_utc), nullable=dt.containsNull
+            "element",
+            to_arrow_type(dt.elementType, error_on_duplicated_field_names_in_struct, timestamp_utc),
+            nullable=dt.containsNull,
         )
         arrow_type = pa.list_(field)
     elif type(dt) == MapType:
-        key_field = pa.field("key", to_arrow_type(dt.keyType, timestamp_utc), nullable=False)
+        key_field = pa.field(
+            "key",
+            to_arrow_type(dt.keyType, error_on_duplicated_field_names_in_struct, timestamp_utc),
+            nullable=False,
+        )
         value_field = pa.field(
-            "value", to_arrow_type(dt.valueType, timestamp_utc), nullable=dt.valueContainsNull
+            "value",
+            to_arrow_type(dt.valueType, error_on_duplicated_field_names_in_struct, timestamp_utc),
+            nullable=dt.valueContainsNull,
         )
         arrow_type = pa.map_(key_field, value_field)
     elif type(dt) == StructType:
+        field_names = dt.names
+        if error_on_duplicated_field_names_in_struct and len(set(field_names)) != len(field_names):
+            raise UnsupportedOperationException(
+                error_class="DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT",
+                message_parameters={"field_names": str(field_names)},
+            )
         fields = [
             pa.field(
-                field.name, to_arrow_type(field.dataType, timestamp_utc), nullable=field.nullable
+                field.name,
+                to_arrow_type(
+                    field.dataType, error_on_duplicated_field_names_in_struct, timestamp_utc
+                ),
+                nullable=field.nullable,
             )
             for field in dt
         ]
@@ -138,7 +160,9 @@ def to_arrow_type(
     elif type(dt) == NullType:
         arrow_type = pa.null()
     elif isinstance(dt, UserDefinedType):
-        arrow_type = to_arrow_type(dt.sqlType(), timestamp_utc)
+        arrow_type = to_arrow_type(
+            dt.sqlType(), error_on_duplicated_field_names_in_struct, timestamp_utc
+        )
     elif type(dt) == VariantType:
         fields = [
             pa.field("value", pa.binary(), nullable=False),
@@ -153,7 +177,11 @@ def to_arrow_type(
     return arrow_type
 
 
-def to_arrow_schema(schema: StructType, timestamp_utc: bool = True) -> "pa.Schema":
+def to_arrow_schema(
+    schema: StructType,
+    error_on_duplicated_field_names_in_struct: bool = False,
+    timestamp_utc: bool = True,
+) -> "pa.Schema":
     """
     Convert a schema from Spark to Arrow
 
@@ -161,12 +189,15 @@ def to_arrow_schema(schema: StructType, timestamp_utc: bool = True) -> "pa.Schem
     ----------
     schema : :class:`StructType`
         The Spark schema.
+    error_on_duplicated_field_names_in_struct: bool, default False
+        Whether to raise an exception when there are duplicated field names in an inner
+        :class:`pyspark.sql.types.StructType`. (default ``False``)
     timestamp_utc : bool, default True
-        If True (the default), :class:`TimestampType` is converted to a timezone-aware
-        :class:`pyarrow.TimestampType` with UTC as the timezone. If False, :class:`TimestampType`
-        is converted to a timezone-naive :class:`pyarrow.TimestampType`. The JVM expects
-        timezone-aware timestamps to be in UTC. Always keep this set to True except in special
-        cases, such as when this function is used in a test
+        If ``True`` (the default), :class:`TimestampType` is converted to a timezone-aware
+        :class:`pyarrow.TimestampType` with UTC as the timezone. If ``False``,
+        :class:`TimestampType` is converted to a timezone-naive :class:`pyarrow.TimestampType`.
+        The JVM expects timezone-aware timestamps to be in UTC. Always keep this set to ``True``
+        except in special cases, such as when this function is used in a test
 
     Returns
     -------
@@ -175,7 +206,11 @@ def to_arrow_schema(schema: StructType, timestamp_utc: bool = True) -> "pa.Schem
     import pyarrow as pa
 
     fields = [
-        pa.field(field.name, to_arrow_type(field.dataType, timestamp_utc), nullable=field.nullable)
+        pa.field(
+            field.name,
+            to_arrow_type(field.dataType, error_on_duplicated_field_names_in_struct, timestamp_utc),
+            nullable=field.nullable,
+        )
         for field in schema
     ]
     return pa.schema(fields)
@@ -306,7 +341,7 @@ def _check_arrow_table_timestamps_localize(
     schema : :class:`StructType`
         The Spark schema corresponding to the schema of the Arrow Table.
     truncate : bool, default True
-        Whether to truncate nanosecond timestamps to microseconds (default True).
+        Whether to truncate nanosecond timestamps to microseconds. (default ``True``)
     timezone : str, optional
         The timezone to convert from. If there is a timestamp type, it's required.
 
@@ -346,7 +381,7 @@ def _check_arrow_array_timestamps_localize(
     dt : :class:`DataType`
         The Spark data type corresponding to the Arrow Array to be converted.
     truncate : bool, default True
-        Whether to truncate nanosecond timestamps to microseconds (default True).
+        Whether to truncate nanosecond timestamps to microseconds. (default ``True``)
     timezone : str, optional
         The timezone to convert from. If there is a timestamp type, it's required.
 

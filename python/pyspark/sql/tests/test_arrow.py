@@ -1237,6 +1237,17 @@ class ArrowTestsMixin:
                         assert_frame_equal(df.toPandas(), expected)
 
     def test_toArrow_duplicate_field_names(self):
+        data = [[1, 1], [2, 2]]
+        names = ["a", "a"]
+        df = self.spark.createDataFrame(data, names)
+
+        expected = pa.table(
+            [[1, 2], [1, 2]],
+            schema=pa.schema([pa.field("a", pa.int64()), pa.field("a", pa.int64())]),
+        )
+
+        self.assertTrue(df.toArrow().equals(expected))
+
         data = [Row(Row("a", 1), Row(2, 3, "b", 4, "c")), Row(Row("x", 6), Row(7, 8, "y", 9, "z"))]
         schema = (
             StructType()
@@ -1285,6 +1296,66 @@ class ArrowTestsMixin:
             df = self.spark.createDataFrame(pdf, schema)
 
         self.assertEqual(df.collect(), data)
+
+    def test_createDataFrame_arrow_duplicate_field_names(self):
+        t = pa.table(
+            [[1, 2], [1, 2]],
+            schema=pa.schema([pa.field("a", pa.int64()), pa.field("a", pa.int64())]),
+        )
+        schema = StructType().add("a", LongType()).add("a", LongType())
+
+        df = self.spark.createDataFrame(t)
+
+        self.assertTrue(df.toArrow().equals(t))
+
+        df = self.spark.createDataFrame(t, schema=schema)
+
+        self.assertTrue(df.toArrow().equals(t))
+
+        t = pa.table(
+            [
+                pa.StructArray.from_arrays(
+                    [
+                        pa.array(["a", "x"], type=pa.string()),
+                        pa.array([1, 6], type=pa.int32()),
+                    ],
+                    names=["x", "x"],
+                ),
+                pa.StructArray.from_arrays(
+                    [
+                        pa.array([2, 7], type=pa.int32()),
+                        pa.array([3, 8], type=pa.int32()),
+                        pa.array(["b", "y"], type=pa.string()),
+                        pa.array([4, 9], type=pa.int32()),
+                        pa.array(["c", "z"], type=pa.string()),
+                    ],
+                    names=["a", "x", "x", "y", "y"],
+                ),
+            ],
+            names=["struct", "struct"],
+        )
+        schema = (
+            StructType()
+            .add("struct", StructType().add("x", StringType()).add("x", IntegerType()))
+            .add(
+                "struct",
+                StructType()
+                .add("a", IntegerType())
+                .add("x", IntegerType())
+                .add("x", StringType())
+                .add("y", IntegerType())
+                .add("y", StringType()),
+            )
+        )
+        with self.assertRaisesRegex(
+            UnsupportedOperationException, "DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT"
+        ):
+            self.spark.createDataFrame(t)
+
+        with self.assertRaisesRegex(
+            UnsupportedOperationException, "DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT"
+        ):
+            self.spark.createDataFrame(t, schema)
 
     def test_toPandas_empty_columns(self):
         for arrow_enabled in [True, False]:

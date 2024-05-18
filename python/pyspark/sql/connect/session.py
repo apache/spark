@@ -581,11 +581,13 @@ class SparkSession:
         if isinstance(schema, StructType) and isinstance(data, pa.Table):
             (timezone,) = self._client.get_configs("spark.sql.session.timeZone")
             _table = _check_arrow_table_timestamps_localize(_table, schema, True, timezone)
-            _table = _table.cast(to_arrow_schema(schema))
+            _table = _table.cast(
+                to_arrow_schema(schema, error_on_duplicated_field_names_in_struct=True)
+            )
 
         if isinstance(schema, StructType) and isinstance(data, (pd.DataFrame, pa.Table)):
             assert arrow_schema is not None
-            _table = _table.rename_columns(  # type: ignore[union-attr] # noqa: F821,F841
+            _table = _table.rename_columns(  # type: ignore[union-attr]
                 cast(StructType, _deduplicate_field_names(schema)).names
             ).cast(arrow_schema)
 

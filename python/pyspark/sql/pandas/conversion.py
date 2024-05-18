@@ -21,7 +21,6 @@ from typing import (
     List,
     Optional,
     Union,
-    cast,
     no_type_check,
     overload,
     TYPE_CHECKING,
@@ -759,7 +758,6 @@ class SparkConversionMixin:
             from_arrow_type,
             from_arrow_schema,
             to_arrow_schema,
-            _deduplicate_field_names,
             _check_arrow_table_timestamps_localize,
         )
         from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
@@ -781,7 +779,7 @@ class SparkConversionMixin:
             schema = struct
 
         if isinstance(schema, StructType):
-            schema = cast(StructType, _deduplicate_field_names(schema))
+            pass
         elif isinstance(schema, DataType):
             raise PySparkTypeError(
                 error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW",
@@ -792,7 +790,7 @@ class SparkConversionMixin:
             schema = from_arrow_schema(table.schema, prefer_timestamp_ntz=prefer_timestamp_ntz)
 
         table = _check_arrow_table_timestamps_localize(table, schema, True, timezone)
-        table = table.cast(to_arrow_schema(schema))
+        table = table.cast(to_arrow_schema(schema, error_on_duplicated_field_names_in_struct=True))
 
         # Chunk the Arrow Table into RecordBatches
         chunk_size = self._jconf.arrowMaxRecordsPerBatch()
