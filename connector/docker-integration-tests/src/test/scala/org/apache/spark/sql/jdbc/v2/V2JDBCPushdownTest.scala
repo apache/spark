@@ -325,4 +325,13 @@ trait V2JDBCPushdownTest extends SharedSparkSession with DockerIntegrationFunSui
     assert(isAggregateRemoved(df))
     commonAssertionOnDataFrame(df)
   }
+
+  test("COUNT aggregate push down") {
+    val df = sql(
+      s"SELECT COUNT(num_col) " +
+        s"FROM `$catalog`.`$schema`.`$tablePrefix`")
+    checkAnswer(df, Row(6))
+    assert(isAggregateRemoved(df))
+    commonAssertionOnDataFrame(df)
+  }
 }
