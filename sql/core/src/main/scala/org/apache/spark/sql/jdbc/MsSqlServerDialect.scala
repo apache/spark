@@ -25,7 +25,8 @@ import scala.util.control.NonFatal
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
 import org.apache.spark.sql.connector.catalog.Identifier
-import org.apache.spark.sql.connector.expressions.{Expression, NullOrdering, SortDirection}
+import org.apache.spark.sql.connector.expressions.{Cast, Expression, NullOrdering, SortDirection}
+import org.apache.spark.sql.connector.expressions.aggregate.Avg
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
@@ -103,6 +104,15 @@ private case class MsSqlServerDialect() extends JdbcDialect {
           case "CASE_WHEN" => visitCaseWhen(expressionsToStringArray(e.children())) + " = 1"
           case _ => super.build(expr)
         }
+        case avg: Avg =>
+          // SqlServer handles the Average in different way than other data sources.
+          // When the column type over which average is done is of Integer
+          // type (or Short, Byte, and Long), SqlServer will return average as integer, meaning
+          // that it will be rounded. In Spark we have different behavior and therefore we need
+          // to cast these columns to Double type so that we get correct average back from
+          // SqlServer. The only unnecessary thing being done here is that casting is done over
+          // Double-like-columns too.
+          super.build(new Avg(new Cast(avg.children.head, DoubleType), avg.isDistinct))
         case _ => super.build(expr)
       }
     }
@@ -150,6 +160,7 @@ private case class MsSqlServerDialect() extends JdbcDialect {
       Some(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
     case ByteType => Some(JdbcType("SMALLINT", java.sql.Types.TINYINT))
     case LongType => Some(JdbcType("BIGINT", java.sql.Types.BIGINT))
+    case DoubleType => Some(JdbcType("FLOAT", java.sql.Types.FLOAT))
     case _ => None
   }
 
