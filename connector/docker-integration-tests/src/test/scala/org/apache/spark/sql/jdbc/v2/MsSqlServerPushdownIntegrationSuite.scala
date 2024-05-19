@@ -30,8 +30,7 @@ class MsSqlServerPushdownIntegrationSuite
   extends DockerJDBCIntegrationSuite
     with V2JDBCPushdownTest {
 
-  override def excluded: Seq[String] = Seq(
-    "case when in predicate and IIF push down")
+  override def excluded: Seq[String] = Seq()
 
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.sqlserver", classOf[JDBCTableCatalog].getName)

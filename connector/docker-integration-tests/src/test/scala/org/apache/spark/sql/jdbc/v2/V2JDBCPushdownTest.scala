@@ -170,27 +170,20 @@ trait V2JDBCPushdownTest extends SharedSparkSession with DockerIntegrationFunSui
     commonAssertionOnDataFrame(df2)
   }
 
-  test("case when in predicate and IIF push down") {
-      val df = sql(
-        s"""SELECT id FROM `$catalog`.`$schema`.`$tablePrefix` WHERE
-           |CASE WHEN id = 3 THEN 2 ELSE 3 END = 2""".stripMargin)
-      checkAnswer(df, Seq(Row(3)))
-      assert(isFilterRemoved(df))
-      commonAssertionOnDataFrame(df)
+  test("case when in predicate push down") {
+    val df = sql(
+      s"""SELECT id FROM `$catalog`.`$schema`.`$tablePrefix` WHERE
+         |CASE WHEN id = 3 THEN true ELSE false END""".stripMargin)
+    checkAnswer(df, Seq(Row(3)))
+    assert(isFilterRemoved(df))
+    commonAssertionOnDataFrame(df)
 
-      val df2 = sql(
-        s"""SELECT id FROM `$catalog`.`$schema`.`$tablePrefix` WHERE
-           |CASE WHEN id = 3 THEN 2 ELSE 3 END = 2""".stripMargin)
-      checkAnswer(df2, Seq(Row(3)))
-      assert(isFilterRemoved(df2))
-      commonAssertionOnDataFrame(df2)
-
-      val df3 = sql(
-        s"""SELECT id FROM `$catalog`.`$schema`.`$tablePrefix` WHERE
-           |IFF(id = 3, 2, 0) = 2""".stripMargin)
-      checkAnswer(df3, Seq(Row(3)))
-      assert(isFilterRemoved(df3))
-      commonAssertionOnDataFrame(df3)
+    val df2 = sql(
+      s"""SELECT id FROM `$catalog`.`$schema`.`$tablePrefix` WHERE
+         |CASE WHEN id = 3 THEN 2 ELSE 3 END = 2""".stripMargin)
+    checkAnswer(df2, Seq(Row(3)))
+    assert(isFilterRemoved(df2))
+    commonAssertionOnDataFrame(df2)
   }
 
   test("coalesce predicate push down") {

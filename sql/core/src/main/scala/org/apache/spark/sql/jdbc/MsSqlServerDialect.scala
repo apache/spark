@@ -66,6 +66,10 @@ private case class MsSqlServerDialect() extends JdbcDialect {
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
 
+  override def quoteIdentifier(colName: String): String = {
+    s"[$colName]"
+  }
+
   class MsSqlServerSQLBuilder extends JDBCSQLBuilder {
     override def visitSortOrder(
         sortKey: String, sortDirection: SortDirection, nullOrdering: NullOrdering): String = {
@@ -97,7 +101,9 @@ private case class MsSqlServerDialect() extends JdbcDialect {
         case e: Predicate => e.name() match {
           case "=" | "<>" | "<=>" | "<" | "<=" | ">" | ">=" =>
             val Array(l, r) = e.children().map {
-              case p: Predicate => s"CASE WHEN ${inputToSQL(p)} THEN 1 ELSE 0 END"
+              case p: Predicate
+              if p.name() != "ALWAYS_TRUE" && p.name() != "ALWAYS_FALSE" =>
+                s"CASE WHEN ${inputToSQL(p)} THEN 1 ELSE 0 END"
               case o => inputToSQL(o)
             }
             visitBinaryComparison(e.name(), l, r)
