@@ -20,7 +20,7 @@ CreateViewCommand `EMP`, [(id,None), (emp_name,None), (hiredate,None), (salary,N
   (500, 'emp 5', date '2001-01-01', double(400.00), NULL),
   (600, 'emp 6 - no dept', date '2001-01-01', double(400.00), 100),
   (700, 'emp 7', date '2010-01-01', double(400.00), 100),
-  (800, 'emp 8', date '2016-01-01', double(150.00), 70), false, false, LocalTempView, true
+  (800, 'emp 8', date '2016-01-01', double(150.00), 70), false, false, LocalTempView, UNSUPPORTED, true
    +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x]
 
 
@@ -39,7 +39,7 @@ CreateViewCommand `DEPT`, [(dept_id,None), (dept_name,None), (state,None)], VALU
   (30, 'dept 3', 'TX'),
   (40, 'dept 4 - unassigned', 'OR'),
   (50, 'dept 5 - unassigned', 'NJ'),
-  (70, 'dept 7', 'FL'), false, false, LocalTempView, true
+  (70, 'dept 7', 'FL'), false, false, LocalTempView, UNSUPPORTED, true
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -62,7 +62,7 @@ CreateViewCommand `BONUS`, [(emp_name,None), (bonus_amt,None)], VALUES
   ('emp 3', double(300.00)),
   ('emp 4', double(100.00)),
   ('emp 5', double(1000.00)),
-  ('emp 6 - no dept', double(500.00)), false, false, LocalTempView, true
+  ('emp 6 - no dept', double(500.00)), false, false, LocalTempView, UNSUPPORTED, true
    +- LocalRelation [col1#x, col2#x]
 
 

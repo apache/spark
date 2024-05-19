@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.scalatest.Assertions._
-
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -28,7 +26,6 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{Count, Max}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.{AsOfJoinDirection, Cross, Inner, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
 import org.apache.spark.sql.errors.DataTypeErrorsBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -57,32 +54,6 @@ private[sql] class GroupableUDT extends UserDefinedType[GroupableData] {
 
 private[sql] case class UngroupableData(data: Map[Int, Int]) {
   def getData: Map[Int, Int] = data
-}
-
-private[sql] class UngroupableUDT extends UserDefinedType[UngroupableData] {
-
-  override def sqlType: DataType = MapType(IntegerType, IntegerType)
-
-  override def serialize(ungroupableData: UngroupableData): MapData = {
-    val keyArray = new GenericArrayData(ungroupableData.data.keys.toSeq)
-    val valueArray = new GenericArrayData(ungroupableData.data.values.toSeq)
-    new ArrayBasedMapData(keyArray, valueArray)
-  }
-
-  override def deserialize(datum: Any): UngroupableData = {
-    datum match {
-      case data: MapData =>
-        val keyArray = data.keyArray().array
-        val valueArray = data.valueArray().array
-        assert(keyArray.length == valueArray.length)
-        val mapData = keyArray.zip(valueArray).toMap.asInstanceOf[Map[Int, Int]]
-        UngroupableData(mapData)
-    }
-  }
-
-  override def userClass: Class[UngroupableData] = classOf[UngroupableData]
-
-  private[spark] override def asNullable: UngroupableUDT = this
 }
 
 case class TestFunction(
@@ -295,11 +266,6 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
         "aggregate(array(1, 2, 3), 0, (acc, x) -> acc + x) FILTER (WHERE c > 1)", 7, 76)))
   }
 
-  errorTest(
-    "non-deterministic filter predicate in aggregate functions",
-    CatalystSqlParser.parsePlan("SELECT count(a) FILTER (WHERE rand(int(c)) > 1) FROM TaBlE2"),
-    "FILTER expression is non-deterministic, it cannot be used in aggregate functions" :: Nil)
-
   test("function don't support ignore nulls") {
     assertAnalysisErrorClass(
       CatalystSqlParser.parsePlan("SELECT hex(a) IGNORE NULLS FROM TaBlE2"),
@@ -394,10 +360,39 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       "inputType" -> "\"BOOLEAN\"",
       "requiredType" -> "\"INT\""))
 
-  errorTest(
-    "too many generators",
-    listRelation.select(Explode($"list").as("a"), Explode($"list").as("b")),
-    "only one generator" :: "explode" :: Nil)
+  errorClassTest(
+    "the buckets of ntile window function is not foldable",
+    testRelation2.select(
+      WindowExpression(
+        NTile(Literal(99.9f)),
+        WindowSpecDefinition(
+          UnresolvedAttribute("a") :: Nil,
+          SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
+          UnspecifiedFrame)).as("window")),
+    errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+    messageParameters = Map(
+      "sqlExpr" -> "\"ntile(99.9)\"",
+      "paramIndex" -> "first",
+      "inputSql" -> "\"99.9\"",
+      "inputType" -> "\"FLOAT\"",
+      "requiredType" -> "\"INT\""))
+
+
+  errorClassTest(
+    "the buckets of ntile window function is not int literal",
+    testRelation2.select(
+      WindowExpression(
+        NTile(AttributeReference("b", IntegerType)()),
+        WindowSpecDefinition(
+          UnresolvedAttribute("a") :: Nil,
+          SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
+          UnspecifiedFrame)).as("window")),
+    errorClass = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+    messageParameters = Map(
+      "sqlExpr" -> "\"ntile(b)\"",
+      "inputName" -> "`buckets`",
+      "inputExpr" -> "\"b\"",
+      "inputType" -> "\"INT\""))
 
   errorClassTest(
     "unresolved attributes",
@@ -805,35 +800,12 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     Map("limit" -> "1000000000", "offset" -> "2000000000"))
 
   errorTest(
-    "more than one generators in SELECT",
-    listRelation.select(Explode($"list"), Explode($"list")),
-    "The generator is not supported: only one generator allowed per select clause but found 2: " +
-      """"explode(list)", "explode(list)"""" :: Nil
-  )
-
-  errorTest(
     "more than one generators for aggregates in SELECT",
     testRelation.select(Explode(CreateArray(min($"a") :: Nil)),
       Explode(CreateArray(max($"a") :: Nil))),
-    "The generator is not supported: only one generator allowed per select clause but found 2: " +
+    "The generator is not supported: only one generator allowed per SELECT clause but found 2: " +
       """"explode(array(min(a)))", "explode(array(max(a)))"""" :: Nil
   )
-
-  errorTest(
-    "SPARK-38666: non-boolean aggregate filter",
-    CatalystSqlParser.parsePlan("SELECT sum(c) filter (where e) FROM TaBlE2"),
-    "FILTER expression is not of type boolean" :: Nil)
-
-  errorTest(
-    "SPARK-38666: aggregate in aggregate filter",
-    CatalystSqlParser.parsePlan("SELECT sum(c) filter (where max(e) > 1) FROM TaBlE2"),
-    "FILTER expression contains aggregate" :: Nil)
-
-  errorTest(
-    "SPARK-38666: window function in aggregate filter",
-    CatalystSqlParser.parsePlan("SELECT sum(c) " +
-       "filter (where nth_value(e, 2) over(order by b) > 1) FROM TaBlE2"),
-    "FILTER expression contains window function" :: Nil)
 
   errorClassTest(
     "EXEC IMMEDIATE - nested execute immediate not allowed",
@@ -862,6 +834,19 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
         "varType" -> "\"INT\""
       ))
   }
+
+  test("EXEC IMMEDIATE - Null string as sqlString parameter") {
+    val execImmediatePlan = ExecuteImmediateQuery(
+      Seq.empty,
+      scala.util.Right(UnresolvedAttribute("testVarNull")),
+      Seq(UnresolvedAttribute("testVarNull")))
+
+    assertAnalysisErrorClass(
+      inputPlan = execImmediatePlan,
+      expectedErrorClass = "NULL_QUERY_STRING_EXECUTE_IMMEDIATE",
+      expectedMessageParameters = Map("varName" -> "`testVarNull`"))
+  }
+
 
   test("EXEC IMMEDIATE - Unsupported expr for parameter") {
     val execImmediatePlan: LogicalPlan = ExecuteImmediateQuery(
@@ -1004,8 +989,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
   }
 
   test("check grouping expression data types") {
-    def checkDataType(
-        dataType: DataType, shouldSuccess: Boolean, dataTypeMsg: String = ""): Unit = {
+    def checkDataType(dataType: DataType): Unit = {
       val plan =
         Aggregate(
           AttributeReference("a", dataType)(exprId = ExprId(2)) :: Nil,
@@ -1014,18 +998,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
             AttributeReference("a", dataType)(exprId = ExprId(2)),
             AttributeReference("b", IntegerType)(exprId = ExprId(1))))
 
-      if (shouldSuccess) {
-        assertAnalysisSuccess(plan, true)
-      } else {
-        assertAnalysisErrorClass(
-          inputPlan = plan,
-          expectedErrorClass = "GROUP_EXPRESSION_TYPE_IS_NOT_ORDERABLE",
-          expectedMessageParameters = Map(
-            "sqlExpr" -> "\"a\"",
-            "dataType" -> dataTypeMsg
-          )
-        )
-      }
+      assertAnalysisSuccess(plan, true)
     }
 
     val supportedDataTypes = Seq(
@@ -1035,6 +1008,10 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       FloatType, DoubleType, DecimalType(25, 5), DecimalType(6, 5),
       DateType, TimestampType,
       ArrayType(IntegerType),
+      MapType(StringType, LongType),
+      new StructType()
+        .add("f1", FloatType, nullable = true)
+        .add("f2", MapType(StringType, LongType), nullable = true),
       new StructType()
         .add("f1", FloatType, nullable = true)
         .add("f2", StringType, nullable = true),
@@ -1043,20 +1020,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
         .add("f2", ArrayType(BooleanType, containsNull = true), nullable = true),
       new GroupableUDT())
     supportedDataTypes.foreach { dataType =>
-      checkDataType(dataType, shouldSuccess = true)
-    }
-
-    val unsupportedDataTypes = Seq(
-      MapType(StringType, LongType),
-      new StructType()
-        .add("f1", FloatType, nullable = true)
-        .add("f2", MapType(StringType, LongType), nullable = true),
-      new UngroupableUDT())
-    val expectedDataTypeParameters =
-      Seq("\"MAP<STRING, BIGINT>\"", "\"STRUCT<f1: FLOAT, f2: MAP<STRING, BIGINT>>\"")
-    unsupportedDataTypes.zip(expectedDataTypeParameters).foreach {
-      case (dataType, dataTypeMsg) =>
-        checkDataType(dataType, shouldSuccess = false, dataTypeMsg)
+      checkDataType(dataType)
     }
   }
 
@@ -1386,4 +1350,18 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       )
     }
   }
+
+  errorClassTest(
+    "SPARK-47572: Enforce Window partitionSpec is orderable",
+    testRelation2.select(
+      WindowExpression(
+        new Rank(),
+        WindowSpecDefinition(
+          CreateMap(Literal("key") :: UnresolvedAttribute("a") :: Nil) :: Nil,
+          SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
+          UnspecifiedFrame)).as("window")),
+    errorClass = "EXPRESSION_TYPE_IS_NOT_ORDERABLE",
+    messageParameters = Map(
+      "expr" -> "\"_w0\"",
+      "exprType" -> "\"MAP<STRING, STRING>\""))
 }

@@ -26,9 +26,9 @@ import javax.security.sasl.SaslException;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientBootstrap;
 import org.apache.spark.network.util.JavaUtils;
@@ -39,7 +39,7 @@ import org.apache.spark.network.util.TransportConf;
  * server should be setup with a {@link SaslRpcHandler} with matching keys for the given appId.
  */
 public class SaslClientBootstrap implements TransportClientBootstrap {
-  private static final Logger logger = LoggerFactory.getLogger(SaslClientBootstrap.class);
+  private static final SparkLogger logger = SparkLoggerFactory.getLogger(SaslClientBootstrap.class);
 
   private final TransportConf conf;
   private final String appId;

@@ -75,8 +75,13 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   /**
    * The set of all attributes that are input to this operator by its children.
    */
-  def inputSet: AttributeSet =
-    AttributeSet(children.flatMap(_.asInstanceOf[QueryPlan[PlanType]].output))
+  def inputSet: AttributeSet = {
+    children match {
+      case Seq() => AttributeSet.empty
+      case Seq(c) => c.outputSet
+      case _ => AttributeSet.fromAttributeSets(children.map(_.outputSet))
+    }
+  }
 
   /**
    * The set of all attributes that are produced by this node.
@@ -102,7 +107,13 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   /**
    * Attributes that are referenced by expressions but not provided by this node's children.
    */
-  final def missingInput: AttributeSet = references -- inputSet
+  final def missingInput: AttributeSet = {
+    if (references.isEmpty) {
+      AttributeSet.empty
+    } else {
+      references -- inputSet
+    }
+  }
 
   /**
    * Runs [[transformExpressionsDown]] with `rule` on all expressions present
@@ -509,6 +520,30 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    */
   def transformDownWithSubqueries(f: PartialFunction[PlanType, PlanType]): PlanType = {
     transformDownWithSubqueriesAndPruning(AlwaysProcess.fn, UnknownRuleId)(f)
+  }
+
+  /**
+   * Same as `transformUpWithSubqueries` except allows for pruning opportunities.
+   */
+  def transformUpWithSubqueriesAndPruning(
+    cond: TreePatternBits => Boolean,
+    ruleId: RuleId = UnknownRuleId)
+    (f: PartialFunction[PlanType, PlanType]): PlanType = {
+    val g: PartialFunction[PlanType, PlanType] = new PartialFunction[PlanType, PlanType] {
+      override def isDefinedAt(x: PlanType): Boolean = true
+
+      override def apply(plan: PlanType): PlanType = {
+        val transformed = plan.transformExpressionsUpWithPruning(t =>
+          t.containsPattern(PLAN_EXPRESSION) && cond(t)) {
+          case planExpression: PlanExpression[PlanType@unchecked] =>
+            val newPlan = planExpression.plan.transformUpWithSubqueriesAndPruning(cond, ruleId)(f)
+            planExpression.withNewPlan(newPlan)
+        }
+        f.applyOrElse[PlanType, PlanType](transformed, identity)
+      }
+    }
+
+    transformUpWithPruning(cond, ruleId)(g)
   }
 
   /**

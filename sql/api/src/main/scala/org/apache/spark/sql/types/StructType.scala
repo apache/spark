@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.parser.{DataTypeParser, LegacyTypeStringPar
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, SparkStringUtils, StringConcat}
 import org.apache.spark.sql.errors.DataTypeErrors
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.util.SparkCollectionUtils
 
@@ -283,10 +284,10 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   def apply(name: String): StructField = {
     nameToField.getOrElse(name,
       throw new SparkIllegalArgumentException(
-        errorClass = "_LEGACY_ERROR_TEMP_3254",
+        errorClass = "FIELD_NOT_FOUND",
         messageParameters = immutable.Map(
-          "name" -> name,
-          "fieldNames" -> fieldNames.mkString(", "))))
+          "fieldName" -> toSQLId(name),
+          "fields" -> fieldNames.map(toSQLId).mkString(", "))))
   }
 
   /**
@@ -299,10 +300,10 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     val nonExistFields = names -- fieldNamesSet
     if (nonExistFields.nonEmpty) {
       throw new SparkIllegalArgumentException(
-        errorClass = "_LEGACY_ERROR_TEMP_3253",
+        errorClass = "NONEXISTENT_FIELD_NAME_IN_LIST",
         messageParameters = immutable.Map(
-          "nonExistFields" -> nonExistFields.mkString(", "),
-          "fieldNames" -> fieldNames.mkString(", ")))
+          "nonExistFields" -> nonExistFields.map(toSQLId).mkString(", "),
+          "fieldNames" -> fieldNames.map(toSQLId).mkString(", ")))
     }
     // Preserve the original order of fields.
     StructType(fields.filter(f => names.contains(f.name)))
@@ -316,10 +317,10 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   def fieldIndex(name: String): Int = {
     nameToIndex.getOrElse(name,
       throw new SparkIllegalArgumentException(
-        errorClass = "_LEGACY_ERROR_TEMP_3252",
+        errorClass = "FIELD_NOT_FOUND",
         messageParameters = immutable.Map(
-          "name" -> name,
-          "fieldNames" -> fieldNames.mkString(", "))))
+          "fieldName" -> toSQLId(name),
+          "fields" -> fieldNames.map(toSQLId).mkString(", "))))
   }
 
   private[sql] def getFieldIndex(name: String): Option[Int] = {

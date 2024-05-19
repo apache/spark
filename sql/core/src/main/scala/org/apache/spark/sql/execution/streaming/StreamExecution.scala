@@ -32,7 +32,8 @@ import com.google.common.util.concurrent.UncheckedExecutionException
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{JobArtifactSet, SparkContext, SparkException, SparkThrowable}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{CHECKPOINT_PATH, CHECKPOINT_ROOT, PATH, PRETTY_ID_STRING, SPARK_DATA_STREAM}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
@@ -40,6 +41,7 @@ import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table}
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, ReadLimit, SparkDataStream}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfoImpl, SupportsTruncate, Write}
 import org.apache.spark.sql.execution.command.StreamingExplainCommand
+import org.apache.spark.sql.execution.streaming.sources.ForeachBatchUserFuncException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SupportsStreamingUpdateAsAppend
 import org.apache.spark.sql.streaming._
@@ -259,7 +261,8 @@ abstract class StreamExecution(
    * has been posted to all the listeners.
    */
   def start(): Unit = {
-    logInfo(s"Starting $prettyIdString. Use $resolvedCheckpointRoot to store the query checkpoint.")
+    logInfo(log"Starting ${MDC(PRETTY_ID_STRING, prettyIdString)}. " +
+      log"Use ${MDC(CHECKPOINT_ROOT, resolvedCheckpointRoot)} to store the query checkpoint.")
     queryExecutionThread.setDaemon(true)
     queryExecutionThread.start()
     startLatch.await()  // Wait until thread started and QueryStart event has been posted
@@ -279,6 +282,7 @@ abstract class StreamExecution(
    * `start()` method returns.
    */
   private def runStream(): Unit = {
+    var errorClassOpt: Option[String] = None
     try {
       sparkSession.sparkContext.setJobGroup(runId.toString, getBatchDescriptionString,
         interruptOnCancel = true)
@@ -316,6 +320,10 @@ abstract class StreamExecution(
           batchWatermarkMs = 0, batchTimestampMs = 0, sparkSessionForStream.conf)
 
         if (state.compareAndSet(INITIALIZING, ACTIVE)) {
+          // Log logical plan at the start of the query to help debug issues related to
+          // plan changes.
+          logInfo(s"Finish initializing with logical plan:\n$logicalPlan")
+
           // Unblock `awaitInitialization`
           initializationLatch.countDown()
           runActivatedStream(sparkSessionForStream)
@@ -330,9 +338,17 @@ abstract class StreamExecution(
         getLatestExecutionContext().updateStatusMessage("Stopped")
       case e: Throwable =>
         val message = if (e.getMessage == null) "" else e.getMessage
+        val cause = if (e.isInstanceOf[ForeachBatchUserFuncException]) {
+          // We want to maintain the current way users get the causing exception
+          // from the StreamingQueryException. Hence the ForeachBatch exception is unwrapped here.
+          e.getCause
+        } else {
+          e
+        }
+
         streamDeathCause = new StreamingQueryException(
           toDebugString(includeLogicalPlan = isInitialized),
-          cause = e,
+          cause = cause,
           getLatestExecutionContext().startOffsets
             .toOffsetSeq(sources.toSeq, getLatestExecutionContext().offsetSeqMetadata)
             .toString,
@@ -350,12 +366,18 @@ abstract class StreamExecution(
             "endOffset" -> getLatestExecutionContext().endOffsets.toOffsetSeq(
               sources.toSeq, getLatestExecutionContext().offsetSeqMetadata).toString
           ))
+
+        errorClassOpt = e match {
+          case t: SparkThrowable => Option(t.getErrorClass)
+          case _ => None
+        }
+
         logError(s"Query $prettyIdString terminated with error", e)
         getLatestExecutionContext().updateStatusMessage(s"Terminated with exception: $message")
         // Rethrow the fatal errors to allow the user using `Thread.UncaughtExceptionHandler` to
         // handle them
-        if (!NonFatal(e)) {
-          throw e
+        if (!NonFatal(cause)) {
+          throw cause
         }
     } finally queryExecutionThread.runUninterruptibly {
       // The whole `finally` block must run inside `runUninterruptibly` to avoid being interrupted
@@ -379,12 +401,6 @@ abstract class StreamExecution(
 
         // Notify others
         sparkSession.streams.notifyQueryTermination(StreamExecution.this)
-        val errorClassOpt = exception.flatMap {
-          _.cause match {
-            case t: SparkThrowable => Some(t.getErrorClass)
-            case _ => None
-          }
-        }
         postEvent(
           new QueryTerminatedEvent(id, runId, exception.map(_.cause).map(Utils.exceptionString),
             errorClassOpt))
@@ -395,13 +411,13 @@ abstract class StreamExecution(
               .getConf(SQLConf.FORCE_DELETE_TEMP_CHECKPOINT_LOCATION) || exception.isEmpty)) {
           val checkpointPath = new Path(resolvedCheckpointRoot)
           try {
-            logInfo(s"Deleting checkpoint $checkpointPath.")
+            logInfo(log"Deleting checkpoint ${MDC(CHECKPOINT_PATH, checkpointPath)}.")
             fileManager.delete(checkpointPath)
           } catch {
             case NonFatal(e) =>
               // Deleting temp checkpoint folder is best effort, don't throw non fatal exceptions
               // when we cannot delete them.
-              logWarning(s"Cannot delete $checkpointPath", e)
+              logWarning(log"Cannot delete ${MDC(PATH, checkpointPath)}", e)
           }
         }
       } finally {
@@ -436,7 +452,8 @@ abstract class StreamExecution(
         source.stop()
       } catch {
         case NonFatal(e) =>
-          logWarning(s"Failed to stop streaming source: $source. Resources may have leaked.", e)
+          logWarning(log"Failed to stop streaming source: ${MDC(SPARK_DATA_STREAM, source)}. " +
+            log"Resources may have leaked.", e)
       }
     }
   }
@@ -691,6 +708,7 @@ object StreamExecution {
     case e2 @ (_: UncheckedIOException | _: ExecutionException | _: UncheckedExecutionException)
         if e2.getCause != null =>
       isInterruptionException(e2.getCause, sc)
+    case fe: ForeachBatchUserFuncException => isInterruptionException(fe.getCause, sc)
     case se: SparkException =>
       val jobGroup = sc.getLocalProperty("spark.jobGroup.id")
       if (jobGroup == null) return false

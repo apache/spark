@@ -24,7 +24,8 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.{SparkConf, SparkEnv}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.StructType
@@ -51,15 +52,16 @@ private[sql] class RocksDBStateStoreProvider
     override def createColFamilyIfAbsent(
         colFamilyName: String,
         keySchema: StructType,
-        numColsPrefixKey: Int,
         valueSchema: StructType,
-        useMultipleValuesPerKey: Boolean = false): Unit = {
+        keyStateEncoderSpec: KeyStateEncoderSpec,
+        useMultipleValuesPerKey: Boolean = false,
+        isInternal: Boolean = false): Unit = {
       verify(colFamilyName != StateStore.DEFAULT_COL_FAMILY_NAME,
         s"Failed to create column family with reserved_name=$colFamilyName")
       verify(useColumnFamilies, "Column families are not supported in this store")
-      rocksDB.createColFamilyIfAbsent(colFamilyName)
+      rocksDB.createColFamilyIfAbsent(colFamilyName, isInternal)
       keyValueEncoderMap.putIfAbsent(colFamilyName,
-        (RocksDBStateEncoder.getKeyEncoder(keySchema, numColsPrefixKey),
+        (RocksDBStateEncoder.getKeyEncoder(keyStateEncoderSpec),
          RocksDBStateEncoder.getValueEncoder(valueSchema, useMultipleValuesPerKey)))
     }
 
@@ -101,14 +103,14 @@ private[sql] class RocksDBStateStoreProvider
 
     override def merge(key: UnsafeRow, value: UnsafeRow,
         colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
-      verify(state == UPDATING, "Cannot put after already committed or aborted")
+      verify(state == UPDATING, "Cannot merge after already committed or aborted")
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
       val keyEncoder = kvEncoder._1
       val valueEncoder = kvEncoder._2
       verify(valueEncoder.supportsMultipleValuesPerKey, "Merge operation requires an encoder" +
         " which supports multiple values for a single key")
       verify(key != null, "Key cannot be null")
-      require(value != null, "Cannot put a null value")
+      require(value != null, "Cannot merge a null value")
       rocksDB.merge(keyEncoder.encodeKey(key), valueEncoder.encodeValue(value), colFamilyName)
     }
 
@@ -163,7 +165,8 @@ private[sql] class RocksDBStateStoreProvider
         verify(state == UPDATING, "Cannot commit after already committed or aborted")
         val newVersion = rocksDB.commit()
         state = COMMITTED
-        logInfo(s"Committed $newVersion for $id")
+        logInfo(log"Committed ${MDC(VERSION_NUM, newVersion)} " +
+          log"for ${MDC(STATE_STORE_ID, id)}")
         newVersion
       } catch {
         case e: Throwable =>
@@ -173,7 +176,8 @@ private[sql] class RocksDBStateStoreProvider
 
     override def abort(): Unit = {
       verify(state == UPDATING || state == ABORTED, "Cannot abort after already committed")
-      logInfo(s"Aborting ${version + 1} for $id")
+      logInfo(log"Aborting ${MDC(VERSION_NUM, version + 1)} " +
+        log"for ${MDC(STATE_STORE_ID, id)}")
       rocksDB.rollback()
       state = ABORTED
     }
@@ -226,7 +230,9 @@ private[sql] class RocksDBStateStoreProvider
           CUSTOM_METRIC_COMPACT_READ_BYTES -> nativeOpsMetrics("totalBytesReadByCompaction"),
           CUSTOM_METRIC_COMPACT_WRITTEN_BYTES -> nativeOpsMetrics("totalBytesWrittenByCompaction"),
           CUSTOM_METRIC_FLUSH_WRITTEN_BYTES -> nativeOpsMetrics("totalBytesWrittenByFlush"),
-          CUSTOM_METRIC_PINNED_BLOCKS_MEM_USAGE -> rocksDBMetrics.pinnedBlocksMemUsage
+          CUSTOM_METRIC_PINNED_BLOCKS_MEM_USAGE -> rocksDBMetrics.pinnedBlocksMemUsage,
+          CUSTOM_METRIC_NUM_EXTERNAL_COL_FAMILIES -> rocksDBMetrics.numExternalColFamilies,
+          CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES -> rocksDBMetrics.numInternalColFamilies
         ) ++ rocksDBMetrics.zipFileBytesUncompressed.map(bytes =>
           Map(CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED -> bytes)).getOrElse(Map())
 
@@ -235,7 +241,8 @@ private[sql] class RocksDBStateStoreProvider
           rocksDBMetrics.totalMemUsageBytes,
           stateStoreCustomMetrics)
       } else {
-        logInfo(s"Failed to collect metrics for store_id=$id and version=$version")
+        logInfo(log"Failed to collect metrics for store_id=${MDC(STATE_STORE_ID, id)} " +
+          log"and version=${MDC(VERSION_NUM, version)}")
         StateStoreMetrics(0, 0, Map.empty)
       }
     }
@@ -251,10 +258,11 @@ private[sql] class RocksDBStateStoreProvider
     def dbInstance(): RocksDB = rocksDB
 
     /** Remove column family if exists */
-    override def removeColFamilyIfExists(colFamilyName: String): Unit = {
+    override def removeColFamilyIfExists(colFamilyName: String): Boolean = {
       verify(useColumnFamilies, "Column families are not supported in this store")
-      rocksDB.removeColFamilyIfExists(colFamilyName)
+      val result = rocksDB.removeColFamilyIfExists(colFamilyName)
       keyValueEncoderMap.remove(colFamilyName)
+      result
     }
   }
 
@@ -262,7 +270,7 @@ private[sql] class RocksDBStateStoreProvider
       stateStoreId: StateStoreId,
       keySchema: StructType,
       valueSchema: StructType,
-      numColsPrefixKey: Int,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
@@ -274,19 +282,13 @@ private[sql] class RocksDBStateStoreProvider
     this.hadoopConf = hadoopConf
     this.useColumnFamilies = useColumnFamilies
 
-    require((keySchema.length == 0 && numColsPrefixKey == 0) ||
-      (keySchema.length > numColsPrefixKey), "The number of columns in the key must be " +
-      "greater than the number of columns for prefix key!")
-
     if (useMultipleValuesPerKey) {
-      require(numColsPrefixKey == 0, "Both multiple values per key, and prefix key are not " +
-        "supported simultaneously.")
       require(useColumnFamilies, "Multiple values per key support requires column families to be" +
         " enabled in RocksDBStateStore.")
     }
 
     keyValueEncoderMap.putIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME,
-      (RocksDBStateEncoder.getKeyEncoder(keySchema, numColsPrefixKey),
+      (RocksDBStateEncoder.getKeyEncoder(keyStateEncoderSpec),
        RocksDBStateEncoder.getValueEncoder(valueSchema, useMultipleValuesPerKey)))
 
     rocksDB // lazy initialization
@@ -436,6 +438,12 @@ object RocksDBStateStoreProvider {
   val CUSTOM_METRIC_PINNED_BLOCKS_MEM_USAGE = StateStoreCustomSizeMetric(
     "rocksdbPinnedBlocksMemoryUsage",
     "RocksDB: memory usage for pinned blocks")
+  val CUSTOM_METRIC_NUM_EXTERNAL_COL_FAMILIES = StateStoreCustomSizeMetric(
+    "rocksdbNumExternalColumnFamilies",
+    "RocksDB: number of external column families")
+  val CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES = StateStoreCustomSizeMetric(
+    "rocksdbNumInternalColumnFamilies",
+    "RocksDB: number of internal column families")
 
   // Total SST file size
   val CUSTOM_METRIC_SST_FILE_SIZE = StateStoreCustomSizeMetric(
@@ -451,6 +459,6 @@ object RocksDBStateStoreProvider {
     CUSTOM_METRIC_BYTES_WRITTEN, CUSTOM_METRIC_ITERATOR_BYTES_READ, CUSTOM_METRIC_STALL_TIME,
     CUSTOM_METRIC_TOTAL_COMPACT_TIME, CUSTOM_METRIC_COMPACT_READ_BYTES,
     CUSTOM_METRIC_COMPACT_WRITTEN_BYTES, CUSTOM_METRIC_FLUSH_WRITTEN_BYTES,
-    CUSTOM_METRIC_PINNED_BLOCKS_MEM_USAGE
-  )
+    CUSTOM_METRIC_PINNED_BLOCKS_MEM_USAGE, CUSTOM_METRIC_NUM_EXTERNAL_COL_FAMILIES,
+    CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES)
 }

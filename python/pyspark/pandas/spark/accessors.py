@@ -240,7 +240,8 @@ class SparkSeriesMethods(SparkIndexOpsMethods["ps.Series"]):
 
         However, it won't work with the same anchor Series.
 
-        >>> ser + ser.spark.analyzed
+        >>> with ps.option_context('compute.ops_on_diff_frames', False):
+        ...     ser + ser.spark.analyzed
         Traceback (most recent call last):
         ...
         ValueError: ... enable 'compute.ops_on_diff_frames' option.
@@ -290,7 +291,8 @@ class SparkIndexMethods(SparkIndexOpsMethods["ps.Index"]):
 
         However, it won't work with the same anchor Index.
 
-        >>> idx + idx.spark.analyzed
+        >>> with ps.option_context('compute.ops_on_diff_frames', False):
+        ...     idx + idx.spark.analyzed
         Traceback (most recent call last):
         ...
         ValueError: ... enable 'compute.ops_on_diff_frames' option.
@@ -1148,7 +1150,8 @@ class SparkFrameMethods:
 
         However, it won't work with the same anchor Series.
 
-        >>> df + df.spark.analyzed
+        >>> with ps.option_context('compute.ops_on_diff_frames', False):
+        ...     df + df.spark.analyzed
         Traceback (most recent call last):
         ...
         ValueError: ... enable 'compute.ops_on_diff_frames' option.

@@ -79,15 +79,15 @@ from `hadoop.version`.
 
 Example:
 
-    ./build/mvn -Pyarn -Dhadoop.version=3.3.0 -DskipTests clean package
+    ./build/mvn -Pyarn -Dhadoop.version=3.4.0 -DskipTests clean package
 
 ## Building With Hive and JDBC Support
 
 To enable Hive integration for Spark SQL along with its JDBC server and CLI,
 add the `-Phive` and `-Phive-thriftserver` profiles to your existing build options.
-By default Spark will build with Hive 2.3.9.
+By default Spark will build with Hive 2.3.10.
 
-    # With Hive 2.3.9 support
+    # With Hive 2.3.10 support
     ./build/mvn -Pyarn -Phive -Phive-thriftserver -DskipTests clean package
 
 ## Packaging without Hadoop Dependencies for YARN
@@ -116,6 +116,13 @@ where `spark-streaming_{{site.SCALA_BINARY_VERSION}}` is the `artifactId` as def
 ## Building with Spark Connect support
 
     ./build/mvn -Pconnect -DskipTests clean package
+
+## Building with JVM Profile support
+
+    ./build/mvn -Pjvm-profiler -DskipTests clean package
+
+**Note:** The `jvm-profiler` profile builds the assembly without including the dependency `ap-loader`,
+you can download it manually from maven central repo and use it together with `spark-profiler_{{site.SCALA_BINARY_VERSION}}`.
 
 ## Continuous Compilation
 
@@ -216,7 +223,7 @@ For information about how to run individual tests, refer to the
 
 If you are building Spark for use in a Python environment and you wish to pip install it, you will first need to build the Spark JARs as described above. Then you can construct an sdist package suitable for setup.py and pip installable package.
 
-    cd python; python setup.py sdist
+    cd python; python packaging/classic/setup.py sdist
 
 **Note:** Due to packaging requirements you can not directly pip install from the Python directory, rather you must first build the sdist package as described above.
 

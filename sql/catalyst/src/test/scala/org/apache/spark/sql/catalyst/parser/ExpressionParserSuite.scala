@@ -1043,17 +1043,6 @@ class ExpressionParserSuite extends AnalysisTest {
         Literal(IntervalUtils.stringToInterval("1 second 1 millisecond")))
     }
 
-    // Non Existing unit
-    checkError(
-      exception = parseException("interval 10 nanoseconds"),
-      errorClass = "_LEGACY_ERROR_TEMP_0062",
-      parameters = Map(
-        "msg" -> "Error parsing ' 10 nanoseconds' to interval, invalid unit 'nanoseconds'"),
-      context = ExpectedContext(
-        fragment = "10 nanoseconds",
-        start = 9,
-        stop = 22))
-
     withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
       // Year-Month intervals.
       val yearMonthValues = Seq("123-10", "496-0", "-2-3", "-123-0", "\t -1-2\t")

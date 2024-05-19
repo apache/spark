@@ -91,6 +91,29 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
     }
   }
 
+  test("Async cleanup callback gets called after the execution is closed") {
+    withClient(UUID.randomUUID().toString, defaultUserId) { client =>
+      val query1 = client.execute(buildPlan(BIG_ENOUGH_QUERY))
+      // just creating the iterator is lazy, trigger query1 and query2 to be sent.
+      query1.hasNext
+      Eventually.eventually(timeout(eventuallyTimeout)) {
+        assert(SparkConnectService.executionManager.listExecuteHolders.length == 1)
+      }
+      val executeHolder1 = SparkConnectService.executionManager.listExecuteHolders.head
+      // Close session
+      client.releaseSession()
+      // Check that queries get cancelled
+      Eventually.eventually(timeout(eventuallyTimeout)) {
+        assert(SparkConnectService.executionManager.listExecuteHolders.length == 0)
+        // SparkConnectService.sessionManager.
+      }
+      // Check the async execute cleanup get called
+      Eventually.eventually(timeout(eventuallyTimeout)) {
+        assert(executeHolder1.completionCallbackCalled)
+      }
+    }
+  }
+
   private def testReleaseSessionTwoSessions(
       sessionIdA: String,
       userIdA: String,
@@ -200,6 +223,26 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
       Eventually.eventually(timeout(30.seconds)) {
         assert(execution.eventsManager.status == ExecuteStatus.Finished)
       }
+    }
+  }
+
+  test("SessionValidation: server validates that the client is talking to the same session.") {
+    val sessionId = UUID.randomUUID.toString()
+    val userId = "Y"
+    withClient(sessionId = sessionId, userId = userId) { client =>
+      // this will create the session, and then ReleaseSession at the end of withClient.
+      val query = client.execute(buildPlan("SELECT 1"))
+      query.hasNext // trigger execution
+      // Same session id.
+      val new_query = client.execute(buildPlan("SELECT 1 + 1"))
+      new_query.hasNext // trigger execution
+      // Change the server session id in the client for testing and try to run something.
+      client.hijackServerSideSessionIdForTesting("-testing")
+      val queryError = intercept[SparkException] {
+        val newest_query = client.execute(buildPlan("SELECT 1 + 1 + 1"))
+        newest_query.hasNext
+      }
+      assert(queryError.getMessage.contains("INVALID_HANDLE.SESSION_CHANGED"))
     }
   }
 }

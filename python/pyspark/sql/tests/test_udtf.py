@@ -21,8 +21,6 @@ import unittest
 from dataclasses import dataclass
 from typing import Iterator, Optional
 
-from py4j.protocol import Py4JJavaError
-
 from pyspark.errors import (
     PySparkAttributeError,
     PythonException,
@@ -30,8 +28,7 @@ from pyspark.errors import (
     AnalysisException,
     PySparkPicklingError,
 )
-from pyspark.files import SparkFiles
-from pyspark.rdd import PythonEvalType
+from pyspark.util import PythonEvalType
 from pyspark.sql.functions import (
     array,
     create_map,
@@ -858,6 +855,8 @@ class BaseUDTFTestsMixin:
                 self._check_result_or_exception(TestUDTF, ret_type, expected)
 
     def test_struct_output_type_casting_row(self):
+        from py4j.protocol import Py4JJavaError
+
         self.check_struct_output_type_casting_row(Py4JJavaError)
 
     def check_struct_output_type_casting_row(self, error_type):
@@ -1800,6 +1799,11 @@ class BaseUDTFTestsMixin:
         self.sc.addArchive(path)
 
     def test_udtf_with_analyze_using_archive(self):
+        from pyspark.core.files import SparkFiles
+
+        self.check_udtf_with_analyze_using_archive(SparkFiles.getRootDirectory())
+
+    def check_udtf_with_analyze_using_archive(self, exec_root_dir):
         with tempfile.TemporaryDirectory(prefix="test_udtf_with_analyze_using_archive") as d:
             archive_path = os.path.join(d, "my_archive")
             os.mkdir(archive_path)
@@ -1814,9 +1818,7 @@ class BaseUDTFTestsMixin:
                 @staticmethod
                 def read_my_archive() -> str:
                     with open(
-                        os.path.join(
-                            SparkFiles.getRootDirectory(), "my_files", "my_archive", "my_file.txt"
-                        ),
+                        os.path.join(exec_root_dir, "my_files", "my_archive", "my_file.txt"),
                         "r",
                     ) as my_file:
                         return my_file.read().strip()
@@ -1847,6 +1849,11 @@ class BaseUDTFTestsMixin:
         self.sc.addFile(path)
 
     def test_udtf_with_analyze_using_file(self):
+        from pyspark.core.files import SparkFiles
+
+        self.check_udtf_with_analyze_using_file(SparkFiles.getRootDirectory())
+
+    def check_udtf_with_analyze_using_file(self, exec_root_dir):
         with tempfile.TemporaryDirectory(prefix="test_udtf_with_analyze_using_file") as d:
             file_path = os.path.join(d, "my_file.txt")
             with open(file_path, "w") as f:
@@ -1857,9 +1864,7 @@ class BaseUDTFTestsMixin:
             class TestUDTF:
                 @staticmethod
                 def read_my_file() -> str:
-                    with open(
-                        os.path.join(SparkFiles.getRootDirectory(), "my_file.txt"), "r"
-                    ) as my_file:
+                    with open(os.path.join(exec_root_dir, "my_file.txt"), "r") as my_file:
                         return my_file.read().strip()
 
                 @staticmethod

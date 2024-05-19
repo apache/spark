@@ -22,6 +22,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -69,8 +70,11 @@ import org.apache.hive.service.rpc.thrift.TProtocolVersion;
 import org.apache.hive.service.rpc.thrift.TRowSet;
 import org.apache.hive.service.rpc.thrift.TTableSchema;
 import org.apache.hive.service.server.ThreadWithGarbageCleanup;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 
 import static org.apache.hadoop.hive.conf.SystemVariables.ENV_PREFIX;
 import static org.apache.hadoop.hive.conf.SystemVariables.HIVECONF_PREFIX;
@@ -91,7 +95,7 @@ public class HiveSessionImpl implements HiveSession {
   private String ipAddress;
   private static final String FETCH_WORK_SERDE_CLASS =
       "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe";
-  private static final Logger LOG = LoggerFactory.getLogger(HiveSessionImpl.class);
+  private static final SparkLogger LOG = SparkLoggerFactory.getLogger(HiveSessionImpl.class);
   private SessionManager sessionManager;
   private OperationManager operationManager;
   private final Set<OperationHandle> opHandleSet = new HashSet<OperationHandle>();
@@ -116,10 +120,10 @@ public class HiveSessionImpl implements HiveSession {
         ShimLoader.getHadoopShims().refreshDefaultQueue(hiveConf, username);
       }
     } catch (IOException e) {
-      LOG.warn("Error setting scheduler queue: " + e, e);
+      LOG.warn("Error setting scheduler queue: ", e);
     }
     // Set an explicit session name to control the download directory name
-    hiveConf.set(ConfVars.HIVESESSIONID.varname,
+    hiveConf.set("hive.session.id",
         sessionHandle.getHandleIdentifier().toString());
     // Use thrift transportable formatter
     hiveConf.set(SerDeUtils.LIST_SINK_OUTPUT_FORMATTER, ThriftFormatter.class.getName());
@@ -146,8 +150,8 @@ public class HiveSessionImpl implements HiveSession {
       sessionState.loadAuxJars();
       sessionState.loadReloadableAuxJars();
     } catch (IOException e) {
-      String msg = "Failed to load reloadable jar file path: " + e;
-      LOG.error(msg, e);
+      String msg = "Failed to load reloadable jar file path.";
+      LOG.error("{}", e, MDC.of(LogKeys.ERROR$.MODULE$, msg));
       throw new HiveSQLException(msg, e);
     }
     // Process global init file: .hiverc
@@ -168,7 +172,7 @@ public class HiveSessionImpl implements HiveSession {
       FileInputStream initStream = null;
       BufferedReader bufferedReader = null;
       initStream = new FileInputStream(fileName);
-      bufferedReader = new BufferedReader(new InputStreamReader(initStream));
+      bufferedReader = new BufferedReader(new InputStreamReader(initStream, StandardCharsets.UTF_8));
       return bufferedReader;
     }
 
@@ -197,7 +201,8 @@ public class HiveSessionImpl implements HiveSession {
           hivercFile = new File(hivercFile, SessionManager.HIVERCFILE);
         }
         if (hivercFile.isFile()) {
-          LOG.info("Running global init file: " + hivercFile);
+          LOG.info("Running global init file: {}",
+            MDC.of(LogKeys.GLOBAL_INIT_FILE$.MODULE$, hivercFile));
           int rc = processor.processFile(hivercFile.getAbsolutePath());
           if (rc != 0) {
             LOG.error("Failed on initializing global .hiverc file");
@@ -297,28 +302,29 @@ public class HiveSessionImpl implements HiveSession {
   @Override
   public void setOperationLogSessionDir(File operationLogRootDir) {
     if (!operationLogRootDir.exists()) {
-      LOG.warn("The operation log root directory is removed, recreating: " +
-          operationLogRootDir.getAbsolutePath());
+      LOG.warn("The operation log root directory is removed, recreating: {}",
+        MDC.of(LogKeys.PATH$.MODULE$, operationLogRootDir.getAbsolutePath()));
       if (!operationLogRootDir.mkdirs()) {
-        LOG.warn("Unable to create operation log root directory: " +
-            operationLogRootDir.getAbsolutePath());
+        LOG.warn("Unable to create operation log root directory: {}",
+          MDC.of(LogKeys.PATH$.MODULE$, operationLogRootDir.getAbsolutePath()));
       }
     }
     if (!operationLogRootDir.canWrite()) {
-      LOG.warn("The operation log root directory is not writable: " +
-          operationLogRootDir.getAbsolutePath());
+      LOG.warn("The operation log root directory is not writable: {}",
+        MDC.of(LogKeys.PATH$.MODULE$, operationLogRootDir.getAbsolutePath()));
     }
     sessionLogDir = new File(operationLogRootDir, sessionHandle.getHandleIdentifier().toString());
     isOperationLogEnabled = true;
     if (!sessionLogDir.exists()) {
       if (!sessionLogDir.mkdir()) {
-        LOG.warn("Unable to create operation log session directory: " +
-            sessionLogDir.getAbsolutePath());
+        LOG.warn("Unable to create operation log session directory: {}",
+          MDC.of(LogKeys.PATH$.MODULE$, sessionLogDir.getAbsolutePath()));
         isOperationLogEnabled = false;
       }
     }
     if (isOperationLogEnabled) {
-      LOG.info("Operation log session directory is created: " + sessionLogDir.getAbsolutePath());
+      LOG.info("Operation log session directory is created: {}",
+        MDC.of(LogKeys.PATH$.MODULE$, sessionLogDir.getAbsolutePath()));
     }
   }
 
@@ -406,7 +412,7 @@ public class HiveSessionImpl implements HiveSession {
 
   @Override
   public HiveConf getHiveConf() {
-    hiveConf.setVar(HiveConf.ConfVars.HIVEFETCHOUTPUTSERDE, FETCH_WORK_SERDE_CLASS);
+    hiveConf.setVar(HiveConf.getConfVars("hive.fetch.output.serde"), FETCH_WORK_SERDE_CLASS);
     return hiveConf;
   }
 
@@ -653,7 +659,8 @@ public class HiveSessionImpl implements HiveSession {
         try {
           operationManager.closeOperation(opHandle);
         } catch (Exception e) {
-          LOG.warn("Exception is thrown closing operation " + opHandle, e);
+          LOG.warn("Exception is thrown closing operation {}", e,
+            MDC.of(LogKeys.OPERATION_HANDLE$.MODULE$, opHandle));
         }
       }
       opHandleSet.clear();
@@ -686,20 +693,21 @@ public class HiveSessionImpl implements HiveSession {
   }
 
   private void cleanupPipeoutFile() {
-    String lScratchDir = hiveConf.getVar(ConfVars.LOCALSCRATCHDIR);
-    String sessionID = hiveConf.getVar(ConfVars.HIVESESSIONID);
+    String lScratchDir = hiveConf.getVar(HiveConf.getConfVars("hive.exec.local.scratchdir"));
+    String sessionID = hiveConf.getVar(HiveConf.getConfVars("hive.session.id"));
 
     File[] fileAry = new File(lScratchDir).listFiles(
             (dir, name) -> name.startsWith(sessionID) && name.endsWith(".pipeout"));
 
     if (fileAry == null) {
-      LOG.error("Unable to access pipeout files in " + lScratchDir);
+      LOG.error("Unable to access pipeout files in {}",
+        MDC.of(LogKeys.LOCAL_SCRATCH_DIR$.MODULE$, lScratchDir));
     } else {
       for (File file : fileAry) {
         try {
           FileUtils.forceDelete(file);
         } catch (Exception e) {
-          LOG.error("Failed to cleanup pipeout file: " + file, e);
+          LOG.error("Failed to cleanup pipeout file: {}", e, MDC.of(LogKeys.PATH$.MODULE$, file));
         }
       }
     }
@@ -710,7 +718,8 @@ public class HiveSessionImpl implements HiveSession {
       try {
         FileUtils.forceDelete(sessionLogDir);
       } catch (Exception e) {
-        LOG.error("Failed to cleanup session log dir: " + sessionHandle, e);
+        LOG.error("Failed to cleanup session log dir: {}", e,
+          MDC.of(LogKeys.SESSION_HANDLE$.MODULE$, sessionHandle));
       }
     }
   }
@@ -759,7 +768,8 @@ public class HiveSessionImpl implements HiveSession {
         try {
           operation.close();
         } catch (Exception e) {
-          LOG.warn("Exception is thrown closing timed-out operation " + operation.getHandle(), e);
+          LOG.warn("Exception is thrown closing timed-out operation {}", e,
+            MDC.of(LogKeys.OPERATION_HANDLE$.MODULE$, operation.getHandle()));
         }
       }
     } finally {

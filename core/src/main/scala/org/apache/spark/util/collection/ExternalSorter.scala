@@ -28,9 +28,10 @@ import com.google.common.io.ByteStreams
 
 import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKeys.{NUM_BYTES, TASK_ATTEMPT_ID}
 import org.apache.spark.serializer._
-import org.apache.spark.shuffle.ShufflePartitionPairsWriter
+import org.apache.spark.shuffle.{ShufflePartitionPairsWriter, ShuffleWriteMetricsReporter}
 import org.apache.spark.shuffle.api.{ShuffleMapOutputWriter, ShufflePartitionWriter}
 import org.apache.spark.shuffle.checksum.ShuffleChecksumSupport
 import org.apache.spark.storage.{BlockId, DiskBlockObjectWriter, ShuffleBlockId}
@@ -689,13 +690,12 @@ private[spark] class ExternalSorter[K, V, C](
   /**
    * Write all the data added into this ExternalSorter into a map output writer that pushes bytes
    * to some arbitrary backing store. This is called by the SortShuffleWriter.
-   *
-   * @return array of lengths, in bytes, of each partition of the file (used by map output tracker)
    */
   def writePartitionedMapOutput(
       shuffleId: Int,
       mapId: Long,
-      mapOutputWriter: ShuffleMapOutputWriter): Unit = {
+      mapOutputWriter: ShuffleMapOutputWriter,
+      writeMetrics: ShuffleWriteMetricsReporter): Unit = {
     if (spills.isEmpty) {
       // Case where we only have in-memory data
       val collection = if (aggregator.isDefined) map else buffer
@@ -712,7 +712,7 @@ private[spark] class ExternalSorter[K, V, C](
             serializerManager,
             serInstance,
             blockId,
-            context.taskMetrics().shuffleWriteMetrics,
+            writeMetrics,
             if (partitionChecksums.nonEmpty) partitionChecksums(partitionId) else null)
           while (it.hasNext && it.nextPartition() == partitionId) {
             it.writeNext(partitionPairsWriter)
@@ -736,7 +736,7 @@ private[spark] class ExternalSorter[K, V, C](
             serializerManager,
             serInstance,
             blockId,
-            context.taskMetrics().shuffleWriteMetrics,
+            writeMetrics,
             if (partitionChecksums.nonEmpty) partitionChecksums(id) else null)
           if (elements.hasNext) {
             for (elem <- elements) {
@@ -817,8 +817,9 @@ private[spark] class ExternalSorter[K, V, C](
         false
       } else {
         val inMemoryIterator = new WritablePartitionedIterator[K, C](upstream)
-        logInfo(s"Task ${TaskContext.get().taskAttemptId()} force spilling in-memory map to disk " +
-          s"and it will release ${org.apache.spark.util.Utils.bytesToString(getUsed())} memory")
+        logInfo(log"Task ${MDC(TASK_ATTEMPT_ID, TaskContext.get().taskAttemptId())}" +
+          log" force spilling in-memory map to disk and it will release" +
+          log" ${MDC(NUM_BYTES, org.apache.spark.util.Utils.bytesToString(getUsed()))} memory")
         val spillFile = spillMemoryIteratorToDisk(inMemoryIterator)
         forceSpillFiles += spillFile
         val spillReader = new SpillReader(spillFile)

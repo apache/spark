@@ -42,9 +42,11 @@ import sys
 import numpy as np
 
 from pyspark.errors import PySparkTypeError, PySparkValueError
-from pyspark.sql.connect.column import Column
+from pyspark.sql.dataframe import DataFrame as ParentDataFrame
+from pyspark.sql import Column
 from pyspark.sql.connect.expressions import (
     CaseWhen,
+    SortOrder,
     Expression,
     LiteralExpression,
     ColumnReference,
@@ -79,13 +81,23 @@ if TYPE_CHECKING:
         DataTypeOrString,
         UserDefinedFunctionLike,
     )
-    from pyspark.sql.connect.dataframe import DataFrame
     from pyspark.sql.connect.udtf import UserDefinedTableFunction
 
 
 def _to_col(col: "ColumnOrName") -> Column:
     assert isinstance(col, (Column, str))
     return col if isinstance(col, Column) else column(col)
+
+
+def _sort_col(col: "ColumnOrName") -> Column:
+    assert isinstance(col, (Column, str))
+    if isinstance(col, Column):
+        if isinstance(col._expr, SortOrder):
+            return col
+        else:
+            return col.asc()
+    else:
+        return column(col).asc()
 
 
 def _invoke_function(name: str, *args: Union[Column, Expression]) -> Column:
@@ -100,14 +112,16 @@ def _invoke_function(name: str, *args: Union[Column, Expression]) -> Column:
     -------
     :class:`Column`
     """
+    from pyspark.sql.connect.column import Column as ConnectColumn
+
     expressions: List[Expression] = []
     for arg in args:
         assert isinstance(arg, (Column, Expression))
         if isinstance(arg, Column):
-            expressions.append(arg._expr)
+            expressions.append(arg._expr)  # type: ignore[arg-type]
         else:
             expressions.append(arg)
-    return Column(UnresolvedFunction(name, expressions))
+    return ConnectColumn(UnresolvedFunction(name, expressions))
 
 
 def _invoke_function_over_columns(name: str, *cols: "ColumnOrName") -> Column:
@@ -168,6 +182,8 @@ def _create_lambda(f: Callable) -> LambdaFunction:
             - (Column, Column) -> Column: ...
             - (Column, Column, Column) -> Column: ...
     """
+    from pyspark.sql.connect.column import Column as ConnectColumn
+
     parameters = _get_lambda_parameters(f)
 
     arg_names = ["x", "y", "z"][: len(parameters)]
@@ -175,7 +191,7 @@ def _create_lambda(f: Callable) -> LambdaFunction:
         UnresolvedNamedLambdaVariable([UnresolvedNamedLambdaVariable.fresh_var_name(arg_name)])
         for arg_name in arg_names
     ]
-    arg_cols = [Column(arg_expr) for arg_expr in arg_exprs]
+    arg_cols = [ConnectColumn(arg_expr) for arg_expr in arg_exprs]
 
     result = f(*arg_cols)
 
@@ -185,7 +201,7 @@ def _create_lambda(f: Callable) -> LambdaFunction:
             message_parameters={"func_name": f.__name__, "return_type": type(result).__name__},
         )
 
-    return LambdaFunction(result._expr, arg_exprs)
+    return LambdaFunction(result._expr, arg_exprs)  # type: ignore[arg-type]
 
 
 def _invoke_higher_order_function(
@@ -222,12 +238,14 @@ def _options_to_col(options: Dict[str, Any]) -> Column:
 
 
 def col(col: str) -> Column:
+    from pyspark.sql.connect.column import Column as ConnectColumn
+
     if col == "*":
-        return Column(UnresolvedStar(unparsed_target=None))
+        return ConnectColumn(UnresolvedStar(unparsed_target=None))
     elif col.endswith(".*"):
-        return Column(UnresolvedStar(unparsed_target=col))
+        return ConnectColumn(UnresolvedStar(unparsed_target=col))
     else:
-        return Column(ColumnReference(unparsed_identifier=col))
+        return ConnectColumn(ColumnReference(unparsed_identifier=col))
 
 
 col.__doc__ = pysparkfuncs.col.__doc__
@@ -237,6 +255,8 @@ column = col
 
 
 def lit(col: Any) -> Column:
+    from pyspark.sql.connect.column import Column as ConnectColumn
+
     if isinstance(col, Column):
         return col
     elif isinstance(col, list):
@@ -260,7 +280,7 @@ def lit(col: Any) -> Column:
 
         return array(*[lit(c) for c in col])
     else:
-        return Column(LiteralExpression._from_value(col))
+        return ConnectColumn(LiteralExpression._from_value(col))
 
 
 lit.__doc__ = pysparkfuncs.lit.__doc__
@@ -302,7 +322,7 @@ def getbit(col: "ColumnOrName", pos: "ColumnOrName") -> Column:
 getbit.__doc__ = pysparkfuncs.getbit.__doc__
 
 
-def broadcast(df: "DataFrame") -> "DataFrame":
+def broadcast(df: "ParentDataFrame") -> "ParentDataFrame":
     from pyspark.sql.connect.dataframe import DataFrame
 
     if not isinstance(df, DataFrame):
@@ -324,7 +344,9 @@ coalesce.__doc__ = pysparkfuncs.coalesce.__doc__
 
 
 def expr(str: str) -> Column:
-    return Column(SQLExpression(str))
+    from pyspark.sql.connect.column import Column as ConnectColumn
+
+    return ConnectColumn(SQLExpression(str))
 
 
 expr.__doc__ = pysparkfuncs.expr.__doc__
@@ -417,6 +439,8 @@ spark_partition_id.__doc__ = pysparkfuncs.spark_partition_id.__doc__
 
 
 def when(condition: Column, value: Any) -> Column:
+    from pyspark.sql.connect.column import Column as ConnectColumn
+
     # Explicitly not using ColumnOrName type here to make reading condition less opaque
     if not isinstance(condition, Column):
         raise PySparkTypeError(
@@ -426,7 +450,12 @@ def when(condition: Column, value: Any) -> Column:
 
     value_col = value if isinstance(value, Column) else lit(value)
 
-    return Column(CaseWhen(branches=[(condition._expr, value_col._expr)], else_value=None))
+    return ConnectColumn(
+        CaseWhen(
+            branches=[(condition._expr, value_col._expr)],  # type: ignore[list-item]
+            else_value=None,
+        )
+    )
 
 
 when.__doc__ = pysparkfuncs.when.__doc__
@@ -905,6 +934,13 @@ def try_divide(left: "ColumnOrName", right: "ColumnOrName") -> Column:
 try_divide.__doc__ = pysparkfuncs.try_divide.__doc__
 
 
+def try_remainder(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("try_remainder", left, right)
+
+
+try_remainder.__doc__ = pysparkfuncs.try_remainder.__doc__
+
+
 def try_multiply(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("try_multiply", left, right)
 
@@ -1033,8 +1069,12 @@ countDistinct.__doc__ = pysparkfuncs.countDistinct.__doc__
 
 
 def count_distinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
+    from pyspark.sql.connect.column import Column as ConnectColumn
+
     _exprs = [_to_col(c)._expr for c in [col] + list(cols)]
-    return Column(UnresolvedFunction("count", _exprs, is_distinct=True))
+    return ConnectColumn(
+        UnresolvedFunction("count", _exprs, is_distinct=True)  # type: ignore[arg-type]
+    )
 
 
 count_distinct.__doc__ = pysparkfuncs.count_distinct.__doc__
@@ -1155,20 +1195,10 @@ def percentile(
     percentage: Union[Column, float, List[float], Tuple[float]],
     frequency: Union[Column, int] = 1,
 ) -> Column:
-    if isinstance(percentage, Column):
-        _percentage = percentage
-    elif isinstance(percentage, (list, tuple)):
-        # Convert tuple to list
-        _percentage = lit(list(percentage))
-    else:
-        # Probably scalar
-        _percentage = lit(percentage)
+    if isinstance(percentage, (list, tuple)):
+        percentage = list(percentage)
 
-    if isinstance(frequency, int):
-        _frequency = lit(frequency)
-    elif isinstance(frequency, Column):
-        _frequency = frequency
-    else:
+    if not isinstance(frequency, (int, Column)):
         raise PySparkTypeError(
             error_class="NOT_COLUMN_OR_INT",
             message_parameters={
@@ -1177,7 +1207,7 @@ def percentile(
             },
         )
 
-    return _invoke_function("percentile", _to_col(col), _percentage, _frequency)
+    return _invoke_function("percentile", _to_col(col), lit(percentage), lit(frequency))
 
 
 percentile.__doc__ = pysparkfuncs.percentile.__doc__
@@ -1188,16 +1218,10 @@ def percentile_approx(
     percentage: Union[Column, float, List[float], Tuple[float]],
     accuracy: Union[Column, float] = 10000,
 ) -> Column:
-    if isinstance(percentage, Column):
-        percentage_col = percentage
-    elif isinstance(percentage, (list, tuple)):
-        # Convert tuple to list
-        percentage_col = lit(list(percentage))
-    else:
-        # Probably scalar
-        percentage_col = lit(percentage)
+    if isinstance(percentage, (list, tuple)):
+        percentage = lit(list(percentage))
 
-    return _invoke_function("percentile_approx", _to_col(col), percentage_col, lit(accuracy))
+    return _invoke_function("percentile_approx", _to_col(col), lit(percentage), lit(accuracy))
 
 
 percentile_approx.__doc__ = pysparkfuncs.percentile_approx.__doc__
@@ -1208,16 +1232,10 @@ def approx_percentile(
     percentage: Union[Column, float, List[float], Tuple[float]],
     accuracy: Union[Column, float] = 10000,
 ) -> Column:
-    if isinstance(percentage, Column):
-        percentage_col = percentage
-    elif isinstance(percentage, (list, tuple)):
-        # Convert tuple to list
-        percentage_col = lit(list(percentage))
-    else:
-        # Probably scalar
-        percentage_col = lit(percentage)
+    if isinstance(percentage, (list, tuple)):
+        percentage = list(percentage)
 
-    return _invoke_function("approx_percentile", _to_col(col), percentage_col, lit(accuracy))
+    return _invoke_function("approx_percentile", _to_col(col), lit(percentage), lit(accuracy))
 
 
 approx_percentile.__doc__ = pysparkfuncs.approx_percentile.__doc__
@@ -1281,7 +1299,11 @@ sumDistinct.__doc__ = pysparkfuncs.sumDistinct.__doc__
 
 
 def sum_distinct(col: "ColumnOrName") -> Column:
-    return Column(UnresolvedFunction("sum", [_to_col(col)._expr], is_distinct=True))
+    from pyspark.sql.connect.column import Column as ConnectColumn
+
+    return ConnectColumn(
+        UnresolvedFunction("sum", [_to_col(col)._expr], is_distinct=True)  # type: ignore[list-item]
+    )
 
 
 sum_distinct.__doc__ = pysparkfuncs.sum_distinct.__doc__
@@ -1841,12 +1863,10 @@ def from_json(
     schema: Union[ArrayType, StructType, Column, str],
     options: Optional[Dict[str, str]] = None,
 ) -> Column:
-    if isinstance(schema, Column):
-        _schema = schema
+    if isinstance(schema, (str, Column)):
+        _schema = lit(schema)
     elif isinstance(schema, DataType):
         _schema = lit(schema.json())
-    elif isinstance(schema, str):
-        _schema = lit(schema)
     else:
         raise PySparkTypeError(
             error_class="NOT_COLUMN_OR_DATATYPE_OR_STR",
@@ -1867,12 +1887,10 @@ def from_xml(
     schema: Union[StructType, Column, str],
     options: Optional[Dict[str, str]] = None,
 ) -> Column:
-    if isinstance(schema, Column):
-        _schema = schema
+    if isinstance(schema, (str, Column)):
+        _schema = lit(schema)
     elif isinstance(schema, StructType):
         _schema = lit(schema.json())
-    elif isinstance(schema, str):
-        _schema = lit(schema)
     else:
         raise PySparkTypeError(
             error_class="NOT_COLUMN_OR_STR_OR_STRUCT",
@@ -2029,6 +2047,55 @@ def str_to_map(
 str_to_map.__doc__ = pysparkfuncs.str_to_map.__doc__
 
 
+def try_parse_json(col: "ColumnOrName") -> Column:
+    return _invoke_function("try_parse_json", _to_col(col))
+
+
+try_parse_json.__doc__ = pysparkfuncs.try_parse_json.__doc__
+
+
+def parse_json(col: "ColumnOrName") -> Column:
+    return _invoke_function("parse_json", _to_col(col))
+
+
+parse_json.__doc__ = pysparkfuncs.parse_json.__doc__
+
+
+def is_variant_null(v: "ColumnOrName") -> Column:
+    return _invoke_function("is_variant_null", _to_col(v))
+
+
+is_variant_null.__doc__ = pysparkfuncs.is_variant_null.__doc__
+
+
+def variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
+    return _invoke_function("variant_get", _to_col(v), lit(path), lit(targetType))
+
+
+variant_get.__doc__ = pysparkfuncs.variant_get.__doc__
+
+
+def try_variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
+    return _invoke_function("try_variant_get", _to_col(v), lit(path), lit(targetType))
+
+
+try_variant_get.__doc__ = pysparkfuncs.try_variant_get.__doc__
+
+
+def schema_of_variant(v: "ColumnOrName") -> Column:
+    return _invoke_function("schema_of_variant", _to_col(v))
+
+
+schema_of_variant.__doc__ = pysparkfuncs.schema_of_variant.__doc__
+
+
+def schema_of_variant_agg(v: "ColumnOrName") -> Column:
+    return _invoke_function("schema_of_variant_agg", _to_col(v))
+
+
+schema_of_variant_agg.__doc__ = pysparkfuncs.schema_of_variant_agg.__doc__
+
+
 def posexplode(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("posexplode", col)
 
@@ -2062,10 +2129,8 @@ def sequence(
 sequence.__doc__ = pysparkfuncs.sequence.__doc__
 
 
-def schema_of_csv(csv: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
-    if isinstance(csv, Column):
-        _csv = csv
-    elif isinstance(csv, str):
+def schema_of_csv(csv: Union[str, Column], options: Optional[Dict[str, str]] = None) -> Column:
+    if isinstance(csv, (str, Column)):
         _csv = lit(csv)
     else:
         raise PySparkTypeError(
@@ -2082,10 +2147,8 @@ def schema_of_csv(csv: "ColumnOrName", options: Optional[Dict[str, str]] = None)
 schema_of_csv.__doc__ = pysparkfuncs.schema_of_csv.__doc__
 
 
-def schema_of_json(json: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
-    if isinstance(json, Column):
-        _json = json
-    elif isinstance(json, str):
+def schema_of_json(json: Union[str, Column], options: Optional[Dict[str, str]] = None) -> Column:
+    if isinstance(json, (str, Column)):
         _json = lit(json)
     else:
         raise PySparkTypeError(
@@ -2102,10 +2165,8 @@ def schema_of_json(json: "ColumnOrName", options: Optional[Dict[str, str]] = Non
 schema_of_json.__doc__ = pysparkfuncs.schema_of_json.__doc__
 
 
-def schema_of_xml(xml: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
-    if isinstance(xml, Column):
-        _xml = xml
-    elif isinstance(xml, str):
+def schema_of_xml(xml: Union[str, Column], options: Optional[Dict[str, str]] = None) -> Column:
+    if isinstance(xml, (str, Column)):
         _xml = lit(xml)
     else:
         raise PySparkTypeError(
@@ -2457,8 +2518,13 @@ def repeat(col: "ColumnOrName", n: Union["ColumnOrName", int]) -> Column:
 repeat.__doc__ = pysparkfuncs.repeat.__doc__
 
 
-def split(str: "ColumnOrName", pattern: str, limit: int = -1) -> Column:
-    return _invoke_function("split", _to_col(str), lit(pattern), lit(limit))
+def split(
+    str: "ColumnOrName",
+    pattern: Union[Column, str],
+    limit: Union["ColumnOrName", int] = -1,
+) -> Column:
+    limit = lit(limit) if isinstance(limit, int) else _to_col(limit)
+    return _invoke_function("split", _to_col(str), lit(pattern), limit)
 
 
 split.__doc__ = pysparkfuncs.split.__doc__
@@ -2851,6 +2917,20 @@ def mask(
 
 
 mask.__doc__ = pysparkfuncs.mask.__doc__
+
+
+def collate(col: "ColumnOrName", collation: str) -> Column:
+    return _invoke_function("collate", _to_col(col), lit(collation))
+
+
+collate.__doc__ = pysparkfuncs.collate.__doc__
+
+
+def collation(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("collation", col)
+
+
+collation.__doc__ = pysparkfuncs.collation.__doc__
 
 
 # Date/Timestamp functions
@@ -3317,6 +3397,13 @@ def timestamp_micros(col: "ColumnOrName") -> Column:
 timestamp_micros.__doc__ = pysparkfuncs.timestamp_micros.__doc__
 
 
+def timestamp_diff(unit: str, start: "ColumnOrName", end: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("timestampdiff", lit(unit), start, end)
+
+
+timestamp_diff.__doc__ = pysparkfuncs.timestamp_diff.__doc__
+
+
 def window(
     timeColumn: "ColumnOrName",
     windowDuration: str,
@@ -3434,6 +3521,7 @@ to_timestamp_ntz.__doc__ = pysparkfuncs.to_timestamp_ntz.__doc__
 
 
 def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
+    warnings.warn("Deprecated in 4.0.0, use partitioning.bucket instead.", FutureWarning)
     from pyspark.sql.connect.functions import partitioning
 
     return partitioning.bucket(numBuckets, col)
@@ -3443,6 +3531,7 @@ bucket.__doc__ = pysparkfuncs.bucket.__doc__
 
 
 def years(col: "ColumnOrName") -> Column:
+    warnings.warn("Deprecated in 4.0.0, use partitioning.years instead.", FutureWarning)
     from pyspark.sql.connect.functions import partitioning
 
     return partitioning.years(col)
@@ -3452,6 +3541,7 @@ years.__doc__ = pysparkfuncs.years.__doc__
 
 
 def months(col: "ColumnOrName") -> Column:
+    warnings.warn("Deprecated in 4.0.0, use partitioning.months instead.", FutureWarning)
     from pyspark.sql.connect.functions import partitioning
 
     return partitioning.months(col)
@@ -3461,6 +3551,7 @@ months.__doc__ = pysparkfuncs.months.__doc__
 
 
 def days(col: "ColumnOrName") -> Column:
+    warnings.warn("Deprecated in 4.0.0, use partitioning.days instead.", FutureWarning)
     from pyspark.sql.connect.functions import partitioning
 
     return partitioning.days(col)
@@ -3470,6 +3561,7 @@ days.__doc__ = pysparkfuncs.days.__doc__
 
 
 def hours(col: "ColumnOrName") -> Column:
+    warnings.warn("Deprecated in 4.0.0, use partitioning.hours instead.", FutureWarning)
     from pyspark.sql.connect.functions import partitioning
 
     return partitioning.hours(col)
@@ -3726,27 +3818,27 @@ def sha2(col: "ColumnOrName", numBits: int) -> Column:
 sha2.__doc__ = pysparkfuncs.sha2.__doc__
 
 
-def hll_sketch_agg(col: "ColumnOrName", lgConfigK: Optional[Union[int, Column]] = None) -> Column:
+def hll_sketch_agg(
+    col: "ColumnOrName",
+    lgConfigK: Optional[Union[int, Column]] = None,
+) -> Column:
     if lgConfigK is None:
         return _invoke_function_over_columns("hll_sketch_agg", col)
     else:
-        _lgConfigK = lit(lgConfigK) if isinstance(lgConfigK, int) else lgConfigK
-        return _invoke_function_over_columns("hll_sketch_agg", col, _lgConfigK)
+        return _invoke_function_over_columns("hll_sketch_agg", col, lit(lgConfigK))
 
 
 hll_sketch_agg.__doc__ = pysparkfuncs.hll_sketch_agg.__doc__
 
 
-def hll_union_agg(col: "ColumnOrName", allowDifferentLgConfigK: Optional[bool] = None) -> Column:
+def hll_union_agg(
+    col: "ColumnOrName",
+    allowDifferentLgConfigK: Optional[Union[bool, Column]] = None,
+) -> Column:
     if allowDifferentLgConfigK is None:
         return _invoke_function_over_columns("hll_union_agg", col)
     else:
-        _allowDifferentLgConfigK = (
-            lit(allowDifferentLgConfigK)
-            if isinstance(allowDifferentLgConfigK, bool)
-            else allowDifferentLgConfigK
-        )
-        return _invoke_function_over_columns("hll_union_agg", col, _allowDifferentLgConfigK)
+        return _invoke_function_over_columns("hll_union_agg", col, lit(allowDifferentLgConfigK))
 
 
 hll_union_agg.__doc__ = pysparkfuncs.hll_union_agg.__doc__
@@ -4023,8 +4115,10 @@ udtf.__doc__ = pysparkfuncs.udtf.__doc__
 
 
 def call_function(funcName: str, *cols: "ColumnOrName") -> Column:
+    from pyspark.sql.connect.column import Column as ConnectColumn
+
     expressions = [_to_col(c)._expr for c in cols]
-    return Column(CallFunction(funcName, expressions))
+    return ConnectColumn(CallFunction(funcName, expressions))  # type: ignore[arg-type]
 
 
 call_function.__doc__ = pysparkfuncs.call_function.__doc__
@@ -4032,6 +4126,7 @@ call_function.__doc__ = pysparkfuncs.call_function.__doc__
 
 def _test() -> None:
     import sys
+    import os
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
     import pyspark.sql.connect.functions.builtin
@@ -4040,7 +4135,7 @@ def _test() -> None:
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.functions tests")
-        .remote("local[4]")
+        .remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[4]"))
         .getOrCreate()
     )
 

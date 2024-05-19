@@ -18,8 +18,8 @@ import sys
 from typing import List, Union, TYPE_CHECKING, cast
 import warnings
 
-from pyspark.errors import PySparkValueError
-from pyspark.rdd import PythonEvalType
+from pyspark.errors import PySparkTypeError
+from pyspark.util import PythonEvalType
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.streaming.state import GroupStateTimeout
@@ -100,11 +100,9 @@ class PandasGroupedOpsMixin:
                 != PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
             )
         ):
-            raise PySparkValueError(
-                error_class="INVALID_PANDAS_UDF",
-                message_parameters={
-                    "detail": "the udf argument must be a pandas_udf of type GROUPED_MAP."
-                },
+            raise PySparkTypeError(
+                error_class="INVALID_UDF_EVAL_TYPE",
+                message_parameters={"eval_type": "SQL_GROUPED_MAP_PANDAS_UDF"},
             )
 
         warnings.warn(
@@ -641,7 +639,7 @@ class PandasCogroupedOps:
         a :class:`DataFrame`.
 
         The `schema` should be a :class:`StructType` describing the schema of the returned
-        `pandas.DataFrame`. The column labels of the returned `pandas.DataFrame` must either match
+        `pyarrow.Table`. The column labels of the returned `pyarrow.Table` must either match
         the field names in the defined schema if specified as strings, or match the
         field data types by position if not strings, e.g. integer indices.
         The length of the returned `pyarrow.Table` can be arbitrary.

@@ -21,7 +21,8 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{MODEL_WEIGHTS, TIME}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.streaming.api.java.{JavaDStream, JavaPairDStream}
 import org.apache.spark.streaming.dstream.DStream
@@ -90,12 +91,12 @@ abstract class StreamingLinearAlgorithm[
     data.foreachRDD { (rdd, time) =>
       if (!rdd.isEmpty()) {
         model = Some(algorithm.run(rdd, model.get.weights))
-        logInfo(s"Model updated at time ${time.toString}")
+        logInfo(log"Model updated at time ${MDC(TIME, time)}")
         val display = model.get.weights.size match {
           case x if x > 100 => model.get.weights.toArray.take(100).mkString("[", ",", "...")
           case _ => model.get.weights.toArray.mkString("[", ",", "]")
         }
-        logInfo(s"Current model: weights, ${display}")
+        logInfo(log"Current model: weights, ${MDC(MODEL_WEIGHTS, display)}")
       }
     }
   }

@@ -18,15 +18,16 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.io.CharArrayWriter
 
-import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.util.{ArrayData, FailFastMode, FailureSafeParser, GenericArrayData, PermissiveMode}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
+import org.apache.spark.sql.catalyst.util.{ArrayData, DropMalformedMode, FailFastMode, FailureSafeParser, GenericArrayData, PermissiveMode}
+import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.catalyst.xml.{StaxXmlGenerator, StaxXmlParser, ValidatorUtil, XmlInferSchema, XmlOptions}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.types.StringTypeAnyCollation
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -140,7 +141,7 @@ case class XmlToStructs(
       converter(parser.parse(str))
   }
 
-  override def inputTypes: Seq[AbstractDataType] = StringType :: Nil
+  override def inputTypes: Seq[AbstractDataType] = StringTypeAnyCollation :: Nil
 
   override def sql: String = schema match {
     case _: MapType => "entries"
@@ -178,7 +179,7 @@ case class SchemaOfXml(
     child = child,
     options = ExprUtils.convertToMapData(options))
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def nullable: Boolean = false
 
@@ -186,11 +187,12 @@ case class SchemaOfXml(
   private lazy val xmlOptions = new XmlOptions(options, "UTC")
 
   @transient
-  private lazy val xmlFactory = xmlOptions.buildXmlFactory()
-
-  @transient
-  private lazy val xmlInferSchema =
+  private lazy val xmlInferSchema = {
+    if (xmlOptions.parseMode == DropMalformedMode) {
+      throw QueryCompilationErrors.parseModeUnsupportedError("schema_of_xml", xmlOptions.parseMode)
+    }
     new XmlInferSchema(xmlOptions, caseSensitive = SQLConf.get.caseSensitiveAnalysis)
+  }
 
   @transient
   private lazy val xml = child.eval().asInstanceOf[UTF8String]
@@ -222,7 +224,7 @@ case class SchemaOfXml(
           .map(ArrayType(_, containsNull = at.containsNull))
           .getOrElse(ArrayType(StructType(Nil), containsNull = at.containsNull))
       case other: DataType =>
-        xmlInferSchema.canonicalizeType(other).getOrElse(StringType)
+        xmlInferSchema.canonicalizeType(other).getOrElse(SQLConf.get.defaultStringType)
     }
 
     UTF8String.fromString(dataType.sql)
@@ -261,7 +263,6 @@ case class StructsToXml(
     timeZoneId: Option[String] = None)
   extends UnaryExpression
   with TimeZoneAwareExpression
-  with CodegenFallback
   with ExpectsInputTypes
   with NullIntolerant {
   override def nullable: Boolean = true
@@ -277,16 +278,26 @@ case class StructsToXml(
       child = child,
       timeZoneId = None)
 
+  override def checkInputDataTypes(): TypeCheckResult = {
+    child.dataType match {
+      case _: StructType => TypeCheckSuccess
+      case _ => DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(0),
+          "requiredType" -> toSQLType(StructType),
+          "inputSql" -> toSQLExpr(child),
+          "inputType" -> toSQLType(child.dataType)
+        )
+      )
+    }
+  }
+
   @transient
   lazy val writer = new CharArrayWriter()
 
   @transient
-  lazy val inputSchema: StructType = child.dataType match {
-    case st: StructType => st
-    case other => throw new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_3234",
-      messageParameters = Map("other" -> other.catalogString))
-  }
+  lazy val inputSchema: StructType = child.dataType.asInstanceOf[StructType]
 
   @transient
   lazy val gen = new StaxXmlGenerator(
@@ -306,12 +317,17 @@ case class StructsToXml(
       getAndReset()
   }
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
   override def nullSafeEval(value: Any): Any = converter(value)
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val expr = ctx.addReferenceObj("this", this)
+    defineCodeGen(ctx, ev, input => s"(UTF8String) $expr.nullSafeEval($input)")
+  }
 
   override def inputTypes: Seq[AbstractDataType] = StructType :: Nil
 

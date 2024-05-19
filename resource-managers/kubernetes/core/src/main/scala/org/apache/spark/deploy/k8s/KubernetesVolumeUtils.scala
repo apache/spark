@@ -19,9 +19,17 @@ package org.apache.spark.deploy.k8s
 import java.lang.Long.parseLong
 
 import org.apache.spark.SparkConf
+import org.apache.spark.annotation.{DeveloperApi, Since, Unstable}
 import org.apache.spark.deploy.k8s.Config._
 
-private[spark] object KubernetesVolumeUtils {
+/**
+ * :: DeveloperApi ::
+ *
+ * A utility class used for K8s operations internally and Spark K8s operator.
+ */
+@Unstable
+@DeveloperApi
+object KubernetesVolumeUtils {
   /**
    * Extract Spark volume configuration properties with a given name prefix.
    *
@@ -29,6 +37,7 @@ private[spark] object KubernetesVolumeUtils {
    * @param prefix the given property name prefix
    * @return a Map storing with volume name as key and spec as value
    */
+  @Since("3.0.0")
   def parseVolumesWithPrefix(sparkConf: SparkConf, prefix: String): Seq[KubernetesVolumeSpec] = {
     val properties = sparkConf.getAllWithPrefix(prefix).toMap
 

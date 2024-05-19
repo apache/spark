@@ -77,6 +77,34 @@ class SparkSessionTestCase(unittest.TestCase):
         self.assertIs(session, session2)
         session.stop()
 
+    def test_active_session_expires_when_client_closes(self):
+        s1 = RemoteSparkSession.builder.remote("sc://other").getOrCreate()
+        s2 = RemoteSparkSession.getActiveSession()
+
+        self.assertIs(s1, s2)
+
+        # We don't call close() to avoid executing ExecutePlanResponseReattachableIterator
+        s1._client._closed = True
+
+        self.assertIsNone(RemoteSparkSession.getActiveSession())
+        s3 = RemoteSparkSession.builder.remote("sc://other").getOrCreate()
+
+        self.assertIsNot(s1, s3)
+
+    def test_default_session_expires_when_client_closes(self):
+        s1 = RemoteSparkSession.builder.remote("sc://other").getOrCreate()
+        s2 = RemoteSparkSession.getDefaultSession()
+
+        self.assertIs(s1, s2)
+
+        # We don't call close() to avoid executing ExecutePlanResponseReattachableIterator
+        s1._client._closed = True
+
+        self.assertIsNone(RemoteSparkSession.getDefaultSession())
+        s3 = RemoteSparkSession.builder.remote("sc://other").getOrCreate()
+
+        self.assertIsNot(s1, s3)
+
 
 class JobCancellationTests(ReusedConnectTestCase):
     def test_tags(self):

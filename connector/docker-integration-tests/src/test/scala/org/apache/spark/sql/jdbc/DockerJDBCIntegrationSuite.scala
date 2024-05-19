@@ -36,6 +36,9 @@ import com.github.dockerjava.zerodep.ZerodepDockerHttpClient
 import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.internal.LogKeys.{CLASS_NAME, CONTAINER, STATUS}
+import org.apache.spark.internal.MDC
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.{DockerUtils, Utils}
 import org.apache.spark.util.Utils.timeStringAsSeconds
@@ -99,7 +102,7 @@ abstract class DatabaseOnDocker {
 }
 
 abstract class DockerJDBCIntegrationSuite
-  extends SharedSparkSession with Eventually with DockerIntegrationFunSuite {
+  extends QueryTest with SharedSparkSession with Eventually with DockerIntegrationFunSuite {
 
   protected val dockerIp = DockerUtils.getDockerIp()
   val db: DatabaseOnDocker
@@ -112,7 +115,7 @@ abstract class DockerJDBCIntegrationSuite
   protected val startContainerTimeout: Long =
     timeStringAsSeconds(sys.props.getOrElse("spark.test.docker.startContainerTimeout", "5min"))
   protected val connectionTimeout: PatienceConfiguration.Timeout = {
-    val timeoutStr = sys.props.getOrElse("spark.test.docker.conn", "5min")
+    val timeoutStr = sys.props.getOrElse("spark.test.docker.connectionTimeout", "5min")
     timeout(timeStringAsSeconds(timeoutStr).seconds)
   }
 
@@ -220,7 +223,8 @@ abstract class DockerJDBCIntegrationSuite
       }
     } catch {
       case NonFatal(e) =>
-        logError(s"Failed to initialize Docker container for ${this.getClass.getName}", e)
+        logError(log"Failed to initialize Docker container for " +
+          log"${MDC(CLASS_NAME, this.getClass.getName)}", e)
         try {
           afterAll()
         } finally {
@@ -259,9 +263,10 @@ abstract class DockerJDBCIntegrationSuite
       } catch {
         case NonFatal(e) =>
           val response = docker.inspectContainerCmd(container.getId).exec()
-          logWarning(s"Container $container already stopped")
+          logWarning(log"Container ${MDC(CONTAINER, container)} already stopped")
           val status = Option(response).map(_.getState.getStatus).getOrElse("unknown")
-          logWarning(s"Could not stop container $container at stage '$status'", e)
+          logWarning(log"Could not stop container ${MDC(CONTAINER, container)} " +
+            log"at stage '${MDC(STATUS, status)}'", e)
       } finally {
         logContainerOutput()
         docker.removeContainerCmd(container.getId).exec()

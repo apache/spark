@@ -58,7 +58,7 @@ object TypeUtils extends QueryErrorsBase {
   }
 
   def checkForMapKeyType(keyType: DataType): TypeCheckResult = {
-    if (keyType.existsRecursively(_.isInstanceOf[MapType])) {
+    if (keyType.existsRecursively(dt => dt.isInstanceOf[MapType] || dt.isInstanceOf[VariantType])) {
       DataTypeMismatch(
         errorSubClass = "INVALID_MAP_KEY_TYPE",
         messageParameters = Map(
@@ -107,6 +107,7 @@ object TypeUtils extends QueryErrorsBase {
    */
   def typeWithProperEquals(dataType: DataType): Boolean = dataType match {
     case BinaryType => false
+    case s: StringType => s.supportsBinaryEquality
     case _: AtomicType => true
     case _ => false
   }

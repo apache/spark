@@ -37,7 +37,7 @@ import org.apache.parquet.hadoop.example.ExampleParquetWriter
 import org.apache.parquet.io.api.Binary
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 
-import org.apache.spark.{SPARK_VERSION_SHORT, SparkException, TestUtils}
+import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException, TestUtils}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
@@ -1064,9 +1064,18 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     val readSchema = StructType(Seq(StructField("_1", DataTypes.TimestampType)))
 
     withParquetFile(data) { path =>
-      val errMsg = intercept[Exception](spark.read.schema(readSchema).parquet(path).collect())
-          .getMessage
-      assert(errMsg.contains("Parquet column cannot be converted in file"))
+      checkErrorMatchPVals(
+        exception = intercept[SparkException] {
+          spark.read.schema(readSchema).parquet(path).collect()
+        },
+        errorClass = "FAILED_READ_FILE.PARQUET_COLUMN_DATA_TYPE_MISMATCH",
+        parameters = Map(
+          "path" -> ".*",
+          "column" -> "\\[_1\\]",
+          "expectedType" -> "timestamp",
+          "actualType" -> "BINARY"
+        )
+      )
     }
   }
 
@@ -1195,39 +1204,6 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     }.toString
     assert(errorMessage.contains("UnknownHostException") ||
         errorMessage.contains("is not a valid DFS filename"))
-  }
-
-  test("SPARK-7837 Do not close output writer twice when commitTask() fails") {
-    withSQLConf(SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
-        classOf[SQLHadoopMapReduceCommitProtocol].getCanonicalName) {
-      // Using a output committer that always fail when committing a task, so that both
-      // `commitTask()` and `abortTask()` are invoked.
-      val extraOptions = Map[String, String](
-        SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key ->
-          classOf[TaskCommitFailureParquetOutputCommitter].getCanonicalName
-      )
-
-      // Before fixing SPARK-7837, the following code results in an NPE because both
-      // `commitTask()` and `abortTask()` try to close output writers.
-
-      withTempPath { dir =>
-        val m1 = intercept[SparkException] {
-          spark.range(1).coalesce(1).write.options(extraOptions).parquet(dir.getCanonicalPath)
-        }
-        assert(m1.getErrorClass == "TASK_WRITE_FAILED")
-        assert(m1.getCause.getMessage.contains("Intentional exception for testing purposes"))
-      }
-
-      withTempPath { dir =>
-        val m2 = intercept[SparkException] {
-          val df = spark.range(1).select($"id" as Symbol("a"), $"id" as Symbol("b"))
-            .coalesce(1)
-          df.write.partitionBy("a").options(extraOptions).parquet(dir.getCanonicalPath)
-        }
-        assert(m2.getErrorClass == "TASK_WRITE_FAILED")
-        assert(m2.getCause.getMessage.contains("Intentional exception for testing purposes"))
-      }
-    }
   }
 
   test("SPARK-11044 Parquet writer version fixed as version1 ") {
@@ -1569,6 +1545,52 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
           assert(Seq(866, 20, 492, 76, 824, 604, 343, 820, 864, 243)
             .zip(last10Df).forall(d =>
             d._1 == d._2.getDecimal(0).unscaledValue().intValue()))
+      }
+    }
+  }
+}
+
+// Parquet IO test suite with output commit coordination disabled.
+// This test suite is separated ParquetIOSuite to avoid race condition of failure events
+// from `OutputCommitCoordination` and `TaskSetManager`.
+class ParquetIOWithoutOutputCommitCoordinationSuite
+    extends QueryTest with ParquetTest with SharedSparkSession {
+  import testImplicits._
+
+  override protected def sparkConf: SparkConf = {
+    super.sparkConf
+      .set("spark.hadoop.outputCommitCoordination.enabled", "false")
+  }
+
+  test("SPARK-7837 Do not close output writer twice when commitTask() fails") {
+    withSQLConf(SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
+      classOf[SQLHadoopMapReduceCommitProtocol].getCanonicalName) {
+      // Using a output committer that always fail when committing a task, so that both
+      // `commitTask()` and `abortTask()` are invoked.
+      val extraOptions = Map[String, String](
+        SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key ->
+          classOf[TaskCommitFailureParquetOutputCommitter].getCanonicalName
+      )
+
+      // Before fixing SPARK-7837, the following code results in an NPE because both
+      // `commitTask()` and `abortTask()` try to close output writers.
+
+      withTempPath { dir =>
+        val m1 = intercept[SparkException] {
+          spark.range(1).coalesce(1).write.options(extraOptions).parquet(dir.getCanonicalPath)
+        }
+        assert(m1.getErrorClass == "TASK_WRITE_FAILED")
+        assert(m1.getCause.getMessage.contains("Intentional exception for testing purposes"))
+      }
+
+      withTempPath { dir =>
+        val m2 = intercept[SparkException] {
+          val df = spark.range(1).select($"id" as Symbol("a"), $"id" as Symbol("b"))
+            .coalesce(1)
+          df.write.partitionBy("a").options(extraOptions).parquet(dir.getCanonicalPath)
+        }
+        assert(m2.getErrorClass == "TASK_WRITE_FAILED")
+        assert(m2.getCause.getMessage.contains("Intentional exception for testing purposes"))
       }
     }
   }

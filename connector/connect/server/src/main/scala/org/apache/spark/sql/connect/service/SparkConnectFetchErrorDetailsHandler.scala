@@ -32,9 +32,13 @@ class SparkConnectFetchErrorDetailsHandler(
     responseObserver: StreamObserver[proto.FetchErrorDetailsResponse]) {
 
   def handle(v: proto.FetchErrorDetailsRequest): Unit = {
+    val previousSessionId = v.hasClientObservedServerSideSessionId match {
+      case true => Some(v.getClientObservedServerSideSessionId)
+      case false => None
+    }
     val sessionHolder =
       SparkConnectService
-        .getOrCreateIsolatedSession(v.getUserContext.getUserId, v.getSessionId)
+        .getOrCreateIsolatedSession(v.getUserContext.getUserId, v.getSessionId, previousSessionId)
 
     val response = Option(sessionHolder.errorIdToError.getIfPresent(v.getErrorId))
       .map { error =>

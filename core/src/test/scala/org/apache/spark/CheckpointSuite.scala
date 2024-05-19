@@ -669,4 +669,20 @@ class CheckpointStorageSuite extends SparkFunSuite with LocalSparkContext {
       assert(rdd.firstParent.isInstanceOf[ReliableCheckpointRDD[_]])
     }
   }
+
+  test("SPARK-48268: checkpoint directory via configuration") {
+    withTempDir { checkpointDir =>
+      val conf = new SparkConf()
+        .set("spark.checkpoint.dir", checkpointDir.toString)
+        .set(UI_ENABLED.key, "false")
+      sc = new SparkContext("local", "test", conf)
+      val parCollection = sc.makeRDD(1 to 4)
+      val flatMappedRDD = parCollection.flatMap(x => 1 to x)
+      flatMappedRDD.checkpoint()
+      assert(flatMappedRDD.dependencies.head.rdd === parCollection)
+      val result = flatMappedRDD.collect()
+      assert(flatMappedRDD.dependencies.head.rdd != parCollection)
+      assert(flatMappedRDD.collect() === result)
+    }
+  }
 }

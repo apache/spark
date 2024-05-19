@@ -21,7 +21,8 @@ import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.spark.api.python.PythonUtils
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.DATA_SOURCE
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.python.UserDefinedPythonDataSource
 import org.apache.spark.util.Utils
@@ -53,7 +54,8 @@ class DataSourceManager extends Logging {
     }
     val previousValue = runtimeDataSourceBuilders.put(normalizedName, source)
     if (previousValue != null) {
-      logWarning(f"The data source $name replaced a previously registered data source.")
+      logWarning(log"The data source ${MDC(DATA_SOURCE, name)} replaced a previously " +
+        log"registered data source.")
     }
   }
 
@@ -103,6 +105,11 @@ object DataSourceManager extends Logging {
         val maybeResult = try {
           Some(UserDefinedPythonDataSource.lookupAllDataSourcesInPython())
         } catch {
+          case e: Throwable if e.toString.contains(
+              "ModuleNotFoundError: No module named 'pyspark'") =>
+            // If PySpark is not in the Python path at all, suppress the warning
+            // To make it less noisy, see also SPARK-47311.
+            None
           case e: Throwable =>
             // Even if it fails for whatever reason, we shouldn't make the whole
             // application fail.

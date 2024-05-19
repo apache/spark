@@ -65,7 +65,7 @@ if should_test_connect:
 
 class SparkConnectColumnTests(SparkConnectSQLTestCase):
     def compare_by_show(self, df1, df2, n: int = 20, truncate: int = 20):
-        from pyspark.sql.dataframe import DataFrame as SDF
+        from pyspark.sql.classic.dataframe import DataFrame as SDF
         from pyspark.sql.connect.dataframe import DataFrame as CDF
 
         assert isinstance(df1, (SDF, CDF))
@@ -772,8 +772,8 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
             sdf.select(sdf.z[0], sdf.z[1], sdf["z"][2]).toPandas(),
         )
         self.assert_eq(
-            cdf.select(CF.col("z")[0], cdf.z[10], CF.col("z")[-10]).toPandas(),
-            sdf.select(SF.col("z")[0], sdf.z[10], SF.col("z")[-10]).toPandas(),
+            cdf.select(CF.col("z")[0], CF.get(cdf.z, 10), CF.get(CF.col("z"), -10)).toPandas(),
+            sdf.select(SF.col("z")[0], SF.get(sdf.z, 10), SF.get(SF.col("z"), -10)).toPandas(),
         )
         self.assert_eq(
             cdf.select(cdf.z.getItem(0), cdf.z.getItem(1), cdf["z"].getField(2)).toPandas(),
@@ -813,12 +813,9 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
             ).toPandas(),
         )
 
-        # TODO(SPARK-41762): make __neg__ return the correct column name
-        # [left]:  Index(['negative(a)'], dtype='object')
-        # [right]: Index(['(- a)'], dtype='object')
         self.assert_eq(
-            cdf.select((-cdf.a).alias("x")).toPandas(),
-            sdf.select((-sdf.a).alias("x")).toPandas(),
+            cdf.select((-cdf.a)).toPandas(),
+            sdf.select((-sdf.a)).toPandas(),
         )
 
         self.assert_eq(
@@ -827,8 +824,12 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
         )
 
         self.assert_eq(
-            cdf.select(cdf.a % cdf["b"], cdf["a"] % 2, 12 % cdf.c).toPandas(),
-            sdf.select(sdf.a % sdf["b"], sdf["a"] % 2, 12 % sdf.c).toPandas(),
+            cdf.select(
+                cdf.a % cdf["b"], cdf["a"] % 2, CF.try_remainder(CF.lit(12), cdf.c)
+            ).toPandas(),
+            sdf.select(
+                sdf.a % sdf["b"], sdf["a"] % 2, SF.try_remainder(SF.lit(12), sdf.c)
+            ).toPandas(),
         )
 
         self.assert_eq(
@@ -1025,12 +1026,8 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
 
 
 if __name__ == "__main__":
-    import os
     import unittest
     from pyspark.sql.tests.connect.test_connect_column import *  # noqa: F401
-
-    # TODO(SPARK-41794): Enable ANSI mode in this file.
-    os.environ["SPARK_ANSI_SQL_MODE"] = "false"
 
     try:
         import xmlrunner

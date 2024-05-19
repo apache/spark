@@ -20,10 +20,8 @@ package org.apache.spark.sql.jdbc.v2
 import java.sql.Connection
 import java.util.Locale
 
-import org.scalatest.time.SpanSugar._
-
 import org.apache.spark.{SparkConf, SparkRuntimeException}
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.OracleDatabaseOnDocker
@@ -50,12 +48,12 @@ import org.apache.spark.tags.DockerTest
  *
  * A sequence of commands to build the Oracle Database Free container image:
  *  $ git clone https://github.com/oracle/docker-images.git
- *  $ cd docker-images/OracleDatabase/SingleInstance/dockerfiles
- *  $ ./buildContainerImage.sh -v 23.2.0 -f
- *  $ export ORACLE_DOCKER_IMAGE_NAME=oracle/database:23.2.0-free
+ *  $ cd docker-images/OracleDatabase/SingleInstance/dockerfiles0
+ *  $ ./buildContainerImage.sh -v 23.4.0 -f
+ *  $ export ORACLE_DOCKER_IMAGE_NAME=oracle/database:23.4.0-free
  *
- * This procedure has been validated with Oracle Database Free version 23.2.0,
- * and with Oracle Express Edition versions 18.4.0 and 21.3.0
+ * This procedure has been validated with Oracle Database Free version 23.4.0,
+ * and with Oracle Express Edition versions 18.4.0 and 21.4.0
  */
 @DockerTest
 class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
@@ -77,8 +75,10 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
   override val namespaceOpt: Option[String] = Some("SYSTEM")
   override val db = new OracleDatabaseOnDocker
 
-  override val defaultMetadata: Metadata = new MetadataBuilder()
+  override def defaultMetadata(dataType: DataType): Metadata = new MetadataBuilder()
     .putLong("scale", 0)
+    .putBoolean("isTimestampNTZ", false)
+    .putBoolean("isSigned", dataType.isInstanceOf[NumericType] || dataType.isInstanceOf[StringType])
     .putString(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, "varchar(255)")
     .build()
 
@@ -89,22 +89,28 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
     .set("spark.sql.catalog.oracle.pushDownLimit", "true")
     .set("spark.sql.catalog.oracle.pushDownOffset", "true")
 
-  override val connectionTimeout = timeout(7.minutes)
-
   override def tablePreparation(connection: Connection): Unit = {
     connection.prepareStatement(
       "CREATE TABLE employee (dept NUMBER(32), name VARCHAR2(32), salary NUMBER(20, 2)," +
         " bonus BINARY_DOUBLE)").executeUpdate()
+    connection.prepareStatement(
+      s"""CREATE TABLE pattern_testing_table (
+         |pattern_testing_col VARCHAR(50)
+         |)
+                   """.stripMargin
+    ).executeUpdate()
   }
 
   override def testUpdateColumnType(tbl: String): Unit = {
     sql(s"CREATE TABLE $tbl (ID INTEGER)")
     var t = spark.table(tbl)
-    var expectedSchema = new StructType().add("ID", DecimalType(10, 0), true, super.defaultMetadata)
+    var expectedSchema = new StructType()
+      .add("ID", DecimalType(10, 0), true, super.defaultMetadata(DecimalType(10, 0)))
     assert(t.schema === expectedSchema)
     sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE LONG")
     t = spark.table(tbl)
-    expectedSchema = new StructType().add("ID", DecimalType(19, 0), true, super.defaultMetadata)
+    expectedSchema = new StructType()
+      .add("ID", DecimalType(19, 0), true, super.defaultMetadata(DecimalType(19, 0)))
     assert(t.schema === expectedSchema)
     // Update column type from LONG to INTEGER
     val sql1 = s"ALTER TABLE $tbl ALTER COLUMN id TYPE INTEGER"
@@ -136,6 +142,15 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
         errorClass = "EXCEED_LIMIT_LENGTH",
         parameters = Map("limit" -> "255")
       )
+    }
+  }
+
+  test("SPARK-47879: Use VARCHAR2 instead of VARCHAR") {
+    val tableName = catalogName + ".t1"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName(c1 varchar(10), c2 char(3))")
+      sql(s"INSERT INTO $tableName SELECT 'Eason' as c1, 'Y' as c2")
+      checkAnswer(sql(s"SELECT * FROM $tableName"), Seq(Row("Eason", "Y  ")))
     }
   }
 }

@@ -31,13 +31,15 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
+import org.apache.spark.sql.catalyst.expressions.variant.VariantExpressionEvalUtils
 import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{JSON_TO_STRUCT, TreePattern}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.types.StringTypeAnyCollation
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 import org.apache.spark.util.Utils
 
 private[this] sealed trait PathInstruction
@@ -76,7 +78,7 @@ private[this] object JsonPathParser extends RegexParsers {
   // parse `.name` or `['name']` child expressions
   def named: Parser[List[PathInstruction]] =
     for {
-      name <- '.' ~> "[^\\.\\[]+".r | "['" ~> "[^\\'\\?]+".r <~ "']"
+      name <- '.' ~> "[^\\.\\[]+".r | "['" ~> "[^\\']+".r <~ "']"
     } yield {
       Key :: Named(name) :: Nil
     }
@@ -131,8 +133,9 @@ case class GetJsonObject(json: Expression, path: Expression)
 
   override def left: Expression = json
   override def right: Expression = path
-  override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
-  override def dataType: DataType = StringType
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeAnyCollation, StringTypeAnyCollation)
+  override def dataType: DataType = SQLConf.get.defaultStringType
   override def nullable: Boolean = true
   override def prettyName: String = "get_json_object"
 
@@ -411,7 +414,7 @@ class GetJsonObjectEvaluator(cachedPath: UTF8String) {
         p.nextToken()
         arrayIndex(p, () => evaluatePath(p, g, style, xs))(idx)
 
-      case (FIELD_NAME, Named(name) :: xs) if p.getCurrentName == name =>
+      case (FIELD_NAME, Named(name) :: xs) if p.currentName == name =>
         // exact field match
         if (p.nextToken() != JsonToken.VALUE_NULL) {
           evaluatePath(p, g, style, xs)
@@ -476,7 +479,7 @@ case class JsonTuple(children: Seq[Expression])
   @transient private lazy val constantFields: Int = foldableFieldNames.count(_ != null)
 
   override def elementSchema: StructType = StructType(fieldExpressions.zipWithIndex.map {
-    case (_, idx) => StructField(s"c$idx", StringType, nullable = true)
+    case (_, idx) => StructField(s"c$idx", children.head.dataType, nullable = true)
   })
 
   override def prettyName: String = "json_tuple"
@@ -486,7 +489,7 @@ case class JsonTuple(children: Seq[Expression])
       throw QueryCompilationErrors.wrongNumArgsError(
         toSQLId(prettyName), Seq("> 1"), children.length
       )
-    } else if (children.forall(child => StringType.acceptsType(child.dataType))) {
+    } else if (children.forall(child => StringTypeAnyCollation.acceptsType(child.dataType))) {
       TypeCheckResult.TypeCheckSuccess
     } else {
       DataTypeMismatch(
@@ -546,7 +549,7 @@ case class JsonTuple(children: Seq[Expression])
     while (parser.nextToken() != JsonToken.END_OBJECT) {
       if (parser.getCurrentToken == JsonToken.FIELD_NAME) {
         // check to see if this field is desired in the output
-        val jsonField = parser.getCurrentName
+        val jsonField = parser.currentName
         var idx = fieldNames.indexOf(jsonField)
         if (idx >= 0) {
           // it is, copy the child tree to the correct location in the output row
@@ -664,7 +667,7 @@ case class JsonToStructs(
       timeZoneId = None)
 
   override def checkInputDataTypes(): TypeCheckResult = nullableSchema match {
-    case _: StructType | _: ArrayType | _: MapType =>
+    case _: StructType | _: ArrayType | _: MapType | _: VariantType =>
       val checkResult = ExprUtils.checkJsonSchema(nullableSchema)
       if (checkResult.isFailure) checkResult else super.checkInputDataTypes()
     case _ =>
@@ -714,11 +717,14 @@ case class JsonToStructs(
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
-  override def nullSafeEval(json: Any): Any = {
-    converter(parser.parse(json.asInstanceOf[UTF8String]))
+  override def nullSafeEval(json: Any): Any = nullableSchema match {
+    case _: VariantType =>
+      VariantExpressionEvalUtils.parseJson(json.asInstanceOf[UTF8String])
+    case _ =>
+      converter(parser.parse(json.asInstanceOf[UTF8String]))
   }
 
-  override def inputTypes: Seq[AbstractDataType] = StringType :: Nil
+  override def inputTypes: Seq[AbstractDataType] = StringTypeAnyCollation :: Nil
 
   override def sql: String = schema match {
     case _: MapType => "entries"
@@ -813,13 +819,17 @@ case class StructsToJson(
         (map: Any) =>
           gen.write(map.asInstanceOf[MapData])
           getAndReset()
+      case _: VariantType =>
+        (v: Any) =>
+          gen.write(v.asInstanceOf[VariantVal])
+          getAndReset()
     }
   }
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def checkInputDataTypes(): TypeCheckResult = inputSchema match {
-    case dt @ (_: StructType | _: MapType | _: ArrayType) =>
+    case dt @ (_: StructType | _: MapType | _: ArrayType | _: VariantType) =>
       JacksonUtils.verifyType(prettyName, dt)
     case _ =>
       DataTypeMismatch(
@@ -865,7 +875,7 @@ case class SchemaOfJson(
       child = child,
       options = ExprUtils.convertToMapData(options))
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def nullable: Boolean = false
 
@@ -911,7 +921,8 @@ case class SchemaOfJson(
             .map(ArrayType(_, containsNull = at.containsNull))
             .getOrElse(ArrayType(StructType(Nil), containsNull = at.containsNull))
         case other: DataType =>
-          jsonInferSchema.canonicalizeType(other, jsonOptions).getOrElse(StringType)
+          jsonInferSchema.canonicalizeType(other, jsonOptions).getOrElse(
+            SQLConf.get.defaultStringType)
       }
     }
 
@@ -949,7 +960,7 @@ case class SchemaOfJson(
 case class LengthOfJsonArray(child: Expression) extends UnaryExpression
   with CodegenFallback with ExpectsInputTypes {
 
-  override def inputTypes: Seq[DataType] = Seq(StringType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
   override def dataType: DataType = IntegerType
   override def nullable: Boolean = true
   override def prettyName: String = "json_array_length"
@@ -1022,8 +1033,8 @@ case class LengthOfJsonArray(child: Expression) extends UnaryExpression
 case class JsonObjectKeys(child: Expression) extends UnaryExpression with CodegenFallback
   with ExpectsInputTypes {
 
-  override def inputTypes: Seq[DataType] = Seq(StringType)
-  override def dataType: DataType = ArrayType(StringType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
+  override def dataType: DataType = ArrayType(SQLConf.get.defaultStringType)
   override def nullable: Boolean = true
   override def prettyName: String = "json_object_keys"
 
@@ -1056,7 +1067,7 @@ case class JsonObjectKeys(child: Expression) extends UnaryExpression with Codege
     // traverse until the end of input and ensure it returns valid key
     while(parser.nextValue() != null && parser.currentName() != null) {
       // add current fieldName to the ArrayBuffer
-      arrayBufferOfKeys += UTF8String.fromString(parser.getCurrentName)
+      arrayBufferOfKeys += UTF8String.fromString(parser.currentName)
 
       // skip all the children of inner object or array
       parser.skipChildren()

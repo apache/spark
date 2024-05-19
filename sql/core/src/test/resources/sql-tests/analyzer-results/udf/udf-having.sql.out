@@ -12,7 +12,7 @@ CreateViewCommand `hav`, select * from values
   ("two", 2),
   ("three", 3),
   ("one", 5)
-  as hav(k, v), false, false, LocalTempView, true
+  as hav(k, v), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, v#x]
       +- SubqueryAlias hav
          +- LocalRelation [k#x, v#x]

@@ -59,16 +59,24 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
     connection.prepareStatement(
       "CREATE TABLE employee (dept INTEGER, name VARCHAR(32), salary NUMERIC(20, 2)," +
         " bonus double precision)").executeUpdate()
+    connection.prepareStatement(
+      s"""CREATE TABLE pattern_testing_table (
+         |pattern_testing_col VARCHAR(50)
+         |)
+                   """.stripMargin
+    ).executeUpdate()
   }
 
   override def testUpdateColumnType(tbl: String): Unit = {
     sql(s"CREATE TABLE $tbl (ID INTEGER)")
     var t = spark.table(tbl)
-    var expectedSchema = new StructType().add("ID", IntegerType, true, defaultMetadata)
+    var expectedSchema = new StructType()
+      .add("ID", IntegerType, true, defaultMetadata(IntegerType))
     assert(t.schema === expectedSchema)
     sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE STRING")
     t = spark.table(tbl)
-    expectedSchema = new StructType().add("ID", StringType, true, defaultMetadata)
+    expectedSchema = new StructType()
+      .add("ID", StringType, true, defaultMetadata())
     assert(t.schema === expectedSchema)
     // Update column type from STRING to INTEGER
     val sql1 = s"ALTER TABLE $tbl ALTER COLUMN id TYPE INTEGER"
@@ -91,7 +99,8 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
     sql(s"CREATE TABLE $tbl (ID INT)" +
       s" TBLPROPERTIES('TABLESPACE'='pg_default')")
     val t = spark.table(tbl)
-    val expectedSchema = new StructType().add("ID", IntegerType, true, defaultMetadata)
+    val expectedSchema = new StructType()
+      .add("ID", IntegerType, true, defaultMetadata(IntegerType))
     assert(t.schema === expectedSchema)
   }
 

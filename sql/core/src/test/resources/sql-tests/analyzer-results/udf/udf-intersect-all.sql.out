@@ -18,7 +18,7 @@ CreateViewCommand `tab1`, SELECT * FROM VALUES
     (2, 3),
     (null, null),
     (null, null)
-    AS tab1(k, v), false, false, LocalTempView, true
+    AS tab1(k, v), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, v#x]
       +- SubqueryAlias tab1
          +- LocalRelation [k#x, v#x]
@@ -41,7 +41,7 @@ CreateViewCommand `tab2`, SELECT * FROM VALUES
     (3, 4),
     (null, null),
     (null, null)
-    AS tab2(k, v), false, false, LocalTempView, true
+    AS tab2(k, v), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, v#x]
       +- SubqueryAlias tab2
          +- LocalRelation [k#x, v#x]

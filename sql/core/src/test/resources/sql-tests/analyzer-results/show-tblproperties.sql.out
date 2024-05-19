@@ -37,7 +37,7 @@ DropTable false, false
 -- !query
 CREATE VIEW view TBLPROPERTIES('p1'='v1', 'p2'='v2') AS SELECT 1 AS c1
 -- !query analysis
-CreateViewCommand `spark_catalog`.`default`.`view`, [p1=v1, p2=v2], SELECT 1 AS c1, false, false, PersistedView, true
+CreateViewCommand `spark_catalog`.`default`.`view`, [p1=v1, p2=v2], SELECT 1 AS c1, false, false, PersistedView, COMPENSATION, true
    +- Project [1 AS c1#x]
       +- OneRowRelation
 
@@ -69,7 +69,7 @@ DropTableCommand `spark_catalog`.`default`.`view`, false, true, false
 -- !query
 CREATE TEMPORARY VIEW tv AS SELECT 1 AS c1
 -- !query analysis
-CreateViewCommand `tv`, SELECT 1 AS c1, false, false, LocalTempView, true
+CreateViewCommand `tv`, SELECT 1 AS c1, false, false, LocalTempView, UNSUPPORTED, true
    +- Project [1 AS c1#x]
       +- OneRowRelation
 

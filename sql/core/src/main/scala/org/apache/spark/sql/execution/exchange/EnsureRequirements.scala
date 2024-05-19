@@ -20,12 +20,14 @@ package org.apache.spark.sql.execution.exchange
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.internal.{LogKeys, MDC}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
+import org.apache.spark.sql.connector.catalog.functions.Reducer
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
@@ -406,11 +408,13 @@ case class EnsureRequirements(
         val leftPartValues = leftSpec.partitioning.partitionValues
         val rightPartValues = rightSpec.partitioning.partitionValues
 
+        val numLeftPartValues = MDC(LogKeys.NUM_LEFT_PARTITION_VALUES, leftPartValues.size)
+        val numRightPartValues = MDC(LogKeys.NUM_RIGHT_PARTITION_VALUES, rightPartValues.size)
         logInfo(
-          s"""
-             |Left side # of partitions: ${leftPartValues.size}
-             |Right side # of partitions: ${rightPartValues.size}
-             |""".stripMargin)
+          log"""
+              |Left side # of partitions: $numLeftPartValues
+              |Right side # of partitions: $numRightPartValues
+              |""".stripMargin)
 
         // As partition keys are compatible, we can pick either left or right as partition
         // expressions
@@ -420,7 +424,8 @@ case class EnsureRequirements(
             .mergePartitions(leftSpec.partitioning, rightSpec.partitioning, partitionExprs)
             .map(v => (v, 1))
 
-        logInfo(s"After merging, there are ${mergedPartValues.size} partitions")
+        logInfo(log"After merging, there are " +
+          log"${MDC(LogKeys.NUM_PARTITIONS, mergedPartValues.size)} partitions")
 
         var replicateLeftSide = false
         var replicateRightSide = false
@@ -444,8 +449,8 @@ case class EnsureRequirements(
           val canReplicateRight = canReplicateRightSide(joinType)
 
           if (!canReplicateLeft && !canReplicateRight) {
-            logInfo("Skipping partially clustered distribution as it cannot be applied for " +
-                s"join type '$joinType'")
+            logInfo(log"Skipping partially clustered distribution as it cannot be applied for " +
+              log"join type '${MDC(LogKeys.JOIN_TYPE, joinType)}'")
           } else {
             val leftLink = left.logicalLink
             val rightLink = right.logicalLink
@@ -454,12 +459,16 @@ case class EnsureRequirements(
               leftLink.isDefined && rightLink.isDefined &&
                   leftLink.get.stats.sizeInBytes > 1 &&
                   rightLink.get.stats.sizeInBytes > 1) {
+              val leftLinkStatsSizeInBytes = MDC(LogKeys.LEFT_LOGICAL_PLAN_STATS_SIZE_IN_BYTES,
+                leftLink.get.stats.sizeInBytes)
+              val rightLinkStatsSizeInBytes = MDC(LogKeys.RIGHT_LOGICAL_PLAN_STATS_SIZE_IN_BYTES,
+                rightLink.get.stats.sizeInBytes)
               logInfo(
-                s"""
+                log"""
                    |Using plan statistics to determine which side of join to fully
                    |cluster partition values:
-                   |Left side size (in bytes): ${leftLink.get.stats.sizeInBytes}
-                   |Right side size (in bytes): ${rightLink.get.stats.sizeInBytes}
+                   |Left side size (in bytes): $leftLinkStatsSizeInBytes
+                   |Right side size (in bytes): $rightLinkStatsSizeInBytes
                    |""".stripMargin)
               leftLink.get.stats.sizeInBytes < rightLink.get.stats.sizeInBytes
             } else {
@@ -476,12 +485,14 @@ case class EnsureRequirements(
             // of partitions can be applied. For instance, replication should not be allowed for
             // the left-hand side of a right outer join.
             if (replicateLeftSide && !canReplicateLeft) {
-              logInfo("Left-hand side is picked but cannot be applied to join type " +
-                  s"'$joinType'. Skipping partially clustered distribution.")
+              logInfo(log"Left-hand side is picked but cannot be applied to join type " +
+                log"'${MDC(LogKeys.JOIN_TYPE, joinType)}'. Skipping partially clustered " +
+                log"distribution.")
               replicateLeftSide = false
             } else if (replicateRightSide && !canReplicateRight) {
-              logInfo("Right-hand side is picked but cannot be applied to join type " +
-                  s"'$joinType'. Skipping partially clustered distribution.")
+              logInfo(log"Right-hand side is picked but cannot be applied to join type " +
+                log"'${MDC(LogKeys.JOIN_TYPE, joinType)}'. Skipping partially clustered " +
+                log"distribution.")
               replicateRightSide = false
             } else {
               // In partially clustered distribution, we should use un-grouped partition values
@@ -498,18 +509,35 @@ case class EnsureRequirements(
                   InternalRowComparableWrapper(partVal, partitionExprs), numParts))
               }
 
-              logInfo("After applying partially clustered distribution, there are " +
-                  s"${mergedPartValues.map(_._2).sum} partitions.")
+              logInfo(log"After applying partially clustered distribution, there are " +
+                log"${MDC(LogKeys.NUM_PARTITIONS, mergedPartValues.map(_._2).sum)} partitions.")
               applyPartialClustering = true
             }
           }
         }
 
-        // Now we need to push-down the common partition key to the scan in each child
-        newLeft = populatePartitionValues(left, mergedPartValues, leftSpec.joinKeyPositions,
-          applyPartialClustering, replicateLeftSide)
-        newRight = populatePartitionValues(right, mergedPartValues, rightSpec.joinKeyPositions,
-          applyPartialClustering, replicateRightSide)
+        // in case of compatible but not identical partition expressions, we apply 'reduce'
+        // transforms to group one side's partitions as well as the common partition values
+        val leftReducers = leftSpec.reducers(rightSpec)
+        val rightReducers = rightSpec.reducers(leftSpec)
+
+        if (leftReducers.isDefined || rightReducers.isDefined) {
+          mergedPartValues = reduceCommonPartValues(mergedPartValues,
+            leftSpec.partitioning.expressions,
+            leftReducers)
+          mergedPartValues = reduceCommonPartValues(mergedPartValues,
+            rightSpec.partitioning.expressions,
+            rightReducers)
+          val rowOrdering = RowOrdering
+            .createNaturalAscendingOrdering(partitionExprs.map(_.dataType))
+          mergedPartValues = mergedPartValues.sorted(rowOrdering.on((t: (InternalRow, _)) => t._1))
+        }
+
+        // Now we need to push-down the common partition information to the scan in each child
+        newLeft = populateCommonPartitionInfo(left, mergedPartValues, leftSpec.joinKeyPositions,
+          leftReducers, applyPartialClustering, replicateLeftSide)
+        newRight = populateCommonPartitionInfo(right, mergedPartValues, rightSpec.joinKeyPositions,
+          rightReducers, applyPartialClustering, replicateRightSide)
       }
     }
 
@@ -527,11 +555,12 @@ case class EnsureRequirements(
         joinType == LeftAnti || joinType == LeftOuter
   }
 
-  // Populate the common partition values down to the scan nodes
-  private def populatePartitionValues(
+  // Populate the common partition information down to the scan nodes
+  private def populateCommonPartitionInfo(
       plan: SparkPlan,
       values: Seq[(InternalRow, Int)],
       joinKeyPositions: Option[Seq[Int]],
+      reducers: Option[Seq[Option[Reducer[_, _]]]],
       applyPartialClustering: Boolean,
       replicatePartitions: Boolean): SparkPlan = plan match {
     case scan: BatchScanExec =>
@@ -539,13 +568,26 @@ case class EnsureRequirements(
         spjParams = scan.spjParams.copy(
           commonPartitionValues = Some(values),
           joinKeyPositions = joinKeyPositions,
+          reducers = reducers,
           applyPartialClustering = applyPartialClustering,
           replicatePartitions = replicatePartitions
         )
       )
     case node =>
-      node.mapChildren(child => populatePartitionValues(
-        child, values, joinKeyPositions, applyPartialClustering, replicatePartitions))
+      node.mapChildren(child => populateCommonPartitionInfo(
+        child, values, joinKeyPositions, reducers, applyPartialClustering, replicatePartitions))
+  }
+
+  private def reduceCommonPartValues(
+      commonPartValues: Seq[(InternalRow, Int)],
+      expressions: Seq[Expression],
+      reducers: Option[Seq[Option[Reducer[_, _]]]]) = {
+    reducers match {
+      case Some(reducers) => commonPartValues.groupBy { case (row, _) =>
+        KeyGroupedShuffleSpec.reducePartitionValue(row, expressions, reducers)
+      }.map{ case(wrapper, splits) => (wrapper.row, splits.map(_._2).sum) }.toSeq
+      case _ => commonPartValues
+    }
   }
 
   /**

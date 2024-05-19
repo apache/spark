@@ -65,7 +65,6 @@ public class V2ExpressionSQLBuilder {
       switch (c) {
         case '_' -> builder.append("\\_");
         case '%' -> builder.append("\\%");
-        case '\'' -> builder.append("\\\'");
         default -> builder.append(c);
       }
     }
@@ -79,7 +78,7 @@ public class V2ExpressionSQLBuilder {
     } else if (expr instanceof NamedReference namedReference) {
       return visitNamedReference(namedReference);
     } else if (expr instanceof Cast cast) {
-      return visitCast(build(cast.expression()), cast.dataType());
+      return visitCast(build(cast.expression()), cast.expressionDataType(), cast.dataType());
     } else if (expr instanceof Extract extract) {
       return visitExtract(extract.field(), build(extract.source()));
     } else if (expr instanceof SortOrder sortOrder) {
@@ -212,7 +211,7 @@ public class V2ExpressionSQLBuilder {
     return l + " LIKE '%" + escapeSpecialCharsForLikePattern(value) + "%' ESCAPE '\\'";
   }
 
-  private String inputToSQL(Expression input) {
+  protected String inputToSQL(Expression input) {
     if (input.children().length > 1) {
       return "(" + build(input) + ")";
     } else {
@@ -231,8 +230,8 @@ public class V2ExpressionSQLBuilder {
     return l + " " + name + " " + r;
   }
 
-  protected String visitCast(String l, DataType dataType) {
-    return "CAST(" + l + " AS " + dataType.typeName() + ")";
+  protected String visitCast(String expr, DataType exprDataType, DataType targetDataType) {
+    return "CAST(" + expr + " AS " + targetDataType.typeName() + ")";
   }
 
   protected String visitAnd(String name, String l, String r) {
@@ -356,7 +355,7 @@ public class V2ExpressionSQLBuilder {
     return joiner.toString();
   }
 
-  private String[] expressionsToStringArray(Expression[] expressions) {
+  protected String[] expressionsToStringArray(Expression[] expressions) {
     String[] result = new String[expressions.length];
     for (int i = 0; i < expressions.length; i++) {
       result[i] = build(expressions[i]);

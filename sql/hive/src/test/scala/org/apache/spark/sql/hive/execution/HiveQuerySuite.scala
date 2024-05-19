@@ -160,28 +160,6 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       |  SELECT key FROM gen_tmp ORDER BY key ASC;
     """.stripMargin)
 
-  test("multiple generators in projection") {
-    checkError(
-      exception = intercept[AnalysisException] {
-        sql("SELECT explode(array(key, key)), explode(array(key, key)) FROM src").collect()
-      },
-      errorClass = "UNSUPPORTED_GENERATOR.MULTI_GENERATOR",
-      parameters = Map(
-        "clause" -> "SELECT",
-        "num" -> "2",
-        "generators" -> "\"explode(array(key, key))\", \"explode(array(key, key))\""))
-
-    checkError(
-      exception = intercept[AnalysisException] {
-        sql("SELECT explode(array(key, key)) as k1, explode(array(key, key)) FROM src").collect()
-      },
-      errorClass = "UNSUPPORTED_GENERATOR.MULTI_GENERATOR",
-      parameters = Map(
-        "clause" -> "SELECT",
-        "num" -> "2",
-        "generators" -> "\"explode(array(key, key))\", \"explode(array(key, key))\""))
-  }
-
   createQueryTest("! operator",
     """
       |SELECT a FROM (
@@ -391,7 +369,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
   test("SPARK-7270: consider dynamic partition when comparing table output") {
     withTable("test_partition", "ptest") {
-      sql(s"CREATE TABLE test_partition (a STRING) PARTITIONED BY (b BIGINT, c STRING)")
+      sql(s"CREATE TABLE test_partition (a STRING) USING HIVE PARTITIONED BY (b BIGINT, c STRING)")
       sql(s"CREATE TABLE ptest (a STRING, b BIGINT, c STRING)")
 
       val analyzedPlan = sql(
@@ -826,7 +804,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   }
 
   test("ADD JAR command") {
-    sql("CREATE TABLE alter1(a INT, b INT)")
+    sql("CREATE TABLE alter1(a INT, b INT) USING HIVE")
     checkError(
       exception = intercept[AnalysisException] {
         sql(
@@ -1247,7 +1225,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
   test("Partition spec validation") {
     sql("DROP TABLE IF EXISTS dp_test")
-    sql("CREATE TABLE dp_test(key INT, value STRING) PARTITIONED BY (dp INT, sp INT)")
+    sql("CREATE TABLE dp_test(key INT, value STRING) USING HIVE PARTITIONED BY (dp INT, sp INT)")
     sql("SET hive.exec.dynamic.partition.mode=strict")
 
     // Should throw when using strict dynamic partition mode without any static partition
@@ -1649,10 +1627,8 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   test("SPARK-33084: Add jar support Ivy URI in SQL") {
     val testData = TestHive.getHiveFile("data/files/sample.json").toURI
     withTable("t") {
-      // hive-catalog-core has some transitive dependencies which dont exist on maven central
-      // and hence cannot be found in the test environment or are non-jar (.pom) which cause
-      // failures in tests. Use transitive=false as it should be good enough to test the Ivy
-      // support in Hive ADD JAR
+      // Use transitive=false as it should be good enough to test the Ivy support
+      // in Hive ADD JAR
       sql(s"ADD JAR ivy://org.apache.hive.hcatalog:hive-hcatalog-core:$hiveVersion" +
         "?transitive=false")
       sql(

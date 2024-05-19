@@ -23,9 +23,8 @@ import time
 import unittest
 from typing import cast
 from collections import namedtuple
-import sys
 
-from pyspark import SparkContext, SparkConf
+from pyspark import SparkConf
 from pyspark.sql import Row, SparkSession
 from pyspark.sql.functions import rand, udf, assert_true, lit
 from pyspark.sql.types import (
@@ -55,8 +54,8 @@ from pyspark.testing.sqlutils import (
     ExamplePoint,
     ExamplePointUDT,
 )
-from pyspark.testing.utils import QuietTest
 from pyspark.errors import ArithmeticException, PySparkTypeError, UnsupportedOperationException
+from pyspark.util import is_remote_only
 
 if have_pandas:
     import pandas as pd
@@ -179,6 +178,35 @@ class ArrowTestsMixin:
         data_dict["2_int_t"] = np.int32(data_dict["2_int_t"])
         data_dict["4_float_t"] = np.float32(data_dict["4_float_t"])
         return pd.DataFrame(data=data_dict)
+
+    def create_arrow_table(self):
+        import pyarrow as pa
+        import pyarrow.compute as pc
+
+        data_dict = {}
+        for j, name in enumerate(self.schema.names):
+            data_dict[name] = [self.data[i][j] for i in range(len(self.data))]
+        t = pa.Table.from_pydict(data_dict)
+        # convert these to Arrow types
+        new_schema = t.schema.set(
+            t.schema.get_field_index("2_int_t"), pa.field("2_int_t", pa.int32())
+        )
+        new_schema = new_schema.set(
+            new_schema.get_field_index("4_float_t"), pa.field("4_float_t", pa.float32())
+        )
+        new_schema = new_schema.set(
+            new_schema.get_field_index("6_decimal_t"),
+            pa.field("6_decimal_t", pa.decimal128(38, 18)),
+        )
+        t = t.cast(new_schema)
+        # convert timestamp to local timezone
+        timezone = self.spark.conf.get("spark.sql.session.timeZone")
+        t = t.set_column(
+            t.schema.get_field_index("8_timestamp_t"),
+            "8_timestamp_t",
+            pc.assume_timezone(t["8_timestamp_t"], timezone),
+        )
+        return t
 
     @property
     def create_np_arrs(self):
@@ -340,6 +368,12 @@ class ArrowTestsMixin:
         pdf_arrow = df.toPandas()
         assert_frame_equal(pdf_arrow, pdf)
 
+    def test_arrow_round_trip(self):
+        t_in = self.create_arrow_table()
+        df = self.spark.createDataFrame(self.data, schema=self.schema)
+        t_out = df.toArrow()
+        self.assertTrue(t_out.equals(t_in))
+
     def test_pandas_self_destruct(self):
         import pyarrow as pa
 
@@ -388,7 +422,7 @@ class ArrowTestsMixin:
         self.assertTrue(pdf.empty)
 
     def test_propagates_spark_exception(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_propagates_spark_exception()
 
     def check_propagates_spark_exception(self):
@@ -459,7 +493,7 @@ class ArrowTestsMixin:
         assert_frame_equal(pdf_arrow, pdf)
 
     def test_createDataFrame_with_incorrect_schema(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_createDataFrame_with_incorrect_schema()
 
     def check_createDataFrame_with_incorrect_schema(self):
@@ -506,7 +540,7 @@ class ArrowTestsMixin:
         self.assertEqual(columns[0], "b")
 
     def test_createDataFrame_with_single_data_type(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_createDataFrame_with_single_data_type()
 
     def check_createDataFrame_with_single_data_type(self):
@@ -599,7 +633,7 @@ class ArrowTestsMixin:
                 self.assertTrue(expected[r][e] == result[r][e])
 
     def test_createDataFrame_with_map_type(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             for arrow_enabled in [True, False]:
                 with self.subTest(arrow_enabled=arrow_enabled):
                     self.check_createDataFrame_with_map_type(arrow_enabled)
@@ -670,7 +704,7 @@ class ArrowTestsMixin:
             assert_frame_equal(pandas_df, df.toPandas(), check_dtype=False)
 
     def test_toPandas_with_map_type(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             for arrow_enabled in [True, False]:
                 with self.subTest(arrow_enabled=arrow_enabled):
                     self.check_toPandas_with_map_type(arrow_enabled)
@@ -692,7 +726,7 @@ class ArrowTestsMixin:
                 assert_frame_equal(origin, pdf)
 
     def test_toPandas_with_map_type_nulls(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             for arrow_enabled in [True, False]:
                 with self.subTest(arrow_enabled=arrow_enabled):
                     self.check_toPandas_with_map_type_nulls(arrow_enabled)
@@ -831,7 +865,8 @@ class ArrowTestsMixin:
         pdf = pd.DataFrame({"c1": [1], "c2": ["string"]})
         df = self.spark.createDataFrame(pdf)
         self.assertEqual([Row(c1=1, c2="string")], df.collect())
-        self.assertGreater(self.spark.sparkContext.defaultParallelism, len(pdf))
+        if not is_remote_only():
+            self.assertGreater(self._legacy_sc.defaultParallelism, len(pdf))
 
     def test_toPandas_error(self):
         for arrow_enabled in [True, False]:
@@ -998,7 +1033,6 @@ class ArrowTestsMixin:
 
         self.assertEqual(df.first(), expected)
 
-    @unittest.skipIf(sys.version_info < (3, 9), "zoneinfo is available from Python 3.9+")
     def test_toPandas_timestmap_tzinfo(self):
         for arrow_enabled in [True, False]:
             with self.subTest(arrow_enabled=arrow_enabled):
@@ -1203,6 +1237,8 @@ class MaxResultArrowTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        from pyspark import SparkContext
+
         cls.spark = SparkSession(
             SparkContext(
                 "local[4]", cls.__name__, conf=SparkConf().set("spark.driver.maxResultSize", "10k")

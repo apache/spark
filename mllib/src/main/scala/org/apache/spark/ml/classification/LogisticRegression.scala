@@ -27,7 +27,8 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.LogKeys.{COUNT, RANGE}
 import org.apache.spark.ml.feature._
 import org.apache.spark.ml.impl.Utils
 import org.apache.spark.ml.linalg._
@@ -530,10 +531,11 @@ class LogisticRegression @Since("1.2.0") (
     }
 
     if (numInvalid != 0) {
-      val msg = s"Classification labels should be in [0 to ${numClasses - 1}]. " +
-        s"Found $numInvalid invalid labels."
+      val msg = log"Classification labels should be in " +
+        log"${MDC(RANGE, s"[0 to ${numClasses - 1}]")}. " +
+        log"Found ${MDC(COUNT, numInvalid)} invalid labels."
       instr.logError(msg)
-      throw new SparkException(msg)
+      throw new SparkException(msg.message)
     }
 
     instr.logNumClasses(numClasses)
@@ -634,9 +636,7 @@ class LogisticRegression @Since("1.2.0") (
         initialSolution.toArray, regularization, optimizer)
 
     if (allCoefficients == null) {
-      val msg = s"${optimizer.getClass.getName} failed."
-      instr.logError(msg)
-      throw new SparkException(msg)
+      MLUtils.optimizerFailed(instr, optimizer.getClass)
     }
 
     val allCoefMatrix = new DenseMatrix(numCoefficientSets, numFeaturesPlusIntercept,
@@ -847,9 +847,11 @@ class LogisticRegression @Since("1.2.0") (
           (_initialModel.interceptVector.size == numCoefficientSets) &&
           (_initialModel.getFitIntercept == $(fitIntercept))
         if (!modelIsValid) {
-          instr.logWarning(s"Initial coefficients will be ignored! Its dimensions " +
-            s"(${providedCoefs.numRows}, ${providedCoefs.numCols}) did not match the " +
-            s"expected size ($numCoefficientSets, $numFeatures)")
+          instr.logWarning(log"Initial coefficients will be ignored! Its dimensions " +
+            log"(${MDC(LogKeys.NUM_ROWS, providedCoefs.numRows)}}, " +
+            log"${MDC(LogKeys.NUM_COLUMNS, providedCoefs.numCols)}) did not match the " +
+            log"expected size (${MDC(LogKeys.NUM_COEFFICIENTS, numCoefficientSets)}, " +
+            log"${MDC(LogKeys.NUM_FEATURES, numFeatures)})")
         }
         modelIsValid
       case None => false

@@ -27,7 +27,8 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{CLASS_NAME, DATA_SOURCE, DATA_SOURCES, PATHS}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogUtils}
@@ -50,7 +51,7 @@ import org.apache.spark.sql.execution.streaming.sources.{RateStreamProvider, Tex
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.types.{DataType, StructField, StructType, VariantType}
+import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.{HadoopFSUtils, ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
@@ -503,8 +504,12 @@ case class DataSource(
     val outputColumns = DataWritingCommand.logicalPlanOutputWithNames(data, outputColumnNames)
     providingInstance() match {
       case dataSource: CreatableRelationProvider =>
-        disallowWritingIntervals(outputColumns.map(_.dataType), forbidAnsiIntervals = true)
-        disallowWritingVariant(outputColumns.map(_.dataType))
+        outputColumns.foreach { attr =>
+          if (!dataSource.supportsDataType(attr.dataType)) {
+            throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError(
+              dataSource.toString, StructField(attr.toString, attr.dataType))
+          }
+        }
         dataSource.createRelation(
           sparkSession.sqlContext, mode, caseInsensitiveOptions, Dataset.ofRows(sparkSession, data))
       case format: FileFormat =>
@@ -525,8 +530,12 @@ case class DataSource(
   def planForWriting(mode: SaveMode, data: LogicalPlan): LogicalPlan = {
     providingInstance() match {
       case dataSource: CreatableRelationProvider =>
-        disallowWritingIntervals(data.schema.map(_.dataType), forbidAnsiIntervals = true)
-        disallowWritingVariant(data.schema.map(_.dataType))
+        data.schema.foreach { field =>
+          if (!dataSource.supportsDataType(field.dataType)) {
+            throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError(
+              dataSource.toString, field)
+          }
+        }
         SaveIntoDataSourceCommand(data, dataSource, caseInsensitiveOptions, mode)
       case format: FileFormat =>
         disallowWritingIntervals(data.schema.map(_.dataType), forbidAnsiIntervals = false)
@@ -562,14 +571,6 @@ case class DataSource(
       TypeUtils.invokeOnceForInterval(_, forbidAnsiIntervals) {
       throw QueryCompilationErrors.cannotSaveIntervalIntoExternalStorageError()
     })
-  }
-
-  private def disallowWritingVariant(dataTypes: Seq[DataType]): Unit = {
-    dataTypes.foreach { dt =>
-      if (dt.existsRecursively(_.isInstanceOf[VariantType])) {
-        throw QueryCompilationErrors.cannotSaveVariantIntoExternalStorageError()
-      }
-    }
   }
 }
 
@@ -695,8 +696,9 @@ object DataSource extends Logging {
             throw QueryCompilationErrors
               .foundMultipleXMLDataSourceError(provider1, sourceNames, externalSource.getName)
           } else if (internalSources.size == 1) {
-            logWarning(s"Multiple sources found for $provider1 (${sourceNames.mkString(", ")}), " +
-              s"defaulting to the internal datasource (${internalSources.head.getClass.getName}).")
+            logWarning(log"Multiple sources found for ${MDC(DATA_SOURCE, provider1)} " +
+              log"(${MDC(DATA_SOURCES, sourceNames.mkString(", "))}), defaulting to the " +
+              log"internal datasource (${MDC(CLASS_NAME, internalSources.head.getClass.getName)}).")
             internalSources.head.getClass
           } else {
             throw QueryCompilationErrors.findMultipleDataSourceError(provider1, sourceNames)
@@ -784,7 +786,7 @@ object DataSource extends Logging {
           globResult
         }.flatten
       } catch {
-        case e: SparkException => throw e.getCause
+        case e: SparkException => throw ThreadUtils.wrapCallerStacktrace(e.getCause)
       }
 
     if (checkFilesExist) {
@@ -796,7 +798,7 @@ object DataSource extends Logging {
           }
         }
       } catch {
-        case e: SparkException => throw e.getCause
+        case e: SparkException => throw ThreadUtils.wrapCallerStacktrace(e.getCause)
       }
     }
 
@@ -807,7 +809,7 @@ object DataSource extends Logging {
       }
       if (filteredIn.isEmpty) {
         logWarning(
-          s"All paths were ignored:\n  ${filteredOut.mkString("\n  ")}")
+          log"All paths were ignored:\n  ${MDC(PATHS, filteredOut.mkString("\n  "))}")
       } else {
         logDebug(
           s"Some paths were ignored:\n  ${filteredOut.mkString("\n  ")}")
