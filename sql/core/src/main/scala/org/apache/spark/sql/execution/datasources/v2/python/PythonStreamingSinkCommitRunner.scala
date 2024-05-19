@@ -62,7 +62,6 @@ class PythonStreamingSinkCommitRunner(
       }
     }
     dataOut.writeLong(batchId)
-
     // Send whether to invoke `abort` instead of `commit`.
     dataOut.writeBoolean(abort)
   }
@@ -72,8 +71,8 @@ class PythonStreamingSinkCommitRunner(
     val code = dataIn.readInt()
     if (code == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
-      throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-        action = "Commit streaming sink", msg)
+      val action = if (abort) "abort" else "commit"
+      throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(action, msg)
     }
   }
 }
