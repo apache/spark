@@ -54,4 +54,77 @@ class MySqlPushdownIntegrationSuite
   override protected def commonAssertionOnDataFrame(df: DataFrame): Unit = {
 
   }
+
+  override def prepareTable(): Unit = {
+    executeUpdate(
+      s"""CREATE SCHEMA $schema"""
+    )
+
+    executeUpdate(
+      s"""CREATE TABLE $schema.$tablePrefix
+         | (id INTEGER, st TEXT, num_col INT);""".stripMargin
+    )
+
+    executeUpdate(
+      s"""CREATE TABLE $schema.${tablePrefix}_coalesce
+         | (id INTEGER, col1 TEXT, col2 INT);""".stripMargin
+    )
+
+    executeUpdate(
+      s"""CREATE TABLE $schema.${tablePrefix}_string_test
+         | (id INTEGER, st TEXT, num_col INT);""".stripMargin
+    )
+
+    executeUpdate(
+      s"""CREATE TABLE $schema.${tablePrefix}_with_nulls
+         | (id INTEGER, st TEXT);""".stripMargin
+    )
+
+    executeUpdate(
+      s"""CREATE TABLE $schema.${tablePrefix}_numeric_test
+         | (id INTEGER,
+         | dec_col DECIMAL(10,2)
+         | );""".stripMargin
+    )
+  }
+
+  override protected def prepareData(): Unit = {
+
+    prepareTable()
+
+    executeUpdate(s"""INSERT INTO $schema.${tablePrefix}_coalesce VALUES (1, NULL, 1)""")
+    executeUpdate(s"""INSERT INTO $schema.${tablePrefix}_coalesce VALUES (2, '2', NULL)""")
+    executeUpdate(s"""INSERT INTO $schema.${tablePrefix}_coalesce VALUES (3, NULL, NULL)""")
+
+    executeUpdate(
+      s"""INSERT INTO $schema.${tablePrefix}_with_nulls VALUES (1, 'first')""")
+    executeUpdate(
+      s"""INSERT INTO $schema.${tablePrefix}_with_nulls VALUES (2, 'second')""")
+    executeUpdate(
+      s"""INSERT INTO $schema.${tablePrefix}_with_nulls VALUES (3, 'third')""")
+    executeUpdate(
+      s"""INSERT INTO $schema.${tablePrefix}_with_nulls VALUES (NULL, 'null')""")
+
+    executeUpdate(
+      s"""INSERT INTO $schema.${tablePrefix}_string_test VALUES (0, 'ab''', 1000)""")
+    executeUpdate(
+      s"""INSERT INTO $schema.${tablePrefix}_string_test VALUES (0, 'FiRs''T', 1000)""")
+    executeUpdate(
+      s"""INSERT INTO $schema.${tablePrefix}_string_test VALUES (0, 'sE Co nD', 1000)""")
+    executeUpdate(
+      s"""INSERT INTO $schema.${tablePrefix}_string_test VALUES (0, '   forth   ', 1000)""")
+
+    executeUpdate(s"""INSERT INTO $schema.$tablePrefix VALUES (1, 'ab', 1000)""")
+    executeUpdate(s"""INSERT INTO $schema.$tablePrefix VALUES (2, 'aba', NULL)""")
+    executeUpdate(s"""INSERT INTO $schema.$tablePrefix VALUES (3, 'abb', 800)""")
+    executeUpdate(s"""INSERT INTO $schema.$tablePrefix VALUES (4, 'abc', NULL)""")
+    executeUpdate(s"""INSERT INTO $schema.$tablePrefix VALUES (5, 'abd', 1200)""")
+    executeUpdate(s"""INSERT INTO $schema.$tablePrefix VALUES (6, 'abe', 1250)""")
+    executeUpdate(s"""INSERT INTO $schema.$tablePrefix VALUES (7, 'abf', 1200)""")
+    executeUpdate(s"""INSERT INTO $schema.$tablePrefix VALUES (8, 'abg', -1300)""")
+
+    executeUpdate(
+      s"""INSERT INTO $schema.${tablePrefix}_numeric_test VALUES (1, 42.42)""")
+  }
+
 }

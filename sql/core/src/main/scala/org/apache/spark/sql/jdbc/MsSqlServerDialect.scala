@@ -29,7 +29,7 @@ import org.apache.spark.sql.connector.expressions.{Cast, Expression, NullOrderin
 import org.apache.spark.sql.connector.expressions.aggregate.Avg
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.MsSqlServerDialect.{GEOGRAPHY, GEOMETRY}
 import org.apache.spark.sql.types._
@@ -167,7 +167,7 @@ private case class MsSqlServerDialect() extends JdbcDialect {
     case ByteType => Some(JdbcType("SMALLINT", java.sql.Types.TINYINT))
     case LongType => Some(JdbcType("BIGINT", java.sql.Types.BIGINT))
     case DoubleType => Some(JdbcType("FLOAT", java.sql.Types.FLOAT))
-    case _ => None
+    case _ => JdbcUtils.getCommonJDBCType(dt)
   }
 
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)

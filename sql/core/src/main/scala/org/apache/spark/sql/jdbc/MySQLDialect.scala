@@ -46,7 +46,14 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper {
   // See https://dev.mysql.com/doc/refman/8.0/en/aggregate-functions.html
   private val supportedAggregateFunctions =
     Set("MAX", "MIN", "SUM", "COUNT", "AVG") ++ distinctUnsupportedAggregateFunctions
-  private val supportedFunctions = supportedAggregateFunctions
+  private val supportedStringFunctions = Set("UPPER", "LOWER", "CHAR_LENGTH")
+  private val supportedMathFunctions = Set("SIN", "COS", "ABS", "FLOOR")
+  private val supportedSqlFunctions = Set("COALESCE")
+  private val supportedFunctions =
+    supportedAggregateFunctions ++
+      supportedStringFunctions ++
+      supportedMathFunctions ++
+      supportedSqlFunctions
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
@@ -92,6 +99,17 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper {
       } else {
         super.visitAggregateFunction(funcName, isDistinct, inputs)
       }
+
+    override def visitCast(expr: String, exprDataType: DataType, dataType: DataType): String = {
+      val databaseTypeDefinition =
+        getJDBCType(dataType).map(_.databaseTypeDefinition).getOrElse(dataType.typeName)
+      if (databaseTypeDefinition == "BIGINT") {
+        s"CAST($expr AS UNSIGNED)"
+      }
+      else {
+        s"CAST($expr AS $databaseTypeDefinition)"
+      }
+    }
   }
 
   override def compileExpression(expr: Expression): Option[String] = {

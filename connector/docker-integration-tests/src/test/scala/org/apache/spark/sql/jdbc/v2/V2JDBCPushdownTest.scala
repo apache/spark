@@ -75,7 +75,7 @@ trait V2JDBCPushdownTest extends SharedSparkSession with DockerIntegrationFunSui
 
     executeUpdate(
       s"""CREATE TABLE "$schema"."${tablePrefix}_numeric_test"
-         | (id INTEGER, dec DECIMAL(10, 2));""".stripMargin
+         | (id INTEGER, dec_col DECIMAL(10, 2));""".stripMargin
     )
   }
 
@@ -288,7 +288,7 @@ trait V2JDBCPushdownTest extends SharedSparkSession with DockerIntegrationFunSui
   test("FLOOR predicate push down") {
     val df = sql(
       s"SELECT id " +
-        s"FROM `$catalog`.`$schema`.`${tablePrefix}_numeric_test` where floor(dec) = 42")
+        s"FROM `$catalog`.`$schema`.`${tablePrefix}_numeric_test` where floor(dec_col) = 42")
     checkAnswer(df, Row(1))
     assert(isFilterRemoved(df))
     commonAssertionOnDataFrame(df)

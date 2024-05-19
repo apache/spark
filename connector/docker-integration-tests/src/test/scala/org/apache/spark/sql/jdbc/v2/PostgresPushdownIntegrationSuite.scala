@@ -91,7 +91,7 @@ class PostgresPushdownIntegrationSuite
 
     executeUpdate(
       s"""CREATE TABLE "$schema"."${tablePrefix}_numeric_test"
-         | (id INTEGER, dec DECIMAL(10, 2));""".stripMargin
+         | (id INTEGER, dec_col DECIMAL(10, 2));""".stripMargin
     )
   }
 }
