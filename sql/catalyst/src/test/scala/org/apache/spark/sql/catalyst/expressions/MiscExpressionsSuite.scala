@@ -21,7 +21,7 @@ import java.io.PrintStream
 
 import scala.util.Random
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.types._
@@ -94,5 +94,60 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     assert(outputCodegen.contains(s"Result of $inputExpr is 1"))
     assert(outputEval.contains(s"Result of $inputExpr is 1"))
+  }
+
+  private val zstdTestInput = ("Apache Spark " * 10).getBytes("UTF-8")
+
+  test("ZStdCompress") {
+    // Basic compression
+    checkEvaluation(
+      Base64(new ZstdCompress(Literal(zstdTestInput))),
+      "KLUv/SCCpQAAaEFwYWNoZSBTcGFyayABABLS+QU=")
+
+    // With level
+    checkEvaluation(
+      Base64(new ZstdCompress(Literal(zstdTestInput), Literal(5))),
+      "KLUv/SCCpQAAaEFwYWNoZSBTcGFyayABABLS+QU=")
+
+    // In streaming mode
+    checkEvaluation(
+      Base64(ZstdCompress(Literal(zstdTestInput), Literal(3), Literal(true))),
+      "KLUv/QBYpAAAaEFwYWNoZSBTcGFyayABABLS+QUBAAA=")
+  }
+
+  test("ZStdDecompress") {
+    // Basic decompression
+    checkEvaluation(
+      ZstdDecompress(new ZstdCompress(Literal(zstdTestInput))),
+      zstdTestInput)
+
+    // With different level
+    checkEvaluation(
+      ZstdDecompress(new ZstdCompress(Literal(zstdTestInput), Literal(20))),
+      zstdTestInput)
+
+    // In streaming mode
+    checkEvaluation(
+      ZstdDecompress(ZstdCompress(Literal(zstdTestInput), Literal(3), Literal(true))),
+      zstdTestInput)
+
+    // Invalid input
+    checkErrorInExpression[SparkRuntimeException](
+      ZstdDecompress(Literal("invalid input".getBytes("UTF-8"))),
+      errorClass = "INVALID_PARAMETER_VALUE.ZSTD_DECOMPRESS_INPUT",
+      parameters = Map("parameter" -> "`input`", "functionName" -> "`zstd_decompress`")
+    )
+  }
+
+  test("TryZStdDecompress") {
+    // Valid input
+    checkEvaluation(
+      TryZstdDecompress(new ZstdCompress(Literal(zstdTestInput))),
+      zstdTestInput)
+
+    // Invalid input:
+    checkEvaluation(
+      TryZstdDecompress(Literal("invalid input".getBytes("UTF-8"))),
+      null)
   }
 }
