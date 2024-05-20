@@ -819,10 +819,20 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
         .option("checkpointLocation", checkpointDir.getAbsolutePath)
         .trigger(ProcessingTimeTrigger(20 * 1000))
         .start(outputDir.getAbsolutePath)
+      def resultDf: DataFrame = spark.read.format("json")
+        .load(outputDir.getAbsolutePath)
+
+      inputData.addData(1 to 3)
       eventually(timeout(waitTimeout * 5)) {
-        inputData.addData(1 to 3)
+        assert(q.lastProgress.batchId >= 1)
+      }
+      checkAnswer(resultDf, (1 to 3).map(Row(_)))
+
+      inputData.addData(4 to 6)
+      eventually(timeout(waitTimeout * 5)) {
         assert(q.lastProgress.batchId >= 2)
       }
+      checkAnswer(resultDf, (1 to 6).map(Row(_)))
       q.stop()
       q.awaitTermination()
       assert(q.exception.isEmpty)
