@@ -99,18 +99,18 @@ class ResolveAliasesSuite extends AnalysisTest {
     withSQLConf(SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED.key -> "true") {
       Seq(
         // Literals
-//        "' 1'" -> "' 1'",
-//        """"abc"""" -> """"abc"""",
-//        """'\t\n xyz \t\r'""" -> """'\t\n xyz \t\r'""",
-//        "1l" -> "1L", "1S" -> "1S",
-//        "date'-0001-1-28'" -> "DATE'-0001-1-28'",
-//        "interval 3 year 1 month" -> "INTERVAL3YEAR1MONTH",
-//        "x'00'" -> "X'00'",
-//        // Preserve case
-//        "CAST(1 as tinyint)" -> "CAST(1ASTINYINT)",
-//        // Brackets
-//        "getbit(11L, 2 + 1)" -> "getbit(11L,2+1)",
-//        "string(int(shiftleft(int(-1), 31))+1)" -> "string(int(shiftleft(int(-1),31))+1)",
+        "' 1'" -> "' 1'",
+        """"abc"""" -> """"abc"""",
+        """'\t\n xyz \t\r'""" -> """'\t\n xyz \t\r'""",
+        "1l" -> "1L", "1S" -> "1S",
+        "date'-0001-1-28'" -> "DATE'-0001-1-28'",
+        "interval 3 year 1 month" -> "INTERVAL3YEAR1MONTH",
+        "x'00'" -> "X'00'",
+        // Preserve case
+        "CAST(1 as tinyint)" -> "CAST(1ASTINYINT)",
+        // Brackets
+        "getbit(11L, 2 + 1)" -> "getbit(11L,2+1)",
+        "string(int(shiftleft(int(-1), 31))+1)" -> "string(int(shiftleft(int(-1),31))+1)",
         "map(1, 'a') [ 5 ]" -> "map(1,'a')[5]",
         // Preserve type
         "CAST('123.a' AS long)" -> "CAST('123.a'ASLONG)",
