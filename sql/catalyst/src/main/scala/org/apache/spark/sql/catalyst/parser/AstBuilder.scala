@@ -49,7 +49,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, con
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors, SqlBatchLangErrors}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLStmt
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LEGACY_BANG_EQUALS_NOT
@@ -116,9 +116,9 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     }
   }
 
-  override def visitBatchOrSingleStatement(ctx: BatchOrSingleStatementContext): BatchBody = {
-    if (ctx.batchCompound() != null) {
-      visit(ctx.batchCompound()).asInstanceOf[BatchBody]
+  override def visitCompoundOrSingleStatement(ctx: CompoundOrSingleStatementContext): BatchBody = {
+    if (ctx.singleCompound() != null) {
+      visit(ctx.singleCompound()).asInstanceOf[BatchBody]
     } else {
       val logicalPlan = visitSingleStatement(ctx.singleStatement())
       BatchBody(List(SparkStatementWithPlan(
@@ -128,11 +128,11 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     }
   }
 
-  override def visitBatchCompound(ctx: BatchCompoundContext): BatchBody = {
-    visitBatchBody(ctx.batchBody(), allowDeclareAtTop = true)
+  override def visitSingleCompound(ctx: SingleCompoundContext): BatchBody = {
+    visit(ctx.compound()).asInstanceOf[BatchBody]
   }
 
-  private def visitBatchBody(ctx: BatchBodyContext, allowDeclareAtTop: Boolean): BatchBody = {
+  private def visitCompoundBodyImpl(ctx: CompoundBodyContext): BatchBody = {
     val buff = ListBuffer[BatchPlanStatement]()
     for (i <- 0 until ctx.getChildCount) {
       val child = visit(ctx.getChild(i))
@@ -142,41 +142,18 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       }
     }
 
-    val statements = buff.toList
-    if (allowDeclareAtTop) {
-      val createVarAfterTop = statements
-        .dropWhile(stmt => stmt.isInstanceOf[SparkStatementWithPlan]
-          && stmt.asInstanceOf[SparkStatementWithPlan].parsedPlan.isInstanceOf[CreateVariable])
-        .filter(_.isInstanceOf[SparkStatementWithPlan])
-        .find(_.asInstanceOf[SparkStatementWithPlan].parsedPlan.isInstanceOf[CreateVariable])
-      if (createVarAfterTop.isDefined) {
-        val varDeclarationInterval = new Interval(
-          createVarAfterTop.get.asInstanceOf[SparkStatementWithPlan].sourceStart,
-          createVarAfterTop.get.asInstanceOf[SparkStatementWithPlan].sourceEnd)
-        throw SqlBatchLangErrors.variableDeclarationOnlyAtBeginning(
-          ctx.start.getInputStream.getText(varDeclarationInterval))
-      }
-    } else {
-      val createVar = statements
-        .filter(_.isInstanceOf[SparkStatementWithPlan])
-        .find(_.asInstanceOf[SparkStatementWithPlan].parsedPlan.isInstanceOf[CreateVariable])
-      if (createVar.isDefined) {
-        val varDeclarationInterval = new Interval(
-          createVar.get.asInstanceOf[SparkStatementWithPlan].sourceStart,
-          createVar.get.asInstanceOf[SparkStatementWithPlan].sourceEnd)
-        throw SqlBatchLangErrors.variableDeclarationNotAllowed(
-          ctx.start.getInputStream.getText(varDeclarationInterval))
-      }
-    }
-
-    BatchBody(statements)
+    BatchBody(buff.toList)
   }
 
-  override def visitBatchBody(ctx: BatchBodyContext): BatchBody = {
-    visitBatchBody(ctx, allowDeclareAtTop = false)
+  override def visitCompound(ctx: CompoundContext): BatchBody = {
+    visitCompoundBodyImpl(ctx.compoundBody())
   }
 
-  override def visitBatchStatement(ctx: BatchStatementContext): BatchPlanStatement = {
+  override def visitCompoundBody(ctx: CompoundBodyContext): BatchBody = {
+    visitCompoundBodyImpl(ctx)
+  }
+
+  override def visitCompoundStatement(ctx: CompoundStatementContext): BatchPlanStatement = {
     val child = visit(ctx.getChild(0))
     child match {
       case logicalPlan: LogicalPlan =>

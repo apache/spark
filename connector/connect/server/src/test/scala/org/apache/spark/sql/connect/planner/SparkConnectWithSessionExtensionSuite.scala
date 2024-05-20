@@ -55,8 +55,8 @@ class SparkConnectWithSessionExtensionSuite extends SparkFunSuite {
     override def parseQuery(sqlText: String): LogicalPlan =
       delegate.parseQuery(sqlText)
 
-    override def parseBatch(sqlText: String): BatchBody =
-      delegate.parseBatch(sqlText)
+    override def parseBatch(batchText: String): BatchBody =
+      delegate.parseBatch(batchText)
   }
 
   test("Parse table name with test parser") {

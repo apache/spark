@@ -2863,23 +2863,6 @@
     ],
     "sqlState" : "42000"
   },
-  "SQL_BATCH_LANG_INVALID_VARIABLE_DECLARATION": {
-    "message" : [
-      "Invalid variable declaration in '<varDeclExpr>'."
-    ],
-    "subClass" : {
-      "NOT_ALLOWED" : {
-        "message": [
-          "Variable declaration is not allowed here."
-        ]
-      },
-      "ONLY_AT_BEGINNING" : {
-        "message": [
-          "Variable declaration is only valid at the beginning of the compound."
-        ]
-      }
-    }
-  },
   "INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE" : {
     "message" : [
       "Variable type must be string type but got <varType>."
