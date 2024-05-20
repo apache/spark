@@ -96,7 +96,8 @@ class StatefulProcessorHandleImpl(
    */
   private[sql] val ttlStates: util.List[TTLState] = new util.ArrayList[TTLState]()
 
-  val operatorMetadata: mutable.Map[String, String] = mutable.Map.empty
+  var stateVariables: mutable.ListBuffer[StateVariableInfo] =
+    mutable.ListBuffer.empty[StateVariableInfo]
 
   private val BATCH_QUERY_ID = "00000000-0000-0000-0000-000000000000"
 
@@ -133,7 +134,7 @@ class StatefulProcessorHandleImpl(
       stateName: String,
       valEncoder: Encoder[T]): ValueState[T] = {
     verifyStateVarOperations("get_value_state")
-    operatorMetadata.put(stateName, "VALUE, FALSE")
+    stateVariables.append(new StateVariableInfo(stateName, ValueState, false))
     incrementMetric("numValueStateVars")
     val resultState = new ValueStateImpl[T](store, stateName, keyEncoder, valEncoder)
     resultState
@@ -144,7 +145,7 @@ class StatefulProcessorHandleImpl(
       valEncoder: Encoder[T],
       ttlConfig: TTLConfig): ValueState[T] = {
     verifyStateVarOperations("get_value_state")
-    operatorMetadata.put(stateName, "VALUE, TRUE")
+    stateVariables.append(new StateVariableInfo(stateName, ValueState, true))
     validateTTLConfig(ttlConfig, stateName)
 
     assert(batchTimestampMs.isDefined)
@@ -246,7 +247,7 @@ class StatefulProcessorHandleImpl(
 
   override def getListState[T](stateName: String, valEncoder: Encoder[T]): ListState[T] = {
     verifyStateVarOperations("get_list_state")
-    operatorMetadata.put(stateName, "LIST, FALSE")
+    stateVariables.append(new StateVariableInfo(stateName, ListState, false))
     incrementMetric("numListStateVars")
     val resultState = new ListStateImpl[T](store, stateName, keyEncoder, valEncoder)
     resultState
@@ -273,7 +274,7 @@ class StatefulProcessorHandleImpl(
       ttlConfig: TTLConfig): ListState[T] = {
 
     verifyStateVarOperations("get_list_state")
-    operatorMetadata.put(stateName, "LIST, TRUE")
+    stateVariables.append(new StateVariableInfo(stateName, ListState, true))
     validateTTLConfig(ttlConfig, stateName)
 
     assert(batchTimestampMs.isDefined)
@@ -290,7 +291,7 @@ class StatefulProcessorHandleImpl(
       userKeyEnc: Encoder[K],
       valEncoder: Encoder[V]): MapState[K, V] = {
     verifyStateVarOperations("get_map_state")
-    operatorMetadata.put(stateName, "MAP, FALSE")
+    stateVariables.append(new StateVariableInfo(stateName, MapState, false))
     incrementMetric("numMapStateVars")
     val resultState = new MapStateImpl[K, V](store, stateName, keyEncoder, userKeyEnc, valEncoder)
     resultState
@@ -302,7 +303,7 @@ class StatefulProcessorHandleImpl(
       valEncoder: Encoder[V],
       ttlConfig: TTLConfig): MapState[K, V] = {
     verifyStateVarOperations("get_map_state")
-    operatorMetadata.put(stateName, "MAP, TRUE")
+    stateVariables.append(new StateVariableInfo(stateName, MapState, true))
     validateTTLConfig(ttlConfig, stateName)
 
     assert(batchTimestampMs.isDefined)

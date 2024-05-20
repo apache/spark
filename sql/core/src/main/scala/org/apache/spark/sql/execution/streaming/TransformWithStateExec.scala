@@ -35,7 +35,22 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
 import org.apache.spark.util.{AccumulatorV2, CompletionIterator, SerializableConfiguration, Utils}
 
-class ColFamilyMetadata(initValue: Map[String, String] = Map.empty)
+// define state variable type enum with types VALUE, LIST, MAP
+sealed trait StateVariableType
+case object ValueState extends StateVariableType
+case object ListState extends StateVariableType
+case object MapState extends StateVariableType
+class StateVariableInfo(
+    val stateName: String,
+    val stateType: StateVariableType,
+    val isTtlEnabled: Boolean
+) {
+    override def toString: String = {
+      s"StateVariableInfo(stateName=$stateName, stateType=$stateType, isTtlEnabled=$isTtlEnabled)"
+    }
+}
+
+class OperatorProperties(initValue: Map[String, String] = Map.empty)
   extends AccumulatorV2[Map[String, String], Map[String, String]] {
 
   private var _value: Map[String, String] = initValue
@@ -43,7 +58,7 @@ class ColFamilyMetadata(initValue: Map[String, String] = Map.empty)
   override def isZero: Boolean = _value.isEmpty
 
   override def copy(): AccumulatorV2[Map[String, String], Map[String, String]] = {
-    val newAcc = new ColFamilyMetadata
+    val newAcc = new OperatorProperties
     newAcc._value = _value
     newAcc
   }
@@ -59,12 +74,12 @@ class ColFamilyMetadata(initValue: Map[String, String] = Map.empty)
   override def value: Map[String, String] = _value
 }
 
-object ColFamilyMetadata {
+object OperatorProperties {
   def create(
       sc: SparkContext,
       name: String,
-      initValue: Map[String, String] = Map.empty): ColFamilyMetadata = {
-    val acc = new ColFamilyMetadata(initValue)
+      initValue: Map[String, String] = Map.empty): OperatorProperties = {
+    val acc = new OperatorProperties(initValue)
     acc.register(sc, name = Some(name))
     acc
   }
@@ -112,15 +127,22 @@ case class TransformWithStateExec(
 
   override def shortName: String = "transformWithStateExec"
 
-  val colFamilyMetadataAccumulator: ColFamilyMetadata =
-    ColFamilyMetadata.create(sparkContext, "colFamilyMetadata")
+  val operatorProperties: OperatorProperties =
+    OperatorProperties.create(
+      sparkContext,
+      "colFamilyMetadata",
+      Map(
+        "timeMode" -> timeMode.toString,
+        "outputMode" -> outputMode.toString
+      )
+    )
 
   /**
    * This method will be called at the end of a MicrobatchExecution
    * to write the metadata of the operator to the checkpoint file.
    */
   override def writeOperatorStateMetadata(): Unit = {
-    colFamilyMetadataAccumulator.value.foreach { case (key, value) =>
+    operatorProperties.value.foreach { case (key, value) =>
       logError(s"### $key: $value")
     }
     children.foreach(_.writeOperatorStateMetadata())
@@ -355,7 +377,8 @@ case class TransformWithStateExec(
           store.abort()
         }
       }
-      colFamilyMetadataAccumulator.add(processorHandle.operatorMetadata.toMap)
+      operatorProperties.add(Map
+        ("stateVariables" -> processorHandle.stateVariables.toString()))
       setStoreMetrics(store)
       setOperatorMetrics()
       statefulProcessor.close()

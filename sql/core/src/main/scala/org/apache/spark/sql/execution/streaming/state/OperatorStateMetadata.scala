@@ -56,10 +56,21 @@ trait OperatorStateMetadata {
   def version: Int
 }
 
+object OperatorStateMetadata {
+  def metadataFilePath(stateCheckpointPath: Path): Path =
+    new Path(new Path(stateCheckpointPath, "_metadata"), "metadata")
+}
 case class OperatorStateMetadataV1(
     operatorInfo: OperatorInfoV1,
     stateStoreInfo: Array[StateStoreMetadataV1]) extends OperatorStateMetadata {
   override def version: Int = 1
+}
+
+case class OperatorStateMetadataV2(
+    operatorInfo: OperatorInfoV1,
+    stateStoreInfo: Array[StateStoreMetadataV1],
+    operatorProperties: Map[String, String]) extends OperatorStateMetadata {
+  override def version: Int = 2
 }
 
 object OperatorStateMetadataV1 {
@@ -69,9 +80,6 @@ object OperatorStateMetadataV1 {
   @scala.annotation.nowarn
   private implicit val manifest = Manifest
     .classType[OperatorStateMetadataV1](implicitly[ClassTag[OperatorStateMetadataV1]].runtimeClass)
-
-  def metadataFilePath(stateCheckpointPath: Path): Path =
-    new Path(new Path(stateCheckpointPath, "_metadata"), "metadata")
 
   def deserialize(in: BufferedReader): OperatorStateMetadata = {
     Serialization.read[OperatorStateMetadataV1](in)
@@ -84,13 +92,31 @@ object OperatorStateMetadataV1 {
   }
 }
 
+object OperatorStateMetadataV2 {
+  private implicit val formats: Formats = Serialization.formats(NoTypeHints)
+
+  @scala.annotation.nowarn
+  private implicit val manifest = Manifest
+    .classType[OperatorStateMetadataV1](implicitly[ClassTag[OperatorStateMetadataV2]].runtimeClass)
+
+  def deserialize(in: BufferedReader): OperatorStateMetadata = {
+    Serialization.read[OperatorStateMetadataV2](in)
+  }
+
+  def serialize(
+      out: FSDataOutputStream,
+      operatorStateMetadata: OperatorStateMetadata): Unit = {
+    Serialization.write(operatorStateMetadata.asInstanceOf[OperatorStateMetadataV2], out)
+  }
+}
+
 /**
  * Write OperatorStateMetadata into the state checkpoint directory.
  */
 class OperatorStateMetadataWriter(stateCheckpointPath: Path, hadoopConf: Configuration)
   extends Logging {
 
-  private val metadataFilePath = OperatorStateMetadataV1.metadataFilePath(stateCheckpointPath)
+  private val metadataFilePath = OperatorStateMetadata.metadataFilePath(stateCheckpointPath)
 
   private lazy val fm = CheckpointFileManager.create(stateCheckpointPath, hadoopConf)
 
@@ -101,7 +127,12 @@ class OperatorStateMetadataWriter(stateCheckpointPath: Path, hadoopConf: Configu
     val outputStream = fm.createAtomic(metadataFilePath, overwriteIfPossible = false)
     try {
       outputStream.write(s"v${operatorMetadata.version}\n".getBytes(StandardCharsets.UTF_8))
-      OperatorStateMetadataV1.serialize(outputStream, operatorMetadata)
+      operatorMetadata.version match {
+        case 1 =>
+          OperatorStateMetadataV1.serialize(outputStream, operatorMetadata)
+        case 2 =>
+          OperatorStateMetadataV2.serialize(outputStream, operatorMetadata)
+      }
       outputStream.close()
     } catch {
       case e: Throwable =>
@@ -117,7 +148,7 @@ class OperatorStateMetadataWriter(stateCheckpointPath: Path, hadoopConf: Configu
  */
 class OperatorStateMetadataReader(stateCheckpointPath: Path, hadoopConf: Configuration) {
 
-  private val metadataFilePath = OperatorStateMetadataV1.metadataFilePath(stateCheckpointPath)
+  private val metadataFilePath = OperatorStateMetadata.metadataFilePath(stateCheckpointPath)
 
   private lazy val fm = CheckpointFileManager.create(stateCheckpointPath, hadoopConf)
 
