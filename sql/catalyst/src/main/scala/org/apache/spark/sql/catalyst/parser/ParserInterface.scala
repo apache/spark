@@ -62,4 +62,10 @@ trait ParserInterface extends DataTypeParserInterface {
    */
   @throws[ParseException]("Text cannot be parsed to a LogicalPlan")
   def parseQuery(sqlText: String): LogicalPlan
+
+  /**
+   * Parse a query string to a [[BatchBody]].
+   */
+  @throws[ParseException]("")
+  def parseBatch(sqlText: String): BatchBody
 }

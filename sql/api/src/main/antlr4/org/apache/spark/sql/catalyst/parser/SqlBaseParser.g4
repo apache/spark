@@ -42,6 +42,25 @@ options { tokenVocab = SqlBaseLexer; }
   public boolean double_quoted_identifiers = false;
 }
 
+batchOrSingleStatement
+    : batchCompound SEMICOLON* EOF
+    | singleStatement
+    ;
+
+batchCompound
+    : BEGIN batchBody END
+    ;
+
+// Last semicolon in body is optional.
+batchBody
+    : batchStatement (SEMICOLON+ batchStatement)* SEMICOLON*
+    ;
+
+batchStatement
+    : statement
+    | batchCompound
+    ;
+
 singleStatement
     : statement SEMICOLON* EOF
     ;
