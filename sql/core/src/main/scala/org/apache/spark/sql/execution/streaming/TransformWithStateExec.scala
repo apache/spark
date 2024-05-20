@@ -37,55 +37,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
 import org.apache.spark.util.{AccumulatorV2, CompletionIterator, SerializableConfiguration, Utils}
 
-// define state variable type enum with types VALUE, LIST, MAP
-sealed trait StateVariableType
-case object ValueState extends StateVariableType
-case object ListState extends StateVariableType
-case object MapState extends StateVariableType
-class StateVariableInfo(
-    val stateName: String,
-    val stateType: StateVariableType,
-    val isTtlEnabled: Boolean
-) {
-    override def toString: String = {
-      s"StateVariableInfo(stateName=$stateName, stateType=$stateType, isTtlEnabled=$isTtlEnabled)"
-    }
-}
-
-class OperatorProperties(initValue: Map[String, String] = Map.empty)
-  extends AccumulatorV2[Map[String, String], Map[String, String]] {
-
-  private var _value: Map[String, String] = initValue
-
-  override def isZero: Boolean = _value.isEmpty
-
-  override def copy(): AccumulatorV2[Map[String, String], Map[String, String]] = {
-    val newAcc = new OperatorProperties
-    newAcc._value = _value
-    newAcc
-  }
-
-  override def reset(): Unit = _value = Map.empty[String, String]
-
-  override def add(v: Map[String, String]): Unit = _value ++= v
-
-  override def merge(other: AccumulatorV2[Map[String, String], Map[String, String]]): Unit = {
-    _value ++= other.value
-  }
-
-  override def value: Map[String, String] = _value
-}
-
-object OperatorProperties {
-  def create(
-      sc: SparkContext,
-      name: String,
-      initValue: Map[String, String] = Map.empty): OperatorProperties = {
-    val acc = new OperatorProperties(initValue)
-    acc.register(sc, name = Some(name))
-    acc
-  }
-}
 /**
  * Physical operator for executing `TransformWithState`
  *

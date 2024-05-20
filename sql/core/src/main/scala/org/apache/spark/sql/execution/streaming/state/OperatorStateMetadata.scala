@@ -19,16 +19,16 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.io.{BufferedReader, InputStreamReader}
 import java.nio.charset.StandardCharsets
-
 import scala.reflect.ClassTag
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FSDataOutputStream, Path}
 import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
+import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, MetadataVersionUtil}
+import org.apache.spark.util.AccumulatorV2
 
 /**
  * Metadata for a state store instance.
@@ -64,6 +64,47 @@ case class OperatorStateMetadataV1(
     operatorInfo: OperatorInfoV1,
     stateStoreInfo: Array[StateStoreMetadataV1]) extends OperatorStateMetadata {
   override def version: Int = 1
+}
+
+/**
+ * Accumulator to store arbitrary Operator properties.
+ * This accumulator is used to store the properties of an operator that are not
+ * available on the driver at the time of planning, and will only be known from
+ * the executor side.
+ */
+class OperatorProperties(initValue: Map[String, String] = Map.empty)
+  extends AccumulatorV2[Map[String, String], Map[String, String]] {
+
+  private var _value: Map[String, String] = initValue
+
+  override def isZero: Boolean = _value.isEmpty
+
+  override def copy(): AccumulatorV2[Map[String, String], Map[String, String]] = {
+    val newAcc = new OperatorProperties
+    newAcc._value = _value
+    newAcc
+  }
+
+  override def reset(): Unit = _value = Map.empty[String, String]
+
+  override def add(v: Map[String, String]): Unit = _value ++= v
+
+  override def merge(other: AccumulatorV2[Map[String, String], Map[String, String]]): Unit = {
+    _value ++= other.value
+  }
+
+  override def value: Map[String, String] = _value
+}
+
+object OperatorProperties {
+  def create(
+      sc: SparkContext,
+      name: String,
+      initValue: Map[String, String] = Map.empty): OperatorProperties = {
+    val acc = new OperatorProperties(initValue)
+    acc.register(sc, name = Some(name))
+    acc
+  }
 }
 
 case class OperatorStateMetadataV2(

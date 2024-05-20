@@ -69,6 +69,22 @@ class QueryInfoImpl(
   }
 }
 
+sealed trait StateVariableType
+
+case object ValueState extends StateVariableType
+case object ListState extends StateVariableType
+case object MapState extends StateVariableType
+
+class StateVariableInfo(
+    val stateName: String,
+    val stateType: StateVariableType,
+    val isTtlEnabled: Boolean
+) {
+  override def toString: String = {
+    s"StateVariableInfo(stateName=$stateName, stateType=$stateType, isTtlEnabled=$isTtlEnabled)"
+  }
+}
+
 /**
  * Class that provides a concrete implementation of a StatefulProcessorHandle. Note that we keep
  * track of valid transitions as various functions are invoked to track object lifecycle.
