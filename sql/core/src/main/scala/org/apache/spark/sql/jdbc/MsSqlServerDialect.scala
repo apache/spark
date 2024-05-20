@@ -29,7 +29,7 @@ import org.apache.spark.sql.connector.expressions.{Cast, Expression, NullOrderin
 import org.apache.spark.sql.connector.expressions.aggregate.Avg
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.MsSqlServerDialect.{GEOGRAPHY, GEOMETRY}
 import org.apache.spark.sql.types._
