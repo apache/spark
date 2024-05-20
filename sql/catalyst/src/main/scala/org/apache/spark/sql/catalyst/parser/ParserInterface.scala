@@ -64,8 +64,8 @@ trait ParserInterface extends DataTypeParserInterface {
   def parseQuery(sqlText: String): LogicalPlan
 
   /**
-   * Parse a query string to a [[BatchBody]].
+   * Parse a batch query string to a [[BatchBody]].
    */
-  @throws[ParseException]("")
-  def parseBatch(sqlText: String): BatchBody
+  @throws[ParseException]("Text cannot be parsed to a BatchBody")
+  def parseBatch(batchText: String): BatchBody
 }
