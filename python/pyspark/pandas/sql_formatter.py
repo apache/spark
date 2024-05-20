@@ -203,19 +203,16 @@ def sql(
     session = default_session()
     formatter = PandasSQLStringFormatter(session)
     try:
-        ps_query = formatter.format(query, **kwargs)
         if not is_remote():
             sdf = session.sql(formatter.format(query, **kwargs), args)
         else:
-            if len(formatter._temp_views) > 0:
-                # here the new_kwargs stores the views
-                new_kwargs = {}
-                for psdf, name in formatter._temp_views:
-                    new_kwargs[name] = psdf._to_spark()
-                # delegate views to spark.sql
-                sdf = session.sql(ps_query, args, **new_kwargs)
-            else:
-                sdf = session.sql(ps_query, args)
+            ps_query = formatter.format(query, **kwargs)
+            # here the new_kwargs stores the views
+            new_kwargs = {}
+            for psdf, name in formatter._temp_views:
+                new_kwargs[name] = psdf._to_spark()
+            # delegate views to spark.sql
+            sdf = session.sql(ps_query, args, **new_kwargs)
     finally:
         formatter.clear()
 
@@ -278,6 +275,7 @@ class PandasSQLStringFormatter(string.Formatter):
                     for df, n in self._temp_views:
                         if df is val:
                             return n
+                    self._temp_views.append((val, df_name))
                 val._to_spark().createOrReplaceTempView(df_name)
                 return df_name
             else:
