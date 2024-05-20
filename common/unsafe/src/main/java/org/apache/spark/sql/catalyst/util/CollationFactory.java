@@ -348,7 +348,7 @@ public final class CollationFactory {
         }
         ICULocaleNames = ICULocaleMap.keySet().toArray(new String[0]);
         Arrays.sort(ICULocaleNames);
-        // maximum number of locale ids as defined by binary layout
+        // Maximum number of locale IDs as defined by binary layout.
         assert (ICULocaleNames.length <= (1 << 12));
         for (int i = 0; i < ICULocaleNames.length; ++i) {
           ICULocaleToId.put(ICULocaleNames[i], i);
