@@ -490,7 +490,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
           "Exec allocation and request times don't make sense")
       }
     }
-    assert(infos.filter(_.requestTime.isEmpty).length === 1,
+    assert(infos.count(_.requestTime.isEmpty) === 1,
       "Our unexpected executor does not have a request time.")
   }
 

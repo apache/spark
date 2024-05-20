@@ -774,7 +774,7 @@ class RocksDB(
 
     // Used for metrics reporting around internal/external column families
     val numInternalColFamilies = colFamilyNameToHandleMap
-      .keys.filter(checkInternalColumnFamilies(_)).size
+      .keys.count(checkInternalColumnFamilies)
     val numExternalColFamilies = colFamilyNameToHandleMap.keys.size - numInternalColFamilies
 
     // if bounded memory usage is enabled, we share the block cache across all state providers
