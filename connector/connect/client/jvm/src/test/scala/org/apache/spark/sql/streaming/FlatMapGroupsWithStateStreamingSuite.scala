@@ -25,14 +25,14 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Append
-import org.apache.spark.sql.test.{QueryTest, SQLHelper}
+import org.apache.spark.sql.test.{QueryTest, RemoteSparkSession}
 import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
 
 case class ClickEvent(id: String, timestamp: Timestamp)
 
 case class ClickState(id: String, count: Int)
 
-class FlatMapGroupsWithStateStreamingSuite extends QueryTest with SQLHelper {
+class FlatMapGroupsWithStateStreamingSuite extends QueryTest with RemoteSparkSession {
 
   val flatMapGroupsWithStateSchema: StructType = StructType(
     Array(StructField("id", StringType), StructField("timestamp", TimestampType)))

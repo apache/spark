@@ -23,9 +23,9 @@ import java.util.concurrent.TimeUnit
 
 import scala.concurrent.duration.FiniteDuration
 
-import org.scalatest.BeforeAndAfterAll
-
+import org.scalatest.{BeforeAndAfterAll, Suite}
 import org.apache.spark.SparkBuildInfo
+
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.client.RetryPolicy
 import org.apache.spark.sql.connect.client.SparkConnectClient
@@ -204,7 +204,7 @@ object SparkConnectServerUtils {
   }
 }
 
-trait RemoteSparkSession extends ConnectFunSuite with BeforeAndAfterAll {
+trait RemoteSparkSession extends BeforeAndAfterAll { self: Suite =>
   import SparkConnectServerUtils._
   var spark: SparkSession = _
   protected lazy val serverPort: Int = port

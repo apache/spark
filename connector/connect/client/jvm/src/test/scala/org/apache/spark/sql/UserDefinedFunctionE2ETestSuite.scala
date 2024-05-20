@@ -27,13 +27,13 @@ import org.apache.spark.api.java.function._
 import org.apache.spark.sql.api.java.UDF2
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveIntEncoder, PrimitiveLongEncoder}
 import org.apache.spark.sql.functions.{col, struct, udf}
-import org.apache.spark.sql.test.QueryTest
+import org.apache.spark.sql.test.{QueryTest, RemoteSparkSession}
 import org.apache.spark.sql.types.IntegerType
 
 /**
  * All tests in this class requires client UDF defined in this test class synced with the server.
  */
-class UserDefinedFunctionE2ETestSuite extends QueryTest {
+class UserDefinedFunctionE2ETestSuite extends QueryTest with RemoteSparkSession {
   test("Dataset typed filter") {
     val rows = spark.range(10).filter(n => n % 2 == 0).collectAsList()
     assert(rows == Arrays.asList[Long](0, 2, 4, 6, 8))

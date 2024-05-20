@@ -33,11 +33,11 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, ForeachWriter, Row, SparkSession}
 import org.apache.spark.sql.functions.{col, lit, udf, window}
 import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryIdleEvent, QueryProgressEvent, QueryStartedEvent, QueryTerminatedEvent}
-import org.apache.spark.sql.test.{IntegrationTestUtils, QueryTest, SQLHelper}
+import org.apache.spark.sql.test.{IntegrationTestUtils, QueryTest, RemoteSparkSession}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.util.SparkFileUtils
 
-class ClientStreamingQuerySuite extends QueryTest with SQLHelper with Logging {
+class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with Logging {
 
   private val testDataPath = Paths
     .get(
