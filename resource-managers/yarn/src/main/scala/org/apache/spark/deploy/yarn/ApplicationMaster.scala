@@ -29,7 +29,6 @@ import scala.concurrent.duration.Duration
 import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.{StringUtils => ComStrUtils}
-
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.util.StringUtils
@@ -38,7 +37,6 @@ import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.exceptions.ApplicationAttemptNotFoundException
 import org.apache.hadoop.yarn.util.Records
-
 import org.apache.spark.{SparkStopAMRetryException, _}
 import org.apache.spark.deploy.{ExecutorFailureTracker, SparkHadoopUtil}
 import org.apache.spark.deploy.history.HistoryServer
