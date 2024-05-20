@@ -48,49 +48,26 @@ To ensure logs are compatible with Spark SQL and log analysis tools, avoid `Exce
 
 ## External third-party ecosystem access
 
-* If you want to output logs in `scala code` through the structured log framework, you can define `custom LogKeys` as follows:
+* If you want to output logs in `scala code` through the structured log framework, you can define `custom LogKey` and use it in `scala` code as follows:
 
 ```scala
-object CustomLogKeys {
-  // External third-party ecosystem `custom LogKey` must be `extends LogKey`
-  case object CUSTOM_LOG_KEY extends LogKey
-}
+// External third-party ecosystem `custom LogKey` must be `extends LogKey`
+case object CUSTOM_LOG_KEY extends LogKey
 ```
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;and use it in `scala` code:
-
 ```scala
-logInfo(log"${MDC(CustomLogKeys.CUSTOM_LOG_KEY, "key")}")
+import org.apache.spark.internal.MDC;
+
+logInfo(log"${MDC(CUSTOM_LOG_KEY, "key")}")
 ```
 
-* If you want to output logs in `java code` through the structured log framework, you can define `custom LogKeys` as follows:
+* If you want to output logs in `java code` through the structured log framework, you can define `custom LogKey` and use it in `java` code as follows:
 
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;when your project does **not depend on `scala`**,
 ```java
-class CustomLogKeys {
-  // External third-party ecosystem `custom LogKey` must be `implements LogKey`
-  public static class CUSTOM_LOG_KEY implements LogKey { }
-
-  // Singleton
-  public static final CUSTOM_LOG_KEY CUSTOM_LOG_KEY = new CUSTOM_LOG_KEY();
-}
+// External third-party ecosystem `custom LogKey` must be `implements LogKey`
+public static class CUSTOM_LOG_KEY implements LogKey { }
 ```
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;and use it in `java` code:
 ```java
 import org.apache.spark.internal.MDC;
 
-logger.error("Unable to delete key {} for cache", MDC.of(CustomLogKeys.CUSTOM_LOG_KEY, "key"));
-```
-
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;when your project has **depended on `scala`**,
-```scala
-object CustomLogKeys {
-  // External third-party ecosystem `custom LogKey` must be `extends LogKey`
-  case object CUSTOM_LOG_KEY extends LogKey
-}
-```
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;and use it in `java` code:
-```java
-import org.apache.spark.internal.MDC;
-
-logger.error("Unable to delete key {} for cache", MDC.of(CustomLogKeys.CUSTOM_LOG_KEY$.MODULE$, "key"));
+logger.error("Unable to delete key {} for cache", MDC.of(CUSTOM_LOG_KEY, "key"));
 ```

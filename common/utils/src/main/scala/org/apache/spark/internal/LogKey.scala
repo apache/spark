@@ -22,7 +22,7 @@ import java.util.Locale
  * All structured logging `keys` used in `MDC` must be extends `LogKey`
  */
 trait LogKey {
-  def name: String = this.getClass.getSimpleName.stripSuffix("$").toLowerCase(Locale.ROOT)
+  lazy val name: String = this.getClass.getSimpleName.stripSuffix("$").toLowerCase(Locale.ROOT)
 }
 
 /**
