@@ -899,7 +899,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
 
   test("resolve a view when the dataTypes of referenced table columns changed") {
     withTable("tab1") {
-      withSQLConf("spark.sql.viewSchemaBindingMode" -> "DISABLED") {
+      withSQLConf("spark.sql.legacy.viewSchemaCompensation" -> "false") {
         spark.range(1, 10).selectExpr("id", "id + 1 id1").write.saveAsTable("tab1")
         withView("testView") {
           sql("CREATE VIEW testView AS SELECT * FROM tab1")

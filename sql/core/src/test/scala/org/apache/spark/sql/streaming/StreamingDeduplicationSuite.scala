@@ -527,7 +527,7 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
       ex.getCause.asInstanceOf[SparkUnsupportedOperationException],
       errorClass = "STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY",
       parameters = Map(
-        "schema" -> ".+\"type\":\"string collate UTF8_BINARY_LCASE\".+"
+        "schema" -> ".+\"str\":\"spark.UTF8_BINARY_LCASE\".+"
       ),
       matchPVals = true
     )

@@ -599,7 +599,7 @@ private[yarn] class YarnAllocator(
         val numToCancel = math.min(numPendingAllocate, -missing)
         logInfo(log"Canceling requests for ${MDC(LogKeys.COUNT, numToCancel)} executor " +
           log"container(s) to have a new desired total " +
-          log"${MDC(LogKeys.EXECUTOR_DESIRED_COUNT,
+          log"${MDC(LogKeys.NUM_EXECUTOR_DESIRED,
             getOrUpdateTargetNumExecutorsForRPId(rpId))} executors.")
         // cancel pending allocate requests by taking locality preference into account
         val cancelRequests = (staleRequests ++ anyHostRequests ++ localRequests).take(numToCancel)
@@ -707,7 +707,7 @@ private[yarn] class YarnAllocator(
     runAllocatedContainers(containersToUse)
 
     logInfo(log"Received ${MDC(LogKeys.COUNT, allocatedContainers.size)} containers from YARN, " +
-      log"launching executors on ${MDC(LogKeys.EXECUTOR_LAUNCH_COUNT, containersToUse.size)} " +
+      log"launching executors on ${MDC(LogKeys.NUM_EXECUTOR_LAUNCH, containersToUse.size)} " +
       log"of them.")
   }
 
@@ -819,7 +819,7 @@ private[yarn] class YarnAllocator(
       } else {
         logInfo(log"Skip launching executorRunnable as running executors count: " +
           log"${MDC(LogKeys.COUNT, rpRunningExecs)} reached target executors count: " +
-          log"${MDC(LogKeys.EXECUTOR_TARGET_COUNT, getOrUpdateTargetNumExecutorsForRPId(rpId))}.")
+          log"${MDC(LogKeys.NUM_EXECUTOR_TARGET, getOrUpdateTargetNumExecutorsForRPId(rpId))}.")
       }
     }
   }

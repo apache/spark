@@ -78,7 +78,7 @@ public class V2ExpressionSQLBuilder {
     } else if (expr instanceof NamedReference namedReference) {
       return visitNamedReference(namedReference);
     } else if (expr instanceof Cast cast) {
-      return visitCast(build(cast.expression()), cast.dataType());
+      return visitCast(build(cast.expression()), cast.expressionDataType(), cast.dataType());
     } else if (expr instanceof Extract extract) {
       return visitExtract(extract.field(), build(extract.source()));
     } else if (expr instanceof SortOrder sortOrder) {
@@ -230,8 +230,8 @@ public class V2ExpressionSQLBuilder {
     return l + " " + name + " " + r;
   }
 
-  protected String visitCast(String l, DataType dataType) {
-    return "CAST(" + l + " AS " + dataType.typeName() + ")";
+  protected String visitCast(String expr, DataType exprDataType, DataType targetDataType) {
+    return "CAST(" + expr + " AS " + targetDataType.typeName() + ")";
   }
 
   protected String visitAnd(String name, String l, String r) {

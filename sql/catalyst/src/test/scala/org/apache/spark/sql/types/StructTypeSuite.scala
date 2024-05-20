@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.types
 
+import com.fasterxml.jackson.databind.ObjectMapper
+
 import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
@@ -35,6 +37,10 @@ import org.apache.spark.unsafe.types.UTF8String
 class StructTypeSuite extends SparkFunSuite with SQLHelper {
 
   private val s = StructType.fromDDL("a INT, b STRING")
+
+  private val UNICODE_COLLATION = "UNICODE"
+  private val UTF8_BINARY_LCASE_COLLATION = "UTF8_BINARY_LCASE"
+  private val mapper = new ObjectMapper()
 
   test("lookup a single missing field should output existing fields") {
     checkError(
@@ -605,5 +611,182 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
       struct.toDDL == "b STRUCT<c: STRING NOT NULL COMMENT 'struct comment'> NOT NULL," +
         "b STRING NOT NULL,c STRING COMMENT 'nullable comment'")
     assert(fromDDL(struct.toDDL) === struct)
+  }
+
+  test("simple struct with collations to json") {
+    val simpleStruct = StructType(
+      StructField("c1", StringType(UNICODE_COLLATION)) :: Nil)
+
+    val expectedJson =
+      s"""
+         |{
+         |  "type": "struct",
+         |  "fields": [
+         |    {
+         |      "name": "c1",
+         |      "type": "string",
+         |      "nullable": true,
+         |      "metadata": {
+         |        "${DataType.COLLATIONS_METADATA_KEY}": {
+         |          "c1": "icu.$UNICODE_COLLATION"
+         |        }
+         |      }
+         |    }
+         |  ]
+         |}
+         |""".stripMargin
+
+    assert(mapper.readTree(simpleStruct.json) == mapper.readTree(expectedJson))
+  }
+
+  test("nested struct with collations to json") {
+    val nestedStruct = StructType(
+      StructField("nested", StructType(
+        StructField("c1", StringType(UTF8_BINARY_LCASE_COLLATION)) :: Nil)) :: Nil)
+
+    val expectedJson =
+      s"""
+         |{
+         |  "type": "struct",
+         |  "fields": [
+         |    {
+         |      "name": "nested",
+         |      "type": {
+         |        "type": "struct",
+         |        "fields": [
+         |          {
+         |            "name": "c1",
+         |            "type": "string",
+         |            "nullable": true,
+         |            "metadata": {
+         |              "${DataType.COLLATIONS_METADATA_KEY}": {
+         |                "c1": "spark.$UTF8_BINARY_LCASE_COLLATION"
+         |              }
+         |            }
+         |          }
+         |        ]
+         |      },
+         |      "nullable": true,
+         |      "metadata": {}
+         |    }
+         |  ]
+         |}
+         |""".stripMargin
+
+    assert(mapper.readTree(nestedStruct.json) == mapper.readTree(expectedJson))
+  }
+
+  test("array with collations in schema to json") {
+    val arrayInSchema = StructType(
+      StructField("arrayField", ArrayType(StringType(UNICODE_COLLATION))) :: Nil)
+
+    val expectedJson =
+      s"""
+         |{
+         |  "type": "struct",
+         |  "fields": [
+         |    {
+         |      "name": "arrayField",
+         |      "type": {
+         |        "type": "array",
+         |        "elementType": "string",
+         |        "containsNull": true
+         |      },
+         |      "nullable": true,
+         |      "metadata": {
+         |        "${DataType.COLLATIONS_METADATA_KEY}": {
+         |          "arrayField.element": "icu.$UNICODE_COLLATION"
+         |        }
+         |      }
+         |    }
+         |  ]
+         |}
+         |""".stripMargin
+
+    assert(mapper.readTree(arrayInSchema.json) == mapper.readTree(expectedJson))
+  }
+
+  test("map with collations in schema to json") {
+    val arrayInSchema = StructType(
+      StructField("mapField",
+        MapType(StringType(UNICODE_COLLATION), StringType(UNICODE_COLLATION))) :: Nil)
+
+    val expectedJson =
+      s"""
+         |{
+         |  "type": "struct",
+         |  "fields": [
+         |    {
+         |      "name": "mapField",
+         |      "type": {
+         |        "type": "map",
+         |        "keyType": "string",
+         |        "valueType": "string",
+         |        "valueContainsNull": true
+         |      },
+         |      "nullable": true,
+         |      "metadata": {
+         |        "${DataType.COLLATIONS_METADATA_KEY}": {
+         |          "mapField.key": "icu.$UNICODE_COLLATION",
+         |          "mapField.value": "icu.$UNICODE_COLLATION"
+         |        }
+         |      }
+         |    }
+         |  ]
+         |}
+         |""".stripMargin
+
+    assert(mapper.readTree(arrayInSchema.json) == mapper.readTree(expectedJson))
+  }
+
+  test("nested array with collations in map to json" ) {
+    val mapWithNestedArray = StructType(
+      StructField("column", ArrayType(MapType(
+        StringType(UNICODE_COLLATION),
+        ArrayType(ArrayType(ArrayType(StringType(UNICODE_COLLATION))))))) :: Nil)
+
+    val expectedJson =
+      s"""
+         |{
+         |  "type": "struct",
+         |  "fields": [
+         |    {
+         |      "name": "column",
+         |      "type": {
+         |        "type": "array",
+         |        "elementType": {
+         |          "type": "map",
+         |          "keyType": "string",
+         |          "valueType": {
+         |            "type": "array",
+         |            "elementType": {
+         |              "type": "array",
+         |              "elementType": {
+         |                "type": "array",
+         |                "elementType": "string",
+         |                "containsNull": true
+         |              },
+         |              "containsNull": true
+         |            },
+         |            "containsNull": true
+         |          },
+         |          "valueContainsNull": true
+         |        },
+         |        "containsNull": true
+         |      },
+         |      "nullable": true,
+         |      "metadata": {
+         |        "${DataType.COLLATIONS_METADATA_KEY}": {
+         |          "column.element.key": "icu.$UNICODE_COLLATION",
+         |          "column.element.value.element.element.element": "icu.$UNICODE_COLLATION"
+         |        }
+         |      }
+         |    }
+         |  ]
+         |}
+         |""".stripMargin
+
+    assert(
+      mapper.readTree(mapWithNestedArray.json) == mapper.readTree(expectedJson))
   }
 }

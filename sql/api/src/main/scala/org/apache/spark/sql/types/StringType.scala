@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.types
 
+import org.json4s.JsonAST.{JString, JValue}
+
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.util.CollationFactory
 
@@ -60,6 +62,11 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
   override def typeName: String =
     if (isUTF8BinaryCollation) "string"
     else s"string collate ${CollationFactory.fetchCollation(collationId).collationName}"
+
+  // Due to backwards compatibility and compatibility with other readers
+  // all string types are serialized in json as regular strings and
+  // the collation information is written to struct field metadata
+  override def jsonValue: JValue = JString("string")
 
   override def equals(obj: Any): Boolean =
     obj.isInstanceOf[StringType] && obj.asInstanceOf[StringType].collationId == collationId
