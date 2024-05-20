@@ -969,8 +969,6 @@ object TypeCoercion extends TypeCoercionBase {
     // Note that ret is nullable to avoid typing a lot of Some(...) in this local scope.
     // We wrap immediately an Option after this.
     @Nullable val ret: DataType = (inType, expectedType) match {
-      case (_: StringType, _: StringType) => expectedType.defaultConcreteType
-
       // If the expected type is already a parent of the input type, no need to cast.
       case _ if expectedType.acceptsType(inType) => inType
 
@@ -1049,6 +1047,9 @@ object TypeCoercion extends TypeCoercionBase {
             null
           }
         }
+
+      // Allows the cast between different collated strings to match with ANSI behavior.
+      case (_: StringType, _: StringType) => expectedType.defaultConcreteType
 
       case _ => null
     }
