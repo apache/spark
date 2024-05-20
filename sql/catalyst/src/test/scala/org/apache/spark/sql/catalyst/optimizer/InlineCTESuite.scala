@@ -30,7 +30,7 @@ class InlineCTESuite extends PlanTest {
     val batches = Batch("inline CTE", FixedPoint(100), InlineCTE()) :: Nil
   }
 
-  test("not-inlined CTE relation in command") {
+  test("SPARK-48307: not-inlined CTE relation in command") {
     val cteDef = CTERelationDef(OneRowRelation().select(rand(0).as("a")))
     val cteRef = CTERelationRef(cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming)
     val plan = AppendData.byName(
