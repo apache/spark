@@ -21,8 +21,8 @@ import java.text.SimpleDateFormat
 
 import scala.collection.immutable.Seq
 
-import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkRuntimeException}
-import org.apache.spark.sql.internal.SqlApiConf
+import org.apache.spark.{SparkConf, SparkException, SparkIllegalArgumentException, SparkRuntimeException}
+import org.apache.spark.sql.internal.{SqlApiConf, SQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -1588,3 +1588,9 @@ class CollationSQLExpressionsSuite
 
 }
 // scalastyle:on nonascii
+
+class CollationSQLExpressionsANSIOffSuite extends CollationSQLExpressionsSuite {
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(SQLConf.ANSI_ENABLED, false)
+
+}
