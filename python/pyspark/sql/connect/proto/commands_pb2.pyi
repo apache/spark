@@ -101,6 +101,7 @@ class Command(google.protobuf.message.Message):
     STREAMING_QUERY_LISTENER_BUS_COMMAND_FIELD_NUMBER: builtins.int
     REGISTER_DATA_SOURCE_FIELD_NUMBER: builtins.int
     CREATE_RESOURCE_PROFILE_COMMAND_FIELD_NUMBER: builtins.int
+    CHECKPOINT_COMMAND_FIELD_NUMBER: builtins.int
     REMOVE_CACHED_REMOTE_RELATION_COMMAND_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     @property
@@ -136,6 +137,8 @@ class Command(google.protobuf.message.Message):
     @property
     def create_resource_profile_command(self) -> global___CreateResourceProfileCommand: ...
     @property
+    def checkpoint_command(self) -> global___CheckpointCommand: ...
+    @property
     def remove_cached_remote_relation_command(
         self,
     ) -> global___RemoveCachedRemoteRelationCommand: ...
@@ -164,6 +167,7 @@ class Command(google.protobuf.message.Message):
         register_data_source: pyspark.sql.connect.proto.relations_pb2.CommonInlineUserDefinedDataSource
         | None = ...,
         create_resource_profile_command: global___CreateResourceProfileCommand | None = ...,
+        checkpoint_command: global___CheckpointCommand | None = ...,
         remove_cached_remote_relation_command: global___RemoveCachedRemoteRelationCommand
         | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
@@ -171,6 +175,8 @@ class Command(google.protobuf.message.Message):
     def HasField(
         self,
         field_name: typing_extensions.Literal[
+            "checkpoint_command",
+            b"checkpoint_command",
             "command_type",
             b"command_type",
             "create_dataframe_view",
@@ -208,6 +214,8 @@ class Command(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "checkpoint_command",
+            b"checkpoint_command",
             "command_type",
             b"command_type",
             "create_dataframe_view",
@@ -259,6 +267,7 @@ class Command(google.protobuf.message.Message):
             "streaming_query_listener_bus_command",
             "register_data_source",
             "create_resource_profile_command",
+            "checkpoint_command",
             "remove_cached_remote_relation_command",
             "extension",
         ]
@@ -2154,3 +2163,87 @@ class RemoveCachedRemoteRelationCommand(google.protobuf.message.Message):
     ) -> None: ...
 
 global___RemoveCachedRemoteRelationCommand = RemoveCachedRemoteRelationCommand
+
+class CheckpointCommand(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RELATION_FIELD_NUMBER: builtins.int
+    LOCAL_FIELD_NUMBER: builtins.int
+    EAGER_FIELD_NUMBER: builtins.int
+    @property
+    def relation(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
+        """(Required) The logical plan to checkpoint."""
+    local: builtins.bool
+    """(Optional) Locally checkpoint using a local temporary
+    directory in Spark Connect server (Spark Driver)
+    """
+    eager: builtins.bool
+    """(Optional) Whether to checkpoint this dataframe immediately."""
+    def __init__(
+        self,
+        *,
+        relation: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
+        local: builtins.bool | None = ...,
+        eager: builtins.bool | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_eager",
+            b"_eager",
+            "_local",
+            b"_local",
+            "eager",
+            b"eager",
+            "local",
+            b"local",
+            "relation",
+            b"relation",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_eager",
+            b"_eager",
+            "_local",
+            b"_local",
+            "eager",
+            b"eager",
+            "local",
+            b"local",
+            "relation",
+            b"relation",
+        ],
+    ) -> None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_eager", b"_eager"]
+    ) -> typing_extensions.Literal["eager"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_local", b"_local"]
+    ) -> typing_extensions.Literal["local"] | None: ...
+
+global___CheckpointCommand = CheckpointCommand
+
+class CheckpointCommandResult(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RELATION_FIELD_NUMBER: builtins.int
+    @property
+    def relation(self) -> pyspark.sql.connect.proto.relations_pb2.CachedRemoteRelation:
+        """(Required) The logical plan checkpointed."""
+    def __init__(
+        self,
+        *,
+        relation: pyspark.sql.connect.proto.relations_pb2.CachedRemoteRelation | None = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["relation", b"relation"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["relation", b"relation"]
+    ) -> None: ...
+
+global___CheckpointCommandResult = CheckpointCommandResult

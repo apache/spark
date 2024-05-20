@@ -477,67 +477,6 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["relation", b"relation"]
         ) -> None: ...
 
-    class Checkpoint(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        RELATION_FIELD_NUMBER: builtins.int
-        LOCAL_FIELD_NUMBER: builtins.int
-        EAGER_FIELD_NUMBER: builtins.int
-        @property
-        def relation(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
-            """(Required) The logical plan to checkpoint."""
-        local: builtins.bool
-        """(Optional) Locally checkpoint using a local temporary
-        directory in Spark Connect server (Spark Driver)
-        """
-        eager: builtins.bool
-        """(Optional) Whether to checkpoint this dataframe immediately."""
-        def __init__(
-            self,
-            *,
-            relation: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
-            local: builtins.bool | None = ...,
-            eager: builtins.bool | None = ...,
-        ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_eager",
-                b"_eager",
-                "_local",
-                b"_local",
-                "eager",
-                b"eager",
-                "local",
-                b"local",
-                "relation",
-                b"relation",
-            ],
-        ) -> builtins.bool: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_eager",
-                b"_eager",
-                "_local",
-                b"_local",
-                "eager",
-                b"eager",
-                "local",
-                b"local",
-                "relation",
-                b"relation",
-            ],
-        ) -> None: ...
-        @typing.overload
-        def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_eager", b"_eager"]
-        ) -> typing_extensions.Literal["eager"] | None: ...
-        @typing.overload
-        def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_local", b"_local"]
-        ) -> typing_extensions.Literal["local"] | None: ...
-
     SESSION_ID_FIELD_NUMBER: builtins.int
     CLIENT_OBSERVED_SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
     USER_CONTEXT_FIELD_NUMBER: builtins.int
@@ -555,7 +494,6 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
     PERSIST_FIELD_NUMBER: builtins.int
     UNPERSIST_FIELD_NUMBER: builtins.int
     GET_STORAGE_LEVEL_FIELD_NUMBER: builtins.int
-    CHECKPOINT_FIELD_NUMBER: builtins.int
     session_id: builtins.str
     """(Required)
 
@@ -604,8 +542,6 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
     def unpersist(self) -> global___AnalyzePlanRequest.Unpersist: ...
     @property
     def get_storage_level(self) -> global___AnalyzePlanRequest.GetStorageLevel: ...
-    @property
-    def checkpoint(self) -> global___AnalyzePlanRequest.Checkpoint: ...
     def __init__(
         self,
         *,
@@ -626,7 +562,6 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         persist: global___AnalyzePlanRequest.Persist | None = ...,
         unpersist: global___AnalyzePlanRequest.Unpersist | None = ...,
         get_storage_level: global___AnalyzePlanRequest.GetStorageLevel | None = ...,
-        checkpoint: global___AnalyzePlanRequest.Checkpoint | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -637,8 +572,6 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             b"_client_type",
             "analyze",
             b"analyze",
-            "checkpoint",
-            b"checkpoint",
             "client_observed_server_side_session_id",
             b"client_observed_server_side_session_id",
             "client_type",
@@ -682,8 +615,6 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             b"_client_type",
             "analyze",
             b"analyze",
-            "checkpoint",
-            b"checkpoint",
             "client_observed_server_side_session_id",
             b"client_observed_server_side_session_id",
             "client_type",
@@ -749,7 +680,6 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             "persist",
             "unpersist",
             "get_storage_level",
-            "checkpoint",
         ]
         | None
     ): ...
@@ -947,25 +877,6 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["storage_level", b"storage_level"]
         ) -> None: ...
 
-    class Checkpoint(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        RELATION_FIELD_NUMBER: builtins.int
-        @property
-        def relation(self) -> pyspark.sql.connect.proto.relations_pb2.CachedRemoteRelation:
-            """(Required) The logical plan checkpointed."""
-        def __init__(
-            self,
-            *,
-            relation: pyspark.sql.connect.proto.relations_pb2.CachedRemoteRelation | None = ...,
-        ) -> None: ...
-        def HasField(
-            self, field_name: typing_extensions.Literal["relation", b"relation"]
-        ) -> builtins.bool: ...
-        def ClearField(
-            self, field_name: typing_extensions.Literal["relation", b"relation"]
-        ) -> None: ...
-
     SESSION_ID_FIELD_NUMBER: builtins.int
     SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
     SCHEMA_FIELD_NUMBER: builtins.int
@@ -981,7 +892,6 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
     PERSIST_FIELD_NUMBER: builtins.int
     UNPERSIST_FIELD_NUMBER: builtins.int
     GET_STORAGE_LEVEL_FIELD_NUMBER: builtins.int
-    CHECKPOINT_FIELD_NUMBER: builtins.int
     session_id: builtins.str
     server_side_session_id: builtins.str
     """Server-side generated idempotency key that the client can use to assert that the server side
@@ -1013,8 +923,6 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
     def unpersist(self) -> global___AnalyzePlanResponse.Unpersist: ...
     @property
     def get_storage_level(self) -> global___AnalyzePlanResponse.GetStorageLevel: ...
-    @property
-    def checkpoint(self) -> global___AnalyzePlanResponse.Checkpoint: ...
     def __init__(
         self,
         *,
@@ -1033,13 +941,10 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
         persist: global___AnalyzePlanResponse.Persist | None = ...,
         unpersist: global___AnalyzePlanResponse.Unpersist | None = ...,
         get_storage_level: global___AnalyzePlanResponse.GetStorageLevel | None = ...,
-        checkpoint: global___AnalyzePlanResponse.Checkpoint | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "checkpoint",
-            b"checkpoint",
             "ddl_parse",
             b"ddl_parse",
             "explain",
@@ -1073,8 +978,6 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "checkpoint",
-            b"checkpoint",
             "ddl_parse",
             b"ddl_parse",
             "explain",
@@ -1126,7 +1029,6 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             "persist",
             "unpersist",
             "get_storage_level",
-            "checkpoint",
         ]
         | None
     ): ...
@@ -1631,6 +1533,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     RESULT_COMPLETE_FIELD_NUMBER: builtins.int
     CREATE_RESOURCE_PROFILE_COMMAND_RESULT_FIELD_NUMBER: builtins.int
     EXECUTION_PROGRESS_FIELD_NUMBER: builtins.int
+    CHECKPOINT_COMMAND_RESULT_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     METRICS_FIELD_NUMBER: builtins.int
     OBSERVED_METRICS_FIELD_NUMBER: builtins.int
@@ -1692,6 +1595,11 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     def execution_progress(self) -> global___ExecutePlanResponse.ExecutionProgress:
         """(Optional) Intermediate query progress reports."""
     @property
+    def checkpoint_command_result(
+        self,
+    ) -> pyspark.sql.connect.proto.commands_pb2.CheckpointCommandResult:
+        """Response for command that checkpoints a DataFrame."""
+    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """Support arbitrary result objects."""
     @property
@@ -1732,6 +1640,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         create_resource_profile_command_result: pyspark.sql.connect.proto.commands_pb2.CreateResourceProfileCommandResult
         | None = ...,
         execution_progress: global___ExecutePlanResponse.ExecutionProgress | None = ...,
+        checkpoint_command_result: pyspark.sql.connect.proto.commands_pb2.CheckpointCommandResult
+        | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
         metrics: global___ExecutePlanResponse.Metrics | None = ...,
         observed_metrics: collections.abc.Iterable[global___ExecutePlanResponse.ObservedMetrics]
@@ -1743,6 +1653,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "arrow_batch",
             b"arrow_batch",
+            "checkpoint_command_result",
+            b"checkpoint_command_result",
             "create_resource_profile_command_result",
             b"create_resource_profile_command_result",
             "execution_progress",
@@ -1776,6 +1688,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "arrow_batch",
             b"arrow_batch",
+            "checkpoint_command_result",
+            b"checkpoint_command_result",
             "create_resource_profile_command_result",
             b"create_resource_profile_command_result",
             "execution_progress",
@@ -1828,6 +1742,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             "result_complete",
             "create_resource_profile_command_result",
             "execution_progress",
+            "checkpoint_command_result",
             "extension",
         ]
         | None

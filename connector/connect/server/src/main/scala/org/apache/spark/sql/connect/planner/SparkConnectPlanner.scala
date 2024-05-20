@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connect.planner
 
+import java.util.UUID
+
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.Try
@@ -33,7 +35,7 @@ import org.apache.spark.{Partition, SparkEnv, TaskContext}
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.{CreateResourceProfileCommand, ExecutePlanResponse, SqlCommand, StreamingForeachFunction, StreamingQueryCommand, StreamingQueryCommandResult, StreamingQueryInstanceId, StreamingQueryManagerCommand, StreamingQueryManagerCommandResult, WriteStreamOperationStart, WriteStreamOperationStartResult}
+import org.apache.spark.connect.proto.{CheckpointCommand, CreateResourceProfileCommand, ExecutePlanResponse, SqlCommand, StreamingForeachFunction, StreamingQueryCommand, StreamingQueryCommandResult, StreamingQueryInstanceId, StreamingQueryManagerCommand, StreamingQueryManagerCommandResult, WriteStreamOperationStart, WriteStreamOperationStartResult}
 import org.apache.spark.connect.proto.ExecutePlanResponse.SqlCommandResult
 import org.apache.spark.connect.proto.Parse.ParseFormat
 import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.StreamingQueryInstance
@@ -2581,6 +2583,8 @@ class SparkConnectPlanner(
         handleCreateResourceProfileCommand(
           command.getCreateResourceProfileCommand,
           responseObserver)
+      case proto.Command.CommandTypeCase.CHECKPOINT_COMMAND =>
+        handleCheckpointCommand(command.getCheckpointCommand, responseObserver)
       case proto.Command.CommandTypeCase.REMOVE_CACHED_REMOTE_RELATION_COMMAND =>
         handleRemoveCachedRemoteRelationCommand(command.getRemoveCachedRemoteRelationCommand)
 
@@ -3505,6 +3509,39 @@ class SparkConnectPlanner(
           proto.CreateResourceProfileCommandResult
             .newBuilder()
             .setProfileId(profile.id)
+            .build())
+        .build())
+  }
+
+  private def handleCheckpointCommand(
+      checkpointCommand: CheckpointCommand,
+      responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
+    val target = Dataset
+      .ofRows(session, transformRelation(checkpointCommand.getRelation))
+    val checkpointed = if (checkpointCommand.hasLocal && checkpointCommand.hasEager) {
+      target.localCheckpoint(eager = checkpointCommand.getEager)
+    } else if (checkpointCommand.hasLocal) {
+      target.localCheckpoint()
+    } else if (checkpointCommand.hasEager) {
+      target.checkpoint(eager = checkpointCommand.getEager)
+    } else {
+      target.checkpoint()
+    }
+
+    val dfId = UUID.randomUUID().toString
+    logInfo(log"Caching DataFrame with id ${MDC(DATAFRAME_ID, dfId)}")
+    sessionHolder.cacheDataFrameById(dfId, checkpointed)
+
+    executeHolder.eventsManager.postFinished()
+    responseObserver.onNext(
+      proto.ExecutePlanResponse
+        .newBuilder()
+        .setSessionId(sessionId)
+        .setServerSideSessionId(sessionHolder.serverSessionId)
+        .setCheckpointCommandResult(
+          proto.CheckpointCommandResult
+            .newBuilder()
+            .setRelation(proto.CachedRemoteRelation.newBuilder().setRelationId(dfId).build())
             .build())
         .build())
   }

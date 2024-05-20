@@ -17,15 +17,12 @@
 
 package org.apache.spark.sql.connect.service
 
-import java.util.UUID
-
 import scala.jdk.CollectionConverters._
 
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto
-import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.DATAFRAME_ID
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, StorageLevelProtoConverter}
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
@@ -207,29 +204,6 @@ private[connect] class SparkConnectAnalyzeHandler(
           proto.AnalyzePlanResponse.GetStorageLevel
             .newBuilder()
             .setStorageLevel(StorageLevelProtoConverter.toConnectProtoType(storageLevel))
-            .build())
-
-      case proto.AnalyzePlanRequest.AnalyzeCase.CHECKPOINT =>
-        val target = Dataset
-          .ofRows(session, planner.transformRelation(request.getCheckpoint.getRelation))
-        val checkpointed = if (request.getCheckpoint.hasLocal && request.getCheckpoint.hasEager) {
-          target.localCheckpoint(eager = request.getCheckpoint.getEager)
-        } else if (request.getCheckpoint.hasLocal) {
-          target.localCheckpoint()
-        } else if (request.getCheckpoint.hasEager) {
-          target.checkpoint(eager = request.getCheckpoint.getEager)
-        } else {
-          target.checkpoint()
-        }
-
-        val dfId = UUID.randomUUID().toString
-        logInfo(log"Caching DataFrame with id ${MDC(DATAFRAME_ID, dfId)}")
-        sessionHolder.cacheDataFrameById(dfId, checkpointed)
-
-        builder.setCheckpoint(
-          proto.AnalyzePlanResponse.Checkpoint
-            .newBuilder()
-            .setRelation(proto.CachedRemoteRelation.newBuilder().setRelationId(dfId).build())
             .build())
 
       case other => throw InvalidPlanInput(s"Unknown Analyze Method $other!")

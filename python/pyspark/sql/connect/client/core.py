@@ -104,7 +104,6 @@ if TYPE_CHECKING:
     from google.rpc.error_details_pb2 import ErrorInfo
     from pyspark.sql.connect._typing import DataTypeOrString
     from pyspark.sql.datasource import DataSource
-    from pyspark.sql.connect.dataframe import DataFrame
 
 
 class ChannelBuilder:
@@ -533,7 +532,6 @@ class AnalyzeResult:
         is_same_semantics: Optional[bool],
         semantic_hash: Optional[int],
         storage_level: Optional[StorageLevel],
-        replaced: Optional["DataFrame"],
     ):
         self.schema = schema
         self.explain_string = explain_string
@@ -546,7 +544,6 @@ class AnalyzeResult:
         self.is_same_semantics = is_same_semantics
         self.semantic_hash = semantic_hash
         self.storage_level = storage_level
-        self.replaced = replaced
 
     @classmethod
     def fromProto(cls, pb: Any) -> "AnalyzeResult":
@@ -561,7 +558,6 @@ class AnalyzeResult:
         is_same_semantics: Optional[bool] = None
         semantic_hash: Optional[int] = None
         storage_level: Optional[StorageLevel] = None
-        replaced: Optional["DataFrame"] = None
 
         if pb.HasField("schema"):
             schema = types.proto_schema_to_pyspark_data_type(pb.schema.schema)
@@ -589,8 +585,6 @@ class AnalyzeResult:
             pass
         elif pb.HasField("get_storage_level"):
             storage_level = proto_to_storage_level(pb.get_storage_level.storage_level)
-        elif pb.HasField("checkpoint"):
-            replaced = proto_to_remote_cached_dataframe(pb.checkpoint.relation)
         else:
             raise SparkConnectException("No analyze result found!")
 
@@ -606,7 +600,6 @@ class AnalyzeResult:
             is_same_semantics,
             semantic_hash,
             storage_level,
-            replaced,
         )
 
 
@@ -1240,12 +1233,6 @@ class SparkConnectClient(object):
                 req.unpersist.blocking = cast(bool, kwargs.get("blocking"))
         elif method == "get_storage_level":
             req.get_storage_level.relation.CopyFrom(cast(pb2.Relation, kwargs.get("relation")))
-        elif method == "checkpoint":
-            req.checkpoint.relation.CopyFrom(cast(pb2.Relation, kwargs.get("relation")))
-            if kwargs.get("local", None) is not None:
-                req.checkpoint.local = cast(bool, kwargs.get("local"))
-            if kwargs.get("eager", None) is not None:
-                req.checkpoint.eager = cast(bool, kwargs.get("eager"))
         else:
             raise PySparkValueError(
                 error_class="UNSUPPORTED_OPERATION",
@@ -1417,6 +1404,12 @@ class SparkConnectClient(object):
             if b.HasField("create_resource_profile_command_result"):
                 profile_id = b.create_resource_profile_command_result.profile_id
                 yield {"create_resource_profile_command_result": profile_id}
+            if b.HasField("checkpoint_command_result"):
+                yield {
+                    "checkpoint_command_result": proto_to_remote_cached_dataframe(
+                        b.checkpoint_command_result.relation
+                    )
+                }
 
         try:
             if self._use_reattachable_execute:

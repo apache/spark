@@ -2132,25 +2132,21 @@ class DataFrame(ParentDataFrame):
         return DataFrame(plan.Offset(child=self._plan, offset=n), session=self._session)
 
     def checkpoint(self, eager: bool = True) -> "DataFrame":
-        relation = self._plan.plan(self._session.client)
-        result = self._session.client._analyze(
-            method="checkpoint", relation=relation, local=False, eager=eager
-        )
-        assert result.replaced is not None
-        assert isinstance(result.replaced._plan, plan.CachedRemoteRelation)
-        checkpointed = result.replaced
-        checkpointed._cached_remote_relation_id = result.replaced._plan._relationId
+        cmd = plan.Checkpoint(child=self._plan, local=True, eager=eager)
+        _, properties = self._session.client.execute_command(cmd.command(self._session.client))
+        assert "checkpoint_command_result" in properties
+        checkpointed = properties["checkpoint_command_result"]
+        assert isinstance(checkpointed._plan, plan.CachedRemoteRelation)
+        checkpointed._cached_remote_relation_id = checkpointed._plan._relationId
         return checkpointed
 
     def localCheckpoint(self, eager: bool = True) -> "DataFrame":
-        relation = self._plan.plan(self._session.client)
-        result = self._session.client._analyze(
-            method="checkpoint", relation=relation, local=False, eager=eager
-        )
-        assert result.replaced is not None
-        assert isinstance(result.replaced._plan, plan.CachedRemoteRelation)
-        checkpointed = result.replaced
-        checkpointed._cached_remote_relation_id = result.replaced._plan._relationId
+        cmd = plan.Checkpoint(child=self._plan, local=True, eager=eager)
+        _, properties = self._session.client.execute_command(cmd.command(self._session.client))
+        assert "checkpoint_command_result" in properties
+        checkpointed = properties["checkpoint_command_result"]
+        assert isinstance(checkpointed._plan, plan.CachedRemoteRelation)
+        checkpointed._cached_remote_relation_id = checkpointed._plan._relationId
         return checkpointed
 
     if not is_remote_only():

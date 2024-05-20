@@ -94,7 +94,6 @@ message AnalyzePlanRequest {
     Persist persist = 14;
     Unpersist unpersist = 15;
     GetStorageLevel get_storage_level = 16;
-    Checkpoint checkpoint = 18;
   }
 
   message Schema {
@@ -200,18 +199,6 @@ message AnalyzePlanRequest {
     // (Required) The logical plan to get the storage level.
     Relation relation = 1;
   }
-
-  message Checkpoint {
-    // (Required) The logical plan to checkpoint.
-    Relation relation = 1;
-
-    // (Optional) Locally checkpoint using a local temporary
-    // directory in Spark Connect server (Spark Driver)
-    optional bool local = 2;
-
-    // (Optional) Whether to checkpoint this dataframe immediately.
-    optional bool eager = 3;
-  }
 }
 
 // Response to performing analysis of the query. Contains relevant metadata to be able to
@@ -237,7 +224,6 @@ message AnalyzePlanResponse {
     Persist persist = 12;
     Unpersist unpersist = 13;
     GetStorageLevel get_storage_level = 14;
-    Checkpoint checkpoint = 16;
   }
 
   message Schema {
@@ -288,11 +274,6 @@ message AnalyzePlanResponse {
   message GetStorageLevel {
     // (Required) The StorageLevel as a result of get_storage_level request.
     StorageLevel storage_level = 1;
-  }
-
-  message Checkpoint {
-    // (Required) The logical plan checkpointed.
-    CachedRemoteRelation relation = 1;
   }
 }
 
@@ -399,6 +380,9 @@ message ExecutePlanResponse {
 
     // (Optional) Intermediate query progress reports.
     ExecutionProgress execution_progress = 18;
+
+    // Response for command that checkpoints a DataFrame.
+    CheckpointCommandResult checkpoint_command_result = 19;
 
     // Support arbitrary result objects.
     google.protobuf.Any extension = 999;

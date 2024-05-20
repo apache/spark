@@ -1798,6 +1798,25 @@ class RemoveRemoteCachedRelation(LogicalPlan):
         return cmd
 
 
+class Checkpoint(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"], local: bool, eager: bool) -> None:
+        super().__init__(child)
+        self._local = local
+        self._eager = eager
+
+    def command(self, session: "SparkConnectClient") -> proto.Command:
+        cmd = proto.Command()
+        assert self._child is not None
+        cmd.checkpoint_command.CopyFrom(
+            proto.CheckpointCommand(
+                relation=self._child.plan(session),
+                local=self._local,
+                eager=self._eager,
+            )
+        )
+        return cmd
+
+
 # Catalog API (internal-only)
 class CurrentDatabase(LogicalPlan):
     def __init__(self) -> None:
