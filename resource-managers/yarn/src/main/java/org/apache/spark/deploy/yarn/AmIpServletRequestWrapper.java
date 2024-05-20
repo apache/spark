@@ -47,7 +47,7 @@ public class AmIpServletRequestWrapper extends HttpServletRequestWrapper {
 
   @Override
   public boolean isUserInRole(String role) {
-    //No role info so far
+    // No role info so far
     return false;
   }
 

@@ -39,14 +39,13 @@ import org.apache.spark.internal.SparkLoggerFactory;
 // Modification:
 // Migrate from javax.servlet to jakarta.servlet
 public class ProxyUtils {
-  private static final SparkLogger LOG = SparkLoggerFactory.getLogger(
-      ProxyUtils.class);
+  private static final SparkLogger LOG = SparkLoggerFactory.getLogger(ProxyUtils.class);
   public static final String E_HTTP_HTTPS_ONLY =
       "This filter only works for HTTP/HTTPS";
   public static final String LOCATION = "Location";
 
   public static class __ implements Hamlet.__ {
-    //Empty
+    // Empty
   }
 
   public static class Page extends Hamlet {
@@ -88,13 +87,13 @@ public class ProxyUtils {
     PrintWriter writer = response.getWriter();
     Page p = new Page(writer);
     p.html()
-        .head().title("Moved").__()
-        .body()
-        .h1("Moved")
-        .div()
-          .__("Content has moved ")
-          .a(location, "here").__()
-        .__().__();
+      .head().title("Moved").__()
+      .body()
+      .h1("Moved")
+      .div()
+        .__("Content has moved ")
+        .a(location, "here").__()
+      .__().__();
     writer.close();
   }
 

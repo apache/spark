@@ -62,7 +62,7 @@ public class AmIpFilter implements Filter {
   private static final String RM_HA_URLS = "RM_HA_URLS";
   // WebAppProxyServlet is defined in WebAppProxyServlet in the original Hadoop code
   public static final String PROXY_USER_COOKIE_NAME = "proxy-user";
-  //update the proxy IP list about every 5 min
+  // update the proxy IP list about every 5 min
   private static long updateInterval = TimeUnit.MINUTES.toMillis(5);
 
   private String[] proxyHosts;
@@ -82,10 +82,10 @@ public class AmIpFilter implements Filter {
       proxyUriBases.put("dummy", conf.getInitParameter(PROXY_URI_BASE));
     } else {
       proxyHosts = conf.getInitParameter(PROXY_HOSTS)
-          .split(PROXY_HOSTS_DELIMITER);
+        .split(PROXY_HOSTS_DELIMITER);
 
       String[] proxyUriBasesArr = conf.getInitParameter(PROXY_URI_BASES)
-          .split(PROXY_URI_BASES_DELIMITER);
+        .split(PROXY_URI_BASES_DELIMITER);
       proxyUriBases = new HashMap<>(proxyUriBasesArr.length);
       for (String proxyUriBase : proxyUriBasesArr) {
         try {
@@ -128,7 +128,7 @@ public class AmIpFilter implements Filter {
 
   @Override
   public void destroy() {
-    //Empty
+    // Empty
   }
 
   @Override
@@ -166,8 +166,8 @@ public class AmIpFilter implements Filter {
       String user = null;
 
       if (httpReq.getCookies() != null) {
-        for(Cookie c: httpReq.getCookies()) {
-          if(PROXY_USER_COOKIE_NAME.equals(c.getName())){
+        for (Cookie c: httpReq.getCookies()) {
+          if (PROXY_USER_COOKIE_NAME.equals(c.getName())){
             user = c.getValue();
             break;
           }
@@ -215,16 +215,14 @@ public class AmIpFilter implements Filter {
   public boolean isValidUrl(String url) {
     boolean isValid = false;
     try {
-      HttpURLConnection conn = (HttpURLConnection) new URL(url)
-          .openConnection();
+      HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
       conn.connect();
       isValid = conn.getResponseCode() == HttpURLConnection.HTTP_OK;
       // If security is enabled, any valid RM which can give 401 Unauthorized is
       // good enough to access. Since AM doesn't have enough credential, auth
       // cannot be completed and hence 401 is fine in such case.
       if (!isValid && UserGroupInformation.isSecurityEnabled()) {
-        isValid = (conn
-            .getResponseCode() == HttpURLConnection.HTTP_UNAUTHORIZED)
+        isValid = (conn.getResponseCode() == HttpURLConnection.HTTP_UNAUTHORIZED)
             || (conn.getResponseCode() == HttpURLConnection.HTTP_FORBIDDEN);
         return isValid;
       }
