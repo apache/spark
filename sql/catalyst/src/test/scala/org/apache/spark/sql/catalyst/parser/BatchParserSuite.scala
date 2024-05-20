@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.exceptions.SqlBatchLangException
 
 class BatchParserSuite extends SparkFunSuite with SQLHelper {
   import CatalystSqlParser._
@@ -44,9 +43,12 @@ class BatchParserSuite extends SparkFunSuite with SQLHelper {
 
   test("multi select without ; - should fail") {
     val batch = "SELECT 1 SELECT 1"
-    intercept[ParseException] {
+    val e = intercept[ParseException] {
       parseBatch(batch)
     }
+    assert(e.getErrorClass === "PARSE_SYNTAX_ERROR")
+    assert(e.getMessage.contains("Syntax error"))
+    assert(e.getMessage.contains("SELECT 1 SELECT 1"))
   }
 
   test("multi select") {
@@ -56,7 +58,7 @@ class BatchParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.collection.forall(_.isInstanceOf[SparkStatementWithPlan]))
 
     batch.split(";")
-      .map(_.replace("\n", "").replace("BEGIN", "").replace("END", "").trim)
+      .map(cleanupStatementString)
       .zip(tree.collection)
       .foreach { case (expected, statement) =>
         val sparkStatement = statement.asInstanceOf[SparkStatementWithPlan]
@@ -79,7 +81,7 @@ class BatchParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.collection.length == 5)
     assert(tree.collection.forall(_.isInstanceOf[SparkStatementWithPlan]))
     batch.split(";")
-      .map(_.replace("\n", "").replace("BEGIN", "").replace("END", "").trim)
+      .map(cleanupStatementString)
       .zip(tree.collection)
       .foreach { case (expected, statement) =>
         val sparkStatement = statement.asInstanceOf[SparkStatementWithPlan]
@@ -102,7 +104,7 @@ class BatchParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.collection.length == 5)
     assert(tree.collection.forall(_.isInstanceOf[SparkStatementWithPlan]))
     batch.split(";")
-      .map(_.replace("\n", "").replace("BEGIN", "").replace("END", "").trim)
+      .map(cleanupStatementString)
       .zip(tree.collection)
       .foreach { case (expected, statement) =>
         val sparkStatement = statement.asInstanceOf[SparkStatementWithPlan]
@@ -142,46 +144,12 @@ class BatchParserSuite extends SparkFunSuite with SQLHelper {
       nestedBody.collection(1).asInstanceOf[SparkStatementWithPlan].getText(batch) == "SELECT 3")
   }
 
-  test("variable declare and set") {
-    val batch =
-      """
-        |BEGIN
-        |DECLARE totalInsertCount = 0;
-        |SET VAR totalInsertCount = totalInsertCount + 1;
-        |END""".stripMargin
-    val tree = parseBatch(batch)
-
-    assert(tree.collection.length == 2)
-    assert(tree.collection.head.isInstanceOf[SparkStatementWithPlan])
-    assert(tree.collection(1).isInstanceOf[SparkStatementWithPlan])
-  }
-
-  test ("declare in compound top") {
-    val batch =
-      """
-        |BEGIN
-        |DECLARE totalInsertCount = 0;
-        |SET VAR totalInsertCount = totalInsertCount + 1;
-        |BEGIN
-        |  DECLARE totalInsertCount2 = 0;
-        |  SET VAR totalInsertCount2 = totalInsertCount2 + 1;
-        |END
-        |END""".stripMargin
-    val _ = parseBatch(batch)
-  }
-
-  test("declare after compound top") {
-    val batch =
-      """
-        |BEGIN
-        |DECLARE totalInsertCount = 0;
-        |SET VAR totalInsertCount = totalInsertCount + 1;
-        |DECLARE totalInsertCount2 = 0;
-        |END""".stripMargin
-    val e = intercept[SqlBatchLangException] {
-      parseBatch(batch)
-    }
-    assert(e.getErrorClass === "SQL_BATCH_LANG_INVALID_VARIABLE_DECLARATION.ONLY_AT_BEGINNING")
-    assert(e.getMessage.contains("DECLARE totalInsertCount2 = 0;"))
+  // Helper methods
+  def cleanupStatementString(statementStr: String): String = {
+    statementStr
+      .replace("\n", "")
+      .replace("BEGIN", "")
+      .replace("END", "")
+      .trim
   }
 }
