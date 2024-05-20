@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.catalyst.util.{CollationFactory, GenericArrayData}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, ArrayType, BooleanType, DataType, StringType, StructType}
+import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, ArrayType, BooleanType, DataType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.collection.OpenHashMap
 
@@ -90,7 +90,6 @@ case class Mode(
       case s: StructType => getBufferForStructType(buffer, s)
       case _ => buffer
     }
-    println(s"Buffer: ${buffer.size} => ${collationAwareBuffer.size}")
     reverseOpt.map { reverse =>
       val defaultKeyOrdering = if (reverse) {
         PhysicalDataType.ordering(child.dataType).asInstanceOf[Ordering[AnyRef]].reverse
@@ -107,23 +106,53 @@ case class Mode(
       s: StructType): Iterable[(AnyRef, Long)] = {
     val fIsNonBinaryString = s.fields.map(f => (f, f.dataType)).map {
       case (f, t: StringType) if !t.supportsBinaryEquality => (f.name, true)
-      case (f, t) => (f.name, false)
+      case (f, _) => (f.name, false)
     }.toMap
+
+    val fIsStructToRecurseOn = s.fields.map(f => (f, f.dataType)).map {
+      case (f, t: StructType) => (f.name, true)
+      case (f, _) => (f.name, false)
+    }.toMap
+
     val fCollationIDs = s.fields.collect {
       case f if fIsNonBinaryString(f.name) =>
         (f.name, f.dataType.asInstanceOf[StringType].collationId)
     }.toMap
 
     buffer.groupMapReduce {
-      case (key: InternalRow, count) =>
-        key.toSeq(s).zip(s.fields).map {
-          case (k: String, field) if fIsNonBinaryString(field.name) =>
-            CollationFactory.getCollationKey(UTF8String.fromString(k), fCollationIDs(field.name))
-          case (k: UTF8String, field) if fIsNonBinaryString(field.name) =>
-            CollationFactory.getCollationKey(k, fCollationIDs(field.name))
-          case (k, _) => k
-      }
+      case (key: InternalRow, _) =>
+        foo(key.toSeq(s).zip(s.fields), fIsNonBinaryString, fIsStructToRecurseOn, fCollationIDs)
     }(x => x)((x, y) => (x._1, x._2 + y._2)).values
+  }
+
+  private def foo(
+      tuples: Seq[(Any, StructField)],
+      fIsNonBinaryString: Map[String, Boolean],
+      fIsStructToRecurseOn: Map[String, Boolean],
+      fCollationIDs: Map[String, Int]): Seq[Any] = {
+    tuples.map {
+      case (k: String, field) if fIsNonBinaryString(field.name) =>
+        CollationFactory.getCollationKey(UTF8String.fromString(k), fCollationIDs(field.name))
+      case (k: UTF8String, field) if fIsNonBinaryString(field.name) =>
+        CollationFactory.getCollationKey(k, fCollationIDs(field.name))
+      case (k, field: StructField) if fIsStructToRecurseOn(field.name) => foo(
+        k.asInstanceOf[InternalRow].toSeq(field.dataType.asInstanceOf[StructType]).zip(
+          field.dataType.asInstanceOf[StructType].fields),
+        field.dataType.asInstanceOf[StructType].fields.map(f => (f.name, f.dataType)).map {
+          case (f, t: StringType) if !t.supportsBinaryEquality => (f, true)
+          case (f, t) => (f, false)
+        }.toMap,
+        field.dataType.asInstanceOf[StructType].fields.map(f => (f, f.dataType)).map {
+          case (f, t: StructType) => (f.name, true)
+          case (f, _) => (f.name, false)
+        }.toMap,
+        field.dataType.asInstanceOf[StructType].fields.collect {
+          case f if f.dataType.isInstanceOf[StringType] &&
+            !f.dataType.asInstanceOf[StringType].supportsBinaryEquality =>
+            (f.name, f.dataType.asInstanceOf[StringType].collationId)
+        }.toMap)
+      case (k, _) => k
+    }
   }
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): Mode =

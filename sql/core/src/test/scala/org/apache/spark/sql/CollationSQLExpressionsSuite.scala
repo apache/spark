@@ -1509,6 +1509,32 @@ class CollationSQLExpressionsSuite
       }
     })
   }
+
+  test("Support mode for string expression with collated strings in recursively nested struct") {
+    case class ModeTestCase[R](collationId: String, bufferValues: Map[String, Long], result: R)
+    val testCases = Seq(
+      ModeTestCase("utf8_binary", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
+      ModeTestCase("utf8_binary_lcase", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b"),
+      ModeTestCase("unicode", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
+      ModeTestCase("unicode_ci", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b")
+    )
+    testCases.foreach(t => {
+      val valuesToAdd = t.bufferValues.map { case (elt, numRepeats) =>
+        (0L to numRepeats).map(_ => s"named_struct('f1', " +
+          s"named_struct('f2', collate('$elt', '${t.collationId}')), 'f3', 1)").mkString(",")
+      }.mkString(",")
+
+      val tableName = s"t_${t.collationId}_mode_nested_struct"
+      withTable(tableName) {
+        sql(s"CREATE TABLE ${tableName}(i STRUCT<f1: STRUCT<f2: STRING COLLATE " +
+          t.collationId + ">, f3: INT>) USING parquet")
+        sql(s"INSERT INTO ${tableName} VALUES " + valuesToAdd)
+        val query = s"SELECT lower(mode(i).f1.f2) FROM ${tableName}"
+        checkAnswer(sql(query), Row(t.result))
+      }
+    })
+  }
+
   // TODO: Add more tests for other SQL expressions
 
 }
