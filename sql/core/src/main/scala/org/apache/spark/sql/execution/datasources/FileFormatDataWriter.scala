@@ -53,7 +53,7 @@ abstract class FileFormatDataWriter(
    * files written should be very small. This is just a safe guard to protect some really bad
    * settings, e.g. maxRecordsPerFile = 1.
    */
-  protected val MAX_FILE_COUNTER: Int = 1000 * 1000
+  protected val MAX_FILE_COUNTER: Int = description.maxFileCounter
   protected val updatedPartitions: mutable.Set[String] = mutable.Set[String]()
   protected var currentWriter: OutputWriter = _
 
@@ -604,7 +604,8 @@ class WriteJobDescription(
     val customPartitionLocations: Map[TablePartitionSpec, String],
     val maxRecordsPerFile: Long,
     val timeZoneId: String,
-    val statsTrackers: Seq[WriteJobStatsTracker])
+    val statsTrackers: Seq[WriteJobStatsTracker],
+    val maxFileCounter: Int = 1000 * 1000)
   extends Serializable {
 
   assert(AttributeSet(allColumns) == AttributeSet(partitionColumns ++ dataColumns),

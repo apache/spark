@@ -1637,6 +1637,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val MAX_FILE_COUNTER = buildConf("spark.sql.max.file.counter")
+    .doc(" Maximum number of file counter to write out per task. This value mast be negative. ")
+    .version("4.0.0")
+    .intConf
+    .checkValue(_ >= 1, "This value mast be negative.")
+    .createWithDefault(1000 * 1000)
+
   val ORDER_BY_ORDINAL = buildConf("spark.sql.orderByOrdinal")
     .doc("When true, the ordinal numbers are treated as the position in the select list. " +
          "When false, the ordinal numbers in order/sort by clause are ignored.")
@@ -5409,6 +5416,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def dataframeCacheLogLevel: String = getConf(DATAFRAME_CACHE_LOG_LEVEL)
 
   def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
+
+  def maxFileCounter: Int = getConf(SQLConf.MAX_FILE_COUNTER)
 
   override def sessionLocalTimeZone: String = getConf(SQLConf.SESSION_LOCAL_TIMEZONE)
 
