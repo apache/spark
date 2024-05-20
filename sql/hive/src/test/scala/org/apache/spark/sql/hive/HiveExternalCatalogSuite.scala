@@ -22,9 +22,10 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.command.DDLUtils
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 /**
  * Test suite for the [[HiveExternalCatalog]].
@@ -199,5 +200,36 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
       val alteredTable = externalCatalog.getTable("db1", "parq_tbl")
       assert(alteredTable.provider === Some("foo"))
     })
+  }
+
+  test("table with collated strings in schema") {
+    val catalog = newBasicCatalog()
+    val tableName = "collation_tbl"
+    val columnName = "col1"
+
+    val collationsSchema = StructType(Seq(
+      StructField(columnName, StringType("UNICODE"))
+    ))
+
+    val tableDDL = CatalogTable(
+      identifier = TableIdentifier(tableName, Some("db1")),
+      tableType = CatalogTableType.MANAGED,
+      storage = storageFormat,
+      schema = collationsSchema,
+      provider = Some("hive"))
+
+    catalog.createTable(tableDDL, ignoreIfExists = false)
+
+    val readBackTable = externalCatalog.getTable("db1", tableName)
+    assert(DataTypeUtils.sameType(readBackTable.schema, collationsSchema))
+
+    // perform alter table
+    val newSchema = StructType(Seq(
+      StructField("col1", StringType("UTF8_BINARY_LCASE"))
+    ))
+    catalog.alterTableDataSchema("db1", tableName, newSchema)
+
+    val alteredTable = externalCatalog.getTable("db1", tableName)
+    assert(DataTypeUtils.sameType(alteredTable.schema, newSchema))
   }
 }
