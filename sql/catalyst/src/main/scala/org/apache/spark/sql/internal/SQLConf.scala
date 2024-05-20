@@ -4246,6 +4246,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_DB2_BOOLEAN_MAPPING_ENABLED =
+    buildConf("spark.sql.legacy.db2.booleanMapping.enabled")
+      .internal()
+      .doc("When true, BooleanType maps to CHAR(1) in DB2; otherwise, BOOLEAN" )
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val CSV_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.csv.filterPushdown.enabled")
     .doc("When true, enable filter pushdown to CSV datasource.")
     .version("3.0.0")
@@ -5384,6 +5392,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyDB2numericMappingEnabled: Boolean =
     getConf(LEGACY_DB2_TIMESTAMP_MAPPING_ENABLED)
+
+  def legacyDB2BooleanMappingEnabled: Boolean =
+    getConf(LEGACY_DB2_BOOLEAN_MAPPING_ENABLED)
 
   override def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = {
     LegacyBehaviorPolicy.withName(getConf(SQLConf.LEGACY_TIME_PARSER_POLICY))
