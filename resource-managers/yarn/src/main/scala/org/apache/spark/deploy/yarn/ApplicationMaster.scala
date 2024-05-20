@@ -27,6 +27,7 @@ import scala.collection.mutable.HashMap
 import scala.concurrent.Promise
 import scala.concurrent.duration.Duration
 import scala.util.control.NonFatal
+
 import org.apache.commons.lang3.{StringUtils => ComStrUtils}
 
 import org.apache.hadoop.fs.{FileSystem, Path}
