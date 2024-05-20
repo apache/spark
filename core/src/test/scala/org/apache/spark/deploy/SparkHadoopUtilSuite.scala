@@ -168,7 +168,7 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
 
   test(
     "SPARK-47008: fs.listStatus SHOULD NOT throw FileNotFoundException in " +
-      "listLeafStatuses if fs.hasPathCapability is TRUE to support S3 Express One Zone Storage") {
+      "listLeafStatuses if fs.hasPathCapability is TRUE") {
     withTempDir { dir =>
       val rootPath = s"${dir.getCanonicalPath}"
       val path = s"${dir.getCanonicalPath}/dir"

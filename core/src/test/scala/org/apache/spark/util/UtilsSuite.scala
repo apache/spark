@@ -30,10 +30,6 @@ import java.util.zip.GZIPOutputStream
 import scala.collection.mutable.ListBuffer
 import scala.util.Random
 
-import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito
-import org.mockito.Mockito.{mock, verify, when}
-
 import com.google.common.io.Files
 import org.apache.commons.io.IOUtils
 import org.apache.commons.lang3.SystemUtils
@@ -42,6 +38,9 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.ipc.{CallerContext => HadoopCallerContext}
 import org.apache.logging.log4j.Level
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito
+import org.mockito.Mockito.{mock, verify, when}
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TaskContext}
 import org.apache.spark.internal.config._
