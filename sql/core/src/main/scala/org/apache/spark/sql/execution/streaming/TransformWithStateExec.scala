@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.streaming
 import java.util.UUID
 import java.util.concurrent.TimeUnit.NANOSECONDS
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.SparkContext
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
@@ -137,6 +139,17 @@ case class TransformWithStateExec(
       )
     )
 
+  /** Metadata of this stateful operator and its states stores. */
+  override def operatorStateMetadata(): OperatorStateMetadata = {
+    val info = getStateInfo
+    val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
+    val stateStoreInfo =
+      Array(StateStoreMetadataV1(StateStoreId.DEFAULT_STORE_NAME, 0, info.numPartitions))
+    OperatorStateMetadataV2(operatorInfo, stateStoreInfo, operatorProperties.value)
+  }
+
+  override def operatorStateMetadataVersion: Int = 2
+
   /**
    * This method will be called at the end of a MicrobatchExecution
    * to write the metadata of the operator to the checkpoint file.
@@ -145,6 +158,13 @@ case class TransformWithStateExec(
     operatorProperties.value.foreach { case (key, value) =>
       logError(s"### $key: $value")
     }
+    val metadata = operatorStateMetadata()
+    val metadataWriter = new OperatorStateMetadataWriter(
+      new Path(stateInfo.get.checkpointLocation,
+        getStateInfo.operatorId.toString),
+      session.sqlContext.sessionState.newHadoopConf()
+    )
+    metadataWriter.write(metadata)
     children.foreach(_.writeOperatorStateMetadata())
   }
 

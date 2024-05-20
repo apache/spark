@@ -158,9 +158,12 @@ class OperatorStateMetadataReader(stateCheckpointPath: Path, hadoopConf: Configu
       new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))
     try {
       val versionStr = inputReader.readLine()
-      val version = MetadataVersionUtil.validateVersion(versionStr, 1)
-      assert(version == 1)
-      OperatorStateMetadataV1.deserialize(inputReader)
+      val version = MetadataVersionUtil.validateVersion(versionStr, 2)
+      assert(version == 1 || version == 2)
+      version match {
+        case 1 => OperatorStateMetadataV1.deserialize(inputReader)
+        case 2 => OperatorStateMetadataV2.deserialize(inputReader)
+      }
     } finally {
       inputStream.close()
     }

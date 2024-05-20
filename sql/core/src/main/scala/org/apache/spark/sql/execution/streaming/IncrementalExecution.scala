@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadat
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.python.FlatMapGroupsInPandasWithStateExec
 import org.apache.spark.sql.execution.streaming.sources.WriteToMicroBatchDataSourceV1
-import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataV1, OperatorStateMetadataWriter}
+import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataV1, OperatorStateMetadataV2, OperatorStateMetadataWriter}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -189,12 +189,13 @@ class IncrementalExecution(
 
   object WriteStatefulOperatorMetadataRule extends SparkPlanPartialRule {
     override val rule: PartialFunction[SparkPlan, SparkPlan] = {
-      case stateStoreWriter: StateStoreWriter if isFirstBatch =>
-        val metadata = stateStoreWriter.operatorStateMetadata()
-        val metadataWriter = new OperatorStateMetadataWriter(new Path(
-          checkpointLocation, stateStoreWriter.getStateInfo.operatorId.toString), hadoopConf)
-        metadataWriter.write(metadata)
-        stateStoreWriter
+      case stateStoreWriter: StateStoreWriter
+        if isFirstBatch && stateStoreWriter.operatorStateMetadataVersion == 1 =>
+          val metadata = stateStoreWriter.operatorStateMetadata()
+          val metadataWriter = new OperatorStateMetadataWriter(new Path(
+            checkpointLocation, stateStoreWriter.getStateInfo.operatorId.toString), hadoopConf)
+          metadataWriter.write(metadata)
+          stateStoreWriter
     }
   }
 
@@ -434,9 +435,10 @@ class IncrementalExecution(
               new SerializableConfiguration(hadoopConf))
             val opMetadataList = reader.allOperatorStateMetadata
             ret = opMetadataList.map { operatorMetadata =>
-              val metadataInfoV1 = operatorMetadata
-                .asInstanceOf[OperatorStateMetadataV1]
-                .operatorInfo
+              val metadataInfoV1 = operatorMetadata match {
+                case v1: OperatorStateMetadataV1 => v1.operatorInfo
+                case v2: OperatorStateMetadataV2 => v2.operatorInfo
+              }
               metadataInfoV1.operatorId -> metadataInfoV1.operatorName
             }.toMap
           } catch {
