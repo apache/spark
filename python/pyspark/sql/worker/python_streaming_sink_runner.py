@@ -51,7 +51,7 @@ def main(infile: IO, outfile: IO) -> None:
     Main method for committing or aborting a data source streaming write operation.
 
     This process is invoked from the `PythonStreamingSinkCommitRunner.runInPython`
-    method in the StreamingWrite implementation of the PythonTableProvider. It is
+    method in the StreamingWrite implementation of the PythonDataSourceV2. It is
     responsible for invoking either the `commit` or the `abort` method on a data source
     writer instance, given a list of commit messages.
     """
