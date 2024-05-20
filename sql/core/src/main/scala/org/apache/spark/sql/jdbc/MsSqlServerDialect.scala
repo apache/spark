@@ -66,10 +66,6 @@ private case class MsSqlServerDialect() extends JdbcDialect {
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
 
-  override def quoteIdentifier(colName: String): String = {
-    s"[$colName]"
-  }
-
   class MsSqlServerSQLBuilder extends JDBCSQLBuilder {
     override def visitSortOrder(
         sortKey: String, sortDirection: SortDirection, nullOrdering: NullOrdering): String = {

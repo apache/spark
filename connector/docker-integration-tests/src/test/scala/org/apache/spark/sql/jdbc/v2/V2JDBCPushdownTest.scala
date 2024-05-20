@@ -17,8 +17,10 @@
 
 package test.scala.org.apache.spark.sql.jdbc.v2
 
+import scala.collection.immutable.Seq
+
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
-import org.apache.spark.sql.catalyst.plans.logical.Aggregate
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LocalLimit}
 import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.sql.jdbc.DockerIntegrationFunSuite
 import org.apache.spark.sql.test.SharedSparkSession
@@ -35,6 +37,12 @@ trait V2JDBCPushdownTest extends SharedSparkSession with DockerIntegrationFunSui
   protected def isAggregateRemoved(df: DataFrame): Boolean = {
     df.queryExecution.optimizedPlan.collect {
       case agg: Aggregate => agg
+    }.isEmpty
+  }
+
+  private def isLimitPushed(df: DataFrame): Boolean = {
+    df.queryExecution.optimizedPlan.collect {
+      case lim: LocalLimit => lim
     }.isEmpty
   }
 
@@ -326,5 +334,48 @@ trait V2JDBCPushdownTest extends SharedSparkSession with DockerIntegrationFunSui
     checkAnswer(df, Row(6))
     assert(isAggregateRemoved(df))
     commonAssertionOnDataFrame(df)
+  }
+
+  test("LIMIT with SORT push down") {
+    val df = sql(
+      s"SELECT id " +
+        s"FROM `$catalog`.`$schema`.`$tablePrefix` " +
+        s"ORDER BY num_col NULLS FIRST " +
+        s"LIMIT 2 "
+    )
+    checkAnswer(df, Seq(Row(2), Row(4)))
+    assert(isLimitPushed(df))
+    commonAssertionOnDataFrame(df)
+
+    val df2 = sql(
+      s"SELECT id " +
+        s"FROM `$catalog`.`$schema`.`$tablePrefix` " +
+        s"ORDER BY num_col NULLS LAST " +
+        s"LIMIT 2 "
+    )
+    checkAnswer(df2, Seq(Row(8), Row(3)))
+    assert(isLimitPushed(df2))
+    commonAssertionOnDataFrame(df2)
+
+    val df3 = sql(
+      s"SELECT id " +
+        s"FROM `$catalog`.`$schema`.`$tablePrefix` " +
+        s"ORDER BY num_col DESC NULLS FIRST " +
+        s"LIMIT 2 "
+    )
+    checkAnswer(df3, Seq(Row(2), Row(4)))
+    assert(isLimitPushed(df3))
+    commonAssertionOnDataFrame(df3)
+
+    val df4 = sql(
+      s"SELECT id " +
+        s"FROM `$catalog`.`$schema`.`$tablePrefix` " +
+        s"ORDER BY num_col DESC NULLS LAST " +
+        s"LIMIT 2 "
+    )
+    checkAnswer(df4, Seq(Row(6), Row(5)))
+    assert(isLimitPushed(df4))
+    commonAssertionOnDataFrame(df4)
+
   }
 }
