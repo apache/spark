@@ -163,7 +163,7 @@ private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
         .orElse(JdbcUtils.getCommonJDBCType(et).map(_.databaseTypeDefinition))
         .map(typeName => JdbcType(s"$typeName[]", java.sql.Types.ARRAY))
     case LongType => Some(JdbcType("BIGINT", Types.BIGINT))
-    case _ => _
+    case _ => None
   }
 
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
