@@ -1019,7 +1019,13 @@ package object dsl {
             WithColumnsRenamed
               .newBuilder()
               .setInput(logicalPlan)
-              .putAllRenameColumnsMap(renameColumnsMap.asJava))
+              .addAllRenames(renameColumnsMap.toSeq.map { case (k, v) =>
+                WithColumnsRenamed.Rename
+                  .newBuilder()
+                  .setColName(k)
+                  .setNewColName(v)
+                  .build()
+              }.asJava))
           .build()
       }
 
