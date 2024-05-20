@@ -23,6 +23,7 @@ import java.util
 import java.util.Locale
 
 import scala.util.Using
+import scala.util.control.NonFatal
 
 import org.apache.spark.internal.LogKeys.COLUMN_NAME
 import org.apache.spark.internal.MDC
@@ -30,7 +31,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NonEmptyNamespaceException, NoSuchIndexException}
 import org.apache.spark.sql.connector.catalog.Identifier
-import org.apache.spark.sql.connector.expressions.NamedReference
+import org.apache.spark.sql.connector.expressions.{Expression, NamedReference}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
@@ -149,6 +150,8 @@ private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
     case FloatType => Some(JdbcType("FLOAT4", Types.FLOAT))
     case DoubleType => Some(JdbcType("FLOAT8", Types.DOUBLE))
     case ShortType | ByteType => Some(JdbcType("SMALLINT", Types.SMALLINT))
+    case LongType => Some(JdbcType("BIGINT", Types.BIGINT))
+    case TimestampNTZType => Some(JdbcType("TIMESTAMP", Types.TIMESTAMP))
     case t: DecimalType => Some(
       JdbcType(s"NUMERIC(${t.precision},${t.scale})", java.sql.Types.NUMERIC))
     case ArrayType(et, _) if et.isInstanceOf[AtomicType] || et.isInstanceOf[ArrayType] =>
@@ -374,6 +377,29 @@ private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
               log"Failed to get array dimension for column ${MDC(COLUMN_NAME, columnName)}", e)
         }
       case _ =>
+    }
+  }
+
+  override def compileExpression(expr: Expression): Option[String] = {
+    val builder = new PostgresSQLBuilder()
+    try {
+      Some(builder.build(expr))
+    } catch {
+      case NonFatal(e) =>
+        logWarning("Error occurs while compiling V2 expression", e)
+        None
+    }
+  }
+
+  private class PostgresSQLBuilder extends JDBCSQLBuilder {
+    override def visitCast(expr: String, exprDataType: DataType, dataType: DataType): String = {
+      if (exprDataType.isInstanceOf[NumericType] && dataType.isInstanceOf[TimestampType]) {
+        throw new UnsupportedOperationException("Cannot cast from numeric types to timestamp type")
+      }
+      if (exprDataType.isInstanceOf[NumericType] && dataType.isInstanceOf[BooleanType]) {
+        throw new UnsupportedOperationException("Cannot cast from numeric types to boolean type")
+      }
+      super.visitCast(expr, exprDataType, dataType)
     }
   }
 }

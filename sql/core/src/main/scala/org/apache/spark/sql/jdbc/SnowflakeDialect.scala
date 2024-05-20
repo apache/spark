@@ -19,8 +19,11 @@ package org.apache.spark.sql.jdbc
 
 import java.util.Locale
 
+import scala.util.control.NonFatal
+
+import org.apache.spark.sql.connector.expressions.Expression
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
-import org.apache.spark.sql.types.{BooleanType, DataType}
+import org.apache.spark.sql.types.{BooleanType, DataType, FractionalType, TimestampType}
 
 private case class SnowflakeDialect() extends JdbcDialect {
   override def canHandle(url: String): Boolean =
@@ -31,6 +34,35 @@ private case class SnowflakeDialect() extends JdbcDialect {
       // By default, BOOLEAN is mapped to BIT(1).
       // but Snowflake does not have a BIT type. It uses BOOLEAN instead.
       Some(JdbcType("BOOLEAN", java.sql.Types.BOOLEAN))
+    case TimestampType =>
+      Option(JdbcType("TIMESTAMP_TZ", java.sql.Types.TIMESTAMP))
     case _ => JdbcUtils.getCommonJDBCType(dt)
+  }
+
+  override def compileExpression(expr: Expression): Option[String] = {
+    val snowflakeSQLBuilder = new SnowflakeSQLBuilder()
+    try {
+      Some(snowflakeSQLBuilder.build(expr))
+    } catch {
+      case NonFatal(e) =>
+        logWarning("Error occurs while compiling V2 expression to snowflake", e)
+        None
+    }
+  }
+
+  private class SnowflakeSQLBuilder extends JDBCSQLBuilder {
+    override def visitCast(expr: String, exprDataType: DataType, dataType: DataType): String = {
+      if (exprDataType.isInstanceOf[FractionalType]) {
+        if (dataType.isInstanceOf[TimestampType]) {
+          throw new UnsupportedOperationException("Cannot cast fractional types to timestamp type")
+        }
+        if (dataType.isInstanceOf[BooleanType]) {
+          // Cast from floating point types fails only when column is referenced,
+          // but succeed for literal values
+          throw new UnsupportedOperationException("Cannot cast fractional types to boolean type")
+        }
+      }
+      super.visitCast(expr, exprDataType, dataType)
+    }
   }
 }
