@@ -118,7 +118,7 @@ def main(infile: IO, outfile: IO) -> None:
                 writer.abort(commit_messages, batch_id)  # type: ignore[arg-type]
             else:
                 writer.commit(commit_messages, batch_id)  # type: ignore[arg-type]
-                # Send a status code back to JVM.
+            # Send a status code back to JVM.
             write_int(0, outfile)
             outfile.flush()
         except Exception as e:
