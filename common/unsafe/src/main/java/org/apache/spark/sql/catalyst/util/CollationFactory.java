@@ -551,7 +551,7 @@ public final class CollationFactory {
         collator.freeze();
         return new Collation(
           collationName(),
-          PROVIDER_SPARK,
+          PROVIDER_ICU,
           collator,
           (s1, s2) -> collator.compare(s1.toString(), s2.toString()),
           ICU_COLLATOR_VERSION,

@@ -282,9 +282,7 @@ class StringType(AtomicType):
 
     def __repr__(self) -> str:
         return (
-            "StringType()"
-            if self.isUTF8BinaryCollation()
-            else "StringType('%s')" % self.collation
+            "StringType()" if self.isUTF8BinaryCollation() else "StringType('%s')" % self.collation
         )
 
     def isUTF8BinaryCollation(self) -> bool:

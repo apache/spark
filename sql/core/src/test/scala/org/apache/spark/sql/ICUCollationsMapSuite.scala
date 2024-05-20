@@ -30,11 +30,11 @@ import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile, Collation
  *
  * To re-generate collations map golden file, run:
  * {{{
- *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly org.apache.spark.sql.ICUCollationsMap"
+ *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly org.apache.spark.sql.ICUCollationsMapSuite"
  * }}}
  */
 // scalastyle:on line.size.limit
-class ICUCollationsMap extends SparkFunSuite {
+class ICUCollationsMapSuite extends SparkFunSuite {
 
   private val collationsMapFile = {
     getWorkspaceFilePath("sql", "core", "src", "test", "resources",
