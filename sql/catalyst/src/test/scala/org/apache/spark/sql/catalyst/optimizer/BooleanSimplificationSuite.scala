@@ -286,23 +286,10 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper {
     checkCondition(!$"f" || $"e", testRelationWithData.where(!$"f" || $"e").analyze)
   }
 
-  test("simplify (x && IsNull(x)) and (IsNull(x) && x)") {
+  test("SPARK-48360: simplify IsNull(x) && x, IsNotNull(x) && x, IsNull(x) || x, ...") {
     checkCondition(($"b" > 2) && IsNull($"b" > 2), IsNull($"b" > 2))
     checkCondition(IsNull($"b" > 2) && ($"b" > 2), IsNull($"b" > 2))
-  }
 
-  test("simplify not nullable (x && IsNull(x)) and (IsNull(x) && x)") {
-    checkConditionInNotNullableRelation(
-      ($"b" > 2) && IsNull($"b" > 2),
-      testNotNullableRelation
-    )
-    checkConditionInNotNullableRelation(
-      IsNull($"b" > 2) && ($"b" > 2),
-      testNotNullableRelation
-    )
-  }
-
-  test("simplify (x && IsNotNull(x)) and (IsNotNull(x) && x)") {
     checkCondition(
       ($"b" > 2) && IsNotNull($"b" > 2),
       EqualNullSafe($"b" > 2, Literal(true, BooleanType))
@@ -311,9 +298,16 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper {
       IsNotNull($"b" > 2) && ($"b" > 2),
       EqualNullSafe($"b" > 2, Literal(true, BooleanType))
     )
-  }
 
-  test("simplify (x || IsNull(x)) and (IsNull(x) || x)") {
+    checkConditionInNotNullableRelation(
+      ($"b" > 2) && IsNull($"b" > 2),
+      testNotNullableRelation
+    )
+    checkConditionInNotNullableRelation(
+      IsNull($"b" > 2) && ($"b" > 2),
+      testNotNullableRelation
+    )
+
     checkCondition(
       ($"b" > 2) || IsNull($"b" > 2),
       Not(EqualNullSafe($"b" > 2, Literal(false, BooleanType)))
@@ -322,14 +316,10 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper {
       IsNull($"b" > 2) || ($"b" > 2),
       Not(EqualNullSafe($"b" > 2, Literal(false, BooleanType)))
     )
-  }
 
-  test("simplify (x || IsNotNull(x)) and (IsNotNull(x) || x)") {
     checkCondition(($"b" > 2) || IsNotNull($"b" > 2), IsNotNull($"b" > 2))
     checkCondition(IsNotNull($"b" > 2) || ($"b" > 2), IsNotNull($"b" > 2))
-  }
 
-  test("simplify not nullable (x || IsNotNull(x)) and (IsNotNull(x) || x)") {
     checkConditionInNotNullableRelation(
       ($"b" > 2) || IsNotNull($"b" > 2),
       testNotNullableRelationWithData

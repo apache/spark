@@ -480,7 +480,7 @@ class CanonicalizeSuite extends SparkFunSuite {
     }
   }
 
-  test("Support IsNull and IsNotNull in Canonicalize") {
+  test("SPARK-48360: Support IsNull and IsNotNull in Canonicalize") {
     // test deterministic expr
     val expr1 = IsNull(Literal(1))
     val expr2 = Not(IsNull(Literal(1)))
