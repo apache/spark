@@ -479,4 +479,26 @@ class CanonicalizeSuite extends SparkFunSuite {
         }
     }
   }
+
+  test("Support IsNull and IsNotNull in Canonicalize") {
+    // test deterministic expr
+    val expr1 = IsNull(Literal(1))
+    val expr2 = Not(IsNull(Literal(1)))
+    val expr3 = IsNotNull(Literal(1))
+    val expr4 = Not(IsNotNull(Literal(1)))
+    assert(expr1.canonicalized != expr2.canonicalized)
+    assert(expr1.canonicalized != expr3.canonicalized)
+    assert(expr1.canonicalized == expr4.canonicalized)
+    assert(expr2.canonicalized == expr3.canonicalized)
+    assert(expr2.canonicalized != expr4.canonicalized)
+    assert(expr3.canonicalized != expr4.canonicalized)
+
+    // test non-deterministic expr
+    val randExpr1 = Not(IsNull(rand(1)))
+    val randExpr2 = IsNotNull(rand(1))
+    val randExpr3 = Not(IsNull(rand(2)))
+    assert(randExpr1.canonicalized == randExpr2.canonicalized)
+    assert(randExpr1.canonicalized != randExpr3.canonicalized)
+    assert(randExpr2.canonicalized != randExpr3.canonicalized)
+  }
 }

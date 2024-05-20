@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLite
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.types.{BooleanType, IntegerType}
+import org.apache.spark.sql.types.{BooleanType, DoubleType, IntegerType}
 
 
 class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper {
@@ -302,158 +302,87 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper {
   }
 
   test ("Simplify conditionals with predicate branches to Boolean logic") {
-    // If(x, false, y) => And(Not(x <=> true), y)
-    assertEquivalent(
-      CaseWhen(($"a" > 2, Literal.FalseLiteral) :: Nil, $"b" <= 4),
-      Not($"a" > 2 <=> true) && $"b" <= 4)
-    assertEquivalent(
-      If($"a" > 2, Literal.FalseLiteral, $"b" <= 4),
-      Not($"a" > 2 <=> true) && $"b" <= 4)
+    val exprs = Seq(
+      // If(x, false, y) => And(Not(EqualNullSafe(x, true)), y)
+      ($"a" > 2.0, FalseLiteral, $"b" <= 4.0) -> (Not($"a" > 2.0 <=> true) && $"b" <= 4.0),
+      ($"d" > 2.0, FalseLiteral, $"b" <= 4.0) -> ($"d" <= 2.0 && $"b" <= 4.0),
+      ($"a" > Rand(1), FalseLiteral, $"b" <= 4.0) -> (Not($"a" > Rand(1) <=> true) && $"b" <= 4.0),
+      // If(x, true, y) => Or(EqualNullSafe(x, true), y)
+      ($"a" > 2.0, TrueLiteral, $"b" <= 4.0) -> (($"a" > 2.0 <=> true) || $"b" <= 4.0),
+      ($"d" > 2.0, TrueLiteral, $"b" <= 4.0) -> ($"d" > 2.0 || $"b" <= 4.0),
+      ($"a" > Rand(1), TrueLiteral, $"b" <= 4.0) -> (($"a" > Rand(1) <=> true) || $"b" <= 4.0),
+      // If(x, x, y) => Or(EqualNullSafe(x, true), y)
+      ($"a" > 2.0, $"a" > 2.0, $"b" <= 4.0) -> (($"a" > 2.0 <=> true) || $"b" <= 4.0),
+      ($"d" > 2.0, $"d" > 2.0, $"b" <= 4.0) -> ($"d" > 2.0 || $"b" <= 4.0),
+      // If(x, Not(x), y) => And(Not(EqualNullSafe(x, true)), y)
+      ($"a" > 2.0, Not($"a" > 2.0), $"b" <= 4.0) -> (Not($"a" > 2.0 <=> true) && $"b" <= 4.0),
+      ($"d" > 2.0, Not($"d" > 2.0), $"b" <= 4.0) -> ($"d" <=2.0 && $"b" <= 4.0),
+      // If(Not(x), x, y) => And(Not(EqualNullSafe(x, false)), y)
+      (Not($"a" > 2.0), $"a" > 2.0, $"b" <= 4.0) -> (Not($"a" <= 2.0 <=> true) && $"b" <= 4.0),
+      (Not($"d" > 2.0), $"d" > 2.0, $"b" <= 4.0) -> ($"d" > 2.0 && $"b" <= 4.0),
+      // If(IsNull(x), IsNotNull(x), y) => And(IsNotNull(x), y)
+      (IsNull($"a" > 2.0), IsNotNull($"a" > 2.0), $"b" <= 4.0) ->
+        (IsNotNull($"a" > 2.0) && $"b" <= 4.0),
+      (IsNull($"d" > 2.0), IsNotNull($"d" > 2.0), $"b" <= 4.0) ->($"b" <= 4.0),
+      // If(IsNotNull(x), IsNull(x), y) => And(IsNull(x), y)
+      (IsNotNull($"a" > 2.0), IsNull($"a" > 2.0), $"b" <= 4.0) ->
+        (IsNull($"a" > 2.0) && $"b" <= 4.0),
+      (IsNotNull($"d" > 2.0), IsNull($"d" > 2.0), $"b" <= 4.0) -> FalseLiteral,
+    )
 
-    assertEquivalent(
-      CaseWhen(($"d" > 2, Literal.FalseLiteral) :: Nil, $"b" <= 4),
-      $"d" <= 2 && $"b" <= 4)
-    assertEquivalent(
-      If($"d" > 2, Literal.FalseLiteral, $"b" <= 4),
-      $"d" <= 2 && $"b" <= 4)
+    // check plans
+    for (((cond, trueValue, falseValue), expected) <- exprs) {
+      assertEquivalent(CaseWhen((cond, trueValue) :: Nil, falseValue), expected)
+      assertEquivalent(If(cond, trueValue, falseValue), expected)
+    }
 
-    assertEquivalent(
-      CaseWhen(($"a" > Rand(1), Literal.FalseLiteral) :: Nil, $"b" <= 4),
-      Not($"a" > Rand(1) <=> true) && $"b" <= 4)
-    assertEquivalent(
-      If($"a" > Rand(1), Literal.FalseLiteral, $"b" <= 4),
-      Not($"a" > Rand(1) <=> true) && $"b" <= 4)
-    
-    // If(x, true, y) => Or((x <=> true), y)
-    assertEquivalent(
-      CaseWhen(($"a" > 2, Literal.TrueLiteral) :: Nil, $"b" <= 4),
-      ($"a" > 2 <=> true) || $"b" <= 4)
-    assertEquivalent(
-      If($"a" > 2, Literal.TrueLiteral, $"b" <= 4),
-      ($"a" > 2 <=> true) || $"b" <= 4)
+    // check evaluation
+    for (aValue <- Seq(3.0, 1.0, null); // evaluates a > 2 to true, false and null
+         bValue <- Seq(3.0, 5.0, null); // evaluates b <= 4 to true, false and null
+         ((cond, trueValue, falseValue), expectedExpr) <- exprs
+         // skip the nullability case when evaluating the non-null attribute 'd'
+         if !(cond.references.contains(UnresolvedAttribute("d")) && aValue == null)) {
+      val resolver: PartialFunction[Expression, Expression] = {
+        case UnresolvedAttribute(Seq("a")) => Literal.create(aValue, DoubleType)
+        case UnresolvedAttribute(Seq("b")) => Literal.create(bValue, DoubleType)
+        case UnresolvedAttribute(Seq("d")) => Literal.create(aValue, DoubleType)
+      }
 
-    assertEquivalent(
-      CaseWhen(($"d" > 2, Literal.TrueLiteral) :: Nil, $"b" <= 4),
-      $"d" > 2 || $"b" <= 4)
-    assertEquivalent(
-      If($"d" > 2, Literal.TrueLiteral, $"b" <= 4),
-      $"d" > 2 || $"b" <= 4)
+      val expected = evaluateWithoutCodegen(expectedExpr.transform(resolver))
+      val expr1 = CaseWhen((cond, trueValue) :: Nil, falseValue).transform(resolver)
+      val expr2 = If(cond, trueValue, falseValue).transform(resolver)
 
-    assertEquivalent(
-      CaseWhen(($"a" > Rand(1), Literal.TrueLiteral) :: Nil, $"b" <= 4),
-      ($"a" > Rand(1) <=> true) || $"b" <= 4)
-    assertEquivalent(
-      If($"a" > Rand(1), Literal.TrueLiteral, $"b" <= 4),
-      ($"a" > Rand(1) <=> true) || $"b" <= 4)
+      checkEvaluation(expr1, expected)
+      checkEvaluation(expr2, expected)
+    }
 
-    // If(x, x, y) => Or((x <=> true), y)
-    assertEquivalent(
-      CaseWhen(($"a" > 2, $"a" > 2) :: Nil, $"b" <= 4),
-      ($"a" > 2 <=> true) || $"b" <= 4)
-    assertEquivalent(
-      If($"a" > 2, $"a" > 2, $"b" <= 4),
-      ($"a" > 2 <=> true) || $"b" <= 4)
+    val nondeterministic = Seq(
+      // If(x, x, y) => Or(EqualNullSafe(x, true), y)
+      ($"a" > Rand(1), $"a" > Rand(1), $"b" <= 4) ->
+        ($"a" > Rand(1), $"a" > Rand(1), $"b" <= 4),
+      // If(x, Not(x), y) => And(Not(EqualNullSafe(x, true)), y)
+      ($"a" > Rand(1), Not($"a" > Rand(1)), $"b" <= 4) ->
+        ($"a" > Rand(1), $"a" <= Rand(1), $"b" <= 4),
+      // If(Not(x), x, y) => And(Not(EqualNullSafe(x, false)), y)
+      (Not($"a" > Rand(1)), $"a" > Rand(1), $"b" <= 4) ->
+        ($"a" <= Rand(1), $"a" > Rand(1), $"b" <= 4),
+      // If(IsNull(x), IsNotNull(x), y) => And(IsNotNull(x), y)
+      (IsNull($"a" > Rand(1)), IsNotNull($"a" > Rand(1)), $"b" <= 4) ->
+        (IsNull($"a" > Rand(1)), IsNotNull($"a" > Rand(1)), $"b" <= 4),
+      // If(IsNotNull(x), IsNull(x), y) => And(IsNull(x), y)
+      (IsNotNull($"a" > Rand(1)), IsNull($"a" > Rand(1)), $"b" <= 4) ->
+        (IsNotNull($"a" > Rand(1)), IsNull($"a" > Rand(1)), $"b" <= 4)
+    )
 
-    assertEquivalent(
-      CaseWhen(($"d" > 2, $"d" > 2) :: Nil, $"b" <= 4),
-      $"d" > 2 || $"b" <= 4)
-    assertEquivalent(
-      If($"d" > 2, $"d" > 2, $"b" <= 4),
-      $"d" > 2 || $"b" <= 4)
-
-    assertEquivalent(
-      CaseWhen(($"a" > Rand(1), $"a" > Rand(1)) :: Nil, $"b" <= 4),
-      CaseWhen(($"a" > Rand(1), $"a" > Rand(1)) :: Nil, $"b" <= 4))
-    assertEquivalent(
-      If($"a" > Rand(1), $"a" > Rand(1), $"b" <= 4),
-      If($"a" > Rand(1), $"a" > Rand(1), $"b" <= 4))
-
-    // If(x, Not(x), y) => And(Not(x <=> true), y)
-    assertEquivalent(
-      CaseWhen(($"a" > 2, Not($"a" > 2)) :: Nil, $"b" <= 4),
-      Not($"a" > 2 <=> true) && $"b" <= 4)
-    assertEquivalent(
-      If($"a" > 2, Not($"a" > 2), $"b" <= 4),
-      Not($"a" > 2 <=> true) && $"b" <= 4)
-
-    assertEquivalent(
-      CaseWhen(($"d" > 2, Not($"d" > 2)) :: Nil, $"b" <= 4),
-      $"d" <=2 && $"b" <= 4)
-    assertEquivalent(
-      If($"d" > 2, Not($"d" > 2), $"b" <= 4),
-      $"d" <= 2 && $"b" <= 4)
-
-    assertEquivalent(
-      CaseWhen(($"a" > Rand(1), Not($"a" > Rand(1))) :: Nil, $"b" <= 4),
-      CaseWhen(($"a" > Rand(1), $"a" <= Rand(1)) :: Nil, $"b" <= 4))
-    assertEquivalent(
-      If($"a" > Rand(1), Not($"a" > Rand(1)), $"b" <= 4),
-      If($"a" > Rand(1), $"a" <= Rand(1), $"b" <= 4))
-
-    // If(Not(x), x, y) => And(Not(x <=> false), y)
-    assertEquivalent(
-      CaseWhen((Not($"a" > 2), $"a" > 2) :: Nil, $"b" <= 4),
-      Not($"a" <= 2 <=> true) && $"b" <= 4)
-    assertEquivalent(
-      If(Not($"a" > 2), $"a" > 2, $"b" <= 4),
-      Not($"a" <= 2 <=> true) && $"b" <= 4)
-
-    assertEquivalent(
-      CaseWhen((Not($"d" > 2), $"d" > 2) :: Nil, $"b" <= 4),
-      $"d" > 2 && $"b" <= 4)
-    assertEquivalent(
-      If(Not($"d" > 2), $"d" > 2, $"b" <= 4),
-      $"d" > 2 && $"b" <= 4)
-
-    assertEquivalent(
-      CaseWhen((Not($"a" > Rand(1)), $"a" > Rand(1)) :: Nil, $"b" <= 4),
-      CaseWhen(($"a" <= Rand(1), $"a" > Rand(1)) :: Nil, $"b" <= 4))
-    assertEquivalent(
-      If(Not($"a" > Rand(1)), $"a" > Rand(1), $"b" <= 4),
-      If($"a" <= Rand(1), $"a" > Rand(1), $"b" <= 4))
-    
-    // If(IsNull(x), IsNotNull(x), y) => And(IsNotNull(x), y)
-    assertEquivalent(
-      CaseWhen((IsNull($"a" > 2), IsNotNull($"a" > 2)) :: Nil, $"b" <= 4),
-      IsNotNull($"a" > 2) && $"b" <= 4)
-    assertEquivalent(
-      If(IsNull($"a" > 2), IsNotNull($"a" > 2), $"b" <= 4),
-      IsNotNull($"a" > 2) && $"b" <= 4)
-
-    assertEquivalent(
-      CaseWhen((IsNull($"d" > 2), IsNotNull($"d" > 2)) :: Nil, $"b" <= 4),
-      $"b" <= 4)
-    assertEquivalent(
-      If(IsNull($"d" > 2), IsNotNull($"d" > 2), $"b" <= 4),
-      $"b" <= 4)
-
-    assertEquivalent(
-      CaseWhen((IsNull($"a" > Rand(1)), IsNotNull($"a" > Rand(1))) :: Nil, $"b" <= 4),
-      CaseWhen((IsNull($"a" > Rand(1)), IsNotNull($"a" > Rand(1))) :: Nil, $"b" <= 4))
-    assertEquivalent(
-      If(IsNull($"a" > Rand(1)), IsNotNull($"a" > Rand(1)), $"b" <= 4),
-      If(IsNull($"a" > Rand(1)), IsNotNull($"a" > Rand(1)), $"b" <= 4))
-
-    // If(IsNotNull(x), IsNull(x), y) => And(IsNull(x), y)
-    assertEquivalent(
-      CaseWhen((IsNotNull($"a" > 2), IsNull($"a" > 2)) :: Nil, $"b" <= 4),
-      IsNull($"a" > 2) && $"b" <= 4)
-    assertEquivalent(
-      If(IsNotNull($"a" > 2), IsNull($"a" > 2), $"b" <= 4),
-      IsNull($"a" > 2) && $"b" <= 4)
-
-    assertEquivalent(
-      CaseWhen((IsNotNull($"d" > 2), IsNull($"d" > 2)) :: Nil, $"b" <= 4),
-      false)
-    assertEquivalent(
-      If(IsNotNull($"d" > 2), IsNull($"d" > 2), $"b" <= 4),
-      false)
-
-    assertEquivalent(
-      CaseWhen((IsNotNull($"a" > Rand(1)), IsNull($"a" > Rand(1))) :: Nil, $"b" <= 4),
-      CaseWhen((IsNotNull($"a" > Rand(1)), IsNull($"a" > Rand(1))) :: Nil, $"b" <= 4))
-    assertEquivalent(
-      If(IsNotNull($"a" > Rand(1)), IsNull($"a" > Rand(1)), $"b" <= 4),
-      If(IsNotNull($"a" > Rand(1)), IsNull($"a" > Rand(1)), $"b" <= 4))
+    for (((condA, trueValueA, falseValueA), (condB, trueValueB, falseValueB)) <- nondeterministic) {
+      assertEquivalent(
+        CaseWhen((condA, trueValueA) :: Nil, falseValueA),
+        CaseWhen((condB, trueValueB) :: Nil, falseValueB)
+      )
+      assertEquivalent(
+        If(condA, trueValueA, falseValueA),
+        If(condB, trueValueB, falseValueB)
+      )
+    }
   }
 }
