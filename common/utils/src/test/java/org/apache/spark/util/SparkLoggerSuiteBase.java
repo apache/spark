@@ -30,7 +30,7 @@ import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
 
-public abstract class LoggerSuiteBase {
+public abstract class SparkLoggerSuiteBase {
 
   abstract SparkLogger logger();
   abstract String className();

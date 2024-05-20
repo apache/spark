@@ -473,6 +473,12 @@
     ],
     "sqlState" : "42704"
   },
+  "COLLATION_INVALID_PROVIDER" : {
+    "message" : [
+      "The value <provider> does not represent a correct collation provider. Supported providers are: [<supportedProviders>]."
+    ],
+    "sqlState" : "42704"
+  },
   "COLLATION_MISMATCH" : {
     "message" : [
       "Could not determine which collation to use for string functions and operators."
@@ -2342,6 +2348,12 @@
     ],
     "sqlState" : "2203G"
   },
+  "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS" : {
+    "message" : [
+      "Collations can only be applied to string types, but the JSON data type is <jsonType>."
+    ],
+    "sqlState" : "2203G"
+  },
   "INVALID_JSON_ROOT_FIELD" : {
     "message" : [
       "Cannot convert JSON root field to target Spark type."
@@ -2677,7 +2689,7 @@
       },
       "CREATE_ROUTINE_WITH_IF_NOT_EXISTS_AND_REPLACE" : {
         "message" : [
-          "CREATE PROCEDURE or CREATE FUNCTION with both IF NOT EXISTS and REPLACE is not allowed."
+          "Cannot create a routine with both IF NOT EXISTS and REPLACE specified."
         ]
       },
       "CREATE_TEMP_FUNC_WITH_DATABASE" : {

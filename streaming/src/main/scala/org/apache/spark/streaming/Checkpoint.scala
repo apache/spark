@@ -29,7 +29,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.{BACKUP_FILE, CHECKPOINT_FILE, CHECKPOINT_TIME, PATH, RETRY_COUNT, TEMP_FILE}
+import org.apache.spark.internal.LogKeys.{BACKUP_FILE, CHECKPOINT_FILE, CHECKPOINT_TIME, NUM_RETRY, PATH, TEMP_FILE}
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.streaming.scheduler.JobGenerator
@@ -288,7 +288,7 @@ class CheckpointWriter(
           return
         } catch {
           case ioe: IOException =>
-            val msg = log"Error in attempt ${MDC(RETRY_COUNT, attempts)} of writing checkpoint " +
+            val msg = log"Error in attempt ${MDC(NUM_RETRY, attempts)} of writing checkpoint " +
               log"to '${MDC(CHECKPOINT_FILE, checkpointFile)}'"
             logWarning(msg, ioe)
             fs = null
