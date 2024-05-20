@@ -697,8 +697,9 @@ private[spark] object Utils
         in.close()
       }
     } else {
-      lazy val fsHasPathCapability =
+      lazy val fsHasPathCapability = {
         fs.hasPathCapability(path, SparkHadoopUtil.DIRECTORY_LISTING_INCONSISTENT)
+      }
       val listStatuses = Try {
         fs.listStatus(path)
       }

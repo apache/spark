@@ -30,12 +30,16 @@ import java.util.zip.GZIPOutputStream
 import scala.collection.mutable.ListBuffer
 import scala.util.Random
 
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito
+import org.mockito.Mockito.{mock, verify, when}
+
 import com.google.common.io.Files
 import org.apache.commons.io.IOUtils
 import org.apache.commons.lang3.SystemUtils
 import org.apache.commons.math3.stat.inference.ChiSquareTest
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.ipc.{CallerContext => HadoopCallerContext}
 import org.apache.logging.log4j.Level
 
@@ -387,8 +391,8 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
   def testOffsetBytesMultipleFiles(isCompressed: Boolean): Unit = {
     withTempDir { tmpDir =>
       val suffix = getSuffix(isCompressed)
-      val files = (1 to 3).map(i =>
-        new File(tmpDir, i.toString + suffix)) :+ new File(tmpDir, "4")
+      val files =
+        (1 to 3).map(i => new File(tmpDir, i.toString + suffix)) :+ new File(tmpDir, "4")
       writeLogFile(files(0).getAbsolutePath, "0123456789".getBytes(UTF_8))
       writeLogFile(files(1).getAbsolutePath, "abcdefghij".getBytes(UTF_8))
       writeLogFile(files(2).getAbsolutePath, "ABCDEFGHIJ".getBytes(UTF_8))
@@ -417,8 +421,9 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
       assert(Utils.offsetBytes(files, fileLengths, 18, 45) === "ijABCDEFGHIJ9876543210")
 
       // Read some nonexistent bytes on both ends
-      assert(Utils.offsetBytes(files, fileLengths, -5, 45) ===
-        "0123456789abcdefghijABCDEFGHIJ9876543210")
+      assert(
+        Utils.offsetBytes(files, fileLengths, -5, 45) ===
+          "0123456789abcdefghijABCDEFGHIJ9876543210")
     }
   }
 
@@ -431,7 +436,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
   }
 
   test("deserialize long value") {
-    val testval : Long = 9730889947L
+    val testval: Long = 9730889947L
     val bbuf = ByteBuffer.allocate(8)
     assert(bbuf.hasArray)
     bbuf.order(ByteOrder.BIG_ENDIAN)
@@ -471,9 +476,11 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
 
   test("getIteratorZipWithIndex") {
     val iterator = Utils.getIteratorZipWithIndex(Iterator(0, 1, 2), -1L + Int.MaxValue)
-    assert(iterator.toArray === Array(
-      (0, -1L + Int.MaxValue), (1, 0L + Int.MaxValue), (2, 1L + Int.MaxValue)
-    ))
+    assert(
+      iterator.toArray === Array(
+        (0, -1L + Int.MaxValue),
+        (1, 0L + Int.MaxValue),
+        (2, 1L + Int.MaxValue)))
     intercept[IllegalArgumentException] {
       Utils.getIteratorZipWithIndex(Iterator(0, 1, 2), -1L)
     }
@@ -525,8 +532,9 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
 
     // The following 3 scenarios are only for the method: createDirectory(File)
     // 6. Symbolic link
-    val scenario6 = java.nio.file.Files.createSymbolicLink(new File(testDir, "scenario6")
-      .toPath, scenario1.toPath).toFile
+    val scenario6 = java.nio.file.Files
+      .createSymbolicLink(new File(testDir, "scenario6").toPath, scenario1.toPath)
+      .toFile
     if (Utils.isJavaVersionAtLeast21) {
       assert(Utils.createDirectory(scenario6))
     } else {
@@ -614,10 +622,12 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     assertResolves("jar1,jar2", s"file:$cwd/jar1,file:$cwd/jar2")
     assertResolves("file:/jar1,file:/jar2", "file:/jar1,file:/jar2")
     assertResolves("hdfs:/jar1,file:/jar2,jar3", s"hdfs:/jar1,file:/jar2,file:$cwd/jar3")
-    assertResolves("hdfs:/jar1,file:/jar2,jar3,jar4#jar5,path to/jar6",
+    assertResolves(
+      "hdfs:/jar1,file:/jar2,jar3,jar4#jar5,path to/jar6",
       s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:$cwd/jar4#jar5,file:$cwd/path%20to/jar6")
     if (Utils.isWindows) {
-      assertResolves("""hdfs:/jar1,file:/jar2,jar3,C:\pi.py#py.pi,C:\path to\jar4""",
+      assertResolves(
+        """hdfs:/jar1,file:/jar2,jar3,C:\pi.py#py.pi,C:\path to\jar4""",
         s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:/C:/pi.py%23py.pi,file:/C:/path%20to/jar4")
     }
     assertResolves(",jar1,jar2", s"file:$cwd/jar1,file:$cwd/jar2")
@@ -635,14 +645,18 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     assert(Utils.nonLocalPaths("hdfs:///spark.jar") === Array("hdfs:///spark.jar"))
     assert(Utils.nonLocalPaths("file:/spark.jar,local:/smart.jar,family.py") === Array.empty)
     assert(Utils.nonLocalPaths("local:/spark.jar,file:/smart.jar,family.py") === Array.empty)
-    assert(Utils.nonLocalPaths("hdfs:/spark.jar,s3:/smart.jar") ===
-      Array("hdfs:/spark.jar", "s3:/smart.jar"))
-    assert(Utils.nonLocalPaths("hdfs:/spark.jar,path to/a.jar,s3:/smart.jar") ===
-      Array("hdfs:/spark.jar", "s3:/smart.jar"))
-    assert(Utils.nonLocalPaths("hdfs:/spark.jar,s3:/smart.jar,local.py,file:/hello/pi.py") ===
-      Array("hdfs:/spark.jar", "s3:/smart.jar"))
-    assert(Utils.nonLocalPaths("local.py,hdfs:/spark.jar,file:/hello/pi.py,s3:/smart.jar") ===
-      Array("hdfs:/spark.jar", "s3:/smart.jar"))
+    assert(
+      Utils.nonLocalPaths("hdfs:/spark.jar,s3:/smart.jar") ===
+        Array("hdfs:/spark.jar", "s3:/smart.jar"))
+    assert(
+      Utils.nonLocalPaths("hdfs:/spark.jar,path to/a.jar,s3:/smart.jar") ===
+        Array("hdfs:/spark.jar", "s3:/smart.jar"))
+    assert(
+      Utils.nonLocalPaths("hdfs:/spark.jar,s3:/smart.jar,local.py,file:/hello/pi.py") ===
+        Array("hdfs:/spark.jar", "s3:/smart.jar"))
+    assert(
+      Utils.nonLocalPaths("local.py,hdfs:/spark.jar,file:/hello/pi.py,s3:/smart.jar") ===
+        Array("hdfs:/spark.jar", "s3:/smart.jar"))
 
     // Test Windows paths
     assert(Utils.nonLocalPaths("C:/some/path.jar", testWindows = true) === Array.empty)
@@ -650,12 +664,15 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     assert(Utils.nonLocalPaths("file:///C:/some/path.jar", testWindows = true) === Array.empty)
     assert(Utils.nonLocalPaths("local:/C:/some/path.jar", testWindows = true) === Array.empty)
     assert(Utils.nonLocalPaths("local:///C:/some/path.jar", testWindows = true) === Array.empty)
-    assert(Utils.nonLocalPaths("hdfs:/a.jar,C:/my.jar,s3:/another.jar", testWindows = true) ===
-      Array("hdfs:/a.jar", "s3:/another.jar"))
-    assert(Utils.nonLocalPaths("D:/your.jar,hdfs:/a.jar,s3:/another.jar", testWindows = true) ===
-      Array("hdfs:/a.jar", "s3:/another.jar"))
-    assert(Utils.nonLocalPaths("hdfs:/a.jar,s3:/another.jar,e:/our.jar", testWindows = true) ===
-      Array("hdfs:/a.jar", "s3:/another.jar"))
+    assert(
+      Utils.nonLocalPaths("hdfs:/a.jar,C:/my.jar,s3:/another.jar", testWindows = true) ===
+        Array("hdfs:/a.jar", "s3:/another.jar"))
+    assert(
+      Utils.nonLocalPaths("D:/your.jar,hdfs:/a.jar,s3:/another.jar", testWindows = true) ===
+        Array("hdfs:/a.jar", "s3:/another.jar"))
+    assert(
+      Utils.nonLocalPaths("hdfs:/a.jar,s3:/another.jar,e:/our.jar", testWindows = true) ===
+        Array("hdfs:/a.jar", "s3:/another.jar"))
   }
 
   test("isBindCollision") {
@@ -735,12 +752,15 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     withTempDir { tmpDir =>
       val outFile = File.createTempFile("test-load-spark-properties", "test", tmpDir)
       System.setProperty("spark.test.fileNameLoadB", "2")
-      Files.write("spark.test.fileNameLoadA true\n" +
-        "spark.test.fileNameLoadB 1\n", outFile, UTF_8)
+      Files.write(
+        "spark.test.fileNameLoadA true\n" +
+          "spark.test.fileNameLoadB 1\n",
+        outFile,
+        UTF_8)
       val properties = Utils.getPropertiesFromFile(outFile.getAbsolutePath)
       properties
-        .filter { case (k, v) => k.startsWith("spark.")}
-        .foreach { case (k, v) => sys.props.getOrElseUpdate(k, v)}
+        .filter { case (k, v) => k.startsWith("spark.") }
+        .foreach { case (k, v) => sys.props.getOrElseUpdate(k, v) }
       val sparkConf = new SparkConf
       assert(sparkConf.getBoolean("spark.test.fileNameLoadA", false))
       assert(sparkConf.getInt("spark.test.fileNameLoadB", 1) === 2)
@@ -801,10 +821,75 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
       val testFileDir = new File(tempDir, "test-filename")
       val testFileName = "testFName"
       val testFilefs = Utils.getHadoopFileSystem(filePath.toString, conf)
-      Utils.fetchHcfsFile(filePath, testFileDir, testFilefs, new SparkConf(),
-        conf, false, Some(testFileName))
+      Utils.fetchHcfsFile(
+        filePath,
+        testFileDir,
+        testFilefs,
+        new SparkConf(),
+        conf,
+        false,
+        Some(testFileName))
       val newFileName = new File(testFileDir, testFileName)
       assert(newFileName.isFile())
+    }
+  }
+
+  test(
+    "SPARK-47008: Utils.fetchHcfsFile SHOULD NOT throw FileNotFoundException(FNFE)" +
+      " when fs.listStatus throws FNFE and fs.hasPathCapability is TRUE") {
+    withTempDir { tempDir =>
+      val sourceDir = new File(tempDir, "source-dir")
+      sourceDir.mkdir()
+      val targetDir = new File(tempDir, "target-dir")
+
+      val path =
+        if (Utils.isWindows) {
+          new Path("file:/" + sourceDir.getAbsolutePath.replace("\\", "/"))
+        } else {
+          new Path("file://" + sourceDir.getAbsolutePath)
+        }
+      val conf = new Configuration
+      val fs = {
+        path.getFileSystem(conf)
+      }
+
+      val mockFS: FileSystem = mock(classOf[FileSystem])
+
+      when(mockFS.hasPathCapability(any(), any())).thenReturn(true)
+      when(mockFS.listStatus(any(classOf[Path]))).thenThrow(new FileNotFoundException())
+      when(mockFS.getFileStatus(any(classOf[Path]))).thenReturn(fs.getFileStatus(path))
+
+      // no exception expected
+      Utils.fetchHcfsFile(path, targetDir, mockFS, new SparkConf(), conf, fileOverwrite = false)
+
+      when(mockFS.hasPathCapability(any(), any())).thenReturn(false)
+      when(mockFS.listStatus(any(classOf[Path]))).thenThrow(new FileNotFoundException())
+
+      // FNFE expected
+      intercept[FileNotFoundException] {
+        Utils.fetchHcfsFile(path, targetDir, mockFS, new SparkConf(), conf, fileOverwrite = false)
+      }
+
+      when(mockFS.hasPathCapability(any(), any())).thenReturn(false)
+      when(mockFS.listStatus(any(classOf[Path]))).thenThrow(new IOException())
+
+      // IOException expected
+      intercept[IOException] {
+        Utils.fetchHcfsFile(path, targetDir, mockFS, new SparkConf(), conf, fileOverwrite = false)
+      }
+
+      when(mockFS.hasPathCapability(any(), any())).thenReturn(true)
+      when(mockFS.listStatus(any(classOf[Path]))).thenThrow(new IOException())
+
+      // IOException expected
+      intercept[IOException] {
+        Utils.fetchHcfsFile(path, targetDir, mockFS, new SparkConf(), conf, fileOverwrite = false)
+      }
+
+      verify(mockFS, Mockito.atLeast(4)).getFileStatus(any(classOf[Path]))
+      verify(mockFS, Mockito.atLeast(4)).listStatus(any(classOf[Path]))
+      // test lazy evaluation of the fsHasPathCapability
+      verify(mockFS, Mockito.atLeast(2)).hasPathCapability(any(), any())
     }
   }
 
@@ -823,7 +908,8 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     manager.remove(hook1)
 
     manager.runAll()
-    assert(output.toList === List(Int.MaxValue, Int.MaxValue, 4, 3, 2, Int.MinValue, Int.MinValue))
+    assert(
+      output.toList === List(Int.MaxValue, Int.MaxValue, 4, 3, 2, Int.MinValue, Int.MinValue))
   }
 
   test("isInDirectory") {
@@ -929,14 +1015,10 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     conf.set("spark.master", "yarn")
     conf.set(SUBMIT_DEPLOY_MODE, "client")
     assert(Utils.isDynamicAllocationEnabled(conf) === false)
-    assert(Utils.isDynamicAllocationEnabled(
-      conf.set(DYN_ALLOCATION_ENABLED, false)) === false)
-    assert(Utils.isDynamicAllocationEnabled(
-      conf.set(DYN_ALLOCATION_ENABLED, true)))
-    assert(Utils.isDynamicAllocationEnabled(
-      conf.set("spark.executor.instances", "1")))
-    assert(Utils.isDynamicAllocationEnabled(
-      conf.set("spark.executor.instances", "0")))
+    assert(Utils.isDynamicAllocationEnabled(conf.set(DYN_ALLOCATION_ENABLED, false)) === false)
+    assert(Utils.isDynamicAllocationEnabled(conf.set(DYN_ALLOCATION_ENABLED, true)))
+    assert(Utils.isDynamicAllocationEnabled(conf.set("spark.executor.instances", "1")))
+    assert(Utils.isDynamicAllocationEnabled(conf.set("spark.executor.instances", "0")))
     assert(Utils.isDynamicAllocationEnabled(conf.set("spark.master", "local")) === false)
     assert(Utils.isDynamicAllocationEnabled(conf.set(DYN_ALLOCATION_TESTING, true)))
   }
@@ -944,19 +1026,25 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
   test("getDynamicAllocationInitialExecutors") {
     val conf = new SparkConf()
     assert(Utils.getDynamicAllocationInitialExecutors(conf) === 0)
-    assert(Utils.getDynamicAllocationInitialExecutors(
-      conf.set(DYN_ALLOCATION_MIN_EXECUTORS, 3)) === 3)
-    assert(Utils.getDynamicAllocationInitialExecutors( // should use minExecutors
-      conf.set("spark.executor.instances", "2")) === 3)
-    assert(Utils.getDynamicAllocationInitialExecutors( // should use executor.instances
-      conf.set("spark.executor.instances", "4")) === 4)
-    assert(Utils.getDynamicAllocationInitialExecutors( // should use executor.instances
-      conf.set(DYN_ALLOCATION_INITIAL_EXECUTORS, 3)) === 4)
-    assert(Utils.getDynamicAllocationInitialExecutors( // should use initialExecutors
-      conf.set(DYN_ALLOCATION_INITIAL_EXECUTORS, 5)) === 5)
-    assert(Utils.getDynamicAllocationInitialExecutors( // should use minExecutors
-      conf.set(DYN_ALLOCATION_INITIAL_EXECUTORS, 2)
-        .set("spark.executor.instances", "1")) === 3)
+    assert(
+      Utils.getDynamicAllocationInitialExecutors(conf.set(DYN_ALLOCATION_MIN_EXECUTORS, 3)) === 3)
+    assert(
+      Utils.getDynamicAllocationInitialExecutors( // should use minExecutors
+        conf.set("spark.executor.instances", "2")) === 3)
+    assert(
+      Utils.getDynamicAllocationInitialExecutors( // should use executor.instances
+        conf.set("spark.executor.instances", "4")) === 4)
+    assert(
+      Utils.getDynamicAllocationInitialExecutors( // should use executor.instances
+        conf.set(DYN_ALLOCATION_INITIAL_EXECUTORS, 3)) === 4)
+    assert(
+      Utils.getDynamicAllocationInitialExecutors( // should use initialExecutors
+        conf.set(DYN_ALLOCATION_INITIAL_EXECUTORS, 5)) === 5)
+    assert(
+      Utils.getDynamicAllocationInitialExecutors( // should use minExecutors
+        conf
+          .set(DYN_ALLOCATION_INITIAL_EXECUTORS, 2)
+          .set("spark.executor.instances", "1")) === 3)
   }
 
   test("Set Spark CallerContext") {
@@ -1109,17 +1197,14 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     val sparkConf = new SparkConf
 
     // Set some secret keys
-    val secretKeysWithSameValue = Seq(
-      "spark.executorEnv.HADOOP_CREDSTORE_PASSWORD",
-      "spark.my.password",
-      "spark.my.sECreT")
+    val secretKeysWithSameValue =
+      Seq("spark.executorEnv.HADOOP_CREDSTORE_PASSWORD", "spark.my.password", "spark.my.sECreT")
     val cmdArgsForSecretWithSameValue = secretKeysWithSameValue.map(s => s"-D$s=sensitive_value")
 
     val secretKeys = secretKeysWithSameValue ++ Seq("spark.your.password")
     val cmdArgsForSecret = cmdArgsForSecretWithSameValue ++ Seq(
       // Have '=' twice
-      "-Dspark.your.password=sensitive=sensitive2"
-    )
+      "-Dspark.your.password=sensitive=sensitive2")
 
     val ignoredArgs = Seq(
       // starts with -D but no assignment
@@ -1143,10 +1228,13 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     // 2) -D option without key-value assignment is not applied
     assert(ignoredArgs.forall(redactedCmdArgs.contains))
 
-    val redactedCmdArgMap = redactedCmdArgs.filterNot(ignoredArgs.contains).map { cmd =>
-      val keyValue = cmd.substring("-D".length).split("=")
-      keyValue(0) -> keyValue.tail.mkString("=")
-    }.toMap
+    val redactedCmdArgMap = redactedCmdArgs
+      .filterNot(ignoredArgs.contains)
+      .map { cmd =>
+        val keyValue = cmd.substring("-D".length).split("=")
+        keyValue(0) -> keyValue.tail.mkString("=")
+      }
+      .toMap
 
     // Assert that secret information got redacted while the regular property remained the same
     secretKeys.foreach { key =>
@@ -1159,15 +1247,19 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
 
   test("redact sensitive information in sequence of key value pairs") {
     val secretKeys = Some("my.password".r)
-    assert(Utils.redact(secretKeys, Seq(("spark.my.password", "12345"))) ===
-      Seq(("spark.my.password", Utils.REDACTION_REPLACEMENT_TEXT)))
-    assert(Utils.redact(secretKeys, Seq(("anything", "spark.my.password=12345"))) ===
-      Seq(("anything", Utils.REDACTION_REPLACEMENT_TEXT)))
-    assert(Utils.redact(secretKeys, Seq((999, "spark.my.password=12345"))) ===
-      Seq((999, Utils.REDACTION_REPLACEMENT_TEXT)))
+    assert(
+      Utils.redact(secretKeys, Seq(("spark.my.password", "12345"))) ===
+        Seq(("spark.my.password", Utils.REDACTION_REPLACEMENT_TEXT)))
+    assert(
+      Utils.redact(secretKeys, Seq(("anything", "spark.my.password=12345"))) ===
+        Seq(("anything", Utils.REDACTION_REPLACEMENT_TEXT)))
+    assert(
+      Utils.redact(secretKeys, Seq((999, "spark.my.password=12345"))) ===
+        Seq((999, Utils.REDACTION_REPLACEMENT_TEXT)))
     // Do not redact when value type is not string
-    assert(Utils.redact(secretKeys, Seq(("my.password", 12345))) ===
-      Seq(("my.password", 12345)))
+    assert(
+      Utils.redact(secretKeys, Seq(("my.password", 12345))) ===
+        Seq(("my.password", 12345)))
   }
 
   test("tryWithSafeFinally") {
@@ -1219,7 +1311,8 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     // if the try, catch and finally blocks throw different exception instances
     try {
       Utils.tryWithSafeFinallyAndFailureCallbacks { throw e }(
-        catchBlock = { throw catchBlockError }, finallyBlock = { throw finallyBlockError })
+        catchBlock = { throw catchBlockError },
+        finallyBlock = { throw finallyBlockError })
     } catch {
       case t: Error =>
         assert(t.getSuppressed.head == catchBlockError)
@@ -1232,7 +1325,8 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     e = new Error("Block1")
     isErrorOccurred = false
     try {
-      Utils.tryWithSafeFinallyAndFailureCallbacks { throw e }(catchBlock = { throw e },
+      Utils.tryWithSafeFinallyAndFailureCallbacks { throw e }(
+        catchBlock = { throw e },
         finallyBlock = { throw e })
     } catch {
       case t: Error =>
@@ -1257,22 +1351,22 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
   }
 
   test("load extensions") {
-    val extensions = Seq(
-      classOf[SimpleExtension],
-      classOf[ExtensionWithConf],
-      classOf[UnregisterableExtension]).map(_.getName())
+    val extensions =
+      Seq(classOf[SimpleExtension], classOf[ExtensionWithConf], classOf[UnregisterableExtension])
+        .map(_.getName())
 
     val conf = new SparkConf(false)
     val instances = Utils.loadExtensions(classOf[Object], extensions, conf)
     assert(instances.size === 2)
     assert(instances.count(_.isInstanceOf[SimpleExtension]) === 1)
 
-    val extWithConf = instances.find(_.isInstanceOf[ExtensionWithConf])
+    val extWithConf = instances
+      .find(_.isInstanceOf[ExtensionWithConf])
       .map(_.asInstanceOf[ExtensionWithConf])
       .get
     assert(extWithConf.conf eq conf)
 
-    class NestedExtension { }
+    class NestedExtension {}
 
     val invalid = Seq(classOf[NestedExtension].getName())
     intercept[SparkException] {
@@ -1486,8 +1580,9 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     assert(executorOffHeapMemory == offHeapMemoryInMB)
   }
 
-  test("executorMemoryOverhead when MEMORY_OFFHEAP_ENABLED is true, " +
-    "but MEMORY_OFFHEAP_SIZE not config scene") {
+  test(
+    "executorMemoryOverhead when MEMORY_OFFHEAP_ENABLED is true, " +
+      "but MEMORY_OFFHEAP_SIZE not config scene") {
     val sparkConf = new SparkConf()
       .set(MEMORY_OFFHEAP_ENABLED, true)
     val expected =
@@ -1498,27 +1593,28 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     assert(message.contains(expected))
   }
 
-  test("isPushBasedShuffleEnabled when PUSH_BASED_SHUFFLE_ENABLED " +
-    "and SHUFFLE_SERVICE_ENABLED are both set to true in YARN mode with maxAttempts set to 1") {
+  test(
+    "isPushBasedShuffleEnabled when PUSH_BASED_SHUFFLE_ENABLED " +
+      "and SHUFFLE_SERVICE_ENABLED are both set to true in YARN mode with maxAttempts set to 1") {
     val conf = new SparkConf()
     assert(Utils.isPushBasedShuffleEnabled(conf, isDriver = true) === false)
     conf.set(PUSH_BASED_SHUFFLE_ENABLED, true)
     conf.set(IS_TESTING, false)
-    assert(Utils.isPushBasedShuffleEnabled(
-      conf, isDriver = false, checkSerializer = false) === false)
+    assert(
+      Utils.isPushBasedShuffleEnabled(conf, isDriver = false, checkSerializer = false) === false)
     conf.set(SHUFFLE_SERVICE_ENABLED, true)
     conf.set(SparkLauncher.SPARK_MASTER, "yarn")
     conf.set("spark.yarn.maxAppAttempts", "1")
     conf.set(SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
     assert(Utils.isPushBasedShuffleEnabled(conf, isDriver = true) === true)
     conf.set("spark.yarn.maxAppAttempts", "2")
-    assert(Utils.isPushBasedShuffleEnabled(
-      conf, isDriver = false, checkSerializer = false) === true)
+    assert(
+      Utils.isPushBasedShuffleEnabled(conf, isDriver = false, checkSerializer = false) === true)
     conf.set(IO_ENCRYPTION_ENABLED, true)
     assert(Utils.isPushBasedShuffleEnabled(conf, isDriver = true) === false)
     conf.set(IO_ENCRYPTION_ENABLED, false)
-    assert(Utils.isPushBasedShuffleEnabled(
-      conf, isDriver = false, checkSerializer = false) === true)
+    assert(
+      Utils.isPushBasedShuffleEnabled(conf, isDriver = false, checkSerializer = false) === true)
     conf.set(SERIALIZER, "org.apache.spark.serializer.JavaSerializer")
     assert(Utils.isPushBasedShuffleEnabled(conf, isDriver = true) === false)
   }
