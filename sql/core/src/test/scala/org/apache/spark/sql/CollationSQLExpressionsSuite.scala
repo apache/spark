@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 
 import scala.collection.immutable.Seq
@@ -30,6 +31,8 @@ import org.apache.spark.sql.types._
 class CollationSQLExpressionsSuite
   extends QueryTest
   with SharedSparkSession {
+
+  private val testSuppCollations = Seq("UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI")
 
   test("Support Md5 hash expression with collation") {
     case class Md5TestCase(
@@ -1634,229 +1637,232 @@ class CollationSQLExpressionsSuite
 
   test("CurrentTimeZone expression with collation") {
     // Supported collations
-    Seq("UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI").foreach(collationName => {
+    testSuppCollations.foreach(collationName => {
       val query = "select current_timezone()"
-      // Result
+      // Data type check
       withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collationName) {
         val testQuery = sql(query)
         val dataType = StringType(collationName)
-        assertResult(dataType)(testQuery.schema.fields.head.dataType)
+        assert(testQuery.schema.fields.head.dataType.sameType(dataType))
       }
     })
   }
 
   test("DayName expression with collation") {
     // Supported collations
-    Seq("UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI").foreach(collationName => {
+    testSuppCollations.foreach(collationName => {
       val query = "select dayname(current_date())"
-      // Result
+      // Data type check
       withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collationName) {
         val testQuery = sql(query)
         val dataType = StringType(collationName)
-        assertResult(dataType)(testQuery.schema.fields.head.dataType)
+        assert(testQuery.schema.fields.head.dataType.sameType(dataType))
       }
     })
   }
 
   test("ToUnixTimestamp expression with collation") {
     // Supported collations
-    Seq("UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI").foreach(collationName => {
+    testSuppCollations.foreach(collationName => {
       val query =
         s"""
           |select to_unix_timestamp(collate('2021-01-01 00:00:00', '${collationName}'),
           |collate('yyyy-MM-dd HH:mm:ss', '${collationName}'))
           |""".stripMargin
-      // Result
+      // Result & data type check
       val testQuery = sql(query)
       val dataType = LongType
       val expectedResult = 1609488000L
-      assertResult(dataType)(testQuery.schema.fields.head.dataType)
-      assertResult(expectedResult)(testQuery.collect().head.getLong(0))
+      assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      checkAnswer(testQuery, Row(expectedResult))
     })
   }
 
   test("FromUnixTime expression with collation") {
     // Supported collations
-    Seq("UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI").foreach(collationName => {
+    testSuppCollations.foreach(collationName => {
       val query =
         s"""
           |select from_unixtime(1609488000, collate('yyyy-MM-dd HH:mm:ss', '${collationName}'))
           |""".stripMargin
-      // Result
+      // Result & data type check
       withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collationName) {
         val testQuery = sql(query)
         val dataType = StringType(collationName)
         val expectedResult = "2021-01-01 00:00:00"
-        assertResult(dataType)(testQuery.schema.fields.head.dataType)
-        assertResult(expectedResult)(testQuery.collect().head.getString(0))
+        assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+        checkAnswer(testQuery, Row(expectedResult))
       }
     })
   }
 
   test("NextDay expression with collation") {
     // Supported collations
-    Seq("UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI").foreach(collationName => {
+    testSuppCollations.foreach(collationName => {
       val query =
         s"""
           |select next_day('2015-01-14', collate('TU', '${collationName}'))
           |""".stripMargin
-      // Result
+      // Result & data type check
       withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collationName) {
         val testQuery = sql(query)
         val dataType = DateType
         val expectedResult = "2015-01-20"
-        assertResult(dataType)(testQuery.schema.fields.head.dataType)
-        assertResult(expectedResult)(testQuery.collect().head.getDate(0).toString)
+        assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+        checkAnswer(testQuery, Row(Date.valueOf(expectedResult)))
       }
     })
   }
 
   test("FromUTCTimestamp expression with collation") {
     // Supported collations
-    Seq("UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI").foreach(collationName => {
+    testSuppCollations.foreach(collationName => {
       val query =
         s"""
           |select from_utc_timestamp(collate('2016-08-31', '${collationName}'),
           |collate('Asia/Seoul', '${collationName}'))
           |""".stripMargin
-      // Result
+      // Result & data type check
       val testQuery = sql(query)
       val dataType = TimestampType
       val expectedResult = "2016-08-31 09:00:00.0"
-      assertResult(dataType)(testQuery.schema.fields.head.dataType)
-      assertResult(expectedResult)(testQuery.collect().head.getTimestamp(0).toString)
+      assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      checkAnswer(testQuery, Row(Timestamp.valueOf(expectedResult)))
     })
   }
 
   test("ToUTCTimestamp expression with collation") {
     // Supported collations
-    Seq("UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI").foreach(collationName => {
+    testSuppCollations.foreach(collationName => {
       val query =
         s"""
           |select to_utc_timestamp(collate('2016-08-31 09:00:00', '${collationName}'),
           |collate('Asia/Seoul', '${collationName}'))
           |""".stripMargin
-      // Result
+      // Result & data type check
       val testQuery = sql(query)
       val dataType = TimestampType
       val expectedResult = "2016-08-31 00:00:00.0"
-      assertResult(dataType)(testQuery.schema.fields.head.dataType)
-      assertResult(expectedResult)(testQuery.collect().head.getTimestamp(0).toString)
+      assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      checkAnswer(testQuery, Row(Timestamp.valueOf(expectedResult)))
     })
   }
 
   test("ParseToDate expression with collation") {
     // Supported collations
-    Seq("UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI").foreach(collationName => {
+    testSuppCollations.foreach(collationName => {
       val query =
         s"""
           |select to_date(collate('2016-12-31', '${collationName}'),
           |collate('yyyy-MM-dd', '${collationName}'))
           |""".stripMargin
-      // Result
+      // Result & data type check
       val testQuery = sql(query)
       val dataType = DateType
       val expectedResult = "2016-12-31"
-      assertResult(dataType)(testQuery.schema.fields.head.dataType)
-      assertResult(expectedResult)(testQuery.collect().head.getDate(0).toString)
+      assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      checkAnswer(testQuery, Row(Date.valueOf(expectedResult)))
     })
   }
 
   test("ParseToTimestamp expression with collation") {
     // Supported collations
-    Seq("UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI").foreach(collationName => {
+    testSuppCollations.foreach(collationName => {
       val query =
         s"""
           |select to_timestamp(collate('2016-12-31 23:59:59', '${collationName}'),
           |collate('yyyy-MM-dd HH:mm:ss', '${collationName}'))
           |""".stripMargin
-      // Result
+      // Result & data type check
       val testQuery = sql(query)
       val dataType = TimestampType
       val expectedResult = "2016-12-31 23:59:59.0"
-      assertResult(dataType)(testQuery.schema.fields.head.dataType)
-      assertResult(expectedResult)(testQuery.collect().head.getTimestamp(0).toString)
+      assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      checkAnswer(testQuery, Row(Timestamp.valueOf(expectedResult)))
     })
   }
 
   test("TruncDate expression with collation") {
     // Supported collations
-    Seq("UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI").foreach(collationName => {
+    testSuppCollations.foreach(collationName => {
       val query =
         s"""
           |select trunc(collate('2016-12-31 23:59:59', '${collationName}'), 'MM')
           |""".stripMargin
-      // Result
+      // Result & data type check
       val testQuery = sql(query)
       val dataType = DateType
       val expectedResult = "2016-12-01"
-      assertResult(dataType)(testQuery.schema.fields.head.dataType)
-      assertResult(expectedResult)(testQuery.collect().head.getDate(0).toString)
+      assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      checkAnswer(testQuery, Row(Date.valueOf(expectedResult)))
     })
   }
 
   test("TruncTimestamp expression with collation") {
     // Supported collations
-    Seq("UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI").foreach(collationName => {
+    testSuppCollations.foreach(collationName => {
       val query =
         s"""
           |select date_trunc(collate('HOUR', '${collationName}'),
           |collate('2015-03-05T09:32:05.359', '${collationName}'))
           |""".stripMargin
-      // Result
+      // Result & data type check
       val testQuery = sql(query)
       val dataType = TimestampType
       val expectedResult = "2015-03-05 09:00:00.0"
-      assertResult(dataType)(testQuery.schema.fields.head.dataType)
-      assertResult(expectedResult)(testQuery.collect().head.getTimestamp(0).toString)
+      assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      checkAnswer(testQuery, Row(Timestamp.valueOf(expectedResult)))
     })
   }
 
   test("MakeTimestamp expression with collation") {
     // Supported collations
-    Seq("UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI").foreach(collationName => {
+    testSuppCollations.foreach(collationName => {
       val query =
         s"""
           |select make_timestamp(2014, 12, 28, 6, 30, 45.887, collate('CET', '${collationName}'))
           |""".stripMargin
-      // Result
+      // Result & data type check
       val testQuery = sql(query)
       val dataType = TimestampType
       val expectedResult = "2014-12-27 21:30:45.887"
-      assertResult(dataType)(testQuery.schema.fields.head.dataType)
-      assertResult(expectedResult)(testQuery.collect().head.getTimestamp(0).toString)
+      assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      checkAnswer(testQuery, Row(Timestamp.valueOf(expectedResult)))
     })
   }
 
   test("DatePart expression with collation") {
     // Supported collations
-    Seq("UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI").foreach(collationName => {
+    testSuppCollations.foreach(collationName => {
       val query =
         s"""
           |select date_part(collate('Week', '${collationName}'),
           |collate('2019-08-12 01:00:00.123456', '${collationName}'))
           |""".stripMargin
-      // Result
+      // Result & data type check
       val testQuery = sql(query)
       val dataType = IntegerType
       val expectedResult = 33
-      assertResult(dataType)(testQuery.schema.fields.head.dataType)
-      assertResult(expectedResult)(testQuery.collect().head.getInt(0))
+      assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      checkAnswer(testQuery, Row(expectedResult))
     })
   }
 
   test("ConvertTimezone expression with collation") {
     // Supported collations
-    Seq("UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI").foreach(collationName => {
+    testSuppCollations.foreach(collationName => {
       val query =
         s"""
-          |select convert_timezone(collate('America/Los_Angeles', '${collationName}'),
-          |collate('UTC', '${collationName}'), collate('2021-12-06 00:00:00', '${collationName}'))
+          |select date_format(convert_timezone(collate('America/Los_Angeles', '${collationName}'),
+          |collate('UTC', '${collationName}'), collate('2021-12-06 00:00:00', '${collationName}')),
+          |'yyyy-MM-dd HH:mm:ss.S')
           |""".stripMargin
-      // Result
+      // Result & data type check
       val testQuery = sql(query)
-      val dataType = TimestampNTZType
-      assertResult(dataType)(testQuery.schema.fields.head.dataType)
+      val dataType = StringType
+      val expectedResult = "2021-12-06 08:00:00.0"
+      assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      checkAnswer(testQuery, Row(expectedResult))
     })
   }
 
