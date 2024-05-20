@@ -223,11 +223,11 @@ View Query Output Columns	[c1, c2]
 
 
 -- !query
-SET spark.sql.viewSchemaBindingMode=DISABLED
+SET spark.sql.legacy.viewSchemaCompensation=false
 -- !query schema
 struct<key:string,value:string>
 -- !query output
-spark.sql.viewSchemaBindingMode	DISABLED
+spark.sql.legacy.viewSchemaCompensation	false
 
 
 -- !query
@@ -279,6 +279,7 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM t     	                    
 View Original Text  	SELECT * FROM t     	                    
+View Schema Mode    	BINDING             	                    
 View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[c1]
 
@@ -288,23 +289,7 @@ ALTER VIEW v WITH SCHEMA BINDING
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "FEATURE_NOT_ENABLED",
-  "sqlState" : "56038",
-  "messageParameters" : {
-    "configKey" : "spark.sql.viewSchemaBindingMode",
-    "configValue" : "COMPENSATION",
-    "featureName" : "VIEW ... WITH SCHEMA ..."
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 14,
-    "stopIndex" : 32,
-    "fragment" : "WITH SCHEMA BINDING"
-  } ]
-}
+
 
 
 -- !query
@@ -324,6 +309,7 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM t     	                    
 View Original Text  	SELECT * FROM t     	                    
+View Schema Mode    	BINDING             	                    
 View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[c1]
 
@@ -379,6 +365,7 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM t     	                    
 View Original Text  	SELECT * FROM t     	                    
+View Schema Mode    	BINDING             	                    
 View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[c1]
 

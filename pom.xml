@@ -323,11 +323,11 @@
       -Dio.netty.tryReflectionSetAccessible=true
     </extraJavaTestArgs>
     <mariadb.java.client.version>3.4.0</mariadb.java.client.version>
-    <mysql.connector.version>8.3.0</mysql.connector.version>
+    <mysql.connector.version>8.4.0</mysql.connector.version>
     <postgresql.version>42.7.3</postgresql.version>
     <db2.jcc.version>11.5.9.0</db2.jcc.version>
     <mssql.jdbc.version>12.6.1.jre11</mssql.jdbc.version>
-    <ojdbc11.version>23.3.0.23.09</ojdbc11.version>
+    <ojdbc11.version>23.4.0.24.05</ojdbc11.version>
   </properties>
   <repositories>
     <repository>
@@ -3008,7 +3008,7 @@
             <dependency>
               <groupId>org.codehaus.mojo</groupId>
               <artifactId>extra-enforcer-rules</artifactId>
-              <version>1.7.0</version>
+              <version>1.8.0</version>
             </dependency>
           </dependencies>
         </plugin>

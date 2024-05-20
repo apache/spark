@@ -940,7 +940,11 @@ class SessionCatalog(
       ** For schema (type) evolution, we take the column as is.
       */
       case SchemaBinding => UpCast(col, toField.dataType)
-      case SchemaUnsupported => UpCast(col, toField.dataType)
+      case SchemaUnsupported => if (conf.viewSchemaCompensation) {
+        Cast(col, toField.dataType, ansiEnabled = true)
+      } else {
+        UpCast(col, toField.dataType)
+      }
       case SchemaCompensation => Cast(col, toField.dataType, ansiEnabled = true)
       case SchemaTypeEvolution => col
       case other => throw SparkException.internalError("Unexpected ViewSchemaMode")

@@ -1113,6 +1113,7 @@ trait ShowCreateTableCommandBase extends SQLConfHelper {
     showViewDataColumns(metadata, builder)
     showTableComment(metadata, builder)
     showViewProperties(metadata, builder)
+    showViewSchemaBinding(metadata, builder)
     showViewText(metadata, builder)
   }
 
@@ -1139,6 +1140,12 @@ trait ShowCreateTableCommandBase extends SQLConfHelper {
       }
 
       builder ++= s"TBLPROPERTIES ${concatByMultiLines(props)}"
+    }
+  }
+
+  private def showViewSchemaBinding(metadata: CatalogTable, builder: StringBuilder): Unit = {
+    if (SQLConf.get.viewSchemaBindingEnabled) {
+      builder ++= s"WITH SCHEMA ${metadata.viewSchemaMode.toString}\n"
     }
   }
 
