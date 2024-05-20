@@ -117,7 +117,8 @@ object DataType {
   private val FIXED_DECIMAL = """decimal\(\s*(\d+)\s*,\s*(\-?\d+)\s*\)""".r
   private val CHAR_TYPE = """char\(\s*(\d+)\s*\)""".r
   private val VARCHAR_TYPE = """varchar\(\s*(\d+)\s*\)""".r
-  private val COLLATED_STRING_TYPE = """string\s+collate\s+([\w_]+|`[\w_]`)""".r
+
+  val COLLATIONS_METADATA_KEY = "__COLLATIONS"
 
   def fromDDL(ddl: String): DataType = {
     parseTypeWithFallback(
@@ -182,9 +183,6 @@ object DataType {
   /** Given the string representation of a type, return its DataType */
   private def nameToType(name: String): DataType = {
     name match {
-      case COLLATED_STRING_TYPE(collation) =>
-        val collationId = CollationFactory.collationNameToId(collation)
-        StringType(collationId)
       case "decimal" => DecimalType.USER_DEFAULT
       case FIXED_DECIMAL(precision, scale) => DecimalType(precision.toInt, scale.toInt)
       case CHAR_TYPE(length) => CharType(length.toInt)
@@ -208,26 +206,40 @@ object DataType {
   }
 
   // NOTE: Map fields must be sorted in alphabetical order to keep consistent with the Python side.
-  private[sql] def parseDataType(json: JValue): DataType = json match {
+  private[sql] def parseDataType(
+      json: JValue,
+      fieldPath: String = "",
+      collationsMap: Map[String, String] = Map.empty): DataType = json match {
     case JString(name) =>
-      nameToType(name)
+      collationsMap.get(fieldPath) match {
+        case Some(collation) =>
+          assertValidTypeForCollations(fieldPath, name, collationsMap)
+          stringTypeWithCollation(collation)
+        case _ => nameToType(name)
+      }
 
     case JSortedObject(
     ("containsNull", JBool(n)),
     ("elementType", t: JValue),
     ("type", JString("array"))) =>
-      ArrayType(parseDataType(t), n)
+      assertValidTypeForCollations(fieldPath, "array", collationsMap)
+      val elementType = parseDataType(t, fieldPath + ".element", collationsMap)
+      ArrayType(elementType, n)
 
     case JSortedObject(
     ("keyType", k: JValue),
     ("type", JString("map")),
     ("valueContainsNull", JBool(n)),
     ("valueType", v: JValue)) =>
-      MapType(parseDataType(k), parseDataType(v), n)
+      assertValidTypeForCollations(fieldPath, "map", collationsMap)
+      val keyType = parseDataType(k, fieldPath + ".key", collationsMap)
+      val valueType = parseDataType(v, fieldPath + ".value", collationsMap)
+      MapType(keyType, valueType, n)
 
     case JSortedObject(
     ("fields", JArray(fields)),
     ("type", JString("struct"))) =>
+      assertValidTypeForCollations(fieldPath, "struct", collationsMap)
       StructType(fields.map(parseStructField))
 
     // Scala/Java UDT
@@ -253,11 +265,18 @@ object DataType {
 
   private def parseStructField(json: JValue): StructField = json match {
     case JSortedObject(
-    ("metadata", metadata: JObject),
+    ("metadata", JObject(metadataFields)),
     ("name", JString(name)),
     ("nullable", JBool(nullable)),
     ("type", dataType: JValue)) =>
-      StructField(name, parseDataType(dataType), nullable, Metadata.fromJObject(metadata))
+      val collationsMap = getCollationsMap(metadataFields)
+      val metadataWithoutCollations =
+        JObject(metadataFields.filterNot(_._1 == COLLATIONS_METADATA_KEY))
+      StructField(
+        name,
+        parseDataType(dataType, name, collationsMap),
+        nullable,
+        Metadata.fromJObject(metadataWithoutCollations))
     // Support reading schema when 'metadata' is missing.
     case JSortedObject(
     ("name", JString(name)),
@@ -272,6 +291,41 @@ object DataType {
     case other => throw new SparkIllegalArgumentException(
       errorClass = "_LEGACY_ERROR_TEMP_3250",
       messageParameters = Map("other" -> compact(render(other))))
+  }
+
+  private def assertValidTypeForCollations(
+      fieldPath: String,
+      fieldType: String,
+      collationMap: Map[String, String]): Unit = {
+    if (collationMap.contains(fieldPath) && fieldType != "string") {
+      throw new SparkIllegalArgumentException(
+        errorClass = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
+        messageParameters = Map("jsonType" -> fieldType))
+    }
+  }
+
+  /**
+   * Returns a map of field path to collation name.
+   */
+  private def getCollationsMap(metadataFields: List[JField]): Map[String, String] = {
+    val collationsJsonOpt = metadataFields.find(_._1 == COLLATIONS_METADATA_KEY).map(_._2)
+    collationsJsonOpt match {
+      case Some(JObject(fields)) =>
+        fields.collect {
+          case (fieldPath, JString(collation)) =>
+            collation.split("\\.", 2) match {
+              case Array(provider: String, collationName: String) =>
+                CollationFactory.assertValidProvider(provider)
+                fieldPath -> collationName
+            }
+        }.toMap
+
+      case _ => Map.empty
+    }
+  }
+
+  private def stringTypeWithCollation(collationName: String): StringType = {
+    StringType(CollationFactory.collationNameToId(collationName))
   }
 
   protected[types] def buildFormattedString(
