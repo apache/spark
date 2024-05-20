@@ -342,7 +342,7 @@ public final class CollationFactory {
         }
         for (String localeName : ICULocaleMap.keySet()) {
           String localeUppercase = localeName.toUpperCase();
-          // locale names are unique case-insensitively
+          // Locale names are unique case-insensitively.
           assert (!ICULocaleMapUppercase.containsKey(localeUppercase));
           ICULocaleMapUppercase.put(localeUppercase, localeName);
         }
