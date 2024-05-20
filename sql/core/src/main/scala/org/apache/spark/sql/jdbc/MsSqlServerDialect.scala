@@ -29,7 +29,7 @@ import org.apache.spark.sql.connector.expressions.{Cast, Expression, NullOrderin
 import org.apache.spark.sql.connector.expressions.aggregate.Avg
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.MsSqlServerDialect.{GEOGRAPHY, GEOMETRY}
 import org.apache.spark.sql.types._
@@ -54,7 +54,7 @@ private case class MsSqlServerDialect() extends JdbcDialect {
   // scalastyle:on line.size.limit
   private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
     "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP")
-  private val supportedStringFunctions = Set("UPPER", "LOWER", "CHAR_LENGTH")
+  private val supportedStringFunctions = Set("UPPER", "LOWER")
   private val supportedMathFunctions = Set("SIN", "COS", "ABS", "FLOOR")
   private val supportedSqlFunctions = Set("COALESCE")
   private val supportedFunctions =
@@ -86,7 +86,6 @@ private case class MsSqlServerDialect() extends JdbcDialect {
       case "VAR_SAMP" => "VAR"
       case "STDDEV_POP" => "STDEVP"
       case "STDDEV_SAMP" => "STDEV"
-      case "CHAR_LENGTH" => "DATALENGTH"
       case _ => super.dialectFunctionName(funcName)
     }
 
@@ -163,6 +162,7 @@ private case class MsSqlServerDialect() extends JdbcDialect {
     case ByteType => Some(JdbcType("SMALLINT", java.sql.Types.TINYINT))
     case LongType => Some(JdbcType("BIGINT", java.sql.Types.BIGINT))
     case DoubleType => Some(JdbcType("FLOAT", java.sql.Types.FLOAT))
+    case _ if !SQLConf.get.legacyMsSqlServerNumericMappingEnabled => JdbcUtils.getCommonJDBCType(dt)
     case _ => None
   }
 

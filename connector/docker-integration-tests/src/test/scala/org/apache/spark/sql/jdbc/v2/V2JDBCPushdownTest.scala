@@ -281,6 +281,13 @@ trait V2JDBCPushdownTest extends SharedSparkSession {
     checkAnswer(df, Row("   forth   "))
     assert(isFilterRemoved(df))
     commonAssertionOnDataFrame(df)
+
+    val df2 = sql(
+      s"SELECT st " +
+        s"FROM `$catalog`.`$schema`.`${tablePrefix}_string_test` where length(id) = 1")
+    assert(df2.collect().length == 4)
+    assert(isFilterRemoved(df2))
+    commonAssertionOnDataFrame(df2)
   }
 
   test("ABS predicate push down") {
