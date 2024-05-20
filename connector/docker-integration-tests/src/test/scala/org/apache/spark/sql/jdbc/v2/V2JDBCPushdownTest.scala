@@ -23,9 +23,7 @@ import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LocalLimit}
 import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.tags.DockerTest
 
-@DockerTest
 trait V2JDBCPushdownTest extends SharedSparkSession {
   protected def isFilterRemoved(df: DataFrame): Boolean = {
     df.queryExecution.sparkPlan.collectFirst {
