@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-import scala.collection.mutable.{ArrayBuffer, Set}
+import scala.collection.mutable.{ArrayBuffer, ListBuffer, Set}
 import scala.jdk.CollectionConverters._
 import scala.util.{Left, Right}
 
@@ -49,7 +49,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, con
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors, SqlBatchLangErrors}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLStmt
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LEGACY_BANG_EQUALS_NOT
@@ -113,6 +113,78 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       node.getChild(0).accept(this)
     } else {
       null
+    }
+  }
+
+  override def visitBatchOrSingleStatement(ctx: BatchOrSingleStatementContext): BatchBody = {
+    if (ctx.batchCompound() != null) {
+      visit(ctx.batchCompound()).asInstanceOf[BatchBody]
+    } else {
+      val logicalPlan = visitSingleStatement(ctx.singleStatement())
+      BatchBody(List(SparkStatementWithPlan(
+        parsedPlan = logicalPlan,
+        sourceStart = ctx.start.getStartIndex,
+        sourceEnd = ctx.stop.getStopIndex + 1)))
+    }
+  }
+
+  override def visitBatchCompound(ctx: BatchCompoundContext): BatchBody = {
+    visitBatchBody(ctx.batchBody(), allowDeclareAtTop = true)
+  }
+
+  private def visitBatchBody(ctx: BatchBodyContext, allowDeclareAtTop: Boolean): BatchBody = {
+    val buff = ListBuffer[BatchPlanStatement]()
+    for (i <- 0 until ctx.getChildCount) {
+      val child = visit(ctx.getChild(i))
+      child match {
+        case statement: BatchPlanStatement => buff += statement
+        case null => // When terminal nodes are visited (like SEMICOLON, EOF, etc.)
+      }
+    }
+
+    val statements = buff.toList
+    if (allowDeclareAtTop) {
+      val createVarAfterTop = statements
+        .dropWhile(stmt => stmt.isInstanceOf[SparkStatementWithPlan]
+          && stmt.asInstanceOf[SparkStatementWithPlan].parsedPlan.isInstanceOf[CreateVariable])
+        .filter(_.isInstanceOf[SparkStatementWithPlan])
+        .find(_.asInstanceOf[SparkStatementWithPlan].parsedPlan.isInstanceOf[CreateVariable])
+      if (createVarAfterTop.isDefined) {
+        val varDeclarationInterval = new Interval(
+          createVarAfterTop.get.asInstanceOf[SparkStatementWithPlan].sourceStart,
+          createVarAfterTop.get.asInstanceOf[SparkStatementWithPlan].sourceEnd)
+        throw SqlBatchLangErrors.variableDeclarationOnlyAtBeginning(
+          ctx.start.getInputStream.getText(varDeclarationInterval))
+      }
+    } else {
+      val createVar = statements
+        .filter(_.isInstanceOf[SparkStatementWithPlan])
+        .find(_.asInstanceOf[SparkStatementWithPlan].parsedPlan.isInstanceOf[CreateVariable])
+      if (createVar.isDefined) {
+        val varDeclarationInterval = new Interval(
+          createVar.get.asInstanceOf[SparkStatementWithPlan].sourceStart,
+          createVar.get.asInstanceOf[SparkStatementWithPlan].sourceEnd)
+        throw SqlBatchLangErrors.variableDeclarationNotAllowed(
+          ctx.start.getInputStream.getText(varDeclarationInterval))
+      }
+    }
+
+    BatchBody(statements)
+  }
+
+  override def visitBatchBody(ctx: BatchBodyContext): BatchBody = {
+    visitBatchBody(ctx, allowDeclareAtTop = false)
+  }
+
+  override def visitBatchStatement(ctx: BatchStatementContext): BatchPlanStatement = {
+    val child = visit(ctx.getChild(0))
+    child match {
+      case logicalPlan: LogicalPlan =>
+        SparkStatementWithPlan(
+          parsedPlan = logicalPlan,
+          sourceStart = ctx.statement().start.getStartIndex,
+          sourceEnd = ctx.statement().stop.getStopIndex + 1)
+      case statement: BatchPlanStatement => statement
     }
   }
 
