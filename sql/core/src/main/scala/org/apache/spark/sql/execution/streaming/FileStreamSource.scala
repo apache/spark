@@ -114,6 +114,11 @@ class FileStreamSource(
       "the same and causes data lost.")
   }
 
+
+  private val maxCachedFiles = sourceOptions.maxCachedFiles
+
+  private val discardCachedInputRatio = sourceOptions.discardCachedInputRatio
+
   /** A mapping from a file that we have processed to some timestamp it was last modified. */
   // Visible for testing and debugging in production.
   val seenFiles = new SeenFilesMap(maxFileAgeMs, fileNameOnly)
@@ -184,7 +189,7 @@ class FileStreamSource(
       case files: ReadMaxFiles if !sourceOptions.latestFirst =>
         // we can cache and reuse remaining fetched list of files in further batches
         val (bFiles, usFiles) = newFiles.splitAt(files.maxFiles())
-        if (usFiles.size < files.maxFiles() * DISCARD_UNSEEN_INPUT_RATIO) {
+        if (usFiles.size < files.maxFiles() * discardCachedInputRatio) {
           // Discard unselected files if the number of files are smaller than threshold.
           // This is to avoid the case when the next batch would have too few files to read
           // whereas there're new files available.
@@ -202,7 +207,7 @@ class FileStreamSource(
         // we can cache and reuse remaining fetched list of files in further batches
         val (FilesSplit(bFiles, _), FilesSplit(usFiles, rSize)) =
           takeFilesUntilMax(newFiles, files.maxBytes())
-        if (rSize.toDouble < (files.maxBytes() * DISCARD_UNSEEN_INPUT_RATIO)) {
+        if (rSize.toDouble < (files.maxBytes() * discardCachedInputRatio)) {
           // Discard unselected files if the total size of files is smaller than threshold.
           // This is to avoid the case when the next batch would have too small of a size of
           // files to read whereas there're new files available.
@@ -221,8 +226,8 @@ class FileStreamSource(
     }
 
     if (unselectedFiles != null && unselectedFiles.nonEmpty) {
-      logTrace(s"Taking first $MAX_CACHED_UNSEEN_FILES unread files.")
-      unreadFiles = unselectedFiles.take(MAX_CACHED_UNSEEN_FILES)
+      logTrace(s"Taking first $maxCachedFiles unread files.")
+      unreadFiles = unselectedFiles.take(maxCachedFiles)
       logTrace(s"${unreadFiles.size} unread files are available for further batches.")
     } else {
       unreadFiles = null
@@ -425,9 +430,6 @@ class FileStreamSource(
 object FileStreamSource {
   /** Timestamp for file modification time, in ms since January 1, 1970 UTC. */
   type Timestamp = Long
-
-  val DISCARD_UNSEEN_INPUT_RATIO = 0.2
-  val MAX_CACHED_UNSEEN_FILES = 10000
 
   case class FileEntry(
       path: String, // uri-encoded path string
