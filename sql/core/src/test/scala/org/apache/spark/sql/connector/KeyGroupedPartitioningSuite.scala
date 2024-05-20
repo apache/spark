@@ -1169,6 +1169,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     Seq(true, false).foreach { shuffle =>
       withSQLConf(
         SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> shuffle.toString,
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
         SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true") {
         val df = createJoinTestDF(Seq("id" -> "item_id"))
         checkAnswer(df, Seq(Row(1, "aa", 40.0, 42.0), Row(3, "bb", 10.0, 19.5)))
@@ -1450,6 +1451,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
         Seq(true, false).foreach { allowJoinKeysSubsetOfPartitionKeys =>
           withSQLConf(
             SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+            SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
             SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
             SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key ->
               allowJoinKeysSubsetOfPartitionKeys.toString,
@@ -1609,6 +1611,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
         Seq(true, false).foreach { allowJoinKeysSubsetOfPartitionKeys =>
           withSQLConf(
             SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+            SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
             SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
             SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key ->
               allowJoinKeysSubsetOfPartitionKeys.toString,
@@ -1738,6 +1741,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
 
         withSQLConf(
           SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+          SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
           SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
           SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
           SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
