@@ -19,7 +19,9 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.io.{BufferedReader, InputStreamReader}
 import java.nio.charset.StandardCharsets
+
 import scala.reflect.ClassTag
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FSDataOutputStream, Path}
 import org.json4s.{Formats, NoTypeHints}

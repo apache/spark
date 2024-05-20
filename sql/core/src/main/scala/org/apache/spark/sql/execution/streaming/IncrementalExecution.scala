@@ -190,6 +190,8 @@ class IncrementalExecution(
   object WriteStatefulOperatorMetadataRule extends SparkPlanPartialRule {
     override val rule: PartialFunction[SparkPlan, SparkPlan] = {
       case stateStoreWriter: StateStoreWriter
+        // We only want to write the OperatorStateMetadata via this rule if
+        // we are in the first batch and the state format version is 1.
         if isFirstBatch && stateStoreWriter.operatorStateMetadataVersion == 1 =>
           val metadata = stateStoreWriter.operatorStateMetadata()
           val metadataWriter = new OperatorStateMetadataWriter(new Path(

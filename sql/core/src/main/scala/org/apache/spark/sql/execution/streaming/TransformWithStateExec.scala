@@ -106,9 +106,6 @@ case class TransformWithStateExec(
    * to write the metadata of the operator to the checkpoint file.
    */
   override def writeOperatorStateMetadata(): Unit = {
-    operatorProperties.value.foreach { case (key, value) =>
-      logError(s"### $key: $value")
-    }
     val metadata = operatorStateMetadata()
     val metadataWriter = new OperatorStateMetadataWriter(
       new Path(stateInfo.get.checkpointLocation,
