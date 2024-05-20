@@ -22,12 +22,11 @@ import scala.collection.immutable.Seq
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LocalLimit}
 import org.apache.spark.sql.execution.FilterExec
-import org.apache.spark.sql.jdbc.DockerIntegrationFunSuite
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.tags.DockerTest
 
 @DockerTest
-trait V2JDBCPushdownTest extends SharedSparkSession with DockerIntegrationFunSuite {
+trait V2JDBCPushdownTest extends SharedSparkSession {
   protected def isFilterRemoved(df: DataFrame): Boolean = {
     df.queryExecution.sparkPlan.collectFirst {
       case f: FilterExec => f
@@ -340,7 +339,7 @@ trait V2JDBCPushdownTest extends SharedSparkSession with DockerIntegrationFunSui
     val df = sql(
       s"SELECT id " +
         s"FROM `$catalog`.`$schema`.`$tablePrefix` " +
-        s"ORDER BY num_col NULLS FIRST " +
+        s"ORDER BY num_col NULLS FIRST, id " +
         s"LIMIT 2 "
     )
     checkAnswer(df, Seq(Row(2), Row(4)))
@@ -350,7 +349,7 @@ trait V2JDBCPushdownTest extends SharedSparkSession with DockerIntegrationFunSui
     val df2 = sql(
       s"SELECT id " +
         s"FROM `$catalog`.`$schema`.`$tablePrefix` " +
-        s"ORDER BY num_col NULLS LAST " +
+        s"ORDER BY num_col NULLS LAST, id " +
         s"LIMIT 2 "
     )
     checkAnswer(df2, Seq(Row(8), Row(3)))
@@ -360,7 +359,7 @@ trait V2JDBCPushdownTest extends SharedSparkSession with DockerIntegrationFunSui
     val df3 = sql(
       s"SELECT id " +
         s"FROM `$catalog`.`$schema`.`$tablePrefix` " +
-        s"ORDER BY num_col DESC NULLS FIRST " +
+        s"ORDER BY num_col DESC NULLS FIRST, id " +
         s"LIMIT 2 "
     )
     checkAnswer(df3, Seq(Row(2), Row(4)))
@@ -370,7 +369,7 @@ trait V2JDBCPushdownTest extends SharedSparkSession with DockerIntegrationFunSui
     val df4 = sql(
       s"SELECT id " +
         s"FROM `$catalog`.`$schema`.`$tablePrefix` " +
-        s"ORDER BY num_col DESC NULLS LAST " +
+        s"ORDER BY num_col DESC NULLS LAST, id " +
         s"LIMIT 2 "
     )
     checkAnswer(df4, Seq(Row(6), Row(5)))
