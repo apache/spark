@@ -183,6 +183,14 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   def requiredChildOrdering: Seq[Seq[SortOrder]] = Seq.fill(children.size)(Nil)
 
   /**
+   * This method will be called at the end of a MicrobatchExecution
+   * to write the metadata of the operator to the checkpoint file.
+   */
+  def writeOperatorStateMetadata(): Unit = {
+    children.foreach(_.writeOperatorStateMetadata())
+  }
+
+  /**
    * Returns the result of this query as an RDD[InternalRow] by delegating to `doExecute` after
    * preparations.
    *

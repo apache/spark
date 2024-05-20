@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.streaming
 import java.util
 import java.util.UUID
 
+import scala.collection.mutable
+
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
@@ -94,6 +96,8 @@ class StatefulProcessorHandleImpl(
    */
   private[sql] val ttlStates: util.List[TTLState] = new util.ArrayList[TTLState]()
 
+  val operatorMetadata: mutable.Map[String, String] = mutable.Map.empty
+
   private val BATCH_QUERY_ID = "00000000-0000-0000-0000-000000000000"
 
   private def buildQueryInfo(): QueryInfo = {
@@ -129,6 +133,7 @@ class StatefulProcessorHandleImpl(
       stateName: String,
       valEncoder: Encoder[T]): ValueState[T] = {
     verifyStateVarOperations("get_value_state")
+    operatorMetadata.put(stateName, "VALUE, FALSE")
     incrementMetric("numValueStateVars")
     val resultState = new ValueStateImpl[T](store, stateName, keyEncoder, valEncoder)
     resultState
@@ -139,6 +144,7 @@ class StatefulProcessorHandleImpl(
       valEncoder: Encoder[T],
       ttlConfig: TTLConfig): ValueState[T] = {
     verifyStateVarOperations("get_value_state")
+    operatorMetadata.put(stateName, "VALUE, TRUE")
     validateTTLConfig(ttlConfig, stateName)
 
     assert(batchTimestampMs.isDefined)
@@ -240,6 +246,7 @@ class StatefulProcessorHandleImpl(
 
   override def getListState[T](stateName: String, valEncoder: Encoder[T]): ListState[T] = {
     verifyStateVarOperations("get_list_state")
+    operatorMetadata.put(stateName, "LIST, FALSE")
     incrementMetric("numListStateVars")
     val resultState = new ListStateImpl[T](store, stateName, keyEncoder, valEncoder)
     resultState
@@ -266,6 +273,7 @@ class StatefulProcessorHandleImpl(
       ttlConfig: TTLConfig): ListState[T] = {
 
     verifyStateVarOperations("get_list_state")
+    operatorMetadata.put(stateName, "LIST, TRUE")
     validateTTLConfig(ttlConfig, stateName)
 
     assert(batchTimestampMs.isDefined)
@@ -282,6 +290,7 @@ class StatefulProcessorHandleImpl(
       userKeyEnc: Encoder[K],
       valEncoder: Encoder[V]): MapState[K, V] = {
     verifyStateVarOperations("get_map_state")
+    operatorMetadata.put(stateName, "MAP, FALSE")
     incrementMetric("numMapStateVars")
     val resultState = new MapStateImpl[K, V](store, stateName, keyEncoder, userKeyEnc, valEncoder)
     resultState
@@ -293,6 +302,7 @@ class StatefulProcessorHandleImpl(
       valEncoder: Encoder[V],
       ttlConfig: TTLConfig): MapState[K, V] = {
     verifyStateVarOperations("get_map_state")
+    operatorMetadata.put(stateName, "MAP, TRUE")
     validateTTLConfig(ttlConfig, stateName)
 
     assert(batchTimestampMs.isDefined)

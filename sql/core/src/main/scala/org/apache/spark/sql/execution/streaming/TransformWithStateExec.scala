@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming
 import java.util.UUID
 import java.util.concurrent.TimeUnit.NANOSECONDS
 
+import org.apache.spark.SparkContext
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -32,8 +33,42 @@ import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSch
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
-import org.apache.spark.util.{CompletionIterator, SerializableConfiguration, Utils}
+import org.apache.spark.util.{AccumulatorV2, CompletionIterator, SerializableConfiguration, Utils}
 
+class ColFamilyMetadata(initValue: Map[String, String] = Map.empty)
+  extends AccumulatorV2[Map[String, String], Map[String, String]] {
+
+  private var _value: Map[String, String] = initValue
+
+  override def isZero: Boolean = _value.isEmpty
+
+  override def copy(): AccumulatorV2[Map[String, String], Map[String, String]] = {
+    val newAcc = new ColFamilyMetadata
+    newAcc._value = _value
+    newAcc
+  }
+
+  override def reset(): Unit = _value = Map.empty[String, String]
+
+  override def add(v: Map[String, String]): Unit = _value ++= v
+
+  override def merge(other: AccumulatorV2[Map[String, String], Map[String, String]]): Unit = {
+    _value ++= other.value
+  }
+
+  override def value: Map[String, String] = _value
+}
+
+object ColFamilyMetadata {
+  def create(
+      sc: SparkContext,
+      name: String,
+      initValue: Map[String, String] = Map.empty): ColFamilyMetadata = {
+    val acc = new ColFamilyMetadata(initValue)
+    acc.register(sc, name = Some(name))
+    acc
+  }
+}
 /**
  * Physical operator for executing `TransformWithState`
  *
@@ -76,6 +111,20 @@ case class TransformWithStateExec(
   extends BinaryExecNode with StateStoreWriter with WatermarkSupport with ObjectProducerExec {
 
   override def shortName: String = "transformWithStateExec"
+
+  val colFamilyMetadataAccumulator: ColFamilyMetadata =
+    ColFamilyMetadata.create(sparkContext, "colFamilyMetadata")
+
+  /**
+   * This method will be called at the end of a MicrobatchExecution
+   * to write the metadata of the operator to the checkpoint file.
+   */
+  override def writeOperatorStateMetadata(): Unit = {
+    colFamilyMetadataAccumulator.value.foreach { case (key, value) =>
+      logError(s"### $key: $value")
+    }
+    children.foreach(_.writeOperatorStateMetadata())
+  }
 
   override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
     if (timeMode == ProcessingTime) {
@@ -306,6 +355,7 @@ case class TransformWithStateExec(
           store.abort()
         }
       }
+      colFamilyMetadataAccumulator.add(processorHandle.operatorMetadata.toMap)
       setStoreMetrics(store)
       setOperatorMetrics()
       statefulProcessor.close()
