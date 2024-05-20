@@ -28,6 +28,7 @@ import org.apache.spark.sql.execution.datasources.v2.jdbc.MysqlTableCatalog
 import org.apache.spark.sql.jdbc.{DatabaseOnDocker, DockerJDBCIntegrationSuite, JdbcDialect, MySQLDatabaseOnDocker, MySQLDialect}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
+@DockerTest
 class MySQLCastSuite extends DockerJDBCIntegrationSuite with JDBCConnectorCastSuiteBase {
   override val db: DatabaseOnDocker = new MySQLDatabaseOnDocker
 

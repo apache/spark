@@ -28,6 +28,7 @@ import org.apache.spark.sql.execution.datasources.v2.jdbc.PostgresqlTableCatalog
 import org.apache.spark.sql.jdbc.{DatabaseOnDocker, DockerJDBCIntegrationSuite, JdbcDialect, PostgresDialect}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
+@DockerTest
 class PostgreSQLCastSuite extends DockerJDBCIntegrationSuite with JDBCConnectorCastSuiteBase {
   override val schemaName: String = "cast_schema"
 

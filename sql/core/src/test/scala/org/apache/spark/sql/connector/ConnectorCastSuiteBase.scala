@@ -20,7 +20,6 @@ package org.apache.spark.sql.connector
 import java.sql.Connection
 
 import org.apache.spark.SparkFunSuite
-
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, EvalMode}
 import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
@@ -28,12 +27,22 @@ import org.apache.spark.sql.connector.expressions.{Cast => ConnectorCast}
 import org.apache.spark.sql.jdbc.JdbcDialect
 import org.apache.spark.sql.types._
 
+/**
+ * Base class for connector cast suites.
+ * It defines table catalog which should load remote table and then to try to do all casts
+ * that are supported on spark.
+ */
 trait ConnectorCastSuiteBase extends SparkFunSuite {
   def tableCatalog: TableCatalog
   protected def dropTable(table: Identifier): Unit
   protected def checkCast(cast: ConnectorCast, tableIdentifier: Identifier): Unit
 }
 
+/**
+ * Connector numeric cast suite.
+ * Defines a test where inheritor should make table on remote with all possible numeric types,
+ * and then, for each column, test will try to cast that column to supported types.
+ */
 trait ConnectorNumericCastSuite extends ConnectorCastSuiteBase {
 
   var numericTypesTable: Identifier = _
@@ -75,6 +84,16 @@ trait ConnectorNumericCastSuite extends ConnectorCastSuiteBase {
   }
 }
 
+/**
+ * Connector string cast suite.
+ * Tests whether string can be casted to supported types.
+ * Inheritors should define table with next structure:
+ * col_int - Int type column (to test string to int conversion)
+ * col_long - Long type column (to test string to long conversion)
+ * col_date - Date type column (to test string to date conversion)
+ * col_timestamp - Timestamp type column (to test string to timestamp conversion)
+ * col_timestamp_ntz - Timestamp NTZ type column (to test string to timestamp ntz conversion)
+ */
 trait ConnectorStringCastSuite extends ConnectorCastSuiteBase {
 
   var stringTypeTable: Identifier = _
@@ -116,6 +135,9 @@ trait ConnectorStringCastSuite extends ConnectorCastSuiteBase {
   }
 }
 
+/**
+ * Common cast suite trait for JDBC connectors like MySQL, Postgres, MSSQL and others.
+ */
 trait JDBCConnectorCastSuiteBase extends ConnectorNumericCastSuite
     with ConnectorStringCastSuite {
   private var connection: Connection = _
@@ -206,7 +228,6 @@ trait JDBCConnectorCastSuiteBase extends ConnectorNumericCastSuite
   override protected def checkCast(cast: ConnectorCast, tableIdentifier: Identifier): Unit = {
     val compiledCast: Option[String] = dialect.compileExpression(cast)
     if (compiledCast.isDefined) {
-      // TODO: Switch to smart approach to craft name
       val tableName = tableIdentifier.toString
       val rs = connection
           .prepareStatement(s"SELECT ${compiledCast.get} FROM $tableName")
