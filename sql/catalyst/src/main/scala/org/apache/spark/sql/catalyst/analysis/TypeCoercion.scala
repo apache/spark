@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.types.{AbstractArrayType, AbstractStringType, StringTypeAnyCollation}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.UpCastRule.numericPrecedence
 
@@ -421,8 +422,9 @@ abstract class TypeCoercionBase {
           case None => c
         }
 
-      case aj @ ArrayJoin(arr, d, nr) if !ArrayType(StringType).acceptsType(arr.dataType) &&
-        ArrayType.acceptsType(arr.dataType) =>
+      case aj @ ArrayJoin(arr, d, nr)
+          if !AbstractArrayType(StringTypeAnyCollation).acceptsType(arr.dataType) &&
+          ArrayType.acceptsType(arr.dataType) =>
         val containsNull = arr.dataType.asInstanceOf[ArrayType].containsNull
         implicitCast(arr, ArrayType(StringType, containsNull)) match {
           case Some(castedArr) => ArrayJoin(castedArr, d, nr)
@@ -996,9 +998,10 @@ object TypeCoercion extends TypeCoercionBase {
       case (_: StringType, AnyTimestampType) => AnyTimestampType.defaultConcreteType
       case (_: StringType, BinaryType) => BinaryType
       // Cast any atomic type to string.
-      case (any: AtomicType, _: StringType) if !any.isInstanceOf[StringType] => StringType
-      case (any: AtomicType, st: StringTypeCollated)
-        if !any.isInstanceOf[StringType] => st.defaultConcreteType
+      case (any: AtomicType, st: StringType) if !any.isInstanceOf[StringType] => st
+      case (any: AtomicType, st: AbstractStringType)
+        if !any.isInstanceOf[StringType] =>
+        st.defaultConcreteType
 
       // When we reach here, input type is not acceptable for any types in this type collection,
       // try to find the first one we can implicitly cast.
@@ -1015,6 +1018,9 @@ object TypeCoercion extends TypeCoercionBase {
       // 3. If the nullabilities of both the from type and the to type are false, the cast is
       // allowed only when Cast.forceNullable(fromType, toType) is false.
       case (ArrayType(fromType, fn), ArrayType(toType: DataType, true)) =>
+        implicitCast(fromType, toType).map(ArrayType(_, true)).orNull
+
+      case (ArrayType(fromType, fn), AbstractArrayType(toType)) =>
         implicitCast(fromType, toType).map(ArrayType(_, true)).orNull
 
       case (ArrayType(fromType, true), ArrayType(toType: DataType, false)) => null
@@ -1105,22 +1111,22 @@ object TypeCoercion extends TypeCoercionBase {
 
       case a @ BinaryArithmetic(left @ StringTypeExpression(), right)
         if !isIntervalType(right.dataType) =>
-        a.makeCopy(Array(Cast(left, DoubleType), right))
+        a.withNewChildren(Seq(Cast(left, DoubleType), right))
       case a @ BinaryArithmetic(left, right @ StringTypeExpression())
         if !isIntervalType(left.dataType) =>
-        a.makeCopy(Array(left, Cast(right, DoubleType)))
+        a.withNewChildren(Seq(left, Cast(right, DoubleType)))
 
       // For equality between string and timestamp we cast the string to a timestamp
       // so that things like rounding of subsecond precision does not affect the comparison.
       case p @ Equality(left @ StringTypeExpression(), right @ TimestampTypeExpression()) =>
-        p.makeCopy(Array(Cast(left, TimestampType), right))
+        p.withNewChildren(Seq(Cast(left, TimestampType), right))
       case p @ Equality(left @ TimestampTypeExpression(), right @ StringTypeExpression()) =>
-        p.makeCopy(Array(left, Cast(right, TimestampType)))
+        p.withNewChildren(Seq(left, Cast(right, TimestampType)))
 
       case p @ BinaryComparison(left, right)
           if findCommonTypeForBinaryComparison(left.dataType, right.dataType, conf).isDefined =>
         val commonType = findCommonTypeForBinaryComparison(left.dataType, right.dataType, conf).get
-        p.makeCopy(Array(castExpr(left, commonType), castExpr(right, commonType)))
+        p.withNewChildren(Seq(castExpr(left, commonType), castExpr(right, commonType)))
     }
   }
 

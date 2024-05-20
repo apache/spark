@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.rules
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, MessageWithContext}
-import org.apache.spark.internal.LogKey._
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.trees.TreeNode
@@ -75,11 +75,11 @@ class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
       def message(): MessageWithContext = {
         if (!oldPlan.fastEquals(newPlan)) {
           log"""
-             |=== Result of Batch ${MDC(RULE_BATCH_NAME, batchName)} ===
+             |=== Result of Batch ${MDC(BATCH_NAME, batchName)} ===
              |${MDC(QUERY_PLAN, sideBySide(oldPlan.treeString, newPlan.treeString).mkString("\n"))}
           """.stripMargin
         } else {
-          log"Batch ${MDC(RULE_BATCH_NAME, batchName)} has no effect."
+          log"Batch ${MDC(BATCH_NAME, batchName)} has no effect."
         }
       }
 
@@ -90,14 +90,16 @@ class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
   def logMetrics(metrics: QueryExecutionMetrics): Unit = {
     val totalTime = metrics.time / NANOS_PER_MILLIS.toDouble
     val totalTimeEffective = metrics.timeEffective / NANOS_PER_MILLIS.toDouble
+    // scalastyle:off line.size.limit
     val message: MessageWithContext =
       log"""
          |=== Metrics of Executed Rules ===
-         |Total number of runs: ${MDC(RULE_NUMBER_OF_RUNS, metrics.numRuns)}
+         |Total number of runs: ${MDC(NUM_RULE_OF_RUNS, metrics.numRuns)}
          |Total time: ${MDC(TOTAL_TIME, totalTime)} ms
-         |Total number of effective runs: ${MDC(RULE_NUMBER_OF_RUNS, metrics.numEffectiveRuns)}
+         |Total number of effective runs: ${MDC(NUM_EFFECTIVE_RULE_OF_RUNS, metrics.numEffectiveRuns)}
          |Total time of effective runs: ${MDC(TOTAL_EFFECTIVE_TIME, totalTimeEffective)} ms
       """.stripMargin
+    // scalastyle:on line.size.limit
 
     logBasedOnLevel(message)
   }
@@ -263,7 +265,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
                 log"to a larger value."
             }
             val log = log"Max iterations (${MDC(NUM_ITERATIONS, iteration - 1)}) " +
-              log"reached for batch ${MDC(RULE_BATCH_NAME, batch.name)}" +
+              log"reached for batch ${MDC(BATCH_NAME, batch.name)}" +
               endingMsg
             if (Utils.isTesting || batch.strategy.errorOnExceed) {
               throw new RuntimeException(log.message)

@@ -3728,7 +3728,7 @@ abstract class JsonSuite
   }
 
   test("SPARK-40667: validate JSON Options") {
-    assert(JSONOptions.getAllOptions.size == 28)
+    assert(JSONOptions.getAllOptions.size == 29)
     // Please add validation on any new Json options here
     assert(JSONOptions.isValidOption("samplingRatio"))
     assert(JSONOptions.isValidOption("primitivesAsString"))
@@ -3756,6 +3756,7 @@ abstract class JsonSuite
     assert(JSONOptions.isValidOption("columnNameOfCorruptRecord"))
     assert(JSONOptions.isValidOption("timeZone"))
     assert(JSONOptions.isValidOption("writeNonAsciiCharacterAsCodePoint"))
+    assert(JSONOptions.isValidOption("singleVariantColumn"))
     assert(JSONOptions.isValidOption("encoding"))
     assert(JSONOptions.isValidOption("charset"))
     // Please add validation on any new Json options with alternative here
@@ -3818,6 +3819,108 @@ abstract class JsonSuite
           errorClass = "INVALID_JSON_SCHEMA_MAP_TYPE",
           parameters = Map("jsonSchema" -> toSQLType(jsonDirSchema)))
       }
+    }
+  }
+
+  test("SPARK-47704: Handle partial parsing of array<map>") {
+    withTempPath { path =>
+      Seq("""{"a":[{"key":{"b":0}}]}""").toDF()
+        .repartition(1)
+        .write.text(path.getAbsolutePath)
+
+      for (enablePartialResults <- Seq(true, false)) {
+        withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> s"$enablePartialResults") {
+          val df = spark.read
+            .schema("a array<map<string, struct<b boolean>>>")
+            .json(path.getAbsolutePath)
+
+          if (enablePartialResults) {
+            checkAnswer(df, Seq(Row(Array(Map("key" -> Row(null))))))
+          } else {
+            checkAnswer(df, Seq(Row(null)))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-47704: Handle partial parsing of map<string, array>") {
+    withTempPath { path =>
+      Seq("""{"a":{"key":[{"b":0}]}}""").toDF()
+        .repartition(1)
+        .write.text(path.getAbsolutePath)
+
+      for (enablePartialResults <- Seq(true, false)) {
+        withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> s"$enablePartialResults") {
+          val df = spark.read
+            .schema("a map<string, array<struct<b boolean>>>")
+            .json(path.getAbsolutePath)
+
+          if (enablePartialResults) {
+            checkAnswer(df, Seq(Row(Map("key" -> Seq(Row(null))))))
+          } else {
+            checkAnswer(df, Seq(Row(null)))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-48148: values are unchanged when read as string") {
+    withTempPath { path =>
+      def extractData(
+          jsonString: String,
+          expectedInexactData: Seq[String],
+          expectedExactData: Seq[String],
+          multiLine: Boolean = false): Unit = {
+        Seq(jsonString).toDF()
+          .repartition(1)
+          .write
+          .mode("overwrite")
+          .text(path.getAbsolutePath)
+
+        withClue("Exact string parsing") {
+          withSQLConf(SQLConf.JSON_EXACT_STRING_PARSING.key -> "true") {
+            val df = spark.read
+              .schema("data STRING")
+              .option("multiLine", multiLine.toString)
+              .json(path.getAbsolutePath)
+            checkAnswer(df, expectedExactData.map(d => Row(d)))
+          }
+        }
+
+        withClue("Inexact string parsing") {
+          withSQLConf(SQLConf.JSON_EXACT_STRING_PARSING.key -> "false") {
+            val df = spark.read
+              .schema("data STRING")
+              .option("multiLine", multiLine.toString)
+              .json(path.getAbsolutePath)
+            checkAnswer(df, expectedInexactData.map(d => Row(d)))
+          }
+        }
+      }
+      extractData(
+        """{"data": {"white":    "space"}}""",
+        expectedInexactData = Seq("""{"white":"space"}"""),
+        expectedExactData = Seq("""{"white":    "space"}""")
+      )
+      extractData(
+        """{"data": ["white",    "space"]}""",
+        expectedInexactData = Seq("""["white","space"]"""),
+        expectedExactData = Seq("""["white",    "space"]""")
+      )
+      val granularFloat = "-999.99999999999999999999999999999999995"
+      extractData(
+        s"""{"data": {"v": ${granularFloat}}}""",
+        expectedInexactData = Seq("""{"v":-1000.0}"""),
+        expectedExactData = Seq(s"""{"v": ${granularFloat}}""")
+      )
+      extractData(
+        s"""{"data": {"white":\n"space"}}""",
+        expectedInexactData = Seq("""{"white":"space"}"""),
+        expectedExactData = Seq(s"""{"white":\n"space"}"""),
+        multiLine = true
+      )
     }
   }
 }

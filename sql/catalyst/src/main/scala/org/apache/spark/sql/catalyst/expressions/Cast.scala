@@ -128,6 +128,7 @@ object Cast extends QueryErrorsBase {
     case (TimestampType, _: NumericType) => true
 
     case (VariantType, _) => variant.VariantGet.checkDataType(to)
+    case (_, VariantType) => variant.VariantGet.checkDataType(from)
 
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
       canAnsiCast(fromType, toType) && resolvableNullability(fn, tn)
@@ -236,6 +237,7 @@ object Cast extends QueryErrorsBase {
     case (_: NumericType, _: NumericType) => true
 
     case (VariantType, _) => variant.VariantGet.checkDataType(to)
+    case (_, VariantType) => variant.VariantGet.checkDataType(from)
 
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
       canCast(fromType, toType) &&
@@ -572,8 +574,6 @@ case class Cast(
   // as strings. Otherwise, the casting is using `BigDecimal.toString` which may use scientific
   // notation if an exponent is needed.
   override protected def useDecimalPlainString: Boolean = ansiEnabled
-
-  override protected def useHexFormatForBinary: Boolean = false
 
   // The class name of `DateTimeUtils`
   protected def dateTimeUtilsCls: String = DateTimeUtils.getClass.getName.stripSuffix("$")
@@ -1114,11 +1114,12 @@ case class Cast(
       _ => throw QueryExecutionErrors.cannotCastFromNullTypeError(to)
     } else if (from.isInstanceOf[VariantType]) {
       buildCast[VariantVal](_, v => {
-        variant.VariantGet.cast(v, to, evalMode != EvalMode.TRY, timeZoneId)
+        variant.VariantGet.cast(v, to, evalMode != EvalMode.TRY, timeZoneId, zoneId)
       })
     } else {
       to match {
         case dt if dt == from => identity[Any]
+        case VariantType => input => variant.VariantExpressionEvalUtils.castToVariant(input, from)
         case _: StringType => castToString(from)
         case BinaryType => castToBinary(from)
         case DateType => castToDate(from)
@@ -1211,17 +1212,22 @@ case class Cast(
     case _ if from.isInstanceOf[VariantType] => (c, evPrim, evNull) =>
       val tmp = ctx.freshVariable("tmp", classOf[Object])
       val dataTypeArg = ctx.addReferenceObj("dataType", to)
-      val zoneIdArg = ctx.addReferenceObj("zoneId", timeZoneId)
+      val zoneStrArg = ctx.addReferenceObj("zoneStr", timeZoneId)
+      val zoneIdArg = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
       val failOnError = evalMode != EvalMode.TRY
       val cls = classOf[variant.VariantGet].getName
       code"""
-        Object $tmp = $cls.cast($c, $dataTypeArg, $failOnError, $zoneIdArg);
+        Object $tmp = $cls.cast($c, $dataTypeArg, $failOnError, $zoneStrArg, $zoneIdArg);
         if ($tmp == null) {
           $evNull = true;
         } else {
           $evPrim = (${CodeGenerator.boxedType(to)})$tmp;
         }
       """
+    case VariantType =>
+      val cls = variant.VariantExpressionEvalUtils.getClass.getName.stripSuffix("$")
+      val fromArg = ctx.addReferenceObj("from", from)
+      (c, evPrim, evNull) => code"$evPrim = $cls.castToVariant($c, $fromArg);"
     case _: StringType => (c, evPrim, _) => castToStringCode(from, ctx).apply(c, evPrim)
     case BinaryType => castToBinaryCode(from)
     case DateType => castToDateCode(from, ctx)

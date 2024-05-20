@@ -21,7 +21,8 @@ import scala.collection.mutable
 import scala.util.Random
 
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{MAX_MEMORY_SIZE, MEMORY_SIZE, NUM_CLASSES, NUM_EXAMPLES, NUM_FEATURES, NUM_NODES, NUM_WEIGHTED_EXAMPLES, TIMER}
 import org.apache.spark.ml.classification.DecisionTreeClassificationModel
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.impl.Utils
@@ -131,10 +132,11 @@ private[spark] object RandomForest extends Logging with Serializable {
         instrumentation.logNumExamples(metadata.numExamples)
         instrumentation.logSumOfWeights(metadata.weightedNumExamples)
       case None =>
-        logInfo(s"numFeatures: ${metadata.numFeatures}")
-        logInfo(s"numClasses: ${metadata.numClasses}")
-        logInfo(s"numExamples: ${metadata.numExamples}")
-        logInfo(s"weightedNumExamples: ${metadata.weightedNumExamples}")
+        logInfo(log"numFeatures: ${MDC(NUM_FEATURES, metadata.numFeatures)}")
+        logInfo(log"numClasses: ${MDC(NUM_CLASSES, metadata.numClasses)}")
+        logInfo(log"numExamples: ${MDC(NUM_EXAMPLES, metadata.numExamples)}")
+        logInfo(log"weightedNumExamples: " +
+          log"${MDC(NUM_WEIGHTED_EXAMPLES, metadata.weightedNumExamples)}")
     }
 
     timer.start("init")
@@ -217,7 +219,7 @@ private[spark] object RandomForest extends Logging with Serializable {
     timer.stop("total")
 
     logInfo("Internal timing for DecisionTree:")
-    logInfo(s"$timer")
+    logInfo(log"${MDC(TIMER, timer)}")
 
     if (strategy.useNodeIdCache) {
       // Delete any remaining checkpoints used for node Id cache.
@@ -1286,9 +1288,10 @@ private[spark] object RandomForest extends Logging with Serializable {
     }
     if (memUsage > maxMemoryUsage) {
       // If maxMemoryUsage is 0, we should still allow splitting 1 node.
-      logWarning(s"Tree learning is using approximately $memUsage bytes per iteration, which" +
-        s" exceeds requested limit maxMemoryUsage=$maxMemoryUsage. This allows splitting" +
-        s" $numNodesInGroup nodes in this iteration.")
+      logWarning(log"Tree learning is using approximately ${MDC(MEMORY_SIZE, memUsage)} " +
+        log"bytes per iteration, which exceeds requested limit " +
+        log"maxMemoryUsage=${MDC(MAX_MEMORY_SIZE, maxMemoryUsage)}. This allows splitting " +
+        log"${MDC(NUM_NODES, numNodesInGroup)} nodes in this iteration.")
     }
     // Convert mutable maps to immutable ones.
     val nodesForGroup: Map[Int, Array[LearningNode]] =

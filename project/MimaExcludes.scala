@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import com.typesafe.tools.mima.core._
+import com.typesafe.tools.mima.core
+import com.typesafe.tools.mima.core.*
 
 /**
  * Additional excludes for checking of Spark's binary compatibility.
@@ -88,7 +89,14 @@ object MimaExcludes {
     // SPARK-47706: Bump json4s from 3.7.0-M11 to 4.0.7
     ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.expressions.MutableAggregationBuffer.jsonValue"),
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.types.DataType#JSortedObject.unapplySeq"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.mllib.tree.model.TreeEnsembleModel#SaveLoadV1_0.readMetadata")
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.mllib.tree.model.TreeEnsembleModel#SaveLoadV1_0.readMetadata"),
+    // SPARK-47814: Move `KinesisTestUtils` & `WriteInputFormatTestDataGenerator` from `main` to `test`
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.python.TestWritable"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.python.TestWritable$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.python.WriteInputFormatTestDataGenerator"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.python.WriteInputFormatTestDataGenerator$"),
+    // SPARK-47764: Cleanup shuffle dependencies based on ShuffleCleanupMode
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.shuffle.MigratableResolver.addShuffleToSkip")
   )
 
   // Default exclude rules

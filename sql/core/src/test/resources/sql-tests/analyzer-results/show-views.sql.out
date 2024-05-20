@@ -22,7 +22,7 @@ CreateDataSourceTableCommand `spark_catalog`.`showdb`.`tbl`, false
 -- !query
 CREATE VIEW view_1 AS SELECT * FROM tbl
 -- !query analysis
-CreateViewCommand `spark_catalog`.`showdb`.`view_1`, SELECT * FROM tbl, false, false, PersistedView, true
+CreateViewCommand `spark_catalog`.`showdb`.`view_1`, SELECT * FROM tbl, false, false, PersistedView, COMPENSATION, true
    +- Project [a#x, b#x, c#x, d#x]
       +- SubqueryAlias spark_catalog.showdb.tbl
          +- Relation spark_catalog.showdb.tbl[a#x,b#x,c#x,d#x] parquet
@@ -31,7 +31,7 @@ CreateViewCommand `spark_catalog`.`showdb`.`view_1`, SELECT * FROM tbl, false, f
 -- !query
 CREATE VIEW view_2 AS SELECT * FROM tbl WHERE c='a'
 -- !query analysis
-CreateViewCommand `spark_catalog`.`showdb`.`view_2`, SELECT * FROM tbl WHERE c='a', false, false, PersistedView, true
+CreateViewCommand `spark_catalog`.`showdb`.`view_2`, SELECT * FROM tbl WHERE c='a', false, false, PersistedView, COMPENSATION, true
    +- Project [a#x, b#x, c#x, d#x]
       +- Filter (c#x = a)
          +- SubqueryAlias spark_catalog.showdb.tbl
@@ -41,7 +41,7 @@ CreateViewCommand `spark_catalog`.`showdb`.`view_2`, SELECT * FROM tbl WHERE c='
 -- !query
 CREATE GLOBAL TEMP VIEW view_3 AS SELECT 1 as col1
 -- !query analysis
-CreateViewCommand `view_3`, SELECT 1 as col1, false, false, GlobalTempView, true
+CreateViewCommand `view_3`, SELECT 1 as col1, false, false, GlobalTempView, UNSUPPORTED, true
    +- Project [1 AS col1#x]
       +- OneRowRelation
 

@@ -80,6 +80,7 @@ import org.apache.spark.util.Utils
  * @groupname struct_funcs Struct functions
  * @groupname csv_funcs CSV functions
  * @groupname json_funcs JSON functions
+ * @groupname variant_funcs VARIANT functions
  * @groupname xml_funcs XML functions
  * @groupname url_funcs URL functions
  * @groupname partition_transforms Partition transform functions
@@ -1935,6 +1936,15 @@ object functions {
    * @since 3.5.0
    */
   def try_divide(left: Column, right: Column): Column = Column.fn("try_divide", left, right)
+
+  /**
+   * Returns the remainder of `dividend``/``divisor`. Its result is
+   * always null if `divisor` is 0.
+   *
+   * @group math_funcs
+   * @since 4.0.0
+   */
+  def try_remainder(left: Column, right: Column): Column = Column.fn("try_remainder", left, right)
 
   /**
    * Returns `left``*``right` and the result is null on overflow. The acceptable input types are
@@ -4144,9 +4154,11 @@ object functions {
   /**
    * Splits str around matches of the given pattern.
    *
-   * @param str a string expression to split
-   * @param pattern a string representing a regular expression. The regex string should be
-   *                a Java regular expression.
+   * @param str
+   *   a string expression to split
+   * @param pattern
+   *   a string representing a regular expression. The regex string should be a Java regular
+   *   expression.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -4156,23 +4168,58 @@ object functions {
   /**
    * Splits str around matches of the given pattern.
    *
-   * @param str a string expression to split
-   * @param pattern a string representing a regular expression. The regex string should be
-   *                a Java regular expression.
-   * @param limit an integer expression which controls the number of times the regex is applied.
-   *        <ul>
-   *          <li>limit greater than 0: The resulting array's length will not be more than limit,
-   *          and the resulting array's last entry will contain all input beyond the last
-   *          matched regex.</li>
-   *          <li>limit less than or equal to 0: `regex` will be applied as many times as
-   *          possible, and the resulting array can be of any size.</li>
-   *        </ul>
+   * @param str
+   *   a string expression to split
+   * @param pattern
+   *   a column of string representing a regular expression. The regex string should be a Java
+   *   regular expression.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def split(str: Column, pattern: Column): Column = Column.fn("split", str, pattern)
+
+  /**
+   * Splits str around matches of the given pattern.
+   *
+   * @param str
+   *   a string expression to split
+   * @param pattern
+   *   a string representing a regular expression. The regex string should be a Java regular
+   *   expression.
+   * @param limit
+   *   an integer expression which controls the number of times the regex is applied. <ul>
+   *   <li>limit greater than 0: The resulting array's length will not be more than limit, and the
+   *   resulting array's last entry will contain all input beyond the last matched regex.</li>
+   *   <li>limit less than or equal to 0: `regex` will be applied as many times as possible, and
+   *   the resulting array can be of any size.</li> </ul>
    *
    * @group string_funcs
    * @since 3.0.0
    */
   def split(str: Column, pattern: String, limit: Int): Column =
     Column.fn("split", str, lit(pattern), lit(limit))
+
+  /**
+   * Splits str around matches of the given pattern.
+   *
+   * @param str
+   *   a string expression to split
+   * @param pattern
+   *   a column of string representing a regular expression. The regex string should be a Java
+   *   regular expression.
+   * @param limit
+   *   a column of integer expression which controls the number of times the regex is applied.
+   *   <ul> <li>limit greater than 0: The resulting array's length will not be more than limit,
+   *   and the resulting array's last entry will contain all input beyond the last matched
+   *   regex.</li> <li>limit less than or equal to 0: `regex` will be applied as many times as
+   *   possible, and the resulting array can be of any size.</li> </ul>
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def split(str: Column, pattern: Column, limit: Column): Column =
+    Column.fn("split", str, pattern, limit)
 
   /**
    * Substring starts at `pos` and is of length `len` when str is String type or
@@ -5695,6 +5742,17 @@ object functions {
   def timestamp_micros(e: Column): Column = Column.fn("timestamp_micros", e)
 
   /**
+   * Gets the difference between the timestamps in the specified units by truncating
+   * the fraction part.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def timestamp_diff(unit: String, start: Column, end: Column): Column = withExpr {
+    TimestampDiff(unit, start.expr, end.expr)
+  }
+
+  /**
    * Parses the `timestamp` expression with the `format` expression
    * to a timestamp without time zone. Returns null with invalid input.
    *
@@ -6595,14 +6653,90 @@ object functions {
   }
 
   /**
-   * Parses a JSON string and constructs a Variant value.
+   * Parses a JSON string and constructs a Variant value. Returns null if the input string is not
+   * a valid JSON value.
    *
    * @param json a string column that contains JSON data.
    *
-   * @group json_funcs
+   * @group variant_funcs
+   * @since 4.0.0
+   */
+  def try_parse_json(json: Column): Column = Column.fn("try_parse_json", json)
+
+  /**
+   * Parses a JSON string and constructs a Variant value.
+   *
+   * @param json
+   *   a string column that contains JSON data.
+   * @group variant_funcs
    * @since 4.0.0
    */
   def parse_json(json: Column): Column = Column.fn("parse_json", json)
+
+  /**
+   * Check if a variant value is a variant null. Returns true if and only if the input is a
+   * variant null and false otherwise (including in the case of SQL NULL).
+   *
+   * @param v
+   *   a variant column.
+   * @group variant_funcs
+   * @since 4.0.0
+   */
+  def is_variant_null(v: Column): Column = Column.fn("is_variant_null", v)
+
+  /**
+   * Extracts a sub-variant from `v` according to `path`, and then cast the sub-variant to
+   * `targetType`. Returns null if the path does not exist. Throws an exception if the cast fails.
+   *
+   * @param v
+   *   a variant column.
+   * @param path
+   *   the extraction path. A valid path should start with `$` and is followed by zero or more
+   *   segments like `[123]`, `.name`, `['name']`, or `["name"]`.
+   * @param targetType
+   *   the target data type to cast into, in a DDL-formatted string.
+   * @group variant_funcs
+   * @since 4.0.0
+   */
+  def variant_get(v: Column, path: String, targetType: String): Column =
+    Column.fn("variant_get", v, lit(path), lit(targetType))
+
+  /**
+   * Extracts a sub-variant from `v` according to `path`, and then cast the sub-variant to
+   * `targetType`. Returns null if the path does not exist or the cast fails..
+   *
+   * @param v
+   *   a variant column.
+   * @param path
+   *   the extraction path. A valid path should start with `$` and is followed by zero or more
+   *   segments like `[123]`, `.name`, `['name']`, or `["name"]`.
+   * @param targetType
+   *   the target data type to cast into, in a DDL-formatted string.
+   * @group variant_funcs
+   * @since 4.0.0
+   */
+  def try_variant_get(v: Column, path: String, targetType: String): Column =
+    Column.fn("try_variant_get", v, lit(path), lit(targetType))
+
+  /**
+   * Returns schema in the SQL format of a variant.
+   *
+   * @param v
+   *   a variant column.
+   * @group variant_funcs
+   * @since 4.0.0
+   */
+  def schema_of_variant(v: Column): Column = Column.fn("schema_of_variant", v)
+
+  /**
+   * Returns the merged schema in the SQL format of a variant column.
+   *
+   * @param v
+   *   a variant column.
+   * @group variant_funcs
+   * @since 4.0.0
+   */
+  def schema_of_variant_agg(v: Column): Column = Column.fn("schema_of_variant_agg", v)
 
   /**
    * Parses a JSON string and infers its schema in DDL format.
@@ -6817,9 +6951,9 @@ object functions {
   /**
    * Returns length of array or map.
    *
-   * The function returns null for null input if spark.sql.legacy.sizeOfNull is set to false or
-   * spark.sql.ansi.enabled is set to true. Otherwise, the function returns -1 for null input.
-   * With the default settings, the function returns -1 for null input.
+   * This function returns -1 for null input only if spark.sql.ansi.enabled is false and
+   * spark.sql.legacy.sizeOfNull is true. Otherwise, it returns null for null input.
+   * With the default settings, the function returns null for null input.
    *
    * @group collection_funcs
    * @since 1.5.0
@@ -6829,9 +6963,9 @@ object functions {
   /**
    * Returns length of array or map. This is an alias of `size` function.
    *
-   * The function returns null for null input if spark.sql.legacy.sizeOfNull is set to false or
-   * spark.sql.ansi.enabled is set to true. Otherwise, the function returns -1 for null input.
-   * With the default settings, the function returns -1 for null input.
+   * This function returns -1 for null input only if spark.sql.ansi.enabled is false and
+   * spark.sql.legacy.sizeOfNull is true. Otherwise, it returns null for null input.
+   * With the default settings, the function returns null for null input.
    *
    * @group collection_funcs
    * @since 3.5.0

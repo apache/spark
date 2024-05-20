@@ -110,9 +110,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
   }
 
   /** Check and throw exception when a given resolved plan contains LateralColumnAliasReference. */
-  private def checkNotContainingLCA(exprSeq: Seq[NamedExpression], plan: LogicalPlan): Unit = {
-    if (!plan.resolved) return
-    exprSeq.foreach(_.transformDownWithPruning(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
+  private def checkNotContainingLCA(exprs: Seq[Expression], plan: LogicalPlan): Unit = {
+    exprs.foreach(_.transformDownWithPruning(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
       case lcaRef: LateralColumnAliasReference =>
         throw SparkException.internalError("Resolved plan should not contain any " +
           s"LateralColumnAliasReference.\nDebugging information: plan:\n$plan",
@@ -146,15 +145,16 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
   private def checkUnreferencedCTERelations(
       cteMap: mutable.Map[Long, (CTERelationDef, Int, mutable.Map[Long, Int])],
       visited: mutable.Map[Long, Boolean],
+      danglingCTERelations: mutable.ArrayBuffer[CTERelationDef],
       cteId: Long): Unit = {
     if (visited(cteId)) {
       return
     }
     val (cteDef, _, refMap) = cteMap(cteId)
     refMap.foreach { case (id, _) =>
-      checkUnreferencedCTERelations(cteMap, visited, id)
+      checkUnreferencedCTERelations(cteMap, visited, danglingCTERelations, id)
     }
-    checkAnalysis0(cteDef.child)
+    danglingCTERelations.append(cteDef)
     visited(cteId) = true
   }
 
@@ -162,35 +162,35 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     val inlineCTE = InlineCTE(alwaysInline = true)
     val cteMap = mutable.HashMap.empty[Long, (CTERelationDef, Int, mutable.Map[Long, Int])]
     inlineCTE.buildCTEMap(plan, cteMap)
+    val danglingCTERelations = mutable.ArrayBuffer.empty[CTERelationDef]
     val visited: mutable.Map[Long, Boolean] = mutable.Map.empty.withDefaultValue(false)
-    cteMap.foreach { case (cteId, (relation, refCount, _)) =>
-      // If a CTE relation is never used, it will disappear after inline. Here we explicitly check
-      // analysis for it, to make sure the entire query plan is valid.
-      try {
-        // If a CTE relation ref count is 0, the other CTE relations that reference it
-        // should also be checked by checkAnalysis0. This code will also guarantee the leaf
-        // relations that do not reference any others are checked first.
-        if (refCount == 0) {
-          checkUnreferencedCTERelations(cteMap, visited, cteId)
-        }
-      } catch {
-        case e: AnalysisException =>
-          throw new ExtendedAnalysisException(e, relation.child)
+    // If a CTE relation is never used, it will disappear after inline. Here we explicitly collect
+    // these dangling CTE relations, and put them back in the main query, to make sure the entire
+    // query plan is valid.
+    cteMap.foreach { case (cteId, (_, refCount, _)) =>
+      // If a CTE relation ref count is 0, the other CTE relations that reference it should also be
+      // collected. This code will also guarantee the leaf relations that do not reference
+      // any others are collected first.
+      if (refCount == 0) {
+        checkUnreferencedCTERelations(cteMap, visited, danglingCTERelations, cteId)
       }
     }
     // Inline all CTEs in the plan to help check query plan structures in subqueries.
-    var inlinedPlan: Option[LogicalPlan] = None
+    var inlinedPlan: LogicalPlan = plan
     try {
-      inlinedPlan = Some(inlineCTE(plan))
+      inlinedPlan = inlineCTE(plan)
     } catch {
       case e: AnalysisException =>
         throw new ExtendedAnalysisException(e, plan)
     }
+    if (danglingCTERelations.nonEmpty) {
+      inlinedPlan = WithCTE(inlinedPlan, danglingCTERelations.toSeq)
+    }
     try {
-      checkAnalysis0(inlinedPlan.get)
+      checkAnalysis0(inlinedPlan)
     } catch {
       case e: AnalysisException =>
-        throw new ExtendedAnalysisException(e, inlinedPlan.get)
+        throw new ExtendedAnalysisException(e, inlinedPlan)
     }
     plan.setAnalyzed()
   }
@@ -789,17 +789,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           msg = s"Found the unresolved operator: ${o.simpleString(SQLConf.get.maxToStringFields)}",
           context = o.origin.getQueryContext,
           summary = o.origin.context.summary)
-      // If the plan is resolved, the resolved Project, Aggregate or Window should have restored or
-      // resolved all lateral column alias references. Add check for extra safe.
-      case p @ Project(pList, _)
-        if pList.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
-        checkNotContainingLCA(pList, p)
-      case agg @ Aggregate(_, aggList, _)
-        if aggList.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
-        checkNotContainingLCA(aggList, agg)
-      case w @ Window(pList, _, _, _)
-        if pList.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
-        checkNotContainingLCA(pList, w)
+      // If the plan is resolved, all lateral column alias references should have been either
+      // restored or resolved. Add check for extra safe.
+      case o if o.expressions.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
+        checkNotContainingLCA(o.expressions, o)
       case _ =>
     }
   }
@@ -1410,7 +1403,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       if (struct.findNestedField(
           fieldNames, includeCollections = true, alter.conf.resolver).isDefined) {
         alter.failAnalysis(
-          errorClass = "FIELDS_ALREADY_EXISTS",
+          errorClass = "FIELD_ALREADY_EXISTS",
           messageParameters = Map(
             "op" -> op,
             "fieldNames" -> toSQLId(fieldNames),

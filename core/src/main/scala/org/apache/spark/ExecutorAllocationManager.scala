@@ -26,7 +26,8 @@ import scala.util.control.NonFatal
 
 import com.codahale.metrics.{Counter, Gauge, MetricRegistry}
 
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.DECOMMISSION_ENABLED
 import org.apache.spark.internal.config.Tests.TEST_DYNAMIC_ALLOCATION_SCHEDULE_ENABLED
@@ -205,11 +206,13 @@ private[spark] class ExecutorAllocationManager(
       throw new SparkException(
         s"s${DYN_ALLOCATION_SUSTAINED_SCHEDULER_BACKLOG_TIMEOUT.key} must be > 0!")
     }
+    val shuffleTrackingEnabled = conf.get(config.DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED)
+    val shuffleDecommissionEnabled = decommissionEnabled &&
+      conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED)
     if (!conf.get(config.SHUFFLE_SERVICE_ENABLED) && !reliableShuffleStorage) {
-      if (conf.get(config.DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED)) {
+      if (shuffleTrackingEnabled) {
         logInfo("Dynamic allocation is enabled without a shuffle service.")
-      } else if (decommissionEnabled &&
-          conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED)) {
+      } else if (shuffleDecommissionEnabled) {
         logInfo("Shuffle data decommission is enabled without a shuffle service.")
       } else if (!testing) {
         throw new SparkException("Dynamic allocation of executors requires one of the " +
@@ -221,6 +224,12 @@ private[spark] class ExecutorAllocationManager(
           s"configuring ${SHUFFLE_IO_PLUGIN_CLASS.key} to use a custom ShuffleDataIO who's " +
           "ShuffleDriverComponents supports reliable storage.")
       }
+    }
+
+    if (shuffleTrackingEnabled && (shuffleDecommissionEnabled || reliableShuffleStorage)) {
+      logWarning("You are enabling both shuffle tracking and other DA supported mechanism, " +
+        "which will cause idle executors not to be released in a timely, " +
+        "please check the configurations.")
     }
 
     if (executorAllocationRatio > 1.0 || executorAllocationRatio <= 0.0) {
@@ -445,10 +454,12 @@ private[spark] class ExecutorAllocationManager(
           val delta = targetNum.delta
           totalDelta += delta
           if (delta > 0) {
-            val executorsString = "executor" + { if (delta > 1) "s" else "" }
-            logInfo(s"Requesting $delta new $executorsString because tasks are backlogged " +
-              s"(new desired total will be ${numExecutorsTargetPerResourceProfileId(rpId)} " +
-              s"for resource profile id: ${rpId})")
+            val executorsString = log" new executor" + { if (delta > 1) log"s" else log"" }
+            logInfo(log"Requesting ${MDC(TARGET_NUM_EXECUTOR_DELTA, delta)}" +
+              executorsString + log" because tasks are backlogged " +
+              log"(new desired total will be" +
+              log" ${MDC(TARGET_NUM_EXECUTOR, numExecutorsTargetPerResourceProfileId(rpId))} " +
+              log"for resource profile id: ${MDC(RESOURCE_PROFILE_ID, rpId)})")
             numExecutorsToAddPerResourceProfileId(rpId) =
               if (delta == numExecutorsToAddPerResourceProfileId(rpId)) {
                 numExecutorsToAddPerResourceProfileId(rpId) * 2
@@ -542,8 +553,8 @@ private[spark] class ExecutorAllocationManager(
         if (testing) {
           throw new SparkException("ResourceProfile Id was UNKNOWN, this is not expected")
         }
-        logWarning(s"Not removing executor $executorIdToBeRemoved because the " +
-          "ResourceProfile was UNKNOWN!")
+        logWarning(log"Not removing executor ${MDC(EXECUTOR_IDS, executorIdToBeRemoved)} " +
+          log"because the ResourceProfile was UNKNOWN!")
       } else {
         // get the running total as we remove or initialize it to the count - pendingRemoval
         val newExecutorTotal = numExecutorsTotalPerRpId.getOrElseUpdate(rpId,
@@ -603,11 +614,13 @@ private[spark] class ExecutorAllocationManager(
       } else {
         executorMonitor.executorsKilled(executorsRemoved.toSeq)
       }
-      logInfo(s"Executors ${executorsRemoved.mkString(",")} removed due to idle timeout.")
+      logInfo(log"Executors ${MDC(EXECUTOR_IDS, executorsRemoved.mkString(","))}" +
+        log"removed due to idle timeout.")
       executorsRemoved.toSeq
     } else {
-      logWarning(s"Unable to reach the cluster manager to kill executor/s " +
-        s"${executorIdsToBeRemoved.mkString(",")} or no executor eligible to kill!")
+      logWarning(log"Unable to reach the cluster manager to kill executor/s " +
+        log"${MDC(EXECUTOR_IDS, executorIdsToBeRemoved.mkString(","))} " +
+        log"or no executor eligible to kill!")
       Seq.empty[String]
     }
   }
@@ -870,8 +883,9 @@ private[spark] class ExecutorAllocationManager(
           // really complete and no tasks left
           resourceProfileIdToStageAttempt(rpForStage.head) -= stageAttempt
         } else {
-          logWarning(s"Should have exactly one resource profile for stage $stageAttempt," +
-              s" but have $rpForStage")
+          logWarning(log"Should have exactly one resource profile for stage " +
+            log"${MDC(STAGE_ATTEMPT, stageAttempt)}, but have " +
+            log"${MDC(RESOURCE_PROFILE_ID, rpForStage)}")
         }
       }
     }

@@ -49,6 +49,13 @@ sealed class Metadata private[types] (private[types] val map: Map[String, Any])
   /** Tests whether this Metadata contains a binding for a key. */
   def contains(key: String): Boolean = map.contains(key)
 
+  /**
+   * Tests whether this Metadata is empty.
+   *
+   * @since 4.0.0
+   */
+  def isEmpty: Boolean = map.isEmpty
+
   /** Gets a Long. */
   def getLong(key: String): Long = get(key)
 

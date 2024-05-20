@@ -25,7 +25,8 @@ import org.apache.spark.{SparkConf, SparkContext, SparkMasterRegex}
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils, SparkKubernetesClientFactory}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants.DEFAULT_EXECUTOR_CONTAINER_NAME
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.MASTER_URL
 import org.apache.spark.internal.config.TASK_MAX_FAILURES
 import org.apache.spark.scheduler.{ExternalClusterManager, SchedulerBackend, TaskScheduler, TaskSchedulerImpl}
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
@@ -61,7 +62,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
           if (threads == "*") localCpuCount else threads.toInt
         case _ => 1
       }
-      logInfo(s"Running Spark with ${sc.conf.get(KUBERNETES_DRIVER_MASTER_URL)}")
+      logInfo(log"Running Spark with ${MDC(MASTER_URL, sc.conf.get(KUBERNETES_DRIVER_MASTER_URL))}")
       val schedulerImpl = scheduler.asInstanceOf[TaskSchedulerImpl]
       // KubernetesClusterSchedulerBackend respects `spark.app.id` while LocalSchedulerBackend
       // does not. Propagate `spark.app.id` via `spark.test.appId` to match the behavior.

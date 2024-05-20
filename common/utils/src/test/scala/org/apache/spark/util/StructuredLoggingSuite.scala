@@ -25,8 +25,7 @@ import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.apache.logging.log4j.Level
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
-import org.apache.spark.internal.{LogEntry, Logging, MDC}
-import org.apache.spark.internal.LogKey.{EXECUTOR_ID, MAX_SIZE, MIN_SIZE}
+import org.apache.spark.internal.{LogEntry, Logging, LogKey, LogKeys, MDC}
 
 trait LoggingSuiteBase
     extends AnyFunSuite // scalastyle:ignore funsuite
@@ -54,12 +53,14 @@ trait LoggingSuiteBase
 
   def basicMsg: String = "This is a log message"
 
-  def msgWithMDC: LogEntry = log"Lost executor ${MDC(EXECUTOR_ID, "1")}."
+  def msgWithMDC: LogEntry = log"Lost executor ${MDC(LogKeys.EXECUTOR_ID, "1")}."
 
-  def msgWithMDCAndException: LogEntry = log"Error in executor ${MDC(EXECUTOR_ID, "1")}."
+  def msgWithMDCValueIsNull: LogEntry = log"Lost executor ${MDC(LogKeys.EXECUTOR_ID, null)}."
 
-  def msgWithConcat: LogEntry = log"Min Size: ${MDC(MIN_SIZE, "2")}, " +
-    log"Max Size: ${MDC(MAX_SIZE, "4")}. " +
+  def msgWithMDCAndException: LogEntry = log"Error in executor ${MDC(LogKeys.EXECUTOR_ID, "1")}."
+
+  def msgWithConcat: LogEntry = log"Min Size: ${MDC(LogKeys.MIN_SIZE, "2")}, " +
+    log"Max Size: ${MDC(LogKeys.MAX_SIZE, "4")}. " +
     log"Please double check."
 
   // test for basic message (without any mdc)
@@ -71,8 +72,14 @@ trait LoggingSuiteBase
   // test for message (with mdc)
   def expectedPatternForMsgWithMDC(level: Level): String
 
+  // test for message (with mdc - the value is null)
+  def expectedPatternForMsgWithMDCValueIsNull(level: Level): String
+
   // test for message and exception
   def expectedPatternForMsgWithMDCAndException(level: Level): String
+
+  // test for external system custom LogKey
+  def expectedPatternForExternalSystemCustomLogKey(level: Level): String
 
   def verifyMsgWithConcat(level: Level, logOutput: String): Unit
 
@@ -80,7 +87,9 @@ trait LoggingSuiteBase
     Seq(
       (Level.ERROR, () => logError(basicMsg)),
       (Level.WARN, () => logWarning(basicMsg)),
-      (Level.INFO, () => logInfo(basicMsg))).foreach { case (level, logFunc) =>
+      (Level.INFO, () => logInfo(basicMsg)),
+      (Level.DEBUG, () => logDebug(basicMsg)),
+      (Level.TRACE, () => logTrace(basicMsg))).foreach { case (level, logFunc) =>
       val logOutput = captureLogOutput(logFunc)
       assert(expectedPatternForBasicMsg(level).r.matches(logOutput))
     }
@@ -91,7 +100,9 @@ trait LoggingSuiteBase
     Seq(
       (Level.ERROR, () => logError(basicMsg, exception)),
       (Level.WARN, () => logWarning(basicMsg, exception)),
-      (Level.INFO, () => logInfo(basicMsg, exception))).foreach { case (level, logFunc) =>
+      (Level.INFO, () => logInfo(basicMsg, exception)),
+      (Level.DEBUG, () => logDebug(basicMsg, exception)),
+      (Level.TRACE, () => logTrace(basicMsg, exception))).foreach { case (level, logFunc) =>
       val logOutput = captureLogOutput(logFunc)
       assert(expectedPatternForBasicMsgWithException(level).r.matches(logOutput))
     }
@@ -101,11 +112,24 @@ trait LoggingSuiteBase
     Seq(
       (Level.ERROR, () => logError(msgWithMDC)),
       (Level.WARN, () => logWarning(msgWithMDC)),
-      (Level.INFO, () => logInfo(msgWithMDC))).foreach {
+      (Level.INFO, () => logInfo(msgWithMDC)),
+      (Level.DEBUG, () => logDebug(msgWithMDC)),
+      (Level.TRACE, () => logTrace(msgWithMDC))).foreach {
         case (level, logFunc) =>
           val logOutput = captureLogOutput(logFunc)
           assert(expectedPatternForMsgWithMDC(level).r.matches(logOutput))
       }
+  }
+
+  test("Logging with MDC(the value is null)") {
+    Seq(
+      (Level.ERROR, () => logError(msgWithMDCValueIsNull)),
+      (Level.WARN, () => logWarning(msgWithMDCValueIsNull)),
+      (Level.INFO, () => logInfo(msgWithMDCValueIsNull))).foreach {
+      case (level, logFunc) =>
+        val logOutput = captureLogOutput(logFunc)
+        assert(expectedPatternForMsgWithMDCValueIsNull(level).r.matches(logOutput))
+    }
   }
 
   test("Logging with MDC and Exception") {
@@ -113,18 +137,37 @@ trait LoggingSuiteBase
     Seq(
       (Level.ERROR, () => logError(msgWithMDCAndException, exception)),
       (Level.WARN, () => logWarning(msgWithMDCAndException, exception)),
-      (Level.INFO, () => logInfo(msgWithMDCAndException, exception))).foreach {
+      (Level.INFO, () => logInfo(msgWithMDCAndException, exception)),
+      (Level.DEBUG, () => logDebug(msgWithMDCAndException, exception)),
+      (Level.TRACE, () => logTrace(msgWithMDCAndException, exception))).foreach {
         case (level, logFunc) =>
           val logOutput = captureLogOutput(logFunc)
           assert(expectedPatternForMsgWithMDCAndException(level).r.matches(logOutput))
       }
   }
 
+  private val externalSystemCustomLog =
+    log"${MDC(CustomLogKeys.CUSTOM_LOG_KEY, "External system custom log message.")}"
+  test("Logging with external system custom LogKey") {
+    Seq(
+      (Level.ERROR, () => logError(externalSystemCustomLog)),
+      (Level.WARN, () => logWarning(externalSystemCustomLog)),
+      (Level.INFO, () => logInfo(externalSystemCustomLog)),
+      (Level.DEBUG, () => logDebug(externalSystemCustomLog)),
+      (Level.TRACE, () => logTrace(externalSystemCustomLog))).foreach {
+      case (level, logFunc) =>
+        val logOutput = captureLogOutput(logFunc)
+        assert(expectedPatternForExternalSystemCustomLogKey(level).r.matches(logOutput))
+    }
+  }
+
   test("Logging with concat") {
     Seq(
       (Level.ERROR, () => logError(msgWithConcat)),
       (Level.WARN, () => logWarning(msgWithConcat)),
-      (Level.INFO, () => logInfo(msgWithConcat))).foreach {
+      (Level.INFO, () => logInfo(msgWithConcat)),
+      (Level.DEBUG, () => logDebug(msgWithConcat)),
+      (Level.TRACE, () => logTrace(msgWithConcat))).foreach {
         case (level, logFunc) =>
           val logOutput = captureLogOutput(logFunc)
           verifyMsgWithConcat(level, logOutput)
@@ -133,7 +176,7 @@ trait LoggingSuiteBase
 }
 
 class StructuredLoggingSuite extends LoggingSuiteBase {
-  override def className: String = classOf[StructuredLoggingSuite].getName
+  override def className: String = classOf[StructuredLoggingSuite].getSimpleName
   override def logFilePath: String = "target/structured.log"
 
   private val jsonMapper = new ObjectMapper().registerModule(DefaultScalaModule)
@@ -185,6 +228,20 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
         }""")
     }
 
+  def expectedPatternForMsgWithMDCValueIsNull(level: Level): String = {
+    compactAndToRegexPattern(
+      s"""
+        {
+          "ts": "<timestamp>",
+          "level": "$level",
+          "msg": "Lost executor null.",
+          "context": {
+             "executor_id": null
+          },
+          "logger": "$className"
+        }""")
+  }
+
   override def expectedPatternForMsgWithMDCAndException(level: Level): String = {
     compactAndToRegexPattern(
       s"""
@@ -202,6 +259,21 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
           },
           "logger": "$className"
         }""")
+  }
+
+  override def expectedPatternForExternalSystemCustomLogKey(level: Level): String = {
+    compactAndToRegexPattern(
+      s"""
+        {
+          "ts": "<timestamp>",
+          "level": "$level",
+          "msg": "External system custom log message.",
+          "context": {
+              "custom_log_key": "External system custom log message."
+          },
+          "logger": "$className"
+        }"""
+    )
   }
 
   override def verifyMsgWithConcat(level: Level, logOutput: String): Unit = {
@@ -232,4 +304,9 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
         }""")
     assert(pattern1.r.matches(logOutput) || pattern2.r.matches(logOutput))
   }
+}
+
+object CustomLogKeys {
+  // External system custom LogKey must be `extends LogKey`
+  case object CUSTOM_LOG_KEY extends LogKey
 }

@@ -119,11 +119,46 @@ class ThreadUtilsSuite extends SparkFunSuite {
       runInNewThread("thread-name") { throw new IllegalArgumentException(uniqueExceptionMessage) }
     }
     assert(exception.getMessage === uniqueExceptionMessage)
-    assert(exception.getStackTrace.mkString("\n").contains(
+    val stacktrace = exception.getStackTrace.mkString("\n")
+    assert(stacktrace.contains(
       "... run in separate thread using org.apache.spark.util.ThreadUtils ..."),
       "stack trace does not contain expected place holder"
     )
-    assert(exception.getStackTrace.mkString("\n").contains("ThreadUtils.scala") === false,
+    assert(!stacktrace.contains("ThreadUtils.scala"),
+      "stack trace contains unexpected references to ThreadUtils"
+    )
+  }
+
+  test("SPARK-47833: wrapCallerStacktrace") {
+    var runnerThreadName: String = null
+    var exception: Throwable = null
+    val t = new Thread() {
+      override def run(): Unit = {
+        runnerThreadName = Thread.currentThread().getName
+        internalMethod()
+      }
+      private def internalMethod(): Unit = {
+        throw new RuntimeException(s"Error occurred on $runnerThreadName")
+      }
+    }
+    t.setDaemon(true)
+    t.setUncaughtExceptionHandler { case (_, e) => exception = e }
+    t.start()
+    t.join()
+
+    ThreadUtils.wrapCallerStacktrace(exception, s"run in separate thread: $runnerThreadName")
+
+    val stacktrace = exception.getStackTrace.mkString("\n")
+    assert(stacktrace.contains("internalMethod"),
+      "stack trace does not contain real exception stack trace"
+    )
+    assert(stacktrace.contains(s"... run in separate thread: $runnerThreadName ..."),
+      "stack trace does not contain expected place holder"
+    )
+    assert(stacktrace.contains("org.scalatest.Suite.run"),
+      "stack trace does not contain caller stack trace"
+    )
+    assert(!stacktrace.contains("ThreadUtils.scala"),
       "stack trace contains unexpected references to ThreadUtils"
     )
   }

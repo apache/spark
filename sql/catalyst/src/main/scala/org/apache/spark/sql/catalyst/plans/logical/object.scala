@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StatefulProcessor, TimeoutMode, TTLMode}
+import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StatefulProcessor, TimeMode}
 import org.apache.spark.sql.types._
 
 object CatalystSerde {
@@ -574,19 +574,17 @@ object TransformWithState {
       groupingAttributes: Seq[Attribute],
       dataAttributes: Seq[Attribute],
       statefulProcessor: StatefulProcessor[K, V, U],
-      ttlMode: TTLMode,
-      timeoutMode: TimeoutMode,
+      timeMode: TimeMode,
       outputMode: OutputMode,
       child: LogicalPlan): LogicalPlan = {
     val keyEncoder = encoderFor[K]
     val mapped = new TransformWithState(
-      UnresolvedDeserializer(encoderFor[K].deserializer, groupingAttributes),
+      UnresolvedDeserializer(keyEncoder.deserializer, groupingAttributes),
       UnresolvedDeserializer(encoderFor[V].deserializer, dataAttributes),
       groupingAttributes,
       dataAttributes,
       statefulProcessor.asInstanceOf[StatefulProcessor[Any, Any, Any]],
-      ttlMode,
-      timeoutMode,
+      timeMode,
       outputMode,
       keyEncoder.asInstanceOf[ExpressionEncoder[Any]],
       CatalystSerde.generateObjAttr[U],
@@ -607,8 +605,7 @@ object TransformWithState {
       groupingAttributes: Seq[Attribute],
       dataAttributes: Seq[Attribute],
       statefulProcessor: StatefulProcessor[K, V, U],
-      ttlMode: TTLMode,
-      timeoutMode: TimeoutMode,
+      timeMode: TimeMode,
       outputMode: OutputMode,
       child: LogicalPlan,
       initialStateGroupingAttrs: Seq[Attribute],
@@ -621,8 +618,7 @@ object TransformWithState {
       groupingAttributes,
       dataAttributes,
       statefulProcessor.asInstanceOf[StatefulProcessor[Any, Any, Any]],
-      ttlMode,
-      timeoutMode,
+      timeMode,
       outputMode,
       keyEncoder.asInstanceOf[ExpressionEncoder[Any]],
       CatalystSerde.generateObjAttr[U],
@@ -643,8 +639,7 @@ case class TransformWithState(
     groupingAttributes: Seq[Attribute],
     dataAttributes: Seq[Attribute],
     statefulProcessor: StatefulProcessor[Any, Any, Any],
-    ttlMode: TTLMode,
-    timeoutMode: TimeoutMode,
+    timeMode: TimeMode,
     outputMode: OutputMode,
     keyEncoder: ExpressionEncoder[Any],
     outputObjAttr: Attribute,

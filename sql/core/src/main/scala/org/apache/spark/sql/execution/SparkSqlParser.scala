@@ -27,7 +27,7 @@ import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, UnresolvedFunctionName, UnresolvedIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, SchemaEvolution, SchemaTypeEvolution, UnresolvedFunctionName, UnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser._
@@ -140,6 +140,21 @@ class SparkSqlAstBuilder extends AstBuilder {
   override def visitResetQuotedConfiguration(
       ctx: ResetQuotedConfigurationContext): LogicalPlan = withOrigin(ctx) {
     ResetCommand(Some(ctx.configKey().getText))
+  }
+
+  /**
+   * Create a [[SetCommand]] logical plan to set [[SQLConf.DEFAULT_COLLATION]]
+   * Example SQL :
+   * {{{
+   *   SET COLLATION UNICODE;
+   * }}}
+   */
+  override def visitSetCollation(ctx: SetCollationContext): LogicalPlan = withOrigin(ctx) {
+    if (!SQLConf.get.collationEnabled) {
+      throw QueryCompilationErrors.collationNotEnabledError()
+    }
+    val key = SQLConf.DEFAULT_COLLATION.key
+    SetCommand(Some(key -> Some(ctx.identifier.getText.toUpperCase(Locale.ROOT))))
   }
 
   /**
@@ -493,6 +508,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     }
 
     checkDuplicateClauses(ctx.commentSpec(), "COMMENT", ctx)
+    checkDuplicateClauses(ctx.schemaBinding(), "WITH SCHEMA", ctx)
     checkDuplicateClauses(ctx.PARTITIONED, "PARTITIONED ON", ctx)
     checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
 
@@ -510,6 +526,10 @@ class SparkSqlAstBuilder extends AstBuilder {
       .getOrElse(Map.empty)
     if (ctx.TEMPORARY != null && !properties.isEmpty) {
       operationNotAllowed("TBLPROPERTIES can't coexist with CREATE TEMPORARY VIEW", ctx)
+    }
+
+    if (ctx.TEMPORARY != null && ctx.schemaBinding(0) != null) {
+      throw QueryParsingErrors.temporaryViewWithSchemaBindingMode(ctx)
     }
 
     val viewType = if (ctx.TEMPORARY == null) {
@@ -531,6 +551,13 @@ class SparkSqlAstBuilder extends AstBuilder {
       val originalText = source(ctx.query)
       assert(Option(originalText).isDefined,
         "'originalText' must be provided to create permanent view")
+      val schemaBinding = visitSchemaBinding(ctx.schemaBinding(0))
+      val finalSchemaBinding =
+        if (schemaBinding == SchemaEvolution && userSpecifiedColumns.nonEmpty) {
+          SchemaTypeEvolution
+        } else {
+          schemaBinding
+        }
       CreateView(
         withIdentClause(ctx.identifierReference(), UnresolvedIdentifier(_)),
         userSpecifiedColumns,
@@ -539,7 +566,8 @@ class SparkSqlAstBuilder extends AstBuilder {
         Some(originalText),
         qPlan,
         ctx.EXISTS != null,
-        ctx.REPLACE != null)
+        ctx.REPLACE != null,
+        finalSchemaBinding)
     } else {
       // Disallows 'CREATE TEMPORARY VIEW IF NOT EXISTS' to be consistent with
       // 'CREATE TEMPORARY TABLE'

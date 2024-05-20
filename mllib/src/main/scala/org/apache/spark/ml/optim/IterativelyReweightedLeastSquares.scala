@@ -17,10 +17,13 @@
 
 package org.apache.spark.ml.optim
 
+import org.apache.spark.internal.LogKeys.{NUM_ITERATIONS, RELATIVE_TOLERANCE}
+import org.apache.spark.internal.MDC
 import org.apache.spark.ml.feature.{Instance, OffsetInstance}
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.util.OptionalInstrumentation
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.MavenUtils.LogStringContext
 
 /**
  * Model fitted by [[IterativelyReweightedLeastSquares]].
@@ -101,14 +104,15 @@ private[ml] class IterativelyReweightedLeastSquares(
 
       if (maxTol < tol) {
         converged = true
-        instr.logInfo(s"IRLS converged in $iter iterations.")
+        instr.logInfo(log"IRLS converged in ${MDC(NUM_ITERATIONS, iter)} iterations.")
       }
 
-      instr.logInfo(s"Iteration $iter : relative tolerance = $maxTol")
+      instr.logInfo(log"Iteration ${MDC(NUM_ITERATIONS, iter)}: " +
+        log"relative tolerance = ${MDC(RELATIVE_TOLERANCE, maxTol)}")
       iter = iter + 1
 
       if (iter == maxIter) {
-        instr.logInfo(s"IRLS reached the max number of iterations: $maxIter.")
+        instr.logInfo(log"IRLS reached the max number of iterations: ${MDC(NUM_ITERATIONS, iter)}.")
       }
 
     }

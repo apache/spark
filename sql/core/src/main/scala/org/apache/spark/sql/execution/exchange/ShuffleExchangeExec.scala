@@ -48,6 +48,15 @@ import org.apache.spark.util.random.XORShiftRandom
 trait ShuffleExchangeLike extends Exchange {
 
   /**
+   * The asynchronous job that materializes the shuffle. It also does the preparations work,
+   * such as waiting for the subqueries.
+   */
+  @transient private lazy val shuffleFuture: Future[MapOutputStatistics] = executeQuery {
+    materializationStarted.set(true)
+    mapOutputStatisticsFuture
+  }
+
+  /**
    * Returns the number of mappers of this shuffle.
    */
   def numMappers: Int
@@ -68,14 +77,24 @@ trait ShuffleExchangeLike extends Exchange {
   def shuffleOrigin: ShuffleOrigin
 
   /**
-   * The asynchronous job that materializes the shuffle. It also does the preparations work,
-   * such as waiting for the subqueries.
+   * Submits the shuffle job.
    */
-  final def submitShuffleJob: Future[MapOutputStatistics] = executeQuery {
-    mapOutputStatisticsFuture
-  }
+  final def submitShuffleJob: Future[MapOutputStatistics] = shuffleFuture
 
   protected def mapOutputStatisticsFuture: Future[MapOutputStatistics]
+
+  /**
+   * Cancels the shuffle job.
+   */
+  final def cancelShuffleJob: Unit = {
+    if (isMaterializationStarted()) {
+      shuffleFuture match {
+        case action: FutureAction[MapOutputStatistics] if !action.isCompleted =>
+          action.cancel()
+        case _ =>
+      }
+    }
+  }
 
   /**
    * Returns the shuffle RDD with specified partition specs.
@@ -86,6 +105,11 @@ trait ShuffleExchangeLike extends Exchange {
    * Returns the runtime statistics after shuffle materialization.
    */
   def runtimeStatistics: Statistics
+
+  /**
+   * The shuffle ID.
+   */
+  def shuffleId: Int
 }
 
 // Describes where the shuffle operator comes from.
@@ -165,6 +189,8 @@ case class ShuffleExchangeExec(
     val rowCount = metrics(SQLShuffleWriteMetricsReporter.SHUFFLE_RECORDS_WRITTEN).value
     Statistics(dataSize, Some(rowCount))
   }
+
+  override def shuffleId: Int = shuffleDependency.shuffleId
 
   /**
    * A [[ShuffleDependency]] that will partition rows of its child based on

@@ -150,7 +150,7 @@ if in_spark:
 # binary format protocol with the Java version, see ARROW_HOME/format/* for specifications.
 # Also don't forget to update python/docs/source/getting_started/install.rst, and
 # python/packaging/connect/setup.py
-_minimum_pandas_version = "1.4.4"
+_minimum_pandas_version = "2.0.0"
 _minimum_numpy_version = "1.21"
 _minimum_pyarrow_version = "10.0.0"
 _minimum_grpc_version = "1.62.0"
@@ -204,8 +204,13 @@ try:
     copyfile("pyspark/shell.py", "pyspark/python/pyspark/shell.py")
 
     if in_spark:
+        # !!HACK ALTERT!!
+        # `setup.py` has to be located with the same directory with the package.
+        # Therefore, we copy the current file, and place it at `spark/python` directory.
+        # After that, we remove it in the end.
         copyfile("packaging/classic/setup.py", "setup.py")
         copyfile("packaging/classic/setup.cfg", "setup.cfg")
+
         # Construct the symlink farm - this is nein_sparkcessary since we can't refer to
         # the path above the package root and we need to copy the jars and scripts which
         # are up above the python root.
@@ -270,12 +275,14 @@ try:
             "pyspark.ml.deepspeed",
             "pyspark.sql",
             "pyspark.sql.avro",
+            "pyspark.sql.classic",
             "pyspark.sql.connect",
             "pyspark.sql.connect.avro",
             "pyspark.sql.connect.client",
             "pyspark.sql.connect.functions",
             "pyspark.sql.connect.proto",
             "pyspark.sql.connect.protobuf",
+            "pyspark.sql.connect.resource",
             "pyspark.sql.connect.shell",
             "pyspark.sql.connect.streaming",
             "pyspark.sql.connect.streaming.worker",
@@ -357,11 +364,10 @@ try:
                 "numpy>=%s" % _minimum_numpy_version,
             ],
         },
-        python_requires=">=3.8",
+        python_requires=">=3.9",
         classifiers=[
             "Development Status :: 5 - Production/Stable",
             "License :: OSI Approved :: Apache Software License",
-            "Programming Language :: Python :: 3.8",
             "Programming Language :: Python :: 3.9",
             "Programming Language :: Python :: 3.10",
             "Programming Language :: Python :: 3.11",

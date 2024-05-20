@@ -18,7 +18,18 @@ package org.apache.spark.deploy.k8s
 
 import io.fabric8.kubernetes.api.model.HasMetadata
 
-private[spark] case class KubernetesDriverSpec(
+import org.apache.spark.annotation.{DeveloperApi, Since, Unstable}
+
+/**
+ * :: DeveloperApi ::
+ *
+ * Spec for driver pod and resources, used for K8s operations internally
+ * and Spark K8s operator.
+ */
+@Unstable
+@DeveloperApi
+@Since("3.3.0")
+case class KubernetesDriverSpec(
     pod: SparkPod,
     driverPreKubernetesResources: Seq[HasMetadata],
     driverKubernetesResources: Seq[HasMetadata],

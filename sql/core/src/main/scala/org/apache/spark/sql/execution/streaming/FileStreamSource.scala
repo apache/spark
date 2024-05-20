@@ -27,7 +27,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, GlobFilter, Path}
 
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
@@ -114,6 +114,11 @@ class FileStreamSource(
       "the same and causes data lost.")
   }
 
+
+  private val maxCachedFiles = sourceOptions.maxCachedFiles
+
+  private val discardCachedInputRatio = sourceOptions.discardCachedInputRatio
+
   /** A mapping from a file that we have processed to some timestamp it was last modified. */
   // Visible for testing and debugging in production.
   val seenFiles = new SeenFilesMap(maxFileAgeMs, fileNameOnly)
@@ -125,8 +130,9 @@ class FileStreamSource(
   }
   seenFiles.purge()
 
-  logInfo(s"maxFilesPerBatch = $maxFilesPerBatch, " +
-    s"maxBytesPerBatch = $maxBytesPerBatch, maxFileAgeMs = $maxFileAgeMs")
+  logInfo(log"maxFilesPerBatch = ${MDC(LogKeys.NUM_FILES, maxFilesPerBatch)}, " +
+    log"maxBytesPerBatch = ${MDC(LogKeys.NUM_BYTES, maxBytesPerBatch)}, " +
+    log"maxFileAgeMs = ${MDC(LogKeys.TIME_UNITS, maxFileAgeMs)}")
 
   private var unreadFiles: Seq[NewFileEntry] = _
 
@@ -183,7 +189,7 @@ class FileStreamSource(
       case files: ReadMaxFiles if !sourceOptions.latestFirst =>
         // we can cache and reuse remaining fetched list of files in further batches
         val (bFiles, usFiles) = newFiles.splitAt(files.maxFiles())
-        if (usFiles.size < files.maxFiles() * DISCARD_UNSEEN_INPUT_RATIO) {
+        if (usFiles.size < files.maxFiles() * discardCachedInputRatio) {
           // Discard unselected files if the number of files are smaller than threshold.
           // This is to avoid the case when the next batch would have too few files to read
           // whereas there're new files available.
@@ -201,7 +207,7 @@ class FileStreamSource(
         // we can cache and reuse remaining fetched list of files in further batches
         val (FilesSplit(bFiles, _), FilesSplit(usFiles, rSize)) =
           takeFilesUntilMax(newFiles, files.maxBytes())
-        if (rSize.toDouble < (files.maxBytes() * DISCARD_UNSEEN_INPUT_RATIO)) {
+        if (rSize.toDouble < (files.maxBytes() * discardCachedInputRatio)) {
           // Discard unselected files if the total size of files is smaller than threshold.
           // This is to avoid the case when the next batch would have too small of a size of
           // files to read whereas there're new files available.
@@ -220,8 +226,8 @@ class FileStreamSource(
     }
 
     if (unselectedFiles != null && unselectedFiles.nonEmpty) {
-      logTrace(s"Taking first $MAX_CACHED_UNSEEN_FILES unread files.")
-      unreadFiles = unselectedFiles.take(MAX_CACHED_UNSEEN_FILES)
+      logTrace(s"Taking first $maxCachedFiles unread files.")
+      unreadFiles = unselectedFiles.take(maxCachedFiles)
       logTrace(s"${unreadFiles.size} unread files are available for further batches.")
     } else {
       unreadFiles = null
@@ -250,7 +256,8 @@ class FileStreamSource(
         FileEntry(path = p.urlEncoded, timestamp = timestamp, batchId = metadataLogCurrentOffset)
       }.toArray
       if (metadataLog.add(metadataLogCurrentOffset, fileEntries)) {
-        logInfo(s"Log offset set to $metadataLogCurrentOffset with ${batchFiles.size} new files")
+        logInfo(log"Log offset set to ${MDC(LogKeys.LOG_OFFSET, metadataLogCurrentOffset)} " +
+          log"with ${MDC(LogKeys.NUM_FILES, batchFiles.size)} new files")
       } else {
         throw new IllegalStateException("Concurrent update to the log. Multiple streaming jobs " +
           s"detected for $metadataLogCurrentOffset")
@@ -290,7 +297,9 @@ class FileStreamSource(
 
     assert(startOffset <= endOffset)
     val files = metadataLog.get(Some(startOffset + 1), Some(endOffset)).flatMap(_._2)
-    logInfo(s"Processing ${files.length} files from ${startOffset + 1}:$endOffset")
+    logInfo(log"Processing ${MDC(LogKeys.NUM_FILES, files.length)} files from " +
+      log"${MDC(LogKeys.FILE_START_OFFSET, startOffset + 1)}:" +
+      log"${MDC(LogKeys.FILE_END_OFFSET, endOffset)}")
     logTrace(s"Files are:\n\t" + files.mkString("\n\t"))
     val newDataSource =
       DataSource(
@@ -380,7 +389,8 @@ class FileStreamSource(
     val listingTimeMs = NANOSECONDS.toMillis(endTime - startTime)
     if (listingTimeMs > 2000) {
       // Output a warning when listing files uses more than 2 seconds.
-      logWarning(s"Listed ${files.size} file(s) in $listingTimeMs ms")
+      logWarning(log"Listed ${MDC(LogKeys.NUM_FILES, files.size)} file(s) in " +
+        log"${MDC(LogKeys.ELAPSED_TIME, listingTimeMs)} ms")
     } else {
       logTrace(s"Listed ${files.size} file(s) in $listingTimeMs ms")
     }
@@ -420,9 +430,6 @@ class FileStreamSource(
 object FileStreamSource {
   /** Timestamp for file modification time, in ms since January 1, 1970 UTC. */
   type Timestamp = Long
-
-  val DISCARD_UNSEEN_INPUT_RATIO = 0.2
-  val MAX_CACHED_UNSEEN_FILES = 10000
 
   case class FileEntry(
       path: String, // uri-encoded path string
@@ -628,11 +635,13 @@ object FileStreamSource {
 
         logDebug(s"Archiving completed file $curPath to $newPath")
         if (!fileSystem.rename(curPath, newPath)) {
-          logWarning(s"Fail to move $curPath to $newPath / skip moving file.")
+          logWarning(log"Fail to move ${MDC(LogKeys.CURRENT_PATH, curPath)} to " +
+            log"${MDC(LogKeys.NEW_PATH, newPath)} / skip moving file.")
         }
       } catch {
         case NonFatal(e) =>
-          logWarning(s"Fail to move $curPath to $newPath / skip moving file.", e)
+          logWarning(log"Fail to move ${MDC(LogKeys.CURRENT_PATH, curPath)} to " +
+            log"${MDC(LogKeys.NEW_PATH, newPath)} / skip moving file.", e)
       }
     }
   }
@@ -646,12 +655,14 @@ object FileStreamSource {
         logDebug(s"Removing completed file $curPath")
 
         if (!fileSystem.delete(curPath, false)) {
-          logWarning(s"Failed to remove $curPath / skip removing file.")
+          logWarning(
+            log"Failed to remove ${MDC(LogKeys.CURRENT_PATH, curPath)} / skip removing file.")
         }
       } catch {
         case NonFatal(e) =>
           // Log to error but swallow exception to avoid process being stopped
-          logWarning(s"Fail to remove $curPath / skip removing file.", e)
+          logWarning(
+            log"Fail to remove ${MDC(LogKeys.CURRENT_PATH, curPath)} / skip removing file.", e)
       }
     }
   }

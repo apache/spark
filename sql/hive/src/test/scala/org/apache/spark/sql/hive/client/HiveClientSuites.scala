@@ -19,8 +19,6 @@ package org.apache.spark.sql.hive.client
 
 import java.net.URI
 
-import scala.collection.immutable.IndexedSeq
-
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.Suite
 
