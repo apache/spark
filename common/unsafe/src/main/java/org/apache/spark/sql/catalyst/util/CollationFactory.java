@@ -382,9 +382,9 @@ public final class CollationFactory {
 
       private static int collationNameToId(
           String originalName, String collationName) throws SparkException {
-        // search for the longest locale match because specifiers are designed to be different from
+        // Search for the longest locale match because specifiers are designed to be different from
         // script tag and country code, meaning the only valid locale name match can be
-        // the longest one
+        // the longest one.
         int lastPos = -1;
         for (int i = 1; i <= collationName.length(); i++) {
           String localeName = collationName.substring(0, i);
