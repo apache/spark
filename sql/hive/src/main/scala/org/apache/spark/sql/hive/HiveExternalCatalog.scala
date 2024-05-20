@@ -1425,7 +1425,6 @@ object HiveExternalCatalog {
     case a: ArrayType => isHiveCompatibleDataType(a.elementType)
     case m: MapType =>
       isHiveCompatibleDataType(m.keyType) && isHiveCompatibleDataType(m.valueType)
-    case st: StringType => st.isUTF8BinaryCollation
     case _ => true
   }
 }
