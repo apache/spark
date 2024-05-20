@@ -167,7 +167,7 @@ private case class MsSqlServerDialect() extends JdbcDialect {
     case ByteType => Some(JdbcType("SMALLINT", java.sql.Types.TINYINT))
     case LongType => Some(JdbcType("BIGINT", java.sql.Types.BIGINT))
     case DoubleType => Some(JdbcType("FLOAT", java.sql.Types.FLOAT))
-    case _ => JdbcUtils.getCommonJDBCType(dt)
+    case _ => _
   }
 
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
