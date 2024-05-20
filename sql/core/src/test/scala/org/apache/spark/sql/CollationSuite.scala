@@ -32,6 +32,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SqlApiConf
+import org.apache.spark.sql.internal.types.{AbstractMapType, StringTypeAnyCollation}
 import org.apache.spark.sql.types.{MapType, StringType, StructField, StructType}
 
 class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
@@ -954,7 +955,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         errorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
         parameters = Map(
           "functionName" -> "`=`",
-          "dataType" -> toSQLType(MapType(StringType, StringType)),
+          "dataType" -> toSQLType(AbstractMapType(StringTypeAnyCollation, StringTypeAnyCollation)),
           "sqlExpr" -> "\"(m = m)\""),
         context = ExpectedContext(ctx, query.length - ctx.length, query.length - 1))
     }
