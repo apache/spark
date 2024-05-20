@@ -322,7 +322,7 @@
       -Djdk.reflect.useDirectMethodHandle=false
       -Dio.netty.tryReflectionSetAccessible=true
     </extraJavaTestArgs>
-    <mariadb.java.client.version>2.7.12</mariadb.java.client.version>
+    <mariadb.java.client.version>3.4.0</mariadb.java.client.version>
     <mysql.connector.version>8.3.0</mysql.connector.version>
     <postgresql.version>42.7.3</postgresql.version>
     <db2.jcc.version>11.5.9.0</db2.jcc.version>
