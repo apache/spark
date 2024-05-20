@@ -18,12 +18,13 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import javax.annotation.Nullable
-
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.{hasStringType, haveSameType}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StringType}
+
+import scala.annotation.tailrec
 
 object CollationTypeCasts extends TypeCoercionRule {
   override val transform: PartialFunction[Expression, Expression] = {
@@ -79,13 +80,15 @@ object CollationTypeCasts extends TypeCoercionRule {
   /**
    * Extracts StringTypes from filtered hasStringType
    */
+  @tailrec
   private def extractStringType(dt: DataType): StringType = dt match {
     case st: StringType => st
     case ArrayType(et, _) => extractStringType(et)
-    case MapType(kt, vt, _) => extractStringType(kt) match {
-      case st: StringType => st
-      case _ => extractStringType(vt)
-    }
+    case MapType(kt, vt, _) => if (hasStringType(kt)) {
+        extractStringType(kt)
+      } else {
+        extractStringType(vt)
+      }
   }
 
   /**
