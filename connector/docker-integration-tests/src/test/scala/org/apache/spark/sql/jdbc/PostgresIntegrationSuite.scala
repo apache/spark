@@ -322,7 +322,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
       checkAnswer(df, Row(
         1,
         DateTimeUtils.toJavaTimestamp(1471022551949271L),
-        DateTimeUtils.toJavaTimestamp(62551949L)))
+        DateTimeUtils.toJavaTimestamp(62551949000L)))
     }
   }
 
