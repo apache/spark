@@ -57,7 +57,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
   }
 
   test("UTF8_BINARY and ICU root locale collation names") {
-    // collation name already normalized
+    // Collation name already normalized.
     Seq(
       "UTF8_BINARY",
       "UTF8_BINARY_LCASE",
@@ -69,15 +69,15 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       val col = fetchCollation(collationName)
       assert(col.collationName == collationName)
     })
-    // collation name normalization
+    // Collation name normalization.
     Seq(
-      // ICU root locale
+      // ICU root locale.
       ("UNICODE_CS", "UNICODE"),
       ("UNICODE_CS_AS", "UNICODE"),
       ("UNICODE_CI_AS", "UNICODE_CI"),
       ("UNICODE_AI_CS", "UNICODE_AI"),
       ("UNICODE_AI_CI", "UNICODE_CI_AI"),
-      // randomized case collation names
+      // Randomized case collation names.
       ("utf8_binary", "UTF8_BINARY"),
       ("UtF8_binARy_LcasE", "UTF8_BINARY_LCASE"),
       ("unicode", "UNICODE"),
@@ -232,31 +232,31 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
     ).foreach(collationId => {
       val col1 = fetchCollation(collationId)
       val col2 = fetchCollation(collationId)
-      assert(col1 eq col2) // reference equality
+      assert(col1 eq col2) // Check for reference equality.
     })
   }
 
   test("collations with ICU non-root localization") {
     Seq(
-      // language only
+      // Language only.
       "en",
       "en_CS",
       "en_CI",
       "en_AS",
       "en_AI",
-      // language + 3-letter country code
+      // Language + 3-letter country code.
       "en_USA",
       "en_USA_CS",
       "en_USA_CI",
       "en_USA_AS",
       "en_USA_AI",
-      // language + script code
+      // Language + script code.
       "sr_Cyrl",
       "sr_Cyrl_CS",
       "sr_Cyrl_CI",
       "sr_Cyrl_AS",
       "sr_Cyrl_AI",
-      // language + script code + 3-letter country code
+      // Language + script code + 3-letter country code.
       "sr_Cyrl_SRB",
       "sr_Cyrl_SRB_CS",
       "sr_Cyrl_SRB_CI",
@@ -270,7 +270,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
 
   test("invalid names of collations with ICU non-root localization") {
     Seq(
-      "en_US", // must use 3-letter country code
+      "en_US", // Must use 3-letter country code
       "enn",
       "en_AAA",
       "en_Something",
@@ -284,10 +284,30 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       "en_USA_UNSPECIFIED_CI",
       "en_INDETERMINATE",
       "en_USA_INDETERMINATE",
-      "en_Latn_USA", // use en_USA instead
+      "en_Latn_USA", // Use en_USA instead.
       "en_Cyrl_USA",
       "en_USA_AAA",
-      "sr_Cyrl_SRB_AAA"
+      "sr_Cyrl_SRB_AAA",
+      // Invalid ordering of language, script and country code.
+      "USA_en",
+      "sr_SRB_Cyrl",
+      "SRB_sr",
+      "SRB_sr_Cyrl",
+      "SRB_Cyrl_sr",
+      "Cyrl_sr",
+      "Cyrl_sr_SRB",
+      "Cyrl_SRB_sr",
+      // Collation specifiers in the middle of locale.
+      "CI_en",
+      "USA_CI_en",
+      "en_CI_USA",
+      "CI_sr_Cyrl_SRB",
+      "sr_CI_Cyrl_SRB",
+      "sr_Cyrl_CI_SRB",
+      "CI_Cyrl_sr",
+      "Cyrl_CI_sr",
+      "Cyrl_CI_sr_SRB",
+      "Cyrl_sr_CI_SRB"
     ).foreach(collationName => {
       val error = intercept[SparkException] {
         fetchCollation(collationName)
@@ -314,7 +334,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       ("en_CI_AS", "en_CI"),
       ("en_AS_CI", "en_CI"),
       ("en_USA_AI_CI", "en_USA_CI_AI"),
-      // randomized case
+      // Randomized case.
       ("EN_USA", "en_USA"),
       ("SR_CYRL", "sr_Cyrl"),
       ("sr_cyrl_srb", "sr_Cyrl_SRB"),
@@ -328,55 +348,55 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
 
   test("invalid collationId") {
     val badCollationIds = Seq(
-      INDETERMINATE_COLLATION_ID, // indeterminate collation
-      1 << 30, // user-defined collation range
-      (1 << 30) | 1, // user-defined collation range
-      (1 << 30) | (1 << 29), // user-defined collation range
-      1 << 1, // utf8-binary mandatory zero bit 1 breach
-      1 << 2, // utf8-binary mandatory zero bit 2 breach
-      1 << 3, // utf8-binary mandatory zero bit 3 breach
-      1 << 4, // utf8-binary mandatory zero bit 4 breach
-      1 << 5, // utf8-binary mandatory zero bit 5 breach
-      1 << 6, // utf8-binary mandatory zero bit 6 breach
-      1 << 7, // utf8-binary mandatory zero bit 7 breach
-      1 << 8, // utf8-binary mandatory zero bit 8 breach
-      1 << 9, // utf8-binary mandatory zero bit 9 breach
-      1 << 10, // utf8-binary mandatory zero bit 10 breach
-      1 << 11, // utf8-binary mandatory zero bit 11 breach
-      1 << 12, // utf8-binary mandatory zero bit 12 breach
-      1 << 13, // utf8-binary mandatory zero bit 13 breach
-      1 << 14, // utf8-binary mandatory zero bit 14 breach
-      1 << 15, // utf8-binary mandatory zero bit 15 breach
-      1 << 16, // utf8-binary mandatory zero bit 16 breach
-      1 << 17, // utf8-binary mandatory zero bit 17 breach
-      1 << 18, // utf8-binary mandatory zero bit 18 breach
-      1 << 19, // utf8-binary mandatory zero bit 19 breach
-      1 << 20, // utf8-binary mandatory zero bit 20 breach
-      1 << 23, // utf8-binary mandatory zero bit 23 breach
-      1 << 24, // utf8-binary mandatory zero bit 24 breach
-      1 << 25, // utf8-binary mandatory zero bit 25 breach
-      1 << 26, // utf8-binary mandatory zero bit 26 breach
-      1 << 27, // utf8-binary mandatory zero bit 27 breach
-      1 << 28, // utf8-binary mandatory zero bit 28 breach
-      (1 << 29) | (1 << 12), // ICU mandatory zero bit 12 breach
-      (1 << 29) | (1 << 13), // ICU mandatory zero bit 13 breach
-      (1 << 29) | (1 << 14), // ICU mandatory zero bit 14 breach
-      (1 << 29) | (1 << 15), // ICU mandatory zero bit 15 breach
-      (1 << 29) | (1 << 18), // ICU mandatory zero bit 18 breach
-      (1 << 29) | (1 << 19), // ICU mandatory zero bit 19 breach
-      (1 << 29) | (1 << 20), // ICU mandatory zero bit 20 breach
-      (1 << 29) | (1 << 21), // ICU mandatory zero bit 21 breach
-      (1 << 29) | (1 << 22), // ICU mandatory zero bit 22 breach
-      (1 << 29) | (1 << 23), // ICU mandatory zero bit 23 breach
-      (1 << 29) | (1 << 24), // ICU mandatory zero bit 24 breach
-      (1 << 29) | (1 << 25), // ICU mandatory zero bit 25 breach
-      (1 << 29) | (1 << 26), // ICU mandatory zero bit 26 breach
-      (1 << 29) | (1 << 27), // ICU mandatory zero bit 27 breach
-      (1 << 29) | (1 << 28), // ICU mandatory zero bit 28 breach
-      (1 << 29) | 0xFFFF // ICU with invalid locale id
+      INDETERMINATE_COLLATION_ID, // Indeterminate collation.
+      1 << 30, // User-defined collation range.
+      (1 << 30) | 1, // User-defined collation range.
+      (1 << 30) | (1 << 29), // User-defined collation range.
+      1 << 1, // UTF8_BINARY mandatory zero bit 1 breach.
+      1 << 2, // UTF8_BINARY mandatory zero bit 2 breach.
+      1 << 3, // UTF8_BINARY mandatory zero bit 3 breach.
+      1 << 4, // UTF8_BINARY mandatory zero bit 4 breach.
+      1 << 5, // UTF8_BINARY mandatory zero bit 5 breach.
+      1 << 6, // UTF8_BINARY mandatory zero bit 6 breach.
+      1 << 7, // UTF8_BINARY mandatory zero bit 7 breach.
+      1 << 8, // UTF8_BINARY mandatory zero bit 8 breach.
+      1 << 9, // UTF8_BINARY mandatory zero bit 9 breach.
+      1 << 10, // UTF8_BINARY mandatory zero bit 10 breach.
+      1 << 11, // UTF8_BINARY mandatory zero bit 11 breach.
+      1 << 12, // UTF8_BINARY mandatory zero bit 12 breach.
+      1 << 13, // UTF8_BINARY mandatory zero bit 13 breach.
+      1 << 14, // UTF8_BINARY mandatory zero bit 14 breach.
+      1 << 15, // UTF8_BINARY mandatory zero bit 15 breach.
+      1 << 16, // UTF8_BINARY mandatory zero bit 16 breach.
+      1 << 17, // UTF8_BINARY mandatory zero bit 17 breach.
+      1 << 18, // UTF8_BINARY mandatory zero bit 18 breach.
+      1 << 19, // UTF8_BINARY mandatory zero bit 19 breach.
+      1 << 20, // UTF8_BINARY mandatory zero bit 20 breach.
+      1 << 23, // UTF8_BINARY mandatory zero bit 23 breach.
+      1 << 24, // UTF8_BINARY mandatory zero bit 24 breach.
+      1 << 25, // UTF8_BINARY mandatory zero bit 25 breach.
+      1 << 26, // UTF8_BINARY mandatory zero bit 26 breach.
+      1 << 27, // UTF8_BINARY mandatory zero bit 27 breach.
+      1 << 28, // UTF8_BINARY mandatory zero bit 28 breach.
+      (1 << 29) | (1 << 12), // ICU mandatory zero bit 12 breach.
+      (1 << 29) | (1 << 13), // ICU mandatory zero bit 13 breach.
+      (1 << 29) | (1 << 14), // ICU mandatory zero bit 14 breach.
+      (1 << 29) | (1 << 15), // ICU mandatory zero bit 15 breach.
+      (1 << 29) | (1 << 18), // ICU mandatory zero bit 18 breach.
+      (1 << 29) | (1 << 19), // ICU mandatory zero bit 19 breach.
+      (1 << 29) | (1 << 20), // ICU mandatory zero bit 20 breach.
+      (1 << 29) | (1 << 21), // ICU mandatory zero bit 21 breach.
+      (1 << 29) | (1 << 22), // ICU mandatory zero bit 22 breach.
+      (1 << 29) | (1 << 23), // ICU mandatory zero bit 23 breach.
+      (1 << 29) | (1 << 24), // ICU mandatory zero bit 24 breach.
+      (1 << 29) | (1 << 25), // ICU mandatory zero bit 25 breach.
+      (1 << 29) | (1 << 26), // ICU mandatory zero bit 26 breach.
+      (1 << 29) | (1 << 27), // ICU mandatory zero bit 27 breach.
+      (1 << 29) | (1 << 28), // ICU mandatory zero bit 28 breach.
+      (1 << 29) | 0xFFFF // ICU with invalid locale id.
     )
     badCollationIds.foreach(collationId => {
-      // assumptions about collation id will break and assert statement will fail
+      // Assumptions about collation id will break and assert statement will fail.
       intercept[AssertionError](fetchCollation(collationId))
     })
   }
