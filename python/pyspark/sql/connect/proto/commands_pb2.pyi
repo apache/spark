@@ -2226,24 +2226,3 @@ class CheckpointCommand(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["local"] | None: ...
 
 global___CheckpointCommand = CheckpointCommand
-
-class CheckpointCommandResult(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-    RELATION_FIELD_NUMBER: builtins.int
-    @property
-    def relation(self) -> pyspark.sql.connect.proto.relations_pb2.CachedRemoteRelation:
-        """(Required) The logical plan checkpointed."""
-    def __init__(
-        self,
-        *,
-        relation: pyspark.sql.connect.proto.relations_pb2.CachedRemoteRelation | None = ...,
-    ) -> None: ...
-    def HasField(
-        self, field_name: typing_extensions.Literal["relation", b"relation"]
-    ) -> builtins.bool: ...
-    def ClearField(
-        self, field_name: typing_extensions.Literal["relation", b"relation"]
-    ) -> None: ...
-
-global___CheckpointCommandResult = CheckpointCommandResult

@@ -504,8 +504,3 @@ message CheckpointCommand {
   // (Optional) Whether to checkpoint this dataframe immediately.
   optional bool eager = 3;
 }
-
-message CheckpointCommandResult {
-  // (Required) The logical plan checkpointed.
-  CachedRemoteRelation relation = 1;
-}

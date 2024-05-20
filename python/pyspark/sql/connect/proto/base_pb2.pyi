@@ -1595,9 +1595,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     def execution_progress(self) -> global___ExecutePlanResponse.ExecutionProgress:
         """(Optional) Intermediate query progress reports."""
     @property
-    def checkpoint_command_result(
-        self,
-    ) -> pyspark.sql.connect.proto.commands_pb2.CheckpointCommandResult:
+    def checkpoint_command_result(self) -> global___CheckpointCommandResult:
         """Response for command that checkpoints a DataFrame."""
     @property
     def extension(self) -> google.protobuf.any_pb2.Any:
@@ -1640,8 +1638,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         create_resource_profile_command_result: pyspark.sql.connect.proto.commands_pb2.CreateResourceProfileCommandResult
         | None = ...,
         execution_progress: global___ExecutePlanResponse.ExecutionProgress | None = ...,
-        checkpoint_command_result: pyspark.sql.connect.proto.commands_pb2.CheckpointCommandResult
-        | None = ...,
+        checkpoint_command_result: global___CheckpointCommandResult | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
         metrics: global___ExecutePlanResponse.Metrics | None = ...,
         observed_metrics: collections.abc.Iterable[global___ExecutePlanResponse.ObservedMetrics]
@@ -3716,3 +3713,24 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["root_error_idx"] | None: ...
 
 global___FetchErrorDetailsResponse = FetchErrorDetailsResponse
+
+class CheckpointCommandResult(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RELATION_FIELD_NUMBER: builtins.int
+    @property
+    def relation(self) -> pyspark.sql.connect.proto.relations_pb2.CachedRemoteRelation:
+        """(Required) The logical plan checkpointed."""
+    def __init__(
+        self,
+        *,
+        relation: pyspark.sql.connect.proto.relations_pb2.CachedRemoteRelation | None = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["relation", b"relation"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["relation", b"relation"]
+    ) -> None: ...
+
+global___CheckpointCommandResult = CheckpointCommandResult

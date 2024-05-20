@@ -1051,6 +1051,11 @@ message FetchErrorDetailsResponse {
   }
 }
 
+message CheckpointCommandResult {
+  // (Required) The logical plan checkpointed.
+  CachedRemoteRelation relation = 1;
+}
+
 // Main interface for the SparkConnect service.
 service SparkConnectService {
 
