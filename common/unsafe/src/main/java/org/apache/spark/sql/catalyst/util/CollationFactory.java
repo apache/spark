@@ -398,7 +398,7 @@ public final class CollationFactory {
           String locale = collationName.substring(0, lastPos);
           int collationId = ICULocaleToId.get(ICULocaleMapUppercase.get(locale));
 
-          // try all combinations of AS/AI and CS/CI
+          // Try all combinations of AS/AI and CS/CI.
           CaseSensitivity caseSensitivity;
           AccentSensitivity accentSensitivity;
           if (collationName.equals(locale) ||
