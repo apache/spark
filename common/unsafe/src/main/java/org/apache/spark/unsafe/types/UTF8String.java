@@ -892,6 +892,17 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
+   * Returns the (default) position of the first occurrence of an empty substr in the current
+   * string from the specified position (0-based index).
+   *
+   * @param start the start position of the current string for searching
+   * @return the position of the first occurrence of the empty substr (now, always 0)
+   */
+  public int indexOfEmpty(int start) {
+    return 0; // TODO: Fix this behaviour (SPARK-48284)
+  }
+
+  /**
    * Returns the position of the first occurrence of substr in
    * current string from the specified position (0-based index).
    *
@@ -901,7 +912,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    */
   public int indexOf(UTF8String v, int start) {
     if (v.numBytes() == 0) {
-      return 0;
+      return indexOfEmpty(start);
     }
 
     // locate to the start position.

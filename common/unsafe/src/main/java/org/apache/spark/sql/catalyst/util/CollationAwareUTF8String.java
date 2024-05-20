@@ -345,14 +345,14 @@ public class CollationAwareUTF8String {
    */
   public static int lowercaseIndexOf(final UTF8String target, final UTF8String pattern,
       final int start) {
-    if (pattern.numChars() == 0) return 0;
+    if (pattern.numChars() == 0) return target.indexOfEmpty(start);
     return lowercaseFind(target, pattern.toLowerCase(), start);
   }
 
   public static int indexOf(final UTF8String target, final UTF8String pattern,
       final int start, final int collationId) {
     if (pattern.numBytes() == 0) {
-      return 0;
+      return target.indexOfEmpty(start);
     }
 
     StringSearch stringSearch = CollationFactory.getStringSearch(target, pattern, collationId);
