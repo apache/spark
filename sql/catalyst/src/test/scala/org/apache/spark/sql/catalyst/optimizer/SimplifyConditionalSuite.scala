@@ -301,7 +301,7 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper {
       CaseWhen((GreaterThan($"a", 1), Literal.create(1, IntegerType)) :: Nil))
   }
 
-  test ("Simplify conditionals with predicate branches to Boolean logic") {
+  test ("Simplify conditionals with predicate branches") {
     val exprs = Seq(
       // If(x, false, y) => And(Not(EqualNullSafe(x, true)), y)
       ($"a" > 2.0, FalseLiteral, $"b" <= 4.0) -> (Not($"a" > 2.0 <=> true) && $"b" <= 4.0),
