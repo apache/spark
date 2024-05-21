@@ -955,6 +955,27 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       Some(DoubleType))
     assert(mySqlDialect.getCatalystType(java.sql.Types.CHAR, "JSON", Int.MaxValue, metadata) ===
       Some(StringType))
+    assert(mySqlDialect.getCatalystType(java.sql.Types.TIMESTAMP, "DATETIME", 1,
+      metadata.putBoolean("isTimestampNTZ", false)) === Some(TimestampType))
+    assert(mySqlDialect.getCatalystType(java.sql.Types.TIMESTAMP, "DATETIME", 1,
+      metadata.putBoolean("isTimestampNTZ", true)) === Some(TimestampNTZType))
+    withSQLConf(SQLConf.LEGACY_MYSQL_TIMESTAMPNTZ_MAPPING_ENABLED.key -> "true") {
+      // in legacy mode, fallback to common mapping
+      assert(mySqlDialect.getCatalystType(java.sql.Types.TIMESTAMP, "TIMESTAMP", 1,
+        metadata.putBoolean("isTimestampNTZ", true)) === None)
+      mySqlDialect.getJDBCType(TimestampNTZType).foreach { jdbcType =>
+        assert(jdbcType.databaseTypeDefinition === "TIMESTAMP")
+      }
+    }
+    withSQLConf(SQLConf.LEGACY_MYSQL_TIMESTAMPNTZ_MAPPING_ENABLED.key -> "false") {
+      Seq(true, false).foreach(isTimestampNTZ => {
+        assert(mySqlDialect.getCatalystType(java.sql.Types.TIMESTAMP, "TIMESTAMP", 1,
+          metadata.putBoolean("isTimestampNTZ", isTimestampNTZ)) === Some(TimestampType))
+      })
+      mySqlDialect.getJDBCType(TimestampNTZType).foreach { jdbcType =>
+        assert(jdbcType.databaseTypeDefinition === "DATETIME")
+      }
+    }
   }
 
   test("SPARK-35446: MySQLDialect type mapping of float") {
