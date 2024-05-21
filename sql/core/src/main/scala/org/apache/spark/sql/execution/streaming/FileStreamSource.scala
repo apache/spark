@@ -134,7 +134,6 @@ class FileStreamSource(
     log"maxBytesPerBatch = ${MDC(LogKeys.NUM_BYTES, maxBytesPerBatch)}, " +
     log"maxFileAgeMs = ${MDC(LogKeys.TIME_UNITS, maxFileAgeMs)}")
 
-
   private var unreadFiles: Seq[NewFileEntry] = _
 
   /**
