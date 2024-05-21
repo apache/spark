@@ -24,6 +24,7 @@ import org.apache.spark.SparkRuntimeException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, Encoders}
 import org.apache.spark.sql.catalyst.util.stringToFile
+import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider, StatefulProcessorCannotPerformOperationWithInvalidHandleState, StateStoreMultipleColumnFamiliesNotSupportedException}
 import org.apache.spark.sql.functions.timestamp_seconds
@@ -364,6 +365,63 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         AddData(inputData, "a", "c"), // should recreate state for "a" and return count as 1 and
         CheckNewAnswer(("a", "1"), ("c", "1"))
       )
+    }
+  }
+
+  test("state reader") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
+      withTempDir { chkptDir =>
+        val clock = new StreamManualClock
+
+        val inputData = MemoryStream[String]
+        val result = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessorWithProcTimeTimer(),
+            TimeMode.ProcessingTime(),
+            OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(
+            Trigger.ProcessingTime("1 second"),
+            triggerClock = clock,
+            checkpointLocation = chkptDir.getCanonicalPath
+          ),
+          AddData(inputData, "a"),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(("a", "1")),
+          Execute { q =>
+            assert(q.lastProgress.stateOperators(0).customMetrics.get("numValueStateVars") > 0)
+            assert(q.lastProgress.stateOperators(0).customMetrics.get("numRegisteredTimers") === 1)
+          },
+          AddData(inputData, "b"),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(("b", "1")),
+
+          AddData(inputData, "b"),
+          AdvanceManualClock(10 * 1000),
+          CheckNewAnswer(("a", "-1"), ("b", "2")),
+
+          AddData(inputData, "b"),
+          AddData(inputData, "c"),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(("c", "1")), // should remove 'b' as count reaches 3
+
+          AddData(inputData, "d"),
+          AdvanceManualClock(10 * 1000),
+          CheckNewAnswer(("c", "-1"), ("d", "1")),
+          StopStream
+        )
+
+        val stateReadDf = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, chkptDir.getAbsolutePath)
+          // skip version and operator ID to test out functionalities
+          .load()
+
+//        // print out all the contents of the stateReadDf
+        stateReadDf.show()
+      }
     }
   }
 

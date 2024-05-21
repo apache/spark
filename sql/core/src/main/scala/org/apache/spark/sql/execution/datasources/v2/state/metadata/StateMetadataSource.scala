@@ -32,7 +32,7 @@ import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionRead
 import org.apache.spark.sql.execution.datasources.v2.state.StateDataSourceErrors
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.PATH
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager
-import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadata, OperatorStateMetadataReader, OperatorStateMetadataV1}
+import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadata, OperatorStateMetadataReader, OperatorStateMetadataV1, OperatorStateMetadataV2}
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -199,17 +199,30 @@ class StateMetadataPartitionReader(
 
   private[state] lazy val stateMetadata: Iterator[StateMetadataTableEntry] = {
     allOperatorStateMetadata.flatMap { operatorStateMetadata =>
-      require(operatorStateMetadata.version == 1)
-      val operatorStateMetadataV1 = operatorStateMetadata.asInstanceOf[OperatorStateMetadataV1]
-      operatorStateMetadataV1.stateStoreInfo.map { stateStoreMetadata =>
-        StateMetadataTableEntry(operatorStateMetadataV1.operatorInfo.operatorId,
-          operatorStateMetadataV1.operatorInfo.operatorName,
-          stateStoreMetadata.storeName,
-          stateStoreMetadata.numPartitions,
-          if (batchIds.nonEmpty) batchIds.head else -1,
-          if (batchIds.nonEmpty) batchIds.last else -1,
-          stateStoreMetadata.numColsPrefixKey
-        )
+      require(operatorStateMetadata.version == 1 || operatorStateMetadata.version == 2)
+      operatorStateMetadata match {
+        case v1: OperatorStateMetadataV1 =>
+          v1.stateStoreInfo.map { stateStoreMetadata =>
+            StateMetadataTableEntry(v1.operatorInfo.operatorId,
+              v1.operatorInfo.operatorName,
+              stateStoreMetadata.storeName,
+              stateStoreMetadata.numPartitions,
+              if (batchIds.nonEmpty) batchIds.head else -1,
+              if (batchIds.nonEmpty) batchIds.last else -1,
+              stateStoreMetadata.numColsPrefixKey
+            )
+          }
+        case v2: OperatorStateMetadataV2 =>
+          v2.stateStoreInfo.map { stateStoreMetadata =>
+            StateMetadataTableEntry(v2.operatorInfo.operatorId,
+              v2.operatorInfo.operatorName,
+              stateStoreMetadata.storeName,
+              stateStoreMetadata.numPartitions,
+              if (batchIds.nonEmpty) batchIds.head else -1,
+              if (batchIds.nonEmpty) batchIds.last else -1,
+              stateStoreMetadata.numColsPrefixKey
+            )
+          }
       }
     }
   }.iterator
