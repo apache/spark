@@ -419,7 +419,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           // skip version and operator ID to test out functionalities
           .load()
 
-//        // print out all the contents of the stateReadDf
+        // print out all the contents of the stateReadDf
         stateReadDf.show()
       }
     }
