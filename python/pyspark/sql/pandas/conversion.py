@@ -236,7 +236,7 @@ class PandasConversionMixin:
         from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 
         require_minimum_pyarrow_version()
-        schema = to_arrow_schema(self.schema)
+        schema = to_arrow_schema(self.schema, error_on_duplicated_field_names_in_struct=True)
 
         import pyarrow as pa
 
@@ -763,11 +763,12 @@ class SparkConversionMixin:
 
         require_minimum_pyarrow_version()
 
+        prefer_timestamp_ntz = is_timestamp_ntz_preferred()
+
         # Create the Spark schema from list of names passed in with Arrow types
         if isinstance(schema, (list, tuple)):
             table = table.rename_columns(schema)
             arrow_schema = table.schema
-            prefer_timestamp_ntz = is_timestamp_ntz_preferred()
             struct = StructType()
             for name, field in zip(schema, arrow_schema):
                 struct.add(
@@ -777,19 +778,12 @@ class SparkConversionMixin:
                 )
             schema = struct
 
-        if isinstance(schema, StructType):
-            pass
-        elif isinstance(schema, DataType):
-            raise PySparkTypeError(
-                error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW",
-                message_parameters={"data_type": str(schema)},
-            )
-        else:
-            prefer_timestamp_ntz = is_timestamp_ntz_preferred()
+        if not isinstance(schema, StructType):
             schema = from_arrow_schema(table.schema, prefer_timestamp_ntz=prefer_timestamp_ntz)
 
-        table = _check_arrow_table_timestamps_localize(table, schema, True, timezone)
-        table = table.cast(to_arrow_schema(schema, error_on_duplicated_field_names_in_struct=True))
+        table = _check_arrow_table_timestamps_localize(table, schema, True, timezone).cast(
+            to_arrow_schema(schema, error_on_duplicated_field_names_in_struct=True)
+        )
 
         # Chunk the Arrow Table into RecordBatches
         chunk_size = self._jconf.arrowMaxRecordsPerBatch()

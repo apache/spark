@@ -571,6 +571,8 @@ class SparkSession:
         elif isinstance(data, pa.Table):
             prefer_timestamp_ntz = is_timestamp_ntz_preferred()
 
+            (timezone,) = self._client.get_configs("spark.sql.session.timeZone")
+
             # If no schema supplied by user then get the names of columns only
             if schema is None:
                 _cols = data.column_names
@@ -582,14 +584,9 @@ class SparkSession:
             if not isinstance(schema, StructType):
                 schema = from_arrow_schema(data.schema, prefer_timestamp_ntz=prefer_timestamp_ntz)
 
-            _table = data
-
-            (timezone,) = self._client.get_configs("spark.sql.session.timeZone")
-            assert isinstance(schema, StructType)
-            arrow_schema = to_arrow_schema(schema, error_on_duplicated_field_names_in_struct=True)
             _table = (
-                _check_arrow_table_timestamps_localize(_table, schema, True, timezone)
-                .cast(arrow_schema)
+                _check_arrow_table_timestamps_localize(data, schema, True, timezone)
+                .cast(to_arrow_schema(schema, error_on_duplicated_field_names_in_struct=True))
                 .rename_columns(schema.names)
             )
 
