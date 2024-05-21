@@ -211,7 +211,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         <class 'pyspark.rdd.RDD'>
         """
         if self._lazy_rdd is None:
-            jrdd = self._jdf.javaToPython()
+            jrdd = self._jdf.javaToPython(0)
             self._lazy_rdd = RDD(
                 jrdd, self.sparkSession._sc, BatchedSerializer(CPickleSerializer())
             )
