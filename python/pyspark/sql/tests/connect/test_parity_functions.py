@@ -18,10 +18,7 @@
 import unittest
 
 from pyspark.sql.tests.test_functions import FunctionsTestsMixin
-from pyspark.testing.connectutils import should_test_connect, ReusedConnectTestCase
-
-if should_test_connect:
-    from pyspark.sql.connect.column import Column
+from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class FunctionsParityTests(FunctionsTestsMixin, ReusedConnectTestCase):
@@ -36,9 +33,6 @@ class FunctionsParityTests(FunctionsTestsMixin, ReusedConnectTestCase):
     @unittest.skip("Spark Connect does not support Spark Context but the test depends on that.")
     def test_input_file_name_reset_for_rdd(self):
         super().test_input_file_name_reset_for_rdd()
-
-    def test_sorting_functions_with_column(self):
-        self.check_sorting_functions_with_column(Column)
 
 
 if __name__ == "__main__":

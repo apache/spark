@@ -152,6 +152,36 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
       Row(Row(1, "haa")) :: Nil)
   }
 
+  test("SPARK-48363: from_xml with non struct schema") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        Seq("1").toDS().select(from_xml($"value", lit("ARRAY<int>"), Map[String, String]().asJava))
+      },
+      errorClass = "INVALID_SCHEMA.NON_STRUCT_TYPE",
+      parameters = Map(
+        "inputSchema" -> "\"ARRAY<int>\"",
+        "dataType" -> "\"ARRAY<INT>\""
+      ),
+      context = ExpectedContext(fragment = "from_xml", getCurrentClassCallSitePattern)
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        Seq("1").toDF("xml").selectExpr(s"from_xml(xml, 'ARRAY<int>')")
+      },
+      errorClass = "INVALID_SCHEMA.NON_STRUCT_TYPE",
+      parameters = Map(
+        "inputSchema" -> "\"ARRAY<int>\"",
+        "dataType" -> "\"ARRAY<INT>\""
+      ),
+      context = ExpectedContext(
+        fragment = "from_xml(xml, 'ARRAY<int>')",
+        start = 0,
+        stop = 26
+      )
+    )
+  }
+
   test("to_xml - struct") {
     val schema = StructType(StructField("a", IntegerType, nullable = false) :: Nil)
     val data = Seq(Row(1))
