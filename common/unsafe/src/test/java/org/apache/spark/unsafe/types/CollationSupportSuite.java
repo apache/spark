@@ -610,8 +610,42 @@ public class CollationSupportSuite {
     assertFindInSet("界x", "test,大千,世,界X,大,千,世界", "UNICODE_CI", 4);
     assertFindInSet("界x", "test,大千,界Xx,世,界X,大,千,世界", "UNICODE_CI", 5);
     assertFindInSet("大", "test,大千,世,界X,大,千,世界", "UNICODE_CI", 5);
+    assertFindInSet("i̇", "İ", "UNICODE_CI", 1);
+    assertFindInSet("i", "İ", "UNICODE_CI", 0);
+    assertFindInSet("i̇", "i̇", "UNICODE_CI", 1);
+    assertFindInSet("i", "i̇", "UNICODE_CI", 0);
+    assertFindInSet("i̇", "İ,", "UNICODE_CI", 1);
+    assertFindInSet("i", "İ,", "UNICODE_CI", 0);
+    assertFindInSet("i̇", "i̇,", "UNICODE_CI", 1);
+    assertFindInSet("i", "i̇,", "UNICODE_CI", 0);
+    assertFindInSet("i̇", "ab,İ", "UNICODE_CI", 2);
+    assertFindInSet("i", "ab,İ", "UNICODE_CI", 0);
+    assertFindInSet("i̇", "ab,i̇", "UNICODE_CI", 2);
+    assertFindInSet("i", "ab,i̇", "UNICODE_CI", 0);
+    assertFindInSet("i̇", "ab,İ,12", "UNICODE_CI", 2);
+    assertFindInSet("i", "ab,İ,12", "UNICODE_CI", 0);
+    assertFindInSet("i̇", "ab,i̇,12", "UNICODE_CI", 2);
+    assertFindInSet("i", "ab,i̇,12", "UNICODE_CI", 0);
     assertFindInSet("i̇o", "ab,İo,12", "UNICODE_CI", 2);
     assertFindInSet("İo", "ab,i̇o,12", "UNICODE_CI", 2);
+    assertFindInSet("i̇", "İ", "UTF8_BINARY_LCASE", 1);
+    assertFindInSet("i", "İ", "UTF8_BINARY_LCASE", 0);
+    assertFindInSet("i̇", "i̇", "UTF8_BINARY_LCASE", 1);
+    assertFindInSet("i", "i̇", "UTF8_BINARY_LCASE", 0);
+    assertFindInSet("i̇", "İ,", "UTF8_BINARY_LCASE", 1);
+    assertFindInSet("i", "İ,", "UTF8_BINARY_LCASE", 0);
+    assertFindInSet("i̇", "i̇,", "UTF8_BINARY_LCASE", 1);
+    assertFindInSet("i", "i̇,", "UTF8_BINARY_LCASE", 0);
+    assertFindInSet("i̇", "ab,İ", "UTF8_BINARY_LCASE", 2);
+    assertFindInSet("i", "ab,İ", "UTF8_BINARY_LCASE", 0);
+    assertFindInSet("i̇", "ab,i̇", "UTF8_BINARY_LCASE", 2);
+    assertFindInSet("i", "ab,i̇", "UTF8_BINARY_LCASE", 0);
+    assertFindInSet("i̇", "ab,İ,12", "UTF8_BINARY_LCASE", 2);
+    assertFindInSet("i", "ab,İ,12", "UTF8_BINARY_LCASE", 0);
+    assertFindInSet("i̇", "ab,i̇,12", "UTF8_BINARY_LCASE", 2);
+    assertFindInSet("i", "ab,i̇,12", "UTF8_BINARY_LCASE", 0);
+    assertFindInSet("i̇o", "ab,İo,12", "UTF8_BINARY_LCASE", 2);
+    assertFindInSet("İo", "ab,i̇o,12", "UTF8_BINARY_LCASE", 2);
   }
 
   private void assertReplace(String source, String search, String replace, String collationName,
@@ -648,8 +682,22 @@ public class CollationSupportSuite {
     assertReplace("replace", "", "123", "UNICODE_CI", "replace");
     assertReplace("aBc世abc", "b", "12", "UNICODE_CI", "a12c世a12c");
     assertReplace("a世Bcdabcd", "bC", "", "UNICODE_CI", "a世dad");
+    assertReplace("abi̇12", "i", "X", "UNICODE_CI", "abi̇12");
+    assertReplace("abi̇12", "\u0307", "X", "UNICODE_CI", "abi̇12");
+    assertReplace("abi̇12", "İ", "X", "UNICODE_CI", "abX12");
+    assertReplace("abİ12", "i", "X", "UNICODE_CI", "abİ12");
+    assertReplace("İi̇İi̇İi̇", "i̇", "x", "UNICODE_CI", "xxxxxx");
+    assertReplace("İi̇İi̇İi̇", "i", "x", "UNICODE_CI", "İi̇İi̇İi̇");
     assertReplace("abİo12i̇o", "i̇o", "xx", "UNICODE_CI", "abxx12xx");
     assertReplace("abi̇o12i̇o", "İo", "yy", "UNICODE_CI", "abyy12yy");
+    assertReplace("abi̇12", "i", "X", "UTF8_BINARY_LCASE", "abẊ12"); // != UNICODE_CI
+    assertReplace("abi̇12", "\u0307", "X", "UTF8_BINARY_LCASE", "abiX12"); // != UNICODE_CI
+    assertReplace("abi̇12", "İ", "X", "UTF8_BINARY_LCASE", "abX12");
+    assertReplace("abİ12", "i", "X", "UTF8_BINARY_LCASE", "abİ12");
+    assertReplace("İi̇İi̇İi̇", "i̇", "x", "UTF8_BINARY_LCASE", "xxxxxx");
+    assertReplace("İi̇İi̇İi̇", "i", "x", "UTF8_BINARY_LCASE", "İẋİẋİẋ"); // != UNICODE_CI
+    assertReplace("abİo12i̇o", "i̇o", "xx", "UTF8_BINARY_LCASE", "abxx12xx");
+    assertReplace("abi̇o12i̇o", "İo", "yy", "UTF8_BINARY_LCASE", "abyy12yy");
   }
 
   private void assertLocate(String substring, String string, Integer start, String collationName,
