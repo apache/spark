@@ -148,8 +148,7 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
     try {
       // Find a log file name
       val fileName = if (logType.equals("out")) {
-        normalizedLogDir.listFiles.map(_.getName).filter(_.endsWith(".out"))
-          .headOption.getOrElse(logType)
+        normalizedLogDir.listFiles.map(_.getName).find(_.endsWith(".out")).getOrElse(logType)
       } else {
         logType
       }
