@@ -112,7 +112,7 @@ case class TransformWithStateExec(
       session.sqlContext.sessionState.newHadoopConf()
     )
     metadataWriter.write(metadata)
-    children.foreach(_.writeOperatorStateMetadata())
+    super.writeOperatorStateMetadata()
   }
 
   override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {

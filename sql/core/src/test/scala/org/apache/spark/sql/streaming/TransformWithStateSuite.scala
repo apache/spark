@@ -368,7 +368,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  test("state reader") {
+  test("verify that operatorProperties contain all stateVariables") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName) {
       withTempDir { chkptDir =>
@@ -413,14 +413,13 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           StopStream
         )
 
-        val stateReadDf = spark.read
+        val df = spark.read
           .format("state-metadata")
           .option(StateSourceOptions.PATH, chkptDir.getAbsolutePath)
           // skip version and operator ID to test out functionalities
           .load()
 
-        // print out all the contents of the stateReadDf
-        stateReadDf.show()
+        df.show()
       }
     }
   }

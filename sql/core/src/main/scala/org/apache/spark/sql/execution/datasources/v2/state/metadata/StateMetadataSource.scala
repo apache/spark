@@ -47,14 +47,13 @@ case class StateMetadataTableEntry(
     numPartitions: Int,
     minBatchId: Long,
     maxBatchId: Long,
-    numColsPrefixKey: Int,
-    operatorProperties: Map[String, String] = Map.empty[String, String]) {
+    operatorProperties: Map[String, String],
+    numColsPrefixKey: Int) {
   def toRow(): InternalRow = {
     // create MapData from Map
     val mapData: MapData = ArrayBasedMapData.apply(
       operatorProperties.keys.map(UTF8String.fromString).toArray,
-      operatorProperties.values.map(UTF8String.fromString).toArray
-    )
+      operatorProperties.values.map(UTF8String.fromString).toArray)
 
     new GenericInternalRow(
       Array[Any](operatorId,
@@ -63,7 +62,6 @@ case class StateMetadataTableEntry(
         numPartitions,
         minBatchId,
         maxBatchId,
-        numColsPrefixKey,
         mapData))
   }
 }
@@ -77,7 +75,6 @@ object StateMetadataTableEntry {
       .add("numPartitions", IntegerType)
       .add("minBatchId", LongType)
       .add("maxBatchId", LongType)
-      .add("numColsPrefixKey", IntegerType)
       .add("operatorProperties", MapType(StringType, StringType, valueContainsNull = false))
   }
 }
@@ -220,6 +217,7 @@ class StateMetadataPartitionReader(
               stateStoreMetadata.numPartitions,
               if (batchIds.nonEmpty) batchIds.head else -1,
               if (batchIds.nonEmpty) batchIds.last else -1,
+              Map.empty[String, String],
               stateStoreMetadata.numColsPrefixKey
             )
           }
@@ -231,8 +229,8 @@ class StateMetadataPartitionReader(
               stateStoreMetadata.numPartitions,
               if (batchIds.nonEmpty) batchIds.head else -1,
               if (batchIds.nonEmpty) batchIds.last else -1,
-              stateStoreMetadata.numColsPrefixKey,
-              v2.operatorProperties
+              v2.operatorProperties,
+              stateStoreMetadata.numColsPrefixKey
             )
           }
       }
