@@ -45,8 +45,7 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
       val dataDF = Seq("""<ROW><a>1</a></ROW>""").toDF("value")
       dataDF.createOrReplaceTempView("XmlToStructsTable")
       val df = sql("SELECT from_xml(value, 'a INT') FROM XmlToStructsTable")
-      val plan = df.queryExecution.executedPlan
-      assert(plan.isInstanceOf[WholeStageCodegenExec])
+      assert(df.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
       checkAnswer(df, Row(Row(1)) :: Nil)
     }
   }
