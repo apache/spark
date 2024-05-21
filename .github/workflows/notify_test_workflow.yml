@@ -164,5 +164,6 @@ jobs:
                   })
                 },
                 details_url: actions_url,
+            
               })
             }
