@@ -1889,7 +1889,7 @@ as the activated JDBC Driver.
 ### Mapping Spark SQL Data Types to DB2
 
 The below table describes the data type conversions from Spark SQL Data Types to DB2 data types,
-when creating, altering, or writing data to an Oracle table using the built-in jdbc data source with
+when creating, altering, or writing data to a DB2 table using the built-in jdbc data source with
 the [IBM Data Server Driver For JDBC and SQLJ](https://mvnrepository.com/artifact/com.ibm.db2/jcc) as the activated JDBC Driver.
 
 <table>
