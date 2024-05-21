@@ -158,12 +158,10 @@ class SparkConnectErrorTests(SparkConnectSQLTestCase):
     def test_unsupported_functions(self):
         # SPARK-41225: Disable unsupported functions.
         df = self.connect.read.table(self.tbl_name)
-        for f in (
-            "checkpoint",
-            "localCheckpoint",
-        ):
-            with self.assertRaises(NotImplementedError):
-                getattr(df, f)()
+        with self.assertRaises(NotImplementedError):
+            df.toJSON()
+        with self.assertRaises(NotImplementedError):
+            df.rdd
 
     def test_unsupported_jvm_attribute(self):
         # Unsupported jvm attributes for Spark session.

@@ -19,10 +19,9 @@ package org.apache.spark.sql.execution.datasources.jdbc
 
 import java.math.{BigDecimal => JBigDecimal}
 import java.nio.charset.StandardCharsets
-import java.sql.{Connection, Date, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException, Timestamp}
-import java.time.{Instant, LocalDate, LocalDateTime}
+import java.sql.{Connection, Date, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException, Time, Timestamp}
+import java.time.{Instant, LocalDate}
 import java.util
-import java.util.concurrent.TimeUnit
 
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
@@ -41,6 +40,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_MILLIS
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.connector.catalog.{Identifier, TableChange}
 import org.apache.spark.sql.connector.catalog.index.{SupportsIndex, TableIndex}
@@ -487,15 +487,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
     // It stores the number of milliseconds after midnight, 00:00:00.000000
     case TimestampType if metadata.contains("logical_time_type") =>
       (rs: ResultSet, row: InternalRow, pos: Int) => {
-        val rawTime = rs.getTime(pos + 1)
-        if (rawTime != null) {
-          val localTimeMicro = TimeUnit.NANOSECONDS.toMicros(
-            rawTime.toLocalTime().toNanoOfDay())
-          val utcTimeMicro = toUTCTime(localTimeMicro, conf.sessionLocalTimeZone)
-          row.setLong(pos, utcTimeMicro)
-        } else {
-          row.update(pos, null)
-        }
+        row.update(pos, nullSafeConvert[Time](
+          rs.getTime(pos + 1), t => Math.multiplyExact(t.getTime, MICROS_PER_MILLIS)))
       }
 
     case TimestampType =>
@@ -509,8 +502,10 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
     case TimestampNTZType if metadata.contains("logical_time_type") =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
-        val micros = nullSafeConvert[java.sql.Time](rs.getTime(pos + 1), t =>
-          localDateTimeToMicros(LocalDateTime.of(LocalDate.EPOCH, t.toLocalTime)))
+        val micros = nullSafeConvert[Time](rs.getTime(pos + 1), t => {
+          val time = dialect.convertJavaTimestampToTimestampNTZ(new Timestamp(t.getTime))
+          localDateTimeToMicros(time)
+        })
         row.update(pos, micros)
 
     case TimestampNTZType =>

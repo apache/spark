@@ -45,6 +45,8 @@ message Command {
     StreamingQueryListenerBusCommand streaming_query_listener_bus_command = 11;
     CommonInlineUserDefinedDataSource register_data_source = 12;
     CreateResourceProfileCommand create_resource_profile_command = 13;
+    CheckpointCommand checkpoint_command = 14;
+    RemoveCachedRemoteRelationCommand remove_cached_remote_relation_command = 15;
 
     // This field is used to mark extensions to the protocol. When plugins generate arbitrary
     // Commands they can add them here. During the planning the correct resolution is done.
@@ -483,4 +485,22 @@ message CreateResourceProfileCommand {
 message CreateResourceProfileCommandResult {
   // (Required) Server-side generated resource profile id.
   int32 profile_id = 1;
+}
+
+// Command to remove `CashedRemoteRelation`
+message RemoveCachedRemoteRelationCommand {
+  // (Required) The remote to be related
+  CachedRemoteRelation relation = 1;
+}
+
+message CheckpointCommand {
+  // (Required) The logical plan to checkpoint.
+  Relation relation = 1;
+
+  // (Optional) Locally checkpoint using a local temporary
+  // directory in Spark Connect server (Spark Driver)
+  optional bool local = 2;
+
+  // (Optional) Whether to checkpoint this dataframe immediately.
+  optional bool eager = 3;
 }

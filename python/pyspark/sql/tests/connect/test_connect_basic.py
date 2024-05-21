@@ -19,6 +19,7 @@ import os
 import unittest
 import shutil
 import tempfile
+import time
 
 from pyspark.util import is_remote_only
 from pyspark.errors import PySparkTypeError, PySparkValueError
@@ -1357,6 +1358,52 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assertFalse(verify_col_name("`m```.s.`s`.v", cdf.schema))
         self.assertTrue(verify_col_name("`m```.`s.s`.v", cdf.schema))
         self.assertTrue(verify_col_name("`m```.`s.s`.`v`", cdf.schema))
+
+
+class SparkConnectGCTests(SparkConnectSQLTestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.origin = os.getenv("USER", None)
+        os.environ["USER"] = "SparkConnectGCTests"
+        super(SparkConnectGCTests, cls).setUpClass()
+
+    @classmethod
+    def tearDownClass(cls):
+        super(SparkConnectGCTests, cls).tearDownClass()
+        if cls.origin is not None:
+            os.environ["USER"] = cls.origin
+        else:
+            del os.environ["USER"]
+
+    def test_garbage_collection_checkpoint(self):
+        # SPARK-48258: Make sure garbage-collecting DataFrame remove the paired state
+        # in Spark Connect server
+        df = self.connect.range(10).localCheckpoint()
+        self.assertIsNotNone(df._cached_remote_relation_id)
+        cached_remote_relation_id = df._cached_remote_relation_id
+
+        jvm = self.spark._jvm
+        session_holder = getattr(
+            getattr(
+                jvm.org.apache.spark.sql.connect.service,
+                "SparkConnectService$",
+            ),
+            "MODULE$",
+        ).getOrCreateIsolatedSession(self.connect.client._user_id, self.connect.client._session_id)
+
+        # Check the state exists.
+        self.assertIsNotNone(
+            session_holder.dataFrameCache().getOrDefault(cached_remote_relation_id, None)
+        )
+
+        del df
+
+        time.sleep(3)  # Make sure removing is triggered, and executed in the server.
+
+        # Check the state was removed up on garbage-collection.
+        self.assertIsNone(
+            session_holder.dataFrameCache().getOrDefault(cached_remote_relation_id, None)
+        )
 
 
 if __name__ == "__main__":
