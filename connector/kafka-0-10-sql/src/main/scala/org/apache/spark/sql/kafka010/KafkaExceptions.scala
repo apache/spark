@@ -155,6 +155,16 @@ object KafkaExceptions {
         "prevOffset" -> prevOffset.toString,
         "newOffset" -> newOffset.toString))
   }
+
+  def startOffsetDoesNotMatchAssigned(
+      specifiedPartitions: Set[TopicPartition],
+      assignedPartitions: Set[TopicPartition]): KafkaIllegalStateException = {
+    new KafkaIllegalStateException(
+      errorClass = "KAFKA_START_OFFSET_DOES_NOT_MATCH_ASSIGNED",
+      messageParameters = Map(
+        "specifiedPartitions" -> specifiedPartitions.toString,
+        "assignedPartitions" -> assignedPartitions.toString))
+  }
 }
 
 /**
