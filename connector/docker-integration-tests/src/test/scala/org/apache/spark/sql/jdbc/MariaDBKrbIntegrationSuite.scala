@@ -46,7 +46,7 @@ class MariaDBKrbIntegrationSuite extends DockerKrbJDBCIntegrationSuite {
     override val jdbcPort = 3306
 
     override def getJdbcUrl(ip: String, port: Int): String =
-      s"jdbc:mysql://$ip:$port/mysql?user=$principal"
+      s"jdbc:mysql://$ip:$port/mysql?permitMysqlScheme&user=$principal"
 
     override def getEntryPoint: Option[String] =
       Some("/docker-entrypoint/mariadb_docker_entrypoint.sh")

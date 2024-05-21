@@ -22,6 +22,7 @@ class MariaDBConnectionProviderSuite extends ConnectionProviderSuiteBase {
     val provider = new MariaDBConnectionProvider()
     val driver = registerDriver(provider.driverClass)
 
-    testSecureConnectionProvider(provider, driver, options("jdbc:mysql://localhost/mysql"))
+    testSecureConnectionProvider(provider, driver,
+      options("jdbc:mysql://localhost/mysql?permitMysqlScheme"))
   }
 }
