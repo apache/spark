@@ -70,7 +70,8 @@ class ExampleRelationPlugin extends RelationPlugin {
     }
     val plugin = rel.unpack(classOf[proto.ExamplePluginRelation])
     val input = ConnectProtoUtils.parseRelationWithRecursionLimit(
-      plugin.getInput.toByteArray, recursionLimit = 1024)
+      plugin.getInput.toByteArray,
+      recursionLimit = 1024)
     Optional.of(planner.transformRelation(input))
   }
 }
@@ -85,7 +86,8 @@ class ExampleExpressionPlugin extends ExpressionPlugin {
     }
     val exp = rel.unpack(classOf[proto.ExamplePluginExpression])
     val child = ConnectProtoUtils.parseExpressionWithRecursionLimit(
-      exp.getChild.toByteArray, recursionLimit = 1024)
+      exp.getChild.toByteArray,
+      recursionLimit = 1024)
     Optional.of(Alias(planner.transformExpression(child), exp.getCustomField)())
   }
 }
