@@ -135,8 +135,7 @@ class FileStreamSource(
     log"maxFileAgeMs = ${MDC(LogKeys.TIME_UNITS, maxFileAgeMs)}")
 
 
-  // Visible for testing
-  private[sql] var unreadFiles: Seq[NewFileEntry] = _
+  private var unreadFiles: Seq[NewFileEntry] = _
 
   /**
    * Split files into a selected/unselected pair according to a total size threshold.
@@ -443,7 +442,7 @@ object FileStreamSource {
   }
 
   /** Newly fetched files metadata holder. Visible for testing. */
-  private[sql] case class NewFileEntry(path: SparkPath, size: Long, timestamp: Long)
+  private case class NewFileEntry(path: SparkPath, size: Long, timestamp: Long)
 
   private case class FilesSplit(files: Seq[NewFileEntry], size: BigInt)
 
