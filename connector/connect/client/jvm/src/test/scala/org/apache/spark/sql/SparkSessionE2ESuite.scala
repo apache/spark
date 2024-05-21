@@ -26,7 +26,7 @@ import scala.util.{Failure, Success}
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.test.RemoteSparkSession
+import org.apache.spark.sql.test.{ConnectFunSuite, RemoteSparkSession}
 import org.apache.spark.util.SparkThreadUtils.awaitResult
 
 /**
@@ -34,7 +34,7 @@ import org.apache.spark.util.SparkThreadUtils.awaitResult
  * class, whether explicit or implicit, as it will trigger a UDF deserialization error during
  * Maven build/test.
  */
-class SparkSessionE2ESuite extends RemoteSparkSession {
+class SparkSessionE2ESuite extends ConnectFunSuite with RemoteSparkSession {
 
   test("interrupt all - background queries, foreground interrupt") {
     val session = spark

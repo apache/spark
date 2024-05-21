@@ -22,11 +22,11 @@ import java.io.{File, FilenameFilter}
 import org.apache.commons.io.FileUtils
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.test.{RemoteSparkSession, SQLHelper}
+import org.apache.spark.sql.test.{ConnectFunSuite, RemoteSparkSession, SQLHelper}
 import org.apache.spark.sql.types.{DoubleType, LongType, StructType}
 import org.apache.spark.storage.StorageLevel
 
-class CatalogSuite extends RemoteSparkSession with SQLHelper {
+class CatalogSuite extends ConnectFunSuite with RemoteSparkSession with SQLHelper {
 
   test("Database APIs") {
     val currentDb = spark.catalog.currentDatabase
