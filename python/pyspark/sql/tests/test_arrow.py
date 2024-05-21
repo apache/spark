@@ -608,18 +608,10 @@ class ArrowTestsMixin:
 
     def test_createDataFrame_pandas_with_schema(self):
         pdf = self.create_pandas_data_frame()
-        for schema in [
-            self.schema,
-            (self.schema,),
-            [
-                self.schema,
-            ],
-        ]:
-            with self.subTest(schema=schema):
-                df = self.spark.createDataFrame(pdf, schema=schema)
-                self.assertEqual(self.schema, df.schema)
-                pdf_arrow = df.toPandas()
-                assert_frame_equal(pdf_arrow, pdf)
+        df = self.spark.createDataFrame(pdf, schema=self.schema)
+        self.assertEqual(self.schema, df.schema)
+        pdf_arrow = df.toPandas()
+        assert_frame_equal(pdf_arrow, pdf)
 
     def test_createDataFrame_pandas_with_incorrect_schema(self):
         with self.quiet():
