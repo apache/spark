@@ -99,7 +99,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   def render(request: HttpServletRequest): Seq[Node] = {
     val state = getMasterState
 
-    val showResourceColumn = state.workers.filter(_.resourcesInfoUsed.nonEmpty).nonEmpty
+    val showResourceColumn = state.workers.exists(_.resourcesInfoUsed.nonEmpty)
     val workerHeaders = if (showResourceColumn) {
       Seq("Worker Id", "Address", "State", "Cores", "Memory", "Resources")
     } else {

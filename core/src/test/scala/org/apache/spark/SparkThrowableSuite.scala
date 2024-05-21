@@ -135,8 +135,8 @@ class SparkThrowableSuite extends SparkFunSuite {
       errorStatesJson, new TypeReference[Map[String, ErrorStateInfo]]() {})
     val errorConditionStates = errorReader.errorInfoMap.values.toSeq.flatMap(_.sqlState).toSet
     assert(Set("22012", "22003", "42601").subsetOf(errorStates.keySet))
-    assert(errorClasses.keySet.filter(!_.matches("[A-Z0-9]{2}")).isEmpty)
-    assert(errorStates.keySet.filter(!_.matches("[A-Z0-9]{5}")).isEmpty)
+    assert(errorClasses.keySet.forall(_.matches("[A-Z0-9]{2}")))
+    assert(errorStates.keySet.forall(_.matches("[A-Z0-9]{5}")))
     assert(errorStates.keySet.map(_.substring(0, 2)).diff(errorClasses.keySet).isEmpty)
     assert(errorConditionStates.diff(errorStates.keySet).isEmpty)
   }
