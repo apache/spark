@@ -50,7 +50,7 @@ from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.utils import (
     has_numpy,
     get_active_spark_context,
-    escapeMetaCharacters,
+    escape_meta_characters,
     StringConcat,
 )
 from pyspark.sql.variant_utils import VariantUtils
@@ -1076,7 +1076,7 @@ class StructField(DataType):
     ) -> None:
         if maxDepth > 0:
             stringConcat.append(
-                f"{prefix}-- {escapeMetaCharacters(self.name)}: {self.dataType.typeName()} "
+                f"{prefix}-- {escape_meta_characters(self.name)}: {self.dataType.typeName()} "
                 + f"(nullable = {str(self.nullable).lower()})\n"
             )
             DataType._data_type_build_formatted_string(

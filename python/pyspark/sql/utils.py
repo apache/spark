@@ -164,7 +164,7 @@ class StringConcat:
 
 
 # Python implementation of 'org.apache.spark.util.SparkSchemaUtils.escapeMetaCharacters'
-def escapeMetaCharacters(s: str) -> str:
+def escape_meta_characters(s: str) -> str:
     return (
         s.replace("\n", "\\n")
         .replace("\r", "\\r")
