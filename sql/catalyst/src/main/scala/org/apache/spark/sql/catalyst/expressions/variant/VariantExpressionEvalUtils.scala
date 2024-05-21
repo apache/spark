@@ -103,7 +103,8 @@ object VariantExpressionEvalUtils {
         val offsets = new java.util.ArrayList[java.lang.Integer](data.numElements())
         for (i <- 0 until data.numElements()) {
           offsets.add(builder.getWritePos - start)
-          buildVariant(builder, data.get(i, elementType), elementType)
+          val element = if (data.isNullAt(i)) null else data.get(i, elementType)
+          buildVariant(builder, element, elementType)
         }
         builder.finishWritingArray(start, offsets)
       case MapType(StringType, valueType, _) =>
@@ -116,7 +117,8 @@ object VariantExpressionEvalUtils {
           val key = keys.getUTF8String(i).toString
           val id = builder.addKey(key)
           fields.add(new VariantBuilder.FieldEntry(key, id, builder.getWritePos - start))
-          buildVariant(builder, values.get(i, valueType), valueType)
+          val value = if (values.isNullAt(i)) null else values.get(i, valueType)
+          buildVariant(builder, value, valueType)
         }
         builder.finishWritingObject(start, fields)
       case StructType(structFields) =>
@@ -127,7 +129,8 @@ object VariantExpressionEvalUtils {
           val key = structFields(i).name
           val id = builder.addKey(key)
           fields.add(new VariantBuilder.FieldEntry(key, id, builder.getWritePos - start))
-          buildVariant(builder, data.get(i, structFields(i).dataType), structFields(i).dataType)
+          val value = if (data.isNullAt(i)) null else data.get(i, structFields(i).dataType)
+          buildVariant(builder, value, structFields(i).dataType)
         }
         builder.finishWritingObject(start, fields)
     }

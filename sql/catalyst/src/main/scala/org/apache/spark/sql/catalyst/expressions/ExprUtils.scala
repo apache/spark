@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CharVarcharUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
+import org.apache.spark.sql.internal.types.{AbstractMapType, StringTypeAnyCollation}
 import org.apache.spark.sql.types.{DataType, MapType, StringType, StructType, VariantType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -57,7 +58,7 @@ object ExprUtils extends QueryErrorsBase {
 
   def convertToMapData(exp: Expression): Map[String, String] = exp match {
     case m: CreateMap
-      if m.dataType.acceptsType(MapType(StringType, StringType, valueContainsNull = false)) =>
+      if AbstractMapType(StringTypeAnyCollation, StringTypeAnyCollation).acceptsType(m.dataType) =>
       val arrayMap = m.eval().asInstanceOf[ArrayBasedMapData]
       ArrayBasedMapData.toScalaMap(arrayMap).map { case (key, value) =>
         key.toString -> value.toString
@@ -77,7 +78,7 @@ object ExprUtils extends QueryErrorsBase {
       columnNameOfCorruptRecord: String): Unit = {
     schema.getFieldIndex(columnNameOfCorruptRecord).foreach { corruptFieldIndex =>
       val f = schema(corruptFieldIndex)
-      if (f.dataType != StringType || !f.nullable) {
+      if (!f.dataType.isInstanceOf[StringType] || !f.nullable) {
         throw QueryCompilationErrors.invalidFieldTypeForCorruptRecordError()
       }
     }
@@ -110,7 +111,7 @@ object ExprUtils extends QueryErrorsBase {
    */
   def checkJsonSchema(schema: DataType): TypeCheckResult = {
     val isInvalid = schema.existsRecursively {
-      case MapType(keyType, _, _) if keyType != StringType => true
+      case MapType(keyType, _, _) if !keyType.isInstanceOf[StringType] => true
       case _ => false
     }
     if (isInvalid) {
@@ -133,7 +134,7 @@ object ExprUtils extends QueryErrorsBase {
   def checkXmlSchema(schema: DataType): TypeCheckResult = {
     val isInvalid = schema.existsRecursively {
       // XML field names must be StringType
-      case MapType(keyType, _, _) if keyType != StringType => true
+      case MapType(keyType, _, _) if !keyType.isInstanceOf[StringType] => true
       case _ => false
     }
     if (isInvalid) {

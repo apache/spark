@@ -70,7 +70,7 @@ class FailureSafeParser[IN](
         case DropMalformedMode =>
           Iterator.empty
         case FailFastMode =>
-          e.cause() match {
+          e.getCause match {
             case _: JsonArraysAsStructsException =>
               // SPARK-42298 we recreate the exception here to make sure the error message
               // have the record content.
@@ -78,10 +78,17 @@ class FailureSafeParser[IN](
             case StringAsDataTypeException(fieldName, fieldValue, dataType) =>
               throw QueryExecutionErrors.cannotParseStringAsDataTypeError(e.record().toString,
                 fieldName, fieldValue, dataType)
-            case other => throw QueryExecutionErrors.malformedRecordsDetectedInRecordParsingError(
-              toResultRow(e.partialResults().headOption, e.record).toString, other)
+            case causeWrapper: LazyBadRecordCauseWrapper =>
+              throwMalformedRecordsDetectedInRecordParsingError(e, causeWrapper.cause())
+            case cause => throwMalformedRecordsDetectedInRecordParsingError(e, cause)
           }
       }
     }
+  }
+
+  private def throwMalformedRecordsDetectedInRecordParsingError(
+      e: BadRecordException, cause: Throwable): Nothing = {
+    throw QueryExecutionErrors.malformedRecordsDetectedInRecordParsingError(
+      toResultRow(e.partialResults().headOption, e.record).toString, cause)
   }
 }

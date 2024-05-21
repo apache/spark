@@ -430,6 +430,11 @@ class DataFrameTestsMixin:
             IllegalArgumentException, lambda: self.spark.range(1).sample(-1.0).count()
         )
 
+    def test_sample_with_random_seed(self):
+        df = self.spark.range(10000).sample(0.1)
+        cnts = [df.count() for i in range(10)]
+        self.assertEqual(1, len(set(cnts)))
+
     def test_toDF_with_string(self):
         df = self.spark.createDataFrame([("John", 30), ("Alice", 25), ("Bob", 28)])
         data = [("John", 30), ("Alice", 25), ("Bob", 28)]
@@ -838,6 +843,11 @@ class DataFrameTestsMixin:
 
     def test_isinstance_dataframe(self):
         self.assertIsInstance(self.spark.range(1), DataFrame)
+
+    def test_checkpoint_dataframe(self):
+        with io.StringIO() as buf, redirect_stdout(buf):
+            self.spark.range(1).localCheckpoint().explain()
+            self.assertIn("ExistingRDD", buf.getvalue())
 
 
 class DataFrameTests(DataFrameTestsMixin, ReusedSQLTestCase):

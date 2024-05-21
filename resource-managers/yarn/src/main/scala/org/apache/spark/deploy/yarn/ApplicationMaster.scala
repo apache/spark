@@ -696,7 +696,7 @@ private[spark] class ApplicationMaster(
 
   /** Add the Yarn IP filter that is required for properly securing the UI. */
   private def addAmIpFilter(driver: Option[RpcEndpointRef], proxyBase: String) = {
-    val amFilter = "org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter"
+    val amFilter = classOf[AmIpFilter].getName
     val params = client.getAmIpFilterParams(yarnConf, proxyBase)
     driver match {
       case Some(d) =>
@@ -793,9 +793,9 @@ private[spark] class ApplicationMaster(
 
     override def onStart(): Unit = {
       driver.send(RegisterClusterManager(self))
-      // if deployment mode for yarn Application is client
+      // if deployment mode for yarn Application is managed client
       // then send the AM Log Info to spark driver
-      if (!isClusterMode) {
+      if (!isClusterMode && !sparkConf.get(YARN_UNMANAGED_AM)) {
         val hostPort = YarnContainerInfoHelper.getNodeManagerHttpAddress(None)
         val yarnAMID = "yarn-am"
         val info = new MiscellaneousProcessDetails(hostPort,

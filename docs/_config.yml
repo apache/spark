@@ -22,7 +22,7 @@ include:
 SPARK_VERSION: 4.0.0-SNAPSHOT
 SPARK_VERSION_SHORT: 4.0.0
 SCALA_BINARY_VERSION: "2.13"
-SCALA_VERSION: "2.13.13"
+SCALA_VERSION: "2.13.14"
 SPARK_ISSUE_TRACKER_URL: https://issues.apache.org/jira/browse/SPARK
 SPARK_GITHUB_URL: https://github.com/apache/spark
 # Before a new release, we should:

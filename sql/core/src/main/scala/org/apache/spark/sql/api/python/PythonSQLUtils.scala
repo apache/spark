@@ -165,10 +165,6 @@ private[sql] object PythonSQLUtils extends Logging {
     }
   }
 
-  def timestampDiff(unit: String, start: Column, end: Column): Column = {
-    Column(TimestampDiff(unit, start.expr, end.expr))
-  }
-
   def pandasProduct(e: Column, ignoreNA: Boolean): Column = {
     Column(PandasProduct(e.expr, ignoreNA).toAggregateExpression(false))
   }

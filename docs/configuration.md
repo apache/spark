@@ -91,7 +91,7 @@ Then, you can supply configuration values at runtime:
 ```sh
 ./bin/spark-submit \
   --name "My app" \
-  --master local[4] \
+  --master "local[4]" \
   --conf spark.eventLog.enabled=false \
   --conf "spark.executor.extraJavaOptions=-XX:+PrintGCDetails -XX:+PrintGCTimeStamps" \
   myApp.jar
@@ -1794,6 +1794,15 @@ Apart from these, the following properties are also available, and may be useful
     Compression will use <code>spark.io.compression.codec</code>.
   </td>
   <td>0.6.0</td>
+</tr>
+<tr>
+  <td><code>spark.checkpoint.dir</code></td>
+  <td>(none)</td>
+  <td>
+    Set the default directory for checkpointing. It can be overwritten by
+    SparkContext.setCheckpointDir.
+  </td>
+  <td>4.0.0</td>
 </tr>
 <tr>
   <td><code>spark.checkpoint.compress</code></td>
@@ -3750,7 +3759,7 @@ Also, you can modify or add configurations at runtime:
 {% highlight bash %}
 ./bin/spark-submit \
   --name "My app" \
-  --master local[4] \
+  --master "local[4]" \
   --conf spark.eventLog.enabled=false \
   --conf "spark.executor.extraJavaOptions=-XX:+PrintGCDetails -XX:+PrintGCTimeStamps" \
   --conf spark.hadoop.abc.def=xyz \

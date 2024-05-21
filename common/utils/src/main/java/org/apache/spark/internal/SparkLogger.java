@@ -24,13 +24,16 @@ import java.util.function.Consumer;
 import org.apache.logging.log4j.CloseableThreadContext;
 import org.apache.logging.log4j.message.MessageFactory;
 import org.apache.logging.log4j.message.ParameterizedMessageFactory;
+// checkstyle.off: RegexpSinglelineJava
+import org.slf4j.Logger;
+// checkstyle.on: RegexpSinglelineJava
 
-public class Logger {
+public class SparkLogger {
 
   private static final MessageFactory MESSAGE_FACTORY = ParameterizedMessageFactory.INSTANCE;
-  private final org.slf4j.Logger slf4jLogger;
+  private final Logger slf4jLogger;
 
-  Logger(org.slf4j.Logger slf4jLogger) {
+  SparkLogger(Logger slf4jLogger) {
     this.slf4jLogger = slf4jLogger;
   }
 
@@ -192,5 +195,9 @@ public class Logger {
     static MessageThrowable of(String message, Throwable throwable) {
       return new MessageThrowable(message, throwable);
     }
+  }
+
+  public Logger getSlf4jLogger() {
+    return slf4jLogger;
   }
 }

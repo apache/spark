@@ -851,7 +851,9 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     // Create the attributes.
     val (attributes, schemaLess) = if (transformClause.colTypeList != null) {
       // Typed return columns.
-      (DataTypeUtils.toAttributes(createSchema(transformClause.colTypeList)), false)
+      val schema = createSchema(transformClause.colTypeList)
+      val replacedSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema)
+      (DataTypeUtils.toAttributes(replacedSchema), false)
     } else if (transformClause.identifierSeq != null) {
       // Untyped return columns.
       val attrs = visitIdentifierSeq(transformClause.identifierSeq).map { name =>
@@ -1638,6 +1640,20 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       }
       partitionByExpressions = p.partition.asScala.map(expression).toSeq
       orderByExpressions = p.sortItem.asScala.map(visitSortItem).toSeq
+      def invalidPartitionOrOrderingExpression(clause: String): String = {
+        "The table function call includes a table argument with an invalid " +
+          s"partitioning/ordering specification: the $clause clause included multiple " +
+          "expressions without parentheses surrounding them; please add parentheses around " +
+          "these expressions and then retry the query again"
+      }
+      validate(
+        Option(p.invalidMultiPartitionExpression).isEmpty,
+        message = invalidPartitionOrOrderingExpression("PARTITION BY"),
+        ctx = p.invalidMultiPartitionExpression)
+      validate(
+        Option(p.invalidMultiSortItem).isEmpty,
+        message = invalidPartitionOrOrderingExpression("ORDER BY"),
+        ctx = p.invalidMultiSortItem)
     }
     validate(
       !(withSinglePartition && partitionByExpressions.nonEmpty),
@@ -4994,6 +5010,62 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       createUnresolvedView(ctx.identifierReference, "ALTER VIEW ... AS"),
       originalText = source(ctx.query),
       query = plan(ctx.query))
+  }
+
+  /**
+   * Defined the schema binding mode during CREATE or ALTER VIEW.
+   * The method also accept a NULL context, in which case it will return the session default
+   *
+   * {{{
+   *   WITH SCHEMA [ BINDING | COMPENSATION | TYPE EVOLUTION | EVOLUTION ]
+   * }}}
+   */
+  override def visitSchemaBinding(ctx: SchemaBindingContext): ViewSchemaMode = {
+    if (ctx == null) {
+      // No schema binding specified, return the session default
+      if (conf.viewSchemaBindingEnabled) {
+        if (conf.viewSchemaCompensation) {
+          SchemaCompensation
+        } else {
+          SchemaBinding
+        }
+      } else {
+        SchemaUnsupported
+      }
+    } else if (!conf.viewSchemaBindingEnabled) {
+      // If the feature is disabled, throw an exception
+      withOrigin(ctx) {
+        throw new ParseException(
+          errorClass = "FEATURE_NOT_ENABLED",
+          messageParameters = Map("featureName" -> "VIEW ... WITH SCHEMA ...",
+            "configKey" -> "spark.sql.legacy.viewSchemaBindingMode",
+            "configValue" -> "true"),
+          ctx)
+      }
+    } else if (ctx.COMPENSATION != null) {
+      SchemaCompensation
+    } else if (ctx.TYPE != null) {
+      SchemaTypeEvolution
+    } else if (ctx.EVOLUTION != null) {
+      SchemaEvolution
+    } else {
+      SchemaBinding
+    }
+  }
+
+  /**
+   * Alter the schema binding of a view. This creates a [[AlterViewSchemaBinding]]
+   *
+   * For example:
+   * {{{
+   *   ALTER VIEW multi_part_name WITH SCHEMA ...;
+   * }}}
+   */
+  override def visitAlterViewSchemaBinding(ctx: AlterViewSchemaBindingContext): LogicalPlan
+  = withOrigin(ctx) {
+    AlterViewSchemaBinding(
+      createUnresolvedView(ctx.identifierReference, "ALTER VIEW ... WITH SCHEMA ..."),
+      viewSchemaMode = visitSchemaBinding(ctx.schemaBinding))
   }
 
   /**

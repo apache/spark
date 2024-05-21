@@ -56,7 +56,6 @@ from pyspark.pandas.utils import (
     scol_for,
     verify_temp_column_name,
 )
-from pyspark.pandas.spark.functions import timestampdiff
 
 
 class Resampler(Generic[FrameLike], metaclass=ABCMeta):
@@ -279,7 +278,7 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
             truncated_ts_scol = F.date_trunc(unit_str, ts_scol)
             if isinstance(key_type, TimestampNTZType):
                 truncated_ts_scol = F.to_timestamp_ntz(truncated_ts_scol)
-            diff = timestampdiff(unit_str, origin_scol, truncated_ts_scol)
+            diff = F.timestamp_diff(unit_str, origin_scol, truncated_ts_scol)
             mod = F.lit(0) if n == 1 else (diff % F.lit(n))
 
             if rule_code in ["h", "H"]:

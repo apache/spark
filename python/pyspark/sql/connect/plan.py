@@ -717,7 +717,7 @@ class Sample(LogicalPlan):
         lower_bound: float,
         upper_bound: float,
         with_replacement: bool,
-        seed: Optional[int],
+        seed: int,
         deterministic_order: bool = False,
     ) -> None:
         super().__init__(child)
@@ -734,8 +734,7 @@ class Sample(LogicalPlan):
         plan.sample.lower_bound = self.lower_bound
         plan.sample.upper_bound = self.upper_bound
         plan.sample.with_replacement = self.with_replacement
-        if self.seed is not None:
-            plan.sample.seed = self.seed
+        plan.sample.seed = self.seed
         plan.sample.deterministic_order = self.deterministic_order
         return plan
 
@@ -1526,7 +1525,7 @@ class StatSampleBy(LogicalPlan):
         child: Optional["LogicalPlan"],
         col: Column,
         fractions: Sequence[Tuple[Column, float]],
-        seed: Optional[int],
+        seed: int,
     ) -> None:
         super().__init__(child)
 
@@ -1554,8 +1553,7 @@ class StatSampleBy(LogicalPlan):
                 fraction.stratum.CopyFrom(k.to_plan(session).literal)
                 fraction.fraction = float(v)
                 plan.sample_by.fractions.append(fraction)
-        if self._seed is not None:
-            plan.sample_by.seed = self._seed
+        plan.sample_by.seed = self._seed
         return plan
 
 
@@ -1787,9 +1785,39 @@ class WriteStreamOperation(LogicalPlan):
         return cmd
 
 
+class RemoveRemoteCachedRelation(LogicalPlan):
+    def __init__(self, relation: CachedRemoteRelation) -> None:
+        super().__init__(None)
+        self._relation = relation
+
+    def command(self, session: "SparkConnectClient") -> proto.Command:
+        plan = self._create_proto_relation()
+        plan.cached_remote_relation.relation_id = self._relation._relationId
+        cmd = proto.Command()
+        cmd.remove_cached_remote_relation_command.relation.CopyFrom(plan.cached_remote_relation)
+        return cmd
+
+
+class Checkpoint(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"], local: bool, eager: bool) -> None:
+        super().__init__(child)
+        self._local = local
+        self._eager = eager
+
+    def command(self, session: "SparkConnectClient") -> proto.Command:
+        cmd = proto.Command()
+        assert self._child is not None
+        cmd.checkpoint_command.CopyFrom(
+            proto.CheckpointCommand(
+                relation=self._child.plan(session),
+                local=self._local,
+                eager=self._eager,
+            )
+        )
+        return cmd
+
+
 # Catalog API (internal-only)
-
-
 class CurrentDatabase(LogicalPlan):
     def __init__(self) -> None:
         super().__init__(None)

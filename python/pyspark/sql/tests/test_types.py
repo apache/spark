@@ -366,7 +366,7 @@ class TypesTestsMixin:
         df = self.spark.createDataFrame(rdd)
         self.assertEqual(Row(f1=[1, None], f2=[None, 2]), df.first())
 
-    def test_infer_array_element_type_empty(self):
+    def test_infer_array_element_type_empty_rdd(self):
         # SPARK-39168: Test inferring array element type from all rows
         ArrayRow = Row("f1")
 
@@ -378,6 +378,12 @@ class TypesTestsMixin:
         self.assertEqual(Row(f1=[]), rows[0])
         self.assertEqual(Row(f1=[None]), rows[1])
         self.assertEqual(Row(f1=[1]), rows[2])
+
+    def test_infer_array_element_type_empty(self):
+        # SPARK-39168: Test inferring array element type from all rows
+        ArrayRow = Row("f1")
+
+        data = [ArrayRow([]), ArrayRow([None]), ArrayRow([1])]
 
         df = self.spark.createDataFrame(data)
         rows = df.collect()
@@ -392,12 +398,6 @@ class TypesTestsMixin:
         with self.sql_conf({"spark.sql.pyspark.inferNestedDictAsStruct.enabled": True}):
             data = [NestedRow([{"payment": 200.5}, {"name": "A"}])]
 
-            nestedRdd = self.sc.parallelize(data)
-            df = self.spark.createDataFrame(nestedRdd)
-            self.assertEqual(
-                Row(f1=[Row(payment=200.5, name=None), Row(payment=None, name="A")]), df.first()
-            )
-
             df = self.spark.createDataFrame(data)
             self.assertEqual(
                 Row(f1=[Row(payment=200.5, name=None), Row(payment=None, name="A")]), df.first()
@@ -409,6 +409,57 @@ class TypesTestsMixin:
             ):
                 df = self.spark.createDataFrame(data)
                 self.assertEqual(Row(f1=[Row(payment=200.5), Row(payment=None)]), df.first())
+
+    def test_infer_map_merge_pair_types_with_rdd(self):
+        # SPARK-48247: Test inferring map pair type from all values in array
+        MapRow = Row("f1", "f2")
+
+        data = [MapRow({"a": 1, "b": None}, {"a": None, "b": 1})]
+
+        rdd = self.sc.parallelize(data)
+        df = self.spark.createDataFrame(rdd)
+        self.assertEqual(Row(f1={"a": 1, "b": None}, f2={"a": None, "b": 1}), df.first())
+
+    def test_infer_map_pair_type_empty_rdd(self):
+        # SPARK-48247: Test inferring map pair type from all rows
+        MapRow = Row("f1")
+
+        data = [MapRow({}), MapRow({"a": None}), MapRow({"a": 1})]
+
+        rdd = self.sc.parallelize(data)
+        df = self.spark.createDataFrame(rdd)
+        rows = df.collect()
+        self.assertEqual(Row(f1={}), rows[0])
+        self.assertEqual(Row(f1={"a": None}), rows[1])
+        self.assertEqual(Row(f1={"a": 1}), rows[2])
+
+    def test_infer_map_pair_type_empty(self):
+        # SPARK-48247: Test inferring map pair type from all rows
+        MapRow = Row("f1")
+
+        data = [MapRow({}), MapRow({"a": None}), MapRow({"a": 1})]
+
+        df = self.spark.createDataFrame(data)
+        rows = df.collect()
+        self.assertEqual(Row(f1={}), rows[0])
+        self.assertEqual(Row(f1={"a": None}), rows[1])
+        self.assertEqual(Row(f1={"a": 1}), rows[2])
+
+    def test_infer_map_pair_type_with_nested_maps(self):
+        # SPARK-48247: Test inferring nested map
+        NestedRow = Row("f1", "f2")
+
+        data = [
+            NestedRow({"payment": 200.5, "name": "A"}, {"outer": {"payment": 200.5, "name": "A"}})
+        ]
+        df = self.spark.createDataFrame(data)
+        self.assertEqual(
+            Row(
+                f1={"payment": "200.5", "name": "A"},
+                f2={"outer": {"payment": "200.5", "name": "A"}},
+            ),
+            df.first(),
+        )
 
     def test_create_dataframe_from_dict_respects_schema(self):
         df = self.spark.createDataFrame([{"a": 1}], ["b"])
@@ -548,6 +599,234 @@ class TypesTestsMixin:
         self.assertEqual(df.schema, schema)
         self.assertEqual(df.count(), 1)
         self.assertEqual(df.head(), Row(name="[123]", income=120))
+
+    def test_schema_with_collations_json_ser_de(self):
+        from pyspark.sql.types import _parse_datatype_json_string
+
+        unicode_collation = "UNICODE"
+
+        simple_struct = StructType([StructField("c1", StringType(unicode_collation))])
+
+        nested_struct = StructType([StructField("nested", simple_struct)])
+
+        array_in_schema = StructType(
+            [StructField("array", ArrayType(StringType(unicode_collation)))]
+        )
+
+        map_in_schema = StructType(
+            [
+                StructField(
+                    "map", MapType(StringType(unicode_collation), StringType(unicode_collation))
+                )
+            ]
+        )
+
+        nested_map = StructType(
+            [
+                StructField(
+                    "nested",
+                    StructType(
+                        [
+                            StructField(
+                                "mapField",
+                                MapType(
+                                    StringType(unicode_collation), StringType(unicode_collation)
+                                ),
+                            )
+                        ]
+                    ),
+                )
+            ]
+        )
+
+        array_in_map = StructType(
+            [
+                StructField(
+                    "arrInMap",
+                    MapType(
+                        StringType(unicode_collation), ArrayType(StringType(unicode_collation))
+                    ),
+                )
+            ]
+        )
+
+        nested_array_in_map_value = StructType(
+            [
+                StructField(
+                    "nestedArrayInMap",
+                    ArrayType(
+                        MapType(
+                            StringType(unicode_collation),
+                            ArrayType(ArrayType(StringType(unicode_collation))),
+                        )
+                    ),
+                )
+            ]
+        )
+
+        schema_with_multiple_fields = StructType(
+            simple_struct.fields
+            + nested_struct.fields
+            + array_in_schema.fields
+            + map_in_schema.fields
+            + nested_map.fields
+            + array_in_map.fields
+            + nested_array_in_map_value.fields
+        )
+
+        schemas = [
+            simple_struct,
+            nested_struct,
+            array_in_schema,
+            map_in_schema,
+            nested_map,
+            nested_array_in_map_value,
+            array_in_map,
+            schema_with_multiple_fields,
+        ]
+
+        for schema in schemas:
+            scala_datatype = self.spark._jsparkSession.parseDataType(schema.json())
+            python_datatype = _parse_datatype_json_string(scala_datatype.json())
+            assert schema == python_datatype
+            assert schema == _parse_datatype_json_string(schema.json())
+
+    def test_schema_with_collations_on_non_string_types(self):
+        from pyspark.sql.types import _parse_datatype_json_string, _COLLATIONS_METADATA_KEY
+
+        collations_on_int_col_json = f"""
+        {{
+          "type": "struct",
+          "fields": [
+            {{
+              "name": "c1",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {{
+                "{_COLLATIONS_METADATA_KEY}": {{
+                  "c1": "icu.UNICODE"
+                }}
+              }}
+            }}
+          ]
+        }}
+        """
+
+        collations_in_array_element_json = f"""
+        {{
+          "type": "struct",
+          "fields": [
+            {{
+              "name": "arrayField",
+              "type": {{
+                  "type": "array",
+                  "elementType": "integer",
+                  "containsNull": true
+              }},
+              "nullable": true,
+              "metadata": {{
+                "{_COLLATIONS_METADATA_KEY}": {{
+                  "arrayField.element": "icu.UNICODE"
+                }}
+              }}
+            }}
+          ]
+        }}
+        """
+
+        collations_on_array_json = f"""
+        {{
+          "type": "struct",
+          "fields": [
+            {{
+              "name": "arrayField",
+              "type": {{
+                  "type": "array",
+                  "elementType": "integer",
+                  "containsNull": true
+              }},
+              "nullable": true,
+              "metadata": {{
+                "{_COLLATIONS_METADATA_KEY}": {{
+                  "arrayField": "icu.UNICODE"
+                }}
+              }}
+            }}
+          ]
+        }}
+        """
+
+        collations_in_nested_map_json = f"""
+        {{
+          "type": "struct",
+          "fields": [
+            {{
+              "name": "nested",
+              "type": {{
+                "type": "struct",
+                "fields": [
+                  {{
+                    "name": "mapField",
+                    "type": {{
+                      "type": "map",
+                      "keyType": "string",
+                      "valueType": "integer",
+                      "valueContainsNull": true
+                    }},
+                    "nullable": true,
+                    "metadata": {{
+                      "{_COLLATIONS_METADATA_KEY}": {{
+                        "mapField.value": "icu.UNICODE"
+                      }}
+                    }}
+                  }}
+                ]
+              }},
+              "nullable": true,
+              "metadata": {{}}
+            }}
+          ]
+        }}
+        """
+
+        self.assertRaises(
+            PySparkTypeError, lambda: _parse_datatype_json_string(collations_on_int_col_json)
+        )
+
+        self.assertRaises(
+            PySparkTypeError, lambda: _parse_datatype_json_string(collations_in_array_element_json)
+        )
+
+        self.assertRaises(
+            PySparkTypeError, lambda: _parse_datatype_json_string(collations_on_array_json)
+        )
+
+        self.assertRaises(
+            PySparkTypeError, lambda: _parse_datatype_json_string(collations_in_nested_map_json)
+        )
+
+    def test_schema_with_bad_collations_provider(self):
+        from pyspark.sql.types import _parse_datatype_json_string, _COLLATIONS_METADATA_KEY
+
+        schema_json = f"""
+        {{
+          "type": "struct",
+          "fields": [
+            {{
+              "name": "c1",
+              "type": "string",
+              "nullable": "true",
+              "metadata": {{
+                "{_COLLATIONS_METADATA_KEY}": {{
+                  "c1": "badProvider.UNICODE"
+                }}
+              }}
+            }}
+          ]
+        }}
+        """
+
+        self.assertRaises(PySparkValueError, lambda: _parse_datatype_json_string(schema_json))
 
     def test_udt(self):
         from pyspark.sql.types import _parse_datatype_json_string, _infer_type, _make_type_verifier
@@ -864,27 +1143,6 @@ class TypesTestsMixin:
                 self.assertEqual(t(), _parse_datatype_string(k))
         self.assertEqual(IntegerType(), _parse_datatype_string("int"))
         self.assertEqual(StringType(), _parse_datatype_string("string"))
-        self.assertEqual(StringType(), _parse_datatype_string("string collate UTF8_BINARY"))
-        self.assertEqual(StringType(), _parse_datatype_string("string COLLATE UTF8_BINARY"))
-        self.assertEqual(
-            StringType.fromCollationId(0), _parse_datatype_string("string COLLATE   UTF8_BINARY")
-        )
-        self.assertEqual(
-            StringType.fromCollationId(1),
-            _parse_datatype_string("string COLLATE UTF8_BINARY_LCASE"),
-        )
-        self.assertEqual(
-            StringType.fromCollationId(2), _parse_datatype_string("string COLLATE UNICODE")
-        )
-        self.assertEqual(
-            StringType.fromCollationId(2), _parse_datatype_string("string COLLATE `UNICODE`")
-        )
-        self.assertEqual(
-            StringType.fromCollationId(3), _parse_datatype_string("string COLLATE UNICODE_CI")
-        )
-        self.assertEqual(
-            StringType.fromCollationId(3), _parse_datatype_string("string COLLATE `UNICODE_CI`")
-        )
         self.assertEqual(CharType(1), _parse_datatype_string("char(1)"))
         self.assertEqual(CharType(10), _parse_datatype_string("char( 10   )"))
         self.assertEqual(CharType(11), _parse_datatype_string("char( 11)"))
@@ -1619,6 +1877,16 @@ class TypesTestsMixin:
                 .schema[0]
                 .dataType,
                 StringType("UTF8_BINARY_LCASE"),
+            )
+
+    def test_infer_array_element_type_with_struct(self):
+        # SPARK-48248: Nested array to respect legacy conf of inferArrayTypeFromFirstElement
+        with self.sql_conf(
+            {"spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled": True}
+        ):
+            self.assertEqual(
+                ArrayType(ArrayType(LongType())),
+                self.spark.createDataFrame([[[[1, 1.0]]]]).schema.fields[0].dataType,
             )
 
 

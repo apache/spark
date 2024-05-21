@@ -66,7 +66,7 @@ CreateViewCommand `various_maps`, SELECT * FROM VALUES (
   string_map1, string_map2, string_map3, string_map4,
   array_map1, array_map2,
   struct_map1, struct_map2
-), false, false, LocalTempView, true
+), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [boolean_map#x, tinyint_map#x, smallint_map#x, int_map#x, bigint_map#x, decimal_map1#x, decimal_map2#x, double_map#x, float_map#x, date_map#x, timestamp_map#x, string_map1#x, string_map2#x, string_map3#x, string_map4#x, array_map1#x, array_map2#x, struct_map1#x, struct_map2#x]
       +- SubqueryAlias various_maps
          +- LocalRelation [boolean_map#x, tinyint_map#x, smallint_map#x, int_map#x, bigint_map#x, decimal_map1#x, decimal_map2#x, double_map#x, float_map#x, date_map#x, timestamp_map#x, string_map1#x, string_map2#x, string_map3#x, string_map4#x, array_map1#x, array_map2#x, struct_map1#x, struct_map2#x]

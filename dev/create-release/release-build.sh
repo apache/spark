@@ -80,6 +80,9 @@ done
 export LC_ALL=C.UTF-8
 export LANG=C.UTF-8
 
+export PYSPARK_PYTHON=/usr/local/bin/python
+export PYSPARK_DRIVER_PYTHON=/usr/local/bin/python
+
 # Commit ref to checkout when building
 GIT_REF=${GIT_REF:-master}
 
@@ -194,6 +197,8 @@ fi
 PUBLISH_SCALA_2_12=1
 if [[ $SPARK_VERSION > "3.5.99" ]]; then
   PUBLISH_SCALA_2_12=0
+  # There is no longer scala-2.13 profile since 4.0.0
+  SCALA_2_13_PROFILES=""
 fi
 SCALA_2_12_PROFILES="-Pscala-2.12"
 
@@ -345,21 +350,25 @@ if [[ "$1" == "package" ]]; then
   declare -A BINARY_PKGS_EXTRA
   BINARY_PKGS_EXTRA["hadoop3"]="withpip,withr"
 
-  if [[ $PUBLISH_SCALA_2_13 = 1 ]]; then
-    key="hadoop3-scala2.13"
+  # This is dead code as Scala 2.12 is no longer supported, but we keep it as a template for
+  # adding new Scala version support in the future. This secondary Scala version only has one
+  # binary package to avoid doubling the number of final packages. It doesn't build PySpark and
+  # SparkR as the primary Scala version will build them.
+  if [[ $PUBLISH_SCALA_2_12 = 1 ]]; then
+    key="hadoop3-scala2.12"
     args="-Phadoop-3 $HIVE_PROFILES"
     extra=""
-    if ! make_binary_release "$key" "$SCALA_2_13_PROFILES $args" "$extra" "2.13"; then
+    if ! make_binary_release "$key" "$SCALA_2_12_PROFILES $args" "$extra" "2.12"; then
       error "Failed to build $key package. Check logs for details."
     fi
   fi
 
-  if [[ $PUBLISH_SCALA_2_12 = 1 ]]; then
+  if [[ $PUBLISH_SCALA_2_13 = 1 ]]; then
     echo "Packages to build: ${!BINARY_PKGS_ARGS[@]}"
     for key in ${!BINARY_PKGS_ARGS[@]}; do
       args=${BINARY_PKGS_ARGS[$key]}
       extra=${BINARY_PKGS_EXTRA[$key]}
-      if ! make_binary_release "$key" "$SCALA_2_12_PROFILES $args" "$extra" "2.12"; then
+      if ! make_binary_release "$key" "$SCALA_2_13_PROFILES $args" "$extra" "2.13"; then
         error "Failed to build $key package. Check logs for details."
       fi
     done

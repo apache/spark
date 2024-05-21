@@ -473,6 +473,12 @@
     ],
     "sqlState" : "42704"
   },
+  "COLLATION_INVALID_PROVIDER" : {
+    "message" : [
+      "The value <provider> does not represent a correct collation provider. Supported providers are: [<supportedProviders>]."
+    ],
+    "sqlState" : "42704"
+  },
   "COLLATION_MISMATCH" : {
     "message" : [
       "Could not determine which collation to use for string functions and operators."
@@ -1339,7 +1345,13 @@
     ],
     "sqlState" : "54001"
   },
-  "FIELDS_ALREADY_EXISTS" : {
+  "FEATURE_NOT_ENABLED" : {
+    "message" : [
+      "The feature <featureName> is not enabled. Consider setting the config <configKey> to <configValue> to enable this capability."
+    ],
+    "sqlState" : "56038"
+  },
+  "FIELD_ALREADY_EXISTS" : {
     "message" : [
       "Cannot <op> column, because <fieldNames> already exists in <struct>."
     ],
@@ -2336,6 +2348,12 @@
     ],
     "sqlState" : "2203G"
   },
+  "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS" : {
+    "message" : [
+      "Collations can only be applied to string types, but the JSON data type is <jsonType>."
+    ],
+    "sqlState" : "2203G"
+  },
   "INVALID_JSON_ROOT_FIELD" : {
     "message" : [
       "Cannot convert JSON root field to target Spark type."
@@ -2669,9 +2687,9 @@
           "ANALYZE TABLE(S) ... COMPUTE STATISTICS ... <ctx> must be either NOSCAN or empty."
         ]
       },
-      "CREATE_FUNC_WITH_IF_NOT_EXISTS_AND_REPLACE" : {
+      "CREATE_ROUTINE_WITH_IF_NOT_EXISTS_AND_REPLACE" : {
         "message" : [
-          "CREATE FUNCTION with both IF NOT EXISTS and REPLACE is not allowed."
+          "Cannot create a routine with both IF NOT EXISTS and REPLACE specified."
         ]
       },
       "CREATE_TEMP_FUNC_WITH_DATABASE" : {
@@ -4201,6 +4219,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_DATA_TYPE_FOR_ENCODER" : {
+    "message" : [
+      "Cannot create encoder for <dataType>. Please use a different output data type for your UDF or DataFrame."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_DEFAULT_VALUE" : {
     "message" : [
       "DEFAULT column values is not supported."
@@ -4493,6 +4517,11 @@
       "TABLE_OPERATION" : {
         "message" : [
           "Table <tableName> does not support <operation>. Please check the current catalog and namespace to make sure the qualified table name is expected, and also check the catalog implementation which is configured by \"spark.sql.catalog\"."
+        ]
+      },
+      "TEMPORARY_VIEW_WITH_SCHEMA_BINDING_MODE" : {
+        "message" : [
+          "Temporary views cannot be created with the WITH SCHEMA clause. Recreate the temporary view when the underlying schema changes, or use a persisted view."
         ]
       },
       "TIME_TRAVEL" : {
