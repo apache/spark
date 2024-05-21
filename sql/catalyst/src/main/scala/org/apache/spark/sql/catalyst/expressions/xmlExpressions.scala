@@ -102,6 +102,7 @@ case class XmlToStructs(
       nullableSchema, parsedOptions.columnNameOfCorruptRecord)
     val rawParser = new StaxXmlParser(schema, parsedOptions)
     val xsdSchema = Option(parsedOptions.rowValidationXSDPath).map(ValidatorUtil.getSchema)
+
     new FailureSafeParser[String](
       input => rawParser.doParseColumn(input, mode, xsdSchema),
       mode,

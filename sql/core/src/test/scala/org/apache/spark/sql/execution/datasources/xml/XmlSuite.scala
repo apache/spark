@@ -1355,6 +1355,7 @@ class XmlSuite
         |  <name>dave guy</name>
         |</parent>
        """.stripMargin
+    val dfNoError = spark.createDataFrame(Seq((8, xmlDataNoError))).toDF("number", "payload")
     val xmlSchema = schema_of_xml(xmlDataNoError)
     val df = spark.createDataFrame(Seq((8, xmlData))).toDF("number", "payload")
     val result = df.withColumn("decoded",
