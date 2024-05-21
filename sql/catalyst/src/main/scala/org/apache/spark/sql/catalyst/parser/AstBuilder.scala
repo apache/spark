@@ -116,45 +116,45 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     }
   }
 
-  override def visitCompoundOrSingleStatement(ctx: CompoundOrSingleStatementContext): BatchBody = {
+  override def visitCompoundOrSingleStatement(ctx: CompoundOrSingleStatementContext): CompoundBody = {
     if (ctx.singleCompound() != null) {
-      visit(ctx.singleCompound()).asInstanceOf[BatchBody]
+      visit(ctx.singleCompound()).asInstanceOf[CompoundBody]
     } else {
       val logicalPlan = visitSingleStatement(ctx.singleStatement())
-      BatchBody(List(SparkStatementWithPlan(
+      CompoundBody(List(SparkStatementWithPlan(
         parsedPlan = logicalPlan,
         sourceStart = ctx.start.getStartIndex,
         sourceEnd = ctx.stop.getStopIndex + 1)))
     }
   }
 
-  override def visitSingleCompound(ctx: SingleCompoundContext): BatchBody = {
-    visit(ctx.compound()).asInstanceOf[BatchBody]
+  override def visitSingleCompound(ctx: SingleCompoundContext): CompoundBody = {
+    visit(ctx.compound()).asInstanceOf[CompoundBody]
   }
 
-  private def visitCompoundBodyImpl(ctx: CompoundBodyContext): BatchBody = {
-    val buff = ListBuffer[BatchPlanStatement]()
+  private def visitCompoundBodyImpl(ctx: CompoundBodyContext): CompoundBody = {
+    val buff = ListBuffer[CompoundPlanStatement]()
     for (i <- 0 until ctx.getChildCount) {
       val child = ctx.getChild(i)
       val visitedChild = visit(ctx.getChild(i))
       visitedChild match {
-        case statement: BatchPlanStatement => buff += statement
+        case statement: CompoundPlanStatement => buff += statement
         case null if child.isInstanceOf[TerminalNodeImpl] =>
       }
     }
 
-    BatchBody(buff.toList)
+    CompoundBody(buff.toList)
   }
 
-  override def visitCompound(ctx: CompoundContext): BatchBody = {
+  override def visitCompound(ctx: CompoundContext): CompoundBody = {
     visitCompoundBodyImpl(ctx.compoundBody())
   }
 
-  override def visitCompoundBody(ctx: CompoundBodyContext): BatchBody = {
+  override def visitCompoundBody(ctx: CompoundBodyContext): CompoundBody = {
     visitCompoundBodyImpl(ctx)
   }
 
-  override def visitCompoundStatement(ctx: CompoundStatementContext): BatchPlanStatement = {
+  override def visitCompoundStatement(ctx: CompoundStatementContext): CompoundPlanStatement = {
     val child = visit(ctx.getChild(0))
     child match {
       case logicalPlan: LogicalPlan =>
@@ -162,7 +162,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
           parsedPlan = logicalPlan,
           sourceStart = ctx.statement().start.getStartIndex,
           sourceEnd = ctx.statement().stop.getStopIndex + 1)
-      case statement: BatchPlanStatement => statement
+      case statement: CompoundPlanStatement => statement
     }
   }
 

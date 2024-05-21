@@ -43,8 +43,8 @@ options { tokenVocab = SqlBaseLexer; }
 }
 
 compoundOrSingleStatement
-    : singleCompound
-    | singleStatement
+    : singleStatement
+    | singleCompound
     ;
 
 singleCompound

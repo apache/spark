@@ -23,7 +23,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.parser.{BatchBody, ParserInterface}
+import org.apache.spark.sql.catalyst.parser.{CompoundBody, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -55,8 +55,8 @@ class SparkConnectWithSessionExtensionSuite extends SparkFunSuite {
     override def parseQuery(sqlText: String): LogicalPlan =
       delegate.parseQuery(sqlText)
 
-    override def parseBatch(batchText: String): BatchBody =
-      delegate.parseBatch(batchText)
+    override def parseScript(sqlScriptText: String): CompoundBody =
+      delegate.parseScript(sqlScriptText)
   }
 
   test("Parse table name with test parser") {
