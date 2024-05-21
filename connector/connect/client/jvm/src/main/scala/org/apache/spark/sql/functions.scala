@@ -5964,6 +5964,15 @@ object functions {
     Column.fn("timestampdiff", lit(unit), start, end)
 
   /**
+   * Adds the specified number of units to the given timestamp.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def timestamp_add(unit: String, quantity: Column, ts: Column): Column =
+    Column.fn("timestampadd", lit(unit), quantity, ts)
+
+  /**
    * Parses the `timestamp` expression with the `format` expression to a timestamp without time
    * zone. Returns null with invalid input.
    *
