@@ -154,30 +154,43 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
   test("SPARK-47462: Unsigned numeric types") {
     val df = sqlContext.read.jdbc(jdbcUrl, "unsigned_numbers", new Properties)
     val rows = df.head()
-    assert(rows.get(0).isInstanceOf[Short])
-    assert(rows.get(1).isInstanceOf[Integer])
-    assert(rows.get(2).isInstanceOf[Integer])
-    assert(rows.get(3).isInstanceOf[Long])
-    assert(rows.get(4).isInstanceOf[BigDecimal])
-    assert(rows.get(5).isInstanceOf[BigDecimal])
-    assert(rows.get(6).isInstanceOf[Double])
-    // Unlike MySQL, MariaDB seems not to distinguish signed and unsigned tinyint(1).
     val isMaria = jdbcUrl.indexOf("disableMariaDbDriver") == -1
     if (isMaria) {
+      assert(rows.get(0).isInstanceOf[Integer])
+      assert(rows.get(1).isInstanceOf[Long])
+      assert(rows.get(2).isInstanceOf[Integer])
+      assert(rows.get(3).isInstanceOf[BigDecimal])
+      assert(rows.get(4).isInstanceOf[BigDecimal])
+      assert(rows.get(5).isInstanceOf[BigDecimal])
+      assert(rows.get(6).isInstanceOf[Double])
+      // Unlike MySQL, MariaDB seems not to distinguish signed and unsigned tinyint(1).
       assert(rows.get(7).isInstanceOf[Boolean])
-    } else {
-      assert(rows.get(7).isInstanceOf[Short])
-    }
-    assert(rows.getShort(0) === 255)
-    assert(rows.getInt(1) === 65535)
-    assert(rows.getInt(2) === 16777215)
-    assert(rows.getLong(3) === 4294967295L)
-    assert(rows.getAs[BigDecimal](4).equals(new BigDecimal("9223372036854775808")))
-    assert(rows.getAs[BigDecimal](5).equals(new BigDecimal("123456789012345.123456789012345000")))
-    assert(rows.getDouble(6) === 1.0000000000000002)
-    if (isMaria) {
+
+      assert(rows.getInt(0) === 255)
+      assert(rows.getLong(1) === 65535L)
+      assert(rows.getInt(2) === 16777215)
+      assert(rows.getAs[BigDecimal](3).equals(new BigDecimal("4294967295")))
+      assert(rows.getAs[BigDecimal](4).equals(new BigDecimal("9223372036854775808")))
+      assert(rows.getAs[BigDecimal](5).equals(new BigDecimal("123456789012345.123456789012345000")))
+      assert(rows.getDouble(6) === 1.0000000000000002)
       assert(rows.getBoolean(7) === false)
     } else {
+      assert(rows.get(0).isInstanceOf[Short])
+      assert(rows.get(1).isInstanceOf[Integer])
+      assert(rows.get(2).isInstanceOf[Integer])
+      assert(rows.get(3).isInstanceOf[Long])
+      assert(rows.get(4).isInstanceOf[BigDecimal])
+      assert(rows.get(5).isInstanceOf[BigDecimal])
+      assert(rows.get(6).isInstanceOf[Double])
+      assert(rows.get(7).isInstanceOf[Short])
+
+      assert(rows.getShort(0) === 255)
+      assert(rows.getInt(1) === 65535)
+      assert(rows.getInt(2) === 16777215)
+      assert(rows.getLong(3) === 4294967295L)
+      assert(rows.getAs[BigDecimal](4).equals(new BigDecimal("9223372036854775808")))
+      assert(rows.getAs[BigDecimal](5).equals(new BigDecimal("123456789012345.123456789012345000")))
+      assert(rows.getDouble(6) === 1.0000000000000002)
       assert(rows.getShort(7) === 0)
     }
   }
@@ -367,13 +380,13 @@ class MySQLOverMariaConnectorIntegrationSuite extends MySQLIntegrationSuite {
 
   override val db = new MySQLDatabaseOnDocker {
     override def getJdbcUrl(ip: String, port: Int): String =
-      s"jdbc:mysql://$ip:$port/mysql?user=root&password=rootpass&allowPublicKeyRetrieval=true" +
-        s"&useSSL=false"
+      s"jdbc:mysql://$ip:$port/mysql?permitMysqlScheme&user=root&password=rootpass" +
+        s"&allowPublicKeyRetrieval=true&useSSL=false"
   }
 
   override def testConnection(): Unit = {
     Using.resource(getConnection()) { conn =>
-      assert(conn.getClass.getName === "org.mariadb.jdbc.MariaDbConnection")
+      assert(conn.getClass.getName === "org.mariadb.jdbc.Connection")
     }
   }
 }

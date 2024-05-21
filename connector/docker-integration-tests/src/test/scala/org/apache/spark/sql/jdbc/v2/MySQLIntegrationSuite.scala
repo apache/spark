@@ -177,7 +177,7 @@ class MySQLOverMariaConnectorIntegrationSuite extends MySQLIntegrationSuite {
 
   override val db = new MySQLDatabaseOnDocker {
     override def getJdbcUrl(ip: String, port: Int): String =
-      s"jdbc:mysql://$ip:$port/mysql?user=root&password=rootpass&allowPublicKeyRetrieval=true" +
-        s"&useSSL=false"
+      s"jdbc:mysql://$ip:$port/mysql?permitMysqlScheme&user=root&password=rootpass" +
+        s"&allowPublicKeyRetrieval=true&useSSL=false"
   }
 }
