@@ -448,9 +448,12 @@ class SparkSession:
                 _num_cols = 1
 
         elif isinstance(schema, (list, tuple)):
-            # Must re-encode any unicode strings to be consistent with StructField names
-            _cols = [x.encode("utf-8") if not isinstance(x, str) else x for x in schema]
-            _num_cols = len(_cols)
+            if len(schema) and isinstance(schema[0], StructType):
+                schema = schema[0]
+            else:
+                # Must re-encode any unicode strings to be consistent with StructField names
+                _cols = [x.encode("utf-8") if not isinstance(x, str) else x for x in schema]
+                _num_cols = len(_cols)
 
         elif schema is not None:
             raise PySparkTypeError(

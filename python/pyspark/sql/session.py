@@ -1490,8 +1490,11 @@ class SparkSession(SparkConversionMixin):
         if isinstance(schema, str):
             schema = cast(Union[AtomicType, StructType, str], _parse_datatype_string(schema))
         elif isinstance(schema, (list, tuple)):
-            # Must re-encode any unicode strings to be consistent with StructField names
-            schema = [x.encode("utf-8") if not isinstance(x, str) else x for x in schema]
+            if len(schema) and isinstance(schema[0], StructType):
+                schema = schema[0]
+            else:
+                # Must re-encode any unicode strings to be consistent with StructField names
+                schema = [x.encode("utf-8") if not isinstance(x, str) else x for x in schema]
 
         try:
             import pandas as pd
