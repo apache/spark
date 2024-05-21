@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
-sealed trait BatchPlanStatement
+sealed trait CompoundPlanStatement
 
 // Statement that is supposed to be executed against Spark.
 // This can also be a Spark expression that is wrapped in a statement.
@@ -27,9 +27,9 @@ case class SparkStatementWithPlan(
     parsedPlan: LogicalPlan,
     sourceStart: Int,
     sourceEnd: Int)
-  extends BatchPlanStatement {
+  extends CompoundPlanStatement {
 
   def getText(batch: String): String = batch.substring(sourceStart, sourceEnd)
 }
 
-case class BatchBody(collection: List[BatchPlanStatement]) extends BatchPlanStatement
+case class CompoundBody(collection: List[CompoundPlanStatement]) extends CompoundPlanStatement

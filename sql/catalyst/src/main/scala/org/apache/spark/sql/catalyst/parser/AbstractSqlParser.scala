@@ -91,16 +91,15 @@ abstract class AbstractSqlParser extends AbstractParser with ParserInterface {
     }
   }
 
-  /** Creates BatchBody for a given SQL string. */
-  override def parseBatch(batchText: String): BatchBody = parse(batchText) { parser =>
+  /** Creates BatchBody for a given SQL script string. */
+  override def parseScript(sqlScriptText: String): CompoundBody = parse(sqlScriptText) { parser =>
     val ctx = parser.compoundOrSingleStatement()
-    withErrorHandling(ctx, Some(batchText)) {
+    withErrorHandling(ctx, Some(sqlScriptText)) {
       astBuilder.visitCompoundOrSingleStatement(ctx) match {
-        case batch: BatchBody => batch
+        case batch: CompoundBody => batch
         case _ =>
-          // TODO: Figure out the error reporting - this is just copy paste of parsePlan logic.
           val position = Origin(None, None)
-          throw QueryParsingErrors.sqlStatementUnsupportedError(batchText, position)
+          throw QueryParsingErrors.sqlStatementUnsupportedError(sqlScriptText, position)
       }
     }
   }
