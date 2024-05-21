@@ -174,12 +174,11 @@ public final class CollationFactory {
     }
 
     /**
-     * Collation id is defined as 32-bit integer.
-     * We specify binary layouts for different classes of collations.
-     * Classes of collations are differentiated by most significant 3 bits (bit 31, 30 and 29),
-     * bit 31 being most significant and bit 0 being least significant.
+     * Collation ID is defined as 32-bit integer. We specify binary layouts for different classes of
+     * collations. Classes of collations are differentiated by most significant 3 bits (bit 31, 30
+     * and 29), bit 31 being most significant and bit 0 being least significant.
      * ---
-     * General collation id binary layout:
+     * General collation ID binary layout:
      * bit 31:    1 for INDETERMINATE (requires all other bits to be 1 as well), 0 otherwise.
      * bit 30:    0 for predefined, 1 for user-defined.
      * Following bits are specified for predefined collations:
@@ -189,16 +188,16 @@ public final class CollationFactory {
      * bit 21-18: Reserved for space trimming.
      * bit 17-0:  Depend on collation family.
      * ---
-     * INDETERMINATE collation id binary layout:
+     * INDETERMINATE collation ID binary layout:
      * bit 31-0: 1
-     * INDETERMINATE collation id is equal to -1.
+     * INDETERMINATE collation ID is equal to -1.
      * ---
-     * User-defined collation id binary layout:
+     * User-defined collation ID binary layout:
      * bit 31:   0
      * bit 30:   1
      * bit 29-0: Undefined, reserved for future use.
      * ---
-     * UTF8_BINARY collation id binary layout:
+     * UTF8_BINARY collation ID binary layout:
      * bit 31-24: Zeroes.
      * bit 23-22: Zeroes, reserved for version.
      * bit 21-18: Zeroes, reserved for space trimming.
@@ -207,7 +206,7 @@ public final class CollationFactory {
      * bit 1:     0, reserved for uppercase and case-insensitive.
      * bit 0:     0 = case-sensitive, 1 = lowercase.
      * ---
-     * ICU collation id binary layout:
+     * ICU collation ID binary layout:
      * bit 31-30: Zeroes.
      * bit 29:    1
      * bit 28-24: Zeroes.
@@ -217,9 +216,9 @@ public final class CollationFactory {
      * bit 16:    0 = accent-sensitive, 1 = accent-insensitive.
      * bit 15-14: Zeroes, reserved for punctuation sensitivity.
      * bit 13-12: Zeroes, reserved for first letter preference.
-     * bit 11-0:  Locale id as specified in `ICULocaleToId` mapping.
+     * bit 11-0:  Locale ID as specified in `ICULocaleToId` mapping.
      * ---
-     * Some illustrative examples of collation name to id mapping:
+     * Some illustrative examples of collation name to ID mapping:
      * - UTF8_BINARY       -> 0
      * - UTF8_BINARY_LCASE -> 1
      * - UNICODE           -> 0x20000000
@@ -232,50 +231,50 @@ public final class CollationFactory {
     private abstract static class CollationSpec {
 
       /**
-       * Bit 30 in collation id having value 0 for predefined and 1 for user-defined collation.
+       * Bit 30 in collation ID having value 0 for predefined and 1 for user-defined collation.
        */
       private enum DefinitionOrigin {
         PREDEFINED, USER_DEFINED
       }
 
       /**
-       * Bit 29 in collation id having value
-       * 0 for UTF8_BINARY family and 1 for ICU family of collations.
+       * Bit 29 in collation ID having value 0 for UTF8_BINARY family and 1 for ICU family of
+       * collations.
        */
       protected enum ImplementationProvider {
         UTF8_BINARY, ICU
       }
 
       /**
-       * Offset in binary collation id layout.
+       * Offset in binary collation ID layout.
        */
       private static final int DEFINITION_ORIGIN_OFFSET = 30;
 
       /**
-       * Bitmask corresponding to width in bits in binary collation id layout.
+       * Bitmask corresponding to width in bits in binary collation ID layout.
        */
       private static final int DEFINITION_ORIGIN_MASK = 0b1;
 
       /**
-       * Offset in binary collation id layout.
+       * Offset in binary collation ID layout.
        */
       protected static final int IMPLEMENTATION_PROVIDER_OFFSET = 29;
 
       /**
-       * Bitmask corresponding to width in bits in binary collation id layout.
+       * Bitmask corresponding to width in bits in binary collation ID layout.
        */
       protected static final int IMPLEMENTATION_PROVIDER_MASK = 0b1;
 
       private static final int INDETERMINATE_COLLATION_ID = -1;
 
       /**
-       * Thread-safe cache mapping collation ids to corresponding `Collation` instances.
+       * Thread-safe cache mapping collation IDs to corresponding `Collation` instances.
        * We add entries to this cache lazily as new `Collation` instances are requested.
        */
       private static final Map<Integer, Collation> collationMap = new ConcurrentHashMap<>();
 
       /**
-       * Utility function to retrieve `ImplementationProvider` enum instance from collation id.
+       * Utility function to retrieve `ImplementationProvider` enum instance from collation ID.
        */
       private static ImplementationProvider getImplementationProvider(int collationId) {
         return ImplementationProvider.values()[SpecifierUtils.getSpecValue(collationId,
@@ -283,7 +282,7 @@ public final class CollationFactory {
       }
 
       /**
-       * Utility function to retrieve `DefinitionOrigin` enum instance from collation id.
+       * Utility function to retrieve `DefinitionOrigin` enum instance from collation ID.
        */
       private static DefinitionOrigin getDefinitionOrigin(int collationId) {
         return DefinitionOrigin.values()[SpecifierUtils.getSpecValue(collationId,
@@ -291,10 +290,11 @@ public final class CollationFactory {
       }
 
       /**
-       * Main entry point for retrieving `Collation` instance from collation id.
+       * Main entry point for retrieving `Collation` instance from collation ID.
        */
       private static Collation fetchCollation(int collationId) {
-        // User-defined collations and INDETERMINATE collations cannot produce a `Collation` instance.
+        // User-defined collations and INDETERMINATE collations cannot produce a `Collation`
+        // instance.
         assert (collationId >= 0 && getDefinitionOrigin(collationId)
           == DefinitionOrigin.PREDEFINED);
         if (collationId == UTF8_BINARY_COLLATION_ID) {
@@ -339,20 +339,20 @@ public final class CollationFactory {
     private static class CollationSpecUTF8Binary extends CollationSpec {
 
       /**
-       * Bit 0 in collation id having value
-       * 0 for plain UTF8_BINARY and 1 for UTF8_BINARY_LCASE collation.
+       * Bit 0 in collation ID having value 0 for plain UTF8_BINARY and 1 for UTF8_BINARY_LCASE
+       * collation.
        */
       private enum CaseSensitivity {
         UNSPECIFIED, LCASE
       }
 
       /**
-       * Offset in binary collation id layout.
+       * Offset in binary collation ID layout.
        */
       private static final int CASE_SENSITIVITY_OFFSET = 0;
 
       /**
-       * Bitmask corresponding to width in bits in binary collation id layout.
+       * Bitmask corresponding to width in bits in binary collation ID layout.
        */
       private static final int CASE_SENSITIVITY_MASK = 0b1;
 
@@ -385,7 +385,7 @@ public final class CollationFactory {
       }
 
       private static CollationSpecUTF8Binary fromCollationId(int collationId) {
-        // Extract case sensitivity from collation id.
+        // Extract case sensitivity from collation ID.
         int caseConversionOrdinal = SpecifierUtils.getSpecValue(collationId,
           CASE_SENSITIVITY_OFFSET, CASE_SENSITIVITY_MASK);
         // Verify only case sensitivity bits were set settable in UTF8_BINARY family of collations.
@@ -404,9 +404,9 @@ public final class CollationFactory {
             UTF8String::binaryCompare,
             "1.0",
             s -> (long) s.hashCode(),
-            true,
-            true,
-            false);
+            /* supportsBinaryEquality = */ true,
+            /* supportsBinaryOrdering = */ true,
+            /* supportsLowercaseEquality = */ false);
         } else {
           return new Collation(
             "UTF8_BINARY_LCASE",
@@ -415,9 +415,9 @@ public final class CollationFactory {
             UTF8String::compareLowerCase,
             "1.0",
             s -> (long) s.toLowerCase().hashCode(),
-            false,
-            false,
-            true);
+            /* supportsBinaryEquality = */ false,
+            /* supportsBinaryOrdering = */ false,
+            /* supportsLowercaseEquality = */ true);
         }
       }
     }
@@ -425,43 +425,43 @@ public final class CollationFactory {
     private static class CollationSpecICU extends CollationSpec {
 
       /**
-       * Bit 17 in collation id having value
-       * 0 for case-sensitive and 1 for case-insensitive collation.
+       * Bit 17 in collation ID having value 0 for case-sensitive and 1 for case-insensitive
+       * collation.
        */
       private enum CaseSensitivity {
         CS, CI
       }
 
       /**
-       * Bit 16 in collation id having value
-       * 0 for accent-sensitive and 1 for accent-insensitive collation.
+       * Bit 16 in collation ID having value 0 for accent-sensitive and 1 for accent-insensitive
+       * collation.
        */
       private enum AccentSensitivity {
         AS, AI
       }
 
       /**
-       * Offset in binary collation id layout.
+       * Offset in binary collation ID layout.
        */
       private static final int CASE_SENSITIVITY_OFFSET = 17;
 
       /**
-       * Bitmask corresponding to width in bits in binary collation id layout.
+       * Bitmask corresponding to width in bits in binary collation ID layout.
        */
       private static final int CASE_SENSITIVITY_MASK = 0b1;
 
       /**
-       * Offset in binary collation id layout.
+       * Offset in binary collation ID layout.
        */
       private static final int ACCENT_SENSITIVITY_OFFSET = 16;
 
       /**
-       * Bitmask corresponding to width in bits in binary collation id layout.
+       * Bitmask corresponding to width in bits in binary collation ID layout.
        */
       private static final int ACCENT_SENSITIVITY_MASK = 0b1;
 
       /**
-       * Array of locale names, each locale id corresponds to the index in this array.
+       * Array of locale names, each locale ID corresponds to the index in this array.
        */
       private static final String[] ICULocaleNames;
 
@@ -523,7 +523,7 @@ public final class CollationFactory {
           assert (!ICULocaleMapUppercase.containsKey(localeUppercase));
           ICULocaleMapUppercase.put(localeUppercase, localeName);
         }
-        // Construct locale name to id mapping. Locale id is defined as index in `ICULocaleNames`.
+        // Construct locale name to ID mapping. Locale ID is defined as index in `ICULocaleNames`.
         ICULocaleNames = ICULocaleMap.keySet().toArray(new String[0]);
         Arrays.sort(ICULocaleNames);
         // Maximum number of locale IDs as defined by binary layout.
@@ -548,7 +548,7 @@ public final class CollationFactory {
         this.locale = locale;
         this.caseSensitivity = caseSensitivity;
         this.accentSensitivity = accentSensitivity;
-        // Construct collation id from locale, case-sensitivity and accent-sensitivity specifiers.
+        // Construct collation ID from locale, case-sensitivity and accent-sensitivity specifiers.
         int collationId = ICULocaleToId.get(locale);
         // Mandatory ICU implementation provider.
         collationId = SpecifierUtils.setSpecValue(collationId, IMPLEMENTATION_PROVIDER_OFFSET,
@@ -563,8 +563,8 @@ public final class CollationFactory {
       private static int collationNameToId(
           String originalName, String collationName) throws SparkException {
         // Search for the longest locale match because specifiers are designed to be different from
-        // script tag and country code, meaning the only valid locale name match can be
-        // the longest one.
+        // script tag and country code, meaning the only valid locale name match can be the longest
+        // one.
         int lastPos = -1;
         for (int i = 1; i <= collationName.length(); i++) {
           String localeName = collationName.substring(0, i);
@@ -607,7 +607,7 @@ public final class CollationFactory {
             throw collationInvalidNameException(originalName);
           }
 
-          // Build collation id from computed specifiers.
+          // Build collation ID from computed specifiers.
           collationId = SpecifierUtils.setSpecValue(collationId,
             IMPLEMENTATION_PROVIDER_OFFSET, ImplementationProvider.ICU);
           collationId = SpecifierUtils.setSpecValue(collationId,
@@ -619,7 +619,7 @@ public final class CollationFactory {
       }
 
       private static CollationSpecICU fromCollationId(int collationId) {
-        // Parse specifiers from collation id.
+        // Parse specifiers from collation ID.
         int caseSensitivityOrdinal = SpecifierUtils.getSpecValue(collationId,
           CASE_SENSITIVITY_OFFSET, CASE_SENSITIVITY_MASK);
         int accentSensitivityOrdinal = SpecifierUtils.getSpecValue(collationId,
@@ -630,9 +630,9 @@ public final class CollationFactory {
           CASE_SENSITIVITY_OFFSET, CASE_SENSITIVITY_MASK);
         collationId = SpecifierUtils.removeSpec(collationId,
           ACCENT_SENSITIVITY_OFFSET, ACCENT_SENSITIVITY_MASK);
-        // Locale id remains after removing all other specifiers.
+        // Locale ID remains after removing all other specifiers.
         int localeId = collationId;
-        // Verify locale id is valid against `ICULocaleNames` array.
+        // Verify locale ID is valid against `ICULocaleNames` array.
         assert (localeId < ICULocaleNames.length);
         CaseSensitivity caseSensitivity = CaseSensitivity.values()[caseSensitivityOrdinal];
         AccentSensitivity accentSensitivity = AccentSensitivity.values()[accentSensitivityOrdinal];
@@ -671,9 +671,9 @@ public final class CollationFactory {
           (s1, s2) -> collator.compare(s1.toString(), s2.toString()),
           ICU_COLLATOR_VERSION,
           s -> (long) collator.getCollationKey(s.toString()).hashCode(),
-          collationId == UNICODE_COLLATION_ID,
-          false,
-          false);
+          /* supportsBinaryEquality = */ collationId == UNICODE_COLLATION_ID,
+          /* supportsBinaryOrdering = */ false,
+          /* supportsLowercaseEquality = */ false);
       }
 
       /**
@@ -699,9 +699,8 @@ public final class CollationFactory {
     }
 
     /**
-     * Utility class for manipulating conversions between
-     * collation ids and specifier enums/locale ids.
-     * Scope bitwise operations here to avoid confusion.
+     * Utility class for manipulating conversions between collation IDs and specifier enums/locale
+     * IDs. Scope bitwise operations here to avoid confusion.
      */
     private static class SpecifierUtils {
       private static int getSpecValue(int collationId, int offset, int mask) {
@@ -776,7 +775,7 @@ public final class CollationFactory {
   }
 
   /**
-   * Returns the collation id for the given collation name.
+   * Returns the collation ID for the given collation name.
    */
   public static int collationNameToId(String collationName) throws SparkException {
     return Collation.CollationSpec.collationNameToId(collationName);
