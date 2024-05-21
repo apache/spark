@@ -46,7 +46,10 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.SparkThreadUtils
 
 class ClientE2ETestSuite
-  extends ConnectFunSuite with RemoteSparkSession with SQLHelper with PrivateMethodTester {
+    extends ConnectFunSuite
+    with RemoteSparkSession
+    with SQLHelper
+    with PrivateMethodTester {
 
   test("throw SparkException with null filename in stack trace elements") {
     withSQLConf("spark.sql.connect.enrichError.enabled" -> "true") {
