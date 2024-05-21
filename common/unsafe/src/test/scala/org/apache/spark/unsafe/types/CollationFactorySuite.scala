@@ -401,7 +401,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
     })
   }
 
-  test("repeated specifiers in collation name") {
+  test("repeated and/or incompatible specifiers in collation name") {
     Seq(
       "UTF8_BINARY_LCASE_LCASE",
       "UNICODE_CS_CS",
