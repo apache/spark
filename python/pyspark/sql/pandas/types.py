@@ -312,41 +312,6 @@ def _get_local_timezone() -> str:
     return os.environ.get("TZ", "dateutil/:")
 
 
-def _check_arrow_table_timestamps_localize(
-    table: "pa.Table", schema: StructType, truncate: bool = True, timezone: Optional[str] = None
-) -> "pa.Table":
-    """
-    Convert timestamps in a PyArrow Table to timezone-naive in the specified timezone if the
-    corresponding Spark data type is TimestampType in the specified Spark schema is TimestampType,
-    and optionally truncate nanosecond timestamps to microseconds.
-
-    Parameters
-    ----------
-    table : :class:`pyarrow.Table`
-    schema : :class:`StructType`
-        The Spark schema corresponding to the schema of the Arrow Table.
-    truncate : bool, default True
-        Whether to truncate nanosecond timestamps to microseconds. (default ``True``)
-    timezone : str, optional
-        The timezone to convert from. If there is a timestamp type, it's required.
-
-    Returns
-    -------
-    :class:`pyarrow.Table`
-    """
-    import pyarrow as pa
-
-    assert len(table.schema) == len(schema.fields)
-
-    return pa.Table.from_arrays(
-        [
-            _check_arrow_array_timestamps_localize(a, f.dataType, truncate, timezone)
-            for a, f in zip(table.columns, schema.fields)
-        ],
-        schema=table.schema,
-    )
-
-
 def _check_arrow_array_timestamps_localize(
     a: Union["pa.Array", "pa.ChunkedArray"],
     dt: DataType,
@@ -428,6 +393,41 @@ def _check_arrow_array_timestamps_localize(
             _check_arrow_array_timestamps_localize(a.dictionary, dt, truncate, timezone),
         )
     return a
+
+
+def _check_arrow_table_timestamps_localize(
+    table: "pa.Table", schema: StructType, truncate: bool = True, timezone: Optional[str] = None
+) -> "pa.Table":
+    """
+    Convert timestamps in a PyArrow Table to timezone-naive in the specified timezone if the
+    corresponding Spark data type is TimestampType in the specified Spark schema is TimestampType,
+    and optionally truncate nanosecond timestamps to microseconds.
+
+    Parameters
+    ----------
+    table : :class:`pyarrow.Table`
+    schema : :class:`StructType`
+        The Spark schema corresponding to the schema of the Arrow Table.
+    truncate : bool, default True
+        Whether to truncate nanosecond timestamps to microseconds. (default ``True``)
+    timezone : str, optional
+        The timezone to convert from. If there is a timestamp type, it's required.
+
+    Returns
+    -------
+    :class:`pyarrow.Table`
+    """
+    import pyarrow as pa
+
+    assert len(table.schema) == len(schema.fields)
+
+    return pa.Table.from_arrays(
+        [
+            _check_arrow_array_timestamps_localize(a, f.dataType, truncate, timezone)
+            for a, f in zip(table.columns, schema.fields)
+        ],
+        schema=table.schema,
+    )
 
 
 def _check_series_localize_timestamps(s: "PandasSeriesLike", timezone: str) -> "PandasSeriesLike":
