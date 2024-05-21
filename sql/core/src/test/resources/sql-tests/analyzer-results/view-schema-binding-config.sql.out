@@ -665,6 +665,142 @@ DescribeTableCommand `spark_catalog`.`default`.`v`, true, [col_name#x, data_type
 
 
 -- !query
+SET spark.sql.legacy.viewSchemaBindingMode = false
+-- !query analysis
+SetCommand (spark.sql.legacy.viewSchemaBindingMode,Some(false))
+
+
+-- !query
+SET spark.sql.legacy.viewSchemaCompensation = false
+-- !query analysis
+SetCommand (spark.sql.legacy.viewSchemaCompensation,Some(false))
+
+
+-- !query
+CREATE OR REPLACE VIEW v AS SELECT 1
+-- !query analysis
+CreateViewCommand `spark_catalog`.`default`.`v`, SELECT 1, false, true, PersistedView, UNSUPPORTED, true
+   +- Project [1 AS 1#x]
+      +- OneRowRelation
+
+
+-- !query
+SET spark.sql.legacy.viewSchemaBindingMode = true
+-- !query analysis
+SetCommand (spark.sql.legacy.viewSchemaBindingMode,Some(true))
+
+
+-- !query
+DESCRIBE EXTENDED v
+-- !query analysis
+DescribeTableCommand `spark_catalog`.`default`.`v`, true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+SHOW TABLE EXTENDED LIKE 'v'
+-- !query analysis
+ShowTablesCommand default, v, [namespace#x, tableName#x, isTemporary#x, information#x], true
+
+
+-- !query
+SHOW CREATE TABLE v
+-- !query analysis
+ShowCreateTableCommand `spark_catalog`.`default`.`v`, [createtab_stmt#x]
+
+
+-- !query
+SET spark.sql.legacy.viewSchemaCompensation = true
+-- !query analysis
+SetCommand (spark.sql.legacy.viewSchemaCompensation,Some(true))
+
+
+-- !query
+DESCRIBE EXTENDED v
+-- !query analysis
+DescribeTableCommand `spark_catalog`.`default`.`v`, true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+SHOW TABLE EXTENDED LIKE 'v'
+-- !query analysis
+ShowTablesCommand default, v, [namespace#x, tableName#x, isTemporary#x, information#x], true
+
+
+-- !query
+SHOW CREATE TABLE v
+-- !query analysis
+ShowCreateTableCommand `spark_catalog`.`default`.`v`, [createtab_stmt#x]
+
+
+-- !query
+DROP VIEW IF EXISTS v
+-- !query analysis
+DropTableCommand `spark_catalog`.`default`.`v`, true, true, false
+
+
+-- !query
+SET spark.sql.legacy.viewSchemaBindingMode = false
+-- !query analysis
+SetCommand (spark.sql.legacy.viewSchemaBindingMode,Some(false))
+
+
+-- !query
+SET spark.sql.legacy.viewSchemaCompensation = false
+-- !query analysis
+SetCommand (spark.sql.legacy.viewSchemaCompensation,Some(false))
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW v AS SELECT 1
+-- !query analysis
+CreateViewCommand `v`, SELECT 1, false, true, LocalTempView, UNSUPPORTED, true
+   +- Project [1 AS 1#x]
+      +- OneRowRelation
+
+
+-- !query
+SET spark.sql.legacy.viewSchemaBindingMode = true
+-- !query analysis
+SetCommand (spark.sql.legacy.viewSchemaBindingMode,Some(true))
+
+
+-- !query
+DESCRIBE EXTENDED v
+-- !query analysis
+DescribeTableCommand `v`, true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+SHOW TABLE EXTENDED LIKE 'v'
+-- !query analysis
+ShowTablesCommand default, v, [namespace#x, tableName#x, isTemporary#x, information#x], true
+
+
+-- !query
+SET spark.sql.legacy.viewSchemaCompensation = true
+-- !query analysis
+SetCommand (spark.sql.legacy.viewSchemaCompensation,Some(true))
+
+
+-- !query
+DESCRIBE EXTENDED v
+-- !query analysis
+DescribeTableCommand `v`, true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+SHOW TABLE EXTENDED LIKE 'v'
+-- !query analysis
+ShowTablesCommand default, v, [namespace#x, tableName#x, isTemporary#x, information#x], true
+
+
+-- !query
+DROP VIEW IF EXISTS v
+-- !query analysis
+DropTempViewCommand v
+
+
+-- !query
 DROP VIEW IF EXISTS v
 -- !query analysis
 DropTableCommand `spark_catalog`.`default`.`v`, true, true, false
