@@ -28,6 +28,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.java.function._
 import org.apache.spark.connect.proto
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
@@ -42,6 +43,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkClassUtils
 
+// scalastyle:off no.finalize
 /**
  * A Dataset is a strongly typed collection of domain-specific objects that can be transformed in
  * parallel using functional or relational operations. Each Dataset also has an untyped view
@@ -132,7 +134,8 @@ class Dataset[T] private[sql] (
     val sparkSession: SparkSession,
     @DeveloperApi val plan: proto.Plan,
     val encoder: Encoder[T])
-    extends Serializable {
+    extends Serializable
+    with Logging {
   // Make sure we don't forget to set plan id.
   assert(plan.getRoot.getCommon.hasPlanId)
 
@@ -3402,20 +3405,103 @@ class Dataset[T] private[sql] (
     df
   }
 
-  def checkpoint(): Dataset[T] = {
-    throw new UnsupportedOperationException("checkpoint is not implemented.")
-  }
+  /**
+   * Eagerly checkpoint a Dataset and return the new Dataset. Checkpointing can be used to
+   * truncate the logical plan of this Dataset, which is especially useful in iterative algorithms
+   * where the plan may grow exponentially. It will be saved to files inside the checkpoint
+   * directory set with `SparkContext#setCheckpointDir`.
+   *
+   * @group basic
+   * @since 4.0.0
+   */
+  def checkpoint(): Dataset[T] = checkpoint(eager = true, reliableCheckpoint = true)
 
-  def checkpoint(eager: Boolean): Dataset[T] = {
-    throw new UnsupportedOperationException("checkpoint is not implemented.")
-  }
+  /**
+   * Returns a checkpointed version of this Dataset. Checkpointing can be used to truncate the
+   * logical plan of this Dataset, which is especially useful in iterative algorithms where the
+   * plan may grow exponentially. It will be saved to files inside the checkpoint directory set
+   * with `SparkContext#setCheckpointDir`.
+   *
+   * @param eager
+   *   Whether to checkpoint this dataframe immediately
+   *
+   * @note
+   *   When checkpoint is used with eager = false, the final data that is checkpointed after the
+   *   first action may be different from the data that was used during the job due to
+   *   non-determinism of the underlying operation and retries. If checkpoint is used to achieve
+   *   saving a deterministic snapshot of the data, eager = true should be used. Otherwise, it is
+   *   only deterministic after the first execution, after the checkpoint was finalized.
+   *
+   * @group basic
+   * @since 4.0.0
+   */
+  def checkpoint(eager: Boolean): Dataset[T] =
+    checkpoint(eager = eager, reliableCheckpoint = true)
 
-  def localCheckpoint(): Dataset[T] = {
-    throw new UnsupportedOperationException("localCheckpoint is not implemented.")
-  }
+  /**
+   * Eagerly locally checkpoints a Dataset and return the new Dataset. Checkpointing can be used
+   * to truncate the logical plan of this Dataset, which is especially useful in iterative
+   * algorithms where the plan may grow exponentially. Local checkpoints are written to executor
+   * storage and despite potentially faster they are unreliable and may compromise job completion.
+   *
+   * @group basic
+   * @since 4.0.0
+   */
+  def localCheckpoint(): Dataset[T] = checkpoint(eager = true, reliableCheckpoint = false)
 
-  def localCheckpoint(eager: Boolean): Dataset[T] = {
-    throw new UnsupportedOperationException("localCheckpoint is not implemented.")
+  /**
+   * Locally checkpoints a Dataset and return the new Dataset. Checkpointing can be used to
+   * truncate the logical plan of this Dataset, which is especially useful in iterative algorithms
+   * where the plan may grow exponentially. Local checkpoints are written to executor storage and
+   * despite potentially faster they are unreliable and may compromise job completion.
+   *
+   * @param eager
+   *   Whether to checkpoint this dataframe immediately
+   *
+   * @note
+   *   When checkpoint is used with eager = false, the final data that is checkpointed after the
+   *   first action may be different from the data that was used during the job due to
+   *   non-determinism of the underlying operation and retries. If checkpoint is used to achieve
+   *   saving a deterministic snapshot of the data, eager = true should be used. Otherwise, it is
+   *   only deterministic after the first execution, after the checkpoint was finalized.
+   *
+   * @group basic
+   * @since 4.0.0
+   */
+  def localCheckpoint(eager: Boolean): Dataset[T] =
+    checkpoint(eager = eager, reliableCheckpoint = false)
+
+  /**
+   * Returns a checkpointed version of this Dataset.
+   *
+   * @param eager
+   *   Whether to checkpoint this dataframe immediately
+   * @param reliableCheckpoint
+   *   Whether to create a reliable checkpoint saved to files inside the checkpoint directory. If
+   *   false creates a local checkpoint using the caching subsystem
+   */
+  private def checkpoint(eager: Boolean, reliableCheckpoint: Boolean): Dataset[T] = {
+    val df = sparkSession.newDataset(agnosticEncoder) { builder =>
+      val command = sparkSession.newCommand { builder =>
+        builder.getCheckpointCommandBuilder
+          .setLocal(reliableCheckpoint)
+          .setEager(eager)
+          .setRelation(this.plan.getRoot)
+      }
+      val responseIter = sparkSession.execute(command)
+      try {
+        val response = responseIter
+          .find(_.hasCheckpointCommandResult)
+          .getOrElse(throw new RuntimeException("CheckpointCommandResult must be present"))
+        // Update the builder with the values from the result.
+        builder.setCachedRemoteRelation(response.getCheckpointCommandResult.getRelation)
+      } finally {
+        // consume the rest of the iterator
+        responseIter.foreach(_ => ())
+      }
+    }
+    df.cachedRemoteRelationID = Some(df.plan.getRoot.getCachedRemoteRelation.getRelationId)
+    df
   }
 
   /**
@@ -3465,6 +3551,26 @@ class Dataset[T] private[sql] (
     try f(result)
     finally {
       result.close()
+    }
+  }
+
+  // Visible for testing
+  private[sql] var cachedRemoteRelationID: Option[String] = None
+
+  override def finalize(): Unit = {
+    if (!sparkSession.client.channel.isShutdown) {
+      cachedRemoteRelationID.foreach { dfId =>
+        try {
+          sparkSession.execute {
+            sparkSession.newCommand { builder =>
+              builder.getRemoveCachedRemoteRelationCommandBuilder
+                .setRelation(proto.CachedRemoteRelation.newBuilder().setRelationId(dfId).build())
+            }
+          }
+        } catch {
+          case e: Throwable => logWarning("RemoveRemoteCachedRelation failed.", e)
+        }
+      }
     }
   }
 

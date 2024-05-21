@@ -33,6 +33,7 @@ import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkUpgradeException}
 import org.apache.spark.SparkBuildInfo.{spark_version => SPARK_VERSION}
+import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchDatabaseException, TableAlreadyExistsException, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
@@ -1557,6 +1558,37 @@ class ClientE2ETestSuite
     // make sure the thread is unblocked after the query is finished
     val metrics = SparkThreadUtils.awaitResult(future, 2.seconds)
     assert(metrics === Map("min(id)" -> 0, "avg(id)" -> 49, "max(id)" -> 98))
+  }
+
+  test("checkpoint") {
+    val df = spark.range(100).localCheckpoint()
+    testCapturedStdOut(df.explain(), "ExistingRDD")
+  }
+
+  test("checkpoint gc") {
+    var df1 = spark.range(100).localCheckpoint(eager = true)
+    val encoder = df1.agnosticEncoder
+    val dfId = df1.cachedRemoteRelationID.get
+
+    // GC triggers remove the cached remote relation
+    df1 = null
+    System.gc()
+
+    // Make sure the cleanup happens in the server side.
+    Thread.sleep(3000L)
+
+    val ex = intercept[SparkException] {
+      spark
+        .newDataset(encoder) { builder =>
+          builder.setCachedRemoteRelation(
+            proto.CachedRemoteRelation
+              .newBuilder()
+              .setRelationId(dfId)
+              .build())
+        }
+        .collect()
+    }
+    assert(ex.getMessage.contains(s"No DataFrame with id $dfId is found"))
   }
 }
 
