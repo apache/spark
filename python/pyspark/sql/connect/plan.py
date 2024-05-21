@@ -1785,9 +1785,39 @@ class WriteStreamOperation(LogicalPlan):
         return cmd
 
 
+class RemoveRemoteCachedRelation(LogicalPlan):
+    def __init__(self, relation: CachedRemoteRelation) -> None:
+        super().__init__(None)
+        self._relation = relation
+
+    def command(self, session: "SparkConnectClient") -> proto.Command:
+        plan = self._create_proto_relation()
+        plan.cached_remote_relation.relation_id = self._relation._relationId
+        cmd = proto.Command()
+        cmd.remove_cached_remote_relation_command.relation.CopyFrom(plan.cached_remote_relation)
+        return cmd
+
+
+class Checkpoint(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"], local: bool, eager: bool) -> None:
+        super().__init__(child)
+        self._local = local
+        self._eager = eager
+
+    def command(self, session: "SparkConnectClient") -> proto.Command:
+        cmd = proto.Command()
+        assert self._child is not None
+        cmd.checkpoint_command.CopyFrom(
+            proto.CheckpointCommand(
+                relation=self._child.plan(session),
+                local=self._local,
+                eager=self._eager,
+            )
+        )
+        return cmd
+
+
 # Catalog API (internal-only)
-
-
 class CurrentDatabase(LogicalPlan):
     def __init__(self) -> None:
         super().__init__(None)
