@@ -294,7 +294,7 @@ public final class CollationFactory {
        * Main entry point for retrieving `Collation` instance from collation id.
        */
       private static Collation fetchCollation(int collationId) {
-        // User-defined collations and INDETERMINATE collations cannot produce `Collation` instance
+        // User-defined collations and INDETERMINATE collations cannot produce a `Collation` instance.
         assert (collationId >= 0 && getDefinitionOrigin(collationId)
           == DefinitionOrigin.PREDEFINED);
         if (collationId == UTF8_BINARY_COLLATION_ID) {
