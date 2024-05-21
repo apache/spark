@@ -351,24 +351,6 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
       case a And b if a.semanticEquals(b) => a
       case a Or b if a.semanticEquals(b) => a
 
-      case a And IsNull(b) if a.semanticEquals(b) =>
-          if (a.nullable) IsNull(a) else Literal.FalseLiteral
-      case IsNull(a) And b if a.semanticEquals(b) =>
-          if (a.nullable) IsNull(a) else Literal.FalseLiteral
-      case a And IsNotNull(b) if a.semanticEquals(b) =>
-          if (a.nullable) EqualNullSafe(a, Literal.TrueLiteral) else a
-      case IsNotNull(a) And b if a.semanticEquals(b) =>
-          if (a.nullable) EqualNullSafe(a, Literal.TrueLiteral) else a
-
-      case a Or IsNull(b) if a.semanticEquals(b) =>
-          if (a.nullable) Not(EqualNullSafe(a, Literal.FalseLiteral)) else a
-      case IsNull(a) Or b if a.semanticEquals(b) =>
-          if (a.nullable) Not(EqualNullSafe(a, Literal.FalseLiteral)) else a
-      case a Or IsNotNull(b) if a.semanticEquals(b) =>
-          if (a.nullable) IsNotNull(a) else Literal.TrueLiteral
-      case IsNotNull(a) Or b if a.semanticEquals(b) =>
-          if (a.nullable) IsNotNull(a) else Literal.TrueLiteral
-
       // The following optimizations are applicable only when the operands are not nullable,
       // since the three-value logic of AND and OR are different in NULL handling.
       // See the chart:

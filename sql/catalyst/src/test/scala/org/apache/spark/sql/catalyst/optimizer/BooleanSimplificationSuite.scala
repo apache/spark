@@ -286,50 +286,6 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper {
     checkCondition(!$"f" || $"e", testRelationWithData.where(!$"f" || $"e").analyze)
   }
 
-  test("SPARK-48360: simplify IsNull(x) && x, IsNotNull(x) && x, IsNull(x) || x, ...") {
-    checkCondition(($"b" > 2) && IsNull($"b" > 2), IsNull($"b" > 2))
-    checkCondition(IsNull($"b" > 2) && ($"b" > 2), IsNull($"b" > 2))
-
-    checkCondition(
-      ($"b" > 2) && IsNotNull($"b" > 2),
-      EqualNullSafe($"b" > 2, Literal(true, BooleanType))
-    )
-    checkCondition(
-      IsNotNull($"b" > 2) && ($"b" > 2),
-      EqualNullSafe($"b" > 2, Literal(true, BooleanType))
-    )
-
-    checkConditionInNotNullableRelation(
-      ($"b" > 2) && IsNull($"b" > 2),
-      testNotNullableRelation
-    )
-    checkConditionInNotNullableRelation(
-      IsNull($"b" > 2) && ($"b" > 2),
-      testNotNullableRelation
-    )
-
-    checkCondition(
-      ($"b" > 2) || IsNull($"b" > 2),
-      Not(EqualNullSafe($"b" > 2, Literal(false, BooleanType)))
-    )
-    checkCondition(
-      IsNull($"b" > 2) || ($"b" > 2),
-      Not(EqualNullSafe($"b" > 2, Literal(false, BooleanType)))
-    )
-
-    checkCondition(($"b" > 2) || IsNotNull($"b" > 2), IsNotNull($"b" > 2))
-    checkCondition(IsNotNull($"b" > 2) || ($"b" > 2), IsNotNull($"b" > 2))
-
-    checkConditionInNotNullableRelation(
-      ($"b" > 2) || IsNotNull($"b" > 2),
-      testNotNullableRelationWithData
-    )
-    checkConditionInNotNullableRelation(
-      IsNotNull($"b" > 2) || ($"b" > 2),
-      testNotNullableRelationWithData
-    )
-  }
-
   test("simplify NOT(IsNull(x)) and NOT(IsNotNull(x))") {
     checkCondition(Not(IsNotNull($"b")), IsNull($"b"))
     checkCondition(Not(IsNull($"b")), IsNotNull($"b"))

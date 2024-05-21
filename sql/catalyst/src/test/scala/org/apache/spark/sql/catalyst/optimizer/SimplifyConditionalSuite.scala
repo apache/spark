@@ -316,7 +316,7 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper {
       ($"d" > 2.0, $"d" > 2.0, $"b" <= 4.0) -> ($"d" > 2.0 || $"b" <= 4.0),
       // If(x, Not(x), y) => And(Not(EqualNullSafe(x, true)), y)
       ($"a" > 2.0, Not($"a" > 2.0), $"b" <= 4.0) -> (Not($"a" > 2.0 <=> true) && $"b" <= 4.0),
-      ($"d" > 2.0, Not($"d" > 2.0), $"b" <= 4.0) -> ($"d" <=2.0 && $"b" <= 4.0),
+      ($"d" > 2.0, Not($"d" > 2.0), $"b" <= 4.0) -> ($"d" <= 2.0 && $"b" <= 4.0),
       // If(Not(x), x, y) => And(Not(EqualNullSafe(x, false)), y)
       (Not($"a" > 2.0), $"a" > 2.0, $"b" <= 4.0) -> (Not($"a" <= 2.0 <=> true) && $"b" <= 4.0),
       (Not($"d" > 2.0), $"d" > 2.0, $"b" <= 4.0) -> ($"d" > 2.0 && $"b" <= 4.0),
