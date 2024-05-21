@@ -40,6 +40,16 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
       Row(Row(1)) :: Nil)
   }
 
+  test("SPARK-48300: from_xml - Codegen Support") {
+    withTempView("XmlToStructsTable") {
+      val dataDF = Seq("""<ROW><a>1</a></ROW>""").toDF("value")
+      dataDF.createOrReplaceTempView("XmlToStructsTable")
+      val df = sql("SELECT from_xml(value, 'a INT') FROM XmlToStructsTable")
+      assert(df.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
+      checkAnswer(df, Row(Row(1)) :: Nil)
+    }
+  }
+
   test("from_xml with option (timestampFormat)") {
     val df = Seq("""<ROW><time>26/08/2015 18:00</time></ROW>""").toDS()
     val schema = new StructType().add("time", TimestampType)
