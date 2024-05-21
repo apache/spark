@@ -55,9 +55,9 @@ private[spark] class SparkHadoopUtil extends Logging {
    * Runs the given function with a Hadoop UserGroupInformation as a thread local variable
    * (distributed to child threads), used for authenticating HDFS and YARN calls.
    *
-   * IMPORTANT NOTE: If this function is going to be called repeated in the same process you need
-   * to look https://issues.apache.org/jira/browse/HDFS-3545 and possibly do a
-   * FileSystem.closeAllForUGI in order to avoid leaking Filesystems
+   * IMPORTANT NOTE: If this function is going to be called repeated in the same process
+   * you need to look https://issues.apache.org/jira/browse/HDFS-3545 and possibly
+   * do a FileSystem.closeAllForUGI in order to avoid leaking Filesystems
    */
   def runAsSparkUser(func: () => Unit): Unit = {
     createSparkUser().doAs(new PrivilegedExceptionAction[Unit] {
@@ -88,8 +88,8 @@ private[spark] class SparkHadoopUtil extends Logging {
   }
 
   /**
-   * Appends spark.hadoop.* configurations from a [[SparkConf]] to a Hadoop configuration without
-   * the spark.hadoop. prefix.
+   * Appends spark.hadoop.* configurations from a [[SparkConf]] to a Hadoop
+   * configuration without the spark.hadoop. prefix.
    */
   def appendSparkHadoopConfigs(conf: SparkConf, hadoopConf: Configuration): Unit = {
     SparkHadoopUtil.appendSparkHadoopConfigs(conf, hadoopConf)
@@ -143,16 +143,15 @@ private[spark] class SparkHadoopUtil extends Logging {
     if (!new File(keytabFilename).exists()) {
       throw new SparkException(s"Keytab file: ${keytabFilename} does not exist")
     } else {
-      logInfo(
-        "Attempting to login to Kerberos " +
-          s"using principal: ${principalName} and keytab: ${keytabFilename}")
+      logInfo("Attempting to login to Kerberos " +
+        s"using principal: ${principalName} and keytab: ${keytabFilename}")
       UserGroupInformation.loginUserFromKeytab(principalName, keytabFilename)
     }
   }
 
   /**
-   * Add or overwrite current user's credentials with serialized delegation tokens, also confirms
-   * correct hadoop configuration is set.
+   * Add or overwrite current user's credentials with serialized delegation tokens,
+   * also confirms correct hadoop configuration is set.
    */
   private[spark] def addDelegationTokens(tokens: Array[Byte], sparkConf: SparkConf): Unit = {
     UserGroupInformation.setConfiguration(newConfiguration(sparkConf))
@@ -173,9 +172,9 @@ private[spark] class SparkHadoopUtil extends Logging {
 
     /**
      * This function may be called in both spawned child threads and parent task thread (in
-     * PythonRDD), and Hadoop FileSystem uses thread local variables to track the statistics. So
-     * we need a map to track the bytes read from the child threads and parent thread, summing
-     * them together to get the bytes read of this task.
+     * PythonRDD), and Hadoop FileSystem uses thread local variables to track the statistics.
+     * So we need a map to track the bytes read from the child threads and parent thread,
+     * summing them together to get the bytes read of this task.
      */
     new (() => Long) {
       private val bytesReadMap = new mutable.HashMap[Long, Long]()
@@ -193,11 +192,10 @@ private[spark] class SparkHadoopUtil extends Logging {
 
   /**
    * Returns a function that can be called to find Hadoop FileSystem bytes written. If
-   * getFSBytesWrittenOnThreadCallback is called from thread r at time t, the returned callback
-   * will return the bytes written on r since t.
+   * getFSBytesWrittenOnThreadCallback is called from thread r at time t, the returned callback will
+   * return the bytes written on r since t.
    *
-   * @return
-   *   None if the required method can't be found.
+   * @return None if the required method can't be found.
    */
   private[spark] def getFSBytesWrittenOnThreadCallback(): () => Long = {
     val threadStats = FileSystem.getAllStatistics.asScala.map(_.getThreadStatistics)
@@ -251,13 +249,9 @@ private[spark] class SparkHadoopUtil extends Logging {
   }
 
   def globPath(fs: FileSystem, pattern: Path): Seq[Path] = {
-    Option(fs.globStatus(pattern))
-      .map { statuses =>
-        statuses
-          .map(_.getPath.makeQualified(fs.getUri, fs.getWorkingDirectory))
-          .toImmutableArraySeq
-      }
-      .getOrElse(Seq.empty[Path])
+    Option(fs.globStatus(pattern)).map { statuses =>
+      statuses.map(_.getPath.makeQualified(fs.getUri, fs.getWorkingDirectory)).toImmutableArraySeq
+    }.getOrElse(Seq.empty[Path])
   }
 
   def globPathIfNecessary(pattern: Path): Seq[Path] = {
@@ -300,10 +294,8 @@ private[spark] class SparkHadoopUtil extends Logging {
   /**
    * Dump the credentials' tokens to string values.
    *
-   * @param credentials
-   *   credentials
-   * @return
-   *   an iterator over the string values. If no credentials are passed in: an empty list
+   * @param credentials credentials
+   * @return an iterator over the string values. If no credentials are passed in: an empty list
    */
   private[spark] def dumpTokens(credentials: Credentials): Iterable[String] = {
     if (credentials != null) {
@@ -314,13 +306,12 @@ private[spark] class SparkHadoopUtil extends Logging {
   }
 
   /**
-   * Convert a token to a string for logging. If its an abstract delegation token, attempt to
-   * unmarshall it and then print more details, including timestamps in human-readable form.
+   * Convert a token to a string for logging.
+   * If its an abstract delegation token, attempt to unmarshall it and then
+   * print more details, including timestamps in human-readable form.
    *
-   * @param token
-   *   token to convert to a string
-   * @return
-   *   a printable string value.
+   * @param token token to convert to a string
+   * @return a printable string value.
    */
   private[spark] def tokenToString(token: Token[_ <: TokenIdentifier]): String = {
     val df = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT, Locale.US)
@@ -372,8 +363,8 @@ private[spark] object SparkHadoopUtil extends Logging {
   /**
    * Number of records to update input metrics when reading from HadoopRDDs.
    *
-   * Each update is potentially expensive because we need to use reflection to access the Hadoop
-   * FileSystem API of interest (only available in 2.5), so we should do this sparingly.
+   * Each update is potentially expensive because we need to use reflection to access the
+   * Hadoop FileSystem API of interest (only available in 2.5), so we should do this sparingly.
    */
   private[spark] val UPDATE_INPUT_METRICS_INTERVAL_RECORDS = 1000
 
@@ -382,8 +373,8 @@ private[spark] object SparkHadoopUtil extends Logging {
 
   /**
    * Name of the file containing the gateway's Hadoop configuration, to be overlayed on top of the
-   * cluster's Hadoop config. It is up to the Spark code launching the application to create this
-   * file if it's desired. If the file doesn't exist, it will just be ignored.
+   * cluster's Hadoop config. It is up to the Spark code launching the application to create
+   * this file if it's desired. If the file doesn't exist, it will just be ignored.
    */
   private[spark] val SPARK_HADOOP_CONF_FILE = "__spark_hadoop_conf__.xml"
 
@@ -393,12 +384,14 @@ private[spark] object SparkHadoopUtil extends Logging {
   private[deploy] val SOURCE_HIVE_SITE = "Set by Spark from hive-site.xml"
 
   /**
-   * Source for configuration options set by spark when another source is not explicitly declared.
+   * Source for configuration options set by spark when another source is
+   * not explicitly declared.
    */
   private[spark] val SOURCE_SPARK = "Set by Spark"
 
   /**
-   * Source for configuration options with `spark.hadoop.` prefix copied from spark-defaults.
+   * Source for configuration options with `spark.hadoop.` prefix copied
+   * from spark-defaults.
    */
   private[deploy] val SOURCE_SPARK_HADOOP =
     "Set by Spark from keys starting with 'spark.hadoop'"
@@ -432,7 +425,8 @@ private[spark] object SparkHadoopUtil extends Logging {
   private[deploy] val ENV_VAR_AWS_SESSION_TOKEN = "AWS_SESSION_TOKEN"
 
   /**
-   * Source for configuration options with `spark.hive.` prefix copied from spark-defaults.
+   * Source for configuration options with `spark.hive.` prefix copied
+   * from spark-defaults.
    */
   private[deploy] val SOURCE_SPARK_HIVE = "Set by Spark from keys starting with 'spark.hive'"
 
@@ -444,10 +438,12 @@ private[spark] object SparkHadoopUtil extends Logging {
   def get: SparkHadoopUtil = instance
 
   /**
-   * Returns a Configuration object with Spark configuration applied on top. Unlike the instance
-   * method, this will always return a Configuration instance, and not a cluster manager-specific
-   * type. The configuration will load all default values set in core-default.xml, and if found on
-   * the classpath, those of core-site.xml. This is done before the spark overrides are applied.
+   * Returns a Configuration object with Spark configuration applied on top. Unlike
+   * the instance method, this will always return a Configuration instance, and not a
+   * cluster manager-specific type.
+   * The configuration will load all default values set in core-default.xml,
+   * and if found on the classpath, those of core-site.xml.
+   * This is done before the spark overrides are applied.
    */
   private[spark] def newConfiguration(conf: SparkConf): Configuration = {
     val hadoopConf = new Configuration()
@@ -461,8 +457,7 @@ private[spark] object SparkHadoopUtil extends Logging {
     // Note: this null check is around more than just access to the "conf" object to maintain
     // the behavior of the old implementation of this code, for backwards compatibility.
     if (conf != null) {
-      appendS3CredentialsFromEnvironment(
-        hadoopConf,
+      appendS3CredentialsFromEnvironment(hadoopConf,
         System.getenv(ENV_VAR_AWS_ENDPOINT_URL),
         System.getenv(ENV_VAR_AWS_ACCESS_KEY),
         System.getenv(ENV_VAR_AWS_SECRET_KEY),
@@ -476,19 +471,17 @@ private[spark] object SparkHadoopUtil extends Logging {
   }
 
   /**
-   * Append any AWS secrets from the environment variables if both `AWS_ACCESS_KEY_ID` and
-   * `AWS_SECRET_ACCESS_KEY` are set. If these two are set and `AWS_SESSION_TOKEN` is also set,
-   * then `fs.s3a.session.token`. The option is set with a source string which includes the
-   * hostname on which it was set. This can help debug propagation issues.
+   * Append any AWS secrets from the environment variables
+   * if both `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` are set.
+   * If these two are set and `AWS_SESSION_TOKEN` is also set,
+   * then `fs.s3a.session.token`.
+   * The option is set with a source string which includes the hostname
+   * on which it was set. This can help debug propagation issues.
    *
-   * @param hadoopConf
-   *   configuration to patch
-   * @param keyId
-   *   key ID or null
-   * @param accessKey
-   *   secret key
-   * @param sessionToken
-   *   session token.
+   * @param hadoopConf configuration to patch
+   * @param keyId key ID or null
+   * @param accessKey secret key
+   * @param sessionToken session token.
    */
   // Exposed for testing
   private[deploy] def appendS3CredentialsFromEnvironment(
@@ -513,7 +506,8 @@ private[spark] object SparkHadoopUtil extends Logging {
 
       // look for session token if the other variables were set
       if (sessionToken != null) {
-        hadoopConf.set("fs.s3a.session.token", sessionToken, source + ENV_VAR_AWS_SESSION_TOKEN)
+        hadoopConf.set("fs.s3a.session.token", sessionToken,
+          source + ENV_VAR_AWS_SESSION_TOKEN)
       }
     }
   }
@@ -538,7 +532,8 @@ private[spark] object SparkHadoopUtil extends Logging {
   private def appendSparkHadoopConfigs(conf: SparkConf, hadoopConf: Configuration): Unit = {
     // Copy any "spark.hadoop.foo=bar" spark properties into conf as "foo=bar"
     for ((key, value) <- conf.getAll if key.startsWith("spark.hadoop.")) {
-      hadoopConf.set(key.substring("spark.hadoop.".length), value, SOURCE_SPARK_HADOOP)
+      hadoopConf.set(key.substring("spark.hadoop.".length), value,
+        SOURCE_SPARK_HADOOP)
     }
     val setBySpark = SET_TO_DEFAULT_VALUES
     if (conf.getOption("spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version").isEmpty) {
@@ -560,16 +555,14 @@ private[spark] object SparkHadoopUtil extends Logging {
   }
 
   /**
-   * Extract the sources of a configuration key, or a default value if the key is not found or it
-   * has no known sources. Note that options provided by credential providers (JCEKS stores etc)
-   * are not resolved, so values retrieved by Configuration.getPassword() may not be recorded as
-   * having an origin.
-   * @param hadoopConf
-   *   hadoop configuration to examine.
-   * @param key
-   *   key to look up
-   * @return
-   *   the origin of the current entry in the configuration, or the empty string.
+   * Extract the sources of a configuration key, or a default value if
+   * the key is not found or it has no known sources.
+   * Note that options provided by credential providers (JCEKS stores etc)
+   * are not resolved, so values retrieved by Configuration.getPassword()
+   * may not be recorded as having an origin.
+   * @param hadoopConf hadoop configuration to examine.
+   * @param key key to look up
+   * @return the origin of the current entry in the configuration, or the empty string.
    */
   def propertySources(hadoopConf: Configuration, key: String): String = {
     val sources = hadoopConf.getPropertySources(key)
