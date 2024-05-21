@@ -1015,7 +1015,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       }
       if (count > 0) {
         logWarning(log"Fail to clean up according to MAX_LOG_NUM policy " +
-          log"(${MDC(MAX_LOG_NUM_POLICY, maxNum)}).")
+          log"(${MDC(MAX_NUM_LOG_POLICY, maxNum)}).")
       }
     }
 

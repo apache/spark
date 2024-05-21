@@ -21,12 +21,13 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.logging.log4j.Level;
 
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 
-public class StructuredLoggerSuite extends LoggerSuiteBase {
+public class StructuredSparkLoggerSuite extends SparkLoggerSuiteBase {
 
-  private static final Logger LOGGER = LoggerFactory.getLogger(StructuredLoggerSuite.class);
+  private static final SparkLogger LOGGER =
+    SparkLoggerFactory.getLogger(StructuredSparkLoggerSuite.class);
 
   private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
   private String compactAndToRegexPattern(Level level, String json) {
@@ -43,13 +44,13 @@ public class StructuredLoggerSuite extends LoggerSuiteBase {
   }
 
   @Override
-  Logger logger() {
+  SparkLogger logger() {
     return LOGGER;
   }
 
   @Override
   String className() {
-    return StructuredLoggerSuite.class.getSimpleName();
+    return StructuredSparkLoggerSuite.class.getSimpleName();
   }
 
   @Override

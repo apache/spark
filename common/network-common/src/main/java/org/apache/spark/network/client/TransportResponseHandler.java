@@ -29,8 +29,8 @@ import io.netty.channel.Channel;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
 import org.apache.spark.network.protocol.ChunkFetchFailure;
@@ -53,7 +53,8 @@ import org.apache.spark.network.util.TransportFrameDecoder;
  * Concurrency: thread safe and can be called from multiple threads.
  */
 public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
-  private static final Logger logger = LoggerFactory.getLogger(TransportResponseHandler.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(TransportResponseHandler.class);
 
   private final Channel channel;
 

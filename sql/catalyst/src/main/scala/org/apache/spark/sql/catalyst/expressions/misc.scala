@@ -200,7 +200,7 @@ object AssertTrue {
   since = "1.6.0",
   group = "misc_funcs")
 case class CurrentDatabase() extends LeafExpression with Unevaluable {
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
   override def nullable: Boolean = false
   override def prettyName: String = "current_schema"
   final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
@@ -219,7 +219,7 @@ case class CurrentDatabase() extends LeafExpression with Unevaluable {
   since = "3.1.0",
   group = "misc_funcs")
 case class CurrentCatalog() extends LeafExpression with Unevaluable {
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
   override def nullable: Boolean = false
   override def prettyName: String = "current_catalog"
   final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
@@ -335,7 +335,7 @@ case class TypeOf(child: Expression) extends UnaryExpression {
 // scalastyle:on line.size.limit
 case class CurrentUser() extends LeafExpression with Unevaluable {
   override def nullable: Boolean = false
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
   override def prettyName: String =
     getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("current_user")
   final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)

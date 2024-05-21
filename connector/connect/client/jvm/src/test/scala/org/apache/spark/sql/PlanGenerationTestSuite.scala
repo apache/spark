@@ -2309,6 +2309,10 @@ class PlanGenerationTestSuite
     fn.timestamp_diff("year", fn.col("t"), fn.col("t"))
   }
 
+  temporalFunctionTest("timestamp_add") {
+    fn.timestamp_add("week", fn.col("x"), fn.col("t"))
+  }
+
   // Array of Long
   // Array of Long
   // Array of Array of Long

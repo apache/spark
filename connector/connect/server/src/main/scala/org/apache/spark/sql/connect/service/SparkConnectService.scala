@@ -315,6 +315,13 @@ object SparkConnectService extends Logging {
       previoslyObservedSessionId)
   }
 
+  // For testing
+  private[spark] def getOrCreateIsolatedSession(
+      userId: String,
+      sessionId: String): SessionHolder = {
+    getOrCreateIsolatedSession(userId, sessionId, None)
+  }
+
   /**
    * If there are no executions, return Left with System.currentTimeMillis of last active
    * execution. Otherwise return Right with list of ExecuteInfo of all executions.
