@@ -180,7 +180,7 @@ class TransformWithStateChainingSuite extends StreamTest {
         .groupByKey(x => x.key)
         .transformWithState[OutputRow](
           new TestStatefulProcessor(),
-          TimeMode.None(),
+          TimeMode.EventTime(),
           OutputMode.Append())
         .groupBy(window($"outputEventTime", "1 minute"))
         .count()
@@ -210,7 +210,7 @@ class TransformWithStateChainingSuite extends StreamTest {
         .groupByKey(x => x.key)
         .transformWithState(
           new InputCountStatefulProcessor[OutputRow](),
-          TimeMode.None(),
+          TimeMode.EventTime(),
           OutputMode.Append()
         )
 
@@ -241,7 +241,7 @@ class TransformWithStateChainingSuite extends StreamTest {
         .groupByKey(x => x.key)
         .transformWithState[OutputRow](
           new TestStatefulProcessor(),
-          TimeMode.None(),
+          TimeMode.EventTime(),
           OutputMode.Append())
         .dropDuplicatesWithinWatermark()
 

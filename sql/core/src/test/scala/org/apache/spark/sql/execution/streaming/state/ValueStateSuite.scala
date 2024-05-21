@@ -49,7 +49,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.ProcessingTime())
 
       val stateName = "testState"
       val testState: ValueState[Long] = handle.getValueState[Long]("testState", Encoders.scalaLong)
@@ -93,7 +93,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.ProcessingTime())
 
       val testState: ValueState[Long] = handle.getValueState[Long]("testState", Encoders.scalaLong)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
@@ -119,7 +119,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.ProcessingTime())
 
       val testState1: ValueState[Long] = handle.getValueState[Long](
         "testState1", Encoders.scalaLong)
@@ -164,7 +164,8 @@ class ValueStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store,
-        UUID.randomUUID(), Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
+        UUID.randomUUID(), Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]],
+        TimeMode.ProcessingTime())
 
       val cfName = "_testState"
       val ex = intercept[SparkUnsupportedOperationException] {
@@ -204,7 +205,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.ProcessingTime())
 
       val testState: ValueState[Double] = handle.getValueState[Double]("testState",
         Encoders.scalaDouble)
@@ -230,7 +231,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.ProcessingTime())
 
       val testState: ValueState[Long] = handle.getValueState[Long]("testState",
         Encoders.scalaLong)
@@ -256,7 +257,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.ProcessingTime())
 
       val testState: ValueState[TestClass] = handle.getValueState[TestClass]("testState",
         Encoders.product[TestClass])
@@ -282,7 +283,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.ProcessingTime())
 
       val testState: ValueState[POJOTestClass] = handle.getValueState[POJOTestClass]("testState",
         Encoders.bean(classOf[POJOTestClass]))

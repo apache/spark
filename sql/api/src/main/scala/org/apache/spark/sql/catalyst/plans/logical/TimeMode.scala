@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.streaming.TimeMode
 
 /** TimeMode types used in transformWithState operator */
-case object NoTime extends TimeMode
 
 case object ProcessingTime extends TimeMode
 

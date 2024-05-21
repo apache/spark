@@ -290,70 +290,106 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
           InputRowForInitialState("init_2", 100.0, List(100.0), Map(100.0 -> 1)))
           .toDS().groupByKey(x => x.key).mapValues(x => x)
       val query = kvDataSet.transformWithState(new InitialStateInMemoryTestClass(),
-        TimeMode.None(), OutputMode.Append(), initStateDf)
+        TimeMode.ProcessingTime(), OutputMode.Append(), initStateDf)
 
+      val clock = new StreamManualClock()
       testStream(query, OutputMode.Update())(
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
         // non-exist key test
         AddData(inputData, InitInputRow("k1", "update", 37.0)),
         AddData(inputData, InitInputRow("k2", "update", 40.0)),
         AddData(inputData, InitInputRow("non-exist", "getOption", -1.0)),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("non-exist", "getOption", -1.0)),
         AddData(inputData, InitInputRow("k1", "appendList", 37.0)),
         AddData(inputData, InitInputRow("k2", "appendList", 40.0)),
         AddData(inputData, InitInputRow("non-exist", "getList", -1.0)),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(),
 
         AddData(inputData, InitInputRow("k1", "incCount", 37.0)),
         AddData(inputData, InitInputRow("k2", "incCount", 40.0)),
         AddData(inputData, InitInputRow("non-exist", "getCount", -1.0)),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("non-exist", "getCount", 0.0)),
         AddData(inputData, InitInputRow("k2", "incCount", 40.0)),
         AddData(inputData, InitInputRow("k2", "getCount", 40.0)),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("k2", "getCount", 2.0)),
 
         // test every row in initial State is processed
         AddData(inputData, InitInputRow("init_1", "getOption", -1.0)),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("init_1", "getOption", 40.0)),
         AddData(inputData, InitInputRow("init_2", "getOption", -1.0)),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("init_2", "getOption", 100.0)),
 
         AddData(inputData, InitInputRow("init_1", "getList", -1.0)),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("init_1", "getList", 40.0)),
         AddData(inputData, InitInputRow("init_2", "getList", -1.0)),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("init_2", "getList", 100.0)),
 
         AddData(inputData, InitInputRow("init_1", "getCount", 40.0)),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("init_1", "getCount", 1.0)),
         AddData(inputData, InitInputRow("init_2", "getCount", 100.0)),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("init_2", "getCount", 1.0)),
 
         // Update row with key in initial row will work
         AddData(inputData, InitInputRow("init_1", "update", 50.0)),
         AddData(inputData, InitInputRow("init_1", "getOption", -1.0)),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("init_1", "getOption", 50.0)),
         AddData(inputData, InitInputRow("init_1", "remove", -1.0)),
         AddData(inputData, InitInputRow("init_1", "getOption", -1.0)),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("init_1", "getOption", -1.0)),
 
         AddData(inputData, InitInputRow("init_1", "appendList", 50.0)),
         AddData(inputData, InitInputRow("init_1", "getList", -1.0)),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("init_1", "getList", 50.0), ("init_1", "getList", 40.0)),
 
         AddData(inputData, InitInputRow("init_1", "incCount", 40.0)),
         AddData(inputData, InitInputRow("init_1", "getCount", 40.0)),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("init_1", "getCount", 2.0)),
 
         // test remove
         AddData(inputData, InitInputRow("k1", "remove", -1.0)),
         AddData(inputData, InitInputRow("k1", "getOption", -1.0)),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("k1", "getOption", -1.0)),
 
         AddData(inputData, InitInputRow("init_1", "clearCount", -1.0)),
         AddData(inputData, InitInputRow("init_1", "getCount", -1.0)),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("init_1", "getCount", 0.0)),
 
         AddData(inputData, InitInputRow("init_1", "clearList", -1.0)),
         AddData(inputData, InitInputRow("init_1", "getList", -1.0)),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer()
       )
     }
@@ -368,9 +404,11 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
       val query = inputData.toDS()
         .groupByKey(x => x.key)
         .transformWithState(new AccumulateStatefulProcessorWithInitState(),
-          TimeMode.None(), OutputMode.Append(), initStateDf
+          TimeMode.ProcessingTime(), OutputMode.Append(), initStateDf
         )
+      val clock = new StreamManualClock()
       testStream(query, OutputMode.Update())(
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
         AddData(inputData, InitInputRow("init_1", "add", 50.0)),
         AddData(inputData, InitInputRow("init_2", "add", 60.0)),
         AddData(inputData, InitInputRow("init_1", "add", 50.0)),
@@ -378,6 +416,8 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
         // following checks will fail
         AddData(inputData,
           InitInputRow("init_1", "getOption", -1.0), InitInputRow("init_2", "getOption", -1.0)),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("init_2", "getOption", 160.0), ("init_1", "getOption", 140.0))
       )
     }
@@ -388,7 +428,7 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
     val result = inputData.toDS()
       .groupByKey(x => x.key)
       .transformWithState(new AccumulateStatefulProcessorWithInitState(),
-        TimeMode.None(),
+        TimeMode.ProcessingTime(),
         OutputMode.Append(),
         createInitialDfForTest)
 
@@ -406,12 +446,16 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
       val query = inputData.toDS()
         .groupByKey(x => x.key)
         .transformWithState(new AccumulateStatefulProcessorWithInitState(),
-          TimeMode.None(),
+          TimeMode.ProcessingTime(),
           OutputMode.Append(),
           initDf)
 
+      val clock = new StreamManualClock()
       testStream(query, OutputMode.Update())(
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
         AddData(inputData, InitInputRow("k1", "add", 50.0)),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         Execute { q =>
           val e = intercept[Exception] {
             q.processAllAvailable()

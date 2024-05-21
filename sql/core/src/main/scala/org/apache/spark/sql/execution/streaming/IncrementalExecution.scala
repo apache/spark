@@ -502,6 +502,6 @@ class IncrementalExecution(
       case p: StateStoreWriter => p.shouldRunAnotherBatch(
         watermarkPropagator.getInputWatermarkForEviction(tentativeBatchId,
           p.stateInfo.get.operatorId))
-    }.exists(_ == true)
+    }.contains(true)
   }
 }

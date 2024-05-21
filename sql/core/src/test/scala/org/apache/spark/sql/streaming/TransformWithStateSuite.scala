@@ -322,11 +322,15 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       val result = inputData.toDS()
         .groupByKey(x => x)
         .transformWithState(new RunningCountStatefulProcessorWithError(),
-          TimeMode.None(),
+          TimeMode.ProcessingTime(),
           OutputMode.Update())
 
+      val clock = new StreamManualClock
       testStream(result, OutputMode.Update())(
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
         AddData(inputData, "a"),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         ExpectFailure[StatefulProcessorCannotPerformOperationWithInvalidHandleState] { t =>
           assert(t.getMessage.contains("invalid handle state"))
         }
@@ -343,25 +347,35 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       val result = inputData.toDS()
         .groupByKey(x => x)
         .transformWithState(new RunningCountStatefulProcessor(),
-          TimeMode.None(),
+          TimeMode.ProcessingTime(),
           OutputMode.Update())
 
+      val clock = new StreamManualClock
       testStream(result, OutputMode.Update())(
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
         AddData(inputData, "a"),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("a", "1")),
         Execute { q =>
           assert(q.lastProgress.stateOperators(0).customMetrics.get("numValueStateVars") > 0)
           assert(q.lastProgress.stateOperators(0).customMetrics.get("numRegisteredTimers") == 0)
         },
         AddData(inputData, "a", "b"),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("a", "2"), ("b", "1")),
         StopStream,
-        StartStream(),
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
         AddData(inputData, "a", "b"), // should remove state for "a" and not return anything for a
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("b", "2")),
         StopStream,
-        StartStream(),
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
         AddData(inputData, "a", "c"), // should recreate state for "a" and return count as 1 and
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("a", "1"), ("c", "1"))
       )
     }
@@ -518,13 +532,13 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       CheckNewAnswer(("a", -1), ("b", 31)), // State for "a" should timeout and emit -1
       Execute { q =>
         // Filter for idle progress events and then verify the custom metrics for stateful operator
-        val progData = q.recentProgress.filter(prog => prog.stateOperators.size > 0)
-        assert(progData.filter(prog =>
-          prog.stateOperators(0).customMetrics.get("numValueStateVars") > 0).size > 0)
-        assert(progData.filter(prog =>
-          prog.stateOperators(0).customMetrics.get("numRegisteredTimers") > 0).size > 0)
-        assert(progData.filter(prog =>
-          prog.stateOperators(0).customMetrics.get("numDeletedTimers") > 0).size > 0)
+        val progData = q.recentProgress.filter(prog => prog.stateOperators.length > 0)
+        assert(progData.exists(prog =>
+          prog.stateOperators(0).customMetrics.get("numValueStateVars") > 0))
+        assert(progData.exists(prog =>
+          prog.stateOperators(0).customMetrics.get("numRegisteredTimers") > 0))
+        assert(progData.exists(prog =>
+          prog.stateOperators(0).customMetrics.get("numDeletedTimers") > 0))
       }
     )
   }
@@ -546,7 +560,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     val result = inputData.toDS()
       .groupByKey(x => x)
       .transformWithState(new RunningCountStatefulProcessor(),
-        TimeMode.None(),
+        TimeMode.ProcessingTime(),
         OutputMode.Append())
 
     val df = result.toDF()
@@ -564,24 +578,29 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         val stream1 = inputData.toDS()
           .groupByKey(x => x._1)
           .transformWithState(new RunningCountMostRecentStatefulProcessor(),
-            TimeMode.None(),
+            TimeMode.ProcessingTime(),
             OutputMode.Update())
 
         val stream2 = inputData.toDS()
           .groupByKey(x => x._1)
           .transformWithState(new MostRecentStatefulProcessorWithDeletion(),
-            TimeMode.None(),
+            TimeMode.ProcessingTime(),
             OutputMode.Update())
 
+        val clock = new StreamManualClock
         testStream(stream1, OutputMode.Update())(
-          StartStream(checkpointLocation = dirPath),
+          StartStream(Trigger.ProcessingTime("1 second"),
+            checkpointLocation = dirPath, triggerClock = clock),
           AddData(inputData, ("a", "str1")),
+          AdvanceManualClock(1 * 1000),
           CheckNewAnswer(("a", "1", "")),
           StopStream
         )
         testStream(stream2, OutputMode.Update())(
-          StartStream(checkpointLocation = dirPath),
+          StartStream(Trigger.ProcessingTime("1 second"),
+            checkpointLocation = dirPath, triggerClock = clock),
           AddData(inputData, ("a", "str2"), ("b", "str3")),
+          AdvanceManualClock(1 * 1000),
           CheckNewAnswer(("a", "str1"),
             ("b", "")), // should not factor in previous count state
           Execute { q =>
@@ -602,22 +621,28 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       val inputData1 = MemoryStream[String]
       val inputData2 = MemoryStream[String]
 
+      val clock = new StreamManualClock
       val result = inputData1.toDS()
         .union(inputData2.toDS())
         .groupByKey(x => x)
         .transformWithState(new RunningCountStatefulProcessor(),
-          TimeMode.None(),
+          TimeMode.ProcessingTime(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
         AddData(inputData1, "a"),
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("a", "1")),
         AddData(inputData2, "a", "b"),
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("a", "2"), ("b", "1")),
         AddData(inputData1, "a", "b"), // should remove state for "a" and not return anything for a
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("b", "2")),
         AddData(inputData1, "d", "e"),
         AddData(inputData2, "a", "c"), // should recreate state for "a" and return count as 1
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("a", "1"), ("c", "1"), ("d", "1"), ("e", "1")),
         StopStream
       )
@@ -639,20 +664,27 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         .union(inputData3.toDS())
         .groupByKey(x => x)
         .transformWithState(new RunningCountStatefulProcessor(),
-          TimeMode.None(),
+          TimeMode.ProcessingTime(),
           OutputMode.Update())
 
+      val clock = new StreamManualClock
       testStream(result, OutputMode.Update())(
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
         AddData(inputData1, "a"),
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("a", "1")),
         AddData(inputData2, "a", "b"),
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("a", "2"), ("b", "1")),
         AddData(inputData3, "a", "b"), // should remove state for "a" and not return anything for a
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("b", "2")),
         AddData(inputData1, "d", "e"),
         AddData(inputData2, "a", "c"), // should recreate state for "a" and return count as 1
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("a", "1"), ("c", "1"), ("d", "1"), ("e", "1")),
         AddData(inputData3, "a", "c", "d", "e"),
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("a", "2"), ("c", "2"), ("d", "2"), ("e", "2")),
         StopStream
       )
@@ -672,18 +704,24 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         .union(inputData2.toDS().map(_.toString))
         .groupByKey(x => x)
         .transformWithState(new RunningCountStatefulProcessor(),
-          TimeMode.None(),
+          TimeMode.ProcessingTime(),
           OutputMode.Update())
 
+      val clock = new StreamManualClock
       testStream(result, OutputMode.Update())(
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
         AddData(inputData1, "1"),
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("1", "1")),
         AddData(inputData2, 1L, 2L),
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("1", "2"), ("2", "1")),
         AddData(inputData1, "1", "2"), // should remove state for "1" and not return anything.
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("2", "2")),
         AddData(inputData1, "4", "5"),
         AddData(inputData2, 1L, 3L), // should recreate state for "1" and return count as 1
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("1", "1"), ("3", "1"), ("4", "1"), ("5", "1")),
         StopStream
       )
@@ -702,7 +740,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       .select("value").as[String]
       .groupByKey(x => x)
       .transformWithState(new RunningCountStatefulProcessor(),
-        TimeMode.None(),
+        TimeMode.EventTime(),
         OutputMode.Update())
   }
 
@@ -794,11 +832,14 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
     val result = inputData.toDS()
       .groupByKey(x => x)
       .transformWithState(new RunningCountStatefulProcessor(),
-        TimeMode.None(),
+        TimeMode.ProcessingTime(),
         OutputMode.Update())
 
+    val clock = new StreamManualClock
     testStream(result, OutputMode.Update())(
+      StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
       AddData(inputData, "a"),
+      AdvanceManualClock(1 * 1000),
       ExpectFailure[StateStoreMultipleColumnFamiliesNotSupportedException] { t =>
         assert(t.getMessage.contains("not supported"))
       }
@@ -813,10 +854,14 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
     val result = inputData.toDS()
       .groupByKey(x => x.key)
       .transformWithState(new AccumulateStatefulProcessorWithInitState(),
-        TimeMode.None(), OutputMode.Append(), initDf
+        TimeMode.ProcessingTime(), OutputMode.Append(), initDf
       )
+
+    val clock = new StreamManualClock
     testStream(result, OutputMode.Update())(
+      StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
       AddData(inputData, InitInputRow("a", "add", -1.0)),
+      AdvanceManualClock(1 * 1000),
       ExpectFailure[StateStoreMultipleColumnFamiliesNotSupportedException] {
         (t: Throwable) => {
           assert(t.getMessage.contains("not supported"))

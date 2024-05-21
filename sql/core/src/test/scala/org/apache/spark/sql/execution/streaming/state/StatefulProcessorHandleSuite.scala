@@ -38,14 +38,13 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
 
   private def getTimeMode(timeMode: String): TimeMode = {
     timeMode match {
-      case "None" => TimeMode.None()
       case "ProcessingTime" => TimeMode.ProcessingTime()
       case "EventTime" => TimeMode.EventTime()
       case _ => throw new IllegalArgumentException(s"Invalid timeMode=$timeMode")
     }
   }
 
-  Seq("None", "ProcessingTime", "EventTime").foreach { timeMode =>
+  Seq("ProcessingTime", "EventTime").foreach { timeMode =>
     test(s"value state creation with timeMode=$timeMode should succeed") {
       tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
         val store = provider.getStore(0)
@@ -85,7 +84,7 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
     handle.registerTimer(1000L)
   }
 
-  Seq("None", "ProcessingTime", "EventTime").foreach { timeMode =>
+  Seq("ProcessingTime", "EventTime").foreach { timeMode =>
     test(s"value state creation with timeMode=$timeMode " +
       "and invalid state should fail") {
       tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
@@ -102,41 +101,6 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
           }
         }
       }
-    }
-  }
-
-  test("registering processing/event time timeouts with None timeMode should fail") {
-    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
-      val store = provider.getStore(0)
-      val handle = new StatefulProcessorHandleImpl(store,
-        UUID.randomUUID(), keyExprEncoder, TimeMode.None())
-      val ex = intercept[SparkUnsupportedOperationException] {
-        handle.registerTimer(10000L)
-      }
-
-      checkError(
-        ex,
-        errorClass = "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_TIME_MODE",
-        parameters = Map(
-          "operationType" -> "register_timer",
-          "timeMode" -> TimeMode.None().toString
-        ),
-        matchPVals = true
-      )
-
-      val ex2 = intercept[SparkUnsupportedOperationException] {
-        handle.deleteTimer(10000L)
-      }
-
-      checkError(
-        ex2,
-        errorClass = "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_TIME_MODE",
-        parameters = Map(
-          "operationType" -> "delete_timer",
-          "timeMode" -> TimeMode.None().toString
-        ),
-        matchPVals = true
-      )
     }
   }
 
@@ -273,11 +237,11 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
     }
   }
 
-  test("ttl States are not populated for timeMode=None") {
+  test("ttl States are not populated for timeMode=EventTime") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store,
-        UUID.randomUUID(), keyExprEncoder, TimeMode.None())
+        UUID.randomUUID(), keyExprEncoder, TimeMode.EventTime())
 
       handle.getValueState("testValueState", Encoders.STRING)
       handle.getListState("testListState", Encoders.STRING)

@@ -632,9 +632,9 @@ class MicroBatchExecution(
     // Check whether next batch should be constructed
     val lastExecutionRequiresAnotherBatch = noDataBatchesEnabled &&
       // need to check the execution plan of the previous batch
-      execCtx.previousContext.map { plan =>
+      execCtx.previousContext.exists { plan =>
         Option(plan.executionPlan).exists(_.shouldRunAnotherBatch(execCtx.offsetSeqMetadata))
-      }.getOrElse(false)
+      }
     val shouldConstructNextBatch = isNewDataAvailable(execCtx) || lastExecutionRequiresAnotherBatch
     logTrace(
       s"noDataBatchesEnabled = $noDataBatchesEnabled, " +

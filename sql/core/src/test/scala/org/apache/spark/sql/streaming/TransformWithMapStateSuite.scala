@@ -22,6 +22,7 @@ import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.streaming.util.StreamManualClock
 
 case class InputMapRow(key: String, action: String, value: (String, String))
 
@@ -94,12 +95,15 @@ class TransformWithMapStateSuite extends StreamTest
       val result = inputData.toDS()
         .groupByKey(x => x.key)
         .transformWithState(new TestMapStateProcessor(),
-          TimeMode.None(),
+          TimeMode.ProcessingTime(),
           OutputMode.Update())
 
-
+      val clock = new StreamManualClock
       testStream(result, OutputMode.Update())(
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
         AddData(inputData, inputMapRow),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         ExpectFailure[SparkIllegalArgumentException] { e => {
           checkError(
             exception = e.asInstanceOf[SparkIllegalArgumentException],
@@ -120,11 +124,15 @@ class TransformWithMapStateSuite extends StreamTest
       val result = inputData.toDS()
         .groupByKey(x => x.key)
         .transformWithState(new TestMapStateProcessor(),
-          TimeMode.None(),
+          TimeMode.ProcessingTime(),
           OutputMode.Update())
 
+      val clock = new StreamManualClock
       testStream(result, OutputMode.Update())(
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
         AddData(inputData, InputMapRow("k1", "getValue", ("v1", ""))),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         CheckAnswer(("k1", "v1", null))
       )
     }
@@ -144,11 +152,15 @@ class TransformWithMapStateSuite extends StreamTest
       val result = inputData.toDS()
         .groupByKey(x => x.key)
         .transformWithState(new TestMapStateProcessor(),
-          TimeMode.None(),
+          TimeMode.ProcessingTime(),
           OutputMode.Update())
 
+      val clock = new StreamManualClock
       testStream(result, OutputMode.Update())(
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
         AddData(inputData, InputMapRow("k1", "updateValue", ("k1", null))),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         ExpectFailure[SparkIllegalArgumentException] { e => {
           checkError(
             exception = e.asInstanceOf[SparkIllegalArgumentException],
@@ -167,13 +179,18 @@ class TransformWithMapStateSuite extends StreamTest
       val result = inputData.toDS()
         .groupByKey(x => x.key)
         .transformWithState(new TestMapStateProcessor(),
-          TimeMode.None(),
+          TimeMode.ProcessingTime(),
           OutputMode.Append())
+
+      val clock = new StreamManualClock
       testStream(result, OutputMode.Append())(
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
         // Test exists()
         AddData(inputData, InputMapRow("k1", "updateValue", ("v1", "10"))),
         AddData(inputData, InputMapRow("k1", "exists", ("", ""))),
         AddData(inputData, InputMapRow("k2", "exists", ("", ""))),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("k1", "exists", "true"), ("k2", "exists", "false")),
 
         // Test get and put with composite key
@@ -185,30 +202,46 @@ class TransformWithMapStateSuite extends StreamTest
 
         // Different grouping key, same user key
         AddData(inputData, InputMapRow("k1", "getValue", ("v2", ""))),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("k1", "v2", "5")),
         // Same grouping key, same user key, update value should reflect
         AddData(inputData, InputMapRow("k2", "getValue", ("v2", ""))),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("k2", "v2", "12")),
 
         // Test get full map for a given grouping key - prefixScan
         AddData(inputData, InputMapRow("k2", "iterator", ("", ""))),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("k2", "v2", "12"), ("k2", "v4", "1")),
 
         AddData(inputData, InputMapRow("k2", "keys", ("", ""))),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("k2", "v2", ""), ("k2", "v4", "")),
 
         AddData(inputData, InputMapRow("k2", "values", ("", ""))),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("k2", "", "12"), ("k2", "", "1")),
 
         // Test remove functionalities
         AddData(inputData, InputMapRow("k1", "removeKey", ("v2", ""))),
         AddData(inputData, InputMapRow("k1", "containsKey", ("v2", ""))),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("k1", "v2", "false")),
 
         AddData(inputData, InputMapRow("k2", "clear", ("", ""))),
         AddData(inputData, InputMapRow("k2", "iterator", ("", ""))),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(),
         AddData(inputData, InputMapRow("k2", "exists", ("", ""))),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("k2", "exists", "false")),
         Execute { q =>
           assert(q.lastProgress.stateOperators(0).customMetrics.get("numMapStateVars") > 0)
@@ -224,7 +257,7 @@ class TransformWithMapStateSuite extends StreamTest
     val result = inputData.toDS()
       .groupByKey(x => x.key)
       .transformWithState(new TestMapStateProcessor(),
-        TimeMode.None(),
+        TimeMode.ProcessingTime(),
         OutputMode.Append())
 
     val df = result.toDF()
