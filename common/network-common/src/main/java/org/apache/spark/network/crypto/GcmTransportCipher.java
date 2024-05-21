@@ -20,6 +20,7 @@ package org.apache.spark.network.crypto;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.crypto.tink.subtle.AesGcmHkdfStreaming;
+import com.google.crypto.tink.subtle.StreamSegmentDecrypter;
 import com.google.crypto.tink.subtle.StreamSegmentEncrypter;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.*;
