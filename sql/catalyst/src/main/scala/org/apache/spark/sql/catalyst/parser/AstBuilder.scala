@@ -116,7 +116,8 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     }
   }
 
-  override def visitCompoundOrSingleStatement(ctx: CompoundOrSingleStatementContext): CompoundBody = {
+  override def visitCompoundOrSingleStatement(
+      ctx: CompoundOrSingleStatementContext): CompoundBody = {
     if (ctx.singleCompound() != null) {
       visit(ctx.singleCompound()).asInstanceOf[CompoundBody]
     } else {
