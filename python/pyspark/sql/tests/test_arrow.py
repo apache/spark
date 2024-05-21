@@ -1676,6 +1676,7 @@ class ArrowTestsMixin:
         self.assertIsInstance(df.schema["ll"].dataType, ArrayType)
 
     def test_createDataFrame_arrow_large_list_int64_offset(self):
+        # Check for expected failure if the large list contains an index >= 2^31
         a = pa.LargeListArray.from_arrays(
             [0, 2**31], pa.NullArray.from_buffers(pa.null(), 2**31, [None])
         )
