@@ -440,7 +440,7 @@ object FileStreamSource {
     def sparkPath: SparkPath = SparkPath.fromUrlString(path)
   }
 
-  /** Newly fetched files metadata holder. Visible for testing. */
+  /** Newly fetched files metadata holder. */
   private case class NewFileEntry(path: SparkPath, size: Long, timestamp: Long)
 
   private case class FilesSplit(files: Seq[NewFileEntry], size: BigInt)
