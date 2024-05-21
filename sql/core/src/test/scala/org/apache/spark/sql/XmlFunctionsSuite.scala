@@ -22,6 +22,7 @@ import java.util.Locale
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -55,7 +56,7 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
     val options = Map("rowTag" -> "foo").asJava
 
     checkAnswer(
-      df.select(from_xml($"value", schema)),
+      df.select(from_xml($"value", schema, options)),
       Row(Row(1)) :: Nil)
   }
 
@@ -108,6 +109,36 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.select(from_xml($"value", "a INT, b STRING", new java.util.HashMap[String, String]())),
       Row(Row(1, "haa")) :: Nil)
+  }
+
+  test("SPARK-48363: from_xml with non struct schema") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        Seq("1").toDS().select(from_xml($"value", lit("ARRAY<int>"), Map[String, String]().asJava))
+      },
+      errorClass = "INVALID_SCHEMA.NON_STRUCT_TYPE",
+      parameters = Map(
+        "inputSchema" -> "\"ARRAY<int>\"",
+        "dataType" -> "\"ARRAY<INT>\""
+      ),
+      context = ExpectedContext(fragment = "from_xml", getCurrentClassCallSitePattern)
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        Seq("1").toDF("xml").selectExpr(s"from_xml(xml, 'ARRAY<int>')")
+      },
+      errorClass = "INVALID_SCHEMA.NON_STRUCT_TYPE",
+      parameters = Map(
+        "inputSchema" -> "\"ARRAY<int>\"",
+        "dataType" -> "\"ARRAY<INT>\""
+      ),
+      context = ExpectedContext(
+        fragment = "from_xml(xml, 'ARRAY<int>')",
+        start = 0,
+        stop = 26
+      )
+    )
   }
 
   test("to_xml - struct") {
@@ -380,6 +411,22 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
       checkAnswer(
         df.select(from_xml($"value", schema, Map("mode" -> "PERMISSIVE").asJava)),
         Row(Row(null, null, badRec)) :: Row(Row(2, 12, null)) :: Nil)
+    }
+  }
+
+  test("SPARK-48296: to_xml - Codegen Support") {
+    withTempView("StructsToXmlTable") {
+      val schema = StructType(StructField("a", IntegerType, nullable = false) :: Nil)
+      val dataDF = spark.createDataFrame(Seq(Row(1)).asJava, schema).withColumn("a", struct($"a"))
+      dataDF.createOrReplaceTempView("StructsToXmlTable")
+      val df = sql("SELECT to_xml(a) FROM StructsToXmlTable")
+      val plan = df.queryExecution.executedPlan
+      assert(plan.isInstanceOf[WholeStageCodegenExec])
+      val expected =
+        s"""|<ROW>
+            |    <a>1</a>
+            |</ROW>""".stripMargin
+      checkAnswer(df, Seq(Row(expected)))
     }
   }
 

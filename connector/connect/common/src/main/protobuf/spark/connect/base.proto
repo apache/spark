@@ -381,6 +381,9 @@ message ExecutePlanResponse {
     // (Optional) Intermediate query progress reports.
     ExecutionProgress execution_progress = 18;
 
+    // Response for command that checkpoints a DataFrame.
+    CheckpointCommandResult checkpoint_command_result = 19;
+
     // Support arbitrary result objects.
     google.protobuf.Any extension = 999;
   }
@@ -1046,6 +1049,11 @@ message FetchErrorDetailsResponse {
     // The structured data of a SparkThrowable exception.
     optional SparkThrowable spark_throwable = 5;
   }
+}
+
+message CheckpointCommandResult {
+  // (Required) The logical plan checkpointed.
+  CachedRemoteRelation relation = 1;
 }
 
 // Main interface for the SparkConnect service.

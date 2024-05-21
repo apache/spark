@@ -601,6 +601,8 @@ class SparkContext(config: SparkConf) extends Logging {
         .foreach(logLevel => _schedulerBackend.updateExecutorsLogLevel(logLevel))
     }
 
+    _conf.get(CHECKPOINT_DIR).foreach(setCheckpointDir)
+
     val _executorMetricsSource =
       if (_conf.get(METRICS_EXECUTORMETRICS_SOURCE_ENABLED)) {
         Some(new ExecutorMetricsSource)

@@ -49,12 +49,12 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
 
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.network.util.JavaUtils;
 
 public class SSLFactory {
-  private static final Logger logger = LoggerFactory.getLogger(SSLFactory.class);
+  private static final SparkLogger logger = SparkLoggerFactory.getLogger(SSLFactory.class);
 
   /**
    * For a configuration specifying keystore/truststore files

@@ -403,10 +403,10 @@ case class CatalogTable(
 
   /**
    * Return the schema binding mode. Defaults to SchemaCompensation if not a view or an older
-   * version, unless the viewSchemaBindingMode config is set to DISABLED
+   * version, unless the viewSchemaBindingMode config is set to false
    */
   def viewSchemaMode: ViewSchemaMode = {
-    if (SQLConf.get.viewSchemaBindingMode == "DISABLED") {
+    if (!SQLConf.get.viewSchemaBindingEnabled) {
       SchemaUnsupported
     } else {
       val schemaMode = properties.getOrElse(VIEW_SCHEMA_MODE, SchemaCompensation.toString)
@@ -510,7 +510,7 @@ case class CatalogTable(
     if (tableType == CatalogTableType.VIEW) {
       viewText.foreach(map.put("View Text", _))
       viewOriginalText.foreach(map.put("View Original Text", _))
-      if (SQLConf.get.viewSchemaBindingMode != "DISABLED") {
+      if (SQLConf.get.viewSchemaBindingEnabled) {
         map.put("View Schema Mode", viewSchemaMode.toString)
       }
       if (viewCatalogAndNamespace.nonEmpty) {

@@ -1,14 +1,11 @@
 -- This test suits check the spark.sql.viewSchemaBindingMode configuration.
 -- It can be DISABLED and COMPENSATION
 
--- Verify the default binding is COMPENSATION
-SET spark.sql.viewSchemaBindingMode;
-
--- Verify which values are allowed
-SET spark.sql.viewSchemaBindingMode = EVOLUTION;
+-- Verify the default binding is true
+SET spark.sql.legacy.viewSchemaBindingMode;
 
 -- 1. Test DISABLED mode.
-SET spark.sql.viewSchemaBindingMode = DISABLED;
+SET spark.sql.legacy.viewSchemaBindingMode = false;
 
 -- 1.a Attempts to use the SCHEMA BINDING clause fail with FEATURE_NOT_ENABLED
 CREATE OR REPLACE VIEW v WITH SCHEMA BINDING AS SELECT 1;
@@ -16,10 +13,11 @@ CREATE OR REPLACE VIEW v WITH SCHEMA COMPENSATION AS SELECT 1;
 CREATE OR REPLACE VIEW v WITH SCHEMA TYPE EVOLUTION AS SELECT 1;
 CREATE OR REPLACE VIEW v WITH SCHEMA EVOLUTION AS SELECT 1;
 
--- 1.b Existing SHOW and DESCRIBE should behave as before Spark 4.4.0
+-- 1.b Existing SHOW and DESCRIBE should behave as before Spark 4.0.0
 CREATE OR REPLACE VIEW v AS SELECT 1;
 DESCRIBE EXTENDED v;
 SHOW TABLE EXTENDED LIKE 'v';
+SHOW CREATE TABLE v;
 DROP VIEW IF EXISTS v;
 
 CREATE OR REPLACE TEMPORARY VIEW v AS SELECT 1;
@@ -34,6 +32,7 @@ CREATE OR REPLACE VIEW v AS SELECT * FROM t;
 SELECT * FROM v;
 -- Baseline: v(c1 INT);
 DESCRIBE EXTENDED v;
+SHOW CREATE TABLE v;
 
 -- Widen the column c1 in t
 DROP TABLE IF EXISTS t;
@@ -44,29 +43,56 @@ SELECT * FROM v;
 -- The view still describes as v(c1 INT);
 DESCRIBE EXTENDED v;
 
--- 2. Test COMPENSATION mode. In this mode Spark tolerates any supported CAST, not just up cast
-SET spark.sql.viewSchemaBindingMode = COMPENSATION;
+-- 2. Test true mode. In this mode Spark tolerates any supported CAST, not just up cast
+SET spark.sql.legacy.viewSchemaBindingMode = true;
+SET spark.sql.legacy.viewSchemaCompensation = false;
 
 -- To verify ANSI_MODE is enforced even if ANSI_MODE is turned off.
 SET spark.sql.ansi.enabled = false;
 
--- 2.a In COMPENSATION views get invalidated if the type can't cast
+-- 2.a In BINDING views get invalidated if the type can't cast
 DROP TABLE IF EXISTS t;
 CREATE TABLE t(c1 INT NOT NULL) USING PARQUET;
 CREATE OR REPLACE VIEW v AS SELECT * FROM t;
 SELECT * FROM v;
 -- Baseline: v(c1 INT);
 DESCRIBE EXTENDED v;
+SHOW CREATE TABLE v;
 
 -- Widen the column c1 in t
 DROP TABLE t;
 CREATE TABLE t(c1 BIGINT NOT NULL) USING PARQUET;
 INSERT INTO t VALUES (1);
+
+-- This fails
 SELECT * FROM v;
 -- The view still describes as v(c1 BIGINT)
 DESCRIBE EXTENDED v;
+SHOW CREATE TABLE v;
 
--- 2.b In COMPENSATION views ignore added columns and change the type
+-- 2.b Switch to default COMPENSATION
+SET spark.sql.legacy.viewSchemaCompensation = true;
+
+DROP TABLE IF EXISTS t;
+CREATE TABLE t(c1 INT NOT NULL) USING PARQUET;
+CREATE OR REPLACE VIEW v AS SELECT * FROM t;
+SELECT * FROM v;
+-- Baseline: v(c1 INT);
+DESCRIBE EXTENDED v;
+SHOW CREATE TABLE v;
+
+-- Widen the column c1 in t
+DROP TABLE t;
+CREATE TABLE t(c1 BIGINT NOT NULL) USING PARQUET;
+INSERT INTO t VALUES (1);
+
+-- This now succeeds
+SELECT * FROM v;
+-- The view still describes as v(c1 BIGINT)
+DESCRIBE EXTENDED v;
+SHOW CREATE TABLE v;
+
+-- 2.c In COMPENSATION views ignore added columns and change the type
 -- Expect the added column to be ignore, but the type will be tolerated, as long as it can cast
 DROP TABLE IF EXISTS t;
 CREATE TABLE t(c1 STRING NOT NULL, c2 INT) USING PARQUET;
@@ -89,7 +115,7 @@ SELECT * FROM v;
 -- The view still describes as v(c1 INT);
 DESCRIBE EXTENDED v;
 
--- 2.c Still can't drop a column, though
+-- 2.d Still can't drop a column, though
 DROP TABLE IF EXISTS t;
 CREATE TABLE t(c1 INT, c2 INT) USING PARQUET;
 INSERT INTO t VALUES (1, 2);
@@ -106,7 +132,7 @@ CREATE TABLE t(c1 INT NOT NULL) USING PARQUET;
 SELECT * FROM v;
 DESCRIBE EXTENDED v;
 
--- 2.d Attempt to rename a column
+-- 2.e Attempt to rename a column
 DROP TABLE IF EXISTS t;
 CREATE TABLE t(c3 INT NOT NULL, c2 INT) USING PARQUET;
 SELECT * FROM v;

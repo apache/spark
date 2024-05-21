@@ -35,8 +35,8 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import org.apache.commons.lang3.SystemUtils;
 
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.util.*;
 
@@ -44,7 +44,7 @@ import org.apache.spark.network.util.*;
  * Server for the efficient, low-level streaming service.
  */
 public class TransportServer implements Closeable {
-  private static final Logger logger = LoggerFactory.getLogger(TransportServer.class);
+  private static final SparkLogger logger = SparkLoggerFactory.getLogger(TransportServer.class);
 
   private final TransportContext context;
   private final TransportConf conf;
