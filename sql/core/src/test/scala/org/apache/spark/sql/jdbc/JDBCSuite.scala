@@ -1400,7 +1400,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-18419: Fix `asConnectionProperties` to filter case-insensitively") {
     val parameters = Map(
-      "url" -> "jdbc:mysql://localhost:3306/temp",
+      "url" -> "jdbc:mysql://localhost:3306/temp?permitMysqlScheme",
       "dbtable" -> "t1",
       "numPartitions" -> "10")
     assert(new JDBCOptions(parameters).asConnectionProperties.isEmpty)
