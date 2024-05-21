@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package test.scala.org.apache.spark.sql.jdbc.v2
+package org.apache.spark.sql.jdbc.v2
 
 import scala.collection.immutable.Seq
 

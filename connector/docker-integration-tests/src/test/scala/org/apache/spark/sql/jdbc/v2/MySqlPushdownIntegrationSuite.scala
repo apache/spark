@@ -19,12 +19,11 @@ package org.apache.spark.sql.jdbc.v2
 
 import java.sql.Connection
 
-import test.scala.org.apache.spark.sql.jdbc.v2.V2JDBCPushdownTest
-
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.{DatabaseOnDocker, DockerJDBCIntegrationSuite, MySQLDatabaseOnDocker}
+import org.apache.spark.sql.jdbc.v2.V2JDBCPushdownTest
 
 class MySqlPushdownIntegrationSuite
   extends DockerJDBCIntegrationSuite
