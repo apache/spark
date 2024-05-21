@@ -26,6 +26,7 @@ import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, MapData}
 import org.apache.spark.sql.connector.catalog.{MetadataColumn, SupportsMetadataColumns, SupportsRead, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder}
@@ -34,7 +35,7 @@ import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.PA
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadata, OperatorStateMetadataReader, OperatorStateMetadataV1, OperatorStateMetadataV2}
 import org.apache.spark.sql.sources.DataSourceRegister
-import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StringType, StructType}
+import org.apache.spark.sql.types.{DataType, IntegerType, LongType, MapType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.SerializableConfiguration
@@ -46,8 +47,15 @@ case class StateMetadataTableEntry(
     numPartitions: Int,
     minBatchId: Long,
     maxBatchId: Long,
-    numColsPrefixKey: Int) {
+    numColsPrefixKey: Int,
+    operatorProperties: Map[String, String] = Map.empty[String, String]) {
   def toRow(): InternalRow = {
+    // create MapData from Map
+    val mapData: MapData = ArrayBasedMapData.apply(
+      operatorProperties.keys.map(UTF8String.fromString).toArray,
+      operatorProperties.values.map(UTF8String.fromString).toArray
+    )
+
     new GenericInternalRow(
       Array[Any](operatorId,
         UTF8String.fromString(operatorName),
@@ -55,7 +63,8 @@ case class StateMetadataTableEntry(
         numPartitions,
         minBatchId,
         maxBatchId,
-        numColsPrefixKey))
+        numColsPrefixKey,
+        mapData))
   }
 }
 
@@ -68,6 +77,8 @@ object StateMetadataTableEntry {
       .add("numPartitions", IntegerType)
       .add("minBatchId", LongType)
       .add("maxBatchId", LongType)
+      .add("numColsPrefixKey", IntegerType)
+      .add("operatorProperties", MapType(StringType, StringType, valueContainsNull = false))
   }
 }
 
@@ -220,7 +231,8 @@ class StateMetadataPartitionReader(
               stateStoreMetadata.numPartitions,
               if (batchIds.nonEmpty) batchIds.head else -1,
               if (batchIds.nonEmpty) batchIds.last else -1,
-              stateStoreMetadata.numColsPrefixKey
+              stateStoreMetadata.numColsPrefixKey,
+              v2.operatorProperties
             )
           }
       }

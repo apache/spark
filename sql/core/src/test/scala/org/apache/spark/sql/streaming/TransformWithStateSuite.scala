@@ -414,7 +414,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         )
 
         val stateReadDf = spark.read
-          .format("statestore")
+          .format("state-metadata")
           .option(StateSourceOptions.PATH, chkptDir.getAbsolutePath)
           // skip version and operator ID to test out functionalities
           .load()
