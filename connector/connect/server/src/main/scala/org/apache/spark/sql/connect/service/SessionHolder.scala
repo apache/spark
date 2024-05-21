@@ -107,7 +107,8 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   // Mapping from relation ID (passed to client) to runtime dataframe. Used for callbacks like
   // foreachBatch() in Streaming, and DataFrame.checkpoint API. Lazy since most sessions don't
   // need it.
-  private[spark] lazy val dataFrameCache: ConcurrentMap[String, DataFrame] = new ConcurrentHashMap()
+  private[spark] lazy val dataFrameCache: ConcurrentMap[String, DataFrame] =
+    new ConcurrentHashMap()
 
   // Mapping from id to StreamingQueryListener. Used for methods like removeListener() in
   // StreamingQueryManager.

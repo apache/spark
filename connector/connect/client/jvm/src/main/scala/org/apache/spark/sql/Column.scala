@@ -1330,7 +1330,8 @@ object Column {
   private[sql] def apply(name: String, planId: Option[Long]): Column = new Column(name, planId)
 
   private[sql] def nameToExpression(
-      name: String, planId: Option[Long] = None): proto.Expression = {
+      name: String,
+      planId: Option[Long] = None): proto.Expression = {
     val builder = proto.Expression.newBuilder()
     name match {
       case "*" =>

@@ -22,9 +22,9 @@ import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.common.ProtoUtils
 
 /**
- * Utility functions for parsing Spark Connect protocol buffers with a recursion limit.
- * This is intended to be used by plugins, as they cannot use `ProtoUtils.parseWithRecursionLimit`
- * due to the shading of the `com.google.protobuf` package.
+ * Utility functions for parsing Spark Connect protocol buffers with a recursion limit. This is
+ * intended to be used by plugins, as they cannot use `ProtoUtils.parseWithRecursionLimit` due to
+ * the shading of the `com.google.protobuf` package.
  */
 object ConnectProtoUtils {
   @DeveloperApi
@@ -44,7 +44,8 @@ object ConnectProtoUtils {
 
   @DeveloperApi
   def parseExpressionWithRecursionLimit(
-      bytes: Array[Byte], recursionLimit: Int): proto.Expression = {
+      bytes: Array[Byte],
+      recursionLimit: Int): proto.Expression = {
     ProtoUtils.parseWithRecursionLimit(bytes, proto.Expression.parser(), recursionLimit)
   }
 

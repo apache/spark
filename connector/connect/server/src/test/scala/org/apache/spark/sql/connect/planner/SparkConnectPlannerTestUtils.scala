@@ -35,7 +35,9 @@ object SparkConnectPlannerTestUtils {
     new SparkConnectPlanner(executeHolder).process(command, new MockObserver())
   }
 
-  private def buildExecutePlanHolder(spark: SparkSession, command: proto.Command): ExecuteHolder = {
+  private def buildExecutePlanHolder(
+      spark: SparkSession,
+      command: proto.Command): ExecuteHolder = {
     val sessionHolder = SessionHolder.forTesting(spark)
     sessionHolder.eventManager.status_(SessionStatus.Started)
 
