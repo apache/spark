@@ -46,10 +46,9 @@ case class StateMetadataTableEntry(
     numPartitions: Int,
     minBatchId: Long,
     maxBatchId: Long,
-    operatorProperties: String,
+    operatorPropertiesJson: String,
     numColsPrefixKey: Int) {
   def toRow(): InternalRow = {
-
     new GenericInternalRow(
       Array[Any](operatorId,
         UTF8String.fromString(operatorName),
@@ -57,7 +56,7 @@ case class StateMetadataTableEntry(
         numPartitions,
         minBatchId,
         maxBatchId,
-        UTF8String.fromString(operatorProperties),
+        UTF8String.fromString(operatorPropertiesJson),
         numColsPrefixKey
       ))
   }
@@ -226,7 +225,7 @@ class StateMetadataPartitionReader(
               stateStoreMetadata.numPartitions,
               if (batchIds.nonEmpty) batchIds.head else -1,
               if (batchIds.nonEmpty) batchIds.last else -1,
-              v2.operatorProperties,
+              v2.operatorPropertiesJson,
               stateStoreMetadata.numColsPrefixKey
             )
           }

@@ -115,7 +115,7 @@ object OperatorProperties {
 case class OperatorStateMetadataV2(
     operatorInfo: OperatorInfoV1,
     stateStoreInfo: Array[StateStoreMetadataV1],
-    operatorProperties: String) extends OperatorStateMetadata {
+    operatorPropertiesJson: String) extends OperatorStateMetadata {
   override def version: Int = 2
 }
 
