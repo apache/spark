@@ -17,14 +17,180 @@
 package org.apache.spark.unsafe.types;
 
 import org.apache.spark.SparkException;
+import org.apache.spark.sql.catalyst.util.CollationAwareUTF8String;
 import org.apache.spark.sql.catalyst.util.CollationFactory;
 import org.apache.spark.sql.catalyst.util.CollationSupport;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-
+// checkstyle.off: AvoidEscapedUnicodeCharacters
 public class CollationSupportSuite {
+
+  /**
+   * Collation-aware UTF8String comparison.
+   */
+
+  private void assertLowercase(String target, String expected, String collationName)
+      throws SparkException {
+    if (collationName.equals("UTF8_BINARY")) {
+      UTF8String targetUTF8 = UTF8String.fromString(target);
+      UTF8String expectedUTF8 = UTF8String.fromString(expected);
+      assertEquals(expectedUTF8, targetUTF8.toLowerCase());
+    } else if (collationName.equals("UTF8_BINARY_LCASE")) {
+      assertEquals(expected, CollationAwareUTF8String.toLowerCase(target));
+    } else {
+      int collationId = CollationFactory.collationNameToId(collationName);
+      assertEquals(expected, CollationAwareUTF8String.toLowerCase(target, collationId));
+    }
+  }
+
+  @Test
+  public void testLowercase() throws SparkException {
+    // Edge cases
+    assertLowercase("", "", "UTF8_BINARY");
+    assertLowercase("", "", "UTF8_BINARY_LCASE");
+    assertLowercase("", "", "UNICODE");
+    assertLowercase("", "", "UNICODE_CI");
+    // Basic tests
+    assertLowercase("abcd", "abcd", "UTF8_BINARY");
+    assertLowercase("AbCd", "abcd", "UTF8_BINARY");
+    assertLowercase("abcd", "abcd", "UTF8_BINARY_LCASE");
+    assertLowercase("aBcD", "abcd", "UTF8_BINARY_LCASE");
+    assertLowercase("abcd", "abcd", "UNICODE");
+    assertLowercase("aBCd", "abcd", "UNICODE");
+    assertLowercase("abcd", "abcd", "UNICODE_CI");
+    assertLowercase("AbcD", "abcd", "UNICODE_CI");
+    // Accent variation
+    assertLowercase("AbĆd", "abćd", "UTF8_BINARY");
+    assertLowercase("aBcΔ", "abcδ", "UTF8_BINARY_LCASE");
+    assertLowercase("ÄbcD", "äbcd", "UNICODE");
+    assertLowercase("aB́Cd", "ab́cd", "UNICODE_CI");
+    // Case-variable character length
+    assertLowercase("İoDiNe", "i̇odine", "UTF8_BINARY");
+    assertLowercase("Abi̇o12", "abi̇o12", "UTF8_BINARY");
+    assertLowercase("İodInE", "i̇odine", "UTF8_BINARY_LCASE");
+    assertLowercase("aBi̇o12", "abi̇o12", "UTF8_BINARY_LCASE");
+    assertLowercase("İoDinE", "i̇odine", "UNICODE");
+    assertLowercase("abi̇O12", "abi̇o12", "UNICODE");
+    assertLowercase("İodINe", "i̇odine", "UNICODE_CI");
+    assertLowercase("ABi̇o12", "abi̇o12", "UNICODE_CI");
+    // Conditional case mapping
+    assertLowercase("ΘΑΛΑΣΣΙΝΟΣ", "θαλασσινος", "UTF8_BINARY");
+    assertLowercase("ΘΑΛΑΣΣΙΝΟΣ", "θαλασσινοσ", "UTF8_BINARY_LCASE"); // != UNICODE_CI
+    assertLowercase("ΘΑΛΑΣΣΙΝΟΣ", "θαλασσινος", "UNICODE");
+    assertLowercase("ΘΑΛΑΣΣΙΝΟΣ", "θαλασσινος", "UNICODE_CI");
+  }
+
+  private void assertUppercase(String target, String expected, String collationName)
+      throws SparkException {
+    if (collationName.equals("UTF8_BINARY")) {
+      UTF8String targetUTF8 = UTF8String.fromString(target);
+      UTF8String expectedUTF8 = UTF8String.fromString(expected);
+      assertEquals(expectedUTF8, targetUTF8.toUpperCase());
+    } else if (collationName.equals("UTF8_BINARY_LCASE")) {
+      assertEquals(expected, CollationAwareUTF8String.toUpperCase(target));
+    } else {
+      int collationId = CollationFactory.collationNameToId(collationName);
+      assertEquals(expected, CollationAwareUTF8String.toUpperCase(target, collationId));
+    }
+  }
+
+  @Test
+  public void testUppercase() throws SparkException {
+    // Edge cases
+    assertUppercase("", "", "UTF8_BINARY");
+    assertUppercase("", "", "UTF8_BINARY_LCASE");
+    assertUppercase("", "", "UNICODE");
+    assertUppercase("", "", "UNICODE_CI");
+    // Basic tests
+    assertUppercase("abcd", "ABCD", "UTF8_BINARY");
+    assertUppercase("AbCd", "ABCD", "UTF8_BINARY");
+    assertUppercase("abcd", "ABCD", "UTF8_BINARY_LCASE");
+    assertUppercase("aBcD", "ABCD", "UTF8_BINARY_LCASE");
+    assertUppercase("abcd", "ABCD", "UNICODE");
+    assertUppercase("aBCd", "ABCD", "UNICODE");
+    assertUppercase("abcd", "ABCD", "UNICODE_CI");
+    assertUppercase("AbcD", "ABCD", "UNICODE_CI");
+    // Accent variation
+    assertUppercase("aBćD", "ABĆD", "UTF8_BINARY");
+    assertUppercase("AbCδ", "ABCΔ", "UTF8_BINARY_LCASE");
+    assertUppercase("äBCd", "ÄBCD", "UNICODE");
+    assertUppercase("Ab́cD", "AB́CD", "UNICODE_CI");
+    // Case-variable character length
+    assertUppercase("i\u0307oDiNe", "I\u0307ODINE", "UTF8_BINARY");
+    assertUppercase("Abi\u0307o12", "ABI\u0307O12", "UTF8_BINARY");
+    assertUppercase("i̇odInE", "İODINE", "UTF8_BINARY_LCASE");
+    assertUppercase("aBi̇o12", "ABİO12", "UTF8_BINARY_LCASE");
+    assertUppercase("i̇oDinE", "I\u0307ODINE", "UNICODE");
+    assertUppercase("abi̇O12", "ABI\u0307O12", "UNICODE");
+    assertUppercase("i̇odINe", "I\u0307ODINE", "UNICODE_CI");
+    assertUppercase("ABi̇o12", "ABI\u0307O12", "UNICODE_CI");
+    // Conditional case mapping
+    assertUppercase("θαλασσινος", "ΘΑΛΑΣΣΙΝΟΣ", "UTF8_BINARY");
+    assertUppercase("θαλασσινοσ", "ΘΑΛΑΣΣΙΝΟΣ", "UTF8_BINARY");
+    assertUppercase("θαλασσινος", "ΘΑΛΑΣΣΙΝΟΣ", "UTF8_BINARY_LCASE");
+    assertUppercase("θαλασσινοσ", "ΘΑΛΑΣΣΙΝΟΣ", "UTF8_BINARY_LCASE");
+    assertUppercase("θαλασσινος", "ΘΑΛΑΣΣΙΝΟΣ", "UNICODE");
+    assertUppercase("θαλασσινοσ", "ΘΑΛΑΣΣΙΝΟΣ", "UNICODE");
+    assertUppercase("θαλασσινος", "ΘΑΛΑΣΣΙΝΟΣ", "UNICODE_CI");
+    assertUppercase("θαλασσινοσ", "ΘΑΛΑΣΣΙΝΟΣ", "UNICODE_CI");
+  }
+
+  private void assertTitlecase(String target, String expected, String collationName)
+      throws SparkException {
+    if (collationName.equals("UTF8_BINARY")) {
+      UTF8String targetUTF8 = UTF8String.fromString(target);
+      UTF8String expectedUTF8 = UTF8String.fromString(expected);
+      assertEquals(expectedUTF8, targetUTF8.toTitleCase());
+    } else if (collationName.equals("UTF8_BINARY_LCASE")) {
+      assertEquals(expected, CollationAwareUTF8String.toTitleCase(target));
+    } else {
+      int collationId = CollationFactory.collationNameToId(collationName);
+      assertEquals(expected, CollationAwareUTF8String.toTitleCase(target, collationId));
+    }
+  }
+
+  @Test
+  public void testTitlecase() throws SparkException {
+    // Edge cases
+    assertTitlecase("", "", "UTF8_BINARY");
+    assertTitlecase("", "", "UTF8_BINARY_LCASE");
+    assertTitlecase("", "", "UNICODE");
+    assertTitlecase("", "", "UNICODE_CI");
+    // Basic tests
+    assertTitlecase("ab cd", "Ab Cd", "UTF8_BINARY");
+    assertTitlecase("Ab Cd", "Ab Cd", "UTF8_BINARY");
+    assertTitlecase("ab cd", "Ab Cd", "UTF8_BINARY_LCASE");
+    assertTitlecase("aB cD", "Ab Cd", "UTF8_BINARY_LCASE");
+    assertTitlecase("ab cd", "Ab Cd", "UNICODE");
+    assertTitlecase("aB Cd", "Ab Cd", "UNICODE");
+    assertTitlecase("ab cd", "Ab Cd", "UNICODE_CI");
+    assertTitlecase("Ab cD", "Ab Cd", "UNICODE_CI");
+    // Accent variation
+    assertTitlecase("aB ćD", "AB ĆD", "UTF8_BINARY");
+    assertTitlecase("AbC δ", "Abc Δ", "UTF8_BINARY_LCASE");
+    assertTitlecase("äB Cd", "Äb Cd", "UNICODE");
+    assertTitlecase("A b́cD", "A B́cd", "UNICODE_CI");
+    // Case-variable character length
+    assertTitlecase("i\u0307oDiNe", "I\u0307oDiNe", "UTF8_BINARY");
+    assertTitlecase("Abi\u0307o12", "Abi\u0307o12", "UTF8_BINARY");
+    assertTitlecase("i̇od i̇nE", "İod İne", "UTF8_BINARY_LCASE");
+    assertTitlecase("aBi̇o12", "Abi\u0307o12", "UTF8_BINARY_LCASE");
+    assertTitlecase("i̇oDinE", "I\u0307odine", "UNICODE");
+    assertTitlecase("abi̇O12", "Abi̇o12", "UNICODE");
+    assertTitlecase("i̇odINe", "I\u0307odine", "UNICODE_CI");
+    assertTitlecase("ABi̇o12", "Abi\u0307o12", "UNICODE_CI");
+    // Conditional case mapping
+    assertTitlecase("a ς c", "A Σ C", "UTF8_BINARY");
+    assertTitlecase("a σ c", "A Σ C", "UTF8_BINARY");
+    assertTitlecase("a ς c", "A Σ C", "UTF8_BINARY_LCASE");
+    assertTitlecase("a σ c", "A Σ C", "UTF8_BINARY_LCASE");
+    assertTitlecase("a ς c", "A Σ C", "UNICODE");
+    assertTitlecase("a σ c", "A Σ C", "UNICODE");
+    assertTitlecase("a ς c", "A Σ C", "UNICODE_CI");
+    assertTitlecase("a σ c", "A Σ C", "UNICODE_CI");
+  }
 
   /**
    * Collation-aware string expressions.
@@ -1008,3 +1174,4 @@ public class CollationSupportSuite {
   // TODO: Test other collation-aware expressions.
 
 }
+// checkstyle.on: AvoidEscapedUnicodeCharacters
