@@ -26,7 +26,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/master' && !startsWith(github.ref, 'refs/heads/branch-') }}
+  cancel-in-progress: ${{ github.repository_owner != 'apache' }}
 
 jobs:
   call-build-and-test:
