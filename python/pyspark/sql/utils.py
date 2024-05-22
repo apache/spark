@@ -17,7 +17,18 @@
 import inspect
 import functools
 import os
-from typing import Any, Callable, Optional, Sequence, TYPE_CHECKING, cast, TypeVar, Union, Type
+from typing import (
+    Any,
+    Callable,
+    Optional,
+    List,
+    Sequence,
+    TYPE_CHECKING,
+    cast,
+    TypeVar,
+    Union,
+    Type,
+)
 
 # For backward compatibility.
 from pyspark.errors import (  # noqa: F401
@@ -122,6 +133,47 @@ class ForeachBatchFunction:
 
     class Java:
         implements = ["org.apache.spark.sql.execution.streaming.sources.PythonForeachBatchFunction"]
+
+
+# Python implementation of 'org.apache.spark.sql.catalyst.util.StringConcat'
+_MAX_ROUNDED_ARRAY_LENGTH = (1 << 31) - 1 - 15
+
+
+class StringConcat:
+    def __init__(self, maxLength: int = _MAX_ROUNDED_ARRAY_LENGTH):
+        self.maxLength: int = maxLength
+        self.strings: List[str] = []
+        self.length: int = 0
+
+    def atLimit(self) -> bool:
+        return self.length >= self.maxLength
+
+    def append(self, s: str) -> None:
+        if s is not None:
+            sLen = len(s)
+            if not self.atLimit():
+                available = self.maxLength - self.length
+                stringToAppend = s if available >= sLen else s[0:available]
+                self.strings.append(stringToAppend)
+
+            self.length = min(self.length + sLen, _MAX_ROUNDED_ARRAY_LENGTH)
+
+    def toString(self) -> str:
+        # finalLength = self.maxLength if self.atLimit()  else self.length
+        return "".join(self.strings)
+
+
+# Python implementation of 'org.apache.spark.util.SparkSchemaUtils.escapeMetaCharacters'
+def escape_meta_characters(s: str) -> str:
+    return (
+        s.replace("\n", "\\n")
+        .replace("\r", "\\r")
+        .replace("\t", "\\t")
+        .replace("\f", "\\f")
+        .replace("\b", "\\b")
+        .replace("\u000B", "\\v")
+        .replace("\u0007", "\\a")
+    )
 
 
 def to_str(value: Any) -> Optional[str]:
