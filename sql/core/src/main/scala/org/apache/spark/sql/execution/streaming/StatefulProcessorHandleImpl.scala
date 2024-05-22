@@ -21,7 +21,8 @@ import java.util.UUID
 
 import scala.collection.mutable
 
-import org.json4s.JsonAST.{JBool, JString, JValue}
+import org.json4s.{DefaultFormats, Formats, JValue}
+import org.json4s.JsonAST.{JBool, JString}
 import org.json4s.JsonDSL._
 
 import org.apache.spark.TaskContext
@@ -78,6 +79,14 @@ case object ValueState extends StateVariableType
 case object ListState extends StateVariableType
 case object MapState extends StateVariableType
 
+object StateVariableType {
+  def withName(name: String): StateVariableType = name match {
+    case "ValueState" => ValueState
+    case "ListState" => ListState
+    case "MapState" => MapState
+    case _ => throw new IllegalArgumentException(s"Unknown state type: $name")
+  }
+}
 class StateVariableInfo(
     val stateName: String,
     val stateType: StateVariableType,
@@ -92,6 +101,21 @@ class StateVariableInfo(
       ("stateType" -> JString(stateType.toString)) ~
       ("isTtlEnabled" -> JBool(isTtlEnabled))
 
+  }
+}
+
+object StateVariableInfo {
+  implicit val formats: Formats = DefaultFormats
+  def fromJson(json: Any): List[StateVariableInfo] = {
+    val stateVariables = json.asInstanceOf[List[Map[String, Any]]]
+    // Extract each JValue to StateVariableInfo
+    stateVariables.map { stateVariable =>
+      new StateVariableInfo(
+        stateVariable("stateName").asInstanceOf[String],
+        StateVariableType.withName(stateVariable("stateType").asInstanceOf[String]),
+        stateVariable("isTtlEnabled").asInstanceOf[Boolean]
+      )
+    }
   }
 }
 

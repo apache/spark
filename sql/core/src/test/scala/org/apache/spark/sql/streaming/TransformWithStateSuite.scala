@@ -428,15 +428,10 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         assert(map("timeMode") === "ProcessingTime")
         assert(map("outputMode") === "Update")
 
-        // TODO: Find a way to verify the stateVariables, need to deserialize from JArray
-//       // get "stateVariables" as list and cast this list as a collection of StateVariableInfo
-//        val stateVariables = map("stateVariables").asInstanceOf[JArray].arr
-//        val stateVariableInfos = stateVariables.map { sv =>
-//
-//        }
-//
-//        // check that all stateVariables are present in operatorProperties
-//        assert(stateVariableInfos.size === 1)
+        val stateVariableInfos = StateVariableInfo.fromJson(
+          map("stateVariables"))
+        assert(stateVariableInfos.size === 1)
+        assert(stateVariableInfos.exists(_.stateName === "countState"))
       }
     }
   }
