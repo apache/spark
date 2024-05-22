@@ -57,7 +57,9 @@ case class StateMetadataTableEntry(
         numPartitions,
         minBatchId,
         maxBatchId,
-        UTF8String.fromString(operatorProperties)))
+        UTF8String.fromString(operatorProperties),
+        numColsPrefixKey
+      ))
   }
 }
 
