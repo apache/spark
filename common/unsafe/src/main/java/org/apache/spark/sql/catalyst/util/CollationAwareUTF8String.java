@@ -141,16 +141,82 @@ public class CollationAwareUTF8String {
     return UCharacter.toUpperCase(locale, target);
   }
 
+  private static int uppercaseCodePoint(final int codePoint, final StringBuilder sb, final int i,
+      final String target) {
+    // Latin small letter i with an additional dot is represented using 2 characters.
+    if (codePoint == 0x0069 && i + 1 < target.length() && target.codePointAt(i + 1) == 0x0307) {
+      sb.append("İ");
+      return 1;
+    }
+    // All other characters should follow context-unaware ICU single-code point case mapping.
+    sb.appendCodePoint(UCharacter.toTitleCase(codePoint));
+    return 0;
+  }
+
+  public static String toUpperCase(final String target) {
+      StringBuilder sb = new StringBuilder();
+    for (int i = 0; i < target.length(); ++i) {
+      int codePoint = target.codePointAt(i);
+      // Latin small letter i with an additional dot above (represented using 2 characters).
+      if (codePoint == 0x0069 && i + 1 < target.length() && target.codePointAt(i + 1) == 0x0307) {
+        sb.append("İ");
+        ++i;
+      }
+      // All other characters should follow context-unaware ICU single-code point case mapping.
+      else {
+        sb.appendCodePoint(UCharacter.toUpperCase(codePoint));
+      }
+    }
+    return sb.toString();
+  }
+
   public static String toLowerCase(final String target, final int collationId) {
     ULocale locale = CollationFactory.fetchCollation(collationId)
       .collator.getLocale(ULocale.ACTUAL_LOCALE);
     return UCharacter.toLowerCase(locale, target);
   }
 
+  private static void lowercaseCodePoint(final int codePoint, final StringBuilder sb) {
+    // Latin capital letter I with dot above is mapped to 2 lowercase characters.
+    if (codePoint == 0x0130) {
+      sb.append("i̇");
+    }
+    // Greek final and non-final capital letter sigma should be mapped the same.
+    else if (codePoint == 0x03C2) {
+      sb.append("σ");
+    }
+    // All other characters should follow context-unaware ICU single-code point case mapping.
+    else {
+      sb.appendCodePoint(UCharacter.toLowerCase(codePoint));
+    }
+  }
+
+  public static String toLowerCase(final String target) {
+      StringBuilder sb = new StringBuilder();
+    for (int i = 0; i < target.length(); ++i) {
+      int codePoint = target.codePointAt(i);
+      lowercaseCodePoint(codePoint, sb);
+    }
+    return sb.toString();
+  }
+
   public static String toTitleCase(final String target, final int collationId) {
     ULocale locale = CollationFactory.fetchCollation(collationId)
       .collator.getLocale(ULocale.ACTUAL_LOCALE);
     return UCharacter.toTitleCase(locale, target, BreakIterator.getWordInstance(locale));
+  }
+
+  public static String toTitleCase(final String target) {
+      StringBuilder sb = new StringBuilder();
+    for (int i = 0; i < target.length(); ++i) {
+      int codePoint = target.codePointAt(i);
+      if (i == 0 || Character.isWhitespace(target.codePointBefore(i))) {
+        i += uppercaseCodePoint(codePoint, sb, i, target);
+      } else {
+        lowercaseCodePoint(codePoint, sb);
+      }
+    }
+    return sb.toString();
   }
 
   public static int findInSet(final UTF8String match, final UTF8String set, int collationId) {
