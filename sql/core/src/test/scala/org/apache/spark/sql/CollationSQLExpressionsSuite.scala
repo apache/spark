@@ -997,6 +997,22 @@ class CollationSQLExpressionsSuite
     })
   }
 
+  test("Support CurrentDatabase/Catalog/User expressions with collation") {
+    // Supported collations
+    Seq("UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI").foreach(collationName =>
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collationName) {
+        val queryDatabase = sql("SELECT current_schema()")
+        val queryCatalog = sql("SELECT current_catalog()")
+        val queryUser = sql("SELECT current_user()")
+        // Data type
+        val dataType = StringType(collationName)
+        assert(queryDatabase.schema.fields.head.dataType.sameType(dataType))
+        assert(queryCatalog.schema.fields.head.dataType.sameType(dataType))
+        assert(queryUser.schema.fields.head.dataType.sameType(dataType))
+      }
+    )
+  }
+
   test("Support Uuid misc expression with collation") {
     // Supported collations
     Seq("UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI").foreach(collationName =>

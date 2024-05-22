@@ -16,7 +16,7 @@
 #
 
 # mypy: disable-error-code="override"
-
+from pyspark.sql.connect.proto import base_pb2 as spark_dot_connect_dot_base__pb2
 from pyspark.errors.exceptions.base import (
     SessionNotSameException,
     PySparkIndexError,
@@ -138,6 +138,41 @@ class DataFrame(ParentDataFrame):
         # by __repr__ and _repr_html_ while eager evaluation opens.
         self._support_repr_html = False
         self._cached_schema: Optional[StructType] = None
+        self._cached_remote_relation_id: Optional[str] = None
+
+    def __del__(self) -> None:
+        # If session is already closed, all cached DataFrame should be released.
+        if not self._session.client.is_closed and self._cached_remote_relation_id is not None:
+            try:
+                command = plan.RemoveRemoteCachedRelation(
+                    plan.CachedRemoteRelation(relationId=self._cached_remote_relation_id)
+                ).command(session=self._session.client)
+                req = self._session.client._execute_plan_request_with_metadata()
+                if self._session.client._user_id:
+                    req.user_context.user_id = self._session.client._user_id
+                req.plan.command.CopyFrom(command)
+
+                for attempt in self._session.client._retrying():
+                    with attempt:
+                        # !!HACK ALERT!!
+                        # unary_stream does not work on Python's exit for an unknown reasons
+                        # Therefore, here we open unary_unary channel instead.
+                        # See also :class:`SparkConnectServiceStub`.
+                        request_serializer = (
+                            spark_dot_connect_dot_base__pb2.ExecutePlanRequest.SerializeToString
+                        )
+                        response_deserializer = (
+                            spark_dot_connect_dot_base__pb2.ExecutePlanResponse.FromString
+                        )
+                        channel = self._session.client._channel.unary_unary(
+                            "/spark.connect.SparkConnectService/ExecutePlan",
+                            request_serializer=request_serializer,
+                            response_deserializer=response_deserializer,
+                        )
+                        metadata = self._session.client._builder.metadata()
+                        channel(req, metadata=metadata)  # type: ignore[arg-type]
+            except Exception as e:
+                warnings.warn(f"RemoveRemoteCachedRelation failed with exception: {e}.")
 
     def __reduce__(self) -> Tuple:
         """
@@ -2096,19 +2131,25 @@ class DataFrame(ParentDataFrame):
     def offset(self, n: int) -> ParentDataFrame:
         return DataFrame(plan.Offset(child=self._plan, offset=n), session=self._session)
 
+    def checkpoint(self, eager: bool = True) -> "DataFrame":
+        cmd = plan.Checkpoint(child=self._plan, local=True, eager=eager)
+        _, properties = self._session.client.execute_command(cmd.command(self._session.client))
+        assert "checkpoint_command_result" in properties
+        checkpointed = properties["checkpoint_command_result"]
+        assert isinstance(checkpointed._plan, plan.CachedRemoteRelation)
+        checkpointed._cached_remote_relation_id = checkpointed._plan._relationId
+        return checkpointed
+
+    def localCheckpoint(self, eager: bool = True) -> "DataFrame":
+        cmd = plan.Checkpoint(child=self._plan, local=True, eager=eager)
+        _, properties = self._session.client.execute_command(cmd.command(self._session.client))
+        assert "checkpoint_command_result" in properties
+        checkpointed = properties["checkpoint_command_result"]
+        assert isinstance(checkpointed._plan, plan.CachedRemoteRelation)
+        checkpointed._cached_remote_relation_id = checkpointed._plan._relationId
+        return checkpointed
+
     if not is_remote_only():
-
-        def checkpoint(self, eager: bool = True) -> "DataFrame":
-            raise PySparkNotImplementedError(
-                error_class="NOT_IMPLEMENTED",
-                message_parameters={"feature": "checkpoint()"},
-            )
-
-        def localCheckpoint(self, eager: bool = True) -> "DataFrame":
-            raise PySparkNotImplementedError(
-                error_class="NOT_IMPLEMENTED",
-                message_parameters={"feature": "localCheckpoint()"},
-            )
 
         def toJSON(self, use_unicode: bool = True) -> "RDD[str]":
             raise PySparkNotImplementedError(
@@ -2203,8 +2244,6 @@ def _test() -> None:
     if not is_remote_only():
         del pyspark.sql.dataframe.DataFrame.toJSON.__doc__
         del pyspark.sql.dataframe.DataFrame.rdd.__doc__
-        del pyspark.sql.dataframe.DataFrame.checkpoint.__doc__
-        del pyspark.sql.dataframe.DataFrame.localCheckpoint.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.dataframe tests")

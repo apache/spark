@@ -26,6 +26,7 @@ import java.util.Properties
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{Column, DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
@@ -72,7 +73,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
       + "'((100.3, 40.2), (20.198, 83.1), (500.821, 311.38))', '<500, 200, 100>', '16/B374D848', "
       + "'ab', 'efg', '2021-02-02', '1 minute', '00:11:22:33:44:55', "
       + "'00:11:22:33:44:55:66:77', 12.3456, '10:20:10,14,15', 1E+37, "
-      + "'17:22:31', '2016-08-12 10:22:31.949271', 'cat:AB & dog:CD', "
+      + "'17:22:31.123', '2016-08-12 10:22:31.949271', 'cat:AB & dog:CD', "
       + "'dog and cat and fox', '10:20:10,14,15', '<key>id</key><value>10</value>')"
     ).executeUpdate()
     conn.prepareStatement("INSERT INTO bar VALUES (null, null, null, null, null, "
@@ -281,7 +282,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(rows(0).getDecimal(33) == new JBigDecimal("12.3456"))
     assert(rows(0).getString(34) == "10:20:10,14,15")
     assert(rows(0).getFloat(35) == 1E+37F)
-    assert(rows(0).getTimestamp(36) == Timestamp.valueOf("1970-01-01 17:22:31.0"))
+    assert(rows(0).getTimestamp(36) == Timestamp.valueOf("1970-01-01 17:22:31.123"))
     assert(rows(0).getTimestamp(37) == Timestamp.valueOf("2016-08-12 10:22:31.949271"))
     assert(rows(0).getString(38) == "'cat':AB & 'dog':CD")
     assert(rows(0).getString(39) == "'and' 'cat' 'dog' 'fox'")
@@ -315,11 +316,13 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
 
   test("SPARK-47390: Convert TIMESTAMP/TIME WITH TIME ZONE regardless of preferTimestampNTZ") {
     Seq(true, false).foreach { prefer =>
-      val rows = sqlContext.read
+      val df = sqlContext.read
         .option("preferTimestampNTZ", prefer)
         .jdbc(jdbcUrl, "ts_with_timezone", new Properties)
-        .collect()
-      rows.head.toSeq.tail.foreach(c => assert(c.isInstanceOf[java.sql.Timestamp]))
+      checkAnswer(df, Row(
+        1,
+        DateTimeUtils.toJavaTimestamp(1471022551949271L),
+        DateTimeUtils.toJavaTimestamp(62551949000L)))
     }
   }
 

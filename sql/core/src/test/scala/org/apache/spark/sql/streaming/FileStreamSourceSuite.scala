@@ -2448,6 +2448,51 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     }
   }
 
+  test("SPARK-48314: Don't cache unread files when using Trigger.AvailableNow") {
+    withCountListingLocalFileSystemAsLocalFileSystem {
+      withThreeTempDirs { case (src, meta, tmp) =>
+        val options = Map("latestFirst" -> "false", "maxFilesPerTrigger" -> "5",
+          "maxCachedFiles" -> "2")
+        val scheme = CountListingLocalFileSystem.scheme
+        val source = new FileStreamSource(spark, s"$scheme:///${src.getCanonicalPath}/*/*", "text",
+          StructType(Nil), Seq.empty, meta.getCanonicalPath, options)
+        val _metadataLog = PrivateMethod[FileStreamSourceLog](Symbol("metadataLog"))
+        val metadataLog = source invokePrivate _metadataLog()
+
+        // provide 20 files in src, with sequential "last modified" to guarantee ordering
+        (0 to 19).map { idx =>
+            val f = createFile(idx.toString, new File(src, idx.toString), tmp)
+          f.setLastModified(idx * 10000)
+          f
+        }
+
+        source.prepareForTriggerAvailableNow()
+        CountListingLocalFileSystem.resetCount()
+
+        var offset = source.latestOffset(FileStreamSourceOffset(-1L), ReadLimit.maxFiles(5))
+          .asInstanceOf[FileStreamSourceOffset]
+        var files = metadataLog.get(offset.logOffset).getOrElse(Array.empty[FileEntry])
+
+        // All files are already tracked in allFilesForTriggerAvailableNow
+        assert(0 === CountListingLocalFileSystem.pathToNumListStatusCalled
+          .get(src.getCanonicalPath).map(_.get()).getOrElse(0))
+        // Should be 5 files in the batch based on maxFiles limit
+        assert(files.length == 5)
+
+        // Reading again leverages the files already tracked in allFilesForTriggerAvailableNow,
+        // so no more listings need to happen
+        offset = source.latestOffset(FileStreamSourceOffset(-1L), ReadLimit.maxFiles(5))
+          .asInstanceOf[FileStreamSourceOffset]
+        files = metadataLog.get(offset.logOffset).getOrElse(Array.empty[FileEntry])
+
+        assert(0 === CountListingLocalFileSystem.pathToNumListStatusCalled
+          .get(src.getCanonicalPath).map(_.get()).getOrElse(0))
+        // Should be 5 files in the batch since cached files are ignored
+        assert(files.length == 5)
+      }
+    }
+  }
+
   test("SPARK-31962: file stream source shouldn't allow modifiedBefore/modifiedAfter") {
     def formatTime(time: LocalDateTime): String = {
       time.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))

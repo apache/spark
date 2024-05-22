@@ -32,7 +32,7 @@ ERRORS=$(./build/mvn \
     -pl connector/connect/common \
     -pl connector/connect/server \
     -pl connector/connect/client/jvm \
-    2>&1 | grep -e "^Requires formatting" \
+    2>&1 | grep -e "Requires formatting" \
 )
 
 if test ! -z "$ERRORS"; then
