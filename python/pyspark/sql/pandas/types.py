@@ -365,6 +365,7 @@ def _check_arrow_array_timestamps_localize(
         return pa.ListArray.from_arrays(
             a.offsets,
             _check_arrow_array_timestamps_localize(a.values, at.elementType, truncate, timezone),
+            mask=a.is_null(),
         )
     if types.is_map(a.type):
         mt: MapType = cast(MapType, dt)
@@ -386,6 +387,7 @@ def _check_arrow_array_timestamps_localize(
                 for i in range(len(a.type))
             ],
             [a.type[i].name for i in range(len(a.type))],
+            mask=a.is_null(),
         )
     if types.is_dictionary(a.type):
         return pa.DictionaryArray.from_arrays(
