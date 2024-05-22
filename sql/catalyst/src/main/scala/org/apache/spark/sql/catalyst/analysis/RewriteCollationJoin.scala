@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, CollationKey, EqualNullSafe, EqualTo}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, CollationKey, Equality}
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.CollationFactory
@@ -27,21 +27,13 @@ object RewriteCollationJoin extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUpWithNewOutput {
     case j @ Join(_, _, _, Some(condition), _) =>
       val newCondition = condition transform {
-        case EqualTo(l: AttributeReference, r: AttributeReference) =>
+        case e @ Equality(l: AttributeReference, r: AttributeReference) =>
           (l.dataType, r.dataType) match {
             case (st: StringType, _: StringType)
               if !CollationFactory.fetchCollation(st.collationId).supportsBinaryEquality =>
-                EqualTo(CollationKey(l), CollationKey(r))
+                e.withNewChildren(Seq(CollationKey(l), CollationKey(r)))
             case _ =>
-              EqualTo(l, r)
-          }
-        case EqualNullSafe(l: AttributeReference, r: AttributeReference) =>
-          (l.dataType, r.dataType) match {
-            case (st: StringType, _: StringType)
-              if !CollationFactory.fetchCollation(st.collationId).supportsBinaryEquality =>
-                EqualNullSafe(CollationKey(l), CollationKey(r))
-            case _ =>
-              EqualNullSafe(l, r)
+              e
           }
       }
       if (!newCondition.fastEquals(condition)) {
