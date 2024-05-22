@@ -19,9 +19,7 @@ package org.apache.spark.sql.internal
 
 import java.lang.ref.{ReferenceQueue, WeakReference}
 import java.util.Collections
-import java.util.concurrent.{ConcurrentHashMap, ScheduledExecutorService, ScheduledThreadPoolExecutor, TimeUnit}
-
-import com.google.common.util.concurrent.ThreadFactoryBuilder
+import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
@@ -52,7 +50,7 @@ private class CleanupTaskWeakReference(
  * when the associated object goes out of scope of the application. Actual cleanup is performed in
  * a separate daemon thread.
  */
-private[spark] class ContextCleaner(session: SparkSession) extends Logging {
+private[spark] class SessionCleaner(session: SparkSession) extends Logging {
 
   /**
    * How often (seconds) to trigger a garbage collection in this JVM. This context cleaner
@@ -61,7 +59,6 @@ private[spark] class ContextCleaner(session: SparkSession) extends Logging {
    * this may happen very occasionally or not at all. Not cleaning at all may lead to executors
    * running out of disk space after a while.
    */
-  private val periodicGCInterval: Long = 30 * 60
   private val refQueuePollTimeout: Long = 100
 
   /**
@@ -75,10 +72,6 @@ private[spark] class ContextCleaner(session: SparkSession) extends Logging {
 
   private val cleaningThread = new Thread() { override def run(): Unit = keepCleaning() }
 
-  private val periodicGCService: ScheduledExecutorService =
-    ContextCleaner.newDaemonSingleThreadScheduledExecutor(
-      "spark-connect-context-cleaner-periodic-gc")
-
   @volatile private var started = false
   @volatile private var stopped = false
 
@@ -87,11 +80,6 @@ private[spark] class ContextCleaner(session: SparkSession) extends Logging {
     cleaningThread.setDaemon(true)
     cleaningThread.setName("Spark Connect Context Cleaner")
     cleaningThread.start()
-    periodicGCService.scheduleAtFixedRate(
-      () => System.gc(),
-      periodicGCInterval,
-      periodicGCInterval,
-      TimeUnit.SECONDS)
   }
 
   /**
@@ -106,7 +94,6 @@ private[spark] class ContextCleaner(session: SparkSession) extends Logging {
       cleaningThread.interrupt()
     }
     cleaningThread.join()
-    periodicGCService.shutdown()
   }
 
   /** Register a CachedRemoteRelation for cleanup when it is garbage collected. */
@@ -155,22 +142,5 @@ private[spark] class ContextCleaner(session: SparkSession) extends Logging {
           .setRelation(proto.CachedRemoteRelation.newBuilder().setRelationId(dfID).build())
       }
     }
-  }
-}
-
-private object ContextCleaner {
-
-  /**
-   * Wrapper over ScheduledThreadPoolExecutor the pool with daemon threads.
-   */
-  private def newDaemonSingleThreadScheduledExecutor(
-      threadName: String): ScheduledExecutorService = {
-    val threadFactory =
-      new ThreadFactoryBuilder().setDaemon(true).setNameFormat(threadName).build()
-    val executor = new ScheduledThreadPoolExecutor(1, threadFactory)
-    // By default, a cancelled task is not automatically removed from the work queue until its delay
-    // elapses. We have to enable it manually.
-    executor.setRemoveOnCancelPolicy(true)
-    executor
   }
 }

@@ -41,7 +41,7 @@ import org.apache.spark.sql.connect.client.{ClassFinder, CloseableIterator, Spar
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.functions.lit
-import org.apache.spark.sql.internal.{CatalogImpl, ContextCleaner, SqlApiConf}
+import org.apache.spark.sql.internal.{CatalogImpl, SessionCleaner, SqlApiConf}
 import org.apache.spark.sql.streaming.DataStreamReader
 import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.sql.types.StructType
@@ -76,7 +76,7 @@ class SparkSession private[sql] (
   private var shouldStopCleaner = false
   private[sql] lazy val cleaner = {
     shouldStopCleaner = true
-    new ContextCleaner(this)
+    new SessionCleaner(this)
   }
 
   // a unique session ID for this session from client.
