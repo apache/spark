@@ -264,6 +264,15 @@ private[sql] class RocksDBStateStoreProvider
       keyValueEncoderMap.remove(colFamilyName)
       result
     }
+
+    override def createColFamilyIfAbsent(colFamilyMetadata: ColumnFamilyMetadataV1): Unit = {
+      createColFamilyIfAbsent(
+          colFamilyMetadata.columnFamilyName,
+          colFamilyMetadata.keySchema,
+          colFamilyMetadata.valueSchema,
+          colFamilyMetadata.keyStateEncoderSpec,
+          colFamilyMetadata.multipleValuesPerKey)
+    }
   }
 
   override def init(

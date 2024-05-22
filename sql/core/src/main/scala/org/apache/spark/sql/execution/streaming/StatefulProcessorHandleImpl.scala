@@ -97,6 +97,9 @@ class StatefulProcessorHandleImpl(
   private[sql] val stateVariables: util.List[StateVariableInfo] =
     new util.ArrayList[StateVariableInfo]()
 
+  var columnFamilyMetadatas: mutable.ListBuffer[ColumnFamilyMetadataV1] =
+    mutable.ListBuffer.empty[ColumnFamilyMetadataV1]
+
   private val BATCH_QUERY_ID = "00000000-0000-0000-0000-000000000000"
 
   private def buildQueryInfo(): QueryInfo = {
@@ -135,6 +138,7 @@ class StatefulProcessorHandleImpl(
     stateVariables.add(new StateVariableInfo(stateName, ValueState, false))
     incrementMetric("numValueStateVars")
     val resultState = new ValueStateImpl[T](store, stateName, keyEncoder, valEncoder)
+    columnFamilyMetadatas.addOne(resultState.columnFamilyMetadataV1)
     resultState
   }
 
@@ -151,6 +155,7 @@ class StatefulProcessorHandleImpl(
       keyEncoder, valEncoder, ttlConfig, batchTimestampMs.get)
     incrementMetric("numValueStateWithTTLVars")
     ttlStates.add(valueStateWithTTL)
+    columnFamilyMetadatas.addOne(valueStateWithTTL.columnFamilyMetadataV1)
     valueStateWithTTL
   }
 
@@ -248,6 +253,7 @@ class StatefulProcessorHandleImpl(
     stateVariables.add(new StateVariableInfo(stateName, ListState, false))
     incrementMetric("numListStateVars")
     val resultState = new ListStateImpl[T](store, stateName, keyEncoder, valEncoder)
+    columnFamilyMetadatas.addOne(resultState.columnFamilyMetadataV1)
     resultState
   }
 
@@ -280,6 +286,7 @@ class StatefulProcessorHandleImpl(
       keyEncoder, valEncoder, ttlConfig, batchTimestampMs.get)
     incrementMetric("numListStateWithTTLVars")
     ttlStates.add(listStateWithTTL)
+    columnFamilyMetadatas.addOne(listStateWithTTL.columnFamilyMetadataV1)
 
     listStateWithTTL
   }
@@ -292,6 +299,7 @@ class StatefulProcessorHandleImpl(
     stateVariables.add(new StateVariableInfo(stateName, MapState, false))
     incrementMetric("numMapStateVars")
     val resultState = new MapStateImpl[K, V](store, stateName, keyEncoder, userKeyEnc, valEncoder)
+    columnFamilyMetadatas.addOne(resultState.columnFamilyMetadataV1)
     resultState
   }
 
@@ -309,6 +317,7 @@ class StatefulProcessorHandleImpl(
       valEncoder, ttlConfig, batchTimestampMs.get)
     incrementMetric("numMapStateWithTTLVars")
     ttlStates.add(mapStateWithTTL)
+    columnFamilyMetadatas.addOne(mapStateWithTTL.columnFamilyMetadataV1)
 
     mapStateWithTTL
   }

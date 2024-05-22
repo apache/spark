@@ -28,6 +28,9 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+import org.json4s.{JInt, JsonAST, JString}
+import org.json4s.JsonAST.JObject
+import org.json4s.JsonDSL._
 
 import org.apache.spark.{SparkContext, SparkEnv, SparkUnsupportedOperationException}
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
@@ -132,6 +135,10 @@ trait StateStore extends ReadStateStore {
       keyStateEncoderSpec: KeyStateEncoderSpec,
       useMultipleValuesPerKey: Boolean = false,
       isInternal: Boolean = false): Unit
+
+  def createColFamilyIfAbsent(
+      colFamilyMetadata: ColumnFamilyMetadataV1
+  )
 
   /**
    * Put a new non-null value for a non-null key. Implementations must be aware that the UnsafeRows
@@ -289,15 +296,27 @@ class InvalidUnsafeRowException(error: String)
     "among restart. For the first case, you can try to restart the application without " +
     s"checkpoint or use the legacy Spark version to process the streaming state.\n$error", null)
 
-sealed trait KeyStateEncoderSpec
+sealed trait KeyStateEncoderSpec {
+  def jsonValue: JsonAST.JObject
+}
 
-case class NoPrefixKeyStateEncoderSpec(keySchema: StructType) extends KeyStateEncoderSpec
+case class NoPrefixKeyStateEncoderSpec(keySchema: StructType) extends KeyStateEncoderSpec {
+  override def jsonValue: JsonAST.JObject = {
+    ("keyStateEncoderType" -> JString("NoPrefixKeyStateEncoderSpec")) ~
+      ("keySchema" -> keySchema.jsonValue)
+  }
+}
 
 case class PrefixKeyScanStateEncoderSpec(
     keySchema: StructType,
     numColsPrefixKey: Int) extends KeyStateEncoderSpec {
   if (numColsPrefixKey == 0 || numColsPrefixKey >= keySchema.length) {
     throw StateStoreErrors.incorrectNumOrderingColsForPrefixScan(numColsPrefixKey.toString)
+  }
+  override def jsonValue: JsonAST.JObject = {
+    ("keyStateEncoderType" -> JString("PrefixKeyScanStateEncoderSpec")) ~
+      ("keySchema" -> keySchema.jsonValue) ~
+      ("numColsPrefixKey" -> JInt(numColsPrefixKey))
   }
 }
 
@@ -307,6 +326,12 @@ case class RangeKeyScanStateEncoderSpec(
     orderingOrdinals: Seq[Int]) extends KeyStateEncoderSpec {
   if (orderingOrdinals.isEmpty || orderingOrdinals.length > keySchema.length) {
     throw StateStoreErrors.incorrectNumOrderingColsForRangeScan(orderingOrdinals.length.toString)
+  }
+
+  override def jsonValue: JObject = {
+    ("keyStateEncoderType" -> JString("RangeKeyScanStateEncoderSpec")) ~
+      ("keySchema" -> keySchema.jsonValue) ~
+      ("orderingOrdinals" -> orderingOrdinals.map(JInt(_)))
   }
 }
 

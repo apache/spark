@@ -245,6 +245,10 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
         colFamilyName: String): Unit = {
       throw StateStoreErrors.unsupportedOperationException("merge", providerName)
     }
+
+    override def createColFamilyIfAbsent(colFamilyMetadata: ColumnFamilyMetadataV1): Unit = {
+      throw StateStoreErrors.multipleColumnFamiliesNotSupported(providerName)
+    }
   }
 
   def getMetricsForProvider(): Map[String, Long] = synchronized {
