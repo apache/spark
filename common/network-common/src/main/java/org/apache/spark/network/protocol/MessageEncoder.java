@@ -25,8 +25,8 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToMessageEncoder;
 
 import org.apache.spark.internal.LogKeys;
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.MDC;
 
 /**
@@ -36,7 +36,7 @@ import org.apache.spark.internal.MDC;
 @ChannelHandler.Sharable
 public final class MessageEncoder extends MessageToMessageEncoder<Message> {
 
-  private static final Logger logger = LoggerFactory.getLogger(MessageEncoder.class);
+  private static final SparkLogger logger = SparkLoggerFactory.getLogger(MessageEncoder.class);
 
   public static final MessageEncoder INSTANCE = new MessageEncoder();
 

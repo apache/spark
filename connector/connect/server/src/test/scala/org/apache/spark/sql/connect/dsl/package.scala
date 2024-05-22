@@ -690,7 +690,7 @@ package object dsl {
 
       def as(alias: String): Relation = {
         Relation
-          .newBuilder(logicalPlan)
+          .newBuilder()
           .setSubqueryAlias(SubqueryAlias.newBuilder().setAlias(alias).setInput(logicalPlan))
           .build()
       }
@@ -720,9 +720,10 @@ package object dsl {
           .setNullOrdering(Expression.SortOrder.NullOrdering.SORT_NULLS_FIRST)
           .setDirection(Expression.SortOrder.SortDirection.SORT_DIRECTION_ASCENDING)
           .setChild(
-            Expression.newBuilder
+            Expression
+              .newBuilder()
               .setUnresolvedAttribute(
-                Expression.UnresolvedAttribute.newBuilder.setUnparsedIdentifier(col).build())
+                Expression.UnresolvedAttribute.newBuilder().setUnparsedIdentifier(col).build())
               .build())
           .build()
       }
@@ -1019,7 +1020,13 @@ package object dsl {
             WithColumnsRenamed
               .newBuilder()
               .setInput(logicalPlan)
-              .putAllRenameColumnsMap(renameColumnsMap.asJava))
+              .addAllRenames(renameColumnsMap.toSeq.map { case (k, v) =>
+                WithColumnsRenamed.Rename
+                  .newBuilder()
+                  .setColName(k)
+                  .setNewColName(v)
+                  .build()
+              }.asJava))
           .build()
       }
 

@@ -40,12 +40,16 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connect.client.{SparkConnectClient, SparkResult}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SqlApiConf
-import org.apache.spark.sql.test.{IntegrationTestUtils, RemoteSparkSession, SQLHelper}
+import org.apache.spark.sql.test.{ConnectFunSuite, IntegrationTestUtils, RemoteSparkSession, SQLHelper}
 import org.apache.spark.sql.test.SparkConnectServerUtils.port
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SparkThreadUtils
 
-class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateMethodTester {
+class ClientE2ETestSuite
+    extends ConnectFunSuite
+    with RemoteSparkSession
+    with SQLHelper
+    with PrivateMethodTester {
 
   test("throw SparkException with null filename in stack trace elements") {
     withSQLConf("spark.sql.connect.enrichError.enabled" -> "true") {

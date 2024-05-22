@@ -22,9 +22,10 @@ import java.sql.{Connection, Date, Timestamp}
 import java.util.Properties
 
 import org.apache.spark.sql.{Row, SaveMode}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BooleanType, ByteType, ShortType, StructType}
+import org.apache.spark.sql.types.{ByteType, ShortType, StructType}
 import org.apache.spark.tags.DockerTest
 
 /**
@@ -61,6 +62,20 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
       .executeUpdate()
     conn.prepareStatement("INSERT INTO strings VALUES ('the', 'quick', 'brown', BLOB('fox'),"
       + "'<cinfo cid=\"10\"><name>Kathy</name></cinfo>')").executeUpdate()
+
+    conn.prepareStatement("CREATE TABLE booleans (a BOOLEAN)").executeUpdate()
+    conn.prepareStatement("INSERT INTO booleans VALUES (true)").executeUpdate()
+    // VARGRAPHIC
+    conn.prepareStatement("CREATE TABLE graphics (a GRAPHIC(16), b VARGRAPHIC(16))")
+      .executeUpdate()
+    conn.prepareStatement("INSERT INTO graphics VALUES ('a', 'b')").executeUpdate()
+    // CHAR(n) FOR BIT DATA
+    conn.prepareStatement("CREATE TABLE binarys (" +
+      "a CHAR(10) FOR BIT DATA, b VARCHAR(10) FOR BIT DATA, c BINARY(10), d VARBINARY(10))")
+      .executeUpdate()
+    conn.prepareStatement("INSERT INTO binarys VALUES (" +
+        "'ABC', 'ABC', BINARY('ABC', 10), VARBINARY('ABC', 10))")
+      .executeUpdate()
   }
 
   test("Basic test") {
@@ -159,13 +174,12 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
     df3.write.jdbc(jdbcUrl, "stringscopy", new Properties)
     // spark types that does not have exact matching db2 table types.
     val df4 = sqlContext.createDataFrame(
-      sparkContext.parallelize(Seq(Row("1".toShort, "20".toByte, true))),
-      new StructType().add("c1", ShortType).add("b", ByteType).add("c3", BooleanType))
+      sparkContext.parallelize(Seq(Row("1".toShort, "20".toByte))),
+      new StructType().add("c1", ShortType).add("b", ByteType))
     df4.write.jdbc(jdbcUrl, "otherscopy", new Properties)
     val rows = sqlContext.read.jdbc(jdbcUrl, "otherscopy", new Properties).collect()
     assert(rows(0).getShort(0) == 1)
     assert(rows(0).getShort(1) == 20)
-    assert(rows(0).getString(2) == "1")
   }
 
   test("query JDBC option") {
@@ -232,5 +246,38 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
       .collect()
 
     assert(actual === expected)
+  }
+
+  test("SPARK-48269: boolean type") {
+    val df = sqlContext.read.jdbc(jdbcUrl, "booleans", new Properties)
+    checkAnswer(df, Row(true))
+    Seq(true, false).foreach { legacy =>
+      withSQLConf(SQLConf.LEGACY_DB2_BOOLEAN_MAPPING_ENABLED.key -> legacy.toString) {
+        val tbl = "booleanscopy" + legacy
+        df.write.jdbc(jdbcUrl, tbl, new Properties)
+        if (legacy) {
+          checkAnswer(sqlContext.read.jdbc(jdbcUrl, tbl, new Properties), Row("1"))
+        } else {
+          checkAnswer(sqlContext.read.jdbc(jdbcUrl, tbl, new Properties), Row(true))
+        }
+      }
+    }
+  }
+
+  test("SPARK-48269: GRAPHIC types") {
+    val df = sqlContext.read.jdbc(jdbcUrl, "graphics", new Properties)
+    checkAnswer(df, Row("a".padTo(16, ' '), "b"))
+    // the padding happens in the source not because of reading as char type
+    assert(!df.schema.exists {
+      _.metadata.contains(CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY) })
+  }
+
+  test("SPARK-48269: binary types") {
+    val df = sqlContext.read.jdbc(jdbcUrl, "binarys", new Properties)
+    checkAnswer(df, Row(
+      "ABC".padTo(10, ' ').getBytes,
+      "ABC".getBytes,
+      "ABC".getBytes ++ Array.fill(7)(0),
+      "ABC".getBytes))
   }
 }

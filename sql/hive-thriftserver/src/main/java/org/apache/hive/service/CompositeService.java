@@ -24,8 +24,8 @@ import java.util.List;
 
 import org.apache.hadoop.hive.conf.HiveConf;
 
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
 
@@ -35,7 +35,7 @@ import org.apache.spark.internal.MDC;
  */
 public class CompositeService extends AbstractService {
 
-  private static final Logger LOG = LoggerFactory.getLogger(CompositeService.class);
+  private static final SparkLogger LOG = SparkLoggerFactory.getLogger(CompositeService.class);
 
   private final List<Service> serviceList = new ArrayList<Service>();
 

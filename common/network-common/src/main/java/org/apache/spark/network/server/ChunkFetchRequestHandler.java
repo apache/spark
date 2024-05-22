@@ -27,8 +27,8 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 
 import org.apache.spark.internal.LogKeys;
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.MDC;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.TransportClient;
@@ -51,7 +51,8 @@ import static org.apache.spark.network.util.NettyUtils.*;
  * registering executors, or waiting for response for an OpenBlocks messages.
  */
 public class ChunkFetchRequestHandler extends SimpleChannelInboundHandler<ChunkFetchRequest> {
-  private static final Logger logger = LoggerFactory.getLogger(ChunkFetchRequestHandler.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(ChunkFetchRequestHandler.class);
 
   private final TransportClient client;
   private final StreamManager streamManager;

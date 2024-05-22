@@ -22,7 +22,7 @@ import scala.util.control.NonFatal
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.LogKeys.{ERROR, POLICY, RETRY_COUNT, RETRY_WAIT_TIME}
+import org.apache.spark.internal.LogKeys.{ERROR, NUM_RETRY, POLICY, RETRY_WAIT_TIME}
 import org.apache.spark.internal.MDC
 
 private[sql] class GrpcRetryHandler(
@@ -190,7 +190,7 @@ private[sql] object GrpcRetryHandler extends Logging {
         // retry exception is considered immediately retriable without any policies.
         logWarning(
           log"Non-Fatal error during RPC execution: ${MDC(ERROR, lastException)}, " +
-            log"retrying (currentRetryNum=${MDC(RETRY_COUNT, currentRetryNum)})")
+            log"retrying (currentRetryNum=${MDC(NUM_RETRY, currentRetryNum)})")
         return
       }
 
@@ -201,7 +201,7 @@ private[sql] object GrpcRetryHandler extends Logging {
           logWarning(
             log"Non-Fatal error during RPC execution: ${MDC(ERROR, lastException)}, " +
               log"retrying (wait=${MDC(RETRY_WAIT_TIME, time.get.toMillis)} ms, " +
-              log"currentRetryNum=${MDC(RETRY_COUNT, currentRetryNum)}, " +
+              log"currentRetryNum=${MDC(NUM_RETRY, currentRetryNum)}, " +
               log"policy=${MDC(POLICY, policy.getName)}).")
           sleep(time.get.toMillis)
           return
@@ -210,7 +210,7 @@ private[sql] object GrpcRetryHandler extends Logging {
 
       logWarning(
         log"Non-Fatal error during RPC execution: ${MDC(ERROR, lastException)}, " +
-          log"exceeded retries (currentRetryNum=${MDC(RETRY_COUNT, currentRetryNum)})")
+          log"exceeded retries (currentRetryNum=${MDC(NUM_RETRY, currentRetryNum)})")
 
       val error = new RetriesExceeded()
       exceptionList.foreach(error.addSuppressed)
