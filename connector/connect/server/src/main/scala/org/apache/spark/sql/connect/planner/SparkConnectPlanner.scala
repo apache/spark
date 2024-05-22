@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connect.planner
 
+import java.util.UUID
+
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.Try
@@ -33,13 +35,13 @@ import org.apache.spark.{Partition, SparkEnv, TaskContext}
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.{CreateResourceProfileCommand, ExecutePlanResponse, SqlCommand, StreamingForeachFunction, StreamingQueryCommand, StreamingQueryCommandResult, StreamingQueryInstanceId, StreamingQueryManagerCommand, StreamingQueryManagerCommandResult, WriteStreamOperationStart, WriteStreamOperationStartResult}
+import org.apache.spark.connect.proto.{CheckpointCommand, CreateResourceProfileCommand, ExecutePlanResponse, SqlCommand, StreamingForeachFunction, StreamingQueryCommand, StreamingQueryCommandResult, StreamingQueryInstanceId, StreamingQueryManagerCommand, StreamingQueryManagerCommandResult, WriteStreamOperationStart, WriteStreamOperationStartResult}
 import org.apache.spark.connect.proto.ExecutePlanResponse.SqlCommandResult
 import org.apache.spark.connect.proto.Parse.ParseFormat
 import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.StreamingQueryInstance
 import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.SESSION_ID
+import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
 import org.apache.spark.ml.{functions => MLFunctions}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
 import org.apache.spark.sql.{Column, Dataset, Encoders, ForeachWriter, Observation, RelationalGroupedDataset, SparkSession}
@@ -1828,6 +1830,11 @@ class SparkConnectPlanner(
         val unit = extractString(children(0), "unit")
         Some(TimestampDiff(unit, children(1), children(2)))
 
+      case "timestampadd" if fun.getArgumentsCount == 3 =>
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
+        val unit = extractString(children(0), "unit")
+        Some(TimestampAdd(unit, children(1), children(2)))
+
       case "window" if Seq(2, 3, 4).contains(fun.getArgumentsCount) =>
         val children = fun.getArgumentsList.asScala.map(transformExpression)
         val timeCol = children.head
@@ -2581,6 +2588,10 @@ class SparkConnectPlanner(
         handleCreateResourceProfileCommand(
           command.getCreateResourceProfileCommand,
           responseObserver)
+      case proto.Command.CommandTypeCase.CHECKPOINT_COMMAND =>
+        handleCheckpointCommand(command.getCheckpointCommand, responseObserver)
+      case proto.Command.CommandTypeCase.REMOVE_CACHED_REMOTE_RELATION_COMMAND =>
+        handleRemoveCachedRemoteRelationCommand(command.getRemoveCachedRemoteRelationCommand)
 
       case _ => throw new UnsupportedOperationException(s"$command not supported.")
     }
@@ -3505,6 +3516,47 @@ class SparkConnectPlanner(
             .setProfileId(profile.id)
             .build())
         .build())
+  }
+
+  private def handleCheckpointCommand(
+      checkpointCommand: CheckpointCommand,
+      responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
+    val target = Dataset
+      .ofRows(session, transformRelation(checkpointCommand.getRelation))
+    val checkpointed = if (checkpointCommand.hasLocal && checkpointCommand.hasEager) {
+      target.localCheckpoint(eager = checkpointCommand.getEager)
+    } else if (checkpointCommand.hasLocal) {
+      target.localCheckpoint()
+    } else if (checkpointCommand.hasEager) {
+      target.checkpoint(eager = checkpointCommand.getEager)
+    } else {
+      target.checkpoint()
+    }
+
+    val dfId = UUID.randomUUID().toString
+    logInfo(log"Caching DataFrame with id ${MDC(DATAFRAME_ID, dfId)}")
+    sessionHolder.cacheDataFrameById(dfId, checkpointed)
+
+    executeHolder.eventsManager.postFinished()
+    responseObserver.onNext(
+      proto.ExecutePlanResponse
+        .newBuilder()
+        .setSessionId(sessionId)
+        .setServerSideSessionId(sessionHolder.serverSessionId)
+        .setCheckpointCommandResult(
+          proto.CheckpointCommandResult
+            .newBuilder()
+            .setRelation(proto.CachedRemoteRelation.newBuilder().setRelationId(dfId).build())
+            .build())
+        .build())
+  }
+
+  private def handleRemoveCachedRemoteRelationCommand(
+      removeCachedRemoteRelationCommand: proto.RemoveCachedRemoteRelationCommand): Unit = {
+    val dfId = removeCachedRemoteRelationCommand.getRelation.getRelationId
+    logInfo(log"Removing DataFrame with id ${MDC(DATAFRAME_ID, dfId)} from the cache")
+    sessionHolder.removeCachedDataFrame(dfId)
+    executeHolder.eventsManager.postFinished()
   }
 
   private val emptyLocalRelation = LocalRelation(
