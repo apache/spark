@@ -4733,7 +4733,7 @@
       },
       "UNSUPPORTED_CORRELATED_EXPRESSION_IN_JOIN_CONDITION": {
         "message" : [
-          "Correlated subqueries in the join predicate that cannot reference both join inputs."
+          "Correlated subqueries in the join predicate cannot reference both join inputs."
         ]
       },
       "UNSUPPORTED_CORRELATED_REFERENCE_DATA_TYPE" : {
