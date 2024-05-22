@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.SIMPLE_DATE_FORMAT
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.types.StringTypeAnyCollation
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType.DAY
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -951,9 +952,9 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
 
   def this(left: Expression, right: Expression) = this(left, right, None)
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, StringType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, StringTypeAnyCollation)
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
