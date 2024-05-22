@@ -43,18 +43,14 @@ public abstract class SparkLoggerSuiteBase {
   }
 
   // Return the newly added log contents in the log file after executing the function `f`
-  private String captureLogOutput(Runnable func) {
-    try {
-      String content = "";
-      if (logFile().exists()) {
-        content = Files.readString(logFile().toPath());
-      }
-      func.run();
-      String newContent = Files.readString(logFile().toPath());
-      return newContent.substring(content.length());
-    } catch (IOException e) {
-      throw new RuntimeException(e);
+  private String captureLogOutput(Runnable func) throws IOException {
+    String content = "";
+    if (logFile().exists()) {
+      content = Files.readString(logFile().toPath());
     }
+    func.run();
+    String newContent = Files.readString(logFile().toPath());
+    return newContent.substring(content.length());
   }
 
   private String basicMsg() {
@@ -108,8 +104,12 @@ public abstract class SparkLoggerSuiteBase {
         Pair.of(Level.INFO, infoFn),
         Pair.of(Level.DEBUG, debugFn),
         Pair.of(Level.TRACE, traceFn)).forEach(pair -> {
-      Assertions.assertTrue(captureLogOutput(pair.getRight()).matches(
-        expectedPatternForBasicMsg(pair.getLeft())));
+      try {
+        Assertions.assertTrue(captureLogOutput(pair.getRight()).matches(
+          expectedPatternForBasicMsg(pair.getLeft())));
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
     });
   }
 
@@ -127,8 +127,12 @@ public abstract class SparkLoggerSuiteBase {
         Pair.of(Level.INFO, infoFn),
         Pair.of(Level.DEBUG, debugFn),
         Pair.of(Level.TRACE, traceFn)).forEach(pair -> {
-      Assertions.assertTrue(captureLogOutput(pair.getRight()).matches(
-        expectedPatternForBasicMsgWithException(pair.getLeft())));
+      try {
+        Assertions.assertTrue(captureLogOutput(pair.getRight()).matches(
+          expectedPatternForBasicMsgWithException(pair.getLeft())));
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
     });
   }
 
@@ -143,8 +147,12 @@ public abstract class SparkLoggerSuiteBase {
         Pair.of(Level.ERROR, errorFn),
         Pair.of(Level.WARN, warnFn),
         Pair.of(Level.INFO, infoFn)).forEach(pair -> {
-      Assertions.assertTrue(captureLogOutput(pair.getRight()).matches(
-        expectedPatternForMsgWithMDC(pair.getLeft())));
+      try {
+        Assertions.assertTrue(captureLogOutput(pair.getRight()).matches(
+          expectedPatternForMsgWithMDC(pair.getLeft())));
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
     });
   }
 
@@ -157,8 +165,12 @@ public abstract class SparkLoggerSuiteBase {
         Pair.of(Level.ERROR, errorFn),
         Pair.of(Level.WARN, warnFn),
         Pair.of(Level.INFO, infoFn)).forEach(pair -> {
-      Assertions.assertTrue(captureLogOutput(pair.getRight()).matches(
-        expectedPatternForMsgWithMDCs(pair.getLeft())));
+      try {
+        Assertions.assertTrue(captureLogOutput(pair.getRight()).matches(
+          expectedPatternForMsgWithMDCs(pair.getLeft())));
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
     });
   }
 
@@ -172,8 +184,12 @@ public abstract class SparkLoggerSuiteBase {
         Pair.of(Level.ERROR, errorFn),
         Pair.of(Level.WARN, warnFn),
         Pair.of(Level.INFO, infoFn)).forEach(pair -> {
-      Assertions.assertTrue(captureLogOutput(pair.getRight()).matches(
-        expectedPatternForMsgWithMDCsAndException(pair.getLeft())));
+      try {
+        Assertions.assertTrue(captureLogOutput(pair.getRight()).matches(
+          expectedPatternForMsgWithMDCsAndException(pair.getLeft())));
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
     });
   }
 
@@ -186,8 +202,12 @@ public abstract class SparkLoggerSuiteBase {
         Pair.of(Level.ERROR, errorFn),
         Pair.of(Level.WARN, warnFn),
         Pair.of(Level.INFO, infoFn)).forEach(pair -> {
-      Assertions.assertTrue(captureLogOutput(pair.getRight()).matches(
-        expectedPatternForMsgWithMDCValueIsNull(pair.getLeft())));
+      try {
+        Assertions.assertTrue(captureLogOutput(pair.getRight()).matches(
+          expectedPatternForMsgWithMDCValueIsNull(pair.getLeft())));
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
     });
   }
 
@@ -200,8 +220,12 @@ public abstract class SparkLoggerSuiteBase {
         Pair.of(Level.ERROR, errorFn),
         Pair.of(Level.WARN, warnFn),
         Pair.of(Level.INFO, infoFn)).forEach(pair -> {
-      Assertions.assertTrue(captureLogOutput(pair.getRight()).matches(
-        expectedPatternForExternalSystemCustomLogKey(pair.getLeft())));
+      try {
+        Assertions.assertTrue(captureLogOutput(pair.getRight()).matches(
+          expectedPatternForExternalSystemCustomLogKey(pair.getLeft())));
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
     });
   }
 }
