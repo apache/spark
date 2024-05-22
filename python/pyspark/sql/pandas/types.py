@@ -361,13 +361,26 @@ def _check_arrow_array_timestamps_localize(
         # Do not localize timestamps that will become Spark TimestampNTZType columns.
         return pc.assume_timezone(a, timezone)
     if types.is_list(a.type):
+        # Return the ListArray as-is if it contains no nested fields or timestamps
+        if not types.is_nested(a.type.value_type) and not types.is_timestamp(a.type.value_type):
+            return a
+
         at: ArrayType = cast(ArrayType, dt)
         return pa.ListArray.from_arrays(
             a.offsets,
             _check_arrow_array_timestamps_localize(a.values, at.elementType, truncate, timezone),
-            mask=a.is_null(),
+            mask=a.is_null() if a.null_count else None,
         )
     if types.is_map(a.type):
+        # Return the MapArray as-is if it contains no nested fields or timestamps
+        if (
+            not types.is_nested(a.type.key_type)
+            and not types.is_nested(a.type.item_type)
+            and not types.is_timestamp(a.type.key_type)
+            and not types.is_timestamp(a.type.item_type)
+        ):
+            return a
+
         mt: MapType = cast(MapType, dt)
         # TODO(SPARK-48302): Do not replace nulls in MapArray with empty lists
         return pa.MapArray.from_arrays(
@@ -376,6 +389,16 @@ def _check_arrow_array_timestamps_localize(
             _check_arrow_array_timestamps_localize(a.items, mt.valueType, truncate, timezone),
         )
     if types.is_struct(a.type):
+        # Return the StructArray as-is if it contains no nested fields or timestamps
+        if all(
+            [
+                not types.is_nested(a.type.field(i).type)
+                and not types.is_timestamp(a.type.field(i).type)
+                for i in range(a.type.num_fields)
+            ]
+        ):
+            return a
+
         st: StructType = cast(StructType, dt)
         assert len(a.type) == len(st.fields)
 
@@ -387,7 +410,7 @@ def _check_arrow_array_timestamps_localize(
                 for i in range(len(a.type))
             ],
             [a.type[i].name for i in range(len(a.type))],
-            mask=a.is_null(),
+            mask=a.is_null() if a.null_count else None,
         )
     if types.is_dictionary(a.type):
         return pa.DictionaryArray.from_arrays(
@@ -419,7 +442,12 @@ def _check_arrow_table_timestamps_localize(
     -------
     :class:`pyarrow.Table`
     """
+    import pyarrow.types as types
     import pyarrow as pa
+
+    # Return the table as-is if it contains no nested fields or timestamps
+    if all([not types.is_nested(at) and not types.is_timestamp(at) for at in table.schema.types]):
+        return table
 
     assert len(table.schema) == len(schema.fields)
 
