@@ -774,11 +774,14 @@ class ArrowTestsMixin:
             for e in range(len(expected[r])):
                 self.assertTrue(expected[r][e] == result[r][e])
 
-    def test_createDataFrame_arrow_with_array_type(self):
-        t = pa.table({"a": [[1, 2], [3, 4]], "b": [["x", "y"], ["y", "z"]]})
+    def test_createDataFrame_arrow_with_array_type_nulls(self):
+        t = pa.table({"a": [[1, 2], None, [3, 4]], "b": [["x", "y"], ["y", "z"], None]})
         df = self.spark.createDataFrame(t)
         result = df.collect()
-        expected = [tuple(list(e) for e in rec) for rec in t.to_pandas().to_records(index=False)]
+        expected = [
+            tuple(list(e) if e is not None else None for e in rec)
+            for rec in t.to_pandas().to_records(index=False)
+        ]
         for r in range(len(expected)):
             for e in range(len(expected[r])):
                 self.assertTrue(expected[r][e] == result[r][e])
@@ -800,14 +803,17 @@ class ArrowTestsMixin:
             for e in range(len(expected[r])):
                 self.assertTrue(expected[r][e] == result[r][e])
 
-    def test_toArrow_with_array_type(self):
-        expected = [([1, 2], ["x", "y"]), ([3, 4], ["y", "z"])]
+    def test_toArrow_with_array_type_nulls(self):
+        expected = [([1, 2], ["x", "y"]), (None, ["y", "z"]), ([3, 4], None)]
         array_schema = StructType(
             [StructField("a", ArrayType(IntegerType())), StructField("b", ArrayType(StringType()))]
         )
         df = self.spark.createDataFrame(expected, schema=array_schema)
         t = df.toArrow()
-        result = [tuple(list(e) for e in rec) for rec in t.to_pandas().to_records(index=False)]
+        result = [
+            tuple(None if e is None else list(e) for e in rec)
+            for rec in t.to_pandas().to_records(index=False)
+        ]
         for r in range(len(expected)):
             for e in range(len(expected[r])):
                 self.assertTrue(expected[r][e] == result[r][e])
@@ -838,6 +844,28 @@ class ArrowTestsMixin:
 
     def test_createDataFrame_arrow_with_map_type(self):
         map_data = [{"a": 1}, {"b": 2, "c": 3}, {}, {}, {"d": None}]
+
+        t = pa.table(
+            {"id": [0, 1, 2, 3, 4], "m": map_data},
+            schema=pa.schema([("id", pa.int64()), ("m", pa.map_(pa.string(), pa.int64()))]),
+        )
+        for schema in (
+            "id long, m map<string, long>",
+            StructType().add("id", LongType()).add("m", MapType(StringType(), LongType())),
+        ):
+            with self.subTest(schema=schema):
+                df = self.spark.createDataFrame(t, schema=schema)
+
+                result = df.collect()
+
+                for row in result:
+                    i, m = row
+                    m = {} if m is None else m
+                    self.assertEqual(m, map_data[i])
+
+    @unittest.skip("SPARK-48302: Nulls are replaced with empty lists")
+    def test_createDataFrame_arrow_with_map_type_nulls(self):
+        map_data = [{"a": 1}, {"b": 2, "c": 3}, {}, None, {"d": None}]
 
         t = pa.table(
             {"id": [0, 1, 2, 3, 4], "m": map_data},
@@ -888,14 +916,15 @@ class ArrowTestsMixin:
             with self.subTest(arrow_enabled=arrow_enabled):
                 self.check_createDataFrame_pandas_with_struct_type(arrow_enabled)
 
-    def test_createDataFrame_arrow_with_struct_type(self):
+    def test_createDataFrame_arrow_with_struct_type_nulls(self):
         t = pa.table(
             {
-                "a": [{"x": 1, "y": "a"}, {"x": 2, "y": "b"}],
-                "b": [{"s": 3, "t": "x"}, {"s": 4, "t": "y"}],
+                "a": [{"x": 1, "y": "a"}, None, {"x": None, "y": "b"}],
+                "b": [{"s": 3, "t": None}, {"s": 4, "t": "y"}, None],
             },
         )
         for schema in (
+            "a struct<x int, y string>, b struct<s int, t string>",
             StructType()
             .add("a", StructType().add("x", LongType()).add("y", StringType()))
             .add("b", StructType().add("s", LongType()).add("t", StringType())),
@@ -904,7 +933,13 @@ class ArrowTestsMixin:
                 df = self.spark.createDataFrame(t, schema)
                 result = df.collect()
                 expected = [
-                    (Row(**rec[0]), Row(**rec[1])) for rec in t.to_pandas().to_records(index=False)
+                    (
+                        Row(
+                            a=None if rec[0] is None else (Row(**rec[0])),
+                            b=None if rec[1] is None else Row(**rec[1]),
+                        )
+                    )
+                    for rec in t.to_pandas().to_records(index=False)
                 ]
                 for r in range(len(expected)):
                     for e in range(len(expected[r])):
@@ -995,8 +1030,10 @@ class ArrowTestsMixin:
 
     @unittest.skip("SPARK-48302: Nulls are replaced with empty lists")
     def test_toArrow_with_map_type_nulls(self, arrow_enabled):
+        map_data = [{"a": 1}, {"b": 2, "c": 3}, {}, None, {"d": None}]
+
         origin = pa.table(
-            {"id": [0, 1, 2, 3, 4], "m": [{"a": 1}, {"b": 2, "c": 3}, {}, None, {"d": None}]},
+            {"id": [0, 1, 2, 3, 4], "m": map_data},
             schema=pa.schema(
                 [pa.field("id", pa.int64()), pa.field("m", pa.map_(pa.string(), pa.int64()), True)]
             ),
@@ -1114,10 +1151,10 @@ class ArrowTestsMixin:
         self.assertIsInstance(arrow_first_category_element, str)
         self.assertIsInstance(spark_first_category_element, str)
 
-    def test_createDataFrame_with_dictionary_type(self):
+    def test_createDataFrame_with_dictionary_type_nulls(self):
         import pyarrow.compute as pc
 
-        t = pa.table({"A": ["a", "b", "c", "a"]})
+        t = pa.table({"A": ["a", "b", "c", None, "a"]})
         t = t.add_column(1, "B", pc.dictionary_encode(t["A"]))
         category_first_element = sorted(t["B"].combine_chunks().dictionary.to_pylist())[0]
 
