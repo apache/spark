@@ -3508,6 +3508,45 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-36680: Supports Dynamic Table Options for Spark SQL") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b')")
+
+      var df = sql(s"SELECT * FROM $t1")
+      var collected = df.queryExecution.optimizedPlan.collect {
+        case scan: DataSourceV2ScanRelation =>
+          assert(scan.relation.options.isEmpty)
+      }
+      assert (collected.size == 1)
+      checkAnswer(df, Seq(Row(1, "a"), Row(2, "b")))
+
+      df = sql(s"SELECT * FROM $t1 WITH OPTIONS (`split-size` = 5)")
+      collected = df.queryExecution.optimizedPlan.collect {
+        case scan: DataSourceV2ScanRelation =>
+          assert(scan.relation.options.get("split-size") == "5")
+      }
+      assert (collected.size == 1)
+      checkAnswer(df, Seq(Row(1, "a"), Row(2, "b")))
+    }
+
+    // negative tests
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
+
+      val noArgs = intercept[AnalysisException](
+        sql(s"SELECT * FROM $t1 WITH OPTIONS"))
+      assert(noArgs.message.contains(
+        "[PARSE_SYNTAX_ERROR] Syntax error at or near end of input."))
+
+      val noValues = intercept[AnalysisException](
+        sql(s"SELECT * FROM $t1 WITH OPTIONS (`split-size`)"))
+      assert(noValues.message.contains(
+        "Operation not allowed: Values must be specified for key(s): [split-size]"))
+    }
+  }
+
   private def testNotSupportedV2Command(
       sqlCommand: String,
       sqlParams: String,
