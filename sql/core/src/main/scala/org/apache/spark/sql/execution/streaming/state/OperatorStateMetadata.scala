@@ -25,6 +25,7 @@ import scala.reflect.ClassTag
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FSDataOutputStream, Path}
 import org.json4s.{Formats, NoTypeHints}
+import org.json4s.JsonAST.JValue
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.SparkContext
@@ -74,35 +75,35 @@ case class OperatorStateMetadataV1(
  * available on the driver at the time of planning, and will only be known from
  * the executor side.
  */
-class OperatorProperties(initValue: Map[String, String] = Map.empty)
-  extends AccumulatorV2[Map[String, String], Map[String, String]] {
+class OperatorProperties(initValue: Map[String, JValue] = Map.empty)
+  extends AccumulatorV2[Map[String, JValue], Map[String, JValue]] {
 
-  private var _value: Map[String, String] = initValue
+  private var _value: Map[String, JValue] = initValue
 
   override def isZero: Boolean = _value.isEmpty
 
-  override def copy(): AccumulatorV2[Map[String, String], Map[String, String]] = {
+  override def copy(): AccumulatorV2[Map[String, JValue], Map[String, JValue]] = {
     val newAcc = new OperatorProperties
     newAcc._value = _value
     newAcc
   }
 
-  override def reset(): Unit = _value = Map.empty[String, String]
+  override def reset(): Unit = _value = Map.empty[String, JValue]
 
-  override def add(v: Map[String, String]): Unit = _value ++= v
+  override def add(v: Map[String, JValue]): Unit = _value ++= v
 
-  override def merge(other: AccumulatorV2[Map[String, String], Map[String, String]]): Unit = {
+  override def merge(other: AccumulatorV2[Map[String, JValue], Map[String, JValue]]): Unit = {
     _value ++= other.value
   }
 
-  override def value: Map[String, String] = _value
+  override def value: Map[String, JValue] = _value
 }
 
 object OperatorProperties {
   def create(
       sc: SparkContext,
       name: String,
-      initValue: Map[String, String] = Map.empty): OperatorProperties = {
+      initValue: Map[String, JValue] = Map.empty): OperatorProperties = {
     val acc = new OperatorProperties(initValue)
     acc.register(sc, name = Some(name))
     acc
@@ -112,7 +113,7 @@ object OperatorProperties {
 case class OperatorStateMetadataV2(
     operatorInfo: OperatorInfoV1,
     stateStoreInfo: Array[StateStoreMetadataV1],
-    operatorProperties: Map[String, String]) extends OperatorStateMetadata {
+    operatorProperties: String) extends OperatorStateMetadata {
   override def version: Int = 2
 }
 

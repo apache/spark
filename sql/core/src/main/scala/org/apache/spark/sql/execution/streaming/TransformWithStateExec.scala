@@ -20,6 +20,11 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit.NANOSECONDS
 
 import org.apache.hadoop.fs.Path
+import org.json4s.{DefaultFormats, JArray, JString}
+import org.json4s.JsonAST.JValue
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods
+import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
@@ -82,11 +87,7 @@ case class TransformWithStateExec(
   val operatorProperties: OperatorProperties =
     OperatorProperties.create(
       sparkContext,
-      "colFamilyMetadata",
-      Map(
-        "timeMode" -> timeMode.toString,
-        "outputMode" -> outputMode.toString
-      )
+      "colFamilyMetadata"
     )
 
   /** Metadata of this stateful operator and its states stores. */
@@ -95,7 +96,13 @@ case class TransformWithStateExec(
     val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
     val stateStoreInfo =
       Array(StateStoreMetadataV1(StateStoreId.DEFAULT_STORE_NAME, 0, info.numPartitions))
-    OperatorStateMetadataV2(operatorInfo, stateStoreInfo, operatorProperties.value)
+
+    val operatorPropertiesJson: JValue = ("timeMode" -> JString(timeMode.toString)) ~
+      ("outputMode" -> JString(outputMode.toString)) ~
+      ("stateVariables" -> operatorProperties.value.get("stateVariables"))
+
+    val json = compact(render(operatorPropertiesJson))
+    OperatorStateMetadataV2(operatorInfo, stateStoreInfo, json)
   }
 
   override def operatorStateMetadataVersion: Int = 2
@@ -345,7 +352,7 @@ case class TransformWithStateExec(
         }
       }
       operatorProperties.add(Map
-        ("stateVariables" -> processorHandle.stateVariables.toString()))
+        ("stateVariables" -> JArray(processorHandle.stateVariables.map(_.jsonValue).toList)))
       setStoreMetrics(store)
       setOperatorMetrics()
       statefulProcessor.close()
@@ -600,6 +607,14 @@ object TransformWithStateExec {
       initialStateDataAttrs,
       initialStateDeserializer,
       initialState)
+  }
+
+  def deserializeOperatorProperties(json: String): Map[String, Any] = {
+    val parsedJson = JsonMethods.parse(json)
+
+    implicit val formats = DefaultFormats
+    val deserializedMap: Map[String, Any] = parsedJson.extract[Map[String, Any]]
+    deserializedMap
   }
 }
 // scalastyle:on argcount

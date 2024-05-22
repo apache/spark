@@ -21,6 +21,9 @@ import java.util.UUID
 
 import scala.collection.mutable
 
+import org.json4s.JsonAST.{JBool, JString, JValue}
+import org.json4s.JsonDSL._
+
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
@@ -82,6 +85,13 @@ class StateVariableInfo(
 ) {
   override def toString: String = {
     s"StateVariableInfo(stateName=$stateName, stateType=$stateType, isTtlEnabled=$isTtlEnabled)"
+  }
+
+  def jsonValue: JValue = {
+    ("stateName" -> JString(stateName)) ~
+      ("stateType" -> JString(stateType.toString)) ~
+      ("isTtlEnabled" -> JBool(isTtlEnabled))
+
   }
 }
 
