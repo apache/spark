@@ -414,6 +414,7 @@ Below is a list of all the keywords in Spark SQL.
 |ASC|non-reserved|non-reserved|non-reserved|
 |AT|non-reserved|non-reserved|reserved|
 |AUTHORIZATION|reserved|non-reserved|reserved|
+|BEGIN|non-reserved|non-reserved|non-reserved|
 |BETWEEN|non-reserved|non-reserved|reserved|
 |BIGINT|non-reserved|non-reserved|reserved|
 |BINARY|non-reserved|non-reserved|reserved|
