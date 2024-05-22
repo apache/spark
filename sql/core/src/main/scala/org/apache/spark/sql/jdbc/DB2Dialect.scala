@@ -18,7 +18,7 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.{SQLException, Types}
-import java.util.Locale
+import java.util.{Calendar, Locale}
 
 import scala.util.control.NonFatal
 
@@ -106,6 +106,8 @@ private case class DB2Dialect() extends JdbcDialect {
     case ShortType | ByteType => Some(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
     case _ => None
   }
+
+  override def getDatabaseCalendar: Option[Calendar] = None
 
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
 

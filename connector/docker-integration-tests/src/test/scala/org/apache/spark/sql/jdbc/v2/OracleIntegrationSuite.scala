@@ -69,7 +69,9 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
     "scan with aggregate push-down: REGR_INTERCEPT with DISTINCT",
     "scan with aggregate push-down: REGR_SLOPE with DISTINCT",
     "scan with aggregate push-down: REGR_R2 with DISTINCT",
-    "scan with aggregate push-down: REGR_SXY with DISTINCT")
+    "scan with aggregate push-down: REGR_SXY with DISTINCT",
+    "simple timestamps roundtrip",
+    "simple timestamps pushdown")
 
   override val catalogName: String = "oracle"
   override val namespaceOpt: Option[String] = Some("SYSTEM")
@@ -138,12 +140,12 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
         conn.prepareStatement(
           s"""
              |insert into $tableName VALUES
-             |(TO_TIMESTAMP('2022-03-03 02:00:00', 'YYYY-DD-MM HH:MI:SS'),
-             |TO_TIMESTAMP_TZ('2022-03-03 02:00:00 +0:00', 'YYYY-DD-MM HH:MI:SS TZH:TZM')),
-             |(TO_TIMESTAMP('2022-03-02 02:00:00', 'YYYY-DD-MM HH:MI:SS'),
-             |TO_TIMESTAMP_TZ('2022-03-02 02:00:00 +2:00', 'YYYY-DD-MM HH:MI:SS TZH:TZM')),
-             |(TO_TIMESTAMP('2022-03-01 02:00:00', 'YYYY-DD-MM HH:MI:SS'),
-             |TO_TIMESTAMP_TZ('2022-03-01 02:00:00 +3:00', 'YYYY-DD-MM HH:MI:SS TZH:TZM'))
+             |(TO_TIMESTAMP('2022-03-03 02:00:00', 'YYYY-MM-DD HH:MI:SS'),
+             |TO_TIMESTAMP_TZ('2022-03-03 02:00:00 +0:00', 'YYYY-MM-DD HH:MI:SS TZH:TZM')),
+             |(TO_TIMESTAMP('2022-03-02 02:00:00', 'YYYY-MM-DD HH:MI:SS'),
+             |TO_TIMESTAMP_TZ('2022-03-02 02:00:00 +2:00', 'YYYY-MM-DD HH:MI:SS TZH:TZM')),
+             |(TO_TIMESTAMP('2022-03-01 02:00:00', 'YYYY-MM-DD HH:MI:SS'),
+             |TO_TIMESTAMP_TZ('2022-03-01 02:00:00 +3:00', 'YYYY-MM-DD HH:MI:SS TZH:TZM'))
              |""".stripMargin).executeUpdate()
       }
     }

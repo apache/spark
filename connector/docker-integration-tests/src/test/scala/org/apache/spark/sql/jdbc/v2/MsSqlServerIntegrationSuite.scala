@@ -59,6 +59,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
     "scan with aggregate push-down: REGR_R2 without DISTINCT",
     "scan with aggregate push-down: REGR_SXY with DISTINCT",
     "scan with aggregate push-down: REGR_SXY without DISTINCT",
+    "simple timestamps roundtrip",
     "simple timestamps pushdown")
 
   override val catalogName: String = "mssql"
