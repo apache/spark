@@ -59,7 +59,7 @@ class StatsdSinkSuite extends SparkFunSuite {
 
   private def withSocketAndSinkTCP(
     testCode: (StatsdSink, Int => Seq[String]) => Any): Unit = {
-    val (socketListeningPort, getClientPackets) =
+    val (socketListeningPort, getClientPackets, closeFunc) =
       TestTcpServer.startTcpServer(socketTimeout, socketMinRecvBufferSize)
 
     val props = new Properties
@@ -78,7 +78,7 @@ class StatsdSinkSuite extends SparkFunSuite {
     try {
       testCode(sink, getReported)
     } finally {
-      // do nothing, we have closed the server socket in the connectionFuture.
+      closeFunc()
     }
   }
 
@@ -256,27 +256,28 @@ object TestTcpServer {
   implicit val executionContext: ExecutionContextExecutor = ExecutionContext.global
 
   def startTcpServer(socketTimeout: Int,
-    receiveBufferSize: Int): (String, () => Future[Seq[String]]) = {
+    receiveBufferSize: Int): (String, () => Future[Seq[String]], () => Unit) = {
     val serverSocket = new ServerSocket(0)
     serverSocket.setSoTimeout(socketTimeout)
     if (serverSocket.getReceiveBufferSize < receiveBufferSize) {
       serverSocket.setReceiveBufferSize(receiveBufferSize)
     }
+    var br: Option[BufferedReader] = None
     val connectionFuture = Future {
       val clientSocket = serverSocket.accept()
       val in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream))
-      try {
-        Iterator.continually(in.readLine()).takeWhile(_ != null).toSeq
-      } finally {
-        in.close()
-        serverSocket.close()
-      }
+      br = Some(in)
+      Iterator.continually(in.readLine()).takeWhile(_ != null).toSeq
     }
 
     val socketLocalPort = serverSocket.getLocalPort.toString
     val getClientPackets = () => connectionFuture
+    val closeFunc = () => {
+      br.foreach(_.close)
+      serverSocket.close()
+    }
 
-    (socketLocalPort, getClientPackets)
+    (socketLocalPort, getClientPackets, closeFunc)
   }
 }
 
