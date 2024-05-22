@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.types.StringType
 
 object RewriteCollationJoin extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformUpWithNewOutput {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case j @ Join(_, _, _, Some(condition), _) =>
       val newCondition = condition transform {
         case e @ Equality(l: AttributeReference, r: AttributeReference) =>
@@ -37,10 +37,9 @@ object RewriteCollationJoin extends Rule[LogicalPlan] {
           }
       }
       if (!newCondition.fastEquals(condition)) {
-        val newJoin = j.copy(condition = Some(newCondition))
-        (newJoin, j.output.zip(newJoin.output))
+        j.copy(condition = Some(newCondition))
       } else {
-        (j, j.output.zip(j.output))
+        j
       }
   }
 }
