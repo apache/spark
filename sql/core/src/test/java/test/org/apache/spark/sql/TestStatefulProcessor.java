@@ -21,6 +21,8 @@ import java.util.*;
 
 import scala.jdk.javaapi.CollectionConverters;
 
+import org.junit.jupiter.api.Assertions;
+
 import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.streaming.*;
 
@@ -74,7 +76,7 @@ public class TestStatefulProcessor extends StatefulProcessor<Integer, String, St
         } else {
           keyCountMap.updateValue(value, 1L);
         }
-        assert(keyCountMap.containsKey(value));
+        Assertions.assertTrue(keyCountMap.containsKey(value));
         keysList.appendValue(value);
         sb.append(value);
       }
@@ -82,13 +84,13 @@ public class TestStatefulProcessor extends StatefulProcessor<Integer, String, St
       scala.collection.Iterator<String> keys = keysList.get();
       while (keys.hasNext()) {
         String keyVal = keys.next();
-        assert(keyCountMap.containsKey(keyVal));
-        assert(keyCountMap.getValue(keyVal) > 0);
+        Assertions.assertTrue(keyCountMap.containsKey(keyVal));
+        Assertions.assertTrue(keyCountMap.getValue(keyVal) > 0);
       }
 
       count += numRows;
       countState.update(count);
-      assert (countState.get() == count);
+      Assertions.assertEquals(count, (long) countState.get());
 
       result.add(sb.toString());
     }

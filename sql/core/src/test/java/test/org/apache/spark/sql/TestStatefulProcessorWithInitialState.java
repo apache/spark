@@ -21,6 +21,8 @@ import java.util.*;
 
 import scala.jdk.javaapi.CollectionConverters;
 
+import org.junit.jupiter.api.Assertions;
+
 import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.streaming.*;
 
@@ -71,7 +73,7 @@ public class TestStatefulProcessorWithInitialState
       }
 
       testState.clear();
-      assert(testState.exists() == false);
+      Assertions.assertFalse(testState.exists());
 
       result.add(sb.toString());
     }
