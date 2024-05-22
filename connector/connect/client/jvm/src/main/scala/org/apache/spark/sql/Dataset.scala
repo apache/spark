@@ -43,7 +43,6 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkClassUtils
 
-// scalastyle:off no.finalize
 /**
  * A Dataset is a strongly typed collection of domain-specific objects that can be transformed in
  * parallel using functional or relational operations. Each Dataset also has an untyped view
@@ -3481,7 +3480,7 @@ class Dataset[T] private[sql] (
    *   false creates a local checkpoint using the caching subsystem
    */
   private def checkpoint(eager: Boolean, reliableCheckpoint: Boolean): Dataset[T] = {
-    val df = sparkSession.newDataset(agnosticEncoder) { builder =>
+    sparkSession.newDataset(agnosticEncoder) { builder =>
       val command = sparkSession.newCommand { builder =>
         builder.getCheckpointCommandBuilder
           .setLocal(reliableCheckpoint)
@@ -3493,15 +3492,17 @@ class Dataset[T] private[sql] (
         val response = responseIter
           .find(_.hasCheckpointCommandResult)
           .getOrElse(throw new RuntimeException("CheckpointCommandResult must be present"))
+
+        val cachedRemoteRelation = response.getCheckpointCommandResult.getRelation
+        sparkSession.cleaner.registerCachedRemoteRelationForCleanup(cachedRemoteRelation)
+
         // Update the builder with the values from the result.
-        builder.setCachedRemoteRelation(response.getCheckpointCommandResult.getRelation)
+        builder.setCachedRemoteRelation(cachedRemoteRelation)
       } finally {
         // consume the rest of the iterator
         responseIter.foreach(_ => ())
       }
     }
-    df.cachedRemoteRelationID = Some(df.plan.getRoot.getCachedRemoteRelation.getRelationId)
-    df
   }
 
   /**
@@ -3551,26 +3552,6 @@ class Dataset[T] private[sql] (
     try f(result)
     finally {
       result.close()
-    }
-  }
-
-  // Visible for testing
-  private[sql] var cachedRemoteRelationID: Option[String] = None
-
-  override def finalize(): Unit = {
-    if (!sparkSession.client.channel.isShutdown) {
-      cachedRemoteRelationID.foreach { dfId =>
-        try {
-          sparkSession.execute {
-            sparkSession.newCommand { builder =>
-              builder.getRemoveCachedRemoteRelationCommandBuilder
-                .setRelation(proto.CachedRemoteRelation.newBuilder().setRelationId(dfId).build())
-            }
-          }
-        } catch {
-          case e: Throwable => logWarning("RemoveRemoteCachedRelation failed.", e)
-        }
-      }
     }
   }
 

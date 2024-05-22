@@ -17,6 +17,7 @@
 package org.apache.spark.sql
 
 import java.io.{ByteArrayOutputStream, PrintStream}
+import java.lang.ref.WeakReference
 import java.nio.file.Files
 import java.time.DateTimeException
 import java.util.Properties
@@ -30,6 +31,8 @@ import org.apache.commons.io.FileUtils
 import org.apache.commons.io.output.TeeOutputStream
 import org.scalactic.TolerantNumerics
 import org.scalatest.PrivateMethodTester
+import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
+import org.scalatest.exceptions.TestFailedDueToTimeoutException
 
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkUpgradeException}
 import org.apache.spark.SparkBuildInfo.{spark_version => SPARK_VERSION}
@@ -1568,27 +1571,65 @@ class ClientE2ETestSuite
   test("checkpoint gc") {
     var df1 = spark.range(100).localCheckpoint(eager = true)
     val encoder = df1.agnosticEncoder
-    val dfId = df1.cachedRemoteRelationID.get
+    val dfId = df1.plan.getRoot.getCachedRemoteRelation.getRelationId
 
     // GC triggers remove the cached remote relation
     df1 = null
-    System.gc()
+    val ref = new WeakReference[Object](df1)
+    while (ref.get() != null) { Thread.sleep(1000L); System.gc() }
 
-    // Make sure the cleanup happens in the server side.
-    Thread.sleep(3000L)
-
-    val ex = intercept[SparkException] {
-      spark
-        .newDataset(encoder) { builder =>
-          builder.setCachedRemoteRelation(
-            proto.CachedRemoteRelation
-              .newBuilder()
-              .setRelationId(dfId)
-              .build())
-        }
-        .collect()
+    eventually(timeout(30.seconds), interval(500.millis)) {
+      val ex = intercept[SparkException] {
+        spark
+          .newDataset(encoder) { builder =>
+            builder.setCachedRemoteRelation(
+              proto.CachedRemoteRelation
+                .newBuilder()
+                .setRelationId(dfId)
+                .build())
+          }
+          .collect()
+      }
+      assert(ex.getMessage.contains(s"No DataFrame with id $dfId is found"))
     }
-    assert(ex.getMessage.contains(s"No DataFrame with id $dfId is found"))
+  }
+
+  test("checkpoint gc derived DataFrame") {
+    var df1 = spark.range(100).localCheckpoint(eager = true)
+    var derived = df1.repartition(10)
+    val encoder = df1.agnosticEncoder
+    val dfId = df1.plan.getRoot.getCachedRemoteRelation.getRelationId
+
+    df1 = null
+    val ref = new WeakReference[Object](df1)
+    while (ref.get() != null) { Thread.sleep(1000L); System.gc() }
+
+    def condition(): Unit = {
+      val ex = intercept[SparkException] {
+        spark
+          .newDataset(encoder) { builder =>
+            builder.setCachedRemoteRelation(
+              proto.CachedRemoteRelation
+                .newBuilder()
+                .setRelationId(dfId)
+                .build())
+          }
+          .collect()
+      }
+      assert(ex.getMessage.contains(s"No DataFrame with id $dfId is found"))
+    }
+
+    intercept[TestFailedDueToTimeoutException] {
+      eventually(timeout(5.seconds), interval(500.millis))(condition())
+    }
+
+    // GC triggers remove the cached remote relation
+    derived = null
+    val ref1 = new WeakReference[Object](df1)
+    while (ref1.get() != null) { Thread.sleep(1000L); System.gc() }
+
+    // Check the state was removed up on garbage-collection.
+    eventually(timeout(30.seconds), interval(500.millis))(condition())
   }
 }
 
