@@ -421,9 +421,6 @@ class SparkSession:
         samplingRatio: Optional[float] = None,
         verifySchema: Optional[bool] = None,
     ) -> "ParentDataFrame":
-        import pandas as pd
-        import pyarrow as pa
-
         assert data is not None
         if isinstance(data, DataFrame):
             raise PySparkTypeError(
