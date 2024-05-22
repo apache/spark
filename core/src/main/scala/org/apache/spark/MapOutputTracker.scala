@@ -44,7 +44,6 @@ import org.apache.spark.shuffle.MetadataFetchFailedException
 import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockId, ShuffleMergedBlockId}
 import org.apache.spark.util._
 import org.apache.spark.util.ArrayImplicits._
-import org.apache.spark.util.collection.OpenHashMap
 import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStream}
 
 /**
@@ -153,8 +152,10 @@ private class ShuffleStatus(
   /**
    * Mapping from a mapId to the mapIndex, this is required to reduce the searching overhead within
    * the function updateMapOutput(mapId, bmAddress).
+   *
+   * Exposed for testing.
    */
-  private[this] val mapIdToMapIndex = new OpenHashMap[Long, Int]()
+  private[spark] val mapIdToMapIndex = new HashMap[Long, Int]()
 
   /**
    * Register a map output. If there is already a registered location for the map output then it
@@ -164,6 +165,8 @@ private class ShuffleStatus(
     if (mapStatuses(mapIndex) == null) {
       _numAvailableMapOutputs += 1
       invalidateSerializedMapOutputStatusCache()
+    } else {
+      mapIdToMapIndex.remove(mapStatuses(mapIndex).mapId)
     }
     mapStatuses(mapIndex) = status
     mapIdToMapIndex(status.mapId) = mapIndex
@@ -224,7 +227,9 @@ private class ShuffleStatus(
     logDebug(s"Removing existing map output ${mapIndex} ${bmAddress}")
     if (mapStatuses(mapIndex) != null && mapStatuses(mapIndex).location == bmAddress) {
       _numAvailableMapOutputs -= 1
-      mapStatusesDeleted(mapIndex) = mapStatuses(mapIndex)
+      val currentMapStatus = mapStatuses(mapIndex)
+      mapIdToMapIndex.remove(currentMapStatus.mapId)
+      mapStatusesDeleted(mapIndex) = currentMapStatus
       mapStatuses(mapIndex) = null
       invalidateSerializedMapOutputStatusCache()
     }
@@ -292,7 +297,9 @@ private class ShuffleStatus(
     for (mapIndex <- mapStatuses.indices) {
       if (mapStatuses(mapIndex) != null && f(mapStatuses(mapIndex).location)) {
         _numAvailableMapOutputs -= 1
-        mapStatusesDeleted(mapIndex) = mapStatuses(mapIndex)
+        val currentMapStatus = mapStatuses(mapIndex)
+        mapIdToMapIndex.remove(currentMapStatus.mapId)
+        mapStatusesDeleted(mapIndex) = currentMapStatus
         mapStatuses(mapIndex) = null
         invalidateSerializedMapOutputStatusCache()
       }
