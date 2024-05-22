@@ -24,11 +24,6 @@ on:
     branches:
     - '**'
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  # only cancel in forked repositories
-  cancel-in-progress: ${{ github.repository_owner != 'apache' }}
-
 jobs:
   call-build-and-test:
     permissions:
