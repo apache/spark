@@ -110,6 +110,8 @@ object OperatorProperties {
   }
 }
 
+// operatorProperties is an arbitrary JSON formatted string that contains
+// any properties that we would want to store for a particular operator.
 case class OperatorStateMetadataV2(
     operatorInfo: OperatorInfoV1,
     stateStoreInfo: Array[StateStoreMetadataV1],
@@ -141,7 +143,7 @@ object OperatorStateMetadataV2 {
 
   @scala.annotation.nowarn
   private implicit val manifest = Manifest
-    .classType[OperatorStateMetadataV1](implicitly[ClassTag[OperatorStateMetadataV2]].runtimeClass)
+    .classType[OperatorStateMetadataV2](implicitly[ClassTag[OperatorStateMetadataV2]].runtimeClass)
 
   def deserialize(in: BufferedReader): OperatorStateMetadata = {
     Serialization.read[OperatorStateMetadataV2](in)
