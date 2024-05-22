@@ -45,7 +45,7 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from pyspark.util import is_remote_only
+from pyspark.util import is_remote_only, JVM_INT_MAX
 from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.utils import (
     has_numpy,
@@ -103,8 +103,6 @@ __all__ = [
     "VariantType",
     "VariantVal",
 ]
-
-_JVM_INT_MAX: int = (1 << 31) - 1
 
 
 class DataType:
@@ -756,7 +754,7 @@ class ArrayType(DataType):
         self,
         prefix: str,
         stringConcat: StringConcat,
-        maxDepth: int = _JVM_INT_MAX,
+        maxDepth: int = JVM_INT_MAX,
     ) -> None:
         if maxDepth > 0:
             stringConcat.append(
@@ -905,7 +903,7 @@ class MapType(DataType):
         self,
         prefix: str,
         stringConcat: StringConcat,
-        maxDepth: int = _JVM_INT_MAX,
+        maxDepth: int = JVM_INT_MAX,
     ) -> None:
         if maxDepth > 0:
             stringConcat.append(f"{prefix}-- key: {self.keyType.typeName()}\n")
@@ -1072,7 +1070,7 @@ class StructField(DataType):
         self,
         prefix: str,
         stringConcat: StringConcat,
-        maxDepth: int = _JVM_INT_MAX,
+        maxDepth: int = JVM_INT_MAX,
     ) -> None:
         if maxDepth > 0:
             stringConcat.append(
@@ -1507,16 +1505,16 @@ class StructType(DataType):
         self,
         prefix: str,
         stringConcat: StringConcat,
-        maxDepth: int = _JVM_INT_MAX,
+        maxDepth: int = JVM_INT_MAX,
     ) -> None:
         for field in self.fields:
             field._build_formatted_string(prefix, stringConcat, maxDepth)
 
-    def treeString(self, maxDepth: int = _JVM_INT_MAX) -> str:
+    def treeString(self, maxDepth: int = JVM_INT_MAX) -> str:
         stringConcat = StringConcat()
         stringConcat.append("root\n")
         prefix = " |"
-        depth = maxDepth if maxDepth > 0 else _JVM_INT_MAX
+        depth = maxDepth if maxDepth > 0 else JVM_INT_MAX
         for field in self.fields:
             field._build_formatted_string(prefix, stringConcat, depth)
         return stringConcat.toString()
