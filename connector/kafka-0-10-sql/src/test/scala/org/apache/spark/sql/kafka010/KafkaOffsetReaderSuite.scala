@@ -148,10 +148,16 @@ class KafkaOffsetReaderSuite extends QueryTest with SharedSparkSession with Kafk
     val startingOffsets = SpecificOffsetRangeLimit(Map(tp1 -> EARLIEST, tp2 -> EARLIEST))
     val endingOffsets = SpecificOffsetRangeLimit(Map(tp1 -> LATEST, tp2 -> 3))
 
-    val ec = intercept[KafkaIllegalStateException] {
+    val ex = intercept[KafkaIllegalStateException] {
       reader.getOffsetRangesFromUnresolvedOffsets(startingOffsets, endingOffsets)
-    }.getErrorClass
-    assert(ec == "KAFKA_START_OFFSET_DOES_NOT_MATCH_ASSIGNED")
+    }
+    checkError(
+      exception = ex,
+      errorClass = "KAFKA_START_OFFSET_DOES_NOT_MATCH_ASSIGNED",
+      parameters = Map(
+        "specifiedPartitions" -> "Set\\(.*,.*\\)",
+        "assignedPartitions" -> "Set\\(.*,.*,.*\\)"),
+      matchPVals = true)
   }
 
   testWithAllOffsetFetchingSQLConf("SPARK-30656: getOffsetRangesFromUnresolvedOffsets - " +

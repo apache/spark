@@ -27,7 +27,7 @@
     "message" : [
       "Partitions specified for Kafka start offsets don't match what are assigned. Maybe topic partitions are created ",
       "or deleted while the query is running. Use -1 for latest, -2 for earliest.",
-      "Specified: ${specifiedPartitions} Assigned: ${assignedPartitions}"
+      "Specified: <specifiedPartitions> Assigned: <assignedPartitions>"
     ]
   },
   "KAFKA_DATA_LOSS" : {
