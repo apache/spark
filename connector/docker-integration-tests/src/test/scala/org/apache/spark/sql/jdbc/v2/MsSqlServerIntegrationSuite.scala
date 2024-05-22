@@ -18,11 +18,13 @@
 package org.apache.spark.sql.jdbc.v2
 
 import java.sql.Connection
+import java.time.ZoneId
 
 import org.apache.spark.{SparkConf, SparkSQLFeatureNotSupportedException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.withDefaultTimeZone
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.MsSQLServerDatabaseOnDocker
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
@@ -148,38 +150,9 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
   }
 
   test("simple timestamps pushdown for MSSQL") {
-    withSQLConf(("spark.sql.session.timeZone", "America/Los_Angeles")) {
-      withTable(s"$catalogName.timestamps") {
-        val tableName = "timestamps"
-        prepareTimestampTable(tableName)
-
-        val filteredNTZDf = sql(
-          s"""SELECT timestampntz FROM $catalogName.${caseConvert(tableName)}
-             |WHERE timestampntz = '2022-03-03 02:00:00'""".stripMargin)
-
-        val outputAfterFilterNTZ = filteredNTZDf.showString(20, 20)
-        assert(outputAfterFilterNTZ.contains("2022-03-03 02:00:00"))
-        assert(filteredNTZDf.collect().length == 1)
-      }
-    }
-
-    withSQLConf(("spark.sql.session.timeZone", "GMT")) {
-      withTable(s"$catalogName.timestamps") {
-        val tableName = "timestamps"
-        prepareTimestampTable(tableName)
-
-        val filteredNTZDf = sql(
-          s"""SELECT timestampntz FROM $catalogName.${caseConvert(tableName)}
-             |WHERE timestampntz = '2022-03-03 02:00:00'""".stripMargin)
-
-        val outputAfterFilterNTZ = filteredNTZDf.showString(20, 20)
-        assert(outputAfterFilterNTZ.contains("2022-03-03 02:00:00"))
-        assert(filteredNTZDf.collect().length == 1)
-      }
-    }
-
-    withDefaultTimeZone(ZoneId.of("GMT-2")) {
-      withSQLConf(("spark.sql.session.timeZone", "America/Los_Angeles")) {
+    for (java8APIenabled <- Seq("false", "true")) {
+      withSQLConf(("spark.sql.session.timeZone", "America/Los_Angeles"),
+        (SQLConf.DATETIME_JAVA8API_ENABLED.key, java8APIenabled)) {
         withTable(s"$catalogName.timestamps") {
           val tableName = "timestamps"
           prepareTimestampTable(tableName)
@@ -191,6 +164,40 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
           val outputAfterFilterNTZ = filteredNTZDf.showString(20, 20)
           assert(outputAfterFilterNTZ.contains("2022-03-03 02:00:00"))
           assert(filteredNTZDf.collect().length == 1)
+        }
+      }
+
+      withSQLConf(("spark.sql.session.timeZone", "GMT"),
+        (SQLConf.DATETIME_JAVA8API_ENABLED.key, java8APIenabled)) {
+        withTable(s"$catalogName.timestamps") {
+          val tableName = "timestamps"
+          prepareTimestampTable(tableName)
+
+          val filteredNTZDf = sql(
+            s"""SELECT timestampntz FROM $catalogName.${caseConvert(tableName)}
+               |WHERE timestampntz = '2022-03-03 02:00:00'""".stripMargin)
+
+          val outputAfterFilterNTZ = filteredNTZDf.showString(20, 20)
+          assert(outputAfterFilterNTZ.contains("2022-03-03 02:00:00"))
+          assert(filteredNTZDf.collect().length == 1)
+        }
+      }
+
+      withDefaultTimeZone(ZoneId.of("GMT-2")) {
+        withSQLConf(("spark.sql.session.timeZone", "America/Los_Angeles"),
+          (SQLConf.DATETIME_JAVA8API_ENABLED.key, java8APIenabled)) {
+          withTable(s"$catalogName.timestamps") {
+            val tableName = "timestamps"
+            prepareTimestampTable(tableName)
+
+            val filteredNTZDf = sql(
+              s"""SELECT timestampntz FROM $catalogName.${caseConvert(tableName)}
+                 |WHERE timestampntz = '2022-03-03 02:00:00'""".stripMargin)
+
+            val outputAfterFilterNTZ = filteredNTZDf.showString(20, 20)
+            assert(outputAfterFilterNTZ.contains("2022-03-03 02:00:00"))
+            assert(filteredNTZDf.collect().length == 1)
+          }
         }
       }
     }

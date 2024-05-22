@@ -33,6 +33,7 @@ import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.NullOrdering
 import org.apache.spark.sql.connector.expressions.aggregate.GeneralAggregateFunc
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.DockerIntegrationFunSuite
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -754,70 +755,9 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
   }
 
   test("simple timestamps roundtrip") {
-    withSQLConf(("spark.sql.session.timeZone", "America/Los_Angeles")) {
-      withTable(s"$catalogName.timestamps", s"$catalogName.temptimestamps") {
-        val tableName = "timestamps"
-        val tempTableName = "temptimestamps"
-
-        prepareTimestampTable(tableName)
-
-        val dfBeforeInsert = sql(s"SELECT * FROM $catalogName.${caseConvert(tableName)}")
-        val outputBeforeInsert = dfBeforeInsert.showString(20, 20)
-
-        assert(outputBeforeInsert.contains("2022-03-03 02:00:00|2022-03-02 18:00:00"))
-        assert(outputBeforeInsert.contains("2022-03-02 02:00:00|2022-03-01 16:00:00"))
-        assert(outputBeforeInsert.contains("2022-03-01 02:00:00|2022-02-28 15:00:00"))
-        assert(dfBeforeInsert.collect().length == 3)
-
-        prepareTimestampTable(tempTableName, false)
-
-        sql(
-          s"""INSERT INTO $catalogName.${caseConvert(tempTableName)}
-             |SELECT * FROM $catalogName.${caseConvert(tableName)}""".stripMargin)
-
-        val dfAfterInsert = sql(s"SELECT * FROM $catalogName.${caseConvert(tempTableName)}")
-        val outputAfterInsert = dfAfterInsert.showString(20, 20)
-
-        assert(outputAfterInsert.contains("2022-03-03 02:00:00|2022-03-02 18:00:00"))
-        assert(outputAfterInsert.contains("2022-03-02 02:00:00|2022-03-01 16:00:00"))
-        assert(outputAfterInsert.contains("2022-03-01 02:00:00|2022-02-28 15:00:00"))
-        assert(dfAfterInsert.collect().length == 3)
-      }
-    }
-
-    withSQLConf(("spark.sql.session.timeZone", "GMT")) {
-      withTable(s"$catalogName.timestamps", s"$catalogName.temptimestamps") {
-        val tableName = "timestamps"
-        val tempTableName = "temptimestamps"
-
-        prepareTimestampTable(tableName)
-
-        val dfBeforeInsert = sql(s"SELECT * FROM $catalogName.${caseConvert(tableName)}")
-        val outputBeforeInsert = dfBeforeInsert.showString(20, 20)
-
-        assert(outputBeforeInsert.contains("2022-03-03 02:00:00|2022-03-03 02:00:00"))
-        assert(outputBeforeInsert.contains("2022-03-02 02:00:00|2022-03-02 00:00:00"))
-        assert(outputBeforeInsert.contains("2022-03-01 02:00:00|2022-02-28 23:00:00"))
-        assert(dfBeforeInsert.collect().length == 3)
-
-        prepareTimestampTable(tempTableName, false)
-
-        sql(
-          s"""INSERT INTO $catalogName.${caseConvert(tempTableName)}
-             | SELECT * FROM $catalogName.${caseConvert(tableName)}""".stripMargin)
-
-        val dfAfterInsert = sql(s"SELECT * FROM $catalogName.${caseConvert(tempTableName)}")
-        val outputAfterInsert = dfAfterInsert.showString(20, 20)
-
-        assert(outputAfterInsert.contains("2022-03-03 02:00:00|2022-03-03 02:00:00"))
-        assert(outputAfterInsert.contains("2022-03-02 02:00:00|2022-03-02 00:00:00"))
-        assert(outputAfterInsert.contains("2022-03-01 02:00:00|2022-02-28 23:00:00"))
-        assert(dfAfterInsert.collect().length == 3)
-      }
-    }
-
-    withDefaultTimeZone(ZoneId.of("GMT-2")) {
-      withSQLConf(("spark.sql.session.timeZone", "America/Los_Angeles")) {
+    for (java8APIenabled <- Seq("false", "true")) {
+      withSQLConf(("spark.sql.session.timeZone", "America/Los_Angeles"),
+        (SQLConf.DATETIME_JAVA8API_ENABLED.key, java8APIenabled)) {
         withTable(s"$catalogName.timestamps", s"$catalogName.temptimestamps") {
           val tableName = "timestamps"
           val tempTableName = "temptimestamps"
@@ -836,7 +776,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
           sql(
             s"""INSERT INTO $catalogName.${caseConvert(tempTableName)}
-               | SELECT * FROM $catalogName.${caseConvert(tableName)}""".stripMargin)
+               |SELECT * FROM $catalogName.${caseConvert(tableName)}""".stripMargin)
 
           val dfAfterInsert = sql(s"SELECT * FROM $catalogName.${caseConvert(tempTableName)}")
           val outputAfterInsert = dfAfterInsert.showString(20, 20)
@@ -847,58 +787,80 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
           assert(dfAfterInsert.collect().length == 3)
         }
       }
+
+      withSQLConf(("spark.sql.session.timeZone", "GMT"),
+        (SQLConf.DATETIME_JAVA8API_ENABLED.key, java8APIenabled)) {
+        withTable(s"$catalogName.timestamps", s"$catalogName.temptimestamps") {
+          val tableName = "timestamps"
+          val tempTableName = "temptimestamps"
+
+          prepareTimestampTable(tableName)
+
+          val dfBeforeInsert = sql(s"SELECT * FROM $catalogName.${caseConvert(tableName)}")
+          val outputBeforeInsert = dfBeforeInsert.showString(20, 20)
+
+          assert(outputBeforeInsert.contains("2022-03-03 02:00:00|2022-03-03 02:00:00"))
+          assert(outputBeforeInsert.contains("2022-03-02 02:00:00|2022-03-02 00:00:00"))
+          assert(outputBeforeInsert.contains("2022-03-01 02:00:00|2022-02-28 23:00:00"))
+          assert(dfBeforeInsert.collect().length == 3)
+
+          prepareTimestampTable(tempTableName, false)
+
+          sql(
+            s"""INSERT INTO $catalogName.${caseConvert(tempTableName)}
+               | SELECT * FROM $catalogName.${caseConvert(tableName)}""".stripMargin)
+
+          val dfAfterInsert = sql(s"SELECT * FROM $catalogName.${caseConvert(tempTableName)}")
+          val outputAfterInsert = dfAfterInsert.showString(20, 20)
+
+          assert(outputAfterInsert.contains("2022-03-03 02:00:00|2022-03-03 02:00:00"))
+          assert(outputAfterInsert.contains("2022-03-02 02:00:00|2022-03-02 00:00:00"))
+          assert(outputAfterInsert.contains("2022-03-01 02:00:00|2022-02-28 23:00:00"))
+          assert(dfAfterInsert.collect().length == 3)
+        }
+      }
+
+
+      withDefaultTimeZone(ZoneId.of("GMT-2")) {
+        withSQLConf(("spark.sql.session.timeZone", "America/Los_Angeles"),
+          (SQLConf.DATETIME_JAVA8API_ENABLED.key, java8APIenabled)) {
+          withTable(s"$catalogName.timestamps", s"$catalogName.temptimestamps") {
+            val tableName = "timestamps"
+            val tempTableName = "temptimestamps"
+
+            prepareTimestampTable(tableName)
+
+            val dfBeforeInsert = sql(s"SELECT * FROM $catalogName.${caseConvert(tableName)}")
+            val outputBeforeInsert = dfBeforeInsert.showString(20, 20)
+
+            assert(outputBeforeInsert.contains("2022-03-03 02:00:00|2022-03-02 18:00:00"))
+            assert(outputBeforeInsert.contains("2022-03-02 02:00:00|2022-03-01 16:00:00"))
+            assert(outputBeforeInsert.contains("2022-03-01 02:00:00|2022-02-28 15:00:00"))
+            assert(dfBeforeInsert.collect().length == 3)
+
+            prepareTimestampTable(tempTableName, false)
+
+            sql(
+              s"""INSERT INTO $catalogName.${caseConvert(tempTableName)}
+                 | SELECT * FROM $catalogName.${caseConvert(tableName)}""".stripMargin)
+
+            val dfAfterInsert = sql(s"SELECT * FROM $catalogName.${caseConvert(tempTableName)}")
+            val outputAfterInsert = dfAfterInsert.showString(20, 20)
+
+            assert(outputAfterInsert.contains("2022-03-03 02:00:00|2022-03-02 18:00:00"))
+            assert(outputAfterInsert.contains("2022-03-02 02:00:00|2022-03-01 16:00:00"))
+            assert(outputAfterInsert.contains("2022-03-01 02:00:00|2022-02-28 15:00:00"))
+            assert(dfAfterInsert.collect().length == 3)
+          }
+        }
+      }
     }
   }
 
   test("simple timestamps pushdown") {
-    withSQLConf(("spark.sql.session.timeZone", "America/Los_Angeles")) {
-      withTable(s"$catalogName.timestamps") {
-        val tableName = "timestamps"
-        prepareTimestampTable(tableName)
-
-        val filteredNTZDf = sql(
-          s"""SELECT * FROM $catalogName.${caseConvert(tableName)}
-             |WHERE timestampntz = '2022-03-03 02:00:00'""".stripMargin)
-
-        val outputAfterFilterNTZ = filteredNTZDf.showString(20, 20)
-        assert(outputAfterFilterNTZ.contains("2022-03-03 02:00:00|2022-03-02 18:00:00"))
-        assert(filteredNTZDf.collect().length == 1)
-
-        val filteredTZDf = sql(
-          s"""SELECT * FROM $catalogName.${caseConvert(tableName)}
-             |WHERE timestamptz = '2022-03-02 18:00:00'""".stripMargin)
-
-        val outputAfterFilterTZ = filteredNTZDf.showString(20, 20)
-        assert(outputAfterFilterTZ.contains("2022-03-03 02:00:00|2022-03-02 18:00:00"))
-        assert(filteredTZDf.collect().length == 1)
-      }
-    }
-
-    withSQLConf(("spark.sql.session.timeZone", "GMT")) {
-      withTable(s"$catalogName.timestamps") {
-        val tableName = "timestamps"
-        prepareTimestampTable(tableName)
-
-        val filteredNTZDf = sql(
-          s"""SELECT * FROM $catalogName.${caseConvert(tableName)}
-             |WHERE timestampntz = '2022-03-03 02:00:00'""".stripMargin)
-
-        val outputAfterFilterNTZ = filteredNTZDf.showString(20, 20)
-        assert(outputAfterFilterNTZ.contains("2022-03-03 02:00:00|2022-03-03 02:00:00"))
-        assert(filteredNTZDf.collect().length == 1)
-
-        val filteredTZDf = sql(
-          s"""SELECT * FROM $catalogName.${caseConvert(tableName)}
-             |WHERE timestamptz = '2022-03-03 02:00:00'""".stripMargin)
-
-        val outputAfterFilterTZ = filteredNTZDf.showString(20, 20)
-        assert(outputAfterFilterTZ.contains("2022-03-03 02:00:00|2022-03-03 02:00:00"))
-        assert(filteredTZDf.collect().length == 1)
-      }
-    }
-
-    withDefaultTimeZone(ZoneId.of("GMT-2")) {
-      withSQLConf(("spark.sql.session.timeZone", "America/Los_Angeles")) {
+    for (java8APIenabled <- Seq("false", "true")) {
+      withSQLConf(("spark.sql.session.timeZone", "America/Los_Angeles"),
+        (SQLConf.DATETIME_JAVA8API_ENABLED.key, java8APIenabled)) {
         withTable(s"$catalogName.timestamps") {
           val tableName = "timestamps"
           prepareTimestampTable(tableName)
@@ -918,6 +880,57 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
           val outputAfterFilterTZ = filteredNTZDf.showString(20, 20)
           assert(outputAfterFilterTZ.contains("2022-03-03 02:00:00|2022-03-02 18:00:00"))
           assert(filteredTZDf.collect().length == 1)
+        }
+      }
+
+      withSQLConf(("spark.sql.session.timeZone", "GMT"),
+        (SQLConf.DATETIME_JAVA8API_ENABLED.key, java8APIenabled)) {
+        withTable(s"$catalogName.timestamps") {
+          val tableName = "timestamps"
+          prepareTimestampTable(tableName)
+
+          val filteredNTZDf = sql(
+            s"""SELECT * FROM $catalogName.${caseConvert(tableName)}
+               |WHERE timestampntz = '2022-03-03 02:00:00'""".stripMargin)
+
+          val outputAfterFilterNTZ = filteredNTZDf.showString(20, 20)
+          assert(outputAfterFilterNTZ.contains("2022-03-03 02:00:00|2022-03-03 02:00:00"))
+          assert(filteredNTZDf.collect().length == 1)
+
+          val filteredTZDf = sql(
+            s"""SELECT * FROM $catalogName.${caseConvert(tableName)}
+               |WHERE timestamptz = '2022-03-03 02:00:00'""".stripMargin)
+
+          val outputAfterFilterTZ = filteredNTZDf.showString(20, 20)
+          assert(outputAfterFilterTZ.contains("2022-03-03 02:00:00|2022-03-03 02:00:00"))
+          assert(filteredTZDf.collect().length == 1)
+        }
+      }
+
+
+      withDefaultTimeZone(ZoneId.of("GMT-2")) {
+        withSQLConf(("spark.sql.session.timeZone", "America/Los_Angeles"),
+          (SQLConf.DATETIME_JAVA8API_ENABLED.key, java8APIenabled)) {
+          withTable(s"$catalogName.timestamps") {
+            val tableName = "timestamps"
+            prepareTimestampTable(tableName)
+
+            val filteredNTZDf = sql(
+              s"""SELECT * FROM $catalogName.${caseConvert(tableName)}
+                 |WHERE timestampntz = '2022-03-03 02:00:00'""".stripMargin)
+
+            val outputAfterFilterNTZ = filteredNTZDf.showString(20, 20)
+            assert(outputAfterFilterNTZ.contains("2022-03-03 02:00:00|2022-03-02 18:00:00"))
+            assert(filteredNTZDf.collect().length == 1)
+
+            val filteredTZDf = sql(
+              s"""SELECT * FROM $catalogName.${caseConvert(tableName)}
+                 |WHERE timestamptz = '2022-03-02 18:00:00'""".stripMargin)
+
+            val outputAfterFilterTZ = filteredNTZDf.showString(20, 20)
+            assert(outputAfterFilterTZ.contains("2022-03-03 02:00:00|2022-03-02 18:00:00"))
+            assert(filteredTZDf.collect().length == 1)
+          }
         }
       }
     }
