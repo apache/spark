@@ -125,7 +125,7 @@ jobs:
                 }
                 retryCount++;
                 if (retryCount < 3) {
-                  await new Promise(resolve => setTimeout(resolve, 10000));
+                  await new Promise(resolve => setTimeout(resolve, 3000));
                 }
               }
               if (!check_run_head) {
@@ -164,6 +164,5 @@ jobs:
                   })
                 },
                 details_url: actions_url,
-            
               })
             }
