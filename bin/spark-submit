@@ -24,4 +24,17 @@ fi
 # disable randomized hash for string in Python 3.3+
 export PYTHONHASHSEED=0
 
-exec "${SPARK_HOME}"/bin/spark-class org.apache.spark.deploy.SparkSubmit "$@"
+exec "${SPARK_HOME}"/bin/spark-class org.apache.spark.deploy.SparkSubmit \
+  --conf spark.kryo.unsafe=true \
+  --conf spark.memory.offHeap.size=5g \
+  --conf spark.plugins=org.pacman.chukonu.ChukonuPlugin \
+  --conf spark.chukonu.root=/app/chukonu \
+  --conf spark.chukonu.stagingdir=/tmp/staging \
+  --conf spark.chukonu.compileCacheDir=/tmp/cache \
+  --conf spark.chukonu.cxx=/usr/bin/g++ \
+  --conf spark.chukonu.enableNativeCodegen=true \
+  --conf spark.memory.offHeap.enabled=true \
+  --conf spark.serializer=org.apache.spark.serializer.KryoSerializer \
+  --conf spark.executor.processTreeMetrics.enabled=true \
+  --conf spark.jars=/app/chukonu/jar/chukonu_2.12-0.5.1.jar \
+  "$@"
