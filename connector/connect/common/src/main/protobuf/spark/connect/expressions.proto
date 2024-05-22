@@ -352,7 +352,7 @@ message CommonInlineUserDefinedFunction {
   // (Required) Indicate the function type of the user-defined function.
   oneof function {
     PythonUDF python_udf = 4;
-    ScalarScalaUDF scalar_scala_udf = 5;
+    ScalaUDF scala_udf = 5;
     JavaUDF java_udf = 6;
   }
 }
@@ -368,7 +368,7 @@ message PythonUDF {
   string python_ver = 4;
 }
 
-message ScalarScalaUDF {
+message ScalaUDF {
   // (Required) Serialized JVM object containing UDF definition, input encoders and output encoder
   bytes payload = 1;
   // (Optional) Input type(s) of the UDF

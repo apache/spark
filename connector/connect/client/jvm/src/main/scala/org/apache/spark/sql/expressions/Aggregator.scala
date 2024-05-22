@@ -53,7 +53,6 @@ abstract class Aggregator[-IN, BUF, OUT] extends Serializable {
 
   /**
    * A zero value for this aggregation. Should satisfy the property that any b + zero = b.
-   *
    * @since 4.0.0
    */
   def zero: BUF
@@ -61,35 +60,30 @@ abstract class Aggregator[-IN, BUF, OUT] extends Serializable {
   /**
    * Combine two values to produce a new value.  For performance, the function may modify `b` and
    * return it instead of constructing new object for b.
-   *
    * @since 4.0.0
    */
   def reduce(b: BUF, a: IN): BUF
 
   /**
    * Merge two intermediate values.
-   *
    * @since 4.0.0
    */
   def merge(b1: BUF, b2: BUF): BUF
 
   /**
    * Transform the output of the reduction.
-   *
    * @since 4.0.0
    */
   def finish(reduction: BUF): OUT
 
   /**
    * Specifies the `Encoder` for the intermediate value type.
-   *
    * @since 4.0.0
    */
   def bufferEncoder: Encoder[BUF]
 
   /**
    * Specifies the `Encoder` for the final output value type.
-   *
    * @since 4.0.0
    */
   def outputEncoder: Encoder[OUT]

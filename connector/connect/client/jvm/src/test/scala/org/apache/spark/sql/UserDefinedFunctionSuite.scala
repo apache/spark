@@ -37,7 +37,7 @@ class UserDefinedFunctionSuite extends ConnectFunSuite {
     assert(udfExpr.getDeterministic)
     assert(udfExpr.getArgumentsCount == 1)
     assert(udfExpr.getArguments(0) == Column("dummy").expr)
-    val udfObj = udfExpr.getScalarScalaUdf
+    val udfObj = udfExpr.getScalaUdf
 
     assert(udfObj.getNullable)
 

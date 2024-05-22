@@ -577,7 +577,7 @@ class SparkConnectPlanner(
     val baseRel = transformRelation(rel.getInput)
     val commonUdf = rel.getFunc
     commonUdf.getFunctionCase match {
-      case proto.CommonInlineUserDefinedFunction.FunctionCase.SCALAR_SCALA_UDF =>
+      case proto.CommonInlineUserDefinedFunction.FunctionCase.SCALA_UDF =>
         val analyzed = session.sessionState.executePlan(baseRel).analyzed
         transformTypedMapPartitions(commonUdf, analyzed)
       case proto.CommonInlineUserDefinedFunction.FunctionCase.PYTHON_UDF =>
@@ -635,7 +635,7 @@ class SparkConnectPlanner(
   private def transformGroupMap(rel: proto.GroupMap): LogicalPlan = {
     val commonUdf = rel.getFunc
     commonUdf.getFunctionCase match {
-      case proto.CommonInlineUserDefinedFunction.FunctionCase.SCALAR_SCALA_UDF =>
+      case proto.CommonInlineUserDefinedFunction.FunctionCase.SCALA_UDF =>
         transformTypedGroupMap(rel, commonUdf)
 
       case proto.CommonInlineUserDefinedFunction.FunctionCase.PYTHON_UDF =>
@@ -755,7 +755,7 @@ class SparkConnectPlanner(
   private def transformCoGroupMap(rel: proto.CoGroupMap): LogicalPlan = {
     val commonUdf = rel.getFunc
     commonUdf.getFunctionCase match {
-      case proto.CommonInlineUserDefinedFunction.FunctionCase.SCALAR_SCALA_UDF =>
+      case proto.CommonInlineUserDefinedFunction.FunctionCase.SCALA_UDF =>
         transformTypedCoGroupMap(rel, commonUdf)
 
       case proto.CommonInlineUserDefinedFunction.FunctionCase.PYTHON_UDF =>
@@ -937,7 +937,7 @@ class SparkConnectPlanner(
   private object TypedScalaUdf {
     def apply(expr: proto.Expression, inputAttrs: Option[Seq[Attribute]]): TypedScalaUdf = {
       if (expr.hasCommonInlineUserDefinedFunction
-        && expr.getCommonInlineUserDefinedFunction.hasScalarScalaUdf) {
+        && expr.getCommonInlineUserDefinedFunction.hasScalaUdf) {
         apply(expr.getCommonInlineUserDefinedFunction, inputAttrs)
       } else {
         throw InvalidPlanInput(s"Expecting a Scala UDF, but get ${expr.getExprTypeCase}")
@@ -1431,7 +1431,7 @@ class SparkConnectPlanner(
         val udf = expr.getCommonInlineUserDefinedFunction
         // A typed scala udf is a scala udf && the udf argument is an unresolved start.
         udf.getFunctionCase ==
-          proto.CommonInlineUserDefinedFunction.FunctionCase.SCALAR_SCALA_UDF &&
+          proto.CommonInlineUserDefinedFunction.FunctionCase.SCALA_UDF &&
           udf.getArgumentsCount == 1 &&
           udf.getArguments(0).getExprTypeCase == proto.Expression.ExprTypeCase.UNRESOLVED_STAR
       case _ =>
@@ -1599,8 +1599,8 @@ class SparkConnectPlanner(
     fun.getFunctionCase match {
       case proto.CommonInlineUserDefinedFunction.FunctionCase.PYTHON_UDF =>
         transformPythonFuncExpression(fun)
-      case proto.CommonInlineUserDefinedFunction.FunctionCase.SCALAR_SCALA_UDF =>
-        transformScalarScalaUDF(fun)
+      case proto.CommonInlineUserDefinedFunction.FunctionCase.SCALA_UDF =>
+        transformScalaUDF(fun)
       case _ =>
         throw InvalidPlanInput(
           s"Function with ID: ${fun.getFunctionCase.getNumber} is not supported")
@@ -1629,14 +1629,14 @@ class SparkConnectPlanner(
   }
 
   private def unpackUdf(fun: proto.CommonInlineUserDefinedFunction): UdfPacket = {
-    unpackScalarScalaUDF[UdfPacket](fun.getScalarScalaUdf)
+    unpackScalaUDF[UdfPacket](fun.getScalaUdf)
   }
 
-  private def unpackForeachWriter(fun: proto.ScalarScalaUDF): ForeachWriterPacket = {
-    unpackScalarScalaUDF[ForeachWriterPacket](fun)
+  private def unpackForeachWriter(fun: proto.ScalaUDF): ForeachWriterPacket = {
+    unpackScalaUDF[ForeachWriterPacket](fun)
   }
 
-  private def unpackScalarScalaUDF[T](fun: proto.ScalarScalaUDF): T = {
+  private def unpackScalaUDF[T](fun: proto.ScalaUDF): T = {
     try {
       logDebug(s"Unpack using class loader: ${Utils.getContextOrSparkClassLoader}")
       Utils.deserialize[T](fun.getPayload.toByteArray, Utils.getContextOrSparkClassLoader)
@@ -1659,19 +1659,19 @@ class SparkConnectPlanner(
   }
 
   /**
-   * Translates a Scalar Scala user-defined function from proto to the Catalyst expression.
+   * Translates a Scala user-defined function from proto to the Catalyst expression.
    *
    * @param fun
-   *   Proto representation of the Scalar Scalar user-defined function.
+   *   Proto representation of the Scala user-defined function.
    * @return
    *   ScalaUDF.
    */
-  private def transformScalarScalaUDF(
+  private def transformScalaUDF(
       fun: proto.CommonInlineUserDefinedFunction): NonSQLExpression = {
-    val udf = fun.getScalarScalaUdf
+    val udf = fun.getScalaUdf
     val udfPacket = unpackUdf(fun)
     if (udf.getAggregate) {
-      transformScalarScalaFunction(fun)
+      transformScalaFunction(fun)
         .asInstanceOf[UserDefinedAggregator[Any, Any, Any]]
         .scalaAggregator(fun.getArgumentsList.asScala.map(transformExpression).toSeq)
     } else {
@@ -1687,9 +1687,9 @@ class SparkConnectPlanner(
     }
   }
 
-  private def transformScalarScalaFunction(
+  private def transformScalaFunction(
       fun: proto.CommonInlineUserDefinedFunction): UserDefinedFunction = {
-    val udf = fun.getScalarScalaUdf
+    val udf = fun.getScalaUdf
     val udfPacket = unpackUdf(fun)
     if (udf.getAggregate) {
       assert(udfPacket.inputEncoders.size == 1, "UDAF should have exactly one input encoder")
@@ -2802,8 +2802,8 @@ class SparkConnectPlanner(
         handleRegisterPythonUDF(fun)
       case proto.CommonInlineUserDefinedFunction.FunctionCase.JAVA_UDF =>
         handleRegisterJavaUDF(fun)
-      case proto.CommonInlineUserDefinedFunction.FunctionCase.SCALAR_SCALA_UDF =>
-        handleRegisterScalarScalaUDF(fun)
+      case proto.CommonInlineUserDefinedFunction.FunctionCase.SCALA_UDF =>
+        handleRegisterScalaUDF(fun)
       case _ =>
         throw InvalidPlanInput(
           s"Function with ID: ${fun.getFunctionCase.getNumber} is not supported")
@@ -2880,8 +2880,8 @@ class SparkConnectPlanner(
     }
   }
 
-  private def handleRegisterScalarScalaUDF(fun: proto.CommonInlineUserDefinedFunction): Unit = {
-    val udf = transformScalarScalaFunction(fun)
+  private def handleRegisterScalaUDF(fun: proto.CommonInlineUserDefinedFunction): Unit = {
+    val udf = transformScalaFunction(fun)
     session.udf.register(fun.getFunctionName, udf)
   }
 
