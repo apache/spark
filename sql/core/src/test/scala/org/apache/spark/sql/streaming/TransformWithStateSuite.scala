@@ -418,8 +418,6 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           .option(StateSourceOptions.PATH, chkptDir.getAbsolutePath)
           .load()
 
-        df.show()
-
         val propsString = df.select("operatorProperties").
           collect().head.getString(0)
 
@@ -431,7 +429,10 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         val stateVariableInfos = StateVariableInfo.fromJson(
           map("stateVariables"))
         assert(stateVariableInfos.size === 1)
-        assert(stateVariableInfos.exists(_.stateName === "countState"))
+        val stateVariableInfo = stateVariableInfos.head
+        assert(stateVariableInfo.stateName === "countState")
+        assert(stateVariableInfo.isTtlEnabled === false)
+        assert(stateVariableInfo.stateType === ValueState)
       }
     }
   }
