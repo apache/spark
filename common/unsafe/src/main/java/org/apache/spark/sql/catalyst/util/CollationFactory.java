@@ -232,9 +232,9 @@ public final class CollationFactory {
       "UTF8_BINARY_LCASE",
       PROVIDER_SPARK,
       null,
-      UTF8String::compareLowerCase,
+      CollationAwareUTF8String::compareLowerCase,
       "1.0",
-      (s) -> (long)s.toLowerCase().hashCode(),
+      (s) -> (long)CollationAwareUTF8String.toLowerCase(s.toString()).hashCode(),
       false,
       false,
       true);

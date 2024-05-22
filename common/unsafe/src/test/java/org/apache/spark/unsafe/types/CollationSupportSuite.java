@@ -31,6 +31,71 @@ public class CollationSupportSuite {
    * Collation-aware UTF8String comparison.
    */
 
+  private void assertCompare(String s1, String s2, String collationName, int expected)
+          throws SparkException {
+    UTF8String l = UTF8String.fromString(s1);
+    UTF8String r = UTF8String.fromString(s2);
+    int compare = CollationFactory.fetchCollation(collationName).comparator.compare(l, r);
+    assertEquals(Integer.signum(expected), Integer.signum(compare));
+  }
+
+  @Test
+  public void testCompare() throws SparkException {
+    // Edge cases
+    assertCompare("", "", "UTF8_BINARY", 0);
+    assertCompare("a", "", "UTF8_BINARY", 1);
+    assertCompare("", "a", "UTF8_BINARY", -1);
+    assertCompare("", "", "UTF8_BINARY_LCASE", 0);
+    assertCompare("a", "", "UTF8_BINARY_LCASE", 1);
+    assertCompare("", "a", "UTF8_BINARY_LCASE", -1);
+    assertCompare("", "", "UNICODE", 0);
+    assertCompare("a", "", "UNICODE", 1);
+    assertCompare("", "a", "UNICODE", -1);
+    assertCompare("", "", "UNICODE_CI", 0);
+    assertCompare("a", "", "UNICODE_CI", 1);
+    assertCompare("", "a", "UNICODE_CI", -1);
+    // Basic tests
+    assertCompare("AbCd", "aBcD", "UTF8_BINARY", -1);
+    assertCompare("ABCD", "abcd", "UTF8_BINARY_LCASE", 0);
+    assertCompare("AbcD", "aBCd", "UNICODE", 1);
+    assertCompare("abcd", "ABCD", "UNICODE_CI", 0);
+    // Accent variation
+    assertCompare("aBćD", "ABĆD", "UTF8_BINARY", 1);
+    assertCompare("AbCδ", "ABCΔ", "UTF8_BINARY_LCASE", 0);
+    assertCompare("äBCd", "ÄBCD", "UNICODE", -1);
+    assertCompare("Ab́cD", "AB́CD", "UNICODE_CI", 0);
+    // Case-variable character length
+    assertCompare("i\u0307", "İ", "UTF8_BINARY", -1);
+    assertCompare("İ", "i\u0307", "UTF8_BINARY", 1);
+    assertCompare("i\u0307", "İ", "UTF8_BINARY_LCASE", 0);
+    assertCompare("İ", "i\u0307", "UTF8_BINARY_LCASE", 0);
+    assertCompare("i\u0307", "İ", "UNICODE", -1);
+    assertCompare("İ", "i\u0307", "UNICODE", 1);
+    assertCompare("i\u0307", "İ", "UNICODE_CI", 0);
+    assertCompare("İ", "i\u0307", "UNICODE_CI", 0);
+    assertCompare("i\u0307İ", "i\u0307İ", "UTF8_BINARY_LCASE", 0);
+    assertCompare("i\u0307İ", "İi\u0307", "UTF8_BINARY_LCASE", 0);
+    assertCompare("İi\u0307", "i\u0307İ", "UTF8_BINARY_LCASE", 0);
+    assertCompare("İi\u0307", "İi\u0307", "UTF8_BINARY_LCASE", 0);
+    assertCompare("i\u0307İ", "i\u0307İ", "UNICODE_CI", 0);
+    assertCompare("i\u0307İ", "İi\u0307", "UNICODE_CI", 0);
+    assertCompare("İi\u0307", "i\u0307İ", "UNICODE_CI", 0);
+    assertCompare("İi\u0307", "İi\u0307", "UNICODE_CI", 0);
+    // Conditional case mapping
+    assertCompare("ς", "σ", "UTF8_BINARY", -1);
+    assertCompare("ς", "Σ", "UTF8_BINARY", 1);
+    assertCompare("σ", "Σ", "UTF8_BINARY", 1);
+    assertCompare("ς", "σ", "UTF8_BINARY_LCASE", 0);
+    assertCompare("ς", "Σ", "UTF8_BINARY_LCASE", 0);
+    assertCompare("σ", "Σ", "UTF8_BINARY_LCASE", 0);
+    assertCompare("ς", "σ", "UNICODE", 1);
+    assertCompare("ς", "Σ", "UNICODE", 1);
+    assertCompare("σ", "Σ", "UNICODE", -1);
+    assertCompare("ς", "σ", "UNICODE_CI", 0);
+    assertCompare("ς", "Σ", "UNICODE_CI", 0);
+    assertCompare("σ", "Σ", "UNICODE_CI", 0);
+  }
+
   private void assertLowercase(String target, String expected, String collationName)
       throws SparkException {
     if (collationName.equals("UTF8_BINARY")) {

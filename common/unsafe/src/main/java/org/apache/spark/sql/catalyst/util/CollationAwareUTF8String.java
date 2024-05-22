@@ -34,6 +34,11 @@ import java.util.Map;
  * Utility class for collation-aware UTF8String operations.
  */
 public class CollationAwareUTF8String {
+
+  public static int compareLowerCase(final UTF8String left, final UTF8String right) {
+    return toLowerCase(left.toString()).compareTo(toLowerCase(right.toString()));
+  }
+
   public static UTF8String replace(final UTF8String src, final UTF8String search,
       final UTF8String replace, final int collationId) {
     // This collation aware implementation is based on existing implementation on UTF8String
