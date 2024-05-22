@@ -73,7 +73,7 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
   }
 
   private def finalStatus(tracker: BasicWriteTaskStatsTracker): BasicWriteTaskStats = {
-    tracker.getFinalStats(0L).asInstanceOf[BasicWriteTaskStats]
+    tracker.getFinalStats(0L, 0L).asInstanceOf[BasicWriteTaskStats]
   }
 
   test("No files in run") {
