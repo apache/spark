@@ -472,3 +472,33 @@ struct<x1:int,x2:int,y1:int,y2:int>
 1	1	1	4
 2	1	NULL	NULL
 3	4	NULL	NULL
+
+
+-- !query
+select * from x join y on x1 = y1 and exists (select * from z where z2 = x2 AND z2 = y2) order by x1, x2, y1, y2
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_CORRELATED_EXPRESSION_IN_JOIN_CONDITION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "subqueryExpression" : "exists(x.x2, y.y2, (z.z2 = x.x2), (z.z2 = y.y2))"
+  }
+}
+
+
+-- !query
+select * from x join y on x1 = y1 and not exists (select * from z where z2 = x2 AND z2 = y2) order by x1, x2, y1, y2
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_CORRELATED_EXPRESSION_IN_JOIN_CONDITION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "subqueryExpression" : "exists(x.x2, y.y2, (z.z2 = x.x2), (z.z2 = y.y2))"
+  }
+}
