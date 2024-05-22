@@ -50,7 +50,7 @@ private class CleanupTaskWeakReference(
  * when the associated object goes out of scope of the application. Actual cleanup is performed in
  * a separate daemon thread.
  */
-private[spark] class SessionCleaner(session: SparkSession) extends Logging {
+private[sql] class SessionCleaner(session: SparkSession) extends Logging {
 
   /**
    * How often (seconds) to trigger a garbage collection in this JVM. This context cleaner

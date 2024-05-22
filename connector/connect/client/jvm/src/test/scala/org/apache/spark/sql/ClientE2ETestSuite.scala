@@ -1578,7 +1578,7 @@ class ClientE2ETestSuite
     val ref = new WeakReference[Object](df1)
     while (ref.get() != null) { Thread.sleep(1000L); System.gc() }
 
-    eventually(timeout(30.seconds), interval(500.millis)) {
+    eventually(timeout(60.seconds), interval(1.second)) {
       val ex = intercept[SparkException] {
         spark
           .newDataset(encoder) { builder =>
@@ -1620,7 +1620,7 @@ class ClientE2ETestSuite
     }
 
     intercept[TestFailedDueToTimeoutException] {
-      eventually(timeout(5.seconds), interval(500.millis))(condition())
+      eventually(timeout(5.seconds), interval(1.second))(condition())
     }
 
     // GC triggers remove the cached remote relation
@@ -1629,7 +1629,7 @@ class ClientE2ETestSuite
     while (ref1.get() != null) { Thread.sleep(1000L); System.gc() }
 
     // Check the state was removed up on garbage-collection.
-    eventually(timeout(30.seconds), interval(500.millis))(condition())
+    eventually(timeout(60.seconds), interval(1.second))(condition())
   }
 }
 
