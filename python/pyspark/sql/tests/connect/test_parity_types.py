@@ -32,7 +32,7 @@ class TypesParityTests(TypesTestsMixin, ReusedConnectTestCase):
 
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_apply_schema_to_row(self):
-        super().test_apply_schema_to_dict_and_rows()
+        super().test_apply_schema_to_row()
 
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_create_dataframe_schema_mismatch(self):
@@ -90,9 +90,9 @@ class TypesParityTests(TypesTestsMixin, ReusedConnectTestCase):
     def test_udt(self):
         super().test_udt()
 
-    @unittest.skip("Does not test anything related to Spark Connect")
-    def test_parse_datatype_string(self):
-        super().test_parse_datatype_string()
+    @unittest.skip("Requires JVM access.")
+    def test_schema_with_collations_json_ser_de(self):
+        super().test_schema_with_collations_json_ser_de()
 
 
 if __name__ == "__main__":

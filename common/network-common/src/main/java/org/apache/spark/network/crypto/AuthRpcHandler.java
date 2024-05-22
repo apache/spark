@@ -26,8 +26,8 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
 import org.apache.spark.network.client.RpcResponseCallback;
@@ -48,7 +48,7 @@ import org.apache.spark.network.util.TransportConf;
  * authenticated. A connection may be authenticated at most once.
  */
 class AuthRpcHandler extends AbstractAuthRpcHandler {
-  private static final Logger LOG = LoggerFactory.getLogger(AuthRpcHandler.class);
+  private static final SparkLogger LOG = SparkLoggerFactory.getLogger(AuthRpcHandler.class);
 
   /** Transport configuration. */
   private final TransportConf conf;

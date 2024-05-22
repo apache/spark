@@ -25,8 +25,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
 import org.rocksdb.*;
 
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
 import org.apache.spark.network.shuffledb.StoreVersion;
@@ -40,7 +40,7 @@ public class RocksDBProvider {
       org.rocksdb.RocksDB.loadLibrary();
     }
 
-    private static final Logger logger = LoggerFactory.getLogger(RocksDBProvider.class);
+    private static final SparkLogger logger = SparkLoggerFactory.getLogger(RocksDBProvider.class);
 
     public static RocksDB initRockDB(File dbFile, StoreVersion version, ObjectMapper mapper) throws
         IOException {
@@ -135,7 +135,7 @@ public class RocksDBProvider {
     }
 
     private static class RocksDBLogger extends org.rocksdb.Logger {
-        private static final Logger LOG = LoggerFactory.getLogger(RocksDBLogger.class);
+        private static final SparkLogger LOG = SparkLoggerFactory.getLogger(RocksDBLogger.class);
 
         RocksDBLogger(Options options) {
           super(options.infoLogLevel());

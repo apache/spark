@@ -491,7 +491,8 @@ class DataFrame(Frame, Generic[T]):
 
     >>> import pandas as pd
     >>> sdf = spark.createDataFrame([("Data", 1), ("Bricks", 2)], ["x", "y"])
-    >>> ps.DataFrame(data=sdf, index=pd.Index([0, 1, 2]))
+    >>> with ps.option_context("compute.ops_on_diff_frames", False):
+    ...     ps.DataFrame(data=sdf, index=pd.Index([0, 1, 2]))
     Traceback (most recent call last):
       ...
     ValueError: Cannot combine the series or dataframe...'compute.ops_on_diff_frames' option.
@@ -509,7 +510,8 @@ class DataFrame(Frame, Generic[T]):
 
     >>> import pandas as pd
     >>> sdf = spark.createDataFrame([("Data", 1), ("Bricks", 2)], ["x", "y"])
-    >>> ps.DataFrame(data=sdf, index=ps.Index([0, 1, 2]))
+    >>> with ps.option_context("compute.ops_on_diff_frames", False):
+    ...     ps.DataFrame(data=sdf, index=ps.Index([0, 1, 2]))
     Traceback (most recent call last):
       ...
     ValueError: Cannot combine the series or dataframe...'compute.ops_on_diff_frames' option.

@@ -1885,3 +1885,109 @@ as the activated JDBC Driver.
     </tr>
   </tbody>
 </table>
+
+### Mapping Spark SQL Data Types to DB2
+
+The below table describes the data type conversions from Spark SQL Data Types to DB2 data types,
+when creating, altering, or writing data to a DB2 table using the built-in jdbc data source with
+the [IBM Data Server Driver For JDBC and SQLJ](https://mvnrepository.com/artifact/com.ibm.db2/jcc) as the activated JDBC Driver.
+
+<table>
+  <thead>
+    <tr>
+      <th><b>Spark SQL Data Type</b></th>
+      <th><b>DB2 Data Type</b></th>
+      <th><b>Remarks</b></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>BooleanType</td>
+      <td>BOOLEAN</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>ByteType</td>
+      <td>SMALLINT</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>ShortType</td>
+      <td>SMALLINT</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>IntegerType</td>
+      <td>INTEGER</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>LongType</td>
+      <td>BIGINT</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>FloatType</td>
+      <td>REAL</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>DoubleType</td>
+      <td>DOUBLE PRECISION</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>DecimalType(p, s)</td>
+      <td>DECIMAL(p,s)</td>
+      <td>The maximum value for 'p' is 31 in DB2, while it is 38 in Spark. It might fail when storing DecimalType(p>=32, s) to DB2</td>
+    </tr>
+    <tr>
+      <td>DateType</td>
+      <td>DATE</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>TimestampType</td>
+      <td>TIMESTAMP</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>TimestampNTZType</td>
+      <td>TIMESTAMP</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>StringType</td>
+      <td>CLOB</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>BinaryType</td>
+      <td>BLOB</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>CharType(n)</td>
+      <td>CHAR(n)</td>
+      <td>The maximum value for 'n' is 255 in DB2, while it is unlimited in Spark.</td>
+    </tr>
+    <tr>
+      <td>VarcharType(n)</td>
+      <td>VARCHAR(n)</td>
+      <td>The maximum value for 'n' is 255 in DB2, while it is unlimited in Spark.</td>
+    </tr>
+  </tbody>
+</table>
+
+The Spark Catalyst data types below are not supported with suitable DB2 types.
+
+- DayTimeIntervalType
+- YearMonthIntervalType
+- CalendarIntervalType
+- ArrayType
+- MapType
+- StructType
+- UserDefinedType
+- NullType
+- ObjectType
+- VariantType

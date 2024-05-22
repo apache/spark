@@ -575,7 +575,7 @@ private[deploy] class Master(
               if (!execs.exists(_.state == ExecutorState.RUNNING)) {
                 logError(log"Application ${MDC(LogKeys.APP_DESC, appInfo.desc.name)} " +
                   log"with ID ${MDC(LogKeys.APP_ID, appInfo.id)} " +
-                  log"failed ${MDC(LogKeys.RETRY_COUNT, appInfo.retryCount)} times; removing it")
+                  log"failed ${MDC(LogKeys.NUM_RETRY, appInfo.retryCount)} times; removing it")
                 removeApplication(appInfo, ApplicationState.FAILED)
               }
             }
