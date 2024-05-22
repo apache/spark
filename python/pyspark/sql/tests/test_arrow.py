@@ -860,10 +860,8 @@ class ArrowTestsMixin:
 
                 for row in result:
                     i, m = row
-                    m = {} if m is None else m
                     self.assertEqual(m, map_data[i])
 
-    @unittest.skip("SPARK-48302: Nulls are replaced with empty lists")
     def test_createDataFrame_arrow_with_map_type_nulls(self):
         map_data = [{"a": 1}, {"b": 2, "c": 3}, {}, None, {"d": None}]
 
@@ -882,7 +880,6 @@ class ArrowTestsMixin:
 
                 for row in result:
                     i, m = row
-                    m = {} if m is None else m
                     self.assertEqual(m, map_data[i])
 
     def test_createDataFrame_pandas_with_struct_type(self):
@@ -1028,8 +1025,7 @@ class ArrowTestsMixin:
                 pdf = df.toPandas()
                 assert_frame_equal(origin, pdf)
 
-    @unittest.skip("SPARK-48302: Nulls are replaced with empty lists")
-    def test_toArrow_with_map_type_nulls(self, arrow_enabled):
+    def test_toArrow_with_map_type_nulls(self):
         map_data = [{"a": 1}, {"b": 2, "c": 3}, {}, None, {"d": None}]
 
         origin = pa.table(
@@ -1553,6 +1549,16 @@ class ArrowTestsMixin:
         )
 
         self.assertTrue(t.equals(expected))
+
+    @unittest.skip("SPARK-48302: Nulls are replaced with empty lists")
+    def test_arrow_map_timestamp_nulls_round_trip(self):
+        origin = pa.table(
+            [[dict(ts=datetime.datetime(2023, 1, 1, 8, 0, 0)), None]],
+            schema=pa.schema([("map", pa.map_(pa.string(), pa.timestamp("us", tz="UTC")))]),
+        )
+        df = self.spark.createDataFrame(origin)
+        t = df.toArrow()
+        self.assertTrue(origin.equals(t))
 
     def test_createDataFrame_udt(self):
         for arrow_enabled in [True, False]:
