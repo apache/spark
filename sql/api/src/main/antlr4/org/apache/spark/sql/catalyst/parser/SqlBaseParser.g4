@@ -1383,6 +1383,7 @@ ansiNonReserved
     | ARRAY
     | ASC
     | AT
+    | BEGIN
     | BETWEEN
     | BIGINT
     | BINARY
@@ -1685,6 +1686,7 @@ nonReserved
     | ASC
     | AT
     | AUTHORIZATION
+    | BEGIN
     | BETWEEN
     | BIGINT
     | BINARY

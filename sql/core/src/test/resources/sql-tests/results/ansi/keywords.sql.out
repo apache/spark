@@ -20,6 +20,7 @@ AS	true
 ASC	false
 AT	false
 AUTHORIZATION	true
+BEGIN	false
 BETWEEN	false
 BIGINT	false
 BINARY	false
