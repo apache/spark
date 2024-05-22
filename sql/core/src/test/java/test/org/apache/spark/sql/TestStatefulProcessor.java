@@ -21,10 +21,10 @@ import java.util.*;
 
 import scala.jdk.javaapi.CollectionConverters;
 
-import org.junit.jupiter.api.Assertions;
-
 import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.streaming.*;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * A test stateful processor used with transformWithState arbitrary stateful operator in
@@ -76,7 +76,7 @@ public class TestStatefulProcessor extends StatefulProcessor<Integer, String, St
         } else {
           keyCountMap.updateValue(value, 1L);
         }
-        Assertions.assertTrue(keyCountMap.containsKey(value));
+        assertTrue(keyCountMap.containsKey(value));
         keysList.appendValue(value);
         sb.append(value);
       }
@@ -84,13 +84,13 @@ public class TestStatefulProcessor extends StatefulProcessor<Integer, String, St
       scala.collection.Iterator<String> keys = keysList.get();
       while (keys.hasNext()) {
         String keyVal = keys.next();
-        Assertions.assertTrue(keyCountMap.containsKey(keyVal));
-        Assertions.assertTrue(keyCountMap.getValue(keyVal) > 0);
+        assertTrue(keyCountMap.containsKey(keyVal));
+        assertTrue(keyCountMap.getValue(keyVal) > 0);
       }
 
       count += numRows;
       countState.update(count);
-      Assertions.assertEquals(count, (long) countState.get());
+      assertEquals(count, (long) countState.get());
 
       result.add(sb.toString());
     }

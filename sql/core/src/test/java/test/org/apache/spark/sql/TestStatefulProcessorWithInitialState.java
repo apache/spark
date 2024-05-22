@@ -21,10 +21,10 @@ import java.util.*;
 
 import scala.jdk.javaapi.CollectionConverters;
 
-import org.junit.jupiter.api.Assertions;
-
 import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.streaming.*;
+
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
  * A test stateful processor concatenates all input rows for a key and emits the result.
@@ -73,7 +73,7 @@ public class TestStatefulProcessorWithInitialState
       }
 
       testState.clear();
-      Assertions.assertFalse(testState.exists());
+      assertFalse(testState.exists());
 
       result.add(sb.toString());
     }
