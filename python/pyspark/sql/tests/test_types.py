@@ -1232,6 +1232,32 @@ class TypesTestsMixin:
                 "",
             ],
         )
+        self.assertEqual(
+            schema1.treeString(3).split("\n"),
+            [
+                "root",
+                " |-- c1: integer (nullable = true)",
+                " |-- c2: struct (nullable = true)",
+                " |    |-- c3: integer (nullable = true)",
+                " |    |-- c4: struct (nullable = true)",
+                " |    |    |-- c5: integer (nullable = true)",
+                " |    |    |-- c6: integer (nullable = true)",
+                "",
+            ],
+        )
+        self.assertEqual(
+            schema1.treeString(4).split("\n"),
+            [
+                "root",
+                " |-- c1: integer (nullable = true)",
+                " |-- c2: struct (nullable = true)",
+                " |    |-- c3: integer (nullable = true)",
+                " |    |-- c4: struct (nullable = true)",
+                " |    |    |-- c5: integer (nullable = true)",
+                " |    |    |-- c6: integer (nullable = true)",
+                "",
+            ],
+        )
 
         schema2 = DataType.fromDDL(
             "c1 INT, c2 ARRAY<STRUCT<c3: INT>>, c4 STRUCT<c5: INT, c6: ARRAY<ARRAY<INT>>>"
