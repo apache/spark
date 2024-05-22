@@ -42,7 +42,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   private val allFileBasedDataSources = collationPreservingSources ++  collationNonPreservingSources
 
   test("collate returns proper type") {
-
     Seq("utf8_binary", "utf8_binary_lcase", "unicode", "unicode_ci").foreach { collationName =>
       checkAnswer(sql(s"select 'aaa' collate $collationName"), Row("aaa"))
       val collationId = CollationFactory.collationNameToId(collationName)
