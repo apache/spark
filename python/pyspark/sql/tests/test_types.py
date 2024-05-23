@@ -1411,6 +1411,41 @@ class TypesTestsMixin:
             ],
         )
 
+    def test_tree_string_for_parameterized_types(self):
+        schema = (
+            StructType()
+            .add("c", CharType(10))
+            .add("v", VarcharType(10))
+            .add("d", DecimalType(10, 2))
+            .add("ym1", YearMonthIntervalType())
+            .add("ym2", YearMonthIntervalType(YearMonthIntervalType.YEAR))
+            .add(
+                "ym3",
+                YearMonthIntervalType(YearMonthIntervalType.YEAR, YearMonthIntervalType.MONTH),
+            )
+            .add("dt1", DayTimeIntervalType())
+            .add("dt2", DayTimeIntervalType(DayTimeIntervalType.DAY))
+            .add("dt3", DayTimeIntervalType(DayTimeIntervalType.HOUR, DayTimeIntervalType.SECOND))
+            .add("i", CalendarIntervalType())
+        )
+        self.assertEqual(
+            schema.treeString().split("\n"),
+            [
+                "root",
+                " |-- c: char(10) (nullable = true)",
+                " |-- v: varchar(10) (nullable = true)",
+                " |-- d: decimal(10,2) (nullable = true)",
+                " |-- ym1: interval year to month (nullable = true)",
+                " |-- ym2: interval year (nullable = true)",
+                " |-- ym3: interval year to month (nullable = true)",
+                " |-- dt1: interval day to second (nullable = true)",
+                " |-- dt2: interval day (nullable = true)",
+                " |-- dt3: interval hour to second (nullable = true)",
+                " |-- i: interval (nullable = true)",
+                "",
+            ],
+        )
+
     def test_metadata_null(self):
         schema = StructType(
             [
