@@ -1074,8 +1074,8 @@ the [PostgreSQL JDBC Driver](https://mvnrepository.com/artifact/org.postgresql/p
     </tr>
     <tr>
       <td>TimestampType</td>
-      <td>timestamp</td>
-      <td></td>
+      <td>timestamp with time zone</td>
+      <td>Before Spark 4.0, it was mapped as timestamp. Please refer to the migration guide for more information</td>
     </tr>
     <tr>
       <td>TimestampNTZType</td>
