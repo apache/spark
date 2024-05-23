@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.plans
 
 import java.util.TimeZone
 
+import org.scalatest.PrivateMethodTester
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -28,7 +30,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, DoubleType, IntegerType, LongType, StringType}
 
-class ConstraintPropagationSuite extends SparkFunSuite with PlanTest {
+class ConstraintPropagationSuite extends SparkFunSuite with PlanTest with PrivateMethodTester{
 
   private def resolveColumn(tr: LocalRelation, columnName: String): Expression =
     resolveColumn(tr.analyze, columnName)
@@ -421,5 +423,93 @@ class ConstraintPropagationSuite extends SparkFunSuite with PlanTest {
     withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
       assert(aliasedRelation.analyze.constraints.isEmpty)
     }
+  }
+
+  test("SPARK-33152: infer from child constraint") {
+    val plan = LocalRelation('a.int, 'b.int)
+      .where('a === 'b)
+      .select('a, ('b + 1) as 'b2)
+      .analyze
+
+    verifyConstraints(plan.constraints, ExpressionSet(Seq(
+      IsNotNull(resolveColumn(plan, "a")),
+      resolveColumn(plan, "a") + 1  <=> resolveColumn(plan, "b2")
+    )))
+  }
+
+  test("SPARK-33152: equality constraints from aliases") {
+    val plan1 = LocalRelation('a.int)
+      .select('a as 'a2, 'a as 'b2)
+      .analyze
+
+    verifyConstraints(plan1.constraints, ExpressionSet(Seq(
+      resolveColumn(plan1, "a2") <=> resolveColumn(plan1, "b2")
+    )))
+
+    val plan2 = LocalRelation()
+      .select(rand(0) as 'a2, rand(0) as 'b2)
+      .analyze
+
+    // No equality from non-deterministic expressions
+    verifyConstraints(plan2.constraints, ExpressionSet(Seq(
+      IsNotNull(resolveColumn(plan2, "a2")),
+      IsNotNull(resolveColumn(plan2, "b2"))
+    )))
+  }
+
+  test("SPARK-33152: Avoid exponential growth of constraints") {
+    val validConstraints = PrivateMethod[ExpressionSet](Symbol("validConstraints"))
+
+    val relation = LocalRelation('a.int, 'b.int, 'c.int)
+      .where('a + 'b + 'c > intToLiteral(0))
+
+    val plan1 = relation
+      .select('a as 'a1, 'b as 'b1, 'c as 'c1)
+      .analyze
+
+    assert(plan1.invokePrivate(validConstraints()).size == 11)
+    verifyConstraints(plan1.constraints,
+      ExpressionSet(Seq(
+        IsNotNull(resolveColumn(plan1, "a1")),
+        IsNotNull(resolveColumn(plan1, "b1")),
+        IsNotNull(resolveColumn(plan1, "c1")),
+        resolveColumn(plan1, "a1")
+          + resolveColumn(plan1, "b1")
+          + resolveColumn(plan1, "c1") > 0
+      )))
+
+    val plan2 = relation
+      .select('a as 'a1, 'b as 'b1, 'c as 'c1, 'a + 'b + 'c)
+      .analyze
+
+    assert(plan2.invokePrivate(validConstraints()).size == 13)
+    verifyConstraints(plan2.constraints,
+      ExpressionSet(Seq(
+        IsNotNull(resolveColumn(plan2, "a1")),
+        IsNotNull(resolveColumn(plan2, "b1")),
+        IsNotNull(resolveColumn(plan2, "c1")),
+        IsNotNull(resolveColumn(plan2, "((a + b) + c)")),
+        resolveColumn(plan2, "((a + b) + c)") > 0,
+        resolveColumn(plan2, "a1")
+          + resolveColumn(plan2, "b1")
+          + resolveColumn(plan2, "c1") > 0
+      )))
+
+    val plan3 = relation
+      .select('a as 'a1, 'b as 'b1, 'c as 'c1, ('a + 'b + 'c) as 'x1)
+      .analyze
+
+    assert(plan3.invokePrivate(validConstraints()).size == 13)
+    verifyConstraints(plan3.constraints,
+      ExpressionSet(Seq(
+        IsNotNull(resolveColumn(plan3, "a1")),
+        IsNotNull(resolveColumn(plan3, "b1")),
+        IsNotNull(resolveColumn(plan3, "c1")),
+        IsNotNull(resolveColumn(plan3, "x1")),
+        resolveColumn(plan3, "x1") > 0,
+        resolveColumn(plan3, "a1")
+          + resolveColumn(plan3, "b1")
+          + resolveColumn(plan3, "c1") > 0
+      )))
   }
 }
