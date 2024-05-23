@@ -52,158 +52,138 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
     Project(projects, withFilter)
   }
 
-  override def apply(plan: LogicalPlan): LogicalPlan = {
-    val catalogFileIndexToCombinedPartitionFilter = mutable.Map[CatalogFileIndex, ExpressionSet]()
-    val basisPartitionSchemaMapping = mutable.Map[CatalogFileIndex, Map[String, Attribute]]()
-    val nonRepeatedEmptyFilterCFI = mutable.Set[CatalogFileIndex]()
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    // Collect the set of partition filters for different `CatalogFileIndex`es.
+    // We will need to `Or` these filters when we call list partitions to get the union of
+    // partitions we need.
+    val catalogFileIndexFilters = mutable.Map.empty[CatalogFileIndex, Option[ExpressionSet]]
+    val attrMapForNormalization = mutable.Map[CatalogFileIndex, Map[String, Attribute]]()
+    val singleOccurenceNoFilterCFI = mutable.Set[CatalogFileIndex]()
     val step1Plan = plan transformDown {
-      case op@PhysicalOperation(projects, filters,
-      logicalRelation@
-        LogicalRelation(fsRelation@
-          HadoopFsRelation(
-          cfi: CatalogFileIndex,
-          partitionSchema,
+      case PhysicalOperation(
+          projects,
+          filters,
+          logicalRelation @ LogicalRelation(
+            fsRelation @ HadoopFsRelation(
+              cfi: CatalogFileIndex,
+              partitionSchema,
+              _,
+              _,
+              _,
+              _),
           _,
           _,
-          _,
-          _),
-        _,
-        _,
-        _))
+          _))
         if fsRelation.partitionSchema.nonEmpty =>
         val normalizedFilters = DataSourceStrategy.normalizeExprs(
-          filters.filter(f => f.deterministic && !SubqueryExpression.hasSubquery(f) &&
-            DataSourceUtils.shouldPushFilter(f, fsRelation.fileFormat.supportsCollationPushDown)),
+          filters.filter(f => f.deterministic && !SubqueryExpression.hasSubquery(f)),
           logicalRelation.output)
         val (partitionKeyFilters, _) = DataSourceUtils
           .getPartitionFiltersAndDataFilters(partitionSchema, normalizedFilters)
-        var cfiInserted = false
-        val basisPartitionSchemaMap = basisPartitionSchemaMapping.getOrElseUpdate(cfi, {
-          cfiInserted = true
-          val lrOutput = logicalRelation.output
-          cfi.table.partitionColumnNames.map(colName => colName.toLowerCase(Locale.ROOT) ->
-            lrOutput.find(_.name.equalsIgnoreCase(colName)).get).toMap
+        val netPartitionFilter = partitionKeyFilters.reduceOption(And)
+        val normalizedNetPartitionFilter = netPartitionFilter.map(expr => {
+          attrMapForNormalization.get(cfi).fold {
+            val lrOutput = logicalRelation.output
+            val attrMap = cfi.table.partitionColumnNames.map(col => col.toLowerCase(Locale
+              .ROOT) -> lrOutput.find(_.name.equalsIgnoreCase(col)).get).toMap
+            attrMapForNormalization.put(cfi, attrMap)
+            expr
+          }(mapping => {
+            expr.transformUp {
+              case attr: Attribute if mapping.contains(attr.name.toLowerCase(Locale.ROOT)) =>
+                mapping(attr.name.toLowerCase(Locale.ROOT))
+            }
+          })
         })
 
-        val reducedPartitionFilters = partitionKeyFilters.reduceOption(And).
-          map(expr => if (cfiInserted) {
-            ExpressionSet(Seq(expr))
-          } else {
-            ExpressionSet(Seq(expr.transformUp {
-              case attr: Attribute if basisPartitionSchemaMap.contains(
-                attr.name.toLowerCase(Locale.ROOT)) =>
-                basisPartitionSchemaMap(attr.name.toLowerCase(Locale.ROOT))
-            }))
-          }).getOrElse(ExpressionSet(Seq.empty))
-
-        if (catalogFileIndexToCombinedPartitionFilter.contains(cfi) ||
-          partitionKeyFilters.nonEmpty) {
-          nonRepeatedEmptyFilterCFI -= cfi
+        if (catalogFileIndexFilters.contains(cfi) || partitionKeyFilters.nonEmpty) {
+          singleOccurenceNoFilterCFI -= cfi
         } else {
-          nonRepeatedEmptyFilterCFI += cfi
+          singleOccurenceNoFilterCFI += cfi
         }
-
-        if (partitionKeyFilters.nonEmpty) {
-          // Keep partition-pruning predicates so that they are visible in physical planning
-          val resultExprSetOpt = catalogFileIndexToCombinedPartitionFilter.get(cfi)
-          // The currentExprSet may be empty which indicates that all the partitions are needed
-          // so if a table is repeated and if either the currentExprSet is empty or
-          // the reducedPartitionFilters of this node is empty, it would mean fetching all
-          // partitions and we keep the empty ExpressionSet
-          val newResultExprSet = resultExprSetOpt.map(currentExprSet =>
-            if (currentExprSet.isEmpty) {
-              currentExprSet
-            } else {
-              if (currentExprSet.head.canonicalized == reducedPartitionFilters.head.canonicalized) {
-                currentExprSet
-              } else {
-                ExpressionSet(Seq(Or(currentExprSet.head, reducedPartitionFilters.head)))
-              }
-            }).getOrElse(reducedPartitionFilters)
-          catalogFileIndexToCombinedPartitionFilter.put(cfi, newResultExprSet)
-
-          val filteredStats =
-            FilterEstimation(Filter(partitionKeyFilters.reduce(And), logicalRelation)).estimate
-          val colStats = filteredStats.map(_.attributeStats.map { case (attr, colStat) =>
-            (attr.name, colStat.toCatalogColumnStat(attr.name, attr.dataType))
-          })
-          val logicalRelationWrapper = LogicalRelationWrapper(logicalRelation, cfi, fsRelation,
-            reducedPartitionFilters, filteredStats, colStats)
-
-          // Keep partition-pruning predicates so that they are visible in physical planning
-          rebuildPhysicalOperation(projects, filters, logicalRelationWrapper)
-        } else {
-          val logicalRelationWrapper = LogicalRelationWrapper(logicalRelation, cfi, fsRelation,
-            reducedPartitionFilters)
-          catalogFileIndexToCombinedPartitionFilter.put(cfi, ExpressionSet(Seq.empty))
-          op.transformUp {
-            case _: LogicalRelation => logicalRelationWrapper
-          }
-        }
+        val prevFiltersOpt = catalogFileIndexFilters.getOrElseUpdate(cfi,
+          normalizedNetPartitionFilter.map(expr => ExpressionSet(Seq(expr))))
+        // if the value returned above is None than nothing needs to be done as it means
+        // fetch all partitions. This could be either the previous value present was None
+        // or current partition filter is empty which would also result in None being returned
+        prevFiltersOpt.foreach(prevExprSet => {
+          val newValue = normalizedNetPartitionFilter.map(prevExprSet + _)
+          catalogFileIndexFilters.put(cfi, newValue)
+        })
+        val logicalRelationWrapper = PartitionedLogicalRelation(logicalRelation,
+          netPartitionFilter, normalizedNetPartitionFilter)
+        // Keep partition-pruning predicates so that they are visible in physical planning
+        rebuildPhysicalOperation(projects, filters, logicalRelationWrapper)
     }
+    applyPartitionPruning(catalogFileIndexFilters, step1Plan, singleOccurenceNoFilterCFI.toSet)
+  }
 
-    val finalPlan = if (catalogFileIndexToCombinedPartitionFilter.isEmpty) {
+  private def applyPartitionPruning(
+      cfiToPartitionFilters: mutable.Map[CatalogFileIndex, Option[ExpressionSet]],
+      step1Plan: LogicalPlan,
+      nonRepeatedEmptyFilterCFI: Set[CatalogFileIndex]): LogicalPlan =
+    if (cfiToPartitionFilters.isEmpty) {
       step1Plan
     } else {
-      val cfiToBasePFI: mutable.Map[PrunedFileIndexLookUpKey, FileIndex]
-      = catalogFileIndexToCombinedPartitionFilter.flatMap {
-        case (cfi, totalFilter) =>
-          if (nonRepeatedEmptyFilterCFI.contains(cfi)) {
-            Seq(((cfi, None), cfi))
+      // Run partitions to get the union of partitions
+      val tablePartitions = cfiToPartitionFilters.flatMap {
+        case (catalogFileIndex, partitionFilters) =>
+          if (nonRepeatedEmptyFilterCFI.contains(catalogFileIndex)) {
+            Seq.empty
           } else {
-            val basePfi = cfi.filterPartitions(totalFilter.toSeq).
-              asInstanceOf[InMemoryFileIndex]
-            Seq(
-              ((cfi, totalFilter.headOption.map(_.canonicalized)), basePfi),
-              ((cfi, None), basePfi)
-            )
+            val unionedExprOpt = partitionFilters.map(exprSet => exprSet.reduce(Or))
+            Seq(catalogFileIndex -> (catalogFileIndex.listPartitions(unionedExprOpt.map(Seq(_))
+              .getOrElse(Seq.empty)), unionedExprOpt))
           }
       }
 
       step1Plan.transformUp {
-        case LogicalRelationWrapper(logicalRelation, cfi, fsRelation, specificFilterToApply,
-        filteredStats, colStats) =>
-          // first check from cachedPFI if we already have a suitable PrunedInMemoryFileIndex
-          // if not we create one.
-          val pfiLookUpKey: PrunedFileIndexLookUpKey =
-            (cfi, specificFilterToApply.headOption.map(_.canonicalized))
+        case PartitionedLogicalRelation(
+          logicalRelation @ LogicalRelation(
+            fsRelation@HadoopFsRelation(catalogFileIndex: CatalogFileIndex, _, _, _, _, _),
+            _,
+            _,
+            _),
+          partitionFilter,
+          normalizedPartitionFilter) => tablePartitions.get(catalogFileIndex) match {
+            case Some(((catalogTablePartitions, baseTimeNs), unionedFilter)) =>
+              val prunedFileIndex = catalogFileIndex.filterPartitions(catalogTablePartitions,
+                baseTimeNs, partitionFilter.fold(Seq.empty[Expression])(pFilterExpr =>
+                  if (unionedFilter == normalizedPartitionFilter) {
+                    Seq.empty[Expression]
+                  } else {
+                    Seq(pFilterExpr)
+                  }))
+              // TODO: What shall we do with baseTimeNs?.
+              //  Asif: I have added it to the diff
+              val prunedFsRelation =
+              fsRelation.copy(location = prunedFileIndex)(fsRelation.sparkSession)
 
-          val prunedFileIndex = cfiToBasePFI.getOrElse(pfiLookUpKey, {
-            val basePruneFileIndex = cfiToBasePFI(cfi -> None)
-            val specificPFI = basePruneFileIndex.asInstanceOf[InMemoryFileIndex].
-              applyFilters(specificFilterToApply.toSeq)
-            cfiToBasePFI.put(pfiLookUpKey, specificPFI)
-            specificPFI
-          })
+              partitionFilter.fold(
+                logicalRelation.copy(relation = prunedFsRelation))(partitionKeyFilter => {
+                val filteredStats =
+                  FilterEstimation(Filter(partitionKeyFilter, logicalRelation)).estimate
+                val colStats = filteredStats.map(_.attributeStats.map { case (attr, colStat) =>
+                  (attr.name, colStat.toCatalogColumnStat(attr.name, attr.dataType))
+                })
+                val withStats = logicalRelation.catalogTable.map(_.copy(
+                  stats = Option(CatalogStatistics(
+                    sizeInBytes = BigInt(prunedFileIndex.sizeInBytes),
+                    rowCount = filteredStats.flatMap(_.rowCount),
+                    colStats = colStats.getOrElse(Map.empty)))))
+                logicalRelation.copy(
+                  relation = prunedFsRelation, catalogTable = withStats)
+              })
 
-          val prunedFsRelation =
-            fsRelation.copy(location = prunedFileIndex)(fsRelation.sparkSession)
-
-          // Change table stats based on the sizeInBytes of pruned files
-          if (specificFilterToApply.isEmpty) {
-            logicalRelation.copy(relation = prunedFsRelation)
-          } else {
-            val withStats = logicalRelation.catalogTable.map(_.copy(
-              stats = Some(CatalogStatistics(
-                sizeInBytes = BigInt(prunedFileIndex.sizeInBytes),
-                rowCount = filteredStats.flatMap(_.rowCount),
-                colStats = colStats.getOrElse(Map.empty)))))
-            val prunedLogicalRelation = logicalRelation.copy(
-              relation = prunedFsRelation, catalogTable = withStats)
-            prunedLogicalRelation
+            case _ => logicalRelation
           }
       }
     }
-    finalPlan
-  }
 
-  private case class LogicalRelationWrapper(
-      lr: LogicalRelation,
-      catalogFileIndex: CatalogFileIndex,
-      fsRelation: HadoopFsRelation,
-      partitionKeyFilter: ExpressionSet,
-      filteredStats: Option[Statistics] = None,
-      colStats: Option[Map[String, CatalogColumnStat]] = None) extends LeafNode {
-    override def output: Seq[Attribute] = lr.output
+  private case class PartitionedLogicalRelation(
+      logicalRelation: LogicalRelation,
+      partitionFilter: Option[Expression],
+      normalizedPartitionFilter: Option[Expression]) extends LeafNode {
+    override def output: Seq[Attribute] = logicalRelation.output
   }
 }
