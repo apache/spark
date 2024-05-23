@@ -3481,7 +3481,7 @@ class Dataset[T] private[sql] (
     sparkSession.newDataset(agnosticEncoder) { builder =>
       val command = sparkSession.newCommand { builder =>
         builder.getCheckpointCommandBuilder
-          .setLocal(reliableCheckpoint)
+          .setLocal(!reliableCheckpoint)
           .setEager(eager)
           .setRelation(this.plan.getRoot)
       }

@@ -2096,7 +2096,7 @@ class DataFrame(ParentDataFrame):
         return DataFrame(plan.Offset(child=self._plan, offset=n), session=self._session)
 
     def checkpoint(self, eager: bool = True) -> "DataFrame":
-        cmd = plan.Checkpoint(child=self._plan, local=True, eager=eager)
+        cmd = plan.Checkpoint(child=self._plan, local=False, eager=eager)
         _, properties = self._session.client.execute_command(cmd.command(self._session.client))
         assert "checkpoint_command_result" in properties
         checkpointed = properties["checkpoint_command_result"]
