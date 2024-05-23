@@ -23,7 +23,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-
+// checkstyle.off: AvoidEscapedUnicodeCharacters
 public class CollationSupportSuite {
 
   /**
@@ -526,10 +526,10 @@ public class CollationSupportSuite {
     assertInitCap("aB 世 de", "UNICODE_CI", "Ab 世 De");
     assertInitCap("ÄBĆΔE", "UNICODE_CI", "Äbćδe");
     // Case-variable character length
-    assertInitCap("İo", "UTF8_BINARY", "İo");
-    assertInitCap("İo", "UTF8_BINARY_LCASE", "İo");
-    assertInitCap("İo", "UNICODE", "İo");
-    assertInitCap("İo", "UNICODE_CI", "İo");
+    assertInitCap("İo", "UTF8_BINARY", "I\u0307o");
+    assertInitCap("İo", "UTF8_BINARY_LCASE", "İo");
+    assertInitCap("İo", "UNICODE", "I\u0307o");
+    assertInitCap("İo", "UNICODE_CI", "İo");
   }
 
   private void assertStringInstr(String string, String substring, String collationName,
@@ -1008,3 +1008,4 @@ public class CollationSupportSuite {
   // TODO: Test other collation-aware expressions.
 
 }
+// checkstyle.on: AvoidEscapedUnicodeCharacters
