@@ -21,10 +21,10 @@ import java.util.Locale
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics}
+import org.apache.spark.sql.catalyst.catalog.CatalogStatistics
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LeafNode, LogicalPlan, Project, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LeafNode, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.FilterEstimation
 import org.apache.spark.sql.catalyst.rules.Rule
 
@@ -38,7 +38,6 @@ import org.apache.spark.sql.catalyst.rules.Rule
  */
 private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
   // the expression value for lookup should be canonicalized
-  type PrunedFileIndexLookUpKey = (CatalogFileIndex, Option[Expression])
   private def rebuildPhysicalOperation(
       projects: Seq[NamedExpression],
       filters: Seq[Expression],
@@ -77,7 +76,8 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
         if fsRelation.partitionSchema.nonEmpty =>
         val normalizedFilters = DataSourceStrategy.normalizeExprs(
           filters.filter(f => !SubqueryExpression.hasSubquery(f) &&
-            DataSourceUtils.shouldPushFilter(f, fsRelation.fileFormat.supportsCollationPushDown))
+            DataSourceUtils.shouldPushFilter(f, fsRelation.fileFormat.supportsCollationPushDown)),
+          logicalRelation.output)
         val (partitionKeyFilters, _) = DataSourceUtils
           .getPartitionFiltersAndDataFilters(partitionSchema, normalizedFilters)
         val netPartitionFilter = partitionKeyFilters.reduceOption(And)
