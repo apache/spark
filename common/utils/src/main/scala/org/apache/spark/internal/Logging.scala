@@ -57,12 +57,11 @@ import org.apache.spark.util.SparkClassUtils
  *   the `Logging` trait to log exceptions, maintaining structured and parsable logs.
  * <p>
  *
- * External third-party ecosystem access:
  *   If you want to output logs in `scala code` through the structured log framework,
  *   you can define `custom LogKey` and use it in `scala` code as follows:
  * <p>
  *
- * // External third-party ecosystem `custom LogKey` must be `extends LogKey`
+ * // To add a `custom LogKey`, implement `LogKey`
  * case object CUSTOM_LOG_KEY extends LogKey
  * import org.apache.spark.internal.MDC;
  * logInfo(log"${MDC(CUSTOM_LOG_KEY, "key")}")

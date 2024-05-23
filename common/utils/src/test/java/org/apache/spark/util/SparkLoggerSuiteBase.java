@@ -67,11 +67,11 @@ public abstract class SparkLoggerSuiteBase {
 
   private final MDC executorIDMDCValueIsNull = MDC.of(LogKeys.EXECUTOR_ID$.MODULE$, null);
 
-  private final MDC externalSystemCustomLog =
-    MDC.of(CustomLogKeys.CUSTOM_LOG_KEY$.MODULE$, "External system custom log message.");
+  private final MDC customLog =
+    MDC.of(CustomLogKeys.CUSTOM_LOG_KEY$.MODULE$, "custom log message.");
 
-  private final MDC externalSystemJavaCustomLog =
-    MDC.of(JavaCustomLogKeys.CUSTOM_LOG_KEY, "External system custom log message.");
+  private final MDC javaCustomLogMdc =
+    MDC.of(JavaCustomLogKeys.CUSTOM_LOG_KEY, "Custom log message.");
 
   // test for basic message (without any mdc)
   abstract String expectedPatternForBasicMsg(Level level);
@@ -95,7 +95,7 @@ public abstract class SparkLoggerSuiteBase {
   abstract String expectedPatternForExternalSystemCustomLogKey(Level level);
 
   // test for external system java custom LogKey
-  abstract String expectedPatternForExternalSystemJavaCustomLogKey(Level level);
+  abstract String expectedPatternForJavaCustomLogKey(Level level);
 
   @Test
   public void testBasicMsgLogger() {
@@ -234,7 +234,7 @@ public abstract class SparkLoggerSuiteBase {
   }
 
   @Test
-  public void testLoggerWithExternalSystemJavaCustomLogKey() {
+  public void testLoggerWithJavaCustomLogKey() {
     Runnable errorFn = () -> logger().error("{}", externalSystemJavaCustomLog);
     Runnable warnFn = () -> logger().warn("{}", externalSystemJavaCustomLog);
     Runnable infoFn = () -> logger().info("{}", externalSystemJavaCustomLog);

@@ -163,7 +163,7 @@ public class StructuredSparkLoggerSuite extends SparkLoggerSuiteBase {
   }
 
   @Override
-  String expectedPatternForExternalSystemJavaCustomLogKey(Level level) {
+  String expectedPatternForJavaCustomLogKey(Level level) {
     return compactAndToRegexPattern(level, """
       {
         "ts": "<timestamp>",

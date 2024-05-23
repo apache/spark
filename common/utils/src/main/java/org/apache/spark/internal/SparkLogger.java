@@ -61,12 +61,11 @@ import org.slf4j.Logger;
  * logger.error("Failed to abort the writer after failing to write map output.", e);
  * <p>
  *
- * External third-party ecosystem access:
  *   If you want to output logs in `java code` through the structured log framework,
  *   you can define `custom LogKey` and use it in `java` code as follows:
  * <p>
  *
- * // External third-party ecosystem `custom LogKey` must be `implements LogKey`
+ * // To add a `custom LogKey`, implement `LogKey`
  * public static class CUSTOM_LOG_KEY implements LogKey { }
  * import org.apache.spark.internal.MDC;
  * logger.error("Unable to delete key {} for cache", MDC.of(CUSTOM_LOG_KEY, "key"));
