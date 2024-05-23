@@ -184,3 +184,10 @@ object SpecialDatetimeValues extends Rule[LogicalPlan] {
     }
   }
 }
+
+object ReplaceTranspose extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transform {
+    case t @ Transpose(output, data, _) =>
+      LocalRelation(output, data)
+  }
+}

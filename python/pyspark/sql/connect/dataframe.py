@@ -1858,6 +1858,12 @@ class DataFrame(ParentDataFrame):
         self._execution_info = ei
         return pdf
 
+    def transpose(self, indexColumn: Optional[Column] = None) -> ParentDataFrame:
+        return DataFrame(
+            plan.Transpose(self._plan, F._to_col(indexColumn) if indexColumn is not None else None),
+            self._session,
+        )
+
     @property
     def schema(self) -> StructType:
         # Schema caching is correct in most cases. Connect is lazy by nature. This means that

@@ -955,6 +955,60 @@ class DataFrameTestsMixin:
             self.spark.range(1).localCheckpoint().explain()
             self.assertIn("ExistingRDD", buf.getvalue())
 
+    def test_transpose(self):
+        df = self.spark.createDataFrame([{"a": "x", "b": "y", "c": "z"}])
+
+        # default index column
+        transposed_df = df.transpose()
+        expected_schema = StructType(
+            [StructField("key", StringType(), False), StructField("x", StringType(), True)]
+        )
+        expected_data = [Row(key="b", x="y"), Row(key="c", x="z")]
+        self.assertEqual(transposed_df.schema, expected_schema)
+        self.assertEqual(transposed_df.collect(), expected_data)
+
+        # specified index column
+        transposed_df = df.transpose(df.c)
+        expected_schema = StructType(
+            [StructField("key", StringType(), False), StructField("z", StringType(), True)]
+        )
+        expected_data = [Row(key="a", z="x"), Row(key="b", z="y")]
+        self.assertEqual(transposed_df.schema, expected_schema)
+        self.assertEqual(transposed_df.collect(), expected_data)
+
+        # enforce transpose max values
+        with self.sql_conf({"spark.sql.transposeMaxValues": 0}):
+            with self.assertRaisesRegex(
+                IllegalArgumentException,
+                "Transposing the DataFrame exceeds the maximum allowed number of values",
+            ):
+                df.transpose().collect()
+
+        # enforce ascending order based on index column values for transposed columns
+        df = self.spark.createDataFrame([{"a": "z"}, {"a": "y"}, {"a": "x"}])
+        transposed_df = df.transpose()
+        expected_schema = StructType(
+            [
+                StructField("key", StringType(), False),
+                StructField("x", StringType(), True),
+                StructField("y", StringType(), True),
+                StructField("z", StringType(), True),
+            ]
+        )
+        self.assertEqual(transposed_df.schema, expected_schema)  # z, y, x -> x, y, z
+
+        # enforce AtomicType Attribute for index column values
+        df = self.spark.createDataFrame([{"a": ["x", "x"], "b": "y", "c": "z"}])
+        with self.assertRaisesRegex(
+            IllegalArgumentException, "Index column must be of atomic type"
+        ):
+            df.transpose().collect()
+
+        # enforce least common type for non-index columns
+        df = self.spark.createDataFrame([{"a": "x", "b": "y", "c": 1}])
+        with self.assertRaisesRegex(IllegalArgumentException, "No common type found"):
+            df.transpose().collect()
+
 
 class DataFrameTests(DataFrameTestsMixin, ReusedSQLTestCase):
     def test_query_execution_unsupported_in_classic(self):

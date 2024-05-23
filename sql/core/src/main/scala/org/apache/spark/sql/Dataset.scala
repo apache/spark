@@ -982,6 +982,30 @@ class Dataset[T] private[sql](
     unpivot(ids.toArray, variableColumnName, valueColumnName)
 
   /** @inheritdoc */
+  def transpose(indexColumn: Column): DataFrame = withPlan {
+    if (this.columns.isEmpty) {
+      LocalRelation()
+    } else {
+      UnresolvedTranspose(
+        indexColumn.named,
+        logicalPlan
+      )
+    }
+  }
+
+  /** @inheritdoc */
+  def transpose(): DataFrame = withPlan {
+    if (this.columns.isEmpty) {
+      LocalRelation()
+    } else {
+      UnresolvedTranspose(
+        this.col(this.columns.head).named,
+        logicalPlan
+      )
+    }
+  }
+
+  /** @inheritdoc */
   @scala.annotation.varargs
   def observe(name: String, expr: Column, exprs: Column*): Dataset[T] = withTypedPlan {
     CollectMetrics(name, (expr +: exprs).map(_.named), logicalPlan, id)

@@ -104,6 +104,7 @@ class Relation(google.protobuf.message.Message):
     AS_OF_JOIN_FIELD_NUMBER: builtins.int
     COMMON_INLINE_USER_DEFINED_DATA_SOURCE_FIELD_NUMBER: builtins.int
     WITH_RELATIONS_FIELD_NUMBER: builtins.int
+    TRANSPOSE_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -205,6 +206,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def with_relations(self) -> global___WithRelations: ...
     @property
+    def transpose(self) -> global___Transpose: ...
+    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
@@ -284,6 +287,7 @@ class Relation(google.protobuf.message.Message):
         common_inline_user_defined_data_source: global___CommonInlineUserDefinedDataSource
         | None = ...,
         with_relations: global___WithRelations | None = ...,
+        transpose: global___Transpose | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -402,6 +406,8 @@ class Relation(google.protobuf.message.Message):
             b"to_df",
             "to_schema",
             b"to_schema",
+            "transpose",
+            b"transpose",
             "unknown",
             b"unknown",
             "unpivot",
@@ -519,6 +525,8 @@ class Relation(google.protobuf.message.Message):
             b"to_df",
             "to_schema",
             b"to_schema",
+            "transpose",
+            b"transpose",
             "unknown",
             b"unknown",
             "unpivot",
@@ -577,6 +585,7 @@ class Relation(google.protobuf.message.Message):
             "as_of_join",
             "common_inline_user_defined_data_source",
             "with_relations",
+            "transpose",
             "fill_na",
             "drop_na",
             "replace",
@@ -3140,6 +3149,46 @@ class Unpivot(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["values"] | None: ...
 
 global___Unpivot = Unpivot
+
+class Transpose(google.protobuf.message.Message):
+    """Transpose a DataFrame, switching rows to columns.
+    Transforms the DataFrame such that the values in the specified index column
+    become the new columns of the DataFrame.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    INDEX_COLUMN_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) The input relation."""
+    @property
+    def index_column(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
+        """(Optional) The single column that will be treated as the index."""
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        index_column: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_index_column", b"_index_column", "index_column", b"index_column", "input", b"input"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_index_column", b"_index_column", "index_column", b"index_column", "input", b"input"
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_index_column", b"_index_column"]
+    ) -> typing_extensions.Literal["index_column"] | None: ...
+
+global___Transpose = Transpose
 
 class ToSchema(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor

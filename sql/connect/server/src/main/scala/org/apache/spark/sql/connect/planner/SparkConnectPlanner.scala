@@ -46,7 +46,7 @@ import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, Task
 import org.apache.spark.sql.{Dataset, Encoders, ForeachWriter, Observation, RelationalGroupedDataset, Row, SparkSession}
 import org.apache.spark.sql.avro.{AvroDataToCatalyst, CatalystDataToAvro}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, QueryPlanningTracker}
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedTranspose}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UnboundRowEncoder
 import org.apache.spark.sql.catalyst.expressions._
@@ -203,6 +203,7 @@ class SparkConnectPlanner(
           transformCachedLocalRelation(rel.getCachedLocalRelation)
         case proto.Relation.RelTypeCase.HINT => transformHint(rel.getHint)
         case proto.Relation.RelTypeCase.UNPIVOT => transformUnpivot(rel.getUnpivot)
+        case proto.Relation.RelTypeCase.TRANSPOSE => transformTranspose(rel.getTranspose)
         case proto.Relation.RelTypeCase.REPARTITION_BY_EXPRESSION =>
           transformRepartitionByExpression(rel.getRepartitionByExpression)
         case proto.Relation.RelTypeCase.MAP_PARTITIONS =>
@@ -1123,6 +1124,18 @@ class SparkConnectPlanner(
 
     val params = rel.getParametersList.asScala.toSeq.map(transformExpression)
     UnresolvedHint(rel.getName, params, transformRelation(rel.getInput))
+  }
+
+  private def transformTranspose(rel: proto.Transpose): LogicalPlan = {
+    val child = transformRelation(rel.getInput)
+
+    val indexColumn = if (rel.hasIndexColumn) {
+      transformExpression(rel.getIndexColumn)
+    } else {
+      child.output.head
+    }
+
+    UnresolvedTranspose(indexColumn = indexColumn, child = child)
   }
 
   private def transformUnpivot(rel: proto.Unpivot): LogicalPlan = {
