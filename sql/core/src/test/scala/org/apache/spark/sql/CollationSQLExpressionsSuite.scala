@@ -21,8 +21,8 @@ import java.text.SimpleDateFormat
 
 import scala.collection.immutable.Seq
 
-import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkRuntimeException}
-import org.apache.spark.sql.internal.SqlApiConf
+import org.apache.spark.{SparkConf, SparkException, SparkIllegalArgumentException, SparkRuntimeException}
+import org.apache.spark.sql.internal.{SqlApiConf, SQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -997,6 +997,22 @@ class CollationSQLExpressionsSuite
     })
   }
 
+  test("Support CurrentDatabase/Catalog/User expressions with collation") {
+    // Supported collations
+    Seq("UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI").foreach(collationName =>
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collationName) {
+        val queryDatabase = sql("SELECT current_schema()")
+        val queryCatalog = sql("SELECT current_catalog()")
+        val queryUser = sql("SELECT current_user()")
+        // Data type
+        val dataType = StringType(collationName)
+        assert(queryDatabase.schema.fields.head.dataType.sameType(dataType))
+        assert(queryCatalog.schema.fields.head.dataType.sameType(dataType))
+        assert(queryUser.schema.fields.head.dataType.sameType(dataType))
+      }
+    )
+  }
+
   test("Support Uuid misc expression with collation") {
     // Supported collations
     Seq("UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI").foreach(collationName =>
@@ -1584,7 +1600,45 @@ class CollationSQLExpressionsSuite
     })
   }
 
+  test("DateFormat expression with collation") {
+    case class DateFormatTestCase[R](date: String, format: String, collation: String, result: R)
+    val testCases = Seq(
+      DateFormatTestCase("2021-01-01", "yyyy-MM-dd", "UTF8_BINARY", "2021-01-01"),
+      DateFormatTestCase("2021-01-01", "yyyy-dd", "UTF8_BINARY_LCASE", "2021-01"),
+      DateFormatTestCase("2021-01-01", "yyyy-MM-dd", "UNICODE", "2021-01-01"),
+      DateFormatTestCase("2021-01-01", "yyyy", "UNICODE_CI", "2021")
+    )
+
+    for {
+      collateDate <- Seq(true, false)
+      collateFormat <- Seq(true, false)
+    } {
+      testCases.foreach(t => {
+        val dateArg = if (collateDate) s"collate('${t.date}', '${t.collation}')" else s"'${t.date}'"
+        val formatArg =
+          if (collateFormat) {
+            s"collate('${t.format}', '${t.collation}')"
+          } else {
+            s"'${t.format}'"
+          }
+
+        withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collation) {
+          val query = s"SELECT date_format(${dateArg}, ${formatArg})"
+          // Result & data type
+          checkAnswer(sql(query), Row(t.result))
+          assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.collation)))
+        }
+      })
+    }
+  }
+
   // TODO: Add more tests for other SQL expressions
 
 }
 // scalastyle:on nonascii
+
+class CollationSQLExpressionsANSIOffSuite extends CollationSQLExpressionsSuite {
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(SQLConf.ANSI_ENABLED, false)
+
+}

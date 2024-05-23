@@ -473,6 +473,12 @@
     ],
     "sqlState" : "42704"
   },
+  "COLLATION_INVALID_PROVIDER" : {
+    "message" : [
+      "The value <provider> does not represent a correct collation provider. Supported providers are: [<supportedProviders>]."
+    ],
+    "sqlState" : "42704"
+  },
   "COLLATION_MISMATCH" : {
     "message" : [
       "Could not determine which collation to use for string functions and operators."
@@ -2339,6 +2345,12 @@
   "INVALID_JSON_DATA_TYPE" : {
     "message" : [
       "Failed to convert the JSON string '<invalidType>' to a data type. Please enter a valid data type."
+    ],
+    "sqlState" : "2203G"
+  },
+  "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS" : {
+    "message" : [
+      "Collations can only be applied to string types, but the JSON data type is <jsonType>."
     ],
     "sqlState" : "2203G"
   },

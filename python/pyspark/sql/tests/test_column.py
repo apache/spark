@@ -259,7 +259,7 @@ class ColumnTestsMixin:
             message_parameters={"arg_name": "window", "arg_type": "int"},
         )
 
-    def test_union_classmethod_usage(self):
+    def test_eqnullsafe_classmethod_usage(self):
         df = self.spark.range(1)
         self.assertEqual(df.select(Column.eqNullSafe(df.id, df.id)).first()[0], True)
 
