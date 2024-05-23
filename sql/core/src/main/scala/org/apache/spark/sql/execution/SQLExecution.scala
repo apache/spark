@@ -28,6 +28,7 @@ import org.apache.spark.SparkContext.{SPARK_JOB_DESCRIPTION, SPARK_JOB_INTERRUPT
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{SPARK_DRIVER_PREFIX, SPARK_EXECUTOR_PREFIX}
 import org.apache.spark.internal.config.Tests.IS_TESTING
+import org.apache.spark.scheduler.ExecutionLimitTracker
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
@@ -202,6 +203,7 @@ object SQLExecution extends Logging {
       }
     } finally {
       executionIdToQueryExecution.remove(executionId)
+      ExecutionLimitTracker.cleanRunningTasks(executionId)
       sc.setLocalProperty(EXECUTION_ID_KEY, oldExecutionId)
       // Unset the "root" SQL Execution Id once the "root" SQL execution completes.
       // The current execution is the root execution if rootExecutionId == executionId.

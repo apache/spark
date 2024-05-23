@@ -1088,6 +1088,7 @@ private[spark] class TaskSetManager(
     if (runningTasksSet.add(tid) && parent != null) {
       parent.increaseRunningTasks(1)
     }
+    ExecutionLimitTracker.increaseRunningTasksIfNeed(taskSet)
   }
 
   /** If the given task ID is in the set of running tasks, removes it. */
