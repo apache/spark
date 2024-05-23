@@ -2174,55 +2174,26 @@ class CheckpointCommand(google.protobuf.message.Message):
     def relation(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
         """(Required) The logical plan to checkpoint."""
     local: builtins.bool
-    """(Optional) Locally checkpoint using a local temporary
+    """(Required) Locally checkpoint using a local temporary
     directory in Spark Connect server (Spark Driver)
     """
     eager: builtins.bool
-    """(Optional) Whether to checkpoint this dataframe immediately."""
+    """(Required) Whether to checkpoint this dataframe immediately."""
     def __init__(
         self,
         *,
         relation: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
-        local: builtins.bool | None = ...,
-        eager: builtins.bool | None = ...,
+        local: builtins.bool = ...,
+        eager: builtins.bool = ...,
     ) -> None: ...
     def HasField(
-        self,
-        field_name: typing_extensions.Literal[
-            "_eager",
-            b"_eager",
-            "_local",
-            b"_local",
-            "eager",
-            b"eager",
-            "local",
-            b"local",
-            "relation",
-            b"relation",
-        ],
+        self, field_name: typing_extensions.Literal["relation", b"relation"]
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "_eager",
-            b"_eager",
-            "_local",
-            b"_local",
-            "eager",
-            b"eager",
-            "local",
-            b"local",
-            "relation",
-            b"relation",
+            "eager", b"eager", "local", b"local", "relation", b"relation"
         ],
     ) -> None: ...
-    @typing.overload
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_eager", b"_eager"]
-    ) -> typing_extensions.Literal["eager"] | None: ...
-    @typing.overload
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_local", b"_local"]
-    ) -> typing_extensions.Literal["local"] | None: ...
 
 global___CheckpointCommand = CheckpointCommand

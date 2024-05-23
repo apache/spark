@@ -402,14 +402,14 @@ case class CatalogTable(
   }
 
   /**
-   * Return the schema binding mode. Defaults to SchemaCompensation if not a view or an older
+   * Return the schema binding mode. Defaults to SchemaBinding if not a view or an older
    * version, unless the viewSchemaBindingMode config is set to false
    */
   def viewSchemaMode: ViewSchemaMode = {
     if (!SQLConf.get.viewSchemaBindingEnabled) {
       SchemaUnsupported
     } else {
-      val schemaMode = properties.getOrElse(VIEW_SCHEMA_MODE, SchemaCompensation.toString)
+      val schemaMode = properties.getOrElse(VIEW_SCHEMA_MODE, SchemaBinding.toString)
       schemaMode match {
         case SchemaBinding.toString => SchemaBinding
         case SchemaEvolution.toString => SchemaEvolution

@@ -41,6 +41,7 @@ from pyspark.sql.types import (
     FloatType,
     DateType,
     TimestampType,
+    TimestampNTZType,
     DayTimeIntervalType,
     YearMonthIntervalType,
     CalendarIntervalType,
@@ -1169,6 +1170,313 @@ class TypesTestsMixin:
             _parse_datatype_string("a INT, c DOUBLE"),
         )
         self.assertEqual(VariantType(), _parse_datatype_string("variant"))
+
+    def test_tree_string(self):
+        schema1 = DataType.fromDDL("c1 INT, c2 STRUCT<c3: INT, c4: STRUCT<c5: INT, c6: INT>>")
+
+        self.assertEqual(
+            schema1.treeString().split("\n"),
+            [
+                "root",
+                " |-- c1: integer (nullable = true)",
+                " |-- c2: struct (nullable = true)",
+                " |    |-- c3: integer (nullable = true)",
+                " |    |-- c4: struct (nullable = true)",
+                " |    |    |-- c5: integer (nullable = true)",
+                " |    |    |-- c6: integer (nullable = true)",
+                "",
+            ],
+        )
+        self.assertEqual(
+            schema1.treeString(-1).split("\n"),
+            [
+                "root",
+                " |-- c1: integer (nullable = true)",
+                " |-- c2: struct (nullable = true)",
+                " |    |-- c3: integer (nullable = true)",
+                " |    |-- c4: struct (nullable = true)",
+                " |    |    |-- c5: integer (nullable = true)",
+                " |    |    |-- c6: integer (nullable = true)",
+                "",
+            ],
+        )
+        self.assertEqual(
+            schema1.treeString(0).split("\n"),
+            [
+                "root",
+                " |-- c1: integer (nullable = true)",
+                " |-- c2: struct (nullable = true)",
+                " |    |-- c3: integer (nullable = true)",
+                " |    |-- c4: struct (nullable = true)",
+                " |    |    |-- c5: integer (nullable = true)",
+                " |    |    |-- c6: integer (nullable = true)",
+                "",
+            ],
+        )
+        self.assertEqual(
+            schema1.treeString(1).split("\n"),
+            [
+                "root",
+                " |-- c1: integer (nullable = true)",
+                " |-- c2: struct (nullable = true)",
+                "",
+            ],
+        )
+        self.assertEqual(
+            schema1.treeString(2).split("\n"),
+            [
+                "root",
+                " |-- c1: integer (nullable = true)",
+                " |-- c2: struct (nullable = true)",
+                " |    |-- c3: integer (nullable = true)",
+                " |    |-- c4: struct (nullable = true)",
+                "",
+            ],
+        )
+        self.assertEqual(
+            schema1.treeString(3).split("\n"),
+            [
+                "root",
+                " |-- c1: integer (nullable = true)",
+                " |-- c2: struct (nullable = true)",
+                " |    |-- c3: integer (nullable = true)",
+                " |    |-- c4: struct (nullable = true)",
+                " |    |    |-- c5: integer (nullable = true)",
+                " |    |    |-- c6: integer (nullable = true)",
+                "",
+            ],
+        )
+        self.assertEqual(
+            schema1.treeString(4).split("\n"),
+            [
+                "root",
+                " |-- c1: integer (nullable = true)",
+                " |-- c2: struct (nullable = true)",
+                " |    |-- c3: integer (nullable = true)",
+                " |    |-- c4: struct (nullable = true)",
+                " |    |    |-- c5: integer (nullable = true)",
+                " |    |    |-- c6: integer (nullable = true)",
+                "",
+            ],
+        )
+
+        schema2 = DataType.fromDDL(
+            "c1 INT, c2 ARRAY<STRUCT<c3: INT>>, c4 STRUCT<c5: INT, c6: ARRAY<ARRAY<INT>>>"
+        )
+        self.assertEqual(
+            schema2.treeString(0).split("\n"),
+            [
+                "root",
+                " |-- c1: integer (nullable = true)",
+                " |-- c2: array (nullable = true)",
+                " |    |-- element: struct (containsNull = true)",
+                " |    |    |-- c3: integer (nullable = true)",
+                " |-- c4: struct (nullable = true)",
+                " |    |-- c5: integer (nullable = true)",
+                " |    |-- c6: array (nullable = true)",
+                " |    |    |-- element: array (containsNull = true)",
+                " |    |    |    |-- element: integer (containsNull = true)",
+                "",
+            ],
+        )
+        self.assertEqual(
+            schema2.treeString(1).split("\n"),
+            [
+                "root",
+                " |-- c1: integer (nullable = true)",
+                " |-- c2: array (nullable = true)",
+                " |-- c4: struct (nullable = true)",
+                "",
+            ],
+        )
+        self.assertEqual(
+            schema2.treeString(2).split("\n"),
+            [
+                "root",
+                " |-- c1: integer (nullable = true)",
+                " |-- c2: array (nullable = true)",
+                " |    |-- element: struct (containsNull = true)",
+                " |-- c4: struct (nullable = true)",
+                " |    |-- c5: integer (nullable = true)",
+                " |    |-- c6: array (nullable = true)",
+                "",
+            ],
+        )
+        self.assertEqual(
+            schema2.treeString(3).split("\n"),
+            [
+                "root",
+                " |-- c1: integer (nullable = true)",
+                " |-- c2: array (nullable = true)",
+                " |    |-- element: struct (containsNull = true)",
+                " |    |    |-- c3: integer (nullable = true)",
+                " |-- c4: struct (nullable = true)",
+                " |    |-- c5: integer (nullable = true)",
+                " |    |-- c6: array (nullable = true)",
+                " |    |    |-- element: array (containsNull = true)",
+                "",
+            ],
+        )
+        self.assertEqual(
+            schema2.treeString(4).split("\n"),
+            [
+                "root",
+                " |-- c1: integer (nullable = true)",
+                " |-- c2: array (nullable = true)",
+                " |    |-- element: struct (containsNull = true)",
+                " |    |    |-- c3: integer (nullable = true)",
+                " |-- c4: struct (nullable = true)",
+                " |    |-- c5: integer (nullable = true)",
+                " |    |-- c6: array (nullable = true)",
+                " |    |    |-- element: array (containsNull = true)",
+                " |    |    |    |-- element: integer (containsNull = true)",
+                "",
+            ],
+        )
+
+        schema3 = DataType.fromDDL(
+            "c1 MAP<INT, STRUCT<c2: MAP<INT, INT>>>, c3 STRUCT<c4: MAP<INT, MAP<INT, INT>>>"
+        )
+        self.assertEqual(
+            schema3.treeString(0).split("\n"),
+            [
+                "root",
+                " |-- c1: map (nullable = true)",
+                " |    |-- key: integer",
+                " |    |-- value: struct (valueContainsNull = true)",
+                " |    |    |-- c2: map (nullable = true)",
+                " |    |    |    |-- key: integer",
+                " |    |    |    |-- value: integer (valueContainsNull = true)",
+                " |-- c3: struct (nullable = true)",
+                " |    |-- c4: map (nullable = true)",
+                " |    |    |-- key: integer",
+                " |    |    |-- value: map (valueContainsNull = true)",
+                " |    |    |    |-- key: integer",
+                " |    |    |    |-- value: integer (valueContainsNull = true)",
+                "",
+            ],
+        )
+        self.assertEqual(
+            schema3.treeString(1).split("\n"),
+            [
+                "root",
+                " |-- c1: map (nullable = true)",
+                " |-- c3: struct (nullable = true)",
+                "",
+            ],
+        )
+        self.assertEqual(
+            schema3.treeString(2).split("\n"),
+            [
+                "root",
+                " |-- c1: map (nullable = true)",
+                " |    |-- key: integer",
+                " |    |-- value: struct (valueContainsNull = true)",
+                " |-- c3: struct (nullable = true)",
+                " |    |-- c4: map (nullable = true)",
+                "",
+            ],
+        )
+        self.assertEqual(
+            schema3.treeString(3).split("\n"),
+            [
+                "root",
+                " |-- c1: map (nullable = true)",
+                " |    |-- key: integer",
+                " |    |-- value: struct (valueContainsNull = true)",
+                " |    |    |-- c2: map (nullable = true)",
+                " |-- c3: struct (nullable = true)",
+                " |    |-- c4: map (nullable = true)",
+                " |    |    |-- key: integer",
+                " |    |    |-- value: map (valueContainsNull = true)",
+                "",
+            ],
+        )
+        self.assertEqual(
+            schema3.treeString(4).split("\n"),
+            [
+                "root",
+                " |-- c1: map (nullable = true)",
+                " |    |-- key: integer",
+                " |    |-- value: struct (valueContainsNull = true)",
+                " |    |    |-- c2: map (nullable = true)",
+                " |    |    |    |-- key: integer",
+                " |    |    |    |-- value: integer (valueContainsNull = true)",
+                " |-- c3: struct (nullable = true)",
+                " |    |-- c4: map (nullable = true)",
+                " |    |    |-- key: integer",
+                " |    |    |-- value: map (valueContainsNull = true)",
+                " |    |    |    |-- key: integer",
+                " |    |    |    |-- value: integer (valueContainsNull = true)",
+                "",
+            ],
+        )
+
+    def test_tree_string_for_builtin_types(self):
+        schema = (
+            StructType()
+            .add("n", NullType())
+            .add("str", StringType())
+            .add("c", CharType(10))
+            .add("v", VarcharType(10))
+            .add("bin", BinaryType())
+            .add("bool", BooleanType())
+            .add("date", DateType())
+            .add("ts", TimestampType())
+            .add("ts_ntz", TimestampNTZType())
+            .add("dec", DecimalType(10, 2))
+            .add("double", DoubleType())
+            .add("float", FloatType())
+            .add("long", LongType())
+            .add("int", IntegerType())
+            .add("short", ShortType())
+            .add("byte", ByteType())
+            .add("ym_interval_1", YearMonthIntervalType())
+            .add("ym_interval_2", YearMonthIntervalType(YearMonthIntervalType.YEAR))
+            .add(
+                "ym_interval_3",
+                YearMonthIntervalType(YearMonthIntervalType.YEAR, YearMonthIntervalType.MONTH),
+            )
+            .add("dt_interval_1", DayTimeIntervalType())
+            .add("dt_interval_2", DayTimeIntervalType(DayTimeIntervalType.DAY))
+            .add(
+                "dt_interval_3",
+                DayTimeIntervalType(DayTimeIntervalType.HOUR, DayTimeIntervalType.SECOND),
+            )
+            .add("cal_interval", CalendarIntervalType())
+            .add("var", VariantType())
+        )
+        self.assertEqual(
+            schema.treeString().split("\n"),
+            [
+                "root",
+                " |-- n: void (nullable = true)",
+                " |-- str: string (nullable = true)",
+                " |-- c: char(10) (nullable = true)",
+                " |-- v: varchar(10) (nullable = true)",
+                " |-- bin: binary (nullable = true)",
+                " |-- bool: boolean (nullable = true)",
+                " |-- date: date (nullable = true)",
+                " |-- ts: timestamp (nullable = true)",
+                " |-- ts_ntz: timestamp_ntz (nullable = true)",
+                " |-- dec: decimal(10,2) (nullable = true)",
+                " |-- double: double (nullable = true)",
+                " |-- float: float (nullable = true)",
+                " |-- long: long (nullable = true)",
+                " |-- int: integer (nullable = true)",
+                " |-- short: short (nullable = true)",
+                " |-- byte: byte (nullable = true)",
+                " |-- ym_interval_1: interval year to month (nullable = true)",
+                " |-- ym_interval_2: interval year (nullable = true)",
+                " |-- ym_interval_3: interval year to month (nullable = true)",
+                " |-- dt_interval_1: interval day to second (nullable = true)",
+                " |-- dt_interval_2: interval day (nullable = true)",
+                " |-- dt_interval_3: interval hour to second (nullable = true)",
+                " |-- cal_interval: interval (nullable = true)",
+                " |-- var: variant (nullable = true)",
+                "",
+            ],
+        )
 
     def test_metadata_null(self):
         schema = StructType(

@@ -1830,6 +1830,11 @@ class SparkConnectPlanner(
         val unit = extractString(children(0), "unit")
         Some(TimestampDiff(unit, children(1), children(2)))
 
+      case "timestampadd" if fun.getArgumentsCount == 3 =>
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
+        val unit = extractString(children(0), "unit")
+        Some(TimestampAdd(unit, children(1), children(2)))
+
       case "window" if Seq(2, 3, 4).contains(fun.getArgumentsCount) =>
         val children = fun.getArgumentsList.asScala.map(transformExpression)
         val timeCol = children.head
@@ -3518,15 +3523,9 @@ class SparkConnectPlanner(
       responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
     val target = Dataset
       .ofRows(session, transformRelation(checkpointCommand.getRelation))
-    val checkpointed = if (checkpointCommand.hasLocal && checkpointCommand.hasEager) {
-      target.localCheckpoint(eager = checkpointCommand.getEager)
-    } else if (checkpointCommand.hasLocal) {
-      target.localCheckpoint()
-    } else if (checkpointCommand.hasEager) {
-      target.checkpoint(eager = checkpointCommand.getEager)
-    } else {
-      target.checkpoint()
-    }
+    val checkpointed = target.checkpoint(
+      eager = checkpointCommand.getEager,
+      reliableCheckpoint = !checkpointCommand.getLocal)
 
     val dfId = UUID.randomUUID().toString
     logInfo(log"Caching DataFrame with id ${MDC(DATAFRAME_ID, dfId)}")

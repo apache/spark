@@ -317,7 +317,8 @@ object SparkConnectService extends Logging {
 
   // For testing
   private[spark] def getOrCreateIsolatedSession(
-      userId: String, sessionId: String): SessionHolder = {
+      userId: String,
+      sessionId: String): SessionHolder = {
     getOrCreateIsolatedSession(userId, sessionId, None)
   }
 
