@@ -142,10 +142,14 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper {
       case Types.SMALLINT =>
         if (md.build().getBoolean("isSigned")) {
           Some(ShortType)
+        } else if ("TINYINT UNSIGNED".equalsIgnoreCase(typeName)) {
+          Some(ShortType)
         } else {
           Some(IntegerType)
         }
-      case Types.INTEGER if "MEDIUMINT UNSIGNED".equalsIgnoreCase(typeName) =>
+      case Types.INTEGER
+        if "MEDIUMINT UNSIGNED".equalsIgnoreCase(typeName) ||
+          "SMALLINT UNSIGNED".equalsIgnoreCase(typeName) =>
         // Signed values in [-8388608, 8388607] and unsigned values in [0, 16777215],
         // both of them fit IntegerType
         Some(IntegerType)
@@ -158,6 +162,8 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper {
         // scalastyle:on line.size.limit
         Some(getTimestampType(md.build()))
       case Types.TIMESTAMP => Some(TimestampType)
+      case Types.BIGINT if "INTEGER UNSIGNED".equalsIgnoreCase(typeName) =>
+        Some(LongType)
       case _ => None
     }
   }
