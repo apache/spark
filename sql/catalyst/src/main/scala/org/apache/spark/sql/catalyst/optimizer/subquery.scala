@@ -824,7 +824,7 @@ object OptimizeOneRowJoin extends Rule[LogicalPlan] with PredicateHelper with Jo
     }
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+  private def rewrite(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(JOIN), ruleId) {
     case p @ Project(_, j: Join) if j.right.maxRows.contains(1) &&
       p.references.subsetOf(j.left.outputSet) =>
@@ -837,4 +837,11 @@ object OptimizeOneRowJoin extends Rule[LogicalPlan] with PredicateHelper with Jo
     case j: Join if j.right.maxRows.contains(1) && j.joinType == LeftSemi =>
       eliminateRightSide(j).getOrElse(j)
   }
+
+  def apply(plan: LogicalPlan): LogicalPlan = if (!conf.optimizeOneRowJoinEnabled) {
+    plan
+  } else {
+    rewrite(plan)
+  }
+
 }
