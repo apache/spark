@@ -31,7 +31,7 @@ public class CollationSupportSuite {
    * Collation-aware UTF8String comparison.
    */
 
-  private void assertCompare(String s1, String s2, String collationName, int expected)
+  private void assertStringCompare(String s1, String s2, String collationName, int expected)
           throws SparkException {
     UTF8String l = UTF8String.fromString(s1);
     UTF8String r = UTF8String.fromString(s2);
@@ -42,68 +42,68 @@ public class CollationSupportSuite {
   @Test
   public void testCompare() throws SparkException {
     // Edge cases
-    assertCompare("", "", "UTF8_BINARY", 0);
-    assertCompare("a", "", "UTF8_BINARY", 1);
-    assertCompare("", "a", "UTF8_BINARY", -1);
-    assertCompare("", "", "UTF8_BINARY_LCASE", 0);
-    assertCompare("a", "", "UTF8_BINARY_LCASE", 1);
-    assertCompare("", "a", "UTF8_BINARY_LCASE", -1);
-    assertCompare("", "", "UNICODE", 0);
-    assertCompare("a", "", "UNICODE", 1);
-    assertCompare("", "a", "UNICODE", -1);
-    assertCompare("", "", "UNICODE_CI", 0);
-    assertCompare("a", "", "UNICODE_CI", 1);
-    assertCompare("", "a", "UNICODE_CI", -1);
+    assertStringCompare("", "", "UTF8_BINARY", 0);
+    assertStringCompare("a", "", "UTF8_BINARY", 1);
+    assertStringCompare("", "a", "UTF8_BINARY", -1);
+    assertStringCompare("", "", "UTF8_BINARY_LCASE", 0);
+    assertStringCompare("a", "", "UTF8_BINARY_LCASE", 1);
+    assertStringCompare("", "a", "UTF8_BINARY_LCASE", -1);
+    assertStringCompare("", "", "UNICODE", 0);
+    assertStringCompare("a", "", "UNICODE", 1);
+    assertStringCompare("", "a", "UNICODE", -1);
+    assertStringCompare("", "", "UNICODE_CI", 0);
+    assertStringCompare("a", "", "UNICODE_CI", 1);
+    assertStringCompare("", "a", "UNICODE_CI", -1);
     // Basic tests
-    assertCompare("AbCd", "aBcD", "UTF8_BINARY", -1);
-    assertCompare("ABCD", "abcd", "UTF8_BINARY_LCASE", 0);
-    assertCompare("AbcD", "aBCd", "UNICODE", 1);
-    assertCompare("abcd", "ABCD", "UNICODE_CI", 0);
+    assertStringCompare("AbCd", "aBcD", "UTF8_BINARY", -1);
+    assertStringCompare("ABCD", "abcd", "UTF8_BINARY_LCASE", 0);
+    assertStringCompare("AbcD", "aBCd", "UNICODE", 1);
+    assertStringCompare("abcd", "ABCD", "UNICODE_CI", 0);
     // Accent variation
-    assertCompare("aBćD", "ABĆD", "UTF8_BINARY", 1);
-    assertCompare("AbCδ", "ABCΔ", "UTF8_BINARY_LCASE", 0);
-    assertCompare("äBCd", "ÄBCD", "UNICODE", -1);
-    assertCompare("Ab́cD", "AB́CD", "UNICODE_CI", 0);
+    assertStringCompare("aBćD", "ABĆD", "UTF8_BINARY", 1);
+    assertStringCompare("AbCδ", "ABCΔ", "UTF8_BINARY_LCASE", 0);
+    assertStringCompare("äBCd", "ÄBCD", "UNICODE", -1);
+    assertStringCompare("Ab́cD", "AB́CD", "UNICODE_CI", 0);
     // Case-variable character length
-    assertCompare("i\u0307", "İ", "UTF8_BINARY", -1);
-    assertCompare("İ", "i\u0307", "UTF8_BINARY", 1);
-    assertCompare("i\u0307", "İ", "UTF8_BINARY_LCASE", 0);
-    assertCompare("İ", "i\u0307", "UTF8_BINARY_LCASE", 0);
-    assertCompare("i\u0307", "İ", "UNICODE", -1);
-    assertCompare("İ", "i\u0307", "UNICODE", 1);
-    assertCompare("i\u0307", "İ", "UNICODE_CI", 0);
-    assertCompare("İ", "i\u0307", "UNICODE_CI", 0);
-    assertCompare("i\u0307İ", "i\u0307İ", "UTF8_BINARY_LCASE", 0);
-    assertCompare("i\u0307İ", "İi\u0307", "UTF8_BINARY_LCASE", 0);
-    assertCompare("İi\u0307", "i\u0307İ", "UTF8_BINARY_LCASE", 0);
-    assertCompare("İi\u0307", "İi\u0307", "UTF8_BINARY_LCASE", 0);
-    assertCompare("i\u0307İ", "i\u0307İ", "UNICODE_CI", 0);
-    assertCompare("i\u0307İ", "İi\u0307", "UNICODE_CI", 0);
-    assertCompare("İi\u0307", "i\u0307İ", "UNICODE_CI", 0);
-    assertCompare("İi\u0307", "İi\u0307", "UNICODE_CI", 0);
+    assertStringCompare("i\u0307", "İ", "UTF8_BINARY", -1);
+    assertStringCompare("İ", "i\u0307", "UTF8_BINARY", 1);
+    assertStringCompare("i\u0307", "İ", "UTF8_BINARY_LCASE", 0);
+    assertStringCompare("İ", "i\u0307", "UTF8_BINARY_LCASE", 0);
+    assertStringCompare("i\u0307", "İ", "UNICODE", -1);
+    assertStringCompare("İ", "i\u0307", "UNICODE", 1);
+    assertStringCompare("i\u0307", "İ", "UNICODE_CI", 0);
+    assertStringCompare("İ", "i\u0307", "UNICODE_CI", 0);
+    assertStringCompare("i\u0307İ", "i\u0307İ", "UTF8_BINARY_LCASE", 0);
+    assertStringCompare("i\u0307İ", "İi\u0307", "UTF8_BINARY_LCASE", 0);
+    assertStringCompare("İi\u0307", "i\u0307İ", "UTF8_BINARY_LCASE", 0);
+    assertStringCompare("İi\u0307", "İi\u0307", "UTF8_BINARY_LCASE", 0);
+    assertStringCompare("i\u0307İ", "i\u0307İ", "UNICODE_CI", 0);
+    assertStringCompare("i\u0307İ", "İi\u0307", "UNICODE_CI", 0);
+    assertStringCompare("İi\u0307", "i\u0307İ", "UNICODE_CI", 0);
+    assertStringCompare("İi\u0307", "İi\u0307", "UNICODE_CI", 0);
     // Conditional case mapping
-    assertCompare("ς", "σ", "UTF8_BINARY", -1);
-    assertCompare("ς", "Σ", "UTF8_BINARY", 1);
-    assertCompare("σ", "Σ", "UTF8_BINARY", 1);
-    assertCompare("ς", "σ", "UTF8_BINARY_LCASE", 0);
-    assertCompare("ς", "Σ", "UTF8_BINARY_LCASE", 0);
-    assertCompare("σ", "Σ", "UTF8_BINARY_LCASE", 0);
-    assertCompare("ς", "σ", "UNICODE", 1);
-    assertCompare("ς", "Σ", "UNICODE", 1);
-    assertCompare("σ", "Σ", "UNICODE", -1);
-    assertCompare("ς", "σ", "UNICODE_CI", 0);
-    assertCompare("ς", "Σ", "UNICODE_CI", 0);
-    assertCompare("σ", "Σ", "UNICODE_CI", 0);
+    assertStringCompare("ς", "σ", "UTF8_BINARY", -1);
+    assertStringCompare("ς", "Σ", "UTF8_BINARY", 1);
+    assertStringCompare("σ", "Σ", "UTF8_BINARY", 1);
+    assertStringCompare("ς", "σ", "UTF8_BINARY_LCASE", 0);
+    assertStringCompare("ς", "Σ", "UTF8_BINARY_LCASE", 0);
+    assertStringCompare("σ", "Σ", "UTF8_BINARY_LCASE", 0);
+    assertStringCompare("ς", "σ", "UNICODE", 1);
+    assertStringCompare("ς", "Σ", "UNICODE", 1);
+    assertStringCompare("σ", "Σ", "UNICODE", -1);
+    assertStringCompare("ς", "σ", "UNICODE_CI", 0);
+    assertStringCompare("ς", "Σ", "UNICODE_CI", 0);
+    assertStringCompare("σ", "Σ", "UNICODE_CI", 0);
   }
 
-  private void assertLowercase(String target, String expected, String collationName)
+  private void assertLcaseCompare(String target, String expected, String collationName)
       throws SparkException {
     if (collationName.equals("UTF8_BINARY")) {
       UTF8String targetUTF8 = UTF8String.fromString(target);
       UTF8String expectedUTF8 = UTF8String.fromString(expected);
       assertEquals(expectedUTF8, targetUTF8.toLowerCase());
     } else if (collationName.equals("UTF8_BINARY_LCASE")) {
-      assertEquals(expected, CollationAwareUTF8String.toLowerCase(target));
+      assertEquals(expected, CollationAwareUTF8String.lowerCaseCodePoints(target));
     } else {
       int collationId = CollationFactory.collationNameToId(collationName);
       assertEquals(expected, CollationAwareUTF8String.toLowerCase(target, collationId));
@@ -111,50 +111,50 @@ public class CollationSupportSuite {
   }
 
   @Test
-  public void testLowercase() throws SparkException {
+  public void testLcaseCompare() throws SparkException {
     // Edge cases
-    assertLowercase("", "", "UTF8_BINARY");
-    assertLowercase("", "", "UTF8_BINARY_LCASE");
-    assertLowercase("", "", "UNICODE");
-    assertLowercase("", "", "UNICODE_CI");
+    assertLcaseCompare("", "", "UTF8_BINARY");
+    assertLcaseCompare("", "", "UTF8_BINARY_LCASE");
+    assertLcaseCompare("", "", "UNICODE");
+    assertLcaseCompare("", "", "UNICODE_CI");
     // Basic tests
-    assertLowercase("abcd", "abcd", "UTF8_BINARY");
-    assertLowercase("AbCd", "abcd", "UTF8_BINARY");
-    assertLowercase("abcd", "abcd", "UTF8_BINARY_LCASE");
-    assertLowercase("aBcD", "abcd", "UTF8_BINARY_LCASE");
-    assertLowercase("abcd", "abcd", "UNICODE");
-    assertLowercase("aBCd", "abcd", "UNICODE");
-    assertLowercase("abcd", "abcd", "UNICODE_CI");
-    assertLowercase("AbcD", "abcd", "UNICODE_CI");
+    assertLcaseCompare("abcd", "abcd", "UTF8_BINARY");
+    assertLcaseCompare("AbCd", "abcd", "UTF8_BINARY");
+    assertLcaseCompare("abcd", "abcd", "UTF8_BINARY_LCASE");
+    assertLcaseCompare("aBcD", "abcd", "UTF8_BINARY_LCASE");
+    assertLcaseCompare("abcd", "abcd", "UNICODE");
+    assertLcaseCompare("aBCd", "abcd", "UNICODE");
+    assertLcaseCompare("abcd", "abcd", "UNICODE_CI");
+    assertLcaseCompare("AbcD", "abcd", "UNICODE_CI");
     // Accent variation
-    assertLowercase("AbĆd", "abćd", "UTF8_BINARY");
-    assertLowercase("aBcΔ", "abcδ", "UTF8_BINARY_LCASE");
-    assertLowercase("ÄbcD", "äbcd", "UNICODE");
-    assertLowercase("aB́Cd", "ab́cd", "UNICODE_CI");
+    assertLcaseCompare("AbĆd", "abćd", "UTF8_BINARY");
+    assertLcaseCompare("aBcΔ", "abcδ", "UTF8_BINARY_LCASE");
+    assertLcaseCompare("ÄbcD", "äbcd", "UNICODE");
+    assertLcaseCompare("aB́Cd", "ab́cd", "UNICODE_CI");
     // Case-variable character length
-    assertLowercase("İoDiNe", "i̇odine", "UTF8_BINARY");
-    assertLowercase("Abi̇o12", "abi̇o12", "UTF8_BINARY");
-    assertLowercase("İodInE", "i̇odine", "UTF8_BINARY_LCASE");
-    assertLowercase("aBi̇o12", "abi̇o12", "UTF8_BINARY_LCASE");
-    assertLowercase("İoDinE", "i̇odine", "UNICODE");
-    assertLowercase("abi̇O12", "abi̇o12", "UNICODE");
-    assertLowercase("İodINe", "i̇odine", "UNICODE_CI");
-    assertLowercase("ABi̇o12", "abi̇o12", "UNICODE_CI");
+    assertLcaseCompare("İoDiNe", "i̇odine", "UTF8_BINARY");
+    assertLcaseCompare("Abi̇o12", "abi̇o12", "UTF8_BINARY");
+    assertLcaseCompare("İodInE", "i̇odine", "UTF8_BINARY_LCASE");
+    assertLcaseCompare("aBi̇o12", "abi̇o12", "UTF8_BINARY_LCASE");
+    assertLcaseCompare("İoDinE", "i̇odine", "UNICODE");
+    assertLcaseCompare("abi̇O12", "abi̇o12", "UNICODE");
+    assertLcaseCompare("İodINe", "i̇odine", "UNICODE_CI");
+    assertLcaseCompare("ABi̇o12", "abi̇o12", "UNICODE_CI");
     // Conditional case mapping
-    assertLowercase("ΘΑΛΑΣΣΙΝΟΣ", "θαλασσινος", "UTF8_BINARY");
-    assertLowercase("ΘΑΛΑΣΣΙΝΟΣ", "θαλασσινοσ", "UTF8_BINARY_LCASE"); // != UNICODE_CI
-    assertLowercase("ΘΑΛΑΣΣΙΝΟΣ", "θαλασσινος", "UNICODE");
-    assertLowercase("ΘΑΛΑΣΣΙΝΟΣ", "θαλασσινος", "UNICODE_CI");
+    assertLcaseCompare("ΘΑΛΑΣΣΙΝΟΣ", "θαλασσινος", "UTF8_BINARY");
+    assertLcaseCompare("ΘΑΛΑΣΣΙΝΟΣ", "θαλασσινοσ", "UTF8_BINARY_LCASE"); // != UNICODE_CI
+    assertLcaseCompare("ΘΑΛΑΣΣΙΝΟΣ", "θαλασσινος", "UNICODE");
+    assertLcaseCompare("ΘΑΛΑΣΣΙΝΟΣ", "θαλασσινος", "UNICODE_CI");
   }
 
-  private void assertUppercase(String target, String expected, String collationName)
+  private void assertUcaseCompare(String target, String expected, String collationName)
       throws SparkException {
     if (collationName.equals("UTF8_BINARY")) {
       UTF8String targetUTF8 = UTF8String.fromString(target);
       UTF8String expectedUTF8 = UTF8String.fromString(expected);
       assertEquals(expectedUTF8, targetUTF8.toUpperCase());
     } else if (collationName.equals("UTF8_BINARY_LCASE")) {
-      assertEquals(expected, CollationAwareUTF8String.toUpperCase(target));
+      assertEquals(expected, CollationAwareUTF8String.upperCaseCodePoints(target));
     } else {
       int collationId = CollationFactory.collationNameToId(collationName);
       assertEquals(expected, CollationAwareUTF8String.toUpperCase(target, collationId));
@@ -164,52 +164,52 @@ public class CollationSupportSuite {
   @Test
   public void testUppercase() throws SparkException {
     // Edge cases
-    assertUppercase("", "", "UTF8_BINARY");
-    assertUppercase("", "", "UTF8_BINARY_LCASE");
-    assertUppercase("", "", "UNICODE");
-    assertUppercase("", "", "UNICODE_CI");
+    assertUcaseCompare("", "", "UTF8_BINARY");
+    assertUcaseCompare("", "", "UTF8_BINARY_LCASE");
+    assertUcaseCompare("", "", "UNICODE");
+    assertUcaseCompare("", "", "UNICODE_CI");
     // Basic tests
-    assertUppercase("abcd", "ABCD", "UTF8_BINARY");
-    assertUppercase("AbCd", "ABCD", "UTF8_BINARY");
-    assertUppercase("abcd", "ABCD", "UTF8_BINARY_LCASE");
-    assertUppercase("aBcD", "ABCD", "UTF8_BINARY_LCASE");
-    assertUppercase("abcd", "ABCD", "UNICODE");
-    assertUppercase("aBCd", "ABCD", "UNICODE");
-    assertUppercase("abcd", "ABCD", "UNICODE_CI");
-    assertUppercase("AbcD", "ABCD", "UNICODE_CI");
+    assertUcaseCompare("abcd", "ABCD", "UTF8_BINARY");
+    assertUcaseCompare("AbCd", "ABCD", "UTF8_BINARY");
+    assertUcaseCompare("abcd", "ABCD", "UTF8_BINARY_LCASE");
+    assertUcaseCompare("aBcD", "ABCD", "UTF8_BINARY_LCASE");
+    assertUcaseCompare("abcd", "ABCD", "UNICODE");
+    assertUcaseCompare("aBCd", "ABCD", "UNICODE");
+    assertUcaseCompare("abcd", "ABCD", "UNICODE_CI");
+    assertUcaseCompare("AbcD", "ABCD", "UNICODE_CI");
     // Accent variation
-    assertUppercase("aBćD", "ABĆD", "UTF8_BINARY");
-    assertUppercase("AbCδ", "ABCΔ", "UTF8_BINARY_LCASE");
-    assertUppercase("äBCd", "ÄBCD", "UNICODE");
-    assertUppercase("Ab́cD", "AB́CD", "UNICODE_CI");
+    assertUcaseCompare("aBćD", "ABĆD", "UTF8_BINARY");
+    assertUcaseCompare("AbCδ", "ABCΔ", "UTF8_BINARY_LCASE");
+    assertUcaseCompare("äBCd", "ÄBCD", "UNICODE");
+    assertUcaseCompare("Ab́cD", "AB́CD", "UNICODE_CI");
     // Case-variable character length
-    assertUppercase("i\u0307oDiNe", "I\u0307ODINE", "UTF8_BINARY");
-    assertUppercase("Abi\u0307o12", "ABI\u0307O12", "UTF8_BINARY");
-    assertUppercase("i̇odInE", "İODINE", "UTF8_BINARY_LCASE");
-    assertUppercase("aBi̇o12", "ABİO12", "UTF8_BINARY_LCASE");
-    assertUppercase("i̇oDinE", "I\u0307ODINE", "UNICODE");
-    assertUppercase("abi̇O12", "ABI\u0307O12", "UNICODE");
-    assertUppercase("i̇odINe", "I\u0307ODINE", "UNICODE_CI");
-    assertUppercase("ABi̇o12", "ABI\u0307O12", "UNICODE_CI");
+    assertUcaseCompare("i\u0307oDiNe", "I\u0307ODINE", "UTF8_BINARY");
+    assertUcaseCompare("Abi\u0307o12", "ABI\u0307O12", "UTF8_BINARY");
+    assertUcaseCompare("i̇odInE", "İODINE", "UTF8_BINARY_LCASE");
+    assertUcaseCompare("aBi̇o12", "ABİO12", "UTF8_BINARY_LCASE");
+    assertUcaseCompare("i̇oDinE", "I\u0307ODINE", "UNICODE");
+    assertUcaseCompare("abi̇O12", "ABI\u0307O12", "UNICODE");
+    assertUcaseCompare("i̇odINe", "I\u0307ODINE", "UNICODE_CI");
+    assertUcaseCompare("ABi̇o12", "ABI\u0307O12", "UNICODE_CI");
     // Conditional case mapping
-    assertUppercase("θαλασσινος", "ΘΑΛΑΣΣΙΝΟΣ", "UTF8_BINARY");
-    assertUppercase("θαλασσινοσ", "ΘΑΛΑΣΣΙΝΟΣ", "UTF8_BINARY");
-    assertUppercase("θαλασσινος", "ΘΑΛΑΣΣΙΝΟΣ", "UTF8_BINARY_LCASE");
-    assertUppercase("θαλασσινοσ", "ΘΑΛΑΣΣΙΝΟΣ", "UTF8_BINARY_LCASE");
-    assertUppercase("θαλασσινος", "ΘΑΛΑΣΣΙΝΟΣ", "UNICODE");
-    assertUppercase("θαλασσινοσ", "ΘΑΛΑΣΣΙΝΟΣ", "UNICODE");
-    assertUppercase("θαλασσινος", "ΘΑΛΑΣΣΙΝΟΣ", "UNICODE_CI");
-    assertUppercase("θαλασσινοσ", "ΘΑΛΑΣΣΙΝΟΣ", "UNICODE_CI");
+    assertUcaseCompare("θαλασσινος", "ΘΑΛΑΣΣΙΝΟΣ", "UTF8_BINARY");
+    assertUcaseCompare("θαλασσινοσ", "ΘΑΛΑΣΣΙΝΟΣ", "UTF8_BINARY");
+    assertUcaseCompare("θαλασσινος", "ΘΑΛΑΣΣΙΝΟΣ", "UTF8_BINARY_LCASE");
+    assertUcaseCompare("θαλασσινοσ", "ΘΑΛΑΣΣΙΝΟΣ", "UTF8_BINARY_LCASE");
+    assertUcaseCompare("θαλασσινος", "ΘΑΛΑΣΣΙΝΟΣ", "UNICODE");
+    assertUcaseCompare("θαλασσινοσ", "ΘΑΛΑΣΣΙΝΟΣ", "UNICODE");
+    assertUcaseCompare("θαλασσινος", "ΘΑΛΑΣΣΙΝΟΣ", "UNICODE_CI");
+    assertUcaseCompare("θαλασσινοσ", "ΘΑΛΑΣΣΙΝΟΣ", "UNICODE_CI");
   }
 
-  private void assertTitlecase(String target, String expected, String collationName)
+  private void assertTcaseCompare(String target, String expected, String collationName)
       throws SparkException {
     if (collationName.equals("UTF8_BINARY")) {
       UTF8String targetUTF8 = UTF8String.fromString(target);
       UTF8String expectedUTF8 = UTF8String.fromString(expected);
       assertEquals(expectedUTF8, targetUTF8.toTitleCase());
     } else if (collationName.equals("UTF8_BINARY_LCASE")) {
-      assertEquals(expected, CollationAwareUTF8String.toTitleCase(target));
+      assertEquals(expected, CollationAwareUTF8String.titleCaseCodePoints(target));
     } else {
       int collationId = CollationFactory.collationNameToId(collationName);
       assertEquals(expected, CollationAwareUTF8String.toTitleCase(target, collationId));
@@ -219,42 +219,42 @@ public class CollationSupportSuite {
   @Test
   public void testTitlecase() throws SparkException {
     // Edge cases
-    assertTitlecase("", "", "UTF8_BINARY");
-    assertTitlecase("", "", "UTF8_BINARY_LCASE");
-    assertTitlecase("", "", "UNICODE");
-    assertTitlecase("", "", "UNICODE_CI");
+    assertTcaseCompare("", "", "UTF8_BINARY");
+    assertTcaseCompare("", "", "UTF8_BINARY_LCASE");
+    assertTcaseCompare("", "", "UNICODE");
+    assertTcaseCompare("", "", "UNICODE_CI");
     // Basic tests
-    assertTitlecase("ab cd", "Ab Cd", "UTF8_BINARY");
-    assertTitlecase("Ab Cd", "Ab Cd", "UTF8_BINARY");
-    assertTitlecase("ab cd", "Ab Cd", "UTF8_BINARY_LCASE");
-    assertTitlecase("aB cD", "Ab Cd", "UTF8_BINARY_LCASE");
-    assertTitlecase("ab cd", "Ab Cd", "UNICODE");
-    assertTitlecase("aB Cd", "Ab Cd", "UNICODE");
-    assertTitlecase("ab cd", "Ab Cd", "UNICODE_CI");
-    assertTitlecase("Ab cD", "Ab Cd", "UNICODE_CI");
+    assertTcaseCompare("ab cd", "Ab Cd", "UTF8_BINARY");
+    assertTcaseCompare("Ab Cd", "Ab Cd", "UTF8_BINARY");
+    assertTcaseCompare("ab cd", "Ab Cd", "UTF8_BINARY_LCASE");
+    assertTcaseCompare("aB cD", "Ab Cd", "UTF8_BINARY_LCASE");
+    assertTcaseCompare("ab cd", "Ab Cd", "UNICODE");
+    assertTcaseCompare("aB Cd", "Ab Cd", "UNICODE");
+    assertTcaseCompare("ab cd", "Ab Cd", "UNICODE_CI");
+    assertTcaseCompare("Ab cD", "Ab Cd", "UNICODE_CI");
     // Accent variation
-    assertTitlecase("aB ćD", "AB ĆD", "UTF8_BINARY");
-    assertTitlecase("AbC δ", "Abc Δ", "UTF8_BINARY_LCASE");
-    assertTitlecase("äB Cd", "Äb Cd", "UNICODE");
-    assertTitlecase("A b́cD", "A B́cd", "UNICODE_CI");
+    assertTcaseCompare("aB ćD", "AB ĆD", "UTF8_BINARY");
+    assertTcaseCompare("AbC δ", "Abc Δ", "UTF8_BINARY_LCASE");
+    assertTcaseCompare("äB Cd", "Äb Cd", "UNICODE");
+    assertTcaseCompare("A b́cD", "A B́cd", "UNICODE_CI");
     // Case-variable character length
-    assertTitlecase("i\u0307oDiNe", "I\u0307oDiNe", "UTF8_BINARY");
-    assertTitlecase("Abi\u0307o12", "Abi\u0307o12", "UTF8_BINARY");
-    assertTitlecase("i̇od i̇nE", "İod İne", "UTF8_BINARY_LCASE");
-    assertTitlecase("aBi̇o12", "Abi\u0307o12", "UTF8_BINARY_LCASE");
-    assertTitlecase("i̇oDinE", "I\u0307odine", "UNICODE");
-    assertTitlecase("abi̇O12", "Abi̇o12", "UNICODE");
-    assertTitlecase("i̇odINe", "I\u0307odine", "UNICODE_CI");
-    assertTitlecase("ABi̇o12", "Abi\u0307o12", "UNICODE_CI");
+    assertTcaseCompare("i\u0307oDiNe", "I\u0307oDiNe", "UTF8_BINARY");
+    assertTcaseCompare("Abi\u0307o12", "Abi\u0307o12", "UTF8_BINARY");
+    assertTcaseCompare("i̇od i̇nE", "İod İne", "UTF8_BINARY_LCASE");
+    assertTcaseCompare("aBi̇o12", "Abi\u0307o12", "UTF8_BINARY_LCASE");
+    assertTcaseCompare("i̇oDinE", "I\u0307odine", "UNICODE");
+    assertTcaseCompare("abi̇O12", "Abi̇o12", "UNICODE");
+    assertTcaseCompare("i̇odINe", "I\u0307odine", "UNICODE_CI");
+    assertTcaseCompare("ABi̇o12", "Abi\u0307o12", "UNICODE_CI");
     // Conditional case mapping
-    assertTitlecase("a ς c", "A Σ C", "UTF8_BINARY");
-    assertTitlecase("a σ c", "A Σ C", "UTF8_BINARY");
-    assertTitlecase("a ς c", "A Σ C", "UTF8_BINARY_LCASE");
-    assertTitlecase("a σ c", "A Σ C", "UTF8_BINARY_LCASE");
-    assertTitlecase("a ς c", "A Σ C", "UNICODE");
-    assertTitlecase("a σ c", "A Σ C", "UNICODE");
-    assertTitlecase("a ς c", "A Σ C", "UNICODE_CI");
-    assertTitlecase("a σ c", "A Σ C", "UNICODE_CI");
+    assertTcaseCompare("a ς c", "A Σ C", "UTF8_BINARY");
+    assertTcaseCompare("a σ c", "A Σ C", "UTF8_BINARY");
+    assertTcaseCompare("a ς c", "A Σ C", "UTF8_BINARY_LCASE");
+    assertTcaseCompare("a σ c", "A Σ C", "UTF8_BINARY_LCASE");
+    assertTcaseCompare("a ς c", "A Σ C", "UNICODE");
+    assertTcaseCompare("a σ c", "A Σ C", "UNICODE");
+    assertTcaseCompare("a ς c", "A Σ C", "UNICODE_CI");
+    assertTcaseCompare("a σ c", "A Σ C", "UNICODE_CI");
   }
 
   /**

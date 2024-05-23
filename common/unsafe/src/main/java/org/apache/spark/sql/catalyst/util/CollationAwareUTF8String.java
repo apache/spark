@@ -35,8 +35,18 @@ import java.util.Map;
  */
 public class CollationAwareUTF8String {
 
+  /**
+   * Lowercase UTF8String comparison used for UTF8_BINARY_LCASE collation. While the default
+   * UTF8String comparison is equivalent to a.toLowerCase().binaryCompare(b.toLowerCase()), this
+   * method uses code points to compare the strings in a case-insensitive manner using ICU rules,
+   * as well as handling special rules for conditional case mappings (see: lowerCaseCodePoints).
+   *
+   * @param left The first UTF8String to compare.
+   * @param right The second UTF8String to compare.
+   * @return An integer representing the comparison result.
+   */
   public static int compareLowerCase(final UTF8String left, final UTF8String right) {
-    return toLowerCase(left.toString()).compareTo(toLowerCase(right.toString()));
+    return lowerCaseCodePoints(left.toString()).compareTo(lowerCaseCodePoints(right.toString()));
   }
 
   public static UTF8String replace(final UTF8String src, final UTF8String search,
@@ -146,6 +156,16 @@ public class CollationAwareUTF8String {
     return UCharacter.toUpperCase(locale, target);
   }
 
+  /**
+   * Converts a single code point to uppercase using ICU rules, with special handling for
+   * conditional case mappings (i.e. characters that map to multiple characters in uppercase).
+   *
+   * @param codePoint The code point to convert to uppercase.
+   * @param sb The StringBuilder to append the uppercase character to.
+   * @param i The index of the code point in the target string.
+   * @param target The target string to convert to uppercase.
+   * @return The number of characters consumed by the code point.
+   */
   private static int uppercaseCodePoint(final int codePoint, final StringBuilder sb, final int i,
       final String target) {
     // Latin small letter i with an additional dot is represented using 2 characters.
@@ -153,12 +173,21 @@ public class CollationAwareUTF8String {
       sb.append("İ");
       return 1;
     }
+    // TODO: Add special handling for other chars that map to multiple characters in uppercase.
     // All other characters should follow context-unaware ICU single-code point case mapping.
     sb.appendCodePoint(UCharacter.toTitleCase(codePoint));
     return 0;
   }
 
-  public static String toUpperCase(final String target) {
+  /**
+   * Converts an entire string to uppercase using ICU rules, code point by code point, with
+   * special handling for conditional case mappings (i.e. characters that map to multiple
+   * characters in uppercase). This method omits information about context-sensitive case mappings.
+   *
+   * @param target The target string to convert to uppercase.
+   * @return The string converted to uppercase in a context-unaware manner.
+   */
+  public static String upperCaseCodePoints(final String target) {
       StringBuilder sb = new StringBuilder();
     for (int i = 0; i < target.length(); ++i) {
       int codePoint = target.codePointAt(i);
@@ -181,6 +210,13 @@ public class CollationAwareUTF8String {
     return UCharacter.toLowerCase(locale, target);
   }
 
+  /**
+   * Converts a single code point to lowercase using ICU rules, with special handling for
+   * conditional case mappings (i.e. characters that map to multiple characters in lowercase).
+   *
+   * @param codePoint The code point to convert to lowercase.
+   * @param sb The StringBuilder to append the lowercase character to.
+   */
   private static void lowercaseCodePoint(final int codePoint, final StringBuilder sb) {
     // Latin capital letter I with dot above is mapped to 2 lowercase characters.
     if (codePoint == 0x0130) {
@@ -196,7 +232,15 @@ public class CollationAwareUTF8String {
     }
   }
 
-  public static String toLowerCase(final String target) {
+  /**
+   * Converts an entire string to lowercase using ICU rules, code point by code point, with
+   * special handling for conditional case mappings (i.e. characters that map to multiple
+   * characters in lowercase). This method omits information about context-sensitive case mappings.
+   *
+   * @param target The target string to convert to lowercase.
+   * @return The string converted to lowercase in a context-unaware manner.
+   */
+  public static String lowerCaseCodePoints(final String target) {
       StringBuilder sb = new StringBuilder();
     for (int i = 0; i < target.length(); ++i) {
       int codePoint = target.codePointAt(i);
@@ -211,7 +255,15 @@ public class CollationAwareUTF8String {
     return UCharacter.toTitleCase(locale, target, BreakIterator.getWordInstance(locale));
   }
 
-  public static String toTitleCase(final String target) {
+  /**
+   * Converts an entire string to titlecase using ICU rules, code point by code point, with
+   * special handling for conditional case mappings (i.e. characters that map to multiple
+   * characters in lowercase). This method omits information about context-sensitive case mappings.
+   *
+   * @param target The target string to convert to lowercase.
+   * @return The string converted to lowercase in a context-unaware manner.
+   */
+  public static String titleCaseCodePoints(final String target) {
       StringBuilder sb = new StringBuilder();
     for (int i = 0; i < target.length(); ++i) {
       int codePoint = target.codePointAt(i);
