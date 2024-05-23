@@ -73,7 +73,8 @@ object ExecutionLimitTracker {
 
   private def hasLegalConfig(taskSet: TaskSet): Boolean = {
     var legalRestrictNumber = false
-    if (taskSet.properties.containsKey(EXECUTION_CORES_LIMIT_NUMBER.key) &&
+    if (taskSet.properties != null &&
+      taskSet.properties.containsKey(EXECUTION_CORES_LIMIT_NUMBER.key) &&
       taskSet.properties.getProperty(EXECUTION_CORES_LIMIT_NUMBER.key).toInt > 0) {
       legalRestrictNumber = true
     }
