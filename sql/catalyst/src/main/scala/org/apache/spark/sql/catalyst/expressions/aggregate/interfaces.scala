@@ -639,22 +639,81 @@ abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
   }
 }
 
+
 /**
  * A special [[TypedImperativeAggregate]] that uses `OpenHashMap[AnyRef, Long]` as internal
  * aggregation buffer.
  */
-abstract class TypedAggregateWithHashMapAsBuffer
-  extends TypedImperativeAggregate[OpenHashMap[AnyRef, Long]] {
-  override def createAggregationBuffer(): OpenHashMap[AnyRef, Long] = {
-    // Initialize new counts map instance here.
-    new OpenHashMap[AnyRef, Long]()
-  }
+abstract class TypedAggregateWithHashMapAsBufferGenericPlus[T]
+  extends TypedImperativeAggregate[(OpenHashMap[AnyRef, T], OpenHashMap[AnyRef, AnyRef])] {
+
+  val t: T
 
   protected def child: Expression
 
-  private lazy val projection = UnsafeProjection.create(Array[DataType](child.dataType, LongType))
+  private lazy val projection1 =
+    UnsafeProjection.create(Array[DataType](child.dataType, tToDataType))
 
-  override def serialize(obj: OpenHashMap[AnyRef, Long]): Array[Byte] = {
+  private lazy val projection2 =
+    UnsafeProjection.create(Array[DataType](child.dataType, child.dataType))
+
+  private def tToDataType: DataType = t match {
+    case _: Long => LongType
+    case _: String => StringType
+  }
+
+  override def serialize(objs: (OpenHashMap[AnyRef, T],
+    OpenHashMap[AnyRef, AnyRef])): Array[Byte] = {
+    val buffer = new Array[Byte](4 << 10)  // 4K
+    val bos = new ByteArrayOutputStream()
+    val out = new DataOutputStream(bos)
+    try {
+      // Write pairs in counts map to byte buffer.
+      objs._1.foreach { case (key, count) =>
+        val row = InternalRow.apply(key, count)
+        val unsafeRow = projection1.apply(row)
+        out.writeInt(unsafeRow.getSizeInBytes)
+        unsafeRow.writeToStream(out, buffer)
+      }
+      out.writeInt(-1)
+      objs._2.foreach { case (key, v) =>
+        val row = InternalRow.apply(key, v)
+        val unsafeRow = projection2.apply(row)
+        out.writeInt(unsafeRow.getSizeInBytes)
+        unsafeRow.writeToStream(out, buffer)
+      }
+      out.writeInt(-1)
+      out.flush()
+
+
+      bos.toByteArray
+    } finally {
+      out.close()
+      bos.close()
+    }
+  }
+}
+
+/**
+ * A special [[TypedImperativeAggregate]] that uses `OpenHashMap[AnyRef, Long]` as internal
+ * aggregation buffer.
+ */
+abstract class TypedAggregateWithHashMapAsBufferGeneric[T]
+  extends TypedImperativeAggregate[OpenHashMap[AnyRef, T]] {
+
+  val t: T
+
+  protected def child: Expression
+
+  private lazy val projection =
+    UnsafeProjection.create(Array[DataType](child.dataType, tToDataType))
+
+  private def tToDataType: DataType = t match {
+    case _: Long => LongType
+    case _: String => StringType
+  }
+
+  override def serialize(obj: OpenHashMap[AnyRef, T]): Array[Byte] = {
     val buffer = new Array[Byte](4 << 10)  // 4K
     val bos = new ByteArrayOutputStream()
     val out = new DataOutputStream(bos)
@@ -674,6 +733,15 @@ abstract class TypedAggregateWithHashMapAsBuffer
       out.close()
       bos.close()
     }
+  }
+
+}
+
+abstract class TypedAggregateWithHashMapAsBuffer extends
+  TypedAggregateWithHashMapAsBufferGeneric[Long] {
+  override def createAggregationBuffer(): OpenHashMap[AnyRef, Long] = {
+    // Initialize new counts map instance here.
+    new OpenHashMap[AnyRef, Long]()
   }
 
   override def deserialize(bytes: Array[Byte]): OpenHashMap[AnyRef, Long] = {
@@ -701,4 +769,54 @@ abstract class TypedAggregateWithHashMapAsBuffer
       bis.close()
     }
   }
+  override val t: Long = 0L
+}
+
+abstract class TypedAggregateWithHashMapAsBufferPlus extends
+  TypedAggregateWithHashMapAsBufferGenericPlus[Long] {
+  override def createAggregationBuffer():
+  (OpenHashMap[AnyRef, Long], OpenHashMap[AnyRef, AnyRef]) = {
+    // Initialize new counts map instance here.
+    (new OpenHashMap[AnyRef, Long](), new OpenHashMap[AnyRef, AnyRef]())
+  }
+  override def deserialize(bytes: Array[Byte]):
+  (OpenHashMap[AnyRef, Long], OpenHashMap[AnyRef, AnyRef]) = {
+    val bis = new ByteArrayInputStream(bytes)
+    val ins = new DataInputStream(bis)
+    try {
+      val counts = new OpenHashMap[AnyRef, Long]()
+      // Read unsafeRow size and content in bytes.
+      var sizeOfNextRow = ins.readInt()
+      while (sizeOfNextRow >= 0) {
+        val bs = new Array[Byte](sizeOfNextRow)
+        ins.readFully(bs)
+        val row = new UnsafeRow(2)
+        row.pointTo(bs, sizeOfNextRow)
+        // Insert the pairs into counts map.
+        val key = row.get(0, child.dataType)
+        val count = row.get(1, LongType).asInstanceOf[Long]
+        counts.update(key, count)
+        sizeOfNextRow = ins.readInt()
+      }
+      val other = new OpenHashMap[AnyRef, AnyRef]()
+      sizeOfNextRow = ins.readInt()
+      while (sizeOfNextRow >= 0) {
+        val bs = new Array[Byte](sizeOfNextRow)
+        ins.readFully(bs)
+        val row = new UnsafeRow(2)
+        row.pointTo(bs, sizeOfNextRow)
+        // Insert the pairs into counts map.
+        val key = row.get(0, child.dataType)
+        val v = row.get(1, child.dataType)
+        other.update(key, v)
+        sizeOfNextRow = ins.readInt()
+      }
+
+      (counts, other)
+    } finally {
+      ins.close()
+      bis.close()
+    }
+  }
+  override val t: Long = 0L
 }

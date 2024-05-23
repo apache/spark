@@ -202,6 +202,8 @@ abstract class CollationBenchmarkBase extends BenchmarkBase with SqlBasedBenchma
       output = output)
     collationTypes.foreach { collationType => {
       val buffer = new OpenHashMap[AnyRef, Long](value.size)
+      val buffer2 = new OpenHashMap[AnyRef, AnyRef](5)
+
       value.foreach(v => {
         buffer.update(v.toString, (v.hashCode() % 1000).toLong)
       })
@@ -209,7 +211,7 @@ abstract class CollationBenchmarkBase extends BenchmarkBase with SqlBasedBenchma
         Literal.create("some_column_name", StringType(collationType)))
       benchmark.addCase(s"$collationType - mode - ${value.size} elements") { _ =>
         (0 to 10) foreach { _ =>
-          modeCurrent.eval(buffer)
+          modeCurrent.eval((buffer, buffer2))
         }
       }
     }
@@ -228,6 +230,7 @@ abstract class CollationBenchmarkBase extends BenchmarkBase with SqlBasedBenchma
       output = output)
     collationTypes.foreach { collationType => {
       val buffer = new OpenHashMap[AnyRef, Long](value.size)
+      val buffer2 = new OpenHashMap[AnyRef, AnyRef](5)
       value.foreach(v => {
         buffer.update(InternalRow.fromSeq(
           Seq(v.toString, UTF8String.fromString(v.toString), 3)),
@@ -241,7 +244,7 @@ abstract class CollationBenchmarkBase extends BenchmarkBase with SqlBasedBenchma
       val modeCurrent = Mode(child = Literal.default(st))
       benchmark.addCase(s"$collationType - mode struct - ${value.size} elements") { _ =>
         (0 to 10) foreach { _ =>
-          modeCurrent.eval(buffer)
+          modeCurrent.eval((buffer, buffer2))
         }
       }
     }

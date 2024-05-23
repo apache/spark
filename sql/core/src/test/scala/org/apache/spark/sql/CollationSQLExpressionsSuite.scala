@@ -17,14 +17,14 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.InternalRow
+
 import java.text.SimpleDateFormat
-
 import scala.collection.immutable.Seq
-
 import org.apache.spark.{SparkConf, SparkException, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.expressions.aggregate.Mode
-import org.apache.spark.sql.internal.{SqlApiConf, SQLConf}
+import org.apache.spark.sql.internal.{SQLConf, SqlApiConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -1697,19 +1697,23 @@ class CollationSQLExpressionsSuite
       UTF8StringModeTestCase("utf8_binary_lcase", bufferValuesUTF8String, "b"),
       UTF8StringModeTestCase("unicode_ci", bufferValuesUTF8String, "b"),
       UTF8StringModeTestCase("unicode", bufferValuesUTF8String, "a"))
-
     testCasesStrings.foreach(t => {
       val buffer = new OpenHashMap[AnyRef, Long](5)
+      val buffer2 = new OpenHashMap[AnyRef, AnyRef](5)
       val myMode = Mode(child = Literal.create("some_column_name", StringType(t.collationId)))
-      t.bufferValues.foreach { case (k, v) => buffer.update(k, v) }
-      assert(myMode.eval(buffer).toString.toLowerCase() == t.result.toLowerCase())
+
+      t.bufferValues.foreach { case (k, v) =>
+        (0L until v).foreach(_ => myMode.update((buffer, buffer2), InternalRow.fromSeq(Seq(k))))
+      }
+      assert(myMode.eval((buffer, buffer2)).toString.toLowerCase() == t.result.toLowerCase())
     })
 
     testCasesUTF8String.foreach(t => {
       val buffer = new OpenHashMap[AnyRef, Long](5)
+      val buffer2 = new OpenHashMap[AnyRef, AnyRef](5)
       val myMode = Mode(child = Literal.create("some_column_name", StringType(t.collationId)))
       t.bufferValues.foreach { case (k, v) => buffer.update(k, v) }
-      assert(myMode.eval(buffer).toString.toLowerCase() == t.result.toLowerCase())
+      assert(myMode.eval((buffer, buffer2)).toString.toLowerCase() == t.result.toLowerCase())
     })
   }
 
