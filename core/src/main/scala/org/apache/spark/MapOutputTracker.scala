@@ -197,8 +197,8 @@ private class ShuffleStatus(
           mapStatus.updateLocation(bmAddress)
           invalidateSerializedMapOutputStatusCache()
         case None =>
-          if (mapIndex.map(mapStatusesDeleted).exists(_.mapId == mapId)) {
-            val index = mapIndex.get
+          val index = mapStatusesDeleted.indexWhere(x => x != null && x.mapId == mapId)
+          if (index >= 0 && mapStatuses(index) == null) {
             val mapStatus = mapStatusesDeleted(index)
             mapStatus.updateLocation(bmAddress)
             mapStatuses(index) = mapStatus
