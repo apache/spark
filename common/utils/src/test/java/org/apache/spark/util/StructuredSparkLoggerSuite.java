@@ -149,14 +149,14 @@ public class StructuredSparkLoggerSuite extends SparkLoggerSuiteBase {
   }
 
   @Override
-  String expectedPatternForExternalSystemCustomLogKey(Level level) {
+  String expectedPatternForScalaCustomLogKey(Level level) {
     return compactAndToRegexPattern(level, """
       {
         "ts": "<timestamp>",
         "level": "<level>",
-        "msg": "External system custom log message.",
+        "msg": "Scala custom log message.",
         "context": {
-          "custom_log_key": "External system custom log message."
+          "custom_log_key": "Scala custom log message."
         },
         "logger": "<className>"
       }""");
@@ -168,9 +168,9 @@ public class StructuredSparkLoggerSuite extends SparkLoggerSuiteBase {
       {
         "ts": "<timestamp>",
         "level": "<level>",
-        "msg": "External system custom log message.",
+        "msg": "Java custom log message.",
         "context": {
-          "custom_log_key": "External system custom log message."
+          "custom_log_key": "Java custom log message."
         },
         "logger": "<className>"
       }""");

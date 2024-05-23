@@ -61,8 +61,8 @@ import org.slf4j.Logger;
  * logger.error("Failed to abort the writer after failing to write map output.", e);
  * <p>
  *
- *   If you want to output logs in `java code` through the structured log framework,
- *   you can define `custom LogKey` and use it in `java` code as follows:
+ * If you want to output logs in `java code` through the structured log framework,
+ * you can define `custom LogKey` and use it in `java` code as follows:
  * <p>
  *
  * // To add a `custom LogKey`, implement `LogKey`

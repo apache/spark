@@ -67,11 +67,11 @@ public abstract class SparkLoggerSuiteBase {
 
   private final MDC executorIDMDCValueIsNull = MDC.of(LogKeys.EXECUTOR_ID$.MODULE$, null);
 
-  private final MDC customLog =
-    MDC.of(CustomLogKeys.CUSTOM_LOG_KEY$.MODULE$, "custom log message.");
+  private final MDC scalaCustomLogMDC =
+    MDC.of(CustomLogKeys.CUSTOM_LOG_KEY$.MODULE$, "Scala custom log message.");
 
-  private final MDC javaCustomLogMdc =
-    MDC.of(JavaCustomLogKeys.CUSTOM_LOG_KEY, "Custom log message.");
+  private final MDC javaCustomLogMDC =
+    MDC.of(JavaCustomLogKeys.CUSTOM_LOG_KEY, "Java custom log message.");
 
   // test for basic message (without any mdc)
   abstract String expectedPatternForBasicMsg(Level level);
@@ -91,10 +91,10 @@ public abstract class SparkLoggerSuiteBase {
   // test for message (with mdc - the value is null)
   abstract String expectedPatternForMsgWithMDCValueIsNull(Level level);
 
-  // test for external system custom LogKey
-  abstract String expectedPatternForExternalSystemCustomLogKey(Level level);
+  // test for scala custom LogKey
+  abstract String expectedPatternForScalaCustomLogKey(Level level);
 
-  // test for external system java custom LogKey
+  // test for java custom LogKey
   abstract String expectedPatternForJavaCustomLogKey(Level level);
 
   @Test
@@ -216,17 +216,17 @@ public abstract class SparkLoggerSuiteBase {
   }
 
   @Test
-  public void testLoggerWithExternalSystemCustomLogKey() {
-    Runnable errorFn = () -> logger().error("{}", externalSystemCustomLog);
-    Runnable warnFn = () -> logger().warn("{}", externalSystemCustomLog);
-    Runnable infoFn = () -> logger().info("{}", externalSystemCustomLog);
+  public void testLoggerWithScalaCustomLogKey() {
+    Runnable errorFn = () -> logger().error("{}", scalaCustomLogMDC);
+    Runnable warnFn = () -> logger().warn("{}", scalaCustomLogMDC);
+    Runnable infoFn = () -> logger().info("{}", scalaCustomLogMDC);
     List.of(
         Pair.of(Level.ERROR, errorFn),
         Pair.of(Level.WARN, warnFn),
         Pair.of(Level.INFO, infoFn)).forEach(pair -> {
       try {
         assert (captureLogOutput(pair.getRight()).matches(
-            expectedPatternForExternalSystemCustomLogKey(pair.getLeft())));
+            expectedPatternForScalaCustomLogKey(pair.getLeft())));
       } catch (IOException e) {
         throw new RuntimeException(e);
       }
@@ -235,16 +235,16 @@ public abstract class SparkLoggerSuiteBase {
 
   @Test
   public void testLoggerWithJavaCustomLogKey() {
-    Runnable errorFn = () -> logger().error("{}", externalSystemJavaCustomLog);
-    Runnable warnFn = () -> logger().warn("{}", externalSystemJavaCustomLog);
-    Runnable infoFn = () -> logger().info("{}", externalSystemJavaCustomLog);
+    Runnable errorFn = () -> logger().error("{}", javaCustomLogMDC);
+    Runnable warnFn = () -> logger().warn("{}", javaCustomLogMDC);
+    Runnable infoFn = () -> logger().info("{}", javaCustomLogMDC);
     List.of(
         Pair.of(Level.ERROR, errorFn),
         Pair.of(Level.WARN, warnFn),
         Pair.of(Level.INFO, infoFn)).forEach(pair -> {
       try {
         assert (captureLogOutput(pair.getRight()).matches(
-            expectedPatternForExternalSystemJavaCustomLogKey(pair.getLeft())));
+            expectedPatternForJavaCustomLogKey(pair.getLeft())));
       } catch (IOException e) {
         throw new RuntimeException(e);
       }
@@ -253,7 +253,7 @@ public abstract class SparkLoggerSuiteBase {
 }
 
 class JavaCustomLogKeys {
-  // External third-party ecosystem `custom LogKey` must be `implements LogKey`
+  // Custom `LogKey` must be `implements LogKey`
   public static class CUSTOM_LOG_KEY implements LogKey { }
 
   // Singleton

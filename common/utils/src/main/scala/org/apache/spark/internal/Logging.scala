@@ -57,8 +57,8 @@ import org.apache.spark.util.SparkClassUtils
  *   the `Logging` trait to log exceptions, maintaining structured and parsable logs.
  * <p>
  *
- *   If you want to output logs in `scala code` through the structured log framework,
- *   you can define `custom LogKey` and use it in `scala` code as follows:
+ * If you want to output logs in `scala code` through the structured log framework,
+ * you can define `custom LogKey` and use it in `scala` code as follows:
  * <p>
  *
  * // To add a `custom LogKey`, implement `LogKey`
