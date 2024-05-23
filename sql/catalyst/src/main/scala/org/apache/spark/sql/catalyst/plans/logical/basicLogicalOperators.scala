@@ -1476,7 +1476,7 @@ case class Pivot(
 
 case class Transpose (
      columnsToTranspose: Seq[Expression],
-     columnAlias: Expression,
+     columnAlias: String,
      orderExpression: Expression,
      child: LogicalPlan) extends UnresolvedUnaryNode {
   final override val nodePatterns: Seq[TreePattern] = Seq(TRANSPOSE)
