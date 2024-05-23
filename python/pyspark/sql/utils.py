@@ -43,7 +43,7 @@ from pyspark.errors import (  # noqa: F401
     PySparkNotImplementedError,
     PySparkRuntimeError,
 )
-from pyspark.util import is_remote_only
+from pyspark.util import is_remote_only, JVM_INT_MAX
 from pyspark.errors.exceptions.captured import CapturedException  # noqa: F401
 from pyspark.find_spark_home import _find_spark_home
 
@@ -136,11 +136,8 @@ class ForeachBatchFunction:
 
 
 # Python implementation of 'org.apache.spark.sql.catalyst.util.StringConcat'
-_MAX_ROUNDED_ARRAY_LENGTH = (1 << 31) - 1 - 15
-
-
 class StringConcat:
-    def __init__(self, maxLength: int = _MAX_ROUNDED_ARRAY_LENGTH):
+    def __init__(self, maxLength: int = JVM_INT_MAX - 15):
         self.maxLength: int = maxLength
         self.strings: List[str] = []
         self.length: int = 0
@@ -156,7 +153,7 @@ class StringConcat:
                 stringToAppend = s if available >= sLen else s[0:available]
                 self.strings.append(stringToAppend)
 
-            self.length = min(self.length + sLen, _MAX_ROUNDED_ARRAY_LENGTH)
+            self.length = min(self.length + sLen, JVM_INT_MAX - 15)
 
     def toString(self) -> str:
         # finalLength = self.maxLength if self.atLimit()  else self.length

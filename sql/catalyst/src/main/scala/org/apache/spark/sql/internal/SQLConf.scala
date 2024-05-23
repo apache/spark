@@ -4265,6 +4265,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_POSTGRES_DATETIME_MAPPING_ENABLED =
+    buildConf("spark.sql.legacy.postgres.datetimeMapping.enabled")
+      .internal()
+      .doc("When true, TimestampType maps to TIMESTAMP WITHOUT TIME ZONE in PostgreSQL for " +
+        "writing; otherwise, TIMESTAMP WITH TIME ZONE. When true, TIMESTAMP WITH TIME ZONE " +
+        "can be converted to TimestampNTZType when JDBC read option preferTimestampNTZ is " +
+        "true; otherwise, converted to TimestampType regardless of preferTimestampNTZ.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val CSV_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.csv.filterPushdown.enabled")
     .doc("When true, enable filter pushdown to CSV datasource.")
     .version("3.0.0")
@@ -5409,6 +5420,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyDB2BooleanMappingEnabled: Boolean =
     getConf(LEGACY_DB2_BOOLEAN_MAPPING_ENABLED)
+
+  def legacyPostgresDatetimeMappingEnabled: Boolean =
+    getConf(LEGACY_POSTGRES_DATETIME_MAPPING_ENABLED)
 
   override def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = {
     LegacyBehaviorPolicy.withName(getConf(SQLConf.LEGACY_TIME_PARSER_POLICY))
