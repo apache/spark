@@ -215,8 +215,8 @@ class DataType:
         if isinstance(dataType, (ArrayType, StructType, MapType)):
             dataType._build_formatted_string(prefix, stringConcat, maxDepth - 1)
 
-    # The methods typeName() and simpleString() are not always the same as the Scala side.
-    # Add this method to make TreeString() compatible with Scala side.
+    # The method typeName() is not always the same as the Scala side.
+    # Add this helper method to make TreeString() compatible with Scala side.
     @classmethod
     def _get_jvm_type_name(cls, dataType: "DataType") -> str:
         if isinstance(
