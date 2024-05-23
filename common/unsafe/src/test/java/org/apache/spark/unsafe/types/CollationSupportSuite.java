@@ -17,6 +17,7 @@
 package org.apache.spark.unsafe.types;
 
 import org.apache.spark.SparkException;
+import org.apache.spark.sql.catalyst.util.CollationAwareUTF8String;
 import org.apache.spark.sql.catalyst.util.CollationFactory;
 import org.apache.spark.sql.catalyst.util.CollationSupport;
 import org.junit.jupiter.api.Test;
@@ -25,6 +26,116 @@ import static org.junit.jupiter.api.Assertions.*;
 
 
 public class CollationSupportSuite {
+
+  private void assertUcaseCompare(String target, String expected, String collationName)
+      throws SparkException {
+    if (collationName.equals("UTF8_BINARY")) {
+      UTF8String targetUTF8 = UTF8String.fromString(target);
+      UTF8String expectedUTF8 = UTF8String.fromString(expected);
+      assertEquals(expectedUTF8, targetUTF8.toUpperCase());
+    } else if (collationName.equals("UTF8_BINARY_LCASE")) {
+      assertEquals(expected, CollationAwareUTF8String.upperCaseCodePoints(target));
+    } else {
+      int collationId = CollationFactory.collationNameToId(collationName);
+      assertEquals(expected, CollationAwareUTF8String.toUpperCase(target, collationId));
+    }
+  }
+
+  @Test
+  public void testUcaseCompare() throws SparkException {
+    // Edge cases
+    assertUcaseCompare("", "", "UTF8_BINARY");
+    assertUcaseCompare("", "", "UTF8_BINARY_LCASE");
+    assertUcaseCompare("", "", "UNICODE");
+    assertUcaseCompare("", "", "UNICODE_CI");
+    // Basic tests
+    assertUcaseCompare("abcd", "ABCD", "UTF8_BINARY");
+    assertUcaseCompare("AbCd", "ABCD", "UTF8_BINARY");
+    assertUcaseCompare("abcd", "ABCD", "UTF8_BINARY_LCASE");
+    assertUcaseCompare("aBcD", "ABCD", "UTF8_BINARY_LCASE");
+    assertUcaseCompare("abcd", "ABCD", "UNICODE");
+    assertUcaseCompare("aBCd", "ABCD", "UNICODE");
+    assertUcaseCompare("abcd", "ABCD", "UNICODE_CI");
+    assertUcaseCompare("AbcD", "ABCD", "UNICODE_CI");
+    // Accent variation
+    assertUcaseCompare("aBćD", "ABĆD", "UTF8_BINARY");
+    assertUcaseCompare("AbCδ", "ABCΔ", "UTF8_BINARY_LCASE");
+    assertUcaseCompare("äBCd", "ÄBCD", "UNICODE");
+    assertUcaseCompare("Ab́cD", "AB́CD", "UNICODE_CI");
+    // Case-variable character length
+    assertUcaseCompare("i\u0307oDiNe", "I\u0307ODINE", "UTF8_BINARY");
+    assertUcaseCompare("Abi\u0307o12", "ABI\u0307O12", "UTF8_BINARY");
+    assertUcaseCompare("i̇odInE", "İODINE", "UTF8_BINARY_LCASE");
+    assertUcaseCompare("aBi̇o12", "ABİO12", "UTF8_BINARY_LCASE");
+    assertUcaseCompare("i̇oDinE", "I\u0307ODINE", "UNICODE");
+    assertUcaseCompare("abi̇O12", "ABI\u0307O12", "UNICODE");
+    assertUcaseCompare("i̇odINe", "I\u0307ODINE", "UNICODE_CI");
+    assertUcaseCompare("ABi̇o12", "ABI\u0307O12", "UNICODE_CI");
+    // Conditional case mapping
+    assertUcaseCompare("θαλασσινος", "ΘΑΛΑΣΣΙΝΟΣ", "UTF8_BINARY");
+    assertUcaseCompare("θαλασσινοσ", "ΘΑΛΑΣΣΙΝΟΣ", "UTF8_BINARY");
+    assertUcaseCompare("θαλασσινος", "ΘΑΛΑΣΣΙΝΟΣ", "UTF8_BINARY_LCASE");
+    assertUcaseCompare("θαλασσινοσ", "ΘΑΛΑΣΣΙΝΟΣ", "UTF8_BINARY_LCASE");
+    assertUcaseCompare("θαλασσινος", "ΘΑΛΑΣΣΙΝΟΣ", "UNICODE");
+    assertUcaseCompare("θαλασσινοσ", "ΘΑΛΑΣΣΙΝΟΣ", "UNICODE");
+    assertUcaseCompare("θαλασσινος", "ΘΑΛΑΣΣΙΝΟΣ", "UNICODE_CI");
+    assertUcaseCompare("θαλασσινοσ", "ΘΑΛΑΣΣΙΝΟΣ", "UNICODE_CI");
+  }
+
+  private void assertTcaseCompare(String target, String expected, String collationName)
+      throws SparkException {
+    if (collationName.equals("UTF8_BINARY")) {
+      UTF8String targetUTF8 = UTF8String.fromString(target);
+      UTF8String expectedUTF8 = UTF8String.fromString(expected);
+      assertEquals(expectedUTF8, targetUTF8.toTitleCase());
+    } else if (collationName.equals("UTF8_BINARY_LCASE")) {
+      assertEquals(expected, CollationAwareUTF8String.titleCaseCodePoints(target));
+    } else {
+      int collationId = CollationFactory.collationNameToId(collationName);
+      assertEquals(expected, CollationAwareUTF8String.toTitleCase(target, collationId));
+    }
+  }
+
+  @Test
+  public void testTcaseCompare() throws SparkException {
+    // Edge cases
+    assertTcaseCompare("", "", "UTF8_BINARY");
+    assertTcaseCompare("", "", "UTF8_BINARY_LCASE");
+    assertTcaseCompare("", "", "UNICODE");
+    assertTcaseCompare("", "", "UNICODE_CI");
+    // Basic tests
+    assertTcaseCompare("ab cd", "Ab Cd", "UTF8_BINARY");
+    assertTcaseCompare("Ab Cd", "Ab Cd", "UTF8_BINARY");
+    assertTcaseCompare("ab cd", "Ab Cd", "UTF8_BINARY_LCASE");
+    assertTcaseCompare("aB cD", "Ab Cd", "UTF8_BINARY_LCASE");
+    assertTcaseCompare("ab cd", "Ab Cd", "UNICODE");
+    assertTcaseCompare("aB Cd", "Ab Cd", "UNICODE");
+    assertTcaseCompare("ab cd", "Ab Cd", "UNICODE_CI");
+    assertTcaseCompare("Ab cD", "Ab Cd", "UNICODE_CI");
+    // Accent variation
+    assertTcaseCompare("aB ćD", "AB ĆD", "UTF8_BINARY");
+    assertTcaseCompare("AbC δ", "Abc Δ", "UTF8_BINARY_LCASE");
+    assertTcaseCompare("äB Cd", "Äb Cd", "UNICODE");
+    assertTcaseCompare("A b́cD", "A B́cd", "UNICODE_CI");
+    // Case-variable character length
+    assertTcaseCompare("i\u0307oDiNe", "I\u0307oDiNe", "UTF8_BINARY");
+    assertTcaseCompare("Abi\u0307o12", "Abi\u0307o12", "UTF8_BINARY");
+    assertTcaseCompare("i̇od i̇nE", "İod İne", "UTF8_BINARY_LCASE");
+    assertTcaseCompare("aBi̇o12", "Abi\u0307o12", "UTF8_BINARY_LCASE");
+    assertTcaseCompare("i̇oDinE", "I\u0307odine", "UNICODE");
+    assertTcaseCompare("abi̇O12", "Abi̇o12", "UNICODE");
+    assertTcaseCompare("i̇odINe", "I\u0307odine", "UNICODE_CI");
+    assertTcaseCompare("ABi̇o12", "Abi\u0307o12", "UNICODE_CI");
+    // Conditional case mapping
+    assertTcaseCompare("a ς c", "A Σ C", "UTF8_BINARY");
+    assertTcaseCompare("a σ c", "A Σ C", "UTF8_BINARY");
+    assertTcaseCompare("a ς c", "A Σ C", "UTF8_BINARY_LCASE");
+    assertTcaseCompare("a σ c", "A Σ C", "UTF8_BINARY_LCASE");
+    assertTcaseCompare("a ς c", "A Σ C", "UNICODE");
+    assertTcaseCompare("a σ c", "A Σ C", "UNICODE");
+    assertTcaseCompare("a ς c", "A Σ C", "UNICODE_CI");
+    assertTcaseCompare("a σ c", "A Σ C", "UNICODE_CI");
+  }
 
   /**
    * Collation-aware string expressions.
