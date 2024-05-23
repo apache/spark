@@ -141,16 +141,107 @@ public class CollationAwareUTF8String {
     return UCharacter.toUpperCase(locale, target);
   }
 
+  /**
+   * Converts a single code point to uppercase using ICU rules, with special handling for
+   * conditional case mappings (i.e. characters that map to multiple characters in uppercase).
+   *
+   * @param codePoint The code point to convert to uppercase.
+   * @param sb The StringBuilder to append the uppercase character to.
+   * @param i The index of the code point in the target string.
+   * @param target The target string to convert to uppercase.
+   * @return The number of characters consumed by the code point.
+   */
+  private static int uppercaseCodePoint(final int codePoint, final StringBuilder sb, final int i,
+      final String target) {
+    // Latin small letter i with an additional dot is represented using 2 characters.
+    if (codePoint == 0x0069 && i + 1 < target.length() && target.codePointAt(i + 1) == 0x0307) {
+      sb.append("İ");
+      return 1;
+    }
+    // TODO: Add special handling for other chars that map to multiple characters in uppercase.
+    // All other characters should follow context-unaware ICU single-code point case mapping.
+    sb.appendCodePoint(UCharacter.toTitleCase(codePoint));
+    return 0;
+  }
+
+  /**
+   * Converts an entire string to uppercase using ICU rules, code point by code point, with
+   * special handling for conditional case mappings (i.e. characters that map to multiple
+   * characters in uppercase). This method omits information about context-sensitive case mappings.
+   *
+   * @param target The target string to convert to uppercase.
+   * @return The string converted to uppercase in a context-unaware manner.
+   */
+  public static String upperCaseCodePoints(final String target) {
+      StringBuilder sb = new StringBuilder();
+    for (int i = 0; i < target.length(); ++i) {
+      int codePoint = target.codePointAt(i);
+      // Latin small letter i with an additional dot above (represented using 2 characters).
+      if (codePoint == 0x0069 && i + 1 < target.length() && target.codePointAt(i + 1) == 0x0307) {
+        sb.append("İ");
+        ++i;
+      }
+      // All other characters should follow context-unaware ICU single-code point case mapping.
+      else {
+        sb.appendCodePoint(UCharacter.toUpperCase(codePoint));
+      }
+    }
+    return sb.toString();
+  }
+
   public static String toLowerCase(final String target, final int collationId) {
     ULocale locale = CollationFactory.fetchCollation(collationId)
       .collator.getLocale(ULocale.ACTUAL_LOCALE);
     return UCharacter.toLowerCase(locale, target);
   }
 
+  /**
+   * Converts a single code point to lowercase using ICU rules, with special handling for
+   * conditional case mappings (i.e. characters that map to multiple characters in lowercase).
+   *
+   * @param codePoint The code point to convert to lowercase.
+   * @param sb The StringBuilder to append the lowercase character to.
+   */
+  private static void lowercaseCodePoint(final int codePoint, final StringBuilder sb) {
+    // Latin capital letter I with dot above is mapped to 2 lowercase characters.
+    if (codePoint == 0x0130) {
+      sb.append("i̇");
+    }
+    // Greek final and non-final capital letter sigma should be mapped the same.
+    else if (codePoint == 0x03C2) {
+      sb.append("σ");
+    }
+    // All other characters should follow context-unaware ICU single-code point case mapping.
+    else {
+      sb.appendCodePoint(UCharacter.toLowerCase(codePoint));
+    }
+  }
+
   public static String toTitleCase(final String target, final int collationId) {
     ULocale locale = CollationFactory.fetchCollation(collationId)
       .collator.getLocale(ULocale.ACTUAL_LOCALE);
     return UCharacter.toTitleCase(locale, target, BreakIterator.getWordInstance(locale));
+  }
+
+  /**
+   * Converts an entire string to titlecase using ICU rules, code point by code point, with
+   * special handling for conditional case mappings (i.e. characters that map to multiple
+   * characters in lowercase). This method omits information about context-sensitive case mappings.
+   *
+   * @param target The target string to convert to lowercase.
+   * @return The string converted to lowercase in a context-unaware manner.
+   */
+  public static String titleCaseCodePoints(final String target) {
+      StringBuilder sb = new StringBuilder();
+    for (int i = 0; i < target.length(); ++i) {
+      int codePoint = target.codePointAt(i);
+      if (i == 0 || Character.isWhitespace(target.codePointBefore(i))) {
+        i += uppercaseCodePoint(codePoint, sb, i, target);
+      } else {
+        lowercaseCodePoint(codePoint, sb);
+      }
+    }
+    return sb.toString();
   }
 
   public static int findInSet(final UTF8String match, final UTF8String set, int collationId) {
