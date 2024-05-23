@@ -1266,6 +1266,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
+  def noOptionsSpecifiedError(): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_OPTIONS.NO_OPTIONS_SPECIFIED",
+      messageParameters = Map.empty)
+  }
+
   def invalidFieldTypeForCorruptRecordError(): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1097",
