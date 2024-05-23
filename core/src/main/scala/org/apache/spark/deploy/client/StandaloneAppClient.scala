@@ -29,7 +29,8 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.Master
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler.ExecutorDecommissionInfo
@@ -109,7 +110,8 @@ private[spark] class StandaloneAppClient(
             masterRef.send(RegisterApplication(appDescription, self))
           } catch {
             case ie: InterruptedException => // Cancelled
-            case NonFatal(e) => logWarning(s"Failed to connect to master $masterAddress", e)
+            case NonFatal(e) => logWarning(log"Failed to connect to master " +
+              log"${MDC(MASTER_URL, masterAddress)}", e)
           }
         })
       }
@@ -146,7 +148,8 @@ private[spark] class StandaloneAppClient(
     private def sendToMaster(message: Any): Unit = {
       master match {
         case Some(masterRef) => masterRef.send(message)
-        case None => logWarning(s"Drop $message because has not yet connected to master")
+        case None => logWarning(
+          log"Drop ${MDC(MESSAGE, message)} because has not yet connected to master")
       }
     }
 
@@ -237,14 +240,16 @@ private[spark] class StandaloneAppClient(
 
     override def onDisconnected(address: RpcAddress): Unit = {
       if (master.exists(_.address == address)) {
-        logWarning(s"Connection to $address failed; waiting for master to reconnect...")
+        logWarning(
+          log"Connection to ${MDC(MASTER_URL, address)} failed; waiting for master to reconnect...")
         markDisconnected()
       }
     }
 
     override def onNetworkError(cause: Throwable, address: RpcAddress): Unit = {
       if (isPossibleMaster(address)) {
-        logWarning(s"Could not connect to $address: $cause")
+        logWarning(log"Could not connect to ${MDC(MASTER_URL, address)}: " +
+          log"${MDC(ERROR, cause)}")
       }
     }
 

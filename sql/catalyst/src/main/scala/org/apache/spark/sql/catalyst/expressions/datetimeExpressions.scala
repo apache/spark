@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.SIMPLE_DATE_FORMAT
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.types.StringTypeAnyCollation
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType.DAY
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -134,7 +135,7 @@ case class CurrentTimeZone() extends LeafExpression with Unevaluable {
   since = "1.5.0")
 // scalastyle:on line.size.limit
 case class CurrentDate(timeZoneId: Option[String] = None)
-  extends LeafExpression with TimeZoneAwareExpression with Unevaluable {
+  extends LeafExpression with TimeZoneAwareExpression with FoldableUnevaluable {
   def this() = this(None)
   override def nullable: Boolean = false
   override def dataType: DataType = DateType
@@ -169,7 +170,7 @@ object CurDateExpressionBuilder extends ExpressionBuilder {
   }
 }
 
-abstract class CurrentTimestampLike() extends LeafExpression with Unevaluable {
+abstract class CurrentTimestampLike() extends LeafExpression with FoldableUnevaluable {
   override def nullable: Boolean = false
   override def dataType: DataType = TimestampType
   final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
@@ -235,7 +236,7 @@ case class Now() extends CurrentTimestampLike {
   group = "datetime_funcs",
   since = "3.4.0")
 case class LocalTimestamp(timeZoneId: Option[String] = None) extends LeafExpression
-  with TimeZoneAwareExpression with Unevaluable {
+  with TimeZoneAwareExpression with FoldableUnevaluable {
   def this() = this(None)
   override def nullable: Boolean = false
   override def dataType: DataType = TimestampNTZType
@@ -951,9 +952,9 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
 
   def this(left: Expression, right: Expression) = this(left, right, None)
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, StringType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, StringTypeAnyCollation)
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))

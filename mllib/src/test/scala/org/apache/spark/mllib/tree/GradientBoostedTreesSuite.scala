@@ -19,7 +19,7 @@ package org.apache.spark.mllib.tree
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.{MDC, MessageWithContext}
-import org.apache.spark.internal.LogKey.{LEARNING_RATE, NUM_ITERATIONS, SUBSAMPLING_RATE}
+import org.apache.spark.internal.LogKeys.{LEARNING_RATE, NUM_ITERATIONS, SUBSAMPLING_RATE}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.{BoostingStrategy, Strategy}
 import org.apache.spark.mllib.tree.configuration.Algo._

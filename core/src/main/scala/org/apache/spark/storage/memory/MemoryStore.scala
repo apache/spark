@@ -30,7 +30,8 @@ import scala.util.control.NonFatal
 import com.google.common.io.ByteStreams
 
 import org.apache.spark.{SparkConf, SparkException, TaskContext}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.{STORAGE_UNROLL_MEMORY_THRESHOLD, UNROLL_MEMORY_CHECK_PERIOD, UNROLL_MEMORY_GROWTH_FACTOR}
 import org.apache.spark.memory.{MemoryManager, MemoryMode}
 import org.apache.spark.serializer.{SerializationStream, SerializerManager}
@@ -110,9 +111,10 @@ private[spark] class MemoryStore(
   }
 
   if (maxMemory < unrollMemoryThreshold) {
-    logWarning(s"Max memory ${Utils.bytesToString(maxMemory)} is less than the initial memory " +
-      s"threshold ${Utils.bytesToString(unrollMemoryThreshold)} needed to store a block in " +
-      s"memory. Please configure Spark with more memory.")
+    logWarning(log"Max memory ${MDC(NUM_BYTES, Utils.bytesToString(maxMemory))} " +
+      log"is less than the initial memory " +
+      log"threshold ${MDC(MAX_SIZE, Utils.bytesToString(unrollMemoryThreshold))} " +
+      log"needed to store a block in memory. Please configure Spark with more memory.")
   }
 
   logInfo("MemoryStore started with capacity %s".format(Utils.bytesToString(maxMemory)))
@@ -213,8 +215,9 @@ private[spark] class MemoryStore(
       reserveUnrollMemoryForThisTask(blockId, initialMemoryThreshold, memoryMode)
 
     if (!keepUnrolling) {
-      logWarning(s"Failed to reserve initial memory threshold of " +
-        s"${Utils.bytesToString(initialMemoryThreshold)} for computing block $blockId in memory.")
+      logWarning(log"Failed to reserve initial memory threshold of " +
+        log"${MDC(NUM_BYTES, Utils.bytesToString(initialMemoryThreshold))} " +
+        log"for computing block ${MDC(BLOCK_ID, blockId)} in memory.")
     } else {
       unrollMemoryUsedByThisBlock += initialMemoryThreshold
     }
@@ -348,9 +351,10 @@ private[spark] class MemoryStore(
     // Initial per-task memory to request for unrolling blocks (bytes).
     val initialMemoryThreshold = unrollMemoryThreshold
     val chunkSize = if (initialMemoryThreshold > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-      logWarning(s"Initial memory threshold of ${Utils.bytesToString(initialMemoryThreshold)} " +
-        s"is too large to be set as chunk size. Chunk size has been capped to " +
-        s"${Utils.bytesToString(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)}")
+      logWarning(log"Initial memory threshold of " +
+        log"${MDC(NUM_BYTES, Utils.bytesToString(initialMemoryThreshold))} " +
+        log"is too large to be set as chunk size. Chunk size has been capped to " +
+        log"${MDC(MAX_SIZE, Utils.bytesToString(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH))}")
       ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
     } else {
       initialMemoryThreshold.toInt
@@ -660,8 +664,8 @@ private[spark] class MemoryStore(
    */
   private def logUnrollFailureMessage(blockId: BlockId, finalVectorSize: Long): Unit = {
     logWarning(
-      s"Not enough space to cache $blockId in memory! " +
-      s"(computed ${Utils.bytesToString(finalVectorSize)} so far)"
+      log"Not enough space to cache ${MDC(BLOCK_ID, blockId)} in memory! " +
+        log"(computed ${MDC(NUM_BYTES, Utils.bytesToString(finalVectorSize))} so far)"
     )
     logMemoryUsage()
   }

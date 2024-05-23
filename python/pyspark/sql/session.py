@@ -40,7 +40,6 @@ from typing import (
 
 from pyspark.conf import SparkConf
 from pyspark.util import is_remote_only
-from pyspark.sql.column import _to_java_column
 from pyspark.sql.conf import RuntimeConfig
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.functions import lit
@@ -143,6 +142,9 @@ def _monkey_patch_RDD(sparkSession: "SparkSession") -> None:
 #
 # @classmethod + @property is also affected by a bug in Python's docstring which was backported
 # to Python 3.9.6 (https://github.com/python/cpython/pull/28838)
+#
+# Python 3.9 with MyPy complains about @classmethod + @property combination. We should fix
+# it together with MyPy.
 class classproperty(property):
     """Same as Python's @property decorator, but for class attributes.
 
@@ -1040,6 +1042,7 @@ class SparkSession(SparkConversionMixin):
             )
         infer_dict_as_struct = self._jconf.inferDictAsStruct()
         infer_array_from_first_element = self._jconf.legacyInferArrayTypeFromFirstElement()
+        infer_map_from_first_pair = self._jconf.legacyInferMapStructTypeFromFirstItem()
         prefer_timestamp_ntz = is_timestamp_ntz_preferred()
         schema = reduce(
             _merge_type,
@@ -1049,6 +1052,7 @@ class SparkSession(SparkConversionMixin):
                     names,
                     infer_dict_as_struct=infer_dict_as_struct,
                     infer_array_from_first_element=infer_array_from_first_element,
+                    infer_map_from_first_pair=infer_map_from_first_pair,
                     prefer_timestamp_ntz=prefer_timestamp_ntz,
                 )
                 for row in data
@@ -1091,6 +1095,7 @@ class SparkSession(SparkConversionMixin):
 
         infer_dict_as_struct = self._jconf.inferDictAsStruct()
         infer_array_from_first_element = self._jconf.legacyInferArrayTypeFromFirstElement()
+        infer_map_from_first_pair = self._jconf.legacyInferMapStructTypeFromFirstItem()
         prefer_timestamp_ntz = is_timestamp_ntz_preferred()
         if samplingRatio is None:
             schema = _infer_schema(
@@ -1108,6 +1113,7 @@ class SparkSession(SparkConversionMixin):
                             names=names,
                             infer_dict_as_struct=infer_dict_as_struct,
                             infer_array_from_first_element=infer_array_from_first_element,
+                            infer_map_from_first_pair=infer_map_from_first_pair,
                             prefer_timestamp_ntz=prefer_timestamp_ntz,
                         ),
                     )
@@ -1127,6 +1133,7 @@ class SparkSession(SparkConversionMixin):
                     names,
                     infer_dict_as_struct=infer_dict_as_struct,
                     infer_array_from_first_element=infer_array_from_first_element,
+                    infer_map_from_first_pair=infer_map_from_first_pair,
                     prefer_timestamp_ntz=prefer_timestamp_ntz,
                 )
             ).reduce(_merge_type)
@@ -1363,12 +1370,14 @@ class SparkSession(SparkConversionMixin):
             later.
         samplingRatio : float, optional
             the sample ratio of rows used for inferring. The first few rows will be used
-            if ``samplingRatio`` is ``None``.
+            if ``samplingRatio`` is ``None``. This option is effective only when the input is
+            :class:`RDD`.
         verifySchema : bool, optional
             verify data types of every row against schema. Enabled by default.
             When the input is :class:`pandas.DataFrame` and
             `spark.sql.execution.arrow.pyspark.enabled` is enabled, this option is not
-            effective. It follows Arrow type coercion.
+            effective. It follows Arrow type coercion. This option is not supported with
+            Spark Connect.
 
             .. versionadded:: 2.1.0
 
@@ -1633,7 +1642,7 @@ class SparkSession(SparkConversionMixin):
         Notes
         -----
         In Spark Classic, a temporary view referenced in `spark.sql` is resolved immediately,
-        while in Spark Connect it is lazily evaluated.
+        while in Spark Connect it is lazily analyzed.
         So in Spark Connect if a view is dropped, modified or replaced after `spark.sql`, the
         execution may fail or generate different results.
 
@@ -1724,6 +1733,7 @@ class SparkSession(SparkConversionMixin):
         |  3|  6|  1|
         +---+---+---+
         """
+        from pyspark.sql.classic.column import _to_java_column
 
         formatter = SQLStringFormatter(self)
         if len(kwargs) > 0:
@@ -1766,7 +1776,7 @@ class SparkSession(SparkConversionMixin):
         Notes
         -----
         In Spark Classic, a temporary view referenced in `spark.table` is resolved immediately,
-        while in Spark Connect it is lazily evaluated.
+        while in Spark Connect it is lazily analyzed.
         So in Spark Connect if a view is dropped, modified or replaced after `spark.table`, the
         execution may fail or generate different results.
 

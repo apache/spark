@@ -26,7 +26,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{FILE_FORMAT, FILE_FORMAT2, INFERENCE_MODE, TABLE_NAME}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
@@ -339,8 +339,8 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     val shouldInfer = (inferenceMode != NEVER_INFER) && !relation.tableMeta.schemaPreservesCase
     val tableName = relation.tableMeta.identifier.unquotedString
     if (shouldInfer) {
-      logInfo(s"Inferring case-sensitive schema for table $tableName (inference mode: " +
-        s"$inferenceMode)")
+      logInfo(log"Inferring case-sensitive schema for table ${MDC(TABLE_NAME, tableName)} " +
+        log"(inference mode:  ${MDC(INFERENCE_MODE, inferenceMode)})})")
       val fileIndex = fileIndexOpt.getOrElse {
         val rootPath = new Path(relation.tableMeta.location)
         new InMemoryFileIndex(sparkSession, Seq(rootPath), options, None)
@@ -372,7 +372,8 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
   }
 
   private def updateDataSchema(identifier: TableIdentifier, newDataSchema: StructType): Unit = try {
-    logInfo(s"Saving case-sensitive schema for table ${identifier.unquotedString}")
+    logInfo(
+      log"Saving case-sensitive schema for table ${MDC(TABLE_NAME, identifier.unquotedString)}")
     sparkSession.sessionState.catalog.alterTableDataSchema(identifier, newDataSchema)
   } catch {
     case NonFatal(ex) =>

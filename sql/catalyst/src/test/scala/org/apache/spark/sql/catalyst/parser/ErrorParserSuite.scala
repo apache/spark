@@ -323,4 +323,37 @@ class ErrorParserSuite extends AnalysisTest {
       parameters = Map("type" -> "\"CHARACTER\""),
       context = ExpectedContext(fragment = "Character", start = 19, stop = 27))
   }
+
+  test("'!' where only NOT should be allowed") {
+    checkError(
+      exception = parseException("SELECT 1 ! IN (2)"),
+      errorClass = "SYNTAX_DISCONTINUED.BANG_EQUALS_NOT",
+      parameters = Map("clause" -> "!"),
+      context = ExpectedContext(fragment = "!", start = 9, stop = 9))
+    checkError(
+      exception = parseException("SELECT 'a' ! LIKE 'b'"),
+      errorClass = "SYNTAX_DISCONTINUED.BANG_EQUALS_NOT",
+      parameters = Map("clause" -> "!"),
+      context = ExpectedContext(fragment = "!", start = 11, stop = 11))
+    checkError(
+      exception = parseException("SELECT 1 ! BETWEEN 1 AND 2"),
+      errorClass = "SYNTAX_DISCONTINUED.BANG_EQUALS_NOT",
+      parameters = Map("clause" -> "!"),
+      context = ExpectedContext(fragment = "!", start = 9, stop = 9))
+    checkError(
+      exception = parseException("SELECT 1 IS ! NULL"),
+      errorClass = "SYNTAX_DISCONTINUED.BANG_EQUALS_NOT",
+      parameters = Map("clause" -> "!"),
+      context = ExpectedContext(fragment = "!", start = 12, stop = 12))
+    checkError(
+      exception = parseException("CREATE TABLE IF ! EXISTS t(c1 INT)"),
+      errorClass = "SYNTAX_DISCONTINUED.BANG_EQUALS_NOT",
+      parameters = Map("clause" -> "!"),
+      context = ExpectedContext(fragment = "!", start = 16, stop = 16))
+    checkError(
+      exception = parseException("CREATE TABLE t(c1 INT ! NULL)"),
+      errorClass = "SYNTAX_DISCONTINUED.BANG_EQUALS_NOT",
+      parameters = Map("clause" -> "!"),
+      context = ExpectedContext(fragment = "!", start = 22, stop = 22))
+  }
 }

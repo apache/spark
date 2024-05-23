@@ -27,6 +27,20 @@ class UDFProfilerParityTests(UDFProfiler2TestsMixin, ReusedConnectTestCase):
         super().setUp()
         self.spark._profiler_collector._value = None
 
+
+class UDFProfilerWithoutPlanCacheParityTests(UDFProfilerParityTests):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.spark.conf.set("spark.connect.session.planCache.enabled", False)
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.spark.conf.unset("spark.connect.session.planCache.enabled")
+        finally:
+            super().tearDownClass()
+
     def test_perf_profiler_udf_multiple_actions(self):
         def action(df):
             df.collect()
@@ -35,6 +49,7 @@ class UDFProfilerParityTests(UDFProfiler2TestsMixin, ReusedConnectTestCase):
         with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
             _do_computation(self.spark, action=action)
 
+        # Without the plan cache, UDF ID will be different for each action
         self.assertEqual(6, len(self.profile_results), str(list(self.profile_results)))
 
         for id in self.profile_results:

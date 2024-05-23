@@ -190,6 +190,9 @@ class StreamingQueryManager:
         self._session = session
         self._sqlb = StreamingQueryListenerBus(self)
 
+    def close(self) -> None:
+        self._sqlb.close()
+
     @property
     def active(self) -> List[StreamingQuery]:
         cmd = pb2.StreamingQueryManagerCommand()
@@ -275,6 +278,10 @@ class StreamingQueryListenerBus:
         self._listener_bus: List[StreamingQueryListener] = []
         self._execution_thread: Optional[Thread] = None
         self._lock = Lock()
+
+    def close(self) -> None:
+        for listener in self._listener_bus:
+            self.remove(listener)
 
     def append(self, listener: StreamingQueryListener) -> None:
         """

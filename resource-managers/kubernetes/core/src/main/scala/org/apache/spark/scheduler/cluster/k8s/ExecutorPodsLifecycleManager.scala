@@ -30,7 +30,8 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesUtils._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.EXECUTOR_ID
 import org.apache.spark.scheduler.ExecutorExited
 import org.apache.spark.util.Utils
 
@@ -99,8 +100,9 @@ private[spark] class ExecutorPodsLifecycleManager(
             if (onFinalNonDeletedState(succeeded, execId, schedulerBackend, deleteFromK8s)) {
               execIdsRemovedInThisRound += execId
               if (schedulerBackend.isExecutorActive(execId.toString)) {
-                logInfo(s"Snapshot reported succeeded executor with id $execId, " +
-                  "even though the application has not requested for it to be removed.")
+                logInfo(log"Snapshot reported succeeded executor with id " +
+                  log"${MDC(EXECUTOR_ID, execId)}, even though the application has not " +
+                  log"requested for it to be removed.")
               } else {
                 logDebug(s"Snapshot reported succeeded executor with id $execId," +
                   s" pod name ${state.pod.getMetadata.getName}.")

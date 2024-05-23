@@ -18,7 +18,7 @@ import sys
 from typing import cast, overload, Dict, Iterable, List, Optional, Tuple, TYPE_CHECKING, Union
 
 from pyspark.util import is_remote_only
-from pyspark.sql.column import _to_seq, _to_java_column, Column
+from pyspark.sql.column import Column
 from pyspark.sql.types import StructType
 from pyspark.sql import utils
 from pyspark.sql.utils import to_str
@@ -619,6 +619,8 @@ class DataFrameReader(OptionUtils):
         |  Tom|  20|  NULL|
         +-----+----+------+
         """
+        from pyspark.sql.classic.column import _to_seq
+
         mergeSchema = options.get("mergeSchema", None)
         pathGlobFilter = options.get("pathGlobFilter", None)
         modifiedBefore = options.get("modifiedBefore", None)
@@ -1042,6 +1044,8 @@ class DataFrameReader(OptionUtils):
         |100|Hyukjin Kwon|
         +---+------------+
         """
+        from pyspark.sql.classic.column import _to_seq
+
         self._set_opts(
             mergeSchema=mergeSchema,
             pathGlobFilter=pathGlobFilter,
@@ -1440,6 +1444,8 @@ class DataFrameWriter(OptionUtils):
         |100|
         +---+
         """
+        from pyspark.sql.classic.column import _to_seq
+
         if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
             cols = cols[0]  # type: ignore[assignment]
         self._jwrite = self._jwrite.partitionBy(
@@ -1503,6 +1509,8 @@ class DataFrameWriter(OptionUtils):
         +---+------------+
         >>> _ = spark.sql("DROP TABLE bucketed_table")
         """
+        from pyspark.sql.classic.column import _to_seq
+
         if not isinstance(numBuckets, int):
             raise PySparkTypeError(
                 error_class="NOT_INT",
@@ -1594,6 +1602,8 @@ class DataFrameWriter(OptionUtils):
         +---+------------+
         >>> _ = spark.sql("DROP TABLE sorted_bucketed_table")
         """
+        from pyspark.sql.classic.column import _to_seq
+
         if isinstance(col, (list, tuple)):
             if cols:
                 raise PySparkValueError(
@@ -2380,6 +2390,8 @@ class DataFrameWriterV2:
 
         .. versionadded: 3.1.0
         """
+        from pyspark.sql.classic.column import _to_seq, _to_java_column
+
         col = _to_java_column(col)
         cols = _to_seq(self._spark._sc, [_to_java_column(c) for c in cols])
         self._jwriter.partitionedBy(col, cols)
@@ -2435,6 +2447,8 @@ class DataFrameWriterV2:
 
         .. versionadded: 3.1.0
         """
+        from pyspark.sql.classic.column import _to_java_column
+
         condition = _to_java_column(condition)
         self._jwriter.overwrite(condition)
 

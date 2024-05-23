@@ -18,7 +18,6 @@ import os
 from typing import Any, Dict, Optional, TYPE_CHECKING
 
 from pyspark.errors import PySparkTypeError, PySparkValueError, PySparkAssertionError
-from pyspark.sql import column
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.utils import is_remote
@@ -116,6 +115,8 @@ class Observation:
         :class:`DataFrame`
             the observed :class:`DataFrame`.
         """
+        from pyspark.sql.classic.column import _to_seq
+
         if self._jo is not None:
             raise PySparkAssertionError(error_class="REUSE_OBSERVATION", message_parameters={})
 
@@ -124,7 +125,9 @@ class Observation:
         cls = self._jvm.org.apache.spark.sql.Observation
         self._jo = cls(self._name) if self._name is not None else cls()
         observed_df = self._jo.on(
-            df._jdf, exprs[0]._jc, column._to_seq(df._sc, [c._jc for c in exprs[1:]])
+            df._jdf,
+            exprs[0]._jc,
+            _to_seq(df._sc, [c._jc for c in exprs[1:]]),
         )
         return DataFrame(observed_df, df.sparkSession)
 

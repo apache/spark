@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import com.typesafe.tools.mima.core._
+import com.typesafe.tools.mima.core
+import com.typesafe.tools.mima.core.*
 
 /**
  * Additional excludes for checking of Spark's binary compatibility.
@@ -93,7 +94,9 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.python.TestWritable"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.python.TestWritable$"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.python.WriteInputFormatTestDataGenerator"),
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.python.WriteInputFormatTestDataGenerator$")
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.python.WriteInputFormatTestDataGenerator$"),
+    // SPARK-47764: Cleanup shuffle dependencies based on ShuffleCleanupMode
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.shuffle.MigratableResolver.addShuffleToSkip")
   )
 
   // Default exclude rules

@@ -1183,4 +1183,32 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       df10.select(zip_with(col("array1"), col("array2"), (b1, b2) => reverseThenConcat2(b1, b2)))
     checkAnswer(test10, Row(Array(Row("cbaihg"), Row("fedlkj"))) :: Nil)
   }
+
+  test("SPARK-47927: Correctly pass null values derived from join to UDF") {
+    val f = udf[Tuple1[Option[Int]], Tuple1[Option[Int]]](identity)
+    val ds1 = Seq(1).toDS()
+    val ds2 = Seq[Int]().toDS()
+
+    checkAnswer(
+      ds1.join(ds2, ds1("value") === ds2("value"), "left_outer")
+        .select(f(struct(ds2("value").as("_1")))),
+      Row(Row(null)))
+  }
+
+  test("char/varchar as UDF return type") {
+    Seq(CharType(5), VarcharType(5)).foreach { dt =>
+      val f = udf(
+        new UDF0[String] {
+          override def call(): String = "a"
+        },
+        dt
+      )
+      checkError(
+        intercept[AnalysisException](spark.range(1).select(f())),
+        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_ENCODER",
+        sqlState = "0A000",
+        parameters = Map("dataType" -> s"\"${dt.sql}\"")
+      )
+    }
+  }
 }

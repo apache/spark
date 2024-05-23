@@ -35,7 +35,8 @@ import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, SparkConnectServiceGrpc}
 import org.apache.spark.connect.proto.SparkConnectServiceGrpc.AsyncService
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.HOST
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_BINDING_ADDRESS, CONNECT_GRPC_BINDING_PORT, CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT, CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE}
 import org.apache.spark.sql.connect.execution.ConnectProgressExecutionListener
@@ -314,6 +315,13 @@ object SparkConnectService extends Logging {
       previoslyObservedSessionId)
   }
 
+  // For testing
+  private[spark] def getOrCreateIsolatedSession(
+      userId: String,
+      sessionId: String): SessionHolder = {
+    getOrCreateIsolatedSession(userId, sessionId, None)
+  }
+
   /**
    * If there are no executions, return Left with System.currentTimeMillis of last active
    * execution. Otherwise return Right with list of ExecuteInfo of all executions.
@@ -346,7 +354,7 @@ object SparkConnectService extends Logging {
     val port = SparkEnv.get.conf.get(CONNECT_GRPC_BINDING_PORT)
     val sb = bindAddress match {
       case Some(hostname) =>
-        logInfo(s"start GRPC service at: $hostname")
+        logInfo(log"start GRPC service at: ${MDC(HOST, hostname)}")
         NettyServerBuilder.forAddress(new InetSocketAddress(hostname, port))
       case _ => NettyServerBuilder.forPort(port)
     }

@@ -31,11 +31,24 @@ import org.apache.spark.sql.catalyst.expressions.{BoundReference, GenericInterna
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.types.{BinaryType, DataType, DoubleType, FloatType, IntegerType, LongType, StringType, StructType, TimestampType}
 
+/**
+ * To run the test suite:
+ * {{{
+ *   build/sbt "sql/testOnly *StreamingQueryHashPartitionVerifySuite"
+ * }}}
+ *
+ * To re-generate the golden file with size limit under 10Mb, run:
+ * {{{
+ *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly *StreamingQueryHashPartitionVerifySuite"
+ *     -Dspark.sql.test.randomDataGenerator.maxStrLen=100
+ *     -Dspark.sql.test.randomDataGenerator.maxArraySize=4
+ * }}}
+ */
 class StreamingQueryHashPartitionVerifySuite extends StreamTest {
 
-  // Configs for golden file
-  private val goldenFileURI =
-    this.getClass.getResource("/structured-streaming/partition-tests/").toURI
+  // A golden file directory in `src/test` instead of `target` directory.
+  private val goldenFileURI = getWorkspaceFilePath(
+    "sql", "core", "src", "test", "resources", "structured-streaming", "partition-tests").toUri
 
   private val schemaFileName = "randomSchemas" // files for storing random input schemas
   private val rowAndPartIdFilename =
@@ -152,9 +165,6 @@ class StreamingQueryHashPartitionVerifySuite extends StreamTest {
     val rowAndPartIdFile = new File(goldenFileURI.getPath, rowAndPartIdFilename)
 
     if (regenerateGoldenFiles) {
-      // To limit the golden file size under 10Mb, please set the final val MAX_STR_LEN: Int = 100
-      // and final val MAX_ARR_SIZE: Int = 4 in org.apache.spark.sql.RandomDataGenerator
-
       val random = new Random()
 
       val schemas = getRandomSchemas(random)

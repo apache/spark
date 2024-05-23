@@ -45,9 +45,14 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from pyspark.util import is_remote_only
+from pyspark.util import is_remote_only, JVM_INT_MAX
 from pyspark.serializers import CloudPickleSerializer
-from pyspark.sql.utils import has_numpy, get_active_spark_context
+from pyspark.sql.utils import (
+    has_numpy,
+    get_active_spark_context,
+    escape_meta_characters,
+    StringConcat,
+)
 from pyspark.sql.variant_utils import VariantUtils
 from pyspark.errors import (
     PySparkNotImplementedError,
@@ -199,6 +204,35 @@ class DataType:
         assert len(schema) == 1
         return schema[0].dataType
 
+    @classmethod
+    def _data_type_build_formatted_string(
+        cls,
+        dataType: "DataType",
+        prefix: str,
+        stringConcat: StringConcat,
+        maxDepth: int,
+    ) -> None:
+        if isinstance(dataType, (ArrayType, StructType, MapType)):
+            dataType._build_formatted_string(prefix, stringConcat, maxDepth - 1)
+
+    # The method typeName() is not always the same as the Scala side.
+    # Add this helper method to make TreeString() compatible with Scala side.
+    @classmethod
+    def _get_jvm_type_name(cls, dataType: "DataType") -> str:
+        if isinstance(
+            dataType,
+            (
+                DecimalType,
+                CharType,
+                VarcharType,
+                DayTimeIntervalType,
+                YearMonthIntervalType,
+            ),
+        ):
+            return dataType.simpleString()
+        else:
+            return dataType.typeName()
+
 
 # This singleton pattern does not work with pickle, you will get
 # another object after pickle and unpickle
@@ -255,6 +289,9 @@ class StringType(AtomicType):
     """
 
     collationNames = ["UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI"]
+    providerSpark = "spark"
+    providerICU = "icu"
+    providers = [providerSpark, providerICU]
 
     def __init__(self, collation: Optional[str] = None):
         self.collationId = 0 if collation is None else self.collationNameToId(collation)
@@ -263,21 +300,32 @@ class StringType(AtomicType):
     def fromCollationId(self, collationId: int) -> "StringType":
         return StringType(StringType.collationNames[collationId])
 
-    def collationIdToName(self) -> str:
-        if self.collationId == 0:
-            return ""
-        else:
-            return " collate %s" % StringType.collationNames[self.collationId]
+    @classmethod
+    def collationIdToName(cls, collationId: int) -> str:
+        return StringType.collationNames[collationId]
 
     @classmethod
     def collationNameToId(cls, collationName: str) -> int:
         return StringType.collationNames.index(collationName)
 
-    def simpleString(self) -> str:
-        return "string" + self.collationIdToName()
+    @classmethod
+    def collationProvider(cls, collationName: str) -> str:
+        # TODO: do this properly like on the scala side
+        if collationName.startswith("UTF8"):
+            return StringType.providerSpark
+        return StringType.providerICU
 
+    def simpleString(self) -> str:
+        if self.isUTF8BinaryCollation():
+            return "string"
+
+        return f"string collate ${self.collationIdToName(self.collationId)}"
+
+    # For backwards compatibility and compatibility with other readers all string types
+    # are serialized in json as regular strings and the collation info is written to
+    # struct field metadata
     def jsonValue(self) -> str:
-        return "string" + self.collationIdToName()
+        return "string"
 
     def __repr__(self) -> str:
         return (
@@ -285,6 +333,9 @@ class StringType(AtomicType):
             if self.collationId != 0
             else "StringType()"
         )
+
+    def isUTF8BinaryCollation(self) -> bool:
+        return self.collationId == 0
 
 
 class CharType(AtomicType):
@@ -693,8 +744,16 @@ class ArrayType(DataType):
         }
 
     @classmethod
-    def fromJson(cls, json: Dict[str, Any]) -> "ArrayType":
-        return ArrayType(_parse_datatype_json_value(json["elementType"]), json["containsNull"])
+    def fromJson(
+        cls,
+        json: Dict[str, Any],
+        fieldPath: str,
+        collationsMap: Optional[Dict[str, str]],
+    ) -> "ArrayType":
+        elementType = _parse_datatype_json_value(
+            json["elementType"], fieldPath + ".element", collationsMap
+        )
+        return ArrayType(elementType, json["containsNull"])
 
     def needConversion(self) -> bool:
         return self.elementType.needConversion()
@@ -708,6 +767,21 @@ class ArrayType(DataType):
         if not self.needConversion():
             return obj
         return obj and [self.elementType.fromInternal(v) for v in obj]
+
+    def _build_formatted_string(
+        self,
+        prefix: str,
+        stringConcat: StringConcat,
+        maxDepth: int = JVM_INT_MAX,
+    ) -> None:
+        if maxDepth > 0:
+            stringConcat.append(
+                f"{prefix}-- element: {DataType._get_jvm_type_name(self.elementType)} "
+                + f"(containsNull = {str(self.containsNull).lower()})\n"
+            )
+            DataType._data_type_build_formatted_string(
+                self.elementType, f"{prefix}    |", stringConcat, maxDepth
+            )
 
 
 class MapType(DataType):
@@ -810,10 +884,19 @@ class MapType(DataType):
         }
 
     @classmethod
-    def fromJson(cls, json: Dict[str, Any]) -> "MapType":
+    def fromJson(
+        cls,
+        json: Dict[str, Any],
+        fieldPath: str,
+        collationsMap: Optional[Dict[str, str]],
+    ) -> "MapType":
+        keyType = _parse_datatype_json_value(json["keyType"], fieldPath + ".key", collationsMap)
+        valueType = _parse_datatype_json_value(
+            json["valueType"], fieldPath + ".value", collationsMap
+        )
         return MapType(
-            _parse_datatype_json_value(json["keyType"]),
-            _parse_datatype_json_value(json["valueType"]),
+            keyType,
+            valueType,
             json["valueContainsNull"],
         )
 
@@ -833,6 +916,25 @@ class MapType(DataType):
         return obj and dict(
             (self.keyType.fromInternal(k), self.valueType.fromInternal(v)) for k, v in obj.items()
         )
+
+    def _build_formatted_string(
+        self,
+        prefix: str,
+        stringConcat: StringConcat,
+        maxDepth: int = JVM_INT_MAX,
+    ) -> None:
+        if maxDepth > 0:
+            stringConcat.append(f"{prefix}-- key: {DataType._get_jvm_type_name(self.keyType)}\n")
+            DataType._data_type_build_formatted_string(
+                self.keyType, f"{prefix}    |", stringConcat, maxDepth
+            )
+            stringConcat.append(
+                f"{prefix}-- value: {DataType._get_jvm_type_name(self.valueType)} "
+                + f"(valueContainsNull = {str(self.valueContainsNull).lower()})\n"
+            )
+            DataType._data_type_build_formatted_string(
+                self.valueType, f"{prefix}    |", stringConcat, maxDepth
+            )
 
 
 class StructField(DataType):
@@ -884,21 +986,88 @@ class StructField(DataType):
         return "StructField('%s', %s, %s)" % (self.name, self.dataType, str(self.nullable))
 
     def jsonValue(self) -> Dict[str, Any]:
+        collationMetadata = self.getCollationMetadata()
+        metadata = (
+            self.metadata
+            if not collationMetadata
+            else {**self.metadata, _COLLATIONS_METADATA_KEY: collationMetadata}
+        )
+
         return {
             "name": self.name,
             "type": self.dataType.jsonValue(),
             "nullable": self.nullable,
-            "metadata": self.metadata,
+            "metadata": metadata,
         }
 
     @classmethod
     def fromJson(cls, json: Dict[str, Any]) -> "StructField":
+        metadata = json.get("metadata")
+        collationsMap = {}
+        if metadata and _COLLATIONS_METADATA_KEY in metadata:
+            collationsMap = metadata[_COLLATIONS_METADATA_KEY]
+            for key, value in collationsMap.items():
+                nameParts = value.split(".")
+                assert len(nameParts) == 2
+                provider, name = nameParts[0], nameParts[1]
+                _assert_valid_collation_provider(provider)
+                collationsMap[key] = name
+
+            metadata = {
+                key: value for key, value in metadata.items() if key != _COLLATIONS_METADATA_KEY
+            }
+
         return StructField(
             json["name"],
-            _parse_datatype_json_value(json["type"]),
+            _parse_datatype_json_value(json["type"], json["name"], collationsMap),
             json.get("nullable", True),
-            json.get("metadata"),
+            metadata,
         )
+
+    def getCollationsMap(self, metadata: Dict[str, Any]) -> Dict[str, str]:
+        if not metadata or _COLLATIONS_METADATA_KEY not in metadata:
+            return {}
+
+        collationMetadata: Dict[str, str] = metadata[_COLLATIONS_METADATA_KEY]
+        collationsMap: Dict[str, str] = {}
+
+        for key, value in collationMetadata.items():
+            nameParts = value.split(".")
+            assert len(nameParts) == 2
+            provider, name = nameParts[0], nameParts[1]
+            _assert_valid_collation_provider(provider)
+            collationsMap[key] = name
+
+        return collationsMap
+
+    def getCollationMetadata(self) -> Dict[str, str]:
+        def visitRecursively(dt: DataType, fieldPath: str) -> None:
+            if isinstance(dt, ArrayType):
+                processDataType(dt.elementType, fieldPath + ".element")
+            elif isinstance(dt, MapType):
+                processDataType(dt.keyType, fieldPath + ".key")
+                processDataType(dt.valueType, fieldPath + ".value")
+            elif isinstance(dt, StringType) and self._isCollatedString(dt):
+                collationMetadata[fieldPath] = self.schemaCollationValue(dt)
+
+        def processDataType(dt: DataType, fieldPath: str) -> None:
+            if self._isCollatedString(dt):
+                collationMetadata[fieldPath] = self.schemaCollationValue(dt)
+            else:
+                visitRecursively(dt, fieldPath)
+
+        collationMetadata: Dict[str, str] = {}
+        visitRecursively(self.dataType, self.name)
+        return collationMetadata
+
+    def _isCollatedString(self, dt: DataType) -> bool:
+        return isinstance(dt, StringType) and not dt.isUTF8BinaryCollation()
+
+    def schemaCollationValue(self, dt: DataType) -> str:
+        assert isinstance(dt, StringType)
+        collationName = StringType.collationIdToName(dt.collationId)
+        provider = StringType.collationProvider(collationName)
+        return f"{provider}.{collationName}"
 
     def needConversion(self) -> bool:
         return self.dataType.needConversion()
@@ -914,6 +1083,22 @@ class StructField(DataType):
             error_class="INVALID_TYPENAME_CALL",
             message_parameters={},
         )
+
+    def _build_formatted_string(
+        self,
+        prefix: str,
+        stringConcat: StringConcat,
+        maxDepth: int = JVM_INT_MAX,
+    ) -> None:
+        if maxDepth > 0:
+            stringConcat.append(
+                f"{prefix}-- {escape_meta_characters(self.name)}: "
+                + f"{DataType._get_jvm_type_name(self.dataType)} "
+                + f"(nullable = {str(self.nullable).lower()})\n"
+            )
+            DataType._data_type_build_formatted_string(
+                self.dataType, f"{prefix}    |", stringConcat, maxDepth
+            )
 
 
 class StructType(DataType):
@@ -1335,6 +1520,24 @@ class StructType(DataType):
             values = obj
         return _create_row(self.names, values)
 
+    def _build_formatted_string(
+        self,
+        prefix: str,
+        stringConcat: StringConcat,
+        maxDepth: int = JVM_INT_MAX,
+    ) -> None:
+        for field in self.fields:
+            field._build_formatted_string(prefix, stringConcat, maxDepth)
+
+    def treeString(self, maxDepth: int = JVM_INT_MAX) -> str:
+        stringConcat = StringConcat()
+        stringConcat.append("root\n")
+        prefix = " |"
+        depth = maxDepth if maxDepth > 0 else JVM_INT_MAX
+        for field in self.fields:
+            field._build_formatted_string(prefix, stringConcat, depth)
+        return stringConcat.toString()
+
 
 class VariantType(AtomicType):
     """
@@ -1521,6 +1724,19 @@ class VariantVal:
         """
         return VariantUtils.to_python(self.value, self.metadata)
 
+    def toJson(self, zone_id: str = "UTC") -> str:
+        """
+        Convert the VariantVal to a JSON string. The zone ID represents the time zone that the
+        timestamp should be printed in. It is defaulted to UTC. The list of valid zone IDs can be
+        found by importing the `zoneinfo` module and running :code:`zoneinfo.available_timezones()`.
+
+        Returns
+        -------
+        str
+            A JSON string that represents the Variant.
+        """
+        return VariantUtils.to_json(self.value, self.metadata, zone_id)
+
 
 _atomic_types: List[Type[DataType]] = [
     StringType,
@@ -1548,12 +1764,26 @@ _all_complex_types: Dict[str, Type[Union[ArrayType, MapType, StructType]]] = dic
     (v.typeName(), v) for v in _complex_types
 )
 
-_COLLATED_STRING = re.compile(r"string\s+collate\s+([\w_]+|`[\w_]`)")
 _LENGTH_CHAR = re.compile(r"char\(\s*(\d+)\s*\)")
 _LENGTH_VARCHAR = re.compile(r"varchar\(\s*(\d+)\s*\)")
 _FIXED_DECIMAL = re.compile(r"decimal\(\s*(\d+)\s*,\s*(-?\d+)\s*\)")
 _INTERVAL_DAYTIME = re.compile(r"interval (day|hour|minute|second)( to (day|hour|minute|second))?")
 _INTERVAL_YEARMONTH = re.compile(r"interval (year|month)( to (year|month))?")
+
+_COLLATIONS_METADATA_KEY = "__COLLATIONS"
+
+
+def _drop_metadata(d: Union[DataType, StructField]) -> Union[DataType, StructField]:
+    assert isinstance(d, (DataType, StructField))
+    if isinstance(d, StructField):
+        return StructField(d.name, _drop_metadata(d.dataType), d.nullable, None)
+    elif isinstance(d, StructType):
+        return StructType([cast(StructField, _drop_metadata(f)) for f in d.fields])
+    elif isinstance(d, ArrayType):
+        return ArrayType(_drop_metadata(d.elementType), d.containsNull)
+    elif isinstance(d, MapType):
+        return MapType(_drop_metadata(d.keyType), _drop_metadata(d.valueType), d.valueContainsNull)
+    return d
 
 
 def _parse_datatype_string(s: str) -> DataType:
@@ -1600,35 +1830,48 @@ def _parse_datatype_string(s: str) -> DataType:
         ...
     ParseException:...
     """
-    from py4j.java_gateway import JVMView
+    from pyspark.sql.utils import is_remote
 
-    sc = get_active_spark_context()
+    if is_remote():
+        from pyspark.sql.connect.session import SparkSession
 
-    def from_ddl_schema(type_str: str) -> DataType:
-        return _parse_datatype_json_string(
-            cast(JVMView, sc._jvm).org.apache.spark.sql.types.StructType.fromDDL(type_str).json()
+        return cast(
+            DataType,
+            SparkSession.active()._client._analyze(method="ddl_parse", ddl_string=s).parsed,
         )
 
-    def from_ddl_datatype(type_str: str) -> DataType:
-        return _parse_datatype_json_string(
-            cast(JVMView, sc._jvm)
-            .org.apache.spark.sql.api.python.PythonSQLUtils.parseDataType(type_str)
-            .json()
-        )
+    else:
+        from py4j.java_gateway import JVMView
 
-    try:
-        # DDL format, "fieldname datatype, fieldname datatype".
-        return from_ddl_schema(s)
-    except Exception as e:
+        sc = get_active_spark_context()
+
+        def from_ddl_schema(type_str: str) -> DataType:
+            return _parse_datatype_json_string(
+                cast(JVMView, sc._jvm)
+                .org.apache.spark.sql.types.StructType.fromDDL(type_str)
+                .json()
+            )
+
+        def from_ddl_datatype(type_str: str) -> DataType:
+            return _parse_datatype_json_string(
+                cast(JVMView, sc._jvm)
+                .org.apache.spark.sql.api.python.PythonSQLUtils.parseDataType(type_str)
+                .json()
+            )
+
         try:
-            # For backwards compatibility, "integer", "struct<fieldname: datatype>" and etc.
-            return from_ddl_datatype(s)
-        except BaseException:
+            # DDL format, "fieldname datatype, fieldname datatype".
+            return from_ddl_schema(s)
+        except Exception as e:
             try:
-                # For backwards compatibility, "fieldname: datatype, fieldname: datatype" case.
-                return from_ddl_datatype("struct<%s>" % s.strip())
+                # For backwards compatibility, "integer", "struct<fieldname: datatype>" and etc.
+                return from_ddl_datatype(s)
             except BaseException:
-                raise e
+                try:
+                    # For backwards compatibility, "fieldname: datatype, fieldname: datatype" case.
+                    return from_ddl_datatype("struct<%s>" % s.strip())
+                except BaseException:
+                    raise e
 
 
 def _parse_datatype_json_string(json_string: str) -> DataType:
@@ -1689,9 +1932,17 @@ def _parse_datatype_json_string(json_string: str) -> DataType:
     return _parse_datatype_json_value(json.loads(json_string))
 
 
-def _parse_datatype_json_value(json_value: Union[dict, str]) -> DataType:
+def _parse_datatype_json_value(
+    json_value: Union[dict, str],
+    fieldPath: str = "",
+    collationsMap: Optional[Dict[str, str]] = None,
+) -> DataType:
     if not isinstance(json_value, dict):
         if json_value in _all_atomic_types.keys():
+            if collationsMap is not None and fieldPath in collationsMap:
+                _assert_valid_type_for_collation(fieldPath, json_value, collationsMap)
+                collation_name = collationsMap[fieldPath]
+                return StringType(collation_name)
             return _all_atomic_types[json_value]()
         elif json_value == "decimal":
             return DecimalType()
@@ -1716,9 +1967,6 @@ def _parse_datatype_json_value(json_value: Union[dict, str]) -> DataType:
             return YearMonthIntervalType(first_field, second_field)
         elif json_value == "interval":
             return CalendarIntervalType()
-        elif _COLLATED_STRING.match(json_value):
-            m = _COLLATED_STRING.match(json_value)
-            return StringType(m.group(1))  # type: ignore[union-attr]
         elif _LENGTH_CHAR.match(json_value):
             m = _LENGTH_CHAR.match(json_value)
             return CharType(int(m.group(1)))  # type: ignore[union-attr]
@@ -1733,7 +1981,15 @@ def _parse_datatype_json_value(json_value: Union[dict, str]) -> DataType:
     else:
         tpe = json_value["type"]
         if tpe in _all_complex_types:
-            return _all_complex_types[tpe].fromJson(json_value)
+            if collationsMap is not None and fieldPath in collationsMap:
+                _assert_valid_type_for_collation(fieldPath, tpe, collationsMap)
+
+            complex_type = _all_complex_types[tpe]
+            if complex_type is ArrayType:
+                return ArrayType.fromJson(json_value, fieldPath, collationsMap)
+            elif complex_type is MapType:
+                return MapType.fromJson(json_value, fieldPath, collationsMap)
+            return StructType.fromJson(json_value)
         elif tpe == "udt":
             return UserDefinedType.fromJson(json_value)
         else:
@@ -1741,6 +1997,27 @@ def _parse_datatype_json_value(json_value: Union[dict, str]) -> DataType:
                 error_class="UNSUPPORTED_DATA_TYPE",
                 message_parameters={"data_type": str(tpe)},
             )
+
+
+def _assert_valid_type_for_collation(
+    fieldPath: str, fieldType: Any, collationMap: Dict[str, str]
+) -> None:
+    if fieldPath in collationMap and fieldType != "string":
+        raise PySparkTypeError(
+            error_class="INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
+            message_parameters={"jsonType": fieldType},
+        )
+
+
+def _assert_valid_collation_provider(provider: str) -> None:
+    if provider.lower() not in StringType.providers:
+        raise PySparkValueError(
+            error_class="COLLATION_INVALID_PROVIDER",
+            message_parameters={
+                "provider": provider,
+                "supportedProviders": ", ".join(StringType.providers),
+            },
+        )
 
 
 # Mapping Python types to Spark SQL DataType
@@ -1862,6 +2139,7 @@ def _infer_type(
     obj: Any,
     infer_dict_as_struct: bool = False,
     infer_array_from_first_element: bool = False,
+    infer_map_from_first_pair: bool = False,
     prefer_timestamp_ntz: bool = False,
 ) -> DataType:
     """Infer the DataType from obj"""
@@ -1897,12 +2175,13 @@ def _infer_type(
                             value,
                             infer_dict_as_struct,
                             infer_array_from_first_element,
+                            infer_map_from_first_pair,
                             prefer_timestamp_ntz,
                         ),
                         True,
                     )
             return struct
-        else:
+        elif infer_map_from_first_pair:
             for key, value in obj.items():
                 if key is not None and value is not None:
                     return MapType(
@@ -1910,28 +2189,72 @@ def _infer_type(
                             key,
                             infer_dict_as_struct,
                             infer_array_from_first_element,
+                            infer_map_from_first_pair,
                             prefer_timestamp_ntz,
                         ),
                         _infer_type(
                             value,
                             infer_dict_as_struct,
                             infer_array_from_first_element,
+                            infer_map_from_first_pair,
                             prefer_timestamp_ntz,
                         ),
                         True,
                     )
             return MapType(NullType(), NullType(), True)
+        else:
+            key_type: DataType = NullType()
+            value_type: DataType = NullType()
+            for key, value in obj.items():
+                if key is not None:
+                    key_type = _merge_type(
+                        key_type,
+                        _infer_type(
+                            key,
+                            infer_dict_as_struct,
+                            infer_array_from_first_element,
+                            infer_map_from_first_pair,
+                            prefer_timestamp_ntz,
+                        ),
+                    )
+                if value is not None:
+                    value_type = _merge_type(
+                        value_type,
+                        _infer_type(
+                            value,
+                            infer_dict_as_struct,
+                            infer_array_from_first_element,
+                            infer_map_from_first_pair,
+                            prefer_timestamp_ntz,
+                        ),
+                    )
+
+            return MapType(key_type, value_type, True)
     elif isinstance(obj, list):
         if len(obj) > 0:
             if infer_array_from_first_element:
                 return ArrayType(
-                    _infer_type(obj[0], infer_dict_as_struct, prefer_timestamp_ntz), True
+                    _infer_type(
+                        obj[0],
+                        infer_dict_as_struct,
+                        infer_array_from_first_element,
+                        prefer_timestamp_ntz,
+                    ),
+                    True,
                 )
             else:
                 return ArrayType(
                     reduce(
                         _merge_type,
-                        (_infer_type(v, infer_dict_as_struct, prefer_timestamp_ntz) for v in obj),
+                        (
+                            _infer_type(
+                                v,
+                                infer_dict_as_struct,
+                                infer_array_from_first_element,
+                                prefer_timestamp_ntz,
+                            )
+                            for v in obj
+                        ),
                     ),
                     True,
                 )
@@ -1950,6 +2273,7 @@ def _infer_type(
                 obj,
                 infer_dict_as_struct=infer_dict_as_struct,
                 infer_array_from_first_element=infer_array_from_first_element,
+                prefer_timestamp_ntz=prefer_timestamp_ntz,
             )
         except TypeError:
             raise PySparkTypeError(
@@ -1963,6 +2287,7 @@ def _infer_schema(
     names: Optional[List[str]] = None,
     infer_dict_as_struct: bool = False,
     infer_array_from_first_element: bool = False,
+    infer_map_from_first_pair: bool = False,
     prefer_timestamp_ntz: bool = False,
 ) -> StructType:
     """Infer the schema from dict/namedtuple/object"""
@@ -2001,6 +2326,7 @@ def _infer_schema(
                         v,
                         infer_dict_as_struct,
                         infer_array_from_first_element,
+                        infer_map_from_first_pair,
                         prefer_timestamp_ntz,
                     ),
                     True,

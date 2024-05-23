@@ -108,6 +108,29 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
       userKeyEnc: Encoder[K],
       valEncoder: Encoder[V]): MapState[K, V]
 
+  /**
+   * Function to create new or return existing map state variable of given type
+   * with ttl. State values will not be returned past ttlDuration, and will be eventually removed
+   * from the state store. Any values in mapState which have expired after ttlDuration will not
+   * returned on get() and will be eventually removed from the state.
+   *
+   * The user must ensure to call this function only within the `init()` method of the
+   * StatefulProcessor.
+   *
+   * @param stateName  - name of the state variable
+   * @param userKeyEnc  - spark sql encoder for the map key
+   * @param valEncoder - SQL encoder for state variable
+   * @param ttlConfig  - the ttl configuration (time to live duration etc.)
+   * @tparam K - type of key for map state variable
+   * @tparam V - type of value for map state variable
+   * @return - instance of MapState of type [K,V] that can be used to store state persistently
+   */
+  def getMapState[K, V](
+     stateName: String,
+     userKeyEnc: Encoder[K],
+     valEncoder: Encoder[V],
+     ttlConfig: TTLConfig): MapState[K, V]
+
   /** Function to return queryInfo for currently running task */
   def getQueryInfo(): QueryInfo
 

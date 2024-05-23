@@ -28,7 +28,7 @@ import org.apache.spark.deploy.{ApplicationDescription, Command}
 import org.apache.spark.deploy.client.{StandaloneAppClient, StandaloneAppClientListener}
 import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.internal.{config, Logging, MDC}
-import org.apache.spark.internal.LogKey.REASON
+import org.apache.spark.internal.LogKeys.REASON
 import org.apache.spark.internal.config.EXECUTOR_REMOVE_DELAY
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
@@ -349,8 +349,8 @@ private[spark] class StandaloneSchedulerBackend(
             _executorRemoveDelay, TimeUnit.MILLISECONDS)
         } catch {
           case _: RejectedExecutionException if stopping.get() =>
-            logWarning(
-              "Skipping onDisconnected RemoveExecutor call because the scheduler is stopping")
+            logWarning("Skipping onDisconnected RemoveExecutor call " +
+              "because the scheduler is stopping")
         }
       }
     }

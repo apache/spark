@@ -397,8 +397,7 @@ class StaxXmlParser(
                     row(anyIndex) = values :+ newValue
                 }
               } else {
-                StaxXmlParserUtils.skipChildren(parser)
-                StaxXmlParserUtils.skipNextEndElement(parser, field, options)
+                StaxXmlParserUtils.skipChildren(parser, field, options)
               }
           }
         } catch {
@@ -800,19 +799,6 @@ class XmlTokenizer(
         }
       } else {
         commentIdx = 0
-      }
-
-      if (c == cdataStart(cdataIdx)) {
-        if (cdataIdx >= cdataStart.length - 1) {
-          //  If a CDATA beigns we must ignore everything until its end
-          buffer.setLength(buffer.length - cdataStart.length)
-          cdataIdx = 0
-          readUntilMatch(cdataEnd)
-        } else {
-          cdataIdx += 1
-        }
-      } else {
-        cdataIdx = 0
       }
 
       if (c == '>' && prevC != '/') {

@@ -18,13 +18,16 @@
 package org.apache.spark.sql.jdbc
 
 import java.math.{BigDecimal => JBigDecimal}
-import java.sql.{Connection, Date, Timestamp}
+import java.sql.{Connection, Date, SQLException, Timestamp}
 import java.text.SimpleDateFormat
 import java.time.LocalDateTime
 import java.util.Properties
 
-import org.apache.spark.sql.{Column, Row}
+import org.apache.spark.SparkException
+import org.apache.spark.sql.{Column, DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
@@ -71,7 +74,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
       + "'((100.3, 40.2), (20.198, 83.1), (500.821, 311.38))', '<500, 200, 100>', '16/B374D848', "
       + "'ab', 'efg', '2021-02-02', '1 minute', '00:11:22:33:44:55', "
       + "'00:11:22:33:44:55:66:77', 12.3456, '10:20:10,14,15', 1E+37, "
-      + "'17:22:31', '2016-08-12 10:22:31.949271', 'cat:AB & dog:CD', "
+      + "'17:22:31.123', '2016-08-12 10:22:31.949271', 'cat:AB & dog:CD', "
       + "'dog and cat and fox', '10:20:10,14,15', '<key>id</key><value>10</value>')"
     ).executeUpdate()
     conn.prepareStatement("INSERT INTO bar VALUES (null, null, null, null, null, "
@@ -280,7 +283,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(rows(0).getDecimal(33) == new JBigDecimal("12.3456"))
     assert(rows(0).getString(34) == "10:20:10,14,15")
     assert(rows(0).getFloat(35) == 1E+37F)
-    assert(rows(0).getTimestamp(36) == Timestamp.valueOf("1970-01-01 17:22:31.0"))
+    assert(rows(0).getTimestamp(36) == Timestamp.valueOf("1970-01-01 17:22:31.123"))
     assert(rows(0).getTimestamp(37) == Timestamp.valueOf("2016-08-12 10:22:31.949271"))
     assert(rows(0).getString(38) == "'cat':AB & 'dog':CD")
     assert(rows(0).getString(39) == "'and' 'cat' 'dog' 'fox'")
@@ -314,11 +317,13 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
 
   test("SPARK-47390: Convert TIMESTAMP/TIME WITH TIME ZONE regardless of preferTimestampNTZ") {
     Seq(true, false).foreach { prefer =>
-      val rows = sqlContext.read
+      val df = sqlContext.read
         .option("preferTimestampNTZ", prefer)
         .jdbc(jdbcUrl, "ts_with_timezone", new Properties)
-        .collect()
-      rows.head.toSeq.tail.foreach(c => assert(c.isInstanceOf[java.sql.Timestamp]))
+      checkAnswer(df, Row(
+        1,
+        DateTimeUtils.toJavaTimestamp(1471022551949271L),
+        DateTimeUtils.toJavaTimestamp(62551949000L)))
     }
   }
 
@@ -553,5 +558,75 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
       .option("url", jdbcUrl)
       .option("query", "SELECT 1::oid, 'bar'::regclass, 'integer'::regtype").load()
     checkAnswer(df, Row(1, "bar", "integer"))
+  }
+
+  test("SPARK-47886: special number values") {
+    def toDF(qry: String): DataFrame = {
+      spark.read.format("jdbc")
+        .option("url", jdbcUrl)
+        .option("query", qry)
+        .load()
+    }
+    checkAnswer(
+      toDF("SELECT 'NaN'::float8 c1, 'infinity'::float8 c2, '-infinity'::float8 c3"),
+      Row(Double.NaN, Double.PositiveInfinity, Double.NegativeInfinity))
+    checkAnswer(
+      toDF("SELECT 'NaN'::float4 c1, 'infinity'::float4 c2, '-infinity'::float4 c3"),
+      Row(Float.NaN, Float.PositiveInfinity, Float.NegativeInfinity)
+    )
+
+    Seq("NaN", "infinity", "-infinity").foreach { v =>
+      val df = toDF(s"SELECT '$v'::numeric c1")
+      val e = intercept[SparkException](df.collect())
+      checkError(e, null)
+      val cause = e.getCause.asInstanceOf[SQLException]
+      assert(cause.getMessage.contains("Bad value for type BigDecimal"))
+      assert(cause.getSQLState === "22003")
+    }
+  }
+
+  test("SPARK-48387: Timestamp write as timestamp with time zone") {
+    val df = spark.sql("select TIMESTAMP '2018-11-17 13:33:33' as col0")
+    // write timestamps for preparation
+    withSQLConf(SQLConf.LEGACY_POSTGRES_DATETIME_MAPPING_ENABLED.key -> "false") {
+      // write timestamp as timestamp with time zone
+      df.write.jdbc(jdbcUrl, "ts_with_timezone_copy_false", new Properties)
+    }
+    withSQLConf(SQLConf.LEGACY_POSTGRES_DATETIME_MAPPING_ENABLED.key -> "true") {
+      // write timestamp as timestamp without time zone
+      df.write.jdbc(jdbcUrl, "ts_with_timezone_copy_true", new Properties)
+    }
+
+    // read timestamps for test
+    withSQLConf(SQLConf.LEGACY_POSTGRES_DATETIME_MAPPING_ENABLED.key -> "true") {
+      val df1 = spark.read.option("preferTimestampNTZ", false)
+        .jdbc(jdbcUrl, "ts_with_timezone_copy_false", new Properties)
+      checkAnswer(df1, Row(Timestamp.valueOf("2018-11-17 13:33:33")))
+      val df2 = spark.read.option("preferTimestampNTZ", true)
+        .jdbc(jdbcUrl, "ts_with_timezone_copy_false", new Properties)
+      checkAnswer(df2, Row(LocalDateTime.of(2018, 11, 17, 13, 33, 33)))
+
+      val df3 = spark.read.option("preferTimestampNTZ", false)
+        .jdbc(jdbcUrl, "ts_with_timezone_copy_true", new Properties)
+      checkAnswer(df3, Row(Timestamp.valueOf("2018-11-17 13:33:33")))
+      val df4 = spark.read.option("preferTimestampNTZ", true)
+        .jdbc(jdbcUrl, "ts_with_timezone_copy_true", new Properties)
+      checkAnswer(df4, Row(LocalDateTime.of(2018, 11, 17, 13, 33, 33)))
+    }
+    withSQLConf(SQLConf.LEGACY_POSTGRES_DATETIME_MAPPING_ENABLED.key -> "false") {
+      Seq("true", "false").foreach { prefer =>
+        val prop = new Properties
+        prop.setProperty("preferTimestampNTZ", prefer)
+        val dfCopy = spark.read.jdbc(jdbcUrl, "ts_with_timezone_copy_false", prop)
+        checkAnswer(dfCopy, Row(Timestamp.valueOf("2018-11-17 13:33:33")))
+      }
+
+      val df5 = spark.read.option("preferTimestampNTZ", false)
+        .jdbc(jdbcUrl, "ts_with_timezone_copy_true", new Properties)
+      checkAnswer(df5, Row(Timestamp.valueOf("2018-11-17 13:33:33")))
+      val df6 = spark.read.option("preferTimestampNTZ", true)
+        .jdbc(jdbcUrl, "ts_with_timezone_copy_true", new Properties)
+      checkAnswer(df6, Row(LocalDateTime.of(2018, 11, 17, 13, 33, 33)))
+    }
   }
 }

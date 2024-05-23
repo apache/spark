@@ -48,10 +48,11 @@ from pandas.api.types import (  # type: ignore[attr-defined]
 )
 import urllib
 
+from pyspark.sql.connect.dataframe import DataFrame
+from pyspark.sql.dataframe import DataFrame as ParentDataFrame
 from pyspark.loose_version import LooseVersion
 from pyspark.sql.connect.client import SparkConnectClient, DefaultChannelBuilder
 from pyspark.sql.connect.conf import RuntimeConf
-from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.connect.plan import (
     SQL,
     Range,
@@ -106,7 +107,6 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.udtf import UDTFRegistration
     from pyspark.sql.connect.shell.progress import ProgressHandler
     from pyspark.sql.connect.datasource import DataSourceRegistration
-
 
 try:
     import memory_profiler  # noqa: F401
@@ -238,7 +238,7 @@ class SparkSession:
             with SparkSession._lock:
                 session = SparkSession.getActiveSession()
                 if session is None:
-                    session = SparkSession._default_session
+                    session = SparkSession._get_default_session()
                     if session is None:
                         session = self.create()
                 self._apply_options(session)
@@ -286,8 +286,18 @@ class SparkSession:
             cls._active_session.session = session
 
     @classmethod
+    def _get_default_session(cls) -> Optional["SparkSession"]:
+        s = cls._default_session
+        if s is not None and not s.is_stopped:
+            return s
+        return None
+
+    @classmethod
     def getActiveSession(cls) -> Optional["SparkSession"]:
-        return getattr(cls._active_session, "session", None)
+        s = getattr(cls._active_session, "session", None)
+        if s is not None and not s.is_stopped:
+            return s
+        return None
 
     @classmethod
     def _getActiveSessionIfMatches(cls, session_id: str) -> "SparkSession":
@@ -315,7 +325,7 @@ class SparkSession:
     def active(cls) -> "SparkSession":
         session = cls.getActiveSession()
         if session is None:
-            session = cls._default_session
+            session = cls._get_default_session()
             if session is None:
                 raise PySparkRuntimeError(
                     error_class="NO_ACTIVE_OR_DEFAULT_SESSION",
@@ -325,7 +335,7 @@ class SparkSession:
 
     active.__doc__ = PySparkSession.active.__doc__
 
-    def table(self, tableName: str) -> DataFrame:
+    def table(self, tableName: str) -> ParentDataFrame:
         if not isinstance(tableName, str):
             raise PySparkTypeError(
                 error_class="NOT_STR",
@@ -378,10 +388,12 @@ class SparkSession:
         (
             infer_dict_as_struct,
             infer_array_from_first_element,
+            infer_map_from_first_pair,
             prefer_timestamp_ntz,
         ) = self._client.get_configs(
             "spark.sql.pyspark.inferNestedDictAsStruct.enabled",
             "spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled",
+            "spark.sql.pyspark.legacy.inferMapTypeFromFirstPair.enabled",
             "spark.sql.timestampType",
         )
         return reduce(
@@ -392,6 +404,7 @@ class SparkSession:
                     names,
                     infer_dict_as_struct=(infer_dict_as_struct == "true"),
                     infer_array_from_first_element=(infer_array_from_first_element == "true"),
+                    infer_map_from_first_pair=(infer_map_from_first_pair == "true"),
                     prefer_timestamp_ntz=(prefer_timestamp_ntz == "TIMESTAMP_NTZ"),
                 )
                 for row in data
@@ -402,13 +415,21 @@ class SparkSession:
         self,
         data: Union["pd.DataFrame", "np.ndarray", Iterable[Any]],
         schema: Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]] = None,
-    ) -> "DataFrame":
+        samplingRatio: Optional[float] = None,
+        verifySchema: Optional[bool] = None,
+    ) -> "ParentDataFrame":
         assert data is not None
         if isinstance(data, DataFrame):
             raise PySparkTypeError(
                 error_class="INVALID_TYPE",
                 message_parameters={"arg_name": "data", "arg_type": "DataFrame"},
             )
+
+        if samplingRatio is not None:
+            warnings.warn("'samplingRatio' is ignored. It is not supported with Spark Connect.")
+
+        if verifySchema is not None:
+            warnings.warn("'verifySchema' is ignored. It is not supported with Spark Connect.")
 
         _schema: Optional[Union[AtomicType, StructType]] = None
         _cols: Optional[List[str]] = None
@@ -636,7 +657,7 @@ class SparkSession:
 
         df = DataFrame(plan, self)
         if _cols is not None and len(_cols) > 0:
-            df = df.toDF(*_cols)
+            df = df.toDF(*_cols)  # type: ignore[assignment]
         return df
 
     createDataFrame.__doc__ = PySparkSession.createDataFrame.__doc__
@@ -646,7 +667,7 @@ class SparkSession:
         sqlQuery: str,
         args: Optional[Union[Dict[str, Any], List]] = None,
         **kwargs: Any,
-    ) -> "DataFrame":
+    ) -> "ParentDataFrame":
         _args = []
         _named_args = {}
         if args is not None:
@@ -687,7 +708,7 @@ class SparkSession:
         end: Optional[int] = None,
         step: int = 1,
         numPartitions: Optional[int] = None,
-    ) -> DataFrame:
+    ) -> ParentDataFrame:
         if end is None:
             actual_end = start
             start = 0
@@ -718,6 +739,9 @@ class SparkSession:
 
     def __del__(self) -> None:
         try:
+            # StreamingQueryManager has client states that needs to be cleaned up
+            if hasattr(self, "_sqm"):
+                self._sqm.close()
             # Try its best to close.
             self.client.close()
         except Exception:
@@ -896,13 +920,13 @@ class SparkSession:
 
     copyFromLocalToFs.__doc__ = PySparkSession.copyFromLocalToFs.__doc__
 
-    def _create_remote_dataframe(self, remote_id: str) -> "DataFrame":
+    def _create_remote_dataframe(self, remote_id: str) -> "ParentDataFrame":
         """
         In internal API to reference a runtime DataFrame on the server side.
         This is used in ForeachBatch() runner, where the remote DataFrame refers to the
         output of a micro batch.
         """
-        return DataFrame(CachedRemoteRelation(remote_id), self)
+        return DataFrame(CachedRemoteRelation(remote_id, spark_session=self), self)
 
     @staticmethod
     def _start_connect_server(master: str, opts: Dict[str, Any]) -> None:

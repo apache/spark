@@ -121,6 +121,7 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper {
     case ByteType => Some(JdbcType("NUMBER(3)", java.sql.Types.SMALLINT))
     case ShortType => Some(JdbcType("NUMBER(5)", java.sql.Types.SMALLINT))
     case StringType => Some(JdbcType("VARCHAR2(255)", java.sql.Types.VARCHAR))
+    case VarcharType(n) => Some(JdbcType(s"VARCHAR2($n)", java.sql.Types.VARCHAR))
     case TimestampType if !conf.legacyOracleTimestampMappingEnabled =>
       Some(JdbcType("TIMESTAMP WITH LOCAL TIME ZONE", TIMESTAMP_LTZ))
     case _ => None

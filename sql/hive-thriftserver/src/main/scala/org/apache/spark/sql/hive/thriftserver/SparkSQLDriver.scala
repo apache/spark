@@ -28,7 +28,7 @@ import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse
 
 import org.apache.spark.SparkThrowable
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.COMMAND
+import org.apache.spark.internal.LogKeys.COMMAND
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.plans.logical.CommandResult
 import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}

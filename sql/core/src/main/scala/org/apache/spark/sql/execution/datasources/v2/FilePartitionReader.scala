@@ -18,7 +18,8 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.io.{FileNotFoundException, IOException}
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{CURRENT_FILE, PARTITIONED_FILE_READER}
 import org.apache.spark.rdd.InputFileBlockHolder
 import org.apache.spark.sql.catalyst.FileSourceOptions
 import org.apache.spark.sql.connector.read.PartitionReader
@@ -38,7 +39,7 @@ class FilePartitionReader[T](
     if (currentReader == null) {
       if (files.hasNext) {
         val file = files.next()
-        logInfo(s"Reading file $file")
+        logInfo(log"Reading file ${MDC(CURRENT_FILE, file)}")
         // Sets InputFileBlockHolder for the file block's information
         InputFileBlockHolder.set(file.urlEncodedPath, file.start, file.length)
         try {
@@ -64,8 +65,8 @@ class FilePartitionReader[T](
       currentReader != null && currentReader.next()
     } catch {
       case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
-        logWarning(
-          s"Skipped the rest of the content in the corrupted file: $currentReader", e)
+        logWarning(log"Skipped the rest of the content in the corrupted file: " +
+          log"${MDC(PARTITIONED_FILE_READER, currentReader)}", e)
         false
       case e: Throwable =>
         throw FileDataSourceV2.attachFilePath(currentReader.file.urlEncodedPath, e)

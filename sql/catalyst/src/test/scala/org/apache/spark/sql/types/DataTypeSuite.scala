@@ -23,10 +23,12 @@ import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentExce
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.StringConcat
+import org.apache.spark.sql.catalyst.util.{CollationFactory, StringConcat}
 import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, yearMonthIntervalTypes}
 
 class DataTypeSuite extends SparkFunSuite {
+
+  private val UNICODE_COLLATION_ID = CollationFactory.collationNameToId("UNICODE")
 
   test("construct an ArrayType") {
     val array = ArrayType(StringType)
@@ -711,5 +713,182 @@ class DataTypeSuite extends SparkFunSuite {
         |""".stripMargin
 
     assert(result === expected)
+  }
+
+  test("schema with collation should not change during ser/de") {
+    val simpleStruct = StructType(
+      StructField("c1", StringType(UNICODE_COLLATION_ID)) :: Nil)
+
+    val nestedStruct = StructType(
+      StructField("nested", simpleStruct) :: Nil)
+
+    val caseInsensitiveNames = StructType(
+      StructField("c1", StringType(UNICODE_COLLATION_ID)) ::
+      StructField("C1", StringType(UNICODE_COLLATION_ID)) :: Nil)
+
+    val specialCharsInName = StructType(
+      StructField("c1.*23?", StringType(UNICODE_COLLATION_ID)) :: Nil)
+
+    val arrayInSchema = StructType(
+      StructField("arrayField", ArrayType(StringType(UNICODE_COLLATION_ID))) :: Nil)
+
+    val mapInSchema = StructType(
+      StructField("mapField",
+        MapType(StringType(UNICODE_COLLATION_ID), StringType(UNICODE_COLLATION_ID))) :: Nil)
+
+    val mapWithKeyInNameInSchema = StructType(
+      StructField("name.key", StringType) ::
+      StructField("name",
+        MapType(StringType(UNICODE_COLLATION_ID), StringType(UNICODE_COLLATION_ID))) :: Nil)
+
+    val arrayInMapInNestedSchema = StructType(
+      StructField("arrInMap",
+        MapType(StringType(UNICODE_COLLATION_ID),
+        ArrayType(StringType(UNICODE_COLLATION_ID)))) :: Nil)
+
+    val nestedArrayInMap = StructType(
+      StructField("nestedArrayInMap",
+        ArrayType(MapType(StringType(UNICODE_COLLATION_ID),
+          ArrayType(ArrayType(StringType(UNICODE_COLLATION_ID)))))) :: Nil)
+
+    val schemaWithMultipleFields = StructType(
+      simpleStruct.fields ++ nestedStruct.fields ++ arrayInSchema.fields ++ mapInSchema.fields ++
+        mapWithKeyInNameInSchema ++ arrayInMapInNestedSchema.fields ++ nestedArrayInMap.fields)
+
+    Seq(
+      simpleStruct, caseInsensitiveNames, specialCharsInName, nestedStruct, arrayInSchema,
+      mapInSchema, mapWithKeyInNameInSchema, nestedArrayInMap, arrayInMapInNestedSchema,
+      schemaWithMultipleFields)
+      .foreach { schema =>
+        val json = schema.json
+        val parsed = DataType.fromJson(json)
+        assert(parsed === schema)
+      }
+  }
+
+  test("non string field has collation metadata") {
+    val json =
+      s"""
+         |{
+         |  "type": "struct",
+         |  "fields": [
+         |    {
+         |      "name": "c1",
+         |      "type": "integer",
+         |      "nullable": true,
+         |      "metadata": {
+         |        "${DataType.COLLATIONS_METADATA_KEY}": {
+         |          "c1": "icu.UNICODE"
+         |        }
+         |      }
+         |    }
+         |  ]
+         |}
+         |""".stripMargin
+
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        DataType.fromJson(json)
+      },
+      errorClass = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
+      parameters = Map("jsonType" -> "integer")
+    )
+  }
+
+  test("non string field in map key has collation metadata") {
+    val json =
+      s"""
+         |{
+         |  "type": "struct",
+         |  "fields": [
+         |    {
+         |      "name": "mapField",
+         |      "type": {
+         |        "type": "map",
+         |        "keyType": "string",
+         |        "valueType": "integer",
+         |        "valueContainsNull": true
+         |      },
+         |      "nullable": true,
+         |      "metadata": {
+         |        "${DataType.COLLATIONS_METADATA_KEY}": {
+         |          "mapField.value": "icu.UNICODE"
+         |        }
+         |      }
+         |    }
+         |  ]
+         |}
+         |""".stripMargin
+
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        DataType.fromJson(json)
+      },
+      errorClass = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
+      parameters = Map("jsonType" -> "integer")
+    )
+  }
+
+  test("map field has collation metadata") {
+    val json =
+      s"""
+         |{
+         |  "type": "struct",
+         |  "fields": [
+         |    {
+         |      "name": "mapField",
+         |      "type": {
+         |        "type": "map",
+         |        "keyType": "string",
+         |        "valueType": "integer",
+         |        "valueContainsNull": true
+         |      },
+         |      "nullable": true,
+         |      "metadata": {
+         |        "${DataType.COLLATIONS_METADATA_KEY}": {
+         |          "mapField": "icu.UNICODE"
+         |        }
+         |      }
+         |    }
+         |  ]
+         |}
+         |""".stripMargin
+
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        DataType.fromJson(json)
+      },
+      errorClass = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
+      parameters = Map("jsonType" -> "map")
+    )
+  }
+
+  test("non existing collation provider") {
+    val json =
+      s"""
+         |{
+         |  "type": "struct",
+         |  "fields": [
+         |    {
+         |      "name": "c1",
+         |      "type": "string",
+         |      "nullable": true,
+         |      "metadata": {
+         |        "${DataType.COLLATIONS_METADATA_KEY}": {
+         |          "c1": "badProvider.UNICODE"
+         |        }
+         |      }
+         |    }
+         |  ]
+         |}
+         |""".stripMargin
+
+    checkError(
+      exception = intercept[SparkException] {
+        DataType.fromJson(json)
+      },
+      errorClass = "COLLATION_INVALID_PROVIDER",
+      parameters = Map("provider" -> "badProvider", "supportedProviders" -> "spark, icu")
+    )
   }
 }

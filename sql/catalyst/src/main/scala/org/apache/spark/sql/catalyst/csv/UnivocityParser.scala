@@ -316,7 +316,7 @@ class UnivocityParser(
       throw BadRecordException(
         () => getCurrentInput,
         () => Array.empty,
-        QueryExecutionErrors.malformedCSVRecordError(""))
+        LazyBadRecordCauseWrapper(() => QueryExecutionErrors.malformedCSVRecordError("")))
     }
 
     val currentInput = getCurrentInput
@@ -326,7 +326,8 @@ class UnivocityParser(
       // However, we still have chance to parse some of the tokens. It continues to parses the
       // tokens normally and sets null when `ArrayIndexOutOfBoundsException` occurs for missing
       // tokens.
-      Some(QueryExecutionErrors.malformedCSVRecordError(currentInput.toString))
+      Some(LazyBadRecordCauseWrapper(
+        () => QueryExecutionErrors.malformedCSVRecordError(currentInput.toString)))
     } else None
     // When the length of the returned tokens is identical to the length of the parsed schema,
     // we just need to:

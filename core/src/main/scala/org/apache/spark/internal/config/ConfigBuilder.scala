@@ -94,7 +94,7 @@ private[spark] class TypedConfigBuilder[T](
   import ConfigHelpers._
 
   def this(parent: ConfigBuilder, converter: String => T) = {
-    this(parent, converter, Option(_).map(_.toString).orNull)
+    this(parent, converter, { v: T => v.toString })
   }
 
   /** Apply a transformation to the user-provided values of the config entry. */
@@ -157,6 +157,7 @@ private[spark] class TypedConfigBuilder[T](
 
   /** Creates a [[ConfigEntry]] that has a default value. */
   def createWithDefault(default: T): ConfigEntry[T] = {
+    assert(default != null, "Use createOptional.")
     // Treat "String" as a special case, so that both createWithDefault and createWithDefaultString
     // behave the same w.r.t. variable expansion of default values.
     default match {

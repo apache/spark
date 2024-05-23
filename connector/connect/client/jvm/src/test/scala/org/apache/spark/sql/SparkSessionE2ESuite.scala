@@ -26,7 +26,7 @@ import scala.util.{Failure, Success}
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.test.RemoteSparkSession
+import org.apache.spark.sql.test.{ConnectFunSuite, RemoteSparkSession}
 import org.apache.spark.util.SparkThreadUtils.awaitResult
 
 /**
@@ -34,7 +34,7 @@ import org.apache.spark.util.SparkThreadUtils.awaitResult
  * class, whether explicit or implicit, as it will trigger a UDF deserialization error during
  * Maven build/test.
  */
-class SparkSessionE2ESuite extends RemoteSparkSession {
+class SparkSessionE2ESuite extends ConnectFunSuite with RemoteSparkSession {
 
   test("interrupt all - background queries, foreground interrupt") {
     val session = spark
@@ -108,7 +108,8 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
     assert(interrupted.length == 2, s"Interrupted operations: $interrupted.")
   }
 
-  test("interrupt tag") {
+  // TODO(SPARK-48139): Re-enable `SparkSessionE2ESuite.interrupt tag`
+  ignore("interrupt tag") {
     val session = spark
     import session.implicits._
 
@@ -196,7 +197,7 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
 
     // q2 and q3 should be cancelled
     interrupted.clear()
-    eventually(timeout(30.seconds), interval(1.seconds)) {
+    eventually(timeout(1.minute), interval(1.seconds)) {
       val ids = spark.interruptTag("two")
       interrupted ++= ids
       assert(interrupted.length == 2, s"Interrupted operations: $interrupted.")
@@ -213,7 +214,7 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
 
     // q1 and q4 should be cancelled
     interrupted.clear()
-    eventually(timeout(30.seconds), interval(1.seconds)) {
+    eventually(timeout(1.minute), interval(1.seconds)) {
       val ids = spark.interruptTag("one")
       interrupted ++= ids
       assert(interrupted.length == 2, s"Interrupted operations: $interrupted.")

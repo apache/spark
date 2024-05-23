@@ -22,7 +22,7 @@ from typing import Union, TYPE_CHECKING
 
 from pyspark.errors import PySparkTypeError
 from pyspark.sql import functions as pysparkfuncs
-from pyspark.sql.connect.column import Column
+from pyspark.sql.column import Column
 from pyspark.sql.connect.functions.builtin import _to_col, _invoke_function_over_columns
 from pyspark.sql.connect.functions.builtin import lit, _invoke_function
 

@@ -25,6 +25,7 @@ import java.util.function.ToLongFunction;
 import com.ibm.icu.text.RuleBasedCollator;
 import com.ibm.icu.text.StringSearch;
 import com.ibm.icu.util.ULocale;
+import com.ibm.icu.text.CollationKey;
 import com.ibm.icu.text.Collator;
 
 import org.apache.spark.SparkException;
@@ -35,11 +36,62 @@ import org.apache.spark.unsafe.types.UTF8String;
  * Provides functionality to the UTF8String object which respects defined collation settings.
  */
 public final class CollationFactory {
+
+  /**
+   * Identifier for single a collation.
+   */
+  public static class CollationIdentifier {
+    private final String provider;
+    private final String name;
+    private final String version;
+
+    public CollationIdentifier(String provider, String collationName, String version) {
+      this.provider = provider;
+      this.name = collationName;
+      this.version = version;
+    }
+
+    public static CollationIdentifier fromString(String identifier) {
+      long numDots = identifier.chars().filter(ch -> ch == '.').count();
+      assert(numDots > 0);
+
+      if (numDots == 1) {
+        String[] parts = identifier.split("\\.", 2);
+        return new CollationIdentifier(parts[0], parts[1], null);
+      }
+
+      String[] parts = identifier.split("\\.", 3);
+      return new CollationIdentifier(parts[0], parts[1], parts[2]);
+    }
+
+    /**
+     * Returns the identifier's string value without the version.
+     * This is used for the table schema as the schema doesn't care about the version,
+     * only the statistics do.
+     */
+    public String toStringWithoutVersion() {
+      return String.format("%s.%s", provider, name);
+    }
+
+    public String getProvider() {
+      return provider;
+    }
+
+    public String getName() {
+      return name;
+    }
+
+    public Optional<String> getVersion() {
+      return Optional.ofNullable(version);
+    }
+  }
+
   /**
    * Entry encapsulating all information about a collation.
    */
   public static class Collation {
     public final String collationName;
+    public final String provider;
     public final Collator collator;
     public final Comparator<UTF8String> comparator;
 
@@ -88,6 +140,7 @@ public final class CollationFactory {
 
     public Collation(
         String collationName,
+        String provider,
         Collator collator,
         Comparator<UTF8String> comparator,
         String version,
@@ -96,6 +149,7 @@ public final class CollationFactory {
         boolean supportsBinaryOrdering,
         boolean supportsLowercaseEquality) {
       this.collationName = collationName;
+      this.provider = provider;
       this.collator = collator;
       this.comparator = comparator;
       this.version = version;
@@ -109,6 +163,8 @@ public final class CollationFactory {
       // No Collation can simultaneously support binary equality and lowercase equality
       assert(!supportsBinaryEquality || !supportsLowercaseEquality);
 
+      assert(SUPPORTED_PROVIDERS.contains(provider));
+
       if (supportsBinaryEquality) {
         this.equalsFunction = UTF8String::equals;
       } else {
@@ -121,6 +177,7 @@ public final class CollationFactory {
      */
     public Collation(
         String collationName,
+        String provider,
         Collator collator,
         String version,
         boolean supportsBinaryEquality,
@@ -128,6 +185,7 @@ public final class CollationFactory {
         boolean supportsLowercaseEquality) {
       this(
         collationName,
+        provider,
         collator,
         (s1, s2) -> collator.compare(s1.toString(), s2.toString()),
         version,
@@ -135,6 +193,11 @@ public final class CollationFactory {
         supportsBinaryEquality,
         supportsBinaryOrdering,
         supportsLowercaseEquality);
+    }
+
+    /** Returns the collation identifier. */
+    public CollationIdentifier identifier() {
+      return new CollationIdentifier(provider, collationName, version);
     }
   }
 
@@ -144,12 +207,17 @@ public final class CollationFactory {
   public static final int UTF8_BINARY_COLLATION_ID = 0;
   public static final int UTF8_BINARY_LCASE_COLLATION_ID = 1;
 
+  public static final String PROVIDER_SPARK = "spark";
+  public static final String PROVIDER_ICU = "icu";
+  public static final List<String> SUPPORTED_PROVIDERS = List.of(PROVIDER_SPARK, PROVIDER_ICU);
+
   static {
     // Binary comparison. This is the default collation.
     // No custom comparators will be used for this collation.
     // Instead, we rely on byte for byte comparison.
     collationTable[0] = new Collation(
       "UTF8_BINARY",
+      PROVIDER_SPARK,
       null,
       UTF8String::binaryCompare,
       "1.0",
@@ -162,6 +230,7 @@ public final class CollationFactory {
     // TODO: Do in place comparisons instead of creating new strings.
     collationTable[1] = new Collation(
       "UTF8_BINARY_LCASE",
+      PROVIDER_SPARK,
       null,
       UTF8String::compareLowerCase,
       "1.0",
@@ -172,13 +241,28 @@ public final class CollationFactory {
 
     // UNICODE case sensitive comparison (ROOT locale, in ICU).
     collationTable[2] = new Collation(
-      "UNICODE", Collator.getInstance(ULocale.ROOT), "153.120.0.0", true, false, false);
+      "UNICODE",
+      PROVIDER_ICU,
+      Collator.getInstance(ULocale.ROOT),
+      "153.120.0.0",
+      true,
+      false,
+      false
+    );
+
     collationTable[2].collator.setStrength(Collator.TERTIARY);
     collationTable[2].collator.freeze();
 
     // UNICODE case-insensitive comparison (ROOT locale, in ICU + Secondary strength).
     collationTable[3] = new Collation(
-      "UNICODE_CI", Collator.getInstance(ULocale.ROOT), "153.120.0.0", false, false, false);
+      "UNICODE_CI",
+      PROVIDER_ICU,
+      Collator.getInstance(ULocale.ROOT),
+      "153.120.0.0",
+      false,
+      false,
+      false
+    );
     collationTable[3].collator.setStrength(Collator.SECONDARY);
     collationTable[3].collator.freeze();
 
@@ -196,10 +280,21 @@ public final class CollationFactory {
       final UTF8String targetUTF8String,
       final UTF8String patternUTF8String,
       final int collationId) {
-    String pattern = patternUTF8String.toString();
-    CharacterIterator target = new StringCharacterIterator(targetUTF8String.toString());
+    return getStringSearch(targetUTF8String.toString(), patternUTF8String.toString(), collationId);
+  }
+
+  /**
+   * Returns a StringSearch object for the given pattern and target strings, under collation
+   * rules corresponding to the given collationId. The external ICU library StringSearch object can
+   * be used to find occurrences of the pattern in the target string, while respecting collation.
+   */
+  public static StringSearch getStringSearch(
+          final String targetString,
+          final String patternString,
+          final int collationId) {
+    CharacterIterator target = new StringCharacterIterator(targetString);
     Collator collator = CollationFactory.fetchCollation(collationId).collator;
-    return new StringSearch(pattern, target, (RuleBasedCollator) collator);
+    return new StringSearch(patternString, target, (RuleBasedCollator) collator);
   }
 
   /**
@@ -251,6 +346,18 @@ public final class CollationFactory {
     }
   }
 
+  public static void assertValidProvider(String provider) throws SparkException {
+    if (!SUPPORTED_PROVIDERS.contains(provider.toLowerCase())) {
+      Map<String, String> params = Map.of(
+        "provider", provider,
+        "supportedProviders", String.join(", ", SUPPORTED_PROVIDERS)
+      );
+
+      throw new SparkException(
+        "COLLATION_INVALID_PROVIDER", SparkException.constructMessageParams(params), null);
+    }
+  }
+
   public static Collation fetchCollation(int collationId) {
     return collationTable[collationId];
   }
@@ -259,4 +366,17 @@ public final class CollationFactory {
     int collationId = collationNameToId(collationName);
     return collationTable[collationId];
   }
+
+  public static UTF8String getCollationKey(UTF8String input, int collationId) {
+    Collation collation = fetchCollation(collationId);
+    if (collation.supportsBinaryEquality) {
+      return input;
+    } else if (collation.supportsLowercaseEquality) {
+      return input.toLowerCase();
+    } else {
+      CollationKey collationKey = collation.collator.getCollationKey(input.toString());
+      return UTF8String.fromBytes(collationKey.toByteArray());
+    }
+  }
+
 }

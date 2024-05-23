@@ -25,6 +25,8 @@ import scala.concurrent.duration.NANOSECONDS
 import scala.util.control.NonFatal
 
 import org.apache.spark.{broadcast, SparkException}
+import org.apache.spark.internal.LogKeys._
+import org.apache.spark.internal.MDC
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -65,10 +67,21 @@ trait BroadcastExchangeLike extends Exchange {
    * It also does the preparations work, such as waiting for the subqueries.
    */
   final def submitBroadcastJob: scala.concurrent.Future[broadcast.Broadcast[Any]] = executeQuery {
+    materializationStarted.set(true)
     completionFuture
   }
 
   protected def completionFuture: scala.concurrent.Future[broadcast.Broadcast[Any]]
+
+  /**
+   * Cancels broadcast job.
+   */
+  final def cancelBroadcastJob(): Unit = {
+    if (isMaterializationStarted() && !this.relationFuture.isDone) {
+      sparkContext.cancelJobsWithTag(this.jobTag)
+      this.relationFuture.cancel(true)
+    }
+  }
 
   /**
    * Returns the runtime statistics after broadcast materialization.
@@ -212,7 +225,7 @@ case class BroadcastExchangeExec(
       relationFuture.get(timeout, TimeUnit.SECONDS).asInstanceOf[broadcast.Broadcast[T]]
     } catch {
       case ex: TimeoutException =>
-        logError(s"Could not execute broadcast in $timeout secs.", ex)
+        logError(log"Could not execute broadcast in ${MDC(TIMEOUT, timeout)} secs.", ex)
         if (!relationFuture.isDone) {
           sparkContext.cancelJobsWithTag(jobTag)
           relationFuture.cancel(true)

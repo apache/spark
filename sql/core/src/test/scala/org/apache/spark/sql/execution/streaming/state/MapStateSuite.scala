@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
+import java.time.Duration
 import java.util.UUID
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl}
-import org.apache.spark.sql.streaming.{ListState, MapState, TimeMode, ValueState}
+import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, MapStateImplWithTTL, StatefulProcessorHandleImpl}
+import org.apache.spark.sql.streaming.{ListState, MapState, TimeMode, TTLConfig, ValueState}
 import org.apache.spark.sql.types.{BinaryType, StructType}
 
 /**
@@ -165,6 +167,92 @@ class MapStateSuite extends StateVariableSuiteBase {
       assert(!mapTestState1.exists())
       assert(mapTestState2.exists())
       assert(mapTestState2.iterator().toList === List(("k2", 4)))
+    }
+  }
+
+  test("test Map state TTL") {
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+      val store = provider.getStore(0)
+      val timestampMs = 10
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.ProcessingTime(),
+        batchTimestampMs = Some(timestampMs))
+
+      val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
+      val testState: MapStateImplWithTTL[String, String] =
+        handle.getMapState[String, String]("testState", Encoders.STRING,
+          Encoders.STRING, ttlConfig).asInstanceOf[MapStateImplWithTTL[String, String]]
+      ImplicitGroupingKeyTracker.setImplicitKey("test_key")
+      testState.updateValue("k1", "v1")
+      assert(testState.getValue("k1") === "v1")
+      assert(testState.getWithoutEnforcingTTL("k1").get === "v1")
+
+      val ttlExpirationMs = timestampMs + 60000
+      var ttlValue = testState.getTTLValue("k1")
+      assert(ttlValue.isDefined)
+      assert(ttlValue.get._2 === ttlExpirationMs)
+      var ttlStateValueIterator = testState.getKeyValuesInTTLState().map(_._2)
+      assert(ttlStateValueIterator.hasNext)
+
+      // increment batchProcessingTime, or watermark and ensure expired value is not returned
+      val nextBatchHandle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]],
+        TimeMode.ProcessingTime(), batchTimestampMs = Some(ttlExpirationMs))
+
+      val nextBatchTestState: MapStateImplWithTTL[String, String] =
+        nextBatchHandle.getMapState[String, String](
+            "testState", Encoders.STRING, Encoders.STRING, ttlConfig)
+            .asInstanceOf[MapStateImplWithTTL[String, String]]
+
+      ImplicitGroupingKeyTracker.setImplicitKey("test_key")
+
+      // ensure get does not return the expired value
+      assert(!nextBatchTestState.exists())
+      assert(nextBatchTestState.getValue("k1") === null)
+
+      // ttl value should still exist in state
+      ttlValue = nextBatchTestState.getTTLValue("k1")
+      assert(ttlValue.isDefined)
+      assert(ttlValue.get._2 === ttlExpirationMs)
+      ttlStateValueIterator = nextBatchTestState.getKeyValuesInTTLState().map(_._2)
+      assert(ttlStateValueIterator.hasNext)
+      assert(ttlStateValueIterator.next() === ttlExpirationMs)
+      assert(ttlStateValueIterator.isEmpty)
+
+      // getWithoutTTL should still return the expired value
+      assert(nextBatchTestState.getWithoutEnforcingTTL("k1").get === "v1")
+
+      nextBatchTestState.clear()
+      assert(!nextBatchTestState.exists())
+      assert(nextBatchTestState.getValue("k1") === null)
+    }
+  }
+
+  test("test negative or zero TTL duration throws error") {
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+      val store = provider.getStore(0)
+      val batchTimestampMs = 10
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]],
+        TimeMode.ProcessingTime(), batchTimestampMs = Some(batchTimestampMs))
+
+      Seq(null, Duration.ZERO, Duration.ofMinutes(-1)).foreach { ttlDuration =>
+        val ttlConfig = TTLConfig(ttlDuration)
+        val ex = intercept[SparkUnsupportedOperationException] {
+          handle.getMapState[String, String](
+            "testState", Encoders.STRING, Encoders.STRING, ttlConfig)
+        }
+
+        checkError(
+          ex,
+          errorClass = "STATEFUL_PROCESSOR_TTL_DURATION_MUST_BE_POSITIVE",
+          parameters = Map(
+            "operationType" -> "update",
+            "stateName" -> "testState"
+          ),
+          matchPVals = true
+        )
+      }
     }
   }
 }

@@ -58,6 +58,9 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     check(Array(primitiveHeader(INT8), 0, 0, 0, 0, 0, 0, 0), emptyMetadata)
     // DECIMAL16 only has 15 byte content.
     check(Array(primitiveHeader(DECIMAL16)) ++ Array.fill(16)(0.toByte), emptyMetadata)
+    // 1e38 has a precision of 39. Even if it still fits into 16 bytes, it is not a valid decimal.
+    check(Array[Byte](primitiveHeader(DECIMAL16), 0) ++
+      BigDecimal(1e38).toBigInt.toByteArray.reverse, emptyMetadata)
     // Short string content too short.
     check(Array(shortStrHeader(2), 'x'), emptyMetadata)
     // Long string length too short (requires 4 bytes).
@@ -237,6 +240,13 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     val expectedResult4 =
       s"""{"a":"y","b":true}"""
     check(expectedResult4, smallObject, smallMetadata)
+  }
+
+  test("is_variant_null invalid input") {
+    checkErrorInExpression[SparkRuntimeException](
+      IsVariantNull(Literal(new VariantVal(Array(), Array(1, 2, 3)))),
+      "MALFORMED_VARIANT"
+    )
   }
 
   private def parseJson(input: String): VariantVal =
@@ -800,6 +810,15 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       "Hello")
   }
 
+  test("SPARK-48150: ParseJson expression nullability") {
+    assert(!ParseJson(Literal("["), failOnError = true).replacement.nullable)
+    assert(ParseJson(Literal("["), failOnError = false).replacement.nullable)
+    checkEvaluation(
+      ParseJson(Literal("["), failOnError = false).replacement,
+      null
+    )
+  }
+
   test("cast to variant") {
     def check[T : TypeTag](input: T, expectedJson: String): Unit = {
       val cast = Cast(Literal.create(input), VariantType, evalMode = EvalMode.ANSI)
@@ -807,9 +826,27 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     check(null.asInstanceOf[String], null)
+    // The following tests cover all allowed scalar types.
     for (input <- Seq[Any](false, true, 0.toByte, 1.toShort, 2, 3L, 4.0F, 5.0D)) {
       check(input, input.toString)
     }
+    for (precision <- Seq(9, 18, 38)) {
+      val input = BigDecimal("9" * precision)
+      check(Literal.create(input, DecimalType(precision, 0)), input.toString)
+    }
+    check("", "\"\"")
+    check("x" * 128, "\"" + ("x" * 128) + "\"")
+    check(Array[Byte](1, 2, 3), "\"AQID\"")
+    check(Literal(0, DateType), "\"1970-01-01\"")
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      check(Literal(0L, TimestampType), "\"1970-01-01 00:00:00+00:00\"")
+      check(Literal(0L, TimestampNTZType), "\"1970-01-01 00:00:00\"")
+    }
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+      check(Literal(0L, TimestampType), "\"1969-12-31 16:00:00-08:00\"")
+      check(Literal(0L, TimestampNTZType), "\"1970-01-01 00:00:00\"")
+    }
+
     check(Array(null, "a", "b", "c"), """[null,"a","b","c"]""")
     check(Map("z" -> 1, "y" -> 2, "x" -> 3), """{"x":3,"y":2,"z":1}""")
     check(Array(parseJson("""{"a": 1,"b": [1, 2, 3]}"""),

@@ -294,7 +294,7 @@ object DataSourceUtils extends PredicateHelper {
       case childExpression @ (_: Attribute | _: GetStructField) =>
         // don't push down filters for types with non-binary sortable collation
         // as it could lead to incorrect results
-        SchemaUtils.hasNonBinarySortableCollatedString(childExpression.dataType)
+        SchemaUtils.hasNonUTF8BinaryCollation(childExpression.dataType)
 
       case _ => false
     }

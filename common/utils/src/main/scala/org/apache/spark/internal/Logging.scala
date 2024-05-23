@@ -17,8 +17,6 @@
 
 package org.apache.spark.internal
 
-import java.util.Locale
-
 import scala.jdk.CollectionConverters._
 
 import org.apache.logging.log4j.{CloseableThreadContext, Level, LogManager}
@@ -29,7 +27,6 @@ import org.apache.logging.log4j.core.filter.AbstractFilter
 import org.slf4j.{Logger, LoggerFactory}
 
 import org.apache.spark.internal.Logging.SparkShellLoggingFilter
-import org.apache.spark.internal.LogKey.LogKey
 import org.apache.spark.util.SparkClassUtils
 
 /**
@@ -40,6 +37,10 @@ import org.apache.spark.util.SparkClassUtils
 case class MDC(key: LogKey, value: Any) {
   require(!value.isInstanceOf[MessageWithContext],
     "the class of value cannot be MessageWithContext")
+}
+
+object MDC {
+  def of(key: LogKey, value: Any): MDC = MDC(key, value)
 }
 
 /**
@@ -111,7 +112,7 @@ trait Logging {
         val value = if (mdc.value != null) mdc.value.toString else null
         sb.append(value)
         if (Logging.isStructuredLoggingEnabled) {
-          context.put(mdc.key.toString.toLowerCase(Locale.ROOT), value)
+          context.put(mdc.key.name, value)
         }
 
         if (processedParts.hasNext) {

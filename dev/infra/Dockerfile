@@ -81,15 +81,15 @@ ENV R_LIBS_SITE "/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library
 
 
 RUN add-apt-repository ppa:pypy/ppa
-RUN mkdir -p /usr/local/pypy/pypy3.8 && \
-    curl -sqL https://downloads.python.org/pypy/pypy3.8-v7.3.11-linux64.tar.bz2 | tar xjf - -C /usr/local/pypy/pypy3.8 --strip-components=1 && \
-    ln -sf /usr/local/pypy/pypy3.8/bin/pypy /usr/local/bin/pypy3.8 && \
-    ln -sf /usr/local/pypy/pypy3.8/bin/pypy /usr/local/bin/pypy3
+RUN mkdir -p /usr/local/pypy/pypy3.9 && \
+    curl -sqL https://downloads.python.org/pypy/pypy3.9-v7.3.16-linux64.tar.bz2 | tar xjf - -C /usr/local/pypy/pypy3.9 --strip-components=1 && \
+    ln -sf /usr/local/pypy/pypy3.9/bin/pypy /usr/local/bin/pypy3.8 && \
+    ln -sf /usr/local/pypy/pypy3.9/bin/pypy /usr/local/bin/pypy3
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | pypy3
-RUN pypy3 -m pip install numpy 'six==1.16.0' 'pandas<=2.2.2' scipy coverage matplotlib lxml
+RUN pypy3 -m pip install numpy 'six==1.16.0' 'pandas==2.2.2' scipy coverage matplotlib lxml
 
 
-ARG BASIC_PIP_PKGS="numpy pyarrow>=15.0.0 six==1.16.0 pandas<=2.2.2 scipy plotly>=4.8 mlflow>=2.8.1 coverage matplotlib openpyxl memory-profiler>=0.61.0 scikit-learn>=1.3.2"
+ARG BASIC_PIP_PKGS="numpy pyarrow>=15.0.0 six==1.16.0 pandas==2.2.2 scipy plotly>=4.8 mlflow>=2.8.1 coverage matplotlib openpyxl memory-profiler>=0.61.0 scikit-learn>=1.3.2"
 # Python deps for Spark Connect
 ARG CONNECT_PIP_PKGS="grpcio==1.62.0 grpcio-status==1.62.0 protobuf==4.25.1 googleapis-common-protos==1.56.4"
 
@@ -138,9 +138,6 @@ RUN python3.12 -m pip install $BASIC_PIP_PKGS $CONNECT_PIP_PKGS lxml && \
     python3.12 -m pip cache purge
 
 # Remove unused installation packages to free up disk space
-RUN apt-get remove --purge -y \
-    '^aspnet.*' '^dotnet-.*' '^llvm-.*' 'php.*' '^mongodb-.*' \
-    snapd google-chrome-stable microsoft-edge-stable firefox \
-    azure-cli google-cloud-sdk mono-devel powershell libgl1-mesa-dri || true
+RUN apt-get remove --purge -y 'gfortran-11' 'humanity-icon-theme' 'nodejs-doc' || true
 RUN apt-get autoremove --purge -y
 RUN apt-get clean

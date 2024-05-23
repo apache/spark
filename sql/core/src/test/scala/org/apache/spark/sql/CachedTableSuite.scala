@@ -1107,7 +1107,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
     assert(queryStats1.map(_._1.name).isEmpty)
 
     val cacheManager = spark.sharedState.cacheManager
-    val cachedData = cacheManager.lookupCachedData(query().logicalPlan)
+    val cachedData = cacheManager.lookupCachedData(query())
     assert(cachedData.isDefined)
     val queryAttrs = cachedData.get.plan.output
     assert(queryAttrs.size === 3)
@@ -1769,5 +1769,24 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
     intercept[IllegalArgumentException] {
       withSQLConf(SQLConf.DEFAULT_CACHE_STORAGE_LEVEL.key -> "DISK") {}
     }
+  }
+
+  test("SPARK-47633: Cache hit for lateral join with join condition") {
+    withTempView("t", "q1") {
+      sql("create or replace temp view t(c1, c2) as values (0, 1), (1, 2)")
+      val query = """select *
+                    |from t
+                    |join lateral (
+                    |  select c1 as a, c2 as b
+                    |  from t)
+                    |on c1 = a;
+                    |""".stripMargin
+      sql(s"cache table q1 as $query")
+      val df = sql(query)
+      checkAnswer(df,
+        Row(0, 1, 0, 1) :: Row(1, 2, 1, 2) :: Nil)
+      assert(getNumInMemoryRelations(df) == 1)
+    }
+
   }
 }

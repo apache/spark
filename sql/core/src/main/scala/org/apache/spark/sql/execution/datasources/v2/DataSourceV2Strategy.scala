@@ -22,7 +22,8 @@ import scala.collection.mutable
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.EXPR
 import org.apache.spark.sql.{SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
@@ -82,7 +83,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
   // given table, the cache's storage level is returned.
   private def invalidateTableCache(r: ResolvedTable)(): Option[StorageLevel] = {
     val v2Relation = DataSourceV2Relation.create(r.table, Some(r.catalog), Some(r.identifier))
-    val cache = session.sharedState.cacheManager.lookupCachedData(v2Relation)
+    val cache = session.sharedState.cacheManager.lookupCachedData(session, v2Relation)
     session.sharedState.cacheManager.uncacheQuery(session, v2Relation, cascade = true)
     if (cache.isDefined) {
       val cacheLevel = cache.get.cachedRepresentation.cacheBuilder.storageLevel
@@ -650,7 +651,7 @@ private[sql] object DataSourceV2Strategy extends Logging {
       Some(new Predicate("IN", FieldReference(name) +: literals))
 
     case other =>
-      logWarning(s"Can't translate $other to source filter, unsupported expression")
+      logWarning(log"Can't translate ${MDC(EXPR, other)} to source filter, unsupported expression")
       None
   }
 }

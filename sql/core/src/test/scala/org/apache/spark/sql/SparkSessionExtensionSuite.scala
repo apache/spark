@@ -40,7 +40,7 @@ import org.apache.spark.sql.connector.write.WriterCommitMessage
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, AQEShuffleReadExec, QueryStageExec, ShuffleQueryStageExec}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
-import org.apache.spark.sql.execution.datasources.{FileFormat, WriteFilesExec, WriteFilesSpec}
+import org.apache.spark.sql.execution.datasources.{FileFormat, WriteFilesExec, WriteFilesExecBase, WriteFilesSpec}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, BroadcastExchangeLike, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.internal.SQLConf
@@ -842,14 +842,13 @@ class ColumnarProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
     new ColumnarProjectExec(projectList, newChild)
 }
 
-class ColumnarWriteExec(
+case class ColumnarWriteExec(
     child: SparkPlan,
     fileFormat: FileFormat,
     partitionColumns: Seq[Attribute],
     bucketSpec: Option[BucketSpec],
     options: Map[String, String],
-    staticPartitions: TablePartitionSpec) extends WriteFilesExec(
-  child, fileFormat, partitionColumns, bucketSpec, options, staticPartitions) {
+    staticPartitions: TablePartitionSpec) extends WriteFilesExecBase {
 
   override def supportsColumnar: Boolean = true
 
@@ -858,8 +857,8 @@ class ColumnarWriteExec(
     throw new Exception("columnar write")
   }
 
-  override protected def withNewChildInternal(newChild: SparkPlan): WriteFilesExec =
-    new ColumnarWriteExec(
+  override protected def withNewChildInternal(newChild: SparkPlan): ColumnarWriteExec =
+    ColumnarWriteExec(
       newChild, fileFormat, partitionColumns, bucketSpec, options, staticPartitions)
 }
 
@@ -971,7 +970,7 @@ case class PreRuleReplaceAddWithBrokenVersion() extends Rule[SparkPlan] {
             replaceWithColumnarExpression(exp).asInstanceOf[NamedExpression]),
             replaceWithColumnarPlan(plan.child))
         case write: WriteFilesExec =>
-          new ColumnarWriteExec(
+          ColumnarWriteExec(
             replaceWithColumnarPlan(write.child),
             write.fileFormat,
             write.partitionColumns,
@@ -1014,6 +1013,7 @@ case class MyShuffleExchangeExec(delegate: ShuffleExchangeExec) extends ShuffleE
     val attributeStats = AttributeMap(Seq((child.output.head, columnStats)))
     Statistics(stats.sizeInBytes, stats.rowCount, attributeStats)
   }
+  override def shuffleId: Int = delegate.shuffleId
   override def child: SparkPlan = delegate.child
   override protected def doExecute(): RDD[InternalRow] = delegate.execute()
   override def outputPartitioning: Partitioning = delegate.outputPartitioning

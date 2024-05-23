@@ -1,19 +1,19 @@
 /*
-* Licensed to the Apache Software Foundation (ASF) under one or more
-* contributor license agreements.  See the NOTICE file distributed with
-* this work for additional information regarding copyright ownership.
-* The ASF licenses this file to You under the Apache License, Version 2.0
-* (the "License"); you may not use this file except in compliance with
-* the License.  You may obtain a copy of the License at
-*
-*    http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package org.apache.spark.unsafe.types;
 
@@ -216,6 +216,43 @@ public class UTF8StringSuite {
   }
 
   @Test
+  public void containsInLowerCase() {
+    // Corner cases
+    assertTrue(EMPTY_UTF8.containsInLowerCase(EMPTY_UTF8));
+    assertTrue(fromString("a").containsInLowerCase(EMPTY_UTF8));
+    assertTrue(fromString("A").containsInLowerCase(fromString("a")));
+    assertTrue(fromString("a").containsInLowerCase(fromString("A")));
+    assertFalse(EMPTY_UTF8.containsInLowerCase(fromString("a")));
+    // ASCII
+    assertTrue(fromString("hello").containsInLowerCase(fromString("ello")));
+    assertFalse(fromString("hello").containsInLowerCase(fromString("vello")));
+    assertFalse(fromString("hello").containsInLowerCase(fromString("hellooo")));
+    // Unicode
+    assertTrue(fromString("大千世界").containsInLowerCase(fromString("千世界")));
+    assertFalse(fromString("大千世界").containsInLowerCase(fromString("世千")));
+    assertFalse(fromString("大千世界").containsInLowerCase(fromString("大千世界好")));
+    // ASCII lowercase
+    assertTrue(fromString("HeLlO").containsInLowerCase(fromString("ElL")));
+    assertFalse(fromString("HeLlO").containsInLowerCase(fromString("ElLoO")));
+    // Unicode lowercase
+    assertTrue(fromString("ЯбЛоКо").containsInLowerCase(fromString("БлОк")));
+    assertFalse(fromString("ЯбЛоКо").containsInLowerCase(fromString("лОкБ")));
+    // Characters with the same binary lowercase representation
+    assertTrue(fromString("The Kelvin.").containsInLowerCase(fromString("Kelvin")));
+    assertTrue(fromString("The Kelvin.").containsInLowerCase(fromString("Kelvin")));
+    assertTrue(fromString("The KKelvin.").containsInLowerCase(fromString("KKelvin")));
+    assertTrue(fromString("2 Kelvin.").containsInLowerCase(fromString("2 Kelvin")));
+    assertTrue(fromString("2 Kelvin.").containsInLowerCase(fromString("2 Kelvin")));
+    assertFalse(fromString("The KKelvin.").containsInLowerCase(fromString("KKelvin,")));
+    // Characters with longer binary lowercase representation
+    assertTrue(fromString("the İodine").containsInLowerCase(fromString("the i̇odine")));
+    assertTrue(fromString("the i̇odine").containsInLowerCase(fromString("the İodine")));
+    assertTrue(fromString("The İodiNe").containsInLowerCase(fromString(" i̇oDin")));
+    assertTrue(fromString("İodiNe").containsInLowerCase(fromString("i̇oDin")));
+    assertFalse(fromString("İodiNe").containsInLowerCase(fromString(" i̇oDin")));
+  }
+
+  @Test
   public void startsWith() {
     assertTrue(EMPTY_UTF8.startsWith(EMPTY_UTF8));
     assertTrue(fromString("hello").startsWith(fromString("hell")));
@@ -227,6 +264,40 @@ public class UTF8StringSuite {
   }
 
   @Test
+  public void startsWithInLowerCase() {
+    // Corner cases
+    assertTrue(EMPTY_UTF8.startsWithInLowerCase(EMPTY_UTF8));
+    assertTrue(fromString("a").startsWithInLowerCase(EMPTY_UTF8));
+    assertTrue(fromString("A").startsWithInLowerCase(fromString("a")));
+    assertTrue(fromString("a").startsWithInLowerCase(fromString("A")));
+    assertFalse(EMPTY_UTF8.startsWithInLowerCase(fromString("a")));
+    // ASCII
+    assertTrue(fromString("hello").startsWithInLowerCase(fromString("hell")));
+    assertFalse(fromString("hello").startsWithInLowerCase(fromString("ell")));
+    // Unicode
+    assertTrue(fromString("大千世界").startsWithInLowerCase(fromString("大千")));
+    assertFalse(fromString("大千世界").startsWithInLowerCase(fromString("世千")));
+    // ASCII lowercase
+    assertTrue(fromString("HeLlO").startsWithInLowerCase(fromString("hElL")));
+    assertFalse(fromString("HeLlO").startsWithInLowerCase(fromString("ElL")));
+    // Unicode lowercase
+    assertTrue(fromString("ЯбЛоКо").startsWithInLowerCase(fromString("яБлОк")));
+    assertFalse(fromString("ЯбЛоКо").startsWithInLowerCase(fromString("БлОк")));
+    // Characters with the same binary lowercase representation
+    assertTrue(fromString("Kelvin.").startsWithInLowerCase(fromString("Kelvin")));
+    assertTrue(fromString("Kelvin.").startsWithInLowerCase(fromString("Kelvin")));
+    assertTrue(fromString("KKelvin.").startsWithInLowerCase(fromString("KKelvin")));
+    assertTrue(fromString("2 Kelvin.").startsWithInLowerCase(fromString("2 Kelvin")));
+    assertTrue(fromString("2 Kelvin.").startsWithInLowerCase(fromString("2 Kelvin")));
+    assertFalse(fromString("KKelvin.").startsWithInLowerCase(fromString("KKelvin,")));
+    // Characters with longer binary lowercase representation
+    assertTrue(fromString("the İodine").startsWithInLowerCase(fromString("the i̇odine")));
+    assertTrue(fromString("the i̇odine").startsWithInLowerCase(fromString("the İodine")));
+    assertTrue(fromString("İodiNe").startsWithInLowerCase(fromString("i̇oDin")));
+    assertFalse(fromString("The İodiNe").startsWithInLowerCase(fromString("i̇oDin")));
+  }
+
+  @Test
   public void endsWith() {
     assertTrue(EMPTY_UTF8.endsWith(EMPTY_UTF8));
     assertTrue(fromString("hello").endsWith(fromString("ello")));
@@ -235,6 +306,40 @@ public class UTF8StringSuite {
     assertTrue(fromString("大千世界").endsWith(fromString("世界")));
     assertFalse(fromString("大千世界").endsWith(fromString("世")));
     assertFalse(fromString("数据砖头").endsWith(fromString("我的数据砖头")));
+  }
+
+  @Test
+  public void endsWithInLowerCase() {
+    // Corner cases
+    assertTrue(EMPTY_UTF8.endsWithInLowerCase(EMPTY_UTF8));
+    assertTrue(fromString("a").endsWithInLowerCase(EMPTY_UTF8));
+    assertTrue(fromString("A").endsWithInLowerCase(fromString("a")));
+    assertTrue(fromString("a").endsWithInLowerCase(fromString("A")));
+    assertFalse(EMPTY_UTF8.endsWithInLowerCase(fromString("a")));
+    // ASCII
+    assertTrue(fromString("hello").endsWithInLowerCase(fromString("ello")));
+    assertFalse(fromString("hello").endsWithInLowerCase(fromString("hell")));
+    // Unicode
+    assertTrue(fromString("大千世界").endsWithInLowerCase(fromString("世界")));
+    assertFalse(fromString("大千世界").endsWithInLowerCase(fromString("大千")));
+    // ASCII lowercase
+    assertTrue(fromString("HeLlO").endsWithInLowerCase(fromString("ElLo")));
+    assertFalse(fromString("HeLlO").endsWithInLowerCase(fromString("hElL")));
+    // Unicode lowercase
+    assertTrue(fromString("ЯбЛоКо").endsWithInLowerCase(fromString("БлОкО")));
+    assertFalse(fromString("ЯбЛоКо").endsWithInLowerCase(fromString("яБлОк")));
+    // Characters with the same binary lowercase representation
+    assertTrue(fromString("The Kelvin").endsWithInLowerCase(fromString("Kelvin")));
+    assertTrue(fromString("The Kelvin").endsWithInLowerCase(fromString("Kelvin")));
+    assertTrue(fromString("The KKelvin").endsWithInLowerCase(fromString("KKelvin")));
+    assertTrue(fromString("The 2 Kelvin").endsWithInLowerCase(fromString("2 Kelvin")));
+    assertTrue(fromString("The 2 Kelvin").endsWithInLowerCase(fromString("2 Kelvin")));
+    assertFalse(fromString("The KKelvin").endsWithInLowerCase(fromString("KKelvin,")));
+    // Characters with longer binary lowercase representation
+    assertTrue(fromString("the İodine").endsWithInLowerCase(fromString("the i̇odine")));
+    assertTrue(fromString("the i̇odine").endsWithInLowerCase(fromString("the İodine")));
+    assertTrue(fromString("The İodiNe").endsWithInLowerCase(fromString("i̇oDine")));
+    assertFalse(fromString("The İodiNe").endsWithInLowerCase(fromString("i̇oDin")));
   }
 
   @Test

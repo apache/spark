@@ -26,6 +26,8 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGe
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.util.ToNumberParser
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.types.StringTypeAnyCollation
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, DatetimeType, Decimal, DecimalType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -47,7 +49,8 @@ abstract class ToNumberBase(left: Expression, right: Expression, errorOnFail: Bo
     DecimalType.USER_DEFAULT
   }
 
-  override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeAnyCollation, StringTypeAnyCollation)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val inputTypeCheck = super.checkInputDataTypes()
@@ -247,8 +250,9 @@ object ToCharacterBuilder extends ExpressionBuilder {
       inputExpr.dataType match {
         case _: DatetimeType => DateFormatClass(inputExpr, format)
         case _: BinaryType =>
-          if (!(format.dataType == StringType && format.foldable)) {
-            throw QueryCompilationErrors.nonFoldableArgumentError(funcName, "format", StringType)
+          if (!(format.dataType.isInstanceOf[StringType] && format.foldable)) {
+            throw QueryCompilationErrors.nonFoldableArgumentError(funcName, "format",
+              format.dataType)
           }
           val fmt = format.eval()
           if (fmt == null) {
@@ -279,8 +283,8 @@ case class ToCharacter(left: Expression, right: Expression)
     }
   }
 
-  override def dataType: DataType = StringType
-  override def inputTypes: Seq[AbstractDataType] = Seq(DecimalType, StringType)
+  override def dataType: DataType = SQLConf.get.defaultStringType
+  override def inputTypes: Seq[AbstractDataType] = Seq(DecimalType, StringTypeAnyCollation)
   override def checkInputDataTypes(): TypeCheckResult = {
     val inputTypeCheck = super.checkInputDataTypes()
     if (inputTypeCheck.isSuccess) {

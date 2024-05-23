@@ -28,7 +28,7 @@ import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{OFFSETS, RETRY_COUNT}
+import org.apache.spark.internal.LogKeys.{NUM_RETRY, OFFSETS, TOPIC_PARTITION_OFFSET}
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.kafka010.KafkaSourceProvider.StrategyOnNoMatchStartingOffset
@@ -508,7 +508,7 @@ private[kafka010] class KafkaOffsetReaderConsumer(
         () =>
           KafkaExceptions.initialOffsetNotFoundForPartitions(deletedPartitions))
     }
-    logInfo(s"Partitions added: $newPartitionInitialOffsets")
+    logInfo(log"Partitions added: ${MDC(TOPIC_PARTITION_OFFSET, newPartitionInitialOffsets)}")
     newPartitionInitialOffsets.filter(_._2 != 0).foreach { case (p, o) =>
       reportDataLoss(
         s"Added partition $p starts from $o instead of 0. Some data may have been missed",
@@ -613,7 +613,7 @@ private[kafka010] class KafkaOffsetReaderConsumer(
                 case NonFatal(e) =>
                   lastException = e
                   logWarning(
-                    log"Error in attempt ${MDC(RETRY_COUNT, attempt)} getting Kafka offsets: ", e)
+                    log"Error in attempt ${MDC(NUM_RETRY, attempt)} getting Kafka offsets: ", e)
                   attempt += 1
                   Thread.sleep(offsetFetchAttemptIntervalMs)
                   resetConsumer()
