@@ -3999,6 +3999,42 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         c.storeAnalyzedQuery()
     }
   }
+
+  object ResolveTranspose extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
+      _.containsPattern(TRANSPOSE), ruleId) {
+      case t @ Transpose(columnsToTranspose, columnAlias, orderExpression, child)
+        if t.expressions.forall(_.resolved) && child.resolved =>
+
+        val pivotColumnName = "__pivot_column"
+
+        // Concatenate the values of columns in columnsToTranspose using an underscore
+        val concatExpr = ConcatWs(Literal("_") +: columnsToTranspose)
+        val aliasExpr = Alias(concatExpr, pivotColumnName)()
+        val tempChild = Project(child.output :+ aliasExpr, child)
+        val columnsToKeep = child.output.filterNot(columnsToTranspose.contains)
+
+        val unpivot = Unpivot(
+          ids = Some(Seq(AttributeReference(pivotColumnName, StringType)())),
+          values = Some(columnsToKeep.map(col => Seq(col.asInstanceOf[NamedExpression]))),
+          aliases = None,
+          variableColumnName = columnAlias,
+          valueColumnNames = Seq("value"),
+          child = tempChild
+        )
+
+        val pivot = Pivot(
+          groupByExprsOpt = Some(Seq(AttributeReference(columnAlias, StringType)())),
+          pivotColumn = AttributeReference(pivotColumnName, StringType)(),
+          pivotValues = Nil,
+          aggregates = Seq(
+            Alias(First(AttributeReference("value", StringType)(), ignoreNulls = true), "value")()),
+          child = unpivot
+        )
+
+        pivot
+    }
+  }
 }
 
 /**
