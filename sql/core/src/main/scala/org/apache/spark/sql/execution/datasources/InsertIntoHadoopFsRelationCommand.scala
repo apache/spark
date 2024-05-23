@@ -181,7 +181,10 @@ case class InsertIntoHadoopFsRelationCommand(
                 ifExists = true, purge = true,
                 retainData = false).run(sparkSession)
               AlterTableAddPartitionCommand(
-                catalogTable.get.identifier, movedPartitions.toSeq.map(p => (p, None)),
+                catalogTable.get.identifier, movedPartitions.toSeq.map(p => (p, Some(
+                  ExternalCatalogUtils.generatePartitionPath(
+                    p, catalogTable.get.partitionColumnNames, new Path(catalogTable.get.location)
+                  ).toString))),
                 ifNotExists = true).run(sparkSession)
             } else {
               // for other overwrite, old data has already deleted, so just set location

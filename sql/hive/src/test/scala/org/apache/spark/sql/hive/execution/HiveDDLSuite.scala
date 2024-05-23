@@ -565,10 +565,7 @@ class HiveDDLSuite
       val basePath = new File(tmpDir.getCanonicalPath)
       val part1Path = new File(new File(basePath, "part10"), "part11")
       val part2Path = new File(new File(basePath, "part20"), "part21")
-      val part1NewPath = new File(new File(basePath, "ds=2008-04-08"), "hr=11")
-      val part2NewPath = new File(new File(basePath, "ds=2008-04-08"), "hr=12")
       val dirSet = part1Path :: part2Path :: Nil
-      val dirNewSet = part1NewPath :: part2NewPath :: Nil
 
       // Before data insertion, all the directory are empty
       assert(dirSet.forall(dir => dir.listFiles == null || dir.listFiles.isEmpty))
@@ -579,6 +576,11 @@ class HiveDDLSuite
              |CREATE TABLE $tab (key INT, value STRING)
              |PARTITIONED BY (ds STRING, hr STRING)
            """.stripMargin)
+        val newBasePath = new Path(spark.sessionState.conf.warehousePath, tab).toUri
+        val part1NewPath = new File(new File(newBasePath.getPath, "ds=2008-04-08"), "hr=11")
+        val part2NewPath = new File(new File(newBasePath.getPath, "ds=2008-04-08"), "hr=12")
+        val dirNewSet = part1NewPath :: part2NewPath :: Nil
+
         sql(
           s"""
              |ALTER TABLE $tab ADD
