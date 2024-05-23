@@ -691,14 +691,16 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-34357: test TIME types") {
-    val rows = spark.read.jdbc(
-      urlWithUserAndPass, "TEST.TIMETYPES", new Properties()).collect()
-    val cachedRows = spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties())
-      .cache().collect()
-    val expectedTimeAtEpoch = java.sql.Timestamp.valueOf("1970-01-01 12:34:56.0")
-    assert(rows(0).getAs[java.sql.Timestamp](0) === expectedTimeAtEpoch)
-    assert(rows(1).getAs[java.sql.Timestamp](0) === expectedTimeAtEpoch)
-    assert(cachedRows(0).getAs[java.sql.Timestamp](0) === expectedTimeAtEpoch)
+    withSQLConf(("spark.sql.legacy.jdbc.useNullCalendar", "true")) {
+      val rows = spark.read.jdbc(
+        urlWithUserAndPass, "TEST.TIMETYPES", new Properties()).collect()
+      val cachedRows = spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties())
+        .cache().collect()
+      val expectedTimeAtEpoch = java.sql.Timestamp.valueOf("1970-01-01 12:34:56.0")
+      assert(rows(0).getAs[java.sql.Timestamp](0) === expectedTimeAtEpoch)
+      assert(rows(1).getAs[java.sql.Timestamp](0) === expectedTimeAtEpoch)
+      assert(cachedRows(0).getAs[java.sql.Timestamp](0) === expectedTimeAtEpoch)
+    }
   }
 
   test("SPARK-47396: TIME WITHOUT TIME ZONE preferTimestampNTZ") {

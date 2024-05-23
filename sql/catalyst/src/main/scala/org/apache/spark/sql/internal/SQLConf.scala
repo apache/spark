@@ -4045,12 +4045,12 @@ object SQLConf {
     .createWithDefault(false)
 
   val USE_NULL_CALENDAR = buildConf("spark.sql.legacy.jdbc.useNullCalendar")
+    .internal()
     .doc("When reading timestamp NTZ columns from JDBC data source, user will see the " +
       "values as they were shown in data source only if the JVM time zone is equal " +
       "to the spark local session time zone. Since these two can differ, local session " +
       "timezone calendar is used in rs.getTimestamp and rs.setTimestamp API calls. " +
       "If this configuration is set to false then null calendar will be used")
-    .internal()
     .version("4.0.0")
     .booleanConf
     .createWithDefault(false)
