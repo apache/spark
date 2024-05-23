@@ -21,7 +21,8 @@ import scala.collection.mutable
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.util.{Distribution, Utils}
 
 
@@ -46,7 +47,7 @@ class StatsReportListener extends SparkListener with Logging {
 
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = {
     implicit val sc = stageCompleted
-    this.logInfo(s"Finished stage: ${getStatusDetail(stageCompleted.stageInfo)}")
+    this.logInfo(log"Finished stage: " + getStatusDetail(stageCompleted.stageInfo))
     showMillisDistribution("task runtime:", (info, _) => info.duration, taskInfoMetrics.toSeq)
 
     // Shuffle write
@@ -73,15 +74,18 @@ class StatsReportListener extends SparkListener with Logging {
     taskInfoMetrics.clear()
   }
 
-  private def getStatusDetail(info: StageInfo): String = {
+  private def getStatusDetail(info: StageInfo): MessageWithContext = {
     val failureReason = info.failureReason.map("(" + _ + ")").getOrElse("")
     val timeTaken = info.submissionTime.map(
       x => info.completionTime.getOrElse(System.currentTimeMillis()) - x
     ).getOrElse("-")
 
-    s"Stage(${info.stageId}, ${info.attemptNumber()}); Name: '${info.name}'; " +
-      s"Status: ${info.getStatusString}$failureReason; numTasks: ${info.numTasks}; " +
-      s"Took: $timeTaken msec"
+    log"Stage(${MDC(STAGE_ID, info.stageId)}," +
+      log" ${MDC(STAGE_ATTEMPT_NUMBER, info.attemptNumber())});" +
+      log" Name: '${MDC(STAGE_NAME, info.name)}'; " +
+      log"Status: ${MDC(STAGE_STATUS, info.getStatusString)} " +
+      log"${MDC(REASON, failureReason)}; numTasks: ${MDC(NUM_TASKS, info.numTasks)}; " +
+      log"Took: ${MDC(TOTAL_TIME, timeTaken)} msec"
   }
 
 }
@@ -111,9 +115,9 @@ private[spark] object StatsReportListener extends Logging {
   def showDistribution(heading: String, d: Distribution, formatNumber: Double => String): Unit = {
     val stats = d.statCounter
     val quantiles = d.getQuantiles(probabilities).map(formatNumber)
-    logInfo(heading + stats)
-    logInfo(percentilesHeader)
-    logInfo("\t" + quantiles.mkString("\t"))
+    logInfo(log"${MDC(HEADING, heading)}${MDC(STAT_COUNTER, stats)}")
+    logInfo(log"${MDC(PERCENTILE_HEADER, percentilesHeader)}")
+    logInfo(log"\t${MDC(QUANTILES, quantiles.mkString("\t"))}")
   }
 
   def showDistribution(

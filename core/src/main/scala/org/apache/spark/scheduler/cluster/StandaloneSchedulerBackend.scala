@@ -28,7 +28,7 @@ import org.apache.spark.deploy.{ApplicationDescription, Command}
 import org.apache.spark.deploy.client.{StandaloneAppClient, StandaloneAppClientListener}
 import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.internal.{config, Logging, MDC}
-import org.apache.spark.internal.LogKeys.REASON
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.EXECUTOR_REMOVE_DELAY
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
@@ -145,7 +145,7 @@ private[spark] class StandaloneSchedulerBackend(
   }
 
   override def connected(appId: String): Unit = {
-    logInfo("Connected to Spark cluster with app ID " + appId)
+    logInfo(log"Connected to Spark cluster with app ID ${MDC(APP_ID, appId)}")
     this.appId = appId
     notifyContext()
     launcherBackend.setAppId(appId)
@@ -174,8 +174,9 @@ private[spark] class StandaloneSchedulerBackend(
 
   override def executorAdded(fullId: String, workerId: String, hostPort: String, cores: Int,
     memory: Int): Unit = {
-    logInfo("Granted executor ID %s on hostPort %s with %d core(s), %s RAM".format(
-      fullId, hostPort, cores, Utils.megabytesToString(memory)))
+    logInfo(log"Granted executor ID ${MDC(EXECUTOR_ID, fullId)}" +
+      log" on hostPort ${MDC(HOST_PORT, hostPort)} with ${MDC(NUM_CORES, cores)} core(s)," +
+      log" ${MDC(MEMORY_SIZE, Utils.megabytesToString(memory))} RAM")
   }
 
   override def executorRemoved(
@@ -192,23 +193,24 @@ private[spark] class StandaloneSchedulerBackend(
       case Some(code) => ExecutorExited(code, exitCausedByApp = true, message)
       case None => ExecutorProcessLost(message, workerHost, causedByApp = workerHost.isEmpty)
     }
-    logInfo("Executor %s removed: %s".format(fullId, message))
+    logInfo(log"Executor ${MDC(EXECUTOR_ID, fullId)} removed: ${MDC(MESSAGE, message)}")
     removeExecutor(fullId.split("/")(1), reason)
   }
 
   override def executorDecommissioned(fullId: String,
       decommissionInfo: ExecutorDecommissionInfo): Unit = {
-    logInfo(s"Asked to decommission executor $fullId")
+    logInfo(log"Asked to decommission executor ${MDC(EXECUTOR_ID, fullId)}")
     val execId = fullId.split("/")(1)
     decommissionExecutors(
       Array((execId, decommissionInfo)),
       adjustTargetNumExecutors = false,
       triggeredByExecutor = false)
-    logInfo("Executor %s decommissioned: %s".format(fullId, decommissionInfo))
+    logInfo(log"Executor ${MDC(EXECUTOR_ID, fullId)}" +
+      log" decommissioned: ${MDC(DECOMMISSION_INFO, decommissionInfo )}")
   }
 
   override def workerRemoved(workerId: String, host: String, message: String): Unit = {
-    logInfo("Worker %s removed: %s".format(workerId, message))
+    logInfo(log"Worker ${MDC(WORKER_ID, workerId)} removed: ${MDC(MESSAGE, message)}")
     removeWorker(workerId, host, message)
   }
 

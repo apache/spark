@@ -19,13 +19,12 @@ package org.apache.spark.scheduler.dynalloc
 
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.concurrent.atomic.AtomicLong
-
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
-
 import org.apache.spark._
 import org.apache.spark.errors.SparkCoreErrors
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{EXECUTOR_ID, NUM_DRIVERS, NUM_EXECUTORS, NUM_GRACEFULLY_DECOMMISSIONED, NUM_UNEXPECTEDLY_EXIT, NUM_UNFINISHED_DECOMMISSION}
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID
 import org.apache.spark.scheduler._
@@ -342,7 +341,8 @@ private[spark] class ExecutorMonitor(
   override def onExecutorAdded(event: SparkListenerExecutorAdded): Unit = {
     val exec = ensureExecutorIsTracked(event.executorId, event.executorInfo.resourceProfileId)
     exec.updateRunningTasks(0)
-    logInfo(s"New executor ${event.executorId} has registered (new total is ${executors.size()})")
+    logInfo(log"New executor ${MDC(EXECUTOR_ID, event.executorId)} has registered" +
+      log" (new total is ${MDC(NUM_EXECUTORS, executors.size())})")
   }
 
   private def decrementExecResourceProfileCount(rpId: Int): Unit = {
@@ -365,11 +365,14 @@ private[spark] class ExecutorMonitor(
       } else {
         metrics.exitedUnexpectedly.inc()
       }
-      logInfo(s"Executor ${event.executorId} is removed. Remove reason statistics: (" +
-        s"gracefully decommissioned: ${metrics.gracefullyDecommissioned.getCount()}, " +
-        s"decommision unfinished: ${metrics.decommissionUnfinished.getCount()}, " +
-        s"driver killed: ${metrics.driverKilled.getCount()}, " +
-        s"unexpectedly exited: ${metrics.exitedUnexpectedly.getCount()}).")
+      logInfo(log"Executor ${MDC(EXECUTOR_ID, event.executorId)} is removed. Remove reason" +
+        log" statistics: (gracefully decommissioned:" +
+        log" ${MDC(NUM_GRACEFULLY_DECOMMISSIONED, metrics.gracefullyDecommissioned.getCount())}," +
+        log" decommision unfinished:" +
+        log" ${MDC(NUM_UNFINISHED_DECOMMISSION, metrics.decommissionUnfinished.getCount())}," +
+        log" driver killed: ${MDC(NUM_DRIVERS, metrics.driverKilled.getCount())}," +
+        log" unexpectedly exited:" +
+        log" ${MDC(NUM_UNEXPECTEDLY_EXIT, metrics.exitedUnexpectedly.getCount())}).")
       if (!removed.pendingRemoval || !removed.decommissioning) {
         nextTimeout.set(Long.MinValue)
       }
