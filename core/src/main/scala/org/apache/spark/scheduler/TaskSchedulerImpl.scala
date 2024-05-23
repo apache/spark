@@ -20,7 +20,7 @@ package org.apache.spark.scheduler
 import java.nio.ByteBuffer
 import java.util.TimerTask
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
-import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
@@ -573,14 +573,14 @@ private[spark] class TaskSchedulerImpl(
         for (currentMaxLocality <- taskSet.myLocalityLevels if !limitByConcurrentTasks) {
           var launchedTaskAtCurrentMaxLocality = false
           do {
-            val (noDelayScheduleReject, minLocality, delayByConcurrent) =
+            val (noDelayScheduleReject, minLocality, limitReject) =
               resourceOfferSingleTaskSet(taskSet, currentMaxLocality, shuffledOffers, availableCpus,
               availableResources, tasks)
             launchedTaskAtCurrentMaxLocality = minLocality.isDefined
             launchedAnyTask |= launchedTaskAtCurrentMaxLocality
             noDelaySchedulingRejects &= noDelayScheduleReject
             globalMinLocality = minTaskLocality(globalMinLocality, minLocality)
-            limitByConcurrentTasks = delayByConcurrent
+            limitByConcurrentTasks = limitReject
           } while (launchedTaskAtCurrentMaxLocality && !limitByConcurrentTasks)
         }
 
@@ -1227,10 +1227,6 @@ private[spark] class TaskSchedulerImpl(
 private[spark] object TaskSchedulerImpl {
 
   val SCHEDULER_MODE_PROPERTY = SCHEDULER_MODE.key
-  // executionId -> running tasks size
-  val RUNNING_TASKS = new ConcurrentHashMap[Long, AtomicInteger]()
-
-  val SQL_EXECUTION_ID_KEY = "spark.sql.execution.id"
 
   /**
    * Calculate the max available task slots given the `availableCpus` and `availableResources`

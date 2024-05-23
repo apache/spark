@@ -36,7 +36,7 @@ object ExecutionLimitTracker {
       return false
     }
     val executionId = taskSet.properties
-      .getProperty(TaskSchedulerImpl.SQL_EXECUTION_ID_KEY).toLong
+      .getProperty(SQL_EXECUTION_ID_KEY).toLong
     val runningTasks = RUNNING_TASKS.getOrDefault(executionId, new AtomicInteger(0)).get()
     val restrictNumber = taskSet.properties
       .getProperty(EXECUTION_CORES_LIMIT_NUMBER.key).toInt
@@ -48,7 +48,7 @@ object ExecutionLimitTracker {
       return
     }
     val executionId = taskSet.properties
-      .getProperty(TaskSchedulerImpl.SQL_EXECUTION_ID_KEY).toLong
+      .getProperty(SQL_EXECUTION_ID_KEY).toLong
     if (!RUNNING_TASKS.containsKey(executionId)) {
       RUNNING_TASKS.put(executionId, new AtomicInteger(0))
     }
@@ -60,7 +60,7 @@ object ExecutionLimitTracker {
       return
     }
     val executionId = taskSet.properties
-      .getProperty(TaskSchedulerImpl.SQL_EXECUTION_ID_KEY).toLong
+      .getProperty(SQL_EXECUTION_ID_KEY).toLong
     if (!RUNNING_TASKS.containsKey(executionId)) {
       return
     }
