@@ -162,11 +162,12 @@ private class ShuffleStatus(
    * will be replaced by the new location.
    */
   def addMapOutput(mapIndex: Int, status: MapStatus): Unit = withWriteLock {
-    if (mapStatuses(mapIndex) == null) {
+    val currentMapStatus = mapStatuses(mapIndex)
+    if (currentMapStatus == null) {
       _numAvailableMapOutputs += 1
       invalidateSerializedMapOutputStatusCache()
     } else {
-      mapIdToMapIndex.remove(mapStatuses(mapIndex).mapId)
+      mapIdToMapIndex.remove(currentMapStatus.mapId)
     }
     mapStatuses(mapIndex) = status
     mapIdToMapIndex(status.mapId) = mapIndex
@@ -225,9 +226,9 @@ private class ShuffleStatus(
    */
   def removeMapOutput(mapIndex: Int, bmAddress: BlockManagerId): Unit = withWriteLock {
     logDebug(s"Removing existing map output ${mapIndex} ${bmAddress}")
-    if (mapStatuses(mapIndex) != null && mapStatuses(mapIndex).location == bmAddress) {
+    val currentMapStatus = mapStatuses(mapIndex)
+    if (currentMapStatus != null && currentMapStatus.location == bmAddress) {
       _numAvailableMapOutputs -= 1
-      val currentMapStatus = mapStatuses(mapIndex)
       mapIdToMapIndex.remove(currentMapStatus.mapId)
       mapStatusesDeleted(mapIndex) = currentMapStatus
       mapStatuses(mapIndex) = null
@@ -295,9 +296,9 @@ private class ShuffleStatus(
    */
   def removeOutputsByFilter(f: BlockManagerId => Boolean): Unit = withWriteLock {
     for (mapIndex <- mapStatuses.indices) {
-      if (mapStatuses(mapIndex) != null && f(mapStatuses(mapIndex).location)) {
+      val currentMapStatus = mapStatuses(mapIndex)
+      if (currentMapStatus != null && f(currentMapStatus.location)) {
         _numAvailableMapOutputs -= 1
-        val currentMapStatus = mapStatuses(mapIndex)
         mapIdToMapIndex.remove(currentMapStatus.mapId)
         mapStatusesDeleted(mapIndex) = currentMapStatus
         mapStatuses(mapIndex) = null
