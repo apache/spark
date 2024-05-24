@@ -112,7 +112,7 @@ private[storage] class BlockManagerDecommissioner(
           } else {
             logInfo(log"Got migration sub-blocks ${MDC(BLOCK_IDS, blocks)}. Trying to migrate " +
               log"${MDC(SHUFFLE_BLOCK_INFO, shuffleBlockInfo)} to ${MDC(PEER, peer)} " +
-              log"(${MDC(RETRY_COUNT, retryCount)} / " +
+              log"(${MDC(NUM_RETRY, retryCount)} / " +
               log"${MDC(MAX_ATTEMPTS, maxReplicationFailuresForDecommission)}")
             // Migrate the components of the blocks.
             try {
