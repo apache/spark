@@ -407,9 +407,6 @@ private[joins] class UnsafeHashedRelation(
     val pageSizeBytes = Option(SparkEnv.get).map(_.memoryManager.pageSizeBytes)
       .getOrElse(new SparkConf().get(BUFFER_PAGESIZE).getOrElse(16L * 1024 * 1024))
 
-    // TODO(josh): We won't need this dummy memory manager after future refactorings; revisit
-    // during code review
-
     binaryMap = new BytesToBytesMap(
       taskMemoryManager,
       (nKeys * 1.5 + 1).toInt, // reduce hash collision
