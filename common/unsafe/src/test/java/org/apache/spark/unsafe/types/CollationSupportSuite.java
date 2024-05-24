@@ -530,6 +530,10 @@ public class CollationSupportSuite {
     assertInitCap("İo", "UTF8_BINARY_LCASE", "İo");
     assertInitCap("İo", "UNICODE", "I\u0307o");
     assertInitCap("İo", "UNICODE_CI", "İo");
+    assertInitCap("i\u0307o", "UTF8_BINARY", "I\u0307o");
+    assertInitCap("i\u0307o", "UTF8_BINARY_LCASE", "I\u0307o");
+    assertInitCap("i\u0307o", "UNICODE", "I\u0307o");
+    assertInitCap("i\u0307o", "UNICODE_CI", "I\u0307o");
     // Different possible word boundaries
     assertInitCap("a b c", "UTF8_BINARY", "A B C");
     assertInitCap("a b c", "UNICODE", "A B C");
