@@ -1139,7 +1139,7 @@ class TypesTestsMixin:
     def test_parse_datatype_json_string(self):
         from pyspark.sql.types import _parse_datatype_json_string
 
-        for dateType in [
+        for dataType in [
             StringType(),
             CharType(5),
             VarcharType(10),
@@ -1166,7 +1166,9 @@ class TypesTestsMixin:
             DayTimeIntervalType(DayTimeIntervalType.HOUR, DayTimeIntervalType.SECOND),
             CalendarIntervalType(),
         ]:
-            self.assertEqual(dateType, _parse_datatype_json_string(dateType.json()))
+            json_str = dataType.json()
+            parsed = _parse_datatype_json_string(json_str)
+            self.assertEqual(dataType, parsed)
 
     def test_parse_datatype_string(self):
         from pyspark.sql.types import _all_mappable_types, _parse_datatype_string
