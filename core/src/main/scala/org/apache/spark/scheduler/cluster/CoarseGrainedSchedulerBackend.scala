@@ -42,6 +42,7 @@ import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend.ENDPOINT_NAME
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.status.api.v1.ThreadStackTrace
 import org.apache.spark.util.{RpcUtils, SerializableBuffer, ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
@@ -732,7 +733,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     if ((System.nanoTime() - createTimeNs) >= maxRegisteredWaitingTimeNs) {
       logInfo(log"SchedulerBackend is ready for scheduling beginning after waiting " +
         log"maxRegisteredResourcesWaitingTime: " +
-        log"${MDC(LogKeys.TIMEOUT, maxRegisteredWaitingTimeNs / 1000L)}(ms)")
+        log"${MDC(LogKeys.TIMEOUT, maxRegisteredWaitingTimeNs / NANOS_PER_MILLIS.toDouble)}(ms)")
       return true
     }
     false
@@ -960,8 +961,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       adjustTargetNumExecutors: Boolean,
       countFailures: Boolean,
       force: Boolean): Seq[String] = {
-    logInfo(log"Requesting to kill executor(s) " +
-      log"${MDC(LogKeys.EXECUTOR_IDS, executorIds.mkString(", "))}")
+    logInfo(
+      log"Requesting to kill executor(s) ${MDC(LogKeys.EXECUTOR_IDS, executorIds.mkString(", "))}")
 
     val response = withLock {
       val (knownExecutors, unknownExecutors) = executorIds.partition(executorDataMap.contains)
@@ -1018,8 +1019,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * @return whether the decommission request is acknowledged.
    */
   final override def decommissionExecutorsOnHost(host: String): Boolean = {
-    logInfo(log"Requesting to kill any and all executors on host " +
-      log"${MDC(LogKeys.HOST, host)}")
+    logInfo(log"Requesting to kill any and all executors on host ${MDC(LogKeys.HOST, host)}")
     // A potential race exists if a new executor attempts to register on a host
     // that is on the exclude list and is no longer valid. To avoid this race,
     // all executor registration and decommissioning happens in the event loop. This way, either
