@@ -1111,7 +1111,9 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-  test("SPARK-48394: mapIdToMapIndex should cleanup unused mapIndexes after removeOutputsByFilter") {
+  test(
+    "SPARK-48394: mapIdToMapIndex should cleanup unused mapIndexes after removeOutputsByFilter"
+  ) {
     val rpcEnv = createRpcEnv("test")
     val tracker = newTrackerMaster()
     try {
