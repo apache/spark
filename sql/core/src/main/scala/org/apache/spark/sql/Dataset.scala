@@ -754,7 +754,7 @@ class Dataset[T] private[sql](
    *                           checkpoint directory. If false creates a local checkpoint using
    *                           the caching subsystem
    */
-  private def checkpoint(eager: Boolean, reliableCheckpoint: Boolean): Dataset[T] = {
+  private[sql] def checkpoint(eager: Boolean, reliableCheckpoint: Boolean): Dataset[T] = {
     val actionName = if (reliableCheckpoint) "checkpoint" else "localCheckpoint"
     withAction(actionName, queryExecution) { physicalPlan =>
       val internalRdd = physicalPlan.execute().map(_.copy())

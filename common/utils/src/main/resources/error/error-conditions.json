@@ -4731,6 +4731,12 @@
           "<treeNode>"
         ]
       },
+      "UNSUPPORTED_CORRELATED_EXPRESSION_IN_JOIN_CONDITION" : {
+        "message" : [
+          "Correlated subqueries in the join predicate cannot reference both join inputs:",
+          "<subqueryExpression>"
+        ]
+      },
       "UNSUPPORTED_CORRELATED_REFERENCE_DATA_TYPE" : {
         "message" : [
           "Correlated column reference '<expr>' cannot be <dataType> type."

@@ -41,6 +41,7 @@ from pyspark.sql.types import (
     FloatType,
     DateType,
     TimestampType,
+    TimestampNTZType,
     DayTimeIntervalType,
     YearMonthIntervalType,
     CalendarIntervalType,
@@ -1407,6 +1408,72 @@ class TypesTestsMixin:
                 " |    |    |-- value: map (valueContainsNull = true)",
                 " |    |    |    |-- key: integer",
                 " |    |    |    |-- value: integer (valueContainsNull = true)",
+                "",
+            ],
+        )
+
+    def test_tree_string_for_builtin_types(self):
+        schema = (
+            StructType()
+            .add("n", NullType())
+            .add("str", StringType())
+            .add("c", CharType(10))
+            .add("v", VarcharType(10))
+            .add("bin", BinaryType())
+            .add("bool", BooleanType())
+            .add("date", DateType())
+            .add("ts", TimestampType())
+            .add("ts_ntz", TimestampNTZType())
+            .add("dec", DecimalType(10, 2))
+            .add("double", DoubleType())
+            .add("float", FloatType())
+            .add("long", LongType())
+            .add("int", IntegerType())
+            .add("short", ShortType())
+            .add("byte", ByteType())
+            .add("ym_interval_1", YearMonthIntervalType())
+            .add("ym_interval_2", YearMonthIntervalType(YearMonthIntervalType.YEAR))
+            .add(
+                "ym_interval_3",
+                YearMonthIntervalType(YearMonthIntervalType.YEAR, YearMonthIntervalType.MONTH),
+            )
+            .add("dt_interval_1", DayTimeIntervalType())
+            .add("dt_interval_2", DayTimeIntervalType(DayTimeIntervalType.DAY))
+            .add(
+                "dt_interval_3",
+                DayTimeIntervalType(DayTimeIntervalType.HOUR, DayTimeIntervalType.SECOND),
+            )
+            .add("cal_interval", CalendarIntervalType())
+            .add("var", VariantType())
+        )
+        self.assertEqual(
+            schema.treeString().split("\n"),
+            [
+                "root",
+                " |-- n: void (nullable = true)",
+                " |-- str: string (nullable = true)",
+                " |-- c: char(10) (nullable = true)",
+                " |-- v: varchar(10) (nullable = true)",
+                " |-- bin: binary (nullable = true)",
+                " |-- bool: boolean (nullable = true)",
+                " |-- date: date (nullable = true)",
+                " |-- ts: timestamp (nullable = true)",
+                " |-- ts_ntz: timestamp_ntz (nullable = true)",
+                " |-- dec: decimal(10,2) (nullable = true)",
+                " |-- double: double (nullable = true)",
+                " |-- float: float (nullable = true)",
+                " |-- long: long (nullable = true)",
+                " |-- int: integer (nullable = true)",
+                " |-- short: short (nullable = true)",
+                " |-- byte: byte (nullable = true)",
+                " |-- ym_interval_1: interval year to month (nullable = true)",
+                " |-- ym_interval_2: interval year (nullable = true)",
+                " |-- ym_interval_3: interval year to month (nullable = true)",
+                " |-- dt_interval_1: interval day to second (nullable = true)",
+                " |-- dt_interval_2: interval day (nullable = true)",
+                " |-- dt_interval_3: interval hour to second (nullable = true)",
+                " |-- cal_interval: interval (nullable = true)",
+                " |-- var: variant (nullable = true)",
                 "",
             ],
         )

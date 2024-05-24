@@ -41,7 +41,7 @@ import org.apache.spark.sql.connect.client.{ClassFinder, CloseableIterator, Spar
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.functions.lit
-import org.apache.spark.sql.internal.{CatalogImpl, SqlApiConf}
+import org.apache.spark.sql.internal.{CatalogImpl, SessionCleaner, SqlApiConf}
 import org.apache.spark.sql.streaming.DataStreamReader
 import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.sql.types.StructType
@@ -73,6 +73,11 @@ class SparkSession private[sql] (
     with Logging {
 
   private[this] val allocator = new RootAllocator()
+  private var shouldStopCleaner = false
+  private[sql] lazy val cleaner = {
+    shouldStopCleaner = true
+    new SessionCleaner(this)
+  }
 
   // a unique session ID for this session from client.
   private[sql] def sessionId: String = client.sessionId
@@ -713,6 +718,9 @@ class SparkSession private[sql] (
   override def close(): Unit = {
     if (releaseSessionOnClose) {
       client.releaseSession()
+    }
+    if (shouldStopCleaner) {
+      cleaner.stop()
     }
     client.shutdown()
     allocator.close()
