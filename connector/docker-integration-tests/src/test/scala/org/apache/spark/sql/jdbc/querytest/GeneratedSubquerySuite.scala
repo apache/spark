@@ -28,9 +28,9 @@ import org.apache.spark.tags.DockerTest
 
 /**
  * This suite is used to generate subqueries, and test Spark against Postgres.
- * To run this test suite for a specific version (e.g., postgres:16.3):
+ * To run this test suite for a specific version (e.g., postgres:16.3-alpine):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:16.3
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:16.3-alpine
  *     ./build/sbt -Pdocker-integration-tests
  *     "docker-integration-tests/testOnly org.apache.spark.sql.jdbc.GeneratedSubquerySuite"
  * }}}

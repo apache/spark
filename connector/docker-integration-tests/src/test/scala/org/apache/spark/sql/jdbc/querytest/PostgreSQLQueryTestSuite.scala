@@ -30,9 +30,9 @@ import org.apache.spark.tags.DockerTest
  *    confidence, and you won't have to manually verify the golden files generated with your test.
  * 2. Add this line to your .sql file: --ONLY_IF spark
  *
- * Note: To run this test suite for a specific version (e.g., postgres:16.3):
+ * Note: To run this test suite for a specific version (e.g., postgres:16.3-alpine):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:16.3
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:16.3-alpine
  *     ./build/sbt -Pdocker-integration-tests
  *     "testOnly org.apache.spark.sql.jdbc.PostgreSQLQueryTestSuite"
  * }}}

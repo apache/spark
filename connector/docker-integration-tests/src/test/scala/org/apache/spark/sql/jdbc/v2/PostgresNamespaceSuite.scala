@@ -26,9 +26,9 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.tags.DockerTest
 
 /**
- * To run this test suite for a specific version (e.g., postgres:16.3):
+ * To run this test suite for a specific version (e.g., postgres:16.3-alpine):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:16.3
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:16.3-alpine
  *     ./build/sbt -Pdocker-integration-tests "testOnly *v2.PostgresNamespaceSuite"
  * }}}
  */
