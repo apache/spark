@@ -204,7 +204,7 @@ private[deploy] class ExecutorRunner(
       worker.send(ExecutorStateChanged(appId, execId, state, Some(message), Some(exitCode)))
     } catch {
       case interrupted: InterruptedException =>
-        logInfo("Runner thread for executor " + fullId + " interrupted")
+        logInfo(log"Runner thread for executor ${MDC(EXECUTOR_ID, fullId)} interrupted")
         state = ExecutorState.KILLED
         killProcess(None)
       case e: Exception =>

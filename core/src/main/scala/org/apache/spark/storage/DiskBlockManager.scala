@@ -295,7 +295,7 @@ private[spark] class DiskBlockManager(
           case e: IOException =>
             logError(
               log"Failed to create ${MDC(MERGE_DIR_NAME, mergeDirName)} dir in " +
-                log"${MDC(PATH, rootDir)}. Ignoring this directory.", e)
+              log"${MDC(PATH, rootDir)}. Ignoring this directory.", e)
         }
       }
     }
