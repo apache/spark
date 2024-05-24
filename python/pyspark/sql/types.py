@@ -747,8 +747,8 @@ class ArrayType(DataType):
     def fromJson(
         cls,
         json: Dict[str, Any],
-        fieldPath: str,
-        collationsMap: Optional[Dict[str, str]],
+        fieldPath: str = "",
+        collationsMap: Optional[Dict[str, str]] = None,
     ) -> "ArrayType":
         elementType = _parse_datatype_json_value(
             json["elementType"], fieldPath + ".element", collationsMap
@@ -887,8 +887,8 @@ class MapType(DataType):
     def fromJson(
         cls,
         json: Dict[str, Any],
-        fieldPath: str,
-        collationsMap: Optional[Dict[str, str]],
+        fieldPath: str = "",
+        collationsMap: Optional[Dict[str, str]] = None,
     ) -> "MapType":
         keyType = _parse_datatype_json_value(json["keyType"], fieldPath + ".key", collationsMap)
         valueType = _parse_datatype_json_value(
