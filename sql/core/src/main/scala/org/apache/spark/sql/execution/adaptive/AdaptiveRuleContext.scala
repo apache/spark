@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
  * @param isFinalStage if the next stage is final stage
  */
 @Experimental
+@DeveloperApi
 case class AdaptiveRuleContext(isSubquery: Boolean, isFinalStage: Boolean) {
 
   /**
