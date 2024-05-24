@@ -547,6 +547,15 @@ public class CollationSupportSuite {
     assertInitCap("a?b世c", "UNICODE", "A?b世c");
     assertInitCap("a?b世c", "UTF8_BINARY_LCASE", "A?B世C");
     assertInitCap("a?b世c", "UNICODE_CI", "A?B世C");
+    // Titlecase characters that are different from uppercase characters
+    assertInitCap("ǳǱǲ", "UTF8_BINARY", "ǲǳǳ");
+    assertInitCap("ǳǱǲ", "UNICODE", "ǲǳǳ");
+    assertInitCap("ǳǱǲ", "UTF8_BINARY_LCASE", "ǲǳǳ");
+    assertInitCap("ǳǱǲ", "UNICODE_CI", "ǲǳǳ");
+    assertInitCap("ǆaba ǈubav Ǌegova", "UTF8_BINARY", "ǅaba ǈubav ǋegova");
+    assertInitCap("ǆaba ǈubav Ǌegova", "UNICODE", "ǅaba ǈubav ǋegova");
+    assertInitCap("ǆaba ǈubav Ǌegova", "UTF8_BINARY_LCASE", "ǅaba ǈubav ǋegova");
+    assertInitCap("ǆaba ǈubav Ǌegova", "UNICODE_CI", "ǅaba ǈubav ǋegova");
   }
 
   private void assertStringInstr(String string, String substring, String collationName,
