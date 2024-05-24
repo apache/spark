@@ -120,9 +120,8 @@ class DataType:
     def __ne__(self, other: Any) -> bool:
         return not self.__eq__(other)
 
-    @classmethod
-    def typeName(cls) -> str:
-        return cls.__name__[:-4].lower()
+    def typeName(self) -> str:
+        return self.__class__.__name__.removesuffix("Type").removesuffix("UDT").lower()
 
     def simpleString(self) -> str:
         return self.typeName()
@@ -215,24 +214,6 @@ class DataType:
         if isinstance(dataType, (ArrayType, StructType, MapType)):
             dataType._build_formatted_string(prefix, stringConcat, maxDepth - 1)
 
-    # The method typeName() is not always the same as the Scala side.
-    # Add this helper method to make TreeString() compatible with Scala side.
-    @classmethod
-    def _get_jvm_type_name(cls, dataType: "DataType") -> str:
-        if isinstance(
-            dataType,
-            (
-                DecimalType,
-                CharType,
-                VarcharType,
-                DayTimeIntervalType,
-                YearMonthIntervalType,
-            ),
-        ):
-            return dataType.simpleString()
-        else:
-            return dataType.typeName()
-
 
 # This singleton pattern does not work with pickle, you will get
 # another object after pickle and unpickle
@@ -255,8 +236,7 @@ class NullType(DataType, metaclass=DataTypeSingleton):
     The data type representing None, used for the types that cannot be inferred.
     """
 
-    @classmethod
-    def typeName(cls) -> str:
+    def typeName(self) -> str:
         return "void"
 
 
@@ -315,7 +295,7 @@ class StringType(AtomicType):
             return StringType.providerSpark
         return StringType.providerICU
 
-    def simpleString(self) -> str:
+    def typeName(self) -> str:
         if self.isUTF8BinaryCollation():
             return "string"
 
@@ -350,10 +330,7 @@ class CharType(AtomicType):
     def __init__(self, length: int):
         self.length = length
 
-    def simpleString(self) -> str:
-        return "char(%d)" % (self.length)
-
-    def jsonValue(self) -> str:
+    def typeName(self) -> str:
         return "char(%d)" % (self.length)
 
     def __repr__(self) -> str:
@@ -372,10 +349,7 @@ class VarcharType(AtomicType):
     def __init__(self, length: int):
         self.length = length
 
-    def simpleString(self) -> str:
-        return "varchar(%d)" % (self.length)
-
-    def jsonValue(self) -> str:
+    def typeName(self) -> str:
         return "varchar(%d)" % (self.length)
 
     def __repr__(self) -> str:
@@ -436,8 +410,7 @@ class TimestampNTZType(AtomicType, metaclass=DataTypeSingleton):
     def needConversion(self) -> bool:
         return True
 
-    @classmethod
-    def typeName(cls) -> str:
+    def typeName(self) -> str:
         return "timestamp_ntz"
 
     def toInternal(self, dt: datetime.datetime) -> int:
@@ -478,10 +451,7 @@ class DecimalType(FractionalType):
         self.scale = scale
         self.hasPrecisionInfo = True  # this is a public API
 
-    def simpleString(self) -> str:
-        return "decimal(%d,%d)" % (self.precision, self.scale)
-
-    def jsonValue(self) -> str:
+    def typeName(self) -> str:
         return "decimal(%d,%d)" % (self.precision, self.scale)
 
     def __repr__(self) -> str:
@@ -572,7 +542,7 @@ class DayTimeIntervalType(AnsiIntervalType):
         self.startField = startField
         self.endField = endField
 
-    def _str_repr(self) -> str:
+    def typeName(self) -> str:
         fields = DayTimeIntervalType._fields
         start_field_name = fields[self.startField]
         end_field_name = fields[self.endField]
@@ -580,10 +550,6 @@ class DayTimeIntervalType(AnsiIntervalType):
             return "interval %s" % start_field_name
         else:
             return "interval %s to %s" % (start_field_name, end_field_name)
-
-    simpleString = _str_repr
-
-    jsonValue = _str_repr
 
     def __repr__(self) -> str:
         return "%s(%d, %d)" % (type(self).__name__, self.startField, self.endField)
@@ -630,7 +596,7 @@ class YearMonthIntervalType(AnsiIntervalType):
         self.startField = startField
         self.endField = endField
 
-    def _str_repr(self) -> str:
+    def typeName(self) -> str:
         fields = YearMonthIntervalType._fields
         start_field_name = fields[self.startField]
         end_field_name = fields[self.endField]
@@ -638,10 +604,6 @@ class YearMonthIntervalType(AnsiIntervalType):
             return "interval %s" % start_field_name
         else:
             return "interval %s to %s" % (start_field_name, end_field_name)
-
-    simpleString = _str_repr
-
-    jsonValue = _str_repr
 
     def __repr__(self) -> str:
         return "%s(%d, %d)" % (type(self).__name__, self.startField, self.endField)
@@ -656,8 +618,7 @@ class CalendarIntervalType(DataType, metaclass=DataTypeSingleton):
     - a long value representing the number of `microseconds` in this interval.
     """
 
-    @classmethod
-    def typeName(cls) -> str:
+    def typeName(self) -> str:
         return "interval"
 
 
@@ -776,7 +737,7 @@ class ArrayType(DataType):
     ) -> None:
         if maxDepth > 0:
             stringConcat.append(
-                f"{prefix}-- element: {DataType._get_jvm_type_name(self.elementType)} "
+                f"{prefix}-- element: {self.elementType.typeName()} "
                 + f"(containsNull = {str(self.containsNull).lower()})\n"
             )
             DataType._data_type_build_formatted_string(
@@ -924,12 +885,12 @@ class MapType(DataType):
         maxDepth: int = JVM_INT_MAX,
     ) -> None:
         if maxDepth > 0:
-            stringConcat.append(f"{prefix}-- key: {DataType._get_jvm_type_name(self.keyType)}\n")
+            stringConcat.append(f"{prefix}-- key: {self.keyType.typeName()}\n")
             DataType._data_type_build_formatted_string(
                 self.keyType, f"{prefix}    |", stringConcat, maxDepth
             )
             stringConcat.append(
-                f"{prefix}-- value: {DataType._get_jvm_type_name(self.valueType)} "
+                f"{prefix}-- value: {self.valueType.typeName()} "
                 + f"(valueContainsNull = {str(self.valueContainsNull).lower()})\n"
             )
             DataType._data_type_build_formatted_string(
@@ -1078,7 +1039,7 @@ class StructField(DataType):
     def fromInternal(self, obj: T) -> T:
         return self.dataType.fromInternal(obj)
 
-    def typeName(self) -> str:  # type: ignore[override]
+    def typeName(self) -> str:
         raise PySparkTypeError(
             error_class="INVALID_TYPENAME_CALL",
             message_parameters={},
@@ -1092,8 +1053,7 @@ class StructField(DataType):
     ) -> None:
         if maxDepth > 0:
             stringConcat.append(
-                f"{prefix}-- {escape_meta_characters(self.name)}: "
-                + f"{DataType._get_jvm_type_name(self.dataType)} "
+                f"{prefix}-- {escape_meta_characters(self.name)}: {self.dataType.typeName()} "
                 + f"(nullable = {str(self.nullable).lower()})\n"
             )
             DataType._data_type_build_formatted_string(
@@ -1560,10 +1520,6 @@ class UserDefinedType(DataType):
 
     .. note:: WARN: Spark Internal Use Only
     """
-
-    @classmethod
-    def typeName(cls) -> str:
-        return cls.__name__.lower()
 
     @classmethod
     def sqlType(cls) -> DataType:
