@@ -191,34 +191,10 @@ public class CollationAwareUTF8String {
     return UCharacter.toLowerCase(locale, target);
   }
 
-  /**
-   * Convert the input string to titlecase using the ICU root locale rules.
-   *
-   * @param target the input string
-   * @return the titlecase string
-   */
-  public static UTF8String toTitleCase(final UTF8String target) {
-    return UTF8String.fromString(toTitleCase(target.toString()));
-  }
-  public static String toTitleCase(final String target) {
-    BreakIterator wordIterator = BreakIterator.getWordInstance();
-    return UCharacter.toTitleCase(target, wordIterator);
-  }
-
-  /**
-   * Convert the input string to titlecase using the specified ICU collation rules.
-   *
-   * @param target the input string
-   * @return the titlecase string
-   */
-  public static UTF8String toTitleCase(final UTF8String target, final int collationId) {
-    return UTF8String.fromString(toTitleCase(target.toString(), collationId));
-  }
   public static String toTitleCase(final String target, final int collationId) {
     ULocale locale = CollationFactory.fetchCollation(collationId)
       .collator.getLocale(ULocale.ACTUAL_LOCALE);
-    BreakIterator wordIterator = BreakIterator.getWordInstance(locale);
-    return UCharacter.toTitleCase(locale, target, wordIterator);
+    return UCharacter.toTitleCase(locale, target, BreakIterator.getWordInstance(locale));
   }
 
   public static int findInSet(final UTF8String match, final UTF8String set, int collationId) {

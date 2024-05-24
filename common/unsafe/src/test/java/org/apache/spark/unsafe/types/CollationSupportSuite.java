@@ -426,10 +426,10 @@ public class CollationSupportSuite {
     assertUpper("ab世De", "UNICODE_CI", "AB世DE");
     assertUpper("äbćδe", "UNICODE_CI", "ÄBĆΔE");
     // Case-variable character length
-    assertUpper("i̇o", "UTF8_BINARY","İO");
-    assertUpper("i̇o", "UTF8_BINARY_LCASE","İO");
-    assertUpper("i̇o", "UNICODE","İO");
-    assertUpper("i̇o", "UNICODE_CI","İO");
+    assertUpper("i\u0307o", "UTF8_BINARY","I\u0307O");
+    assertUpper("i\u0307o", "UTF8_BINARY_LCASE","I\u0307O");
+    assertUpper("i\u0307o", "UNICODE","I\u0307O");
+    assertUpper("i\u0307o", "UNICODE_CI","I\u0307O");
   }
 
   private void assertLower(String target, String collationName, String expected)
@@ -476,10 +476,10 @@ public class CollationSupportSuite {
     assertLower("aB世De", "UNICODE_CI", "ab世de");
     assertLower("ÄBĆΔE", "UNICODE_CI", "äbćδe");
     // Case-variable character length
-    assertLower("İo", "UTF8_BINARY","i̇o");
-    assertLower("İo", "UTF8_BINARY_LCASE","i̇o");
-    assertLower("İo", "UNICODE","i̇o");
-    assertLower("İo", "UNICODE_CI","i̇o");
+    assertLower("İo", "UTF8_BINARY","i\u0307o");
+    assertLower("İo", "UTF8_BINARY_LCASE","i\u0307o");
+    assertLower("İo", "UNICODE","i\u0307o");
+    assertLower("İo", "UNICODE_CI","i\u0307o");
   }
 
   private void assertInitCap(String target, String collationName, String expected)
@@ -526,10 +526,10 @@ public class CollationSupportSuite {
     assertInitCap("aB 世 de", "UNICODE_CI", "Ab 世 De");
     assertInitCap("ÄBĆΔE", "UNICODE_CI", "Äbćδe");
     // Case-variable character length
-    assertInitCap("İo", "UTF8_BINARY", "I\u0307o");
-    assertInitCap("İo", "UTF8_BINARY_LCASE", "İo");
-    assertInitCap("İo", "UNICODE", "I\u0307o");
-    assertInitCap("İo", "UNICODE_CI", "İo");
+    assertInitCap("İo", "UTF8_BINARY", "İo");
+    assertInitCap("İo", "UTF8_BINARY_LCASE", "İo");
+    assertInitCap("İo", "UNICODE", "İo");
+    assertInitCap("İo", "UNICODE_CI", "İo");
   }
 
   private void assertStringInstr(String string, String substring, String collationName,
