@@ -45,7 +45,7 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from pyspark.util import is_remote_only
+from pyspark.util import is_remote_only, JVM_INT_MAX
 from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.utils import (
     has_numpy,
@@ -103,8 +103,6 @@ __all__ = [
     "VariantType",
     "VariantVal",
 ]
-
-_JVM_INT_MAX: int = (1 << 31) - 1
 
 
 class DataType:
@@ -216,6 +214,24 @@ class DataType:
     ) -> None:
         if isinstance(dataType, (ArrayType, StructType, MapType)):
             dataType._build_formatted_string(prefix, stringConcat, maxDepth - 1)
+
+    # The method typeName() is not always the same as the Scala side.
+    # Add this helper method to make TreeString() compatible with Scala side.
+    @classmethod
+    def _get_jvm_type_name(cls, dataType: "DataType") -> str:
+        if isinstance(
+            dataType,
+            (
+                DecimalType,
+                CharType,
+                VarcharType,
+                DayTimeIntervalType,
+                YearMonthIntervalType,
+            ),
+        ):
+            return dataType.simpleString()
+        else:
+            return dataType.typeName()
 
 
 # This singleton pattern does not work with pickle, you will get
@@ -756,11 +772,11 @@ class ArrayType(DataType):
         self,
         prefix: str,
         stringConcat: StringConcat,
-        maxDepth: int = _JVM_INT_MAX,
+        maxDepth: int = JVM_INT_MAX,
     ) -> None:
         if maxDepth > 0:
             stringConcat.append(
-                f"{prefix}-- element: {self.elementType.typeName()} "
+                f"{prefix}-- element: {DataType._get_jvm_type_name(self.elementType)} "
                 + f"(containsNull = {str(self.containsNull).lower()})\n"
             )
             DataType._data_type_build_formatted_string(
@@ -905,15 +921,15 @@ class MapType(DataType):
         self,
         prefix: str,
         stringConcat: StringConcat,
-        maxDepth: int = _JVM_INT_MAX,
+        maxDepth: int = JVM_INT_MAX,
     ) -> None:
         if maxDepth > 0:
-            stringConcat.append(f"{prefix}-- key: {self.keyType.typeName()}\n")
+            stringConcat.append(f"{prefix}-- key: {DataType._get_jvm_type_name(self.keyType)}\n")
             DataType._data_type_build_formatted_string(
                 self.keyType, f"{prefix}    |", stringConcat, maxDepth
             )
             stringConcat.append(
-                f"{prefix}-- value: {self.valueType.typeName()} "
+                f"{prefix}-- value: {DataType._get_jvm_type_name(self.valueType)} "
                 + f"(valueContainsNull = {str(self.valueContainsNull).lower()})\n"
             )
             DataType._data_type_build_formatted_string(
@@ -1072,11 +1088,12 @@ class StructField(DataType):
         self,
         prefix: str,
         stringConcat: StringConcat,
-        maxDepth: int = _JVM_INT_MAX,
+        maxDepth: int = JVM_INT_MAX,
     ) -> None:
         if maxDepth > 0:
             stringConcat.append(
-                f"{prefix}-- {escape_meta_characters(self.name)}: {self.dataType.typeName()} "
+                f"{prefix}-- {escape_meta_characters(self.name)}: "
+                + f"{DataType._get_jvm_type_name(self.dataType)} "
                 + f"(nullable = {str(self.nullable).lower()})\n"
             )
             DataType._data_type_build_formatted_string(
@@ -1507,16 +1524,16 @@ class StructType(DataType):
         self,
         prefix: str,
         stringConcat: StringConcat,
-        maxDepth: int = _JVM_INT_MAX,
+        maxDepth: int = JVM_INT_MAX,
     ) -> None:
         for field in self.fields:
             field._build_formatted_string(prefix, stringConcat, maxDepth)
 
-    def treeString(self, maxDepth: int = _JVM_INT_MAX) -> str:
+    def treeString(self, maxDepth: int = JVM_INT_MAX) -> str:
         stringConcat = StringConcat()
         stringConcat.append("root\n")
         prefix = " |"
-        depth = maxDepth if maxDepth > 0 else _JVM_INT_MAX
+        depth = maxDepth if maxDepth > 0 else JVM_INT_MAX
         for field in self.fields:
             field._build_formatted_string(prefix, stringConcat, depth)
         return stringConcat.toString()

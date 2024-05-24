@@ -55,16 +55,6 @@ from pyspark.errors import PySparkAssertionError, PySparkValueError
 import pyspark.sql.connect.proto as pb2
 
 
-JVM_BYTE_MIN: int = -(1 << 7)
-JVM_BYTE_MAX: int = (1 << 7) - 1
-JVM_SHORT_MIN: int = -(1 << 15)
-JVM_SHORT_MAX: int = (1 << 15) - 1
-JVM_INT_MIN: int = -(1 << 31)
-JVM_INT_MAX: int = (1 << 31) - 1
-JVM_LONG_MIN: int = -(1 << 63)
-JVM_LONG_MAX: int = (1 << 63) - 1
-
-
 class UnparsedDataType(DataType):
     """
     Unparsed data type.

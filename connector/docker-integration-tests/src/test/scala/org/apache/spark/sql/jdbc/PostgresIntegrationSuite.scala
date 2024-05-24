@@ -27,6 +27,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.{Column, DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
@@ -581,6 +582,51 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
       val cause = e.getCause.asInstanceOf[SQLException]
       assert(cause.getMessage.contains("Bad value for type BigDecimal"))
       assert(cause.getSQLState === "22003")
+    }
+  }
+
+  test("SPARK-48387: Timestamp write as timestamp with time zone") {
+    val df = spark.sql("select TIMESTAMP '2018-11-17 13:33:33' as col0")
+    // write timestamps for preparation
+    withSQLConf(SQLConf.LEGACY_POSTGRES_DATETIME_MAPPING_ENABLED.key -> "false") {
+      // write timestamp as timestamp with time zone
+      df.write.jdbc(jdbcUrl, "ts_with_timezone_copy_false", new Properties)
+    }
+    withSQLConf(SQLConf.LEGACY_POSTGRES_DATETIME_MAPPING_ENABLED.key -> "true") {
+      // write timestamp as timestamp without time zone
+      df.write.jdbc(jdbcUrl, "ts_with_timezone_copy_true", new Properties)
+    }
+
+    // read timestamps for test
+    withSQLConf(SQLConf.LEGACY_POSTGRES_DATETIME_MAPPING_ENABLED.key -> "true") {
+      val df1 = spark.read.option("preferTimestampNTZ", false)
+        .jdbc(jdbcUrl, "ts_with_timezone_copy_false", new Properties)
+      checkAnswer(df1, Row(Timestamp.valueOf("2018-11-17 13:33:33")))
+      val df2 = spark.read.option("preferTimestampNTZ", true)
+        .jdbc(jdbcUrl, "ts_with_timezone_copy_false", new Properties)
+      checkAnswer(df2, Row(LocalDateTime.of(2018, 11, 17, 13, 33, 33)))
+
+      val df3 = spark.read.option("preferTimestampNTZ", false)
+        .jdbc(jdbcUrl, "ts_with_timezone_copy_true", new Properties)
+      checkAnswer(df3, Row(Timestamp.valueOf("2018-11-17 13:33:33")))
+      val df4 = spark.read.option("preferTimestampNTZ", true)
+        .jdbc(jdbcUrl, "ts_with_timezone_copy_true", new Properties)
+      checkAnswer(df4, Row(LocalDateTime.of(2018, 11, 17, 13, 33, 33)))
+    }
+    withSQLConf(SQLConf.LEGACY_POSTGRES_DATETIME_MAPPING_ENABLED.key -> "false") {
+      Seq("true", "false").foreach { prefer =>
+        val prop = new Properties
+        prop.setProperty("preferTimestampNTZ", prefer)
+        val dfCopy = spark.read.jdbc(jdbcUrl, "ts_with_timezone_copy_false", prop)
+        checkAnswer(dfCopy, Row(Timestamp.valueOf("2018-11-17 13:33:33")))
+      }
+
+      val df5 = spark.read.option("preferTimestampNTZ", false)
+        .jdbc(jdbcUrl, "ts_with_timezone_copy_true", new Properties)
+      checkAnswer(df5, Row(Timestamp.valueOf("2018-11-17 13:33:33")))
+      val df6 = spark.read.option("preferTimestampNTZ", true)
+        .jdbc(jdbcUrl, "ts_with_timezone_copy_true", new Properties)
+      checkAnswer(df6, Row(LocalDateTime.of(2018, 11, 17, 13, 33, 33)))
     }
   }
 }

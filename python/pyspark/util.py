@@ -71,6 +71,16 @@ if typing.TYPE_CHECKING:
     from pyspark.sql import SparkSession
 
 
+JVM_BYTE_MIN: int = -(1 << 7)
+JVM_BYTE_MAX: int = (1 << 7) - 1
+JVM_SHORT_MIN: int = -(1 << 15)
+JVM_SHORT_MAX: int = (1 << 15) - 1
+JVM_INT_MIN: int = -(1 << 31)
+JVM_INT_MAX: int = (1 << 31) - 1
+JVM_LONG_MIN: int = -(1 << 63)
+JVM_LONG_MAX: int = (1 << 63) - 1
+
+
 def print_exec(stream: TextIO) -> None:
     ei = sys.exc_info()
     traceback.print_exception(ei[0], ei[1], ei[2], None, stream)

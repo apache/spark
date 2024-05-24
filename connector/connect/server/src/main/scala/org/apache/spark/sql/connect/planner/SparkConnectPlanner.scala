@@ -3523,15 +3523,9 @@ class SparkConnectPlanner(
       responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
     val target = Dataset
       .ofRows(session, transformRelation(checkpointCommand.getRelation))
-    val checkpointed = if (checkpointCommand.hasLocal && checkpointCommand.hasEager) {
-      target.localCheckpoint(eager = checkpointCommand.getEager)
-    } else if (checkpointCommand.hasLocal) {
-      target.localCheckpoint()
-    } else if (checkpointCommand.hasEager) {
-      target.checkpoint(eager = checkpointCommand.getEager)
-    } else {
-      target.checkpoint()
-    }
+    val checkpointed = target.checkpoint(
+      eager = checkpointCommand.getEager,
+      reliableCheckpoint = !checkpointCommand.getLocal)
 
     val dfId = UUID.randomUUID().toString
     logInfo(log"Caching DataFrame with id ${MDC(DATAFRAME_ID, dfId)}")

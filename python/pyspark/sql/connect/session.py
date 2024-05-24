@@ -926,7 +926,7 @@ class SparkSession:
         This is used in ForeachBatch() runner, where the remote DataFrame refers to the
         output of a micro batch.
         """
-        return DataFrame(CachedRemoteRelation(remote_id), self)
+        return DataFrame(CachedRemoteRelation(remote_id, spark_session=self), self)
 
     @staticmethod
     def _start_connect_server(master: str, opts: Dict[str, Any]) -> None:
