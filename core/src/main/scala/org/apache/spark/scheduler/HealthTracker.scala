@@ -160,7 +160,7 @@ private[scheduler] class HealthTracker (
     val fullMsg = if (EXCLUDE_ON_FAILURE_DECOMMISSION_ENABLED) {
       log"${MDC(MESSAGE, msg)} (actually decommissioning)"
     } else {
-      log"$MDC(MESSAGE, msg)"
+      log"${MDC(MESSAGE, msg)}"
     }
     allocationClient match {
       case Some(a) =>
