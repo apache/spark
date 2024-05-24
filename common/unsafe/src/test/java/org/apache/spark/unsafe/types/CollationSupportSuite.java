@@ -646,6 +646,7 @@ public class CollationSupportSuite {
     assertFindInSet("i", "ab,i̇,12", "UTF8_BINARY_LCASE", 0);
     assertFindInSet("i̇o", "ab,İo,12", "UTF8_BINARY_LCASE", 2);
     assertFindInSet("İo", "ab,i̇o,12", "UTF8_BINARY_LCASE", 2);
+    assertFindInSet("c", "A�,B,C,V", "UTF8_BINARY_LCASE", 3);
   }
 
   private void assertReplace(String source, String search, String replace, String collationName,
@@ -690,12 +691,13 @@ public class CollationSupportSuite {
     assertReplace("İi̇İi̇İi̇", "i", "x", "UNICODE_CI", "İi̇İi̇İi̇");
     assertReplace("abİo12i̇o", "i̇o", "xx", "UNICODE_CI", "abxx12xx");
     assertReplace("abi̇o12i̇o", "İo", "yy", "UNICODE_CI", "abyy12yy");
-    assertReplace("abi̇12", "i", "X", "UTF8_BINARY_LCASE", "abẊ12"); // != UNICODE_CI
+    assertReplace("abi̇12", "i", "X", "UTF8_BINARY_LCASE", "abX\u030712"); // != UNICODE_CI
     assertReplace("abi̇12", "\u0307", "X", "UTF8_BINARY_LCASE", "abiX12"); // != UNICODE_CI
     assertReplace("abi̇12", "İ", "X", "UTF8_BINARY_LCASE", "abX12");
     assertReplace("abİ12", "i", "X", "UTF8_BINARY_LCASE", "abİ12");
     assertReplace("İi̇İi̇İi̇", "i̇", "x", "UTF8_BINARY_LCASE", "xxxxxx");
-    assertReplace("İi̇İi̇İi̇", "i", "x", "UTF8_BINARY_LCASE", "İẋİẋİẋ"); // != UNICODE_CI
+    assertReplace("İi̇İi̇İi̇", "i", "x", "UTF8_BINARY_LCASE",
+      "İx\u0307İx\u0307İx\u0307"); // != UNICODE_CI
     assertReplace("abİo12i̇o", "i̇o", "xx", "UTF8_BINARY_LCASE", "abxx12xx");
     assertReplace("abi̇o12i̇o", "İo", "yy", "UTF8_BINARY_LCASE", "abyy12yy");
   }

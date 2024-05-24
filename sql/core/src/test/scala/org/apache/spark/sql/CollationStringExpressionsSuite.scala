@@ -325,6 +325,12 @@ class CollationStringExpressionsSuite
     assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
   }
 
+  test("Menelaos") {
+    val q = "select find_in_set('c' collate utf8_binary_lcase, " +
+      "cast(unhex('41C22C422C432C56') as string) collate utf8_binary_lcase)"
+    checkAnswer(sql(q), Row())
+  }
+
   test("Support Replace string expression with collation") {
     case class ReplaceTestCase[R](source: String, search: String, replace: String,
         c: String, result: R)
