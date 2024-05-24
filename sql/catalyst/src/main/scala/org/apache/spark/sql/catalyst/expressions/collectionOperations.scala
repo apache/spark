@@ -829,6 +829,8 @@ case class MapFromEntries(child: Expression)
 
   override def nullable: Boolean = child.nullable || nullEntries
 
+  override def stateful: Boolean = true
+
   @transient override lazy val dataType: MapType = dataTypeDetails.get._1
 
   override def checkInputDataTypes(): TypeCheckResult = dataTypeDetails match {
