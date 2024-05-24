@@ -203,7 +203,7 @@ abstract class CollationBenchmarkBase extends BenchmarkBase with SqlBasedBenchma
     collationTypes.foreach { collationType => {
       val buffer = new OpenHashMap[AnyRef, Long](value.size)
       value.foreach(v => {
-        buffer.update(v.toString, (v.hashCode() % 1000).toLong)
+        buffer.update(v, (v.hashCode() % 1000).toLong)
       })
       val modeCurrent = Mode(child =
         Literal.create("some_column_name", StringType(collationType)))
@@ -230,7 +230,7 @@ abstract class CollationBenchmarkBase extends BenchmarkBase with SqlBasedBenchma
       val buffer = new OpenHashMap[AnyRef, Long](value.size)
       value.foreach(v => {
         buffer.update(InternalRow.fromSeq(
-          Seq(v.toString, UTF8String.fromString(v.toString), 3)),
+          Seq(v, v, 3)),
           (v.hashCode() % 1000).toLong)
       })
       val st = StructType(Seq(

@@ -1670,20 +1670,10 @@ class CollationSQLExpressionsSuite
   }
 
   test("Support Mode.eval(buffer)") {
-    case class ModeTestCase[R](
-        collationId: String,
-        bufferValues: Map[String, Long],
-        result: R)
     case class UTF8StringModeTestCase[R](
         collationId: String,
         bufferValues: Map[UTF8String, Long],
         result: R)
-
-    val bufferValues = Map("a" -> 5L, "b" -> 4L, "B" -> 3L, "d" -> 2L, "e" -> 1L)
-    val testCasesStrings = Seq(ModeTestCase("utf8_binary", bufferValues, "a"),
-      ModeTestCase("utf8_binary_lcase", bufferValues, "b"),
-      ModeTestCase("unicode_ci", bufferValues, "b"),
-      ModeTestCase("unicode", bufferValues, "a"))
 
     val bufferValuesUTF8String = Map(
       UTF8String.fromString("a") -> 5L,
@@ -1697,13 +1687,6 @@ class CollationSQLExpressionsSuite
       UTF8StringModeTestCase("utf8_binary_lcase", bufferValuesUTF8String, "b"),
       UTF8StringModeTestCase("unicode_ci", bufferValuesUTF8String, "b"),
       UTF8StringModeTestCase("unicode", bufferValuesUTF8String, "a"))
-
-    testCasesStrings.foreach(t => {
-      val buffer = new OpenHashMap[AnyRef, Long](5)
-      val myMode = Mode(child = Literal.create("some_column_name", StringType(t.collationId)))
-      t.bufferValues.foreach { case (k, v) => buffer.update(k, v) }
-      assert(myMode.eval(buffer).toString.toLowerCase() == t.result.toLowerCase())
-    })
 
     testCasesUTF8String.foreach(t => {
       val buffer = new OpenHashMap[AnyRef, Long](5)

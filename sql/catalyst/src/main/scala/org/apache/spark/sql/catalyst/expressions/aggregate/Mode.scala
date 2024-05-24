@@ -55,7 +55,7 @@ case class Mode(
       defaultCheck
     } else if (UnsafeRowUtils.isBinaryStable(child.dataType) ||
       child.dataType.isInstanceOf[StringType]) {
-      defaultCheck
+      TypeCheckResult.TypeCheckSuccess
     } else {
       TypeCheckResult.TypeCheckFailure(
         "The input to the function 'mode' was a complex type with non-binary collated fields," +
@@ -95,11 +95,7 @@ case class Mode(
         !CollationFactory.fetchCollation(c.collationId).supportsBinaryEquality =>
         val collationId = c.collationId
         val modeMap = buffer.toSeq.groupMapReduce {
-          case (key: String, _) =>
-            CollationFactory.getCollationKey(UTF8String.fromString(key), collationId)
-          case (key: UTF8String, _) =>
-            CollationFactory.getCollationKey(key, collationId)
-          case (key, _) => key
+         case (k, _) => CollationFactory.getCollationKey(k.asInstanceOf[UTF8String], collationId)
         }(x => x)((x, y) => (x._1, x._2 + y._2)).values
         modeMap
       case _ => buffer
