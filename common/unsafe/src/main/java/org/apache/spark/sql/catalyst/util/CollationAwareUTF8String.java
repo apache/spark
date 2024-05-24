@@ -170,16 +170,17 @@ public class CollationAwareUTF8String {
    * @param sb The StringBuilder to append the lowercase character to.
    */
   private static void lowercaseCodePoint(final int codePoint, final StringBuilder sb) {
-    // Latin capital letter I with dot above is mapped to 2 lowercase characters.
     if (codePoint == 0x0130) {
-      sb.append("i̇");
+      // Latin capital letter I with dot above is mapped to 2 lowercase characters.
+      sb.appendCodePoint(0x0069);
+      sb.appendCodePoint(0x0307);
     }
-    // Greek final and non-final capital letter sigma should be mapped the same.
     else if (codePoint == 0x03C2) {
-      sb.append("σ");
+      // Greek final and non-final capital letter sigma should be mapped the same.
+      sb.appendCodePoint(0x03C3);
     }
-    // All other characters should follow context-unaware ICU single-code point case mapping.
     else {
+      // All other characters should follow context-unaware ICU single-code point case mapping.
       sb.appendCodePoint(UCharacter.toLowerCase(codePoint));
     }
   }
@@ -193,10 +194,9 @@ public class CollationAwareUTF8String {
    * @return The string converted to lowercase in a context-unaware manner.
    */
   public static String lowerCaseCodePoints(final String target) {
-      StringBuilder sb = new StringBuilder();
+    StringBuilder sb = new StringBuilder();
     for (int i = 0; i < target.length(); ++i) {
-      int codePoint = target.codePointAt(i);
-      lowercaseCodePoint(codePoint, sb);
+      lowercaseCodePoint(target.codePointAt(i), sb);
     }
     return sb.toString();
   }
