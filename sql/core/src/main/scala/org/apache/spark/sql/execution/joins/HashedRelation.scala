@@ -396,8 +396,6 @@ private[joins] class UnsafeHashedRelation(
     val nKeys = readLong()
     val nValues = readLong()
     // This is used in Broadcast, shared by multiple tasks, so we use on-heap memory
-    // TODO(josh): This needs to be revisited before we merge this patch; making this change now
-    // so that tests compile:
     val taskMemoryManager = new TaskMemoryManager(
       new UnifiedMemoryManager(
         new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
