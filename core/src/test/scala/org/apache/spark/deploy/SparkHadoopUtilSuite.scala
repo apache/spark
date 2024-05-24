@@ -163,14 +163,6 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
       val file2Dir1 = s"${path1}/file2"
       val file1Dir2 = s"${path2}/file1"
       val file2Dir2 = s"${path2}/file2"
-//      root
-//      └── dir
-//        ├── dir1
-//        │   ├── file1
-//        │   └── file2
-//        └── dir2
-//            ├── file1
-//            └── file2
 
       val conf = new Configuration
       val fs = {
