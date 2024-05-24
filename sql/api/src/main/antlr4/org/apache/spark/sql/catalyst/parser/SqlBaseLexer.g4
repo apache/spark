@@ -88,7 +88,7 @@ lexer grammar SqlBaseLexer;
    * GT token and we do nothing.
    */
   public void decComplexTypeLevelCounter() {
-    if (complex_type_level_counter > 0) complex_type_level_counter++;
+    if (complex_type_level_counter > 0) complex_type_level_counter--;
   }
 
   /**
