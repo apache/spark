@@ -367,9 +367,19 @@ case class TransformWithStateExec(
           store.abort()
         }
       }
-      operatorPropertiesFromExecutor.add(Map
-        ("stateVariables" -> JArray(processorHandle.stateVariables.
-          asScala.map(_.jsonValue).toList)))
+
+      // only write this information out for partition 0
+      if (store.id.partitionId == 0) {
+        operatorPropertiesFromExecutor.add(Map
+          ("stateVariables" -> JArray(processorHandle.stateVariables.
+            asScala.map(_.jsonValue).toList)))
+
+        operatorPropertiesFromExecutor.add(Map
+          ("columnFamilyMetadatas" ->
+            JArray(processorHandle.columnFamilyMetadatas.
+              asScala.map(_.jsonValue).toList)))
+      }
+
       setStoreMetrics(store)
       setOperatorMetrics()
       statefulProcessor.close()
