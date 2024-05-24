@@ -27,7 +27,6 @@ import scala.collection.mutable
 import scala.collection.mutable.HashMap
 import scala.jdk.CollectionConverters._
 import scala.language.existentials
-import scala.util.{Failure, Success, Try}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
@@ -219,24 +218,17 @@ private[spark] class SparkHadoopUtil extends Logging {
    * that file.
    */
   def listLeafStatuses(fs: FileSystem, baseStatus: FileStatus): Seq[FileStatus] = {
-    def recurse(status: FileStatus): Seq[FileStatus] = {
-      lazy val fsHasPathCapability =
-        fs.hasPathCapability(status.getPath, SparkHadoopUtil.DIRECTORY_LISTING_INCONSISTENT)
-      val statusResult = Try {
-        fs.listStatus(status.getPath)
-      }
-      statusResult match {
-        case Failure(e) =>
-          if (e.isInstanceOf[FileNotFoundException] && fsHasPathCapability) {
-            Seq.empty[FileStatus]
-          } else throw e
-        case Success(sr) =>
-          val (directories, leaves) = sr.partition(_.isDirectory)
-          (leaves ++ directories.flatMap(f => listLeafStatuses(fs, f))).toImmutableArraySeq
-      }
+    val locatedFileStatusIt = fs.listFiles(baseStatus.getPath, true)
+    getFileStatusSeq(locatedFileStatusIt)
+  }
+
+  private[spark] def getFileStatusSeq(ri: RemoteIterator[LocatedFileStatus]): Seq[FileStatus] = {
+    val scalaIterator: Iterator[LocatedFileStatus] = new Iterator[LocatedFileStatus] {
+      override def hasNext: Boolean = ri.hasNext
+      override def next(): LocatedFileStatus = ri.next()
     }
 
-    if (baseStatus.isDirectory) recurse(baseStatus) else Seq(baseStatus)
+    scalaIterator.toSeq.map(identity)
   }
 
   def isGlobPath(pattern: Path): Boolean = {
@@ -368,6 +360,13 @@ private[spark] object SparkHadoopUtil extends Logging {
    */
   private[spark] val UPDATE_INPUT_METRICS_INTERVAL_RECORDS = 1000
 
+  /**
+   * Determines if this store may have inconsistencies between parent directory listings
+   * and direct list/getFileStatus calls. This issue can occur with Amazon S3 Express
+   * One Zone Storage when there are pending uploads in a directory.
+   * Applications can use this flag to decide whether to consider FileNotFoundExceptions
+   * encountered during treewalks as errors or to downgrade them.
+   */
   private[spark] val DIRECTORY_LISTING_INCONSISTENT =
     "fs.capability.directory.listing.inconsistent"
 
