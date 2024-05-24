@@ -48,7 +48,7 @@ compoundOrSingleStatement
     ;
 
 singleCompound
-    : beginEndCompoundBlock SEMICOLON* EOF
+    : beginEndCompoundBlock SEMICOLON? EOF
     ;
 
 beginEndCompoundBlock
