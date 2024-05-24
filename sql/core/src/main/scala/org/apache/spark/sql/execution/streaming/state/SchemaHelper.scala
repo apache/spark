@@ -38,8 +38,8 @@ class ColumnFamilyMetadataV1(
     val multipleValuesPerKey: Boolean) extends Serializable {
     def jsonValue: JsonAST.JObject = {
         ("columnFamilyName" -> JString(columnFamilyName)) ~
-        ("keySchema" -> keySchema.jsonValue) ~
-        ("valueSchema" -> valueSchema.jsonValue) ~
+        ("keySchema" -> keySchema.json) ~
+        ("valueSchema" -> valueSchema.json) ~
         ("keyStateEncoderSpec" -> keyStateEncoderSpec.jsonValue) ~
         ("multipleValuesPerKey" -> JBool(multipleValuesPerKey))
     }
@@ -47,6 +47,23 @@ class ColumnFamilyMetadataV1(
     def json: String = {
       compact(render(jsonValue))
     }
+}
+
+object ColumnFamilyMetadataV1 {
+  def fromJson(json: List[Map[String, Any]]): List[ColumnFamilyMetadataV1] = {
+    assert(json.isInstanceOf[List[_]])
+
+    json.map { colFamilyMap =>
+      new ColumnFamilyMetadataV1(
+        colFamilyMap("columnFamilyName").asInstanceOf[String],
+        StructType.fromString(colFamilyMap("keySchema").asInstanceOf[String]),
+        StructType.fromString(colFamilyMap("valueSchema").asInstanceOf[String]),
+        KeyStateEncoderSpec.fromJson(colFamilyMap("keyStateEncoderSpec")
+          .asInstanceOf[Map[String, Any]]),
+        colFamilyMap("multipleValuesPerKey").asInstanceOf[Boolean]
+      )
+    }
+  }
 }
 
 /**
@@ -99,7 +116,7 @@ object SchemaHelper {
     private val schemaFilePath = SchemaV3Writer.getSchemaFilePath(stateCheckpointPath)
 
     private lazy val fm = CheckpointFileManager.create(stateCheckpointPath, hadoopConf)
-    def read: List[String] = {
+    def read: List[ColumnFamilyMetadataV1] = {
       if (!fm.exists(schemaFilePath)) {
           return List.empty
       }
@@ -116,9 +133,7 @@ object SchemaHelper {
         s"Expected List but got ${deserializedList.getClass}")
       val columnFamilyMetadatas = deserializedList.asInstanceOf[List[Map[String, Any]]]
       // Extract each JValue to StateVariableInfo
-      columnFamilyMetadatas.map { columnFamilyMetadata =>
-        columnFamilyMetadata("columnFamilyName").asInstanceOf[String]
-      }
+      ColumnFamilyMetadataV1.fromJson(columnFamilyMetadatas)
     }
   }
 

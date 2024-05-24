@@ -31,6 +31,7 @@ import org.apache.hadoop.fs.Path
 import org.json4s.{JInt, JsonAST, JString}
 import org.json4s.JsonAST.JObject
 import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.{SparkContext, SparkEnv, SparkUnsupportedOperationException}
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
@@ -298,12 +299,31 @@ class InvalidUnsafeRowException(error: String)
 
 sealed trait KeyStateEncoderSpec {
   def jsonValue: JsonAST.JObject
+  def json: String = compact(render(jsonValue))
+}
+
+object KeyStateEncoderSpec {
+  def fromJson(m: Map[String, Any]): KeyStateEncoderSpec = {
+    // match on type
+    val keySchema = StructType.fromString(m("keySchema").asInstanceOf[String])
+    m("keyStateEncoderType").asInstanceOf[String] match {
+      case "NoPrefixKeyStateEncoderSpec" =>
+        NoPrefixKeyStateEncoderSpec(keySchema)
+      case "RangeKeyScanStateEncoderSpec" =>
+        val orderingOrdinals = m("orderingOrdinals").
+          asInstanceOf[List[_]].map(_.asInstanceOf[Int])
+        RangeKeyScanStateEncoderSpec(keySchema, orderingOrdinals)
+      case "PrefixKeyScanStateEncoderSpec" =>
+        val numColsPrefixKey = m("numColsPrefixKey").asInstanceOf[Int]
+        PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey)
+    }
+  }
 }
 
 case class NoPrefixKeyStateEncoderSpec(keySchema: StructType) extends KeyStateEncoderSpec {
   override def jsonValue: JsonAST.JObject = {
     ("keyStateEncoderType" -> JString("NoPrefixKeyStateEncoderSpec")) ~
-      ("keySchema" -> keySchema.jsonValue)
+      ("keySchema" -> JString(keySchema.json))
   }
 }
 
@@ -315,7 +335,7 @@ case class PrefixKeyScanStateEncoderSpec(
   }
   override def jsonValue: JsonAST.JObject = {
     ("keyStateEncoderType" -> JString("PrefixKeyScanStateEncoderSpec")) ~
-      ("keySchema" -> keySchema.jsonValue) ~
+      ("keySchema" -> JString(keySchema.json)) ~
       ("numColsPrefixKey" -> JInt(numColsPrefixKey))
   }
 }
@@ -330,7 +350,7 @@ case class RangeKeyScanStateEncoderSpec(
 
   override def jsonValue: JObject = {
     ("keyStateEncoderType" -> JString("RangeKeyScanStateEncoderSpec")) ~
-      ("keySchema" -> keySchema.jsonValue) ~
+      ("keySchema" -> JString(keySchema.json)) ~
       ("orderingOrdinals" -> orderingOrdinals.map(JInt(_)))
   }
 }

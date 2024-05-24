@@ -42,7 +42,7 @@ import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.execution.streaming.state.SchemaHelper.{SchemaV3Reader, SchemaV3Writer}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
-import org.apache.spark.util.{CollectionAccumulator, CompletionIterator, SerializableConfiguration, Utils}
+import org.apache.spark.util.{CompletionIterator, SerializableConfiguration, Utils}
 
 /**
  * Physical operator for executing `TransformWithState`
@@ -447,9 +447,6 @@ case class TransformWithStateExec(
           getStateInfo.operatorId.toString)
         val hadoopConf = session.sqlContext.sessionState.newHadoopConf()
         val reader = new SchemaV3Reader(stateCheckpointPath, hadoopConf)
-        reader.read.foreach { columnFamilyName =>
-          print(s"### columnFamilyName: $columnFamilyName")
-        }
         child.execute().mapPartitionsWithStateStore[InternalRow](
           getStateInfo,
           KEY_ROW_SCHEMA,
