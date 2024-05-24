@@ -19,10 +19,20 @@ package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
+/**
+ * Trait for all SQL Scripting logical operators that are product of parsing phase.
+ * These operators will be used by the SQL Scripting interpreter to generate execution nodes.
+ */
 sealed trait CompoundPlanStatement
 
-// Statement that is supposed to be executed against Spark.
-// This can also be a Spark expression that is wrapped in a statement.
+/**
+ * Logical operator representing result of parsing a single SQL statement
+ *   that is supposed to be executed against Spark.
+ * It can also be a Spark expression that is wrapped in a statement.
+ * @param parsedPlan Result of SQL statement parsing.
+ * @param sourceStart Index of the first char of the statement in the original SQL script text.
+ * @param sourceEnd Index of the last char of the statement in the original SQL script text.
+ */
 case class SparkStatementWithPlan(
     parsedPlan: LogicalPlan,
     sourceStart: Int,
@@ -32,4 +42,8 @@ case class SparkStatementWithPlan(
   def getText(batch: String): String = batch.substring(sourceStart, sourceEnd)
 }
 
+/**
+ * Logical operator for a compound body. Contains all statements within the compound body.
+ * @param collection Collection of statements within the compound body.
+ */
 case class CompoundBody(collection: List[CompoundPlanStatement]) extends CompoundPlanStatement

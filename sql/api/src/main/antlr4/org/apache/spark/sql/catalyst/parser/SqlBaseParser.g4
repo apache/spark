@@ -48,21 +48,20 @@ compoundOrSingleStatement
     ;
 
 singleCompound
-    : compound SEMICOLON* EOF
+    : beginEndCompoundBlock SEMICOLON* EOF
     ;
 
-compound
+beginEndCompoundBlock
     : BEGIN compoundBody END
     ;
 
-// Last semicolon in body is optional.
 compoundBody
-    : compoundStatement (SEMICOLON+ compoundStatement)* SEMICOLON*
+    : (compoundStatement SEMICOLON)*
     ;
 
 compoundStatement
     : statement
-    | compound
+    | beginEndCompoundBlock
     ;
 
 singleStatement

@@ -130,7 +130,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   }
 
   override def visitSingleCompound(ctx: SingleCompoundContext): CompoundBody = {
-    visit(ctx.compound()).asInstanceOf[CompoundBody]
+    visit(ctx.beginEndCompoundBlock()).asInstanceOf[CompoundBody]
   }
 
   private def visitCompoundBodyImpl(ctx: CompoundBodyContext): CompoundBody = {
@@ -147,7 +147,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     CompoundBody(buff.toList)
   }
 
-  override def visitCompound(ctx: CompoundContext): CompoundBody = {
+  override def visitBeginEndCompoundBlock(ctx: BeginEndCompoundBlockContext): CompoundBody = {
     visitCompoundBodyImpl(ctx.compoundBody())
   }
 
