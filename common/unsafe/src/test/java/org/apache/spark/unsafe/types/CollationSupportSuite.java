@@ -530,6 +530,23 @@ public class CollationSupportSuite {
     assertInitCap("İo", "UTF8_BINARY_LCASE", "İo");
     assertInitCap("İo", "UNICODE", "I\u0307o");
     assertInitCap("İo", "UNICODE_CI", "İo");
+    // Different possible word boundaries
+    assertInitCap("a b c", "UTF8_BINARY", "A B C");
+    assertInitCap("a b c", "UNICODE", "A B C");
+    assertInitCap("a b c", "UTF8_BINARY_LCASE", "A B C");
+    assertInitCap("a b c", "UNICODE_CI", "A B C");
+    assertInitCap("a.b,c", "UTF8_BINARY", "A.b,c");
+    assertInitCap("a.b,c", "UNICODE", "A.b,c");
+    assertInitCap("a.b,c", "UTF8_BINARY_LCASE", "A.b,C");
+    assertInitCap("a.b,c", "UNICODE_CI", "A.b,C");
+    assertInitCap("a. b-c", "UTF8_BINARY", "A. B-c");
+    assertInitCap("a. b-c", "UNICODE", "A. B-c");
+    assertInitCap("a. b-c", "UTF8_BINARY_LCASE", "A. B-C");
+    assertInitCap("a. b-c", "UNICODE_CI", "A. B-C");
+    assertInitCap("a?b世c", "UTF8_BINARY", "A?b世c");
+    assertInitCap("a?b世c", "UNICODE", "A?b世c");
+    assertInitCap("a?b世c", "UTF8_BINARY_LCASE", "A?B世C");
+    assertInitCap("a?b世c", "UNICODE_CI", "A?B世C");
   }
 
   private void assertStringInstr(String string, String substring, String collationName,
