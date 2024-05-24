@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCoercion.{hasStringType, haveS
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StringType}
 
 object CollationTypeCasts extends TypeCoercionRule {
   override val transform: PartialFunction[Expression, Expression] = {
@@ -85,6 +85,11 @@ object CollationTypeCasts extends TypeCoercionRule {
   private def extractStringType(dt: DataType): StringType = dt match {
     case st: StringType => st
     case ArrayType(et, _) => extractStringType(et)
+    case MapType(kt, vt, _) => if (hasStringType(kt)) {
+        extractStringType(kt)
+      } else {
+        extractStringType(vt)
+      }
   }
 
   /**
@@ -102,6 +107,14 @@ object CollationTypeCasts extends TypeCoercionRule {
       case st: StringType if st.collationId != castType.collationId => castType
       case ArrayType(arrType, nullable) =>
         castStringType(arrType, castType).map(ArrayType(_, nullable)).orNull
+      case MapType(keyType, valueType, nullable) =>
+        val newKeyType = castStringType(keyType, castType).getOrElse(keyType)
+        val newValueType = castStringType(valueType, castType).getOrElse(valueType)
+        if (newKeyType != keyType || newValueType != valueType) {
+          MapType(newKeyType, newValueType, nullable)
+        } else {
+          null
+        }
       case _ => null
     }
     Option(ret)

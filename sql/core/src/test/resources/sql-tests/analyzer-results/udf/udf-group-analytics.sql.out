@@ -189,7 +189,7 @@ Sort [cast(udf(cast(course#x as string)) as string) ASC NULLS FIRST, sum#xL ASC 
 SELECT udf(course), udf(year), GROUPING(course), GROUPING(year), GROUPING_ID(course, year) FROM courseSales
 GROUP BY CUBE(course, year)
 -- !query analysis
-Aggregate [course#x, year#x, spark_grouping_id#xL], [cast(udf(cast(course#x as string)) as string) AS udf(course)#x, cast(udf(cast(year#x as string)) as int) AS udf(year)#x, cast((shiftright(spark_grouping_id#xL, 1) & 1) as tinyint) AS grouping(course)#x, cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) AS grouping(year)#x, spark_grouping_id#xL AS grouping_id(course, year)#xL]
+Aggregate [course#x, year#x, spark_grouping_id#xL], [cast(udf(cast(course#x as string)) as string) AS udf(course)#x, cast(udf(cast(year#x as string)) as int) AS udf(year)#x, cast(((spark_grouping_id#xL >> 1) & 1) as tinyint) AS grouping(course)#x, cast(((spark_grouping_id#xL >> 0) & 1) as tinyint) AS grouping(year)#x, spark_grouping_id#xL AS grouping_id(course, year)#xL]
 +- Expand [[course#x, year#x, earnings#x, course#x, year#x, 0], [course#x, year#x, earnings#x, course#x, null, 1], [course#x, year#x, earnings#x, null, year#x, 2], [course#x, year#x, earnings#x, null, null, 3]], [course#x, year#x, earnings#x, course#x, year#x, spark_grouping_id#xL]
    +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
       +- SubqueryAlias coursesales
@@ -255,7 +255,7 @@ HAVING GROUPING(year) = 1 AND GROUPING_ID(course, year) > 0 ORDER BY course, udf
 -- !query analysis
 Sort [course#x ASC NULLS FIRST, cast(udf(cast(year#x as string)) as int) ASC NULLS FIRST], true
 +- Project [course#x, year#x]
-   +- Filter ((cast(cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) as int) = 1) AND (spark_grouping_id#xL > cast(0 as bigint)))
+   +- Filter ((cast(cast(((spark_grouping_id#xL >> 0) & 1) as tinyint) as int) = 1) AND (spark_grouping_id#xL > cast(0 as bigint)))
       +- Aggregate [course#x, year#x, spark_grouping_id#xL], [course#x, year#x, spark_grouping_id#xL, spark_grouping_id#xL]
          +- Expand [[course#x, year#x, earnings#x, course#x, year#x, 0], [course#x, year#x, earnings#x, course#x, null, 1], [course#x, year#x, earnings#x, null, year#x, 2], [course#x, year#x, earnings#x, null, null, 3]], [course#x, year#x, earnings#x, course#x, year#x, spark_grouping_id#xL]
             +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
@@ -308,8 +308,8 @@ SELECT course, year, GROUPING(course), GROUPING(year) FROM courseSales GROUP BY 
 ORDER BY GROUPING(course), GROUPING(year), course, udf(year)
 -- !query analysis
 Project [course#x, year#x, grouping(course)#x, grouping(year)#x]
-+- Sort [cast((shiftright(spark_grouping_id#xL, 1) & 1) as tinyint) ASC NULLS FIRST, cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) ASC NULLS FIRST, course#x ASC NULLS FIRST, cast(udf(cast(year#x as string)) as int) ASC NULLS FIRST], true
-   +- Aggregate [course#x, year#x, spark_grouping_id#xL], [course#x, year#x, cast((shiftright(spark_grouping_id#xL, 1) & 1) as tinyint) AS grouping(course)#x, cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) AS grouping(year)#x, spark_grouping_id#xL, spark_grouping_id#xL]
++- Sort [cast(((spark_grouping_id#xL >> 1) & 1) as tinyint) ASC NULLS FIRST, cast(((spark_grouping_id#xL >> 0) & 1) as tinyint) ASC NULLS FIRST, course#x ASC NULLS FIRST, cast(udf(cast(year#x as string)) as int) ASC NULLS FIRST], true
+   +- Aggregate [course#x, year#x, spark_grouping_id#xL], [course#x, year#x, cast(((spark_grouping_id#xL >> 1) & 1) as tinyint) AS grouping(course)#x, cast(((spark_grouping_id#xL >> 0) & 1) as tinyint) AS grouping(year)#x, spark_grouping_id#xL, spark_grouping_id#xL]
       +- Expand [[course#x, year#x, earnings#x, course#x, year#x, 0], [course#x, year#x, earnings#x, course#x, null, 1], [course#x, year#x, earnings#x, null, year#x, 2], [course#x, year#x, earnings#x, null, null, 3]], [course#x, year#x, earnings#x, course#x, year#x, spark_grouping_id#xL]
          +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
             +- SubqueryAlias coursesales
@@ -325,7 +325,7 @@ SELECT course, year, GROUPING_ID(course, year) FROM courseSales GROUP BY CUBE(co
 ORDER BY GROUPING(course), GROUPING(year), course, udf(year)
 -- !query analysis
 Project [course#x, year#x, grouping_id(course, year)#xL]
-+- Sort [cast((shiftright(spark_grouping_id#xL, 1) & 1) as tinyint) ASC NULLS FIRST, cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) ASC NULLS FIRST, course#x ASC NULLS FIRST, cast(udf(cast(year#x as string)) as int) ASC NULLS FIRST], true
++- Sort [cast(((spark_grouping_id#xL >> 1) & 1) as tinyint) ASC NULLS FIRST, cast(((spark_grouping_id#xL >> 0) & 1) as tinyint) ASC NULLS FIRST, course#x ASC NULLS FIRST, cast(udf(cast(year#x as string)) as int) ASC NULLS FIRST], true
    +- Aggregate [course#x, year#x, spark_grouping_id#xL], [course#x, year#x, spark_grouping_id#xL AS grouping_id(course, year)#xL, spark_grouping_id#xL, spark_grouping_id#xL]
       +- Expand [[course#x, year#x, earnings#x, course#x, year#x, 0], [course#x, year#x, earnings#x, course#x, null, 1], [course#x, year#x, earnings#x, null, year#x, 2], [course#x, year#x, earnings#x, null, null, 3]], [course#x, year#x, earnings#x, course#x, year#x, spark_grouping_id#xL]
          +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]

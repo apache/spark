@@ -334,6 +334,16 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[ReversedMissingMethodProblem](
         "org.apache.spark.sql.SQLImplicits._sqlContext" // protected
       ),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.internal.SessionCleaner"),
+
+      // private
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.internal.CleanupTask"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.internal.CleanupTaskWeakReference"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.internal.CleanupCachedRemoteRelation"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.internal.CleanupCachedRemoteRelation$"),
 
       // Catalyst Refactoring
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.catalyst.util.SparkCollectionUtils"),
