@@ -74,7 +74,7 @@ public class CollationAwareUTF8String {
    * @param startPos the start position for searching (in the target string)
    * @return length of the target substring that ends with the specified prefix in lowercase
    */
-  public static int lowercaseMatchLengthFrom(
+  private static int lowercaseMatchLengthFrom(
       final UTF8String target,
       final UTF8String lowercasePattern,
       int startPos) {
@@ -99,7 +99,7 @@ public class CollationAwareUTF8String {
    * @param startPos the start position for searching (in the target string)
    * @return the position of the first occurrence of pattern in target
    */
-  public static int lowercaseFind(
+  private static int lowercaseFind(
       final UTF8String target,
       final UTF8String lowercasePattern,
       int startPos) {
@@ -145,7 +145,7 @@ public class CollationAwareUTF8String {
    * @param endPos the end position for searching (in the target string)
    * @return length of the target substring that ends with the specified suffix in lowercase
    */
-  public static int lowercaseMatchLengthUntil(
+  private static int lowercaseMatchLengthUntil(
       final UTF8String target,
       final UTF8String lowercasePattern,
       int endPos) {
@@ -170,7 +170,7 @@ public class CollationAwareUTF8String {
    * @param endPos the end position for searching (in the target string)
    * @return the position of the last occurrence of pattern in target
    */
-  public static int lowercaseRFind(
+  private static int lowercaseRFind(
       final UTF8String target,
       final UTF8String lowercasePattern,
       int endPos) {
