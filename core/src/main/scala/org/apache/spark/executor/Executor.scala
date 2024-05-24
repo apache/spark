@@ -95,6 +95,13 @@ private[spark] class Executor(
 
   private[executor] val conf = env.conf
 
+  // SPARK-48131: Unify MDC key mdc.taskName and task_name in Spark 4.0 release.
+  private[executor] val taskNameMDCKey = if (conf.get(LEGACY_TASK_NAME_MDC_ENABLED)) {
+    "mdc.taskName"
+  } else {
+    LogKeys.TASK_NAME.name
+  }
+
   // SPARK-40235: updateDependencies() uses a ReentrantLock instead of the `synchronized` keyword
   // so that tasks can exit quickly if they are interrupted while waiting on another task to
   // finish downloading dependencies.
@@ -914,7 +921,7 @@ private[spark] class Executor(
     try {
       mdc.foreach { case (key, value) => MDC.put(key, value) }
       // avoid overriding the takName by the user
-      MDC.put(LogKeys.TASK_NAME.name, taskName)
+      MDC.put(taskNameMDCKey, taskName)
     } catch {
       case _: NoSuchFieldError => logInfo("MDC is not supported.")
     }
@@ -923,7 +930,7 @@ private[spark] class Executor(
   private def cleanMDCForTask(taskName: String, mdc: Seq[(String, String)]): Unit = {
     try {
       mdc.foreach { case (key, _) => MDC.remove(key) }
-      MDC.remove(LogKeys.TASK_NAME.name)
+      MDC.remove(taskNameMDCKey)
     } catch {
       case _: NoSuchFieldError => logInfo("MDC is not supported.")
     }

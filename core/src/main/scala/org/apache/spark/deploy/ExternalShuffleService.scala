@@ -23,7 +23,8 @@ import java.util.concurrent.CountDownLatch
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SecurityManager, SparkConf}
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKeys.{AUTH_ENABLED, PORT, SHUFFLE_DB_BACKEND_KEY, SHUFFLE_DB_BACKEND_NAME}
 import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
 import org.apache.spark.network.TransportContext
 import org.apache.spark.network.crypto.AuthServerBootstrap
@@ -86,8 +87,8 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
     if (sparkConf.get(config.SHUFFLE_SERVICE_DB_ENABLED) && enabled) {
       val shuffleDBName = sparkConf.get(config.SHUFFLE_SERVICE_DB_BACKEND)
       val dbBackend = DBBackend.byName(shuffleDBName)
-      logInfo(s"Use ${dbBackend.name()} as the implementation of " +
-        s"${config.SHUFFLE_SERVICE_DB_BACKEND.key}")
+      logInfo(log"Use ${MDC(SHUFFLE_DB_BACKEND_NAME, dbBackend.name())} as the implementation of " +
+        log"${MDC(SHUFFLE_DB_BACKEND_KEY, config.SHUFFLE_SERVICE_DB_BACKEND.key)}")
       new ExternalBlockHandler(conf,
         findRegisteredExecutorsDBFile(dbBackend.fileName(registeredExecutorsDB)))
     } else {
@@ -106,7 +107,8 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
   def start(): Unit = {
     require(server == null, "Shuffle server already started")
     val authEnabled = securityManager.isAuthenticationEnabled()
-    logInfo(s"Starting shuffle service on port $port (auth enabled = $authEnabled)")
+    logInfo(log"Starting shuffle service on port ${MDC(PORT, port)}" +
+      log" (auth enabled = ${MDC(AUTH_ENABLED, authEnabled)})")
     val bootstraps: Seq[TransportServerBootstrap] =
       if (authEnabled) {
         Seq(new AuthServerBootstrap(transportConf, securityManager))

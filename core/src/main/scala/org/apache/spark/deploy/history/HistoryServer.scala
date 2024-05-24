@@ -28,7 +28,8 @@ import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.Utils.addRenderLogHandler
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.History
 import org.apache.spark.internal.config.UI._
@@ -332,8 +333,8 @@ object HistoryServer extends Logging {
     }
 
     if (config.get(ACLS_ENABLE)) {
-      logInfo(s"${ACLS_ENABLE.key} is configured, " +
-        s"clearing it and only using ${History.HISTORY_SERVER_UI_ACLS_ENABLE.key}")
+      logInfo(log"${MDC(KEY, ACLS_ENABLE.key)} is configured, " +
+        log"clearing it and only using ${MDC(KEY2, History.HISTORY_SERVER_UI_ACLS_ENABLE.key)}")
       config.set(ACLS_ENABLE, false)
     }
 

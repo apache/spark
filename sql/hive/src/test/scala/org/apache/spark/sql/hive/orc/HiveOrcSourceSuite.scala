@@ -143,7 +143,7 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
         errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
           "columnName" -> "`testType()`",
-          "columnType" -> "\"INTERVAL\"",
+          "columnType" -> "UDT(\"INTERVAL\")",
           "format" -> "ORC")
       )
 
@@ -170,7 +170,7 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
         errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
           "columnName" -> "`a`",
-          "columnType" -> "\"INTERVAL\"",
+          "columnType" -> "UDT(\"INTERVAL\")",
           "format" -> "ORC")
       )
     }

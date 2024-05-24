@@ -34,7 +34,7 @@ import org.apache.commons.io.output.{ByteArrayOutputStream => ApacheByteArrayOut
 import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.broadcast.{Broadcast, BroadcastManager}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
@@ -188,7 +188,8 @@ private class ShuffleStatus(
       val mapStatusOpt = mapIndex.map(mapStatuses(_)).flatMap(Option(_))
       mapStatusOpt match {
         case Some(mapStatus) =>
-          logInfo(s"Updating map output for ${mapId} to ${bmAddress}")
+          logInfo(log"Updating map output for ${MDC(MAP_ID, mapId)}" +
+            log" to ${MDC(BLOCK_MANAGER_ID, bmAddress)}")
           mapStatus.updateLocation(bmAddress)
           invalidateSerializedMapOutputStatusCache()
         case None =>
@@ -200,7 +201,8 @@ private class ShuffleStatus(
             _numAvailableMapOutputs += 1
             invalidateSerializedMapOutputStatusCache()
             mapStatusesDeleted(index) = null
-            logInfo(s"Recover ${mapStatus.mapId} ${mapStatus.location}")
+            logInfo(log"Recover ${MDC(MAP_ID, mapStatus.mapId)}" +
+              log" ${MDC(BLOCK_MANAGER_ID, mapStatus.location)}")
           } else {
             logWarning(log"Asked to update map output ${MDC(MAP_ID, mapId)} " +
               log"for untracked map status.")
@@ -490,20 +492,24 @@ private[spark] class MapOutputTrackerMasterEndpoint(
 
   logDebug("init") // force eager creation of logger
 
+  private def logInfoMsg(msg: MessageWithContext, shuffleId: Int, context: RpcCallContext): Unit = {
+    val hostPort = context.senderAddress.hostPort
+    logInfo(log"Asked to send " +
+      msg +
+      log" locations for shuffle ${MDC(SHUFFLE_ID, shuffleId)} to ${MDC(HOST_PORT, hostPort)}")
+  }
+
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case GetMapOutputStatuses(shuffleId: Int) =>
-      val hostPort = context.senderAddress.hostPort
-      logInfo(s"Asked to send map output locations for shuffle $shuffleId to $hostPort")
+      logInfoMsg(log"map output", shuffleId, context)
       tracker.post(GetMapOutputMessage(shuffleId, context))
 
     case GetMapAndMergeResultStatuses(shuffleId: Int) =>
-      val hostPort = context.senderAddress.hostPort
-      logInfo(s"Asked to send map/merge result locations for shuffle $shuffleId to $hostPort")
+      logInfoMsg(log"map/merge result", shuffleId, context)
       tracker.post(GetMapAndMergeOutputMessage(shuffleId, context))
 
     case GetShufflePushMergerLocations(shuffleId: Int) =>
-      logInfo(s"Asked to send shuffle push merger locations for shuffle" +
-        s" $shuffleId to ${context.senderAddress.hostPort}")
+      logInfoMsg(log"shuffle push merger", shuffleId, context)
       tracker.post(GetShufflePushMergersMessage(shuffleId, context))
 
     case StopMapOutputTracker =>
@@ -1422,13 +1428,15 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
       val mergeOutputStatuses = mergeStatuses.get(shuffleId).orNull
 
       if (mapOutputStatuses == null || mergeOutputStatuses == null) {
-        logInfo("Don't have map/merge outputs for shuffle " + shuffleId + ", fetching them")
+        logInfo(log"Don't have map/merge outputs for" +
+          log" shuffle ${MDC(SHUFFLE_ID, shuffleId)}, fetching them")
         val startTimeNs = System.nanoTime()
         fetchingLock.withLock(shuffleId) {
           var fetchedMapStatuses = mapStatuses.get(shuffleId).orNull
           var fetchedMergeStatuses = mergeStatuses.get(shuffleId).orNull
           if (fetchedMapStatuses == null || fetchedMergeStatuses == null) {
-            logInfo("Doing the fetch; tracker endpoint = " + trackerEndpoint)
+            logInfo(log"Doing the fetch; tracker endpoint = " +
+              log"${MDC(RPC_ENDPOINT_REF, trackerEndpoint)}")
             val fetchedBytes =
               askTracker[(Array[Byte], Array[Byte])](GetMapAndMergeResultStatuses(shuffleId))
             try {
@@ -1456,12 +1464,14 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
     } else {
       val statuses = mapStatuses.get(shuffleId).orNull
       if (statuses == null) {
-        logInfo("Don't have map outputs for shuffle " + shuffleId + ", fetching them")
+        logInfo(log"Don't have map outputs for shuffle ${MDC(SHUFFLE_ID, shuffleId)}," +
+          log" fetching them")
         val startTimeNs = System.nanoTime()
         fetchingLock.withLock(shuffleId) {
           var fetchedStatuses = mapStatuses.get(shuffleId).orNull
           if (fetchedStatuses == null) {
-            logInfo("Doing the fetch; tracker endpoint = " + trackerEndpoint)
+            logInfo(log"Doing the fetch; tracker endpoint =" +
+              log" ${MDC(RPC_ENDPOINT_REF, trackerEndpoint)}")
             val fetchedBytes = askTracker[Array[Byte]](GetMapOutputStatuses(shuffleId))
             try {
               fetchedStatuses =
@@ -1500,7 +1510,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
   def updateEpoch(newEpoch: Long): Unit = {
     epochLock.synchronized {
       if (newEpoch > epoch) {
-        logInfo("Updating epoch to " + newEpoch + " and clearing cache")
+        logInfo(log"Updating epoch to ${MDC(EPOCH, newEpoch)} and clearing cache")
         epoch = newEpoch
         mapStatuses.clear()
         mergeStatuses.clear()
@@ -1561,7 +1571,9 @@ private[spark] object MapOutputTracker extends Logging {
         oos.close()
       }
       val outArr = out.toByteArray
-      logInfo("Broadcast outputstatuses size = " + outArr.length + ", actual size = " + arrSize)
+      logInfo(log"Broadcast outputstatuses size = " +
+        log"${MDC(BROADCAST_OUTPUT_STATUS_SIZE, outArr.length)}," +
+        log" actual size = ${MDC(BROADCAST_OUTPUT_STATUS_SIZE, arrSize)}")
       (outArr, bcast)
     } else {
       (chunkedByteBuf.toArray, null)
@@ -1594,8 +1606,10 @@ private[spark] object MapOutputTracker extends Logging {
         try {
           // deserialize the Broadcast, pull .value array out of it, and then deserialize that
           val bcast = deserializeObject(in).asInstanceOf[Broadcast[Array[Array[Byte]]]]
-          logInfo("Broadcast outputstatuses size = " + bytes.length +
-            ", actual size = " + bcast.value.foldLeft(0L)(_ + _.length))
+          val actualSize = bcast.value.foldLeft(0L)(_ + _.length)
+          logInfo(log"Broadcast outputstatuses size =" +
+            log" ${MDC(BROADCAST_OUTPUT_STATUS_SIZE, bytes.length)}" +
+            log", actual size = ${MDC(BROADCAST_OUTPUT_STATUS_SIZE, actualSize)}")
           val bcastIn = new ChunkedByteBuffer(bcast.value.map(ByteBuffer.wrap)).toInputStream()
           // Important - ignore the DIRECT tag ! Start from offset 1
           bcastIn.skip(1)

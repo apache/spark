@@ -1194,4 +1194,21 @@ class UDFSuite extends QueryTest with SharedSparkSession {
         .select(f(struct(ds2("value").as("_1")))),
       Row(Row(null)))
   }
+
+  test("char/varchar as UDF return type") {
+    Seq(CharType(5), VarcharType(5)).foreach { dt =>
+      val f = udf(
+        new UDF0[String] {
+          override def call(): String = "a"
+        },
+        dt
+      )
+      checkError(
+        intercept[AnalysisException](spark.range(1).select(f())),
+        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_ENCODER",
+        sqlState = "0A000",
+        parameters = Map("dataType" -> s"\"${dt.sql}\"")
+      )
+    }
+  }
 }

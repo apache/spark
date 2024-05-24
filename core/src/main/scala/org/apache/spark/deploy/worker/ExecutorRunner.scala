@@ -163,7 +163,7 @@ private[deploy] class ExecutorRunner(
       val command = builder.command()
       val redactedCommand = Utils.redactCommandLineArgs(conf, command.asScala.toSeq)
         .mkString("\"", "\" \"", "\"")
-      logInfo(s"Launch command: $redactedCommand")
+      logInfo(log"Launch command: ${MDC(COMMAND, redactedCommand)}")
 
       builder.directory(executorDir)
       builder.environment.put("SPARK_EXECUTOR_DIRS", appLocalDirs.mkString(File.pathSeparator))

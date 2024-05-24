@@ -646,7 +646,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * @param end the end position of the current UTF8String in bytes.
    * @return a new UTF8String in the position of [start, end] of current UTF8String bytes.
    */
-  private UTF8String copyUTF8String(int start, int end) {
+  public UTF8String copyUTF8String(int start, int end) {
     int len = end - start + 1;
     byte[] newBytes = new byte[len];
     copyMemory(base, offset + start, newBytes, BYTE_ARRAY_OFFSET, len);

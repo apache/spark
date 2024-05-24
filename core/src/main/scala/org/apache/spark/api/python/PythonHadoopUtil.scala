@@ -45,7 +45,7 @@ private[python] object Converter extends Logging {
     converterClass.map { cc =>
       Try {
         val c = Utils.classForName[Converter[T, U]](cc).getConstructor().newInstance()
-        logInfo(s"Loaded converter: $cc")
+        logInfo(log"Loaded converter: ${MDC(CLASS_NAME, cc)}")
         c
       } match {
         case Success(c) => c

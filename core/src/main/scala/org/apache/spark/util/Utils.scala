@@ -401,14 +401,14 @@ private[spark] object Utils
           "Untarring behavior will be deprecated at spark.files and " +
             "SparkContext.addFile. Consider using spark.archives or SparkContext.addArchive " +
             "instead.")
-        logInfo("Untarring " + fileName)
+        logInfo(log"Untarring ${MDC(FILE_NAME, fileName)}")
         executeAndGetOutput(Seq("tar", "-xzf", fileName), targetDir)
       } else if (fileName.endsWith(".tar")) {
         logWarning(
           "Untarring behavior will be deprecated at spark.files and " +
             "SparkContext.addFile. Consider using spark.archives or SparkContext.addArchive " +
             "instead.")
-        logInfo("Untarring " + fileName)
+        logInfo(log"Untarring ${MDC(FILE_NAME, fileName)}")
         executeAndGetOutput(Seq("tar", "-xf", fileName), targetDir)
       }
     }
@@ -503,7 +503,7 @@ private[spark] object Utils
       fileOverwrite: Boolean): Unit = {
     val tempFile = File.createTempFile("fetchFileTemp", null,
       new File(destFile.getParentFile.getAbsolutePath))
-    logInfo(s"Fetching $url to $tempFile")
+    logInfo(log"Fetching ${MDC(LogKeys.URL, url)} to ${MDC(FILE_ABSOLUTE_PATH, tempFile)}")
 
     try {
       val out = new FileOutputStream(tempFile)
@@ -545,7 +545,8 @@ private[spark] object Utils
       if (!filesEqualRecursive(sourceFile, destFile)) {
         if (fileOverwrite) {
           logInfo(
-            s"File $destFile exists and does not match contents of $url, replacing it with $url"
+            log"File ${MDC(DESTINATION_PATH, destFile)} exists and does not match contents of" +
+              log" ${MDC(LogKeys.URL, url)}, replacing it with ${MDC(LogKeys.URL2, url)}"
           )
           if (!destFile.delete()) {
             throw new SparkException(

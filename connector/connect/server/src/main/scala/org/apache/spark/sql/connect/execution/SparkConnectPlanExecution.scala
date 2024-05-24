@@ -264,8 +264,14 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
         name -> values
     }
     if (observedMetrics.nonEmpty) {
-      Some(SparkConnectPlanExecution
-        .createObservedMetricsResponse(sessionId, sessionHolder.serverSessionId, observedMetrics))
+      val planId = executeHolder.request.getPlan.getRoot.getCommon.getPlanId
+      Some(
+        SparkConnectPlanExecution
+          .createObservedMetricsResponse(
+            sessionId,
+            sessionHolder.serverSessionId,
+            planId,
+            observedMetrics))
     } else None
   }
 }
@@ -274,11 +280,13 @@ object SparkConnectPlanExecution {
   def createObservedMetricsResponse(
       sessionId: String,
       serverSessionId: String,
+      planId: Long,
       metrics: Map[String, Seq[(Option[String], Any)]]): ExecutePlanResponse = {
     val observedMetrics = metrics.map { case (name, values) =>
       val metrics = ExecutePlanResponse.ObservedMetrics
         .newBuilder()
         .setName(name)
+        .setPlanId(planId)
       values.foreach { case (key, value) =>
         metrics.addValues(toLiteralProto(value))
         key.foreach(metrics.addKeys)

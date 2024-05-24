@@ -15,12 +15,32 @@
  * limitations under the License.
  */
 
-package org.apache.spark.internal;
+package org.apache.spark.sql
 
-public class LoggerFactory {
+import java.util.UUID
 
-  public static Logger getLogger(Class<?> clazz) {
-    org.slf4j.Logger slf4jLogger = org.slf4j.LoggerFactory.getLogger(clazz);
-    return new Logger(slf4jLogger);
-  }
+class Observation(name: String) extends ObservationBase(name) {
+
+  /**
+   * Create an Observation instance without providing a name. This generates a random name.
+   */
+  def this() = this(UUID.randomUUID().toString)
+}
+
+/**
+ * (Scala-specific) Create instances of Observation via Scala `apply`.
+ * @since 4.0.0
+ */
+object Observation {
+
+  /**
+   * Observation constructor for creating an anonymous observation.
+   */
+  def apply(): Observation = new Observation()
+
+  /**
+   * Observation constructor for creating a named observation.
+   */
+  def apply(name: String): Observation = new Observation(name)
+
 }

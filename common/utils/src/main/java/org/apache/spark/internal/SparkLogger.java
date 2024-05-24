@@ -24,14 +24,21 @@ import java.util.function.Consumer;
 import org.apache.logging.log4j.CloseableThreadContext;
 import org.apache.logging.log4j.message.MessageFactory;
 import org.apache.logging.log4j.message.ParameterizedMessageFactory;
+// checkstyle.off: RegexpSinglelineJava
+import org.slf4j.Logger;
+// checkstyle.on: RegexpSinglelineJava
 
-public class Logger {
+public class SparkLogger {
 
   private static final MessageFactory MESSAGE_FACTORY = ParameterizedMessageFactory.INSTANCE;
-  private final org.slf4j.Logger slf4jLogger;
+  private final Logger slf4jLogger;
 
-  Logger(org.slf4j.Logger slf4jLogger) {
+  SparkLogger(Logger slf4jLogger) {
     this.slf4jLogger = slf4jLogger;
+  }
+
+  public boolean isErrorEnabled() {
+    return slf4jLogger.isErrorEnabled();
   }
 
   public void error(String msg) {
@@ -58,6 +65,10 @@ public class Logger {
     }
   }
 
+  public boolean isWarnEnabled() {
+    return slf4jLogger.isWarnEnabled();
+  }
+
   public void warn(String msg) {
     slf4jLogger.warn(msg);
   }
@@ -80,6 +91,10 @@ public class Logger {
     } else if (slf4jLogger.isWarnEnabled()) {
       withLogContext(msg, mdcs, throwable, mt -> slf4jLogger.warn(mt.message, mt.throwable));
     }
+  }
+
+  public boolean isInfoEnabled() {
+    return slf4jLogger.isInfoEnabled();
   }
 
   public void info(String msg) {
@@ -106,6 +121,10 @@ public class Logger {
     }
   }
 
+  public boolean isDebugEnabled() {
+    return slf4jLogger.isDebugEnabled();
+  }
+
   public void debug(String msg) {
     slf4jLogger.debug(msg);
   }
@@ -124,6 +143,10 @@ public class Logger {
 
   public void debug(String msg, Throwable throwable) {
     slf4jLogger.debug(msg, throwable);
+  }
+
+  public boolean isTraceEnabled() {
+    return slf4jLogger.isTraceEnabled();
   }
 
   public void trace(String msg) {
@@ -145,7 +168,6 @@ public class Logger {
   public void trace(String msg, Throwable throwable) {
     slf4jLogger.trace(msg, throwable);
   }
-
 
   private void withLogContext(
       String pattern,
@@ -173,5 +195,9 @@ public class Logger {
     static MessageThrowable of(String message, Throwable throwable) {
       return new MessageThrowable(message, throwable);
     }
+  }
+
+  public Logger getSlf4jLogger() {
+    return slf4jLogger;
   }
 }

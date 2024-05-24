@@ -78,7 +78,6 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var principal: String = null
   var keytab: String = null
   private var dynamicAllocationEnabled: Boolean = false
-
   // Standalone cluster mode only
   var supervise: Boolean = false
   var driverCores: String = null
@@ -90,7 +89,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   lazy val defaultSparkProperties: HashMap[String, String] = {
     val defaultProperties = new HashMap[String, String]()
     if (verbose) {
-      logInfo(s"Using properties file: $propertiesFile")
+      logInfo(log"Using properties file: ${MDC(PATH, propertiesFile)}")
     }
     Option(propertiesFile).foreach { filename =>
       val properties = Utils.getPropertiesFromFile(filename)
@@ -100,7 +99,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       // Property files may contain sensitive information, so redact before printing
       if (verbose) {
         Utils.redact(properties).foreach { case (k, v) =>
-          logInfo(s"Adding default property: $k=$v")
+          logInfo(log"Adding default property: ${MDC(KEY, k)}=${MDC(VALUE, v)}")
         }
       }
     }
@@ -490,7 +489,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
 
   private def printUsageAndExit(exitCode: Int, unknownParam: Any = null): Unit = {
     if (unknownParam != null) {
-      logInfo("Unknown/unsupported param " + unknownParam)
+      logInfo(log"Unknown/unsupported param ${MDC(UNKNOWN_PARAM, unknownParam)}")
     }
     val command = sys.env.getOrElse("_SPARK_CMD_USAGE",
       """Usage: spark-submit [options] <app jar | python file | R file> [app arguments]
@@ -589,11 +588,10 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     )
 
     if (SparkSubmit.isSqlShell(mainClass)) {
-      logInfo("CLI options:")
-      logInfo(getSqlShellOptions())
+      logInfo(log"CLI options:\n${MDC(SHELL_OPTIONS, getSqlShellOptions())}")
     }
 
-    throw new SparkUserAppException(exitCode)
+    throw SparkUserAppException(exitCode)
   }
 
   /**

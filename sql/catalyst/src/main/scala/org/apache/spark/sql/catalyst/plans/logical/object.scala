@@ -579,7 +579,7 @@ object TransformWithState {
       child: LogicalPlan): LogicalPlan = {
     val keyEncoder = encoderFor[K]
     val mapped = new TransformWithState(
-      UnresolvedDeserializer(encoderFor[K].deserializer, groupingAttributes),
+      UnresolvedDeserializer(keyEncoder.deserializer, groupingAttributes),
       UnresolvedDeserializer(encoderFor[V].deserializer, dataAttributes),
       groupingAttributes,
       dataAttributes,

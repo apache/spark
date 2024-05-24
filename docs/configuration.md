@@ -91,7 +91,7 @@ Then, you can supply configuration values at runtime:
 ```sh
 ./bin/spark-submit \
   --name "My app" \
-  --master local[4] \
+  --master "local[4]" \
   --conf spark.eventLog.enabled=false \
   --conf "spark.executor.extraJavaOptions=-XX:+PrintGCDetails -XX:+PrintGCTimeStamps" \
   myApp.jar
@@ -1796,6 +1796,15 @@ Apart from these, the following properties are also available, and may be useful
   <td>0.6.0</td>
 </tr>
 <tr>
+  <td><code>spark.checkpoint.dir</code></td>
+  <td>(none)</td>
+  <td>
+    Set the default directory for checkpointing. It can be overwritten by
+    SparkContext.setCheckpointDir.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
   <td><code>spark.checkpoint.compress</code></td>
   <td>false</td>
   <td>
@@ -3387,7 +3396,7 @@ Spark subsystems.
 
 Runtime SQL configurations are per-session, mutable Spark SQL configurations. They can be set with initial values by the config file
 and command-line options with `--conf/-c` prefixed, or by setting `SparkConf` that are used to create `SparkSession`.
-Also, they can be set and queried by SET commands and rest to their initial values by RESET command,
+Also, they can be set and queried by SET commands and reset to their initial values by RESET command,
 or by `SparkSession.conf`'s setter and getter methods in runtime.
 
 {% include_api_gen generated-runtime-sql-config-table.html %}
@@ -3693,7 +3702,11 @@ val logDf = spark.read.schema(LOG_SCHEMA).json("path/to/logs")
 ```
 
 ## Plain Text Logging
-If you prefer plain text logging, you can use the `log4j2.properties.pattern-layout-template` file as a starting point. This is the default configuration used by Spark before the 4.0.0 release. This configuration uses the [PatternLayout](https://logging.apache.org/log4j/2.x/manual/layouts.html#PatternLayout) to log all the logs in plain text. MDC information is not included by default. In order to print it in the logs, you can update the patternLayout in the file. For example, you can add `%X{task_name}` to print the task name in the logs.
+If you prefer plain text logging, you have two options:
+- Disable structured JSON logging by setting the Spark configuration `spark.log.structuredLogging.enabled` to `false`.
+- Use a custom log4j configuration file. Rename `conf/log4j2.properties.pattern-layout-template` to `conf/log4j2.properties`. This reverts to the default configuration prior to Spark 4.0, which utilizes [PatternLayout](https://logging.apache.org/log4j/2.x/manual/layouts.html#PatternLayout) for logging all messages in plain text.
+
+MDC information is not included by default when with plain text logging. In order to print it in the logs, you can update the patternLayout in the file. For example, you can add `%X{task_name}` to print the task name in the logs.
 Moreover, you can use `spark.sparkContext.setLocalProperty(s"mdc.$name", "value")` to add user specific data into MDC.
 The key in MDC will be the string of `mdc.$name`.
 
@@ -3746,7 +3759,7 @@ Also, you can modify or add configurations at runtime:
 {% highlight bash %}
 ./bin/spark-submit \
   --name "My app" \
-  --master local[4] \
+  --master "local[4]" \
   --conf spark.eventLog.enabled=false \
   --conf "spark.executor.extraJavaOptions=-XX:+PrintGCDetails -XX:+PrintGCTimeStamps" \
   --conf spark.hadoop.abc.def=xyz \

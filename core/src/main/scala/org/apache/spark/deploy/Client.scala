@@ -164,11 +164,12 @@ private class ClientEndpoint(
       // logs again when waitAppCompletion is set to true
       if (!driverStatusReported) {
         driverStatusReported = true
-        logInfo(s"State of $submittedDriverID is ${state.get}")
+        logInfo(log"State of ${MDC(DRIVER_ID, submittedDriverID)}" +
+          log" is ${MDC(DRIVER_STATE, state.get)}")
         // Worker node, if present
         (workerId, workerHostPort, state) match {
           case (Some(id), Some(hostPort), Some(DriverState.RUNNING)) =>
-            logInfo(s"Driver running on $hostPort ($id)")
+            logInfo(log"Driver running on ${MDC(HOST, hostPort)} (${MDC(WORKER_ID, id)})")
           case _ =>
         }
       }
@@ -181,17 +182,18 @@ private class ClientEndpoint(
           state.get match {
             case DriverState.FINISHED | DriverState.FAILED |
                  DriverState.ERROR | DriverState.KILLED =>
-              logInfo(s"State of driver $submittedDriverID is ${state.get}, " +
-                s"exiting spark-submit JVM.")
+              logInfo(log"State of driver ${MDC(DRIVER_ID, submittedDriverID)}" +
+                log" is ${MDC(DRIVER_STATE, state.get)}, exiting spark-submit JVM.")
               System.exit(0)
             case _ =>
               if (!waitAppCompletion) {
-                logInfo(s"spark-submit not configured to wait for completion, " +
-                  s"exiting spark-submit JVM.")
+                logInfo("spark-submit not configured to wait for completion, " +
+                  " exiting spark-submit JVM.")
                 System.exit(0)
               } else {
-                logDebug(s"State of driver $submittedDriverID is ${state.get}, " +
-                  s"continue monitoring driver status.")
+                logDebug(log"State of driver ${MDC(DRIVER_ID, submittedDriverID)}" +
+                  log" is ${MDC(DRIVER_STATE, state.get)}, " +
+                  log"continue monitoring driver status.")
               }
           }
       }

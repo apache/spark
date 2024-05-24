@@ -3337,24 +3337,170 @@ class Dataset[T] private[sql] (
     }
   }
 
+  /**
+   * Define (named) metrics to observe on the Dataset. This method returns an 'observed' Dataset
+   * that returns the same result as the input, with the following guarantees: <ul> <li>It will
+   * compute the defined aggregates (metrics) on all the data that is flowing through the Dataset
+   * at that point.</li> <li>It will report the value of the defined aggregate columns as soon as
+   * we reach a completion point. A completion point is currently defined as the end of a
+   * query.</li> </ul> Please note that continuous execution is currently not supported.
+   *
+   * The metrics columns must either contain a literal (e.g. lit(42)), or should contain one or
+   * more aggregate functions (e.g. sum(a) or sum(a + b) + avg(c) - lit(1)). Expressions that
+   * contain references to the input Dataset's columns must always be wrapped in an aggregate
+   * function.
+   *
+   * A user can retrieve the metrics by calling
+   * `org.apache.spark.sql.Dataset.collectResult().getObservedMetrics`.
+   *
+   * {{{
+   *   // Observe row count (rows) and highest id (maxid) in the Dataset while writing it
+   *   val observed_ds = ds.observe("my_metrics", count(lit(1)).as("rows"), max($"id").as("maxid"))
+   *   observed_ds.write.parquet("ds.parquet")
+   *   val metrics = observed_ds.collectResult().getObservedMetrics
+   * }}}
+   *
+   * @group typedrel
+   * @since 4.0.0
+   */
+  @scala.annotation.varargs
   def observe(name: String, expr: Column, exprs: Column*): Dataset[T] = {
-    throw new UnsupportedOperationException("observe is not implemented.")
+    sparkSession.newDataset(agnosticEncoder) { builder =>
+      builder.getCollectMetricsBuilder
+        .setInput(plan.getRoot)
+        .setName(name)
+        .addAllMetrics((expr +: exprs).map(_.expr).asJava)
+    }
   }
 
-  def checkpoint(): Dataset[T] = {
-    throw new UnsupportedOperationException("checkpoint is not implemented.")
+  /**
+   * Observe (named) metrics through an `org.apache.spark.sql.Observation` instance. This is
+   * equivalent to calling `observe(String, Column, Column*)` but does not require to collect all
+   * results before returning the metrics - the metrics are filled during iterating the results,
+   * as soon as they are available. This method does not support streaming datasets.
+   *
+   * A user can retrieve the metrics by accessing `org.apache.spark.sql.Observation.get`.
+   *
+   * {{{
+   *   // Observe row count (rows) and highest id (maxid) in the Dataset while writing it
+   *   val observation = Observation("my_metrics")
+   *   val observed_ds = ds.observe(observation, count(lit(1)).as("rows"), max($"id").as("maxid"))
+   *   observed_ds.write.parquet("ds.parquet")
+   *   val metrics = observation.get
+   * }}}
+   *
+   * @throws IllegalArgumentException
+   *   If this is a streaming Dataset (this.isStreaming == true)
+   *
+   * @group typedrel
+   * @since 4.0.0
+   */
+  @scala.annotation.varargs
+  def observe(observation: Observation, expr: Column, exprs: Column*): Dataset[T] = {
+    val df = observe(observation.name, expr, exprs: _*)
+    sparkSession.registerObservation(df.getPlanId.get, observation)
+    df
   }
 
-  def checkpoint(eager: Boolean): Dataset[T] = {
-    throw new UnsupportedOperationException("checkpoint is not implemented.")
-  }
+  /**
+   * Eagerly checkpoint a Dataset and return the new Dataset. Checkpointing can be used to
+   * truncate the logical plan of this Dataset, which is especially useful in iterative algorithms
+   * where the plan may grow exponentially. It will be saved to files inside the checkpoint
+   * directory set with `SparkContext#setCheckpointDir`.
+   *
+   * @group basic
+   * @since 4.0.0
+   */
+  def checkpoint(): Dataset[T] = checkpoint(eager = true, reliableCheckpoint = true)
 
-  def localCheckpoint(): Dataset[T] = {
-    throw new UnsupportedOperationException("localCheckpoint is not implemented.")
-  }
+  /**
+   * Returns a checkpointed version of this Dataset. Checkpointing can be used to truncate the
+   * logical plan of this Dataset, which is especially useful in iterative algorithms where the
+   * plan may grow exponentially. It will be saved to files inside the checkpoint directory set
+   * with `SparkContext#setCheckpointDir`.
+   *
+   * @param eager
+   *   Whether to checkpoint this dataframe immediately
+   *
+   * @note
+   *   When checkpoint is used with eager = false, the final data that is checkpointed after the
+   *   first action may be different from the data that was used during the job due to
+   *   non-determinism of the underlying operation and retries. If checkpoint is used to achieve
+   *   saving a deterministic snapshot of the data, eager = true should be used. Otherwise, it is
+   *   only deterministic after the first execution, after the checkpoint was finalized.
+   *
+   * @group basic
+   * @since 4.0.0
+   */
+  def checkpoint(eager: Boolean): Dataset[T] =
+    checkpoint(eager = eager, reliableCheckpoint = true)
 
-  def localCheckpoint(eager: Boolean): Dataset[T] = {
-    throw new UnsupportedOperationException("localCheckpoint is not implemented.")
+  /**
+   * Eagerly locally checkpoints a Dataset and return the new Dataset. Checkpointing can be used
+   * to truncate the logical plan of this Dataset, which is especially useful in iterative
+   * algorithms where the plan may grow exponentially. Local checkpoints are written to executor
+   * storage and despite potentially faster they are unreliable and may compromise job completion.
+   *
+   * @group basic
+   * @since 4.0.0
+   */
+  def localCheckpoint(): Dataset[T] = checkpoint(eager = true, reliableCheckpoint = false)
+
+  /**
+   * Locally checkpoints a Dataset and return the new Dataset. Checkpointing can be used to
+   * truncate the logical plan of this Dataset, which is especially useful in iterative algorithms
+   * where the plan may grow exponentially. Local checkpoints are written to executor storage and
+   * despite potentially faster they are unreliable and may compromise job completion.
+   *
+   * @param eager
+   *   Whether to checkpoint this dataframe immediately
+   *
+   * @note
+   *   When checkpoint is used with eager = false, the final data that is checkpointed after the
+   *   first action may be different from the data that was used during the job due to
+   *   non-determinism of the underlying operation and retries. If checkpoint is used to achieve
+   *   saving a deterministic snapshot of the data, eager = true should be used. Otherwise, it is
+   *   only deterministic after the first execution, after the checkpoint was finalized.
+   *
+   * @group basic
+   * @since 4.0.0
+   */
+  def localCheckpoint(eager: Boolean): Dataset[T] =
+    checkpoint(eager = eager, reliableCheckpoint = false)
+
+  /**
+   * Returns a checkpointed version of this Dataset.
+   *
+   * @param eager
+   *   Whether to checkpoint this dataframe immediately
+   * @param reliableCheckpoint
+   *   Whether to create a reliable checkpoint saved to files inside the checkpoint directory. If
+   *   false creates a local checkpoint using the caching subsystem
+   */
+  private def checkpoint(eager: Boolean, reliableCheckpoint: Boolean): Dataset[T] = {
+    sparkSession.newDataset(agnosticEncoder) { builder =>
+      val command = sparkSession.newCommand { builder =>
+        builder.getCheckpointCommandBuilder
+          .setLocal(!reliableCheckpoint)
+          .setEager(eager)
+          .setRelation(this.plan.getRoot)
+      }
+      val responseIter = sparkSession.execute(command)
+      try {
+        val response = responseIter
+          .find(_.hasCheckpointCommandResult)
+          .getOrElse(throw new RuntimeException("CheckpointCommandResult must be present"))
+
+        val cachedRemoteRelation = response.getCheckpointCommandResult.getRelation
+        sparkSession.cleaner.registerCachedRemoteRelationForCleanup(cachedRemoteRelation)
+
+        // Update the builder with the values from the result.
+        builder.setCachedRemoteRelation(cachedRemoteRelation)
+      } finally {
+        // consume the rest of the iterator
+        responseIter.foreach(_ => ())
+      }
+    }
   }
 
   /**

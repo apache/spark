@@ -1406,6 +1406,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         NAME_FIELD_NUMBER: builtins.int
         VALUES_FIELD_NUMBER: builtins.int
         KEYS_FIELD_NUMBER: builtins.int
+        PLAN_ID_FIELD_NUMBER: builtins.int
         name: builtins.str
         @property
         def values(
@@ -1417,6 +1418,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         def keys(
             self,
         ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+        plan_id: builtins.int
         def __init__(
             self,
             *,
@@ -1426,11 +1428,12 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             ]
             | None = ...,
             keys: collections.abc.Iterable[builtins.str] | None = ...,
+            plan_id: builtins.int = ...,
         ) -> None: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "keys", b"keys", "name", b"name", "values", b"values"
+                "keys", b"keys", "name", b"name", "plan_id", b"plan_id", "values", b"values"
             ],
         ) -> None: ...
 
@@ -1530,6 +1533,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     RESULT_COMPLETE_FIELD_NUMBER: builtins.int
     CREATE_RESOURCE_PROFILE_COMMAND_RESULT_FIELD_NUMBER: builtins.int
     EXECUTION_PROGRESS_FIELD_NUMBER: builtins.int
+    CHECKPOINT_COMMAND_RESULT_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     METRICS_FIELD_NUMBER: builtins.int
     OBSERVED_METRICS_FIELD_NUMBER: builtins.int
@@ -1591,6 +1595,9 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     def execution_progress(self) -> global___ExecutePlanResponse.ExecutionProgress:
         """(Optional) Intermediate query progress reports."""
     @property
+    def checkpoint_command_result(self) -> global___CheckpointCommandResult:
+        """Response for command that checkpoints a DataFrame."""
+    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """Support arbitrary result objects."""
     @property
@@ -1631,6 +1638,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         create_resource_profile_command_result: pyspark.sql.connect.proto.commands_pb2.CreateResourceProfileCommandResult
         | None = ...,
         execution_progress: global___ExecutePlanResponse.ExecutionProgress | None = ...,
+        checkpoint_command_result: global___CheckpointCommandResult | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
         metrics: global___ExecutePlanResponse.Metrics | None = ...,
         observed_metrics: collections.abc.Iterable[global___ExecutePlanResponse.ObservedMetrics]
@@ -1642,6 +1650,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "arrow_batch",
             b"arrow_batch",
+            "checkpoint_command_result",
+            b"checkpoint_command_result",
             "create_resource_profile_command_result",
             b"create_resource_profile_command_result",
             "execution_progress",
@@ -1675,6 +1685,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "arrow_batch",
             b"arrow_batch",
+            "checkpoint_command_result",
+            b"checkpoint_command_result",
             "create_resource_profile_command_result",
             b"create_resource_profile_command_result",
             "execution_progress",
@@ -1727,6 +1739,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             "result_complete",
             "create_resource_profile_command_result",
             "execution_progress",
+            "checkpoint_command_result",
             "extension",
         ]
         | None
@@ -3700,3 +3713,24 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["root_error_idx"] | None: ...
 
 global___FetchErrorDetailsResponse = FetchErrorDetailsResponse
+
+class CheckpointCommandResult(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RELATION_FIELD_NUMBER: builtins.int
+    @property
+    def relation(self) -> pyspark.sql.connect.proto.relations_pb2.CachedRemoteRelation:
+        """(Required) The logical plan checkpointed."""
+    def __init__(
+        self,
+        *,
+        relation: pyspark.sql.connect.proto.relations_pb2.CachedRemoteRelation | None = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["relation", b"relation"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["relation", b"relation"]
+    ) -> None: ...
+
+global___CheckpointCommandResult = CheckpointCommandResult

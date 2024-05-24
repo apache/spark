@@ -374,7 +374,8 @@ object CreateStruct {
       // We should always use the last part of the column name (`c` in the above example) as the
       // alias name inside CreateNamedStruct.
       case (u: UnresolvedAttribute, _) => Seq(Literal(u.nameParts.last), u)
-      case (u @ UnresolvedExtractValue(_, e: Literal), _) if e.dataType == StringType => Seq(e, u)
+      case (u @ UnresolvedExtractValue(_, e: Literal), _) if e.dataType.isInstanceOf[StringType] =>
+        Seq(e, u)
       case (a: Alias, _) => Seq(Literal(a.name), a)
       case (e: NamedExpression, _) if e.resolved => Seq(Literal(e.name), e)
       case (e: NamedExpression, _) => Seq(NamePlaceholder, e)
@@ -465,7 +466,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression with 
         toSQLId(prettyName), Seq("2n (n > 0)"), children.length
       )
     } else {
-      val invalidNames = nameExprs.filterNot(e => e.foldable && e.dataType == StringType)
+      val invalidNames = nameExprs.filterNot(e => e.foldable && e.dataType.isInstanceOf[StringType])
       if (invalidNames.nonEmpty) {
         DataTypeMismatch(
           errorSubClass = "CREATE_NAMED_STRUCT_WITHOUT_FOLDABLE_STRING",

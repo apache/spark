@@ -1071,7 +1071,8 @@ case class Range(
   override def newInstance(): Range = copy(output = output.map(_.newInstance()))
 
   override def simpleString(maxFields: Int): String = {
-    s"Range ($start, $end, step=$step, splits=$numSlices)"
+    val splits = if (numSlices.isDefined) { s", splits=$numSlices" } else { "" }
+    s"Range ($start, $end, step=$step$splits)"
   }
 
   override def maxRows: Option[Long] = {

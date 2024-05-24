@@ -20,11 +20,9 @@ package org.apache.spark.sql.connect.planner
 import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.ByteString
-import io.grpc.stub.StreamObserver
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.connect.proto.Expression.{Alias, ExpressionString, UnresolvedStar}
 import org.apache.spark.sql.{AnalysisException, Dataset, Row}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -34,7 +32,7 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
-import org.apache.spark.sql.connect.service.{ExecuteHolder, ExecuteStatus, SessionHolder, SessionStatus, SparkConnectService}
+import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
@@ -45,21 +43,12 @@ import org.apache.spark.unsafe.types.UTF8String
  * test cases.
  */
 trait SparkConnectPlanTest extends SharedSparkSession {
-
-  class MockObserver extends StreamObserver[proto.ExecutePlanResponse] {
-    override def onNext(value: ExecutePlanResponse): Unit = {}
-    override def onError(t: Throwable): Unit = {}
-    override def onCompleted(): Unit = {}
-  }
-
   def transform(rel: proto.Relation): logical.LogicalPlan = {
-    new SparkConnectPlanner(SessionHolder.forTesting(spark)).transformRelation(rel)
+    SparkConnectPlannerTestUtils.transform(spark, rel)
   }
 
   def transform(cmd: proto.Command): Unit = {
-    val executeHolder = buildExecutePlanHolder(cmd)
-    new SparkConnectPlanner(executeHolder)
-      .process(cmd, new MockObserver())
+    SparkConnectPlannerTestUtils.transform(spark, cmd)
   }
 
   def readRel: proto.Relation =
@@ -113,29 +102,6 @@ trait SparkConnectPlanTest extends SharedSparkSession {
 
     localRelationBuilder.setData(ByteString.copyFrom(bytes))
     proto.Relation.newBuilder().setLocalRelation(localRelationBuilder.build()).build()
-  }
-
-  def buildExecutePlanHolder(command: proto.Command): ExecuteHolder = {
-    val sessionHolder = SessionHolder.forTesting(spark)
-    sessionHolder.eventManager.status_(SessionStatus.Started)
-
-    val context = proto.UserContext
-      .newBuilder()
-      .setUserId(sessionHolder.userId)
-      .build()
-    val plan = proto.Plan
-      .newBuilder()
-      .setCommand(command)
-      .build()
-    val request = proto.ExecutePlanRequest
-      .newBuilder()
-      .setPlan(plan)
-      .setSessionId(sessionHolder.sessionId)
-      .setUserContext(context)
-      .build()
-    val executeHolder = SparkConnectService.executionManager.createExecuteHolder(request)
-    executeHolder.eventsManager.status_(ExecuteStatus.Started)
-    executeHolder
   }
 }
 

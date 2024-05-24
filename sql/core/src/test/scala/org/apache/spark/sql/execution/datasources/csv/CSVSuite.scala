@@ -80,6 +80,7 @@ abstract class CSVSuite
   private val valueMalformedFile = "test-data/value-malformed.csv"
   private val badAfterGoodFile = "test-data/bad_after_good.csv"
   private val malformedRowFile = "test-data/malformedRow.csv"
+  private val charFile = "test-data/char.csv"
 
   /** Verifies data and schema. */
   private def verifyCars(
@@ -3339,6 +3340,29 @@ abstract class CSVSuite
           .load(testFile(carsFile))
           .select("comment")
           .where("year < 2014"),
+        expected)
+    }
+  }
+
+  test("SPARK-48241: CSV parsing failure with char/varchar type columns") {
+    withTable("charVarcharTable") {
+      spark.sql(
+        s"""
+           |CREATE TABLE charVarcharTable(
+           |  color char(4),
+           |  name varchar(10))
+           |USING csv
+           |OPTIONS (
+           |  header "true",
+           |  path "${testFile(charFile)}"
+           |)
+       """.stripMargin)
+      val expected = Seq(
+        Row("pink", "Bob"),
+        Row("blue", "Mike"),
+        Row("grey", "Tom"))
+      checkAnswer(
+        sql("SELECT * FROM charVarcharTable"),
         expected)
     }
   }

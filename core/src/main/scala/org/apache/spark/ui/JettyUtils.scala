@@ -250,7 +250,8 @@ private[spark] object JettyUtils extends Logging {
       poolSize: Int = 200): ServerInfo = {
 
     val stopTimeout = conf.get(UI_JETTY_STOP_TIMEOUT)
-    logInfo(s"Start Jetty $hostName:$port for $serverName")
+    logInfo(log"Start Jetty ${MDC(HOST, hostName)}:${MDC(PORT, port)}" +
+      log" for ${MDC(SERVER_NAME, serverName)}")
     // Start the server first, with no connectors.
     val pool = new QueuedThreadPool(poolSize)
     if (serverName.nonEmpty) {
@@ -558,7 +559,9 @@ private[spark] case class ServerInfo(
    */
   private def addFilters(handler: ServletContextHandler, securityMgr: SecurityManager): Unit = {
     conf.get(UI_FILTERS).foreach { filter =>
-      logInfo(s"Adding filter to ${handler.getContextPath()}: $filter")
+      logInfo(log"Adding filter to" +
+        log" ${MDC(SERVLET_CONTEXT_HANDLER_PATH, handler.getContextPath())}:" +
+        log" ${MDC(UI_FILTER, filter)}")
       val oldParams = conf.getOption(s"spark.$filter.params").toSeq
         .flatMap(Utils.stringToSeq)
         .flatMap { param =>

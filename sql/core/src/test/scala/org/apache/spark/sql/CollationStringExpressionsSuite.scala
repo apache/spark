@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkConf
+import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, Literal, StringTrim, StringTrimLeft, StringTrimRight}
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -26,7 +27,8 @@ import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, DataType,
 // scalastyle:off nonascii
 class CollationStringExpressionsSuite
   extends QueryTest
-  with SharedSparkSession {
+  with SharedSparkSession
+  with ExpressionEvalHelper {
 
   test("Support ConcatWs string expression with collation") {
     // Supported collations
@@ -798,6 +800,163 @@ class CollationStringExpressionsSuite
       sql("SELECT locate(collate('aBc', 'UTF8_BINARY'),collate('abcabc', 'UTF8_BINARY_LCASE'),4)")
     }
     assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+  }
+
+  test("StringTrim* functions - unit tests for both paths (codegen and eval)") {
+    // Without trimString param.
+    checkEvaluation(StringTrim(Literal.create( "  asd  ", StringType("UTF8_BINARY"))), "asd")
+    checkEvaluation(
+      StringTrimLeft(Literal.create("  asd  ", StringType("UTF8_BINARY_LCASE"))), "asd  ")
+    checkEvaluation(StringTrimRight(Literal.create("  asd  ", StringType("UNICODE"))), "  asd")
+
+    // With trimString param.
+    checkEvaluation(
+      StringTrim(
+        Literal.create("  asd  ", StringType("UTF8_BINARY")),
+        Literal.create(" ", StringType("UTF8_BINARY"))),
+      "asd")
+    checkEvaluation(
+      StringTrimLeft(
+        Literal.create("  asd  ", StringType("UTF8_BINARY_LCASE")),
+        Literal.create(" ", StringType("UTF8_BINARY_LCASE"))),
+      "asd  ")
+    checkEvaluation(
+      StringTrimRight(
+        Literal.create("  asd  ", StringType("UNICODE")),
+        Literal.create(" ", StringType("UNICODE"))),
+      "  asd")
+
+    checkEvaluation(
+      StringTrim(
+        Literal.create("xxasdxx", StringType("UTF8_BINARY")),
+        Literal.create("x", StringType("UTF8_BINARY"))),
+      "asd")
+    checkEvaluation(
+      StringTrimLeft(
+        Literal.create("xxasdxx", StringType("UTF8_BINARY_LCASE")),
+        Literal.create("x", StringType("UTF8_BINARY_LCASE"))),
+      "asdxx")
+    checkEvaluation(
+      StringTrimRight(
+        Literal.create("xxasdxx", StringType("UNICODE")),
+        Literal.create("x", StringType("UNICODE"))),
+      "xxasd")
+  }
+
+  test("StringTrim* functions - E2E tests") {
+    case class StringTrimTestCase(
+      collation: String,
+      trimFunc: String,
+      sourceString: String,
+      hasTrimString: Boolean,
+      trimString: String,
+      expectedResultString: String)
+
+    val testCases = Seq(
+      StringTrimTestCase("UTF8_BINARY", "TRIM", "  asd  ", false, null, "asd"),
+      StringTrimTestCase("UTF8_BINARY", "BTRIM", "  asd  ", true, null, null),
+      StringTrimTestCase("UTF8_BINARY", "LTRIM", "xxasdxx", true, "x", "asdxx"),
+      StringTrimTestCase("UTF8_BINARY", "RTRIM", "xxasdxx", true, "x", "xxasd"),
+
+      StringTrimTestCase("UTF8_BINARY_LCASE", "TRIM", "  asd  ", true, null, null),
+      StringTrimTestCase("UTF8_BINARY_LCASE", "BTRIM", "xxasdxx", true, "x", "asd"),
+      StringTrimTestCase("UTF8_BINARY_LCASE", "LTRIM", "xxasdxx", true, "x", "asdxx"),
+      StringTrimTestCase("UTF8_BINARY_LCASE", "RTRIM", "  asd  ", false, null, "  asd"),
+
+      StringTrimTestCase("UNICODE", "TRIM", "xxasdxx", true, "x", "asd"),
+      StringTrimTestCase("UNICODE", "BTRIM", "xxasdxx", true, "x", "asd"),
+      StringTrimTestCase("UNICODE", "LTRIM", "  asd  ", false, null, "asd  "),
+      StringTrimTestCase("UNICODE", "RTRIM", "  asd  ", true, null, null)
+
+      // Other more complex cases can be found in unit tests in CollationSupportSuite.java.
+    )
+
+    testCases.foreach(testCase => {
+      var df: DataFrame = null
+
+      if (testCase.trimFunc.equalsIgnoreCase("BTRIM")) {
+        // BTRIM has arguments in (srcStr, trimStr) order
+        df = sql(s"SELECT ${testCase.trimFunc}(" +
+          s"COLLATE('${testCase.sourceString}', '${testCase.collation}')" +
+            (if (!testCase.hasTrimString) ""
+            else if (testCase.trimString == null) ", null"
+            else s", '${testCase.trimString}'") +
+          ")")
+      }
+      else {
+        // While other functions have arguments in (trimStr, srcStr) order
+        df = sql(s"SELECT ${testCase.trimFunc}(" +
+            (if (!testCase.hasTrimString) ""
+            else if (testCase.trimString == null) "null, "
+            else s"'${testCase.trimString}', ") +
+          s"COLLATE('${testCase.sourceString}', '${testCase.collation}')" +
+          ")")
+      }
+
+      checkAnswer(df = df, expectedAnswer = Row(testCase.expectedResultString))
+    })
+  }
+
+  test("StringTrim* functions - implicit collations") {
+    checkAnswer(
+      df = sql("SELECT TRIM(COLLATE('x', 'UTF8_BINARY'), COLLATE('xax', 'UTF8_BINARY'))"),
+      expectedAnswer = Row("a"))
+    checkAnswer(
+      df = sql("SELECT BTRIM(COLLATE('xax', 'UTF8_BINARY_LCASE'), "
+        + "COLLATE('x', 'UTF8_BINARY_LCASE'))"),
+      expectedAnswer = Row("a"))
+    checkAnswer(
+      df = sql("SELECT LTRIM(COLLATE('x', 'UNICODE'), COLLATE('xax', 'UNICODE'))"),
+      expectedAnswer = Row("ax"))
+
+    checkAnswer(
+      df = sql("SELECT RTRIM('x', COLLATE('xax', 'UTF8_BINARY'))"),
+      expectedAnswer = Row("xa"))
+    checkAnswer(
+      df = sql("SELECT TRIM('x', COLLATE('xax', 'UTF8_BINARY_LCASE'))"),
+      expectedAnswer = Row("a"))
+    checkAnswer(
+      df = sql("SELECT BTRIM('xax', COLLATE('x', 'UNICODE'))"),
+      expectedAnswer = Row("a"))
+
+    checkAnswer(
+      df = sql("SELECT LTRIM(COLLATE('x', 'UTF8_BINARY'), 'xax')"),
+      expectedAnswer = Row("ax"))
+    checkAnswer(
+      df = sql("SELECT RTRIM(COLLATE('x', 'UTF8_BINARY_LCASE'), 'xax')"),
+      expectedAnswer = Row("xa"))
+    checkAnswer(
+      df = sql("SELECT TRIM(COLLATE('x', 'UNICODE'), 'xax')"),
+      expectedAnswer = Row("a"))
+  }
+
+  test("StringTrim* functions - collation type mismatch") {
+    List("TRIM", "LTRIM", "RTRIM").foreach(func => {
+      val collationMismatch = intercept[AnalysisException] {
+        sql("SELECT " + func + "(COLLATE('x', 'UTF8_BINARY_LCASE'), "
+          + "COLLATE('xxaaaxx', 'UNICODE'))")
+      }
+      assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+    })
+
+    val collationMismatch = intercept[AnalysisException] {
+      sql("SELECT BTRIM(COLLATE('xxaaaxx', 'UNICODE'), COLLATE('x', 'UTF8_BINARY_LCASE'))")
+    }
+    assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
+  }
+
+  test("StringTrim* functions - unsupported collation types") {
+    List("TRIM", "LTRIM", "RTRIM").foreach(func => {
+      val collationMismatch = intercept[AnalysisException] {
+        sql("SELECT " + func + "(COLLATE('x', 'UNICODE_CI'), COLLATE('xxaaaxx', 'UNICODE_CI'))")
+      }
+      assert(collationMismatch.getErrorClass === "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
+    })
+
+    val collationMismatch = intercept[AnalysisException] {
+      sql("SELECT BTRIM(COLLATE('xxaaaxx', 'UNICODE_CI'), COLLATE('x', 'UNICODE_CI'))")
+    }
+    assert(collationMismatch.getErrorClass === "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
   }
 
   // TODO: Add more tests for other string expressions

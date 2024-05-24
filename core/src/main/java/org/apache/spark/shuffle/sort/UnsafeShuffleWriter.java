@@ -35,12 +35,14 @@ import scala.reflect.ClassTag$;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.ByteStreams;
 import com.google.common.io.Closeables;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import org.apache.spark.*;
 import org.apache.spark.annotation.Private;
 import org.apache.spark.internal.config.package$;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.io.CompressionCodec;
 import org.apache.spark.io.CompressionCodec$;
 import org.apache.spark.io.NioBufferedFileInputStream;
@@ -66,7 +68,7 @@ import org.apache.spark.util.Utils;
 @Private
 public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
-  private static final Logger logger = LoggerFactory.getLogger(UnsafeShuffleWriter.class);
+  private static final SparkLogger logger = SparkLoggerFactory.getLogger(UnsafeShuffleWriter.class);
 
   private static final ClassTag<Object> OBJECT_CLASS_TAG = ClassTag$.MODULE$.Object();
 
@@ -226,7 +228,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       sorter = null;
       for (SpillInfo spill : spills) {
         if (spill.file.exists() && !spill.file.delete()) {
-          logger.error("Error while deleting spill file {}", spill.file.getPath());
+          logger.error("Error while deleting spill file {}",
+            MDC.of(LogKeys.PATH$.MODULE$, spill.file.getPath()));
         }
       }
     }

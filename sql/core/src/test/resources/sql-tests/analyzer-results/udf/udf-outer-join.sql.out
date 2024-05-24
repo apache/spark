@@ -6,7 +6,7 @@ as t1(int_col1)
 -- !query analysis
 CreateViewCommand `t1`, SELECT * FROM VALUES
 (-234), (145), (367), (975), (298)
-as t1(int_col1), false, true, LocalTempView, true
+as t1(int_col1), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [int_col1#x]
       +- SubqueryAlias t1
          +- LocalRelation [int_col1#x]
@@ -19,7 +19,7 @@ as t2(int_col0, int_col1)
 -- !query analysis
 CreateViewCommand `t2`, SELECT * FROM VALUES
 (-769, -244), (-800, -409), (940, 86), (-507, 304), (-367, 158)
-as t2(int_col0, int_col1), false, true, LocalTempView, true
+as t2(int_col0, int_col1), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [int_col0#x, int_col1#x]
       +- SubqueryAlias t2
          +- LocalRelation [int_col0#x, int_col1#x]
@@ -58,7 +58,7 @@ Project [udf(sum(udf(coalesce(int_col1, int_col0))))#xL, (udf(coalesce(int_col1,
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW t1 AS SELECT * FROM VALUES (97) as t1(int_col1)
 -- !query analysis
-CreateViewCommand `t1`, SELECT * FROM VALUES (97) as t1(int_col1), false, true, LocalTempView, true
+CreateViewCommand `t1`, SELECT * FROM VALUES (97) as t1(int_col1), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [int_col1#x]
       +- SubqueryAlias t1
          +- LocalRelation [int_col1#x]
@@ -67,7 +67,7 @@ CreateViewCommand `t1`, SELECT * FROM VALUES (97) as t1(int_col1), false, true, 
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW t2 AS SELECT * FROM VALUES (0) as t2(int_col1)
 -- !query analysis
-CreateViewCommand `t2`, SELECT * FROM VALUES (0) as t2(int_col1), false, true, LocalTempView, true
+CreateViewCommand `t2`, SELECT * FROM VALUES (0) as t2(int_col1), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [int_col1#x]
       +- SubqueryAlias t2
          +- LocalRelation [int_col1#x]
