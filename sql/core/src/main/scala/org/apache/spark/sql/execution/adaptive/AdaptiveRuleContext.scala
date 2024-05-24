@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.adaptive
 
 import scala.collection.mutable
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.sql.catalyst.SQLConfHelper
 
 /**
