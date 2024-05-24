@@ -396,8 +396,9 @@ case class AlterTableChangeColumnCommand(
     val newDataSchema = table.dataSchema.fields.map { field =>
       if (field.name == originColumn.name) {
         // Create a new column from the origin column with the new comment.
+        val newField = field.copy(dataType = newColumn.dataType)
         val withNewComment: StructField =
-          addComment(field, newColumn.getComment())
+          addComment(newField, newColumn.getComment())
         // Create a new column from the origin column with the new current default value.
         if (newColumn.getCurrentDefaultValue().isDefined) {
           if (newColumn.getCurrentDefaultValue().get.nonEmpty) {
@@ -445,7 +446,8 @@ case class AlterTableChangeColumnCommand(
   // name(by resolver) and dataType.
   private def columnEqual(
       field: StructField, other: StructField, resolver: Resolver): Boolean = {
-    resolver(field.name, other.name) && field.dataType == other.dataType
+    resolver(field.name, other.name) &&
+      DataType.equalsIgnoreCompatibleCollationAndNullability(field.dataType, other.dataType)
   }
 }
 

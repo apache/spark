@@ -409,6 +409,37 @@ object DataType {
   }
 
   /**
+   * Check if `from` is equal to `to` type except for collations and nullability, which are
+   * both checked to be compatible so that data of type `from` can be interpreted as of type `to`.
+   */
+  private[sql] def equalsIgnoreCompatibleCollationAndNullability(
+      from: DataType,
+      to: DataType): Boolean = {
+    (from, to) match {
+      case (_: StringType, _: StringType) => true
+
+      case (ArrayType(fromElement, fn), ArrayType(toElement, tn)) =>
+        (tn || !fn) && equalsIgnoreCompatibleCollationAndNullability(fromElement, toElement)
+
+      case (MapType(fromKey, fromValue, fn), MapType(toKey, toValue, tn)) =>
+        (tn || !fn) &&
+          // Map keys cannot change collation.
+          equalsIgnoreCompatibleNullability(fromKey, toKey) &&
+          equalsIgnoreCompatibleCollationAndNullability(fromValue, toValue)
+
+      case (StructType(fromFields), StructType(toFields)) =>
+        fromFields.length == toFields.length &&
+          fromFields.zip(toFields).forall { case (fromField, toField) =>
+            fromField.name == toField.name &&
+              (toField.nullable || !fromField.nullable) &&
+              equalsIgnoreCompatibleCollationAndNullability(fromField.dataType, toField.dataType)
+          }
+
+      case (fromDataType, toDataType) => fromDataType == toDataType
+    }
+  }
+
+  /**
    * Returns true if the two data types share the same "shape", i.e. the types
    * are the same, but the field names don't need to be the same.
    *

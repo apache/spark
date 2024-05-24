@@ -689,6 +689,115 @@ class DataTypeSuite extends SparkFunSuite {
     false,
     caseSensitive = true)
 
+  def checkEqualsIgnoreCompatibleCollationAndNullability(
+      from: DataType,
+      to: DataType,
+      expected: Boolean): Unit = {
+    val testName = s"equalsIgnoreCompatibleCollationAndNullability: (from: $from, to: $to)"
+
+    test(testName) {
+      assert(DataType.equalsIgnoreCompatibleCollationAndNullability(from, to) === expected)
+    }
+  }
+
+  // Simple types.
+  checkEqualsIgnoreCompatibleCollationAndNullability(IntegerType, IntegerType, expected = true)
+  checkEqualsIgnoreCompatibleCollationAndNullability(BooleanType, BooleanType, expected = true)
+  checkEqualsIgnoreCompatibleCollationAndNullability(StringType, StringType, expected = true)
+  checkEqualsIgnoreCompatibleCollationAndNullability(IntegerType, BooleanType, expected = false)
+  checkEqualsIgnoreCompatibleCollationAndNullability(BooleanType, IntegerType, expected = false)
+  checkEqualsIgnoreCompatibleCollationAndNullability(StringType, BooleanType, expected = false)
+  checkEqualsIgnoreCompatibleCollationAndNullability(BooleanType, StringType, expected = false)
+  checkEqualsIgnoreCompatibleCollationAndNullability(StringType, IntegerType, expected = false)
+  checkEqualsIgnoreCompatibleCollationAndNullability(IntegerType, StringType, expected = false)
+  // Collated `StringType`.
+  checkEqualsIgnoreCompatibleCollationAndNullability(StringType, StringType("UTF8_BINARY_LCASE"),
+    expected = true)
+  checkEqualsIgnoreCompatibleCollationAndNullability(
+    StringType("UTF8_BINARY"), StringType("UTF8_BINARY_LCASE"), expected = true)
+  // Complex types.
+  checkEqualsIgnoreCompatibleCollationAndNullability(
+    ArrayType(StringType),
+    ArrayType(StringType("UTF8_BINARY_LCASE")),
+    expected = true
+  )
+  checkEqualsIgnoreCompatibleCollationAndNullability(
+    ArrayType(StringType),
+    ArrayType(ArrayType(StringType("UTF8_BINARY_LCASE"))),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollationAndNullability(
+    ArrayType(ArrayType(StringType)),
+    ArrayType(ArrayType(StringType("UTF8_BINARY_LCASE"))),
+    expected = true
+  )
+  checkEqualsIgnoreCompatibleCollationAndNullability(
+    MapType(StringType, StringType),
+    MapType(StringType, StringType("UTF8_BINARY_LCASE")),
+    expected = true
+  )
+  checkEqualsIgnoreCompatibleCollationAndNullability(
+    MapType(StringType("UTF8_BINARY_LCASE"), StringType),
+    MapType(StringType, StringType),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollationAndNullability(
+    MapType(StringType("UTF8_BINARY_LCASE"), ArrayType(StringType)),
+    MapType(StringType("UTF8_BINARY_LCASE"), ArrayType(StringType("UTF8_BINARY_LCASE"))),
+    expected = true
+  )
+  checkEqualsIgnoreCompatibleCollationAndNullability(
+    MapType(ArrayType(StringType), IntegerType),
+    MapType(ArrayType(StringType("UTF8_BINARY_LCASE")), IntegerType),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollationAndNullability(
+    MapType(ArrayType(StringType("UTF8_BINARY_LCASE")), IntegerType),
+    MapType(ArrayType(StringType("UTF8_BINARY_LCASE")), IntegerType),
+    expected = true
+  )
+  checkEqualsIgnoreCompatibleCollationAndNullability(
+    StructType(StructField("a", StringType) :: Nil),
+    StructType(StructField("a", StringType("UTF8_BINARY_LCASE")) :: Nil),
+    expected = true
+  )
+  checkEqualsIgnoreCompatibleCollationAndNullability(
+    StructType(StructField("a", ArrayType(StringType)) :: Nil),
+    StructType(StructField("a", ArrayType(StringType("UTF8_BINARY_LCASE"))) :: Nil),
+    expected = true
+  )
+  checkEqualsIgnoreCompatibleCollationAndNullability(
+    StructType(StructField("a", MapType(StringType, IntegerType)) :: Nil),
+    StructType(StructField("a", MapType(StringType("UTF8_BINARY_LCASE"), IntegerType)) :: Nil),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollationAndNullability(
+    StructType(StructField("a", StringType) :: Nil),
+    StructType(StructField("b", StringType("UTF8_BINARY_LCASE")) :: Nil),
+    expected = false
+  )
+  // Null compatibility checks.
+  checkEqualsIgnoreCompatibleCollationAndNullability(
+    ArrayType(StringType, containsNull = true),
+    ArrayType(StringType, containsNull = false),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollationAndNullability(
+    ArrayType(StringType, containsNull = true),
+    ArrayType(StringType("UTF8_BINARY_LCASE"), containsNull = false),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollationAndNullability(
+    MapType(StringType, StringType, valueContainsNull = true),
+    MapType(StringType, StringType, valueContainsNull = false),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollationAndNullability(
+    StructType(StructField("a", StringType) :: Nil),
+    StructType(StructField("a", StringType, nullable = false) :: Nil),
+    expected = false
+  )
+
   test("SPARK-25031: MapType should produce current formatted string for complex types") {
     val keyType: DataType = StructType(Seq(
       StructField("a", DataTypes.IntegerType),
