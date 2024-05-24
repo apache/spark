@@ -1136,12 +1136,46 @@ class TypesTestsMixin:
         self.assertRaises(IndexError, lambda: struct1[9])
         self.assertRaises(TypeError, lambda: struct1[9.9])
 
-    def test_parse_datatype_string(self):
-        from pyspark.sql.types import _all_atomic_types, _parse_datatype_string
+    def test_parse_datatype_json_string(self):
+        from pyspark.sql.types import _parse_datatype_json_string
 
-        for k, t in _all_atomic_types.items():
-            if k != "varchar" and k != "char":
-                self.assertEqual(t(), _parse_datatype_string(k))
+        for dataType in [
+            StringType(),
+            CharType(5),
+            VarcharType(10),
+            BinaryType(),
+            BooleanType(),
+            DecimalType(),
+            DecimalType(10, 2),
+            FloatType(),
+            DoubleType(),
+            ByteType(),
+            ShortType(),
+            IntegerType(),
+            LongType(),
+            DateType(),
+            TimestampType(),
+            TimestampNTZType(),
+            NullType(),
+            VariantType(),
+            YearMonthIntervalType(),
+            YearMonthIntervalType(YearMonthIntervalType.YEAR),
+            YearMonthIntervalType(YearMonthIntervalType.YEAR, YearMonthIntervalType.MONTH),
+            DayTimeIntervalType(),
+            DayTimeIntervalType(DayTimeIntervalType.DAY),
+            DayTimeIntervalType(DayTimeIntervalType.HOUR, DayTimeIntervalType.SECOND),
+            CalendarIntervalType(),
+        ]:
+            json_str = dataType.json()
+            parsed = _parse_datatype_json_string(json_str)
+            self.assertEqual(dataType, parsed)
+
+    def test_parse_datatype_string(self):
+        from pyspark.sql.types import _all_mappable_types, _parse_datatype_string
+
+        for k, t in _all_mappable_types.items():
+            self.assertEqual(t(), _parse_datatype_string(k))
+
         self.assertEqual(IntegerType(), _parse_datatype_string("int"))
         self.assertEqual(StringType(), _parse_datatype_string("string"))
         self.assertEqual(CharType(1), _parse_datatype_string("char(1)"))
