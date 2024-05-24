@@ -27,12 +27,15 @@ import org.apache.spark.sql.types.StringType
 /**
  * Resolves the identifier expressions and builds the original plans/expressions.
  */
-class ResolveIdentifierClause(executor: RuleExecutor[LogicalPlan]) extends Rule[LogicalPlan]
-  with AliasHelper with EvalHelper {
+class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch])
+  extends Rule[LogicalPlan] with AliasHelper with EvalHelper {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
     _.containsAnyPattern(UNRESOLVED_IDENTIFIER)) {
     case p: PlanWithUnresolvedIdentifier if p.identifierExpr.resolved =>
+      val executor = new RuleExecutor[LogicalPlan] {
+        override def batches: Seq[Batch] = earlyBatches.asInstanceOf[Seq[Batch]]
+      }
       executor.execute(p.planBuilder.apply(evalIdentifierExpr(p.identifierExpr)))
     case other =>
       other.transformExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_IDENTIFIER)) {
