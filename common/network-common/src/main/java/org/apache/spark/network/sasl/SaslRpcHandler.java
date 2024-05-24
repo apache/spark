@@ -25,8 +25,8 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.server.AbstractAuthRpcHandler;
@@ -43,7 +43,7 @@ import org.apache.spark.network.util.TransportConf;
  * which are individual RPCs.
  */
 public class SaslRpcHandler extends AbstractAuthRpcHandler {
-  private static final Logger logger = LoggerFactory.getLogger(SaslRpcHandler.class);
+  private static final SparkLogger logger = SparkLoggerFactory.getLogger(SaslRpcHandler.class);
 
   /** Transport configuration. */
   private final TransportConf conf;

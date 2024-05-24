@@ -34,7 +34,7 @@ import org.apache.hive.service.auth.HiveAuthFactory
 import org.apache.hive.service.cli._
 import org.apache.hive.service.server.HiveServer2
 
-import org.apache.spark.internal.Logger
+import org.apache.spark.internal.SparkLogger
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.util.SQLKeywordUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -113,10 +113,10 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, sqlContext: SQLC
 
 private[thriftserver] trait ReflectedCompositeService { this: AbstractService =>
 
-  private val logInfo = (msg: String) => getAncestorField[Logger](this, 3, "LOG").info(msg)
+  private val logInfo = (msg: String) => getAncestorField[SparkLogger](this, 3, "LOG").info(msg)
 
   private val logError = (msg: String, e: Throwable) =>
-    getAncestorField[Logger](this, 3, "LOG").error(msg, e)
+    getAncestorField[SparkLogger](this, 3, "LOG").error(msg, e)
 
   def initCompositeService(hiveConf: HiveConf): Unit = {
     // Emulating `CompositeService.init(hiveConf)`

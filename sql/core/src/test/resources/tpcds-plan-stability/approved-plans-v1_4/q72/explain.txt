@@ -264,7 +264,7 @@ Condition : (isnotnull(d_week_seq#26) AND isnotnull(d_date_sk#25))
 
 (42) BroadcastExchange
 Input [2]: [d_date_sk#25, d_week_seq#26]
-Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[1, int, false] as bigint), 32) | (cast(input[0, int, false] as bigint) & 4294967295))),false), [plan_id=6]
+Arguments: HashedRelationBroadcastMode(List(((cast(input[1, int, false] as bigint) << 32) | (cast(input[0, int, false] as bigint) & 4294967295))),false), [plan_id=6]
 
 (43) BroadcastHashJoin [codegen id : 10]
 Left keys [2]: [d_week_seq#24, inv_date_sk#13]

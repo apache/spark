@@ -5964,6 +5964,15 @@ object functions {
     Column.fn("timestampdiff", lit(unit), start, end)
 
   /**
+   * Adds the specified number of units to the given timestamp.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def timestamp_add(unit: String, quantity: Column, ts: Column): Column =
+    Column.fn("timestampadd", lit(unit), quantity, ts)
+
+  /**
    * Parses the `timestamp` expression with the `format` expression to a timestamp without time
    * zone. Returns null with invalid input.
    *
@@ -7208,9 +7217,9 @@ object functions {
   /**
    * Returns length of array or map.
    *
-   * The function returns null for null input if spark.sql.legacy.sizeOfNull is set to false or
-   * spark.sql.ansi.enabled is set to true. Otherwise, the function returns -1 for null input.
-   * With the default settings, the function returns -1 for null input.
+   * This function returns -1 for null input only if spark.sql.ansi.enabled is false and
+   * spark.sql.legacy.sizeOfNull is true. Otherwise, it returns null for null input. With the
+   * default settings, the function returns null for null input.
    *
    * @group collection_funcs
    * @since 3.4.0
@@ -7686,9 +7695,9 @@ object functions {
   /**
    * Returns length of array or map. This is an alias of `size` function.
    *
-   * The function returns null for null input if spark.sql.legacy.sizeOfNull is set to false or
-   * spark.sql.ansi.enabled is set to true. Otherwise, the function returns -1 for null input.
-   * With the default settings, the function returns -1 for null input.
+   * This function returns -1 for null input only if spark.sql.ansi.enabled is false and
+   * spark.sql.legacy.sizeOfNull is true. Otherwise, it returns null for null input. With the
+   * default settings, the function returns null for null input.
    *
    * @group collection_funcs
    * @since 3.5.0

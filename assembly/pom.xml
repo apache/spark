@@ -136,10 +136,6 @@
           <artifactId>spark-yarn_${scala.binary.version}</artifactId>
           <version>${project.version}</version>
         </dependency>
-        <dependency>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-yarn-server-web-proxy</artifactId>
-        </dependency>
       </dependencies>
     </profile>
     <profile>

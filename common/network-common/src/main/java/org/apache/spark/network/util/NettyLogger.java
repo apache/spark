@@ -26,11 +26,11 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.logging.LoggingHandler;
 import io.netty.handler.logging.LogLevel;
 
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 
 public class NettyLogger {
-  private static final Logger logger = LoggerFactory.getLogger(NettyLogger.class);
+  private static final SparkLogger logger = SparkLoggerFactory.getLogger(NettyLogger.class);
 
   /** A Netty LoggingHandler which does not dump the message contents. */
   private static class NoContentLoggingHandler extends LoggingHandler {

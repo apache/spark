@@ -50,8 +50,8 @@ import org.apache.hive.service.rpc.thrift.TRowSet;
 import org.apache.hive.service.rpc.thrift.TTableSchema;
 import org.apache.hive.service.server.HiveServer2;
 
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
 
@@ -61,7 +61,7 @@ import org.apache.spark.internal.MDC;
  */
 public class CLIService extends CompositeService implements ICLIService {
 
-  private static final Logger LOG = LoggerFactory.getLogger(CLIService.class);
+  private static final SparkLogger LOG = SparkLoggerFactory.getLogger(CLIService.class);
 
   public static final TProtocolVersion SERVER_VERSION;
 
