@@ -192,10 +192,10 @@ public class CollationAwareUTF8String {
   }
 
   /**
-   * Convert the input string to lowercase using the ICU root locale rules.
+   * Convert the input string to titlecase using the ICU root locale rules.
    *
    * @param target the input string
-   * @return the lowercase string
+   * @return the titlecase string
    */
   public static UTF8String toTitleCase(final UTF8String target) {
     return UTF8String.fromString(toTitleCase(target.toString()));
@@ -206,10 +206,10 @@ public class CollationAwareUTF8String {
   }
 
   /**
-   * Convert the input string to lowercase using the specified ICU collation rules.
+   * Convert the input string to titlecase using the specified ICU collation rules.
    *
    * @param target the input string
-   * @return the lowercase string
+   * @return the titlecase string
    */
   public static UTF8String toTitleCase(final UTF8String target, final int collationId) {
     return UTF8String.fromString(toTitleCase(target.toString(), collationId));
