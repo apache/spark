@@ -520,7 +520,7 @@ struct<two:double>
 -- !query
 SELECT string(shiftleft(int(-1), 31))
 -- !query schema
-struct<shiftleft(-1, 31):string>
+struct<(-1 << 31):string>
 -- !query output
 -2147483648
 
@@ -528,7 +528,7 @@ struct<shiftleft(-1, 31):string>
 -- !query
 SELECT string(int(shiftleft(int(-1), 31))+1)
 -- !query schema
-struct<(shiftleft(-1, 31) + 1):string>
+struct<((-1 << 31) + 1):string>
 -- !query output
 -2147483647
 
