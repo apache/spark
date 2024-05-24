@@ -67,6 +67,45 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       }
   }
 
+  test("empty BEGIN END block") {
+    val batch =
+      """
+        |BEGIN
+        |END""".stripMargin
+    val tree = parseScript(batch)
+    assert(tree.collection.isEmpty)
+  }
+
+  test("multiple ; in row - should fail") {
+    val batch =
+      """
+        |BEGIN
+        |  SELECT 1;;
+        |  SELECT 2;
+        |END""".stripMargin
+    val e = intercept[ParseException] {
+      parseScript(batch)
+    }
+    assert(e.getErrorClass === "PARSE_SYNTAX_ERROR")
+    assert(e.getMessage.contains("Syntax error"))
+    assert(e.getMessage.contains("at or near ';'"))
+  }
+
+  test("without ; in last statement - should fail") {
+    val batch =
+      """
+        |BEGIN
+        |  SELECT 1;
+        |  SELECT 2
+        |END""".stripMargin
+    val e = intercept[ParseException] {
+      parseScript(batch)
+    }
+    assert(e.getErrorClass === "PARSE_SYNTAX_ERROR")
+    assert(e.getMessage.contains("Syntax error"))
+    assert(e.getMessage.contains("at or near end of input"))
+  }
+
   test("multi statement") {
     val batch =
       """
@@ -76,29 +115,6 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  INSERT INTO A VALUES (a, b, 3);
         |  SELECT a, b, c FROM T;
         |  SELECT * FROM T;
-        |END""".stripMargin
-    val tree = parseScript(batch)
-    assert(tree.collection.length == 5)
-    assert(tree.collection.forall(_.isInstanceOf[SparkStatementWithPlan]))
-    batch.split(";")
-      .map(cleanupStatementString)
-      .zip(tree.collection)
-      .foreach { case (expected, statement) =>
-        val sparkStatement = statement.asInstanceOf[SparkStatementWithPlan]
-        val statementText = sparkStatement.getText(batch)
-        assert(statementText == expected)
-      }
-  }
-
-  test("multi statement without ; at the end") {
-    val batch =
-      """
-        |BEGIN
-        |SELECT 1;
-        |SELECT 2;
-        |INSERT INTO A VALUES (a, b, 3);
-        |SELECT a, b, c FROM T;
-        |SELECT * FROM T
         |END""".stripMargin
     val tree = parseScript(batch)
     assert(tree.collection.length == 5)
