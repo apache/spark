@@ -421,13 +421,13 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         val propsString = df.select("operatorProperties").
           collect().head.getString(0)
 
-        val map = TransformWithStateExec.
+        val operatorProperties = TransformWithStateExec.
           deserializeOperatorProperties(propsString)
-        assert(map("timeMode") === "ProcessingTime")
-        assert(map("outputMode") === "Update")
+        assert(operatorProperties("timeMode") === "ProcessingTime")
+        assert(operatorProperties("outputMode") === "Update")
 
         val stateVariableInfos = StateVariableInfo.fromJson(
-          map("stateVariables"))
+          operatorProperties("stateVariables"))
         assert(stateVariableInfos.size === 1)
         val stateVariableInfo = stateVariableInfos.head
         assert(stateVariableInfo.stateName === "countState")

@@ -39,9 +39,10 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.StateStoreAwareZipPartitionsHelper
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema.{KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA}
 import org.apache.spark.sql.execution.streaming.state._
+import org.apache.spark.sql.execution.streaming.state.SchemaHelper.{SchemaV3Reader, SchemaV3Writer}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
-import org.apache.spark.util.{CompletionIterator, SerializableConfiguration, Utils}
+import org.apache.spark.util.{CollectionAccumulator, CompletionIterator, SerializableConfiguration, Utils}
 
 /**
  * Physical operator for executing `TransformWithState`
@@ -86,10 +87,10 @@ case class TransformWithStateExec(
 
   override def shortName: String = "transformWithStateExec"
 
-  val operatorProperties: OperatorProperties =
-    OperatorProperties.create(
+  private val operatorPropertiesFromExecutor: OperatorPropertiesFromExecutor =
+    OperatorPropertiesFromExecutor.create(
       sparkContext,
-      "colFamilyMetadata"
+      "operatorPropsFromExecutor"
     )
 
   /** Metadata of this stateful operator and its states stores. */
@@ -101,7 +102,7 @@ case class TransformWithStateExec(
 
     val operatorPropertiesJson: JValue = ("timeMode" -> JString(timeMode.toString)) ~
       ("outputMode" -> JString(outputMode.toString)) ~
-      ("stateVariables" -> operatorProperties.value.get("stateVariables"))
+      ("stateVariables" -> operatorPropertiesFromExecutor.value.get("stateVariables"))
 
     val json = compact(render(operatorPropertiesJson))
     OperatorStateMetadataV2(operatorInfo, stateStoreInfo, json)
@@ -114,13 +115,26 @@ case class TransformWithStateExec(
    * to write the metadata of the operator to the checkpoint file.
    */
   override def writeOperatorStateMetadata(): Unit = {
+    val stateCheckpointPath = new Path(stateInfo.get.checkpointLocation,
+      getStateInfo.operatorId.toString)
+
     val metadata = operatorStateMetadata()
+    val hadoopConf = session.sqlContext.sessionState.newHadoopConf()
     val metadataWriter = new OperatorStateMetadataWriter(
-      new Path(stateInfo.get.checkpointLocation,
-        getStateInfo.operatorId.toString),
-      session.sqlContext.sessionState.newHadoopConf()
+      stateCheckpointPath,
+      hadoopConf
     )
     metadataWriter.write(metadata)
+
+    val schemaV3Writer = new SchemaV3Writer(
+        stateCheckpointPath,
+        hadoopConf
+    )
+
+    val jValue = operatorPropertiesFromExecutor.value.get("columnFamilyMetadatas")
+    val json = compact(render(jValue))
+    schemaV3Writer.writeSchema(json)
+
     super.writeOperatorStateMetadata()
   }
 
@@ -353,7 +367,7 @@ case class TransformWithStateExec(
           store.abort()
         }
       }
-      operatorProperties.add(Map
+      operatorPropertiesFromExecutor.add(Map
         ("stateVariables" -> JArray(processorHandle.stateVariables.
           asScala.map(_.jsonValue).toList)))
       setStoreMetrics(store)
@@ -429,6 +443,13 @@ case class TransformWithStateExec(
       }
     } else {
       if (isStreaming) {
+        val stateCheckpointPath = new Path(stateInfo.get.checkpointLocation,
+          getStateInfo.operatorId.toString)
+        val hadoopConf = session.sqlContext.sessionState.newHadoopConf()
+        val reader = new SchemaV3Reader(stateCheckpointPath, hadoopConf)
+        reader.read.foreach { columnFamilyName =>
+          print(s"### columnFamilyName: $columnFamilyName")
+        }
         child.execute().mapPartitionsWithStateStore[InternalRow](
           getStateInfo,
           KEY_ROW_SCHEMA,

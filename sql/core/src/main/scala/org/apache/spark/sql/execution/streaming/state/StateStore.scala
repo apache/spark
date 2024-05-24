@@ -138,7 +138,7 @@ trait StateStore extends ReadStateStore {
 
   def createColFamilyIfAbsent(
       colFamilyMetadata: ColumnFamilyMetadataV1
-  )
+  ): Unit
 
   /**
    * Put a new non-null value for a non-null key. Implementations must be aware that the UnsafeRows

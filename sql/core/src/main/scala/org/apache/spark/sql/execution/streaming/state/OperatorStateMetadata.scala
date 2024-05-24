@@ -79,7 +79,7 @@ case class OperatorStateMetadataV1(
  * available on the driver at the time of planning, and will only be known from
  * the executor side.
  */
-class OperatorProperties(initValue: Map[String, JValue] = Map.empty)
+class OperatorPropertiesFromExecutor(initValue: Map[String, JValue] = Map.empty)
   extends AccumulatorV2[Map[String, JValue], Map[String, JValue]] {
 
   private var _value: Map[String, JValue] = initValue
@@ -87,7 +87,7 @@ class OperatorProperties(initValue: Map[String, JValue] = Map.empty)
   override def isZero: Boolean = _value.isEmpty
 
   override def copy(): AccumulatorV2[Map[String, JValue], Map[String, JValue]] = {
-    val newAcc = new OperatorProperties
+    val newAcc = new OperatorPropertiesFromExecutor
     newAcc._value = _value
     newAcc
   }
@@ -103,12 +103,12 @@ class OperatorProperties(initValue: Map[String, JValue] = Map.empty)
   override def value: Map[String, JValue] = _value
 }
 
-object OperatorProperties {
+object OperatorPropertiesFromExecutor {
   def create(
       sc: SparkContext,
       name: String,
-      initValue: Map[String, JValue] = Map.empty): OperatorProperties = {
-    val acc = new OperatorProperties(initValue)
+      initValue: Map[String, JValue] = Map.empty): OperatorPropertiesFromExecutor = {
+    val acc = new OperatorPropertiesFromExecutor(initValue)
     acc.register(sc, name = Some(name))
     acc
   }

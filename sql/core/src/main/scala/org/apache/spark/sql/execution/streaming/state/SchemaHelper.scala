@@ -19,13 +19,14 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.io.StringReader
 
-import org.apache.hadoop.fs.{FSDataInputStream, FSDataOutputStream}
-import org.json4s.JsonAST
+import org.apache.hadoop.fs.{FSDataInputStream, FSDataOutputStream, Path}
+import org.json4s.{DefaultFormats, JsonAST}
 import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods
 import org.json4s.jackson.JsonMethods.{compact, render}
 
-import org.apache.spark.sql.execution.streaming.MetadataVersionUtil
+import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, MetadataVersionUtil}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
@@ -34,7 +35,7 @@ class ColumnFamilyMetadataV1(
     val keySchema: StructType,
     val valueSchema: StructType,
     val keyStateEncoderSpec: KeyStateEncoderSpec,
-    val multipleValuesPerKey: Boolean) {
+    val multipleValuesPerKey: Boolean) extends Serializable {
     def jsonValue: JsonAST.JObject = {
         ("columnFamilyName" -> JString(columnFamilyName)) ~
         ("keySchema" -> keySchema.jsonValue) ~
@@ -91,13 +92,33 @@ object SchemaHelper {
     }
   }
 
-  class SchemaV3Reader {
-    def read(inputStream: FSDataInputStream): ColumnFamilyMetadataV1 = {
+  class SchemaV3Reader(
+      stateCheckpointPath: Path,
+      hadoopConf: org.apache.hadoop.conf.Configuration) {
+
+    private val schemaFilePath = SchemaV3Writer.getSchemaFilePath(stateCheckpointPath)
+
+    private lazy val fm = CheckpointFileManager.create(stateCheckpointPath, hadoopConf)
+    def read: List[String] = {
+      if (!fm.exists(schemaFilePath)) {
+          return List.empty
+      }
       val buf = new StringBuilder
-      val numMetadataChunks = inputStream.readInt()
-      (0 until numMetadataChunks).foreach(_ => buf.append(inputStream.readUTF()))
-      val colFamilyMetadataStr = buf.toString()
-      ColumnFamilyMetadataV1.fromString(colFamilyMetadataStr)
+      val inputStream = fm.open(schemaFilePath)
+      val numKeyChunks = inputStream.readInt()
+      (0 until numKeyChunks).foreach(_ => buf.append(inputStream.readUTF()))
+      val json = buf.toString()
+      val parsedJson = JsonMethods.parse(json)
+
+      implicit val formats = DefaultFormats
+      val deserializedList: List[Any] = parsedJson.extract[List[Any]]
+      assert(deserializedList.isInstanceOf[List[_]],
+        s"Expected List but got ${deserializedList.getClass}")
+      val columnFamilyMetadatas = deserializedList.asInstanceOf[List[Map[String, Any]]]
+      // Extract each JValue to StateVariableInfo
+      columnFamilyMetadatas.map { columnFamilyMetadata =>
+        columnFamilyMetadata("columnFamilyName").asInstanceOf[String]
+      }
     }
   }
 
@@ -178,33 +199,49 @@ object SchemaHelper {
     }
   }
 
+  object SchemaV3Writer {
+    def getSchemaFilePath(stateCheckpointPath: Path): Path = {
+      new Path(new Path(stateCheckpointPath, "_metadata"), "schema")
+    }
+  }
   /**
    * Schema writer for schema version 3. Because this writer writes out ColFamilyMetadatas
    * instead of key and value schemas, it is not compatible with the SchemaWriter interface.
    */
-  class SchemaV3Writer {
+  class SchemaV3Writer(
+      stateCheckpointPath: Path,
+      hadoopConf: org.apache.hadoop.conf.Configuration) {
     val version: Int = 3
+
+    private lazy val fm = CheckpointFileManager.create(stateCheckpointPath, hadoopConf)
+    private val schemaFilePath = SchemaV3Writer.getSchemaFilePath(stateCheckpointPath)
 
     // 2^16 - 1 bytes
     final val MAX_UTF_CHUNK_SIZE = 65535
 
-    def writeSchema(
-        metadatas: Array[ColumnFamilyMetadataV1],
-        outputStream: FSDataOutputStream): Unit = {
+    def writeSchema(metadatasJson: String): Unit = {
       val buf = new Array[Char](MAX_UTF_CHUNK_SIZE)
 
+      if (fm.exists(schemaFilePath)) return
+
+      fm.mkdirs(schemaFilePath.getParent)
+      val outputStream = fm.createAtomic(schemaFilePath, overwriteIfPossible = false)
       // DataOutputStream.writeUTF can't write a string at once
       // if the size exceeds 65535 (2^16 - 1) bytes.
       // Each metadata consists of multiple chunks in schema version 3.
-      metadatas.foreach{ metadata =>
-        val metadataJson = metadata.json
-        val numMetadataChunks = (metadataJson.length - 1) / MAX_UTF_CHUNK_SIZE + 1
-        val metadataStringReader = new StringReader(metadataJson)
+      try {
+        val numMetadataChunks = (metadatasJson.length - 1) / MAX_UTF_CHUNK_SIZE + 1
+        val metadataStringReader = new StringReader(metadatasJson)
         outputStream.writeInt(numMetadataChunks)
         (0 until numMetadataChunks).foreach { _ =>
           val numRead = metadataStringReader.read(buf, 0, MAX_UTF_CHUNK_SIZE)
           outputStream.writeUTF(new String(buf, 0, numRead))
         }
+        outputStream.close()
+      } catch {
+        case e: Throwable =>
+          outputStream.cancel()
+          throw e
       }
     }
   }
