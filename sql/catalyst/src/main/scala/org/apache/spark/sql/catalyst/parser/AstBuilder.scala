@@ -851,7 +851,9 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     // Create the attributes.
     val (attributes, schemaLess) = if (transformClause.colTypeList != null) {
       // Typed return columns.
-      (DataTypeUtils.toAttributes(createSchema(transformClause.colTypeList)), false)
+      val schema = createSchema(transformClause.colTypeList)
+      val replacedSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema)
+      (DataTypeUtils.toAttributes(replacedSchema), false)
     } else if (transformClause.identifierSeq != null) {
       // Untyped return columns.
       val attrs = visitIdentifierSeq(transformClause.identifierSeq).map { name =>
@@ -2191,6 +2193,17 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
         BitwiseXor(left, right)
       case SqlBaseParser.PIPE =>
         BitwiseOr(left, right)
+    }
+  }
+
+  override def visitShiftExpression(ctx: ShiftExpressionContext): Expression = withOrigin(ctx) {
+    val left = expression(ctx.left)
+    val right = expression(ctx.right)
+    val operator = ctx.shiftOperator().getChild(0).asInstanceOf[TerminalNode]
+    operator.getSymbol.getType match {
+      case SqlBaseParser.SHIFT_LEFT => ShiftLeft(left, right)
+      case SqlBaseParser.SHIFT_RIGHT => ShiftRight(left, right)
+      case SqlBaseParser.SHIFT_RIGHT_UNSIGNED => ShiftRightUnsigned(left, right)
     }
   }
 
@@ -5021,19 +5034,23 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   override def visitSchemaBinding(ctx: SchemaBindingContext): ViewSchemaMode = {
     if (ctx == null) {
       // No schema binding specified, return the session default
-      if (conf.viewSchemaBindingMode == "COMPENSATION") {
-        SchemaCompensation
+      if (conf.viewSchemaBindingEnabled) {
+        if (conf.viewSchemaCompensation) {
+          SchemaCompensation
+        } else {
+          SchemaBinding
+        }
       } else {
         SchemaUnsupported
       }
-    } else if (conf.viewSchemaBindingMode == "DISABLED") {
+    } else if (!conf.viewSchemaBindingEnabled) {
       // If the feature is disabled, throw an exception
       withOrigin(ctx) {
         throw new ParseException(
           errorClass = "FEATURE_NOT_ENABLED",
           messageParameters = Map("featureName" -> "VIEW ... WITH SCHEMA ...",
-            "configKey" -> "spark.sql.viewSchemaBindingMode",
-            "configValue" -> "COMPENSATION"),
+            "configKey" -> "spark.sql.legacy.viewSchemaBindingMode",
+            "configValue" -> "true"),
           ctx)
       }
     } else if (ctx.COMPENSATION != null) {

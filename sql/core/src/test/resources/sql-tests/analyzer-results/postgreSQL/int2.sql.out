@@ -274,14 +274,14 @@ Project [ AS five#x, f1#x, (cast(f1#x as double) / cast(cast(2 as int) as double
 -- !query
 SELECT string(shiftleft(smallint(-1), 15))
 -- !query analysis
-Project [cast(shiftleft(cast(cast(-1 as smallint) as int), 15) as string) AS shiftleft(-1, 15)#x]
+Project [cast((cast(cast(-1 as smallint) as int) << 15) as string) AS (-1 << 15)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT string(smallint(shiftleft(smallint(-1), 15))+1)
 -- !query analysis
-Project [cast((cast(cast(shiftleft(cast(cast(-1 as smallint) as int), 15) as smallint) as int) + 1) as string) AS (shiftleft(-1, 15) + 1)#x]
+Project [cast((cast(cast((cast(cast(-1 as smallint) as int) << 15) as smallint) as int) + 1) as string) AS ((-1 << 15) + 1)#x]
 +- OneRowRelation
 
 

@@ -30,8 +30,8 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import com.google.common.annotations.VisibleForTesting;
 
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 
 /**
  * A {@link TrustManager} implementation that reloads its configuration when
@@ -45,7 +45,8 @@ import org.apache.spark.internal.LoggerFactory;
 public final class ReloadingX509TrustManager
         implements X509TrustManager, Runnable {
 
-  private static final Logger logger = LoggerFactory.getLogger(ReloadingX509TrustManager.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(ReloadingX509TrustManager.class);
 
   private final String type;
   private final File file;

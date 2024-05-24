@@ -26,8 +26,8 @@ import java.util.Objects;
 import java.util.Set;
 
 import org.apache.spark.annotation.Experimental;
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
 import org.apache.spark.SparkIllegalArgumentException;
@@ -45,7 +45,8 @@ import org.apache.spark.SparkUnsupportedOperationException;
  */
 @Experimental
 public class CaseInsensitiveStringMap implements Map<String, String> {
-  private static final Logger logger = LoggerFactory.getLogger(CaseInsensitiveStringMap.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(CaseInsensitiveStringMap.class);
 
   public static CaseInsensitiveStringMap empty() {
     return new CaseInsensitiveStringMap(new HashMap<>(0));

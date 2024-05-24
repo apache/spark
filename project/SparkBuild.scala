@@ -266,7 +266,7 @@ object SparkBuild extends PomBuild {
       .orElse(sys.props.get("java.home").map { p => new File(p).getParentFile().getAbsolutePath() })
       .map(file),
     publishMavenStyle := true,
-    unidocGenjavadocVersion := "0.18",
+    unidocGenjavadocVersion := "0.19",
 
     // Override SBT's default resolvers:
     resolvers := Seq(

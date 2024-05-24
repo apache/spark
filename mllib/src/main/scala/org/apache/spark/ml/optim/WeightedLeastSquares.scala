@@ -124,13 +124,13 @@ private[ml] class WeightedLeastSquares(
     if (rawBStd == 0) {
       if (fitIntercept || rawBBar == 0.0) {
         if (rawBBar == 0.0) {
-          instr.logWarning(s"Mean and standard deviation of the label are zero, so the " +
-            s"coefficients and the intercept will all be zero; as a result, training is not " +
-            s"needed.")
+          instr.logWarning("Mean and standard deviation of the label are zero, so the " +
+            "coefficients and the intercept will all be zero; as a result, training is not " +
+            "needed.")
         } else {
-          instr.logWarning(s"The standard deviation of the label is zero, so the coefficients " +
-            s"will be zeros and the intercept will be the mean of the label; as a result, " +
-            s"training is not needed.")
+          instr.logWarning("The standard deviation of the label is zero, so the coefficients " +
+            "will be zeros and the intercept will be the mean of the label; as a result, " +
+            "training is not needed.")
         }
         val coefficients = new DenseVector(Array.ofDim(numFeatures))
         val intercept = rawBBar
@@ -139,8 +139,8 @@ private[ml] class WeightedLeastSquares(
       } else {
         require(!(regParam > 0.0 && standardizeLabel), "The standard deviation of the label is " +
           "zero. Model cannot be regularized when labels are standardized.")
-        instr.logWarning(s"The standard deviation of the label is zero. Consider setting " +
-          s"fitIntercept=true.")
+        instr.logWarning("The standard deviation of the label is zero. Consider setting " +
+          "fitIntercept=true.")
       }
     }
 

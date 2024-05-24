@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.analysis.TempResolvedColumn
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
@@ -437,5 +438,18 @@ class RewriteWithExpressionSuite extends PlanTest {
       val plan = testRelation.window(Seq(expr.as("col")), Seq(a), Nil)
       Optimizer.execute(plan)
     }
+  }
+
+  test("SPARK-48252: TempResolvedColumn in common expression") {
+    val a = testRelation.output.head
+    val tempResolved = TempResolvedColumn(a, Seq("a"))
+    val expr = With(tempResolved) { case Seq(ref) =>
+      ref === 1
+    }
+    val plan = testRelation.having($"b")(avg("a").as("a"))(expr).analyze
+    comparePlans(
+      Optimizer.execute(plan),
+      testRelation.groupBy($"b")(avg("a").as("a")).where($"a" === 1).analyze
+    )
   }
 }
