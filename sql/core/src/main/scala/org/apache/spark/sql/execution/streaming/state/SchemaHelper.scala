@@ -30,12 +30,18 @@ import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, Metadata
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
-class ColumnFamilyMetadataV1(
+sealed trait ColumnFamilyMetadata extends Serializable {
+  def jsonValue: JsonAST.JObject
+
+  def json: String
+}
+
+case class ColumnFamilyMetadataV1(
     val columnFamilyName: String,
     val keySchema: StructType,
     val valueSchema: StructType,
     val keyStateEncoderSpec: KeyStateEncoderSpec,
-    val multipleValuesPerKey: Boolean) extends Serializable {
+    val multipleValuesPerKey: Boolean) extends ColumnFamilyMetadata {
     def jsonValue: JsonAST.JObject = {
         ("columnFamilyName" -> JString(columnFamilyName)) ~
         ("keySchema" -> keySchema.json) ~
@@ -50,7 +56,7 @@ class ColumnFamilyMetadataV1(
 }
 
 object ColumnFamilyMetadataV1 {
-  def fromJson(json: List[Map[String, Any]]): List[ColumnFamilyMetadataV1] = {
+  def fromJson(json: List[Map[String, Any]]): List[ColumnFamilyMetadata] = {
     assert(json.isInstanceOf[List[_]])
 
     json.map { colFamilyMap =>
@@ -116,7 +122,7 @@ object SchemaHelper {
     private val schemaFilePath = SchemaV3Writer.getSchemaFilePath(stateCheckpointPath)
 
     private lazy val fm = CheckpointFileManager.create(stateCheckpointPath, hadoopConf)
-    def read: List[ColumnFamilyMetadataV1] = {
+    def read: List[ColumnFamilyMetadata] = {
       if (!fm.exists(schemaFilePath)) {
           return List.empty
       }

@@ -44,9 +44,9 @@ class ListStateImpl[S](
 
   private val stateTypesEncoder = StateTypesEncoder(keySerializer, valEncoder, stateName)
 
-  val columnFamilyMetadataV1 = new ColumnFamilyMetadataV1(
+  val columnFamilyMetadata = new ColumnFamilyMetadataV1(
     stateName, KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA, NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA), false)
-  store.createColFamilyIfAbsent(columnFamilyMetadataV1)
+  store.createColFamilyIfAbsent(columnFamilyMetadata)
 
   /** Whether state exists or not. */
    override def exists(): Boolean = {

@@ -34,11 +34,11 @@ class MapStateImpl[K, V](
   private val stateTypesEncoder = new CompositeKeyStateEncoder(
     keySerializer, userKeyEnc, valEncoder, COMPOSITE_KEY_ROW_SCHEMA, stateName)
 
-  val columnFamilyMetadataV1 = new ColumnFamilyMetadataV1(
+  val columnFamilyMetadata = new ColumnFamilyMetadataV1(
     stateName, COMPOSITE_KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA,
     PrefixKeyScanStateEncoderSpec(COMPOSITE_KEY_ROW_SCHEMA, 1), false)
 
-  store.createColFamilyIfAbsent(columnFamilyMetadataV1)
+  store.createColFamilyIfAbsent(columnFamilyMetadata)
 
   /** Whether state exists or not. */
   override def exists(): Boolean = {

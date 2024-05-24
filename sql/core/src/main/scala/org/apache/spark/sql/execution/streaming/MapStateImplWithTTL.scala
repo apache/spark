@@ -55,13 +55,13 @@ class MapStateImplWithTTL[K, V](
   private val ttlExpirationMs =
     StateTTL.calculateExpirationTimeForDuration(ttlConfig.ttlDuration, batchTimestampMs)
 
-  val columnFamilyMetadataV1 = new ColumnFamilyMetadataV1(
+  val columnFamilyMetadata = new ColumnFamilyMetadataV1(
     stateName, COMPOSITE_KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA_WITH_TTL,
     PrefixKeyScanStateEncoderSpec(COMPOSITE_KEY_ROW_SCHEMA, 1), false)
   initialize()
 
   private def initialize(): Unit = {
-    store.createColFamilyIfAbsent(columnFamilyMetadataV1)
+    store.createColFamilyIfAbsent(columnFamilyMetadata)
   }
 
   /** Whether state exists or not. */

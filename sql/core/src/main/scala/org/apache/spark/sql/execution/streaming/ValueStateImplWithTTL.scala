@@ -49,13 +49,13 @@ class ValueStateImplWithTTL[S](
   private val ttlExpirationMs =
     StateTTL.calculateExpirationTimeForDuration(ttlConfig.ttlDuration, batchTimestampMs)
 
-  val columnFamilyMetadataV1 = new ColumnFamilyMetadataV1(
+  val columnFamilyMetadata = new ColumnFamilyMetadataV1(
     stateName, KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA_WITH_TTL,
     NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA), false)
   initialize()
 
   private def initialize(): Unit = {
-    store.createColFamilyIfAbsent(columnFamilyMetadataV1)
+    store.createColFamilyIfAbsent(columnFamilyMetadata)
   }
 
   /** Function to check if state exists. Returns true if present and false otherwise */
