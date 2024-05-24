@@ -397,3 +397,24 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "hint" : ""
   }
 }
+
+
+-- !query
+select cast(null as array<array<int>>), 20181117 >> 2
+-- !query analysis
+Project [cast(null as array<array<int>>) AS NULL#x, (20181117 >> 2) AS (20181117 >> 2)#x]
++- OneRowRelation
+
+
+-- !query
+select cast(null as array<array<int>>), 20181117 >>> 2
+-- !query analysis
+Project [cast(null as array<array<int>>) AS NULL#x, (20181117 >>> 2) AS (20181117 >>> 2)#x]
++- OneRowRelation
+
+
+-- !query
+select cast(null as map<int, array<int>>), 20181117 >> 2
+-- !query analysis
+Project [cast(null as map<int,array<int>>) AS NULL#x, (20181117 >> 2) AS (20181117 >> 2)#x]
++- OneRowRelation

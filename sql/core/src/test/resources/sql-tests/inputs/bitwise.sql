@@ -84,4 +84,6 @@ SELECT 20181117 < < 2;
 SELECT 20181117 > >> 2;
 SELECT 20181117 <<< 2;
 SELECT 20181117 >>>> 2;
-
+select cast(null as array<array<int>>), 20181117 >> 2;
+select cast(null as array<array<int>>), 20181117 >>> 2;
+select cast(null as map<int, array<int>>), 20181117 >> 2;

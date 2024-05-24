@@ -426,3 +426,27 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "hint" : ""
   }
 }
+
+
+-- !query
+select cast(null as array<array<int>>), 20181117 >> 2
+-- !query schema
+struct<NULL:array<array<int>>,(20181117 >> 2):int>
+-- !query output
+NULL	5045279
+
+
+-- !query
+select cast(null as array<array<int>>), 20181117 >>> 2
+-- !query schema
+struct<NULL:array<array<int>>,(20181117 >>> 2):int>
+-- !query output
+NULL	5045279
+
+
+-- !query
+select cast(null as map<int, array<int>>), 20181117 >> 2
+-- !query schema
+struct<NULL:map<int,array<int>>,(20181117 >> 2):int>
+-- !query output
+NULL	5045279
