@@ -98,7 +98,7 @@ Input [4]: [i_category#9, i_class#10, spark_grouping_id#11, sum#13]
 Keys [3]: [i_category#9, i_class#10, spark_grouping_id#11]
 Functions [1]: [sum(UnscaledValue(ws_net_paid#2))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ws_net_paid#2))#14]
-Results [7]: [MakeDecimal(sum(UnscaledValue(ws_net_paid#2))#14,17,2) AS total_sum#15, i_category#9, i_class#10, (cast((shiftright(spark_grouping_id#11, 1) & 1) as tinyint) + cast((shiftright(spark_grouping_id#11, 0) & 1) as tinyint)) AS lochierarchy#16, MakeDecimal(sum(UnscaledValue(ws_net_paid#2))#14,17,2) AS _w0#17, (cast((shiftright(spark_grouping_id#11, 1) & 1) as tinyint) + cast((shiftright(spark_grouping_id#11, 0) & 1) as tinyint)) AS _w1#18, CASE WHEN (cast((shiftright(spark_grouping_id#11, 0) & 1) as tinyint) = 0) THEN i_category#9 END AS _w2#19]
+Results [7]: [MakeDecimal(sum(UnscaledValue(ws_net_paid#2))#14,17,2) AS total_sum#15, i_category#9, i_class#10, (cast(((spark_grouping_id#11 >> 1) & 1) as tinyint) + cast(((spark_grouping_id#11 >> 0) & 1) as tinyint)) AS lochierarchy#16, MakeDecimal(sum(UnscaledValue(ws_net_paid#2))#14,17,2) AS _w0#17, (cast(((spark_grouping_id#11 >> 1) & 1) as tinyint) + cast(((spark_grouping_id#11 >> 0) & 1) as tinyint)) AS _w1#18, CASE WHEN (cast(((spark_grouping_id#11 >> 0) & 1) as tinyint) = 0) THEN i_category#9 END AS _w2#19]
 
 (17) Exchange
 Input [7]: [total_sum#15, i_category#9, i_class#10, lochierarchy#16, _w0#17, _w1#18, _w2#19]

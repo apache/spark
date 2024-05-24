@@ -335,7 +335,7 @@ Input [4]: [ws_item_sk#97, ws_web_site_sk#98, ws_order_number#99, ws_sold_date_s
 
 (53) BroadcastExchange
 Input [3]: [ws_item_sk#97, ws_web_site_sk#98, ws_order_number#99]
-Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[0, int, true] as bigint), 32) | (cast(input[2, int, true] as bigint) & 4294967295))),false), [plan_id=5]
+Arguments: HashedRelationBroadcastMode(List(((cast(input[0, int, true] as bigint) << 32) | (cast(input[2, int, true] as bigint) & 4294967295))),false), [plan_id=5]
 
 (54) BroadcastHashJoin [codegen id : 15]
 Left keys [2]: [wr_item_sk#92, wr_order_number#93]
