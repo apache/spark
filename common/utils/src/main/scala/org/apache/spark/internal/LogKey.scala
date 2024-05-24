@@ -50,8 +50,8 @@ object LogKeys {
   case object APP_STATE extends LogKey
   case object ARCHIVE_NAME extends LogKey
   case object ARGS extends LogKey
-  case object AUTH_ENABLED extends LogKey
   case object ATTRIBUTE_MAP extends LogKey
+  case object AUTH_ENABLED extends LogKey
   case object BACKUP_FILE extends LogKey
   case object BARRIER_EPOCH extends LogKey
   case object BARRIER_ID extends LogKey
@@ -364,9 +364,9 @@ object LogKeys {
   case object MINI_BATCH_FRACTION extends LogKey
   case object MIN_COMPACTION_BATCH_ID extends LogKey
   case object MIN_FREQUENT_PATTERN_COUNT extends LogKey
-  case object MIN_REGISTER_RATIO extends LogKey
   case object MIN_NUM_FREQUENT_PATTERN extends LogKey
   case object MIN_POINT_PER_CLUSTER extends LogKey
+  case object MIN_REGISTER_RATIO extends LogKey
   case object MIN_SHARE extends LogKey
   case object MIN_SIZE extends LogKey
   case object MIN_TIME extends LogKey
@@ -476,9 +476,9 @@ object LogKeys {
   case object NUM_SUB_DIRS extends LogKey
   case object NUM_TASKS extends LogKey
   case object NUM_TASK_CPUS extends LogKey
+  case object NUM_TRAIN_WORD extends LogKey
   case object NUM_UNEXPECTEDLY_EXIT extends LogKey
   case object NUM_UNFINISHED_DECOMMISSION extends LogKey
-  case object NUM_TRAIN_WORD extends LogKey
   case object NUM_VERSIONS_RETAIN extends LogKey
   case object NUM_WEIGHTED_EXAMPLES extends LogKey
   case object OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD extends LogKey
@@ -546,8 +546,8 @@ object LogKeys {
   case object PYTHON_VERSION extends LogKey
   case object PYTHON_WORKER_MODULE extends LogKey
   case object PYTHON_WORKER_RESPONSE extends LogKey
-  case object QUERY_CACHE_VALUE extends LogKey
   case object QUANTILES extends LogKey
+  case object QUERY_CACHE_VALUE extends LogKey
   case object QUERY_HINT extends LogKey
   case object QUERY_ID extends LogKey
   case object QUERY_PLAN extends LogKey
@@ -556,8 +556,8 @@ object LogKeys {
   case object QUERY_PLAN_LENGTH_MAX extends LogKey
   case object QUERY_RUN_ID extends LogKey
   case object RANGE extends LogKey
-  case object RDD_CREATION_SITE extends LogKey
   case object RDD_CHECKPOINT_DIR extends LogKey
+  case object RDD_CREATION_SITE extends LogKey
   case object RDD_DEBUG_STRING extends LogKey
   case object RDD_DESCRIPTION extends LogKey
   case object RDD_ID extends LogKey
@@ -573,8 +573,8 @@ object LogKeys {
   case object REDACTED_STATEMENT extends LogKey
   case object REDUCE_ID extends LogKey
   case object REGEX extends LogKey
-  case object REGISTER_MERGE_RESULT extends LogKey
   case object REGISTERED_EXECUTOR_FILE extends LogKey
+  case object REGISTER_MERGE_RESULT extends LogKey
   case object RELATION_NAME extends LogKey
   case object RELATION_OUTPUT extends LogKey
   case object RELATIVE_TOLERANCE extends LogKey
@@ -592,10 +592,10 @@ object LogKeys {
   case object RESOURCE_PROFILE_TO_TOTAL_EXECS extends LogKey
   case object RESPONSE extends LogKey
   case object RESPONSE_BODY_SIZE extends LogKey
+  case object REST_PROTOCOL_RESPONSE_MESSAGE_TYPE extends LogKey
   case object RESULT extends LogKey
   case object RESULT_SIZE_BYTES extends LogKey
   case object RESULT_SIZE_BYTES_MAX extends LogKey
-  case object REST_PROTOCOL_RESPONSE_MESSAGE_TYPE extends LogKey
   case object RETRY_COUNT extends LogKey
   case object RETRY_INTERVAL extends LogKey
   case object RETRY_WAIT_TIME extends LogKey
@@ -654,8 +654,8 @@ object LogKeys {
   case object SQL_TEXT extends LogKey
   case object SRC_PATH extends LogKey
   case object STAGE extends LogKey
-  case object STAGES extends LogKey
   case object STAGE2 extends LogKey
+  case object STAGES extends LogKey
   case object STAGE_ATTEMPT extends LogKey
   case object STAGE_ATTEMPT_ID extends LogKey
   case object STAGE_ATTEMPT_NUMBER extends LogKey
@@ -758,8 +758,8 @@ object LogKeys {
   case object URI extends LogKey
   case object URIS extends LogKey
   case object URL extends LogKey
-  case object URLS extends LogKey
   case object URL2 extends LogKey
+  case object URLS extends LogKey
   case object USER_ID extends LogKey
   case object USER_NAME extends LogKey
   case object UUID extends LogKey
@@ -774,8 +774,8 @@ object LogKeys {
   case object WEIGHT extends LogKey
   case object WORKER extends LogKey
   case object WORKER_HOST extends LogKey
-  case object WORKER_MEMORY extends LogKey
   case object WORKER_ID extends LogKey
+  case object WORKER_MEMORY extends LogKey
   case object WORKER_PORT extends LogKey
   case object WORKER_URL extends LogKey
   case object WRITE_AHEAD_LOG_INFO extends LogKey
