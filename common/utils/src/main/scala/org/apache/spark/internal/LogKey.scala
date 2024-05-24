@@ -585,7 +585,6 @@ object LogKeys {
   case object SESSION_KEY extends LogKey
   case object SET_CLIENT_INFO_REQUEST extends LogKey
   case object SHARD_ID extends LogKey
-  case object SHELL_OPTIONS extends LogKey
   case object SHORT_USER_NAME extends LogKey
   case object SHUFFLE_BLOCK_INFO extends LogKey
   case object SHUFFLE_DB_BACKEND_KEY extends LogKey
