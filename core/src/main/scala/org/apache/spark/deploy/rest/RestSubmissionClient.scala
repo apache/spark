@@ -109,8 +109,9 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
 
   /** Request that the server kill the specified submission. */
   def killSubmission(submissionId: String): SubmitRestProtocolResponse = {
-    logInfo(log"Submitting a request to kill submission" +
-      log" ${MDC(SUBMISSION_ID, submissionId)} in ${MDC(MASTER_URL, master)}}.")
+    logInfo(log"Submitting a request to kill submission " +
+      log"${MDC(SUBMISSION_ID, submissionId)} in " +
+      log"${MDC(MASTER_URL, master)}.")
     var handled: Boolean = false
     var response: SubmitRestProtocolResponse = null
     for (m <- masters if !handled) {
@@ -228,8 +229,9 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
   def requestSubmissionStatus(
       submissionId: String,
       quiet: Boolean = false): SubmitRestProtocolResponse = {
-    logInfo(log"Submitting a request for the status of submission" +
-      log" ${MDC(SUBMISSION_ID, submissionId)} in ${MDC(MASTER_URL, master)}.")
+      logInfo(log"Submitting a request for the status of submission " +
+      log"${MDC(SUBMISSION_ID, submissionId)} in " +
+      log"${MDC(MASTER_URL, master)}.")
 
     var handled: Boolean = false
     var response: SubmitRestProtocolResponse = null
@@ -442,8 +444,8 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
     if (submitResponse.success) {
       val submissionId = submitResponse.submissionId
       if (submissionId != null) {
-        logInfo(log"Submission successfully created as" +
-          log" ${MDC(SUBMISSION_ID, submissionId)}. Polling submission state...")
+        logInfo(log"Submission successfully created as ${MDC(SUBMISSION_ID, submissionId)}. " +
+          log"Polling submission state...")
         pollSubmissionStatus(submissionId)
       } else {
         // should never happen
@@ -473,15 +475,17 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
         val exception = Option(statusResponse.message)
         // Log driver state, if present
         driverState match {
-          case Some(state) => logInfo(log"State of driver ${MDC(SUBMISSION_ID, submissionId)}" +
-            log" is now ${MDC(DRIVER_STATE, state)}.")
+          case Some(state) =>
+            logInfo(log"State of driver ${MDC(SUBMISSION_ID, submissionId)} is now " +
+              log"${MDC(DRIVER_STATE, state)}.")
           case _ =>
             logError(log"State of driver ${MDC(SUBMISSION_ID, submissionId)} was not found!")
         }
         // Log worker node, if present
         (workerId, workerHostPort) match {
-          case (Some(id), Some(hp)) => logInfo(log"Driver is running on worker" +
-            log" ${MDC(WORKER_ID, id)} at ${MDC(HOST_PORT, hp)}.")
+          case (Some(id), Some(hp)) =>
+            logInfo(
+              log"Driver is running on worker ${MDC(WORKER_ID, id)} at ${MDC(HOST_PORT, hp)}.")
           case _ =>
         }
         // Log exception stack trace, if present
@@ -495,9 +499,8 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
 
   /** Log the response sent by the server in the REST application submission protocol. */
   private def handleRestResponse(response: SubmitRestProtocolResponse): Unit = {
-    logInfo(log"Server responded with" +
-      log" ${MDC(REST_PROTOCOL_RESPONSE_MESSAGE_TYPE, response.messageType)}:\n" +
-      log"${MDC(RESPONSE, response.toJson)}")
+    logInfo(log"Server responded with ${MDC(CLASS_NAME, response.messageType)}:\n" +
+      log"${MDC(RESULT, response.toJson)}")
   }
 
   /** Log an appropriate error if the response sent by the server is not of the expected type. */

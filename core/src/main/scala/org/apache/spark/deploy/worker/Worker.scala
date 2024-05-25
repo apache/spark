@@ -38,7 +38,6 @@ import org.apache.spark.deploy.StandaloneResourceUtils._
 import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.deploy.worker.ui.WorkerWebUI
 import org.apache.spark.internal.{config, Logging, MDC}
-import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.internal.config.UI._
@@ -75,7 +74,7 @@ private[deploy] class Worker(
   if (conf.get(config.DECOMMISSION_ENABLED)) {
     val signal = conf.get(config.Worker.WORKER_DECOMMISSION_SIGNAL)
     logInfo(log"Registering SIG${MDC(SIGNAL, signal)} handler to trigger decommissioning.")
-    SignalUtils.register(signal, log"Failed to register SIG${MDC(LogKeys.SIGNAL, signal)} " +
+    SignalUtils.register(signal, log"Failed to register SIG${MDC(SIGNAL, signal)} " +
       log"handler - disabling worker decommission feature.") {
        self.send(WorkerDecommissionSigReceived)
        true
@@ -106,10 +105,12 @@ private[deploy] class Worker(
   private val INITIAL_REGISTRATION_RETRIES = conf.get(WORKER_INITIAL_REGISTRATION_RETRIES)
   private val TOTAL_REGISTRATION_RETRIES = conf.get(WORKER_MAX_REGISTRATION_RETRIES)
   if (INITIAL_REGISTRATION_RETRIES > TOTAL_REGISTRATION_RETRIES) {
-    logInfo(log"${MDC(KEY, WORKER_INITIAL_REGISTRATION_RETRIES.key)}" +
-      log" (${MDC(LogKeys.INITIAL_REGISTRATION_RETRIES, INITIAL_REGISTRATION_RETRIES)} is" +
-      log" capped by ${MDC(KEY2, WORKER_MAX_REGISTRATION_RETRIES.key)}" +
-      log" (${MDC(LogKeys.TOTAL_REGISTRATION_RETRIES, TOTAL_REGISTRATION_RETRIES)})")
+    logInfo(
+      log"${MDC(CONFIG, WORKER_INITIAL_REGISTRATION_RETRIES.key)} " +
+      log"(${MDC(VALUE, INITIAL_REGISTRATION_RETRIES)}) is capped by " +
+      log"${MDC(CONFIG2, WORKER_MAX_REGISTRATION_RETRIES.key)} " +
+      log"(${MDC(MAX_ATTEMPTS, TOTAL_REGISTRATION_RETRIES)})"
+      )
   }
   private val FUZZ_MULTIPLIER_INTERVAL_LOWER_BOUND = 0.500
   private val REGISTRATION_RETRY_FUZZ_MULTIPLIER = {
@@ -238,9 +239,9 @@ private[deploy] class Worker(
 
   override def onStart(): Unit = {
     assert(!registered)
-    logInfo(log"Starting Spark worker ${MDC(HOST, host)}:${MDC(PORT, port)} with" +
-      log" ${MDC(NUM_CORES, cores)} cores," +
-      log" ${MDC(WORKER_MEMORY, Utils.megabytesToString(memory))} RAM")
+    logInfo(log"Starting Spark worker ${MDC(HOST, host)}:${MDC(PORT, port)} " +
+      log"with ${MDC(NUM_CORES, cores)} cores, " +
+      log"${MDC(MEMORY_SIZE, Utils.megabytesToString(memory))} RAM")
     logInfo(log"Running Spark version ${MDC(SPARK_VERSION, org.apache.spark.SPARK_VERSION)}")
     logInfo(log"Spark home: ${MDC(PATH, sparkHome)}")
     createWorkDir()
@@ -303,8 +304,8 @@ private[deploy] class Worker(
     master = Some(masterRef)
     connected = true
     if (reverseProxy) {
-      logInfo(log"WorkerWebUI is available at" +
-        log" ${MDC(WEB_URL, activeMasterWebUiUrl.stripSuffix("/"))}" +
+      logInfo(
+        log"WorkerWebUI is available at ${MDC(WEB_URL, activeMasterWebUiUrl.stripSuffix("/"))}" +
         log"/proxy/${MDC(WORKER_ID, workerId)}")
       // if reverseProxyUrl is not set, then we continue to generate relative URLs
       // starting with "/" throughout the UI and do not use activeMasterWebUiUrl
@@ -346,8 +347,8 @@ private[deploy] class Worker(
       if (registered) {
         cancelLastRegistrationRetry()
       } else if (connectionAttemptCount <= TOTAL_REGISTRATION_RETRIES) {
-        logInfo(log"Retrying connection to master" +
-          log" (attempt # ${MDC(COUNT, connectionAttemptCount)})")
+        logInfo(log"Retrying connection to master (attempt # " +
+          log"${MDC(NUM_ATTEMPT, connectionAttemptCount)})")
         /**
          * Re-register with the active master this worker has been communicating with. If there
          * is none, then it means this worker is still bootstrapping and hasn't established a
@@ -495,8 +496,9 @@ private[deploy] class Worker(
           () => Utils.tryLogNonFatalError { self.send(SendHeartbeat) },
           0, HEARTBEAT_MILLIS, TimeUnit.MILLISECONDS)
         if (CLEANUP_ENABLED) {
-          logInfo(log"Worker cleanup enabled; old application directories will be deleted in:" +
-            log" ${MDC(PATH, workDir)}")
+          logInfo(
+            log"Worker cleanup enabled; old application directories will be deleted in: " +
+            log"${MDC(PATH, workDir)}")
           forwardMessageScheduler.scheduleAtFixedRate(
             () => Utils.tryLogNonFatalError { self.send(WorkDirCleanup) },
             CLEANUP_INTERVAL_MILLIS, CLEANUP_INTERVAL_MILLIS, TimeUnit.MILLISECONDS)
@@ -567,7 +569,8 @@ private[deploy] class Worker(
       }
 
     case MasterChanged(masterRef, masterWebUiUrl) =>
-      logInfo(log"Master has changed, new master is at ${MDC(URL, masterRef.address.toSparkURL)}")
+      logInfo(log"Master has changed, new master is at " +
+        log"${MDC(MASTER_URL, masterRef.address.toSparkURL)}")
       changeMaster(masterRef, masterWebUiUrl, masterRef.address)
 
       val executorResponses = executors.values.map { e =>
@@ -580,8 +583,8 @@ private[deploy] class Worker(
         workerId, executorResponses.toList, driverResponses.toSeq))
 
     case ReconnectWorker(masterUrl) =>
-      logInfo(log"Master with url ${MDC(MASTER_URL, masterUrl)}" +
-        log" requested this worker to reconnect.")
+      logInfo(
+        log"Master with url ${MDC(MASTER_URL, masterUrl)} requested this worker to reconnect.")
       registerWithMaster()
 
     case LaunchExecutor(masterUrl, appId, execId, rpId, appDesc, cores_, memory_, resources_) =>
@@ -593,7 +596,7 @@ private[deploy] class Worker(
       } else {
         try {
           logInfo(log"Asked to launch executor ${MDC(APP_ID, appId)}/${MDC(EXECUTOR_ID, execId)}" +
-            log" for ${MDC(APP_NAME, appDesc.name)}")
+            log" for ${MDC(APP_DESC, appDesc.name)}")
 
           // Create the executor's working directory
           val executorDir = new File(workDir, appId + "/" + execId)
@@ -652,8 +655,8 @@ private[deploy] class Worker(
         } catch {
           case e: Exception =>
             logError(
-              log"Failed to launch executor ${MDC(APP_ID, appId)}/${MDC(EXECUTOR_ID, execId)} " +
-                log"for ${MDC(APP_DESC, appDesc.name)}.", e)
+              log"Failed to launch executor ${MDC(APP_ID, appId)}/" +
+              log"${MDC(EXECUTOR_ID, execId)} for ${MDC(APP_DESC, appDesc.name)}.", e)
             if (executors.contains(appId + "/" + execId)) {
               executors(appId + "/" + execId).kill()
               executors -= appId + "/" + execId
@@ -910,8 +913,7 @@ private[deploy] class Worker(
       case DriverState.KILLED =>
         logInfo(log"Driver ${MDC(DRIVER_ID, driverId)} was killed by user")
       case _ =>
-        logDebug(log"Driver ${MDC(DRIVER_ID, driverId)} changed state" +
-          log" to ${MDC(DRIVER_STATE, state)}")
+        logDebug(s"Driver $driverId changed state to $state")
     }
     sendToMaster(driverStateChanged)
     val driver = drivers.remove(driverId).get
@@ -929,13 +931,22 @@ private[deploy] class Worker(
     if (ExecutorState.isFinished(state)) {
       val appId = executorStateChanged.appId
       val fullId = appId + "/" + executorStateChanged.execId
-      val message = executorStateChanged.message.map("message " + _).getOrElse("")
-      val exitStatus = executorStateChanged.exitStatus.map("exitStatus " + _).getOrElse("")
+      val message = executorStateChanged.message match {
+        case Some(msg) =>
+          log" message ${MDC(MESSAGE, msg)}"
+        case None =>
+          log""
+      }
+      val exitStatus = executorStateChanged.exitStatus match {
+        case Some(status) =>
+          log" exitStatus ${MDC(EXIT_CODE, status)}"
+        case None =>
+          log""
+      }
       executors.get(fullId) match {
         case Some(executor) =>
-          logInfo(log"Executor ${MDC(EXECUTOR_ID, fullId)}" +
-            log" finished with state ${MDC(EXECUTOR_STATE, state)}" +
-            log" ${MDC(MESSAGE, message)} ${MDC(STATUS, exitStatus)}")
+          logInfo(log"Executor ${MDC(EXECUTOR_ID, fullId)} finished with state " +
+            log"${MDC(EXECUTOR_STATE, state)}" + message + exitStatus)
           executors -= fullId
           finishedExecutors(fullId) = executor
           trimFinishedExecutorsIfNecessary()
@@ -947,9 +958,8 @@ private[deploy] class Worker(
             shuffleService.executorRemoved(executorStateChanged.execId.toString, appId)
           }
         case None =>
-          logInfo(log"Unknown Executor ${MDC(EXECUTOR_ID, fullId)}" +
-            log" finished with state ${MDC(EXECUTOR_STATE, state)}" +
-            log" ${MDC(MESSAGE, message)} ${MDC(STATUS, exitStatus)}")
+          logInfo(log"Unknown Executor ${MDC(EXECUTOR_ID, fullId)} finished with state " +
+            log"${MDC(EXECUTOR_STATE, state)}" + message + exitStatus)
       }
       maybeCleanupApplication(appId)
     }

@@ -1756,13 +1756,45 @@ _atomic_types: List[Type[DataType]] = [
     TimestampNTZType,
     NullType,
     VariantType,
+    YearMonthIntervalType,
+    DayTimeIntervalType,
 ]
-_all_atomic_types: Dict[str, Type[DataType]] = dict((t.typeName(), t) for t in _atomic_types)
 
-_complex_types: List[Type[Union[ArrayType, MapType, StructType]]] = [ArrayType, MapType, StructType]
-_all_complex_types: Dict[str, Type[Union[ArrayType, MapType, StructType]]] = dict(
-    (v.typeName(), v) for v in _complex_types
-)
+_complex_types: List[Type[Union[ArrayType, MapType, StructType]]] = [
+    ArrayType,
+    MapType,
+    StructType,
+]
+_all_complex_types: Dict[str, Type[Union[ArrayType, MapType, StructType]]] = {
+    "array": ArrayType,
+    "map": MapType,
+    "struct": StructType,
+}
+
+# Datatypes that can be directly parsed by mapping a json string without regex.
+# This dict should be only used in json parsing.
+# Note that:
+# 1, CharType and VarcharType are not listed here, since they need regex;
+# 2, DecimalType can be parsed by both mapping ('decimal') and regex ('decimal(10, 2)');
+# 3, CalendarIntervalType is not an atomic type, but can be mapped by 'interval';
+_all_mappable_types: Dict[str, Type[DataType]] = {
+    "string": StringType,
+    "binary": BinaryType,
+    "boolean": BooleanType,
+    "decimal": DecimalType,
+    "float": FloatType,
+    "double": DoubleType,
+    "byte": ByteType,
+    "short": ShortType,
+    "integer": IntegerType,
+    "long": LongType,
+    "date": DateType,
+    "timestamp": TimestampType,
+    "timestamp_ntz": TimestampNTZType,
+    "void": NullType,
+    "variant": VariantType,
+    "interval": CalendarIntervalType,
+}
 
 _LENGTH_CHAR = re.compile(r"char\(\s*(\d+)\s*\)")
 _LENGTH_VARCHAR = re.compile(r"varchar\(\s*(\d+)\s*\)")
@@ -1887,11 +1919,8 @@ def _parse_datatype_json_string(json_string: str) -> DataType:
     ...     python_datatype = _parse_datatype_json_string(scala_datatype.json())
     ...     assert datatype == python_datatype
     ...
-    >>> for cls in _all_atomic_types.values():
-    ...     if cls is not VarcharType and cls is not CharType:
-    ...         check_datatype(cls())
-    ...     else:
-    ...         check_datatype(cls(1))
+    >>> for cls in _all_mappable_types.values():
+    ...     check_datatype(cls())
 
     >>> # Simple ArrayType.
     >>> simple_arraytype = ArrayType(StringType(), True)
@@ -1938,14 +1967,12 @@ def _parse_datatype_json_value(
     collationsMap: Optional[Dict[str, str]] = None,
 ) -> DataType:
     if not isinstance(json_value, dict):
-        if json_value in _all_atomic_types.keys():
+        if json_value in _all_mappable_types.keys():
             if collationsMap is not None and fieldPath in collationsMap:
                 _assert_valid_type_for_collation(fieldPath, json_value, collationsMap)
                 collation_name = collationsMap[fieldPath]
                 return StringType(collation_name)
-            return _all_atomic_types[json_value]()
-        elif json_value == "decimal":
-            return DecimalType()
+            return _all_mappable_types[json_value]()
         elif _FIXED_DECIMAL.match(json_value):
             m = _FIXED_DECIMAL.match(json_value)
             return DecimalType(int(m.group(1)), int(m.group(2)))  # type: ignore[union-attr]
@@ -1965,8 +1992,6 @@ def _parse_datatype_json_value(
             if first_field is not None and second_field is None:
                 return YearMonthIntervalType(first_field)
             return YearMonthIntervalType(first_field, second_field)
-        elif json_value == "interval":
-            return CalendarIntervalType()
         elif _LENGTH_CHAR.match(json_value):
             m = _LENGTH_CHAR.match(json_value)
             return CharType(int(m.group(1)))  # type: ignore[union-attr]

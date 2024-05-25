@@ -111,8 +111,8 @@ private[scheduler] class HealthTracker (
       val execsToInclude = executorIdToExcludedStatus.filter(_._2.expiryTime < now).keys
       if (execsToInclude.nonEmpty) {
         // Include any executors that have been excluded longer than the excludeOnFailure timeout.
-        logInfo(log"Removing executors ${MDC(EXECUTOR_IDS, execsToInclude)} from exclude" +
-          log" list because the executors have reached the timed out")
+        logInfo(log"Removing executors ${MDC(EXECUTOR_IDS, execsToInclude)} from " +
+          log"exclude list because the executors have reached the timed out")
         execsToInclude.foreach { exec =>
           val status = executorIdToExcludedStatus.remove(exec).get
           val failedExecsOnNode = nodeToExcludedExecs(status.node)
@@ -128,8 +128,8 @@ private[scheduler] class HealthTracker (
       val nodesToInclude = nodeIdToExcludedExpiryTime.filter(_._2 < now).keys
       if (nodesToInclude.nonEmpty) {
         // Include any nodes that have been excluded longer than the excludeOnFailure timeout.
-        logInfo(log"Removing nodes ${MDC(NODE_IDS, nodesToInclude)} from exclude" +
-          log" list because the nodes have reached has timed out")
+        logInfo(log"Removing nodes ${MDC(NODES, nodesToInclude)} from exclude list because the " +
+          log"nodes have reached has timed out")
         nodesToInclude.foreach { node =>
           nodeIdToExcludedExpiryTime.remove(node)
           // post both to keep backwards compatibility
@@ -158,23 +158,23 @@ private[scheduler] class HealthTracker (
 
   private def killExecutor(exec: String, msg: String): Unit = {
     val fullMsg = if (EXCLUDE_ON_FAILURE_DECOMMISSION_ENABLED) {
-      log"${MDC(MESSAGE, msg)} (actually decommissioning)"
+      s"${msg} (actually decommissioning)"
     } else {
-      log"${MDC(MESSAGE, msg)}"
+      msg
     }
     allocationClient match {
       case Some(a) =>
         logInfo(fullMsg)
         if (EXCLUDE_ON_FAILURE_DECOMMISSION_ENABLED) {
-          a.decommissionExecutor(exec, ExecutorDecommissionInfo(fullMsg.message),
+          a.decommissionExecutor(exec, ExecutorDecommissionInfo(fullMsg),
             adjustTargetNumExecutors = false)
         } else {
           a.killExecutors(Seq(exec), adjustTargetNumExecutors = false, countFailures = false,
             force = true)
         }
       case None =>
-        logInfo(log"Not attempting to kill excluded executor id ${MDC(EXECUTOR_ID, exec)} " +
-          log"since allocation client is not defined.")
+        logInfo(log"Not attempting to kill excluded executor id ${MDC(EXECUTOR_ID, exec)}" +
+          log" since allocation client is not defined.")
     }
   }
 
@@ -197,13 +197,14 @@ private[scheduler] class HealthTracker (
         case Some(a) =>
           if (EXCLUDE_ON_FAILURE_DECOMMISSION_ENABLED) {
             logInfo(log"Decommissioning all executors on excluded host ${MDC(HOST, node)} " +
-              log"since ${MDC(KEY, config.EXCLUDE_ON_FAILURE_KILL_ENABLED.key)} is set.")
+              log"since ${MDC(CONFIG, config.EXCLUDE_ON_FAILURE_KILL_ENABLED.key)} " +
+              log"is set.")
             if (!a.decommissionExecutorsOnHost(node)) {
               logError(log"Decommissioning executors on ${MDC(HOST, node)} failed.")
             }
           } else {
             logInfo(log"Killing all executors on excluded host ${MDC(HOST, node)} " +
-              log"since ${MDC(KEY, config.EXCLUDE_ON_FAILURE_KILL_ENABLED.key)} is set.")
+              log"since ${MDC(CONFIG, config.EXCLUDE_ON_FAILURE_KILL_ENABLED.key)} is set.")
             if (!a.killExecutorsOnHost(node)) {
               logError(log"Killing executors on node ${MDC(HOST, node)} failed.")
             }
@@ -231,8 +232,8 @@ private[scheduler] class HealthTracker (
 
       if (conf.get(config.SHUFFLE_SERVICE_ENABLED)) {
         if (!nodeIdToExcludedExpiryTime.contains(host)) {
-          logInfo(log"excluding node ${MDC(HOST, host)} due to fetch failure of" +
-            log" external shuffle service")
+          logInfo(log"excluding node ${MDC(HOST, host)} due to fetch failure of " +
+            log"external shuffle service")
 
           nodeIdToExcludedExpiryTime.put(host, expiryTimeForNewExcludes)
           // post both to keep backwards compatibility
@@ -281,8 +282,8 @@ private[scheduler] class HealthTracker (
       // some of the logic around expiry times a little more confusing.  But it also wouldn't be a
       // problem to re-exclude, with a later expiry time.
       if (newTotal >= MAX_FAILURES_PER_EXEC && !executorIdToExcludedStatus.contains(exec)) {
-        logInfo(log"Excluding executor id: ${MDC(EXECUTOR_ID, exec)} because" +
-          log" it has ${MDC(NUM_FAILURES, newTotal)} task failures in successful task sets")
+        logInfo(log"Excluding executor id: ${MDC(EXECUTOR_ID, exec)} because it has " +
+          log"${MDC(TOTAL, newTotal)} task failures in successful task sets")
         val node = failuresInTaskSet.node
         executorIdToExcludedStatus.put(exec, ExcludedExecutor(node, expiryTimeForNewExcludes))
         // post both to keep backwards compatibility
@@ -300,9 +301,9 @@ private[scheduler] class HealthTracker (
         // time.
         if (excludedExecsOnNode.size >= MAX_FAILED_EXEC_PER_NODE &&
             !nodeIdToExcludedExpiryTime.contains(node)) {
-          logInfo(log"Excluding node ${MDC(HOST, node)} because it has" +
-            log" ${MDC(NUM_EXECUTORS, excludedExecsOnNode.size)} " +
-            log"executors excluded: ${MDC(EXECUTOR_IDS, excludedExecsOnNode)}")
+          logInfo(log"Excluding node ${MDC(HOST, node)} because it has " +
+            log"${MDC(NUM_EXECUTORS, excludedExecsOnNode.size)} executors " +
+            log"excluded: ${MDC(EXECUTOR_IDS, excludedExecsOnNode)}")
           nodeIdToExcludedExpiryTime.put(node, expiryTimeForNewExcludes)
           // post both to keep backwards compatibility
           listenerBus.post(SparkListenerNodeBlacklisted(now, node, excludedExecsOnNode.size))
