@@ -128,6 +128,9 @@ function get_release_info {
     RC_COUNT=1
   fi
 
+  if [ "$GIT_BRANCH" = "master" ]; then
+    RELEASE_VERSION="$RELEASE_VERSION-preview1"
+  fi
   export NEXT_VERSION
   export RELEASE_VERSION=$(read_config "Release" "$RELEASE_VERSION")
 
