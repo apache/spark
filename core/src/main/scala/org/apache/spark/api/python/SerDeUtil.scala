@@ -88,18 +88,49 @@ private[spark] object SerDeUtil extends Logging {
     override def hasNext: Boolean = iter.hasNext
 
     override def next(): Array[Byte] = {
+      // Fill the buffer
       while (iter.hasNext && buffer.length < batch) {
         buffer += iter.next()
       }
-      val bytes = pickle.dumps(buffer.toArray)
-      val size = bytes.length
-      // let  1M < size < 10M
-      if (size < 1024 * 1024) {
-        batch *= 2
-      } else if (size > 1024 * 1024 * 10 && batch > 1) {
-        batch /= 2
+      // Pickle the buffer (or a part of it)
+      val bytes
+      Int elementsToDump = buffer.length
+      while (true) {
+        try {
+          bytes = pickle.dumps(
+            (elementsToDump == buffer.length)
+            ? buffer.toArray
+            : buffer.take(elementsToDump).toArray
+          )
+        } catch {
+          // Example: java.lang.IllegalArgumentException: Cannot grow BufferHolder by size 578595584 because the size after growing exceeds size limitation 2147483632
+          case e: java.lang.IllegalArgumentException =>
+            if (elementsToDump == 1) {
+              // if we can't even pickle a single element, throw the exception
+              throw e;
+            } else {
+              // retry with fewer elements
+              elementsToDump /= 2
+              continue;
+            }
+          }
+        }
+        // Pickling succeeded
+        val size = bytes.length
+        // Adjust batch so that 1M < size < 10M by expectation
+        if (size < 1024 * 1024 && elementsToDump == buffer.length) {
+          batch *= 2
+        } else if ((size > 1024 * 1024 * 10 || elementsToDump < buffer.length) && batch > 1) {
+          batch /= 2
+        }
+        if (elementsToDump == buffer.length) {
+          // clear the buffer
+          buffer.clear()
+        } else {
+          // remove the first elementsToDump elements
+          buffer.remove(0, elementsToDump)
+        }
       }
-      buffer.clear()
       bytes
     }
   }
