@@ -18,6 +18,7 @@ package org.apache.spark.sql.catalyst.util;
 
 import com.ibm.icu.text.StringSearch;
 
+import org.apache.spark.SparkException;
 import org.apache.spark.unsafe.types.UTF8String;
 
 import java.util.ArrayList;
@@ -297,10 +298,8 @@ public final class CollationSupport {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
       if (collation.supportsBinaryEquality) {
         return execBinary(word, set);
-      } else if (collation.supportsLowercaseEquality) {
-        return execLowercase(word, set);
       } else {
-        return execICU(word, set, collationId);
+        return execCollationAware(word, set, collationId);
       }
     }
     public static String genCode(final String word, final String set, final int collationId) {
@@ -308,20 +307,15 @@ public final class CollationSupport {
       String expr = "CollationSupport.FindInSet.exec";
       if (collation.supportsBinaryEquality) {
         return String.format(expr + "Binary(%s, %s)", word, set);
-      } else if (collation.supportsLowercaseEquality) {
-        return String.format(expr + "Lowercase(%s, %s)", word, set);
       } else {
-        return String.format(expr + "ICU(%s, %s, %d)", word, set, collationId);
+        return String.format(expr + "execCollationAware(%s, %s, %d)", word, set, collationId);
       }
     }
     public static int execBinary(final UTF8String word, final UTF8String set) {
       return set.findInSet(word);
     }
-    public static int execLowercase(final UTF8String word, final UTF8String set) {
-      return set.toLowerCase().findInSet(word.toLowerCase());
-    }
-    public static int execICU(final UTF8String word, final UTF8String set,
-                                  final int collationId) {
+    public static int execCollationAware(final UTF8String word, final UTF8String set,
+        final int collationId) {
       return CollationAwareUTF8String.findInSet(word, set, collationId);
     }
   }

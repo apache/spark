@@ -287,32 +287,28 @@ public class CollationAwareUTF8String {
   }
 
   public static int findInSet(final UTF8String match, final UTF8String set, int collationId) {
+    // If the "word" string contains a comma, FindInSet should return 0.
     if (match.contains(UTF8String.fromString(","))) {
       return 0;
     }
-
-    String setString = set.toString();
-    StringSearch stringSearch = CollationFactory.getStringSearch(setString, match.toString(),
-      collationId);
-
-    int wordStart = 0;
-    while ((wordStart = stringSearch.next()) != StringSearch.DONE) {
-      boolean isValidStart = wordStart == 0 || setString.charAt(wordStart - 1) == ',';
-      boolean isValidEnd = wordStart + stringSearch.getMatchLength() == setString.length()
-        || setString.charAt(wordStart + stringSearch.getMatchLength()) == ',';
-
-      if (isValidStart && isValidEnd) {
-        int pos = 0;
-        for (int i = 0; i < setString.length() && i < wordStart; i++) {
-          if (setString.charAt(i) == ',') {
-            pos++;
-          }
+    // Otherwise, search for commas in "set" and compare each substring with "word".
+    int byteIndex = 0, charIndex = 0, wordCount = 1, lastComma = -1;
+    while (byteIndex < set.numBytes()) {
+      byte nextByte = set.getByte(byteIndex);
+      if (nextByte == (byte) ',') {
+        if (set.substring(lastComma + 1, charIndex).semanticEquals(match, collationId)) {
+          return wordCount;
         }
-
-        return pos + 1;
+        lastComma = charIndex;
+        ++wordCount;
       }
+      byteIndex += UTF8String.numBytesForFirstByte(nextByte);
+      ++charIndex;
     }
-
+    if (set.substring(lastComma + 1, set.numBytes()).semanticEquals(match, collationId)) {
+      return wordCount;
+    }
+    // If no match is found, return 0.
     return 0;
   }
 
