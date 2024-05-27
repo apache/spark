@@ -218,7 +218,7 @@ object NestedColumnAliasing {
     case _ => false
   }
 
-  private def canTransform(ev: Expression): Boolean = {
+  private def canAlias(ev: Expression): Boolean = {
     // we can not alias the attr from lambda variable whose expr id is not available
     !ev.exists(_.isInstanceOf[NamedLambdaVariable]) && ev.references.size == 1
   }
@@ -231,11 +231,11 @@ object NestedColumnAliasing {
    */
   private def collectRootReferenceAndExtractValue(e: Expression): Seq[Expression] = e match {
     case _: AttributeReference => Seq(e)
-    case GetStructField(_: ExtractValue | _: AttributeReference, _, _) if canTransform(e) => Seq(e)
+    case GetStructField(_: ExtractValue | _: AttributeReference, _, _) if canAlias(e) => Seq(e)
     case GetArrayStructFields(_: MapValues |
                               _: MapKeys |
                               _: ExtractValue |
-                              _: AttributeReference, _, _, _, _) if canTransform(e) => Seq(e)
+                              _: AttributeReference, _, _, _, _) if canAlias(e) => Seq(e)
     case es if es.children.nonEmpty => es.children.flatMap(collectRootReferenceAndExtractValue)
     case _ => Seq.empty
   }
