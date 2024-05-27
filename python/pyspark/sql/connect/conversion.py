@@ -577,7 +577,8 @@ def proto_to_remote_cached_dataframe(relation: pb2.CachedRemoteRelation) -> "Dat
     from pyspark.sql.connect.session import SparkSession
     import pyspark.sql.connect.plan as plan
 
+    session = SparkSession.active()
     return DataFrame(
-        plan=plan.CachedRemoteRelation(relation.relation_id),
-        session=SparkSession.active(),
+        plan=plan.CachedRemoteRelation(relation.relation_id, session),
+        session=session,
     )

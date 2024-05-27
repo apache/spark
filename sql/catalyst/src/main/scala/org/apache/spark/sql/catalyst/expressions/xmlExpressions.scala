@@ -58,7 +58,6 @@ case class XmlToStructs(
     timeZoneId: Option[String] = None)
   extends UnaryExpression
   with TimeZoneAwareExpression
-  with CodegenFallback
   with ExpectsInputTypes
   with NullIntolerant
   with QueryErrorsBase {
@@ -119,6 +118,11 @@ case class XmlToStructs(
 
   override def nullSafeEval(xml: Any): Any =
     converter(parser.parse(xml.asInstanceOf[UTF8String].toString))
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val expr = ctx.addReferenceObj("this", this)
+    defineCodeGen(ctx, ev, input => s"(InternalRow) $expr.nullSafeEval($input)")
+  }
 
   override def inputTypes: Seq[AbstractDataType] = StringTypeAnyCollation :: Nil
 

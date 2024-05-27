@@ -24,6 +24,8 @@ import scala.jdk.javaapi.CollectionConverters;
 import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.streaming.*;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
+
 /**
  * A test stateful processor concatenates all input rows for a key and emits the result.
  * Primarily used for testing the Java API for arbitrary stateful operator in structured streaming
@@ -71,7 +73,7 @@ public class TestStatefulProcessorWithInitialState
       }
 
       testState.clear();
-      assert(testState.exists() == false);
+      assertFalse(testState.exists());
 
       result.add(sb.toString());
     }

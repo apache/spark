@@ -75,3 +75,15 @@ select getbit(11L, 2 + 1), getbit(11L, 3 - 1), getbit(10L + 1, 1 * 1), getbit(ca
 select getbit(11L, 63);
 select getbit(11L, -1);
 select getbit(11L, 64);
+
+SELECT 20181117 >> 2;
+SELECT 20181117 << 2;
+SELECT 20181117 >>> 2;
+SELECT 20181117 > > 2;
+SELECT 20181117 < < 2;
+SELECT 20181117 > >> 2;
+SELECT 20181117 <<< 2;
+SELECT 20181117 >>>> 2;
+select cast(null as array<array<int>>), 20181117 >> 2;
+select cast(null as array<array<int>>), 20181117 >>> 2;
+select cast(null as map<int, array<int>>), 20181117 >> 2;
