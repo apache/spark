@@ -72,7 +72,7 @@ public class CollationAwareUTF8String {
    * @param target the string to be searched in
    * @param lowercasePattern the string to be searched for
    * @param startPos the start position for searching (in the target string)
-   * @return length of the target substring that ends with the specified prefix in lowercase
+   * @return length of the target substring that starts with the specified prefix in lowercase
    */
   private static int lowercaseMatchLengthFrom(
       final UTF8String target,
