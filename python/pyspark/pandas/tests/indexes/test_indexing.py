@@ -235,7 +235,9 @@ class FrameIndexingMixin:
         self.assert_eq(psdf.sort_index(), pdf.sort_index(), almost=True)
 
         psser = ps.Series([4, 5, 6])
-        self.assertRaises(ValueError, lambda: psdf.insert(0, "y", psser))
+        with ps.option_context("compute.ops_on_diff_frames", False):
+            self.assertRaises(ValueError, lambda: psdf.insert(0, "y", psser))
+
         self.assertRaisesRegex(
             ValueError, "cannot insert b, already exists", lambda: psdf.insert(1, "b", 10)
         )
@@ -256,7 +258,9 @@ class FrameIndexingMixin:
         )
 
         self.assertRaises(ValueError, lambda: psdf.insert(0, "e", [7, 8, 9, 10]))
-        self.assertRaises(ValueError, lambda: psdf.insert(0, "f", ps.Series([7, 8])))
+        with ps.option_context("compute.ops_on_diff_frames", False):
+            self.assertRaises(ValueError, lambda: psdf.insert(0, "f", ps.Series([7, 8])))
+
         self.assertRaises(AssertionError, lambda: psdf.insert(100, "y", psser))
         self.assertRaises(AssertionError, lambda: psdf.insert(1, "y", psser, allow_duplicates=True))
 

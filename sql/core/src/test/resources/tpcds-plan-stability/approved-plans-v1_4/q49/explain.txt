@@ -99,7 +99,7 @@ Input [6]: [ws_item_sk#1, ws_order_number#2, ws_quantity#3, ws_net_paid#4, ws_ne
 
 (5) BroadcastExchange
 Input [5]: [ws_item_sk#1, ws_order_number#2, ws_quantity#3, ws_net_paid#4, ws_sold_date_sk#6]
-Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[1, int, true] as bigint), 32) | (cast(input[0, int, true] as bigint) & 4294967295))),false), [plan_id=1]
+Arguments: HashedRelationBroadcastMode(List(((cast(input[1, int, true] as bigint) << 32) | (cast(input[0, int, true] as bigint) & 4294967295))),false), [plan_id=1]
 
 (6) Scan parquet spark_catalog.default.web_returns
 Output [5]: [wr_item_sk#8, wr_order_number#9, wr_return_quantity#10, wr_return_amt#11, wr_returned_date_sk#12]
@@ -209,7 +209,7 @@ Input [6]: [cs_item_sk#36, cs_order_number#37, cs_quantity#38, cs_net_paid#39, c
 
 (29) BroadcastExchange
 Input [5]: [cs_item_sk#36, cs_order_number#37, cs_quantity#38, cs_net_paid#39, cs_sold_date_sk#41]
-Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[1, int, true] as bigint), 32) | (cast(input[0, int, true] as bigint) & 4294967295))),false), [plan_id=4]
+Arguments: HashedRelationBroadcastMode(List(((cast(input[1, int, true] as bigint) << 32) | (cast(input[0, int, true] as bigint) & 4294967295))),false), [plan_id=4]
 
 (30) Scan parquet spark_catalog.default.catalog_returns
 Output [5]: [cr_item_sk#42, cr_order_number#43, cr_return_quantity#44, cr_return_amount#45, cr_returned_date_sk#46]
@@ -319,7 +319,7 @@ Input [6]: [ss_item_sk#70, ss_ticket_number#71, ss_quantity#72, ss_net_paid#73, 
 
 (53) BroadcastExchange
 Input [5]: [ss_item_sk#70, ss_ticket_number#71, ss_quantity#72, ss_net_paid#73, ss_sold_date_sk#75]
-Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[1, int, true] as bigint), 32) | (cast(input[0, int, true] as bigint) & 4294967295))),false), [plan_id=7]
+Arguments: HashedRelationBroadcastMode(List(((cast(input[1, int, true] as bigint) << 32) | (cast(input[0, int, true] as bigint) & 4294967295))),false), [plan_id=7]
 
 (54) Scan parquet spark_catalog.default.store_returns
 Output [5]: [sr_item_sk#76, sr_ticket_number#77, sr_return_quantity#78, sr_return_amt#79, sr_returned_date_sk#80]

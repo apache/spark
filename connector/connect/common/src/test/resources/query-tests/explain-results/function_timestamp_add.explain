@@ -1,0 +1,2 @@
+Project [timestampadd(week, cast(x#0L as int), t#0, Some(America/Los_Angeles)) AS timestampadd(week, x, t)#0]
++- LocalRelation <empty>, [d#0, t#0, s#0, x#0L, wt#0]

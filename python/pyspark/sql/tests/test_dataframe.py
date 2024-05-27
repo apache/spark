@@ -844,6 +844,11 @@ class DataFrameTestsMixin:
     def test_isinstance_dataframe(self):
         self.assertIsInstance(self.spark.range(1), DataFrame)
 
+    def test_checkpoint_dataframe(self):
+        with io.StringIO() as buf, redirect_stdout(buf):
+            self.spark.range(1).localCheckpoint().explain()
+            self.assertIn("ExistingRDD", buf.getvalue())
+
 
 class DataFrameTests(DataFrameTestsMixin, ReusedSQLTestCase):
     pass
