@@ -115,12 +115,23 @@ class DataType:
         return hash(str(self))
 
     def __eq__(self, other: Any) -> bool:
-        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+        if isinstance(other, self.__class__):
+            self_dict = {k: v for k, v in self.__dict__.items() if k != "typeName"}
+            other_dict = {k: v for k, v in other.__dict__.items() if k != "typeName"}
+            return self_dict == other_dict
+        return False
 
     def __ne__(self, other: Any) -> bool:
         return not self.__eq__(other)
 
-    def typeName(self) -> str:
+    @classmethod
+    def typeName(cls) -> str:
+        return cls.__name__[:-4].lower()
+
+    # The classmethod 'typeName' is not always consistent with the Scala side, e.g.
+    # DecimalType(10, 2): 'decimal' vs 'decimal(10, 2)'
+    # This method is used in subclass initializer to replace 'typeName' if they are different.
+    def _type_name(self) -> str:
         return self.__class__.__name__.removesuffix("Type").removesuffix("UDT").lower()
 
     def simpleString(self) -> str:
@@ -236,7 +247,8 @@ class NullType(DataType, metaclass=DataTypeSingleton):
     The data type representing None, used for the types that cannot be inferred.
     """
 
-    def typeName(self) -> str:
+    @classmethod
+    def typeName(cls) -> str:
         return "void"
 
 
@@ -274,6 +286,7 @@ class StringType(AtomicType):
     providers = [providerSpark, providerICU]
 
     def __init__(self, collation: Optional[str] = None):
+        self.typeName = self._type_name  # type: ignore[method-assign]
         self.collationId = 0 if collation is None else self.collationNameToId(collation)
 
     @classmethod
@@ -295,7 +308,7 @@ class StringType(AtomicType):
             return StringType.providerSpark
         return StringType.providerICU
 
-    def typeName(self) -> str:
+    def _type_name(self) -> str:
         if self.isUTF8BinaryCollation():
             return "string"
 
@@ -328,9 +341,10 @@ class CharType(AtomicType):
     """
 
     def __init__(self, length: int):
+        self.typeName = self._type_name  # type: ignore[method-assign]
         self.length = length
 
-    def typeName(self) -> str:
+    def _type_name(self) -> str:
         return "char(%d)" % (self.length)
 
     def __repr__(self) -> str:
@@ -347,9 +361,10 @@ class VarcharType(AtomicType):
     """
 
     def __init__(self, length: int):
+        self.typeName = self._type_name  # type: ignore[method-assign]
         self.length = length
 
-    def typeName(self) -> str:
+    def _type_name(self) -> str:
         return "varchar(%d)" % (self.length)
 
     def __repr__(self) -> str:
@@ -410,7 +425,8 @@ class TimestampNTZType(AtomicType, metaclass=DataTypeSingleton):
     def needConversion(self) -> bool:
         return True
 
-    def typeName(self) -> str:
+    @classmethod
+    def typeName(cls) -> str:
         return "timestamp_ntz"
 
     def toInternal(self, dt: datetime.datetime) -> int:
@@ -447,11 +463,12 @@ class DecimalType(FractionalType):
     """
 
     def __init__(self, precision: int = 10, scale: int = 0):
+        self.typeName = self._type_name  # type: ignore[method-assign]
         self.precision = precision
         self.scale = scale
         self.hasPrecisionInfo = True  # this is a public API
 
-    def typeName(self) -> str:
+    def _type_name(self) -> str:
         return "decimal(%d,%d)" % (self.precision, self.scale)
 
     def __repr__(self) -> str:
@@ -526,6 +543,7 @@ class DayTimeIntervalType(AnsiIntervalType):
     _inverted_fields = dict(zip(_fields.values(), _fields.keys()))
 
     def __init__(self, startField: Optional[int] = None, endField: Optional[int] = None):
+        self.typeName = self._type_name  # type: ignore[method-assign]
         if startField is None and endField is None:
             # Default matched to scala side.
             startField = DayTimeIntervalType.DAY
@@ -542,7 +560,7 @@ class DayTimeIntervalType(AnsiIntervalType):
         self.startField = startField
         self.endField = endField
 
-    def typeName(self) -> str:
+    def _type_name(self) -> str:
         fields = DayTimeIntervalType._fields
         start_field_name = fields[self.startField]
         end_field_name = fields[self.endField]
@@ -580,6 +598,7 @@ class YearMonthIntervalType(AnsiIntervalType):
     _inverted_fields = dict(zip(_fields.values(), _fields.keys()))
 
     def __init__(self, startField: Optional[int] = None, endField: Optional[int] = None):
+        self.typeName = self._type_name  # type: ignore[method-assign]
         if startField is None and endField is None:
             # Default matched to scala side.
             startField = YearMonthIntervalType.YEAR
@@ -596,7 +615,7 @@ class YearMonthIntervalType(AnsiIntervalType):
         self.startField = startField
         self.endField = endField
 
-    def typeName(self) -> str:
+    def _type_name(self) -> str:
         fields = YearMonthIntervalType._fields
         start_field_name = fields[self.startField]
         end_field_name = fields[self.endField]
@@ -618,7 +637,8 @@ class CalendarIntervalType(DataType, metaclass=DataTypeSingleton):
     - a long value representing the number of `microseconds` in this interval.
     """
 
-    def typeName(self) -> str:
+    @classmethod
+    def typeName(cls) -> str:
         return "interval"
 
 
@@ -1039,7 +1059,7 @@ class StructField(DataType):
     def fromInternal(self, obj: T) -> T:
         return self.dataType.fromInternal(obj)
 
-    def typeName(self) -> str:
+    def typeName(self) -> str:  # type: ignore[override]
         raise PySparkTypeError(
             error_class="INVALID_TYPENAME_CALL",
             message_parameters={},
@@ -1520,6 +1540,10 @@ class UserDefinedType(DataType):
 
     .. note:: WARN: Spark Internal Use Only
     """
+
+    @classmethod
+    def typeName(cls) -> str:
+        return cls.__name__.lower()
 
     @classmethod
     def sqlType(cls) -> DataType:

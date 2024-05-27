@@ -81,6 +81,67 @@ from pyspark.testing.utils import PySparkErrorTestUtils
 
 
 class TypesTestsMixin:
+    def test_class_method_type_name(self):
+        for dataType, name in [
+            (StringType, "string"),
+            (CharType, "char"),
+            (VarcharType, "varchar"),
+            (BinaryType, "binary"),
+            (BooleanType, "boolean"),
+            (DecimalType, "decimal"),
+            (FloatType, "float"),
+            (DoubleType, "double"),
+            (ByteType, "byte"),
+            (ShortType, "short"),
+            (IntegerType, "integer"),
+            (LongType, "long"),
+            (DateType, "date"),
+            (TimestampType, "timestamp"),
+            (TimestampNTZType, "timestamp_ntz"),
+            (NullType, "void"),
+            (VariantType, "variant"),
+            (YearMonthIntervalType, "yearmonthinterval"),
+            (DayTimeIntervalType, "daytimeinterval"),
+            (CalendarIntervalType, "interval"),
+        ]:
+            self.assertEqual(dataType.typeName(), name)
+
+    def test_instance_method_type_name(self):
+        for dataType, name in [
+            (StringType(), "string"),
+            (CharType(5), "char(5)"),
+            (VarcharType(10), "varchar(10)"),
+            (BinaryType(), "binary"),
+            (BooleanType(), "boolean"),
+            (DecimalType(), "decimal(10,0)"),
+            (DecimalType(10, 2), "decimal(10,2)"),
+            (FloatType(), "float"),
+            (DoubleType(), "double"),
+            (ByteType(), "byte"),
+            (ShortType(), "short"),
+            (IntegerType(), "integer"),
+            (LongType(), "long"),
+            (DateType(), "date"),
+            (TimestampType(), "timestamp"),
+            (TimestampNTZType(), "timestamp_ntz"),
+            (NullType(), "void"),
+            (VariantType(), "variant"),
+            (YearMonthIntervalType(), "interval year to month"),
+            (YearMonthIntervalType(YearMonthIntervalType.YEAR), "interval year"),
+            (
+                YearMonthIntervalType(YearMonthIntervalType.YEAR, YearMonthIntervalType.MONTH),
+                "interval year to month",
+            ),
+            (DayTimeIntervalType(), "interval day to second"),
+            (DayTimeIntervalType(DayTimeIntervalType.DAY), "interval day"),
+            (
+                DayTimeIntervalType(DayTimeIntervalType.HOUR, DayTimeIntervalType.SECOND),
+                "interval hour to second",
+            ),
+            (CalendarIntervalType(), "interval"),
+        ]:
+            self.assertEqual(dataType.typeName(), name)
+
     def test_apply_schema_to_row(self):
         df = self.spark.read.json(self.sc.parallelize(["""{"a":2}"""]))
         df2 = self.spark.createDataFrame(df.rdd.map(lambda x: x), df.schema)
