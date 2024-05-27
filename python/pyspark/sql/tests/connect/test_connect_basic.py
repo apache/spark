@@ -16,10 +16,10 @@
 #
 
 import os
+import gc
 import unittest
 import shutil
 import tempfile
-import time
 
 from pyspark.util import is_remote_only
 from pyspark.errors import PySparkTypeError, PySparkValueError
@@ -34,6 +34,7 @@ from pyspark.sql.types import (
     ArrayType,
     Row,
 )
+from pyspark.testing.utils import eventually
 from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.testing.connectutils import (
     should_test_connect,
@@ -1379,8 +1380,8 @@ class SparkConnectGCTests(SparkConnectSQLTestCase):
         # SPARK-48258: Make sure garbage-collecting DataFrame remove the paired state
         # in Spark Connect server
         df = self.connect.range(10).localCheckpoint()
-        self.assertIsNotNone(df._cached_remote_relation_id)
-        cached_remote_relation_id = df._cached_remote_relation_id
+        self.assertIsNotNone(df._plan._relation_id)
+        cached_remote_relation_id = df._plan._relation_id
 
         jvm = self.spark._jvm
         session_holder = getattr(
@@ -1397,13 +1398,53 @@ class SparkConnectGCTests(SparkConnectSQLTestCase):
         )
 
         del df
+        gc.collect()
 
-        time.sleep(3)  # Make sure removing is triggered, and executed in the server.
+        def condition():
+            # Check the state was removed up on garbage-collection.
+            self.assertIsNone(
+                session_holder.dataFrameCache().getOrDefault(cached_remote_relation_id, None)
+            )
 
-        # Check the state was removed up on garbage-collection.
-        self.assertIsNone(
+        eventually(catch_assertions=True)(condition)()
+
+    def test_garbage_collection_derived_checkpoint(self):
+        # SPARK-48258: Should keep the cached remote relation when derived DataFrames exist
+        df = self.connect.range(10).localCheckpoint()
+        self.assertIsNotNone(df._plan._relation_id)
+        derived = df.repartition(10)
+        cached_remote_relation_id = df._plan._relation_id
+
+        jvm = self.spark._jvm
+        session_holder = getattr(
+            getattr(
+                jvm.org.apache.spark.sql.connect.service,
+                "SparkConnectService$",
+            ),
+            "MODULE$",
+        ).getOrCreateIsolatedSession(self.connect.client._user_id, self.connect.client._session_id)
+
+        # Check the state exists.
+        self.assertIsNotNone(
             session_holder.dataFrameCache().getOrDefault(cached_remote_relation_id, None)
         )
+
+        del df
+        gc.collect()
+
+        def condition():
+            self.assertIsNone(
+                session_holder.dataFrameCache().getOrDefault(cached_remote_relation_id, None)
+            )
+
+        # Should not remove the cache
+        with self.assertRaises(AssertionError):
+            eventually(catch_assertions=True, timeout=5)(condition)()
+
+        del derived
+        gc.collect()
+
+        eventually(catch_assertions=True)(condition)()
 
 
 if __name__ == "__main__":

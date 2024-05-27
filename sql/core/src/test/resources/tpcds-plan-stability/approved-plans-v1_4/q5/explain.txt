@@ -304,7 +304,7 @@ Input [5]: [wr_item_sk#92, wr_order_number#93, wr_return_amt#94, wr_net_loss#95,
 
 (49) BroadcastExchange
 Input [5]: [wr_item_sk#92, wr_order_number#93, wr_return_amt#94, wr_net_loss#95, wr_returned_date_sk#96]
-Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[0, int, true] as bigint), 32) | (cast(input[1, int, true] as bigint) & 4294967295))),false), [plan_id=5]
+Arguments: HashedRelationBroadcastMode(List(((cast(input[0, int, true] as bigint) << 32) | (cast(input[1, int, true] as bigint) & 4294967295))),false), [plan_id=5]
 
 (50) Scan parquet spark_catalog.default.web_sales
 Output [4]: [ws_item_sk#97, ws_web_site_sk#98, ws_order_number#99, ws_sold_date_sk#100]
