@@ -48,3 +48,5 @@ addSbtPlugin("com.github.sbt" % "sbt-pom-reader" % "2.4.0")
 addSbtPlugin("net.aichler" % "sbt-jupiter-interface" % "0.11.1")
 
 addSbtPlugin("com.thesamet" % "sbt-protoc" % "1.0.7")
+
+addSbtPlugin("io.get-coursier" % "sbt-coursier" % "2.1.0")
