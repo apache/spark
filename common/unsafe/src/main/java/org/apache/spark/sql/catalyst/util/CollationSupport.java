@@ -18,7 +18,6 @@ package org.apache.spark.sql.catalyst.util;
 
 import com.ibm.icu.text.StringSearch;
 
-import org.apache.spark.SparkException;
 import org.apache.spark.unsafe.types.UTF8String;
 
 import java.util.ArrayList;
