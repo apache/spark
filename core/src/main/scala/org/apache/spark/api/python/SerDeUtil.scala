@@ -99,9 +99,9 @@ private[spark] object SerDeUtil extends Logging {
         // Try pickling; if it fails, adjust the batch size and retry
         try {
           bytes = pickle.dumps(
-            (elementsToDump == buffer.length)
-            ? buffer.toArray
-            : buffer.take(elementsToDump).toArray
+            if (elementsToDump == buffer.length)
+            buffer.toArray
+            else buffer.take(elementsToDump).toArray
           )
         } catch {
           // Example: java.lang.IllegalArgumentException: Cannot grow BufferHolder by size 578595584 because the size after growing exceeds size limitation 2147483632
