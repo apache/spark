@@ -356,8 +356,8 @@ case class AlterTableUnsetPropertiesCommand(
 
 
 /**
- * A command to change the column for a table, only support changing the comment of a non-partition
- * column for now.
+ * A command to change the column for a table, only support changing the comment or collation of
+ * the data type or nested types (recursively) of a non-partition column for now.
  *
  * The syntax of using this command in SQL is:
  * {{{
@@ -387,33 +387,33 @@ case class AlterTableChangeColumnCommand(
     }
     // Find the origin column from dataSchema by column name.
     val originColumn = findColumnByName(table.dataSchema, columnName, resolver)
-    // Throw an AnalysisException if the column name/dataType is changed.
-    if (!columnEqual(originColumn, newColumn, resolver)) {
+    // Throw an AnalysisException if the column name is changed or we cannot evolve the data type.
+    // Only changes in collation of column data type or its nested types (recursively) are allowed.
+    if (!namesEqual(originColumn, newColumn, resolver) || !canEvolveType(originColumn, newColumn)) {
       throw QueryCompilationErrors.alterTableChangeColumnNotSupportedForColumnTypeError(
         toSQLId(table.identifier.nameParts), originColumn, newColumn, this.origin)
     }
 
     val newDataSchema = table.dataSchema.fields.map { field =>
       if (field.name == originColumn.name) {
-        // Create a new column from the origin column with the new comment.
-        val newField = field.copy(dataType = newColumn.dataType)
-        val withNewComment: StructField =
-          addComment(newField, newColumn.getComment())
+        // Create a new column from the origin column with the new type and new comment.
+        val withNewTypeAndComment: StructField =
+          addComment(field.withNewType(newColumn.dataType), newColumn.getComment())
         // Create a new column from the origin column with the new current default value.
         if (newColumn.getCurrentDefaultValue().isDefined) {
           if (newColumn.getCurrentDefaultValue().get.nonEmpty) {
             val result: StructField =
-              addCurrentDefaultValue(withNewComment, newColumn.getCurrentDefaultValue())
+              addCurrentDefaultValue(withNewTypeAndComment, newColumn.getCurrentDefaultValue())
             // Check that the proposed default value parses and analyzes correctly, and that the
             // type of the resulting expression is equivalent or coercible to the destination column
             // type.
             ResolveDefaultColumns.analyze(result, "ALTER TABLE ALTER COLUMN")
             result
           } else {
-            withNewComment.clearCurrentDefaultValue()
+            withNewTypeAndComment.clearCurrentDefaultValue()
           }
         } else {
-          withNewComment
+          withNewTypeAndComment
         }
       } else {
         field
@@ -443,11 +443,17 @@ case class AlterTableChangeColumnCommand(
     value.map(column.withCurrentDefaultValue).getOrElse(column)
 
   // Compare a [[StructField]] to another, return true if they have the same column
-  // name(by resolver) and dataType.
-  private def columnEqual(
+  // name(by resolver).
+  private def namesEqual(
       field: StructField, other: StructField, resolver: Resolver): Boolean = {
-    resolver(field.name, other.name) &&
-      DataType.equalsIgnoreCompatibleCollationAndNullability(field.dataType, other.dataType)
+    resolver(field.name, other.name)
+  }
+
+  // Compare dataType of [[StructField]] to another, return true if it is valid to evolve the type
+  // when altering column. Only changes in collation of data type or its nested types (recursively)
+  // are allowed.
+  private def canEvolveType(from: StructField, to: StructField): Boolean = {
+    DataType.equalsIgnoreCompatibleCollation(from.dataType, to.dataType)
   }
 }
 

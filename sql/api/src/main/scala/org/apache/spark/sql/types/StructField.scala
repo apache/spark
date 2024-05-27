@@ -125,6 +125,13 @@ case class StructField(
   }
 
   /**
+   * Updates the StructField with a new dataType.
+   */
+  def withNewType(dataType: DataType): StructField = {
+    copy(dataType = dataType)
+  }
+
+  /**
    * Updates the StructField with a new comment value.
    */
   def withComment(comment: String): StructField = {
