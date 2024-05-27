@@ -450,3 +450,27 @@ select cast(null as map<int, array<int>>), 20181117 >> 2
 struct<NULL:map<int,array<int>>,(20181117 >> 2):int>
 -- !query output
 NULL	5045279
+
+
+-- !query
+select 1 << 1 + 2 as plus_over_shift
+-- !query schema
+struct<plus_over_shift:int>
+-- !query output
+8
+
+
+-- !query
+select 2 >> 1 << 1 as left_to_right
+-- !query schema
+struct<left_to_right:int>
+-- !query output
+2
+
+
+-- !query
+select 1 & 2 >> 1 as shift_over_ampersand
+-- !query schema
+struct<shift_over_ampersand:int>
+-- !query output
+1
