@@ -34,7 +34,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate._
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SqlApiConf
-import org.apache.spark.sql.types.{MapType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{BinaryType, MapType, StringType, StructField, StructType}
 
 class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   protected val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
@@ -1075,25 +1075,44 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     val data = Seq(Row("AA"), Row("aa"), Row("BB"))
     val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
     df.createOrReplaceTempView("tempTable")
-    val dfGroupBy = spark.sql("SELECT name, COUNT(*) FROM tempTable GROUP BY name")
-    // test RewriteGroupByCollation idempotence
-    val logicalPlan = dfGroupBy.queryExecution.analyzed
-    val newPlan = RewriteGroupByCollation(logicalPlan)
-    val newNewPlan = RewriteGroupByCollation(newPlan)
-    assert(newPlan == newNewPlan)
+    // test RewriteGroupByCollation idempotence (without aggregate expression)
+    val dfGroupBy1 = spark.sql("SELECT COUNT(*) FROM tempTable GROUP BY name")
+    val logicalPlan1 = dfGroupBy1.queryExecution.analyzed
+    val newPlan1 = RewriteGroupByCollation(logicalPlan1)
+    val newNewPlan1 = RewriteGroupByCollation(newPlan1)
+    assert(newPlan1 == newNewPlan1)
+    // test RewriteGroupByCollation idempotence (with aggregate expression)
+    val dfGroupBy2 = spark.sql("SELECT name, COUNT(*) FROM tempTable GROUP BY name")
+    val logicalPlan2 = dfGroupBy2.queryExecution.analyzed
+    val newPlan2 = RewriteGroupByCollation(logicalPlan2)
+    val newNewPlan2 = RewriteGroupByCollation(newPlan2)
+    assert(newPlan2 == newNewPlan2)
     // get the query execution result
-    checkAnswer(dfGroupBy, Seq(Row("AA", 2), Row("BB", 1)))
+    checkAnswer(dfGroupBy1, Seq(Row(2), Row(1)))
+    checkAnswer(dfGroupBy2, Seq(Row("AA", 2), Row("BB", 1)))
   }
 
   test("hash aggregation should be used for collated strings") {
     val t1 = "T_1"
 
-    case class HashAggregationTestCase[R](collation: String, result: R)
+    case class HashAggregationTestCase[R](collation: String, result1: R, result2: R)
     val testCases = Seq(
-      HashAggregationTestCase("UTF8_BINARY", Seq(Row("aa", 1), Row("AA", 1), Row("bb", 1))),
-      HashAggregationTestCase("UTF8_BINARY_LCASE", Seq(Row("aa", 2), Row("bb", 1))),
-//      HashJoinTestCase("UNICODE", Seq(Row("aa", 1, "aa", 2))),
-//      HashJoinTestCase("UNICODE_CI", Seq(Row("aa", 1, "AA", 2), Row("aa", 1, "aa", 2)))
+      HashAggregationTestCase("UTF8_BINARY",
+        Seq(Row(1), Row(1), Row(1)),
+        Seq(Row("aa", 1), Row("AA", 1), Row("bb", 1))
+      ),
+      HashAggregationTestCase("UTF8_BINARY_LCASE",
+        Seq(Row(2), Row(1)),
+        Seq(Row("aa", 2), Row("bb", 1))
+      ),
+      HashAggregationTestCase("UNICODE",
+        Seq(Row(1), Row(1), Row(1)),
+        Seq(Row("aa", 1), Row("AA", 1), Row("bb", 1))
+      ),
+      HashAggregationTestCase("UNICODE_CI",
+        Seq(Row(2), Row(1)),
+        Seq(Row("aa", 2), Row("bb", 1))
+      )
     )
 
     testCases.foreach(t => {
@@ -1101,18 +1120,34 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         sql(s"CREATE TABLE $t1 (x STRING COLLATE ${t.collation}) USING PARQUET")
         sql(s"INSERT INTO $t1 VALUES ('aa'), ('AA'), ('bb')")
 
-        val df = sql(s"SELECT x, COUNT(*) FROM $t1 GROUP BY x")
-        checkAnswer(df, t.result)
+        val df1 = sql(s"SELECT COUNT(*) FROM $t1 GROUP BY x")
+        checkAnswer(df1, t.result1)
 
-        val queryPlan = df.queryExecution.executedPlan
+        val df2 = sql(s"SELECT x, COUNT(*) FROM $t1 GROUP BY x")
+        checkAnswer(df2, t.result2)
 
-        // confirm that hash agg is used instead of sort merge agg
-        assert(collectFirst(queryPlan) {
-          case _: HashAggregateExec => ()
-        }.nonEmpty)
-        assert(collectFirst(queryPlan) {
-          case _: SortAggregateExec => ()
-        }.isEmpty)
+        val queryPlan1 = df1.queryExecution.executedPlan
+        val queryPlan2 = df2.queryExecution.executedPlan
+
+        if (CollationFactory.fetchCollation(t.collation).supportsBinaryEquality) {
+          // hash agg can always be used for binary collations
+          assert(collectFirst(queryPlan1) { case _: HashAggregateExec => () }.nonEmpty)
+          assert(collectFirst(queryPlan1) { case _: SortAggregateExec => () }.isEmpty)
+          assert(collectFirst(queryPlan2) { case _: HashAggregateExec => () }.nonEmpty)
+          assert(collectFirst(queryPlan2) { case _: SortAggregateExec => () }.isEmpty)
+        } else {
+          // hash agg can also be used if a non-binary collation is only used for grouping
+          assert(collectFirst(queryPlan1) { case _: HashAggregateExec => () }.nonEmpty)
+          assert(collectFirst(queryPlan1) { case _: SortAggregateExec => () }.isEmpty)
+          // however, sort agg will be used if a non-binary collation is present in the aggregate
+          assert(collectFirst(queryPlan2) { case _: HashAggregateExec => () }.isEmpty)
+          assert(collectFirst(queryPlan2) { case _: SortAggregateExec => () }.nonEmpty)
+          // check that CollationKey is injected into the Aggregate logical plan in any case
+          assert(collectFirst(queryPlan1) { case s: HashAggregateExec =>
+            s.groupingExpressions.head.dataType.isInstanceOf[BinaryType] }.nonEmpty)
+          assert(collectFirst(queryPlan2) { case s: SortAggregateExec =>
+            s.groupingExpressions.head.dataType.isInstanceOf[BinaryType] }.nonEmpty)
+        }
       }
     })
   }
