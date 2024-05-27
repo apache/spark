@@ -30,8 +30,7 @@ import org.apache.spark.InternalAccumulator
 import org.apache.spark.InternalAccumulator.{input, shuffleRead}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.errors.SparkCoreErrors
-import org.apache.spark.internal.{config, Logging, MDC}
-import org.apache.spark.internal.LogKeys
+import org.apache.spark.internal.{config, Logging, LogKeys, MDC}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.scheduler.SchedulingMode._
@@ -280,8 +279,9 @@ private[spark] class TaskSetManager(
               for (e <- set) {
                 pendingTaskSetToAddTo.forExecutor.getOrElseUpdate(e, new ArrayBuffer) += index
               }
-              logInfo(s"Pending task $index has a cached location at ${e.host} " +
-                ", where there are executors " + set.mkString(","))
+              logInfo(log"Pending task ${MDC(INDEX, index)} has a cached location at " +
+                log"${MDC(HOST, e.host)}, where there are executors " +
+                log"${MDC(EXECUTOR_IDS, set.mkString(","))}")
             case None => logDebug(s"Pending task $index has a cached location at ${e.host} " +
               ", but there are no executors alive there.")
           }
@@ -554,10 +554,16 @@ private[spark] class TaskSetManager(
     // a good proxy to task serialization time.
     // val timeTaken = clock.getTime() - startTime
     val tName = taskName(taskId)
-    logInfo(s"Starting $tName ($host, executor ${info.executorId}, " +
-      s"partition ${task.partitionId}, $taskLocality, ${serializedTask.limit()} bytes) " +
-      (if (taskResourceAssignments.nonEmpty) s"taskResourceAssignments ${taskResourceAssignments}"
-      else ""))
+    logInfo(log"Starting ${MDC(TASK_NAME, tName)} (${MDC(HOST, host)}," +
+      log"executor ${MDC(LogKeys.EXECUTOR_ID, info.executorId)}, " +
+      log"partition ${MDC(PARTITION_ID, task.partitionId)}, " +
+      log"${MDC(TASK_LOCALITY, taskLocality)}, " +
+      log"${MDC(SIZE, serializedTask.limit())} bytes) " +
+      (if (taskResourceAssignments.nonEmpty) {
+        log"taskResourceAssignments ${MDC(TASK_RESOURCE_ASSIGNMENTS, taskResourceAssignments)}"
+      } else {
+        log""
+      }))
 
     sched.dagScheduler.taskStarted(task, info)
     new TaskDescription(
@@ -829,8 +835,11 @@ private[spark] class TaskSetManager(
     // Kill any other attempts for the same task (since those are unnecessary now that one
     // attempt completed successfully).
     for (attemptInfo <- taskAttempts(index) if attemptInfo.running) {
-      logInfo(s"Killing attempt ${attemptInfo.attemptNumber} for ${taskName(attemptInfo.taskId)}" +
-        s" on ${attemptInfo.host} as the attempt ${info.attemptNumber} succeeded on ${info.host}")
+      logInfo(log"Killing attempt ${MDC(NUM_ATTEMPT, attemptInfo.attemptNumber)} for " +
+        log"${MDC(TASK_NAME, taskName(attemptInfo.taskId))} on " +
+        log"${MDC(HOST, attemptInfo.host)} as the attempt " +
+        log"${MDC(TASK_ATTEMPT_ID, info.attemptNumber)} succeeded on " +
+        log"${MDC(HOST, info.host)}")
       killedByOtherAttempt += attemptInfo.taskId
       sched.backend.killTask(
         attemptInfo.taskId,
@@ -840,8 +849,10 @@ private[spark] class TaskSetManager(
     }
     if (!successful(index)) {
       tasksSuccessful += 1
-      logInfo(s"Finished ${taskName(info.taskId)} in ${info.duration} ms " +
-        s"on ${info.host} (executor ${info.executorId}) ($tasksSuccessful/$numTasks)")
+      logInfo(log"Finished ${MDC(TASK_NAME, taskName(info.taskId))} in " +
+        log"${MDC(DURATION, info.duration)} ms on ${MDC(HOST, info.host)} " +
+        log"(executor ${MDC(LogKeys.EXECUTOR_ID, info.executorId)}) " +
+        log"(${MDC(NUM_SUCCESSFUL_TASKS, tasksSuccessful)}/${MDC(NUM_TASKS, numTasks)})")
       // Mark successful and stop if all the tasks have succeeded.
       successful(index) = true
       numFailures(index) = 0
@@ -849,8 +860,9 @@ private[spark] class TaskSetManager(
         isZombie = true
       }
     } else {
-      logInfo(s"Ignoring task-finished event for ${taskName(info.taskId)} " +
-        s"because it has already completed successfully")
+      logInfo(log"Ignoring task-finished event for " +
+        log"${MDC(TASK_NAME, taskName(info.taskId))} " +
+        log"because it has already completed successfully")
     }
     // This method is called by "TaskSchedulerImpl.handleSuccessfulTask" which holds the
     // "TaskSchedulerImpl" lock until exiting. To avoid the SPARK-7655 issue, we should not
@@ -1007,8 +1019,10 @@ private[spark] class TaskSetManager(
           logWarning(failureReason)
         } else {
           logInfo(
-            s"Lost $task on ${info.host}, executor ${info.executorId}: " +
-              s"${ef.className} (${ef.description}) [duplicate $dupCount]")
+            log"Lost ${MDC(TASK_NAME, task)} on ${MDC(HOST, info.host)}, " +
+            log"executor ${MDC(LogKeys.EXECUTOR_ID, info.executorId)}: " +
+            log"${MDC(CLASS_NAME, ef.className)} " +
+            log"(${MDC(DESCRIPTION, ef.description)}) [duplicate ${MDC(COUNT, dupCount)}]")
         }
         ef.exception
 
@@ -1020,9 +1034,9 @@ private[spark] class TaskSetManager(
         None
 
       case e: ExecutorLostFailure if !e.exitCausedByApp =>
-        logInfo(s"${taskName(tid)} failed because while it was being computed, its executor " +
-          "exited for a reason unrelated to the task. Not counting this failure towards the " +
-          "maximum number of failures for the task.")
+        logInfo(log"${MDC(TASK_NAME, taskName(tid))} failed because while it was being computed," +
+          log" its executor exited for a reason unrelated to the task. " +
+          log"Not counting this failure towards the maximum number of failures for the task.")
         None
 
       case _: TaskFailedReason =>  // TaskResultLost and others
@@ -1052,10 +1066,10 @@ private[spark] class TaskSetManager(
     }
 
     if (successful(index)) {
-      logInfo(s"${taskName(info.taskId)} failed, but the task will not" +
-        " be re-executed (either because the task failed with a shuffle data fetch failure," +
-        " so the previous stage needs to be re-run, or because a different copy of the task" +
-        " has already succeeded).")
+      logInfo(log"${MDC(LogKeys.TASK_NAME, taskName(info.taskId))} failed, but the task will not" +
+        log" be re-executed (either because the task failed with a shuffle data fetch failure," +
+        log" so the previous stage needs to be re-run, or because a different copy of the task" +
+        log" has already succeeded).")
     } else {
       addPendingTask(index)
     }
@@ -1238,9 +1252,10 @@ private[spark] class TaskSetManager(
         if (speculated) {
           addPendingTask(index, speculatable = true)
           logInfo(
-            ("Marking task %d in stage %s (on %s) as speculatable because it ran more" +
-              " than %.0f ms(%d speculatable tasks in this taskset now)")
-              .format(index, taskSet.id, info.host, threshold, speculatableTasks.size + 1))
+            log"Marking task ${MDC(INDEX, index)} in stage ${MDC(STAGE_ID, taskSet.id)} (on " +
+            log"${MDC(HOST, info.host)}) as speculatable because it ran more than " +
+            log"${MDC(TIMEOUT, threshold)} ms(${MDC(NUM_TASKS, speculatableTasks.size + 1)}" +
+            log"speculatable tasks in this taskset now)")
           speculatableTasks += index
           sched.dagScheduler.speculativeTaskSubmitted(tasks(index), index)
         }

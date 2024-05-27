@@ -37,7 +37,7 @@ import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
@@ -142,8 +142,9 @@ private[spark] class SparkHadoopUtil extends Logging {
     if (!new File(keytabFilename).exists()) {
       throw new SparkException(s"Keytab file: ${keytabFilename} does not exist")
     } else {
-      logInfo("Attempting to login to Kerberos " +
-        s"using principal: ${principalName} and keytab: ${keytabFilename}")
+      logInfo(log"Attempting to login to Kerberos using principal: " +
+        log"${MDC(LogKeys.PRINCIPAL, principalName)} and keytab: " +
+        log"${MDC(LogKeys.KEYTAB, keytabFilename)}")
       UserGroupInformation.loginUserFromKeytab(principalName, keytabFilename)
     }
   }

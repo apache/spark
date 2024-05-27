@@ -1074,8 +1074,8 @@ the [PostgreSQL JDBC Driver](https://mvnrepository.com/artifact/org.postgresql/p
     </tr>
     <tr>
       <td>TimestampType</td>
-      <td>timestamp</td>
-      <td></td>
+      <td>timestamp with time zone</td>
+      <td>Before Spark 4.0, it was mapped as timestamp. Please refer to the migration guide for more information</td>
     </tr>
     <tr>
       <td>TimestampNTZType</td>
@@ -1980,6 +1980,220 @@ the [IBM Data Server Driver For JDBC and SQLJ](https://mvnrepository.com/artifac
 </table>
 
 The Spark Catalyst data types below are not supported with suitable DB2 types.
+
+- DayTimeIntervalType
+- YearMonthIntervalType
+- CalendarIntervalType
+- ArrayType
+- MapType
+- StructType
+- UserDefinedType
+- NullType
+- ObjectType
+- VariantType
+
+### Mapping Spark SQL Data Types from Teradata
+
+The below table describes the data type conversions from Teradata data types to Spark SQL Data Types,
+when reading data from a Teradata table using the built-in jdbc data source with the [Teradata JDBC Driver](https://mvnrepository.com/artifact/com.teradata.jdbc/terajdbc)
+as the activated JDBC Driver.
+
+<table>
+  <thead>
+    <tr>
+      <th><b>Teradata Data Type</b></th>
+      <th><b>Spark SQL Data Type</b></th>
+      <th><b>Remarks</b></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>BYTEINT</td>
+      <td>ByteType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>SMALLINT</td>
+      <td>ShortType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>INTEGER, INT</td>
+      <td>IntegerType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>BIGINT</td>
+      <td>LongType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>REAL, DOUBLE PRECISION, FLOAT</td>
+      <td>DoubleType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>DECIMAL, NUMERIC, NUMBER</td>
+      <td>DecimalType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>DATE</td>
+      <td>DateType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>TIMESTAMP, TIMESTAMP WITH TIME ZONE</td>
+      <td>TimestampType</td>
+      <td>(Default)preferTimestampNTZ=false or spark.sql.timestampType=TIMESTAMP_LTZ</td>
+    </tr>
+    <tr>
+      <td>TIMESTAMP, TIMESTAMP WITH TIME ZONE</td>
+      <td>TimestampNTZType</td>
+      <td>preferTimestampNTZ=true or spark.sql.timestampType=TIMESTAMP_NTZ</td>
+    </tr>
+    <tr>
+      <td>TIME, TIME WITH TIME ZONE</td>
+      <td>TimestampType</td>
+      <td>(Default)preferTimestampNTZ=false or spark.sql.timestampType=TIMESTAMP_LTZ</td>
+    </tr>
+    <tr>
+      <td>TIME, TIME WITH TIME ZONE</td>
+      <td>TimestampNTZType</td>
+      <td>preferTimestampNTZ=true or spark.sql.timestampType=TIMESTAMP_NTZ</td>
+    </tr>
+    <tr>
+      <td>CHARACTER(n), CHAR(n), GRAPHIC(n)</td>
+      <td>CharType(n)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>VARCHAR(n), VARGRAPHIC(n)</td>
+      <td>VarcharType(n)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>BYTE(n), VARBYTE(n)</td>
+      <td>BinaryType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>CLOB</td>
+      <td>StringType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>BLOB</td>
+      <td>BinaryType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>INTERVAL Data Types</td>
+      <td>-</td>
+      <td>The INTERVAL data types are unknown yet</td>
+    </tr>
+    <tr>
+      <td>Period Data Types, ARRAY, UDT</td>
+      <td>-</td>
+      <td>Not Supported</td>
+    </tr>
+  </tbody>
+</table>
+
+### Mapping Spark SQL Data Types to Teradata
+
+The below table describes the data type conversions from Spark SQL Data Types to Teradata data types,
+when creating, altering, or writing data to a Teradata table using the built-in jdbc data source with
+the [Teradata JDBC Driver](https://mvnrepository.com/artifact/com.teradata.jdbc/terajdbc) as the activated JDBC Driver.
+
+<table>
+  <thead>
+    <tr>
+      <th><b>Spark SQL Data Type</b></th>
+      <th><b>Teradata Data Type</b></th>
+      <th><b>Remarks</b></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>BooleanType</td>
+      <td>CHAR(1)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>ByteType</td>
+      <td>BYTEINT</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>ShortType</td>
+      <td>SMALLINT</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>IntegerType</td>
+      <td>INTEGER</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>LongType</td>
+      <td>BIGINT</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>FloatType</td>
+      <td>REAL</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>DoubleType</td>
+      <td>DOUBLE PRECISION</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>DecimalType(p, s)</td>
+      <td>DECIMAL(p,s)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>DateType</td>
+      <td>DATE</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>TimestampType</td>
+      <td>TIMESTAMP</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>TimestampNTZType</td>
+      <td>TIMESTAMP</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>StringType</td>
+      <td>VARCHAR(255)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>BinaryType</td>
+      <td>BLOB</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>CharType(n)</td>
+      <td>CHAR(n)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>VarcharType(n)</td>
+      <td>VARCHAR(n)</td>
+      <td></td>
+    </tr>
+  </tbody>
+</table>
+
+The Spark Catalyst data types below are not supported with suitable Teradata types.
 
 - DayTimeIntervalType
 - YearMonthIntervalType

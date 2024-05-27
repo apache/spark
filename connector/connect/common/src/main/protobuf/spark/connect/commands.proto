@@ -497,10 +497,10 @@ message CheckpointCommand {
   // (Required) The logical plan to checkpoint.
   Relation relation = 1;
 
-  // (Optional) Locally checkpoint using a local temporary
+  // (Required) Locally checkpoint using a local temporary
   // directory in Spark Connect server (Spark Driver)
-  optional bool local = 2;
+  bool local = 2;
 
-  // (Optional) Whether to checkpoint this dataframe immediately.
-  optional bool eager = 3;
+  // (Required) Whether to checkpoint this dataframe immediately.
+  bool eager = 3;
 }
