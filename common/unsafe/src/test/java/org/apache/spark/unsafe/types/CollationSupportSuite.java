@@ -96,35 +96,48 @@ public class CollationSupportSuite {
     assertStringCompare("σ", "Σ", "UNICODE_CI", 0);
   }
 
-  private void assertLowerCaseCodePoints(String target, String expected, Boolean useCodePoints) {
+  private void assertLowerCaseCodePoints(UTF8String target, UTF8String expected, Boolean useCodePoints) {
     if (useCodePoints) {
-      assertEquals(expected, CollationAwareUTF8String.lowerCaseCodePoints(target));
+      assertEquals(expected.toString(), CollationAwareUTF8String.lowerCaseCodePoints(target.toString()));
     } else {
-      assertEquals(UTF8String.fromString(expected), UTF8String.fromString(target).toLowerCase());
+      assertEquals(expected, target.toLowerCase());
     }
   }
 
   @Test
   public void testLowerCaseCodePoints() {
     // Edge cases
-    assertLowerCaseCodePoints("", "", false);
-    assertLowerCaseCodePoints("", "", true);
+    assertLowerCaseCodePoints(UTF8String.fromString(""), UTF8String.fromString(""), false);
+    assertLowerCaseCodePoints(UTF8String.fromString(""), UTF8String.fromString(""), true);
     // Basic tests
-    assertLowerCaseCodePoints("abcd", "abcd", false);
-    assertLowerCaseCodePoints("AbCd", "abcd", false);
-    assertLowerCaseCodePoints("abcd", "abcd", true);
-    assertLowerCaseCodePoints("aBcD", "abcd", true);
+    assertLowerCaseCodePoints(UTF8String.fromString("abcd"), UTF8String.fromString("abcd"), false);
+    assertLowerCaseCodePoints(UTF8String.fromString("AbCd"), UTF8String.fromString("abcd"), false);
+    assertLowerCaseCodePoints(UTF8String.fromString("abcd"), UTF8String.fromString("abcd"), true);
+    assertLowerCaseCodePoints(UTF8String.fromString("aBcD"), UTF8String.fromString("abcd"), true);
     // Accent variation
-    assertLowerCaseCodePoints("AbĆd", "abćd", false);
-    assertLowerCaseCodePoints("aBcΔ", "abcδ", true);
+    assertLowerCaseCodePoints(UTF8String.fromString("AbĆd"), UTF8String.fromString("abćd"), false);
+    assertLowerCaseCodePoints(UTF8String.fromString("aBcΔ"), UTF8String.fromString("abcδ"), true);
     // Case-variable character length
-    assertLowerCaseCodePoints("İoDiNe", "i̇odine", false);
-    assertLowerCaseCodePoints("Abi̇o12", "abi̇o12", false);
-    assertLowerCaseCodePoints("İodInE", "i̇odine", true);
-    assertLowerCaseCodePoints("aBi̇o12", "abi̇o12", true);
+    assertLowerCaseCodePoints(
+      UTF8String.fromString("İoDiNe"), UTF8String.fromString("i̇odine"), false);
+    assertLowerCaseCodePoints(
+      UTF8String.fromString("Abi̇o12"), UTF8String.fromString("abi̇o12"), false);
+    assertLowerCaseCodePoints(
+      UTF8String.fromString("İodInE"), UTF8String.fromString("i̇odine"), true);
+    assertLowerCaseCodePoints(
+      UTF8String.fromString("aBi̇o12"), UTF8String.fromString("abi̇o12"), true);
     // Conditional case mapping
-    assertLowerCaseCodePoints("ΘΑΛΑΣΣΙΝΟΣ", "θαλασσινος", false);
-    assertLowerCaseCodePoints("ΘΑΛΑΣΣΙΝΟΣ", "θαλασσινοσ", true);
+    assertLowerCaseCodePoints(
+      UTF8String.fromString("ΘΑΛΑΣΣΙΝΟΣ"), UTF8String.fromString("θαλασσινος"), false);
+    assertLowerCaseCodePoints(
+      UTF8String.fromString("ΘΑΛΑΣΣΙΝΟΣ"), UTF8String.fromString("θαλασσινοσ"), true);
+    // Surrogate pairs are treated as invalid UTF8 sequences
+    assertLowerCaseCodePoints(UTF8String.fromBytes(new byte[]
+      {(byte) 0xED, (byte) 0xA0, (byte) 0x80, (byte) 0xED, (byte) 0xB0, (byte) 0x80}),
+      UTF8String.fromString("\ufffd\ufffd"), false);
+    assertLowerCaseCodePoints(UTF8String.fromBytes(new byte[]
+      {(byte) 0xED, (byte) 0xA0, (byte) 0x80, (byte) 0xED, (byte) 0xB0, (byte) 0x80}),
+      UTF8String.fromString("\ufffd\ufffd"), true);
   }
 
   /**
