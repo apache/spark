@@ -96,9 +96,11 @@ public class CollationSupportSuite {
     assertStringCompare("σ", "Σ", "UNICODE_CI", 0);
   }
 
-  private void assertLowerCaseCodePoints(UTF8String target, UTF8String expected, Boolean useCodePoints) {
+  private void assertLowerCaseCodePoints(UTF8String target, UTF8String expected,
+      Boolean useCodePoints) {
     if (useCodePoints) {
-      assertEquals(expected.toString(), CollationAwareUTF8String.lowerCaseCodePoints(target.toString()));
+      assertEquals(expected.toString(),
+        CollationAwareUTF8String.lowerCaseCodePoints(target.toString()));
     } else {
       assertEquals(expected, target.toLowerCase());
     }
