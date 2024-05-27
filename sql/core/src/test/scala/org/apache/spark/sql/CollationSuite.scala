@@ -1131,6 +1131,37 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     })
   }
 
+  test("hash aggregation should be used for collated struct field") {
+    val t1 = "T_1"
+    withTable(t1) {
+      val schema = "x: STRING, y: STRING COLLATE UTF8_BINARY_LCASE"
+      sql(s"CREATE TABLE $t1 (c struct<$schema>) USING PARQUET")
+      sql(s"INSERT INTO $t1 VALUES (named_struct('x', 'aa', 'y', 'aa'))")
+      sql(s"INSERT INTO $t1 VALUES (named_struct('x', 'AA', 'y', 'AA'))")
+      sql(s"INSERT INTO $t1 VALUES (named_struct('x', 'bb', 'y', 'bb'))")
+
+      val df1 = sql(s"SELECT COUNT(*) FROM $t1 GROUP BY c.x")
+      val result1 = Seq(Row(1), Row(1), Row(1))
+      checkAnswer(df1, result1)
+
+      val df2 = sql(s"SELECT COUNT(*) FROM $t1 GROUP BY c.y")
+      val result2 = Seq(Row(2), Row(1))
+      checkAnswer(df2, result2)
+
+      val queryPlan1 = df1.queryExecution.executedPlan
+      val queryPlan2 = df2.queryExecution.executedPlan
+
+      // hash aggregation can be used for all collations in these examples
+      assert(collectFirst(queryPlan1) { case _: HashAggregateExec => () }.nonEmpty)
+      assert(collectFirst(queryPlan1) { case _: SortAggregateExec => () }.isEmpty)
+      assert(collectFirst(queryPlan2) { case _: HashAggregateExec => () }.nonEmpty)
+      assert(collectFirst(queryPlan2) { case _: SortAggregateExec => () }.isEmpty)
+      // check that CollationKey is injected into the Aggregate logical plan
+      assert(collectFirst(queryPlan1) { case s: HashAggregateExec =>
+        s.groupingExpressions.head.dataType.isInstanceOf[BinaryType]}.nonEmpty)
+    }
+  }
+
   test("hll sketch aggregate should respect collation") {
     case class HllSketchAggTestCase[R](c: String, result: R)
     val testCases = Seq(

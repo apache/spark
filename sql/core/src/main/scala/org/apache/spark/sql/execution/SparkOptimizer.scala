@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.ExperimentalMethods
+import org.apache.spark.sql.catalyst.analysis.RewriteGroupByCollation
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.optimizer._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -84,7 +85,8 @@ class SparkOptimizer(
       LimitPushDown,
       PushPredicateThroughNonJoin,
       PushProjectionThroughLimit,
-      RemoveNoopOperators) :+
+      RemoveNoopOperators,
+      RewriteGroupByCollation) :+
     Batch("Infer window group limit", Once,
       InferWindowGroupLimit,
       LimitPushDown,
