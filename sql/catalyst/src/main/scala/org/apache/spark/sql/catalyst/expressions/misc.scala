@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.util.{MapData, RandomUUIDGenerator}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.errors.QueryExecutionErrors.raiseError
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.{AbstractMapType, StringTypeAnyCollation}
+import org.apache.spark.sql.internal.types.StringTypeAnyCollation
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -75,7 +75,7 @@ case class RaiseError(errorClass: Expression, errorParms: Expression, dataType: 
       } else {
         "USER_RAISED_EXCEPTION"
       }),
-      CreateMap(Seq(Literal("errorMessage"), str)), NullType)
+      CreateMap(Seq(Literal("errorMessage"), Collate(str, "UTF8_BINARY"))), NullType)
   }
 
   def this(errorClass: Expression, errorParms: Expression) = {
@@ -85,7 +85,7 @@ case class RaiseError(errorClass: Expression, errorParms: Expression, dataType: 
   override def foldable: Boolean = false
   override def nullable: Boolean = true
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeAnyCollation, AbstractMapType(StringTypeAnyCollation, StringTypeAnyCollation))
+    Seq(StringTypeAnyCollation, MapType(StringType, StringType))
 
   override def left: Expression = errorClass
   override def right: Expression = errorParms

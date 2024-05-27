@@ -97,7 +97,7 @@ abstract class TypeCoercionBase {
             MapType(kt, vt, valueContainsNull1 || valueContainsNull2 ||
               Cast.forceNullable(vt1, vt) || Cast.forceNullable(vt2, vt))
           }
-      }
+        }
     case (StructType(fields1), StructType(fields2)) if fields1.length == fields2.length =>
       val resolver = SQLConf.get.resolver
       fields1.zip(fields2).foldLeft(Option(new StructType())) {
@@ -1089,10 +1089,10 @@ object TypeCoercion extends TypeCoercionBase {
   /**
    * Whether the data type contains StringType.
    */
+  @tailrec
   def hasStringType(dt: DataType): Boolean = dt match {
     case _: StringType => true
     case ArrayType(et, _) => hasStringType(et)
-    case MapType(kt, vt, _) => hasStringType(kt) || hasStringType(vt)
     // Add StructType if we support string promotion for struct fields in the future.
     case _ => false
   }
