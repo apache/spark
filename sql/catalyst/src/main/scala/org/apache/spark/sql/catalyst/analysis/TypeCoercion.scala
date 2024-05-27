@@ -97,7 +97,7 @@ abstract class TypeCoercionBase {
             MapType(kt, vt, valueContainsNull1 || valueContainsNull2 ||
               Cast.forceNullable(vt1, vt) || Cast.forceNullable(vt2, vt))
           }
-        }
+      }
     case (StructType(fields1), StructType(fields2)) if fields1.length == fields2.length =>
       val resolver = SQLConf.get.resolver
       fields1.zip(fields2).foldLeft(Option(new StructType())) {
