@@ -45,7 +45,7 @@ public class CollationAwareUTF8String {
    * @param right The second UTF8String to compare.
    * @return An integer representing the comparison result.
    */
-  public static int compareLowerCase(final UTF8String left, final UTF8String right) {
+  public static int lowercaseCompare(final UTF8String left, final UTF8String right) {
     return lowerCaseCodePoints(left.toString()).compareTo(lowerCaseCodePoints(right.toString()));
   }
 
