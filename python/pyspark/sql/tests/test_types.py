@@ -244,16 +244,16 @@ class TypesTestsMixin:
 
         with self.sql_conf({"spark.sql.timestampType": "TIMESTAMP_NTZ"}):
             with self.sql_conf({"spark.sql.session.timeZone": "America/Sao_Paulo"}):
-                data = [(
-                    datetime.datetime(1970, 1, 1, 0, 0),
-                    Row(a=Row(a=datetime.datetime(1970, 1, 1, 0, 0))),
-                )]
-                df = self.spark.createDataFrame(data)
+                data = [
+                    (
+                        datetime.datetime(1970, 1, 1, 0, 0),
+                        Row(a=Row(a=datetime.datetime(1970, 1, 1, 0, 0))),
+                    )
+                ]
                 self.assertEqual(list(df.schema)[0].dataType.simpleString(), "timestamp_ntz")
                 self.assertEqual(df.first()[0], datetime.datetime(1970, 1, 1, 0, 0))
                 self.assertEqual(
-                    list(df.schema)[1].dataType.simpleString(),
-                    "struct<a:struct<a:timestamp_ntz>>"
+                    list(df.schema)[1].dataType.simpleString(), "struct<a:struct<a:timestamp_ntz>>"
                 )
                 self.assertEqual(df.first()[1], Row(a=Row(a=datetime.datetime(1970, 1, 1, 0, 0))))
 
