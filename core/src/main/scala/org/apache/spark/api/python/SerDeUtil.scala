@@ -93,9 +93,10 @@ private[spark] object SerDeUtil extends Logging {
         buffer += iter.next()
       }
       // Pickle the buffer (or a part of it)
-      val bytes
-      Int elementsToDump = buffer.length
+      var bytes: Array[Byte] = null
+      var elementsToDump: Int = buffer.length
       while (true) {
+        // Try pickling; if it fails, adjust the batch size and retry
         try {
           bytes = pickle.dumps(
             (elementsToDump == buffer.length)
