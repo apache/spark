@@ -251,7 +251,7 @@ class TypesTestsMixin:
                 df = self.spark.createDataFrame(data)
                 self.assertEqual(list(df.schema)[0].dataType.simpleString(), "timestamp_ntz")
                 self.assertEqual(df.first()[0], datetime.datetime(1970, 1, 1, 0, 0))
-                self.assertEquoal(list(df.schema)[1].dataType.simpleString(), "timestamp_ntz")
+                self.assertEqual(list(df.schema)[1].dataType.simpleString(), "timestamp_ntz")
                 self.assertEqual(df.first()[1], Row(a=Row(a=datetime.datetime(1970, 1, 1, 0, 0))))
 
             df = self.spark.createDataFrame(
