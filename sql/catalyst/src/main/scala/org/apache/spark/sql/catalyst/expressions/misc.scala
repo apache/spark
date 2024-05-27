@@ -75,7 +75,7 @@ case class RaiseError(errorClass: Expression, errorParms: Expression, dataType: 
       } else {
         "USER_RAISED_EXCEPTION"
       }),
-      CreateMap(Seq(Literal("errorMessage"), Collate(str, "UTF8_BINARY"))), NullType)
+      CreateMap(Seq(Literal("errorMessage"), str)), NullType)
   }
 
   def this(errorClass: Expression, errorParms: Expression) = {
