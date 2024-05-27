@@ -534,8 +534,10 @@ public final class CollationSupport {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
       if (collation.supportsBinaryEquality) {
         return execBinary(srcString);
-      } else {
+      } else if (collation.supportsLowercaseEquality) {
         return execLowercase(srcString);
+      } else {
+        return execLowercase(srcString); // TODO: ICU implementation
       }
     }
     public static UTF8String exec(
@@ -545,8 +547,10 @@ public final class CollationSupport {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
       if (collation.supportsBinaryEquality) {
         return execBinary(srcString, trimString);
-      } else {
+      } else if (collation.supportsLowercaseEquality) {
         return execLowercase(srcString, trimString);
+      } else {
+        return execLowercase(srcString, trimString); // TODO: ICU implementation
       }
     }
     public static String genCode(
@@ -556,8 +560,10 @@ public final class CollationSupport {
       String expr = "CollationSupport.StringTrim.exec";
       if (collation.supportsBinaryEquality) {
         return String.format(expr + "Binary(%s)", srcString);
-      } {
+      } else if (collation.supportsLowercaseEquality) {
         return String.format(expr + "Lowercase(%s)", srcString);
+      } else {
+        return String.format(expr + "Lowercase(%s)", srcString); // TODO: ICU implementation
       }
     }
     public static String genCode(
@@ -568,8 +574,10 @@ public final class CollationSupport {
       String expr = "CollationSupport.StringTrim.exec";
       if (collation.supportsBinaryEquality) {
         return String.format(expr + "Binary(%s, %s)", srcString, trimString);
-      } else {
+      } else if (collation.supportsLowercaseEquality) {
         return String.format(expr + "Lowercase(%s, %s)", srcString, trimString);
+      } else {
+        return String.format(expr + "Lowercase(%s, %s)", srcString, trimString); // TODO: ICU implementation
       }
     }
     public static UTF8String execBinary(
@@ -599,8 +607,10 @@ public final class CollationSupport {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
       if (collation.supportsBinaryEquality) {
         return execBinary(srcString);
-      } else {
+      } else if (collation.supportsLowercaseEquality) {
         return execLowercase(srcString);
+      } else {
+        return execLowercase(srcString); // TODO: ICU implementation
       }
     }
     public static UTF8String exec(
@@ -610,8 +620,10 @@ public final class CollationSupport {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
       if (collation.supportsBinaryEquality) {
         return execBinary(srcString, trimString);
-      } else {
+      } else if (collation.supportsLowercaseEquality) {
         return execLowercase(srcString, trimString);
+      } else {
+        return execLowercase(srcString, trimString); // TODO: ICU implementation
       }
     }
     public static String genCode(
@@ -621,8 +633,10 @@ public final class CollationSupport {
       String expr = "CollationSupport.StringTrimLeft.exec";
       if (collation.supportsBinaryEquality) {
         return String.format(expr + "Binary(%s)", srcString);
-      } else {
+      } else if (collation.supportsLowercaseEquality) {
         return String.format(expr + "Lowercase(%s)", srcString);
+      } else {
+        return String.format(expr + "Lowercase(%s)", srcString); // TODO: ICU implementation
       }
     }
     public static String genCode(
@@ -633,8 +647,10 @@ public final class CollationSupport {
       String expr = "CollationSupport.StringTrimLeft.exec";
       if (collation.supportsBinaryEquality) {
         return String.format(expr + "Binary(%s, %s)", srcString, trimString);
-      } else {
+      } else if (collation.supportsLowercaseEquality) {
         return String.format(expr + "Lowercase(%s, %s)", srcString, trimString);
+      } else {
+        return String.format(expr + "Lowercase(%s, %s)", srcString, trimString); // TODO: ICU implementation
       }
     }
     public static UTF8String execBinary(
@@ -664,8 +680,10 @@ public final class CollationSupport {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
       if (collation.supportsBinaryEquality) {
         return execBinary(srcString);
-      } else {
+      } else if (collation.supportsLowercaseEquality) {
         return execLowercase(srcString);
+      } else {
+        return execLowercase(srcString); // TODO: ICU implementation
       }
     }
     public static UTF8String exec(
@@ -675,8 +693,10 @@ public final class CollationSupport {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
       if (collation.supportsBinaryEquality) {
         return execBinary(srcString, trimString);
-      } else {
+      } else if (collation.supportsLowercaseEquality) {
         return execLowercase(srcString, trimString);
+      } else {
+        return execLowercase(srcString, trimString); // TODO: ICU implementation
       }
     }
     public static String genCode(
@@ -686,8 +706,10 @@ public final class CollationSupport {
       String expr = "CollationSupport.StringTrimRight.exec";
       if (collation.supportsBinaryEquality) {
         return String.format(expr + "Binary(%s)", srcString);
-      } else {
+      } else if (collation.supportsLowercaseEquality) {
         return String.format(expr + "Lowercase(%s)", srcString);
+      } else {
+        return String.format(expr + "Lowercase(%s)", srcString); // TODO: ICU implementation
       }
     }
     public static String genCode(
@@ -698,8 +720,10 @@ public final class CollationSupport {
       String expr = "CollationSupport.StringTrimRight.exec";
       if (collation.supportsBinaryEquality) {
         return String.format(expr + "Binary(%s, %s)", srcString, trimString);
-      } else {
+      } else if (collation.supportsLowercaseEquality) {
         return String.format(expr + "Lowercase(%s, %s)", srcString, trimString);
+      } else {
+        return String.format(expr + "Lowercase(%s, %s)", srcString, trimString); // TODO: ICU implementation
       }
     }
     public static UTF8String execBinary(
