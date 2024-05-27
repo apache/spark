@@ -192,7 +192,7 @@ class TypesTestsMixin:
             Row(a=1),
             Row("a")(1),
             A(),
-            Row(b=Row(c=datetime.datetime(1970, 1, 1, 0, 0)))
+            Row(b=Row(c=datetime.datetime(1970, 1, 1, 0, 0))),
         ]
 
         df = self.spark.createDataFrame([data])
@@ -215,7 +215,7 @@ class TypesTestsMixin:
             "struct<a:bigint>",
             "struct<a:bigint>",
             "struct<a:bigint>",
-            "struct<b:struct<c:timestamp>>"
+            "struct<b:struct<c:timestamp>>",
         ]
         self.assertEqual(actual, expected)
 
@@ -238,7 +238,7 @@ class TypesTestsMixin:
             Row(a=1),
             Row(a=1),
             Row(a=1),
-            Row(b=Row(c=datetime.datetime(1970, 1, 1, 0, 0)))
+            Row(b=Row(c=datetime.datetime(1970, 1, 1, 0, 0))),
         ]
         self.assertEqual(actual, expected)
 
@@ -248,7 +248,7 @@ class TypesTestsMixin:
                     datetime.datetime(1970, 1, 1, 0, 0),
                     Row(a=Row(a=datetime.datetime(1970, 1, 1, 0, 0))),
                 )]
-                df = self.spark.createDataFrame()
+                df = self.spark.createDataFrame(data)
                 self.assertEqual(list(df.schema)[0].dataType.simpleString(), "timestamp_ntz")
                 self.assertEqual(df.first()[0], datetime.datetime(1970, 1, 1, 0, 0))
                 self.assertEquoal(list(df.schema)[1].dataType.simpleString(), "timestamp_ntz")
