@@ -32,12 +32,8 @@ case class CollationKey(expr: Expression) extends UnaryExpression with ExpectsIn
       st.collationId
   }
 
-  override def nullSafeEval(input: Any): Any = input match {
-    case str: UTF8String =>
-      CollationFactory.getCollationKeyBytes(str, collationId)
-    case _ =>
-      None
-  }
+  override def nullSafeEval(input: Any): Any =
+    CollationFactory.getCollationKeyBytes(input.asInstanceOf[UTF8String], collationId)
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c => s"CollationFactory.getCollationKeyBytes($c, $collationId)")
