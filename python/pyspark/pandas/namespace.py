@@ -65,6 +65,7 @@ from pyspark.sql.types import (
     StringType,
     DateType,
     StructType,
+    DataType,
 )
 from pyspark.sql.dataframe import DataFrame as PySparkDataFrame
 from pyspark import pandas as ps
@@ -2228,7 +2229,9 @@ def get_dummies(
     ):
         raise NotImplementedError(
             "get_dummies currently only accept {} values".format(
-                ", ".join([t.__name__ for t in _get_dummies_acceptable_types])
+                ", ".join(
+                    [cast(Type[DataType], t).typeName() for t in _get_dummies_acceptable_types]
+                )
             )
         )
 
