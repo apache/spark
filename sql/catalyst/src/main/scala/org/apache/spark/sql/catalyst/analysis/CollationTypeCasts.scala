@@ -74,9 +74,7 @@ object CollationTypeCasts extends TypeCoercionRule {
     case raiseError: RaiseError =>
       val newErrorParams = raiseError.errorParms.dataType match {
         case MapType(StringType, StringType, _) => raiseError.errorParms
-        case _: MapType => raiseError.errorParms.withNewChildren(
-          raiseError.errorParms.children.map(Cast(_, StringType)))
-        case _ => raiseError.errorParms
+        case _ => Cast(raiseError.errorParms, MapType(StringType, StringType))
       }
       raiseError.withNewChildren(Seq(raiseError.errorClass, newErrorParams))
 
