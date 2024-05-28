@@ -355,7 +355,7 @@ Aggregate [corr(cast(b#x as double), cast(a#x as double)) AS corr(b, a)#x]
 -- !query
 CREATE TEMPORARY VIEW regr_test AS SELECT * FROM VALUES (10,150),(20,250),(30,350),(80,540),(100,200) AS regr_test (x, y)
 -- !query analysis
-CreateViewCommand `regr_test`, SELECT * FROM VALUES (10,150),(20,250),(30,350),(80,540),(100,200) AS regr_test (x, y), false, false, LocalTempView, true
+CreateViewCommand `regr_test`, SELECT * FROM VALUES (10,150),(20,250),(30,350),(80,540),(100,200) AS regr_test (x, y), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [x#x, y#x]
       +- SubqueryAlias regr_test
          +- LocalRelation [x#x, y#x]

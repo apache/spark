@@ -139,7 +139,7 @@ private[spark] object FallbackStorage extends Logging {
       // The fallback directory for this app may not be created yet.
       if (fallbackFileSystem.exists(fallbackPath)) {
         if (fallbackFileSystem.delete(fallbackPath, true)) {
-          logInfo(s"Succeed to clean up: $fallbackUri")
+          logInfo(log"Succeed to clean up: ${MDC(URI, fallbackUri)}")
         } else {
           // Clean-up can fail due to the permission issues.
           logWarning(log"Failed to clean up: ${MDC(URI, fallbackUri)}")
@@ -159,7 +159,7 @@ private[spark] object FallbackStorage extends Logging {
    * Read a ManagedBuffer.
    */
   def read(conf: SparkConf, blockId: BlockId): ManagedBuffer = {
-    logInfo(s"Read $blockId")
+    logInfo(log"Read ${MDC(BLOCK_ID, blockId)}")
     val fallbackPath = new Path(conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).get)
     val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
     val fallbackFileSystem = FileSystem.get(fallbackPath.toUri, hadoopConf)

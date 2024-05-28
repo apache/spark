@@ -80,6 +80,9 @@ done
 export LC_ALL=C.UTF-8
 export LANG=C.UTF-8
 
+export PYSPARK_PYTHON=/usr/local/bin/python
+export PYSPARK_DRIVER_PYTHON=/usr/local/bin/python
+
 # Commit ref to checkout when building
 GIT_REF=${GIT_REF:-master}
 
@@ -123,12 +126,12 @@ if [[ "$1" == "finalize" ]]; then
     --repository-url https://upload.pypi.org/legacy/ \
     "pyspark-$RELEASE_VERSION.tar.gz" \
     "pyspark-$RELEASE_VERSION.tar.gz.asc"
-  svn update "pyspark-connect-$RELEASE_VERSION.tar.gz"
-  svn update "pyspark-connect-$RELEASE_VERSION.tar.gz.asc"
+  svn update "pyspark_connect-$RELEASE_VERSION.tar.gz"
+  svn update "pyspark_connect-$RELEASE_VERSION.tar.gz.asc"
   TWINE_USERNAME=spark-upload TWINE_PASSWORD="$PYPI_PASSWORD" twine upload \
     --repository-url https://upload.pypi.org/legacy/ \
-    "pyspark-connect-$RELEASE_VERSION.tar.gz" \
-    "pyspark-connect-$RELEASE_VERSION.tar.gz.asc"
+    "pyspark_connect-$RELEASE_VERSION.tar.gz" \
+    "pyspark_connect-$RELEASE_VERSION.tar.gz.asc"
   cd ..
   rm -rf svn-spark
   echo "PySpark uploaded"
@@ -311,7 +314,7 @@ if [[ "$1" == "package" ]]; then
         --detach-sig $PYTHON_DIST_NAME
       shasum -a 512 $PYTHON_DIST_NAME > $PYTHON_DIST_NAME.sha512
 
-      PYTHON_CONNECT_DIST_NAME=pyspark-connect-$PYSPARK_VERSION.tar.gz
+      PYTHON_CONNECT_DIST_NAME=pyspark_connect-$PYSPARK_VERSION.tar.gz
       cp spark-$SPARK_VERSION-bin-$NAME/python/dist/$PYTHON_CONNECT_DIST_NAME .
 
       echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour \
@@ -380,8 +383,8 @@ if [[ "$1" == "package" ]]; then
 
     echo "Copying release tarballs"
     cp spark-* "svn-spark/${DEST_DIR_NAME}-bin/"
-    cp pyspark-* "svn-spark/${DEST_DIR_NAME}-bin/"
-    cp SparkR_* "svn-spark/${DEST_DIR_NAME}-bin/"
+    cp pyspark* "svn-spark/${DEST_DIR_NAME}-bin/"
+    cp SparkR* "svn-spark/${DEST_DIR_NAME}-bin/"
     svn add "svn-spark/${DEST_DIR_NAME}-bin"
 
     cd svn-spark

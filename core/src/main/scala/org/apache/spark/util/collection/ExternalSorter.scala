@@ -28,7 +28,8 @@ import com.google.common.io.ByteStreams
 
 import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKeys.{NUM_BYTES, TASK_ATTEMPT_ID}
 import org.apache.spark.serializer._
 import org.apache.spark.shuffle.{ShufflePartitionPairsWriter, ShuffleWriteMetricsReporter}
 import org.apache.spark.shuffle.api.{ShuffleMapOutputWriter, ShufflePartitionWriter}
@@ -816,8 +817,9 @@ private[spark] class ExternalSorter[K, V, C](
         false
       } else {
         val inMemoryIterator = new WritablePartitionedIterator[K, C](upstream)
-        logInfo(s"Task ${TaskContext.get().taskAttemptId()} force spilling in-memory map to disk " +
-          s"and it will release ${org.apache.spark.util.Utils.bytesToString(getUsed())} memory")
+        logInfo(log"Task ${MDC(TASK_ATTEMPT_ID, TaskContext.get().taskAttemptId())}" +
+          log" force spilling in-memory map to disk and it will release" +
+          log" ${MDC(NUM_BYTES, org.apache.spark.util.Utils.bytesToString(getUsed()))} memory")
         val spillFile = spillMemoryIteratorToDisk(inMemoryIterator)
         forceSpillFiles += spillFile
         val spillReader = new SpillReader(spillFile)

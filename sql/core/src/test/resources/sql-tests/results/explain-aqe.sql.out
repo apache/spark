@@ -975,7 +975,7 @@ Execute CreateViewCommand (1)
 Output: []
 
 (2) CreateViewCommand
-Arguments: `spark_catalog`.`default`.`explain_view`, SELECT key, val FROM explain_temp1, false, false, PersistedView, true
+Arguments: `spark_catalog`.`default`.`explain_view`, SELECT key, val FROM explain_temp1, false, false, PersistedView, COMPENSATION, true
 
 (3) LogicalRelation
 Arguments: parquet, [key#x, val#x], `spark_catalog`.`default`.`explain_temp1`, false

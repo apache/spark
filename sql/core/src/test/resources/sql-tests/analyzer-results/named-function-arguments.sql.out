@@ -58,7 +58,7 @@ CreateViewCommand `t2`, select * from values
   ('val1e', 8S, null, 19L, float(17), 25D, 26E2, timestamp '2014-09-04 01:01:00.000', date '2014-09-04'),
   ('val1f', 19S, null, 19L, float(17), 25D, 26E2, timestamp '2014-10-04 01:01:00.000', date '2014-10-04'),
   ('val1b', null, 16, 19L, float(17), 25D, 26E2, timestamp '2014-05-04 01:01:00.000', null)
-  as t2(t2a, t2b, t2c, t2d, t2e, t2f, t2g, t2h, t2i), false, false, LocalTempView, true
+  as t2(t2a, t2b, t2c, t2d, t2e, t2f, t2g, t2h, t2i), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
       +- SubqueryAlias t2
          +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
@@ -192,7 +192,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW v AS SELECT id FROM range(0, 8)
 -- !query analysis
-CreateViewCommand `v`, SELECT id FROM range(0, 8), false, true, LocalTempView, true
+CreateViewCommand `v`, SELECT id FROM range(0, 8), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [id#xL]
       +- Range (0, 8, step=1)
 

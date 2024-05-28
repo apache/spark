@@ -872,6 +872,9 @@ jobs:
         python3.9 -m pip install 'docutils<0.18.0' # See SPARK-39421
     - name: Install dependencies for documentation generation
       run: |
+        # Keep the version of Bundler here in sync with the following locations:
+        #   - dev/create-release/spark-rm/Dockerfile
+        #   - docs/README.md
         gem install bundler -v 2.4.22
         cd docs
         bundle install

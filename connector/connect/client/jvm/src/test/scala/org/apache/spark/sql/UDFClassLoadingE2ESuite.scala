@@ -23,9 +23,9 @@ import scala.util.Properties
 
 import org.apache.spark.sql.connect.common.ProtoDataTypes
 import org.apache.spark.sql.expressions.ScalarUserDefinedFunction
-import org.apache.spark.sql.test.RemoteSparkSession
+import org.apache.spark.sql.test.{ConnectFunSuite, RemoteSparkSession}
 
-class UDFClassLoadingE2ESuite extends RemoteSparkSession {
+class UDFClassLoadingE2ESuite extends ConnectFunSuite with RemoteSparkSession {
 
   private val scalaVersion = Properties.versionNumberString
     .split("\\.")

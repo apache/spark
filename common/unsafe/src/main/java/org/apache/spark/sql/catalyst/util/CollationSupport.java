@@ -16,22 +16,14 @@
  */
 package org.apache.spark.sql.catalyst.util;
 
-import com.ibm.icu.lang.UCharacter;
-import com.ibm.icu.text.BreakIterator;
 import com.ibm.icu.text.StringSearch;
-import com.ibm.icu.util.ULocale;
 
-import org.apache.spark.unsafe.UTF8StringBuilder;
 import org.apache.spark.unsafe.types.UTF8String;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
-
-import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
-import static org.apache.spark.unsafe.Platform.copyMemory;
 
 /**
  * Static entry point for collation-aware expressions (StringExpressions, RegexpExpressions, and
@@ -441,7 +433,7 @@ public final class CollationSupport {
       return string.toLowerCase().indexOf(substring.toLowerCase(), start);
     }
     public static int execICU(final UTF8String string, final UTF8String substring, final int start,
-                              final int collationId) {
+        final int collationId) {
       return CollationAwareUTF8String.indexOf(string, substring, start, collationId);
     }
   }
@@ -535,6 +527,201 @@ public final class CollationSupport {
     }
   }
 
+  public static class StringTrim {
+    public static UTF8String exec(
+        final UTF8String srcString,
+        final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      if (collation.supportsBinaryEquality) {
+        return execBinary(srcString);
+      } else {
+        return execLowercase(srcString);
+      }
+    }
+    public static UTF8String exec(
+        final UTF8String srcString,
+        final UTF8String trimString,
+        final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      if (collation.supportsBinaryEquality) {
+        return execBinary(srcString, trimString);
+      } else {
+        return execLowercase(srcString, trimString);
+      }
+    }
+    public static String genCode(
+        final String srcString,
+        final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      String expr = "CollationSupport.StringTrim.exec";
+      if (collation.supportsBinaryEquality) {
+        return String.format(expr + "Binary(%s)", srcString);
+      } {
+        return String.format(expr + "Lowercase(%s)", srcString);
+      }
+    }
+    public static String genCode(
+        final String srcString,
+        final String trimString,
+        final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      String expr = "CollationSupport.StringTrim.exec";
+      if (collation.supportsBinaryEquality) {
+        return String.format(expr + "Binary(%s, %s)", srcString, trimString);
+      } else {
+        return String.format(expr + "Lowercase(%s, %s)", srcString, trimString);
+      }
+    }
+    public static UTF8String execBinary(
+        final UTF8String srcString) {
+      return srcString.trim();
+    }
+    public static UTF8String execBinary(
+        final UTF8String srcString,
+        final UTF8String trimString) {
+      return srcString.trim(trimString);
+    }
+    public static UTF8String execLowercase(
+        final UTF8String srcString) {
+      return srcString.trim();
+    }
+    public static UTF8String execLowercase(
+        final UTF8String srcString,
+        final UTF8String trimString) {
+      return CollationAwareUTF8String.lowercaseTrim(srcString, trimString);
+    }
+  }
+
+  public static class StringTrimLeft {
+    public static UTF8String exec(
+        final UTF8String srcString,
+        final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      if (collation.supportsBinaryEquality) {
+        return execBinary(srcString);
+      } else {
+        return execLowercase(srcString);
+      }
+    }
+    public static UTF8String exec(
+        final UTF8String srcString,
+        final UTF8String trimString,
+        final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      if (collation.supportsBinaryEquality) {
+        return execBinary(srcString, trimString);
+      } else {
+        return execLowercase(srcString, trimString);
+      }
+    }
+    public static String genCode(
+        final String srcString,
+        final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      String expr = "CollationSupport.StringTrimLeft.exec";
+      if (collation.supportsBinaryEquality) {
+        return String.format(expr + "Binary(%s)", srcString);
+      } else {
+        return String.format(expr + "Lowercase(%s)", srcString);
+      }
+    }
+    public static String genCode(
+        final String srcString,
+        final String trimString,
+        final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      String expr = "CollationSupport.StringTrimLeft.exec";
+      if (collation.supportsBinaryEquality) {
+        return String.format(expr + "Binary(%s, %s)", srcString, trimString);
+      } else {
+        return String.format(expr + "Lowercase(%s, %s)", srcString, trimString);
+      }
+    }
+    public static UTF8String execBinary(
+        final UTF8String srcString) {
+      return srcString.trimLeft();
+    }
+    public static UTF8String execBinary(
+        final UTF8String srcString,
+        final UTF8String trimString) {
+      return srcString.trimLeft(trimString);
+    }
+    public static UTF8String execLowercase(
+        final UTF8String srcString) {
+      return srcString.trimLeft();
+    }
+    public static UTF8String execLowercase(
+        final UTF8String srcString,
+        final UTF8String trimString) {
+      return CollationAwareUTF8String.lowercaseTrimLeft(srcString, trimString);
+    }
+  }
+
+  public static class StringTrimRight {
+    public static UTF8String exec(
+        final UTF8String srcString,
+        final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      if (collation.supportsBinaryEquality) {
+        return execBinary(srcString);
+      } else {
+        return execLowercase(srcString);
+      }
+    }
+    public static UTF8String exec(
+        final UTF8String srcString,
+        final UTF8String trimString,
+        final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      if (collation.supportsBinaryEquality) {
+        return execBinary(srcString, trimString);
+      } else {
+        return execLowercase(srcString, trimString);
+      }
+    }
+    public static String genCode(
+        final String srcString,
+        final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      String expr = "CollationSupport.StringTrimRight.exec";
+      if (collation.supportsBinaryEquality) {
+        return String.format(expr + "Binary(%s)", srcString);
+      } else {
+        return String.format(expr + "Lowercase(%s)", srcString);
+      }
+    }
+    public static String genCode(
+        final String srcString,
+        final String trimString,
+        final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      String expr = "CollationSupport.StringTrimRight.exec";
+      if (collation.supportsBinaryEquality) {
+        return String.format(expr + "Binary(%s, %s)", srcString, trimString);
+      } else {
+        return String.format(expr + "Lowercase(%s, %s)", srcString, trimString);
+      }
+    }
+    public static UTF8String execBinary(
+        final UTF8String srcString) {
+      return srcString.trimRight();
+    }
+    public static UTF8String execBinary(
+        final UTF8String srcString,
+        final UTF8String trimString) {
+      return srcString.trimRight(trimString);
+    }
+    public static UTF8String execLowercase(
+        final UTF8String srcString) {
+      return srcString.trimRight();
+    }
+    public static UTF8String execLowercase(
+        final UTF8String srcString,
+        final UTF8String trimString) {
+      return CollationAwareUTF8String.lowercaseTrimRight(srcString, trimString);
+    }
+  }
+
   // TODO: Add more collation-aware string expressions.
 
   /**
@@ -565,334 +752,5 @@ public final class CollationSupport {
    */
 
   // TODO: Add other collation-aware expressions.
-
-  /**
-   * Utility class for collation-aware UTF8String operations.
-   */
-
-  private static class CollationAwareUTF8String {
-
-    private static UTF8String replace(final UTF8String src, final UTF8String search,
-        final UTF8String replace, final int collationId) {
-      // This collation aware implementation is based on existing implementation on UTF8String
-      if (src.numBytes() == 0 || search.numBytes() == 0) {
-        return src;
-      }
-
-      StringSearch stringSearch = CollationFactory.getStringSearch(src, search, collationId);
-
-      // Find the first occurrence of the search string.
-      int end = stringSearch.next();
-      if (end == StringSearch.DONE) {
-        // Search string was not found, so string is unchanged.
-        return src;
-      }
-
-      // Initialize byte positions
-      int c = 0;
-      int byteStart = 0; // position in byte
-      int byteEnd = 0; // position in byte
-      while (byteEnd < src.numBytes() && c < end) {
-        byteEnd += UTF8String.numBytesForFirstByte(src.getByte(byteEnd));
-        c += 1;
-      }
-
-      // At least one match was found. Estimate space needed for result.
-      // The 16x multiplier here is chosen to match commons-lang3's implementation.
-      int increase = Math.max(0, Math.abs(replace.numBytes() - search.numBytes())) * 16;
-      final UTF8StringBuilder buf = new UTF8StringBuilder(src.numBytes() + increase);
-      while (end != StringSearch.DONE) {
-        buf.appendBytes(src.getBaseObject(), src.getBaseOffset() + byteStart, byteEnd - byteStart);
-        buf.append(replace);
-
-        // Move byteStart to the beginning of the current match
-        byteStart = byteEnd;
-        int cs = c;
-        // Move cs to the end of the current match
-        // This is necessary because the search string may contain 'multi-character' characters
-        while (byteStart < src.numBytes() && cs < c + stringSearch.getMatchLength()) {
-          byteStart += UTF8String.numBytesForFirstByte(src.getByte(byteStart));
-          cs += 1;
-        }
-        // Go to next match
-        end = stringSearch.next();
-        // Update byte positions
-        while (byteEnd < src.numBytes() && c < end) {
-          byteEnd += UTF8String.numBytesForFirstByte(src.getByte(byteEnd));
-          c += 1;
-        }
-      }
-      buf.appendBytes(src.getBaseObject(), src.getBaseOffset() + byteStart,
-        src.numBytes() - byteStart);
-      return buf.build();
-    }
-
-    private static UTF8String lowercaseReplace(final UTF8String src, final UTF8String search,
-        final UTF8String replace) {
-      if (src.numBytes() == 0 || search.numBytes() == 0) {
-        return src;
-      }
-      UTF8String lowercaseString = src.toLowerCase();
-      UTF8String lowercaseSearch = search.toLowerCase();
-
-      int start = 0;
-      int end = lowercaseString.indexOf(lowercaseSearch, 0);
-      if (end == -1) {
-        // Search string was not found, so string is unchanged.
-        return src;
-      }
-
-      // Initialize byte positions
-      int c = 0;
-      int byteStart = 0; // position in byte
-      int byteEnd = 0; // position in byte
-      while (byteEnd < src.numBytes() && c < end) {
-        byteEnd += UTF8String.numBytesForFirstByte(src.getByte(byteEnd));
-        c += 1;
-      }
-
-      // At least one match was found. Estimate space needed for result.
-      // The 16x multiplier here is chosen to match commons-lang3's implementation.
-      int increase = Math.max(0, replace.numBytes() - search.numBytes()) * 16;
-      final UTF8StringBuilder buf = new UTF8StringBuilder(src.numBytes() + increase);
-      while (end != -1) {
-        buf.appendBytes(src.getBaseObject(), src.getBaseOffset() + byteStart, byteEnd - byteStart);
-        buf.append(replace);
-        // Update character positions
-        start = end + lowercaseSearch.numChars();
-        end = lowercaseString.indexOf(lowercaseSearch, start);
-        // Update byte positions
-        byteStart = byteEnd + search.numBytes();
-        while (byteEnd < src.numBytes() && c < end) {
-          byteEnd += UTF8String.numBytesForFirstByte(src.getByte(byteEnd));
-          c += 1;
-        }
-      }
-      buf.appendBytes(src.getBaseObject(), src.getBaseOffset() + byteStart,
-        src.numBytes() - byteStart);
-      return buf.build();
-    }
-
-    private static String toUpperCase(final String target, final int collationId) {
-      ULocale locale = CollationFactory.fetchCollation(collationId)
-              .collator.getLocale(ULocale.ACTUAL_LOCALE);
-      return UCharacter.toUpperCase(locale, target);
-    }
-
-    private static String toLowerCase(final String target, final int collationId) {
-      ULocale locale = CollationFactory.fetchCollation(collationId)
-              .collator.getLocale(ULocale.ACTUAL_LOCALE);
-      return UCharacter.toLowerCase(locale, target);
-    }
-
-    private static String toTitleCase(final String target, final int collationId) {
-      ULocale locale = CollationFactory.fetchCollation(collationId)
-              .collator.getLocale(ULocale.ACTUAL_LOCALE);
-      return UCharacter.toTitleCase(locale, target, BreakIterator.getWordInstance(locale));
-    }
-
-    private static int findInSet(final UTF8String match, final UTF8String set, int collationId) {
-      if (match.contains(UTF8String.fromString(","))) {
-        return 0;
-      }
-
-      String setString = set.toString();
-      StringSearch stringSearch = CollationFactory.getStringSearch(setString, match.toString(),
-        collationId);
-
-      int wordStart = 0;
-      while ((wordStart = stringSearch.next()) != StringSearch.DONE) {
-        boolean isValidStart = wordStart == 0 || setString.charAt(wordStart - 1) == ',';
-        boolean isValidEnd = wordStart + stringSearch.getMatchLength() == setString.length()
-                || setString.charAt(wordStart + stringSearch.getMatchLength()) == ',';
-
-        if (isValidStart && isValidEnd) {
-          int pos = 0;
-          for (int i = 0; i < setString.length() && i < wordStart; i++) {
-            if (setString.charAt(i) == ',') {
-              pos++;
-            }
-          }
-
-          return pos + 1;
-        }
-      }
-
-      return 0;
-    }
-
-    private static int indexOf(final UTF8String target, final UTF8String pattern,
-        final int start, final int collationId) {
-      if (pattern.numBytes() == 0) {
-        return 0;
-      }
-
-      StringSearch stringSearch = CollationFactory.getStringSearch(target, pattern, collationId);
-      stringSearch.setIndex(start);
-
-      return stringSearch.next();
-    }
-
-    private static int find(UTF8String target, UTF8String pattern, int start,
-        int collationId) {
-      assert (pattern.numBytes() > 0);
-
-      StringSearch stringSearch = CollationFactory.getStringSearch(target, pattern, collationId);
-      // Set search start position (start from character at start position)
-      stringSearch.setIndex(target.bytePosToChar(start));
-
-      // Return either the byte position or -1 if not found
-      return target.charPosToByte(stringSearch.next());
-    }
-
-    private static UTF8String subStringIndex(final UTF8String string, final UTF8String delimiter,
-        int count, final int collationId) {
-      if (delimiter.numBytes() == 0 || count == 0 || string.numBytes() == 0) {
-        return UTF8String.EMPTY_UTF8;
-      }
-      if (count > 0) {
-        int idx = -1;
-        while (count > 0) {
-          idx = find(string, delimiter, idx + 1, collationId);
-          if (idx >= 0) {
-            count --;
-          } else {
-            // can not find enough delim
-            return string;
-          }
-        }
-        if (idx == 0) {
-          return UTF8String.EMPTY_UTF8;
-        }
-        byte[] bytes = new byte[idx];
-        copyMemory(string.getBaseObject(), string.getBaseOffset(), bytes, BYTE_ARRAY_OFFSET, idx);
-        return UTF8String.fromBytes(bytes);
-
-      } else {
-        count = -count;
-
-        StringSearch stringSearch = CollationFactory
-          .getStringSearch(string, delimiter, collationId);
-
-        int start = string.numChars() - 1;
-        int lastMatchLength = 0;
-        int prevStart = -1;
-        while (count > 0) {
-          stringSearch.reset();
-          prevStart = -1;
-          int matchStart = stringSearch.next();
-          lastMatchLength = stringSearch.getMatchLength();
-          while (matchStart <= start) {
-            if (matchStart != StringSearch.DONE) {
-              // Found a match, update the start position
-              prevStart = matchStart;
-              matchStart = stringSearch.next();
-            } else {
-              break;
-            }
-          }
-
-          if (prevStart == -1) {
-            // can not find enough delim
-            return string;
-          } else {
-            start = prevStart - 1;
-            count--;
-          }
-        }
-
-        int resultStart = prevStart + lastMatchLength;
-        if (resultStart == string.numChars()) {
-          return UTF8String.EMPTY_UTF8;
-        }
-
-        return string.substring(resultStart, string.numChars());
-      }
-    }
-
-    private static UTF8String lowercaseSubStringIndex(final UTF8String string,
-      final UTF8String delimiter, int count) {
-      if (delimiter.numBytes() == 0 || count == 0) {
-        return UTF8String.EMPTY_UTF8;
-      }
-
-      UTF8String lowercaseString = string.toLowerCase();
-      UTF8String lowercaseDelimiter = delimiter.toLowerCase();
-
-      if (count > 0) {
-        int idx = -1;
-        while (count > 0) {
-          idx = lowercaseString.find(lowercaseDelimiter, idx + 1);
-          if (idx >= 0) {
-            count --;
-          } else {
-            // can not find enough delim
-            return string;
-          }
-        }
-        if (idx == 0) {
-          return UTF8String.EMPTY_UTF8;
-        }
-        byte[] bytes = new byte[idx];
-        copyMemory(string.getBaseObject(), string.getBaseOffset(), bytes, BYTE_ARRAY_OFFSET, idx);
-        return UTF8String.fromBytes(bytes);
-
-      } else {
-        int idx = string.numBytes() - delimiter.numBytes() + 1;
-        count = -count;
-        while (count > 0) {
-          idx = lowercaseString.rfind(lowercaseDelimiter, idx - 1);
-          if (idx >= 0) {
-            count --;
-          } else {
-            // can not find enough delim
-            return string;
-          }
-        }
-        if (idx + delimiter.numBytes() == string.numBytes()) {
-          return UTF8String.EMPTY_UTF8;
-        }
-        int size = string.numBytes() - delimiter.numBytes() - idx;
-        byte[] bytes = new byte[size];
-        copyMemory(string.getBaseObject(), string.getBaseOffset() + idx + delimiter.numBytes(),
-                bytes, BYTE_ARRAY_OFFSET, size);
-        return UTF8String.fromBytes(bytes);
-      }
-    }
-
-    private static Map<String, String> getCollationAwareDict(UTF8String string,
-        Map<String, String> dict, int collationId) {
-      String srcStr = string.toString();
-
-      Map<String, String> collationAwareDict = new HashMap<>();
-      for (String key : dict.keySet()) {
-        StringSearch stringSearch =
-          CollationFactory.getStringSearch(string, UTF8String.fromString(key), collationId);
-
-        int pos = 0;
-        while ((pos = stringSearch.next()) != StringSearch.DONE) {
-          int codePoint = srcStr.codePointAt(pos);
-          int charCount = Character.charCount(codePoint);
-          String newKey = srcStr.substring(pos, pos + charCount);
-
-          boolean exists = false;
-          for (String existingKey : collationAwareDict.keySet()) {
-            if (stringSearch.getCollator().compare(existingKey, newKey) == 0) {
-              collationAwareDict.put(newKey, collationAwareDict.get(existingKey));
-              exists = true;
-              break;
-            }
-          }
-
-          if (!exists) {
-            collationAwareDict.put(newKey, dict.get(key));
-          }
-        }
-      }
-
-      return collationAwareDict;
-    }
-
-  }
 
 }

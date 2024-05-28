@@ -1627,10 +1627,8 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   test("SPARK-33084: Add jar support Ivy URI in SQL") {
     val testData = TestHive.getHiveFile("data/files/sample.json").toURI
     withTable("t") {
-      // hive-catalog-core has some transitive dependencies which dont exist on maven central
-      // and hence cannot be found in the test environment or are non-jar (.pom) which cause
-      // failures in tests. Use transitive=false as it should be good enough to test the Ivy
-      // support in Hive ADD JAR
+      // Use transitive=false as it should be good enough to test the Ivy support
+      // in Hive ADD JAR
       sql(s"ADD JAR ivy://org.apache.hive.hcatalog:hive-hcatalog-core:$hiveVersion" +
         "?transitive=false")
       sql(

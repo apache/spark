@@ -451,6 +451,7 @@ object FunctionRegistry {
     // "try_*" function which always return Null instead of runtime error.
     expression[TryAdd]("try_add"),
     expression[TryDivide]("try_divide"),
+    expression[TryRemainder]("try_remainder"),
     expression[TrySubtract]("try_subtract"),
     expression[TryMultiply]("try_multiply"),
     expression[TryElementAt]("try_element_at"),
@@ -799,6 +800,9 @@ object FunctionRegistry {
     expression[BitwiseNot]("~"),
     expression[BitwiseOr]("|"),
     expression[BitwiseXor]("^"),
+    expression[ShiftLeft]("<<", true, Some("4.0.0")),
+    expression[ShiftRight](">>", true, Some("4.0.0")),
+    expression[ShiftRightUnsigned](">>>", true, Some("4.0.0")),
     expression[BitwiseCount]("bit_count"),
     expression[BitAndAgg]("bit_and"),
     expression[BitOrAgg]("bit_or"),

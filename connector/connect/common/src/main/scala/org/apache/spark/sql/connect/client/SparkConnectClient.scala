@@ -39,7 +39,7 @@ import org.apache.spark.sql.connect.common.config.ConnectCommon
  */
 private[sql] class SparkConnectClient(
     private[sql] val configuration: SparkConnectClient.Configuration,
-    private val channel: ManagedChannel) {
+    private[sql] val channel: ManagedChannel) {
 
   private val userContext: UserContext = configuration.userContext
 

@@ -6,7 +6,7 @@ AS testData(a, b)
 -- !query analysis
 CreateViewCommand `testData`, SELECT * FROM VALUES
 ('{"a":1, "b":"2"}', '[{"a": 1, "b":2}, {"a":2, "b":2}]'), ('{"a":1, "b":"2"}', null), ('{"a":2, "b":"3"}', '[{"a": 3, "b":4}, {"a":4, "b":5}]'), ('{"a":5, "b":"6"}', '[{"a": 6, "b":7}, {"a":8, "b":9}]'), (null, '[{"a": 1, "b":2}, {"a":2, "b":2}]')
-AS testData(a, b), false, true, LocalTempView, true
+AS testData(a, b), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [a#x, b#x]
       +- SubqueryAlias testData
          +- LocalRelation [a#x, b#x]

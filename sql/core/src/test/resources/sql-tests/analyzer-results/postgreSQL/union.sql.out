@@ -6,7 +6,7 @@ CREATE OR REPLACE TEMPORARY VIEW INT4_TBL AS SELECT * FROM
 -- !query analysis
 CreateViewCommand `INT4_TBL`, SELECT * FROM
   (VALUES (0), (123456), (-123456), (2147483647), (-2147483647))
-  AS v(f1), false, true, LocalTempView, true
+  AS v(f1), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [f1#x]
       +- SubqueryAlias v
          +- Project [col1#x AS f1#x]
@@ -30,7 +30,7 @@ CreateViewCommand `INT8_TBL`, SELECT * FROM
     (4567890123456789, 123),
     (4567890123456789, 4567890123456789),
     (4567890123456789, -4567890123456789))
-  AS v(q1, q2), false, true, LocalTempView, true
+  AS v(q1, q2), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [q1#xL, q2#xL]
       +- SubqueryAlias v
          +- Project [col1#xL AS q1#xL, col2#xL AS q2#xL]
@@ -46,7 +46,7 @@ CREATE OR REPLACE TEMPORARY VIEW FLOAT8_TBL AS SELECT * FROM
 CreateViewCommand `FLOAT8_TBL`, SELECT * FROM
   (VALUES (0.0), (-34.84), (-1004.30),
     (CAST('-1.2345678901234e+200' AS DOUBLE)), (CAST('-1.2345678901234e-200' AS DOUBLE)))
-  AS v(f1), false, true, LocalTempView, true
+  AS v(f1), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [f1#x]
       +- SubqueryAlias v
          +- Project [col1#x AS f1#x]

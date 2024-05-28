@@ -57,14 +57,14 @@ object CollateExpressionBuilder extends ExpressionBuilder {
     expressions match {
       case Seq(e: Expression, collationExpr: Expression) =>
         (collationExpr.dataType, collationExpr.foldable) match {
-          case (StringType, true) =>
+          case (_: StringType, true) =>
             val evalCollation = collationExpr.eval()
             if (evalCollation == null) {
               throw QueryCompilationErrors.unexpectedNullError("collation", collationExpr)
             } else {
               Collate(e, evalCollation.toString)
             }
-          case (StringType, false) => throw QueryCompilationErrors.nonFoldableArgumentError(
+          case (_: StringType, false) => throw QueryCompilationErrors.nonFoldableArgumentError(
             funcName, "collationName", StringType)
           case (_, _) => throw QueryCompilationErrors.unexpectedInputDataTypeError(
             funcName, 1, StringType, collationExpr)

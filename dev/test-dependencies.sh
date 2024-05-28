@@ -49,7 +49,7 @@ OLD_VERSION=$($MVN -q \
     --non-recursive \
     org.codehaus.mojo:exec-maven-plugin:1.6.0:exec | grep -E '[0-9]+\.[0-9]+\.[0-9]+')
 # dependency:get for guava and jetty-io are workaround for SPARK-37302.
-GUAVA_VERSION=$(build/mvn help:evaluate -Dexpression=guava.version -q -DforceStdout | grep -E "^[0-9.]+$")
+GUAVA_VERSION=$(build/mvn help:evaluate -Dexpression=guava.version -q -DforceStdout | grep -E "^[0-9\.]+")
 build/mvn dependency:get -Dartifact=com.google.guava:guava:${GUAVA_VERSION} -q
 JETTY_VERSION=$(build/mvn help:evaluate -Dexpression=jetty.version -q -DforceStdout | grep -E "[0-9]+\.[0-9]+\.[0-9]+")
 build/mvn dependency:get -Dartifact=org.eclipse.jetty:jetty-io:${JETTY_VERSION} -q
@@ -139,5 +139,9 @@ for HADOOP_HIVE_PROFILE in "${HADOOP_HIVE_PROFILES[@]}"; do
     exit 1
   fi
 done
+
+if [[ -d "$FWDIR/dev/pr-deps" ]]; then
+  rm -rf "$FWDIR/dev/pr-deps"
+fi
 
 exit 0

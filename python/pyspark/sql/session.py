@@ -1042,6 +1042,7 @@ class SparkSession(SparkConversionMixin):
             )
         infer_dict_as_struct = self._jconf.inferDictAsStruct()
         infer_array_from_first_element = self._jconf.legacyInferArrayTypeFromFirstElement()
+        infer_map_from_first_pair = self._jconf.legacyInferMapStructTypeFromFirstItem()
         prefer_timestamp_ntz = is_timestamp_ntz_preferred()
         schema = reduce(
             _merge_type,
@@ -1051,6 +1052,7 @@ class SparkSession(SparkConversionMixin):
                     names,
                     infer_dict_as_struct=infer_dict_as_struct,
                     infer_array_from_first_element=infer_array_from_first_element,
+                    infer_map_from_first_pair=infer_map_from_first_pair,
                     prefer_timestamp_ntz=prefer_timestamp_ntz,
                 )
                 for row in data
@@ -1093,6 +1095,7 @@ class SparkSession(SparkConversionMixin):
 
         infer_dict_as_struct = self._jconf.inferDictAsStruct()
         infer_array_from_first_element = self._jconf.legacyInferArrayTypeFromFirstElement()
+        infer_map_from_first_pair = self._jconf.legacyInferMapStructTypeFromFirstItem()
         prefer_timestamp_ntz = is_timestamp_ntz_preferred()
         if samplingRatio is None:
             schema = _infer_schema(
@@ -1110,6 +1113,7 @@ class SparkSession(SparkConversionMixin):
                             names=names,
                             infer_dict_as_struct=infer_dict_as_struct,
                             infer_array_from_first_element=infer_array_from_first_element,
+                            infer_map_from_first_pair=infer_map_from_first_pair,
                             prefer_timestamp_ntz=prefer_timestamp_ntz,
                         ),
                     )
@@ -1129,6 +1133,7 @@ class SparkSession(SparkConversionMixin):
                     names,
                     infer_dict_as_struct=infer_dict_as_struct,
                     infer_array_from_first_element=infer_array_from_first_element,
+                    infer_map_from_first_pair=infer_map_from_first_pair,
                     prefer_timestamp_ntz=prefer_timestamp_ntz,
                 )
             ).reduce(_merge_type)

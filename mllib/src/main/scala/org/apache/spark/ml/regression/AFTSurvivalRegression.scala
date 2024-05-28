@@ -24,7 +24,7 @@ import breeze.optimize.{CachedDiffFunction, LBFGS => BreezeLBFGS}
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.feature._
 import org.apache.spark.ml.linalg._
@@ -206,8 +206,8 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
     instr.logNamedValue("quantileProbabilities.size", $(quantileProbabilities).length)
 
     if (dataset.storageLevel != StorageLevel.NONE) {
-      instr.logWarning(s"Input instances will be standardized, blockified to blocks, and " +
-        s"then cached during training. Be careful of double caching!")
+      instr.logWarning("Input instances will be standardized, blockified to blocks, and " +
+        "then cached during training. Be careful of double caching!")
     }
 
     val validatedCensorCol = {
@@ -441,8 +441,8 @@ class AFTSurvivalRegressionModel private[ml] (
     if (predictionColNames.nonEmpty) {
       dataset.withColumns(predictionColNames, predictionColumns)
     } else {
-      this.logWarning(s"$uid: AFTSurvivalRegressionModel.transform() does nothing" +
-        " because no output columns were set.")
+      this.logWarning(log"${MDC(LogKeys.UUID, uid)}: AFTSurvivalRegressionModel.transform() " +
+        log"does nothing because no output columns were set.")
       dataset.toDF()
     }
   }

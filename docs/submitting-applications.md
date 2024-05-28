@@ -91,7 +91,7 @@ run it with `--help`. Here are a few examples of common options:
 # Run application locally on 8 cores
 ./bin/spark-submit \
   --class org.apache.spark.examples.SparkPi \
-  --master local[8] \
+  --master "local[8]" \
   /path/to/examples.jar \
   100
 

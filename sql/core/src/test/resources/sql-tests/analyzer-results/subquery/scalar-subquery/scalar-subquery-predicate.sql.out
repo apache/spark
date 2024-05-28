@@ -2,7 +2,7 @@
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW p AS VALUES (1, 1) AS T(pk, pv)
 -- !query analysis
-CreateViewCommand `p`, VALUES (1, 1) AS T(pk, pv), false, true, LocalTempView, true
+CreateViewCommand `p`, VALUES (1, 1) AS T(pk, pv), false, true, LocalTempView, UNSUPPORTED, true
    +- SubqueryAlias T
       +- LocalRelation [pk#x, pv#x]
 
@@ -10,7 +10,7 @@ CreateViewCommand `p`, VALUES (1, 1) AS T(pk, pv), false, true, LocalTempView, t
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW c AS VALUES (1, 1) AS T(ck, cv)
 -- !query analysis
-CreateViewCommand `c`, VALUES (1, 1) AS T(ck, cv), false, true, LocalTempView, true
+CreateViewCommand `c`, VALUES (1, 1) AS T(ck, cv), false, true, LocalTempView, UNSUPPORTED, true
    +- SubqueryAlias T
       +- LocalRelation [ck#x, cv#x]
 
@@ -110,7 +110,7 @@ CreateViewCommand `t1`, select * from values
   ('val1d', 10S, null, 12L, float(17.0), 25D, 26E2BD, timestamp '2015-05-04 01:01:00.000', date '2015-05-04'),
   ('val1a', 6S, 8, 10L, float(15.0), 20D, 20E2BD, timestamp '2014-04-04 01:02:00.001', date '2014-04-04'),
   ('val1e', 10S, null, 19L, float(17.0), 25D, 26E2BD, timestamp '2014-05-04 01:01:00.000', date '2014-05-04')
-  as t1(t1a, t1b, t1c, t1d, t1e, t1f, t1g, t1h, t1i), false, false, LocalTempView, true
+  as t1(t1a, t1b, t1c, t1d, t1e, t1f, t1g, t1h, t1i), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]
       +- SubqueryAlias t1
          +- LocalRelation [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]
@@ -147,7 +147,7 @@ CreateViewCommand `t2`, select * from values
   ('val1e', 8S, null, 19L, float(17), 25D, 26E2BD, timestamp '2014-09-04 01:01:00.000', date '2014-09-04'),
   ('val1f', 19S, null, 19L, float(17), 25D, 26E2BD, timestamp '2014-10-04 01:01:00.000', date '2014-10-04'),
   ('val1b', null, 16, 19L, float(17), 25D, 26E2BD, timestamp '2014-05-04 01:01:00.000', null)
-  as t2(t2a, t2b, t2c, t2d, t2e, t2f, t2g, t2h, t2i), false, false, LocalTempView, true
+  as t2(t2a, t2b, t2c, t2d, t2e, t2f, t2g, t2h, t2i), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
       +- SubqueryAlias t2
          +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
@@ -182,7 +182,7 @@ CreateViewCommand `t3`, select * from values
   ('val1b', null, 16, 19L, float(17), 25D, 26E2BD, timestamp '2014-11-04 01:02:00.000', null),
   ('val3b', 8S, null, 719L, float(17), 25D, 26E2BD, timestamp '2014-05-04 01:02:00.000', date '2014-05-04'),
   ('val3b', 8S, null, 19L, float(17), 25D, 26E2BD, timestamp '2015-05-04 01:02:00.000', date '2015-05-04')
-  as t3(t3a, t3b, t3c, t3d, t3e, t3f, t3g, t3h, t3i), false, false, LocalTempView, true
+  as t3(t3a, t3b, t3c, t3d, t3e, t3f, t3g, t3h, t3i), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [t3a#x, t3b#x, t3c#x, t3d#xL, t3e#x, t3f#x, t3g#x, t3h#x, t3i#x]
       +- SubqueryAlias t3
          +- LocalRelation [t3a#x, t3b#x, t3c#x, t3d#xL, t3e#x, t3f#x, t3g#x, t3h#x, t3i#x]
@@ -1254,21 +1254,21 @@ Project [t1a#x, t1b#x]
 -- !query
 CREATE OR REPLACE TEMP VIEW t0(t0a, t0b) AS VALUES (1, 1), (2, 0)
 -- !query analysis
-CreateViewCommand `t0`, [(t0a,None), (t0b,None)], VALUES (1, 1), (2, 0), false, true, LocalTempView, true
+CreateViewCommand `t0`, [(t0a,None), (t0b,None)], VALUES (1, 1), (2, 0), false, true, LocalTempView, UNSUPPORTED, true
    +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
 CREATE OR REPLACE TEMP VIEW t1(t1a, t1b, t1c) AS VALUES (1, 1, 3)
 -- !query analysis
-CreateViewCommand `t1`, [(t1a,None), (t1b,None), (t1c,None)], VALUES (1, 1, 3), false, true, LocalTempView, true
+CreateViewCommand `t1`, [(t1a,None), (t1b,None), (t1c,None)], VALUES (1, 1, 3), false, true, LocalTempView, UNSUPPORTED, true
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
 -- !query
 CREATE OR REPLACE TEMP VIEW t2(t2a, t2b, t2c) AS VALUES (1, 1, 5), (2, 2, 7)
 -- !query analysis
-CreateViewCommand `t2`, [(t2a,None), (t2b,None), (t2c,None)], VALUES (1, 1, 5), (2, 2, 7), false, true, LocalTempView, true
+CreateViewCommand `t2`, [(t2a,None), (t2b,None), (t2c,None)], VALUES (1, 1, 5), (2, 2, 7), false, true, LocalTempView, UNSUPPORTED, true
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 

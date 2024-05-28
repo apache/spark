@@ -225,7 +225,7 @@ CreateViewCommand `various_arrays`, SELECT * FROM VALUES (
   array_array1, array_array2,
   struct_array1, struct_array2,
   map_array1, map_array2
-), false, false, LocalTempView, true
+), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [boolean_array1#x, boolean_array2#x, tinyint_array1#x, tinyint_array2#x, smallint_array1#x, smallint_array2#x, int_array1#x, int_array2#x, bigint_array1#x, bigint_array2#x, decimal_array1#x, decimal_array2#x, double_array1#x, double_array2#x, float_array1#x, float_array2#x, date_array1#x, data_array2#x, timestamp_array1#x, timestamp_array2#x, string_array1#x, string_array2#x, array_array1#x, array_array2#x, ... 4 more fields]
       +- SubqueryAlias various_arrays
          +- LocalRelation [boolean_array1#x, boolean_array2#x, tinyint_array1#x, tinyint_array2#x, smallint_array1#x, smallint_array2#x, int_array1#x, int_array2#x, bigint_array1#x, bigint_array2#x, decimal_array1#x, decimal_array2#x, double_array1#x, double_array2#x, float_array1#x, float_array2#x, date_array1#x, data_array2#x, timestamp_array1#x, timestamp_array2#x, string_array1#x, string_array2#x, array_array1#x, array_array2#x, ... 4 more fields]

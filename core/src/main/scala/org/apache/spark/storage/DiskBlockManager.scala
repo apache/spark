@@ -252,7 +252,7 @@ private[spark] class DiskBlockManager(
     Utils.getConfiguredLocalDirs(conf).flatMap { rootDir =>
       try {
         val localDir = Utils.createDirectory(rootDir, "blockmgr")
-        logInfo(s"Created local directory at $localDir")
+        logInfo(log"Created local directory at ${MDC(PATH, localDir)}")
         Some(localDir)
       } catch {
         case e: IOException =>
@@ -290,7 +290,7 @@ private[spark] class DiskBlockManager(
               }
             }
           }
-          logInfo(s"Merge directory and its sub dirs get created at $mergeDir")
+          logInfo(log"Merge directory and its sub dirs get created at ${MDC(PATH, mergeDir)}")
         } catch {
           case e: IOException =>
             logError(

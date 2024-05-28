@@ -1435,7 +1435,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 CREATE TEMPORARY VIEW fmtTable(fmtField) AS SELECT * FROM VALUES ('invalidFormat')
 -- !query analysis
-CreateViewCommand `fmtTable`, [(fmtField,None)], SELECT * FROM VALUES ('invalidFormat'), false, false, LocalTempView, true
+CreateViewCommand `fmtTable`, [(fmtField,None)], SELECT * FROM VALUES ('invalidFormat'), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [col1#x]
       +- LocalRelation [col1#x]
 

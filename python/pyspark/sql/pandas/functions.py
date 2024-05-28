@@ -432,7 +432,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
 
 
 # validate the pandas udf and return the adjusted eval type
-def _validate_pandas_udf(f, returnType, evalType) -> int:
+def _validate_pandas_udf(f, evalType) -> int:
     argspec = getfullargspec(f)
 
     # pandas UDF by type hints.
@@ -533,7 +533,7 @@ def _validate_pandas_udf(f, returnType, evalType) -> int:
 
 
 def _create_pandas_udf(f, returnType, evalType):
-    evalType = _validate_pandas_udf(f, returnType, evalType)
+    evalType = _validate_pandas_udf(f, evalType)
 
     if is_remote():
         from pyspark.sql.connect.udf import _create_udf as _create_connect_udf

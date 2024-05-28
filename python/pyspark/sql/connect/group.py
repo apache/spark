@@ -34,6 +34,7 @@ from typing import (
 from pyspark.util import PythonEvalType
 from pyspark.sql.group import GroupedData as PySparkGroupedData
 from pyspark.sql.pandas.group_ops import PandasCogroupedOps as PySparkPandasCogroupedOps
+from pyspark.sql.pandas.functions import _validate_pandas_udf  # type: ignore[attr-defined]
 from pyspark.sql.types import NumericType
 from pyspark.sql.types import StructType
 
@@ -293,6 +294,7 @@ class GroupedData:
         from pyspark.sql.connect.udf import UserDefinedFunction
         from pyspark.sql.connect.dataframe import DataFrame
 
+        _validate_pandas_udf(func, PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF)
         udf_obj = UserDefinedFunction(
             func,
             returnType=schema,
@@ -322,6 +324,7 @@ class GroupedData:
         from pyspark.sql.connect.udf import UserDefinedFunction
         from pyspark.sql.connect.dataframe import DataFrame
 
+        _validate_pandas_udf(func, PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE)
         udf_obj = UserDefinedFunction(
             func,
             returnType=outputStructType,
@@ -360,6 +363,7 @@ class GroupedData:
         from pyspark.sql.connect.udf import UserDefinedFunction
         from pyspark.sql.connect.dataframe import DataFrame
 
+        _validate_pandas_udf(func, PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF)
         udf_obj = UserDefinedFunction(
             func,
             returnType=schema,
@@ -398,9 +402,8 @@ class PandasCogroupedOps:
     ) -> "DataFrame":
         from pyspark.sql.connect.udf import UserDefinedFunction
         from pyspark.sql.connect.dataframe import DataFrame
-        from pyspark.sql.pandas.functions import _validate_pandas_udf  # type: ignore[attr-defined]
 
-        _validate_pandas_udf(func, schema, PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF)
+        _validate_pandas_udf(func, PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF)
         udf_obj = UserDefinedFunction(
             func,
             returnType=schema,
@@ -426,6 +429,7 @@ class PandasCogroupedOps:
         from pyspark.sql.connect.udf import UserDefinedFunction
         from pyspark.sql.connect.dataframe import DataFrame
 
+        _validate_pandas_udf(func, PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF)
         udf_obj = UserDefinedFunction(
             func,
             returnType=schema,

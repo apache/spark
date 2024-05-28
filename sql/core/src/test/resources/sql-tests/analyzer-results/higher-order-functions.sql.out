@@ -10,7 +10,7 @@ CreateViewCommand `nested`, values
   (1, array(32, 97), array(array(12, 99), array(123, 42), array(1))),
   (2, array(77, -76), array(array(6, 96, 65), array(-1, -2))),
   (3, array(12), array(array(17)))
-  as t(x, ys, zs), false, true, LocalTempView, true
+  as t(x, ys, zs), false, true, LocalTempView, UNSUPPORTED, true
    +- SubqueryAlias t
       +- LocalRelation [x#x, ys#x, zs#x]
 
@@ -278,7 +278,7 @@ create or replace temporary view nested as values
 CreateViewCommand `nested`, values
   (1, map(1, 1, 2, 2, 3, 3)),
   (2, map(4, 4, 5, 5, 6, 6))
-  as t(x, ys), false, true, LocalTempView, true
+  as t(x, ys), false, true, LocalTempView, UNSUPPORTED, true
    +- SubqueryAlias t
       +- LocalRelation [x#x, ys#x]
 
