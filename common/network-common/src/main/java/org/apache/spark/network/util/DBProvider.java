@@ -22,8 +22,8 @@ import java.io.IOException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
 
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.network.shuffledb.DB;
 import org.apache.spark.network.shuffledb.DBBackend;
 import org.apache.spark.network.shuffledb.LevelDB;
@@ -31,7 +31,7 @@ import org.apache.spark.network.shuffledb.RocksDB;
 import org.apache.spark.network.shuffledb.StoreVersion;
 
 public class DBProvider {
-  private static final Logger logger = LoggerFactory.getLogger(DBProvider.class);
+  private static final SparkLogger logger = SparkLoggerFactory.getLogger(DBProvider.class);
     public static DB initDB(
         DBBackend dbBackend,
         File dbFile,

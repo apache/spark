@@ -29,8 +29,8 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Multimap;
 import org.apache.hadoop.hive.metastore.TableType;
 
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
 
@@ -43,7 +43,7 @@ import org.apache.spark.internal.MDC;
  */
 public class ClassicTableTypeMapping implements TableTypeMapping {
 
-  private static final Logger LOG = LoggerFactory.getLogger(ClassicTableTypeMapping.class);
+  private static final SparkLogger LOG = SparkLoggerFactory.getLogger(ClassicTableTypeMapping.class);
 
   public enum ClassicTableTypes {
     TABLE,

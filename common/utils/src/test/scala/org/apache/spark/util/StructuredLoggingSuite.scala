@@ -78,8 +78,8 @@ trait LoggingSuiteBase
   // test for message and exception
   def expectedPatternForMsgWithMDCAndException(level: Level): String
 
-  // test for external system custom LogKey
-  def expectedPatternForExternalSystemCustomLogKey(level: Level): String
+  // test for custom LogKey
+  def expectedPatternForCustomLogKey(level: Level): String
 
   def verifyMsgWithConcat(level: Level, logOutput: String): Unit
 
@@ -146,18 +146,17 @@ trait LoggingSuiteBase
       }
   }
 
-  private val externalSystemCustomLog =
-    log"${MDC(CustomLogKeys.CUSTOM_LOG_KEY, "External system custom log message.")}"
-  test("Logging with external system custom LogKey") {
+  private val customLog = log"${MDC(CustomLogKeys.CUSTOM_LOG_KEY, "Custom log message.")}"
+  test("Logging with custom LogKey") {
     Seq(
-      (Level.ERROR, () => logError(externalSystemCustomLog)),
-      (Level.WARN, () => logWarning(externalSystemCustomLog)),
-      (Level.INFO, () => logInfo(externalSystemCustomLog)),
-      (Level.DEBUG, () => logDebug(externalSystemCustomLog)),
-      (Level.TRACE, () => logTrace(externalSystemCustomLog))).foreach {
+      (Level.ERROR, () => logError(customLog)),
+      (Level.WARN, () => logWarning(customLog)),
+      (Level.INFO, () => logInfo(customLog)),
+      (Level.DEBUG, () => logDebug(customLog)),
+      (Level.TRACE, () => logTrace(customLog))).foreach {
       case (level, logFunc) =>
         val logOutput = captureLogOutput(logFunc)
-        assert(expectedPatternForExternalSystemCustomLogKey(level).r.matches(logOutput))
+        assert(expectedPatternForCustomLogKey(level).r.matches(logOutput))
     }
   }
 
@@ -261,15 +260,15 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
         }""")
   }
 
-  override def expectedPatternForExternalSystemCustomLogKey(level: Level): String = {
+  override def expectedPatternForCustomLogKey(level: Level): String = {
     compactAndToRegexPattern(
       s"""
         {
           "ts": "<timestamp>",
           "level": "$level",
-          "msg": "External system custom log message.",
+          "msg": "Custom log message.",
           "context": {
-              "custom_log_key": "External system custom log message."
+              "custom_log_key": "Custom log message."
           },
           "logger": "$className"
         }"""
@@ -307,6 +306,6 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
 }
 
 object CustomLogKeys {
-  // External system custom LogKey must be `extends LogKey`
+  // Custom `LogKey` must be `extends LogKey`
   case object CUSTOM_LOG_KEY extends LogKey
 }

@@ -772,12 +772,17 @@ object SQLConf {
         " produced by a builtin function such as to_char or CAST")
       .version("4.0.0")
       .stringConf
-      .checkValue(CollationFactory.isValidCollation,
+      .checkValue(
+        collationName => {
+          try {
+            CollationFactory.fetchCollation(collationName)
+            true
+          } catch {
+            case e: SparkException if e.getErrorClass == "COLLATION_INVALID_NAME" => false
+          }
+        },
         "DEFAULT_COLLATION",
-        name =>
-          Map(
-            "proposal" -> CollationFactory.getClosestCollation(name)
-          ))
+        _ => Map())
       .createWithDefault("UTF8_BINARY")
 
   val FETCH_SHUFFLE_BLOCKS_IN_BATCH =
@@ -1569,7 +1574,7 @@ object SQLConf {
         "side. This could help to eliminate unnecessary shuffles")
       .version("3.4.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED =
     buildConf("spark.sql.sources.v2.bucketing.partiallyClusteredDistribution.enabled")
@@ -1700,15 +1705,21 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val VIEW_SCHEMA_BINDING_MODE = buildConf("spark.sql.viewSchemaBindingMode")
-    .doc("Set to DISABLE to disable the WITH SCHEMA clause for view DDL and suppress the line in " +
-      " DESCRIBE EXTENDED. The default, and only other value, is COMPENSATION. Views without " +
-      " WITH SCHEMA clause are defaulted to WITH SCHEMA COMPENSATION.")
+  val VIEW_SCHEMA_BINDING_ENABLED = buildConf("spark.sql.legacy.viewSchemaBindingMode")
+    .internal()
+    .doc("Set to false to disable the WITH SCHEMA clause for view DDL and suppress the line in " +
+      "DESCRIBE EXTENDED and SHOW CREATE TABLE.")
     .version("4.0.0")
-    .stringConf
-    .transform(_.toUpperCase(Locale.ROOT))
-    .checkValues(Set("COMPENSATION", "DISABLED"))
-    .createWithDefault("COMPENSATION")
+    .booleanConf
+    .createWithDefault(true)
+
+  val VIEW_SCHEMA_COMPENSATION = buildConf("spark.sql.legacy.viewSchemaCompensation")
+    .internal()
+    .doc("Set to false to revert default view schema binding mode from WITH SCHEMA COMPENSATION " +
+      "to WITH SCHEMA BINDING.")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(true)
 
   // The output committer class used by data sources. The specified class needs to be a
   // subclass of org.apache.hadoop.mapreduce.OutputCommitter.
@@ -4223,6 +4234,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_MYSQL_TIMESTAMPNTZ_MAPPING_ENABLED =
+    buildConf("spark.sql.legacy.mysql.timestampNTZMapping.enabled")
+      .internal()
+      .doc("When true, TimestampNTZType and MySQL TIMESTAMP can be converted bidirectionally. " +
+        "For reading, MySQL TIMESTAMP is converted to TimestampNTZType when JDBC read option " +
+        "preferTimestampNTZ is true. For writing, TimestampNTZType is converted to MySQL " +
+        "TIMESTAMP; otherwise, DATETIME")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_ORACLE_TIMESTAMP_MAPPING_ENABLED =
     buildConf("spark.sql.legacy.oracle.timestampMapping.enabled")
       .internal()
@@ -4236,6 +4258,25 @@ object SQLConf {
     buildConf("spark.sql.legacy.db2.numericMapping.enabled")
       .internal()
       .doc("When true, SMALLINT maps to IntegerType in DB2; otherwise, ShortType" )
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_DB2_BOOLEAN_MAPPING_ENABLED =
+    buildConf("spark.sql.legacy.db2.booleanMapping.enabled")
+      .internal()
+      .doc("When true, BooleanType maps to CHAR(1) in DB2; otherwise, BOOLEAN" )
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_POSTGRES_DATETIME_MAPPING_ENABLED =
+    buildConf("spark.sql.legacy.postgres.datetimeMapping.enabled")
+      .internal()
+      .doc("When true, TimestampType maps to TIMESTAMP WITHOUT TIME ZONE in PostgreSQL for " +
+        "writing; otherwise, TIMESTAMP WITH TIME ZONE. When true, TIMESTAMP WITH TIME ZONE " +
+        "can be converted to TimestampNTZType when JDBC read option preferTimestampNTZ is " +
+        "true; otherwise, converted to TimestampType regardless of preferTimestampNTZ.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
@@ -5373,11 +5414,20 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyMySqlBitArrayMappingEnabled: Boolean =
     getConf(LEGACY_MYSQL_BIT_ARRAY_MAPPING_ENABLED)
 
+  def legacyMySqlTimestampNTZMappingEnabled: Boolean =
+    getConf(LEGACY_MYSQL_TIMESTAMPNTZ_MAPPING_ENABLED)
+
   def legacyOracleTimestampMappingEnabled: Boolean =
     getConf(LEGACY_ORACLE_TIMESTAMP_MAPPING_ENABLED)
 
   def legacyDB2numericMappingEnabled: Boolean =
     getConf(LEGACY_DB2_TIMESTAMP_MAPPING_ENABLED)
+
+  def legacyDB2BooleanMappingEnabled: Boolean =
+    getConf(LEGACY_DB2_BOOLEAN_MAPPING_ENABLED)
+
+  def legacyPostgresDatetimeMappingEnabled: Boolean =
+    getConf(LEGACY_POSTGRES_DATETIME_MAPPING_ENABLED)
 
   override def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = {
     LegacyBehaviorPolicy.withName(getConf(SQLConf.LEGACY_TIME_PARSER_POLICY))
@@ -5524,7 +5574,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def groupByAliases: Boolean = getConf(GROUP_BY_ALIASES)
 
-  def viewSchemaBindingMode: String = getConf(VIEW_SCHEMA_BINDING_MODE)
+  def viewSchemaBindingEnabled: Boolean = getConf(VIEW_SCHEMA_BINDING_ENABLED)
+
+  def viewSchemaCompensation: Boolean = getConf(VIEW_SCHEMA_COMPENSATION)
 
   def defaultCacheStorageLevel: StorageLevel =
     StorageLevel.fromString(getConf(DEFAULT_CACHE_STORAGE_LEVEL))

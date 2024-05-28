@@ -37,8 +37,8 @@ import org.apache.hive.service.cli.thrift.ThriftBinaryCLIService;
 import org.apache.hive.service.cli.thrift.ThriftCLIService;
 import org.apache.hive.service.cli.thrift.ThriftHttpCLIService;
 
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
 import org.apache.spark.util.ShutdownHookManager;
@@ -49,7 +49,7 @@ import org.apache.spark.util.SparkExitCode;
  *
  */
 public class HiveServer2 extends CompositeService {
-  private static final Logger LOG = LoggerFactory.getLogger(HiveServer2.class);
+  private static final SparkLogger LOG = SparkLoggerFactory.getLogger(HiveServer2.class);
 
   private CLIService cliService;
   private ThriftCLIService thriftCLIService;
@@ -145,7 +145,7 @@ public class HiveServer2 extends CompositeService {
           throw new Error("Max start attempts " + maxAttempts + " exhausted", throwable);
         } else {
           LOG.warn("Error starting HiveServer2 on attempt {}, will retry in 60 seconds",
-            throwable, MDC.of(LogKeys.RETRY_COUNT$.MODULE$, attempts));
+            throwable, MDC.of(LogKeys.NUM_RETRY$.MODULE$, attempts));
           try {
             Thread.sleep(60L * 1000L);
           } catch (InterruptedException e) {

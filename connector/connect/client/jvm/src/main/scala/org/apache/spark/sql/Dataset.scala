@@ -3402,20 +3402,105 @@ class Dataset[T] private[sql] (
     df
   }
 
-  def checkpoint(): Dataset[T] = {
-    throw new UnsupportedOperationException("checkpoint is not implemented.")
-  }
+  /**
+   * Eagerly checkpoint a Dataset and return the new Dataset. Checkpointing can be used to
+   * truncate the logical plan of this Dataset, which is especially useful in iterative algorithms
+   * where the plan may grow exponentially. It will be saved to files inside the checkpoint
+   * directory set with `SparkContext#setCheckpointDir`.
+   *
+   * @group basic
+   * @since 4.0.0
+   */
+  def checkpoint(): Dataset[T] = checkpoint(eager = true, reliableCheckpoint = true)
 
-  def checkpoint(eager: Boolean): Dataset[T] = {
-    throw new UnsupportedOperationException("checkpoint is not implemented.")
-  }
+  /**
+   * Returns a checkpointed version of this Dataset. Checkpointing can be used to truncate the
+   * logical plan of this Dataset, which is especially useful in iterative algorithms where the
+   * plan may grow exponentially. It will be saved to files inside the checkpoint directory set
+   * with `SparkContext#setCheckpointDir`.
+   *
+   * @param eager
+   *   Whether to checkpoint this dataframe immediately
+   *
+   * @note
+   *   When checkpoint is used with eager = false, the final data that is checkpointed after the
+   *   first action may be different from the data that was used during the job due to
+   *   non-determinism of the underlying operation and retries. If checkpoint is used to achieve
+   *   saving a deterministic snapshot of the data, eager = true should be used. Otherwise, it is
+   *   only deterministic after the first execution, after the checkpoint was finalized.
+   *
+   * @group basic
+   * @since 4.0.0
+   */
+  def checkpoint(eager: Boolean): Dataset[T] =
+    checkpoint(eager = eager, reliableCheckpoint = true)
 
-  def localCheckpoint(): Dataset[T] = {
-    throw new UnsupportedOperationException("localCheckpoint is not implemented.")
-  }
+  /**
+   * Eagerly locally checkpoints a Dataset and return the new Dataset. Checkpointing can be used
+   * to truncate the logical plan of this Dataset, which is especially useful in iterative
+   * algorithms where the plan may grow exponentially. Local checkpoints are written to executor
+   * storage and despite potentially faster they are unreliable and may compromise job completion.
+   *
+   * @group basic
+   * @since 4.0.0
+   */
+  def localCheckpoint(): Dataset[T] = checkpoint(eager = true, reliableCheckpoint = false)
 
-  def localCheckpoint(eager: Boolean): Dataset[T] = {
-    throw new UnsupportedOperationException("localCheckpoint is not implemented.")
+  /**
+   * Locally checkpoints a Dataset and return the new Dataset. Checkpointing can be used to
+   * truncate the logical plan of this Dataset, which is especially useful in iterative algorithms
+   * where the plan may grow exponentially. Local checkpoints are written to executor storage and
+   * despite potentially faster they are unreliable and may compromise job completion.
+   *
+   * @param eager
+   *   Whether to checkpoint this dataframe immediately
+   *
+   * @note
+   *   When checkpoint is used with eager = false, the final data that is checkpointed after the
+   *   first action may be different from the data that was used during the job due to
+   *   non-determinism of the underlying operation and retries. If checkpoint is used to achieve
+   *   saving a deterministic snapshot of the data, eager = true should be used. Otherwise, it is
+   *   only deterministic after the first execution, after the checkpoint was finalized.
+   *
+   * @group basic
+   * @since 4.0.0
+   */
+  def localCheckpoint(eager: Boolean): Dataset[T] =
+    checkpoint(eager = eager, reliableCheckpoint = false)
+
+  /**
+   * Returns a checkpointed version of this Dataset.
+   *
+   * @param eager
+   *   Whether to checkpoint this dataframe immediately
+   * @param reliableCheckpoint
+   *   Whether to create a reliable checkpoint saved to files inside the checkpoint directory. If
+   *   false creates a local checkpoint using the caching subsystem
+   */
+  private def checkpoint(eager: Boolean, reliableCheckpoint: Boolean): Dataset[T] = {
+    sparkSession.newDataset(agnosticEncoder) { builder =>
+      val command = sparkSession.newCommand { builder =>
+        builder.getCheckpointCommandBuilder
+          .setLocal(!reliableCheckpoint)
+          .setEager(eager)
+          .setRelation(this.plan.getRoot)
+      }
+      val responseIter = sparkSession.execute(command)
+      try {
+        val response = responseIter
+          .find(_.hasCheckpointCommandResult)
+          .getOrElse(throw new RuntimeException("CheckpointCommandResult must be present"))
+
+        val cachedRemoteRelation = response.getCheckpointCommandResult.getRelation
+        sparkSession.cleaner.register(cachedRemoteRelation)
+
+        // Update the builder with the values from the result.
+        builder.setCachedRemoteRelation(cachedRemoteRelation)
+      } finally {
+        // consume the rest of the iterator
+        responseIter.foreach(_ => ())
+      }
+    }
   }
 
   /**

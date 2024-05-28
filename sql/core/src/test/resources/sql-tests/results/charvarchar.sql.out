@@ -223,6 +223,7 @@ struct<createtab_stmt:string>
 CREATE VIEW default.char_view (
   c,
   v)
+WITH SCHEMA COMPENSATION
 AS select * from char_tbl
 
 

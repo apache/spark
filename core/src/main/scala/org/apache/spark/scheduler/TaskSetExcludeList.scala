@@ -19,8 +19,7 @@ package org.apache.spark.scheduler
 import scala.collection.mutable.{HashMap, HashSet}
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config
+import org.apache.spark.internal.{config, Logging, LogKeys, MDC}
 import org.apache.spark.util.Clock
 
 /**
@@ -134,7 +133,8 @@ private[scheduler] class TaskSetExcludelist(
     val numFailures = execFailures.numUniqueTasksWithFailures
     if (numFailures >= MAX_FAILURES_PER_EXEC_STAGE) {
       if (excludedExecs.add(exec)) {
-        logInfo(s"Excluding executor ${exec} for stage $stageId")
+        logInfo(log"Excluding executor ${MDC(LogKeys.EXECUTOR_ID, exec)} for stage " +
+          log"${MDC(LogKeys.STAGE_ID, stageId)}")
         // This executor has been excluded for this stage.  Let's check if it
         // the whole node should be excluded.
         val excludedExecutorsOnNode =
@@ -149,7 +149,8 @@ private[scheduler] class TaskSetExcludelist(
         val numFailExec = excludedExecutorsOnNode.size
         if (numFailExec >= MAX_FAILED_EXEC_PER_NODE_STAGE) {
           if (excludedNodes.add(host)) {
-            logInfo(s"Excluding ${host} for stage $stageId")
+            logInfo(log"Excluding ${MDC(LogKeys.HOST, host)} for " +
+              log"stage ${MDC(LogKeys.STAGE_ID, stageId)}")
             // SparkListenerNodeBlacklistedForStage is deprecated but post both events
             // to keep backward compatibility
             listenerBus.post(
