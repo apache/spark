@@ -332,6 +332,21 @@ package object dsl {
       def sql(sqlText: String): Relation = {
         Relation.newBuilder().setSql(SQL.newBuilder().setQuery(sqlText)).build()
       }
+
+      def table(name: String): Relation = {
+        proto.Relation
+          .newBuilder()
+          .setRead(
+            proto.Read
+              .newBuilder()
+              .setNamedTable(
+                proto.Read.NamedTable
+                  .newBuilder()
+                  .setUnparsedIdentifier(name)
+                  .build())
+              .build())
+          .build()
+      }
     }
 
     implicit class DslNAFunctions(val logicalPlan: Relation) {

@@ -1477,16 +1477,11 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-15648: teradataDialect StringType data mapping") {
-    val teradataDialect = JdbcDialects.get("jdbc:teradata://127.0.0.1/db")
-    assert(teradataDialect.getJDBCType(StringType).
-      map(_.databaseTypeDefinition).get == "VARCHAR(255)")
-  }
-
-  test("SPARK-15648: teradataDialect BooleanType data mapping") {
-    val teradataDialect = JdbcDialects.get("jdbc:teradata://127.0.0.1/db")
-    assert(teradataDialect.getJDBCType(BooleanType).
-      map(_.databaseTypeDefinition).get == "CHAR(1)")
+  test("SPARK-48399: TeradataDialect jdbc data mapping") {
+    val dialect = JdbcDialects.get("jdbc:teradata://127.0.0.1/db")
+    assert(dialect.getJDBCType(StringType).map(_.databaseTypeDefinition).get == "VARCHAR(255)")
+    assert(dialect.getJDBCType(BooleanType).map(_.databaseTypeDefinition).get == "CHAR(1)")
+    assert(dialect.getJDBCType(ByteType).map(_.databaseTypeDefinition).get == "BYTEINT")
   }
 
   test("SPARK-38846: TeradataDialect catalyst type mapping") {

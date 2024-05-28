@@ -45,7 +45,7 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from pyspark.util import is_remote_only
+from pyspark.util import is_remote_only, JVM_INT_MAX
 from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.utils import (
     has_numpy,
@@ -104,8 +104,6 @@ __all__ = [
     "VariantVal",
 ]
 
-_JVM_INT_MAX: int = (1 << 31) - 1
-
 
 class DataType:
     """Base class for data types."""
@@ -117,7 +115,11 @@ class DataType:
         return hash(str(self))
 
     def __eq__(self, other: Any) -> bool:
-        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+        if isinstance(other, self.__class__):
+            self_dict = {k: v for k, v in self.__dict__.items() if k != "typeName"}
+            other_dict = {k: v for k, v in other.__dict__.items() if k != "typeName"}
+            return self_dict == other_dict
+        return False
 
     def __ne__(self, other: Any) -> bool:
         return not self.__eq__(other)
@@ -125,6 +127,12 @@ class DataType:
     @classmethod
     def typeName(cls) -> str:
         return cls.__name__[:-4].lower()
+
+    # The classmethod 'typeName' is not always consistent with the Scala side, e.g.
+    # DecimalType(10, 2): 'decimal' vs 'decimal(10, 2)'
+    # This method is used in subclass initializer to replace 'typeName' if they are different.
+    def _type_name(self) -> str:
+        return self.__class__.__name__.removesuffix("Type").removesuffix("UDT").lower()
 
     def simpleString(self) -> str:
         return self.typeName()
@@ -272,25 +280,13 @@ class StringType(AtomicType):
         name of the collation, default is UTF8_BINARY.
     """
 
-    collationNames = ["UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI"]
     providerSpark = "spark"
     providerICU = "icu"
     providers = [providerSpark, providerICU]
 
-    def __init__(self, collation: Optional[str] = None):
-        self.collationId = 0 if collation is None else self.collationNameToId(collation)
-
-    @classmethod
-    def fromCollationId(self, collationId: int) -> "StringType":
-        return StringType(StringType.collationNames[collationId])
-
-    @classmethod
-    def collationIdToName(cls, collationId: int) -> str:
-        return StringType.collationNames[collationId]
-
-    @classmethod
-    def collationNameToId(cls, collationName: str) -> int:
-        return StringType.collationNames.index(collationName)
+    def __init__(self, collation: str = "UTF8_BINARY"):
+        self.typeName = self._type_name  # type: ignore[method-assign]
+        self.collation = collation
 
     @classmethod
     def collationProvider(cls, collationName: str) -> str:
@@ -299,11 +295,11 @@ class StringType(AtomicType):
             return StringType.providerSpark
         return StringType.providerICU
 
-    def simpleString(self) -> str:
+    def _type_name(self) -> str:
         if self.isUTF8BinaryCollation():
             return "string"
 
-        return f"string collate ${self.collationIdToName(self.collationId)}"
+        return f"string collate ${self.collation}"
 
     # For backwards compatibility and compatibility with other readers all string types
     # are serialized in json as regular strings and the collation info is written to
@@ -313,13 +309,11 @@ class StringType(AtomicType):
 
     def __repr__(self) -> str:
         return (
-            "StringType('%s')" % StringType.collationNames[self.collationId]
-            if self.collationId != 0
-            else "StringType()"
+            "StringType()" if self.isUTF8BinaryCollation() else "StringType('%s')" % self.collation
         )
 
     def isUTF8BinaryCollation(self) -> bool:
-        return self.collationId == 0
+        return self.collation == "UTF8_BINARY"
 
 
 class CharType(AtomicType):
@@ -332,12 +326,10 @@ class CharType(AtomicType):
     """
 
     def __init__(self, length: int):
+        self.typeName = self._type_name  # type: ignore[method-assign]
         self.length = length
 
-    def simpleString(self) -> str:
-        return "char(%d)" % (self.length)
-
-    def jsonValue(self) -> str:
+    def _type_name(self) -> str:
         return "char(%d)" % (self.length)
 
     def __repr__(self) -> str:
@@ -354,12 +346,10 @@ class VarcharType(AtomicType):
     """
 
     def __init__(self, length: int):
+        self.typeName = self._type_name  # type: ignore[method-assign]
         self.length = length
 
-    def simpleString(self) -> str:
-        return "varchar(%d)" % (self.length)
-
-    def jsonValue(self) -> str:
+    def _type_name(self) -> str:
         return "varchar(%d)" % (self.length)
 
     def __repr__(self) -> str:
@@ -458,14 +448,12 @@ class DecimalType(FractionalType):
     """
 
     def __init__(self, precision: int = 10, scale: int = 0):
+        self.typeName = self._type_name  # type: ignore[method-assign]
         self.precision = precision
         self.scale = scale
         self.hasPrecisionInfo = True  # this is a public API
 
-    def simpleString(self) -> str:
-        return "decimal(%d,%d)" % (self.precision, self.scale)
-
-    def jsonValue(self) -> str:
+    def _type_name(self) -> str:
         return "decimal(%d,%d)" % (self.precision, self.scale)
 
     def __repr__(self) -> str:
@@ -540,6 +528,7 @@ class DayTimeIntervalType(AnsiIntervalType):
     _inverted_fields = dict(zip(_fields.values(), _fields.keys()))
 
     def __init__(self, startField: Optional[int] = None, endField: Optional[int] = None):
+        self.typeName = self._type_name  # type: ignore[method-assign]
         if startField is None and endField is None:
             # Default matched to scala side.
             startField = DayTimeIntervalType.DAY
@@ -556,7 +545,7 @@ class DayTimeIntervalType(AnsiIntervalType):
         self.startField = startField
         self.endField = endField
 
-    def _str_repr(self) -> str:
+    def _type_name(self) -> str:
         fields = DayTimeIntervalType._fields
         start_field_name = fields[self.startField]
         end_field_name = fields[self.endField]
@@ -564,10 +553,6 @@ class DayTimeIntervalType(AnsiIntervalType):
             return "interval %s" % start_field_name
         else:
             return "interval %s to %s" % (start_field_name, end_field_name)
-
-    simpleString = _str_repr
-
-    jsonValue = _str_repr
 
     def __repr__(self) -> str:
         return "%s(%d, %d)" % (type(self).__name__, self.startField, self.endField)
@@ -598,6 +583,7 @@ class YearMonthIntervalType(AnsiIntervalType):
     _inverted_fields = dict(zip(_fields.values(), _fields.keys()))
 
     def __init__(self, startField: Optional[int] = None, endField: Optional[int] = None):
+        self.typeName = self._type_name  # type: ignore[method-assign]
         if startField is None and endField is None:
             # Default matched to scala side.
             startField = YearMonthIntervalType.YEAR
@@ -614,7 +600,7 @@ class YearMonthIntervalType(AnsiIntervalType):
         self.startField = startField
         self.endField = endField
 
-    def _str_repr(self) -> str:
+    def _type_name(self) -> str:
         fields = YearMonthIntervalType._fields
         start_field_name = fields[self.startField]
         end_field_name = fields[self.endField]
@@ -622,10 +608,6 @@ class YearMonthIntervalType(AnsiIntervalType):
             return "interval %s" % start_field_name
         else:
             return "interval %s to %s" % (start_field_name, end_field_name)
-
-    simpleString = _str_repr
-
-    jsonValue = _str_repr
 
     def __repr__(self) -> str:
         return "%s(%d, %d)" % (type(self).__name__, self.startField, self.endField)
@@ -756,7 +738,7 @@ class ArrayType(DataType):
         self,
         prefix: str,
         stringConcat: StringConcat,
-        maxDepth: int = _JVM_INT_MAX,
+        maxDepth: int = JVM_INT_MAX,
     ) -> None:
         if maxDepth > 0:
             stringConcat.append(
@@ -905,7 +887,7 @@ class MapType(DataType):
         self,
         prefix: str,
         stringConcat: StringConcat,
-        maxDepth: int = _JVM_INT_MAX,
+        maxDepth: int = JVM_INT_MAX,
     ) -> None:
         if maxDepth > 0:
             stringConcat.append(f"{prefix}-- key: {self.keyType.typeName()}\n")
@@ -1049,7 +1031,7 @@ class StructField(DataType):
 
     def schemaCollationValue(self, dt: DataType) -> str:
         assert isinstance(dt, StringType)
-        collationName = StringType.collationIdToName(dt.collationId)
+        collationName = dt.collation
         provider = StringType.collationProvider(collationName)
         return f"{provider}.{collationName}"
 
@@ -1072,7 +1054,7 @@ class StructField(DataType):
         self,
         prefix: str,
         stringConcat: StringConcat,
-        maxDepth: int = _JVM_INT_MAX,
+        maxDepth: int = JVM_INT_MAX,
     ) -> None:
         if maxDepth > 0:
             stringConcat.append(
@@ -1507,16 +1489,16 @@ class StructType(DataType):
         self,
         prefix: str,
         stringConcat: StringConcat,
-        maxDepth: int = _JVM_INT_MAX,
+        maxDepth: int = JVM_INT_MAX,
     ) -> None:
         for field in self.fields:
             field._build_formatted_string(prefix, stringConcat, maxDepth)
 
-    def treeString(self, maxDepth: int = _JVM_INT_MAX) -> str:
+    def treeString(self, maxDepth: int = JVM_INT_MAX) -> str:
         stringConcat = StringConcat()
         stringConcat.append("root\n")
         prefix = " |"
-        depth = maxDepth if maxDepth > 0 else _JVM_INT_MAX
+        depth = maxDepth if maxDepth > 0 else JVM_INT_MAX
         for field in self.fields:
             field._build_formatted_string(prefix, stringConcat, depth)
         return stringConcat.toString()
@@ -1739,13 +1721,45 @@ _atomic_types: List[Type[DataType]] = [
     TimestampNTZType,
     NullType,
     VariantType,
+    YearMonthIntervalType,
+    DayTimeIntervalType,
 ]
-_all_atomic_types: Dict[str, Type[DataType]] = dict((t.typeName(), t) for t in _atomic_types)
 
-_complex_types: List[Type[Union[ArrayType, MapType, StructType]]] = [ArrayType, MapType, StructType]
-_all_complex_types: Dict[str, Type[Union[ArrayType, MapType, StructType]]] = dict(
-    (v.typeName(), v) for v in _complex_types
-)
+_complex_types: List[Type[Union[ArrayType, MapType, StructType]]] = [
+    ArrayType,
+    MapType,
+    StructType,
+]
+_all_complex_types: Dict[str, Type[Union[ArrayType, MapType, StructType]]] = {
+    "array": ArrayType,
+    "map": MapType,
+    "struct": StructType,
+}
+
+# Datatypes that can be directly parsed by mapping a json string without regex.
+# This dict should be only used in json parsing.
+# Note that:
+# 1, CharType and VarcharType are not listed here, since they need regex;
+# 2, DecimalType can be parsed by both mapping ('decimal') and regex ('decimal(10, 2)');
+# 3, CalendarIntervalType is not an atomic type, but can be mapped by 'interval';
+_all_mappable_types: Dict[str, Type[DataType]] = {
+    "string": StringType,
+    "binary": BinaryType,
+    "boolean": BooleanType,
+    "decimal": DecimalType,
+    "float": FloatType,
+    "double": DoubleType,
+    "byte": ByteType,
+    "short": ShortType,
+    "integer": IntegerType,
+    "long": LongType,
+    "date": DateType,
+    "timestamp": TimestampType,
+    "timestamp_ntz": TimestampNTZType,
+    "void": NullType,
+    "variant": VariantType,
+    "interval": CalendarIntervalType,
+}
 
 _LENGTH_CHAR = re.compile(r"char\(\s*(\d+)\s*\)")
 _LENGTH_VARCHAR = re.compile(r"varchar\(\s*(\d+)\s*\)")
@@ -1870,11 +1884,8 @@ def _parse_datatype_json_string(json_string: str) -> DataType:
     ...     python_datatype = _parse_datatype_json_string(scala_datatype.json())
     ...     assert datatype == python_datatype
     ...
-    >>> for cls in _all_atomic_types.values():
-    ...     if cls is not VarcharType and cls is not CharType:
-    ...         check_datatype(cls())
-    ...     else:
-    ...         check_datatype(cls(1))
+    >>> for cls in _all_mappable_types.values():
+    ...     check_datatype(cls())
 
     >>> # Simple ArrayType.
     >>> simple_arraytype = ArrayType(StringType(), True)
@@ -1921,14 +1932,12 @@ def _parse_datatype_json_value(
     collationsMap: Optional[Dict[str, str]] = None,
 ) -> DataType:
     if not isinstance(json_value, dict):
-        if json_value in _all_atomic_types.keys():
+        if json_value in _all_mappable_types.keys():
             if collationsMap is not None and fieldPath in collationsMap:
                 _assert_valid_type_for_collation(fieldPath, json_value, collationsMap)
                 collation_name = collationsMap[fieldPath]
                 return StringType(collation_name)
-            return _all_atomic_types[json_value]()
-        elif json_value == "decimal":
-            return DecimalType()
+            return _all_mappable_types[json_value]()
         elif _FIXED_DECIMAL.match(json_value):
             m = _FIXED_DECIMAL.match(json_value)
             return DecimalType(int(m.group(1)), int(m.group(2)))  # type: ignore[union-attr]
@@ -1948,8 +1957,6 @@ def _parse_datatype_json_value(
             if first_field is not None and second_field is None:
                 return YearMonthIntervalType(first_field)
             return YearMonthIntervalType(first_field, second_field)
-        elif json_value == "interval":
-            return CalendarIntervalType()
         elif _LENGTH_CHAR.match(json_value):
             m = _LENGTH_CHAR.match(json_value)
             return CharType(int(m.group(1)))  # type: ignore[union-attr]

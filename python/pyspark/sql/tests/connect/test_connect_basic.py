@@ -16,10 +16,12 @@
 #
 
 import os
+import gc
 import unittest
 import shutil
 import tempfile
-import time
+import io
+from contextlib import redirect_stdout
 
 from pyspark.util import is_remote_only
 from pyspark.errors import PySparkTypeError, PySparkValueError
@@ -34,6 +36,7 @@ from pyspark.sql.types import (
     ArrayType,
     Row,
 )
+from pyspark.testing.utils import eventually
 from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.testing.connectutils import (
     should_test_connect,
@@ -351,6 +354,24 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         result = df._explain_string()
         self.assertGreater(len(result), 0)
 
+    def _check_print_schema(self, query: str):
+        with io.StringIO() as buf, redirect_stdout(buf):
+            self.spark.sql(query).printSchema()
+            print1 = buf.getvalue()
+        with io.StringIO() as buf, redirect_stdout(buf):
+            self.connect.sql(query).printSchema()
+            print2 = buf.getvalue()
+        self.assertEqual(print1, print2, query)
+
+        for level in [-1, 0, 1, 2, 3, 4]:
+            with io.StringIO() as buf, redirect_stdout(buf):
+                self.spark.sql(query).printSchema(level)
+                print1 = buf.getvalue()
+            with io.StringIO() as buf, redirect_stdout(buf):
+                self.connect.sql(query).printSchema(level)
+                print2 = buf.getvalue()
+            self.assertEqual(print1, print2, query)
+
     def test_schema(self):
         schema = self.connect.read.table(self.tbl_name).schema
         self.assertEqual(
@@ -372,6 +393,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.spark.sql(query).schema,
             self.connect.sql(query).schema,
         )
+        self._check_print_schema(query)
 
         # test TimestampType, DateType
         query = """
@@ -385,6 +407,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.spark.sql(query).schema,
             self.connect.sql(query).schema,
         )
+        self._check_print_schema(query)
 
         # test DayTimeIntervalType
         query = """ SELECT INTERVAL '100 10:30' DAY TO MINUTE AS interval """
@@ -392,6 +415,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.spark.sql(query).schema,
             self.connect.sql(query).schema,
         )
+        self._check_print_schema(query)
 
         # test MapType
         query = """
@@ -405,6 +429,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.spark.sql(query).schema,
             self.connect.sql(query).schema,
         )
+        self._check_print_schema(query)
 
         # test ArrayType
         query = """
@@ -418,6 +443,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.spark.sql(query).schema,
             self.connect.sql(query).schema,
         )
+        self._check_print_schema(query)
 
         # test StructType
         query = """
@@ -431,6 +457,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.spark.sql(query).schema,
             self.connect.sql(query).schema,
         )
+        self._check_print_schema(query)
 
     def test_to(self):
         # SPARK-41464: test DataFrame.to()
@@ -1379,8 +1406,8 @@ class SparkConnectGCTests(SparkConnectSQLTestCase):
         # SPARK-48258: Make sure garbage-collecting DataFrame remove the paired state
         # in Spark Connect server
         df = self.connect.range(10).localCheckpoint()
-        self.assertIsNotNone(df._cached_remote_relation_id)
-        cached_remote_relation_id = df._cached_remote_relation_id
+        self.assertIsNotNone(df._plan._relation_id)
+        cached_remote_relation_id = df._plan._relation_id
 
         jvm = self.spark._jvm
         session_holder = getattr(
@@ -1397,13 +1424,53 @@ class SparkConnectGCTests(SparkConnectSQLTestCase):
         )
 
         del df
+        gc.collect()
 
-        time.sleep(3)  # Make sure removing is triggered, and executed in the server.
+        def condition():
+            # Check the state was removed up on garbage-collection.
+            self.assertIsNone(
+                session_holder.dataFrameCache().getOrDefault(cached_remote_relation_id, None)
+            )
 
-        # Check the state was removed up on garbage-collection.
-        self.assertIsNone(
+        eventually(catch_assertions=True)(condition)()
+
+    def test_garbage_collection_derived_checkpoint(self):
+        # SPARK-48258: Should keep the cached remote relation when derived DataFrames exist
+        df = self.connect.range(10).localCheckpoint()
+        self.assertIsNotNone(df._plan._relation_id)
+        derived = df.repartition(10)
+        cached_remote_relation_id = df._plan._relation_id
+
+        jvm = self.spark._jvm
+        session_holder = getattr(
+            getattr(
+                jvm.org.apache.spark.sql.connect.service,
+                "SparkConnectService$",
+            ),
+            "MODULE$",
+        ).getOrCreateIsolatedSession(self.connect.client._user_id, self.connect.client._session_id)
+
+        # Check the state exists.
+        self.assertIsNotNone(
             session_holder.dataFrameCache().getOrDefault(cached_remote_relation_id, None)
         )
+
+        del df
+        gc.collect()
+
+        def condition():
+            self.assertIsNone(
+                session_holder.dataFrameCache().getOrDefault(cached_remote_relation_id, None)
+            )
+
+        # Should not remove the cache
+        with self.assertRaises(AssertionError):
+            eventually(catch_assertions=True, timeout=5)(condition)()
+
+        del derived
+        gc.collect()
+
+        eventually(catch_assertions=True)(condition)()
 
 
 if __name__ == "__main__":
