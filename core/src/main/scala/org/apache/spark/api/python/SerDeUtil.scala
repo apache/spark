@@ -105,7 +105,7 @@ private[spark] object SerDeUtil extends Logging {
           )
         } catch {
           // Example: java.lang.IllegalArgumentException: Cannot grow BufferHolder by size 578595584 because the size after growing exceeds size limitation 2147483632
-          case e: java.lang.IllegalArgumentException =>
+          case e: java.lang.IllegalArgumentException => {
             if (elementsToDump == 1) {
               // if we can't even pickle a single element, throw the exception
               throw e;
