@@ -270,7 +270,7 @@ class HadoopRDD[K, V](
     val iter = new NextIterator[(K, V)] {
 
       private val split = theSplit.asInstanceOf[HadoopPartition]
-      logInfo("Input split: " + split.inputSplit)
+      logInfo(log"Input split: ${MDC(INPUT_SPLIT, split.inputSplit)}")
       private val jobConf = getJobConf()
 
       private val inputMetrics = context.taskMetrics().inputMetrics

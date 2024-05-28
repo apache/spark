@@ -88,7 +88,7 @@ private[deploy] class ExecutorRunner(
       if (state == ExecutorState.LAUNCHING || state == ExecutorState.RUNNING) {
         state = ExecutorState.FAILED
       }
-      killProcess(Some("Worker shutting down")) }
+      killProcess("Worker shutting down") }
   }
 
   /**
@@ -96,7 +96,7 @@ private[deploy] class ExecutorRunner(
    *
    * @param message the exception message which caused the executor's death
    */
-  private def killProcess(message: Option[String]): Unit = {
+  private def killProcess(message: String): Unit = {
     var exitCode: Option[Int] = None
     if (process != null) {
       logInfo("Killing process!")
@@ -113,7 +113,7 @@ private[deploy] class ExecutorRunner(
       }
     }
     try {
-      worker.send(ExecutorStateChanged(appId, execId, state, message, exitCode))
+      worker.send(ExecutorStateChanged(appId, execId, state, Some(message), exitCode))
     } catch {
       case e: IllegalStateException => logWarning(log"${MDC(ERROR, e.getMessage())}", e)
     }
@@ -204,13 +204,13 @@ private[deploy] class ExecutorRunner(
       worker.send(ExecutorStateChanged(appId, execId, state, Some(message), Some(exitCode)))
     } catch {
       case interrupted: InterruptedException =>
-        logInfo("Runner thread for executor " + fullId + " interrupted")
+        logInfo(log"Runner thread for executor ${MDC(EXECUTOR_ID, fullId)} interrupted")
         state = ExecutorState.KILLED
-        killProcess(None)
+        killProcess(s"Runner thread for executor $fullId interrupted")
       case e: Exception =>
         logError("Error running executor", e)
         state = ExecutorState.FAILED
-        killProcess(Some(e.toString))
+        killProcess(s"Error running executor: $e")
     }
   }
 }

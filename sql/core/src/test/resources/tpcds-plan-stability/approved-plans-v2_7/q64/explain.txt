@@ -203,7 +203,7 @@ Input [3]: [sr_item_sk#14, sr_ticket_number#15, sr_returned_date_sk#16]
 
 (8) BroadcastExchange
 Input [2]: [sr_item_sk#14, sr_ticket_number#15]
-Arguments: HashedRelationBroadcastMode(List(((cast(input[0, int, true] as bigint) << 32) | (cast(input[1, int, true] as bigint) & 4294967295))),false), [plan_id=1]
+Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[0, int, true] as bigint), 32) | (cast(input[1, int, true] as bigint) & 4294967295))),false), [plan_id=1]
 
 (9) BroadcastHashJoin [codegen id : 20]
 Left keys [2]: [ss_item_sk#1, ss_ticket_number#8]
@@ -253,7 +253,7 @@ Input [6]: [cr_item_sk#21, cr_order_number#22, cr_refunded_cash#23, cr_reversed_
 
 (19) BroadcastExchange
 Input [5]: [cr_item_sk#21, cr_order_number#22, cr_refunded_cash#23, cr_reversed_charge#24, cr_store_credit#25]
-Arguments: HashedRelationBroadcastMode(List(((cast(input[0, int, true] as bigint) << 32) | (cast(input[1, int, true] as bigint) & 4294967295))),false), [plan_id=2]
+Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[0, int, true] as bigint), 32) | (cast(input[1, int, true] as bigint) & 4294967295))),false), [plan_id=2]
 
 (20) BroadcastHashJoin [codegen id : 3]
 Left keys [2]: [cs_item_sk#17, cs_order_number#18]
