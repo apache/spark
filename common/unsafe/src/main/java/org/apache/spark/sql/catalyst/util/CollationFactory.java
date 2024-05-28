@@ -414,7 +414,7 @@ public final class CollationFactory {
             null,
             CollationAwareUTF8String::lowercaseCompare,
             "1.0",
-            s -> (long)CollationAwareUTF8String.lowerCaseCodePoints(s.toString()).hashCode(),
+            s -> (long) CollationAwareUTF8String.lowerCaseCodePoints(s.toString()).hashCode(),
             /* supportsBinaryEquality = */ false,
             /* supportsBinaryOrdering = */ false,
             /* supportsLowercaseEquality = */ true);
