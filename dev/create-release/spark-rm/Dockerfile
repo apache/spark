@@ -58,6 +58,7 @@ RUN apt-get update && apt-get install -y \
     texinfo \
     texlive-latex-extra \
     qpdf \
+    jq \
     r-base \
     ruby \
     ruby-dev \
