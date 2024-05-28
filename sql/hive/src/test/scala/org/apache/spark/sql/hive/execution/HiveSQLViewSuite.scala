@@ -213,7 +213,7 @@ class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
           exception = intercept[AnalysisException] {
             sql("SHOW CREATE TABLE v1")
           },
-          errorClass = "UNSUPPORTED_SHOW_CREATE_TABLE." +
+          errorClass = "UNSUPPORTED_SHOW_CREATE_TABLE.WITH_UNSUPPORTED_FEATURE" +
             "",
           parameters = Map(
             "table" -> s"`$SESSION_CATALOG_NAME`.`default`.`v1`",
