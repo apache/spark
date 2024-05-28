@@ -8214,11 +8214,6 @@
       "Failed to parse a value for data type <dataType>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_3250" : {
-    "message" : [
-      "Failed to convert the JSON string '<other>' to a field."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3260" : {
     "message" : [
       "'<s>' is an invalid timestamp"
