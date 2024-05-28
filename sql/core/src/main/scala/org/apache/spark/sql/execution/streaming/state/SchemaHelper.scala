@@ -26,22 +26,23 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods
 import org.json4s.jackson.JsonMethods.{compact, render}
 
+import org.apache.spark.SparkContext
 import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, MetadataVersionUtil}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{AccumulatorV2, Utils}
 
-sealed trait ColumnFamilyMetadata extends Serializable {
+sealed trait ColumnFamilySchema extends Serializable {
   def jsonValue: JsonAST.JObject
 
   def json: String
 }
 
-case class ColumnFamilyMetadataV1(
+case class ColumnFamilySchemaV1(
     val columnFamilyName: String,
     val keySchema: StructType,
     val valueSchema: StructType,
     val keyStateEncoderSpec: KeyStateEncoderSpec,
-    val multipleValuesPerKey: Boolean) extends ColumnFamilyMetadata {
+    val multipleValuesPerKey: Boolean) extends ColumnFamilySchema {
     def jsonValue: JsonAST.JObject = {
         ("columnFamilyName" -> JString(columnFamilyName)) ~
         ("keySchema" -> keySchema.json) ~
@@ -55,12 +56,69 @@ case class ColumnFamilyMetadataV1(
     }
 }
 
-object ColumnFamilyMetadataV1 {
-  def fromJson(json: List[Map[String, Any]]): List[ColumnFamilyMetadata] = {
+class ColumnFamilyAccumulator(
+    columnFamilyMetadata: ColumnFamilySchema) extends
+  AccumulatorV2[ColumnFamilySchema, ColumnFamilySchema] {
+
+  private var _value: ColumnFamilySchema = columnFamilyMetadata
+  /**
+   * Returns if this accumulator is zero value or not. e.g. for a counter accumulator, 0 is zero
+   * value; for a list accumulator, Nil is zero value.
+   */
+  override def isZero: Boolean = _value == null
+
+  /**
+   * Creates a new copy of this accumulator.
+   */
+  override def copy(): AccumulatorV2[ColumnFamilySchema, ColumnFamilySchema] = {
+    new ColumnFamilyAccumulator(_value)
+  }
+
+  /**
+   * Resets this accumulator, which is zero value. i.e. call `isZero` must
+   * return true.
+   */
+  override def reset(): Unit = {
+    _value = null
+  }
+
+  /**
+   * Takes the inputs and accumulates.
+   */
+  override def add(v: ColumnFamilySchema): Unit = {
+    _value = v
+  }
+
+  /**
+   * Merges another same-type accumulator into this one and update its state, i.e. this should be
+   * merge-in-place.
+   */
+  override def merge(other: AccumulatorV2[ColumnFamilySchema, ColumnFamilySchema]): Unit = {
+    _value = other.value
+  }
+
+  /**
+   * Defines the current value of this accumulator
+   */
+  override def value: ColumnFamilySchema = _value
+}
+
+object ColumnFamilyAccumulator {
+  def create(
+              columnFamilyMetadata: ColumnFamilySchema,
+              sparkContext: SparkContext): ColumnFamilyAccumulator = {
+    val acc = new ColumnFamilyAccumulator(columnFamilyMetadata)
+    acc.register(sparkContext)
+    acc
+  }
+}
+
+object ColumnFamilySchemaV1 {
+  def fromJson(json: List[Map[String, Any]]): List[ColumnFamilySchema] = {
     assert(json.isInstanceOf[List[_]])
 
     json.map { colFamilyMap =>
-      new ColumnFamilyMetadataV1(
+      new ColumnFamilySchemaV1(
         colFamilyMap("columnFamilyName").asInstanceOf[String],
         StructType.fromString(colFamilyMap("keySchema").asInstanceOf[String]),
         StructType.fromString(colFamilyMap("valueSchema").asInstanceOf[String]),
@@ -122,7 +180,7 @@ object SchemaHelper {
     private val schemaFilePath = SchemaV3Writer.getSchemaFilePath(stateCheckpointPath)
 
     private lazy val fm = CheckpointFileManager.create(stateCheckpointPath, hadoopConf)
-    def read: List[ColumnFamilyMetadata] = {
+    def read: List[ColumnFamilySchema] = {
       if (!fm.exists(schemaFilePath)) {
           return List.empty
       }
@@ -139,7 +197,7 @@ object SchemaHelper {
         s"Expected List but got ${deserializedList.getClass}")
       val columnFamilyMetadatas = deserializedList.asInstanceOf[List[Map[String, Any]]]
       // Extract each JValue to StateVariableInfo
-      ColumnFamilyMetadataV1.fromJson(columnFamilyMetadatas)
+      ColumnFamilySchemaV1.fromJson(columnFamilyMetadatas)
     }
   }
 

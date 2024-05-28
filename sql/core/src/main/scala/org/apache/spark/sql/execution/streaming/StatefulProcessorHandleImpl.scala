@@ -84,7 +84,8 @@ class StatefulProcessorHandleImpl(
     timeMode: TimeMode,
     isStreaming: Boolean = true,
     batchTimestampMs: Option[Long] = None,
-    metrics: Map[String, SQLMetric] = Map.empty)
+    metrics: Map[String, SQLMetric] = Map.empty,
+    existingColFamilies: Map[String, ColumnFamilyAccumulator] = Map.empty)
   extends StatefulProcessorHandle with Logging {
   import StatefulProcessorHandleState._
 
@@ -97,8 +98,8 @@ class StatefulProcessorHandleImpl(
   private[sql] val stateVariables: util.List[StateVariableInfo] =
     new util.ArrayList[StateVariableInfo]()
 
-  private[sql] val columnFamilyMetadatas: util.List[ColumnFamilyMetadata] =
-    new util.ArrayList[ColumnFamilyMetadata]()
+  private[sql] val columnFamilyMetadatas: util.List[ColumnFamilySchema] =
+    new util.ArrayList[ColumnFamilySchema]()
 
   private val BATCH_QUERY_ID = "00000000-0000-0000-0000-000000000000"
 
@@ -168,6 +169,7 @@ class StatefulProcessorHandleImpl(
       throw StateStoreErrors.cannotPerformOperationWithInvalidHandleState(operationType,
         currState.toString)
     }
+
   }
 
   private def verifyTimerOperations(operationType: String): Unit = {

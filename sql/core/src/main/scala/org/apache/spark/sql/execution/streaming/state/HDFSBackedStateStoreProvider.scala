@@ -246,7 +246,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       throw StateStoreErrors.unsupportedOperationException("merge", providerName)
     }
 
-    override def createColFamilyIfAbsent(colFamilyMetadata: ColumnFamilyMetadataV1): Unit = {
+    override def createColFamilyIfAbsent(colFamilyMetadata: ColumnFamilySchemaV1): Unit = {
       throw StateStoreErrors.multipleColumnFamiliesNotSupported(providerName)
     }
   }

@@ -265,7 +265,7 @@ private[sql] class RocksDBStateStoreProvider
       result
     }
 
-    override def createColFamilyIfAbsent(colFamilyMetadata: ColumnFamilyMetadataV1): Unit = {
+    override def createColFamilyIfAbsent(colFamilyMetadata: ColumnFamilySchemaV1): Unit = {
       createColFamilyIfAbsent(
           colFamilyMetadata.columnFamilyName,
           colFamilyMetadata.keySchema,

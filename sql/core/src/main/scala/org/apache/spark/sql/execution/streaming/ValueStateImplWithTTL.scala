@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema.{KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA_WITH_TTL}
-import org.apache.spark.sql.execution.streaming.state.{ColumnFamilyMetadataV1, NoPrefixKeyStateEncoderSpec, StateStore}
+import org.apache.spark.sql.execution.streaming.state.{ColumnFamilySchemaV1, NoPrefixKeyStateEncoderSpec, StateStore}
 import org.apache.spark.sql.streaming.{TTLConfig, ValueState}
 
 /**
@@ -49,7 +49,7 @@ class ValueStateImplWithTTL[S](
   private val ttlExpirationMs =
     StateTTL.calculateExpirationTimeForDuration(ttlConfig.ttlDuration, batchTimestampMs)
 
-  val columnFamilyMetadata = new ColumnFamilyMetadataV1(
+  val columnFamilyMetadata = new ColumnFamilySchemaV1(
     stateName, KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA_WITH_TTL,
     NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA), false)
   initialize()

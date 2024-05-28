@@ -93,6 +93,22 @@ case class TransformWithStateExec(
       "operatorPropsFromExecutor"
     )
 
+  private lazy val colFamilyAccumulators: Map[String, ColumnFamilyAccumulator] =
+    initializeColFamilyAccumulators()
+
+  private def initializeColFamilyAccumulators(): Map[String, ColumnFamilyAccumulator] = {
+    val stateCheckpointPath = new Path(stateInfo.get.checkpointLocation,
+      getStateInfo.operatorId.toString)
+    val hadoopConf = session.sqlContext.sessionState.newHadoopConf()
+
+    val reader = new SchemaV3Reader(stateCheckpointPath, hadoopConf)
+
+    reader.read.map { colFamilyMetadata =>
+      val acc = ColumnFamilyAccumulator.create(colFamilyMetadata, sparkContext)
+      colFamilyMetadata.asInstanceOf[ColumnFamilySchemaV1].columnFamilyName -> acc
+    }.toMap
+  }
+
   /** Metadata of this stateful operator and its states stores. */
   override def operatorStateMetadata(): OperatorStateMetadata = {
     val info = getStateInfo
@@ -414,6 +430,7 @@ case class TransformWithStateExec(
 
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
+    colFamilyAccumulators
 
     validateTimeMode()
 
@@ -453,10 +470,7 @@ case class TransformWithStateExec(
       }
     } else {
       if (isStreaming) {
-        val stateCheckpointPath = new Path(stateInfo.get.checkpointLocation,
-          getStateInfo.operatorId.toString)
-        val hadoopConf = session.sqlContext.sessionState.newHadoopConf()
-        val reader = new SchemaV3Reader(stateCheckpointPath, hadoopConf)
+
         child.execute().mapPartitionsWithStateStore[InternalRow](
           getStateInfo,
           KEY_ROW_SCHEMA,
@@ -535,7 +549,7 @@ case class TransformWithStateExec(
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
     val processorHandle = new StatefulProcessorHandleImpl(
       store, getStateInfo.queryRunId, keyEncoder, timeMode,
-      isStreaming, batchTimestampMs, metrics)
+      isStreaming, batchTimestampMs, metrics, colFamilyAccumulators)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
     statefulProcessor.setHandle(processorHandle)
     statefulProcessor.init(outputMode, timeMode)

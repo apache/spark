@@ -138,7 +138,7 @@ trait StateStore extends ReadStateStore {
       isInternal: Boolean = false): Unit
 
   def createColFamilyIfAbsent(
-      colFamilyMetadata: ColumnFamilyMetadataV1
+      colFamilyMetadata: ColumnFamilySchemaV1
   ): Unit
 
   /**

@@ -20,7 +20,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema.{COMPOSITE_KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA}
-import org.apache.spark.sql.execution.streaming.state.{ColumnFamilyMetadataV1, PrefixKeyScanStateEncoderSpec, StateStore, StateStoreErrors, UnsafeRowPair}
+import org.apache.spark.sql.execution.streaming.state.{ColumnFamilySchemaV1, PrefixKeyScanStateEncoderSpec, StateStore, StateStoreErrors, UnsafeRowPair}
 import org.apache.spark.sql.streaming.MapState
 
 class MapStateImpl[K, V](
@@ -34,7 +34,7 @@ class MapStateImpl[K, V](
   private val stateTypesEncoder = new CompositeKeyStateEncoder(
     keySerializer, userKeyEnc, valEncoder, COMPOSITE_KEY_ROW_SCHEMA, stateName)
 
-  val columnFamilyMetadata = new ColumnFamilyMetadataV1(
+  val columnFamilyMetadata = new ColumnFamilySchemaV1(
     stateName, COMPOSITE_KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA,
     PrefixKeyScanStateEncoderSpec(COMPOSITE_KEY_ROW_SCHEMA, 1), false)
 
