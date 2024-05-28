@@ -244,7 +244,7 @@ message WriteStreamOperationStart {
 message StreamingForeachFunction {
   oneof function {
     PythonUDF python_function = 1;
-    ScalaUDF scala_function = 2;
+    ScalarScalaUDF scala_function = 2;
   }
 }
 

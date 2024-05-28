@@ -108,7 +108,7 @@ case class ScalaUserDefinedFunction private[sql] (
     extends UserDefinedFunction {
 
   private[this] lazy val udf = {
-    val scalaUdfBuilder = proto.ScalaUDF
+    val scalaUdfBuilder = proto.ScalarScalaUDF
       .newBuilder()
       .setPayload(ByteString.copyFrom(serializedUdfPacket))
       // Send the real inputs and return types to obtain the types without deser the udf bytes.
@@ -125,7 +125,7 @@ case class ScalaUserDefinedFunction private[sql] (
     val udfBuilder = builder.getCommonInlineUserDefinedFunctionBuilder
     udfBuilder
       .setDeterministic(deterministic)
-      .setScalaUdf(udf)
+      .setScalarScalaUdf(udf)
       .addAllArguments(exprs.map(_.expr).asJava)
 
     name.foreach(udfBuilder.setFunctionName)
@@ -141,7 +141,7 @@ case class ScalaUserDefinedFunction private[sql] (
     val builder = proto.CommonInlineUserDefinedFunction.newBuilder()
     builder
       .setDeterministic(deterministic)
-      .setScalaUdf(udf)
+      .setScalarScalaUdf(udf)
 
     name.foreach(builder.setFunctionName)
     builder.build()

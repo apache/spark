@@ -1029,12 +1029,12 @@ class StreamingForeachFunction(google.protobuf.message.Message):
     @property
     def python_function(self) -> pyspark.sql.connect.proto.expressions_pb2.PythonUDF: ...
     @property
-    def scala_function(self) -> pyspark.sql.connect.proto.expressions_pb2.ScalaUDF: ...
+    def scala_function(self) -> pyspark.sql.connect.proto.expressions_pb2.ScalarScalaUDF: ...
     def __init__(
         self,
         *,
         python_function: pyspark.sql.connect.proto.expressions_pb2.PythonUDF | None = ...,
-        scala_function: pyspark.sql.connect.proto.expressions_pb2.ScalaUDF | None = ...,
+        scala_function: pyspark.sql.connect.proto.expressions_pb2.ScalarScalaUDF | None = ...,
     ) -> None: ...
     def HasField(
         self,

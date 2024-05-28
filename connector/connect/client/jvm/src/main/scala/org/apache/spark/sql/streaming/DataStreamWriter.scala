@@ -218,7 +218,7 @@ final class DataStreamWriter[T] private[sql] (ds: Dataset[T]) extends Logging {
    */
   def foreach(writer: ForeachWriter[T]): DataStreamWriter[T] = {
     val serialized = SparkSerDeUtils.serialize(ForeachWriterPacket(writer, ds.agnosticEncoder))
-    val scalaWriterBuilder = proto.ScalaUDF
+    val scalaWriterBuilder = proto.ScalarScalaUDF
       .newBuilder()
       .setPayload(ByteString.copyFrom(serialized))
     sinkBuilder.getForeachWriterBuilder.setScalaFunction(scalaWriterBuilder)

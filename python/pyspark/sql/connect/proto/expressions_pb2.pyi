@@ -1366,7 +1366,7 @@ class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
     DETERMINISTIC_FIELD_NUMBER: builtins.int
     ARGUMENTS_FIELD_NUMBER: builtins.int
     PYTHON_UDF_FIELD_NUMBER: builtins.int
-    SCALA_UDF_FIELD_NUMBER: builtins.int
+    SCALAR_SCALA_UDF_FIELD_NUMBER: builtins.int
     JAVA_UDF_FIELD_NUMBER: builtins.int
     function_name: builtins.str
     """(Required) Name of the user-defined function."""
@@ -1380,7 +1380,7 @@ class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
     @property
     def python_udf(self) -> global___PythonUDF: ...
     @property
-    def scala_udf(self) -> global___ScalaUDF: ...
+    def scalar_scala_udf(self) -> global___ScalarScalaUDF: ...
     @property
     def java_udf(self) -> global___JavaUDF: ...
     def __init__(
@@ -1390,7 +1390,7 @@ class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
         deterministic: builtins.bool = ...,
         arguments: collections.abc.Iterable[global___Expression] | None = ...,
         python_udf: global___PythonUDF | None = ...,
-        scala_udf: global___ScalaUDF | None = ...,
+        scalar_scala_udf: global___ScalarScalaUDF | None = ...,
         java_udf: global___JavaUDF | None = ...,
     ) -> None: ...
     def HasField(
@@ -1402,8 +1402,8 @@ class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
             b"java_udf",
             "python_udf",
             b"python_udf",
-            "scala_udf",
-            b"scala_udf",
+            "scalar_scala_udf",
+            b"scalar_scala_udf",
         ],
     ) -> builtins.bool: ...
     def ClearField(
@@ -1421,13 +1421,13 @@ class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
             b"java_udf",
             "python_udf",
             b"python_udf",
-            "scala_udf",
-            b"scala_udf",
+            "scalar_scala_udf",
+            b"scalar_scala_udf",
         ],
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["function", b"function"]
-    ) -> typing_extensions.Literal["python_udf", "scala_udf", "java_udf"] | None: ...
+    ) -> typing_extensions.Literal["python_udf", "scalar_scala_udf", "java_udf"] | None: ...
 
 global___CommonInlineUserDefinedFunction = CommonInlineUserDefinedFunction
 
@@ -1474,7 +1474,7 @@ class PythonUDF(google.protobuf.message.Message):
 
 global___PythonUDF = PythonUDF
 
-class ScalaUDF(google.protobuf.message.Message):
+class ScalarScalaUDF(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     PAYLOAD_FIELD_NUMBER: builtins.int
@@ -1527,7 +1527,7 @@ class ScalaUDF(google.protobuf.message.Message):
         ],
     ) -> None: ...
 
-global___ScalaUDF = ScalaUDF
+global___ScalarScalaUDF = ScalarScalaUDF
 
 class JavaUDF(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
