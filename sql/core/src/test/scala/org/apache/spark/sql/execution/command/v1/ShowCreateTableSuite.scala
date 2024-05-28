@@ -163,6 +163,7 @@ trait ShowCreateTableSuiteBase extends command.ShowCreateTableSuiteBase
           getShowCreateDDL(t, true)
         },
         errorClass = "UNSUPPORTED_SHOW_CREATE_TABLE.WITH_UNNECESSARY_SERDE_PARAMETER",
+        sqlState = "0A000",
         parameters = Map("table" -> "`spark_catalog`.`ns1`.`tbl`")
       )
     }

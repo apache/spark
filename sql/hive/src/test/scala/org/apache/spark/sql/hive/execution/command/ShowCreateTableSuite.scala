@@ -366,6 +366,7 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
           checkCreateSparkTableAsHive("t1")
         },
         errorClass = "UNSUPPORTED_SHOW_CREATE_TABLE.WITH_UNSUPPORTED_SERDE_CONFIGURATION",
+        sqlState = "0A000",
         parameters = Map(
           "table" -> "t1",
           "configs" -> (" SERDE: org.apache.hadoop.hive.serde2.columnar.LazyBinaryColumnarSerDe " +
@@ -438,6 +439,7 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
           sql("SHOW CREATE TABLE t1")
         },
         errorClass = "UNSUPPORTED_SHOW_CREATE_TABLE.ON_TRANSACTIONAL_HIVE_TABLE",
+        sqlState = "0A000",
         parameters = Map("table" -> "`spark_catalog`.`default`.`t1`")
       )
     }

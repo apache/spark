@@ -5010,6 +5010,41 @@
     },
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_SHOW_CREATE_TABLE" : {
+    "message" : [
+      "Unsupported show create table command."
+    ],
+    "subClass" : {
+      "ON_TEMPORARY_VIEW" : {
+        "message" : [
+          "SHOW CREATE TABLE is not supported on a temporary view: <table>."
+        ]
+      },
+      "ON_TRANSACTIONAL_HIVE_TABLE" : {
+        "message" : [
+          "SHOW CREATE TABLE doesn't support transactional Hive table. Please use `SHOW CREATE TABLE <table> AS SERDE` to show Hive DDL instead."
+        ]
+      },
+      "WITH_UNNECESSARY_SERDE_PARAMETER" : {
+        "message" : [
+          "<table> is a Spark data source table. Use `SHOW CREATE TABLE` without `AS SERDE` instead."
+        ]
+      },
+      "WITH_UNSUPPORTED_FEATURE" : {
+        "message" : [
+          "Failed to execute SHOW CREATE TABLE against table/view <table>, which is created by Hive and uses the following unsupported feature(s)",
+          "<unsupportedFeatures>"
+        ]
+      },
+      "WITH_UNSUPPORTED_SERDE_CONFIGURATION" : {
+        "message" : [
+          "Failed to execute SHOW CREATE TABLE against table <table>, which is created by Hive and uses the following unsupported serde configuration",
+          "<configs>"
+        ]
+      }
+    },
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_STREAMING_OPERATOR_WITHOUT_WATERMARK" : {
     "message" : [
       "<outputMode> output mode not supported for <statefulOperator> on streaming DataFrames/DataSets without watermark."
@@ -6245,41 +6280,6 @@
     "message" : [
       "Failed to truncate table <tableIdentWithDB> when removing data of the path: <path>."
     ]
-  },
-  "UNSUPPORTED_SHOW_CREATE_TABLE":  {
-    "message": [
-      ""
-    ],
-    "subClass" : {
-      "ON_TEMPORARY_VIEW" : {
-        "message" : [
-          "SHOW CREATE TABLE is not supported on a temporary view: <table>."
-        ]
-      },
-      "ON_TRANSACTIONAL_HIVE_TABLE" : {
-        "message" : [
-          "SHOW CREATE TABLE doesn't support transactional Hive table. Please use `SHOW CREATE TABLE <table> AS SERDE` to show Hive DDL instead."
-        ]
-      },
-      "WITH_UNSUPPORTED_FEATURE" : {
-        "message" : [
-          "Failed to execute SHOW CREATE TABLE against table/view <table>, which is created by Hive and uses the following unsupported feature(s)",
-          "<unsupportedFeatures>"
-        ]
-      },
-      "WITH_UNSUPPORTED_SERDE_CONFIGURATION" : {
-        "message" : [
-          "Failed to execute SHOW CREATE TABLE against table <table>, which is created by Hive and uses the following unsupported serde configuration",
-          "<configs>"
-        ]
-      },
-      "WITH_UNNECESSARY_SERDE_PARAMETER" : {
-        "message" : [
-          "<table> is a Spark data source table. Use `SHOW CREATE TABLE` without `AS SERDE` instead."
-        ]
-      }
-    },
-    "sqlState" : "0A000"
   },
   "_LEGACY_ERROR_TEMP_1276" : {
     "message" : [
