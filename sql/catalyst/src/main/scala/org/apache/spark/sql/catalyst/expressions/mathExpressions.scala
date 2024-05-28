@@ -1283,15 +1283,15 @@ sealed trait BitShiftOperation
   }
 
   override def toString: String = {
-    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse(symbol) match {
-      case alias if alias == symbol => s"($left $symbol $right)"
+    getTagValue(FunctionRegistry.FUNC_ALIAS) match {
+      case Some(alias) if alias == symbol => s"($left $symbol $right)"
       case _ => super.toString
     }
   }
 
   override def sql: String = {
-    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse(symbol) match {
-      case alias if alias == symbol => s"(${left.sql} $symbol ${right.sql})"
+    getTagValue(FunctionRegistry.FUNC_ALIAS) match {
+      case Some(alias) if alias == symbol => s"(${left.sql} $symbol ${right.sql})"
       case _ => super.sql
     }
   }

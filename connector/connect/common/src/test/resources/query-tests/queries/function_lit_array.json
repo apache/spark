@@ -305,7 +305,7 @@
         "array": {
           "elementType": {
             "string": {
-              "collationId": 0
+              "collation": "UTF8_BINARY"
             }
           },
           "elements": [{
@@ -324,7 +324,7 @@
         "array": {
           "elementType": {
             "string": {
-              "collationId": 0
+              "collation": "UTF8_BINARY"
             }
           },
           "elements": [{
