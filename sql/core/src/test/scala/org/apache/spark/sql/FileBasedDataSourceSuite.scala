@@ -474,7 +474,7 @@ class FileBasedDataSourceSuite extends QueryTest
         errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
           "columnName" -> "`vectors`",
-          "columnType" -> "\"ARRAY<DOUBLE>\"",
+          "columnType" -> "UDT(\"ARRAY<DOUBLE>\")",
           "format" -> "CSV")
       )
 
@@ -487,7 +487,7 @@ class FileBasedDataSourceSuite extends QueryTest
         errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
           "columnName" -> "`a`",
-          "columnType" -> "\"ARRAY<DOUBLE>\"",
+          "columnType" -> "UDT(\"ARRAY<DOUBLE>\")",
           "format" -> "CSV")
       )
     }
@@ -545,7 +545,7 @@ class FileBasedDataSourceSuite extends QueryTest
               errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
               parameters = Map(
                 "columnName" -> "`a`",
-                "columnType" -> "\"INTERVAL\"",
+                "columnType" -> "UDT(\"INTERVAL\")",
                 "format" -> formatParameter
               )
             )
@@ -595,7 +595,7 @@ class FileBasedDataSourceSuite extends QueryTest
               errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
               parameters = Map(
                 "columnName" -> "`testType()`",
-                "columnType" -> "\"VOID\"",
+                "columnType" -> "UDT(\"VOID\")",
                 "format" -> formatParameter
               )
             )
@@ -624,7 +624,7 @@ class FileBasedDataSourceSuite extends QueryTest
               errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
               parameters = Map(
                 "columnName" -> "`a`",
-                "columnType" -> "\"VOID\"",
+                "columnType" -> "UDT(\"VOID\")",
                 "format" -> formatParameter
               )
             )

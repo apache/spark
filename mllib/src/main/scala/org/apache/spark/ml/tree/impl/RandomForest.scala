@@ -22,7 +22,7 @@ import scala.util.Random
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.{MAX_MEMORY_SIZE, MEMORY_SIZE, NUM_CLASSES, NUM_EXAMPLES, NUM_FEATURES, NUM_NODES, TIMER, WEIGHTED_NUM}
+import org.apache.spark.internal.LogKeys.{MAX_MEMORY_SIZE, MEMORY_SIZE, NUM_CLASSES, NUM_EXAMPLES, NUM_FEATURES, NUM_NODES, NUM_WEIGHTED_EXAMPLES, TIMER}
 import org.apache.spark.ml.classification.DecisionTreeClassificationModel
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.impl.Utils
@@ -136,7 +136,7 @@ private[spark] object RandomForest extends Logging with Serializable {
         logInfo(log"numClasses: ${MDC(NUM_CLASSES, metadata.numClasses)}")
         logInfo(log"numExamples: ${MDC(NUM_EXAMPLES, metadata.numExamples)}")
         logInfo(log"weightedNumExamples: " +
-          log"${MDC(WEIGHTED_NUM, metadata.weightedNumExamples)}")
+          log"${MDC(NUM_WEIGHTED_EXAMPLES, metadata.weightedNumExamples)}")
     }
 
     timer.start("init")

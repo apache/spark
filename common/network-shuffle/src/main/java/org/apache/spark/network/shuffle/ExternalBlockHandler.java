@@ -38,8 +38,8 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
 
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
 import org.apache.spark.network.buffer.ManagedBuffer;
@@ -67,7 +67,8 @@ import org.apache.spark.network.util.TransportConf;
  */
 public class ExternalBlockHandler extends RpcHandler
     implements RpcHandler.MergedBlockMetaReqHandler {
-  private static final Logger logger = LoggerFactory.getLogger(ExternalBlockHandler.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(ExternalBlockHandler.class);
   private static final String SHUFFLE_MERGER_IDENTIFIER = "shuffle-push-merger";
   private static final String SHUFFLE_BLOCK_ID = "shuffle";
   private static final String SHUFFLE_CHUNK_ID = "shuffleChunk";

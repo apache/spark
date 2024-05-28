@@ -15,17 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.internal;
+package org.apache.spark.deploy.yarn;
 
-public class LoggerFactory {
+import java.security.Principal;
 
-  public static Logger getLogger(String name) {
-    org.slf4j.Logger slf4jLogger = org.slf4j.LoggerFactory.getLogger(name);
-    return new Logger(slf4jLogger);
+// This class is copied from Hadoop 3.4.0
+// org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpPrincipal
+public class AmIpPrincipal implements Principal {
+  private final String name;
+
+  public AmIpPrincipal(String name) {
+    this.name = name;
   }
 
-  public static Logger getLogger(Class<?> clazz) {
-    org.slf4j.Logger slf4jLogger = org.slf4j.LoggerFactory.getLogger(clazz);
-    return new Logger(slf4jLogger);
+  @Override
+  public String getName() {
+    return name;
   }
 }

@@ -30,6 +30,44 @@ import org.apache.spark.internal.Logging.SparkShellLoggingFilter
 import org.apache.spark.util.SparkClassUtils
 
 /**
+ * Guidelines for the Structured Logging Framework - Scala Logging
+ * <p>
+ *
+ * Use the `org.apache.spark.internal.Logging` trait for logging in Scala code:
+ * Logging Messages with Variables:
+ *   When logging a message with variables, wrap all the variables with `MDC`s and they will be
+ *   automatically added to the Mapped Diagnostic Context (MDC).
+ * This allows for structured logging and better log analysis.
+ * <p>
+ *
+ * logInfo(log"Trying to recover app: ${MDC(LogKeys.APP_ID, app.id)}")
+ * <p>
+ *
+ * Constant String Messages:
+ *   If you are logging a constant string message, use the log methods that accept a constant
+ *   string.
+ * <p>
+ *
+ * logInfo("StateStore stopped")
+ * <p>
+ *
+ * Exceptions:
+ *   To ensure logs are compatible with Spark SQL and log analysis tools, avoid
+ *   `Exception.printStackTrace()`. Use `logError`, `logWarning`, and `logInfo` methods from
+ *   the `Logging` trait to log exceptions, maintaining structured and parsable logs.
+ * <p>
+ *
+ * If you want to output logs in `scala code` through the structured log framework,
+ * you can define `custom LogKey` and use it in `scala` code as follows:
+ * <p>
+ *
+ * // To add a `custom LogKey`, implement `LogKey`
+ * case object CUSTOM_LOG_KEY extends LogKey
+ * import org.apache.spark.internal.MDC;
+ * logInfo(log"${MDC(CUSTOM_LOG_KEY, "key")}")
+ */
+
+/**
  * Mapped Diagnostic Context (MDC) that will be used in log messages.
  * The values of the MDC will be inline in the log message, while the key-value pairs will be
  * part of the ThreadContext.

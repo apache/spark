@@ -23,8 +23,8 @@ import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
 import org.apache.spark.network.TransportContext;
 
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
 import org.apache.spark.network.client.TransportClient;
@@ -53,7 +53,8 @@ import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
  * timeout if the client is continuously sending but getting no responses, for simplicity.
  */
 public class TransportChannelHandler extends SimpleChannelInboundHandler<Message> {
-  private static final Logger logger = LoggerFactory.getLogger(TransportChannelHandler.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(TransportChannelHandler.class);
 
   private final TransportClient client;
   private final TransportResponseHandler responseHandler;
