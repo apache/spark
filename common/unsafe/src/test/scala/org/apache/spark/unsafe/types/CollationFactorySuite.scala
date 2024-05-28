@@ -40,7 +40,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
 
     val unicode = fetchCollation(2)
     assert(unicode.collationName == "UNICODE")
-    assert(unicode.supportsBinaryEquality);
+    assert(!unicode.supportsBinaryEquality);
 
     val unicodeCi = fetchCollation(3)
     assert(unicodeCi.collationName == "UNICODE_CI")
