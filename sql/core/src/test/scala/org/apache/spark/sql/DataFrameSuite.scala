@@ -32,7 +32,7 @@ import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Cast, EqualTo, ExpressionSet, GreaterThan, Literal, PythonUDF, ScalarSubquery, Uuid}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Cast, CreateMap, EqualTo, ExpressionSet, GreaterThan, Literal, PythonUDF, ScalarSubquery, Uuid}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LeafNode, LocalRelation, LogicalPlan, OneRowRelation}
@@ -2503,6 +2503,14 @@ class DataFrameSuite extends QueryTest
       assert(row.getInt(0) == row.getInt(1))
       assert(row.getInt(0).toString == row.getString(2))
       assert(row.getInt(0).toString == row.getString(3))
+    }
+
+    val v3 = Column(CreateMap(Seq(Literal("key"), Literal("value"))))
+    val v4 = to_csv(struct(v3.as("a"))) // to_csv is CodegenFallback
+    df.select(v3, v3, v4, v4).collect().foreach { row =>
+      assert(row.getMap(0).toString() == row.getMap(1).toString())
+      assert(row.getString(2) == s"{key -> ${row.getMap(0).get("key").get}}")
+      assert(row.getString(3) == s"{key -> ${row.getMap(0).get("key").get}}")
     }
   }
 
