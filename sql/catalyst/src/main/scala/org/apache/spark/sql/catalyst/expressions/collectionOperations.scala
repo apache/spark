@@ -713,6 +713,7 @@ case class MapConcat(children: Seq[Expression])
     }
   }
 
+  override def stateful: Boolean = true
   override def nullable: Boolean = children.exists(_.nullable)
 
   private lazy val mapBuilder = new ArrayBasedMapBuilder(dataType.keyType, dataType.valueType)
@@ -827,6 +828,8 @@ case class MapFromEntries(child: Expression)
   @transient private lazy val nullEntries: Boolean = dataTypeDetails.get._3
 
   override def nullable: Boolean = child.nullable || nullEntries
+
+  override def stateful: Boolean = true
 
   @transient override lazy val dataType: MapType = dataTypeDetails.get._1
 
