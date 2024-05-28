@@ -82,7 +82,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`gstest_empty`, false
 select a, b, grouping(a), grouping(b), sum(v), count(*), max(v)
   from gstest1 group by rollup (a,b)
 -- !query analysis
-Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, cast(((spark_grouping_id#xL >> 1) & 1) as tinyint) AS grouping(a)#x, cast(((spark_grouping_id#xL >> 0) & 1) as tinyint) AS grouping(b)#x, sum(v#x) AS sum(v)#xL, count(1) AS count(1)#xL, max(v#x) AS max(v)#x]
+Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, cast((shiftright(spark_grouping_id#xL, 1) & 1) as tinyint) AS grouping(a)#x, cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) AS grouping(b)#x, sum(v#x) AS sum(v)#xL, count(1) AS count(1)#xL, max(v#x) AS max(v)#x]
 +- Expand [[a#x, b#x, v#x, a#x, b#x, 0], [a#x, b#x, v#x, a#x, null, 1], [a#x, b#x, v#x, null, null, 3]], [a#x, b#x, v#x, a#x, b#x, spark_grouping_id#xL]
    +- Project [a#x, b#x, v#x, a#x AS a#x, b#x AS b#x]
       +- SubqueryAlias gstest1
@@ -96,7 +96,7 @@ select a, b, grouping(a), grouping(b), sum(v), count(*), max(v)
   from gstest1 group by rollup (a,b) order by a,b
 -- !query analysis
 Sort [a#x ASC NULLS FIRST, b#x ASC NULLS FIRST], true
-+- Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, cast(((spark_grouping_id#xL >> 1) & 1) as tinyint) AS grouping(a)#x, cast(((spark_grouping_id#xL >> 0) & 1) as tinyint) AS grouping(b)#x, sum(v#x) AS sum(v)#xL, count(1) AS count(1)#xL, max(v#x) AS max(v)#x]
++- Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, cast((shiftright(spark_grouping_id#xL, 1) & 1) as tinyint) AS grouping(a)#x, cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) AS grouping(b)#x, sum(v#x) AS sum(v)#xL, count(1) AS count(1)#xL, max(v#x) AS max(v)#x]
    +- Expand [[a#x, b#x, v#x, a#x, b#x, 0], [a#x, b#x, v#x, a#x, null, 1], [a#x, b#x, v#x, null, null, 3]], [a#x, b#x, v#x, a#x, b#x, spark_grouping_id#xL]
       +- Project [a#x, b#x, v#x, a#x AS a#x, b#x AS b#x]
          +- SubqueryAlias gstest1
@@ -110,7 +110,7 @@ select a, b, grouping(a), grouping(b), sum(v), count(*), max(v)
   from gstest1 group by rollup (a,b) order by b desc, a
 -- !query analysis
 Sort [b#x DESC NULLS LAST, a#x ASC NULLS FIRST], true
-+- Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, cast(((spark_grouping_id#xL >> 1) & 1) as tinyint) AS grouping(a)#x, cast(((spark_grouping_id#xL >> 0) & 1) as tinyint) AS grouping(b)#x, sum(v#x) AS sum(v)#xL, count(1) AS count(1)#xL, max(v#x) AS max(v)#x]
++- Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, cast((shiftright(spark_grouping_id#xL, 1) & 1) as tinyint) AS grouping(a)#x, cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) AS grouping(b)#x, sum(v#x) AS sum(v)#xL, count(1) AS count(1)#xL, max(v#x) AS max(v)#x]
    +- Expand [[a#x, b#x, v#x, a#x, b#x, 0], [a#x, b#x, v#x, a#x, null, 1], [a#x, b#x, v#x, null, null, 3]], [a#x, b#x, v#x, a#x, b#x, spark_grouping_id#xL]
       +- Project [a#x, b#x, v#x, a#x AS a#x, b#x AS b#x]
          +- SubqueryAlias gstest1
@@ -124,7 +124,7 @@ select a, b, grouping(a), grouping(b), sum(v), count(*), max(v)
   from gstest1 group by rollup (a,b) order by coalesce(a,0)+coalesce(b,0), a
 -- !query analysis
 Sort [(coalesce(a#x, 0) + coalesce(b#x, 0)) ASC NULLS FIRST, a#x ASC NULLS FIRST], true
-+- Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, cast(((spark_grouping_id#xL >> 1) & 1) as tinyint) AS grouping(a)#x, cast(((spark_grouping_id#xL >> 0) & 1) as tinyint) AS grouping(b)#x, sum(v#x) AS sum(v)#xL, count(1) AS count(1)#xL, max(v#x) AS max(v)#x]
++- Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, cast((shiftright(spark_grouping_id#xL, 1) & 1) as tinyint) AS grouping(a)#x, cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) AS grouping(b)#x, sum(v#x) AS sum(v)#xL, count(1) AS count(1)#xL, max(v#x) AS max(v)#x]
    +- Expand [[a#x, b#x, v#x, a#x, b#x, 0], [a#x, b#x, v#x, a#x, null, 1], [a#x, b#x, v#x, null, null, 3]], [a#x, b#x, v#x, a#x, b#x, spark_grouping_id#xL]
       +- Project [a#x, b#x, v#x, a#x AS a#x, b#x AS b#x]
          +- SubqueryAlias gstest1
@@ -209,7 +209,7 @@ select t1.a, t2.b, grouping(t1.a), grouping(t2.b), sum(t1.v), max(t2.a)
   from gstest1 t1, gstest2 t2
  group by grouping sets ((t1.a, t2.b), ())
 -- !query analysis
-Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, cast(((spark_grouping_id#xL >> 1) & 1) as tinyint) AS grouping(a)#x, cast(((spark_grouping_id#xL >> 0) & 1) as tinyint) AS grouping(b)#x, sum(v#x) AS sum(v)#xL, max(a#x) AS max(a)#x]
+Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, cast((shiftright(spark_grouping_id#xL, 1) & 1) as tinyint) AS grouping(a)#x, cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) AS grouping(b)#x, sum(v#x) AS sum(v)#xL, max(a#x) AS max(a)#x]
 +- Expand [[a#x, b#x, v#x, a#x, b#x, c#x, d#x, e#x, f#x, g#x, h#x, a#x, b#x, 0], [a#x, b#x, v#x, a#x, b#x, c#x, d#x, e#x, f#x, g#x, h#x, null, null, 3]], [a#x, b#x, v#x, a#x, b#x, c#x, d#x, e#x, f#x, g#x, h#x, a#x, b#x, spark_grouping_id#xL]
    +- Project [a#x, b#x, v#x, a#x, b#x, c#x, d#x, e#x, f#x, g#x, h#x, a#x AS a#x, b#x AS b#x]
       +- Join Inner
@@ -228,7 +228,7 @@ select t1.a, t2.b, grouping(t1.a), grouping(t2.b), sum(t1.v), max(t2.a)
   from gstest1 t1 join gstest2 t2 on (t1.a=t2.a)
  group by grouping sets ((t1.a, t2.b), ())
 -- !query analysis
-Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, cast(((spark_grouping_id#xL >> 1) & 1) as tinyint) AS grouping(a)#x, cast(((spark_grouping_id#xL >> 0) & 1) as tinyint) AS grouping(b)#x, sum(v#x) AS sum(v)#xL, max(a#x) AS max(a)#x]
+Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, cast((shiftright(spark_grouping_id#xL, 1) & 1) as tinyint) AS grouping(a)#x, cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) AS grouping(b)#x, sum(v#x) AS sum(v)#xL, max(a#x) AS max(a)#x]
 +- Expand [[a#x, b#x, v#x, a#x, b#x, c#x, d#x, e#x, f#x, g#x, h#x, a#x, b#x, 0], [a#x, b#x, v#x, a#x, b#x, c#x, d#x, e#x, f#x, g#x, h#x, null, null, 3]], [a#x, b#x, v#x, a#x, b#x, c#x, d#x, e#x, f#x, g#x, h#x, a#x, b#x, spark_grouping_id#xL]
    +- Project [a#x, b#x, v#x, a#x, b#x, c#x, d#x, e#x, f#x, g#x, h#x, a#x AS a#x, b#x AS b#x]
       +- Join Inner, (a#x = a#x)
@@ -247,7 +247,7 @@ select a, b, grouping(a), grouping(b), sum(t1.v), max(t2.c)
   from gstest1 t1 join gstest2 t2 using (a,b)
  group by grouping sets ((a, b), ())
 -- !query analysis
-Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, cast(((spark_grouping_id#xL >> 1) & 1) as tinyint) AS grouping(a)#x, cast(((spark_grouping_id#xL >> 0) & 1) as tinyint) AS grouping(b)#x, sum(v#x) AS sum(v)#xL, max(c#x) AS max(c)#x]
+Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, cast((shiftright(spark_grouping_id#xL, 1) & 1) as tinyint) AS grouping(a)#x, cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) AS grouping(b)#x, sum(v#x) AS sum(v)#xL, max(c#x) AS max(c)#x]
 +- Expand [[a#x, b#x, v#x, c#x, d#x, e#x, f#x, g#x, h#x, a#x, b#x, 0], [a#x, b#x, v#x, c#x, d#x, e#x, f#x, g#x, h#x, null, null, 3]], [a#x, b#x, v#x, c#x, d#x, e#x, f#x, g#x, h#x, a#x, b#x, spark_grouping_id#xL]
    +- Project [a#x, b#x, v#x, c#x, d#x, e#x, f#x, g#x, h#x, a#x AS a#x, b#x AS b#x]
       +- Project [a#x, b#x, v#x, c#x, d#x, e#x, f#x, g#x, h#x]
@@ -402,8 +402,8 @@ order by 2,1
 -- !query analysis
 Sort [grouping(ten)#x ASC NULLS FIRST, ten#x ASC NULLS FIRST], true
 +- Project [ten#x, grouping(ten)#x]
-   +- Filter (cast(cast(((spark_grouping_id#xL >> 0) & 1) as tinyint) as int) >= 0)
-      +- Aggregate [ten#x, spark_grouping_id#xL], [ten#x, cast(((spark_grouping_id#xL >> 0) & 1) as tinyint) AS grouping(ten)#x, spark_grouping_id#xL]
+   +- Filter (cast(cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) as int) >= 0)
+      +- Aggregate [ten#x, spark_grouping_id#xL], [ten#x, cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) AS grouping(ten)#x, spark_grouping_id#xL]
          +- Expand [[unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, ten#x, 0]], [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, ten#x, spark_grouping_id#xL]
             +- Project [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, ten#x AS ten#x]
                +- SubqueryAlias spark_catalog.default.onek
@@ -417,8 +417,8 @@ order by 2,1
 -- !query analysis
 Sort [grouping(ten)#x ASC NULLS FIRST, ten#x ASC NULLS FIRST], true
 +- Project [ten#x, grouping(ten)#x]
-   +- Filter (cast(cast(((spark_grouping_id#xL >> 1) & 1) as tinyint) as int) > 0)
-      +- Aggregate [ten#x, four#x, spark_grouping_id#xL], [ten#x, cast(((spark_grouping_id#xL >> 1) & 1) as tinyint) AS grouping(ten)#x, spark_grouping_id#xL]
+   +- Filter (cast(cast((shiftright(spark_grouping_id#xL, 1) & 1) as tinyint) as int) > 0)
+      +- Aggregate [ten#x, four#x, spark_grouping_id#xL], [ten#x, cast((shiftright(spark_grouping_id#xL, 1) & 1) as tinyint) AS grouping(ten)#x, spark_grouping_id#xL]
          +- Expand [[unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, ten#x, null, 1], [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, null, four#x, 2]], [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, ten#x, four#x, spark_grouping_id#xL]
             +- Project [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, ten#x AS ten#x, four#x AS four#x]
                +- SubqueryAlias spark_catalog.default.onek
@@ -432,8 +432,8 @@ order by 2,1
 -- !query analysis
 Sort [grouping(ten)#x ASC NULLS FIRST, ten#x ASC NULLS FIRST], true
 +- Project [ten#x, grouping(ten)#x]
-   +- Filter (cast(cast(((spark_grouping_id#xL >> 0) & 1) as tinyint) as int) > 0)
-      +- Aggregate [ten#x, spark_grouping_id#xL], [ten#x, cast(((spark_grouping_id#xL >> 0) & 1) as tinyint) AS grouping(ten)#x, spark_grouping_id#xL]
+   +- Filter (cast(cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) as int) > 0)
+      +- Aggregate [ten#x, spark_grouping_id#xL], [ten#x, cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) AS grouping(ten)#x, spark_grouping_id#xL]
          +- Expand [[unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, ten#x, 0], [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, null, 1]], [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, ten#x, spark_grouping_id#xL]
             +- Project [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, ten#x AS ten#x]
                +- SubqueryAlias spark_catalog.default.onek
@@ -447,8 +447,8 @@ order by 2,1
 -- !query analysis
 Sort [grouping(ten)#x ASC NULLS FIRST, ten#x ASC NULLS FIRST], true
 +- Project [ten#x, grouping(ten)#x]
-   +- Filter (cast(cast(((spark_grouping_id#xL >> 0) & 1) as tinyint) as int) > 0)
-      +- Aggregate [ten#x, spark_grouping_id#xL], [ten#x, cast(((spark_grouping_id#xL >> 0) & 1) as tinyint) AS grouping(ten)#x, spark_grouping_id#xL]
+   +- Filter (cast(cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) as int) > 0)
+      +- Aggregate [ten#x, spark_grouping_id#xL], [ten#x, cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) AS grouping(ten)#x, spark_grouping_id#xL]
          +- Expand [[unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, ten#x, 0], [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, null, 1]], [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, ten#x, spark_grouping_id#xL]
             +- Project [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, ten#x AS ten#x]
                +- SubqueryAlias spark_catalog.default.onek
@@ -482,7 +482,7 @@ select a, b, grouping(a), grouping(b), sum(v), count(*), max(v)
   from gstest1 group by grouping sets ((a),(b)) order by 3,4,1,2 /* 3,1,2 */
 -- !query analysis
 Sort [grouping(a)#x ASC NULLS FIRST, grouping(b)#x ASC NULLS FIRST, a#x ASC NULLS FIRST, b#x ASC NULLS FIRST], true
-+- Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, cast(((spark_grouping_id#xL >> 1) & 1) as tinyint) AS grouping(a)#x, cast(((spark_grouping_id#xL >> 0) & 1) as tinyint) AS grouping(b)#x, sum(v#x) AS sum(v)#xL, count(1) AS count(1)#xL, max(v#x) AS max(v)#x]
++- Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, cast((shiftright(spark_grouping_id#xL, 1) & 1) as tinyint) AS grouping(a)#x, cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) AS grouping(b)#x, sum(v#x) AS sum(v)#xL, count(1) AS count(1)#xL, max(v#x) AS max(v)#x]
    +- Expand [[a#x, b#x, v#x, a#x, null, 1], [a#x, b#x, v#x, null, b#x, 2]], [a#x, b#x, v#x, a#x, b#x, spark_grouping_id#xL]
       +- Project [a#x, b#x, v#x, a#x AS a#x, b#x AS b#x]
          +- SubqueryAlias gstest1
@@ -496,7 +496,7 @@ select a, b, grouping(a), grouping(b), sum(v), count(*), max(v)
   from gstest1 group by cube(a,b) order by 3,4,1,2 /* 3,1,2 */
 -- !query analysis
 Sort [grouping(a)#x ASC NULLS FIRST, grouping(b)#x ASC NULLS FIRST, a#x ASC NULLS FIRST, b#x ASC NULLS FIRST], true
-+- Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, cast(((spark_grouping_id#xL >> 1) & 1) as tinyint) AS grouping(a)#x, cast(((spark_grouping_id#xL >> 0) & 1) as tinyint) AS grouping(b)#x, sum(v#x) AS sum(v)#xL, count(1) AS count(1)#xL, max(v#x) AS max(v)#x]
++- Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, cast((shiftright(spark_grouping_id#xL, 1) & 1) as tinyint) AS grouping(a)#x, cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) AS grouping(b)#x, sum(v#x) AS sum(v)#xL, count(1) AS count(1)#xL, max(v#x) AS max(v)#x]
    +- Expand [[a#x, b#x, v#x, a#x, b#x, 0], [a#x, b#x, v#x, a#x, null, 1], [a#x, b#x, v#x, null, b#x, 2], [a#x, b#x, v#x, null, null, 3]], [a#x, b#x, v#x, a#x, b#x, spark_grouping_id#xL]
       +- Project [a#x, b#x, v#x, a#x AS a#x, b#x AS b#x]
          +- SubqueryAlias gstest1
@@ -526,7 +526,7 @@ select unhashable_col, unsortable_col,
  order by 3, 4, 6 /* 3, 5 */
 -- !query analysis
 Sort [grouping(unhashable_col)#x ASC NULLS FIRST, grouping(unsortable_col)#x ASC NULLS FIRST, sum(v)#xL ASC NULLS FIRST], true
-+- Aggregate [unhashable_col#x, unsortable_col#x, spark_grouping_id#xL], [unhashable_col#x, unsortable_col#x, cast(((spark_grouping_id#xL >> 1) & 1) as tinyint) AS grouping(unhashable_col)#x, cast(((spark_grouping_id#xL >> 0) & 1) as tinyint) AS grouping(unsortable_col)#x, count(1) AS count(1)#xL, sum(v#x) AS sum(v)#xL]
++- Aggregate [unhashable_col#x, unsortable_col#x, spark_grouping_id#xL], [unhashable_col#x, unsortable_col#x, cast((shiftright(spark_grouping_id#xL, 1) & 1) as tinyint) AS grouping(unhashable_col)#x, cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) AS grouping(unsortable_col)#x, count(1) AS count(1)#xL, sum(v#x) AS sum(v)#xL]
    +- Expand [[id#x, v#x, unhashable_col#x, unsortable_col#x, unhashable_col#x, null, 1], [id#x, v#x, unhashable_col#x, unsortable_col#x, null, unsortable_col#x, 2]], [id#x, v#x, unhashable_col#x, unsortable_col#x, unhashable_col#x, unsortable_col#x, spark_grouping_id#xL]
       +- Project [id#x, v#x, unhashable_col#x, unsortable_col#x, unhashable_col#x AS unhashable_col#x, unsortable_col#x AS unsortable_col#x]
          +- SubqueryAlias spark_catalog.default.gstest4
@@ -541,7 +541,7 @@ select unhashable_col, unsortable_col,
  order by 3, 4, 6 /* 3,5 */
 -- !query analysis
 Sort [grouping(unhashable_col)#x ASC NULLS FIRST, grouping(unsortable_col)#x ASC NULLS FIRST, sum(v)#xL ASC NULLS FIRST], true
-+- Aggregate [v#x, unhashable_col#x, unsortable_col#x, spark_grouping_id#xL], [unhashable_col#x, unsortable_col#x, cast(((spark_grouping_id#xL >> 1) & 1) as tinyint) AS grouping(unhashable_col)#x, cast(((spark_grouping_id#xL >> 0) & 1) as tinyint) AS grouping(unsortable_col)#x, count(1) AS count(1)#xL, sum(v#x) AS sum(v)#xL]
++- Aggregate [v#x, unhashable_col#x, unsortable_col#x, spark_grouping_id#xL], [unhashable_col#x, unsortable_col#x, cast((shiftright(spark_grouping_id#xL, 1) & 1) as tinyint) AS grouping(unhashable_col)#x, cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) AS grouping(unsortable_col)#x, count(1) AS count(1)#xL, sum(v#x) AS sum(v)#xL]
    +- Expand [[id#x, v#x, unhashable_col#x, unsortable_col#x, v#x, unhashable_col#x, null, 1], [id#x, v#x, unhashable_col#x, unsortable_col#x, v#x, null, unsortable_col#x, 2]], [id#x, v#x, unhashable_col#x, unsortable_col#x, v#x, unhashable_col#x, unsortable_col#x, spark_grouping_id#xL]
       +- Project [id#x, v#x, unhashable_col#x, unsortable_col#x, v#x AS v#x, unhashable_col#x AS unhashable_col#x, unsortable_col#x AS unsortable_col#x]
          +- SubqueryAlias spark_catalog.default.gstest4
@@ -593,7 +593,7 @@ select a, b, grouping(a), grouping(b), sum(v), count(*), max(v)
   from gstest1 group by grouping sets ((a,b),(a+1,b+1),(a+2,b+2)) order by 3,4,7 /* 3,6 */
 -- !query analysis
 Sort [grouping(a)#x ASC NULLS FIRST, grouping(b)#x ASC NULLS FIRST, max(v)#x ASC NULLS FIRST], true
-+- Aggregate [a#x, b#x, (a#x + 1)#x, (b#x + 1)#x, (a#x + 2)#x, (b#x + 2)#x, spark_grouping_id#xL], [a#x, b#x, cast(((spark_grouping_id#xL >> 5) & 1) as tinyint) AS grouping(a)#x, cast(((spark_grouping_id#xL >> 4) & 1) as tinyint) AS grouping(b)#x, sum(v#x) AS sum(v)#xL, count(1) AS count(1)#xL, max(v#x) AS max(v)#x]
++- Aggregate [a#x, b#x, (a#x + 1)#x, (b#x + 1)#x, (a#x + 2)#x, (b#x + 2)#x, spark_grouping_id#xL], [a#x, b#x, cast((shiftright(spark_grouping_id#xL, 5) & 1) as tinyint) AS grouping(a)#x, cast((shiftright(spark_grouping_id#xL, 4) & 1) as tinyint) AS grouping(b)#x, sum(v#x) AS sum(v)#xL, count(1) AS count(1)#xL, max(v#x) AS max(v)#x]
    +- Expand [[a#x, b#x, v#x, a#x, b#x, null, null, null, null, 15], [a#x, b#x, v#x, null, null, (a#x + 1)#x, (b#x + 1)#x, null, null, 51], [a#x, b#x, v#x, null, null, null, null, (a#x + 2)#x, (b#x + 2)#x, 60]], [a#x, b#x, v#x, a#x, b#x, (a#x + 1)#x, (b#x + 1)#x, (a#x + 2)#x, (b#x + 2)#x, spark_grouping_id#xL]
       +- Project [a#x, b#x, v#x, a#x AS a#x, b#x AS b#x, (a#x + 1) AS (a#x + 1)#x, (b#x + 1) AS (b#x + 1)#x, (a#x + 2) AS (a#x + 2)#x, (b#x + 2) AS (b#x + 2)#x]
          +- SubqueryAlias gstest1
@@ -634,7 +634,7 @@ select v||'a', case grouping(v||'a') when 1 then 1 else 0 end, count(*)
  group by rollup(i, v||'a') order by 1,3
 -- !query analysis
 Sort [concat(v, a)#x ASC NULLS FIRST, count(1)#xL ASC NULLS FIRST], true
-+- Aggregate [i#x, concat(v#x, a)#x, spark_grouping_id#xL], [concat(v#x, a)#x AS concat(v, a)#x, CASE WHEN (cast(cast(((spark_grouping_id#xL >> 0) & 1) as tinyint) as int) = 1) THEN 1 ELSE 0 END AS CASE WHEN (grouping(concat(v, a)) = 1) THEN 1 ELSE 0 END#x, count(1) AS count(1)#xL]
++- Aggregate [i#x, concat(v#x, a)#x, spark_grouping_id#xL], [concat(v#x, a)#x AS concat(v, a)#x, CASE WHEN (cast(cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) as int) = 1) THEN 1 ELSE 0 END AS CASE WHEN (grouping(concat(v, a)) = 1) THEN 1 ELSE 0 END#x, count(1) AS count(1)#xL]
    +- Expand [[i#x, v#x, i#x, concat(v#x, a)#x, 0], [i#x, v#x, i#x, null, 1], [i#x, v#x, null, null, 3]], [i#x, v#x, i#x, concat(v#x, a)#x, spark_grouping_id#xL]
       +- Project [i#x, v#x, i#x AS i#x, concat(v#x, a) AS concat(v#x, a)#x]
          +- SubqueryAlias u
@@ -647,7 +647,7 @@ select v||'a', case when grouping(v||'a') = 1 then 1 else 0 end, count(*)
  group by rollup(i, v||'a') order by 1,3
 -- !query analysis
 Sort [concat(v, a)#x ASC NULLS FIRST, count(1)#xL ASC NULLS FIRST], true
-+- Aggregate [i#x, concat(v#x, a)#x, spark_grouping_id#xL], [concat(v#x, a)#x AS concat(v, a)#x, CASE WHEN (cast(cast(((spark_grouping_id#xL >> 0) & 1) as tinyint) as int) = 1) THEN 1 ELSE 0 END AS CASE WHEN (grouping(concat(v, a)) = 1) THEN 1 ELSE 0 END#x, count(1) AS count(1)#xL]
++- Aggregate [i#x, concat(v#x, a)#x, spark_grouping_id#xL], [concat(v#x, a)#x AS concat(v, a)#x, CASE WHEN (cast(cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) as int) = 1) THEN 1 ELSE 0 END AS CASE WHEN (grouping(concat(v, a)) = 1) THEN 1 ELSE 0 END#x, count(1) AS count(1)#xL]
    +- Expand [[i#x, v#x, i#x, concat(v#x, a)#x, 0], [i#x, v#x, i#x, null, 1], [i#x, v#x, null, null, 3]], [i#x, v#x, i#x, concat(v#x, a)#x, spark_grouping_id#xL]
       +- Project [i#x, v#x, i#x AS i#x, concat(v#x, a) AS concat(v#x, a)#x]
          +- SubqueryAlias u
