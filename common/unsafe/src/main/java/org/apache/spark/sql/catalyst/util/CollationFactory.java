@@ -250,7 +250,7 @@ public final class CollationFactory {
       false
     );
 
-    collationTable[2].collator.setStrength(Collator.IDENTICAL);
+    collationTable[2].collator.setStrength(Collator.TERTIARY);
     collationTable[2].collator.freeze();
 
     // UNICODE case-insensitive comparison (ROOT locale, in ICU + Secondary strength).
