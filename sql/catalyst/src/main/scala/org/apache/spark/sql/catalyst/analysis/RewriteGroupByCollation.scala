@@ -22,11 +22,12 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.First
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.catalyst.util.UnsafeRowUtils.isBinaryStable
 import org.apache.spark.sql.types.StringType
 
 object RewriteGroupByCollation extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUpWithNewOutput {
-    case a: Aggregate =>
+    case a: Aggregate if a.aggregateExpressions.forall(e => isBinaryStable(e.dataType)) =>
       val aliasMap = a.groupingExpressions.collect {
         case attr: AttributeReference if attr.dataType.isInstanceOf[StringType] &&
           !CollationFactory.fetchCollation(

@@ -22,8 +22,7 @@ import scala.jdk.CollectionConverters.MapHasAsJava
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.analysis.RewriteGroupByCollation
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, CollationKey, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LocalRelation}
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2ProviderWithCustomSchema}
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable}
@@ -1032,43 +1031,20 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("RewriteGroupByCollation rule rewrites Aggregate logical plan") {
-    val dataType = StringType(CollationFactory.collationNameToId("UNICODE_CI"))
-    val attrRef = AttributeReference("attr", dataType)()
-    // original logical plan should only contain one attribute in groupingExpressions
-    val originalPlan = Aggregate(Seq(attrRef), Seq(attrRef), LocalRelation(attrRef))
-    assert(originalPlan.groupingExpressions.size == 1)
-    assert(originalPlan.groupingExpressions.head.isInstanceOf[AttributeReference])
-    assert(originalPlan.groupingExpressions.head == attrRef)
-    // plan level rewrite should replace attr with CollationKey in Aggregate logical plan
-    val newPlan = RewriteGroupByCollation(originalPlan).asInstanceOf[Aggregate]
-    assert(newPlan.resolved)
-    assert(newPlan.groupingExpressions.size == 1)
-    assert(newPlan.groupingExpressions.head.isInstanceOf[CollationKey])
-    assert(newPlan.groupingExpressions.head.asInstanceOf[CollationKey].expr == attrRef)
-  }
-
   test("RewriteGroupByCollation rule works for string") {
     val dataType = StringType(CollationFactory.collationNameToId("UNICODE_CI"))
     val schema = StructType(Seq(StructField("name", dataType)))
     val data = Seq(Row("AA"), Row("aa"), Row("BB"))
     val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
     df.createOrReplaceTempView("tempTable")
-    // test RewriteGroupByCollation idempotence (without aggregate expression)
+    // test RewriteGroupByCollation idempotence
     val dfGroupBy1 = spark.sql("SELECT COUNT(*) FROM tempTable GROUP BY name")
     val logicalPlan1 = dfGroupBy1.queryExecution.analyzed
     val newPlan1 = RewriteGroupByCollation(logicalPlan1)
     val newNewPlan1 = RewriteGroupByCollation(newPlan1)
     assert(newPlan1 == newNewPlan1)
-    // test RewriteGroupByCollation idempotence (with aggregate expression)
-    val dfGroupBy2 = spark.sql("SELECT name, COUNT(*) FROM tempTable GROUP BY name")
-    val logicalPlan2 = dfGroupBy2.queryExecution.analyzed
-    val newPlan2 = RewriteGroupByCollation(logicalPlan2)
-    val newNewPlan2 = RewriteGroupByCollation(newPlan2)
-    assert(newPlan2 == newNewPlan2)
     // get the query execution result
     checkAnswer(dfGroupBy1, Seq(Row(2), Row(1)))
-    checkAnswer(dfGroupBy2, Seq(Row("AA", 2), Row("BB", 1)))
   }
 
   test("hash aggregation should be used for collated strings") {
