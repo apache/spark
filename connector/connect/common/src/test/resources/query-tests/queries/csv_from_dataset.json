@@ -18,7 +18,7 @@
           "name": "c1",
           "dataType": {
             "string": {
-              "collationId": 0
+              "collation": "UTF8_BINARY"
             }
           },
           "nullable": true

@@ -73,14 +73,15 @@ private[storage] class BlockManagerDecommissioner(
 
     private def allowRetry(shuffleBlock: ShuffleBlockInfo, failureNum: Int): Boolean = {
       if (failureNum < maxReplicationFailuresForDecommission) {
-        logInfo(s"Add $shuffleBlock back to migration queue for " +
-          s"retry ($failureNum / $maxReplicationFailuresForDecommission)")
+        logInfo(log"Add ${MDC(SHUFFLE_BLOCK_INFO, shuffleBlock)} back to migration queue for " +
+          log" retry (${MDC(FAILURES, failureNum)} / " +
+          log"${MDC(MAX_ATTEMPTS, maxReplicationFailuresForDecommission)})")
         // The block needs to retry so we should not mark it as finished
         shufflesToMigrate.add((shuffleBlock, failureNum))
       } else {
         logWarning(log"Give up migrating ${MDC(SHUFFLE_BLOCK_INFO, shuffleBlock)} " +
           log"since it's been failed for " +
-          log"${MDC(NUM_FAILURES, maxReplicationFailuresForDecommission)} times")
+          log"${MDC(MAX_ATTEMPTS, maxReplicationFailuresForDecommission)} times")
         false
       }
     }
@@ -98,7 +99,7 @@ private[storage] class BlockManagerDecommissioner(
     }
 
     override def run(): Unit = {
-      logInfo(s"Starting shuffle block migration thread for $peer")
+      logInfo(log"Starting shuffle block migration thread for ${MDC(PEER, peer)}")
       // Once a block fails to transfer to an executor stop trying to transfer more blocks
       while (keepRunning) {
         try {
@@ -107,10 +108,12 @@ private[storage] class BlockManagerDecommissioner(
           var isTargetDecommissioned = false
           // We only migrate a shuffle block when both index file and data file exist.
           if (blocks.isEmpty) {
-            logInfo(s"Ignore deleted shuffle block $shuffleBlockInfo")
+            logInfo(log"Ignore deleted shuffle block ${MDC(SHUFFLE_BLOCK_INFO, shuffleBlockInfo)}")
           } else {
-            logInfo(s"Got migration sub-blocks $blocks. Trying to migrate $shuffleBlockInfo " +
-              s"to $peer ($retryCount / $maxReplicationFailuresForDecommission)")
+            logInfo(log"Got migration sub-blocks ${MDC(BLOCK_IDS, blocks)}. Trying to migrate " +
+              log"${MDC(SHUFFLE_BLOCK_INFO, shuffleBlockInfo)} to ${MDC(PEER, peer)} " +
+              log"(${MDC(NUM_RETRY, retryCount)} / " +
+              log"${MDC(MAX_ATTEMPTS, maxReplicationFailuresForDecommission)}")
             // Migrate the components of the blocks.
             try {
               val startTime = System.currentTimeMillis()
@@ -130,9 +133,10 @@ private[storage] class BlockManagerDecommissioner(
                   logDebug(s"Migrated sub-block $blockId")
                 }
               }
-              logInfo(s"Migrated $shuffleBlockInfo (" +
-                s"size: ${Utils.bytesToString(blocks.map(b => b._2.size()).sum)}) to $peer " +
-                s"in ${System.currentTimeMillis() - startTime} ms")
+              logInfo(log"Migrated ${MDC(SHUFFLE_BLOCK_INFO, shuffleBlockInfo)} (" +
+                log"size: ${MDC(SIZE, Utils.bytesToString(blocks.map(b => b._2.size()).sum))}) " +
+                log"to ${MDC(PEER, peer)} in " +
+                log"${MDC(DURATION, System.currentTimeMillis() - startTime)} ms")
             } catch {
               case e @ ( _ : IOException | _ : SparkException) =>
                 // If a block got deleted before netty opened the file handle, then trying to
@@ -181,7 +185,11 @@ private[storage] class BlockManagerDecommissioner(
           }
         } catch {
           case _: InterruptedException =>
-            logInfo(s"Stop shuffle block migration${if (keepRunning) " unexpectedly"}.")
+            if (keepRunning) {
+              logInfo("Stop shuffle block migration unexpectedly.")
+            } else {
+              logInfo("Stop shuffle block migration.")
+            }
             keepRunning = false
           case NonFatal(e) =>
             keepRunning = false
@@ -234,12 +242,16 @@ private[storage] class BlockManagerDecommissioner(
             logInfo("Attempting to migrate all cached RDD blocks")
             rddBlocksLeft = decommissionRddCacheBlocks()
             lastRDDMigrationTime = startTime
-            logInfo(s"Finished current round RDD blocks migration, " +
-              s"waiting for ${sleepInterval}ms before the next round migration.")
+            logInfo(log"Finished current round RDD blocks migration, " +
+              log"waiting for ${MDC(SLEEP_TIME, sleepInterval)}ms before the next round migration.")
             Thread.sleep(sleepInterval)
           } catch {
             case _: InterruptedException =>
-              logInfo(s"Stop RDD blocks migration${if (!stopped && !stoppedRDD) " unexpectedly"}.")
+              if (!stopped && !stoppedRDD) {
+                logInfo("Stop RDD blocks migration unexpectedly.")
+              } else {
+                logInfo("Stop RDD blocks migration.")
+              }
               stoppedRDD = true
             case NonFatal(e) =>
               logError("Error occurred during RDD blocks migration.", e)
@@ -265,8 +277,9 @@ private[storage] class BlockManagerDecommissioner(
           val startTime = System.nanoTime()
           shuffleBlocksLeft = refreshMigratableShuffleBlocks()
           lastShuffleMigrationTime = startTime
-          logInfo(s"Finished current round refreshing migratable shuffle blocks, " +
-            s"waiting for ${sleepInterval}ms before the next round refreshing.")
+          logInfo(log"Finished current round refreshing migratable shuffle blocks, " +
+            log"waiting for ${MDC(SLEEP_TIME, sleepInterval)}ms before the " +
+            log"next round refreshing.")
           Thread.sleep(sleepInterval)
         } catch {
           case _: InterruptedException if stopped =>
@@ -302,8 +315,9 @@ private[storage] class BlockManagerDecommissioner(
     shufflesToMigrate.addAll(newShufflesToMigrate.map(x => (x, 0)).asJava)
     migratingShuffles ++= newShufflesToMigrate
     val remainedShuffles = migratingShuffles.size - numMigratedShuffles.get()
-    logInfo(s"${newShufflesToMigrate.size} of ${localShuffles.size} local shuffles " +
-      s"are added. In total, $remainedShuffles shuffles are remained.")
+    logInfo(log"${MDC(COUNT, newShufflesToMigrate.size)} of " +
+      log"${MDC(TOTAL, localShuffles.size)} local shuffles are added. " +
+      log"In total, ${MDC(NUM_REMAINED, remainedShuffles)} shuffles are remained.")
 
     // Update the threads doing migrations
     val livePeerSet = bm.getPeers(false).toSet
@@ -350,8 +364,9 @@ private[storage] class BlockManagerDecommissioner(
     // Refresh peers and validate we have somewhere to move blocks.
 
     if (replicateBlocksInfo.nonEmpty) {
-      logInfo(s"Need to replicate ${replicateBlocksInfo.size} RDD blocks " +
-        "for block manager decommissioning")
+      logInfo(
+        log"Need to replicate ${MDC(NUM_REPLICAS, replicateBlocksInfo.size)} RDD blocks " +
+        log"for block manager decommissioning")
     } else {
       logWarning("Asked to decommission RDD cache blocks, but no blocks to migrate")
       return false
@@ -378,9 +393,10 @@ private[storage] class BlockManagerDecommissioner(
       blockToReplicate.maxReplicas,
       maxReplicationFailures = Some(maxReplicationFailuresForDecommission))
     if (replicatedSuccessfully) {
-      logInfo(s"Block ${blockToReplicate.blockId} migrated successfully, Removing block now")
+      logInfo(log"Block ${MDC(BLOCK_ID, blockToReplicate.blockId)} migrated " +
+        log"successfully, Removing block now")
       bm.removeBlock(blockToReplicate.blockId)
-      logInfo(s"Block ${blockToReplicate.blockId} removed")
+      logInfo(log"Block ${MDC(BLOCK_ID, blockToReplicate.blockId)} removed")
     } else {
       logWarning(log"Failed to migrate block ${MDC(BLOCK_ID, blockToReplicate.blockId)}")
     }

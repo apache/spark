@@ -588,7 +588,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     )
 
     if (SparkSubmit.isSqlShell(mainClass)) {
-      logInfo(log"CLI options:\n${MDC(SHELL_OPTIONS, getSqlShellOptions())}")
+      logInfo("CLI options:")
+      logInfo(getSqlShellOptions())
     }
 
     throw SparkUserAppException(exitCode)
