@@ -365,7 +365,7 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
         exception = intercept[AnalysisException] {
           checkCreateSparkTableAsHive("t1")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1273",
+        errorClass = "UNSUPPORTED_SHOW_CREATE_TABLE.WITH_UNSUPPORTED_SERDE_CONFIGURATION",
         parameters = Map(
           "table" -> "t1",
           "configs" -> (" SERDE: org.apache.hadoop.hive.serde2.columnar.LazyBinaryColumnarSerDe " +
@@ -437,7 +437,7 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
         exception = intercept[AnalysisException] {
           sql("SHOW CREATE TABLE t1")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1272",
+        errorClass = "UNSUPPORTED_SHOW_CREATE_TABLE.ON_TRANSACTIONAL_HIVE_TABLE",
         parameters = Map("table" -> "`spark_catalog`.`default`.`t1`")
       )
     }

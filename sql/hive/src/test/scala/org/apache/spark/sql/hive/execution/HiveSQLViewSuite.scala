@@ -213,7 +213,7 @@ class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
           exception = intercept[AnalysisException] {
             sql("SHOW CREATE TABLE v1")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1271",
+          errorClass = "UNSUPPORTED_SHOW_CREATE_TABLE.WITH_UNSUPPORTED_FEATURE",
           parameters = Map(
             "unsupportedFeatures" -> " - partitioned view",
             "table" -> s"`$SESSION_CATALOG_NAME`.`default`.`v1`"
@@ -223,7 +223,7 @@ class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
           exception = intercept[AnalysisException] {
             sql("SHOW CREATE TABLE v1 AS SERDE")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1275",
+          errorClass = "UNSUPPORTED_SHOW_CREATE_TABLE.WITH_UNSUPPORTED_FEATURE",
           parameters = Map(
             "table" -> s"`$SESSION_CATALOG_NAME`.`default`.`v1`",
             "features" -> " - partitioned view"
